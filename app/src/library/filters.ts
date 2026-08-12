@@ -110,6 +110,24 @@ export function clearFilters(): Filters {
  *  (`Library.tsx`'s own token-row control, still wired to `clearFilters()`
  *  above, unchanged) remains the one control that empties everything,
  *  `types` included. */
+/** Is ANY filter active? Read this, never `filterTokens(f).length > 0` —
+ *  that equivalence broke on 2026-08-12, when TYPE stopped being tokenized
+ *  ("already visible": its chip row is the indicator). A type-only filter
+ *  produces zero tokens while genuinely narrowing the list, so the old
+ *  token-derived test made Library's header claim the full count over a
+ *  filtered list, and hid CLEAR ALL. Deriving from the FILTERS keeps the
+ *  header honest and survives the next non-tokenized control too. */
+export function hasActiveFilters(f: Filters): boolean {
+  return (
+    f.types.length > 0 ||
+    f.difficulties.length > 0 ||
+    f.durations.length > 0 ||
+    f.painLevels.length > 0 ||
+    f.lastDone !== null ||
+    f.source !== null
+  );
+}
+
 export function clearSheetFilters(f: Filters): Filters {
   return { ...EMPTY_FILTERS, types: f.types };
 }

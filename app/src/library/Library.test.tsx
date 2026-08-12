@@ -407,14 +407,13 @@ describe("Library", () => {
     // rather than the sheet's draft) — a rower had no way to see that
     // pressing this CLEAR would also drop their chip-row selection. This
     // pins the fix: CLEAR resets exactly the sheet's own groups.
-    it("the sheet's own CLEAR leaves an active TYPE chip (and its token) standing, resetting only the sheet's own groups", async () => {
+    it("the sheet's own CLEAR leaves an active TYPE chip standing, resetting only the sheet's own groups", async () => {
       mockReady();
       await renderLibrary();
 
       // TYPE via the chip row (outside the sheet, applied immediately) —
       // narrows straight to w-o2.
       await userEvent.click(screen.getByRole("button", { name: "O2" }));
-      expect(tokenLabel("O2")).toBeInTheDocument();
       expect(visibleHrefs()).toStrictEqual(["/library/w-o2"]);
 
       await openSheet();
@@ -446,7 +445,11 @@ describe("Library", () => {
         "aria-pressed",
         "true",
       );
-      expect(tokenLabel("O2")).toBeInTheDocument();
+      // ...and it still contributes no token — the chip IS the indicator
+      // (2026-08-12: "already visible").
+      expect(
+        screen.queryByText("O2", { selector: ".filter-token-label" }),
+      ).not.toBeInTheDocument();
     });
 
     it("the primary disables (and the caption reads 'NO WORKOUTS MATCH') when the draft matches nothing", async () => {
@@ -656,8 +659,11 @@ describe("Library", () => {
 
       expect(o2).toHaveAttribute("aria-pressed", "true");
       expect(visibleHrefs()).toStrictEqual(["/library/w-o2"]);
-      expect(tokenLabel("O2")).toBeInTheDocument();
       expect(screen.getByText("1 OF 3 SHOWN")).toBeInTheDocument();
+      // No token: the pressed chip already says which type is filtering.
+      expect(
+        screen.queryByText("O2", { selector: ".filter-token-label" }),
+      ).not.toBeInTheDocument();
     });
 
     // Carried-forward subject D: exclusivity is correctly dead (multi-select
@@ -698,7 +704,10 @@ describe("Library", () => {
       );
       await applySheet();
 
-      expect(tokenLabel("O2")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "O2" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
       expect(screen.getByText("PAIN 1")).toBeInTheDocument();
       expect(visibleHrefs()).toStrictEqual(["/library/w-o2"]);
 
@@ -778,23 +787,56 @@ describe("Library", () => {
       });
     });
 
-    // I-2 (review fix, the fill seam's other half): subject F pins that a
-    // TWO-type token carries no colour through `toRowTokens` — nothing at
-    // client level pinned that a SINGLE selected type's token still carries
-    // its OWN colour through that same seam (`Library.tsx:96`'s
-    // `fill: token.fill` passthrough). Without this, a mutant that always
-    // strips `fill` for "type" tokens (`token.kind === "type" ? undefined :
-    // token.fill`) passes the whole suite.
-    it("a single selected type's token carries its own type-colour fill through toRowTokens", async () => {
+    // Successor to the two fill tests deleted on 2026-08-12. Their subjects
+    // (a single type's token carries its own colour; a two-type token
+    // carries none) both died with the TYPE token itself — James: "the type
+    // shouldn't be added as a tag since it's already visible". What replaces
+    // them is the ruling, pinned where a rower sees it: an active type
+    // produces NO token, while another group's token still appears in the
+    // same row, so this cannot pass by the row simply being empty.
+    it("a TYPE-ONLY filter still reports the narrowed count and offers CLEAR ALL", async () => {
+      // The bug this pins: `hasFilters` used to be `tokens.length > 0`, so
+      // once TYPE stopped tokenizing, a type-only filter left the header
+      // claiming the FULL count over a one-row list and hid CLEAR ALL
+      // entirely — the rower's only way out was re-tapping the chip.
       mockReady();
       await renderLibrary();
 
       await userEvent.click(screen.getByRole("button", { name: "O2" }));
 
-      const token = tokenLabel("O2").closest(".filter-token")!;
-      expect(token).toHaveAttribute(
-        "style",
-        expect.stringContaining("--type-o2"),
+      expect(visibleHrefs()).toStrictEqual(["/library/w-o2"]);
+      expect(screen.getByText("1 OF 3 SHOWN")).toBeInTheDocument();
+      expect(screen.queryByText("3 WORKOUTS")).not.toBeInTheDocument();
+      const clearAll = screen.getByRole("button", { name: "CLEAR ALL" });
+      await userEvent.click(clearAll);
+      expect(visibleHrefs()).toHaveLength(3);
+      expect(screen.getByText("3 WORKOUTS")).toBeInTheDocument();
+    });
+
+    it("an active type renders no token, while another group's token still does", async () => {
+      mockReady();
+      await renderLibrary();
+
+      await userEvent.click(screen.getByRole("button", { name: "O2" }));
+      await openSheet();
+      await userEvent.click(
+        within(screen.getByRole("dialog")).getByRole("button", { name: "1" }),
+      );
+      await applySheet();
+
+      // The pain filter tokenizes...
+      expect(tokenLabel("PAIN 1")).toBeInTheDocument();
+      // ...the type does not, in either the label or a removal button.
+      expect(
+        screen.queryByText("O2", { selector: ".filter-token-label" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Remove O2 filter" }),
+      ).not.toBeInTheDocument();
+      // And the chip is still doing the indicating.
+      expect(screen.getByRole("button", { name: "O2" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
       );
     });
 
@@ -814,29 +856,6 @@ describe("Library", () => {
         expect(expectedIds).toHaveLength(4);
         expect(visibleHrefs()).toStrictEqual(expectedIds);
         expect(screen.getByText("4 OF 8 SHOWN")).toBeInTheDocument();
-      });
-
-      // Carried-forward subject F: pinned at the filterTokens level already
-      // (Task 1); this is the seam Library actually renders through
-      // (`toRowTokens`), which is the whole point of the spec's finding 1.
-      it("the two-type token carries no inline type-color fill through toRowTokens", async () => {
-        mockReady(MULTI_TYPE_WORKOUTS);
-        await renderLibrary();
-
-        await userEvent.click(screen.getByRole("button", { name: "O2" }));
-        await userEvent.click(screen.getByRole("button", { name: "AT" }));
-
-        // Not a bare `not.toHaveAttribute("style")`: React clears the prior
-        // single-type fill by unsetting the `background` property on the
-        // SAME node (same `key={token.kind}`), which can leave an empty
-        // `style=""` attribute behind — a harmless DOM artifact, not a
-        // colour. The actual contract (no `--type-*` value present) is what
-        // the deleted test's own idiom checked too.
-        const token = tokenLabel("O2 · AT").closest(".filter-token")!;
-        expect(token).not.toHaveAttribute(
-          "style",
-          expect.stringContaining("--type-"),
-        );
       });
     });
   });
@@ -1292,7 +1311,14 @@ describe("Library", () => {
       await renderLibrary();
 
       expect(await screen.findByText("1 OF 3 SHOWN")).toBeInTheDocument();
-      expect(tokenLabel("AT")).toBeInTheDocument();
+      // A restored type shows as the PRESSED CHIP, not a token (2026-08-12).
+      expect(screen.getByRole("button", { name: "AT" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      expect(
+        screen.queryByText("AT", { selector: ".filter-token-label" }),
+      ).not.toBeInTheDocument();
       expect(screen.getByText("Anaerobic Threshold Blitz")).toBeInTheDocument();
       expect(screen.queryByText("Steady State Cruise")).not.toBeInTheDocument();
     });

@@ -94,12 +94,17 @@ test.describe("library list", () => {
     await expect(page.locator(".library-count")).toHaveText(
       `${filteredCount} OF ${initialCount} SHOWN`,
     );
-    // Scoped to the token's own label (not a bare page-wide text query):
-    // every visible row also wears an "AN" type badge once filtered, which
-    // would otherwise make this a strict-mode-violating multi-match.
+    // The chip itself is the indicator — TYPE is not tokenized (2026-08-12,
+    // "already visible"), so assert the pressed chip and the ABSENCE of a
+    // pill rather than a token label.
     await expect(
-      page.locator(".filter-token-label", { hasText: "AN" }),
-    ).toBeVisible();
+      page
+        .locator(".type-chip-grid")
+        .getByRole("button", { name: "AN", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await expect(
+      page.locator(".filter-token-label", { hasText: /^AN$/ }),
+    ).toHaveCount(0);
 
     await page.getByRole("button", { name: "CLEAR ALL" }).click();
     await expect(rows).toHaveCount(initialCount);
@@ -516,9 +521,17 @@ test.describe("TYPE + DIFFICULTY composition (chip row union intersected with th
     await page.getByRole("button", { name: "O2", exact: true }).click();
     await page.getByRole("button", { name: "AT", exact: true }).click();
     await expect(rows).toHaveCount(counts.unionCount);
+    // Both chips pressed, and still no type pill (2026-08-12 ruling).
+    for (const code of ["O2", "AT"]) {
+      await expect(
+        page
+          .locator(".type-chip-grid")
+          .getByRole("button", { name: code, exact: true }),
+      ).toHaveAttribute("aria-pressed", "true");
+    }
     await expect(
-      page.locator(".filter-token-label", { hasText: "O2 · AT" }),
-    ).toBeVisible();
+      page.locator(".filter-token-label", { hasText: /^O2 · AT$/ }),
+    ).toHaveCount(0);
 
     // A DIFFICULTY band from the sheet intersects with the chip-row union —
     // composed together, not either alone.
@@ -551,9 +564,16 @@ test.describe("TYPE + DIFFICULTY composition (chip row union intersected with th
 
     await page.getByRole("link", { name: "← BACK" }).click();
 
-    await expect(
-      page.locator(".filter-token-label", { hasText: "O2 · AT" }),
-    ).toBeVisible();
+    // The chip-row selection survives BACK as PRESSED CHIPS (its own
+    // persistence path), the sheet's difficulty as a token — both halves,
+    // since only one of them is tokenized now.
+    for (const code of ["O2", "AT"]) {
+      await expect(
+        page
+          .locator(".type-chip-grid")
+          .getByRole("button", { name: code, exact: true }),
+      ).toHaveAttribute("aria-pressed", "true");
+    }
     await expect(
       page.locator(".filter-token-label", { hasText: "MEDIUM" }),
     ).toBeVisible();

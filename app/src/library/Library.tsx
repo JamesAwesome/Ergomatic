@@ -8,6 +8,7 @@ import type { Baselines, WorkoutType } from "../../domain/types.js";
 import {
   applyFilters,
   clearFilters,
+  hasActiveFilters,
   toggleType,
   type Filters,
 } from "./filters";
@@ -33,11 +34,11 @@ const TYPE_CHIPS: WorkoutType[] = ["O2", "AT", "TR", "AN"];
 // CSS custom property per workout type — never a raw hex (tokens.css). Kept
 // local per this repo's established per-file duplication convention
 // (TypeBadge.tsx's own comment names the precedent) rather than importing
-// Today.tsx's identical map. Library-filter-unification round, Task 2: this
-// map now colours the chip row's own active fill (below) — it no longer
-// backs `toRowTokens`' fill (that now passes `filterTokens.ts`'s own
-// `Token.fill` straight through, spec finding 1), but the chip row needs the
-// identical per-type colour Today's own TodayChip applies inline.
+// Today.tsx's identical map. Its ONLY consumer is the chip row's active
+// fill (below), which needs the identical per-type colour Today's own
+// TodayChip applies inline. It used to back the TYPE token's colour too;
+// that token is retired (2026-08-12, "already visible" — the chip row is
+// the colour now), so the token row has no per-instance colour at all.
 const TYPE_COLOR_VAR: Record<WorkoutType, string> = {
   O2: "--type-o2",
   AT: "--type-at",
@@ -69,21 +70,13 @@ function Header() {
   );
 }
 
-/** filterTokens.ts's own Token (`{kind, label, clear, fill}`, one per active
- *  GROUP) adapted to TokenRow's `{key, label, onClear, fill}` shape — the
- *  two don't share a type: filterTokens.ts's `clear` takes the CURRENT
- *  Filters (so a token stays correct after a later, unrelated change),
- *  while TokenRow's `onClear` is a plain callback with no arguments.
- *
- * Library-filter-unification round, Task 2 (spec finding 1): `fill` is
- * passed straight through from `filterTokens.ts` rather than re-derived
- * here by looking the token's own LABEL up in a WorkoutType-keyed map — that
- * lookup only worked while a type token's label was a bare code, and broke
- * silently the moment `types` went multi-select (`"O2 · AT"` resolves no
- * single WorkoutType). `filterTokens.ts` already knows which case it's in
- * (one selected type has a colour; several don't) and sets `fill`
- * accordingly, so this function no longer needs its own type-colour map at
- * all. */
+/** filterTokens.ts's own Token (`{kind, label, clear}`, one per active
+ *  GROUP) adapted to TokenRow's `{key, label, onClear}` shape — the two
+ *  don't share a type: filterTokens.ts's `clear` takes the CURRENT Filters
+ *  (so a token stays correct after a later, unrelated change), while
+ *  TokenRow's `onClear` is a plain callback with no arguments. No colour
+ *  passes through any more: TYPE is not tokenized (its chip row shows the
+ *  selection itself), and it was the only token that ever carried one. */
 function toRowTokens(
   tokens: ReturnType<typeof filterTokens>,
   filters: Filters,
@@ -93,7 +86,6 @@ function toRowTokens(
     key: token.kind,
     label: token.label,
     onClear: () => onRemove(token.clear(filters)),
-    fill: token.fill,
   }));
 }
 
@@ -282,7 +274,10 @@ export default function Library() {
   const total = workouts.length;
   const visible = applyFilters(workouts, filters, baselines);
   const tokens = filterTokens(filters);
-  const hasFilters = tokens.length > 0;
+  // Derived from the FILTERS, not the tokens: TYPE narrows the list without
+  // tokenizing (2026-08-12), so a token-derived flag would show the full
+  // count over a filtered list and hide CLEAR ALL. See hasActiveFilters.
+  const hasFilters = hasActiveFilters(filters);
   const draftCount = applyFilters(workouts, draftFilters, baselines).length;
 
   function openSheet() {

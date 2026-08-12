@@ -424,15 +424,21 @@ test.describe("library screen", () => {
   test("zero WCAG 2A/2AA violations with an active filter token on screen", async ({
     page,
   }) => {
-    // TYPE left the FILTER sheet for its own chip row above the list
-    // (library-filter-unification round, Task 2, spec §2) — no sheet/Apply
-    // Filter round trip needed to get a token on screen.
+    // Needs a real TOKEN on screen, so it must come from a sheet group:
+    // TYPE moved to its own chip row AND stopped tokenizing (2026-08-12,
+    // "already visible"), so the chip alone would leave the token row empty
+    // and this sweep would assert nothing. A pressed chip is included too,
+    // so the pass covers both indicators at once.
     await page
       .locator(".type-chip-grid")
       .getByRole("button", { name: "O2", exact: true })
       .click();
+    await page.getByRole("button", { name: "FILTER ⌄" }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("button", { name: "MEDIUM", exact: true }).click();
+    await dialog.getByRole("button", { name: "Apply Filter" }).click();
     await expect(
-      page.locator(".filter-token", { hasText: "O2" }),
+      page.locator(".filter-token-label", { hasText: "MEDIUM" }),
     ).toBeVisible();
     await assertNoA11yViolations(page);
   });
@@ -444,32 +450,34 @@ test.describe("library screen", () => {
     expect(bodyBg).toBe("rgb(244, 241, 232)"); // --page
   });
 
-  // Task 4 (ui-fix round): a TYPE token fills with its own type colour, the
-  // same selected-state rule DESIGN.md extends from chips to tokens — never
-  // a flat accent regardless of which type is active. Library-filter-
-  // unification round, Task 3: re-targeted at the chip row (TYPE's own
-  // control now, spec §2) instead of a dialog cell — the assertion's own
-  // subject (a single selected type's token fill) and its exact expected
-  // colour are UNCHANGED; this is the only guard in the suite on that
-  // colour (a client-level pin was also added in Task 2 — belt-and-braces).
-  test("a TYPE token fills with its own type colour, not accent", async ({
+  // Task 4 (ui-fix round) asserted this rule on the TYPE TOKEN; that token
+  // was retired on 2026-08-12 ("already visible"). The RULE is unchanged and
+  // still needs a guard — DESIGN.md's selected-state rule: a type's control
+  // wears that type's OWN colour, never a flat accent — so the subject moves
+  // to the chip row, which is where a selected type is now shown. Same
+  // expected colour, same reason; only the element changed.
+  test("a selected TYPE chip fills with its own type colour, not accent", async ({
     page,
   }) => {
-    await page
+    const chip = page
       .locator(".type-chip-grid")
-      .getByRole("button", { name: "O2", exact: true })
-      .click();
+      .getByRole("button", { name: "O2", exact: true });
+    await chip.click();
 
-    const tokenBg = await page
-      .locator(".filter-token", { hasText: "O2" })
-      .evaluate((el) => getComputedStyle(el).backgroundColor);
-    expect(tokenBg).toBe("rgb(42, 98, 117)"); // --type-o2, not --accent
+    const chipBg = await chip.evaluate(
+      (el) => getComputedStyle(el).backgroundColor,
+    );
+    expect(chipBg).toBe("rgb(42, 98, 117)"); // --type-o2, not --accent
+
+    // And the retired token really is gone — no pill restates the type.
+    await expect(
+      page.locator(".filter-token-label", { hasText: /^O2$/ }),
+    ).toHaveCount(0);
   });
 
-  // Task 4 (ui-fix round): every other token kind fills plain ink.
-  test("a non-TYPE token (e.g. LAST DONE) fills ink, not accent", async ({
-    page,
-  }) => {
+  // Task 4 (ui-fix round): every token kind fills plain ink — now that
+  // TYPE is not tokenized, that is EVERY token, with no exceptions.
+  test("a token (e.g. LAST DONE) fills ink, not accent", async ({ page }) => {
     await page.getByRole("button", { name: "FILTER ⌄" }).click();
     await page
       .getByRole("dialog")

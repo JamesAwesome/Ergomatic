@@ -7,7 +7,7 @@ describe("filterTokens", () => {
     expect(filterTokens(EMPTY_FILTERS)).toStrictEqual([]);
   });
 
-  it("emits one token per active group, in TYPE/DIFFICULTY/TIME/PAIN/LAST DONE/SOURCE order regardless of set order", () => {
+  it("emits one token per active group, in DIFFICULTY/TIME/PAIN/LAST DONE/SOURCE order regardless of set order — TYPE contributes none", () => {
     const f: Filters = {
       types: ["O2"],
       difficulties: ["easy"],
@@ -17,7 +17,6 @@ describe("filterTokens", () => {
       source: "custom",
     };
     expect(filterTokens(f).map((t) => t.kind)).toStrictEqual([
-      "type",
       "difficulty",
       "duration",
       "pain",
@@ -26,41 +25,21 @@ describe("filterTokens", () => {
     ]);
   });
 
-  describe("type token", () => {
-    it("a single selected type's label is the bare type code, filled with its own colour", () => {
-      const f: Filters = { ...EMPTY_FILTERS, types: ["AN"] };
-      expect(filterTokens(f)).toStrictEqual([
-        {
-          kind: "type",
-          label: "AN",
-          fill: "var(--type-an)",
-          clear: expect.any(Function),
-        },
-      ]);
-    });
-
-    it("a two-type selection joins in the canonical O2·AT·TR·AN order, not selection order, and carries no fill", () => {
-      const selectedAtFirst: Filters = {
-        ...EMPTY_FILTERS,
-        types: ["AT", "O2"],
-      };
-      const selectedO2First: Filters = {
-        ...EMPTY_FILTERS,
-        types: ["O2", "AT"],
-      };
-      for (const f of [selectedAtFirst, selectedO2First]) {
-        expect(filterTokens(f)).toStrictEqual([
-          { kind: "type", label: "O2 · AT", clear: expect.any(Function) },
-        ]);
+  // No type token at all (James, 2026-08-12): "the type shouldn't be added
+  // as a tag since it's already visible" — the chip row above the row shows
+  // the selection in its own colour with the descriptor beneath it, so a
+  // token would restate what is already on screen. This also retires the
+  // whole `fill` seam: the type token was its only producer.
+  describe("type is NOT tokenized", () => {
+    it("a selected type contributes no token, however many are selected", () => {
+      for (const types of [["AN"], ["O2", "AT"], ["AN", "TR", "O2"]] as const) {
+        expect(
+          filterTokens({ ...EMPTY_FILTERS, types: [...types] }),
+        ).toStrictEqual([]);
       }
     });
 
-    it("joins three types in canonical order regardless of toggle order", () => {
-      const f: Filters = { ...EMPTY_FILTERS, types: ["AN", "TR", "O2"] };
-      expect(filterTokens(f)[0].label).toBe("O2 · TR · AN");
-    });
-
-    it("clear empties only types, leaving the rest of a busy Filters untouched", () => {
+    it("types never suppress another group's token, and no token carries a fill", () => {
       const busy: Filters = {
         types: ["O2", "AT"],
         difficulties: ["easy"],
@@ -69,8 +48,17 @@ describe("filterTokens", () => {
         lastDone: "under21",
         source: "custom",
       };
-      const [token] = filterTokens(busy);
-      expect(token.clear(busy)).toStrictEqual({ ...busy, types: [] });
+      const tokens = filterTokens(busy);
+      expect(tokens.map((t) => t.kind)).toStrictEqual([
+        "difficulty",
+        "duration",
+        "pain",
+        "lastDone",
+        "source",
+      ]);
+      for (const token of tokens) {
+        expect(token).not.toHaveProperty("fill");
+      }
     });
   });
 
@@ -213,10 +201,8 @@ describe("filterTokens", () => {
         source: "custom",
       };
       const tokens = filterTokens(busy);
-      expect(tokens).toHaveLength(6);
-
-      const typeToken = tokens.find((t) => t.kind === "type")!;
-      expect(typeToken.clear(busy)).toStrictEqual({ ...busy, types: [] });
+      // Five, not six: the active TYPE contributes no token (2026-08-12).
+      expect(tokens).toHaveLength(5);
 
       const difficultyToken = tokens.find((t) => t.kind === "difficulty")!;
       expect(difficultyToken.clear(busy)).toStrictEqual({
@@ -250,10 +236,13 @@ describe("filterTokens", () => {
     });
 
     it("clear operates on whatever Filters it's given, not a value captured when the token was built", () => {
-      const original: Filters = { ...EMPTY_FILTERS, types: ["AN"] };
+      // Was built on the TYPE token before it was retired; DIFFICULTY
+      // carries the same subject (a token handed a later, changed Filters
+      // still clears the right field).
+      const original: Filters = { ...EMPTY_FILTERS, difficulties: ["hard"] };
       const [token] = filterTokens(original);
       const later: Filters = { ...original, painLevels: [2] };
-      expect(token.clear(later)).toStrictEqual({ ...later, types: [] });
+      expect(token.clear(later)).toStrictEqual({ ...later, difficulties: [] });
     });
   });
 });

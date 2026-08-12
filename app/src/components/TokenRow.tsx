@@ -1,15 +1,16 @@
 import type { ReactNode } from "react";
 
-/** One removable token: `fill` carries a type token's own `--type-*` CSS
- *  var through as an inline background (the same per-instance idiom
- *  TypeBadge.tsx/PainBar.tsx use), `"ink"` — the default, whether omitted
- *  or set explicitly — leaves `.filter-token`'s own `--ink` background rule
- *  alone rather than overriding it with an identical inline value. */
+/** One removable token. Every token wears `.filter-token`'s own `--ink`
+ *  background; there is no per-instance colour override any more. The old
+ *  `fill` prop existed solely for Library's TYPE token, and that token was
+ *  retired on 2026-08-12 ("the type shouldn't be added as a tag since it's
+ *  already visible" — its chip row shows the selection in colour), leaving
+ *  no producer. Deleted rather than left as an unused seam; a future
+ *  coloured token would reintroduce it deliberately. */
 export interface Token {
   key: string;
   label: string;
   onClear: () => void;
-  fill?: "ink" | string;
 }
 
 /**
@@ -42,15 +43,7 @@ export function TokenRow({
   return (
     <div className="token-row">
       {tokens.map((token) => (
-        <span
-          key={token.key}
-          className="filter-token"
-          style={
-            token.fill && token.fill !== "ink"
-              ? { background: token.fill }
-              : undefined
-          }
-        >
+        <span key={token.key} className="filter-token">
           <span className="filter-token-label">{token.label}</span>
           <button
             type="button"

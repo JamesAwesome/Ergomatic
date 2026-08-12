@@ -1,48 +1,26 @@
 import { RECENCY_BOUNDARY_DAYS, type Filters } from "./filters";
 import { collapseDifficulties } from "../components/difficultyTokenLabel";
 import { collapseDurations } from "../components/durationTokenLabel";
-import type { WorkoutType } from "../../domain/types.js";
 
 // One token per active GROUP, not per selected band — DESIGN.md's own rule
-// ("the header count counts tokens, so the row and the count never
-// disagree"). Colour is carried by `fill`, not derived from `kind` or
-// `label`: with `types` plural, `label` can be a multi-code join
-// ("O2 · AT"), so a renderer can no longer derive a "type" token's colour
-// by looking the label up in a WorkoutType-keyed map — that lookup is
-// exactly the bug this round's Task 1 fixes (library-filter-unification
-// spec, finding 1). See the `Token.fill` doc comment below for the rule
-// this replaces it with.
+// ("the header count counts tokens"). NOTE the count itself no longer keys
+// off this row: see filters.ts's `hasActiveFilters`, because TYPE narrows
+// the list while contributing no token.
+//
+// TYPE is deliberately NOT among the kinds (James, 2026-08-12: "the type
+// shouldn't be added as a tag since it's already visible"). Its control is
+// the chip row above this row, which shows the selection in the type's own
+// colour with the descriptor word beneath it, and clears by being tapped
+// again — a token would restate what the rower can already see. This also
+// retired the whole colour seam: the type token was the only token that
+// ever carried a `fill`, so `Token.fill` and `TokenRow`'s `fill` prop went
+// with it rather than lingering unused.
 export type TokenKind =
-  "type" | "difficulty" | "duration" | "pain" | "lastDone" | "source";
-
-// The repo's canonical left-to-right type order (docs/design/README.md
-// §Screens → "2. Library", amended 2026-08-08) — every multi-type label
-// joins in THIS order, never selection order, so "AT · O2" and "O2 · AT"
-// (built by toggling in different sequences) always read identically.
-const TYPE_ORDER: readonly WorkoutType[] = ["O2", "AT", "TR", "AN"];
-
-// CSS custom property per workout type — never a raw hex (tokens.css). Kept
-// local per this repo's established per-file duplication convention
-// (TypeBadge.tsx's own comment names the precedent, Library.tsx's and
-// FilterSheet.tsx's own identical copies are the same pattern) rather than
-// importing either of those files' maps.
-const TYPE_COLOR_VAR: Record<WorkoutType, string> = {
-  O2: "--type-o2",
-  AT: "--type-at",
-  AN: "--type-an",
-  TR: "--type-tr",
-};
+  "difficulty" | "duration" | "pain" | "lastDone" | "source";
 
 export interface Token {
   kind: TokenKind;
   label: string;
-  // The token's own colour var (e.g. "var(--type-o2)"), or undefined when
-  // it has none — a renderer applies this directly and falls back to its
-  // own default (`--ink`) when it's absent, rather than re-deriving a
-  // colour from `label` (which, for a multi-type label, names no single
-  // WorkoutType to look up). Only ever set on a single-type "type" token;
-  // every other kind, including a multi-type one, leaves it undefined.
-  fill?: string;
   clear(f: Filters): Filters;
 }
 
@@ -70,22 +48,6 @@ function collapsePain(levels: number[]): string {
  *  clears the right field. */
 export function filterTokens(f: Filters): Token[] {
   const tokens: Token[] = [];
-
-  if (f.types.length > 0) {
-    const ordered = TYPE_ORDER.filter((t) => f.types.includes(t));
-    tokens.push({
-      kind: "type",
-      label: ordered.join(" · "),
-      // Only a single selected type has one colour to show; several types
-      // fill with the row's own `--ink` default instead (no key at all —
-      // see the `Token.fill` doc comment above), never a blended/first-
-      // wins guess.
-      ...(ordered.length === 1
-        ? { fill: `var(${TYPE_COLOR_VAR[ordered[0]]})` }
-        : {}),
-      clear: (current) => ({ ...current, types: [] }),
-    });
-  }
 
   if (f.difficulties.length > 0) {
     tokens.push({

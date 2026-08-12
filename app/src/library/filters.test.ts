@@ -4,6 +4,7 @@ import {
   RECENCY_BOUNDARY_DAYS,
   applyFilters,
   bucketFor,
+  hasActiveFilters,
   clearFilters,
   isRecent,
   setLastDone,
@@ -343,5 +344,36 @@ describe("source", () => {
     expect(custom.source).toBe("custom");
     expect(setSource(custom, "global").source).toBe("global");
     expect(clearFilters().source).toBeNull();
+  });
+});
+
+describe("hasActiveFilters", () => {
+  // The reason this exists: `filterTokens(f).length > 0` used to be the
+  // equivalent test, and it stopped being one when TYPE lost its token
+  // (2026-08-12). A type-only filter narrows the list while producing no
+  // tokens, so the old test made Library claim the unfiltered count over a
+  // filtered list and hid CLEAR ALL.
+  it("is false only for EMPTY_FILTERS", () => {
+    expect(hasActiveFilters(EMPTY_FILTERS)).toBe(false);
+  });
+
+  it("is true for a TYPE-ONLY filter — the case the token-derived test got wrong", () => {
+    expect(hasActiveFilters({ ...EMPTY_FILTERS, types: ["O2"] })).toBe(true);
+  });
+
+  it("is true for every other group on its own", () => {
+    const cases: Partial<Filters>[] = [
+      { difficulties: ["easy"] },
+      { durations: ["<30"] },
+      { painLevels: [3] },
+      { lastDone: "under21" },
+      { source: "custom" },
+    ];
+    for (const patch of cases) {
+      const active = hasActiveFilters({ ...EMPTY_FILTERS, ...patch });
+      // Named in the failure via the value itself, since vitest's `expect`
+      // takes no message argument.
+      expect({ patch, active }).toStrictEqual({ patch, active: true });
+    }
   });
 });
