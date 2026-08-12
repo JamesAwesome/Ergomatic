@@ -1441,37 +1441,64 @@ describe("Timer — the notched total bar", () => {
     expect(lefts[2]).toBeCloseTo(83.333, 2);
   });
 
-  it("tones the warm-up's leading chunk out of the work (§5b)", async () => {
+  /** The warm-up fill's own width, as a percentage. */
+  function warmupFillWidth(): number | null {
+    const el = document.querySelector<HTMLElement>(".timer-total-warmup");
+    return el === null ? null : Number.parseFloat(el.style.width);
+  }
+
+  it("fills the warm-up in its own tone as the rower rows it (§5b)", async () => {
     mockKeepAwake();
     // The same bar the connected pane gets, on the surface most rowers
-    // actually see: the matrix fixture's 4:00 warm-up is 240 of 1420
-    // seconds, and its chunk ends exactly where the first notch is drawn.
+    // actually see. The matrix fixture's warm-up is 240 of 1420 seconds
+    // (16.9% of the bar); two minutes in, the bar has MOVED 8.45% and all of
+    // that movement is still the warm-up's tone, short of its own notch.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(FIXED_NOW);
     const run = matrixRun();
     runAtIndex(run, 0);
+    vi.setSystemTime(new Date(FIXED_NOW.getTime() + 120_000));
     await renderTimer();
 
-    const chunk = document.querySelector<HTMLElement>(".timer-total-warmup");
-    expect(chunk).not.toBeNull();
-    expect(Number.parseFloat(chunk!.style.width)).toBeCloseTo(
-      (240 / 1420) * 100,
-      6,
-    );
-    expect(Number.parseFloat(chunk!.style.width)).toBeCloseTo(
-      notchLefts()[0]!,
+    expect(warmupFillWidth()).toBeCloseTo((120 / 1420) * 100, 6);
+    expect(warmupFillWidth()!).toBeLessThan(notchLefts()[0]!);
+    expect(notchLefts()[0]).toBeCloseTo((240 / 1420) * 100, 6);
+  });
+
+  it("caps the warm-up's fill at its own notch once the work starts", async () => {
+    mockKeepAwake();
+    // A minute into the first work phase: the fill has run past the warm-up,
+    // so the warm-up tone stops at its span and the working tone carries the
+    // rest.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(FIXED_NOW);
+    const run = matrixRun();
+    runAtIndex(run, 1);
+    vi.setSystemTime(new Date(FIXED_NOW.getTime() + 60_000));
+    await renderTimer();
+
+    expect(warmupFillWidth()).toBeCloseTo((240 / 1420) * 100, 6);
+    expect(warmupFillWidth()).toBeCloseTo(notchLefts()[0]!, 6);
+    const work = document.querySelector<HTMLElement>(".timer-total-bar span")!;
+    expect(Number.parseFloat(work.style.width)).toBeCloseTo(
+      (300 / 1420) * 100,
       6,
     );
   });
 
-  it("draws no chunk at all with the warm-up preference off", async () => {
+  it("draws no warm-up fill at all with the preference off", async () => {
     mockKeepAwake();
     // THE REGRESSION PIN on this surface: the same workout with the warm-up
-    // off is the bar it always was — fill and notches, nothing between.
+    // off is the bar it always was — one fill and its notches, nothing else.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(FIXED_NOW);
     const run = buildAndSaveRun(kindMatrixDraft(), FIXED_NOW, BASELINES, null);
     runAtIndex(run, 0);
+    vi.setSystemTime(new Date(FIXED_NOW.getTime() + 120_000));
     await renderTimer();
 
     expect(run.phases.some((p) => p.type === "warmup")).toBe(false);
-    expect(document.querySelector(".timer-total-warmup")).toBeNull();
+    expect(warmupFillWidth()).toBeNull();
     expect(notchLefts()).toHaveLength(2);
   });
 

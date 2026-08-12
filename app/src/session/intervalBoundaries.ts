@@ -54,19 +54,22 @@ export interface IntervalBoundaries {
    *
    * The warm-up's span IS proportionally real: it is time the rower spends
    * rowing, and shrinking it would lie about the shape of the session. What
-   * changes is its TONE — `TimerRuler` draws this leading chunk in the
-   * unfilled-track colour rather than the working one, so the bar reads
-   * "this part is not the work" with no new colour and no legend.
+   * changes is its TONE — the bar fills THROUGH the warm-up as the rower
+   * rows it, in a lighter tone than the work fill, so the bar advances while
+   * the rower is moving and still reads as "this part is not the work"
+   * (James, 2026-08-12, amending §5b's first reading). This position is the
+   * cap on that fill: `TimerRuler`'s `warmupFillPercent`. No new colour, no
+   * legend.
    *
    * It is exactly `seconds[0]` whenever interval 0 is a warm-up, so it
    * RE-ANCHORS for free: a warm-up the machine measured at 9:00 tones 9:00,
    * not the programmed 8:00. And it is `null` in the three cases where
    * there is no honest width to draw — no warm-up at all, a warm-up the
    * honest stop could not price, and a session that is nothing BUT a
-   * warm-up (whose chunk would be the whole bar, leaving a fill that could
-   * never appear to move).
+   * warm-up (where the warm-up tone would be the only fill the bar could
+   * ever show, saying nothing).
    *
-   * The chunk starts at 0 rather than carrying a start of its own: a
+   * The span starts at 0 rather than carrying a start of its own: a
    * warm-up is always the FIRST phase of a run — `src/session/engine.ts`'s
    * `warmupPhases` is the one producer of `type: "warmup"` and `buildRun`
    * prepends it ("ORDER IS PART OF THE CONTRACT", that function's own
