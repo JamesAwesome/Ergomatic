@@ -21,6 +21,9 @@
 5. Drop the timer pane from connected mode; LIVE and GRID remain.
 6. `RUNNING` on the phone timer goes ink (taking DEVIATIONS row 1's own recommendation).
 7. **The total-left bar is notched by interval, proportional to duration** — his call, overriding the packet's "total-left bar 5px with quarter ticks. Unchanged."
+8. **Notches RE-ANCHOR as intervals complete** (post-adversarial): a completed interval's notch snaps to where it actually ended; upcoming notches stay estimated and re-flow. Truth about the past, best guess about the future.
+9. **The status word stays dropped** — re-confirmed on corrected information (the packet does keep one; this is a deliberate deviation, not an oversight).
+10. **The connected surface goes FULL-BLEED in landscape**, breaking the app's max-width so the gutter reaches the housing and the content column gains the width back.
 
 ## 3. The casualty list (approved)
 
@@ -30,7 +33,7 @@ Deleting `PaneTimer.tsx` deletes the only renderer of five things. Each is resol
 |---|---|
 | Interval countdown (96/112px, `.connected-clock-value`) | REHOMED: the live pane's metric row (30px, revision §3) and the grid header's totals line |
 | Full `INTERVAL 2 OF 5 · WORK` (`intervalLabel`) | REHOMED to the grid header (`3 OF 12 · WORK · 0:47 LEFT`, revision §4). Live keeps `intervalLabelShort` (`2 OF 5 · WORK`), already on its connection line at no vertical cost |
-| Status word `ROWING` (`statusWord`, `.connected-status-word`) | DROPPED. With the erg counting and two live heroes on screen it is the least informative element on the pane. `PAUSED` survives: the paused block lives in the shell, never in the pane. `SurfaceModel.statusWord` keeps its other consumers (paused/lost/ended copy) — the field is not deleted, only its `ROWING` rendering |
+| Status word `ROWING` (`statusWord`, `.connected-status-word`) | DROPPED, and the field dies with it. CORRECTED (adversarial): `PaneTimer.tsx:54` is its ONLY renderer — the shell hardcodes its own PAUSED/LOST/ENDED strings, so `SurfaceModel.statusWord` and `statusWordFor` are removed entirely rather than kept for imaginary consumers. This is a DEVIATION from the packet (revision §5 implies connected mode keeps a status word; the mockup renders one), taken deliberately on James's re-confirmation: two judged heroes beside a counting erg make the word the least informative pixel on a pane the revision already made tight. DEVIATIONS row |
 | Within-interval progress bar (`intervalProgressPct`, `.connected-interval-bar`) | DROPPED. The metric row's countdown is the same fact as a number, and revision §3's live layout has no slot |
 | The 2×2 card grid (`.connected-cards`/`-primary`/`-secondary`) | DIES with the pane; `-triple` keeps its consumer |
 
@@ -43,35 +46,54 @@ Two further live-pane casualties, same ruling:
 
 James's report: the landscape content column changed width view to view. The mechanism, found by the scout and re-verified against the CSS:
 
-1. `.connected-surface-body` is the ONE container in the landscape grid chain that never declares `min-width: 0` (it has `min-height: 0` only, `index.css:5315`/`:6277`). Its automatic minimum size is therefore its min-content width. `.connected-pane` declares `min-width: 0` (`:5326`) and `.connected-col` does in landscape (`:6346`) — the body is the gap.
-2. `.connected-pane-grid` overrides the panes' `overflow: hidden/clip` (`:5344-5346`) back to `overflow: visible` (`:5664-5670`), which restores a content-based intrinsic minimum that the other panes suppress.
+**CORRECTED against live source (adversarial B4 — the original cites carried ~13 lines of drift from a scout run against pre-merge main; every line below re-read on this worktree).**
 
-Together: the grid pane contributes a min-content width the other panes do not, so the `1fr` track — and the rail beside it — measures differently per pane, and content-dependently (interval count, meters digits) within the grid itself.
+`.connected-surface-body` is a grid item in a `1fr` (= `minmax(auto, 1fr)`) track with `overflow: visible` and no `min-width` (`index.css:5300-5304`, landscape `:6261-6265`). Its automatic minimum size is therefore content-based. Only ONE pane is mounted at a time (`ConnectedSurface.tsx:322-324`), so the track measures against whichever pane is showing — and within the grid pane, against its own content (interval count, meters digits). That is the whole mechanism.
 
-**Fix:** `min-width: 0` on `.connected-surface-body`; the grid's `overflow: visible` exception is removed or scoped so it cannot restore an intrinsic minimum (the implementer determines which the sticky header actually needs — if `visible` is load-bearing there, the row track gets its own `min-width: 0` instead). The gutter rail (§6) lands on top of this, not instead of it.
+The grid's `overflow: visible` (`index.css:5654-5656`) is NOT part of it: `.connected-pane` already declares `min-width: 0` (`:5313`), which overrides any automatic minimum `overflow` could restore. That rule exists for the sticky header and stays untouched.
+
+**Fix:** `min-width: 0` on `.connected-surface-body`. Single declaration; the track then resolves to a fixed width independent of pane and content.
+
+**Two consequences this wave owns:** (a) content now CLIPS instead of widening its track, so the grid pane gains a no-clip pin of its own (the widest realistic row — three-digit intervals, five-digit meters — fits without truncation at 390px landscape); (b) §6's full-bleed change re-arithmetics the same track, so the width invariant is written AFTER the gutter lands, measuring the final geometry.
 
 **Pin (the test that outlives the cause):** in both orientations, for BOTH panes, the content column's `getBoundingClientRect()` `width` AND `left` are identical to the pixel; asserted after a swipe between panes, not just on fresh mounts. A future cause of drift fails this regardless of mechanism.
 
-## 5. The notched total bar (James's call)
+## 5. The notched total bar (James's call, adversarially repaired)
 
-`TimerRuler` today renders TOTAL LEFT plus a four-tick ruler at ¼/½/¾ and the session length. The ticks mark fractions of nothing the rower is doing.
+`TimerRuler` today renders TOTAL LEFT plus a four-tick ruler at ¼/½/¾ and the session length. Those ticks mark fractions of nothing the rower is doing.
 
-**New behavior:** the bar carries **one notch per interval boundary, positioned proportionally to duration** (the same `phases` durations the segment bar counts, priced the way `buildRun` already prices them). The fill continues to show session progress, so its edge lands inside the current interval's span. The bar then states, without a word: how far through, how many intervals, and which one is live.
+**The unit is the INTERVAL, not the phase (adversarial B1).** `program.intervals.length` folds each work piece with its trailing rest (`surfaceModel.ts:318`); `phases.length` does not (`:412`). The caption says `2 OF 5`, so the bar must draw 4 interior notches, not 9. One notch per interval BOUNDARY: `intervals.length - 1`.
 
-- **Notches are hairlines in `--ink`**, 1px, full bar height. No colour: accent means four things and the tint colours mean over/under, so the bar stays monochrome. Rest spans are NOT separately tinted in this wave (a second track weight was considered and rejected as noise at 5px).
-- **Fallback:** a single-interval session has no interior notches, so the bar keeps the ¼/½/¾ ruler rather than rendering a bare rectangle. Notches when there is structure; quarters when there is not. The threshold is literal: `phases.length > 1`.
-- **Both surfaces** get it (revision §5: the unconnected timer follows the live-pane spec), so `TimerRuler` gains the notch input rather than the connected panes forking a copy.
-- **The count still reads in words** on live's connection line (`2 OF 5 · WORK`) and in the grid header. Counting notches at 170bpm is not a reliable read; the label costs no row.
+**Notch positions re-anchor as intervals complete (ruling 8, closing adversarial B2).** A distance interval has no true duration — `phaseSeconds` (`domain/expand.ts:98-106`) returns `(meters / 500) * targetSplit`, an estimate by its own doc comment, and `null` when a phase carries neither seconds nor a priced distance. So:
+
+- **Completed intervals** are positioned by their REAL elapsed time, taken from the same per-interval actuals the record already holds. Their notches are facts.
+- **Upcoming intervals** are positioned by estimate (`phaseSeconds` summed across the interval's phases) and re-flow each time a real boundary lands.
+- **A `null`-priced phase** (open-ended piece) contributes no estimate: its interval, and everything after it, is drawn UNNOTCHED — the bar honestly stops predicting rather than collapsing spans to zero width.
+- The fill continues to run on real elapsed, so the fill edge and the notches are finally measured in the same units for the past, and the drift is confined to the future where it belongs.
+
+**Inputs are net-new (adversarial B3).** Neither `IntervalSegments` (`{total, current, kinds}`, `IntervalSegments.tsx:20-24`) nor `TimerRuler` (`{totalLeftSeconds, totalSeconds}`, `TimerRuler.tsx:29-35`) carries durations, and `SurfaceModel` has no duration array. This wave adds one: an interval-boundary array (cumulative seconds per boundary, plus a flag for where prediction stops), derived once and passed to `TimerRuler`. Both surfaces consume the same shape, so the unconnected timer gets the same bar rather than a fork.
+
+**Rendering:** notches are 1px `--ink` hairlines, full bar height, monochrome (accent means four things; the tint colours mean over/under). Rest spans are NOT separately tinted this wave — a second track weight at 5px reads as noise.
+
+**Fallbacks:**
+- A single-interval session (`intervals.length === 1`) has no interior notches and keeps the ¼/½/¾ ruler rather than rendering a bare rectangle.
+- **Density:** at 390px landscape, more than ~16 boundaries puts notches under 24px apart and they read as texture, not structure. Above that threshold the bar keeps the quarter ruler and the count stays textual. The threshold is a named constant, and the grid pane remains the honest place to read a 25-interval session.
+
+**The count still reads in words** on live's connection line (`2 OF 5 · WORK`, already rendered at no vertical cost) and in the grid header. Counting notches at 170bpm is not a reliable read.
 
 ## 6. The two panes
 
-**Rail in the sensor gutter (landscape).** A 44px gutter column (`#efeade`, 1px right rule) holds LIVE at top and GRID at bottom with the housing spacer between; the content column starts immediately after it, with no additional inset — which is also why §4's fix must land first, since today's rail is a right-edge grid column inside `max-width: 800px`. Portrait keeps a 54px two-tab bar (LIVE · GRID).
+**Rail in the sensor gutter (landscape), and the surface goes FULL-BLEED (ruling 10, adversarial B5).** Today `.screen` caps the surface at 480px with 20px padding (`index.css:401-407`) and landscape at 800px (`:6233`), so a 44px gutter would float ~42px inboard of the housing it exists to avoid. In landscape the connected surface therefore breaks out of the app's max-width and runs edge to edge: the gutter (`#efeade`, 1px inner rule, LIVE top / GRID bottom with the housing spacer between) sits at the physical edge, and the content column starts immediately after it with no additional inset — gaining back the ~84px the max-width was spending. This is a HUD on a mounted phone, not a document. Portrait is unchanged in width and keeps a 54px two-tab bar (LIVE · GRID). Safe-area insets still apply; the full-bleed is a max-width and padding change, never an inset override.
 
 **Pane state.** `PANES` becomes `["live","grid"]`; `DEFAULT_PANE` stays `live`. A stored `"timer"` from a rower's localStorage already falls back through `PANES.includes` (`ConnectedSurface.tsx:73`) — verified graceful, no migration written.
 
 **Live pane** (revision §3): two heroes, actual split and actual rate, each with its target directly beneath in ink (112/104px actuals, 46/44px targets, tenths at half size). Below a 1px ink rule, the metric row on one baseline: left-in-interval · meters · HR at 30px. Then UP NEXT, then TOTAL LEFT with the notched bar. The hero cannot clip: `min-width: 0` on the column, `white-space: nowrap` on the numeral, and any split slower than `9:59.9` renders `—`.
 
-**The second hero is net-new plumbing.** Rate exists today as a 40px card with no target rendered anywhere, and `SurfaceModel` carries no target-rate field. This wave adds `targetRate` + its caption to the model, derived from the programmed phase's spm, judged by the SAME `judgeActual` helper (`domain/judge.ts`, `SPM_TOLERANCE = 2`) that already tints split. One judgement helper, two heroes — no pane deciding for itself, and the existing single-call-site census test extends to cover it.
+**The second hero is a PROMOTION, not new plumbing (corrected, adversarial).** The target rate already exists in the model and already renders — `surfaceModel.ts:337`/`:433` derive it and `PaneLive.tsx:94` shows it as the rate card's caption. The work is promoting that caption to a 46/44px ink numeral beneath a 112/104px judged actual, not deriving a new field. Judgement stays the single `judgeActual` call (`domain/judge.ts`, `SPM_TOLERANCE = 2`, direction already correct for rate), and the existing single-call-site census test extends to the second hero.
+
+**Both heroes need a no-target state (adversarial).** Every rest phase, and any work phase without a programmed rate, has no target to render. The target slot holds its space and reads `—` in `--ink-3`; the actual above it renders unjudged (plain ink), since a value with nothing to compare against must not be tinted. Pinned by test for the rest case, which every interval session hits.
+
+**UP NEXT's string needs work the revision assumes away (adversarial B6).** The revision's `REST 2:00 · then WORK 2:09.0` is unreachable today: `phaseAnnouncement` emits `KIND · label` and collapses rests to a bare `REST` (`Timer.tsx:194-199`, `:214-218`), with `:202-206` documenting why the duration is absent. This wave extends the announcement to carry the rest's own duration, on both surfaces, and the portrait short form (`REST 2:00 · WORK 2:09.0`) follows the same builder rather than a second string.
 
 **Grid pane** (revision §4): single-line fixed-height rows (36px landscape / 40px portrait, mono 19px), 8 visible landscape / 12 portrait; the portrait second line and the active row's third line both go. Columns per the revision's flex table. Completed rows ink over a solid rule; the active row a `--surface` fill between two ink rules with a 4×20 marker (no card padding, no 2px box); upcoming rows `--ink-3` over a dashed rule. Session totals move into the header line (`3 OF 12 · WORK · 0:47 LEFT` and `38:20 TOTAL`). Rows scroll under the pinned header, active row always scrolled into view.
 
@@ -81,7 +103,9 @@ Together: the grid pane contributes a min-content width the other panes do not, 
 
 Same size steps, same gutter treatment (back `←` top, END bottom, either side of the housing), countdown 128/118px ink with ELAPSED beneath at 26px, both targets stacked in the right column at 56/52px **in ink**, Pause as the only level-1 control (200×44 landscape, full-width 56px portrait), UP NEXT and TOTAL LEFT per §5-§6 above including the notched bar. Distance pieces swap the hero (meters count down, clock accrues beneath) with labels swapping and layout holding.
 
-`RUNNING` goes ink (ruling 6). Accent's remaining jobs on this surface: the Pause fill and the phase progress bar.
+`RUNNING` goes ink (ruling 6). Accent's remaining jobs on this surface, CORRECTED against source (adversarial): the phase progress bar (`index.css:3785`) and the total-bar fill (`:3722-3727`, which the original draft missed). The mockup does NOT render Pause as an accent fill — the implementer follows the mockup for Pause's treatment and records the resulting accent inventory in the DEVIATIONS row rather than assuming the shipped fill survives.
+
+**The landscape leak is this wave's problem (adversarial).** `index.css:4070`/`:4087`/`:4098`'s `.timer-*` landscape rules are NOT scoped to `.timer-screen`, so they reach the connected panes, where `:6321-6327` resets only three properties. Rebuilding the timer surface moves the leaking layer: the rebuild scopes those rules to their own surface and deletes the reset, rather than leaving two half-coupled layers behind.
 
 ## 8. Size steps (ruling 3)
 
@@ -90,13 +114,14 @@ Same size steps, same gutter treatment (back `←` top, END bottom, either side 
 ## 9. Testing and acceptance
 
 - **Load-bearing pins only** (ruling 4): the §4 width invariant (both panes, both orientations, after a swipe); no-scroll on live in both orientations; hero no-clip including the `9:59.9` cap rendering `—`; grid row heights and visible-row counts (8/12); the gutter's 44px and End's 44pt target; the notch count equalling `phases.length - 1` with the single-interval fallback to quarter ticks; the judged-tint census extended to the rate hero. The existing tap-target, axe and token-palette sweeps run over both rebuilt surfaces.
-- **Retirements, expected and enumerated:** `PaneTimer.tsx` and its portrait `order` rules; the pane-A describe in `ConnectedSurface.test.tsx` (4 its); `connected-pane-timer` ×2 captures and `e2e/fixtures/connected-pane-timer.html`; the lost-banner step-downs keyed to `.connected-clock-value`. `connected-paused` ×2 is currently captured ON pane A (`ConnectedSurface.screens.test.tsx:238-245`) and must RE-POINT to live, not retire.
+- **Retirements, expected and enumerated:** `PaneTimer.tsx` and its portrait `order` rules; the pane-A describe in `ConnectedSurface.test.tsx` (4 its); `connected-pane-timer` ×2 captures and `e2e/fixtures/connected-pane-timer.html`; the lost-banner step-downs keyed to `.connected-clock-value`; `statusWord`/`statusWordFor` and their model tests. `connected-paused` ×2 is currently captured ON pane A (`ConnectedSurface.screens.test.tsx:238-245`) and must RE-POINT to live, not retire. The plan's first task RE-DERIVES the full retirement inventory from source (the adversarial pass found this list short by roughly a dozen, including `PaneGrid.test.tsx`'s row-shape suites and the visible-row pin at `screenshots.spec.ts:2214`) — no test retires without appearing in that inventory with a reason.
+- **Every line cite in this spec was corrected against this worktree post-adversarial.** The plan's implementers re-verify before editing anyway: the original drift came from a scout reading pre-merge main, and the same trap is live for anyone citing across a merge.
 - **Capture churn is the wave's largest test cost and is expected:** every `connected-*` capture re-shoots (18 today), plus the timer captures. Each committed diff states its reason; unrelated re-encode noise is reverted.
-- **Tab order changes twice** (rail loses a target, End moves to the header): the `screenshots.spec.ts:2233-2237` order pin is rewritten once, deliberately, with the new order stated in the diff.
+- **Tab order changes twice** (rail loses a target, End moves to the header): the order pin at `screenshots.spec.ts:2192-2198` (the file is 2228 lines; the original cite was past EOF) is rewritten once, deliberately, including its `slice(0, 5)` arity, with the new order stated in the diff.
 - Gates ×2 on the per-worktree stack. Baseline measured at plan time.
 
 ## 10. Docs
 
 - ROADMAP: the phase entry, its exit (a hardware read at the erg: both panes in landscape at a real PM5, the width holding across a swipe, the notched bar against a real multi-interval piece), and the follow-ons this wave does not take (README §7's three open questions).
-- DEVIATIONS: three rows — the notched bar overriding the packet's "unchanged" quarter ruler (ruling 7); `RUNNING` in ink, which NARROWS the existing row 1 rather than adding a divergence; and the live pane dropping the segment bar the packet's §3 keeps.
+- DEVIATIONS: five rows — the notched bar overriding the packet's "unchanged" quarter ruler (ruling 7, with the re-anchoring and density rules); `RUNNING` in ink, which NARROWS the existing row 1 rather than adding a divergence; the live pane dropping the segment bar the packet's §3 keeps; the status word dropped where the packet and mockup render one (ruling 9); and the landscape full-bleed departing the app-wide max-width (ruling 10).
 - The design packet stays in `docs/design/handoffs/2026-08-11-connected-revamp/` as the implementation's cited authority.
