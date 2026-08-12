@@ -36,7 +36,6 @@ import type { ConnectedPhase } from "../../monitor/useMonitorSession";
 import type { EnginePhase } from "../../session/engine";
 import {
   phaseKindWord,
-  segmentKind,
   thenNextTextAt,
   totalSessionSecondsOf,
   upNextTextAt,
@@ -242,11 +241,6 @@ export interface SurfaceModel {
   intervalLabelShort: string;
   /** `NOW · /500M` live; `LAST · /500M` once the link is gone (handoff §4). */
   nowLabel: string;
-  segments: {
-    total: number;
-    current: number;
-    kinds: ("work" | "rest" | "wu")[];
-  };
   upNext: string;
   thenNext: string | null;
   totalSeconds: number;
@@ -268,11 +262,16 @@ export interface SurfaceModel {
   paceWhole: string;
   paceTenths: string;
   rate: JudgedValue;
-  /** `"NO RATE TARGET"` or `` `TARGET ${targetSpm}` ``. Connected-revamp
-   *  Task 3 promotes this to the rate hero's own ink numeral
-   *  (`PaneLive.tsx`'s `rateTargetValue`) rather than deriving a second
-   *  field for it — see that file's own header comment. */
-  rateCaption: string;
+  /** The rate hero's own target row: `DASH` when the phase carries no spm
+   *  (the same no-target signal `targetSplit.main` uses). Connected-revamp
+   *  Task 3 fix round 1 (task-3-review.md Minor-3): this replaced a string
+   *  caption (`"NO RATE TARGET"` / `` `TARGET ${targetSpm}` ``) PaneLive
+   *  used to parse for its numeral — `targetSpm` was already in hand two
+   *  lines from where that caption used to be built, so reading it
+   *  straight into a `{ main }` pair costs nothing and removes the
+   *  presentation-string coupling. Mirrors `targetSplit` below; no `sub`
+   *  because a rate target carries no ref to show underneath it. */
+  targetRate: { main: string };
   meters: JudgedValue;
   hr: JudgedValue;
   /** The TARGET SPLIT card: resolved value + the ref it came from. */
@@ -315,7 +314,19 @@ function livePace(frame: MonitorFrame, status: SurfaceStatus): number | null {
  *  as no reading at all rather than a five-plus-character numeral: `null`
  *  through `judgedValue` renders `DASH` and judges `"within"` (rule 2),
  *  the same honest "nothing to show" every other absent case on this pane
- *  takes. */
+ *  takes.
+ *
+ *  LEAKS INTO PANE C, deliberately (task-3-review.md Minor-4): `pace`
+ *  below is the same `JudgedValue` `buildGridModel` receives as `livePace`
+ *  for the active row's `/500M` cell, so a capped split blanks that cell
+ *  too — a 19px grid cell has no width problem of its own, so the cap's
+ *  own reason does not apply there, but the alternative (deriving a
+ *  SECOND, uncapped pace for pane C) would let a rower swipe from a dash
+ *  on B to a five-digit number on C for the exact same live reading,
+ *  which is worse. One capped value, shared, stays consistent with "the
+ *  same objects, so a rower swiping cannot find the split judged one way
+ *  on one pane and another way on the next" (`buildGridModel`'s own
+ *  comment). */
 const PACE_HERO_CAP_SECONDS = 599.9;
 
 export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
@@ -432,11 +443,6 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
     intervalLabel: `INTERVAL ${intervalIndex + 1} OF ${intervals} · ${kindWord}`,
     intervalLabelShort: `${intervalIndex + 1} OF ${intervals} · ${kindWord}`,
     nowLabel: stale ? "LAST · /500M" : "NOW · /500M",
-    segments: {
-      total: phases.length,
-      current: phaseIndex,
-      kinds: phases.map((p) => segmentKind(p.type)),
-    },
     upNext: upNextTextAt(phases, phaseIndex),
     thenNext: thenNextTextAt(phases, phaseIndex),
     totalSeconds,
@@ -452,7 +458,7 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
     paceWhole,
     paceTenths,
     rate,
-    rateCaption: targetSpm === null ? "NO RATE TARGET" : `TARGET ${targetSpm}`,
+    targetRate: { main: targetSpm === null ? DASH : String(targetSpm) },
     meters,
     hr,
     targetSplit,

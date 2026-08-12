@@ -13,12 +13,10 @@
 // THE RATE HERO IS A PROMOTION, NOT NEW PLUMBING. `model.rate` is the same
 // `JudgedValue` `judgedValue` has always produced (`surfaceModel.ts`'s one
 // judgement path — `judgeActual`'s single call site is unmoved by this
-// file); `model.rateCaption` is the same string ("NO RATE TARGET" or
-// `TARGET ${targetSpm}`) that used to caption a small RATE card. Promoting
-// it to a hero-scale numeral is presentation only: `rateTargetValue` below
-// strips the "TARGET " word for display (the label span already says
-// TARGET beside it, mirroring the split hero's own TARGET row) and reads
-// the caption's "NO RATE TARGET" sentinel as the no-target signal.
+// file); `model.targetRate.main` is read straight off the model (fix round
+// 1, task-3-review.md Minor-3 — an earlier version of this file parsed a
+// caption STRING for this value instead; `targetRate` replaced it at the
+// model layer, see that file's own comment).
 //
 // THE NO-TARGET STATE (design spec §6, adversarial finding): every REST
 // phase — and any work phase without a numeric target — has nothing to
@@ -49,19 +47,6 @@ import TimerRuler from "../../session/TimerRuler";
 import ConnectionLine from "./ConnectionLine";
 import { DASH, type SurfaceModel } from "./surfaceModel";
 
-/** `surfaceModel.ts`'s own sentinel for "no rate target" — see that file's
- *  `rateCaption` field. Matched literally rather than re-deriving a boolean
- *  here, so the model stays the single source of truth for the signal. */
-const RATE_NO_TARGET = "NO RATE TARGET";
-
-/** `"TARGET 24"` -> `"24"`; `"NO RATE TARGET"` -> `DASH`. The only parsing
- *  this file does: `rateCaption` already carries the value, and promoting
- *  it to a numeral is a presentation change, not a new derivation
- *  (design spec §6: "not deriving a new field"). */
-function rateTargetValue(caption: string): string {
-  return caption === RATE_NO_TARGET ? DASH : caption.replace(/^TARGET /, "");
-}
-
 function judgedClass(
   base: string,
   value: { judgement: string; absent: boolean },
@@ -72,10 +57,10 @@ function judgedClass(
 }
 
 export default function PaneLive({ model }: { model: SurfaceModel }) {
-  const rateAbsent = model.rateCaption === RATE_NO_TARGET;
-  // Same signal the pace hero's target already carries (`targetSplit.main
-  // === DASH`, fixed at the model layer) — mirrored here rather than adding
-  // a second boolean field for one comparison.
+  // Both heroes signal "no target" the same way: the model's own value
+  // reads DASH (`targetSplit.main`/`targetRate.main`, both fixed at the
+  // model layer) rather than a second boolean field per hero.
+  const rateAbsent = model.targetRate.main === DASH;
   const paceTargetAbsent = model.targetSplit.main === DASH;
   // `model.stale` already distinguishes "the link is gone" from "the erg is
   // just paused" (paused values hold, they are not stale) — the same rule
@@ -126,7 +111,7 @@ export default function PaneLive({ model }: { model: SurfaceModel }) {
                   : "connected-hero-target-value"
               }
             >
-              {rateTargetValue(model.rateCaption)}
+              {model.targetRate.main}
             </span>
           </div>
         </div>
