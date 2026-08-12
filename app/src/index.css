@@ -3461,7 +3461,16 @@ button:disabled {
      not one of this app's other screens' literal PX figures (those are
      phone-frame-specific prototype numbers). The tab bar is hidden on this
      route (AppRoutes.tsx's hidesTabBar), so the viewport minus this
-     screen's own safe-area padding is genuinely all there is to fill. */
+     screen's own safe-area padding is genuinely all there is to fill.
+
+     PORTRAIT STILL OVERFLOWS BY 18px HERE, measured at 390×844 during fix
+     round 1 (`scrollHeight` 862 vs `clientHeight` 844, this box 818px):
+     the bar is hidden but `.app-shell` still RESERVES `var(--tap)` for it
+     (index.css:398), and `box-sizing: border-box` already counts the 26px
+     subtracted above inside the min-height. `.timer-screen`'s own comment
+     carries the full derivation and the fix (swap the `- 26px` term for
+     `- var(--tap)`); this rule and `.session-complete-screen`'s were left
+     on the pre-fix formula deliberately — Task 8 owns `countdown.png`. */
   min-height: calc(
     100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) -
       26px
@@ -3606,13 +3615,50 @@ button:disabled {
    reusing `.timer-end-confirm`/`.timer-end-actions` (renamed
    `.timer-end-abandon` to `.timer-confirm-primary`, since that class now
    backs two different panels' confirm buttons, not just Abandon's). */
+/* PORTRAIT'S 18px OF DEAD SCROLL: `var(--tap)`, not the column's spacing
+   (fix round 1, review Important-3 — the new `session.spec.ts` pin measured
+   `scrollHeight` 862 vs `clientHeight` 844 at 390×844, a defect PRE-DATING
+   this branch: `main`'s own `.timer-screen` carries the identical formula).
+   The first attempt at it cut this `gap` 16 → 12 and the number did not
+   move by one pixel, which is the whole diagnosis: walked live in the
+   browser at 390×844, the flex column's six children total 546.2px, so
+   even at 16px spacing its natural height is 652.2px — well SHORT of the
+   box, and `.timer-controls`'s `margin-top: auto` (below) eats every pixel
+   of the difference (measured `margin-top: 185.8px` before this fix), so
+   no gap value on this column can change the page's height at all.
+
+   What sets that height is this `min-height` plus `.app-shell`'s
+   `padding-bottom: calc(var(--tap) + safe-area-bottom)` (index.css:398),
+   the strip the shell reserves for a fixed tab bar on EVERY route even
+   though `hidesTabBar` (AppRoutes.tsx) renders none here. Measured:
+   `main.screen.timer-screen` 818px (= 844 − 26) + the shell's 44px = 862.
+   The overflow is exactly `var(--tap)` − 26px = 18px, the same signature
+   and the same arithmetic Task 4's F3 fix closed for this rule's LANDSCAPE
+   half and Task 5 closed for `.countdown-screen`'s (see that rule's own
+   comment: "the identical 18px `.timer-screen` itself carried").
+
+   Fixed by swapping the term rather than appending to it. The `- 26px` was
+   this screen's own `.screen` padding (6px top + 20px bottom), written to
+   subtract padding that `box-sizing: border-box` (index.css:1) already
+   counts INSIDE the min-height — a double count, which is why merely
+   appending `- var(--tap)` (the two prior fixes' shape) would have left
+   26px of dead space at the bottom instead. The reserved-strip term is the
+   real one: the document's own ceiling for this route is `100dvh` −
+   `var(--tap)`, so that is what the box may be. Re-measured after:
+   `scrollHeight` 844, `clientHeight` 844 — exact fit, zero scroll — the
+   box 800px, its content 652.2px, so the auto margin (now 147.8px) still
+   pins the controls to its foot exactly as before, 18px higher up the
+   page and nothing else moved. The `gap`
+   accordingly goes back to `main`'s 16px: nothing here was ever a spacing
+   problem. Landscape is unaffected either way — its own `@media` block
+   overrides `min-height`, `row-gap` and `column-gap` outright. */
 .timer-screen {
   display: flex;
   flex-direction: column;
   gap: 16px;
   min-height: calc(
     100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) -
-      26px
+      var(--tap)
   );
 }
 
@@ -3734,8 +3780,17 @@ button:disabled {
   display: block;
 }
 
+/* Ink, not accent (fix round 1, review Important-1). DEVIATIONS.md:77
+   already named this exact issue — the mockup's own segment bar is
+   ink/mid/rule, zero accent pixels (`Ergomatic connected mode.dc.html`'s
+   timer frames render the completed dots `#1b1a17`), and the connected
+   surface's own now-retired override already proved the fix ("accent
+   means four things and none of them is 'already rowed'"). Phase 7B Task
+   6 scoped that fix to `.connected-pane` only, leaving THIS base rule —
+   the phone timer's own — as the still-open half of the same row; closing
+   it here retires DEVIATIONS.md:77 rather than carrying it forward. */
 .timer-dot-past {
-  background: var(--accent);
+  background: var(--ink);
 }
 
 .timer-dot-current {
@@ -3764,6 +3819,15 @@ button:disabled {
   font-size: 11px;
   letter-spacing: 0.16em;
   color: var(--ink-3);
+}
+
+/* Landscape-only decorative duplicate of `.timer-name` (fix round 1: the
+   mockup's own combined row, see `Timer.tsx`'s comment on this span for
+   the full reasoning). Hidden by default — same `display: none`/media-
+   query-`inline` idiom `.timer-upnext-then` already establishes for a
+   single-orientation word inside a shared text run. */
+.timer-phase-title {
+  display: none;
 }
 
 /* Ink, not accent (connected-revamp Task 7, revision §5 + spec §7:
@@ -4315,11 +4379,15 @@ button:disabled {
     grid-template-columns: 44px 1fr;
     grid-template-rows: auto auto auto 1fr auto auto auto;
     column-gap: 14px;
-    /* 4px, not portrait's 8 (measured: the frame's real 390px budget
-       overflowed by 66px at 8px row-gap across 7 tracks — see the block
-       comment on `.timer-name` below for the other three cuts that closed
-       the rest of it). */
-    row-gap: 4px;
+    /* 3px, not portrait's 12 (measured: the frame's real 390px budget
+       overflowed by 66px at 8px row-gap across 7 tracks originally — see
+       the block comment on `.timer-name` below for the other three cuts
+       that closed most of it. Fix round 1: restoring the title onto the
+       label row, `.timer-phase-head`'s three-item baseline-aligned flex
+       row measures a hair taller than its pre-fix two-item shape,
+       reopening a real 2px overflow — `scrollHeight` 392 vs `clientHeight`
+       390 — closed here rather than by touching the row's own content). */
+    row-gap: 3px;
     /* Same `.app-shell` tab-bar-padding accounting as the pre-Task-7 rule
        this replaces (Task 4's own fix round, F3) — this route hides the
        tab bar but `.app-shell` still reserves its height, and the 390px
@@ -4376,10 +4444,16 @@ button:disabled {
     border-radius: 6px;
   }
 
-  /* END, in the gutter: 44×44, ink-outlined (revision §2's own connected-
-     header treatment, reused here for the timer's own gutter END — mono
-     11px/600, accent text/border, radius 2). Overrides the portrait rule's
-     transparent/borderless/auto-width shape entirely. */
+  /* END, in the gutter: 44×44, accent-outlined (fix round 1, review
+     Minor-5: this comment previously said "ink-outlined", contradicting
+     both the code below and its own parenthetical — revision §2's own
+     connected-header treatment, reused here for the timer's own gutter
+     END — mono 11px/600, accent text/border, radius 2). Overrides the
+     portrait rule's transparent/borderless/auto-width shape entirely.
+     This is a THIRD accent job on this surface (fix round 1, review
+     Minor-4) — the report's original "two jobs" inventory undercounted
+     it; spec-consistent (mirrors the connected surface's own accent-
+     outlined End), not a defect, just an incomplete tally. */
   .timer-screen .timer-header .timer-end {
     width: 44px;
     min-width: 44px;
@@ -4402,23 +4476,33 @@ button:disabled {
     display: contents;
   }
 
-  /* THE WORKOUT TITLE IS DROPPED IN LANDSCAPE (measured budget finding, not
-     the original plan): the mockup draws it combined onto ONE line with the
-     interval caption (`Ergomatic connected mode.dc.html`'s own "4 × 1K OFF
-     2′ · INTERVAL 3 OF 12 · WORK"); this task keeps `stepLineText`'s
-     existing STEP-line copy unchanged rather than inventing a second string
-     builder, so a first pass gave the title its own row instead — measured
-     directly against this worktree at the revision's own 390px frame, that
-     row (plus its own row-gap) was part of a real 66px overflow
-     (`document.documentElement.scrollHeight` 456 vs `clientHeight` 390).
-     Portrait still shows the title on its header line (unaffected, this
-     rule is landscape-only); dropping it here rather than merging two
-     independently-computed React strings into one is the smaller, safer
-     change under real time pressure — routed to Task 8's DEVIATIONS audit
-     as a departure from the mockup's own combined-line copy, not just its
-     pixel geometry. */
+  /* THE WORKOUT TITLE REJOINS LANDSCAPE, MERGED ONTO THE LABEL LINE (fix
+     round 1, review Important-2): the mockup draws it combined onto ONE
+     row with the interval caption
+     (`Ergomatic connected mode.dc.html:687`, "4 × 1K OFF 2′ · INTERVAL 3
+     OF 12 · WORK"), at no extra height over the STEP line this surface
+     already renders. The FIRST pass instead gave the title its own
+     separate row — measured directly against this worktree at the
+     revision's own 390px frame, that row (plus its own row-gap) was part
+     of a real 66px overflow (`scrollHeight` 456 vs `clientHeight` 390,
+     see the fix-round report for the re-measurement after this change) —
+     and dropped it rather than building the merge. `.timer-name` itself
+     (the ACCESSIBLE instance, in the gutter's header row) stays hidden
+     here; `.timer-phase-title` below is the decorative landscape-only
+     duplicate `Timer.tsx`'s own comment documents — a TRUE SIBLING of
+     `.timer-phase-label`, not nested inside it (`Timer.tsx`'s own comment
+     has the full reasoning: nesting broke every `getByText(/^STEP N OF
+     M/)` e2e assertion in the suite, caught by this fix round's own
+     self-mutation testing). The merge is a landscape FLEX-ROW fact
+     (`.timer-phase-head`'s three children, DOM order title/label/state,
+     below), never a shared text run — costs no new row either way. */
   .timer-screen .timer-name {
     display: none;
+  }
+
+  .timer-screen .timer-phase-title {
+    display: inline;
+    flex: none;
   }
 
   /* `.timer-phase` (STEP N OF M/RUNNING, the hero, the optional phase bar)
@@ -4436,6 +4520,32 @@ button:disabled {
   .timer-screen .timer-phase-head {
     grid-column: 2;
     grid-row: 1;
+    /* Spaces title/label/state apart — `.timer-phase-title`'s own text ends
+       in a bare "·" (no trailing space, unlike the pre-fix-round nested
+       version) specifically so this ONE gap value supplies the space on
+       both sides of the dot rather than doubling up with a second one
+       baked into the string. */
+    gap: 10px;
+  }
+
+  /* The STEP text itself can run long ("STEP N OF M · WORK · SET x/y ·
+     NNNNM"), and now shares its row with the title and RUNNING besides —
+     truncates rather than wrapping onto a second line (which would blow
+     the row's own auto height) or squeezing RUNNING off the row's far
+     edge. `min-width: 0` is what lets a flex child actually shrink below
+     its own text's natural width in the first place (the recurring fix
+     this file reaches for everywhere a flex row needs to clip one long
+     child). */
+  .timer-screen .timer-phase-label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .timer-screen .timer-state {
+    flex: none;
   }
 
   .timer-screen .timer-dots {
@@ -4620,10 +4730,26 @@ button:disabled {
   display: flex;
   flex-direction: column;
   gap: 20px;
-  /* Same full-bleed sizing as `.timer-screen` above (this route is in
-     AppRoutes.tsx's HIDDEN_TABBAR_PREFIXES, so there's no tab bar height to
-     subtract for either) — pins `.complete-back`'s `margin-top: auto` to
-     the bottom of the viewport rather than right under the actuals list. */
+  /* Full-bleed sizing (this route is in AppRoutes.tsx's
+     HIDDEN_TABBAR_PREFIXES, so no tab bar renders over it) — pins
+     `.complete-back`'s `margin-top: auto` to the bottom of the viewport
+     rather than right under the actuals list.
+
+     NO LONGER "the same as `.timer-screen` above", which this comment used
+     to say: fix round 1 swapped that rule's `- 26px` for `- var(--tap)`
+     after measuring 18px of dead portrait scroll (see its own comment for
+     the derivation). This formula is the pre-fix one, and by the same
+     arithmetic — `.app-shell` reserves `var(--tap)` for a bar this route
+     never renders, and `box-sizing: border-box` already counts the 26px of
+     `.screen` padding inside the min-height — this screen and
+     `.countdown-screen` (its own base rule above) both still carry the
+     identical 18px in PORTRAIT — MEASURED live at 390×844, not inferred:
+     `scrollHeight` 862 vs `clientHeight` 844 on both, each screen's own
+     `main` box 818px, exactly the timer's own before-numbers. Both were
+     left alone deliberately: fix round 1's brief is the phone timer's own
+     portrait budget, and re-shooting `countdown.png`/
+     `session-complete*.png` belongs to Task 8, which owns those captures.
+     Flagged in the fix-round report for Task 8, not fixed here. */
   min-height: calc(
     100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) -
       26px
