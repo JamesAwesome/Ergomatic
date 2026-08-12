@@ -293,7 +293,7 @@ describe("live", () => {
     expect(model({ frame: frame({ spm: spm - 10 }) }).rate.judgement).toBe(
       "under",
     );
-    expect(model().rateCaption).toBe(`TARGET ${spm}`);
+    expect(model().targetRate.main).toBe(String(spm));
   });
 
   it("cuts the hero split so the tenths can be set smaller", () => {
@@ -378,7 +378,7 @@ describe("live", () => {
     expect(m.targetSplit.main).toBe("—");
     expect(m.pace.judgement).toBe("within");
     expect(m.pace.absent).toBe(false);
-    expect(m.rateCaption).toBe("NO RATE TARGET");
+    expect(m.targetRate.main).toBe("—");
     expect(m.rate.judgement).toBe("within");
     expect(m.rate.absent).toBe(false);
   });
@@ -394,14 +394,15 @@ describe("live", () => {
     expect(m.totalLeftSeconds).toBe(0);
   });
 
-  it("carries the same segments and UP NEXT for whichever pane asks", () => {
-    const m = model({ frame: frame({ intervalIndex: 1 }) });
-    expect(m.segments.total).toBe(FIXTURE.phases.length);
-    expect(m.segments.current).toBe(
-      phaseIndexForInterval(FIXTURE.phases, 1, false),
-    );
-    expect(m.upNext).not.toBe("");
-  });
+  // `SurfaceModel.segments` retired (connected-revamp Task 3 fix round,
+  // task-3-review.md Important-3): its only remaining consumer,
+  // `IntervalSegments` on pane B, went with this task's own segment-bar
+  // removal (design spec §3's casualty list), and `Timer.tsx:630`'s
+  // surviving usage builds its own props from `currentRun`, never from
+  // `SurfaceModel`. This test's own premise — proving segments/UP NEXT
+  // read the same "for whichever pane asks" — died from both directions
+  // once `PaneTimer.tsx` (Task 2) and this pane's own segment bar (Task 3)
+  // left exactly one pane standing.
 });
 
 // ---------------------------------------------------------------------------

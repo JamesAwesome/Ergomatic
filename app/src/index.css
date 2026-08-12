@@ -3827,26 +3827,28 @@ button:disabled {
 
    Measured against `--surface` (#fffdf7): `--type-o2` 6.65:1,
    `--type-at` 5.54:1, `--ink-3` 7.44:1 (and 6.30:1 against
-   `--surface-sunken`, the fill a stale card moves to). All clear the
-   house's 4.5:1 floor. `-within` deliberately declares nothing: within
-   tolerance IS plain `--ink`, and a rule restating that would be one more
-   place for the neutral case to drift.
+   `--surface-sunken`). All clear the house's 4.5:1 floor. `-within`
+   deliberately declares nothing: within tolerance IS plain `--ink`, and a
+   rule restating that would be one more place for the neutral case to
+   drift.
 
    Fix wave (review H5/N3): `.timer-card-static` and the bare
    `.timer-card-actual` used to sit between this comment and the rules it
    describes. Both were rendered ONLY by `TimerTargets`' `variant="connected"`
    JSX, which Task 8 deleted; a grep across `src`/`e2e`/`domain` found zero
    renderers for either. Removed rather than kept "in case" — the shipped
-   renderers of the judgement-keyed hook are `connected/JudgedCard.tsx`,
-   `connected/PaneLive.tsx` and `connected/PaneGrid.tsx`, and they use the
-   `-under`/`-over`/`-stale` suffixed classes only. */
+   renderers of the judgement-keyed hook are `connected/PaneLive.tsx` and
+   `connected/PaneGrid.tsx` (connected-revamp Task 3's fix round retired
+   the third, `connected/JudgedCard.tsx`, along with the cards it wrapped —
+   see that task's own report), and they use the `-under`/`-over`/`-stale`
+   suffixed classes only. */
 
 /* Handoff: "every stale value greys to --ink-3" — task-3 review HIGH-1:
    this shipped as `--ink-5` (2.76:1 against --surface, FAILS the house's
-   binding >=4.5:1 AA rule; 2.33:1 against --surface-sunken, the fill a
-   stale card moves to, worse). `--ink-3` measures 7.44:1 / 6.30:1 against
-   the same two backgrounds — both pass comfortably. Pinned structurally
-   (not just by eye) in TimerTargets.test.tsx, which reads this exact rule
+   binding >=4.5:1 AA rule; 2.33:1 against --surface-sunken, worse).
+   `--ink-3` measures 7.44:1 / 6.30:1 against the same two backgrounds —
+   both pass comfortably. Pinned structurally (not just by eye) in
+   TimerTargets.test.tsx, which reads this exact rule
    out of this file's own source text. The rule it describes is
    `.timer-card-actual-stale`, third below — this comment used to sit
    immediately above `-under`, which is not it (review N3). */
@@ -5397,22 +5399,19 @@ section:not(.news-pinned) .news-row:last-of-type {
 }
 
 /* ACCENT APPEARS NOWHERE ON THESE PANES (rule 1 at the top of this block).
-   The phone timer's own segment strip paints COMPLETED segments
-   `--accent`, and `IntervalSegments` is reused here verbatim, so the class
-   arrives with the component — these two rules are what keep it off the
-   surface. The three tones are the mockup's own bar: completed ink,
-   current mid, upcoming rule. */
-.connected-pane .timer-dot-past {
-  background: var(--ink);
-}
-
-.connected-pane .timer-dot-current {
-  background: var(--ink-4);
-}
-
-/* Same reason: `TimerRuler`'s own TOTAL LEFT bar fills `--accent` on the
-   phone timer, and the component is reused verbatim. On this surface the
-   progress fill is ink, like the interval bar above it. */
+   `TimerRuler`'s own TOTAL LEFT bar fills `--accent` on the phone timer,
+   and the component is reused here verbatim (Task 4 rebuilds its
+   internals, not this override) — on this surface the progress fill is
+   ink instead. The sibling override this comment used to describe,
+   `.connected-pane .timer-dot-past`/`-current` (the phone timer's segment
+   strip painting COMPLETED segments `--accent`), retired in the same fix
+   round that removed it: `IntervalSegments` is no longer reused on ANY
+   connected pane — pane A's own usage went with `PaneTimer.tsx`
+   (connected-revamp Task 2), and pane B's went with the equal-width
+   segment bar this task's own rebuild dropped (design spec §3's casualty
+   list). No `.timer-dot*` element can render inside `.connected-pane` any
+   more (`grep -rn "timer-dot" src --include=*.tsx`: only `components/
+   IntervalSegments.tsx`, consumed solely by `session/Timer.tsx`). */
 .connected-pane .timer-total-bar span {
   background: var(--ink);
 }
@@ -6252,7 +6251,24 @@ section:not(.news-pinned) .news-row:last-of-type {
      edge plays the gutter's role, so the ordinary inset behaviour is
      correct there. Which physical side the housing actually falls on
      depends on rotation direction, which neither the revision nor this
-     fix addresses — that is a design call, not an implementation one. */
+     fix addresses — that is a design call, not an implementation one.
+
+     `height` RECLAIMS THE DEAD 26px (connected-revamp Task 3 fix round,
+     task-3-review.md Scrutiny 1(b)/Important-1). The base rule's `height:
+     calc(100dvh - insets - 26px)` (`:5289-5292`) sized that flat 26px to
+     match `.screen`'s own vertical padding (6px top + 20px bottom — the
+     class this element also carries), which the padding override just
+     above already zeroes out in landscape (`padding: insets 0`, no
+     literal 6/20 left to account for). Task 2's full-bleed change dropped
+     the padding but never touched the height term, so landscape's own
+     border-box has ended 26px short of the viewport ever since — measured
+     directly against this worktree pre-fix: `.connected-surface`
+     `[0, 364]` inside a 390px frame, nothing painting `364→390`. Dropping
+     the term here (landscape only — portrait's own copy of this same
+     defect is a separate, unverified finding this fix round did not
+     touch; see the report) turns that dead space into 26px more content
+     budget, which is what makes the hero over-constraint below (Important-1)
+     and the UP NEXT/line-height divergences fixable in the same pass. */
   .connected-surface {
     display: grid;
     grid-template-columns: calc(44px + env(safe-area-inset-left, 0px)) 1fr;
@@ -6266,6 +6282,9 @@ section:not(.news-pinned) .news-row:last-of-type {
     margin: 0;
     padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
       env(safe-area-inset-bottom, 0px) 0;
+    height: calc(
+      100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)
+    );
   }
 
   /* One line in landscape: 390px of height cannot spare the two-line
@@ -6428,25 +6447,23 @@ section:not(.news-pinned) .news-row:last-of-type {
      the same as portrait. Mirrors `.connected-pane-grid`'s own override
      just below for the identical reason.
 
-     `gap: 9px`, not the base rule's 16px (measured, not guessed): the
+     `gap: 4px`, not the base rule's 16px (measured, not guessed): the
      16px figure is the OLD two-column layout's ROW gap — appropriate
      between two side-by-side columns, wrong once this pane stacks FIVE
-     items in one column instead of two. 9px is the mockup's own figure
-     for this exact content column (`Ergomatic connected mode.dc.html`'s
-     Live landscape frame, the outer `gap:9px`) — measured against this
-     worktree: at 16px the two heroes' box collapsed to 4px and their
-     112px text spilled through the metric row beneath them. 6px, tighter
-     still than the mockup's own 9px: this codebase spends 94px of chrome
-     the mockup's own 390px-tall frame does not (`.connected-surface`'s own
-     `-26px` height term, the 52px footer row and its two 8px grid
-     row-gaps — none of it new to this task, all of it pre-existing), so
-     matching the mockup's figure exactly still left the hero content
-     overlapping its neighbours above and below by ~8px each side —
-     measured directly against this worktree, not guessed. Combined with
-     the ruler/metric-row trims below, 6px is what actually closes it. */
+     items in one column instead of two. The mockup's own figure for this
+     exact content column is 9px (`Ergomatic connected mode.dc.html`'s Live
+     landscape frame) — this codebase still spends more chrome than that
+     390px-tall frame does even after reclaiming the dead 26px above (fix
+     round 1, task-3-review.md Scrutiny 1: the 52px footer row and its two
+     8px grid row-gaps are real, pre-existing, and not this task's to
+     remove), so 4px plus the trims below is what actually clears the
+     heroes' own content with a real, measured margin rather than the
+     ~1.5px one an earlier pass in this same fix round left standing
+     (task-3-review.md Important-1: 0.4px of literal overlap before the
+     26px reclaim). */
   .connected-pane-live {
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
   }
 
   /* THE TWO HEROES BECOME A ROW. `display: contents` (declared with
@@ -6493,6 +6510,14 @@ section:not(.news-pinned) .news-row:last-of-type {
     flex: none;
     align-self: stretch;
     background: var(--rule);
+  }
+
+  /* Revision §3's own table: 112px landscape at line-height 0.92, distinct
+     from portrait's 104px/0.90 (the base rule, unchanged). Fix round 1
+     (task-3-review.md Divergence 3): costs ~2.2px per hero the frame did
+     not have room for before the 26px reclaim above; it does now. */
+  .connected-pane-live .connected-hero-value {
+    line-height: 0.92;
   }
 
   /* When the lost-link banner is on screen it takes a row of its own out of
@@ -6545,21 +6570,27 @@ section:not(.news-pinned) .news-row:last-of-type {
   }
 
   /* THE SAME TRIM, EXTENDED TO PANE B'S OWN NEW ROWS (connected-revamp
-     Task 3). Two full 112px heroes are the tightest thing this frame has
-     ever had to fit beside a full metric row and the ruler — measured
-     against this worktree: the untrimmed shapes below collapsed the
-     heroes' own box to a 4-96px sliver and their text spilled through
-     whatever came next. `.connected-metric-row`'s padding/gap and
-     `.timer-total`'s gap/padding shrink by the same proportion the
-     upnext trim above already established; the ruler's own quarter-tick
-     row (marks + ¼/½/¾/N′ labels) goes further and drops entirely in
-     this one context — TOTAL LEFT's own label, value and fill bar (the
-     load-bearing fact: how much time is left) all survive unchanged, and
-     Task 4 rebuilds this exact row's internals into the notched bar next,
-     so trimming decorative tick labels here is not a loss the next task
-     re-litigates. */
+     Task 3, fix round 1). Two full 112px heroes were the tightest thing
+     this frame ever had to fit beside a full metric row and the ruler —
+     measured against this worktree: the untrimmed shapes below once
+     collapsed the heroes' own box to a 4-96px sliver with text spilling
+     through whatever came next. `.connected-metric-row`'s padding/gap and
+     `.timer-total`'s gap/padding shrink by the same proportion the upnext
+     trim above already established. Fix round 1 (task-3-review.md
+     Scrutiny 1) found the REAL cause of that tightness: `.connected-
+     surface`'s own landscape `height` was paying for a 26px of `.screen`
+     padding the full-bleed rule had already zeroed (fixed at that rule,
+     `:6211-6247`), not a genuine 112px-hero-vs-frame conflict. With the
+     26px back, the ruler's quarter-tick row (marks + ¼/½/¾/N′ labels,
+     which a first version of this fix round hid entirely) fits again —
+     un-hidden below, so spec §5's single-interval and >16-boundary
+     fallbacks Task 4 is about to build have somewhere to render in
+     landscape. The padding/gap trims below stay: they were never about
+     making room for the ruler, only about the five-row stack's own
+     spacing being tighter than the old two-column layout's, and they
+     still match the mockup more closely than the untrimmed shapes did. */
   .connected-pane-live .connected-metric-row {
-    padding-top: 3px;
+    padding-top: 1px;
   }
 
   .connected-pane-live .connected-metric-cell {
@@ -6567,16 +6598,12 @@ section:not(.news-pinned) .news-row:last-of-type {
   }
 
   .connected-pane-live .connected-hero-target {
-    padding-top: 2px;
+    padding-top: 0;
   }
 
   .connected-pane-live .timer-total {
-    gap: 2px;
-    padding-top: 3px;
-  }
-
-  .connected-pane-live .timer-ruler {
-    display: none;
+    gap: 1px;
+    padding-top: 1px;
   }
 
   /* Baseline-aligned rather than portrait's top-aligned three equal
@@ -6616,6 +6643,21 @@ section:not(.news-pinned) .news-row:last-of-type {
   .connected-pane-live .connected-metric-row .timer-upnext-main {
     justify-content: flex-end;
     gap: 10px;
+  }
+
+  /* Revision §3's own table: "UP NEXT | label 11px + value 20px,
+     right-aligned". `.timer-upnext-label`/`-value`'s base rules (10px/13px,
+     the phone timer's own portrait-derived sizes) under-sized this by a
+     margin the row never actually needed — fix round 1 (task-3-review.md,
+     Divergence 1): the metric row's own 30px numerals already set its
+     height, so a 20px UP NEXT value fits under that ceiling with room to
+     spare, not budget-forced like the trims above. */
+  .connected-pane-live .connected-metric-row .timer-upnext-label {
+    font-size: var(--size-label);
+  }
+
+  .connected-pane-live .connected-metric-row .timer-upnext-value {
+    font-size: 20px;
   }
 
   .connected-pane-live .connected-metric-row .timer-upnext-then {

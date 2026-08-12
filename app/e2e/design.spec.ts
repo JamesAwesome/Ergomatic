@@ -4608,9 +4608,11 @@ test.describe("connected screens (fake-driven)", () => {
 
   // NO-CLIP: the split hero's own cap (design spec §6: "anything slower
   // than 9:59.9 -> —") through the REAL driver, not a typed-in fixture —
-  // `EXTREME_SPLIT_STORY`'s currentSplit (3661s) is orders past any real
-  // erg reading. Landscape is the tighter frame (112px hero in a 390px-tall
-  // viewport), so it is the one this test measures.
+  // `EXTREME_SPLIT_STORY`'s currentSplit (650s, its own doc comment above
+  // explains why not further past the wire's U16LE ceiling) is well past
+  // the 599.9s cap and any real erg reading. Landscape is the tighter
+  // frame (112px hero in a 390px-tall viewport), so it is the one this
+  // test measures.
   test("the split hero caps an extreme live split at the dash rather than clipping — landscape (844x390)", async ({
     page,
   }) => {
@@ -4648,6 +4650,115 @@ test.describe("connected screens (fake-driven)", () => {
 
     await cleanupAllConnected(page, title);
   });
+
+  // --- Task 3 fix round 1 (task-3-review.md Scrutiny 1 / Important-1) ---
+
+  // THE DEAD 26px, RECLAIMED. `.connected-surface`'s landscape `height`
+  // used to subtract a flat 26px matching `.screen`'s own vertical padding
+  // — real in portrait (that padding still applies there), stale in
+  // landscape once the full-bleed rule zeroed it (index.css's own comment
+  // at that rule has the archaeology). This is the geometry half of the
+  // fix: the surface's own border box now reaches the viewport's height
+  // (minus real safe-area insets, `0px` in Chromium — the same fact every
+  // other inset-aware test in this file relies on), not 26px short of it.
+  test("the landscape surface reclaims the dead 26px: its height equals the viewport's (844x390)", async ({
+    page,
+  }) => {
+    const title = "Design Connected Surface Height Workout";
+    await page.setViewportSize({ width: 844, height: 390 });
+    await injectConnectedFake(page, ROWING_STORY);
+    await openConnected(
+      page,
+      title,
+      "design-connected-surface-height@e2e.test",
+    );
+    await walkToSurface(page);
+    await pumpUntilText(page, "2 OF 5");
+
+    const surfaceBox = await page.locator(".connected-surface").boundingBox();
+    expect(surfaceBox).not.toBeNull();
+    // Insets are 0px in Chromium (confirmed empirically elsewhere in this
+    // file via CDP's `setSafeAreaInsetsOverride`), so the surface's own
+    // height should equal the viewport's exactly — not 26px short of it,
+    // which is what this test would have caught before the fix.
+    expect(surfaceBox!.height).toBeCloseTo(390, 0);
+    expect(surfaceBox!.y).toBeCloseTo(0, 0);
+    expect(surfaceBox!.y + surfaceBox!.height).toBeCloseTo(390, 0);
+
+    await cleanupAllConnected(page, title);
+  });
+
+  // NO-OVERLAP: the pin Important-1 says would have caught the 0.4px
+  // literal overlap a tight landscape budget once produced. The no-scroll
+  // pin above only measures the PANE's own outer box, which an inner flex
+  // item's content overflowing past its own allotted space does not grow
+  // (`.connected-pane`'s `overflow: clip` hides it from scrollHeight, not
+  // from the neighbour it spills into) — this measures the boxes that
+  // actually sit next to each other in the DOM's visual order and asserts
+  // none of their rects intersect, in both orientations.
+  for (const viewport of [
+    { width: 390, height: 844, label: "portrait" },
+    { width: 844, height: 390, label: "landscape" },
+  ] as const) {
+    test(`the live pane's rows never overlap their neighbours — ${viewport.label} (${viewport.width}x${viewport.height})`, async ({
+      page,
+    }) => {
+      const title = `Design Connected Live No-Overlap ${viewport.label}`;
+      await page.setViewportSize({
+        width: viewport.width,
+        height: viewport.height,
+      });
+      await injectConnectedFake(page, ROWING_STORY);
+      await openConnected(
+        page,
+        title,
+        `design-connected-live-nooverlap-${viewport.label}@e2e.test`,
+      );
+      await walkToSurface(page);
+      await pumpUntilText(page, "2 OF 5");
+
+      // Visual top-to-bottom order of the live pane's own rows (portrait:
+      // `.connected-heroes` is `display: contents`, so its two children are
+      // consecutive top-level rows in their own right; landscape: the same
+      // wrapper becomes one row beside the divider).
+      //
+      // Important-1's actual defect was CONTENT (the hero's own label/
+      // target spans) reading into a NEIGHBOUR's outer box, not two outer
+      // boxes overlapping each other — flexbox siblings never do that by
+      // construction, so a box-vs-box check one level up would have passed
+      // right through the 0.4px this pin exists to catch. Each pair below
+      // is deliberately the INNERMOST element on the risk side (a hero's
+      // own label above, its own target row below) against the ADJACENT
+      // row's outer box, for both heroes in both orientations.
+      const pairs: [string, string][] = [
+        [".connected-line", ".connected-hero-split .connected-hero-label"],
+        [".connected-line", ".connected-hero-rate .connected-hero-label"],
+        [
+          ".connected-hero-split .connected-hero-target",
+          ".connected-metric-row",
+        ],
+        [
+          ".connected-hero-rate .connected-hero-target",
+          ".connected-metric-row",
+        ],
+        [".connected-metric-row", ".timer-total"],
+      ];
+      for (const [aboveSel, belowSel] of pairs) {
+        const [above, below] = await Promise.all([
+          page.locator(aboveSel).boundingBox(),
+          page.locator(belowSel).boundingBox(),
+        ]);
+        expect(above, aboveSel).not.toBeNull();
+        expect(below, belowSel).not.toBeNull();
+        expect(
+          below!.y,
+          `${belowSel} (top ${below!.y}) overlaps ${aboveSel} (bottom ${above!.y + above!.height})`,
+        ).toBeGreaterThanOrEqual(above!.y + above!.height);
+      }
+
+      await cleanupAllConnected(page, title);
+    });
+  }
 });
 
 // Phase 6I Task 8: the three new/changed screens the onboarding phase adds —

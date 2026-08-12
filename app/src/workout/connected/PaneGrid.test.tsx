@@ -706,21 +706,33 @@ describe("THE ACCENT CENSUS: one sanctioned accent on the whole surface", () => 
     expect(row(3).querySelector(".connected-grid-countdown")).not.toBeNull();
   });
 
-  it("the reused phone-timer components are still repainted ink here", () => {
+  it("the reused phone-timer ruler is still repainted ink here", () => {
     // The census above only looks at `.connected-*` classes, which is only
-    // honest while `.timer-dot-past` and the ruler's fill stay overridden
-    // inside `.connected-pane` (task 6's own two rules). Without this,
-    // deleting those rules would put accent back on two panes and the
-    // census would not notice.
-    for (const selector of [
-      /\.connected-pane\s+\.timer-dot-past\s*\{([^}]*)\}/,
-      /\.connected-pane\s+\.timer-dot-current\s*\{([^}]*)\}/,
-      /\.connected-pane\s+\.timer-total-bar\s+span\s*\{([^}]*)\}/,
-    ]) {
-      const rule = selector.exec(DECLARATIONS);
-      expect(rule).not.toBeNull();
-      expect(rule![1]).not.toContain("--accent");
-    }
+    // honest while the ruler's fill stays overridden inside
+    // `.connected-pane` (task 6's own rule). Without this, deleting that
+    // rule would put accent back on the total-left bar and the census
+    // would not notice.
+    //
+    // `.timer-dot-past`/`.timer-dot-current`'s own override rules retired
+    // in connected-revamp Task 3's fix round (task-3-review.md
+    // Important-2): `IntervalSegments` is no longer reused on ANY
+    // connected pane — pane A's usage went with `PaneTimer.tsx` (Task 2),
+    // pane B's went with the equal-width segment bar Task 3 dropped — so
+    // no `.timer-dot*` element can render inside `.connected-pane` any
+    // more, and a test pinning those two rules' existence would have been
+    // pinning a vacuous invariant.
+    const rule =
+      /\.connected-pane\s+\.timer-total-bar\s+span\s*\{([^}]*)\}/.exec(
+        DECLARATIONS,
+      );
+    expect(rule).not.toBeNull();
+    expect(rule![1]).not.toContain("--accent");
+    // The SCOPED overrides, not the bare phone-timer classes: `.timer-dot-
+    // past`/`-current` themselves are still real (`Timer.tsx`'s own
+    // `IntervalSegments` usage), only `.connected-pane`'s repaint of them
+    // is dead.
+    expect(DECLARATIONS).not.toContain(".connected-pane .timer-dot-past");
+    expect(DECLARATIONS).not.toContain(".connected-pane .timer-dot-current");
   });
 
   it("the countdown's accent is a COLOUR on a duration, at 22/26px", () => {
