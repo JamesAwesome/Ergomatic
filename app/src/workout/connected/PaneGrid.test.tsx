@@ -653,11 +653,11 @@ describe("THE ACCENT CENSUS: one sanctioned accent on the whole surface", () => 
     ]);
   });
 
-  it("panes A and B carry NONE of them, and pane C carries exactly one", () => {
+  it("pane B carries NONE of them, and pane C carries exactly one", () => {
     const selector = accentClassesFromCss()
       .map((c) => `.${c}`)
       .join(",");
-    const paneAccents = (pane: "timer" | "live" | "grid"): Element[] => {
+    const paneAccents = (pane: "live" | "grid"): Element[] => {
       localStorage.setItem(LAST_PANE_KEY, pane);
       render(
         <ConnectedSurface
@@ -676,10 +676,11 @@ describe("THE ACCENT CENSUS: one sanctioned accent on the whole surface", () => 
       return found;
     };
 
-    // Task 6 proved these two have none. This re-proves it from the
-    // STYLESHEET's own accent set rather than from a class name typed here,
-    // so a rule added later is caught without this test changing.
-    expect(paneAccents("timer")).toHaveLength(0);
+    // Task 6 proved this pane has none (pane A's own equal proof retired
+    // with `PaneTimer.tsx`, connected-revamp Task 2). This re-proves it
+    // from the STYLESHEET's own accent set rather than from a class name
+    // typed here, so a rule added later is caught without this test
+    // changing.
     expect(paneAccents("live")).toHaveLength(0);
 
     const accented = paneAccents("grid");
@@ -747,7 +748,7 @@ function cleanupRender(): void {
 // The one judgement path — pane C joins the count
 // ---------------------------------------------------------------------------
 
-/** Every judged cell on whatever is on screen. Panes A and B put
+/** Every judged cell on whatever is on screen. Pane B puts
  *  `timer-card-actual-{judgement}` on cards and a hero; pane C puts it on
  *  its actual `/500M` and `SPM` cells, and NOWHERE else. */
 function judgedCells(): { text: string; judgement: string }[] {
@@ -788,13 +789,16 @@ describe("judged cells: pane C goes through the ONE helper", () => {
   });
 
   it("the WHOLE SURFACE's judged-cell count, pane by pane", () => {
-    // The number the mutation round moves: pane A 3 (NOW/RATE/METERS),
-    // pane B 4 (hero/rate/HR/meters), pane C 4 on this frame (one completed
-    // row's two cells plus the active row's two) — ELEVEN in total. Break
-    // `judgeActual` and every one of them lands on the same wrong verdict
-    // at once, which is the property this file is here to keep.
+    // The number the mutation round moves: pane B 4 (hero/rate/HR/meters),
+    // pane C 4 on this frame (one completed row's two cells plus the active
+    // row's two) — EIGHT in total. Break `judgeActual` and every one of
+    // them lands on the same wrong verdict at once, which is the property
+    // this file is here to keep. Pane A (3: NOW/RATE/METERS) retired with
+    // `PaneTimer.tsx` (connected-revamp Task 2); a stored `"timer"` now
+    // aliases to live via `PANES.includes`, so it is no longer a distinct
+    // pane to count.
     const counts: Record<string, number> = {};
-    for (const pane of ["timer", "live", "grid"] as const) {
+    for (const pane of ["live", "grid"] as const) {
       localStorage.setItem(LAST_PANE_KEY, pane);
       render(
         <ConnectedSurface
@@ -807,7 +811,7 @@ describe("judged cells: pane C goes through the ONE helper", () => {
       counts[pane] = judgedCells().length;
       cleanupRender();
     }
-    expect(counts).toStrictEqual({ timer: 3, live: 4, grid: 4 });
+    expect(counts).toStrictEqual({ live: 4, grid: 4 });
   });
 
   // THE STALE OVERRIDE, SCOPED (task-7 review, M2). Staleness is a property
@@ -1201,17 +1205,19 @@ describe("tab order through pane C", () => {
     }
   });
 
-  it("tabs the grid, then End, then the three pager targets", async () => {
+  it("tabs the grid, then End, then the two pager targets", async () => {
     // THE REAL BROWSER ORDER (task-7 review, M3 measured it as
-    // `scroller → End → Timer → Live → Grid`), and now jsdom's too, because
-    // the `tabindex` is explicit rather than implied by a scroll container.
-    // It is also the READING order: the grid is above End on the screen in
-    // both orientations. The DOM was deliberately NOT reordered to put End
-    // first — see the task-7 report; doing so would have introduced exactly
-    // the paint-vs-sequence divergence the shell's own L4 note warns about.
+    // `scroller → End → Timer → Live → Grid`; connected-revamp Task 2
+    // dropped Timer from the rail, so it is `scroller → End → Live → Grid`
+    // now), and jsdom's too, because the `tabindex` is explicit rather than
+    // implied by a scroll container. It is also the READING order: the grid
+    // is above End on the screen in both orientations. The DOM was
+    // deliberately NOT reordered to put End first — see the task-7 report;
+    // doing so would have introduced exactly the paint-vs-sequence
+    // divergence the shell's own L4 note warns about.
     renderGrid();
     const order: string[] = [];
-    for (let i = 0; i < 5; i += 1) {
+    for (let i = 0; i < 4; i += 1) {
       await userEvent.tab();
       order.push(
         (document.activeElement as HTMLElement).getAttribute("aria-label") ??
@@ -1221,7 +1227,6 @@ describe("tab order through pane C", () => {
     expect(order).toStrictEqual([
       "Interval grid",
       "End session",
-      "Timer pane",
       "Live pane",
       "Grid pane",
     ]);
@@ -1234,12 +1239,7 @@ describe("the grid never grows a control of its own", () => {
     const buttons = screen
       .getAllByRole("button")
       .map((b) => b.getAttribute("aria-label") ?? b.textContent);
-    expect(buttons).toStrictEqual([
-      "End session",
-      "Timer pane",
-      "Live pane",
-      "Grid pane",
-    ]);
+    expect(buttons).toStrictEqual(["End session", "Live pane", "Grid pane"]);
     expect(document.querySelector(".button-l1")).toBeNull();
   });
 

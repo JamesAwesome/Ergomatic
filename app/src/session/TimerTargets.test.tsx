@@ -213,9 +213,11 @@ describe("TimerTargets (component)", () => {
 // it) is RETIRED — Task 7 built pane C/A's judged cells as rows in
 // `PaneTimer.tsx`/`PaneGrid.tsx` directly, never through this component —
 // but `.timer-card-actual-{judgement}` itself is very much live, rendered
-// today by `PaneTimer.tsx` on the real `/library/:id` connected surface;
-// this test's own CSS-source-reading approach remains the honest ceiling
-// for a token jsdom cannot compute.
+// today by `PaneLive.tsx`'s hero and `PaneGrid.tsx`'s judged cells on the
+// real `/library/:id` connected surface (connected-revamp Task 2 retired
+// `PaneTimer.tsx`, pane A, an earlier renderer of the same hook); this
+// test's own CSS-source-reading approach remains the honest ceiling for a
+// token jsdom cannot compute.
 describe("index.css: .timer-card-actual-stale resolves to the AA-passing token (review HIGH-1)", () => {
   it("uses var(--ink-3), never the AA-failing var(--ink-5) this task originally shipped", () => {
     // Plain string surgery on `import.meta.url`, not the global `URL`

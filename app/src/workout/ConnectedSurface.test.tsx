@@ -41,6 +41,7 @@ import { buildRun, type EnginePhase } from "../session/engine";
 import type { LogSeed } from "../session/logDraft";
 import { ARM_TIMEOUT_MS } from "../session/useStagedDiscard";
 import { commentStrippedSource } from "../test/cssView";
+import { PANES } from "./connected/PagerRail";
 import ConnectedInterstitial from "./ConnectedInterstitial";
 import ConnectedSurface, {
   DEFAULT_PANE,
@@ -179,10 +180,10 @@ function renderSurface(
   return { ...view, session: current, onEnded };
 }
 
-/** The rail is the fallback; these are its three targets by accessible
- *  name (the visible `TIMER`/`TMR` pair is `aria-hidden` — both ship in
+/** The rail is the fallback; these are its two targets by accessible name
+ *  (the visible long/short label pair is `aria-hidden` — both ship in
  *  every orientation, so neither can be the name). */
-function railButton(pane: "Timer" | "Live" | "Grid") {
+function railButton(pane: "Live" | "Grid") {
   return screen.getByRole("button", { name: `${pane} pane` });
 }
 
@@ -213,17 +214,38 @@ describe("landing and persistence (handoff §3: per ROWER, first-ever lands B)",
 
   it("lands on whichever pane the rower last used, not on the workout's", async () => {
     const first = renderSurface();
-    await userEvent.click(railButton("Timer"));
-    expect(localStorage.getItem(LAST_PANE_KEY)).toBe("timer");
+    await userEvent.click(railButton("Grid"));
+    expect(localStorage.getItem(LAST_PANE_KEY)).toBe("grid");
     first.unmount();
 
     renderSurface();
-    expect(railButton("Timer")).toHaveAttribute("aria-current", "page");
+    expect(railButton("Grid")).toHaveAttribute("aria-current", "page");
   });
 
   it("ignores a garbage stored value rather than rendering nothing", () => {
     localStorage.setItem(LAST_PANE_KEY, "not-a-pane");
     expect(loadLastPane()).toBe(DEFAULT_PANE);
+  });
+
+  // connected-revamp Task 2: `PANES` drops "timer" (the pane, and the
+  // string). A rower who connected before this shipped can still have it
+  // sitting in their own `localStorage`, and design spec §6 rules that this
+  // is PINNED, not migrated — the existing `PANES.includes` guard in
+  // `loadLastPane` already treats any value outside the current `PANES` as
+  // garbage, so "timer" needs no special case at all, only proof that the
+  // general path actually catches THIS specific value now that it is one.
+  it("has exactly two panes, and neither of them is the retired timer pane", () => {
+    expect(PANES).toHaveLength(2);
+    expect(PANES).not.toContain("timer");
+    expect(PANES).toStrictEqual(["live", "grid"]);
+  });
+
+  it("a stored 'timer' — a real rower's pre-Task-2 value, not synthetic garbage — lands on live", () => {
+    localStorage.setItem(LAST_PANE_KEY, "timer");
+    expect(loadLastPane()).toBe(DEFAULT_PANE);
+    // And the real surface renders it, not just the loader function.
+    renderSurface();
+    expect(railButton("Live")).toHaveAttribute("aria-current", "page");
   });
 
   it("survives storage throwing outright", () => {
@@ -246,8 +268,8 @@ describe("swipe is the real navigation, 60px (handoff §3)", () => {
     renderSurface();
     swipe(59);
     expect(railButton("Live")).toHaveAttribute("aria-current", "page");
-    swipe(60);
-    expect(railButton("Timer")).toHaveAttribute("aria-current", "page");
+    swipe(-60);
+    expect(railButton("Grid")).toHaveAttribute("aria-current", "page");
   });
 
   it("does nothing below the threshold", () => {
@@ -257,11 +279,11 @@ describe("swipe is the real navigation, 60px (handoff §3)", () => {
 
   it("moves at exactly the threshold", () => {
     expect(paneAfterSwipe("live", -SWIPE_THRESHOLD_PX)).toBe("grid");
-    expect(paneAfterSwipe("live", SWIPE_THRESHOLD_PX)).toBe("timer");
+    expect(paneAfterSwipe("grid", SWIPE_THRESHOLD_PX)).toBe("live");
   });
 
   it("clamps at both ends rather than wrapping", () => {
-    expect(paneAfterSwipe("timer", SWIPE_THRESHOLD_PX * 2)).toBe("timer");
+    expect(paneAfterSwipe("live", SWIPE_THRESHOLD_PX * 2)).toBe("live");
     expect(paneAfterSwipe("grid", -SWIPE_THRESHOLD_PX * 2)).toBe("grid");
   });
 
@@ -269,14 +291,13 @@ describe("swipe is the real navigation, 60px (handoff §3)", () => {
     renderSurface();
     expect(railButton("Live")).toHaveAttribute("aria-current", "page");
 
-    swipe(SWIPE_THRESHOLD_PX + 10);
-    expect(railButton("Timer")).toHaveAttribute("aria-current", "page");
-    expect(localStorage.getItem(LAST_PANE_KEY)).toBe("timer");
-
-    swipe(-(SWIPE_THRESHOLD_PX + 10));
     swipe(-(SWIPE_THRESHOLD_PX + 10));
     expect(railButton("Grid")).toHaveAttribute("aria-current", "page");
     expect(localStorage.getItem(LAST_PANE_KEY)).toBe("grid");
+
+    swipe(SWIPE_THRESHOLD_PX + 10);
+    expect(railButton("Live")).toHaveAttribute("aria-current", "page");
+    expect(localStorage.getItem(LAST_PANE_KEY)).toBe("live");
   });
 
   it("ignores a touch end with no touch start behind it", () => {
@@ -309,14 +330,24 @@ describe("swipe is the real navigation, 60px (handoff §3)", () => {
 
 describe("the pager is LABELLED (handoff §3, DEVIATIONS row 4)", () => {
   it("carries both label sets in both orientations, never bare dots", () => {
+    // LIVE and GRID's own long and short forms are IDENTICAL text (unlike
+    // the retired TIMER/TMR pair), so a `textContent` check can no longer
+    // prove both label spans exist — this checks the DOM shape instead:
+    // every target renders both classes, whichever the orientation query
+    // then shows or hides.
     renderSurface();
     const pager = screen.getByRole("navigation", { name: "Connected panes" });
-    const text = pager.textContent ?? "";
-    for (const label of ["TIMER", "LIVE", "GRID", "TMR"]) {
-      expect(text).toContain(label);
+    const buttons = within(pager).getAllByRole("button");
+    // Two targets, and every one of them names what is behind it.
+    expect(buttons).toHaveLength(2);
+    for (const button of buttons) {
+      expect(
+        button.querySelector(".connected-pager-label-long"),
+      ).not.toBeNull();
+      expect(
+        button.querySelector(".connected-pager-label-short"),
+      ).not.toBeNull();
     }
-    // Three targets, and every one of them names what is behind it.
-    expect(within(pager).getAllByRole("button")).toHaveLength(3);
   });
 
   it("reaches pane C, the grid (Task 7 filled the slot)", async () => {
@@ -349,67 +380,7 @@ function judgedCells(): { text: string; judgement: string }[] {
   }));
 }
 
-describe("pane A — the connected timer", () => {
-  beforeEach(() => {
-    localStorage.setItem(LAST_PANE_KEY, "timer");
-  });
-
-  it("names the monitor, the interval and the state, all in ink", () => {
-    renderSurface();
-    expect(screen.getByText(DEVICE)).toBeInTheDocument();
-    expect(screen.getByText("INTERVAL 2 OF 5 · WORK")).toBeInTheDocument();
-    expect(screen.getByText("ROWING")).toBeInTheDocument();
-    expect(document.querySelector(".connected-line-mark-hollow")).toBeNull();
-  });
-
-  it("puts the actual beside the target, four cards, targets never tinted", () => {
-    renderSurface();
-    expect(screen.getByText("NOW · /500M")).toBeInTheDocument();
-    expect(screen.getByText("TARGET SPLIT")).toBeInTheDocument();
-    expect(screen.getByText("RATE")).toBeInTheDocument();
-    expect(screen.getByText("METERS")).toBeInTheDocument();
-    // The TARGET SPLIT card's value carries no judgement class at all: a
-    // programmed value is never judged, only what actually happened.
-    const targetCard = screen.getByText("TARGET SPLIT").parentElement!;
-    expect(
-      targetCard.querySelector('[class*="timer-card-actual-"]'),
-    ).toBeNull();
-    expect(targetCard.querySelector(".timer-card-value-accent")).toBeNull();
-  });
-
-  it("keeps the phone timer's own segments, UP NEXT and ruler", () => {
-    renderSurface();
-    expect(document.querySelector(".timer-dots")).not.toBeNull();
-    expect(document.querySelector(".timer-upnext")).not.toBeNull();
-    expect(document.querySelector(".timer-total")).not.toBeNull();
-    expect(document.querySelectorAll(".timer-dots .timer-dot")).toHaveLength(
-      FIXTURE.phases.length,
-    );
-  });
-
-  it("has no level-1 button anywhere: End is the level 2 (handoff §3)", () => {
-    renderSurface();
-    expect(document.querySelector(".button-l1")).toBeNull();
-    expect(screen.getByRole("button", { name: "End session" })).toHaveClass(
-      "button-l2",
-    );
-  });
-});
-
 describe("pane B — live", () => {
-  it("never costs the rower their place: the SAME segments and UP NEXT as A", async () => {
-    renderSurface();
-    // Pane B is the landing pane.
-    const bDots = document.querySelector(".timer-dots")!.outerHTML;
-    const bUpNext = document.querySelector(".timer-upnext")!.outerHTML;
-    const bRuler = document.querySelector(".timer-total")!.outerHTML;
-
-    await userEvent.click(railButton("Timer"));
-    expect(document.querySelector(".timer-dots")!.outerHTML).toBe(bDots);
-    expect(document.querySelector(".timer-upnext")!.outerHTML).toBe(bUpNext);
-    expect(document.querySelector(".timer-total")!.outerHTML).toBe(bRuler);
-  });
-
   it("leads with the split, cut so the eye lands on the seconds", () => {
     renderSurface({ frame: frame({ currentSplit: 117.8 }) });
     const hero = document.querySelector(".connected-hero-value")!;
@@ -462,32 +433,21 @@ describe("judgement: one helper, every pane (handoff §3)", () => {
   const target = WORK_PHASE.targetSplit!;
 
   // Direction is the EFFORT's, not the number's: a smaller split is a
-  // faster boat, so it is `over` (ochre). `domain/judge.ts` owns that rule
-  // for both panes at once.
-  it("tints pane A's NOW card ochre when faster and teal when slower", () => {
-    localStorage.setItem(LAST_PANE_KEY, "timer");
+  // faster boat, so it is `over` (ochre). `domain/judge.ts` owns that rule.
+  it("tints pane B's hero ochre when faster and teal when slower", () => {
     const fast = renderSurface({
       frame: frame({ currentSplit: target - 10 }),
     });
-    expect(document.querySelector(".timer-card-actual-over")).not.toBeNull();
-    fast.unmount();
-
-    renderSurface({ frame: frame({ currentSplit: target + 10 }) });
-    expect(document.querySelector(".timer-card-actual-under")).not.toBeNull();
-  });
-
-  it("tints pane B's hero by the same rule as pane A's card", () => {
-    const a = renderSurface({ frame: frame({ currentSplit: target - 10 }) });
     const heroClass = document.querySelector(
       ".connected-hero-value",
     )!.className;
     expect(heroClass).toContain("timer-card-actual-over");
-    a.unmount();
+    fast.unmount();
 
-    localStorage.setItem(LAST_PANE_KEY, "timer");
-    renderSurface({ frame: frame({ currentSplit: target - 10 }) });
-    const nowCard = screen.getByText("NOW · /500M").parentElement!;
-    expect(nowCard.querySelector(".timer-card-actual-over")).not.toBeNull();
+    renderSurface({ frame: frame({ currentSplit: target + 10 }) });
+    expect(
+      document.querySelector(".connected-hero-value")!.className,
+    ).toContain("timer-card-actual-under");
   });
 
   it("judges within tolerance as plain ink, no tint class beyond -within", () => {
@@ -503,18 +463,6 @@ describe("judgement: one helper, every pane (handoff §3)", () => {
     const cells = judgedCells();
     // hero + rate + HR + meters
     expect(cells).toHaveLength(4);
-    for (const cell of cells) {
-      expect(["under", "within", "over", "stale"]).toContain(cell.judgement);
-    }
-    expect(cells.some((c) => c.judgement === "over")).toBe(true);
-  });
-
-  it("EVERY judged cell on pane A goes through the helper — none opts out", () => {
-    localStorage.setItem(LAST_PANE_KEY, "timer");
-    renderSurface({ frame: frame({ currentSplit: target - 10 }) });
-    const cells = judgedCells();
-    // NOW + RATE + METERS (the TARGET SPLIT card is not an actual)
-    expect(cells).toHaveLength(3);
     for (const cell of cells) {
       expect(["under", "within", "over", "stale"]).toContain(cell.judgement);
     }
@@ -616,14 +564,13 @@ describe("index.css: both connected screens hide the shell's tab bar (the post-:
 // ---------------------------------------------------------------------------
 
 describe("paused (handoff §4)", () => {
-  it("replaces End with the status block, and says PAUSED", () => {
-    // Pane A carries the status word (pane B's header is the device name
-    // and the interval count — handoff §3's own two header shapes); the
-    // block itself is the shell's, so it shows on every pane.
-    localStorage.setItem(LAST_PANE_KEY, "timer");
+  it("replaces End with the paused block", () => {
+    // The paused block itself is the shell's, so it shows on every pane —
+    // `statusWord`'s own "says PAUSED" half of this test retired with pane
+    // A (`PaneTimer.tsx`, connected-revamp Task 2): it was the field's only
+    // renderer, and no surviving pane shows a status word at all.
     renderSurface({ phase: "paused" });
     expect(screen.getByText("PAUSED · PULL TO RESUME")).toBeInTheDocument();
-    expect(screen.getByText("PAUSED")).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "End session" }),
     ).not.toBeInTheDocument();
@@ -672,23 +619,29 @@ describe("paused (handoff §4)", () => {
     expect(label![1]).toContain("color: var(--surface)");
   });
 
-  it("the interval clock greys but holds its last value", () => {
-    localStorage.setItem(LAST_PANE_KEY, "timer");
+  // Pane A's own versions of both its below (`.connected-clock-value`'s
+  // greying, and "NOW reads `—` with NOT ROWING") retired with
+  // `PaneTimer.tsx` (connected-revamp Task 2) — `paceCaption`'s only
+  // renderer was that pane's `JudgedCard`, so "NOT ROWING" has no surviving
+  // renderer anywhere and the caption half of that coverage genuinely
+  // lapses (the field itself stays computed and model-tested,
+  // `surfaceModel.test.ts`'s own paused describe). The dash and the
+  // held-clock grey DO still render, on pane B, so those two get pane B's
+  // own version here rather than being dropped along with pane A.
+  it("pane B's second-value clock greys but holds its last value", () => {
     renderSurface({
       phase: "paused",
       frame: frame({ intervalRemaining: { kind: "time", value: 41 } }),
     });
-    const clock = document.querySelector(".connected-clock-value")!;
+    const clock = document.querySelector(".connected-second-value")!;
     expect(clock.textContent).toBe("0:41");
     expect(clock.className).toContain("connected-clock-value-held");
   });
 
-  it("NOW reads `—` with NOT ROWING, because nobody is pulling", () => {
-    localStorage.setItem(LAST_PANE_KEY, "timer");
+  it("pane B's hero reads `—`, because nobody is pulling", () => {
     renderSurface({ phase: "paused" });
-    const nowCard = screen.getByText("NOW · /500M").parentElement!;
-    expect(nowCard.querySelector(".timer-card-value")!.textContent).toBe("—");
-    expect(screen.getByText("NOT ROWING")).toBeInTheDocument();
+    const hero = document.querySelector(".connected-hero-value")!;
+    expect(hero.textContent).toBe("—");
   });
 
   it("keeps the erg's own numbers live: paused is not stale", () => {
@@ -731,24 +684,15 @@ describe("disconnected: lose and degrade (spec C5)", () => {
     expect(screen.getByText("LAST · /500M")).toBeInTheDocument();
   });
 
-  it("THE STALE OVERRIDE BEATS EVERY JUDGEMENT, on every cell of every pane", () => {
+  it("THE STALE OVERRIDE BEATS EVERY JUDGEMENT, on every cell of the pane", () => {
     const target = WORK_PHASE.targetSplit!;
     // Numbers that would otherwise scream "over" and "over".
     const wild = frame({ currentSplit: target - 40, spm: 60 });
 
-    const b = renderSurface({ phase: "disconnected", frame: wild });
-    let cells = judgedCells();
+    renderSurface({ phase: "disconnected", frame: wild });
+    const cells = judgedCells();
     expect(cells).toHaveLength(4);
     for (const cell of cells) expect(cell.judgement).toBe("stale");
-    b.unmount();
-
-    localStorage.setItem(LAST_PANE_KEY, "timer");
-    renderSurface({ phase: "disconnected", frame: wild });
-    cells = judgedCells();
-    expect(cells).toHaveLength(3);
-    for (const cell of cells) expect(cell.judgement).toBe("stale");
-    expect(document.querySelector(".timer-card-actual-under")).toBeNull();
-    expect(document.querySelector(".timer-card-actual-over")).toBeNull();
   });
 
   it("moves every stale card to the sunken fill", () => {
@@ -1036,12 +980,21 @@ describe("the connected walk, fake-driven", () => {
     // kind word is WARM-UP and not WORK.
     expect(screen.getByText("1 OF 5 · WARM-UP")).toBeInTheDocument();
 
-    // THE PIN FOR THE ORDINAL ABOVE (task-7 review, L4). Pane A carries the
-    // status word, and it is the one thing on this surface that reads the
-    // machine's `state` directly: put `WORKOUTSTATE_INTERVALREST` back in
-    // the script and this says RESTING.
-    await userEvent.click(screen.getByRole("button", { name: "Timer pane" }));
-    expect(screen.getByText("ROWING")).toBeInTheDocument();
-    expect(screen.queryByText("RESTING")).not.toBeInTheDocument();
+    // THE PIN FOR THE ORDINAL ABOVE used to live here (task-7 review, L4):
+    // pane A's status word was the one thing on this surface that read the
+    // machine's `state` directly, so clicking into it and asserting ROWING
+    // (not RESTING) proved `WORKOUTSTATE_INTERVALWORKTIME` — not
+    // `WORKOUTSTATE_INTERVALREST` — actually reached `frame.state` for THIS
+    // scripted event. `statusWord` retired with pane A (`PaneTimer.tsx`,
+    // connected-revamp Task 2), and nothing that survives reads `state`
+    // unconditionally the way it did: `resting`'s only other consumer,
+    // `phaseIndexForInterval`, is insensitive to this exact script (interval
+    // 0's warm-up has no adjacent rest phase for the boundary logic to pick
+    // between — confirmed against `server/seed/library/at.ts`'s "Filling
+    // Low" fixture), so no surviving DOM text distinguishes the two
+    // ordinals for this event. The wire-level decode itself stays
+    // thoroughly pinned at the driver layer (`monitor/driver.test.ts`'s own
+    // extensive `WORKOUTSTATE_INTERVALWORKTIME`/`_INTERVALREST` coverage);
+    // only THIS integration test's UI-level double-check is gone.
   });
 });

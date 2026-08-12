@@ -51,7 +51,6 @@ import ConnectionLogSheet from "./connected/ConnectionLogSheet";
 import PagerRail, { PANES, type PaneId } from "./connected/PagerRail";
 import PaneGrid from "./connected/PaneGrid";
 import PaneLive from "./connected/PaneLive";
-import PaneTimer from "./connected/PaneTimer";
 import { buildSurfaceModel } from "./connected/surfaceModel";
 
 /** Which pane the rower was last on, PER ROWER — not per workout (handoff
@@ -322,7 +321,6 @@ export default function ConnectedSurface({
     >
       {model.stale && <LostBanner />}
       <div className="connected-surface-body">
-        {pane === "timer" && <PaneTimer model={model} />}
         {pane === "live" && <PaneLive model={model} />}
         {pane === "grid" && <PaneGrid model={model} />}
       </div>

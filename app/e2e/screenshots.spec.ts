@@ -2132,7 +2132,6 @@ async function showConnectedFixture(page: Page, name: string): Promise<void> {
 }
 
 const CONNECTED_STATES = [
-  "connected-pane-timer",
   "connected-pane-live",
   "connected-pane-live-nohr",
   "connected-paused",
@@ -2213,10 +2212,14 @@ for (const name of CONNECTED_STATES) {
         }
         return stops;
       });
-      expect(tabOrder.slice(0, 5)).toStrictEqual([
+      // connected-revamp Task 2 (first of two rewrites this pin takes,
+      // design spec §9: "Tab order changes twice"): "Timer pane" drops out
+      // with the rail's third target, and the arity itself shrinks from 5
+      // to 4 — a `slice(0, 5)` left in place would silently stop proving
+      // anything about the fifth stop once there is no fifth stop to lose.
+      expect(tabOrder.slice(0, 4)).toStrictEqual([
         "Interval grid",
         "End session",
-        "Timer pane",
         "Live pane",
         "Grid pane",
       ]);

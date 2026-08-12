@@ -5,10 +5,10 @@
 //
 //  1. **ONE judgement path.** `judgedValue` below is the only function in
 //     `src/` that calls `domain/judge.ts`'s `judgeActual`. Every live actual
-//     on every pane — pane A's NOW/RATE/METERS cards, pane B's hero, rate,
-//     HR and meters cards — is a `JudgedValue` produced by that one helper
-//     (handoff §3: "One helper decides the colour; no pane implements its
-//     own judgement"). Pane C's grid (Task 7) inherits the same rule: every
+//     on every pane — pane B's hero, rate, HR and meters cards — is a
+//     `JudgedValue` produced by that one helper (handoff §3: "One helper
+//     decides the colour; no pane implements its own judgement"). Pane C's
+//     grid (Task 7) inherits the same rule: every
 //     ACTUAL cell in `buildGridModel` below is a `judgedValue` too, and its
 //     PROGRAMMED cells are plain strings that structurally cannot carry a
 //     verdict (`GridValue.judged` is `null` for them) — "programmed values
@@ -231,14 +231,15 @@ export interface SurfaceModel {
   linked: boolean;
   /** `PM5 430123456`, or `PM5 430123456 · LOST`. */
   deviceCaption: string;
-  /** `INTERVAL 3 OF 25 · WORK` (pane A). */
+  /** `INTERVAL 3 OF 25 · WORK`. No current renderer: its only one,
+   *  `PaneTimer.tsx`'s pane A, retired with connected-revamp Task 2. Casualty
+   *  list (design spec §3) rehomes it to the grid header (revision §4's `3
+   *  OF 12 · WORK · 0:47 LEFT`) — a later task's job, not this field's; the
+   *  value stays computed and correct in the meantime. */
   intervalLabel: string;
   /** `3 OF 25 · WORK` (pane B's header line, where the device name already
    *  occupies the left of the row). */
   intervalLabelShort: string;
-  /** `ROWING` / `RESTING` / `PAUSED` / `LOST` / `ENDED`, in ink (DEVIATIONS
-   *  row 1: never the phone timer's accent). */
-  statusWord: string;
   /** `NOW · /500M` live; `LAST · /500M` once the link is gone (handoff §4). */
   nowLabel: string;
   segments: {
@@ -260,7 +261,14 @@ export interface SurfaceModel {
    *  LEFT"). */
   intervalClockLabel: string;
   intervalClockValue: string;
-  /** 0-100, pane A's 6px bar under the interval clock. */
+  /** 0-100. No current renderer: its only one, `PaneTimer.tsx`'s pane A
+   *  (`.connected-interval-bar`), retired with connected-revamp Task 2 —
+   *  design spec §3's casualty list calls this DROPPED outright, not
+   *  rehomed like `intervalLabel` above, since "the metric row's countdown
+   *  is the same fact as a number, and revision §3's live layout has no
+   *  slot" for a second bar. Left computed and tested rather than deleted:
+   *  it is not in Task 2's own retirement inventory, so the field stays
+   *  until whoever reconciles that gap says otherwise. */
   intervalProgressPct: number;
   pace: JudgedValue;
   /** The hero split, cut so the tenths can be set smaller (handoff §3: "the
@@ -406,7 +414,6 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
     deviceCaption: deviceCaptionFor(deviceName, status),
     intervalLabel: `INTERVAL ${intervalIndex + 1} OF ${intervals} · ${kindWord}`,
     intervalLabelShort: `${intervalIndex + 1} OF ${intervals} · ${kindWord}`,
-    statusWord: statusWordFor(status, frame),
     nowLabel: stale ? "LAST · /500M" : "NOW · /500M",
     segments: {
       total: phases.length,
@@ -765,18 +772,6 @@ function deviceCaptionFor(
 ): string {
   const name = deviceName ?? "PM5";
   return status === "disconnected" ? `${name} · LOST` : name;
-}
-
-/** In ink on every pane (DEVIATIONS row 1). `RESTING` is ours: the handoff
- *  names only `ROWING` and `PAUSED`, but the machine reports a distinct
- *  `resting` state during a programmed rest and calling that "ROWING" would
- *  be the one thing this surface promises never to do — report a number, or
- *  a word, the monitor did not say. */
-function statusWordFor(status: SurfaceStatus, frame: MonitorFrame): string {
-  if (status === "paused") return "PAUSED";
-  if (status === "disconnected") return "LOST";
-  if (status === "ended") return "ENDED";
-  return frame.state === "resting" ? "RESTING" : "ROWING";
 }
 
 function intervalClockValueFor(

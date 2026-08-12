@@ -76,20 +76,22 @@ export function rateDisplay(phase: EnginePhase): {
  *  JSX — the handoff's pane A puts the live actual in a SEPARATE card of the
  *  same geometry beside the target, "distinguished by its label (`NOW ·
  *  /500M` vs `TARGET SPLIT`)", not inside the target card the way the
- *  retired variant drew it. `targetSplitDisplay`/`rateDisplay` below are
- *  still the shared derivation both this component and `PaneTimer.tsx` call;
- *  only the JSX branch (and its now-orphaned `JudgedActual` prop pair) is
- *  gone.
+ *  retired variant drew it. `targetSplitDisplay` below is still the shared
+ *  derivation this component calls directly AND the one `surfaceModel.ts`
+ *  calls on the connected surface's behalf, for the TARGET SPLIT card's
+ *  value/ref pair (`PaneLive.tsx`'s `model.targetSplit`); `rateDisplay` has
+ *  no caller outside this component. connected-revamp Task 2 retired
+ *  `PaneTimer.tsx` (pane A), the connected surface's OWN caller of this
+ *  file's exports before `surfaceModel.ts` mediated the call — only the
+ *  mediation survives, not a second copy of either function.
  *
  *  Of the CSS hooks the retired variant exercised, only the
  *  judgement-keyed one survives: `timer-card-actual-{judgement}` is
  *  declared in `index.css` and rendered today by
  *  `connected/JudgedCard.tsx`, `connected/PaneLive.tsx` and
- *  `connected/PaneGrid.tsx` — NOT by `PaneTimer.tsx`, which is what this
- *  comment used to claim (review H5; `PaneTimer.tsx`'s own header already
- *  said the right thing, so the two contradicted each other).
- *  `.timer-card-static` and the bare `.timer-card-actual` had no renderer
- *  left at all and were deleted from `index.css` by the same fix wave. */
+ *  `connected/PaneGrid.tsx`. `.timer-card-static` and the bare
+ *  `.timer-card-actual` had no renderer left at all and were deleted from
+ *  `index.css` by the same fix wave. */
 export default function TimerTargets({ phase }: { phase: EnginePhase }) {
   const target = targetSplitDisplay(phase);
   const rate = rateDisplay(phase);

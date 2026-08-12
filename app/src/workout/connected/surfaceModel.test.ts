@@ -265,13 +265,6 @@ describe("live", () => {
     expect(m.intervalLabelShort).toBe("2 OF 5 · WORK");
   });
 
-  it("says ROWING in ink, and RESTING when the machine is resting", () => {
-    expect(model().statusWord).toBe("ROWING");
-    expect(model({ frame: frame({ state: "resting" }) }).statusWord).toBe(
-      "RESTING",
-    );
-  });
-
   it("keeps the device's own advertised name, with no promise attached", () => {
     expect(model().deviceCaption).toBe(DEVICE);
     expect(model().linked).toBe(true);
@@ -516,7 +509,6 @@ describe("paused", () => {
     expect(m.pace.display).toBe("—");
     expect(m.pace.absent).toBe(true);
     expect(m.paceCaption).toBe("NOT ROWING");
-    expect(m.statusWord).toBe("PAUSED");
   });
 
   it("is NOT stale: the erg is still talking, so nothing greys as unvouched", () => {

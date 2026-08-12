@@ -215,12 +215,6 @@ function tripleTapGrid(): void {
 }
 
 describe("screen fixtures for pnpm screenshots", () => {
-  it("pane A, rowing", async () => {
-    await expect(capture("timer")).toMatchFileSnapshot(
-      "../../e2e/fixtures/connected-pane-timer.html",
-    );
-  });
-
   it("pane B, rowing", async () => {
     await expect(capture("live")).toMatchFileSnapshot(
       "../../e2e/fixtures/connected-pane-live.html",
@@ -233,9 +227,9 @@ describe("screen fixtures for pnpm screenshots", () => {
     ).toMatchFileSnapshot("../../e2e/fixtures/connected-pane-live-nohr.html");
   });
 
-  it("pane A, erg paused", async () => {
+  it("pane B, erg paused", async () => {
     await expect(
-      capture("timer", {
+      capture("live", {
         phase: "paused",
         frame: { intervalRemaining: { kind: "time", value: 41 } },
       }),

@@ -5344,13 +5344,13 @@ section:not(.news-pinned) .news-row:last-of-type {
 
 /* `min-width: 0` beside the existing `min-height: 0` (design spec §4, the
    width fix): in landscape this element is a grid item in `.connected-
-   surface`'s `1fr` (= `minmax(auto, 1fr)`) track (`:6228`). With no
+   surface`'s `1fr` (= `minmax(auto, 1fr)`) track (`:6188`). With no
    explicit `min-width` the track's automatic minimum is CONTENT-based —
    and since only ONE pane is mounted at a time (`ConnectedSurface.tsx
-   :325-327`), that minimum was measured against whichever pane happened
+   :324-325`), that minimum was measured against whichever pane happened
    to be showing, and within the grid pane, against its own content
    (interval numbers, meters digits). `.connected-pane`'s own `min-width:
-   0` (`:5313`) does not reach far enough to fix this: it lets THAT
+   0` (`:5330`) does not reach far enough to fix this: it lets THAT
    element shrink when something squeezes it, but says nothing about how
    big `.connected-surface-body` NATURALLY wants to be when nothing is
    squeezing it yet, which is exactly the quantity the grid track's
@@ -5452,75 +5452,17 @@ section:not(.news-pinned) .news-row:last-of-type {
   color: var(--ink-3);
 }
 
-.connected-phase-line {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-}
-
-.connected-phase-label {
-  flex: 1;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.16em;
-  color: var(--ink-3);
-}
-
-/* INK, not the phone timer's accent RUNNING — DEVIATIONS row 1. */
-.connected-status-word {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.16em;
-  color: var(--ink);
-}
-
-.connected-interval-clock {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-/* The mockup's pane A shows a bare `0:41` with no label, because every
-   frame it draws is a TIME interval. A distance interval's countdown is a
-   raw meter count — `1200` under nothing at all — so the slot is labelled,
-   the same two words pane B's own second slot uses. Static per interval;
-   it never re-words mid-interval. */
-.connected-clock-label {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.18em;
-  color: var(--ink-3);
-}
-
-.connected-clock-value {
-  font-family: var(--font-mono);
-  font-size: 96px;
-  font-weight: 500;
-  line-height: 0.92;
-  letter-spacing: -0.05em;
-  color: var(--ink);
-}
-
 /* Handoff §4: paused "greys but holds its last value". Same grey the
-   stale treatment uses — both mean "this number is not being updated". */
+   stale treatment uses — both mean "this number is not being updated".
+   Reused by `PaneLive.tsx`'s `.connected-second-value` (connected-revamp
+   Task 2's own trap note: the BASE `.connected-clock-value` rule that used
+   to live here retired with `PaneTimer.tsx`, pane A's only renderer; this
+   modifier survives because it is a second, independent consumer). */
 .connected-clock-value-held {
   color: var(--ink-3);
 }
 
-.connected-interval-bar {
-  height: 6px;
-  background: var(--rule-2);
-  display: block;
-}
-
-.connected-interval-bar span {
-  height: 6px;
-  background: var(--ink);
-  display: block;
-}
-
-/* Pane A's two card rows and pane B's three-card row. Its own class, NOT
+/* Pane B's three-card row. Its own class, NOT
    `.timer-cards`: that class carries explicit `grid-column`/`grid-row`
    placement in the phone timer's landscape query (which is not scoped to
    `.timer-screen`), so reusing it here would drop these rows into the
@@ -5536,9 +5478,9 @@ section:not(.news-pinned) .news-row:last-of-type {
   grid-template-columns: 1fr 1fr 1fr;
 }
 
-/* Pane B's three equal cards carry the handoff's 40px value (pane A keeps
-   the phone timer's 30px). Tighter padding so three cards still fit the
-   390px frame without the numeral wrapping. */
+/* Pane B's three equal cards carry the handoff's 40px value. Tighter
+   padding so three cards still fit the 390px frame without the numeral
+   wrapping. */
 .connected-cards-triple .timer-card {
   padding: 11px;
 }
@@ -6137,20 +6079,22 @@ section:not(.news-pinned) .news-row:last-of-type {
 
 /* --- The labelled pager (handoff §3, DEVIATIONS row 4) -------------- */
 
-/* Portrait: a 56px band at the bottom, three equal thirds (130×56 each on
-   a 390px frame — `flex: 1` is what makes that exact at 390 and still
-   correct on any other width), 9px square + mono 10px label. */
+/* Portrait: a 54px band at the bottom, two equal halves (195×54 each on a
+   390px frame — `flex: 1` is what makes that exact at 390 and still correct
+   on any other width), 9px square + mono 10px label (revision §2: "Portrait
+   keeps a 54px two-tab bar"). connected-revamp Task 2 dropped the pager
+   from three targets to two along with the timer pane. */
 .connected-pager {
   flex: none;
   display: flex;
-  height: 56px;
+  height: 54px;
   border-top: 1px solid var(--rule);
 }
 
 .connected-pager-target {
   flex: 1;
   min-width: 0;
-  height: 56px;
+  height: 54px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -6160,6 +6104,14 @@ section:not(.news-pinned) .news-row:last-of-type {
   border: none;
   padding: 0;
   cursor: pointer;
+}
+
+/* No gutter, no housing to represent in portrait — the landscape-only
+   camera-housing spacer between the two targets (see the landscape query)
+   takes zero space here rather than just being visually hidden, so it can
+   never perturb the two targets' `flex: 1` split. */
+.connected-pager-housing {
+  display: none;
 }
 
 .connected-pager-mark {
@@ -6215,38 +6167,6 @@ section:not(.news-pinned) .news-row:last-of-type {
 }
 
 @media (orientation: portrait) {
-  .connected-pane-timer .connected-line {
-    order: 1;
-  }
-
-  .connected-pane-timer .timer-dots {
-    order: 2;
-  }
-
-  .connected-pane-timer .connected-phase-line {
-    order: 3;
-  }
-
-  .connected-pane-timer .connected-interval-clock {
-    order: 4;
-  }
-
-  .connected-pane-timer .connected-cards-primary {
-    order: 5;
-  }
-
-  .connected-pane-timer .connected-cards-secondary {
-    order: 6;
-  }
-
-  .connected-pane-timer .timer-upnext {
-    order: 7;
-  }
-
-  .connected-pane-timer .timer-total {
-    order: 8;
-  }
-
   .connected-pane-live .connected-line {
     order: 1;
   }
@@ -6283,19 +6203,44 @@ section:not(.news-pinned) .news-row:last-of-type {
 /* --- Landscape ------------------------------------------------------ */
 
 @media (orientation: landscape) {
-  /* The pager becomes a 56px rail on the RIGHT edge (handoff §3: "mount
-     cradles crop bottom-centre"). The rest of the surface keeps its
-     column. */
+  /* THE FIRST HALF OF THE SIZE-TOKEN SCALE (Task 2, `tokens.css`'s own
+     comment on the other half): the landscape value of each of the eight
+     `--size-*` roles, redefined here — ONE name, two values, never a second
+     name — because this is the connected surface's own existing landscape
+     query and both surfaces the scale serves land their landscape half
+     wherever their own query already lives. */
+  :root {
+    --size-hero: 112px;
+    --size-hero-tenths: 58px;
+    --size-subhero: 56px;
+    --size-target: 46px;
+    --size-metric: 30px;
+    --size-total: 22px;
+    --size-row: 19px;
+    --size-label: 11px;
+  }
+
+  /* THE SURFACE GOES FULL-BLEED (design spec §6/ruling 10, revision §6):
+     `.screen`'s 480px cap and its fixed 20px/6px padding are sized for a
+     portrait document column, not a HUD on a mounted phone. Landscape
+     breaks both so the gutter below can reach the housing at the true
+     physical edge instead of floating ~42px inboard of it (the previous
+     56px-cap-plus-padding shape) — safe-area insets still apply (they are
+     real device geometry, not the app's own layout choice), only the
+     app-chosen 20px/6px on top of them is dropped. */
   .connected-surface {
     display: grid;
-    grid-template-columns: 1fr 56px;
+    grid-template-columns: 44px 1fr;
     grid-template-rows: auto 1fr auto;
-    column-gap: 12px;
+    /* No column-gap: the gutter's own 1px inner rule (below) is the only
+       separation between it and the content column — "content starts
+       immediately after the gutter, no extra inset" (revision §2). */
+    column-gap: 0;
     row-gap: 8px;
-    /* Same override, same reason, as `.timer-screen`'s own landscape rule:
-       the global 480px cap is sized for a portrait column and would leave
-       each of two columns under 220px on the 844px reference frame. */
-    max-width: 800px;
+    max-width: none;
+    margin: 0;
+    padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
+      env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
   }
 
   /* One line in landscape: 390px of height cannot spare the two-line
@@ -6309,9 +6254,19 @@ section:not(.news-pinned) .news-row:last-of-type {
     padding: 6px 12px;
   }
 
+  /* The ended hand-off frame is NOT full-bleed (it is not a pane and has no
+     gutter to reach) — it stays the plain centred document column the
+     general rule above no longer is, so it restores exactly what `.screen`
+     itself would have given it: the app-wide max-width, the auto-centering
+     margin and the fixed 20px/6px padding on top of the safe-area insets.
+     Higher specificity than `.connected-surface` alone wins these back. */
   .connected-surface.connected-surface-ended {
     display: flex;
     max-width: 480px;
+    margin: 0 auto;
+    padding: calc(6px + env(safe-area-inset-top, 0px))
+      calc(20px + env(safe-area-inset-right, 0px)) 20px
+      calc(20px + env(safe-area-inset-left, 0px));
   }
 
   /* The last 6px, measured: with the banner up, pane B's readout column ran
@@ -6322,35 +6277,62 @@ section:not(.news-pinned) .news-row:last-of-type {
   }
 
   .connected-surface-body {
-    grid-column: 1;
+    grid-column: 2;
     grid-row: 2;
     min-height: 0;
   }
 
   .connected-surface-footer {
-    grid-column: 1;
+    grid-column: 2;
     grid-row: 3;
   }
 
+  /* THE GUTTER (revision §2/§6): a 44px column at the PHYSICAL edge — column
+     1 of the grid above, with no column-gap ahead of it — `#efeade`
+     (`--surface-sunken`) with a 1px inner rule on the side facing the
+     content. `space-between` plus the 12px vertical padding is what puts
+     LIVE at the top, GRID at the bottom and the housing spacer exactly
+     between them, mirroring the mockup's own gutter column byte for byte. */
   .connected-pager {
-    grid-column: 2;
+    grid-column: 1;
     grid-row: 1 / -1;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    gap: 2px;
+    justify-content: space-between;
+    gap: 0;
     height: auto;
-    width: 56px;
+    width: 44px;
+    padding: 12px 0;
+    background: var(--surface-sunken);
     border-top: none;
-    border-left: 1px solid var(--rule);
+    border-right: 1px solid var(--rule);
   }
 
-  /* 56x56 targets (handoff §3), abbreviated labels. */
+  /* 44x44 targets (revision §2), abbreviated labels. */
   .connected-pager-target {
     flex: none;
-    width: 56px;
-    height: 56px;
-    gap: 4px;
+    width: 44px;
+    height: 44px;
+  }
+
+  /* 10x10 in the gutter, up from the shared 9x9 base (revision §2: "Dot
+     10×10, label mono 9px"). */
+  .connected-pager-mark {
+    width: 10px;
+    height: 10px;
+  }
+
+  /* The camera-housing bump between the two gutter targets (`PagerRail.tsx`'s
+     own comment on why it exists). Zero footprint in portrait, where
+     `.connected-pager-housing` renders (see the portrait rule below) but
+     there is no gutter or housing to represent. */
+  .connected-pager-housing {
+    width: 11px;
+    height: 104px;
+    flex: none;
+    display: block;
+    background: var(--ink);
+    border-radius: 6px;
   }
 
   .connected-pager-label-long {
@@ -6360,14 +6342,21 @@ section:not(.news-pinned) .news-row:last-of-type {
   .connected-pager-label-short {
     display: block;
     font-size: 9px;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.06em;
   }
 
-  /* Two columns, each sizing itself. */
+  /* Two columns, each sizing itself. Padding lives HERE, not on the removed
+     `.screen`/`.connected-surface` inset (the full-bleed rule above): the
+     mockup's own content column starts immediately after the gutter with
+     no extra inset ahead of it, then carries this exact padding of its own
+     (`Ergomatic connected mode.dc.html`'s Live/Grid landscape frames both
+     use `12px 16px 12px 14px`) — shared by both panes, since both frames
+     use the identical figure. */
   .connected-pane {
     flex-direction: row;
     gap: 16px;
     justify-content: flex-start;
+    padding: 12px 16px 12px 14px;
   }
 
   /* THE PHONE TIMER'S LANDSCAPE QUERY IS NOT SCOPED TO ITS OWN SCREEN.
@@ -6397,7 +6386,6 @@ section:not(.news-pinned) .news-row:last-of-type {
     min-height: 0;
   }
 
-  .connected-col-clock,
   .connected-col-hero {
     flex: 1;
   }
@@ -6405,54 +6393,22 @@ section:not(.news-pinned) .news-row:last-of-type {
   /* "The right column is a full-height stack: header and segment bar
      pinned top, UP NEXT pinned bottom, and the two card rows share the
      space between them" (handoff §3). */
-  .connected-col-cards,
   .connected-col-readouts {
     flex: 1.05;
     justify-content: space-between;
   }
 
-  .connected-col-cards .connected-cards {
-    flex: 1;
-  }
-
-  .connected-col-cards .timer-card {
-    justify-content: center;
-    padding: 8px 10px;
-  }
-
   /* 844x390 is 454px shorter than the portrait frame and every element the
-     handoff names has to fit without scrolling (panes A and B "cannot
-     grow"). These are the measured trims that make that true — see the
-     task-6 report's landscape measurement table. */
+     handoff names has to fit without scrolling (pane B "cannot grow").
+     These are the measured trims that make that true — see the task-6
+     report's landscape measurement table. */
   .connected-pane .timer-upnext {
     padding: 9px 12px;
   }
 
-  /* Pane A's numeral takes the same landscape step the phone timer's own
-     does. It fits because this column no longer shares a row height with
-     the cards beside it. */
-  /* 112px, not the phone timer's landscape 128px: this column is 330px
-     wide on the 844px frame and a five-character readout (`12:00`, or a
-     five-digit meters countdown) measures 336px at 128px of Plex Mono.
-     Measured, not eyeballed — see the task-6 report. */
-  .connected-pane-timer .connected-clock-value {
-    font-size: 112px;
-    line-height: 0.86;
-  }
-
-  .connected-pane-timer .connected-interval-clock {
-    justify-content: center;
-    flex: 1;
-  }
-
-  .connected-col-cards .timer-card-value {
-    font-size: 34px;
-    line-height: 1;
-  }
-
   /* Handoff §3 asks for 150px/72px here. 128px/62px is what fits once the
      session-context block the same section makes mandatory — "the same
-     total-left bar and quarter-ruler as pane A ... on every pane" — is in
+     total-left bar and quarter-ruler ... on every pane" — is in
      this column too; at 150px the ruler was pushed 31px off the bottom of
      the frame. The handoff states the REASON for the size as a measurement,
      not the size itself ("the hero digit height is ~74px in landscape,
@@ -6487,12 +6443,6 @@ section:not(.news-pinned) .news-row:last-of-type {
     .connected-pane-live
     .connected-hero-tenths {
     font-size: 44px;
-  }
-
-  .connected-surface:has(.connected-lost)
-    .connected-pane-timer
-    .connected-clock-value {
-    font-size: 88px;
   }
 
   .connected-pane-live .connected-second-value {
@@ -6531,7 +6481,7 @@ section:not(.news-pinned) .news-row:last-of-type {
      wrappers' cells to direct flex items of the row, so the seven cells sit
      on one line at the handoff's own weights — one markup, no second copy,
      and nothing re-mounts on rotation. Same technique `.connected-col` uses
-     on panes A and B. */
+     on pane B. */
   .connected-grid-row,
   .connected-grid-head {
     flex-direction: row;
