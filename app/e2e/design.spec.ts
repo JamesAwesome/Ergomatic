@@ -4263,6 +4263,14 @@ test.describe("connected screens (fake-driven)", () => {
   // happens to be wide enough. The plain real-content measurement stays
   // too, as normal-usage regression coverage — it already passes today and
   // must keep passing.
+  //
+  // HONEST SCOPE (task-1 review, minor 1): only the LANDSCAPE case can go
+  // red today. `.connected-surface` is a flex column in portrait and only
+  // becomes a CSS grid under `@media (orientation: landscape)`, so the
+  // `minmax(auto, 1fr)` track this guards does not exist in portrait — the
+  // portrait run is defense in depth against a future portrait grid, not a
+  // live regression guard. Kept deliberately, and said out loud so nobody
+  // reads a passing portrait as proof the mechanism is covered there.
   for (const viewport of [
     { width: 390, height: 844, label: "portrait" },
     { width: 844, height: 390, label: "landscape" },
