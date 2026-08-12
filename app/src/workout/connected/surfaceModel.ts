@@ -35,6 +35,10 @@ import type {
 import type { ConnectedPhase } from "../../monitor/useMonitorSession";
 import type { EnginePhase } from "../../session/engine";
 import {
+  intervalBoundaries,
+  type IntervalBoundaries,
+} from "../../session/intervalBoundaries";
+import {
   phaseKindWord,
   thenNextTextAt,
   totalSessionSecondsOf,
@@ -249,6 +253,13 @@ export interface SurfaceModel {
    *  the ruler and carries it as the header line's trailing caption
    *  instead. */
   totalLeftDisplay: string;
+  /** Where the intervals actually are, for the live pane's notched TOTAL
+   *  LEFT bar (design spec §5). One entry per INTERIOR interval boundary,
+   *  so the bar draws `intervalLabelShort`'s own `OF N` minus one — the
+   *  count the caption promises, never `phases.length`. Completed
+   *  intervals are re-anchored to the machine's own actuals; see
+   *  `session/intervalBoundaries.ts`. */
+  boundaries: IntervalBoundaries;
   elapsedDisplay: string;
   /** `LEFT IN INTERVAL` on a time interval, `METERS LEFT` on a distance one
    *  (handoff §3: "On a distance interval the second slot becomes METERS
@@ -448,6 +459,7 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
     totalSeconds,
     totalLeftSeconds,
     totalLeftDisplay: fmtDuration(totalLeftSeconds / 60),
+    boundaries: intervalBoundaries(phases, measuredWorkSeconds(input.actuals)),
     // The log sheet captions this `SESSION m:ss` and PaneLive shows it as
     // the piece's running clock — both mean the whole session, so it reads
     // the accumulated pair for the same walk-4 reason TOTAL LEFT does.
@@ -480,6 +492,25 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
       hasTargetSplit: targetSplitSeconds !== null,
     }),
   };
+}
+
+/** The measured half of the notched bar (design spec §5): every interval the
+ *  machine has actually finished, keyed by ITS OWN interval index, in the
+ *  sparse-array shape `intervalBoundaries` documents.
+ *
+ *  Same `index !== null` contract `buildGridModel` applies for the same
+ *  reason (`IntervalActual.index`: "A CONSUMER MUST NOT TREAT `null` AS
+ *  INTERVAL 0") — an actual that belongs to no interval we can name
+ *  re-anchors nothing, and the boundary it would have fixed stays an
+ *  estimate rather than being moved to somebody else's number. */
+function measuredWorkSeconds(
+  actuals: IntervalActual[],
+): (number | undefined)[] {
+  const out: (number | undefined)[] = [];
+  for (const actual of actuals) {
+    if (actual.index !== null) out[actual.index] = actual.elapsedSeconds;
+  }
+  return out;
 }
 
 /**

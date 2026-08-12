@@ -1317,3 +1317,119 @@ describe("Timer — the repaint loop", () => {
     expect(screen.getByText(/^STEP 3 OF 3/)).toBeInTheDocument();
   });
 });
+
+// --- The notched TOTAL LEFT bar, on the UNCONNECTED surface ----------------
+//
+// Design spec §5: "Both surfaces consume the same shape, so the unconnected
+// timer gets the same bar rather than a fork." These are the phone timer's
+// half of that — the component's own rendering rules are pinned in
+// `TimerRuler.test.tsx`, and the arithmetic in `intervalBoundaries.test.ts`.
+
+describe("Timer — the notched total bar", () => {
+  /** The notches, left to right, as percentages of the bar. */
+  function notchLefts(): number[] {
+    return Array.from(document.querySelectorAll(".timer-total-notch")).map(
+      (n) => Number.parseFloat((n as HTMLElement).style.left),
+    );
+  }
+
+  it("notches the bar by INTERVAL, not by phase, and drops the quarter ruler", async () => {
+    mockKeepAwake();
+    const run = matrixRun();
+    runAtIndex(run, 0);
+    await renderTimer();
+
+    // The kind-matrix fixture is five phases folding into four intervals
+    // (warm-up · work+its rest · 500 m · effort), so the bar draws three
+    // notches. Four — one per phase boundary — is the defect.
+    expect(run.phases).toHaveLength(5);
+    expect(notchLefts()).toHaveLength(3);
+    expect(document.querySelector(".timer-ruler")).toBeNull();
+
+    // 240s / 1420s total, 1260 / 1420, 1360 / 1420.
+    const total = totalSessionSeconds(run);
+    expect(total).toBe(1420);
+    const [first, second, third] = notchLefts();
+    expect(first).toBeCloseTo((240 / total) * 100, 6);
+    expect(second).toBeCloseTo((1260 / total) * 100, 6);
+    expect(third).toBeCloseTo((1360 / total) * 100, 6);
+  });
+
+  it("re-anchors on the stopwatch's own recorded actual for a distance piece", async () => {
+    mockKeepAwake();
+    const run = matrixRun();
+    runAtIndex(run, 4);
+    await renderTimer();
+    const estimated = notchLefts();
+
+    // The 500 m (phase 3, the third interval) actually took 60s against its
+    // 100s estimate — the shape `nextDistance` records when the rower
+    // presses NEXT. Its own notch moves LEFT; the notch before it does not.
+    document.body.innerHTML = "";
+    saveRun({
+      ...run,
+      index: 4,
+      phaseStartedAt: FIXED_NOW.toISOString(),
+      pausedAt: null,
+      pausedTotalMs: 0,
+      actuals: {
+        3: { elapsedSeconds: 60, splitSeconds: 60, actualSource: "stopwatch" },
+      },
+    });
+    await renderTimer();
+    const anchored = notchLefts();
+
+    expect(anchored[0]).toBeCloseTo(estimated[0]!, 6);
+    expect(anchored[1]).toBeCloseTo(estimated[1]!, 6);
+    expect(anchored[2]).toBeLessThan(estimated[2]!);
+    expect(anchored[2]).toBeCloseTo((1320 / 1420) * 100, 6);
+  });
+
+  it("marks the measured notch a fact and leaves the rest predicted", async () => {
+    mockKeepAwake();
+    const run = matrixRun();
+    saveRun({
+      ...run,
+      index: 4,
+      phaseStartedAt: FIXED_NOW.toISOString(),
+      actuals: {
+        3: { elapsedSeconds: 60, splitSeconds: 60, actualSource: "stopwatch" },
+      },
+    });
+    await renderTimer();
+
+    // Intervals 0 and 1 were TIME phases the engine advanced at their own
+    // programmed boundaries — nothing measured them, so their notches stay
+    // estimates (`runIntervalBoundaries`'s own rule).
+    expect(
+      Array.from(document.querySelectorAll(".timer-total-notch")).map(
+        (n) => (n as HTMLElement).dataset.predicted,
+      ),
+    ).toStrictEqual(["true", "true", "true"]);
+  });
+
+  it("keeps the quarter ruler for a session with only one interval", async () => {
+    mockKeepAwake();
+    // One 20:00 work step: one interval, no interior boundary, so the bar
+    // would otherwise be a bare rectangle.
+    const draft = buildDraft({
+      id: "id-single",
+      title: "Single piece",
+      type: "O2" as WorkoutType,
+      steps: [
+        {
+          k: "w",
+          duration: { kind: "time", minutes: 20 },
+          ref: { base: "6k", off: 0 },
+        },
+      ],
+    });
+    const run = buildAndSaveRun(draft, FIXED_NOW, BASELINES, null);
+    runAtIndex(run, 0);
+    await renderTimer();
+
+    expect(document.querySelectorAll(".timer-total-notch")).toHaveLength(0);
+    expect(document.querySelector(".timer-ruler")).not.toBeNull();
+    expect(screen.getByText("¼")).toBeInTheDocument();
+  });
+});

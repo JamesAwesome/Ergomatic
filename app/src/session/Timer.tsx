@@ -24,6 +24,11 @@ import {
   type PhaseActual,
   type SessionRun,
 } from "./run";
+import {
+  foldIntervals,
+  intervalBoundaries,
+  type IntervalBoundaries,
+} from "./intervalBoundaries";
 import TimerTargets from "./TimerTargets";
 import TimerRuler from "./TimerRuler";
 import IntervalSegments from "../components/IntervalSegments";
@@ -162,6 +167,31 @@ export function hasRemainingEstimate(
 // eslint-disable-next-line react-refresh/only-export-components
 export function totalSessionSeconds(run: SessionRun): number {
   return totalSessionSecondsOf(run.phases);
+}
+
+/** THE NOTCHED BAR'S INPUT, run-shaped (design spec §5). The fourth of this
+ *  file's run-shaped readers over a phase list, and the same delegation the
+ *  three below use: the arithmetic lives in `intervalBoundaries.ts` (shared
+ *  verbatim with the connected surface, so the two bars cannot drift), and
+ *  this only answers the one question a `SessionRun` can answer that a bare
+ *  phase list cannot — which intervals were actually MEASURED.
+ *
+ *  ONLY A RECORDED ACTUAL COUNTS AS MEASURED, and on this surface that means
+ *  a distance piece the rower pressed NEXT on (`engine.ts`'s `nextDistance`
+ *  is the only writer of `SessionRun.actuals`, keyed by the phase's POSITION
+ *  — which is exactly `IntervalGroup.workIndex`). A completed TIME phase is
+ *  deliberately NOT counted: `tick` advances it at its own programmed
+ *  boundary, so its real elapsed equals its estimate and re-anchoring it
+ *  would move nothing — but `advance`/`rewind` re-seed the clock at `now`
+ *  and record nothing, so a SKIPPED phase's real duration is genuinely
+ *  unknown. Claiming those as measurements would put a fact's weight behind
+ *  a number nobody took. */
+// eslint-disable-next-line react-refresh/only-export-components
+export function runIntervalBoundaries(run: SessionRun): IntervalBoundaries {
+  const measured = foldIntervals(run.phases).map(
+    (group) => run.actuals[group.workIndex]?.elapsedSeconds,
+  );
+  return intervalBoundaries(run.phases, measured);
 }
 
 /** The same sum over a bare phase list. The connected surface (7B Task 6)
@@ -664,6 +694,7 @@ export default function Timer() {
         <TimerRuler
           totalLeftSeconds={totalRemainingSeconds(currentRun, now)}
           totalSeconds={totalSessionSeconds(currentRun)}
+          boundaries={runIntervalBoundaries(currentRun)}
         />
       )}
 
