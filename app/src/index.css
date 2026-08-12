@@ -3463,23 +3463,29 @@ button:disabled {
      route (AppRoutes.tsx's hidesTabBar), so the viewport minus this
      screen's own safe-area padding is genuinely all there is to fill.
 
-     PORTRAIT STILL OVERFLOWS BY 18px HERE, measured at 390×844 during fix
-     round 1 (`scrollHeight` 862 vs `clientHeight` 844, this box 818px):
-     the bar is hidden but `.app-shell` still RESERVES `var(--tap)` for it
-     (index.css:398), and `box-sizing: border-box` already counts the 26px
-     subtracted above inside the min-height. `.timer-screen`'s own comment
-     carries the full derivation and the fix (swap the `- 26px` term for
-     `- var(--tap)`); this rule and `.session-complete-screen`'s were left
-     on the pre-fix formula deliberately — Task 8 owns `countdown.png`. */
+     PORTRAIT OVERFLOWED BY 18px HERE until Task 8, measured at 390×844
+     during Task 7's fix round (`scrollHeight` 862 vs `clientHeight` 844,
+     this box 818px): the bar is hidden but `.app-shell` still RESERVES
+     `var(--tap)` for it (index.css:398), and `box-sizing: border-box`
+     already counts the 26px subtracted here inside the min-height — a
+     double count. `.timer-screen`'s own comment carries the full
+     derivation; the fix is the same one, SWAPPING the `- 26px` term for
+     `- var(--tap)` rather than appending to it (appending closes the
+     scroll but leaves 26px of dead space at the foot). Re-measured after
+     on this rule's own screen: `scrollHeight` 844 = `clientHeight` 844.
+     Landscape is unaffected — its own `@media` block below overrides
+     `min-height` outright and keeps its own measured formula. */
   min-height: calc(
     100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) -
-      26px
+      var(--tap)
   );
 }
 
 /* Task 5 (final-review triage item, carried from Task 4's own flag):
-   `.countdown-screen`'s base `min-height` above shares `.timer-screen`'s
-   PRE-Task-4-fix formula — it never accounts for `.app-shell`'s own
+   `.countdown-screen`'s base `min-height` above shared `.timer-screen`'s
+   PRE-Task-4-fix formula at the time (Task 8 has since swapped its
+   `- 26px` term the same way; this landscape half keeps the appended
+   shape it was measured on) — it never accounts for `.app-shell`'s own
    `padding-bottom: calc(var(--tap) + safe-area-bottom)`, reserved for the
    fixed tab bar's height on every route even though `hidesTabBar`
    (AppRoutes.tsx) never renders one here. Measured live at 844×420 (the
@@ -4735,32 +4741,33 @@ button:disabled {
      `.complete-back`'s `margin-top: auto` to the bottom of the viewport
      rather than right under the actuals list.
 
-     NO LONGER "the same as `.timer-screen` above", which this comment used
-     to say: fix round 1 swapped that rule's `- 26px` for `- var(--tap)`
-     after measuring 18px of dead portrait scroll (see its own comment for
-     the derivation). This formula is the pre-fix one, and by the same
-     arithmetic — `.app-shell` reserves `var(--tap)` for a bar this route
-     never renders, and `box-sizing: border-box` already counts the 26px of
-     `.screen` padding inside the min-height — this screen and
-     `.countdown-screen` (its own base rule above) both still carry the
-     identical 18px in PORTRAIT — MEASURED live at 390×844, not inferred:
-     `scrollHeight` 862 vs `clientHeight` 844 on both, each screen's own
-     `main` box 818px, exactly the timer's own before-numbers. Both were
-     left alone deliberately: fix round 1's brief is the phone timer's own
-     portrait budget, and re-shooting `countdown.png`/
-     `session-complete*.png` belongs to Task 8, which owns those captures.
-     Flagged in the fix-round report for Task 8, not fixed here. */
+     The same formula as `.timer-screen` above, again — and for the same
+     reason it changed there. Task 7's fix round swapped that rule's
+     `- 26px` for `- var(--tap)` after measuring 18px of dead portrait
+     scroll; this screen and `.countdown-screen` were measured live at
+     390×844 in the same session and carried the identical 18px
+     (`scrollHeight` 862 vs `clientHeight` 844 on both, each screen's own
+     `main` box 818px), left on the pre-fix formula only because Task 8
+     owns `countdown.png`/`session-complete*.png`. Task 8 took the same
+     swap: `.app-shell` reserves `var(--tap)` for a tab bar this route
+     never renders (index.css:398), and `box-sizing: border-box` already
+     counts the 26px of `.screen` padding INSIDE the min-height, so the
+     26px was a double count and the reserved strip is the real term.
+     Re-measured after: `scrollHeight` 844 = `clientHeight` 844. */
   min-height: calc(
     100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) -
-      26px
+      var(--tap)
   );
 }
 
 /* Task 5: the identical fix as `.countdown-screen`'s own landscape rule
-   above, for the identical reason — same base formula, same missing
-   `.app-shell` tab-bar padding, same 844×420 measurement (438 vs 420
-   before, 414 vs 420 after). See that rule's comment for the full
-   derivation; not repeated verbatim here.
+   above, for the identical reason — same missing `.app-shell` tab-bar
+   padding, same 844×420 measurement (438 vs 420 before, 414 vs 420
+   after). See that rule's comment for the full derivation; not repeated
+   verbatim here. (Task 8 later swapped the `- 26px` out of BOTH screens'
+   PORTRAIT base rules; these landscape halves keep the appended shape
+   they were measured on, exactly as `.timer-screen`'s own landscape half
+   does.)
 
    Task 1 (ui-fix round) re-measurement: the two-button half-width row
    (`.complete-actions`, pre-Task-1) became a full-width L1/L2 stack — 56 +
