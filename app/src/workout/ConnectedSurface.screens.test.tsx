@@ -226,9 +226,13 @@ describe("screen fixtures for pnpm screenshots", () => {
    *  first 2000 m rep — so nothing had a picture of the state §5b's table is
    *  actually about: the caption reading `WARM-UP` with no ordinal at all,
    *  both target slots on the dash with both heroes unjudged (a warm-up is
-   *  never graded), and TOTAL LEFT's bar drawing its leading chunk in the
-   *  unfilled-track tone rather than the working one. A time warm-up counts
-   *  DOWN, hence the time-kind remaining. */
+   *  never graded), and TOTAL LEFT's bar part-way through the warm-up's own
+   *  span — filling in ITS tone as the rower rows it, with the unrowed rest
+   *  of the span still plain track (James, 2026-08-12: the bar moves while
+   *  the rower moves, and still reads as visibly not-work). The frame is set
+   *  8:00-warm-up-minus-3:32, so the fill sits inside the span rather than
+   *  at either end of it. A time warm-up counts DOWN, hence the time-kind
+   *  remaining. */
   it("pane B, warming up", async () => {
     await expect(
       capture("live", {

@@ -88,7 +88,18 @@ export function notchPercents(
  *
  *  Clamped at 100 for the same reason a notch is: a measured warm-up can
  *  outrun an estimated session, and the bar says so at its right edge
- *  rather than overflowing. */
+ *  rather than overflowing.
+ *
+ *  EXPORTED FOR ITS OWN TESTS, deliberately (task-4b-review.md M-2). Its only
+ *  production consumer is `warmupFillPercent` immediately below, and that
+ *  function's `Math.min` MASKS this one's rules: an unclamped 150% here is
+ *  invisible once it is min'd against a fill `totalProgressPct` has already
+ *  clamped to 100. Exercising it only through the public function would
+ *  therefore leave the clamp unfalsifiable — a mutant that deletes it would
+ *  survive — and the clamp is not dead weight: it is what keeps this a
+ *  percentage OF THE BAR for any later caller, and what would keep
+ *  `warmupFillPercent` right if it were ever handed a fill that had not been
+ *  clamped first. */
 // eslint-disable-next-line react-refresh/only-export-components
 export function warmupPercent(
   boundaries: IntervalBoundaries | undefined,
