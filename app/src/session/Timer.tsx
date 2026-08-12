@@ -735,6 +735,33 @@ export default function Timer() {
 
       <div className="timer-phase">
         <div className="timer-phase-head">
+          {/* THE TITLE REJOINS THIS LINE IN LANDSCAPE (fix round 1: the
+              mockup's own single combined row, `Ergomatic connected mode
+              .dc.html:687`, "4 × 1K OFF 2′ · INTERVAL 3 OF 12 · WORK" —
+              keeping this file's existing `stepLineText` vocabulary rather
+              than adopting the mockup's own "INTERVAL" word, a separate
+              copy question this fix round wasn't asked to open).
+              `.timer-name` (in the gutter's own header row above) is still
+              the ACCESSIBLE instance — portrait shows it there and nowhere
+              else; this is a decorative landscape-only duplicate,
+              `aria-hidden`, `display: none` by default (index.css) and
+              shown only under `@media (orientation: landscape)`.
+
+              A TRUE SIBLING of `.timer-phase-label`, deliberately NOT
+              nested inside it (an earlier version was — self-mutation
+              testing this fix round found it broke every
+              `getByText(/^STEP N OF M/)` e2e assertion across the suite:
+              Playwright's text-locator matching considers an element's
+              FULL descendant text, `aria-hidden` or not, unlike jsdom/RTL's
+              `getNodeText`, which only reads direct text-node children and
+              is why the equivalent jsdom unit test never caught it).
+              Keeping this span a sibling means `.timer-phase-label`'s own
+              text stays byte-identical to before this fix round in EVERY
+              orientation, and the merge is purely a landscape flex-layout
+              fact, not a shared text run. */}
+          <span className="timer-phase-title" aria-hidden="true">
+            {title} ·
+          </span>
           <span className="timer-phase-label">
             {stepLineText(phase, currentRun.index, currentRun.phases.length)}
           </span>

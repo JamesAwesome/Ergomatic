@@ -1658,6 +1658,59 @@ describe("Timer — the gutter's structure and Pause's own row (connected-revamp
       screen.queryByRole("button", { name: "Resume" }),
     ).not.toBeInTheDocument();
   });
+
+  // Fix round 1 (review Important-2): the workout title rejoins the
+  // landscape label ROW as a decorative, `aria-hidden` duplicate — the
+  // ACCESSIBLE instance stays `.timer-name` in the gutter's header row
+  // (portrait's own visible copy). jsdom can't evaluate the
+  // `@media (orientation: landscape)` toggle itself (no browser layout
+  // engine — the CSS-source describe below pins that half); what a
+  // component test CAN prove is the DOM shape this depends on: exactly one
+  // extra, hidden-from-a11y title node, a TRUE SIBLING of
+  // `.timer-phase-label` rather than nested inside it — nesting was this
+  // fix round's own first attempt, and self-mutation testing below proves
+  // exactly why it was wrong (it broke `getByText(/^STEP N OF M/)` across
+  // the e2e suite; jsdom's `getNodeText` only reads DIRECT text-node
+  // children, so the equivalent jsdom assertion never caught it — a real
+  // engine-behavior gap, not a mistake in the pin itself).
+  it("carries a decorative, aria-hidden title duplicate as .timer-phase-label's SIBLING, never nested inside it — and .timer-phase-label's own text is untouched", async () => {
+    mockKeepAwake();
+    const run = matrixRun();
+    runAtIndex(run, 1);
+    await renderTimer();
+
+    const title = library("Hoarfrost").title;
+    const head = document.querySelector(".timer-phase-head");
+    expect(head).not.toBeNull();
+    const inlineTitle = head!.querySelector(".timer-phase-title");
+    expect(inlineTitle).not.toBeNull();
+    expect(inlineTitle).toHaveAttribute("aria-hidden", "true");
+    expect(inlineTitle!.textContent).toContain(title);
+    // Real trailing separator, not just an adjacent word with no glyph
+    // between them once CSS puts both on one line.
+    expect(inlineTitle!.textContent).toMatch(/·\s*$/);
+
+    // THE REGRESSION THIS FIX ROUND FOUND AND FIXED: `.timer-phase-label`'s
+    // own text is byte-identical to the pre-merge shape — the title is
+    // NEVER a descendant of it. `getNodeText` (jsdom/RTL) already proved
+    // this indirectly (every `getByText("STEP …")` assertion elsewhere in
+    // this file still passes), but this asserts the DOM shape directly:
+    // `.timer-phase-title` must not be found by searching INSIDE the
+    // label.
+    const label = document.querySelector(".timer-phase-label");
+    expect(label).not.toBeNull();
+    expect(label!.querySelector(".timer-phase-title")).toBeNull();
+    expect(label!.textContent).toBe("STEP 2 OF 5 · WORK");
+
+    // The accessible instance is unaffected — still exactly one, still in
+    // the gutter's header row, still carrying the bare title with no
+    // `aria-hidden`.
+    const accessibleName = screen.getByText(title, {
+      selector: ".timer-name",
+    });
+    expect(accessibleName).not.toHaveAttribute("aria-hidden");
+    expect(document.querySelectorAll(".timer-phase-title")).toHaveLength(1);
+  });
 });
 
 // CONNECTED-REVAMP TASK 7 (revision §5, spec §7). jsdom never loads
@@ -1721,6 +1774,17 @@ describe("index.css: RUNNING/countdown/ELAPSED/targets — the ink ruling and th
     expect(body).not.toContain("var(--accent)");
   });
 
+  // Fix round 1 (review Important-1): DEVIATIONS.md:77 already named this
+  // exact issue on this exact surface ("the phone timer's COMPLETED
+  // colour" repainted ink on the connected pane, with the phone timer's
+  // own base rule left as the still-open half) — this closes it, retiring
+  // that row rather than carrying it forward.
+  it("the segment dots' COMPLETED colour (.timer-dot-past) resolves to var(--ink), never var(--accent) — DEVIATIONS.md:77, closed", () => {
+    const body = ruleBody(".timer-dot-past");
+    expect(body).toContain("var(--ink)");
+    expect(body).not.toContain("var(--accent)");
+  });
+
   it(".timer-time (the countdown, and the distance hero's meters) uses --size-countdown, never a raw literal", () => {
     const body = ruleBody(".timer-time");
     expect(body).toContain("var(--size-countdown)");
@@ -1745,6 +1809,15 @@ describe("index.css: RUNNING/countdown/ELAPSED/targets — the ink ruling and th
     expect(indexCssStripped).not.toContain(".timer-card-value-accent");
   });
 
+  // Fix round 1 (review Important-2): the title-merge's CSS half — hidden
+  // by default (portrait keeps `.timer-name` as the only visible copy),
+  // shown only inside the timer's own scoped landscape block.
+  it(".timer-phase-title is hidden by default and shown only inside the timer's own scoped landscape block", () => {
+    expect(ruleBody(".timer-phase-title")).toContain("display: none");
+    const landscapeBody = ruleBody(".timer-screen .timer-phase-title");
+    expect(landscapeBody).toContain("display: inline");
+  });
+
   it("Pause (.timer-control-pause) follows the mockup, not the pre-Task-7 accent fill: surface background, ink border, ink text", () => {
     const body = ruleBody(".timer-control-pause");
     expect(body).toContain("var(--surface)");
@@ -1753,7 +1826,7 @@ describe("index.css: RUNNING/countdown/ELAPSED/targets — the ink ruling and th
     expect(body).not.toContain("var(--on-color)");
   });
 
-  it("accent's only two remaining jobs on this surface: the phase-progress fill and the total-bar fill (spec §7's own inventory)", () => {
+  it("the phase-progress fill and the total-bar fill both stay accent (two of the surface's three accent jobs)", () => {
     // Passed as it literally appears in index.css (a comma-joined selector
     // list across two lines) — `ruleBody` escapes its argument as literal
     // text, so a regex metacharacter like `\s*` typed here would itself be
@@ -1761,6 +1834,34 @@ describe("index.css: RUNNING/countdown/ELAPSED/targets — the ink ruling and th
     expect(ruleBody(".timer-phase-bar span,\n.timer-total-bar span")).toContain(
       "var(--accent)",
     );
+  });
+
+  // EXHAUSTIVE (fix round 1, review Minor-4: the report's first-draft
+  // inventory said "two jobs," missing the gutter's own accent-outlined
+  // END — spec-consistent, but the CLAIM of exhaustiveness was wrong).
+  // This scans every top-level `.timer-*` (never `.connected-*`) rule in
+  // the WHOLE file — not just the two rules the test above already knows
+  // about by name — for `var(--accent)`, and asserts the exact set,
+  // sorted, so a future accent addition or removal on this surface fails
+  // this test rather than silently drifting past a report's own prose. */
+  it("accent's exactly three jobs on this surface, and no others — the phase-progress fill, the total-bar fill, and the gutter's END control", () => {
+    const ACCENT_TIMER_SELECTORS = [
+      ".timer-phase-bar span",
+      ".timer-total-bar span",
+      ".timer-screen .timer-header .timer-end",
+    ].toSorted();
+
+    const found = new Set<string>();
+    for (const m of indexCssStripped.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      const [, selectorList, body] = m;
+      if (!body!.includes("var(--accent)")) continue;
+      for (const selector of selectorList!.split(",").map((s) => s.trim())) {
+        if (selector.startsWith(".timer-") && !selector.includes("connected")) {
+          found.add(selector);
+        }
+      }
+    }
+    expect(Array.from(found).toSorted()).toStrictEqual(ACCENT_TIMER_SELECTORS);
   });
 });
 

@@ -477,6 +477,42 @@ test.describe("Phase 6B Task 4: session completion + resilience", () => {
     await cleanupByTitle(page, title);
   });
 
+  // Fix round 1 (review Important-3): landscape earned a real
+  // scrollHeight/clientHeight pin from a measured 66px overflow; portrait
+  // had only a screenshot inspection — weaker evidence this wave keeps
+  // proving insufficient (the landscape overflow itself would have looked
+  // fine in a still image too, before the CSS fix). Same measurement,
+  // portrait's own frame (390×844, this project's default viewport —
+  // playwright.config.ts — so no explicit `setViewportSize` needed).
+  test("portrait viewport has no dead vertical scroll (390×844)", async ({
+    page,
+  }) => {
+    const title = "Portrait Budget";
+    await signInViaBackdoor(page, {
+      email: "session-portrait-budget@e2e.test",
+      name: "Portrait Budget Tester",
+    });
+    await setBaselines(page, { k2Seconds: 100, k6Seconds: 120 });
+    // Two steps, matching the landscape test's own fixture shape (the UP
+    // NEXT panel's content is part of what this budget has to fit).
+    await importBulk(
+      page,
+      [`${title} | AN | easy | 1`, "w 1:00 6k", "w 0:30 6k"].join("\n"),
+    );
+
+    await startFromLibrary(page, title);
+    await startAndSkipCountdown(page);
+    await expect(page.getByText(/^STEP 1 OF 2/)).toBeVisible();
+
+    const overflow = await page.evaluate(() => ({
+      scrollHeight: document.documentElement.scrollHeight,
+      clientHeight: document.documentElement.clientHeight,
+    }));
+    expect(overflow.scrollHeight).toBeLessThanOrEqual(overflow.clientHeight);
+
+    await cleanupByTitle(page, title);
+  });
+
   // Task 3 (ui-fix round): SessionComplete's own new Discard without
   // logging — clears the run/draft records with no POST, lands on Today
   // with neither an unlogged line NOR an advanced plan counter (only a
