@@ -236,6 +236,22 @@ describe("TimerRuler — the notched bar", () => {
     ).toStrictEqual([true, true, false, false]);
   });
 
+  it("pulls a clamped notch back inside its own bar, and only that one", () => {
+    // task-4-review.md M-4: `left: 100%` puts a 1px child's LEFT edge on the
+    // bar's right edge, so the hairline would paint outside the box.
+    render(
+      <TimerRuler
+        totalLeftSeconds={0}
+        totalSeconds={TOTAL}
+        boundaries={{ seconds: [900, 1800], predictedFrom: null }}
+      />,
+    );
+    expect(
+      notches().map((n) => n.classList.contains("timer-total-notch-end")),
+    ).toStrictEqual([false, true]);
+    expect(lefts()).toStrictEqual(["60%", "100%"]);
+  });
+
   it("stops notching at an unpriceable interval, and draws no ruler ticks either way", () => {
     // The honest stop: two boundaries survive, and because the bar IS
     // notched the quarter ruler stays gone — the fallback is all-or-nothing.

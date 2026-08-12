@@ -48,7 +48,10 @@ export const MAX_NOTCH_BOUNDARIES = 16;
  *  same way — the bar is exhausted, and both the fill and the notch say so
  *  at its right edge. Dropping them instead would make the notch count
  *  disagree with the `N OF M` caption, which is the one thing §5 says the
- *  bar must never do. */
+ *  bar must never do. A notch AT 100 is pulled back onto the bar by
+ *  `.timer-total-notch-end` (`index.css`): `left: 100%` puts a 1px child's
+ *  LEFT edge on the bar's right edge, so without that pull-back the hairline
+ *  paints just outside the box it belongs to (task-4-review.md M-4). */
 // eslint-disable-next-line react-refresh/only-export-components
 export function notchPercents(
   boundaries: IntervalBoundaries | undefined,
@@ -107,9 +110,15 @@ export default function TimerRuler({
               // 1px full-height mark, cut out of the fill rather than laid
               // on it, and still nothing but ink and paper. Ahead of the
               // fill it is the spec's ink line on the `--rule-2` track.
-              at <= pct
-                ? "timer-total-notch timer-total-notch-passed"
-                : "timer-total-notch"
+              [
+                "timer-total-notch",
+                at <= pct ? "timer-total-notch-passed" : null,
+                // The overrun case, pulled back inside its own bar — see
+                // `notchPercents`'s comment.
+                at >= 100 ? "timer-total-notch-end" : null,
+              ]
+                .filter((c) => c !== null)
+                .join(" ")
             }
             style={{ left: `${at}%` }}
             data-predicted={

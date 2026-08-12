@@ -64,19 +64,49 @@ export interface IntervalGroup {
   restSeconds: number;
 }
 
-/** Folds a phase list into intervals, `compileProgram`'s rule exactly (see
- *  this module's header). A LEADING rest — which `compileProgram` rejects
- *  outright as `leading-rest`, so no connected session can have one — is
- *  dropped rather than given an interval of its own: it belongs to no
- *  interval the caption counts, and inventing one would put the bar's spans
- *  permanently out of step with the words. */
-export function foldIntervals(phases: EnginePhase[]): IntervalGroup[] {
+/** What `foldIntervals` sees in a phase list: the intervals the caption
+ *  counts, plus whatever ran BEFORE the first of them. */
+export interface FoldedPhases {
+  groups: IntervalGroup[];
+  /** Seconds of leading rest — rest phases with no interval yet open. They
+   *  get no interval of their own (see `foldIntervals`) but they DO occupy
+   *  the front of the bar, so every boundary after them is offset by this. */
+  leadInSeconds: number;
+}
+
+/**
+ * Folds a phase list into intervals, `compileProgram`'s rule exactly (see
+ * this module's header).
+ *
+ * A LEADING rest gets no interval of its own — it belongs to no interval the
+ * caption counts, and inventing one would put the bar's spans permanently
+ * out of step with the words — but it is NOT discarded: its seconds come
+ * back as `leadInSeconds` and seed the first boundary's position.
+ *
+ * THE SHAPE IS REACHABLE, which a first version of this comment denied
+ * (task-4-review.md I-1). `compileProgram` does reject it (`leading-rest`,
+ * `domain/monitor/program.ts`) so no CONNECTED session can have one — but
+ * the phone timer never runs that compiler, and nothing on the authoring
+ * path stops a rest from being step 1: `domain/validate.ts`'s `validateSteps`
+ * has no positional rule, `builder/builderState.ts`'s `addRow`/reorder have
+ * no leading-rest guard, and `domain/bulk.ts` parses a rest line wherever it
+ * appears. Dropping those seconds while `totalSessionSecondsOf`
+ * (`session/Timer.tsx`, the bar's own denominator) still counted them put
+ * every notch `leadIn / totalSeconds` too far left — on a
+ * `[5:00 rest, 4 × (4:00 + 1:00)]` session, the first notch landed at 20.8%
+ * instead of 41.7%.
+ */
+export function foldIntervals(phases: EnginePhase[]): FoldedPhases {
   const groups: IntervalGroup[] = [];
+  let leadInSeconds = 0;
   for (let i = 0; i < phases.length; i += 1) {
     const phase = phases[i]!;
     if (phase.type === "rest") {
       const open = groups[groups.length - 1];
-      if (open === undefined) continue;
+      if (open === undefined) {
+        leadInSeconds += phaseSeconds(phase) ?? 0;
+        continue;
+      }
       open.restSeconds += phaseSeconds(phase) ?? 0;
       continue;
     }
@@ -86,7 +116,7 @@ export function foldIntervals(phases: EnginePhase[]): IntervalGroup[] {
       restSeconds: 0,
     });
   }
-  return groups;
+  return { groups, leadInSeconds };
 }
 
 /**
@@ -116,15 +146,30 @@ export function foldIntervals(phases: EnginePhase[]): IntervalGroup[] {
  * the array. Its own boundary and every boundary after it are omitted — the
  * bar stops predicting rather than collapsing the unpriceable span to zero
  * width and shunting every later notch left.
+ *
+ * The stop is honest about POSITIONS, not about LENGTH, and the difference
+ * is documented rather than fixed here (task-4-review.md M-3): the bar's
+ * denominator is `totalSessionSecondsOf` (`session/Timer.tsx`), which prices
+ * an unpriceable phase at 0 (`phaseSeconds(p) ?? 0`), so a session with a
+ * mid-list unpriceable piece is scaled against a total that omits it and
+ * the surviving notches sit right of where a true total would put them.
+ * Deliberately left alone: the FILL edge divides by the same number, so the
+ * bar and its notches stay mutually consistent, and changing that
+ * denominator would move TOTAL LEFT itself — a whole-surface decision, not
+ * this module's. Flagged for Task 8's DEVIATIONS pass.
+ *
+ * Boundaries are ABSOLUTE seconds from the start of the SESSION, not from
+ * the first interval: `leadInSeconds` seeds the running total so a session
+ * that opens with a rest still puts its notches where that rest leaves them.
  */
 export function intervalBoundaries(
   phases: EnginePhase[],
   measuredWorkSeconds: readonly (number | null | undefined)[] = [],
 ): IntervalBoundaries {
-  const groups = foldIntervals(phases);
+  const { groups, leadInSeconds } = foldIntervals(phases);
   const seconds: number[] = [];
   let predictedFrom: number | null = null;
-  let cumulative = 0;
+  let cumulative = leadInSeconds;
   let estimating = false;
 
   // `groups.length - 1`: these are INTERIOR boundaries. The end of the last

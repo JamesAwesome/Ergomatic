@@ -188,7 +188,7 @@ export function totalSessionSeconds(run: SessionRun): number {
  *  a number nobody took. */
 // eslint-disable-next-line react-refresh/only-export-components
 export function runIntervalBoundaries(run: SessionRun): IntervalBoundaries {
-  const measured = foldIntervals(run.phases).map(
+  const measured = foldIntervals(run.phases).groups.map(
     (group) => run.actuals[group.workIndex]?.elapsedSeconds,
   );
   return intervalBoundaries(run.phases, measured);

@@ -42,7 +42,7 @@ const FIVE_TIMED: EnginePhase[] = [
 
 describe("foldIntervals — one interval per non-rest phase, rests folded onto it", () => {
   it("folds each work piece with its trailing rest, the caption's own unit", () => {
-    const groups = foldIntervals(FIVE_TIMED);
+    const { groups } = foldIntervals(FIVE_TIMED);
     expect(groups).toHaveLength(5);
     expect(groups.map((g) => g.workSeconds)).toStrictEqual([
       240, 240, 240, 240, 240,
@@ -53,7 +53,7 @@ describe("foldIntervals — one interval per non-rest phase, rests folded onto i
   });
 
   it("folds CONSECUTIVE rests onto one interval (compileProgram's own rule)", () => {
-    const groups = foldIntervals([
+    const { groups } = foldIntervals([
       ...work(240),
       { type: "rest", seconds: 30, label: "Rest", originalIndex: 0 },
       { type: "rest", seconds: 45, label: "Rest", originalIndex: 0 },
@@ -63,13 +63,34 @@ describe("foldIntervals — one interval per non-rest phase, rests folded onto i
     expect(groups[0]!.restSeconds).toBe(75);
   });
 
-  it("drops a leading rest rather than giving it an interval of its own", () => {
-    const groups = foldIntervals([
+  it("gives a leading rest no interval, but hands its seconds back as the lead-in", () => {
+    // It belongs to no interval the caption counts (`compileProgram` will not
+    // even compile it), so it gets no group — but it DOES occupy the front of
+    // the bar, and the denominator (`totalSessionSecondsOf`) counts it, so
+    // dropping its seconds outright would slide every notch left. Fix round 1
+    // (task-4-review.md I-1): an earlier version of this test pinned exactly
+    // that defect.
+    const { groups, leadInSeconds } = foldIntervals([
       { type: "rest", seconds: 60, label: "Rest", originalIndex: 0 },
       ...work(240),
     ]);
     expect(groups).toHaveLength(1);
     expect(groups[0]!.restSeconds).toBe(0);
+    expect(leadInSeconds).toBe(60);
+  });
+
+  it("sums CONSECUTIVE leading rests into the lead-in", () => {
+    const { groups, leadInSeconds } = foldIntervals([
+      { type: "rest", seconds: 60, label: "Rest", originalIndex: 0 },
+      { type: "rest", seconds: 30, label: "Rest", originalIndex: 0 },
+      ...work(240),
+    ]);
+    expect(groups).toHaveLength(1);
+    expect(leadInSeconds).toBe(90);
+  });
+
+  it("a session that starts on a work piece has no lead-in", () => {
+    expect(foldIntervals(FIVE_TIMED).leadInSeconds).toBe(0);
   });
 
   it("a rest phase with no duration contributes nothing, never NaN", () => {
@@ -77,7 +98,7 @@ describe("foldIntervals — one interval per non-rest phase, rests folded onto i
     // so this is the guard's only exercise — and it earns one, because a
     // NaN here would poison the cumulative sum and blank every notch after
     // it rather than failing where the bad phase is.
-    const groups = foldIntervals([
+    const { groups } = foldIntervals([
       ...work(240),
       { type: "rest", label: "Rest", originalIndex: 0 },
       ...work(240),
@@ -90,10 +111,25 @@ describe("foldIntervals — one interval per non-rest phase, rests folded onto i
         ...work(240),
       ]).seconds,
     ).toStrictEqual([240]);
+    // Same guard on the lead-in side: a durationless LEADING rest adds
+    // nothing rather than NaN-ing every notch after it.
+    const lead = foldIntervals([
+      { type: "rest", label: "Rest", originalIndex: 0 },
+      ...work(240, 60),
+      ...work(240),
+    ]);
+    expect(lead.leadInSeconds).toBe(0);
+    expect(
+      intervalBoundaries([
+        { type: "rest", label: "Rest", originalIndex: 0 },
+        ...work(240, 60),
+        ...work(240),
+      ]).seconds,
+    ).toStrictEqual([300]);
   });
 
   it("counts a warm-up as an interval, exactly as compileProgram does", () => {
-    const groups = foldIntervals([
+    const { groups } = foldIntervals([
       { type: "warmup", seconds: 480, label: "Easy", originalIndex: -1 },
       ...work(240),
     ]);
@@ -160,7 +196,7 @@ describe("intervalBoundaries — the notch positions", () => {
       ...work(240, 60),
       ...work(240),
     ];
-    expect(foldIntervals(phases)).toHaveLength(5);
+    expect(foldIntervals(phases).groups).toHaveLength(5);
     const { seconds } = intervalBoundaries(phases);
     expect(seconds).toStrictEqual([300, 600]);
   });
@@ -196,6 +232,58 @@ describe("intervalBoundaries — the notch positions", () => {
     ];
     // (2000 / 500) * 120 = 480, + 180 rest = 660.
     expect(intervalBoundaries(phases).seconds).toStrictEqual([660]);
+  });
+
+  it("a session that OPENS with a rest still puts its notches where that rest leaves them", () => {
+    // The review's worked case (task-4-review.md I-1), the shape
+    // `validate.ts`/`builderState.ts`/`bulk.ts` all accept and
+    // `compileProgram` alone rejects: `[5:00 rest, 4 x (4:00 + 1:00)]` with
+    // no rest after the last piece. `totalSessionSecondsOf` prices the whole
+    // list at 300 + 4x240 + 3x60 = 1440, and the first interval genuinely
+    // ends at 300 + 240 + 60 = 600 (41.7% of the bar). Before the fix this
+    // read 300 (20.8%) — every notch was short by the lead-in.
+    const phases: EnginePhase[] = [
+      { type: "rest", seconds: 300, label: "Rest", originalIndex: 0 },
+      ...work(240, 60),
+      ...work(240, 60),
+      ...work(240, 60),
+      ...work(240),
+    ];
+    const total = phases.reduce((sum, p) => sum + (p.seconds ?? 0), 0);
+    expect(total).toBe(1440);
+    const { seconds } = intervalBoundaries(phases);
+    expect(foldIntervals(phases).groups).toHaveLength(4);
+    expect(seconds).toStrictEqual([600, 900, 1200]);
+    // As percentages of the bar the rower sees: 41.7 / 62.5 / 83.3.
+    const pct = seconds.map((s) => (s / total) * 100);
+    expect(pct[0]).toBeCloseTo(41.667, 2);
+    expect(pct[1]).toBeCloseTo(62.5, 3);
+    expect(pct[2]).toBeCloseTo(83.333, 2);
+  });
+
+  it("re-anchors on top of the lead-in, never instead of it", () => {
+    const phases: EnginePhase[] = [
+      { type: "rest", seconds: 300, label: "Rest", originalIndex: 0 },
+      ...work(240, 60),
+      ...work(240),
+    ];
+    // Interval 0's work actually took 288s: 300 + 288 + 60.
+    expect(intervalBoundaries(phases, [288]).seconds).toStrictEqual([648]);
+  });
+
+  it("an unpriceable FIRST interval leaves no boundary to draw at all", () => {
+    // task-4-review.md M-5: the honest stop firing on interval 0 hands the
+    // bar an empty array, and `TimerRuler` falls back to the quarter ruler.
+    const phases: EnginePhase[] = [
+      { type: "test", label: "All out", originalIndex: 0 },
+      ...work(240, 60),
+      ...work(240),
+    ];
+    expect(foldIntervals(phases).groups).toHaveLength(3);
+    expect(intervalBoundaries(phases)).toStrictEqual({
+      seconds: [],
+      predictedFrom: null,
+    });
   });
 
   it("a single-interval session has no interior boundary at all", () => {
@@ -251,7 +339,7 @@ describe("intervalBoundaries — against a real library workout", () => {
   if ("code" in program) throw new Error(`fixture failed: ${program.code}`);
 
   it("folds to exactly the intervals compileProgram emits — the caption's own count", () => {
-    expect(foldIntervals(phases)).toHaveLength(program.intervals.length);
+    expect(foldIntervals(phases).groups).toHaveLength(program.intervals.length);
     expect(program.intervals).toHaveLength(5);
   });
 

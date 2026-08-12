@@ -38,7 +38,18 @@ test("tab order: TODAY · NEWS · LIBRARY · PLAN · YOU, TREND gone", async ({
     email: `news-tabs-${RUN_ID}@e2e.test`,
     name: "News Tabs",
   });
-  const labels = await page.locator('nav[aria-label="Main"] a').allInnerTexts();
+  // `signInViaBackdoor` ends on `page.goto("/")`, which resolves on `load`
+  // — before React has mounted the shell. `allInnerTexts()` is a ONE-SHOT
+  // read with no auto-retry, so this raced the mount and returned `[]`
+  // whenever the machine was busy enough (caught 2026-08-12 during
+  // connected-revamp Task 4's fix round: 2 failures in 3 isolated runs on a
+  // loaded host, and the failure's own page snapshot showed the nav fully
+  // present with Today still reading LOADING…). Waiting for the bar to
+  // exist is the fix; the ORDER assertion below is unchanged, so a real
+  // tab-order regression still fails here exactly as it always did.
+  const tabs = page.locator('nav[aria-label="Main"] a');
+  await expect(tabs.first()).toBeVisible();
+  const labels = await tabs.allInnerTexts();
   expect(labels).toEqual(["TODAY", "NEWS", "LIBRARY", "PLAN", "YOU"]);
 });
 

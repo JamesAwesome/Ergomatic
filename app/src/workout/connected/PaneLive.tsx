@@ -7,8 +7,10 @@
 // / 104px portrait) with its target directly beneath at `--size-target`
 // (46/44px), in ink. Everything else on the pane tops out at `--size-metric`
 // (30px) — the metric row, three values on one baseline under a 1px ink
-// rule — then UP NEXT, then the ruler (Task 4's territory; consumed here
-// unchanged).
+// rule — then UP NEXT, then the TOTAL LEFT bar, which Task 4 notched by
+// INTERVAL (design spec §5): this file hands `TimerRuler` one more prop,
+// `model.boundaries`, and the phone timer hands it the same shape, so the
+// two surfaces cannot grow different bars.
 //
 // THE RATE HERO IS A PROMOTION, NOT NEW PLUMBING. `model.rate` is the same
 // `JudgedValue` `judgedValue` has always produced (`surfaceModel.ts`'s one
