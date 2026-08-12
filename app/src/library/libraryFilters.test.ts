@@ -18,9 +18,10 @@ const FULL: Filters = {
 };
 
 // The pre-Task-4 (v1) shape, kept verbatim as a fixture rather than reused
-// from filters.ts (which has never exported these field names) — this is
-// exactly the record a rower's browser could still be holding in
-// sessionStorage from before that round shipped.
+// from filters.ts (which has never exported `painMax3`/`recency`/
+// `customOnly` — those three names predate any shape this file's own types
+// have ever described) — this is exactly the record a rower's browser
+// could still be holding in sessionStorage from before that round shipped.
 const V1_RECORD = {
   type: "AT",
   durations: ["30-45", "60+"],
@@ -38,6 +39,23 @@ const V1_RECORD = {
 // `types: []` (= "no filter", i.e. showing MORE than they had selected).
 const V2_RECORD = {
   type: "O2",
+  durations: [],
+  painLevels: [],
+  lastDone: null,
+  source: null,
+};
+
+// A record that is otherwise fully v3-shaped (has `difficulties`,
+// `durations`, `painLevels`, `lastDone`, `source` all present and valid)
+// but still carries the RENAMED field under its old name (`type`, not
+// `types`) — unlike `V2_RECORD`, which is missing `difficulties` too, this
+// is rejected by ONE check alone (`!Array.isArray(f.types)`), isolating
+// that check from every other field's own validation (whole-branch review
+// I-5: `V2_RECORD`'s rejection can't tell the `types`-presence check apart
+// from the `difficulties`-presence check, since it fails both).
+const HALF_MIGRATED_RECORD = {
+  type: "O2",
+  difficulties: [],
   durations: [],
   painLevels: [],
   lastDone: null,
@@ -86,6 +104,10 @@ describe("libraryFilters", () => {
       ["a JSON array", JSON.stringify(["AT"])],
       ["null", "null"],
       ["types missing entirely", JSON.stringify(V2_RECORD)],
+      [
+        "types still under its old name, everything else already migrated",
+        JSON.stringify(HALF_MIGRATED_RECORD),
+      ],
       ["types not an array", JSON.stringify({ ...FULL, types: "AT" })],
       [
         "types contains an unknown code",

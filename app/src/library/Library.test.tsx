@@ -432,7 +432,7 @@ describe("Library", () => {
       );
       await applySheet();
 
-      expect(screen.getByText("30–45′")).toBeInTheDocument();
+      expect(tokenLabel("30–45′")).toBeInTheDocument();
       expect(screen.getByText("PAIN 3")).toBeInTheDocument();
       expect(screen.getByText("1 OF 3 SHOWN")).toBeInTheDocument();
 
@@ -473,7 +473,7 @@ describe("Library", () => {
       );
       await applySheet();
 
-      expect(screen.getByText("30–45′")).toBeInTheDocument();
+      expect(tokenLabel("30–45′")).toBeInTheDocument();
       expect(screen.getByText("PAIN 3")).toBeInTheDocument();
       expect(screen.getByText("1 OF 3 SHOWN")).toBeInTheDocument();
 
@@ -481,7 +481,9 @@ describe("Library", () => {
         screen.getByRole("button", { name: "Remove 30–45′ filter" }),
       );
 
-      expect(screen.queryByText("30–45′")).not.toBeInTheDocument();
+      expect(
+        screen.queryByText("30–45′", { selector: ".filter-token-label" }),
+      ).not.toBeInTheDocument();
       expect(screen.getByText("PAIN 3")).toBeInTheDocument();
       expect(screen.getByText("1 OF 3 SHOWN")).toBeInTheDocument();
       expect(visibleHrefs()).toStrictEqual(["/library/w-at"]);

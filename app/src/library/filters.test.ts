@@ -168,10 +168,14 @@ describe("applyFilters", () => {
   });
 
   it("difficulties: empty means no filter; a selection excludes the rest", () => {
-    const all = applyFilters(WORKOUTS, { ...EMPTY_FILTERS }, baselines);
+    // Compared against WORKOUTS.length directly, not against a second
+    // EMPTY_FILTERS-shaped call — EMPTY_FILTERS already has
+    // `difficulties: []`, so comparing two calls that are the same input
+    // would pass even if the guard this test exists to pin were dropped
+    // (whole-branch review I-3).
     expect(
       applyFilters(WORKOUTS, { ...EMPTY_FILTERS, difficulties: [] }, baselines),
-    ).toHaveLength(all.length);
+    ).toHaveLength(WORKOUTS.length);
     const easy = applyFilters(
       WORKOUTS,
       { ...EMPTY_FILTERS, difficulties: ["easy"] },
@@ -189,6 +193,9 @@ describe("applyFilters", () => {
   });
 
   it("types: empty means all; a two-type selection is their union", () => {
+    expect(
+      applyFilters(WORKOUTS, { ...EMPTY_FILTERS, types: [] }, baselines),
+    ).toHaveLength(WORKOUTS.length);
     const o2 = applyFilters(
       WORKOUTS,
       { ...EMPTY_FILTERS, types: ["O2"] },

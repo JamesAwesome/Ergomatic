@@ -5,14 +5,13 @@ import type { WorkoutType } from "../../domain/types.js";
 
 // One token per active GROUP, not per selected band — DESIGN.md's own rule
 // ("the header count counts tokens, so the row and the count never
-// disagree"). `kind` doubles as the rendering hook for colour (FilterSheet.tsx
-// and Library.tsx both fill a "type" token with that type's own colour,
-// tokens.css var; every other kind fills `--ink`) — a "type" token now
-// carries that colour itself, via `fill` (see the `Token` doc comment
-// below): with `types` plural, `label` can be a multi-code join
-// ("O2 · AT"), so a renderer can no longer derive the colour by looking
-// the label up in a WorkoutType-keyed map — that lookup is exactly the bug
-// this round's Task 1 fixes (library-filter-unification spec, finding 1).
+// disagree"). Colour is carried by `fill`, not derived from `kind` or
+// `label`: with `types` plural, `label` can be a multi-code join
+// ("O2 · AT"), so a renderer can no longer derive a "type" token's colour
+// by looking the label up in a WorkoutType-keyed map — that lookup is
+// exactly the bug this round's Task 1 fixes (library-filter-unification
+// spec, finding 1). See the `Token.fill` doc comment below for the rule
+// this replaces it with.
 export type TokenKind =
   "type" | "difficulty" | "duration" | "pain" | "lastDone" | "source";
 
@@ -56,11 +55,19 @@ function collapsePain(levels: number[]): string {
   return min === max ? `PAIN ${min}` : `PAIN ${min}–${max}`;
 }
 
-/** Filters -> the active tokens row, in the sheet's own group order (TYPE,
- *  DIFFICULTY, TIME, PAIN, LAST DONE, SOURCE). Each token's `clear` resets
- *  exactly its own group on whatever Filters it's given — not the group's
- *  value at the moment this token was built — so a token handed to a
- *  later, changed Filters still clears the right field. */
+/** Filters -> the active tokens row, in TYPE, DIFFICULTY, TIME, PAIN, LAST
+ *  DONE, SOURCE order. This is NOT "the sheet's own group order" — after
+ *  Task 1, the sheet holds neither TYPE nor DIFFICULTY (TYPE is the chip
+ *  row above it; DIFFICULTY is Task 2's own addition to the sheet). The
+ *  actual rule (library-filter-unification spec, "Token row order"): the
+ *  row reads top-to-bottom in the order the CONTROLS appear on screen —
+ *  the chip row first, then each of the sheet's own groups in the order
+ *  they're rendered there. A future reorder of the sheet's groups reorders
+ *  this array to match; it does not fall out of the sheet's order
+ *  automatically. Each token's `clear` resets exactly its own group on
+ *  whatever Filters it's given — not the group's value at the moment this
+ *  token was built — so a token handed to a later, changed Filters still
+ *  clears the right field. */
 export function filterTokens(f: Filters): Token[] {
   const tokens: Token[] = [];
 
