@@ -2242,6 +2242,22 @@ const CONNECTED_STATES = [
   "connected-ended",
 ] as const;
 
+/** THE GRID SCROLLER'S OWN BUDGET, in pixels, per orientation — the number
+ *  every row count on this surface is derived from, pinned here so a drift
+ *  fails on the budget with its delta rather than on a bare integer that
+ *  hides how close it was (task-6 review, Scrutiny 1b).
+ *
+ *  Measured against this worktree's own served bundle, both fonts applied
+ *  (`showConnectedFixture` waits on `document.fonts.ready`; the review
+ *  reproduced a 3px swing by skipping that wait, which is what the original
+ *  "13 one run, 14 the next" report actually was). Both are `clientHeight`
+ *  of `.connected-grid-rows` on the 25-interval fixture. The three
+ *  flex-none siblings above and below it carry explicit heights in
+ *  `index.css` for exactly this reason, so these are arithmetic, not
+ *  typography. */
+const PORTRAIT_GRID_SCROLLER_PX = 612;
+const LANDSCAPE_GRID_SCROLLER_PX = 276;
+
 for (const name of CONNECTED_STATES) {
   test(name, async ({ page }) => {
     await showConnectedFixture(page, name);
@@ -2265,7 +2281,7 @@ for (const name of CONNECTED_STATES) {
       // in portrait" actually means.
       const value = await page.locator(".timer-upnext-value").innerText();
       expect(value?.replace(/\s+/g, " ").trim()).toBe(
-        "REST 3:00 · WORK · 2:06.0",
+        "REST 3:00 · WORK 2:06.0",
       );
       await expect(page.locator(".timer-upnext-then")).toBeHidden();
 
@@ -2290,35 +2306,52 @@ for (const name of CONNECTED_STATES) {
     }
     if (name === "connected-pane-grid-long") {
       // PORTRAIT'S OWN DENSITY CLAIM (connected-revamp Task 5, JAMES RULING
-      // 2026-08-12, fix round: "take all 14 rows" — the revision packet's
-      // 12 was written before anyone measured a real build, and no code
-      // should exist whose only job is to hide capacity a 40px-fixed-height
-      // row genuinely has room for). REVISED, connected-revamp Task 6: the
-      // safety fix's own always-on header (End, 44px — the tap-target
-      // floor, non-negotiable) now sits above the pane body on every
-      // session, and this pane's own internal gaps were trimmed as far as
-      // they can go giving space back (`.connected-pane-grid`,
-      // `.connected-grid-headline`, `.connected-grid-head`, all in
-      // index.css) — 13 is what the real, POST-HEADER budget holds with a
-      // genuine ~30px margin; 14 measured exactly zero-slack in this same
-      // browser (560px needed, 560px available) and read 13 in the docker
-      // build the very next run purely from sub-pixel font-rendering
-      // variance between environments — too fragile to pin. Needs James's
-      // own confirmation, same as Task 5's original ruling did. Measured
-      // the same way the landscape block below measures its own 7 — a
-      // bounding-box containment count in the real browser, not a jsdom
-      // guess, because the header, the totals line, the column head, the
-      // scroller and the caption all have to land inside 844px of real
-      // layout for the claim to be true.
-      const visible = await page.evaluate(() => {
+      // 2026-08-12: "take all the rows" — the revision packet's 12 was
+      // written before anyone measured a real build, and no code should
+      // exist whose only job is to hide capacity a 40px-fixed-height row
+      // genuinely has room for). SECOND RULING, same day, task-6 fix round:
+      // the shipped 13 blamed the safety fix's 44px header for a row it did
+      // not cost. The task-6 review measured the real spender — a footer
+      // slot reserving 52px + 4px that stood EMPTY for the whole session
+      // (the paused block only ever occupies it while the erg is stopped) —
+      // and James ruled the space back to the pane. The footer is a
+      // zero-height anchor now and the paused block overlays out of flow
+      // (`index.css`'s `.connected-surface-footer`), which is what pays for
+      // the count below.
+      //
+      // THE BUDGET IS PINNED, NOT ONLY THE INTEGER (review, Scrutiny 1b).
+      // The count is derived — rows fit into a scroller — so asserting the
+      // integer alone hides how close it came, and the shipped 13 was 4px
+      // from reading 14. All four numbers are asserted instead: the row's
+      // own fixed height, the scroller's exact height (the real budget, and
+      // the one a font or padding drift moves), the count as a floor at the
+      // claimed value, and zero document overflow. Rows cannot shrink to
+      // fake a higher count (the height is exact), content cannot spill
+      // (overflow is zero), and a drift fails on `clientHeight` with the px
+      // delta in the message rather than on a bare integer.
+      const m = await page.evaluate(() => {
         const scroller = document.querySelector(".connected-grid-rows")!;
         const box = scroller.getBoundingClientRect();
-        return Array.from(scroller.children).filter((el) => {
-          const r = el.getBoundingClientRect();
-          return r.top >= box.top - 0.5 && r.bottom <= box.bottom + 0.5;
-        }).length;
+        const first = scroller.children[0]!.getBoundingClientRect();
+        return {
+          rowHeight: first.height,
+          clientHeight: scroller.clientHeight,
+          visible: Array.from(scroller.children).filter((el) => {
+            const r = el.getBoundingClientRect();
+            return r.top >= box.top - 0.5 && r.bottom <= box.bottom + 0.5;
+          }).length,
+          docOverflow:
+            document.documentElement.scrollHeight -
+            document.documentElement.clientHeight,
+        };
       });
-      expect(visible).toBe(13);
+      expect(m.rowHeight).toBe(40);
+      expect(m.clientHeight).toBe(PORTRAIT_GRID_SCROLLER_PX);
+      expect(m.visible).toBeGreaterThanOrEqual(15);
+      // The pane itself never scrolls: only the rows do (DEVIATIONS row 2).
+      // Landscape has always pinned this; portrait did not until the fix
+      // round, which is how a portrait overflow could have gone unseen.
+      expect(m.docOverflow).toBe(0);
     }
     await page.screenshot({
       path: path.join(SCREENSHOTS_DIR, `${name}.png`),
@@ -2333,8 +2366,13 @@ for (const name of CONNECTED_STATES) {
     await showConnectedFixture(page, name);
     if (name === "connected-pane-live") {
       // UP NEXT'S LANDSCAPE STRING: "REST 2:00 · then WORK 2:09.0" —
-      // revision §3's own example, byte-for-byte (this fixture's numbers
-      // differ, the SHAPE doesn't). Same value as the portrait case above,
+      // revision §3's own example, and the SHAPE is now literally that (the
+      // fixture's own numbers differ). It was not, until the task-6 fix
+      // round: `phaseAnnouncement` used to emit "WORK · 2:06.0", putting a
+      // second "·" inside a phrase the outer "·" already separates, and
+      // this comment claimed byte-for-byte fidelity it did not have (task-6
+      // review, M2). The builder was corrected to the design, not the
+      // comment to the build. Same value as the portrait case above,
       // plus the word "then" — proving it is one builder, not two, the
       // same way `UpNextStrip.test.tsx` proves it structurally. `innerText`
       // for the same reason the portrait block above uses it (rendering-
@@ -2342,7 +2380,7 @@ for (const name of CONNECTED_STATES) {
       // as `textContent` would, but consistency beats relying on that.
       const value = await page.locator(".timer-upnext-value").innerText();
       expect(value?.replace(/\s+/g, " ").trim()).toBe(
-        "REST 3:00 · then WORK · 2:06.0",
+        "REST 3:00 · then WORK 2:06.0",
       );
       await expect(page.locator(".timer-upnext-then")).toBeVisible();
       // NOT VISUALLY CLIPPED — the bug `innerText` above cannot catch
@@ -2446,35 +2484,64 @@ for (const name of CONNECTED_STATES) {
         "Grid pane",
       ]);
       // JAMES RULING 2026-08-12 (connected-revamp Task 5, superseding the
-      // packet's "8 fit at 36px"): the measured landscape scroller is
-      // 232px, 8 rows at 36px is 288px and does not fit it, and 7 rows at
-      // the fixed 32px height (224px) is what the budget holds. Asserted
-      // in the BROWSER, because it is a measurement — the row height, the
-      // header, the totals line, the column head and the caption all have
-      // to land inside 390×844's landscape frame for it to be true, and
-      // jsdom computes none of them. An earlier run of this pane fitted
-      // five (the column headings were rendering at the row type size, and
-      // the rows were 4px too tall); the CSS carries the arithmetic that
-      // fixed it. Exact, not a floor: `toBe`, not `toBeGreaterThanOrEqual`
-      // — a weaker assertion would still pass if the density claim were
-      // wrong in the generous direction, which is not what 7 means here.
-      const visible = await page.evaluate(() => {
+      // packet's "8 fit at 36px"): 8 rows at 36px is 288px, which no
+      // measured build of this frame has ever held, and the fixed row
+      // height came down to 32px. TASK 6 SHIPPED 7 AT ZERO SLACK — the
+      // review measured 224px of scroller against 224px of rows, so half a
+      // pixel of growth anywhere above it would have turned the assertion
+      // red with no clue why. SECOND RULING, task-6 fix round: the empty
+      // footer's 52px goes back to the pane (see the portrait block above
+      // for the mechanism), which restores the packet's original 8 AND
+      // leaves real margin under it. Asserted in the BROWSER, because it is
+      // a measurement — the row height, the header, the totals line, the
+      // column head and the caption all have to land inside 844×390's
+      // landscape frame for it to be true, and jsdom computes none of them.
+      // An earlier run of this pane fitted five (the column headings were
+      // rendering at the row type size, and the rows were 4px too tall);
+      // the CSS carries the arithmetic that fixed it.
+      //
+      // The budget, not only the derived integer — same four assertions as
+      // the portrait block above, and the same reasoning (review, Scrutiny
+      // 1b). The floor is bounded on both sides by the exact row height and
+      // the zero-overflow pin, so it cannot pass by rows shrinking.
+      const m = await page.evaluate(() => {
         const scroller = document.querySelector(".connected-grid-rows")!;
         const box = scroller.getBoundingClientRect();
-        return Array.from(scroller.children).filter((el) => {
-          const r = el.getBoundingClientRect();
-          return r.top >= box.top - 0.5 && r.bottom <= box.bottom + 0.5;
-        }).length;
+        const first = scroller.children[0]!.getBoundingClientRect();
+        return {
+          rowHeight: first.height,
+          clientHeight: scroller.clientHeight,
+          visible: Array.from(scroller.children).filter((el) => {
+            const r = el.getBoundingClientRect();
+            return r.top >= box.top - 0.5 && r.bottom <= box.bottom + 0.5;
+          }).length,
+          docOverflow:
+            document.documentElement.scrollHeight -
+            document.documentElement.clientHeight,
+        };
       });
-      expect(visible).toBe(7);
+      expect(m.rowHeight).toBe(32);
+      expect(m.clientHeight).toBe(LANDSCAPE_GRID_SCROLLER_PX);
+      expect(m.visible).toBeGreaterThanOrEqual(8);
       // ...and the pane itself never scrolls: only the rows do (DEVIATIONS
       // row 2). The document is exactly the viewport.
-      const overflow = await page.evaluate(
-        () =>
-          document.documentElement.scrollHeight -
-          document.documentElement.clientHeight,
-      );
-      expect(overflow).toBe(0);
+      expect(m.docOverflow).toBe(0);
+    }
+    if (name === "connected-ended") {
+      // THE HAND-OFF FRAME KEEPS ITS OWN SPACING IN LANDSCAPE (task-6 fix
+      // round). `.connected-surface-ended` declares `gap: 10px`, but Task 6
+      // added `row-gap: 0` to the landscape `.connected-surface` rule —
+      // equal specificity, declared later, so the row axis silently went to
+      // zero on this frame and only on this frame. Nothing in jsdom can see
+      // a cascade resolved across two media-scoped rules; the computed
+      // value in a real 844×390 browser can, so the pin lives here.
+      const gaps = await page
+        .locator(".connected-surface-ended")
+        .evaluate((el) => {
+          const cs = getComputedStyle(el);
+          return { row: cs.rowGap, column: cs.columnGap };
+        });
+      expect(gaps).toStrictEqual({ row: "10px", column: "10px" });
     }
     await page.screenshot({
       path: path.join(SCREENSHOTS_DIR, `${name}-landscape.png`),

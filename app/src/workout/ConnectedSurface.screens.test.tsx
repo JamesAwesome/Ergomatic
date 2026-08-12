@@ -282,15 +282,17 @@ describe("screen fixtures for pnpm screenshots", () => {
   });
 
   /** The scroll case, and the only one that can show it: 25 intervals, the
-   *  active row eight deep. Header and caption pinned, seven rows visible
-   *  at 390×844's landscape height and fourteen at portrait's (connected-
-   *  revamp Task 5, two separate JAMES RULINGS 2026-08-12: landscape
-   *  supersedes the packet's 8-at-36px figure on a measured budget too
-   *  tight to hold it; portrait's fix round reverses this task's own first
-   *  attempt, which forced the packet's unmeasured 12 with a deliberate
-   *  spacer — portrait now takes every row its budget actually holds, no
-   *  code hiding capacity — `e2e/screenshots.spec.ts` measures both counts
-   *  in a real browser), the rest below the fold. */
+   *  active row eight deep. Header and caption pinned, EIGHT rows visible
+   *  at 844×390's landscape height and fifteen at portrait's, the rest
+   *  below the fold. Three JAMES RULINGS 2026-08-12 got to those two
+   *  numbers: the packet's unmeasured 12 portrait was replaced by whatever
+   *  the budget really holds (nothing may exist whose only job is to hide
+   *  capacity); landscape's row height came down to 32px, since 8 at the
+   *  packet's 36 has never fitted this frame; and the task-6 fix round
+   *  reclaimed a footer slot that reserved 56px it never used, which is
+   *  what put landscape back at the packet's own 8. `e2e/screenshots.spec
+   *  .ts` measures both counts AND the scroller budget each is derived
+   *  from, in a real browser. */
   it("pane C, twenty-five intervals", async () => {
     await expect(
       capture("grid", {

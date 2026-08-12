@@ -207,7 +207,7 @@ export function totalSessionSecondsOf(phases: EnginePhase[]): number {
   return phases.reduce((sum, p) => sum + (phaseSeconds(p) ?? 0), 0);
 }
 
-/** "KIND · label", except when the phase's own resolved `label` IS its kind
+/** "KIND label", except when the phase's own resolved `label` IS its kind
  *  word — a rest phase's label is literally `"Rest"` (domain/expand.ts's
  *  own `phases()`), which collides with `phaseKindWord("rest")`'s `"REST"`
  *  (case-insensitive: the two vocabularies capitalize differently) — in
@@ -226,17 +226,30 @@ export function totalSessionSecondsOf(phases: EnginePhase[]): number {
  *  case used to drop the one fact a bare "REST" doesn't carry — how long.
  *  `phaseSeconds` already knows a rest phase's own duration (its `.seconds`
  *  field, set at build time from `restMinutes`), so the collapsed form now
- *  reads `REST 2:00`, not just `REST` — plain-appended, not through the
- *  `·` separator the label case uses (revision §3: "`REST 2:00 · then WORK
- *  2:09.0`", never "REST · 2:00"). ONE builder: `upNextText`/`thenNextText`
- *  both call this, so both surfaces and both the UP NEXT value and its
- *  "then" annotation carry the same duration from the same place — see
- *  `components/UpNextStrip.tsx`'s own comment for how the two orientations
- *  share this single string without a second one. */
+ *  reads `REST 2:00`, not just `REST`. ONE builder: `upNextText`/
+ *  `thenNextText` both call this, so both surfaces and both the UP NEXT
+ *  value and its "then" annotation carry the same duration from the same
+ *  place — see `components/UpNextStrip.tsx`'s own comment for how the two
+ *  orientations share this single string without a second one.
+ *
+ *  THE SEPARATOR IS A SPACE, NOT `·` (task-6 review, M2 — fix round). The
+ *  label case used to read `WORK · 2:09.0`, which made the assembled strip
+ *  `REST 3:00 · then WORK · 2:06.0`: the same glyph doing two different
+ *  jobs in one line, one separating the two PHASES and one separating a
+ *  phase's kind from its target. Revision §3 and the mockup both draw it
+ *  with one job only — `REST 2:00 · then WORK 2:09.0`
+ *  (`Ergomatic connected mode.dc.html:349` landscape, `:433` portrait) —
+ *  and the collapsed rest branch below was already spelling its duration
+ *  that way, so the two branches now agree with each other as well as with
+ *  the design. This function feeds NOTHING but UP NEXT (`upNextTextAt` and
+ *  `thenNextTextAt` are its only callers), so the change reaches exactly
+ *  the string §3 specifies and no other copy on either surface; the step
+ *  line's own `STEP 1 OF 4 · WORK · SET 1/2` is a different builder
+ *  (`stepLine`) and keeps its separators. */
 function phaseAnnouncement(phase: EnginePhase): string {
   const kind = phaseKindWord(phase.type);
   if (kind.toLowerCase() !== phase.label.toLowerCase()) {
-    return `${kind} · ${phase.label}`;
+    return `${kind} ${phase.label}`;
   }
   const seconds = phaseSeconds(phase);
   return seconds === null ? kind : `${kind} ${fmtDuration(seconds / 60)}`;

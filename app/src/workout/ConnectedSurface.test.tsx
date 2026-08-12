@@ -682,7 +682,7 @@ describe("paused (handoff §4)", () => {
     expect(screen.getByRole("button", { name: "END" })).toBeInTheDocument();
   });
 
-  it("NOTHING ABOVE SHIFTS: the footer slot is reserved whether or not the paused block fills it", () => {
+  it("NOTHING ABOVE SHIFTS: the paused block arrives without the slot ever changing height", () => {
     // The header (End's new home) is a THIRD invariant alongside the
     // footer: it renders the same single child regardless of state, so its
     // own fixed height can never be what moves the pane body underneath
@@ -691,7 +691,8 @@ describe("paused (handoff §4)", () => {
     const liveHeader = document.querySelector(".connected-header")!;
     expect(liveHeader.children).toHaveLength(1);
     const liveFooter = document.querySelector(".connected-surface-footer")!;
-    // Reserved, but empty while rowing — End no longer lives here.
+    // Empty while rowing — End no longer lives here, and as of the task-6
+    // fix round the slot reserves nothing for the block that does.
     expect(liveFooter.children).toHaveLength(0);
     live.unmount();
 
@@ -702,9 +703,9 @@ describe("paused (handoff §4)", () => {
     // One child now — the paused block alone in the slot End vacated.
     expect(pausedFooter.children).toHaveLength(1);
     // The footer sits in the SAME place in the tree either way — directly
-    // after the pane body, directly before the pager — so its own
-    // reserved 52px (pinned by the CSS test below) is the only thing that
-    // differs between the two states, never its position.
+    // after the pane body, directly before the pager — so the only thing
+    // that differs between the two states is whether it has a child, never
+    // its position and (per the CSS test below) never its height.
     expect(pausedFooter.previousElementSibling!.className).toContain(
       "connected-surface-body",
     );
@@ -713,12 +714,36 @@ describe("paused (handoff §4)", () => {
     );
   });
 
-  it("index.css pins the footer slot and the paused block at 52px", () => {
+  it("index.css makes the slot cost the pane NOTHING: a zero-height anchor with the block overlaid on it", () => {
+    // JAMES RULING 2026-08-12 (task-6 fix round). This assertion used to
+    // read `height: 52px` on BOTH the slot and the block: the slot held
+    // 52px open for the whole session so the block could drop into it
+    // without moving anything. The review measured what that reservation
+    // cost — an entire grid row in each orientation, spent on space the
+    // rower saw as blank for all but the seconds they were stopped. The
+    // invariant it was buying survives, more strongly: the slot has NO
+    // height in either state, so there is nothing left that could change.
     const css = readFileSync(indexCssPath(), "utf-8");
-    const footer = /\.connected-surface-footer\s*\{([^}]*)\}/.exec(css);
+    const footers = [
+      ...css.matchAll(/\.connected-surface-footer\s*\{([^}]*)\}/g),
+    ].map((m) => m[1]!);
+    // Two rules: the base one and the landscape query's placement override.
+    expect(footers).toHaveLength(2);
+    // `\n` anchored, so `min-height: 0` could never satisfy this.
+    expect(footers[0]).toMatch(/\n\s*height: 0;/);
+    // The anchor the overlay is positioned against. Without it the block
+    // would hang off the nearest positioned ancestor — the viewport — and
+    // land somewhere else entirely.
+    expect(footers[0]).toContain("position: relative");
+    // And the landscape query must not put the reservation back: its own
+    // copy of the rule places the slot in the grid and nothing more.
+    expect(footers[1]).not.toMatch(/height\s*:/);
+    // The block itself is unchanged in size and in where it paints; only
+    // its participation in the flow is gone.
     const paused = /\.connected-paused\s*\{([^}]*)\}/.exec(css);
-    expect(footer).not.toBeNull();
-    expect(footer![1]).toContain("height: 52px");
+    expect(paused).not.toBeNull();
+    expect(paused![1]).toContain("position: absolute");
+    expect(paused![1]).toContain("bottom: 0");
     expect(paused![1]).toContain("height: 52px");
   });
 
@@ -970,6 +995,28 @@ describe("End's hit box is small and out of the swipe corridor (safety fix, Jame
     expect(footer.children).toHaveLength(0);
   });
 
+  it("wears the mockup's word, keeps the sentence as its accessible name", async () => {
+    // Task-6 review, M3: the visible label is what the box is WIDE for, and
+    // "End session" is why it measured 109px on the one control this task
+    // exists to shrink. The mockup draws `END` (and revision §2's staging
+    // says `TAP AGAIN`); the accessible name keeps the sentence, so every
+    // selector that keys on "End session" survives and the paused block's
+    // own visible `END` stays distinguishable from this one.
+    renderSurface();
+    const end = document.querySelector(".connected-end")!;
+    expect(end.textContent).toBe("END");
+    expect(end).toHaveAttribute("aria-label", "End session");
+    await userEvent.click(screen.getByRole("button", { name: "End session" }));
+    const armed = document.querySelector(".connected-end")!;
+    expect(armed.textContent).toBe("TAP AGAIN");
+    expect(armed).toHaveAttribute("aria-label", "Tap again to end");
+    // WCAG 2.5.3, label in name: the visible word has to be findable inside
+    // the spoken one, or voice control cannot reach the control.
+    expect(armed.getAttribute("aria-label")!.toLowerCase()).toContain(
+      armed.textContent!.toLowerCase(),
+    );
+  });
+
   it("index.css never stretches the control to the surface's width", () => {
     const css = readFileSync(indexCssPath(), "utf-8");
     const end = /\.connected-end\s*\{([^}]*)\}/.exec(css);
@@ -1016,16 +1063,26 @@ describe("End's hit box is small and out of the swipe corridor (safety fix, Jame
   });
 
   it("the SAME swipe, originating on End, works in the other direction too", () => {
+    // REWRITTEN (task-6 review, I3): the first version of this started on
+    // the DEFAULT pane and swiped the way `paneAfterSwipe` clamps, so both
+    // of its assertions — Live is current, End is unarmed — were already
+    // true of the very first render. The reviewer deleted the whole gesture
+    // and it still passed. It has a real discriminator now: the surface
+    // starts on GRID, and only the swipe can put it back on Live.
     renderSurface();
+    fireEvent.click(railButton("Grid"));
+    expect(railButton("Grid")).toHaveAttribute("aria-current", "page");
+
     const endButton = screen.getByRole("button", { name: "End session" });
     fireEvent.touchStart(endButton, { touches: [{ clientX: 200 }] });
     fireEvent.touchEnd(document.querySelector(".connected-surface")!, {
       changedTouches: [{ clientX: 200 + (SWIPE_THRESHOLD_PX + 10) }],
     });
-    // Already on "live" (the default pane) — a rightward swipe clamps
-    // there rather than wrapping (`paneAfterSwipe`'s own contract), so the
-    // proof here is that it did NOT arm End, not that it changed pane.
+    // A POSITIVE delta walks backward through `PANES` (["live","grid"]), so
+    // this is grid → live: the mirror of the leftward case above, still
+    // starting its touch on End itself.
     expect(railButton("Live")).toHaveAttribute("aria-current", "page");
+    expect(railButton("Grid")).not.toHaveAttribute("aria-current");
     expect(
       screen.queryByRole("button", { name: "Tap again to end" }),
     ).not.toBeInTheDocument();

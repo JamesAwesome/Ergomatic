@@ -541,7 +541,10 @@ async function walkSurfaceToLog(
   // "PAUSED", changing UP NEXT's own resolved length and, through
   // `space-between`, every gap in the pane — a confound this file's first
   // attempt at this pin measured directly (a real, reproducible ~10px
-  // difference with the SAME footer state on both sides).
+  // difference with the SAME footer state on both sides). Since the task-6
+  // fix round the slot is out of the flow entirely, which makes the claim
+  // harder still to break — and this pin is what would catch it going back
+  // into the flow.
   const metricRow = page.locator(".connected-metric-row");
 
   // PAUSED — the freeze in `buildStoryEvents()` above lands here. The
@@ -600,12 +603,13 @@ async function walkSurfaceToLog(
   await pumpUntilResumed(page);
   await expect(page.getByText("PAUSED · PULL TO RESUME")).toBeHidden();
   await expect(page.getByRole("button", { name: "End session" })).toBeVisible();
-  // NOTHING ABOVE SHIFTED, the actual pixel proof: the footer's own
-  // content just swapped back from the paused block to empty (its
-  // RESERVED height never changed — pinned separately, `index.css`'s own
-  // `.connected-surface-footer { height: 52px }`), and the pane body's top
-  // — this metric row's own top — reads the same either side of that
-  // swap.
+  // NOTHING ABOVE SHIFTED, the actual pixel proof: the paused block just
+  // came and went, and the pane body's top — this metric row's own top —
+  // reads the same either side of it. The block is an OVERLAY as of the
+  // task-6 fix round (`index.css`'s `.connected-surface-footer { height: 0;
+  // position: relative }` plus `.connected-paused { position: absolute }`),
+  // so it costs the flow nothing in EITHER state; before that, the footer
+  // reserved 52px all session long to buy the same invariant.
   const resumedMetricTop = (await metricRow.boundingBox())!.y;
   expect(resumedMetricTop).toBeCloseTo(pausedMetricTop, 0);
 
@@ -650,16 +654,21 @@ async function walkSurfaceToLog(
   // intermittent miss only under the full 279-test parallel run) and is
   // not this task's frame to make less transient. Whichever of "the frame
   // painted" or "navigation already landed" happens first is equally good
-  // proof End worked; the `toHaveURL` assertion right after is the real,
-  // non-racy confirmation either way.
-  await Promise.race([
-    page
-      .getByText("That is the session")
-      .waitFor({ state: "visible" })
-      .catch(() => undefined),
-    page
-      .waitForURL(/\/library\/[^/]+\/log\?from=monitor$/)
-      .catch(() => undefined),
+  // proof End worked.
+  //
+  // `Promise.any`, NOT `Promise.race` (task-6 review, I4 — this is a
+  // disclosed retirement-and-restoration, not a silent weakening). The
+  // first version of this raced two promises that each swallowed their own
+  // rejection with `.catch(() => undefined)`, which asserts NOTHING: a race
+  // settles on the first SETTLEMENT, so two timeouts resolved it just as
+  // happily as a painted frame did, and the ended hand-off went unpinned in
+  // this walk. `any` resolves on the first FULFILMENT and rejects with an
+  // `AggregateError` if both fail — so the tolerance for which of the two
+  // wins survives, and a double failure still fails here, on this line,
+  // naming both branches.
+  await Promise.any([
+    page.getByText("That is the session").waitFor({ state: "visible" }),
+    page.waitForURL(/\/library\/[^/]+\/log\?from=monitor$/),
   ]);
 
   // THE LOG FLOW — `WorkoutDetail.tsx`'s own `handleConnectedEnded`
