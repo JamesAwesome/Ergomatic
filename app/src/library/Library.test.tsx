@@ -5,7 +5,8 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import type { LibraryWorkout } from "../api/useWorkouts";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import { ONBOARDING_LIBRARY_WORKOUTS } from "../../server/seed/library/onboarding";
-import type { Step } from "../../domain/types.js";
+import type { Step, WorkoutType } from "../../domain/types.js";
+import { TYPE_WORDS } from "../components/typeWords";
 
 /** A work step of exactly `minutes` at this file's 6k baseline (off 0), so
  *  `estimateMinutes` prices each fixture to the round number its row is
@@ -108,6 +109,38 @@ const FIRST_6K = onboardingLibraryEntry("First 6k", "w-first6k");
 const FIRST_2K = onboardingLibraryEntry("First 2k", "w-first2k");
 const SEA_FRET = realLibraryEntry("Sea Fret", "w-seafret");
 
+// Controller addendum, carried-forward subject E: the 3-workout WORKOUTS
+// fixture above has exactly one workout per type, so it can't distinguish a
+// TYPE union (selecting two chips shows BOTH types' rows) from a
+// single-select swap (selecting the second chip would just replace the
+// first). Built from the real 300-workout seed (recurring-failure #3),
+// picking the first two rows of each type by index rather than by title —
+// unlike `realLibraryEntry`, this doesn't need to name specific titles.
+function realWorkoutsOfType(
+  type: WorkoutType,
+  count: number,
+): LibraryWorkout[] {
+  return LIBRARY_WORKOUTS.filter((w) => w.type === type)
+    .slice(0, count)
+    .map((w, i) => ({
+      id: `w-real-${type}-${i}`,
+      title: w.title,
+      type: w.type,
+      difficulty: w.difficulty,
+      pain: w.pain,
+      steps: w.steps,
+      isGlobal: true,
+      lastDoneDaysAgo: null,
+    }));
+}
+
+const MULTI_TYPE_WORKOUTS: LibraryWorkout[] = [
+  ...realWorkoutsOfType("O2", 2),
+  ...realWorkoutsOfType("AT", 2),
+  ...realWorkoutsOfType("TR", 2),
+  ...realWorkoutsOfType("AN", 2),
+];
+
 // Final-review fix: a CUSTOM (isGlobal: false) workout that happens to
 // collide with a designated onboarding title. The exclusion must key off
 // isGlobal too, not title alone — otherwise a rower's own "First 6k" build
@@ -182,14 +215,13 @@ async function openSheet() {
   await userEvent.click(screen.getByRole("button", { name: "FILTER ⌄" }));
 }
 
-/** Clicks the sheet's own live-counting primary — its accessible name
- *  changes with the draft ("Show 12 workouts"), hence the regex. Only valid
- *  when the draft matches at least one workout; the button is disabled
- *  ("No workouts match") otherwise, by design (FilterSheet.tsx). */
+/** Clicks the sheet's own primary — the constant "Apply Filter" regardless
+ *  of the draft (library-filter-unification, Task 2: the live count moved to
+ *  a caption above it). Only valid when the draft matches at least one
+ *  workout; the button is disabled at zero matches, by design
+ *  (FilterSheet.tsx). */
 async function applySheet() {
-  await userEvent.click(
-    screen.getByRole("button", { name: /^Show \d+ workouts?$/ }),
-  );
+  await userEvent.click(screen.getByRole("button", { name: "Apply Filter" }));
 }
 
 beforeEach(() => {
@@ -256,9 +288,7 @@ describe("Library", () => {
           name: "3",
         }),
       );
-      expect(
-        screen.getByRole("button", { name: "Show 1 workout" }),
-      ).toBeInTheDocument();
+      expect(screen.getByText("1 WORKOUT")).toBeInTheDocument();
       await applySheet();
 
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -357,9 +387,7 @@ describe("Library", () => {
       await userEvent.click(
         within(dialog()).getByRole("button", { name: "3" }),
       );
-      expect(
-        screen.getByRole("button", { name: "Show 1 workout" }),
-      ).toBeInTheDocument();
+      expect(within(dialog()).getByText("1 WORKOUT")).toBeInTheDocument();
 
       await userEvent.click(
         within(dialog()).getByRole("button", { name: "CLEAR" }),
@@ -369,12 +397,10 @@ describe("Library", () => {
       expect(
         within(dialog()).getByRole("button", { name: "3" }),
       ).toHaveAttribute("aria-pressed", "false");
-      expect(
-        screen.getByRole("button", { name: "Show 3 workouts" }),
-      ).toBeInTheDocument();
+      expect(within(dialog()).getByText("3 WORKOUTS")).toBeInTheDocument();
     });
 
-    it("the primary disables and reads 'No workouts match' when the draft matches nothing", async () => {
+    it("the primary disables (and the caption reads 'NO WORKOUTS MATCH') when the draft matches nothing", async () => {
       mockReady();
       await renderLibrary();
 
@@ -390,10 +416,28 @@ describe("Library", () => {
         within(dialog()).getByRole("button", { name: "60′+" }),
       );
 
-      const primary = screen.getByRole("button", {
-        name: "No workouts match",
-      });
-      expect(primary).toBeDisabled();
+      expect(
+        screen.getByRole("button", { name: "Apply Filter" }),
+      ).toBeDisabled();
+      expect(screen.getByText("NO WORKOUTS MATCH")).toBeInTheDocument();
+    });
+
+    // library-filter-unification round, Task 2: DIFFICULTY joins the sheet
+    // in TYPE's old slot.
+    it("narrows via DIFFICULTY in the sheet", async () => {
+      mockReady();
+      await renderLibrary();
+
+      await openSheet();
+      await userEvent.click(
+        within(screen.getByRole("dialog")).getByRole("button", {
+          name: "HARD",
+        }),
+      );
+      await applySheet();
+
+      expect(visibleHrefs()).toStrictEqual(["/library/w-an"]);
+      expect(screen.getByText("1 OF 3 SHOWN")).toBeInTheDocument();
     });
 
     it("narrows to NOT-RECENT rows via LAST DONE 21D+, counting never-done as 21D+", async () => {
@@ -487,6 +531,158 @@ describe("Library", () => {
       expect(screen.getByText("PAIN 3")).toBeInTheDocument();
       expect(screen.getByText("1 OF 3 SHOWN")).toBeInTheDocument();
       expect(visibleHrefs()).toStrictEqual(["/library/w-at"]);
+    });
+  });
+
+  // library-filter-unification round, Task 2 (spec §2): TYPE's chip row now
+  // sits above the sheet/token row, multi-select, persisting immediately.
+  describe("type chip row", () => {
+    // Carried-forward subject A (Task 1's deletion left this homeless):
+    // James's ordering decision is real DOM order, not just presence — an
+    // existence-only loop can't tell this apart from the old order.
+    it("renders left-to-right as O2, AT, TR, AN", async () => {
+      mockReady();
+      await renderLibrary();
+
+      const chipRow = document.querySelector<HTMLElement>(".type-chip-grid")!;
+      const labels = within(chipRow)
+        .getAllByRole("button")
+        .map((button) => button.textContent);
+      expect(labels).toStrictEqual(["O2", "AT", "TR", "AN"]);
+    });
+
+    // Carried-forward subject B (both halves — the negative half was in the
+    // deleted test too). Contrast for the active fill is already verified
+    // at 6.67:1 (library-filter-unification design spec) — cited, not
+    // re-derived.
+    it("an active chip fills its own type color inline; an inactive one does not", async () => {
+      mockReady();
+      await renderLibrary();
+
+      const o2 = screen.getByRole("button", { name: "O2" });
+      const at = screen.getByRole("button", { name: "AT" });
+      expect(o2).not.toHaveAttribute(
+        "style",
+        expect.stringContaining("--type-o2"),
+      );
+      await userEvent.click(o2);
+      expect(o2).toHaveAttribute("style", expect.stringContaining("--type-o2"));
+      expect(at).not.toHaveAttribute(
+        "style",
+        expect.stringContaining("--type-at"),
+      );
+    });
+
+    // Carried-forward subject C: the first product consumer of
+    // `toggleType`'s multi-select semantics (M-10).
+    it("tapping a chip reports the toggled state, narrowing the list to that type", async () => {
+      mockReady();
+      await renderLibrary();
+
+      const o2 = screen.getByRole("button", { name: "O2" });
+      expect(o2).toHaveAttribute("aria-pressed", "false");
+      await userEvent.click(o2);
+
+      expect(o2).toHaveAttribute("aria-pressed", "true");
+      expect(visibleHrefs()).toStrictEqual(["/library/w-o2"]);
+      expect(tokenLabel("O2")).toBeInTheDocument();
+      expect(screen.getByText("1 OF 3 SHOWN")).toBeInTheDocument();
+    });
+
+    // Carried-forward subject D: exclusivity is correctly dead (multi-select
+    // replaces it), but "toggle twice clears it" is not — this pins that
+    // toggling the SAME chip off returns to the fully unfiltered list.
+    it("toggling the same chip twice returns to the unfiltered list", async () => {
+      mockReady();
+      await renderLibrary();
+
+      const o2 = screen.getByRole("button", { name: "O2" });
+      await userEvent.click(o2);
+      await userEvent.click(o2);
+
+      expect(o2).toHaveAttribute("aria-pressed", "false");
+      expect(visibleHrefs()).toStrictEqual([
+        "/library/w-at",
+        "/library/w-o2",
+        "/library/w-an",
+      ]);
+      expect(screen.getByText("3 WORKOUTS")).toBeInTheDocument();
+      expect(
+        screen.queryByText("O2", { selector: ".filter-token-label" }),
+      ).not.toBeInTheDocument();
+    });
+
+    describe("the effective-type descriptor word", () => {
+      it("shows the selected type's word when exactly one type is selected", async () => {
+        mockReady();
+        await renderLibrary();
+
+        expect(screen.queryByText(TYPE_WORDS.O2)).not.toBeInTheDocument();
+        await userEvent.click(screen.getByRole("button", { name: "O2" }));
+
+        const word = screen.getByText(TYPE_WORDS.O2);
+        expect(word).toBeInTheDocument();
+        expect(word.closest(".type-word-row")).toHaveAttribute(
+          "aria-hidden",
+          "true",
+        );
+      });
+
+      it("stays hidden at zero selections and disappears again once a second type joins", async () => {
+        mockReady(MULTI_TYPE_WORKOUTS);
+        await renderLibrary();
+
+        expect(screen.queryByText(TYPE_WORDS.O2)).not.toBeInTheDocument();
+
+        await userEvent.click(screen.getByRole("button", { name: "O2" }));
+        expect(screen.getByText(TYPE_WORDS.O2)).toBeInTheDocument();
+
+        await userEvent.click(screen.getByRole("button", { name: "AT" }));
+        expect(screen.queryByText(TYPE_WORDS.O2)).not.toBeInTheDocument();
+        expect(screen.queryByText(TYPE_WORDS.AT)).not.toBeInTheDocument();
+      });
+    });
+
+    // Carried-forward subject E: WORKOUTS (above) has exactly one workout
+    // per type and cannot distinguish a union from a single-select swap.
+    describe("a two-type union (real seed, >=2 workouts per type)", () => {
+      it("selecting two chips shows the UNION of both types, not their intersection (which would be empty — a workout has one type)", async () => {
+        mockReady(MULTI_TYPE_WORKOUTS);
+        await renderLibrary();
+
+        await userEvent.click(screen.getByRole("button", { name: "O2" }));
+        await userEvent.click(screen.getByRole("button", { name: "AT" }));
+
+        const expectedIds = MULTI_TYPE_WORKOUTS.filter(
+          (w) => w.type === "O2" || w.type === "AT",
+        ).map((w) => `/library/${w.id}`);
+        expect(expectedIds).toHaveLength(4);
+        expect(visibleHrefs()).toStrictEqual(expectedIds);
+        expect(screen.getByText("4 OF 8 SHOWN")).toBeInTheDocument();
+      });
+
+      // Carried-forward subject F: pinned at the filterTokens level already
+      // (Task 1); this is the seam Library actually renders through
+      // (`toRowTokens`), which is the whole point of the spec's finding 1.
+      it("the two-type token carries no inline type-color fill through toRowTokens", async () => {
+        mockReady(MULTI_TYPE_WORKOUTS);
+        await renderLibrary();
+
+        await userEvent.click(screen.getByRole("button", { name: "O2" }));
+        await userEvent.click(screen.getByRole("button", { name: "AT" }));
+
+        // Not a bare `not.toHaveAttribute("style")`: React clears the prior
+        // single-type fill by unsetting the `background` property on the
+        // SAME node (same `key={token.kind}`), which can leave an empty
+        // `style=""` attribute behind — a harmless DOM artifact, not a
+        // colour. The actual contract (no `--type-*` value present) is what
+        // the deleted test's own idiom checked too.
+        const token = tokenLabel("O2 · AT").closest(".filter-token")!;
+        expect(token).not.toHaveAttribute(
+          "style",
+          expect.stringContaining("--type-"),
+        );
+      });
     });
   });
 
@@ -1078,9 +1274,7 @@ describe("Library", () => {
       // Sea Fret is O2/easy — the sheet's default draft (everything
       // selected) should count exactly the one non-onboarding row, not all
       // three real global rows.
-      expect(
-        screen.getByRole("button", { name: /^Show 1 workout$/ }),
-      ).toBeVisible();
+      expect(screen.getByText("1 WORKOUT")).toBeVisible();
     });
 
     // Final-review fix: the exclusion must key off isGlobal, not title

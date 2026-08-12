@@ -1067,23 +1067,26 @@ test.describe("today screen (plan active, logs present)", () => {
 
   // Amendment (2026-08-04 PR #50 round), Task 2: the four type-swap chips
   // now span the plan line's full content width as a 4-column 1fr grid
-  // (`.today-type-chips`, index.css) instead of sitting left-packed at
-  // their own intrinsic `.chip` width inside a flex-wrap row. Verified via
-  // real bounding boxes (jsdom has no layout engine) — all four chips are
-  // near-equal width (a 1fr share each) and the row's total span (first
-  // chip's left edge to last chip's right edge) reaches the container's
-  // own width, proving they stretch rather than merely sit side by side.
+  // (`.type-chip-grid`, index.css — renamed from `.today-type-chips` in the
+  // library-filter-unification round, Task 2: Library's own multi-select
+  // chip row needed the identical grid override) instead of sitting
+  // left-packed at their own intrinsic `.chip` width inside a flex-wrap
+  // row. Verified via real bounding boxes (jsdom has no layout engine) —
+  // all four chips are near-equal width (a 1fr share each) and the row's
+  // total span (first chip's left edge to last chip's right edge) reaches
+  // the container's own width, proving they stretch rather than merely sit
+  // side by side.
   test("the type-swap chips span the full row as a 4-column grid, not left-packed intrinsic widths", async ({
     page,
   }) => {
     const chips = await page
-      .locator(".today-type-chips .chip")
+      .locator(".type-chip-grid .chip")
       .evaluateAll((els) =>
         els.map((el) => el.getBoundingClientRect().toJSON()),
       );
     expect(chips).toHaveLength(4);
 
-    const rowBox = (await page.locator(".today-type-chips").boundingBox())!;
+    const rowBox = (await page.locator(".type-chip-grid").boundingBox())!;
 
     // Every cell within a few px of an equal 1fr share of the row.
     const expectedWidth = rowBox.width / 4;

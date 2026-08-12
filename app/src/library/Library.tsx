@@ -5,10 +5,16 @@ import { useBaselines } from "../api/useBaselines";
 import { estimateMinutes } from "../../domain/expand.js";
 import { isOnboardingTitle } from "../../domain/onboarding.js";
 import type { Baselines, WorkoutType } from "../../domain/types.js";
-import { applyFilters, clearFilters, type Filters } from "./filters";
+import {
+  applyFilters,
+  clearFilters,
+  toggleType,
+  type Filters,
+} from "./filters";
 import { filterTokens } from "./filterTokens";
 import FilterSheet from "./FilterSheet";
 import { TokenRow, type Token } from "../components/TokenRow";
+import { TYPE_WORDS } from "../components/typeWords";
 import { loadLibraryFilters, saveLibraryFilters } from "./libraryFilters";
 import { loadLibraryScroll, saveLibraryScroll } from "./libraryScroll";
 import WorkoutRow from "./WorkoutRow";
@@ -19,10 +25,19 @@ import WorkoutRow from "./WorkoutRow";
 // gets written, not just whichever one happened to land on a 100ms tick.
 const SCROLL_SAVE_THROTTLE_MS = 100;
 
+// Chip order: O2, AT, TR, AN — the pyramid's base-first order, matching
+// Today.tsx's own TYPE_CHIPS and FilterSheet.tsx's pre-Task-1 TYPE group
+// (docs/design/README.md §Screens → "2. Library", amended 2026-08-08).
+const TYPE_CHIPS: WorkoutType[] = ["O2", "AT", "TR", "AN"];
+
 // CSS custom property per workout type — never a raw hex (tokens.css). Kept
 // local per this repo's established per-file duplication convention
 // (TypeBadge.tsx's own comment names the precedent) rather than importing
-// FilterSheet.tsx's identical map.
+// Today.tsx's identical map. Library-filter-unification round, Task 2: this
+// map now colours the chip row's own active fill (below) — it no longer
+// backs `toRowTokens`' fill (that now passes `filterTokens.ts`'s own
+// `Token.fill` straight through, spec finding 1), but the chip row needs the
+// identical per-type colour Today's own TodayChip applies inline.
 const TYPE_COLOR_VAR: Record<WorkoutType, string> = {
   O2: "--type-o2",
   AT: "--type-at",
@@ -54,14 +69,21 @@ function Header() {
   );
 }
 
-/** filterTokens.ts's own Token (`{kind, label, clear}`, one per active
+/** filterTokens.ts's own Token (`{kind, label, clear, fill}`, one per active
  *  GROUP) adapted to TokenRow's `{key, label, onClear, fill}` shape — the
  *  two don't share a type: filterTokens.ts's `clear` takes the CURRENT
  *  Filters (so a token stays correct after a later, unrelated change),
- *  while TokenRow's `onClear` is a plain callback with no arguments. `fill`
- *  carries a TYPE token's own `--type-*` color through as TokenRow's
- *  per-instance inline override (DESIGN.md's selected-state rule extended
- *  to tokens); every other kind leaves TokenRow's `--ink` default alone. */
+ *  while TokenRow's `onClear` is a plain callback with no arguments.
+ *
+ * Library-filter-unification round, Task 2 (spec finding 1): `fill` is
+ * passed straight through from `filterTokens.ts` rather than re-derived
+ * here by looking the token's own LABEL up in a WorkoutType-keyed map — that
+ * lookup only worked while a type token's label was a bare code, and broke
+ * silently the moment `types` went multi-select (`"O2 · AT"` resolves no
+ * single WorkoutType). `filterTokens.ts` already knows which case it's in
+ * (one selected type has a colour; several don't) and sets `fill`
+ * accordingly, so this function no longer needs its own type-colour map at
+ * all. */
 function toRowTokens(
   tokens: ReturnType<typeof filterTokens>,
   filters: Filters,
@@ -71,10 +93,7 @@ function toRowTokens(
     key: token.kind,
     label: token.label,
     onClear: () => onRemove(token.clear(filters)),
-    fill:
-      token.kind === "type"
-        ? `var(${TYPE_COLOR_VAR[token.label as WorkoutType]})`
-        : undefined,
+    fill: token.fill,
   }));
 }
 
@@ -91,7 +110,7 @@ export default function Library() {
   const [filters, setFilters] = useState<Filters>(loadLibraryFilters);
   const [sheetOpen, setSheetOpen] = useState(false);
   // The sheet's own scratch copy — nothing here reaches `filters` (or its
-  // sessionStorage persistence) until "Show N workouts" commits it. Opening
+  // sessionStorage persistence) until "Apply Filter" commits it. Opening
   // the sheet seeds this from the currently-applied `filters`; every other
   // way out (backdrop tap, Escape, a tab tap, a hardware/browser back
   // navigation — none of which push a route for the sheet to intercept)
@@ -283,11 +302,56 @@ export default function Library() {
   return (
     <main className="screen" ref={rootRef}>
       <Header />
+      {/* Library-filter-unification round, Task 2 (spec §2): TYPE's own
+          chip row, outside the sheet — same `.chip`/aria-pressed convention
+          Today's own type-swap row uses, MULTI-select (unlike Today's
+          single-select swap): tapping toggles that type in `filters.types`
+          and persists immediately via the effect below, the same as every
+          other filter change. `.type-chip-grid` (index.css, extracted from
+          Today's own `.today-type-chips`) lays these out as the identical
+          4-column grid Today's row uses — a pure rename, not a new layout. */}
+      <div className="chip-wrap type-chip-grid">
+        {TYPE_CHIPS.map((type) => {
+          const selected = filters.types.includes(type);
+          return (
+            <button
+              key={type}
+              type="button"
+              className="chip"
+              aria-pressed={selected}
+              style={
+                selected
+                  ? {
+                      background: `var(${TYPE_COLOR_VAR[type]})`,
+                      borderColor: `var(${TYPE_COLOR_VAR[type]})`,
+                      color: "var(--on-color)",
+                    }
+                  : undefined
+              }
+              onClick={() => setFilters(toggleType(filters, type))}
+            >
+              {type}
+            </button>
+          );
+        })}
+      </div>
+      {/* The selected type's descriptor word (spec §2) — renders ONLY while
+          exactly one type is selected (zero or several: no element at all,
+          unlike Today's own row, which always has exactly one effective
+          type to describe). Reuses Today's own `.today-type-word` text
+          style (unchanged, not one of this round's three extracted rules)
+          inside the screen-neutral `.type-word-row` wrapper (extracted from
+          Today's `.today-type-word-row`). */}
+      {filters.types.length === 1 && (
+        <div className="type-word-row" aria-hidden="true">
+          <p className="today-type-word">{TYPE_WORDS[filters.types[0]]}</p>
+        </div>
+      )}
       <div className="library-filter-bar">
         <div className="library-filter-row">
           <button
             type="button"
-            className="library-filter-toggle"
+            className="button-outline filter-trigger"
             aria-haspopup="dialog"
             aria-expanded={sheetOpen}
             onClick={openSheet}

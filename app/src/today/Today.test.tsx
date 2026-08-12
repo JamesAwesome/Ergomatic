@@ -1334,7 +1334,7 @@ describe("Today (type-swap chips)", () => {
     mockReady();
     const { container } = await renderToday();
     const labels = Array.from(
-      container.querySelectorAll(".today-type-chips .chip"),
+      container.querySelectorAll(".type-chip-grid .chip"),
     ).map((el) => el.textContent);
     expect(labels).toStrictEqual(["O2", "AT", "TR", "AN"]);
   });
@@ -1564,7 +1564,7 @@ describe("Today (type descriptor word)", () => {
     mockReady();
     await renderToday();
     const word = screen.getByText("COMFORTABLY HARD");
-    const row = word.closest(".today-type-word-row");
+    const row = word.closest(".type-word-row");
     expect(row).toHaveAttribute("aria-hidden", "true");
   });
 });
