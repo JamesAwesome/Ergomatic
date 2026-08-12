@@ -5437,8 +5437,8 @@ section:not(.news-pinned) .news-row:last-of-type {
      `margin-bottom` on the children that actually render (below) is what
      the header, the pane body and the footer pay unconditionally — the
      lost banner's own 10px only when it's actually on screen — reclaiming
-     the pane's row-count budget (Task 5's own 14-row portrait/7-row
-     landscape rulings), which a flat `gap` would otherwise spend on a
+     the pane's row-count budget (15 rows portrait, 8 landscape after the
+     task-6 fix round), which a flat `gap` would otherwise spend on a
      boundary with nothing to separate most sessions. */
   gap: 0;
   height: calc(
@@ -5821,11 +5821,29 @@ section:not(.news-pinned) .news-row:last-of-type {
    and device name) and `.connected-grid-totals` (the interval caption and
    the whole-session total). Portrait stacks them — device + END would be
    one line and interval + total a second, except this pane renders no END
-   of its own (that lives in the shell's footer outside every pane) — so
-   this is simply two lines. Landscape folds both into ONE line the same
-   way the columns below fold, in the landscape query. */
+   of its own (that lives in the shell's HEADER, above every pane, since
+   connected-revamp Task 6) — so this is simply two lines. Landscape folds
+   both into ONE line the same way the columns below fold, in the landscape
+   query.
+
+   EXPLICIT HEIGHT (task-6 review, Scrutiny 1 recommendation 2 — applied to
+   all three of this pane's flex-none siblings: this rule,
+   `.connected-grid-head` and `.connected-grid-caption`). The scroller
+   between them is `flex: 0 1 auto` fill, so its height is whatever these
+   three leave — and while their own heights were TEXT METRICS (line boxes
+   at 11/13px), the visible row count was a derived integer resting on
+   sub-pixel typography. The review reproduced a 3px landscape swing purely
+   by measuring before `document.fonts.ready`, which is what the "13 one
+   run, 14 the next" report actually was. Pinning these three the way the
+   ROWS were already pinned makes the whole budget arithmetic: 28 = the two
+   14px line boxes this column stacks (landscape's one-line fold steps it to
+   14 below), measured against the served bundle with the self-hosted face
+   applied. A face that renders shorter can no longer quietly hand the
+   scroller a row's worth of extra space, and one that renders taller
+   overflows its own 28px rather than stealing from the rows. */
 .connected-grid-headline {
   flex: none;
+  height: 28px;
   display: flex;
   flex-direction: column;
   /* 0, not 6 (connected-revamp Task 6): trimmed to give the portrait
@@ -5869,6 +5887,12 @@ section:not(.news-pinned) .news-row:last-of-type {
    handful of size tokens the landscape query steps. */
 .connected-grid-head {
   flex: none;
+  /* Explicit, for the reason `.connected-grid-headline` above sets out at
+     length. 17 = the 10px labels' own 13px line box + this rule's 2px
+     `padding-bottom` + its 2px `border-bottom`, which `box-sizing:
+     border-box` (global, `index.css:1`) folds into the same 17. Identical
+     in both orientations, so no landscape step is needed. */
+  height: 17px;
   display: flex;
   align-items: baseline;
   gap: 8px;
@@ -5889,9 +5913,10 @@ section:not(.news-pinned) .news-row:last-of-type {
 
 /* THE ONE SCROLL ON THE CONNECTED SURFACE (DEVIATIONS row 2). Contained:
    the header above and the caption below are flex-none siblings, End
-   belongs to the shell's footer outside this pane entirely, and only this
-   element moves. `min-height: 0` is what actually lets a flex child shrink
-   below its content and therefore scroll at all. */
+   belongs to the shell's HEADER above this pane entirely (connected-revamp
+   Task 6 moved it out of the footer), and only this element moves.
+   `min-height: 0` is what actually lets a flex child shrink below its
+   content and therefore scroll at all. */
 .connected-grid-rows {
   /* `0 1 auto`, not `1`: with four rows the list hugs them and the caption
      sits directly under, the way the mockup's portrait frame draws it; with
@@ -5915,11 +5940,13 @@ section:not(.news-pinned) .news-row:last-of-type {
   flex-direction: column;
   /* ZERO (Task 5, JAMES RULING 2026-08-12): a row's own border IS the
      separator now — the old 6px/3px gap was budget the new density cannot
-     spare. Measured against this worktree's own build: the landscape
-     scroller is 239px, 7 rows at the fixed 32px height take 224px, and
-     an 8th (256px) does not fit — the ruling's own 232px was measured
-     against an earlier build of this same header; the number moved, the
-     count it was defending (7, not 8) did not.
+     spare. Measured against this worktree's own build after the task-6 fix
+     round reclaimed the empty footer: the landscape scroller is 276px and
+     8 rows at the fixed 32px height take 256, leaving 20px of real margin
+     — which is the packet's own original count, recovered. The ruling's
+     231/232/239 figures all came from builds of this header that no longer
+     exist; `e2e/screenshots.spec.ts` pins the budget itself now
+     (`LANDSCAPE_GRID_SCROLLER_PX`), not just the count derived from it.
 
      NO PADDING HERE EITHER (Task 5 fix round, JAMES RULING 2026-08-12,
      reversing this task's own first attempt): portrait's scroller has more
@@ -5928,15 +5955,18 @@ section:not(.news-pinned) .news-row:last-of-type {
      `padding-top` once sat here purely to manufacture unused space and
      force the count down to 12; that is the "old code" pattern the ruling
      names — nothing may exist whose only job is to hide capacity. Portrait
-     now takes every row its own 40px-fixed-height budget actually holds.
-     `e2e/screenshots.spec.ts` measures and pins the real count. */
+     now takes every row its own 40px-fixed-height budget actually holds:
+     612px of scroller, 15 rows at 40 = 600, 12px of margin.
+     `e2e/screenshots.spec.ts` measures and pins both the budget and the
+     count. */
   gap: 0;
 }
 
 /* FIXED HEIGHT, BOTH ORIENTATIONS (revision §4's own table; landscape
    steps it to 32px below — JAMES RULING 2026-08-12, superseding the
-   packet's 36px: the measured 232px scroller cannot hold 8 rows at 36px,
-   and 7 at 32px is what the budget holds). `box-sizing: border-box` is
+   packet's 36px: no measured build of this frame has held 8 rows at 36px,
+   which is 288px, and 32 is what does hold the packet's count). `box-sizing:
+   border-box` is
    what makes "fixed height" true of the ACTIVE row too, whose two ink
    rules (`border-top` + `border-bottom`) would otherwise add 1px beyond
    every other row's single `border-bottom`. */
@@ -6060,11 +6090,14 @@ section:not(.news-pinned) .news-row:last-of-type {
 /* THE ONE SANCTIONED ACCENT ON THE WHOLE CONNECTED SURFACE (handoff §3:
    the active interval's countdown "is accent (a duration — legal)").
    Accent's four meanings include a duration the app is counting, and this
-   cell is exactly that. It is the ONLY `var(--accent)` declaration in the
-   three panes — the footer's paused `END` outline is the surface's other
-   one and belongs to the shell, not a pane — and `ConnectedSurface.test
-   .tsx`'s census derives that set from THIS FILE rather than trusting this
-   comment. Task 5 dropped the old enlarged size (22px/26px): the revision's
+   cell is exactly that. It is the ONLY `var(--accent)` declaration inside a
+   PANE. The surface's other three all belong to the shell, not to a pane:
+   `.connected-end` (the header control, connected-revamp Task 6),
+   `.connected-paused-end` and `.connected-paused-end-armed` (the paused
+   overlay's own `END`, handoff §4). `PaneGrid.test.tsx`'s census derives
+   that set from THIS FILE rather than trusting this comment.
+
+   Task 5 dropped the old enlarged size (22px/26px): the revision's
    own mockup draws the countdown at the SAME `--size-row` as every other
    value, tinted, not enlarged — the density this task exists for has no
    room for a bigger digit. */
@@ -6075,6 +6108,9 @@ section:not(.news-pinned) .news-row:last-of-type {
 /* Pinned under the scroller: the distance rule, in words, never a glyph. */
 .connected-grid-caption {
   flex: none;
+  /* Explicit, for the reason `.connected-grid-headline` above sets out at
+     length: 13px, the 10px mono line box, both orientations. */
+  height: 13px;
   /* A `<p>` carries the UA stylesheet's own `1em` block margin — 10px at
      THIS element's font-size, both sides — which a tight scroller budget
      cannot spare (measured: worth a full row's height at the landscape
@@ -6266,32 +6302,53 @@ section:not(.news-pinned) .news-row:last-of-type {
   border-color: var(--ink-2);
 }
 
-/* --- The footer: the paused block, alone in End's old slot ---------- */
+/* --- The footer: a zero-cost anchor for the paused overlay ---------- */
 
-/* The 52px lives HERE, on the slot, not on the one occupant it now has —
-   which is what makes handoff §4's "Same height, so nothing above shifts"
-   structural rather than a number maintained by hand. Reserved
-   UNCONDITIONALLY (empty while rowing, `PausedBlock` while paused): the
-   wrapper's own contribution to the pane body's available height is
-   therefore identical in both states, exactly as it was before End moved
-   out of it. */
+/* JAMES RULING 2026-08-12 (task-6 fix round): THIS SLOT RESERVES NOTHING.
+   It used to hold 52px + a 4px margin open unconditionally so that the
+   paused block could drop into it without moving anything — but the erg is
+   rowing for essentially the whole session, and for all of that time the
+   reservation was 56px of blank page between the pane and the pager
+   (visible as dead space in the committed `connected-pane-grid-long.png`
+   before this round). The task-6 review measured what it was costing: a
+   full grid row in each orientation.
+
+   `height: 0` plus `position: relative` turns it into a pure anchor, and
+   `.connected-paused` below is `position: absolute; bottom: 0`, so the
+   block paints UPWARD from this element's own baseline — the bottom edge of
+   the pane in portrait, the bottom edge of the content column in landscape
+   — without ever entering the flow. Handoff §4's "Same height, so nothing
+   above shifts" is now structurally unbreakable rather than arithmetically
+   maintained: there is no height, in either state, so there is nothing to
+   change. What it costs instead is OCCLUSION — while paused, the ink band
+   covers the bottom 52px of whatever the pane is showing (the grid's
+   caption and its last row and a bit; the live pane's TOTAL LEFT bar).
+   That is the trade the ruling names, and it is a state the rower is in
+   only while stopped. `margin-bottom` is gone with the height for the same
+   reason: a gap before the pager only exists when there is something on
+   both sides of it. */
 .connected-surface-footer {
   flex: none;
-  height: 52px;
+  height: 0;
   display: flex;
-  /* Portrait's own share of `.connected-surface`'s margin-based gap
-     scheme (see that rule's comment) — the gap before the pager,
-     unconditional like the header's own. */
-  margin-bottom: 4px;
+  position: relative;
 }
 
 /* INVERTED, deliberately (2026-08-08, hardware walk 2: the operator missed
    the sunken-grey version entirely). Ink field, paper text: the loudest
    signal the surface's own vocabulary allows without touching accent, and
-   the geometry is unchanged — same 52px, same slot, nothing above
-   shifts. */
+   the geometry is unchanged — same 52px, same slot, nothing above shifts.
+
+   OUT OF FLOW as of the task-6 fix round (see the footer above): `absolute`
+   against the zero-height anchor, stretched across it and hanging its own
+   52px upward from `bottom: 0`. The height is still 52 and it still lands
+   in exactly the same place on screen; what changed is that the pane no
+   longer pays for the slot while the erg is rowing. */
 .connected-paused {
-  flex: 1;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
   height: 52px;
   display: flex;
   align-items: center;
@@ -6622,9 +6679,23 @@ section:not(.news-pinned) .news-row:last-of-type {
      general rule above no longer is, so it restores exactly what `.screen`
      itself would have given it: the app-wide max-width, the auto-centering
      margin and the fixed 20px/6px padding on top of the safe-area insets.
-     Higher specificity than `.connected-surface` alone wins these back. */
+     Higher specificity than `.connected-surface` alone wins these back.
+
+     `row-gap`, RESTORED (task-6 fix round — found chasing a 3px drift in
+     `connected-ended-landscape.png` that this round's own diff could not
+     explain, and it answers the task-6 review's open "cannot verify:
+     whether the header's new grid row disturbs the ended frame"). It did:
+     `.connected-surface-ended`'s own `gap: 10px` (`:6197`) used to be the
+     last word for this element, but Task 6 added `row-gap: 0` to the
+     LANDSCAPE `.connected-surface` rule above — same specificity, declared
+     later in the file, so it won the row axis and the three lines of the
+     hand-off went flush in landscape only (portrait's base
+     `.connected-surface` is declared BEFORE `-ended`, so it kept its 10).
+     Re-declared here, where the 0,2,0 selector settles it in both
+     directions rather than relying on source order. */
   .connected-surface.connected-surface-ended {
     display: flex;
+    row-gap: 10px;
     max-width: 480px;
     margin: 0 auto;
     padding: calc(6px + env(safe-area-inset-top, 0px))
@@ -6651,14 +6722,14 @@ section:not(.news-pinned) .news-row:last-of-type {
     margin-bottom: 2px;
   }
 
+  /* Row 4 collapses to nothing, exactly as in portrait — the base rule's
+     `height: 0`/`position: relative` carry over and the paused overlay
+     hangs upward from the bottom of the content column. Nothing to place
+     here beyond the track coordinates; the base rule no longer has a
+     margin for this one to cancel. */
   .connected-surface-footer {
     grid-column: 2;
     grid-row: 4;
-    /* Cancels the base (portrait) rule's own margin-based gap (see
-       `.connected-surface`'s comment) — landscape's pager is a separate
-       GRID COLUMN, not a row below the footer, so there is no boundary
-       here for a margin to separate. */
-    margin-bottom: 0;
   }
 
   /* THE GUTTER (revision §2/§6): a 44px column at the PHYSICAL edge — column
@@ -7063,6 +7134,9 @@ section:not(.news-pinned) .news-row:last-of-type {
      child) would otherwise compete with `.connected-grid-interval` for the
      growing space; only the interval caption may grow here. */
   .connected-grid-headline {
+    /* One line, so one 14px line box — the base rule's 28 is two of them
+       stacked. Same pinning rationale; see that rule's comment. */
+    height: 14px;
     flex-direction: row;
     align-items: center;
     gap: 9px;
@@ -7082,10 +7156,12 @@ section:not(.news-pinned) .news-row:last-of-type {
     gap: 10px;
   }
 
-  /* 32px, not the packet's 36 (JAMES RULING 2026-08-12): the measured
-     landscape scroller is 239px, 8 rows at 36px is 288px and does not fit
-     it, and 7 at 32px (224px) is what the budget holds — DEVIATIONS row
-     owed (Task 8). */
+  /* 32px, not the packet's 36 (JAMES RULING 2026-08-12): 8 rows at 36px is
+     288px, more than any measured build of this frame has ever offered,
+     and 32 is what fits the packet's count into the 276px this scroller
+     actually has (256, with 20 to spare) — DEVIATIONS row owed (Task 8) for
+     the ROW HEIGHT, no longer for the count, which is back at the packet's
+     8 since the task-6 fix round reclaimed the empty footer. */
   .connected-grid-row {
     height: 32px;
   }

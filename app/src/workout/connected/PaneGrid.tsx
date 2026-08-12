@@ -45,8 +45,9 @@
 // THE ONE SCROLL ON THIS SURFACE (DEVIATIONS row 2, handoff §3: "pane C is
 // the single exception to the no-scroll rule, and it is contained"). The
 // header row and the caption are pinned by being flex-none siblings of the
-// scroller; End is pinned because it belongs to the shell's footer, outside
-// this pane entirely. Only `.connected-grid-rows` scrolls, and the active
+// scroller; End is pinned because it belongs to the shell's HEADER, above
+// this pane entirely (connected-revamp Task 6's safety fix moved it there
+// out of the footer). Only `.connected-grid-rows` scrolls, and the active
 // row is scrolled into view whenever the machine moves on.
 //
 // TAB ORDER (task-6 review's L4 trap, and the task-7 review's M3 — this
@@ -71,9 +72,12 @@
 // that rendered it), and this pane declares NO `order` anywhere. Its DOM
 // sequence IS its
 // reading sequence in both orientations, so the scroller is tabbed to
-// exactly where it is seen — above End, which sits below the grid in the
-// shell's footer. Pinned in jsdom AND in a real browser; see the task-7
-// report for why the DOM was NOT reordered to put End first.
+// exactly where it is seen — BELOW End, which sits above the grid in the
+// shell's header (connected-revamp Task 6; the tab order pinned in
+// `PaneGrid.test.tsx` and `e2e/screenshots.spec.ts` is End first, then this
+// scroller, then the two pager targets). Pinned in jsdom AND in a real
+// browser; the DOM did not need reordering for that to be the reading
+// order — moving End is what put the two in agreement.
 
 import { useEffect, useRef } from "react";
 import ConnectionLine from "./ConnectionLine";

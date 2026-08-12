@@ -374,7 +374,7 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
     // Connected-revamp Task 6: the "then" phase (the rest that follows the
     // named work phase) now rides along on the SAME value, duration and
     // all — `phaseAnnouncement`'s own extension.
-    expect(upNextFullText()).toBe("WORK · 2:12.0 · then REST 5:00");
+    expect(upNextFullText()).toBe("WORK 2:12.0 · then REST 5:00");
     expect(screen.queryByText("—")).not.toBeInTheDocument();
   });
 
@@ -394,13 +394,15 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
     expect(screen.getByText("spm")).toBeInTheDocument();
     // Fix round (whole-branch review, F4): a rest phase's own resolved
     // `label` is literally "Rest" (domain/expand.ts), which used to render
-    // as the redundant "REST · Rest" here — deduped to the kind word alone
+    // as the redundant "REST Rest" here — deduped to the kind word alone
     // now that it collides with `phaseKindWord`. Connected-revamp Task 6:
     // the collapsed word gains its own duration ("REST 5:00", the rest
-    // phase's own `phaseSeconds`), and the phase AFTER it ("WORK · 1:40.0")
-    // rides along on the same value behind " · then ".
-    expect(upNextFullText()).toBe("REST 5:00 · then WORK · 1:40.0");
-    expect(screen.queryByText("REST · Rest")).not.toBeInTheDocument();
+    // phase's own `phaseSeconds`), and the phase AFTER it ("WORK 1:40.0")
+    // rides along on the same value behind " · then ". The kind and its
+    // target are separated by a SPACE, not a second "·" (task-6 fix round,
+    // review M2 — revision §3 draws the dot between the two phases only).
+    expect(upNextFullText()).toBe("REST 5:00 · then WORK 1:40.0");
+    expect(screen.queryByText("REST Rest")).not.toBeInTheDocument();
     expect(screen.queryByText("—")).not.toBeInTheDocument();
   });
 
@@ -439,8 +441,8 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
     expect(screen.getByText("Rest")).toBeInTheDocument();
     expect(screen.getByText("free")).toBeInTheDocument();
     // Ui-fix round, Item 1: UP NEXT is exact now, never a "lo–hi" band.
-    // The phase after next ("WORK · ALL OUT") rides along too.
-    expect(upNextFullText()).toBe("WORK · 1:40.0 · then WORK · ALL OUT");
+    // The phase after next ("WORK ALL OUT") rides along too.
+    expect(upNextFullText()).toBe("WORK 1:40.0 · then WORK ALL OUT");
     expect(screen.queryByText("—")).not.toBeInTheDocument();
   });
 
@@ -460,7 +462,7 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
     // The phase after next is past the run's own last phase, so the "then"
     // half reads the hardcoded "FINISH" (never `phaseAnnouncement`'s own
     // dedupe/duration logic — `thenNextTextAt`'s own contract).
-    expect(upNextFullText()).toBe("WORK · ALL OUT · then FINISH");
+    expect(upNextFullText()).toBe("WORK ALL OUT · then FINISH");
     // Fix round (spec review F1/F2): distance mode keeps ◀/Pause — only the
     // rightmost control becomes NEXT → instead of ▶.
     expect(screen.getByRole("button", { name: "NEXT →" })).toBeInTheDocument();
@@ -514,8 +516,8 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
       // elsewhere in this file, applied here via the shared
       // `phaseAnnouncement` helper — plus its Task 6 extension: the
       // collapsed "REST" carries its own duration now.
-      expect(upNextFullText()).toBe("WORK · 2:12.0 · then REST 5:00");
-      expect(upNextFullText()).not.toContain("then REST · Rest");
+      expect(upNextFullText()).toBe("WORK 2:12.0 · then REST 5:00");
+      expect(upNextFullText()).not.toContain("then REST Rest");
       const then = document.querySelector(".timer-upnext-then")!;
       expect(then.textContent).toBe("then ");
     });
@@ -526,7 +528,7 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
       runAtIndex(run, 3); // next=effort work (the last phase), afterNext=none
       await renderTimer();
 
-      expect(upNextFullText()).toBe("WORK · ALL OUT · then FINISH");
+      expect(upNextFullText()).toBe("WORK ALL OUT · then FINISH");
       const then = document.querySelector(".timer-upnext-then")!;
       expect(then.textContent).toBe("then ");
     });
@@ -702,11 +704,11 @@ describe("Timer — legacy pre-ref run (Q3, fix round 1)", () => {
     await renderTimer();
 
     expect(screen.getByText("STEP 1 OF 5 · WARM-UP")).toBeInTheDocument();
-    // The OLD band string, byte-for-byte, not "WORK · 2:12.0" — this run's
+    // The OLD band string, byte-for-byte, not "WORK 2:12.0" — this run's
     // frozen label is never recomputed against the current domain code.
     // The phase after it (phase 2, untouched by this fixture's legacy
     // reshape) still gets Task 6's own duration-carrying "then REST 5:00".
-    expect(upNextFullText()).toBe("WORK · 2:11.0–2:13.0 · then REST 5:00");
+    expect(upNextFullText()).toBe("WORK 2:11.0–2:13.0 · then REST 5:00");
   });
 
   it("renders the legacy phase itself without crashing: a two-line TARGET SPLIT card (main value from targetSplit, no ref sub-line)", async () => {

@@ -330,37 +330,32 @@ export default function ConnectedSurface({
           real swipe gesture crosses. Rendered UNCONDITIONALLY — paused or
           not — so its own row never changes height and nothing below it
           (the pane body) ever shifts; the paused block gets its own,
-          additional END/AGAIN affordance in the footer slot End vacated
-          (below), off the SAME armed state, but this header control keeps
-          working too. Staging is unchanged: first tap arms `TAP AGAIN` for
+          additional END/AGAIN affordance in the slot End vacated (below),
+          off the SAME armed state, but this header control keeps working
+          too. Staging is unchanged: first tap arms `TAP AGAIN` for
           `ARM_TIMEOUT_MS`, exactly as before — the size and position
-          changed, not the confirm. */}
-      {/* THE SAFETY FIX (connected-revamp Task 6, James 2026-08-12 reading
-          the captures): the old full-width footer button "could easily be
-          touched accidentally if somebody tries to change views mid-row" —
-          every point along the bottom edge WAS End's hit box, so a short
-          stumble that never travels the 60px swipe threshold landed as a
-          tap on it. End now lives in this small header instead: a 44pt
-          outlined control (revision §2) that does not span the surface's
-          width and sits at the TOP edge, clear of the vertical middle a
-          real swipe gesture crosses. Rendered UNCONDITIONALLY — paused or
-          not — so its own row never changes height and nothing below it
-          (the pane body) ever shifts; the paused block gets its own,
-          additional END/AGAIN affordance in the footer slot End vacated
-          (below), off the SAME armed state, but this header control keeps
-          working too. Staging is unchanged: first tap arms `TAP AGAIN` for
-          `ARM_TIMEOUT_MS`, exactly as before — the size and position
-          changed, not the confirm. */}
+          changed, not the confirm.
+
+          THE LABEL IS THE MOCKUP'S (`Ergomatic connected mode.dc.html`
+          :297/:379/:510/:559 — `END`, and `TAP AGAIN` armed, revision §2's
+          own staging wording), not the old bar's sentence. It is why the
+          box measures ~50px instead of the 109px the sentence cost, on the
+          one control this task exists to shrink. The ACCESSIBLE name keeps
+          the sentence (`aria-label`): a dozen selectors across unit and e2e
+          key on "End session", the visible word alone would collide with
+          the paused block's own `END`, and "END" is a prefix of "End
+          session" so WCAG 2.5.3's label-in-name still holds. */}
       <div className="connected-header">
         <button
           type="button"
           className={
             end.armed ? "connected-end connected-end-armed" : "connected-end"
           }
+          aria-label={end.armed ? "Tap again to end" : "End session"}
           onClick={handleEnd}
           onBlur={end.disarm}
         >
-          {end.armed ? "Tap again to end" : "End session"}
+          {end.armed ? "TAP AGAIN" : "END"}
         </button>
       </div>
       {model.stale && <LostBanner />}
@@ -368,14 +363,22 @@ export default function ConnectedSurface({
         {pane === "live" && <PaneLive model={model} />}
         {pane === "grid" && <PaneGrid model={model} />}
       </div>
-      {/* End's old footer slot survives (handoff §4: "Same height, so
-          nothing above shifts") — the paused block now occupies it alone.
-          The wrapper still reserves the fixed 52px UNCONDITIONALLY (empty
-          while rowing), which is what keeps the pane body's own available
-          height — and therefore the metric row's position inside it —
-          byte-identical to before Task 6 moved End out: the footer's
-          contribution to that arithmetic never changed, only which single
-          control used to live in it. */}
+      {/* End's old footer slot survives as the paused block's home (handoff
+          §4: "Same height, so nothing above shifts"), but it no longer
+          RESERVES anything — JAMES RULING 2026-08-12, fix round: the 52px
+          this wrapper used to hold open stood empty for the whole session
+          and the rower only ever saw it as dead space between the pane and
+          the pager. It is now a zero-height anchor (`index.css`'s
+          `.connected-surface-footer { height: 0; position: relative }`) and
+          the paused block is absolutely positioned out of flow inside it,
+          painting UP from the pane's bottom edge when the erg stops. Both
+          halves of handoff §4's promise still hold, and more literally than
+          the reserved-slot version did: nothing above shifts (the block
+          costs the layout nothing in EITHER state, so there is no height to
+          change), and the space the reservation was spending goes back to
+          the pane — a whole extra grid row in each orientation. What the
+          rower sees while paused is the ink band OVER the bottom 52px of
+          the pane, not the pane rearranging itself underneath it. */}
       <div className="connected-surface-footer">
         {model.status === "paused" && (
           <PausedBlock armed={end.armed} onEnd={handleEnd} />
@@ -418,9 +421,11 @@ function LostBanner() {
 /** Handoff §4's paused treatment. CONNECTED-REVAMP TASK 6: this used to
  *  take End's OWN 52px slot (the two were mutually exclusive occupants of
  *  one footer); End now lives in the header instead (always on screen,
- *  never hidden by pause), and this block occupies that same 52px footer
- *  slot ALONE — the phone owns no Pause, so there is no transport row to
- *  hide, and nothing above may shift when the rower stops pulling. `END`
+ *  never hidden by pause), and this block owns that slot ALONE — as an
+ *  OVERLAY, out of flow, so the slot costs nothing while rowing (see the
+ *  footer's own comment above). The phone owns no Pause, so there is no
+ *  transport row to hide, and nothing above may shift when the rower stops
+ *  pulling — nothing MOVES at all now, in either direction. `END`
  *  stays inside it, 64×44 and accent-outlined, so ending is still possible
  *  without reaching for the header, and it is "staged as everywhere else"
  *  (§5's own caption) off the SAME arm state the header's End control uses
