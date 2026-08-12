@@ -249,9 +249,11 @@ describe("Library", () => {
       expect(toggle).toHaveAttribute("aria-expanded", "true");
       expect(screen.getByRole("dialog", { name: "Filter" })).toBeVisible();
 
+      // PAIN 3, not TYPE — TYPE left the sheet this round; w-at is the
+      // fixture's only pain-3 workout, so this still narrows to exactly 1.
       await userEvent.click(
         within(screen.getByRole("dialog")).getByRole("button", {
-          name: "AT",
+          name: "3",
         }),
       );
       expect(
@@ -270,9 +272,10 @@ describe("Library", () => {
       await renderLibrary();
 
       await openSheet();
+      // PAIN 3, not TYPE — TYPE left the sheet this round.
       await userEvent.click(
         within(screen.getByRole("dialog")).getByRole("button", {
-          name: "AT",
+          name: "3",
         }),
       );
       // The backdrop is the dialog's own parent; clicking it (not the panel)
@@ -295,9 +298,10 @@ describe("Library", () => {
       await renderLibrary();
 
       await openSheet();
+      // PAIN 3, not TYPE — TYPE left the sheet this round.
       await userEvent.click(
         within(screen.getByRole("dialog")).getByRole("button", {
-          name: "AT",
+          name: "3",
         }),
       );
       await userEvent.keyboard("{Escape}");
@@ -330,15 +334,16 @@ describe("Library", () => {
 
       await openSheet();
       const dialog = () => screen.getByRole("dialog");
+      // PAIN 3, not TYPE — TYPE left the sheet this round.
       await userEvent.click(
-        within(dialog()).getByRole("button", { name: "AT" }),
+        within(dialog()).getByRole("button", { name: "3" }),
       );
       // Dismiss without applying.
       await userEvent.keyboard("{Escape}");
 
       await openSheet();
       expect(
-        within(dialog()).getByRole("button", { name: "AT" }),
+        within(dialog()).getByRole("button", { name: "3" }),
       ).toHaveAttribute("aria-pressed", "false");
     });
 
@@ -348,8 +353,9 @@ describe("Library", () => {
 
       await openSheet();
       const dialog = () => screen.getByRole("dialog");
+      // PAIN 3, not TYPE — TYPE left the sheet this round.
       await userEvent.click(
-        within(dialog()).getByRole("button", { name: "AT" }),
+        within(dialog()).getByRole("button", { name: "3" }),
       );
       expect(
         screen.getByRole("button", { name: "Show 1 workout" }),
@@ -361,7 +367,7 @@ describe("Library", () => {
 
       expect(dialog()).toBeVisible();
       expect(
-        within(dialog()).getByRole("button", { name: "AT" }),
+        within(dialog()).getByRole("button", { name: "3" }),
       ).toHaveAttribute("aria-pressed", "false");
       expect(
         screen.getByRole("button", { name: "Show 3 workouts" }),
@@ -374,40 +380,20 @@ describe("Library", () => {
 
       await openSheet();
       const dialog = () => screen.getByRole("dialog");
-      // AT's only workout is a 30-minute step, which buckets as 30-45 —
-      // <30′ combined with AT matches nothing.
+      // PAIN 1 (only w-o2) and 60′+ (only w-an, its 60-minute step buckets
+      // as 60+) share no workout — TYPE, which used to drive this test via
+      // AT + <30′, left the sheet this round.
       await userEvent.click(
-        within(dialog()).getByRole("button", { name: "AT" }),
+        within(dialog()).getByRole("button", { name: "1" }),
       );
       await userEvent.click(
-        within(dialog()).getByRole("button", { name: "<30′" }),
+        within(dialog()).getByRole("button", { name: "60′+" }),
       );
 
       const primary = screen.getByRole("button", {
         name: "No workouts match",
       });
       expect(primary).toBeDisabled();
-    });
-
-    it("toggling the same TYPE cell twice in one sheet session clears it (single-select, toggles off)", async () => {
-      mockReady();
-      await renderLibrary();
-
-      await openSheet();
-      const dialog = () => screen.getByRole("dialog");
-      const atCell = within(dialog()).getByRole("button", {
-        name: "AT",
-      });
-      await userEvent.click(atCell);
-      await userEvent.click(atCell);
-      await applySheet();
-
-      expect(visibleHrefs()).toStrictEqual([
-        "/library/w-at",
-        "/library/w-o2",
-        "/library/w-an",
-      ]);
-      expect(screen.getByText("3 WORKOUTS")).toBeInTheDocument();
     });
 
     it("narrows to NOT-RECENT rows via LAST DONE 21D+, counting never-done as 21D+", async () => {
@@ -434,17 +420,19 @@ describe("Library", () => {
 
       await openSheet();
       const dialog = () => screen.getByRole("dialog");
-      // AT + PAIN 3 both match w-at (fixture: type AT, pain 3) — two groups
-      // active together, still exactly one result.
+      // 30–45′ + PAIN 3 both match w-at (fixture: a 30-minute step buckets
+      // as 30-45, pain 3) — two groups active together, still exactly one
+      // result. TYPE, which used to be the first of the pair, left the
+      // sheet this round.
       await userEvent.click(
-        within(dialog()).getByRole("button", { name: "AT" }),
+        within(dialog()).getByRole("button", { name: "30–45′" }),
       );
       await userEvent.click(
         within(dialog()).getByRole("button", { name: "3" }),
       );
       await applySheet();
 
-      expect(tokenLabel("AT")).toBeInTheDocument();
+      expect(screen.getByText("30–45′")).toBeInTheDocument();
       expect(screen.getByText("PAIN 3")).toBeInTheDocument();
       expect(screen.getByText("1 OF 3 SHOWN")).toBeInTheDocument();
 
@@ -463,15 +451,16 @@ describe("Library", () => {
       mockReady();
       await renderLibrary();
 
-      // Applied in two sheet visits (AT alone, then AT+PAIN 3 together) —
-      // w-at is the fixture's only AT *and* only pain-3 workout, so
+      // Applied in two sheet visits (30–45′ alone, then +PAIN 3) — w-at is
+      // the fixture's only 30-45-bucket *and* only pain-3 workout, so
       // selecting both in one draft would still resolve to exactly it, but
       // going through two visits proves the SECOND apply doesn't clobber
-      // the first group, only adds to it.
+      // the first group, only adds to it. TYPE, which used to be the
+      // first-applied group here, left the sheet this round.
       await openSheet();
       await userEvent.click(
         within(screen.getByRole("dialog")).getByRole("button", {
-          name: "AT",
+          name: "30–45′",
         }),
       );
       await applySheet();
@@ -484,17 +473,15 @@ describe("Library", () => {
       );
       await applySheet();
 
-      expect(tokenLabel("AT")).toBeInTheDocument();
+      expect(screen.getByText("30–45′")).toBeInTheDocument();
       expect(screen.getByText("PAIN 3")).toBeInTheDocument();
       expect(screen.getByText("1 OF 3 SHOWN")).toBeInTheDocument();
 
       await userEvent.click(
-        screen.getByRole("button", { name: "Remove AT filter" }),
+        screen.getByRole("button", { name: "Remove 30–45′ filter" }),
       );
 
-      expect(
-        screen.queryByText("AT", { selector: ".filter-token-label" }),
-      ).not.toBeInTheDocument();
+      expect(screen.queryByText("30–45′")).not.toBeInTheDocument();
       expect(screen.getByText("PAIN 3")).toBeInTheDocument();
       expect(screen.getByText("1 OF 3 SHOWN")).toBeInTheDocument();
       expect(visibleHrefs()).toStrictEqual(["/library/w-at"]);
@@ -510,7 +497,8 @@ describe("Library", () => {
     sessionStorage.setItem(
       "ergomatic.libraryFilters",
       JSON.stringify({
-        type: "AT",
+        types: ["AT"],
+        difficulties: [],
         durations: ["<30"],
         painLevels: [],
         lastDone: null,
@@ -650,7 +638,8 @@ describe("Library", () => {
       sessionStorage.setItem(
         "ergomatic.libraryFilters",
         JSON.stringify({
-          type: null,
+          types: [],
+          difficulties: [],
           durations: [],
           painLevels: [],
           lastDone: null,
@@ -703,7 +692,8 @@ describe("Library", () => {
       sessionStorage.setItem(
         "ergomatic.libraryFilters",
         JSON.stringify({
-          type: null,
+          types: [],
+          difficulties: [],
           durations: [],
           painLevels: [],
           lastDone: null,
@@ -781,10 +771,12 @@ describe("Library", () => {
       expect(await screen.findByRole("list")).toBeInTheDocument();
       expect(scrollToSpy).toHaveBeenCalledTimes(1);
 
+      // PAIN 3, not TYPE — TYPE left the sheet this round; any filter
+      // change proves the point (a second scrollTo does NOT fire).
       await openSheet();
       await userEvent.click(
         within(screen.getByRole("dialog")).getByRole("button", {
-          name: "AT",
+          name: "3",
         }),
       );
       await applySheet();
@@ -935,7 +927,8 @@ describe("Library", () => {
       sessionStorage.setItem(
         "ergomatic.libraryFilters",
         JSON.stringify({
-          type: "AT",
+          types: ["AT"],
+          difficulties: [],
           durations: [],
           painLevels: [],
           lastDone: null,
@@ -961,7 +954,8 @@ describe("Library", () => {
       sessionStorage.setItem(
         "ergomatic.libraryFilters",
         JSON.stringify({
-          type: "AT",
+          types: ["AT"],
+          difficulties: [],
           durations: [],
           painLevels: [],
           lastDone: null,
@@ -986,20 +980,15 @@ describe("Library", () => {
     });
 
     it("persists every filter change to sessionStorage as it happens", async () => {
+      // TYPE left the sheet this round (library-filter-unification, Task 1
+      // pulled forward) — this test used to drive its first filter change
+      // through the sheet's own TYPE cell, which no longer exists there.
+      // PAIN and SOURCE are still sheet groups, so they carry the same
+      // "every change persists" point without pretending type filtering
+      // works via a control this branch doesn't have.
       mockReady();
       await renderLibrary();
       await screen.findByRole("list");
-
-      await openSheet();
-      await userEvent.click(
-        within(screen.getByRole("dialog")).getByRole("button", {
-          name: "AT",
-        }),
-      );
-      await applySheet();
-      expect(
-        JSON.parse(sessionStorage.getItem("ergomatic.libraryFilters")!),
-      ).toMatchObject({ type: "AT" });
 
       await openSheet();
       await userEvent.click(
@@ -1010,14 +999,30 @@ describe("Library", () => {
       await applySheet();
       expect(
         JSON.parse(sessionStorage.getItem("ergomatic.libraryFilters")!),
-      ).toMatchObject({ type: "AT", painLevels: [3] });
+      ).toMatchObject({ painLevels: [3] });
+
+      // GLOBAL, not CUSTOM: every WORKOUTS fixture row is isGlobal:true, so
+      // adding SOURCE=global on top of the PAIN 3 filter still matches
+      // w-at (proving the change persisted alongside the first, rather
+      // than replacing it) instead of narrowing to zero and disabling the
+      // sheet's own primary.
+      await openSheet();
+      await userEvent.click(
+        within(screen.getByRole("dialog")).getByRole("button", {
+          name: "GLOBAL",
+        }),
+      );
+      await applySheet();
+      expect(
+        JSON.parse(sessionStorage.getItem("ergomatic.libraryFilters")!),
+      ).toMatchObject({ painLevels: [3], source: "global" });
 
       // CLEAR ALL empties the persisted set too — a BACK after clearing
       // must not resurrect the cleared filters.
       await userEvent.click(screen.getByRole("button", { name: "CLEAR ALL" }));
       expect(
         JSON.parse(sessionStorage.getItem("ergomatic.libraryFilters")!),
-      ).toMatchObject({ type: null, painLevels: [] });
+      ).toMatchObject({ painLevels: [], source: null });
     });
 
     it("ignores a malformed stored value and mounts unfiltered", async () => {

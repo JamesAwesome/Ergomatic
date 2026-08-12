@@ -1,5 +1,4 @@
 import { useRef } from "react";
-import type { WorkoutType } from "../../domain/types.js";
 import type { DurationBucket } from "../../domain/duration.js";
 import { CellGrid } from "../components/CellGrid";
 import { SheetShell } from "../components/SheetShell";
@@ -11,40 +10,10 @@ import {
   setSource,
   toggleDuration,
   togglePainLevel,
-  toggleType,
   type Filters,
 } from "./filters";
 
-// Chip order per docs/design/README.md §Screens → "2. Library" (amended
-// 2026-08-08: James's ordering decision — every left-to-right type row reads
-// O2 · AT · TR · AN app-wide, the pyramid's base-first order, superseding
-// this sheet's earlier AN-first order carried over from the retired
-// FilterChips.tsx).
-const TYPE_CHIPS: { type: WorkoutType; label: string }[] = [
-  { type: "O2", label: "O2" },
-  { type: "AT", label: "AT" },
-  { type: "TR", label: "TR" },
-  { type: "AN", label: "AN" },
-];
-
 const PAIN_LEVELS = [1, 2, 3, 4, 5];
-
-// CSS custom property per workout type — never a raw hex (tokens.css). Kept
-// local rather than shared with TypeBadge.tsx/Today.tsx/ClassificationCard.tsx's
-// own identical maps: this repo's established per-file duplication
-// convention (TypeBadge.tsx's own comment names the precedent).
-const TYPE_COLOR_VAR: Record<WorkoutType, string> = {
-  O2: "--type-o2",
-  AT: "--type-at",
-  AN: "--type-an",
-  TR: "--type-tr",
-};
-
-function typeCellStyle(active: boolean, type: WorkoutType) {
-  if (!active) return undefined;
-  const v = `var(${TYPE_COLOR_VAR[type]})`;
-  return { background: v, borderColor: v, color: "var(--on-color)" };
-}
 
 // The one h2 in this sheet — SheetShell points its own `aria-labelledby` at
 // this id rather than taking the title text itself, so it stays completely
@@ -54,11 +23,19 @@ const TITLE_ID = "filter-sheet-title";
 /**
  * The FILTER sheet (Task 4, ui-fix round — DESIGN.md's "Library, second
  * pass"): slides up over the list (not a route — Library.tsx never pushes
- * history for it), holding all five filter groups plus a live-counting L1
+ * history for it), holding four filter groups plus a live-counting L1
  * button. Operates entirely on a DRAFT copy of Filters that the caller owns
  * (`draft`/`onChangeDraft`) — nothing here writes to the list's actually-
  * applied filters directly. `onApply` commits the draft (Library.tsx's own
  * "Show N workouts" handler); `onDismiss` (backdrop tap) discards it.
+ *
+ * TYPE left this sheet entirely (library-filter-unification round, Task 1,
+ * pulled forward from Task 2's own item so the branch keeps compiling
+ * across the task boundary — spec §2: "The TYPE group leaves `FilterSheet`
+ * entirely"). Its chip row above the list, and DIFFICULTY joining this
+ * sheet in TYPE's old slot, are Task 2's own work — until that lands, this
+ * branch has no UI path to filter by type at all (the predicate in
+ * `filters.ts` already supports it; nothing here surfaces it).
  *
  * BACK-with-sheet-open decision (task-4-brief's own ask): this component has
  * no route and pushes no history entry, so leaving Library by ANY means
@@ -74,7 +51,7 @@ const TITLE_ID = "filter-sheet-title";
  * The dialog machinery itself (backdrop, `role="dialog"`, the focus
  * trap/restore) lives in SheetShell now (extracted for Today's own
  * collapsible filter sheet, task-1 of the 2026-08-04 round) — this
- * component supplies only the five filter groups and the resultCount-driven
+ * component supplies only the filter groups and the resultCount-driven
  * primary button, via SheetShell's `children`/`primary` props.
  */
 export default function FilterSheet({
@@ -125,22 +102,6 @@ export default function FilterSheet({
           CLEAR
         </button>
       </div>
-
-      <CellGrid
-        label="TYPE"
-        cells={TYPE_CHIPS.map(({ type, label }) => {
-          const active = draft.type === type;
-          return {
-            value: type,
-            label,
-            pressed: active,
-            style: typeCellStyle(active, type),
-          };
-        })}
-        onToggle={(value) =>
-          onChangeDraft(toggleType(draft, value as WorkoutType))
-        }
-      />
 
       <CellGrid
         label="TIME"

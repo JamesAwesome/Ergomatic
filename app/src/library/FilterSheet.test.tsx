@@ -29,16 +29,11 @@ function renderSheet(
 }
 
 describe("FilterSheet", () => {
-  it("renders as a labelled dialog holding all five groups", () => {
+  it("renders as a labelled dialog holding all four groups", () => {
     renderSheet();
     const dialog = screen.getByRole("dialog", { name: "Filter" });
-    for (const label of ["TYPE", "TIME", "PAIN", "LAST DONE", "SOURCE"]) {
+    for (const label of ["TIME", "PAIN", "LAST DONE", "SOURCE"]) {
       expect(within(dialog).getByText(label)).toBeInTheDocument();
-    }
-    for (const type of ["O2", "AT", "TR", "AN"]) {
-      expect(
-        within(dialog).getByRole("button", { name: type }),
-      ).toBeInTheDocument();
     }
     for (const bucket of ["<30′", "30–45′", "45–60′", "60′+"]) {
       expect(
@@ -64,24 +59,27 @@ describe("FilterSheet", () => {
     ).toBeInTheDocument();
   });
 
-  // James's 2026-08-08 ordering decision: every left-to-right type row reads
-  // O2 · AT · TR · AN app-wide (the pyramid's base-first order), not the
-  // AN-first order this sheet used before. Real DOM order, not just
-  // presence — a naive existence-only loop over the four labels can't tell
-  // this apart from the old order.
-  it("renders the TYPE cells left-to-right as O2, AT, TR, AN", () => {
+  // library-filter-unification round, Task 1 (pulled forward from Task 2's
+  // own contract item 4): TYPE left the sheet entirely — no "TYPE" group
+  // label, no type-coded cell, nothing named after a WorkoutType code.
+  // Task 2 puts the chip row above the list instead; until then this
+  // branch simply has no type-filtering UI, and this test is what pins
+  // that honestly rather than leaving the old sheet-based assertions
+  // silently describing a control that no longer exists.
+  it("has no TYPE group and no type-coded cell — TYPE left the sheet entirely", () => {
     renderSheet();
-    const typeGroup = screen.getByRole("group", { name: "TYPE" });
-    const labels = within(typeGroup)
-      .getAllByRole("button")
-      .map((button) => button.textContent);
-    expect(labels).toStrictEqual(["O2", "AT", "TR", "AN"]);
+    const dialog = screen.getByRole("dialog", { name: "Filter" });
+    expect(within(dialog).queryByText("TYPE")).not.toBeInTheDocument();
+    for (const type of ["O2", "AT", "TR", "AN"]) {
+      expect(
+        within(dialog).queryByRole("button", { name: type }),
+      ).not.toBeInTheDocument();
+    }
   });
 
   it("aria-pressed on each cell reflects the draft prop, not internal state", () => {
     const draft: Filters = {
       ...EMPTY_FILTERS,
-      type: "AT",
       durations: ["45-60"],
       painLevels: [3, 4],
       lastDone: "under21",
@@ -89,14 +87,6 @@ describe("FilterSheet", () => {
     };
     renderSheet({ draft });
 
-    expect(screen.getByRole("button", { name: "AT" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(screen.getByRole("button", { name: "O2" })).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
     expect(screen.getByRole("button", { name: "45–60′" })).toHaveAttribute(
       "aria-pressed",
       "true",
@@ -121,25 +111,6 @@ describe("FilterSheet", () => {
       "aria-pressed",
       "true",
     );
-  });
-
-  it("a TYPE cell fills its own type color inline when active", () => {
-    renderSheet({ draft: { ...EMPTY_FILTERS, type: "O2" } });
-    const o2 = screen.getByRole("button", { name: "O2" });
-    expect(o2).toHaveAttribute("style", expect.stringContaining("--type-o2"));
-    expect(screen.getByRole("button", { name: "AT" })).not.toHaveAttribute(
-      "style",
-      expect.stringContaining("--type-at"),
-    );
-  });
-
-  it("clicking a TYPE cell reports the toggled draft via onChangeDraft", async () => {
-    const { onChangeDraft } = renderSheet();
-    await userEvent.click(screen.getByRole("button", { name: "AN" }));
-    expect(onChangeDraft).toHaveBeenCalledWith({
-      ...EMPTY_FILTERS,
-      type: "AN",
-    });
   });
 
   it("clicking a TIME cell reports the toggled draft", async () => {
@@ -198,7 +169,7 @@ describe("FilterSheet", () => {
 
   it("CLEAR reports an empty draft without calling onApply/onDismiss", async () => {
     const { onChangeDraft, onApply, onDismiss } = renderSheet({
-      draft: { ...EMPTY_FILTERS, type: "AT" },
+      draft: { ...EMPTY_FILTERS, source: "custom" },
     });
     await userEvent.click(screen.getByRole("button", { name: "CLEAR" }));
     expect(onChangeDraft).toHaveBeenCalledWith(EMPTY_FILTERS);
@@ -242,7 +213,7 @@ describe("FilterSheet", () => {
 
   it("clicking inside the panel does not call onDismiss (stopPropagation)", async () => {
     const { onDismiss } = renderSheet();
-    await userEvent.click(screen.getByText("TYPE"));
+    await userEvent.click(screen.getByText("TIME"));
     expect(onDismiss).not.toHaveBeenCalled();
   });
 
