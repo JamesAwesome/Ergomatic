@@ -65,11 +65,22 @@ describe("UpNextStrip", () => {
     expect(value.textContent).toBe("REST 2:00 · then WORK 2:09.0");
     const then = value.querySelector(".timer-upnext-then")!;
     expect(then.textContent).toBe("then ");
-    // Portrait: subtract exactly the "then" span's own text (what CSS
-    // hides there by default) and what's left is the short form, verbatim
-    // — no independently-typed second string anywhere in this file.
-    expect(value.textContent!.replace(then.textContent!, "")).toBe(
-      "REST 2:00 · WORK 2:09.0",
-    );
+    // Portrait: what CSS hides is that span, and what must be left is the
+    // short form. Asserted as the span's POSITION in the run rather than as
+    // a subtraction (test-integrity sweep, P13): `textContent.replace(
+    // then.textContent, "")` is self-cancelling — with the two pins above
+    // removed to isolate it, changing `>then </span>` to `>NEXT UP: </span>`
+    // still passed, because `"… · NEXT UP: WORK …".replace("NEXT UP: ", "")`
+    // is the short form too. The word can only be hidden cleanly if the
+    // separator sits BEFORE the span and the rest of the string AFTER it,
+    // which is what these two assertions say and the subtraction erased.
+    expect(
+      [...value.childNodes].map((n) => [n.nodeName, n.textContent]),
+    ).toStrictEqual([
+      ["#text", "REST 2:00"],
+      ["#text", " · "],
+      ["SPAN", "then "],
+      ["#text", "WORK 2:09.0"],
+    ]);
   });
 });

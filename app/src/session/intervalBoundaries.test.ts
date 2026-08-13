@@ -337,11 +337,17 @@ describe("intervalBoundaries — the notch positions", () => {
     const { seconds } = intervalBoundaries(phases);
     expect(foldIntervals(phases).groups).toHaveLength(4);
     expect(seconds).toStrictEqual([600, 900, 1200]);
-    // As percentages of the bar the rower sees: 41.7 / 62.5 / 83.3.
-    const pct = seconds.map((s) => (s / total) * 100);
-    expect(pct[0]).toBeCloseTo(41.667, 2);
-    expect(pct[1]).toBeCloseTo(62.5, 3);
-    expect(pct[2]).toBeCloseTo(83.333, 2);
+    // As percentages of the bar the rower sees, that is 41.7 / 62.5 / 83.3 —
+    // said here in a comment, not in three more assertions. The
+    // `toBeCloseTo` trio that used to follow divided two literals this test
+    // had already pinned (`seconds` on the line above, `total` three lines
+    // up), so any regression trips one of those first; and
+    // `intervalBoundaries.ts` computes no percentages at all — the real
+    // producer is `notchPercents` in `TimerRuler.tsx`, which this file does
+    // not import. Proven: with `notchPercents` gutted to `return []`, all 33
+    // tests here still passed (test-integrity sweep, S0a). The percentages
+    // themselves are covered off real inline `style.left` values, by
+    // `Timer.test.tsx`'s own "the notches land where the boundaries are".
   });
 
   it("re-anchors on top of the lead-in, never instead of it", () => {
@@ -440,7 +446,16 @@ describe("intervalBoundaries — against a real library workout", () => {
 
   it("puts the first boundary at the end of the warm-up plus its rest, and rises from there", () => {
     const { seconds } = intervalBoundaries(phases);
-    expect(seconds[0]).toBe(480); // the 8:00 warm-up, no rest after it
+    // The whole array, not `seconds[0]` plus a loop over an unpinned length
+    // (test-integrity sweep, P6): the length was never asserted, so a
+    // truncated array ran the monotonicity body zero times and the "rises
+    // from there" half of this title evaporated. Proven: a `break;` after
+    // `seconds.push(cumulative)`, emitting exactly one boundary, passed.
+    //
+    // 480 is the 8:00 warm-up with no rest after it; each 2000 m at the
+    // 2:06.0 target split is 504 s, and each rest 180, so the groups after
+    // it land 684 apart.
+    expect(seconds).toStrictEqual([480, 1164, 1848, 2532]);
     for (let i = 1; i < seconds.length; i += 1) {
       expect(seconds[i]!).toBeGreaterThan(seconds[i - 1]!);
     }
