@@ -1604,7 +1604,7 @@ describe("Timer — the gutter's structure and Pause's own row (connected-revamp
     vi.setSystemTime(FIXED_NOW);
   });
 
-  it("renders exactly one END button, inside .timer-gutter beside the decorative back glyph and housing spacer", async () => {
+  it("renders exactly one END button, inside .timer-gutter beside the decorative back glyph and NOTHING else", async () => {
     mockKeepAwake();
     const run = matrixRun();
     runAtIndex(run, 1);
@@ -1615,13 +1615,19 @@ describe("Timer — the gutter's structure and Pause's own row (connected-revamp
     const back = gutter!.querySelector(".timer-gutter-back");
     expect(back).not.toBeNull();
     expect(back).toHaveAttribute("aria-hidden", "true");
-    expect(gutter!.querySelector(".timer-gutter-housing")).toHaveAttribute(
-      "aria-hidden",
-      "true",
-    );
     const ends = screen.getAllByRole("button", { name: "END →" });
     expect(ends).toHaveLength(1);
     expect(gutter!.contains(ends[0])).toBe(true);
+    // THE DECORATIVE HOUSING SPACER IS GONE (James's erg walk, 2026-08-13
+    // — `Timer.tsx`'s own gutter comment has the reasoning). Asserted as an
+    // exact child census, not just `querySelector(...) === null`: landscape
+    // lays this column out with `justify-content: space-between`, which
+    // positions its children by COUNT, so "the housing is absent" and "back
+    // and END are the only two things space-between is dividing" are
+    // different claims and it is the second one the geometry depends on.
+    expect(
+      Array.from(gutter!.children).map((el) => el.className),
+    ).toStrictEqual(["timer-gutter-back", "timer-end"]);
   });
 
   it("Pause lives in .timer-upnext-row, never inside .timer-controls — which now holds exactly Previous phase + Next phase", async () => {
@@ -1916,12 +1922,24 @@ describe("index.css: the landscape leak is closed (spec §7, adversarial finding
     const rules = timerLandscapeRules();
     // EXACT, not `> 10` (test-integrity sweep, S0c): a floor still passed
     // with half the block deleted, and the per-selector loop below would
-    // then have run against a truncated set. 31 rules today; a deliberate
+    // then have run against a truncated set. 29 rules today; a deliberate
     // addition or removal updates this line, and the author sees the
-    // scoping rule it guards while doing so. (30 -> 31: James's 2026-08-12
-    // ruling stretched the ◀/▶ pair across the column in PORTRAIT, so
-    // landscape needed its own rule to keep them 56px squares.)
-    expect(rules).toHaveLength(31);
+    // scoping rule it guards while doing so.
+    //
+    // 30 -> 31 -> 30 -> 29, both moves in the close-out round and both
+    // deliberate:
+    //   31 -> 30 (tail review M-3). James's 2026-08-12 ruling stretched the
+    //     ◀/▶ pair across the column in PORTRAIT, so landscape needed a
+    //     rule pinning them back to a fixed width — but it was added as a
+    //     SECOND `.timer-screen .timer-control` rule beside the existing
+    //     one rather than as a declaration inside it, the only duplicated
+    //     selector in the whole block. They are merged now. The width
+    //     itself never changed, only how many rules carried it, which is
+    //     exactly the drift this ratchet exists to surface.
+    //   30 -> 29 (James's erg walk, 2026-08-13). The gutter's decorative
+    //     camera-housing spacer is deleted, and `.timer-screen
+    //     .timer-header .timer-gutter-housing` went with it.
+    expect(rules).toHaveLength(29);
     for (const rule of rules) {
       expect(rule.selectors.length).toBeGreaterThan(0);
       for (const selector of rule.selectors) {

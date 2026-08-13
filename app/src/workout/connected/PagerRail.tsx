@@ -4,18 +4,25 @@
 //
 // ONE component for both orientations. The band/rail geometry is CSS
 // (`index.css`'s `.connected-pager`, portrait 54px bottom band with two
-// equal halves, landscape a 44px sensor-gutter column at the PHYSICAL edge
-// with two 44x44 targets either side of a decorative housing spacer); the
-// only thing that changes in the markup is which of the two label sets is
+// equal halves, landscape a 44px sensor-gutter column at the PHYSICAL
+// edge holding two 44x44 targets, LIVE top and GRID bottom); the only
+// thing that changes in the markup is which of the two label sets is
 // rendered, and BOTH are always in the DOM — the wrong one is hidden by the
 // orientation media query, never unmounted, so a rotation cannot reflow or
 // re-mount the control the rower's thumb is already on.
 //
 // connected-revamp Task 2 (revision §1/§2): the timer pane is dropped from
-// connected mode entirely — `PANES` is down to `["live","grid"]`, and the
-// gutter's own housing spacer (`connected-pager-housing`, landscape-only)
-// sits between the two remaining targets, matching the mockup's own
-// LIVE/[housing]/GRID column order.
+// connected mode entirely — `PANES` is down to `["live","grid"]`.
+//
+// THE DECORATIVE HOUSING SPACER IS GONE (James's erg walk, 2026-08-13).
+// The mockup drew an 11x104 ink bar between the two landscape targets to
+// represent the phone's camera bump; on a real mounted phone it renders
+// millimetres from the actual bump it depicts, so it reads as a smudge on
+// the glass rather than as a picture of one. James: "i think it just takes
+// up space." Deleting it also retires the `DEVIATIONS` row that existed
+// solely to excuse its 6px radius against the house's 2px. `space-between`
+// on the gutter still puts LIVE at the top and GRID at the bottom — the
+// spacer was never what positioned them.
 
 // eslint-disable-next-line react-refresh/only-export-components
 export const PANES = ["live", "grid"] as const;
@@ -93,37 +100,15 @@ export default function PagerRail({ active, onSelect }: PagerRailProps) {
           `PANES[0]`/`PANES[1]` pair: a hardcoded index still renders two
           targets if `PANES` ever grew a third, silently never showing it —
           passing the census test's own LENGTH check while failing its
-          intent. The housing spacer (decorative: the camera-housing bump
-          the mockup draws between the landscape targets, revision §2's own
-          gutter diagram) interleaves after the FIRST target specifically,
-          matching the mockup's LIVE/[housing]/GRID order — zero footprint
-          in portrait, where `index.css` gives `.connected-pager-housing`
-          no space at all rather than just visually hiding it, so it never
-          perturbs the two-tab bar's `flex: 1` split. */}
-      {PANES.flatMap((pane, index) =>
-        index === 0
-          ? [
-              <PagerTarget
-                key={pane}
-                pane={pane}
-                active={active}
-                onSelect={onSelect}
-              />,
-              <span
-                key="housing"
-                className="connected-pager-housing"
-                aria-hidden="true"
-              />,
-            ]
-          : [
-              <PagerTarget
-                key={pane}
-                pane={pane}
-                active={active}
-                onSelect={onSelect}
-              />,
-            ],
-      )}
+          intent. */}
+      {PANES.map((pane) => (
+        <PagerTarget
+          key={pane}
+          pane={pane}
+          active={active}
+          onSelect={onSelect}
+        />
+      ))}
     </nav>
   );
 }

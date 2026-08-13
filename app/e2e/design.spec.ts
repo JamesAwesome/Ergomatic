@@ -4514,7 +4514,25 @@ test.describe("connected screens (fake-driven)", () => {
   // the CDP call `getComputedStyle(...).paddingLeft` read `0px`, AFTER it
   // read the injected value exactly). No Playwright-level API wraps this —
   // it goes through `page.context().newCDPSession(page)` directly.
-  test("a REAL safe-area inset still reaches physical x=0 with the gutter absorbing it, not overriding it — landscape (844x390)", async ({
+  // ROTATION-STABILITY, not just inset-absorption. This test used to assert
+  // `railBox.width === 44 + INSET` in the ONE rotation it measured, with a
+  // comment calling that correct — and it was walk defect #5 written down as
+  // an invariant. James, at the erg (2026-08-13): "it holds but the black
+  // bar makes it wider if you put it on the notch side." The gutter is
+  // always on the layout's LEFT, but the notch is only physically on that
+  // side in one of the two landscape rotations, so keying the gutter off
+  // `env(safe-area-inset-left)` alone made the whole surface change shape
+  // when the phone was remounted the other way up. Measured at 844x390 with
+  // the same 59px inset, BEFORE the fix:
+  //
+  //   notch LEFT   gutter 103px, content column x=103, width 741
+  //   notch RIGHT  gutter  44px, content column x= 44, width 741
+  //
+  // Green then, and green for the wrong reason. What this test asserts now
+  // is the rule rather than one side of it: the two rotations must agree,
+  // on every term, and the way to falsify that is to measure BOTH and
+  // compare them to each other rather than to a literal.
+  test("the gutter and the content column are IDENTICAL in both landscape rotations, notch left or notch right (844x390)", async ({
     page,
   }) => {
     const title = "Design Connected Gutter Inset Workout";
@@ -4529,32 +4547,61 @@ test.describe("connected screens (fake-driven)", () => {
     // round number chosen to make the arithmetic easy.
     const INSET = 59;
     const client = await page.context().newCDPSession(page);
-    await client.send("Emulation.setSafeAreaInsetsOverride", {
-      insets: { top: 0, left: INSET, bottom: 0, right: 0 },
-    });
 
-    const surfaceBox = await page.locator(".connected-surface").boundingBox();
-    const railBox = await page.locator(".connected-pager").boundingBox();
-    const liveTarget = await page
-      .getByRole("button", { name: "Live pane" })
-      .boundingBox();
-    expect(surfaceBox).not.toBeNull();
-    expect(railBox).not.toBeNull();
-    expect(liveTarget).not.toBeNull();
+    /** Every term the rower can see, at one inset condition. */
+    async function measure(left: number, right: number) {
+      await client.send("Emulation.setSafeAreaInsetsOverride", {
+        insets: { top: 0, left, bottom: 0, right },
+      });
+      // The override is applied out-of-band; give the style/layout pass a
+      // frame to land before reading boxes back.
+      await page.evaluate(
+        () => new Promise((r) => requestAnimationFrame(() => r(null))),
+      );
+      const [surface, rail, pane, live] = await Promise.all([
+        page.locator(".connected-surface").boundingBox(),
+        page.locator(".connected-pager").boundingBox(),
+        page.locator(".connected-pane").boundingBox(),
+        page.getByRole("button", { name: "Live pane" }).boundingBox(),
+      ]);
+      const round = (n: number) => Math.round(n * 100) / 100;
+      return {
+        surfaceX: round(surface!.x),
+        railX: round(rail!.x),
+        railWidth: round(rail!.width),
+        contentX: round(pane!.x),
+        contentWidth: round(pane!.width),
+        liveX: round(live!.x),
+      };
+    }
 
-    // The surface's own left edge is UNMOVED — the inset is the gutter's
-    // job now, not a second `.connected-surface` padding term stacked in
-    // front of it.
-    expect(surfaceBox!.x).toBeCloseTo(0, 0);
-    // The gutter's OWN box still starts at the true physical edge — its
-    // `#efeade` fill reaches the housing exactly like the no-inset case.
-    // This is the assertion that catches Important-1's regression: with
-    // the inset applied to `.connected-surface`'s own padding instead (the
-    // pre-fix shape), this would read `x ≈ 59`, not `0`.
-    expect(railBox!.x).toBeCloseTo(0, 0);
-    // But the gutter's WIDTH grows by exactly the inset — it is absorbing
-    // the real device geometry, not discarding it.
-    expect(railBox!.width).toBeCloseTo(44 + INSET, 0);
+    const notchLeft = await measure(INSET, 0);
+    const notchRight = await measure(0, INSET);
+
+    // THE ACCEPTANCE CRITERION, in James's own words: the content column
+    // must not change width or position when the phone is rotated the other
+    // way. Asserted as one whole-object comparison so a failure's diff names
+    // every term that moved, not just the first one — and so a future change
+    // that fixes the width while leaving the position asymmetric (the exact
+    // half-fix this file previously shipped) cannot pass.
+    expect(notchRight).toStrictEqual(notchLeft);
+
+    // …and the shape they agree ON is the right one, or "identical" could be
+    // satisfied by discarding the inset in both rotations — which would put
+    // the tappable targets back under the notch, the defect the task-2 fix
+    // round existed to kill.
+    //
+    // The surface still starts at the true physical edge: the inset is the
+    // gutter's job, not a `.connected-surface` padding term stacked in front
+    // of it.
+    expect(notchLeft.surfaceX).toBeCloseTo(0, 0);
+    // The gutter's own box starts there too, so its `#efeade` fill reaches
+    // the physical edge. With the inset applied to the surface's padding
+    // instead (the pre-task-2 shape) this would read x ≈ 59.
+    expect(notchLeft.railX).toBeCloseTo(0, 0);
+    // The gutter still ABSORBS a real inset rather than discarding it —
+    // 44px of tappable column plus the notch it has to clear.
+    expect(notchLeft.railWidth).toBeCloseTo(44 + INSET, 0);
     // And the actual tappable content (LIVE) sits CLEAR of the notch: its
     // own left edge lands at the inset, not at the physical edge — the
     // 44px of "tappable content" the fix comment promises, pushed in from
@@ -4562,7 +4609,7 @@ test.describe("connected screens (fake-driven)", () => {
     // usual 0.5px: measured sub-pixel rendering lands this one at exactly
     // 58.5 against an integer 59px inset, half a pixel outside
     // `toBeCloseTo(INSET, 0)`'s own tolerance.
-    expect(Math.abs(liveTarget!.x - INSET)).toBeLessThanOrEqual(1);
+    expect(Math.abs(notchLeft.liveX - INSET)).toBeLessThanOrEqual(1);
 
     await cleanupAllConnected(page, title);
   });
@@ -4717,6 +4764,128 @@ test.describe("connected screens (fake-driven)", () => {
     // coverage and read as a third check. Measured exactly: {y: 0, h: 390}.
     expect(surfaceBox!.height).toBeCloseTo(390, 0);
     expect(surfaceBox!.y).toBeCloseTo(0, 0);
+
+    await cleanupAllConnected(page, title);
+  });
+
+  // --- Close-out round (James's erg walk, 2026-08-13, defect 4) ---
+
+  // THE VERTICAL AXIS, MEASURED UNDER A REAL INSET. The test directly above
+  // pins the surface's height at zero insets and its own comment CITES the
+  // CDP inset tool before declining to use it — which is why the ledge
+  // survived a task review, a fix round, a whole-branch review, a 997-line
+  // test-integrity sweep and a re-review. The branch had the instrument, the
+  // measurement and the frame in one file and never crossed them vertically.
+  // This is that crossing.
+  test("under a real bottom inset the surface AND the gutter's fill still reach the physical bottom edge — landscape (844x390)", async ({
+    page,
+  }) => {
+    const title = "Design Connected Bottom Inset Workout";
+    await page.setViewportSize({ width: 844, height: 390 });
+    await injectConnectedFake(page, ROWING_STORY);
+    await openConnected(page, title, "design-connected-bottom-inset@e2e.test");
+    await walkToSurface(page);
+    await pumpUntilText(page, "2 OF 5");
+
+    // 21px: the iPhone home-indicator inset in landscape, the condition
+    // James was actually looking at.
+    const BOTTOM = 21;
+    const client = await page.context().newCDPSession(page);
+    await client.send("Emulation.setSafeAreaInsetsOverride", {
+      insets: { top: 0, left: 0, bottom: BOTTOM, right: 0 },
+    });
+    await page.evaluate(
+      () => new Promise((r) => requestAnimationFrame(() => r(null))),
+    );
+
+    const [surfaceBox, railBox, gridTarget] = await Promise.all([
+      page.locator(".connected-surface").boundingBox(),
+      page.locator(".connected-pager").boundingBox(),
+      page.getByRole("button", { name: "Grid pane" }).boundingBox(),
+    ]);
+
+    // The surface's border box reaches the foot of the viewport. Before the
+    // fix its height was `calc(100dvh - top - bottom)` while the element is
+    // anchored at y=0 AND spends the same insets as padding — each one
+    // charged twice — so this measured [0, 369] in a 390px frame.
+    expect(surfaceBox!.y + surfaceBox!.height).toBeCloseTo(390, 0);
+    // THE LEDGE ITSELF. The gutter is the only thing on this surface with a
+    // fill of its own (`--surface-sunken`, `grid-row: 1 / -1`), so it is the
+    // gutter's bottom edge — not the surface's — that a rower sees stop
+    // short. Measured at 348 before the fix: 42px of dead band, 21px of it a
+    // hard horizontal edge across the fill.
+    expect(railBox!.y + railBox!.height).toBeCloseTo(390, 0);
+    // …and the fill reaching the glass must NOT have dragged the tap target
+    // down with it. GRID keeps its 12px of breathing room ABOVE the home
+    // indicator, so its bottom edge sits at 390 - 21 - 12 = 357: the fill
+    // moved and the button did not.
+    expect(gridTarget!.y + gridTarget!.height).toBeCloseTo(357, 0);
+
+    await cleanupAllConnected(page, title);
+  });
+
+  // --- Close-out round (James's erg walk, 2026-08-13, defect 3) ---
+
+  // PORTRAIT, UNDER A REAL INSET. Same blind spot, other orientation: at
+  // zero insets this pane measures `scrollHeight` 682 = `clientHeight` 682
+  // with 103px of slack absorbed, so every gate and every capture called it
+  // clean. Give it a notch and TOTAL LEFT falls off the bottom — the row is
+  // the last thing in the pane and `.connected-pane` is `overflow: clip`,
+  // so it does not scroll into reach, it simply is not there.
+  test("under real portrait insets the live pane does not clip, and TOTAL LEFT is still inside it (390x844)", async ({
+    page,
+  }) => {
+    const title = "Design Connected Portrait Inset Workout";
+    await page.setViewportSize({ width: 390, height: 844 });
+    await injectConnectedFake(page, ROWING_STORY);
+    await openConnected(
+      page,
+      title,
+      "design-connected-portrait-inset@e2e.test",
+    );
+    await walkToSurface(page);
+    await pumpUntilText(page, "2 OF 5");
+
+    const client = await page.context().newCDPSession(page);
+    // Both phones this app ships to, because they differ by 12px at the top
+    // and the pre-fix margin was 25px — a test that only tried the smaller
+    // notch would have called a 12px-worse device fixed.
+    for (const [device, top] of [
+      ["iPhone 14", 47],
+      ["iPhone 14 Pro", 59],
+    ] as const) {
+      await client.send("Emulation.setSafeAreaInsetsOverride", {
+        insets: { top, left: 0, bottom: 34, right: 0 },
+      });
+      await page.evaluate(
+        () => new Promise((r) => requestAnimationFrame(() => r(null))),
+      );
+
+      const measured = await page.evaluate(() => {
+        const pane = document.querySelector(".connected-pane-live")!;
+        const total = document.querySelector(".timer-total")!;
+        return {
+          scrollHeight: pane.scrollHeight,
+          clientHeight: pane.clientHeight,
+          paneBottom: pane.getBoundingClientRect().bottom,
+          totalBottom: total.getBoundingClientRect().bottom,
+        };
+      });
+
+      // No clip. Pre-fix: 579 vs 554 on the 14, 579 vs 530 on the 14 Pro.
+      // The device name rides along so a failure says WHICH phone broke.
+      expect([
+        device,
+        measured.scrollHeight <= measured.clientHeight,
+      ]).toStrictEqual([device, true]);
+      // …and specifically the row James lost. `scrollHeight` alone would go
+      // green if TOTAL LEFT were deleted rather than fitted, so the row's
+      // own bottom edge is checked against the pane that clips it.
+      expect([
+        device,
+        measured.totalBottom <= measured.paneBottom + 0.5,
+      ]).toStrictEqual([device, true]);
+    }
 
     await cleanupAllConnected(page, title);
   });
