@@ -45,14 +45,20 @@
 // `IntervalSegments` bar (the notched TOTAL LEFT bar says the same thing
 // proportionally, Task 4's rebuild) — neither renders here any more.
 
+import type { Judgement } from "../../../domain/judge.js";
 import UpNextStrip from "../../components/UpNextStrip";
 import TimerRuler from "../../session/TimerRuler";
 import ConnectionLine from "./ConnectionLine";
 import { type SurfaceModel } from "./surfaceModel";
 
+// `Judgement`, not `string` (tail review M-7): the class suffix IS the union
+// member, so this parameter is the render boundary the 2026-08-13 rename
+// crossed — and with `string` here the type system sat the rename out
+// entirely. Typed, a member that is renamed again without its CSS rule
+// following stops compiling at the one place that builds the hook.
 function judgedClass(
   base: string,
-  value: { judgement: string; absent: boolean },
+  value: { judgement: Judgement; absent: boolean },
 ): string {
   return `${base} timer-card-actual-${value.judgement}${
     value.absent ? " connected-value-absent" : ""
