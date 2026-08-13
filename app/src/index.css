@@ -4259,11 +4259,17 @@ button:disabled {
 }
 
 /* CONNECTED-REVAMP TASK 7: down to two buttons (◀, then ▶ or NEXT) now that
-   Pause has its own standalone slot in `.timer-upnext-row` below — no
-   longer a 3-column grid spanning the full width, just the two remaining
-   controls at their existing 56px size, left-aligned. */
+   Pause has its own standalone slot in `.timer-upnext-row` below.
+   JAMES RULING 2026-08-12 (from #89's portrait capture, the pair circled):
+   they stay SIDE BY SIDE but span the content column, half each — two 56px
+   squares hugging the bottom-left corner read as an afterthought, and the
+   forward control is one a rower reaches for mid-piece. Landscape keeps the
+   two squares right-aligned (see the orientation override below): there the
+   row shares its band with the ruler, and stretching them would put a
+   half-width ▶ under the totals it is not related to. */
 .timer-controls {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 8px;
   margin-top: auto;
   padding-bottom: 8px;
@@ -4273,7 +4279,9 @@ button:disabled {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 56px;
+  /* Portrait stretches these to the grid's half-columns; landscape pins
+     them back to 56px squares. */
+  width: auto;
   min-height: 56px;
   background: var(--surface);
   border: 1px solid var(--rule-3);
@@ -4721,7 +4729,16 @@ button:disabled {
        `.timer-name`'s own comment above for the full accounting): this
        row's own trailing padding was part of the 66px overflow. */
     padding-bottom: 0;
+    /* Back to flex: the base rule's two half-columns are PORTRAIT's answer
+       to James's 2026-08-12 ruling. Landscape keeps the two 56px squares
+       right-aligned — this row shares its band with the ruler, so stretched
+       controls would sit under totals they have nothing to do with. */
+    display: flex;
     justify-content: flex-end;
+  }
+
+  .timer-screen .timer-control {
+    width: 56px;
   }
 
   /* 44px, not the base rule's 56 (same measured budget finding) — still

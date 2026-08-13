@@ -24,12 +24,13 @@
 // phase — and any work phase without a numeric target — has nothing to
 // judge. `judgeActual` already reads a `null` target as `"within"` (rule
 // 2: "nothing to judge is not a deviation"), so the actual above renders
-// unjudged in plain ink with zero code here. The target VALUE needed help:
-// `surfaceModel.ts`'s `targetSplit.main` used to fall back to the phase's
-// own word ("REST", "ALL OUT") instead of a dash, which is fixed at the
-// model layer (see that file's own comment); this pane reads the result
-// (`DASH`) and swaps in `connected-value-absent` (`--ink-3`) so the slot
-// holds its space without claiming a target that isn't there.
+// unjudged in plain ink with zero code here. The target VALUE says which
+// KIND of piece this is — `Easy`, `Rest`, `All out`, `Free` — and this pane
+// greys it via `connected-value-absent` (`--ink-3`) on the model's own
+// `absent` flag, so the slot holds its space and names the phase without
+// the word passing for a programmed number. (It was a bare dash until
+// James's 2026-08-12 ruling on #89's warm-up captures; see
+// `surfaceModel.ts`'s own comment for what that reversed and why.)
 //
 // CARDS ARE GONE (revision §3: "The old three metric cards are gone; the
 // metric row costs 44px, not 120." / "Missing HR renders — in place. No
@@ -47,7 +48,7 @@
 import UpNextStrip from "../../components/UpNextStrip";
 import TimerRuler from "../../session/TimerRuler";
 import ConnectionLine from "./ConnectionLine";
-import { DASH, type SurfaceModel } from "./surfaceModel";
+import { type SurfaceModel } from "./surfaceModel";
 
 function judgedClass(
   base: string,
@@ -59,11 +60,13 @@ function judgedClass(
 }
 
 export default function PaneLive({ model }: { model: SurfaceModel }) {
-  // Both heroes signal "no target" the same way: the model's own value
-  // reads DASH (`targetSplit.main`/`targetRate.main`, both fixed at the
-  // model layer) rather than a second boolean field per hero.
-  const rateAbsent = model.targetRate.main === DASH;
-  const paceTargetAbsent = model.targetSplit.main === DASH;
+  // Both heroes signal "no target" the same way: the model's own `absent`
+  // flag. This used to sniff for DASH in the value, which stopped working
+  // when James ruled the WORD into that slot (`Easy`/`Rest`/`All out`/
+  // `Free`, 2026-08-12) — a sentinel in the display string only ever held
+  // while the display string had nothing else to say.
+  const rateAbsent = model.targetRate.absent;
+  const paceTargetAbsent = model.targetSplit.absent;
   // `model.stale` already distinguishes "the link is gone" from "the erg is
   // just paused" (paused values hold, they are not stale) — the same rule
   // `nowLabel` uses for the split hero's own NOW/LAST swap, mirrored here

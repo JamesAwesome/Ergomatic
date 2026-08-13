@@ -368,7 +368,7 @@ describe("live", () => {
   // interval 1's REST phase when `state: "resting"` sits on `intervalIndex:
   // 1` (the fixture's own first work rep — this file's header names the
   // shape: warm-up, then 4 x 2000m with rest folded after each).
-  it("during REST the target slot reads the dash and the actual above stays unjudged", () => {
+  it("during REST both targets NAME the phase (Rest / Free), greyed, and the actual above stays unjudged", () => {
     // Derived the same way `phaseIndexForInterval`'s own describe block
     // does above, rather than a hardcoded index: interval 1, resting.
     const restIndex = phaseIndexForInterval(FIXTURE.phases, 1, true);
@@ -380,16 +380,22 @@ describe("live", () => {
         intervalIndex: 1,
         state: "resting",
         // A reading that would otherwise scream "over" against ANY real
-        // target, to prove the dash-target case is what suppresses the
+        // target, to prove the no-target case is what suppresses the
         // tint, not a coincidentally-within actual.
         currentSplit: 60,
         spm: 40,
       }),
     });
-    expect(m.targetSplit.main).toBe("—");
+    // The WORD, not a dash (James, 2026-08-12). `absent` is what keeps
+    // §6's original concern answered: greyed, so it cannot pass for a
+    // programmed number. Both are asserted — the word alone would let a
+    // regression render it in the target's own weight and stay green.
+    expect(m.targetSplit.main).toBe("Rest");
+    expect(m.targetSplit.absent).toBe(true);
     expect(m.pace.judgement).toBe("within");
     expect(m.pace.absent).toBe(false);
-    expect(m.targetRate.main).toBe("—");
+    expect(m.targetRate.main).toBe("Free");
+    expect(m.targetRate.absent).toBe(true);
     expect(m.rate.judgement).toBe("within");
     expect(m.rate.absent).toBe(false);
   });
@@ -648,19 +654,26 @@ describe("degenerate inputs", () => {
       deviceName: DEVICE,
       actuals: [],
     });
+    // Still the DASH here, and this is the ONLY case that keeps it: with
+    // no phase there is no word to show. Everywhere else the slot names the
+    // phase (James, 2026-08-12).
     expect(m.targetSplit.main).toBe("—");
-    expect(m.targetSplitCaption).toBe("NO SPLIT TARGET");
+    expect(m.targetSplit.absent).toBe(true);
+    expect(m.targetSplitCaption).toBe("");
     expect(m.intervalLabel).toBe("INTERVAL 1 OF 4 · WORK");
   });
 
   // `paceCaption`'s own "NO PACE TARGET" assertion retired with the field
   // (§10.2 DECIDE, same disposition as the paused describe above); the
   // no-target state now speaks through `targetSplit.main` itself.
-  it("the hero's target reads the dash when a phase carries no split target of its own", () => {
+  it("the hero's target NAMES the phase when it carries no split target of its own", () => {
     const m = model({ frame: frame({ intervalIndex: 0 }) });
     expect(FIXTURE.phases[0]!.type).toBe("warmup");
-    expect(m.targetSplit.main).toBe("—");
-    expect(m.targetSplitCaption).toBe("NO SPLIT TARGET");
+    expect(m.targetSplit.main).toBe("Easy");
+    expect(m.targetSplit.absent).toBe(true);
+    // The caption is EMPTY, not "NO SPLIT TARGET": the word above it now
+    // says the same thing, and the old caption would only repeat it.
+    expect(m.targetSplitCaption).toBe("");
   });
 });
 
@@ -801,13 +814,15 @@ describe("the warm-up is flagged, never counted", () => {
   it("NOTHING NEW on the live pane: a warm-up is never graded", () => {
     // Design spec §5b's fourth row, confirmed by test rather than by change.
     // A warm-up carries no target (`compileProgram` nulls it), so the
-    // no-target dash and the judgement standing down are already correct —
-    // whatever the rower is actually pulling.
+    // named-but-greyed target and the judgement standing down are already
+    // correct — whatever the rower is actually pulling.
     const m = model({ frame: frame({ intervalIndex: 0, currentSplit: 95 }) });
     expect(FIXTURE.program.intervals[0]!.type).toBe("warmup");
     expect(FIXTURE.program.intervals[0]!.targetSplit).toBeNull();
-    expect(m.targetSplit.main).toBe("—");
-    expect(m.targetRate.main).toBe("—");
+    expect(m.targetSplit.main).toBe("Easy");
+    expect(m.targetSplit.absent).toBe(true);
+    expect(m.targetRate.main).toBe("Free");
+    expect(m.targetRate.absent).toBe(true);
     expect(m.pace.judgement).toBe("within"); // ungraded, not "over"
     expect(m.rate.judgement).toBe("within");
     expect(m.pace.display).toBe("1:35.0"); // and the reading itself is shown

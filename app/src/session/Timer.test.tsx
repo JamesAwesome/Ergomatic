@@ -367,7 +367,7 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
     vi.setSystemTime(FIXED_NOW);
   });
 
-  it("warm-up: 'Easy' target, 'free', count-DOWN remaining", async () => {
+  it("warm-up: 'Easy' target, 'Free', count-DOWN remaining", async () => {
     mockKeepAwake();
     const run = matrixRun();
     runAtIndex(run, 0);
@@ -377,7 +377,7 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
     expect(screen.getByText("RUNNING")).toBeInTheDocument();
     expect(screen.getByText("4:00")).toBeInTheDocument(); // 240s remaining
     expect(screen.getByText("Easy")).toBeInTheDocument();
-    expect(screen.getByText("free")).toBeInTheDocument();
+    expect(screen.getByText("Free")).toBeInTheDocument();
     // Ui-fix round, Item 1: UP NEXT is exact now, never a "lo–hi" band.
     // Connected-revamp Task 6: the "then" phase (the rest that follows the
     // named work phase) now rides along on the SAME value, duration and
@@ -438,7 +438,7 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
     ).toBeInTheDocument();
   });
 
-  it("rest: 'Rest' target, 'free'", async () => {
+  it("rest: 'Rest' target, 'Free'", async () => {
     mockKeepAwake();
     const run = matrixRun();
     runAtIndex(run, 2);
@@ -447,7 +447,7 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
     expect(screen.getByText("STEP 3 OF 5 · REST")).toBeInTheDocument();
     expect(screen.getByText("5:00")).toBeInTheDocument(); // 300s remaining
     expect(screen.getByText("Rest")).toBeInTheDocument();
-    expect(screen.getByText("free")).toBeInTheDocument();
+    expect(screen.getByText("Free")).toBeInTheDocument();
     // Ui-fix round, Item 1: UP NEXT is exact now, never a "lo–hi" band.
     // The phase after next ("WORK ALL OUT") rides along too.
     expect(upNextFullText()).toBe("WORK 1:40.0 · then WORK ALL OUT");
@@ -466,7 +466,7 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
     // Ui-fix round, Item 1: the sub-line is the ref, uppercased. off=0 ->
     // refLabel drops the sign entirely -> just the base, "2K".
     expect(screen.getByText("2K")).toBeInTheDocument();
-    expect(screen.getByText("free")).toBeInTheDocument();
+    expect(screen.getByText("Free")).toBeInTheDocument();
     // The phase after next is past the run's own last phase, so the "then"
     // half reads the hardcoded "FINISH" (never `phaseAnnouncement`'s own
     // dedupe/duration logic — `thenNextTextAt`'s own contract).
@@ -496,7 +496,7 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
     // scoped to the numeral to avoid colliding with the duplicate text.
     expect(document.querySelector(".timer-time")).toHaveTextContent("1:00");
     expect(screen.getByText("ALL OUT")).toBeInTheDocument();
-    expect(screen.getByText("free")).toBeInTheDocument();
+    expect(screen.getByText("Free")).toBeInTheDocument();
     expect(screen.getByText("FINISH")).toBeInTheDocument();
     // The estimate behind an effort target (baselines.k2Seconds=100, per
     // pace.ts's estimationSplit for "max") must never surface as text.
@@ -554,7 +554,7 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
     });
   });
 
-  it("test (open-ended): 'All out' (lowercase, distinct from effort's ALL OUT), 'free', count-UP, standard controls, NO phase bar or TOTAL LEFT row", async () => {
+  it("test (open-ended): 'All out' (lowercase, distinct from effort's ALL OUT), 'Free', count-UP, standard controls, NO phase bar or TOTAL LEFT row", async () => {
     mockKeepAwake();
     const run = testKindRun();
     runAtIndex(run, 1);
@@ -572,7 +572,7 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
     expect(document.querySelector(".timer-total")).not.toBeInTheDocument();
     expect(document.querySelector(".timer-phase-bar")).not.toBeInTheDocument();
     expect(screen.getByText("All out")).toBeInTheDocument();
-    expect(screen.getByText("free")).toBeInTheDocument();
+    expect(screen.getByText("Free")).toBeInTheDocument();
     expect(screen.getByText("FINISH")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Previous phase" }),
@@ -1916,10 +1916,12 @@ describe("index.css: the landscape leak is closed (spec §7, adversarial finding
     const rules = timerLandscapeRules();
     // EXACT, not `> 10` (test-integrity sweep, S0c): a floor still passed
     // with half the block deleted, and the per-selector loop below would
-    // then have run against a truncated set. 30 rules today; a deliberate
+    // then have run against a truncated set. 31 rules today; a deliberate
     // addition or removal updates this line, and the author sees the
-    // scoping rule it guards while doing so.
-    expect(rules).toHaveLength(30);
+    // scoping rule it guards while doing so. (30 -> 31: James's 2026-08-12
+    // ruling stretched the ◀/▶ pair across the column in PORTRAIT, so
+    // landscape needed its own rule to keep them 56px squares.)
+    expect(rules).toHaveLength(31);
     for (const rule of rules) {
       expect(rule.selectors.length).toBeGreaterThan(0);
       for (const selector of rule.selectors) {

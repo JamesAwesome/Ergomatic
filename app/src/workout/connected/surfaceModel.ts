@@ -44,7 +44,7 @@ import {
   totalSessionSecondsOf,
   upNextTextAt,
 } from "../../session/Timer";
-import { targetSplitDisplay } from "../../session/TimerTargets";
+import { FREE, targetSplitDisplay } from "../../session/TimerTargets";
 
 /** The four `ConnectedPhase` values the surface is mounted for. Everything
  *  earlier (`idle`/`picking`/`pairing`/`programming`/`ready`/`failed`) still
@@ -331,15 +331,15 @@ export interface SurfaceModel {
    *  straight into a `{ main }` pair costs nothing and removes the
    *  presentation-string coupling. Mirrors `targetSplit` below; no `sub`
    *  because a rate target carries no ref to show underneath it. */
-  targetRate: { main: string };
+  targetRate: { main: string; absent: boolean };
   meters: JudgedValue;
   hr: JudgedValue;
   /** The TARGET SPLIT card: resolved value + the ref it came from. */
-  targetSplit: { main: string; sub: string | null };
-  /** That card's third line, never blank — the ref when there is one, and
-   *  the honest reason when there isn't (a warm-up, a rest, an effort
-   *  phase whose estimate `compileProgram` deliberately never programmed,
-   *  or a legacy run frozen before `ref` existed). */
+  targetSplit: { main: string; sub: string | null; absent: boolean };
+  /** That card's third line — the ref when there is one, and EMPTY when
+   *  there isn't. It used to read `NO SPLIT TARGET` beside a dash; both
+   *  surfaces now name the phase instead (`Easy`, `Rest`, `All out`), so
+   *  the caption would only repeat the value above it. */
   targetSplitCaption: string;
   /** Pane C. Built here, not in the pane, so its actual cells go through
    *  the same `judgedValue` path every other pane's do. */
@@ -469,21 +469,31 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
     ? [pace.display, ""]
     : splitHero(pace.display);
 
-  // THE NO-TARGET STATE (design spec §6, adversarial finding): every REST
-  // phase, and any work phase without a numeric split target (an "effort"
-  // target, a warm-up, a legacy run frozen before `ref` existed), has
-  // nothing for the hero's TARGET slot to show. `targetSplitDisplay` alone
-  // used to fall back to the phase's own WORD (`phase.label` — "REST",
-  // "ALL OUT") for `main` in exactly this case, which read as a target
-  // that doesn't exist. Gating on `targetSplitSeconds !== null` — the same
-  // "is there a real number" test `pace`'s own judgement already uses —
-  // makes `main` the house `DASH` instead, so `PaneLive.tsx` can hold the
-  // slot's space and greys it via `connected-value-absent` rather than
-  // rendering a word in the target's own type weight.
+  // THE NO-TARGET STATE (design spec §6, adversarial finding — REVISED
+  // 2026-08-12 by James, from #89's warm-up captures). Every REST phase,
+  // and any work phase without a numeric split target (an "effort" target,
+  // a warm-up, a legacy run frozen before `ref` existed), has no number for
+  // the hero's TARGET slot.
+  //
+  // §6 originally made that a `DASH` on this surface, because the phase's
+  // own WORD in the target's type weight "read as a target that doesn't
+  // exist". The phone timer never adopted that rule — it kept showing
+  // `Easy`/`Rest`/`All out` — and once the revamp taught the two surfaces
+  // one visual language, the same warm-up read `Easy` on the phone and
+  // `— NO SPLIT TARGET` on the erg. James ruled the WORD, both places.
+  //
+  // §6's concern is answered by treatment rather than by omission: `absent`
+  // still drives `connected-value-absent`, so the word is greyed and cannot
+  // be mistaken for a programmed number. A dash carried no information; the
+  // word says which kind of piece this is.
   const targetSplit =
     phase && targetSplitSeconds !== null
-      ? targetSplitDisplay(phase)
-      : { main: DASH, sub: null };
+      ? { ...targetSplitDisplay(phase), absent: false }
+      : {
+          main: phase ? phase.label : DASH,
+          sub: null,
+          absent: true,
+        };
 
   const totalSeconds = totalSessionSecondsOf(phases);
   // `sessionElapsedSeconds`, never `frame.elapsedSeconds`: 0x0031's own
@@ -533,11 +543,18 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
     paceWhole,
     paceTenths,
     rate,
-    targetRate: { main: targetSpm === null ? DASH : String(targetSpm) },
+    // `Free`, not a dash, for the same reason `targetSplit` names its phase
+    // (James, 2026-08-12): the phone timer has always said `free` here, and
+    // the two surfaces now share a language. Capitalized to sit beside
+    // `Easy`/`Rest`/`All out`, which the phase vocabulary already Title-cases.
+    targetRate: {
+      main: targetSpm === null ? FREE : String(targetSpm),
+      absent: targetSpm === null,
+    },
     meters,
     hr,
     targetSplit,
-    targetSplitCaption: targetSplit.sub ?? "NO SPLIT TARGET",
+    targetSplitCaption: targetSplit.sub ?? "",
     grid: buildGridModel({
       intervals: program.intervals,
       actuals: input.actuals,
