@@ -96,6 +96,45 @@ export interface MonitorRun {
 // reader unconditionally destructures exist and are the right container
 // type, without walking every `ProgramInterval`'s own fields — identical
 // to how `isSessionRun` never validates individual `EnginePhase` entries.
+//
+// **THE STORED PROGRAM CAN BE OLDER THAN ITS OWN TYPE, AND THAT IS A
+// DELIBERATE CHOICE** (close-out C, antagonist review R1). The connected
+// revamp made `ProgramInterval.type` a REQUIRED field
+// (`domain/monitor/program.ts`) without bumping `v`, so a record written
+// before that deploy loads afterwards with `interval.type === undefined`
+// on a field TypeScript believes is a string. Three things were weighed
+// and each was rejected for the same reason:
+//
+//   - bumping to `v: 3` — the version arm above discards on a mismatch and
+//     clears the key. A rower who finished a connected piece before the
+//     update and had not logged it yet would lose the PM5's numbers
+//     outright (`session/LogSession.tsx` falls through to the manual door)
+//     AND lose the unlogged warning `connectGuardStage` puts in front of
+//     the next Connect. That is the F5 data-loss class this file's own
+//     guards exist to prevent, spent to fix a defect that cannot fire.
+//   - validating `type` here — identical outcome by a different door, and
+//     it would abandon the shallow-validation rule this comment opens with.
+//   - migrating on read — the only non-destructive option, but it would
+//     have to derive `type` from `logSeed.steps[i].kind`, which a v1
+//     record does not have at all, and this file's header pins "no
+//     migration" as its contract.
+//
+// It cannot fire because NOTHING that reads a loaded program reads `type`.
+// The connected surface's numbering (`workout/connected/surfaceModel.ts`'s
+// `intervalNumbering`, the field's one and only consumer) is fed the
+// program `WorkoutDetail.handleConnectProceed` compiles fresh in memory at
+// Connect, never this record's; `useMonitorSession` creates runs and never
+// loads one. The single production reader of a program that came back out
+// of localStorage is `session/logDraft.ts`'s `buildMonitorLogSteps`, and it
+// takes warm-up-ness from `logSeed.steps[i].kind` instead.
+//
+// **So the invariant to keep is "no reader of a LOADED program consults
+// `ProgramInterval.type`", not "the stored shape is current."** Adding
+// such a reader — retiring `LogSeed.kind` in favour of `type`, say, which
+// `logDraft.ts`'s own comment contemplates — reintroduces the miscount
+// this wave exists to fix, on the records of the rowers most likely to be
+// mid-session. Do that only together with the version bump or the
+// migration, and price the loss above first.
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }

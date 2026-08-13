@@ -104,7 +104,18 @@ export interface ProgramInterval {
    *  NOT A WIRE FIELD. Nothing in `pm5/commands.ts` encodes it (a warm-up is
    *  programmed as an ordinary interval that happens to have no target, and
    *  the PM5 has no warm-up concept of its own); it is the IR remembering
-   *  what it compiled, for the phone's own screens. */
+   *  what it compiled, for the phone's own screens.
+   *
+   *  REQUIRED HERE, BUT A PERSISTED PROGRAM MAY PREDATE IT. A whole
+   *  `WorkoutProgram` is embedded in `src/monitor/monitorRun.ts`'s
+   *  localStorage record, whose validator checks the interval array
+   *  shallowly and whose version was not bumped when this field arrived —
+   *  so a record straddling that deploy hands a reader `undefined` here
+   *  while the type promises a string. That is safe today only because
+   *  every consumer of this field is fed a program compiled fresh in
+   *  memory. Before reading `type` off a program that came out of storage,
+   *  read `isMonitorRun`'s own comment on why the record is kept rather
+   *  than discarded, and what a reader owes it. */
   type: IntervalType;
   kind: "time" | "distance";
   /** Seconds (kind "time") or meters (kind "distance"). Always the
