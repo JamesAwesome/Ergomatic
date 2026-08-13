@@ -45,7 +45,12 @@ import type {
 import { buildDraft } from "../../session/draft";
 import { buildRun, type EnginePhase } from "../../session/engine";
 import type { LogSeed } from "../../session/logDraft";
-import { commentStrippedSource } from "../../test/cssView";
+import {
+  atRuleBodies,
+  commentStrippedSource,
+  cssRules,
+  scopedRuleBodies,
+} from "../../test/cssView";
 import ConnectedInterstitial from "../ConnectedInterstitial";
 import ConnectedSurface, { LAST_PANE_KEY } from "../ConnectedSurface";
 import {
@@ -92,6 +97,72 @@ function indexCssPath(): string {
 const DECLARATIONS = commentStrippedSource(
   readFileSync(indexCssPath(), "utf-8"),
 );
+
+const LANDSCAPE_QUERY = "@media (orientation: landscape)";
+const PORTRAIT_QUERY = "@media (orientation: portrait)";
+
+/**
+ * SECOND HALF OF THE SAME DEFECT (test-integrity sweep, P10/P11/P12):
+ * comment-stripping stopped this file reading PROSE, but it still read the
+ * stylesheet as one flat string, so every "in portrait" / "in landscape"
+ * claim below actually proved only "somewhere in 7,848 lines". Three
+ * measured consequences, all with 46/46 green: the base
+ * `.connected-grid-row` rule moved INTO the first landscape query (portrait
+ * rows losing their height, flex and box-sizing) passed, including the test
+ * that says "and portrait's 40px rule is untouched"; all four landscape
+ * pane-C rules hoisted OUT to the file tail (32px rows, a 26px `#` and a
+ * visible REST column leaking into portrait) passed, because
+ * `slice(lastIndexOf("@media (orientation: landscape)"))` runs to EOF and
+ * that query closes 186 lines early; and `.connected-grid-time { order: 2 }`
+ * added inside the landscape query passed the `order` guard.
+ *
+ * `baseRule` and `landscapeRule` go through `scopedRuleBodies`, a
+ * brace-depth scanner, so the scope is checked rather than assumed. Both
+ * assert exactly one match: a landscape override must never be able to
+ * stand in for a missing base rule, or the other way round.
+ */
+function baseRule(selector: string): string {
+  const bodies = scopedRuleBodies(DECLARATIONS, selector);
+  expect(
+    bodies,
+    `expected exactly one TOP-LEVEL rule for ${selector}`,
+  ).toHaveLength(1);
+  return bodies[0]!;
+}
+
+/** Every rule for `selector` genuinely inside a landscape media query.
+ *  `index.css` has five of those; this searches all five and nothing
+ *  between or after them. Plural because a selector legitimately appears in
+ *  more than one landscape rule (`.connected-grid-row` takes its `gap` from
+ *  a comma-joined rule and its `height` from its own). */
+function landscapeRules(selector: string): string[] {
+  return scopedRuleBodies(DECLARATIONS, selector, [LANDSCAPE_QUERY]);
+}
+
+/** The one rule for `selector` genuinely inside a landscape media query,
+ *  where exactly one is the claim. */
+function landscapeRule(selector: string): string {
+  const bodies = landscapeRules(selector);
+  expect(
+    bodies,
+    `expected exactly one landscape-scoped rule for ${selector}`,
+  ).toHaveLength(1);
+  return bodies[0]!;
+}
+
+/** Every value declared for `property` across `bodies`, in source order —
+ *  so "declared once, as 32px" is one exact assertion rather than a
+ *  `toMatch` that a second, contradicting declaration would slip past. The
+ *  leading boundary keeps `height` from matching `min-height`. */
+function declaredValuesOf(bodies: string[], property: string): string[] {
+  return bodies.flatMap((body) =>
+    [
+      ...body.matchAll(
+        new RegExp(`(?:^|[;{\\s])${property}\\s*:\\s*([^;]+);`, "g"),
+      ),
+    ].map((m) => m[1]!.trim()),
+  );
+}
 const baselines: Baselines = { k2Seconds: 112, k6Seconds: 122 };
 const t0 = new Date("2026-08-07T09:00:00.000Z");
 const DEVICE = "PM5 432331249";
@@ -433,16 +504,13 @@ describe("row states (handoff §3's three treatments)", () => {
 
 describe("the dash carries 'not yet', colour does not (handoff §3)", () => {
   it("gives upcoming rows a DASHED border and completed rows a solid one", () => {
-    const upcoming = /\.connected-grid-upcoming\s*\{([^}]*)\}/.exec(
-      DECLARATIONS,
+    // Base rules, in BOTH orientations — never a landscape-only override.
+    expect(baseRule(".connected-grid-upcoming")).toContain(
+      "1px dashed var(--rule-3)",
     );
-    const completed = /\.connected-grid-completed\s*\{([^}]*)\}/.exec(
-      DECLARATIONS,
+    expect(baseRule(".connected-grid-completed")).toContain(
+      "1px solid var(--rule-2)",
     );
-    expect(upcoming).not.toBeNull();
-    expect(completed).not.toBeNull();
-    expect(upcoming![1]).toContain("1px dashed var(--rule-3)");
-    expect(completed![1]).toContain("1px solid var(--rule-2)");
   });
 
   it("keeps upcoming VALUES at --ink-3, never the AA-failing --ink-5", () => {
@@ -453,10 +521,9 @@ describe("the dash carries 'not yet', colour does not (handoff §3)", () => {
     // readable. Connected-revamp Task 5 dropped the old line-wrapper
     // indirection — `color` is declared on the ROW itself now, inherited by
     // every cell that doesn't carry its own judged tint.
-    const rule = /\.connected-grid-upcoming\s*\{([^}]*)\}/.exec(DECLARATIONS);
-    expect(rule).not.toBeNull();
-    expect(rule![1]).toContain("color: var(--ink-3)");
-    expect(rule![1]).not.toContain("--ink-5");
+    const rule = baseRule(".connected-grid-upcoming");
+    expect(rule).toContain("color: var(--ink-3)");
+    expect(rule).not.toContain("--ink-5");
   });
 });
 
@@ -820,10 +887,15 @@ describe("THE ACCENT CENSUS: one sanctioned accent on the whole surface", () => 
     // revision's own mockup draws the countdown at the SAME `--size-row`
     // as every other value in the row, tinted, not enlarged — the density
     // this task exists for has no room for a bigger digit.
-    const rule = /\.connected-grid-countdown\s*\{([^}]*)\}/.exec(DECLARATIONS);
-    expect(rule).not.toBeNull();
-    expect(rule![1]).toContain("color: var(--accent)");
-    expect(rule![1]).not.toContain("font-size");
+    const rule = baseRule(".connected-grid-countdown");
+    expect(rule).toContain("color: var(--accent)");
+    expect(rule).not.toContain("font-size");
+    // And no landscape query re-enlarges it behind the base rule's back.
+    expect(
+      scopedRuleBodies(DECLARATIONS, ".connected-grid-countdown", [
+        LANDSCAPE_QUERY,
+      ]),
+    ).toStrictEqual([]);
   });
 });
 
@@ -990,20 +1062,17 @@ describe("contained scroll: only the rows move", () => {
     // which argues about `flex: 1` and `min-height: 0` in words — satisfied
     // it whether or not either declaration existed. It also asserted
     // `flex: 1`, a value the stylesheet deliberately REJECTS.
-    const scroller = /\.connected-grid-rows\s*\{([^}]*)\}/.exec(DECLARATIONS);
-    expect(scroller).not.toBeNull();
-    expect(scroller![1]).toContain("overflow-y: auto");
-    expect(scroller![1]).toContain("min-height: 0");
+    const scroller = baseRule(".connected-grid-rows");
+    expect(scroller).toContain("overflow-y: auto");
+    expect(scroller).toContain("min-height: 0");
     // `0 1 auto`, not `1` — the hug-then-shrink behaviour the caption's
     // position depends on. Asserting the value the code rejected was the
     // other half of M1.
-    expect(scroller![1]).toContain("flex: 0 1 auto");
-    expect(scroller![1]).not.toMatch(/flex:\s*1;/);
+    expect(scroller).toContain("flex: 0 1 auto");
+    expect(scroller).not.toMatch(/flex:\s*1;/);
 
-    const head = /\.connected-grid-head\s*\{([^}]*)\}/.exec(DECLARATIONS);
-    const caption = /\.connected-grid-caption\s*\{([^}]*)\}/.exec(DECLARATIONS);
-    expect(head![1]).toContain("flex: none");
-    expect(caption![1]).toContain("flex: none");
+    expect(baseRule(".connected-grid-head")).toContain("flex: none");
+    expect(baseRule(".connected-grid-caption")).toContain("flex: none");
   });
 
   it("SCROLLS THE ACTIVE ROW INTO VIEW, and again when the machine moves on", () => {
@@ -1049,8 +1118,7 @@ describe("contained scroll: only the rows move", () => {
     // `touch-action: pan-y` on the surface is what lets the rows scroll at
     // all while the horizontal swipe stays ours (handoff §3's 60px pager
     // gesture).
-    const rule = /\.connected-surface\s*\{([^}]*)\}/.exec(DECLARATIONS);
-    expect(rule![1]).toContain("touch-action: pan-y");
+    expect(baseRule(".connected-surface")).toContain("touch-action: pan-y");
   });
 });
 
@@ -1065,79 +1133,78 @@ describe("contained scroll: only the rows move", () => {
 
 describe("row height and column weights, both orientations (revision §4)", () => {
   it("fixes the row at 40px portrait, box-sizing border-box so the border can't grow it", () => {
-    const rule = /\.connected-grid-row\s*\{([^}]*)\}/.exec(DECLARATIONS);
-    expect(rule).not.toBeNull();
-    expect(rule![1]).toContain("height: 40px");
-    expect(rule![1]).toContain("box-sizing: border-box");
+    // TOP LEVEL, so it applies in portrait too. The old flat-string version
+    // of this passed with the whole rule moved inside a landscape query.
+    const rule = baseRule(".connected-grid-row");
+    expect(declaredValuesOf([rule], "height")).toStrictEqual(["40px"]);
+    expect(rule).toContain("box-sizing: border-box");
   });
 
   it("steps the row to 32px in landscape — JAMES RULING 2026-08-12, not the packet's 36", () => {
-    const landscape = DECLARATIONS.slice(
-      DECLARATIONS.lastIndexOf("@media (orientation: landscape)"),
-    );
-    expect(landscape).toMatch(/\.connected-grid-row\s*\{[^}]*height:\s*32px/);
+    // Exactly one landscape-scoped `height`, and it is 32px — a second
+    // landscape rule quietly re-declaring it would fail this.
+    expect(
+      declaredValuesOf(landscapeRules(".connected-grid-row"), "height"),
+    ).toStrictEqual(["32px"]);
     // And portrait's 40px rule is untouched — this is a landscape STEP, not
     // a redefinition of the base value.
-    const portrait = DECLARATIONS.slice(0, DECLARATIONS.indexOf(landscape));
-    expect(portrait).toMatch(/\.connected-grid-row\s*\{[^}]*height:\s*40px/);
+    expect(
+      declaredValuesOf([baseRule(".connected-grid-row")], "height"),
+    ).toStrictEqual(["40px"]);
   });
 
   it("carries the revision's exact flex table, unchanged between orientations", () => {
     // TIME 1, METERS 1, /500M 1.1, SPM 0.6, HR 0.6 — the SAME weights in
     // both orientations (only `#`'s width and REST's visibility differ),
     // so these live in the base rules, never inside the landscape query.
+    // Both halves are now checked: the weight is declared at the top level,
+    // AND no landscape query redeclares `flex` for that column.
     const weights: [string, string][] = [
-      ["connected-grid-time", "flex: 1;"],
-      ["connected-grid-meters", "flex: 1;"],
-      ["connected-grid-pace", "flex: 1.1;"],
+      [".connected-grid-time", "flex: 1;"],
+      [".connected-grid-meters", "flex: 1;"],
+      [".connected-grid-pace", "flex: 1.1;"],
+      // One comma-joined rule in the source; `scopedRuleBodies` splits the
+      // list, so each half is findable by name instead of by matching the
+      // stylesheet's own line breaks.
+      [".connected-grid-spm", "flex: 0.6;"],
+      [".connected-grid-hr", "flex: 0.6;"],
     ];
-    for (const [cls, declaration] of weights) {
-      const rule = new RegExp(`\\.${cls}\\s*\\{([^}]*)\\}`).exec(DECLARATIONS);
-      expect(rule).not.toBeNull();
-      expect(rule![1]).toContain(declaration);
+    for (const [selector, declaration] of weights) {
+      expect(baseRule(selector)).toContain(declaration);
+      expect([
+        selector,
+        scopedRuleBodies(DECLARATIONS, selector, [LANDSCAPE_QUERY]).filter(
+          (body) => /flex\s*:/.test(body),
+        ),
+      ]).toStrictEqual([selector, []]);
     }
-    expect(DECLARATIONS).toMatch(
-      /\.connected-grid-spm,\s*\n\s*\.connected-grid-hr\s*\{[^}]*flex:\s*0\.6;/,
-    );
   });
 
   it("widens `#` to 26px in landscape, 22px in portrait", () => {
-    const portrait = /\.connected-grid-num\s*\{([^}]*)\}/.exec(DECLARATIONS);
-    expect(portrait).not.toBeNull();
-    expect(portrait![1]).toContain("width: 22px");
-    const landscape = DECLARATIONS.slice(
-      DECLARATIONS.lastIndexOf("@media (orientation: landscape)"),
-    );
-    expect(landscape).toMatch(
-      /\.connected-pane-grid\s+\.connected-grid-num\s*\{[^}]*width:\s*26px/,
-    );
+    expect(
+      declaredValuesOf([baseRule(".connected-grid-num")], "width"),
+    ).toStrictEqual(["22px"]);
+    expect(
+      declaredValuesOf(
+        [landscapeRule(".connected-pane-grid .connected-grid-num")],
+        "width",
+      ),
+    ).toStrictEqual(["26px"]);
   });
 
   it("drops REST in portrait and brings it back at 0.8 in landscape", () => {
     // Revision §4's own column list: portrait's row has SIX columns, never
     // seven — REST is rendered (one markup, both orientations) and hidden.
-    const rest = /\.connected-grid-rest\s*\{([^}]*)\}/.exec(DECLARATIONS);
-    expect(rest).not.toBeNull();
-    expect(rest![1]).toContain("display: none");
-    const landscape = DECLARATIONS.slice(
-      DECLARATIONS.lastIndexOf("@media (orientation: landscape)"),
-    );
-    const override =
-      /\.connected-pane-grid\s+\.connected-grid-rest\s*\{([^}]*)\}/.exec(
-        landscape,
-      );
-    expect(override).not.toBeNull();
-    expect(override![1]).toContain("flex: 0.8");
-    expect(override![1]).not.toContain("display: none");
+    expect(baseRule(".connected-grid-rest")).toContain("display: none");
+    const override = landscapeRule(".connected-pane-grid .connected-grid-rest");
+    expect(override).toContain("flex: 0.8");
+    expect(override).not.toContain("display: none");
   });
 
   it("stays a COLUMN and keeps its scroll where the other panes become rows", () => {
-    const landscape = DECLARATIONS.slice(
-      DECLARATIONS.lastIndexOf("@media (orientation: landscape)"),
+    expect(landscapeRule(".connected-pane-grid")).toContain(
+      "flex-direction: column",
     );
-    const rule = /\.connected-pane-grid\s*\{([^}]*)\}/.exec(landscape);
-    expect(rule).not.toBeNull();
-    expect(rule![1]).toContain("flex-direction: column");
   });
 
   it("renders the same six or seven columns in the DOM in both orientations — CSS hides REST, JSX never omits it", () => {
@@ -1299,15 +1366,51 @@ describe("tab order through pane C", () => {
     // moves paint without moving the tab sequence. Pane C introduces the
     // surface's first scrolling region; if it had inherited that trade, a
     // focusable inside it would be reached out of sequence.
-    expect(DECLARATIONS).not.toMatch(
-      /\.connected-pane-grid[^{]*\{[^}]*\border:/,
+    //
+    // P12: the old guard only looked at selectors carrying the
+    // `.connected-pane-grid` ancestor, and pane C's own columns are
+    // declared without it (`.connected-grid-row`, `-num`, `-spm`, `-rest`),
+    // so `.connected-grid-time { order: 2 }` inside the landscape query
+    // passed. This censuses EVERY rule in the file whose selector names a
+    // pane-C class, at every nesting depth, and pins the offenders to the
+    // empty list — the accent census's idiom, applied to `order`.
+    const paneCRules = cssRules(DECLARATIONS).filter((rule) =>
+      rule.selectors.some((s) =>
+        /\.connected-(pane-grid|grid-[\w-]+)(\s|$|:|\.|>)/.test(`${s} `),
+      ),
     );
-    const portrait = DECLARATIONS.slice(
-      DECLARATIONS.indexOf("@media (orientation: portrait)"),
-      DECLARATIONS.lastIndexOf("@media (orientation: landscape)"),
-    );
-    expect(portrait).not.toContain("connected-grid");
-    expect(portrait).not.toContain("connected-pane-grid");
+    // Non-empty guard, and specifically that the four classes P12 named as
+    // escaping the old guard are inside the census now.
+    const scanned = new Set(paneCRules.flatMap((rule) => rule.selectors));
+    for (const selector of [
+      ".connected-pane-grid",
+      ".connected-grid-row",
+      ".connected-grid-num",
+      ".connected-grid-spm",
+      ".connected-grid-rest",
+      ".connected-grid-time",
+    ]) {
+      expect([selector, scanned.has(selector)]).toStrictEqual([selector, true]);
+    }
+    expect(paneCRules.length).toBeGreaterThanOrEqual(30); // measured: 32
+    expect(
+      paneCRules
+        .filter((rule) => /\border\s*:/.test(rule.body))
+        .map((rule) => rule.selectors.join(", ")),
+    ).toStrictEqual([]);
+
+    // P11: `slice(indexOf(portrait), lastIndexOf(landscape))` yielded `""`
+    // — trivially satisfying both assertions below — the moment the portrait
+    // query moved after the last landscape one, or was deleted. Proven: the
+    // portrait query moved to EOF with `.connected-grid-row { order: 3 }`
+    // added inside it passed 46/46. This reads the query's real body.
+    const portraitQueries = atRuleBodies(DECLARATIONS, PORTRAIT_QUERY);
+    expect(portraitQueries).toHaveLength(1);
+    // Two independent claims, not one: `"connected-pane-grid"` is NOT a
+    // superstring of `"connected-grid"` (the shared prefix stops at
+    // `connected-`), so neither `toContain` implies the other.
+    expect(portraitQueries[0]).not.toContain("connected-grid");
+    expect(portraitQueries[0]).not.toContain("connected-pane-grid");
   });
 
   it("has EXACTLY ONE focusable thing of its own: the named scroller", () => {

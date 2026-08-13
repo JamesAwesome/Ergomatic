@@ -21,16 +21,29 @@
 // portrait half lives in `tokens.css`'s single `:root` block, the landscape
 // half in `index.css`'s own single `:root` block — the ONLY `:root` block
 // that file contains — nested inside the connected surface's existing
-// `@media (orientation: landscape)` query. Both `:root` blocks are located
-// by a plain single-match regex on purpose: if either file ever grows a
-// second `:root` block, that regex breaks LOUDLY (`.exec` returns a match
-// for the FIRST occurrence only, and a second one silently goes unchecked)
-// rather than silently checking the wrong one — a future editor adding a
-// second block is exactly the trap review Minor-13 flagged.
+// `@media (orientation: landscape)` query.
+//
+// Both blocks are located by `scopedRuleBodies` (`../test/cssView`), a
+// brace-depth scanner, and both lookups assert `toHaveLength(1)`. The
+// earlier hand-rolled version of this file claimed exactly those two
+// properties and proved neither — the test-integrity sweep's P8 and P9.
+// `.exec(/:root\s*\{([^}]*)\}/)` returns the FIRST match and never looks at
+// a second, so appending `:root { --size-hero: 999px; }` to `tokens.css` —
+// later in source order at equal specificity, so `--size-hero` genuinely
+// resolves to 999px app-wide — left 22/22 green. And `slice(indexOf("@media
+// (orientation: landscape)"))` found the FIRST landscape query
+// (`index.css:3457`, the countdown one), then ran to EOF across four query
+// boundaries, so hoisting this whole token block out of its media query to
+// top level — which renders portrait phones at landscape type sizes — also
+// left 22/22 green. Both mutations now fail.
 
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { commentStrippedSource } from "../test/cssView";
+import {
+  commentStrippedSource,
+  cssRules,
+  scopedRuleBodies,
+} from "../test/cssView";
 
 function thisDirPath(filename: string): string {
   // Same plain string surgery `TimerTargets.test.tsx` uses and documents:
@@ -44,37 +57,30 @@ function thisDirPath(filename: string): string {
     .replace(/tokens\.test\.ts$/, filename);
 }
 
-function rootBlockOf(source: string): string {
-  const stripped = commentStrippedSource(source);
-  const match = /:root\s*\{([^}]*)\}/.exec(stripped);
-  expect(match, "expected exactly one :root block").not.toBeNull();
-  return match![1];
-}
+const LANDSCAPE_QUERY = "@media (orientation: landscape)";
 
-const tokensCss = readFileSync(thisDirPath("tokens.css"), "utf-8");
-const indexCss = readFileSync(thisDirPath("../index.css"), "utf-8");
+const tokensCss = commentStrippedSource(
+  readFileSync(thisDirPath("tokens.css"), "utf-8"),
+);
+const indexCss = commentStrippedSource(
+  readFileSync(thisDirPath("../index.css"), "utf-8"),
+);
 
-const PORTRAIT_ROOT = rootBlockOf(tokensCss);
+/** The portrait half: every TOP-LEVEL `:root` block in `tokens.css`.
+ *  `at: []` is what makes "top-level" a checked fact rather than an
+ *  assumption; the count is pinned by its own test below, not here, so a
+ *  second block fails as a named test rather than as a collection error
+ *  that reports zero tests run. */
+const PORTRAIT_ROOTS = scopedRuleBodies(tokensCss, ":root");
 
-// `index.css` has exactly one `:root` block in the whole file (grep-verified
-// this task), and it lives inside `@media (orientation: landscape)` — this
-// extracts the block bounded by that query specifically, not just "the
-// first :root in the file", so a future `:root` added OUTSIDE the landscape
-// query would not be silently accepted as this one.
-function landscapeRootBlockOf(source: string): string {
-  const stripped = commentStrippedSource(source);
-  const mediaStart = stripped.indexOf("@media (orientation: landscape)");
-  expect(mediaStart, "expected a landscape media query").toBeGreaterThan(-1);
-  const afterMedia = stripped.slice(mediaStart);
-  const match = /:root\s*\{([^}]*)\}/.exec(afterMedia);
-  expect(
-    match,
-    "expected a :root block inside the landscape media query",
-  ).not.toBeNull();
-  return match![1];
-}
+/** The landscape half: every `:root` block genuinely nested inside a
+ *  `@media (orientation: landscape)` query. `index.css` carries FIVE such
+ *  queries; this searches all of them and none of the top-level CSS
+ *  between or after them. */
+const LANDSCAPE_ROOTS = scopedRuleBodies(indexCss, ":root", [LANDSCAPE_QUERY]);
 
-const LANDSCAPE_ROOT = landscapeRootBlockOf(indexCss);
+const PORTRAIT_ROOT = PORTRAIT_ROOTS[0] ?? "";
+const LANDSCAPE_ROOT = LANDSCAPE_ROOTS[0] ?? "";
 
 /** Design spec §8 / revision's own §3-§6 tables, exactly as the brief
  *  states them (portrait/landscape order — the brief and the spec's own
@@ -135,6 +141,25 @@ function declaredValue(block: string, name: string): number {
 }
 
 describe("the size-token scale (tokens.css portrait + index.css landscape)", () => {
+  // P9. Not "at least one": a SECOND `:root` later in source order at equal
+  // specificity wins the cascade, and the old `.exec` never looked at it.
+  it("tokens.css declares exactly one :root block, at the top level", () => {
+    expect(PORTRAIT_ROOTS).toHaveLength(1);
+  });
+
+  // P8. Two halves, both previously unproven: the block is inside a
+  // landscape query (hoisting it to top level used to pass), and it is the
+  // only `:root` index.css has anywhere (`:root` at top level would apply
+  // in BOTH orientations while looking, to the old slice, exactly like this
+  // one).
+  it("index.css declares exactly one :root block, and it is inside a landscape media query", () => {
+    expect(LANDSCAPE_ROOTS).toHaveLength(1);
+    expect(scopedRuleBodies(indexCss, ":root")).toStrictEqual([]);
+    expect(
+      cssRules(indexCss).filter((rule) => rule.selectors.includes(":root")),
+    ).toHaveLength(1);
+  });
+
   it.each(SCALE)(
     "$name: portrait $portrait px in tokens.css's :root, exactly once",
     ({ name, portrait }) => {
@@ -167,6 +192,16 @@ describe("the size-token scale (tokens.css portrait + index.css landscape)", () 
   });
 
   it("differs between orientations exactly where spec §8 says it differs, never where it doesn't", () => {
+    // HONEST SCOPE (test-integrity sweep, S0d — adjudicated and disclosed
+    // rather than deleted): this cannot be the SOLE failure. The two
+    // `it.each` blocks above already pin each name to its exact px in each
+    // block via `declarationCount(...) === 1`, and `declaredValue` reads
+    // that same single declaration, so `actualPortrait === actualLandscape`
+    // is determined by SCALE's own two columns once those pass. It is kept
+    // because it states spec §8's differ/don't-differ shape in one place
+    // and names the offending token in its diff; it is NOT a second,
+    // independent check, and nothing here should be counted as one.
+    //
     // Reads the ACTUAL declared value out of each real `:root` block —
     // not the `SCALE` fixture's own two columns compared to each other,
     // which would be a tautology about the test, not a fact about the CSS.
@@ -191,12 +226,11 @@ describe("the size-token scale (tokens.css portrait + index.css landscape)", () 
     // A second token spelling either block might use instead of redefining
     // the same one (e.g. a landscape-only `--size-hero-landscape`) would
     // slip past the exact-eight-names check above if it also kept the
-    // canonical eight — this greps both raw sources (not just the :root
+    // canonical eight — this greps both whole sources (not just the :root
     // blocks) for the tell-tale shape and fails loudly if found.
     for (const source of [tokensCss, indexCss]) {
-      const stripped = commentStrippedSource(source);
-      expect(stripped).not.toMatch(/--size-[a-z-]+-landscape/);
-      expect(stripped).not.toMatch(/--size-[a-z-]+-portrait/);
+      expect(source).not.toMatch(/--size-[a-z-]+-landscape/);
+      expect(source).not.toMatch(/--size-[a-z-]+-portrait/);
     }
   });
 });
