@@ -342,8 +342,11 @@ export interface SurfaceModel {
   targetSplit: { main: string; sub: string | null; absent: boolean };
   /** That card's third line — the ref when there is one, and EMPTY when
    *  there isn't. It used to read `NO SPLIT TARGET` beside a dash; both
-   *  surfaces now name the phase instead (`Easy`, `Rest`, `All out`), so
-   *  the caption would only repeat the value above it. */
+   *  surfaces now name the phase instead — `Easy`, `Rest`, `All out` for
+   *  the phase kinds, and `ALL OUT`/`EASY` for a work phase at an effort
+   *  ref (`domain/pace.ts`'s `effortWord`, caps on purpose — see the `FREE`
+   *  comment in `session/TimerTargets.tsx`) — so the caption would only
+   *  repeat the value above it. */
   targetSplitCaption: string;
   /** Pane C. Built here, not in the pane, so its actual cells go through
    *  the same `judgedValue` path every other pane's do. */
@@ -492,6 +495,14 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
   // still drives `connected-value-absent`, so the word is greyed and cannot
   // be mistaken for a programmed number. A dash carried no information; the
   // word says which kind of piece this is.
+  //
+  // THE WORD IS WHATEVER THE PHASE CALLS ITSELF, not a vocabulary this file
+  // curates: `Easy`/`Rest`/`All out` for the phase kinds, and `ALL OUT`/
+  // `EASY` (caps, `domain/pace.ts`'s `effortWord`) for a work phase at an
+  // effort ref, which is the branch the ruling newly routed here and the
+  // one no test or capture had reached (tail review I-1). The caps are
+  // deliberate and shared with the timer's UP NEXT strip; the reasoning is
+  // beside `FREE` in `session/TimerTargets.tsx`.
   const targetSplit =
     phase && targetSplitSeconds !== null
       ? { ...targetSplitDisplay(phase), absent: false }

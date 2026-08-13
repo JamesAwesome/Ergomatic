@@ -1,7 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { readFileSync } from "node:fs";
-import type { EnginePhase } from "./engine";
+import type { WorkoutType } from "../../domain/types.js";
+import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
+import { buildDraft } from "./draft";
+import { buildRun, type EnginePhase } from "./engine";
 import TimerTargets, { rateDisplay, targetSplitDisplay } from "./TimerTargets";
 
 // A minimal but realistic EnginePhase builder — every field the real engine
@@ -16,6 +19,34 @@ function phase(overrides: Partial<EnginePhase>): EnginePhase {
     ...overrides,
   };
 }
+
+/** A REAL effort work phase, out of the seeded library and through the real
+ *  assembly (`buildDraft` -> `buildRun`), so the `label` under test is the
+ *  one `domain/expand.ts` actually stamps rather than a string this file
+ *  chose. The hand-built `phase()` cases above pin the FUNCTION's branches;
+ *  this pins the VOCABULARY, which is the half a hand-typed label cannot
+ *  prove. */
+function effortPhaseOf(title: string): EnginePhase {
+  const w = LIBRARY_WORKOUTS.find((s) => s.title === title);
+  if (!w) throw new Error(`missing library fixture: ${title}`);
+  const draft = buildDraft({
+    id: title.toLowerCase().replace(/\s+/g, "-"),
+    title: w.title,
+    type: w.type as WorkoutType,
+    steps: w.steps,
+  });
+  const run = buildRun(
+    draft,
+    { k2Seconds: 112, k6Seconds: 122 },
+    TIMER_T0,
+    null,
+  );
+  const p = run.phases.find((x) => x.targetKind === "effort");
+  if (!p) throw new Error(`${title} has no effort work phase`);
+  return p;
+}
+
+const TIMER_T0 = new Date("2026-08-07T09:00:00.000Z");
 
 describe("targetSplitDisplay", () => {
   it("warmup: the label alone ('Easy'), no sub-line", () => {
@@ -161,6 +192,31 @@ describe("TimerTargets (component)", () => {
     expect(screen.getByText("spm")).toBeInTheDocument();
     // No tolerance band (EN DASH, U+2013) anywhere on the card.
     expect(screen.queryByText(/–/)).not.toBeInTheDocument();
+  });
+
+  // THE EFFORT CARD, from the real library rather than a hand-typed label
+  // (tail review I-1: nothing anywhere rendered this case against a phase
+  // the engine actually built, and the connected surface had newly started
+  // routing effort work through the same word). `Fog Bow` is 30' at 6k+12,
+  // 5' at MIN, 25' at 6k+10; `Rear Flank` is 5 x (1'/2'/3' at MAX). The
+  // engine stamps `label` from `domain/pace.ts`'s `effortWord`, so the card
+  // shows CAPS — deliberately, since the timer's own UP NEXT strip above it
+  // reads `WORK ALL OUT` off the same field.
+  it("renders the effort WORD in the domain's own caps for a real library effort phase, never the estimate behind it", () => {
+    const easy = effortPhaseOf("Fog Bow");
+    const allOut = effortPhaseOf("Rear Flank");
+    expect(easy.targetSplit).not.toBeUndefined(); // the estimate exists...
+
+    const first = render(<TimerTargets phase={easy} />);
+    expect(screen.getByText("EASY")).toBeInTheDocument();
+    // ...and is nowhere on the card. 6k 122 + 20 = 142 -> "2:22.0".
+    expect(screen.queryByText("2:22.0")).not.toBeInTheDocument();
+    expect(screen.getByText("20")).toBeInTheDocument(); // its rate IS real
+    first.unmount();
+
+    render(<TimerTargets phase={allOut} />);
+    expect(screen.getByText("ALL OUT")).toBeInTheDocument();
+    expect(screen.queryByText("1:52.0")).not.toBeInTheDocument(); // 2k = 112
   });
 
   it("renders 'Free' with no stray caption for a warm-up phase", () => {
