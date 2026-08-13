@@ -4216,9 +4216,18 @@ button:disabled {
   color: var(--ink-3);
 }
 
+/* `--size-total` (spec §8's "total 22", declared in `theme/tokens.css` and
+   redefined in this file's landscape `:root`) — the token's FIRST consumer,
+   wired in the connected-revamp fix round (final review, Minor-1). It
+   shipped declared twice and pinned three ways by `tokens.test.ts` while
+   nothing in this file referenced it at all: 22px lived in three places at
+   once and moving the token moved nothing on screen. `TimerRuler` renders
+   this element on BOTH surfaces and neither orientation overrides the size
+   (22 portrait, 22 landscape — an exact match for the token), so this is a
+   substitution, not a change: 22px before, 22px after. */
 .timer-total-value {
   font-family: var(--font-mono);
-  font-size: 22px;
+  font-size: var(--size-total);
   color: var(--ink);
   font-variant-numeric: tabular-nums;
 }
