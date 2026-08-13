@@ -561,17 +561,19 @@ async function walkSurfaceToLog(
   // Cards are gone from pane B (connected-revamp Task 3, revision §3: "the
   // old three metric cards are gone") — METERS is now a plain metric-row
   // cell, `.connected-metric-cell` in place of the old `.timer-card`.
-  // Structural `has()`, not `hasText`: this program's own interval clock
-  // cell reads "METERS LEFT" (a distance interval) and its own cell's
-  // concatenated text is "METERS LEFT<value>" with no separator, which a
-  // `hasText` substring/regex match on the CELL itself cannot tell apart
-  // from the real METERS cell's "METERS<value>" — `has()` instead requires
-  // an exact-text `.connected-metric-label` child, so only the cell whose
-  // label is precisely "METERS" matches.
+  // Structural `has()`, not `hasText`. This was originally a workaround for
+  // the two labels being indistinguishable: the interval clock read "METERS
+  // LEFT" and this cell read "METERS", so a substring match on the CELL
+  // could not tell "METERS LEFT<value>" from "METERS<value>". James renamed
+  // this one to "TOTAL M" on 2026-08-13 precisely because that collision
+  // was a rower's problem before it was a test's. The structural form is
+  // kept anyway — an exact-text label child is the honest way to identify a
+  // cell, and it no longer depends on the two names staying distinguishable
+  // by accident.
   const metersValue = page
     .locator(".connected-metric-cell")
     .filter({
-      has: page.locator(".connected-metric-label", { hasText: /^METERS$/ }),
+      has: page.locator(".connected-metric-label", { hasText: /^TOTAL M$/ }),
     })
     .locator(".connected-metric-value");
   const pausedMeters = await metersValue.textContent();

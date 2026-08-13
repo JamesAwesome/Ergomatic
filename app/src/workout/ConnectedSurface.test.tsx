@@ -472,7 +472,7 @@ describe("pane B — live (connected-revamp Task 3: two heroes)", () => {
     ).not.toBeNull();
 
     const row = document.querySelector(".connected-metric-row")!;
-    expect(within(row as HTMLElement).getByText("METERS")).toBeInTheDocument();
+    expect(within(row as HTMLElement).getByText("TOTAL M")).toBeInTheDocument();
     expect(within(row as HTMLElement).getByText("HR")).toBeInTheDocument();
 
     expect(document.querySelector(".timer-card")).toBeNull();
@@ -571,7 +571,11 @@ describe("pane B — live (connected-revamp Task 3: two heroes)", () => {
     const labels = Array.from(cells).map(
       (cell) => cell.querySelector(".connected-metric-label")!.textContent,
     );
-    expect(labels).toStrictEqual(["METERS LEFT", "METERS", "HR"]);
+    // `TOTAL M`, not `METERS` (James, 2026-08-13): this cell is the whole
+    // session's distance and it sits beside the INTERVAL counting down, so
+    // the bare word made two scopes look like one. The exact-array
+    // assertion is what makes the pair legible here too.
+    expect(labels).toStrictEqual(["METERS LEFT", "TOTAL M", "HR"]);
     for (const cell of cells) {
       expect(cell.querySelector(".connected-metric-value")).not.toBeNull();
     }

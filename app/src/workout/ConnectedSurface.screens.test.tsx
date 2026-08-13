@@ -123,11 +123,24 @@ function liveFrame(overrides: Partial<MonitorFrame> = {}): MonitorFrame {
   // The session pair mirrors the raw pair unless a case overrides it — see
   // `connected/surfaceModel.test.ts`'s own copy of this factory for the
   // full walk-4 reasoning.
+  //
+  // EXCEPT `sessionDistanceMeters`, which is set apart from the raw value on
+  // purpose (James, 2026-08-13, reading the landscape capture: "it renders
+  // 'meters left' but it's a time workout"). It used to mirror at 800 — the
+  // SAME number as the interval's own distance — so `TOTAL M 800` sat beside
+  // `METERS LEFT 1200` looking like two readings of one interval, when the
+  // first is the whole session. A rower one interval into Filling Low has
+  // the 8:00 warm-up behind them: `actualFor`'s own 2384 m for a time
+  // interval, plus this interval's 800. The picture now shows two visibly
+  // different scopes instead of a coincidence, which is what made the screen
+  // scan wrong. `sessionElapsedSeconds` was always a genuine session value
+  // (828 s = the 480 s warm-up plus 348 s of this interval), so only the
+  // distance half was lying.
   const f: MonitorFrame = {
     elapsedSeconds: 828,
     distanceMeters: 800,
     sessionElapsedSeconds: 828,
-    sessionDistanceMeters: 800,
+    sessionDistanceMeters: 2384 + 800,
     currentSplit: 117.8,
     spm: 21,
     heartRateBpm: 164,
@@ -141,7 +154,12 @@ function liveFrame(overrides: Partial<MonitorFrame> = {}): MonitorFrame {
   return {
     ...f,
     sessionElapsedSeconds: overrides.sessionElapsedSeconds ?? f.elapsedSeconds,
-    sessionDistanceMeters: overrides.sessionDistanceMeters ?? f.distanceMeters,
+    // `f.sessionDistanceMeters`, NOT `f.distanceMeters`: mirroring the raw
+    // value unconditionally is what discarded the default above and made
+    // every capture's session total equal to its interval distance. A case
+    // that wants the mirror now says so (the warm-up fixture does, where the
+    // two genuinely are equal because nothing precedes a warm-up).
+    sessionDistanceMeters: f.sessionDistanceMeters,
   };
 }
 
@@ -240,6 +258,11 @@ describe("screen fixtures for pnpm screenshots", () => {
           intervalIndex: 0,
           elapsedSeconds: 268,
           distanceMeters: 942,
+          // Equal to the raw value here, and stated rather than inherited:
+          // a warm-up is the FIRST interval, so the session total genuinely
+          // is this interval's own distance. Everywhere else the two differ
+          // (see `liveFrame`).
+          sessionDistanceMeters: 942,
           currentSplit: 142.3,
           spm: 18,
           heartRateBpm: 131,
