@@ -5,6 +5,29 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // The connected-mode revamp (#89) plus the two that landed beside it,
+    // the Library's filter unification (#87) and the article-state fix
+    // (#88). Item order is rower-priority, not merge order. Every
+    // connected item here is walk-confirmed on a real PM5 (2026-08-13):
+    // the column holding still through a rotation, the notches landing on
+    // a real boundary, the warm-up reading WARM-UP and then 1 OF 2, and
+    // both heroes legible at arm's length mid-stroke. The countdown and
+    // finish-screen line is the one item that needs no monitor at all.
+    version: "v0.9.0",
+    date: "2026-08-13",
+    items: [
+      "Connected mode is two screens instead of three. Live shows your split and your stroke rate as two big numbers, each sitting directly over the target it is judged against.",
+      "Faster than your target reads blue, slower reads red, on the split and the rate alike.",
+      "Your warm-up is flagged as one. It says WARM-UP while you row it, and the interval count starts at your first working piece, so a two piece workout no longer tells you it is one of three before you have begun.",
+      "The progress bar is notched where your intervals actually change, so you can see where you are in the session without reading a number.",
+      "The grid gives every interval a single line: eight of them visible in landscape, fifteen in portrait.",
+      "End session moved to the top corner. It used to be a full width bar directly under the pane switcher, easy to catch with a thumb reaching to change views mid row.",
+      "Connected mode in landscape uses the whole screen.",
+      "The countdown and the finish screen stopped scrolling on phones with a notch. That one needs no monitor.",
+      "The Library filters by difficulty now, and the workout type chips sit outside the filter sheet where one tap reaches them.",
+    ],
+  },
+  {
     // The fast-follow wave plus everything that shipped after v0.7.0's own
     // entry was written (#80/#81/#83). Item order is rower-priority, not
     // merge order. The connected-screen items are all walk-confirmed on a

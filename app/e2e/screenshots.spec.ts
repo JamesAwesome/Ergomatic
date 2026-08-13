@@ -913,7 +913,7 @@ test("releases", async ({ page }) => {
     page.getByRole("heading", { name: "Release notes" }),
   ).toBeVisible();
   await expect(page.locator(".news-release-version").first()).toContainText(
-    "v0.8.0",
+    "v0.9.0",
   );
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "releases.png"),
