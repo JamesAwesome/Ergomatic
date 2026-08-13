@@ -294,7 +294,9 @@ function frame(overrides: Partial<MonitorFrame> = {}): MonitorFrame {
 /** A completed interval's actuals, derived from the PROGRAM's own numbers
  *  (never literals typed into this file): the programmed distance rowed 6
  *  s/500m faster than asked and one stroke under the rate, which is the
- *  ochre/teal pair the handoff's mockup draws on its completed rows. */
+ *  two-verdict pair the handoff's mockup draws on its completed rows —
+ *  blue `"faster"` and red `"slower"` since the 2026-08-13 repaint, ochre
+ *  and teal in the mockup itself. */
 function actualFor(index: number, program: WorkoutProgram): IntervalActual {
   const interval = program.intervals[index]!;
   const split = interval.targetSplit ?? 132;
@@ -867,7 +869,7 @@ describe("THE ACCENT CENSUS: accent is a CONTROL colour, and nothing else", () =
     cleanupRender();
   });
 
-  it("no upcoming or completed row can reach the accent class", () => {
+  it("no upcoming or completed row can reach the countdown mark", () => {
     renderGrid({
       frame: frame({ intervalIndex: 2 }),
       actuals: [actualFor(0, FILLING_LOW.program)],
@@ -907,7 +909,7 @@ describe("THE ACCENT CENSUS: accent is a CONTROL colour, and nothing else", () =
     expect(DECLARATIONS).not.toContain(".connected-pane .timer-dot-current");
   });
 
-  it("the countdown's accent is a COLOUR, never an enlarged size", () => {
+  it("the countdown's mark is a COLOUR, never an enlarged size — and gold, never accent or a verdict", () => {
     // Connected-revamp Task 5 dropped the old 22px/26px special case: the
     // revision's own mockup draws the countdown at the SAME `--size-row`
     // as every other value in the row, tinted, not enlarged — the density
@@ -971,9 +973,9 @@ describe("judged cells: pane C goes through the ONE helper", () => {
       row(4).querySelectorAll('[class*="timer-card-actual-"]'),
     ).toHaveLength(0);
 
-    // Row 2's actual was rowed 6 s/500m faster than asked -> ochre "faster"
-    // (the effort direction, `domain/judge.ts`'s rule), and one stroke
-    // under the programmed rate -> teal "slower".
+    // Row 2's actual was rowed 6 s/500m faster than asked -> blue "faster"
+    // (the rower's direction, `domain/judge.ts`'s rule), and one stroke
+    // under the programmed rate -> red "slower".
     expect(row(2).querySelector(".connected-grid-pace")!.className).toContain(
       "timer-card-actual-faster",
     );
@@ -1043,7 +1045,7 @@ describe("judged cells: pane C goes through the ONE helper", () => {
     // retract it.
     renderDisconnectedMidSession();
     // Row 2 is the first 2000 m rep, rowed 6 s/500m fast and a stroke under
-    // the rate: ochre and teal, and they stay ochre and teal.
+    // the rate: blue and red, and they stay blue and red.
     expect(row(2).className).toContain("connected-grid-completed");
     expect(row(2).querySelector(".connected-grid-pace")!.className).toContain(
       "timer-card-actual-faster",

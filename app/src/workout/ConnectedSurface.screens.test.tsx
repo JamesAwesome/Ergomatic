@@ -100,7 +100,8 @@ const LONG_FIXTURE = libraryFixture("Sea Smoke", 6);
 /** What the machine reported for an interval that is already behind the
  *  rower. Built from the PROGRAM's own numbers, not typed-in ones: the
  *  actual is the target's distance rowed a touch fast, which is the state
- *  the handoff's mockup draws (ochre) on its completed rows. */
+ *  the handoff's mockup draws on its completed rows — `"faster"`, painted
+ *  blue here since the 2026-08-13 repaint, ochre in the mockup itself. */
 function actualFor(index: number, program: WorkoutProgram): IntervalActual {
   const interval = program.intervals[index]!;
   const split = interval.targetSplit ?? 132;
@@ -117,8 +118,10 @@ function actualFor(index: number, program: WorkoutProgram): IntervalActual {
 }
 
 /** Mid-way through the first 2000 m rep, going a little too hard: the
- *  handoff's own mockup shows `1:57.8` against a `2:00.0` target so the
- *  ochre "faster" state is what the picture actually shows. */
+ *  handoff's own mockup shows `1:57.8` against a `2:00.0` target, so the
+ *  `"faster"` state is what the picture actually shows — BLUE in the
+ *  committed capture (`connected-pane-live.png`), the mockup's ochre having
+ *  been repainted 2026-08-13. */
 function liveFrame(overrides: Partial<MonitorFrame> = {}): MonitorFrame {
   // The session pair mirrors the raw pair unless a case overrides it — see
   // `connected/surfaceModel.test.ts`'s own copy of this factory for the
@@ -243,7 +246,8 @@ describe("screen fixtures for pnpm screenshots", () => {
    *  §5b). Every other fixture in this file photographs interval 1 — the
    *  first 2000 m rep — so nothing had a picture of the state §5b's table is
    *  actually about: the caption reading `WARM-UP` with no ordinal at all,
-   *  both target slots on the dash with both heroes unjudged (a warm-up is
+   *  both target slots naming the phase instead of a number — `Easy` and
+   *  `Free`, greyed — with both heroes unjudged (a warm-up is
    *  never graded), and TOTAL LEFT's bar part-way through the warm-up's own
    *  span — filling in ITS tone as the rower rows it, with the unrowed rest
    *  of the span still plain track (James, 2026-08-12: the bar moves while

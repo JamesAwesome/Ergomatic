@@ -520,11 +520,12 @@ describe("pane B — live (connected-revamp Task 3: two heroes)", () => {
     expect(hero.className).toContain("timer-card-actual-within");
   });
 
-  // THE NO-TARGET STATE (design spec §6, adversarial finding): every REST
-  // phase hits this. The target slot holds its space and reads the dash in
-  // `--ink-3` (`connected-value-absent`); the actual above stays UNJUDGED
-  // (plain ink — no `-over`/`-under`/`-stale` class), because a value with
-  // nothing to compare against must not be tinted.
+  // THE NO-TARGET STATE (design spec §6, as revised 2026-08-13): every REST
+  // phase hits this. The target slot holds its space and names the PHASE
+  // (`Rest`/`Free`) in `--ink-3` (`connected-value-absent`) where §6
+  // originally put a dash; the actual above stays UNJUDGED (plain ink — no
+  // `-faster`/`-slower`/`-stale` class), because a value with nothing to
+  // compare against must not be tinted.
   it("during REST both targets name the phase (Rest / Free) in the absent tone, and both actuals above stay unjudged", () => {
     renderSurface({
       frame: frame({
@@ -602,9 +603,10 @@ describe("pane B — live (connected-revamp Task 3: two heroes)", () => {
 describe("judgement: one helper, every pane (handoff §3)", () => {
   const target = WORK_PHASE.targetSplit!;
 
-  // Direction is the EFFORT's, not the number's: a smaller split is a
-  // faster boat, so it is `over` (ochre). `domain/judge.ts` owns that rule.
-  it("tints pane B's hero ochre when faster and teal when slower", () => {
+  // Direction is the ROWER's, not the number's: a smaller split is a
+  // faster boat, so it is `"faster"` (blue). `domain/judge.ts` owns that
+  // rule.
+  it("tints pane B's hero blue when faster and red when slower", () => {
     const fast = renderSurface({
       frame: frame({ currentSplit: target - 10 }),
     });

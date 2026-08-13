@@ -194,9 +194,9 @@ describe("splitHero: the hero's whole/tenths cut", () => {
 });
 
 describe("judgedValue: the one judgement path", () => {
-  // `"faster"`/`"slower"` are OVER/UNDER THE EFFORT ASKED, not the number: a
+  // `"faster"`/`"slower"` are the ROWER's direction, not the numeral's: a
   // smaller split is a faster boat (`domain/judge.ts`'s direction rule).
-  it("tints under/within/over off the real tolerance, not a guess", () => {
+  it("tints slower/within/faster off the real tolerance, not a guess", () => {
     const target = 120;
     const within = judgedValue({
       kind: "pace",
@@ -237,7 +237,7 @@ describe("judgedValue: the one judgement path", () => {
     expect(v.judgement).toBe("within");
   });
 
-  it("stale beats a value that would otherwise judge over", () => {
+  it("stale beats a value that would otherwise judge faster", () => {
     const v = judgedValue({
       kind: "pace",
       actual: 90,
@@ -283,7 +283,7 @@ describe("live", () => {
 
   it("judges the split against the phase's own resolved target", () => {
     const target = firstWorkPhase().targetSplit!;
-    // Ten seconds per 500 m FASTER than asked is over the effort, ochre.
+    // Ten seconds per 500 m quicker than asked reads `"faster"`, blue.
     expect(
       model({ frame: frame({ currentSplit: target - 10 }) }).pace.judgement,
     ).toBe("faster");
@@ -537,11 +537,13 @@ describe("no HR monitor", () => {
   });
 });
 
-describe("a zero split is not a reading (7B iteration: the pre-pull ochre 0:00.0)", () => {
+describe("a zero split is not a reading (7B iteration: the pre-pull tinted 0:00.0)", () => {
   it("live with currentSplit 0 renders the dash, unjudged — never 0:00.0 painted against the target", () => {
     // Hardware walk 2: before the first pull the PM reports Current Pace
-    // 0, and the hero judged it as FASTER than target (0 < anything) —
-    // ochre at a rower who had not taken a stroke.
+    // 0, and the hero judged it as FASTER than target (0 < anything) — a
+    // verdict colour at a rower who had not taken a stroke. (The walk saw
+    // it in ochre; that state is blue since the 2026-08-13 repaint. The
+    // colour is not what the test is about.)
     const m = model({ phase: "live", frame: frame({ currentSplit: 0 }) });
     expect(m.pace.display).toBe("—");
     expect(m.pace.absent).toBe(true);

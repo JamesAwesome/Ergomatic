@@ -359,8 +359,10 @@ export interface SurfaceModel {
  *  A ZERO split is the same statement from the other direction (7B
  *  iteration, 2026-08-08): before the first pull — and in rests and
  *  boundary frames — the PM reports Current Pace 0, and hardware walk 2
- *  showed the hero judging that 0 against the target: `0:00.0` painted
- *  OCHRE at a rower who had not taken a stroke. A 0.00 s/500m pace is not
+ *  showed the hero judging that 0 against the target: `0:00.0` painted in
+ *  the FASTER-than-target colour (ochre on that walk, blue since the
+ *  2026-08-13 repaint) at a rower who had not taken a stroke. A 0.00
+ *  s/500m pace is not
  *  a reading; it maps to the same `null` the paused case takes, so the
  *  hero renders the dash in ink and judgement colours appear only once a
  *  real split exists. */

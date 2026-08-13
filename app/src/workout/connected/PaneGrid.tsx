@@ -5,8 +5,8 @@
 // state and the caption arrive already decided on `SurfaceModel.grid`
 // (`surfaceModel.ts`'s `buildGridModel`), which is also where the actual
 // cells go through the one `judgedValue` path pane B uses — so the
-// split judged ochre on pane B's hero is judged ochre in this grid's
-// `/500M` cell by the same call, not by a second opinion.
+// split judged `"faster"` (blue) on pane B's hero is judged blue in this
+// grid's `/500M` cell by the same call, not by a second opinion.
 //
 // CONNECTED-REVAMP TASK 5 (design spec §6, revision §4): every row is now
 // SINGLE-LINE at a FIXED height (32px landscape / 40px portrait, JAMES
