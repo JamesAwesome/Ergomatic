@@ -1654,9 +1654,9 @@ on James's iPhone against a real PM5, and James gives the merge word.
 
 ## Phase CR — Connected revamp: two panes, two heroes, one honest bar
 
-**Status:** Implementation complete on the `connected-revamp` branch
-(Tasks 1-8 of 9); James's erg look (Task 9) is the only step left
-before the PR and his merge word.
+**Status:** PR #89 open, rebased over #87/#88, CI green (unit 3853+1
+across 157 files, e2e 283, screenshots 62). James's erg look (Task 9)
+is the only step left before his merge word.
 **Goal:** connected mode becomes two panes whose landscape geometry
 cannot drift; the live pane reads as two big judged numerals over
 ink targets; the grid becomes single-line rows with its totals in
@@ -1768,6 +1768,73 @@ item at a time —
   rows legible at 8 visible.
 Anything he wants changed goes through a fix round before the PR;
 then the PR (rich body, before/after captures) and his merge word.
+
+## Phase CP — The pause that isn't
+
+**Status:** filed 2026-08-12 from James's question ("the PM5 doesn't
+pause, so why do we?"). CONFIRMED in full; needs a brainstorm and his
+ruling before any code. Not a blocker for #89.
+**Goal:** stop one word meaning two opposite things across two surfaces
+that now deliberately look alike.
+
+**The confirmation, from our own record.** There is no paused state on
+the PM5 wire. `MonitorFrame.state` is
+`idle | armed | rowing | resting | finished | terminated` and its own
+comment says so ("There is NO paused state on the wire"), with a test
+that asserts `state` never equals `"paused"`. We send the monitor
+nothing when we show PAUSED: no pause command exists in the driver, and
+none is implementable — the PM starts on the first stroke and
+`SET_STARTTYPE` is `<Not implemented>` in rev 0.27. James's memory of
+the clock continuing is exactly right, and it is on hardware in the
+2026-08-08 recording: LEFT IN INTERVAL counted 4:38 -> 3:47 while
+meters sat pinned at 30, split at 4:16.1 and rate at 68. That
+observation is load-bearing elsewhere — it is precisely WHY
+`elapsedSeconds` is excluded from `freezeKey`, since a key containing a
+running clock never repeats and PAUSED could never fire at all.
+
+**So the two surfaces use one word for opposite things:**
+- *Phone timer (unconnected):* `pause` is a COMMAND. `engine.ts` sets
+  `pausedAt` as the clock's right edge and `resume` folds the span into
+  `pausedTotalMs`, subtracting it. Time genuinely does not accrue. The
+  rower's piece is suspended.
+- *Connected (PM5):* PAUSED is an OBSERVATION, derived from three
+  metrics freezing for `PAUSED_FRAME_HOLD` frames. Nothing is
+  suspended. The interval clock is draining the whole time the word is
+  on screen, and the rower's piece is quietly getting shorter.
+
+Phase CR just unified these two surfaces' visual language, which makes
+the collision sharper rather than softer: the same treatment now says
+"I stopped your clock" on one screen and "I noticed you stopped" on the
+other.
+
+**The part that is arguably a bug, not just wording.** The connected
+paused block is `position: absolute; bottom: 0; height: 52px` on an
+opaque `--ink` fill, so it OCCLUDES the bottom of the live pane — TOTAL
+LEFT and the progress bar. Those are the two elements that would show
+the clock still running. At the exact moment a rower is most likely to
+believe the workout is suspended, we cover the evidence that it is not.
+(Phase CR walk item (b3) asks James to judge the occlusion as a layout
+trade; this reframes the same pixels as an information question.)
+
+**Open questions for the brainstorm** — none of these are decided:
+1. Is the honest word STOPPED, or RESTING, or "NOT ROWING", rather than
+   PAUSED? `PULL TO RESUME` already carries the right instruction; the
+   noun above it is what overstates.
+2. Should the connected block stop occluding TOTAL LEFT and the bar,
+   or go further and make the still-draining clock the LOUDEST thing on
+   screen while the rower is stopped?
+3. Does the phone timer's real pause deserve visual separation from the
+   connected observation, now that they share a design language?
+4. Is there anything worth doing about the underlying reality — e.g.
+   telling the rower how much of their interval they spent stopped, on
+   the finish screen or in the log?
+5. Distance intervals are UNWATCHED here. The clock is expected to run
+   on them identically, but the freeze has only ever been observed on a
+   timed piece (the caveat `PAUSED_FRAME_HOLD` already carries).
+
+**Cheapest useful next step:** questions 1 and 2 are copy plus a
+`bottom`/`background` change and could ride a bugfix round; 3 and 4 are
+design. Do not start any of it before James rules on the word.
 
 ## Bugfix rounds
 
