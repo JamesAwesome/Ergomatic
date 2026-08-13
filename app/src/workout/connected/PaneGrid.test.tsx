@@ -296,17 +296,40 @@ function frame(overrides: Partial<MonitorFrame> = {}): MonitorFrame {
  *  s/500m faster than asked and one stroke under the rate, which is the
  *  two-verdict pair the handoff's mockup draws on its completed rows —
  *  blue `"faster"` and red `"slower"` since the 2026-08-13 repaint, ochre
- *  and teal in the mockup itself. */
+ *  and teal in the mockup itself.
+ *
+ *  THE ROW MUST BE PHYSICALLY POSSIBLE (tail review M-6, and the close-out
+ *  round's own item 6). An interval fixes ONE of its two dimensions — a
+ *  time piece its seconds, a distance piece its metres — and the other
+ *  follows AT THE PACE THIS ROW CLAIMS IT WAS ROWED, which is `avgSplit`,
+ *  not the target. Both used to be free here: the warm-up's metres were a
+ *  literal 2384 (8:00 at 1:40.7, faster than the workout's own 2:06 work
+ *  target and impossible beside the 2:06.0 split printed in the same row),
+ *  and a distance row's seconds were priced at the TARGET while its split
+ *  claimed six seconds better.
+ *
+ *  `ConnectedSurface.screens.test.tsx` carries its own copy of this
+ *  function, by the same deliberate-duplication convention `libraryFixture`
+ *  above follows. The two must stay in step: that copy feeds the committed
+ *  PNGs, this one does not, and a fix landing in only one of them is how
+ *  the literal survived here after being corrected there. The
+ *  "arithmetically possible" test below pins this copy independently, so
+ *  the two cannot drift back apart in silence. */
 function actualFor(index: number, program: WorkoutProgram): IntervalActual {
   const interval = program.intervals[index]!;
   const split = interval.targetSplit ?? 132;
-  const meters = interval.kind === "distance" ? interval.value : 2384;
+  const avgSplit = split - 6;
+  const meters =
+    interval.kind === "distance"
+      ? interval.value
+      : Math.round((interval.value / avgSplit) * 500);
+  const elapsedSeconds =
+    interval.kind === "time" ? interval.value : (meters / 500) * avgSplit;
   return {
     index,
-    elapsedSeconds:
-      interval.kind === "time" ? interval.value : (meters / 500) * split,
+    elapsedSeconds,
     distanceMeters: meters,
-    avgSplit: split - 6,
+    avgSplit,
     avgSpm: (interval.displaySpm ?? 20) - 4,
     avgHeartRateBpm: 158 + index,
   };
@@ -420,6 +443,38 @@ describe("the fixtures are what this file says they are", () => {
   it("Sea Smoke is the 25-interval case the handoff works through", () => {
     expect(SEA_SMOKE.program.intervals).toHaveLength(25);
   });
+
+  // The arithmetic, asserted directly rather than left to the rendered
+  // strings. A cell-level snapshot records an impossible row exactly as
+  // happily as a possible one — that is how the literal 2384 survived a
+  // task review, a whole-branch review and a 997-line test-integrity sweep
+  // in this very file. This checks the INVARIANT instead: whatever
+  // dimension the interval does not fix, distance and time must agree with
+  // the split the same row reports.
+  it("every actualFor row is arithmetically possible: metres, seconds and split agree", () => {
+    for (const [name, fixture] of [
+      ["Filling Low", FILLING_LOW],
+      ["Sea Smoke", SEA_SMOKE],
+    ] as const) {
+      fixture.program.intervals.forEach((_interval, index) => {
+        const a = actualFor(index, fixture.program);
+        // `avgSplit` is nullable on the wire type but never null here —
+        // asserted rather than asserted-away, so a future `actualFor` that
+        // stopped reporting a split would fail this test instead of
+        // silently skipping the arithmetic it exists to check.
+        expect(a.avgSplit).not.toBeNull();
+        // split = seconds per 500 m, so metres = seconds / split * 500.
+        // Within a metre: `actualFor` rounds the derived side.
+        expect([
+          `${name} #${index}`,
+          Math.abs((a.elapsedSeconds / a.avgSplit!) * 500 - a.distanceMeters),
+        ]).toStrictEqual([
+          `${name} #${index}`,
+          expect.closeTo(0, 0) as unknown as number,
+        ]);
+      });
+    }
+  });
 });
 
 describe("row states (handoff §3's three treatments)", () => {
@@ -433,9 +488,12 @@ describe("row states (handoff §3's three treatments)", () => {
     expect(row(1).className).toContain("connected-grid-completed");
     const done = cells(row(1));
     expect(done.num).toBe("WU");
-    // The warm-up's programmed 480 s, as the machine reported rowing it.
+    // The warm-up's programmed 480 s, as the machine reported rowing it —
+    // and the metres that 480 s at this row's own reported split actually
+    // buys (480 / 126 * 500), not a literal that contradicted the pace
+    // printed two cells to its right.
     expect(done.time).toBe("8:00");
-    expect(done.meters).toBe("2384");
+    expect(done.meters).toBe("1905");
     expect(done.hr).toBe("158");
 
     // 2 — ACTIVE: a filled row, a now-marker, a bold index. Work numbering
@@ -1290,7 +1348,7 @@ describe("the grid, fake-driven", () => {
           kind: "status",
           workoutState: 4,
           elapsedSeconds: warmup.value,
-          distanceMeters: 2384,
+          distanceMeters: 1908,
           spm: 20,
           currentSplit: 125.8,
           heartRateBpm: 142,
@@ -1302,20 +1360,20 @@ describe("the grid, fake-driven", () => {
           actual: {
             index: 0,
             elapsedSeconds: warmup.value,
-            distanceMeters: 2384,
+            distanceMeters: 1908,
             avgSplit: 125.8,
             avgSpm: 18,
             avgHeartRateBpm: 142,
           },
           cumulativeElapsedSeconds: warmup.value,
-          cumulativeDistanceMeters: 2384,
+          cumulativeDistanceMeters: 1908,
         },
         {
           atMs: 300,
           kind: "status",
           workoutState: 4,
           elapsedSeconds: warmup.value + 60,
-          distanceMeters: 2384 + 240,
+          distanceMeters: 1908 + 240,
           spm: 21,
           currentSplit: 117.8,
           heartRateBpm: 164,
@@ -1365,14 +1423,22 @@ describe("the grid, fake-driven", () => {
     expect(document.querySelector(".connected-pane-grid")).not.toBeNull();
 
     // Row 1 is COMPLETED and carries numbers the machine reported, decoded
-    // by the real codec: 8:00 / 2384 m / 2:05.8 / 18 spm / 142 bpm — the
+    // by the real codec: 8:00 / 1908 m / 2:05.8 / 18 spm / 142 bpm — the
     // handoff mockup's own first row, arrived at honestly. It is the
     // warm-up (design spec §5b), so its `#` reads `WU`, not `1`.
+    //
+    // 1908, not the 2384 this story used to script (close-out item 6). The
+    // frames above are hand-authored and then run through the REAL codec,
+    // so the codec cannot make an impossible row possible: 480 s at the
+    // 125.8 s/500m this same row reports is 1908 m, while 2384 m in 480 s
+    // is a 1:40.7 warm-up. The row printed both numbers side by side and
+    // no assertion could see the contradiction, because every one of them
+    // checked a rendered string rather than the arithmetic between them.
     expect(row(1).className).toContain("connected-grid-completed");
     expect(cells(row(1))).toStrictEqual({
       num: "WU",
       time: "8:00",
-      meters: "2384",
+      meters: "1908",
       pace: "2:05.8",
       spm: "18",
       hr: "142",
