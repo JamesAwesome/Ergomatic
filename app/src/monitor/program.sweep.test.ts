@@ -228,6 +228,12 @@ describe("compileProgram: the warm-up SETTING reaches interval 0", () => {
     // compiler, so it is pinned against the real library rather than a
     // hand-built pair — with the preference ON for every workout, and OFF
     // for every workout.
+    //
+    // Non-empty guard first (test-integrity sweep, S0e): every assertion in
+    // this test lives inside the loop, so an empty `LIBRARY_WORKOUTS` would
+    // pass it silently, "across all 300 workouts" and all. The count is in
+    // the title, so the count is what gets pinned.
+    expect(LIBRARY_WORKOUTS).toHaveLength(300);
     for (const [i, workout] of LIBRARY_WORKOUTS.entries()) {
       const draft = buildDraft({
         id: `warmup-sweep-${i}`,

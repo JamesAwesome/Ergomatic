@@ -229,7 +229,17 @@ describe("TimerRuler — the notched bar", () => {
         boundaries={FIVE_OF_FIVE}
       />,
     );
-    expect(notches().every((n) => n.dataset.predicted === "true")).toBe(true);
+    // THE WHOLE ARRAY, never `every` (test-integrity sweep, P5): `[].every()`
+    // is `true` and this test never pinned the notch count, so with
+    // `notchPercents` stubbed to `return []` — the bar drawing no notches at
+    // all — BOTH halves of the only test in this file for the
+    // before/after rule passed.
+    expect(notches().map((n) => n.dataset.predicted)).toStrictEqual([
+      "true",
+      "true",
+      "true",
+      "true",
+    ]);
     unmount();
     render(
       <TimerRuler
@@ -242,9 +252,12 @@ describe("TimerRuler — the notched bar", () => {
         }}
       />,
     );
-    expect(notches().every((n) => n.dataset.predicted === undefined)).toBe(
-      true,
-    );
+    expect(notches().map((n) => n.dataset.predicted)).toStrictEqual([
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ]);
   });
 
   it("cuts the notches the fill has passed out of it, and inks the ones ahead", () => {

@@ -395,9 +395,21 @@ describe("live", () => {
   });
 
   it("prices TOTAL LEFT off the workout's own phases, not the machine's guess", () => {
+    // THE NUMBER, not a floor, and not `totalSeconds` compared to itself
+    // (test-integrity sweep, P14). `totalLeftSeconds === totalSeconds - 600`
+    // re-implements the impl's own one-liner and says nothing about where
+    // `totalSeconds` came from — which is the whole of this test's title.
+    // Proven: `totalSessionSecondsOf(phases) + 600` and `- 600` each left
+    // 61/61 green, a ten-minute error in the session total invisible to the
+    // entire file.
+    //
+    // 3216 s, derived from the fixture rather than read back off the model:
+    // an 8:00 warm-up (480) + 4 x 2000 m at the resolved 2:06.0 target
+    // split, i.e. 4 x 4 x 126 = 2016 s of work, + 4 x 3:00 rest (720).
+    // 480 + 2016 + 720 = 3216.
     const m = model({ frame: frame({ elapsedSeconds: 600 }) });
-    expect(m.totalSeconds).toBeGreaterThan(0);
-    expect(m.totalLeftSeconds).toBe(m.totalSeconds - 600);
+    expect(m.totalSeconds).toBe(3216);
+    expect(m.totalLeftSeconds).toBe(3216 - 600);
   });
 
   it("never reports a negative total left when the machine overruns", () => {
@@ -460,9 +472,13 @@ describe("the session pair across a work-interval reset (walk 4)", () => {
 
     // Exact, not merely monotone: the middle frame is the one the recording
     // caught jumping BACKWARDS to a nearly-full countdown, because the raw
-    // clock it used to read had just returned to 0.
+    // clock it used to read had just returned to 0. `total` is pinned to
+    // its own known value first, so these three are measured against a
+    // number rather than against another field of the same call — and the
+    // `lefts[1] < total` trailer that used to sit here is gone: it could
+    // not fail once the line above passed (test-integrity sweep, S0g).
+    expect(total).toBe(3216);
     expect(lefts).toStrictEqual([total - 37.81, total - 37.81, total - 39.01]);
-    expect(lefts[1]).toBeLessThan(total);
   });
 
   it("the METERS card shows the accumulated total, not the reset interval's 1 m", () => {
@@ -472,10 +488,12 @@ describe("the session pair across a work-interval reset (walk 4)", () => {
 
     // 102.5 is deliberately a half-way value: `Math.round` gives 103 where a
     // floor would give 102, so this pins the rounding as well as the source.
+    // What the bug looked like on the erg: the raw field would have
+    // rendered `Math.round(0.7)` as `"1"` in the middle slot and the card
+    // fell 109 -> 50 for real. The exact triple below already forbids that;
+    // the separate `not.toBe("1")` trailer that used to follow it could not
+    // fail once this line passed (test-integrity sweep, S0g).
     expect(displays).toStrictEqual(["102", "103", "105"]);
-    // What the bug looked like on the erg: the raw field would have rendered
-    // `Math.round(0.7)` here and the card fell 109 -> 50 for real.
-    expect(displays[1]).not.toBe("1");
   });
 
   it("the SESSION caption's clock keeps running through the reset too", () => {
@@ -580,9 +598,11 @@ describe("disconnected: lose and degrade (spec C5)", () => {
   });
 
   it("promises nothing: the caption reads LOST, never TRYING", () => {
+    // The exact caption forbids "TRYING" on its own; the extra
+    // `not.toContain("TRYING")` trailer that used to follow could not fail
+    // once this line passed (test-integrity sweep, S0g).
     const m = model({ phase: "disconnected" });
     expect(m.deviceCaption).toBe(`${DEVICE} · LOST`);
-    expect(m.deviceCaption).not.toContain("TRYING");
   });
 });
 
@@ -694,13 +714,13 @@ describe("the warm-up is flagged, never counted", () => {
   });
 
   it("says WARM-UP with no ordinal while the warm-up is running", () => {
+    // The defect this replaced: the rower warming up read `1 OF 5` on a
+    // workout they know as four pieces. The two exact strings forbid that
+    // outright; the `not.toMatch(/\d/)` and `not.toContain("OF")` trailers
+    // that used to follow could not fail once they passed (S0g).
     const m = model({ frame: frame({ intervalIndex: 0 }) });
     expect(m.intervalLabelShort).toBe("WARM-UP");
     expect(m.intervalLabel).toBe("WARM-UP");
-    // The defect this replaced: the rower warming up read `1 OF 5` on a
-    // workout they know as four pieces.
-    expect(m.intervalLabelShort).not.toMatch(/\d/);
-    expect(m.intervalLabelShort).not.toContain("OF");
   });
 
   it("starts the count at 1 on the first WORK piece, on a four-piece workout", () => {
@@ -715,9 +735,10 @@ describe("the warm-up is flagged, never counted", () => {
     ]);
     // The denominator counts WORKING intervals only — the number the rower
     // has in their head — and it is one short of the program's own length.
+    // The `every(... "OF 4")` / `some(... "OF 5")` trailers that used to
+    // follow are gone: both were implied by the exact four strings above
+    // (S0g), and `every` over an unpinned array is its own trap.
     expect(FIXTURE.program.intervals).toHaveLength(5);
-    expect(captions.every((c) => c.includes("OF 4"))).toBe(true);
-    expect(captions.some((c) => c.includes("OF 5"))).toBe(false);
   });
 
   it("drops the ordinal for the warm-up's own trailing rest too", () => {
@@ -812,16 +833,16 @@ function actualFor(index: number, elapsedSeconds: number): IntervalActual {
 
 describe("boundaries: where the intervals actually are", () => {
   it("draws one notch per interval BOUNDARY, never one per phase", () => {
-    const m = model();
-    expect(m.boundaries.seconds).toHaveLength(
-      FIXTURE.program.intervals.length - 1,
-    );
     // The defect this replaced: nine phases, nine equal dots, for the five
-    // intervals the caption counts.
-    expect(FIXTURE.phases.length).toBeGreaterThan(
-      FIXTURE.program.intervals.length,
-    );
-    expect(m.boundaries.seconds).not.toHaveLength(FIXTURE.phases.length - 1);
+    // intervals the caption counts. All three counts are pinned EXACTLY —
+    // the old version asserted `phases.length > intervals.length`, a
+    // property of the fixture that no change to `surfaceModel.ts` could
+    // falsify, and `not.toHaveLength(8)`, implied by the length above it
+    // (test-integrity sweep, S0g).
+    expect(FIXTURE.phases).toHaveLength(9);
+    expect(FIXTURE.program.intervals).toHaveLength(5);
+    const m = model();
+    expect(m.boundaries.seconds).toHaveLength(4);
   });
 
   it("the notch count never disagrees with the interval caption", () => {
@@ -873,7 +894,9 @@ describe("boundaries: where the intervals actually are", () => {
     const m = model({ actuals: [warmup, actualFor(1, long)] });
     expect(m.boundaries.seconds[0]).toBe(estimated[0]); // the warm-up holds
     expect(m.boundaries.seconds[1]).toBe(estimated[0]! + long + rest);
-    expect(m.boundaries.seconds[1]).toBeGreaterThan(estimated[1]!);
+    // (The `> estimated[1]` trailer that used to follow is gone: with the
+    // exact value above pinned, `long + rest > programmed` is arithmetic on
+    // this test's own constants — test-integrity sweep, S0g.)
     // And the notches after it moved by the SAME correction, not their own.
     const shift = m.boundaries.seconds[1]! - estimated[1]!;
     expect(m.boundaries.seconds[2]! - estimated[2]!).toBe(shift);
@@ -949,6 +972,14 @@ describe("boundaries: where the intervals actually are", () => {
     // The bar scales boundaries against `totalSeconds`; a boundary past it
     // would be a notch off the end of its own bar.
     const m = model();
+    // The relation alone carries a ±684 s tolerance — the real gap between
+    // 2532 and 3216 — so it survived both `totalSeconds ± 600` mutations
+    // (test-integrity sweep, P15). Both sides are exactly known, so both
+    // are pinned: the warm-up ends at 480, then each work-plus-rest group
+    // adds 504 + 180 = 684, and the fourth group's boundary IS the end of
+    // the session, so it is not drawn.
+    expect(m.boundaries.seconds).toStrictEqual([480, 1164, 1848, 2532]);
+    expect(m.totalSeconds).toBe(3216);
     expect(m.boundaries.seconds.at(-1)!).toBeLessThan(m.totalSeconds);
   });
 });

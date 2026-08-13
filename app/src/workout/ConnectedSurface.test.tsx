@@ -40,7 +40,7 @@ import { buildDraft } from "../session/draft";
 import { buildRun, type EnginePhase } from "../session/engine";
 import type { LogSeed } from "../session/logDraft";
 import { ARM_TIMEOUT_MS } from "../session/useStagedDiscard";
-import { commentStrippedSource } from "../test/cssView";
+import { commentStrippedSource, type CssRule, cssRules } from "../test/cssView";
 import { PANES } from "./connected/PagerRail";
 import ConnectedInterstitial from "./ConnectedInterstitial";
 import ConnectedSurface, {
@@ -62,6 +62,30 @@ function indexCssPath(): string {
   return import.meta.url
     .replace(/^file:\/\//, "")
     .replace(/workout\/[^/]+\.test\.tsx$/, "index.css");
+}
+
+/** `index.css` with every comment stripped — the only view of the
+ *  stylesheet the assertions below get, so none of them can be satisfied by
+ *  a rule's own prose (the defect `cssView.ts`'s header records three times
+ *  over). Several tests in this file used to regex the RAW source. */
+const INDEX_CSS = commentStrippedSource(readFileSync(indexCssPath(), "utf-8"));
+
+/** Every rule for `selector` in the stylesheet, at any nesting depth,
+ *  outermost first. Plural on purpose: `.exec`'s first-match-only behaviour
+ *  is test-integrity sweep P17 — `.connected-end { width: 100%; flex-grow:
+ *  1 }` appended to `index.css` passed the very test that says "no
+ *  width/flex-grow declaration ANYWHERE in its own block". */
+function rulesFor(selector: string): CssRule[] {
+  return cssRules(INDEX_CSS).filter((rule) =>
+    rule.selectors.includes(selector),
+  );
+}
+
+/** The body of the ONE rule for `selector`. */
+function ruleBody(selector: string): string {
+  const rules = rulesFor(selector);
+  expect(rules, `expected exactly one rule for ${selector}`).toHaveLength(1);
+  return rules[0]!.body;
 }
 
 const baselines: Baselines = { k2Seconds: 112, k6Seconds: 122 };
@@ -235,8 +259,8 @@ describe("landing and persistence (handoff §3: per ROWER, first-ever lands B)",
   // garbage, so "timer" needs no special case at all, only proof that the
   // general path actually catches THIS specific value now that it is one.
   it("has exactly two panes, and neither of them is the retired timer pane", () => {
-    expect(PANES).toHaveLength(2);
-    expect(PANES).not.toContain("timer");
+    // One exact pin. The `toHaveLength(2)` and `not.toContain("timer")`
+    // that used to bracket it could not fail once it passed (S0g).
     expect(PANES).toStrictEqual(["live", "grid"]);
   });
 
@@ -348,6 +372,29 @@ describe("the pager is LABELLED (handoff §3, DEVIATIONS row 4)", () => {
         button.querySelector(".connected-pager-label-short"),
       ).not.toBeNull();
     }
+
+    // "IN BOTH ORIENTATIONS" — the half of this title that had no assertion
+    // under it at all (test-integrity sweep, S0f). jsdom cannot compute
+    // which set is drawn, and since Task 2 made the long and short forms
+    // IDENTICAL text (`LIVE`/`LIVE`), a screenshot cannot distinguish them
+    // either. The rules can be read, and now are: the short form is hidden
+    // at the top level and flips in landscape, the long form is the other
+    // way round, so exactly one set paints per orientation.
+    expect(
+      rulesFor(".connected-pager-label-short").map((rule) => [
+        rule.at,
+        /display:\s*([a-z]+)/.exec(rule.body)?.[1],
+      ]),
+    ).toStrictEqual([
+      [[], "none"],
+      [["@media (orientation: landscape)"], "block"],
+    ]);
+    expect(
+      rulesFor(".connected-pager-label-long").map((rule) => [
+        rule.at,
+        /display:\s*([a-z]+)/.exec(rule.body)?.[1],
+      ]),
+    ).toStrictEqual([[["@media (orientation: landscape)"], "none"]]);
   });
 
   it("reaches pane C, the grid (Task 7 filled the slot)", async () => {
@@ -439,6 +486,22 @@ describe("pane B — live (connected-revamp Task 3: two heroes)", () => {
     for (const target of targets) {
       expect(target.className).not.toContain("accent");
     }
+    // ...but that className loop structurally CANNOT fail (test-integrity
+    // sweep, P16): `PaneLive.tsx`'s two possible class strings for this
+    // span are `connected-hero-target-value` and `… connected-value-absent`,
+    // neither of which can contain "accent", and jsdom loads no stylesheet
+    // here — so the COLOUR was decided entirely by CSS and nothing in this
+    // file read it. Proven: `color: var(--accent)` added to the rule, the
+    // exact regression this test names, passed 71/71.
+    //
+    // The target is ink BY INHERITANCE — the rule declares no `color` at
+    // all — so that absence is what gets asserted, across every rule the
+    // stylesheet has for the class at any nesting depth.
+    const targetRules = rulesFor(".connected-hero-target-value");
+    expect(targetRules).toHaveLength(1);
+    for (const rule of targetRules) {
+      expect(rule.body).not.toMatch(/color\s*:/);
+    }
     // Accent appears NOWHERE on this pane.
     expect(document.querySelector(".timer-card-value-accent")).toBeNull();
     expect(document.querySelector(".button-l1")).toBeNull();
@@ -509,20 +572,16 @@ describe("pane B — live (connected-revamp Task 3: two heroes)", () => {
   });
 
   it("index.css: both heroes are --size-hero over --size-target, tenths at --size-hero-tenths, nowrap", () => {
-    const css = readFileSync(indexCssPath(), "utf-8");
-    const heroValue = /\.connected-hero-value\s*\{([^}]*)\}/.exec(css);
-    const heroTenths = /\.connected-hero-tenths\s*\{([^}]*)\}/.exec(css);
-    const targetValue = /\.connected-hero-target-value\s*\{([^}]*)\}/.exec(css);
-    const metricValue = /\.connected-metric-value\s*\{([^}]*)\}/.exec(css);
-    expect(heroValue).not.toBeNull();
-    expect(heroValue![1]).toContain("var(--size-hero)");
-    expect(heroValue![1]).toContain("white-space: nowrap");
-    expect(heroTenths).not.toBeNull();
-    expect(heroTenths![1]).toContain("var(--size-hero-tenths)");
-    expect(targetValue).not.toBeNull();
-    expect(targetValue![1]).toContain("var(--size-target)");
-    expect(metricValue).not.toBeNull();
-    expect(metricValue![1]).toContain("var(--size-metric)");
+    const heroValue = ruleBody(".connected-hero-value");
+    expect(heroValue).toContain("var(--size-hero)");
+    expect(heroValue).toContain("white-space: nowrap");
+    expect(ruleBody(".connected-hero-tenths")).toContain(
+      "var(--size-hero-tenths)",
+    );
+    expect(ruleBody(".connected-hero-target-value")).toContain(
+      "var(--size-target)",
+    );
+    expect(ruleBody(".connected-metric-value")).toContain("var(--size-metric)");
   });
 });
 
@@ -571,17 +630,14 @@ describe("judgement: one helper, every pane (handoff §3)", () => {
   });
 
   it("index.css paints the two verdicts with the handoff's own tokens", () => {
-    const css = readFileSync(indexCssPath(), "utf-8");
-    const under = /\.timer-card-actual-under\s*\{([^}]*)\}/.exec(css);
-    const over = /\.timer-card-actual-over\s*\{([^}]*)\}/.exec(css);
-    expect(under).not.toBeNull();
-    expect(over).not.toBeNull();
-    expect(under![1]).toContain("var(--type-o2)");
-    expect(over![1]).toContain("var(--type-at)");
+    const under = ruleBody(".timer-card-actual-under");
+    const over = ruleBody(".timer-card-actual-over");
+    expect(under).toContain("var(--type-o2)");
+    expect(over).toContain("var(--type-at)");
     // Accent is never a judgement colour: it is the target's, everywhere
     // else in the app, and on these panes the target is ink.
-    expect(under![1]).not.toContain("--accent");
-    expect(over![1]).not.toContain("--accent");
+    expect(under).not.toContain("--accent");
+    expect(over).not.toContain("--accent");
   });
 });
 
@@ -723,36 +779,36 @@ describe("paused (handoff §4)", () => {
     // rower saw as blank for all but the seconds they were stopped. The
     // invariant it was buying survives, more strongly: the slot has NO
     // height in either state, so there is nothing left that could change.
-    const css = readFileSync(indexCssPath(), "utf-8");
-    const footers = [
-      ...css.matchAll(/\.connected-surface-footer\s*\{([^}]*)\}/g),
-    ].map((m) => m[1]!);
-    // Two rules: the base one and the landscape query's placement override.
-    expect(footers).toHaveLength(2);
+    const footers = rulesFor(".connected-surface-footer");
+    // Two rules, and now WHICH is which is checked rather than assumed:
+    // the base one at the top level, the landscape query's placement
+    // override genuinely inside a landscape query.
+    expect(footers.map((rule) => rule.at)).toStrictEqual([
+      [],
+      ["@media (orientation: landscape)"],
+    ]);
     // `\n` anchored, so `min-height: 0` could never satisfy this.
-    expect(footers[0]).toMatch(/\n\s*height: 0;/);
+    expect(footers[0]!.body).toMatch(/\n\s*height: 0;/);
     // The anchor the overlay is positioned against. Without it the block
     // would hang off the nearest positioned ancestor — the viewport — and
     // land somewhere else entirely.
-    expect(footers[0]).toContain("position: relative");
+    expect(footers[0]!.body).toContain("position: relative");
     // And the landscape query must not put the reservation back: its own
     // copy of the rule places the slot in the grid and nothing more.
-    expect(footers[1]).not.toMatch(/height\s*:/);
+    expect(footers[1]!.body).not.toMatch(/height\s*:/);
     // The block itself is unchanged in size and in where it paints; only
     // its participation in the flow is gone.
-    const paused = /\.connected-paused\s*\{([^}]*)\}/.exec(css);
-    expect(paused).not.toBeNull();
-    expect(paused![1]).toContain("position: absolute");
-    expect(paused![1]).toContain("bottom: 0");
-    expect(paused![1]).toContain("height: 52px");
+    const paused = ruleBody(".connected-paused");
+    expect(paused).toContain("position: absolute");
+    expect(paused).toContain("bottom: 0");
+    expect(paused).toContain("height: 52px");
   });
 
   it("index.css inverts the paused band: ink field, paper label (2026-08-08, the operator missed the grey one)", () => {
-    const css = readFileSync(indexCssPath(), "utf-8");
-    const paused = /\.connected-paused\s*\{([^}]*)\}/.exec(css);
-    const label = /\.connected-paused-label\s*\{([^}]*)\}/.exec(css);
-    expect(paused![1]).toContain("background: var(--ink)");
-    expect(label![1]).toContain("color: var(--surface)");
+    expect(ruleBody(".connected-paused")).toContain("background: var(--ink)");
+    expect(ruleBody(".connected-paused-label")).toContain(
+      "color: var(--surface)",
+    );
   });
 
   // Pane A's own versions of both its below (`.connected-clock-value`'s
@@ -1002,40 +1058,71 @@ describe("End's hit box is small and out of the swipe corridor (safety fix, Jame
     // says `TAP AGAIN`); the accessible name keeps the sentence, so every
     // selector that keys on "End session" survives and the paused block's
     // own visible `END` stays distinguishable from this one.
+    const read = (): [string, string] => {
+      const el = document.querySelector(".connected-end")!;
+      return [el.textContent!, el.getAttribute("aria-label")!];
+    };
     renderSurface();
-    const end = document.querySelector(".connected-end")!;
-    expect(end.textContent).toBe("END");
-    expect(end).toHaveAttribute("aria-label", "End session");
+    const unarmed = read();
     await userEvent.click(screen.getByRole("button", { name: "End session" }));
-    const armed = document.querySelector(".connected-end")!;
-    expect(armed.textContent).toBe("TAP AGAIN");
-    expect(armed).toHaveAttribute("aria-label", "Tap again to end");
+    const states: [string, string][] = [unarmed, read()];
+
     // WCAG 2.5.3, label in name: the visible word has to be findable inside
-    // the spoken one, or voice control cannot reach the control.
-    expect(armed.getAttribute("aria-label")!.toLowerCase()).toContain(
-      armed.textContent!.toLowerCase(),
-    );
+    // the spoken one, or voice control cannot reach the control. FIRST, and
+    // over BOTH states (test-integrity sweep, P18): the old version put this
+    // last, behind exact pins of both of its own operands, so it reduced to
+    // `"tap again to end".includes("tap again")` and no mutation could
+    // reach it — changing the armed `aria-label` to "Confirm", a genuine
+    // label-in-name violation, failed two lines earlier. The unarmed pair
+    // had no such check at all.
+    expect(states).toHaveLength(2);
+    for (const [text, label] of states) {
+      expect([
+        text,
+        label.toLowerCase().includes(text.toLowerCase()),
+      ]).toStrictEqual([text, true]);
+    }
+
+    // Then the strings themselves, exactly.
+    expect(states).toStrictEqual([
+      ["END", "End session"],
+      ["TAP AGAIN", "Tap again to end"],
+    ]);
   });
 
   it("index.css never stretches the control to the surface's width", () => {
-    const css = readFileSync(indexCssPath(), "utf-8");
-    const end = /\.connected-end\s*\{([^}]*)\}/.exec(css);
-    expect(end).not.toBeNull();
     // The old full-width footer button was `button-l2` (`width: 100%`) —
     // this control carries neither that class nor an equivalent rule of
     // its own: no width/flex-grow declaration anywhere in its own block
     // means it can only ever be as wide as its own padded text, never the
     // surface.
-    expect(end![1]).not.toMatch(/width\s*:/);
-    expect(end![1]).not.toMatch(/flex-grow\s*:/);
-    expect(end![1]).toContain("flex: none");
-    expect(end![1]).toContain("min-height: 44px");
-    expect(end![1]).toContain("padding: 6px 10px");
+    //
+    // "ANYWHERE" is now true of the assertion as well as the comment
+    // (test-integrity sweep, P17): the old `.exec` read only the FIRST
+    // `.connected-end` block, so `.connected-end { width: 100%; flex-grow:
+    // 1; }` appended to a 7,000-line stylesheet with per-orientation
+    // overrides throughout passed this test. Every rule the file has for
+    // the class is checked, at every nesting depth.
+    const endRules = rulesFor(".connected-end");
+    expect(endRules.map((rule) => rule.at)).toStrictEqual([[]]);
+    for (const rule of endRules) {
+      expect(rule.body).not.toMatch(/width\s*:/);
+      expect(rule.body).not.toMatch(/flex-grow\s*:/);
+    }
+    const end = endRules[0]!.body;
+    expect(end).toContain("flex: none");
+    expect(end).toContain("min-height: 44px");
+    expect(end).toContain("padding: 6px 10px");
     // The header itself doesn't stretch it either — it stays pinned to one
-    // edge of a flex row, its own content-sized box.
-    const header = /\.connected-header\s*\{([^}]*)\}/.exec(css);
-    expect(header).not.toBeNull();
-    expect(header![1]).toContain("justify-content: flex-end");
+    // edge of a flex row, its own content-sized box. Its landscape copy
+    // only re-places it in the grid, so the base rule is the one asked for.
+    const headerRules = rulesFor(".connected-header");
+    expect(headerRules.map((rule) => rule.at)).toStrictEqual([
+      [],
+      ["@media (orientation: landscape)"],
+    ]);
+    expect(headerRules[0]!.body).toContain("justify-content: flex-end");
+    expect(headerRules[1]!.body).not.toMatch(/justify-content\s*:/);
   });
 
   // THE MECHANISM (mutation-tested below in the report, not just asserted

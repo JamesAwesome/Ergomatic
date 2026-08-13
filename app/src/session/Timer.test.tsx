@@ -1660,6 +1660,23 @@ describe("Timer — the gutter's structure and Pause's own row (connected-revamp
     expect(
       screen.queryByRole("button", { name: "Pause" }),
     ).not.toBeInTheDocument();
+  });
+
+  // The PAUSED arm of the same rule, split out of the test above
+  // (test-integrity sweep, S0b): that run is never paused, so `Resume` was
+  // absent BEFORE the click for reasons that have nothing to do with the
+  // subject, and asserting its absence after proved nothing. Here the run
+  // is paused first, so `Resume` is genuinely on screen and the confirm
+  // panel genuinely has to take it away.
+  it("Resume disappears too, when END is staged from a PAUSED run", async () => {
+    mockKeepAwake();
+    const run = matrixRun();
+    runAtIndex(run, 1);
+    await renderTimer();
+
+    await userEvent.click(screen.getByRole("button", { name: "Pause" }));
+    expect(screen.getByRole("button", { name: "Resume" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "END →" }));
     expect(
       screen.queryByRole("button", { name: "Resume" }),
     ).not.toBeInTheDocument();
