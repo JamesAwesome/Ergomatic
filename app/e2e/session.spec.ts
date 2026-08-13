@@ -453,12 +453,24 @@ test.describe("Phase 6B Task 4: session completion + resilience", () => {
     // inside it, not in the content column.
     expect(Math.round(gutterBox.x)).toBe(0);
     expect(Math.round(gutterBox.width)).toBe(44);
-    // 1px tolerance either side of the box edges: sub-pixel layout can
-    // legitimately place the button's own rect a fraction of a px outside
-    // its parent's rounded box (the parent's padding is 12px, the button
-    // 44px wide inside a 44px column — a genuine content-vs-parent mismatch
-    // would be far larger than a fraction of a pixel, not masked by this).
-    expect(gutterEndBox.x).toBeGreaterThanOrEqual(gutterBox.x - 1);
+    // END is a 44x44 hit target, centred in the gutter. The left-edge
+    // check used to read `>= gutterBox.x - 1`, and `gutterBox.x` is pinned
+    // to 0 two lines up, so it reduced to `x >= -1` — true of every
+    // in-flow box on the page (test-integrity sweep, P4). It is a
+    // TWO-SIDED bound now, so a button that drifted right into the content
+    // column fails it, and the size is pinned exactly so a shrunk hit
+    // target fails too.
+    //
+    // 1px tolerance either side, and the overhang is real rather than
+    // theoretical: the column is 44px wide but carries a 1px
+    // `border-right`, so centring a 44px button in its 43px content box
+    // puts it at x = -0.5. A genuine content-vs-parent mismatch would be
+    // far larger than a half pixel, not masked by this.
+    expect(Math.abs(gutterEndBox.x - gutterBox.x)).toBeLessThanOrEqual(1);
+    expect({
+      width: gutterEndBox.width,
+      height: gutterEndBox.height,
+    }).toStrictEqual({ width: 44, height: 44 });
     expect(gutterEndBox.x + gutterEndBox.width).toBeLessThanOrEqual(
       gutterBox.x + gutterBox.width + 1,
     );
@@ -472,7 +484,19 @@ test.describe("Phase 6B Task 4: session completion + resilience", () => {
     // WITHIN the hero row, the target column (cards) sits strictly right
     // of the countdown+ELAPSED column — revision §5's own "stacked in the
     // right column" shape.
-    expect(cardsBox.x).toBeGreaterThan(heroBox.x);
+    //
+    // Measured against `.timer-hero-main`, the column the sentence above
+    // actually names, not against `.timer-hero` (test-integrity sweep,
+    // S1): `.timer-cards` is rendered INSIDE `.timer-hero`
+    // (`Timer.tsx`'s `TimerTargets` call), so `cardsBox.x > heroBox.x`
+    // was ordinary box containment — a `.timer-cards` positioned at
+    // `heroBox.x + 1`, overlapping the countdown column completely,
+    // passed. Right OF the sibling column is the claim, so the sibling
+    // column is what it is compared to.
+    const heroMainBox = (await page.locator(".timer-hero-main").boundingBox())!;
+    expect(cardsBox.x).toBeGreaterThanOrEqual(
+      heroMainBox.x + heroMainBox.width,
+    );
 
     // The landscape-only "then …" UP NEXT second line is showing now.
     await expect(page.locator(".timer-upnext-then")).toBeVisible();
