@@ -15,7 +15,13 @@ import {
 import type { WarmupSetting } from "../api/usePreferences";
 import { buildRun, type EnginePhase } from "./engine";
 import { loadRun, saveRun, type SessionRun } from "./run";
-import { commentStrippedSource } from "../test/cssView";
+import {
+  atRuleBodies,
+  commentStrippedSource,
+  type CssRule,
+  cssRules,
+  scopedRuleBodies,
+} from "../test/cssView";
 import {
   hasRemainingEstimate,
   isSuspectActual,
@@ -1725,46 +1731,53 @@ const indexCssPath = import.meta.url
 const indexCssRaw = readFileSync(indexCssPath, "utf-8");
 const indexCssStripped = commentStrippedSource(indexCssRaw);
 
-/** The body of a single top-level rule, `selector { … }`, found anywhere in
- *  the (already comment-stripped) source — same shape as
- *  `TimerTargets.test.tsx`'s own `.timer-card-actual-stale` regex, generalised
- *  to any selector. */
+/** The body of the ONE rule for `selector`, anywhere in the stylesheet at
+ *  any nesting depth. Exactly one, not the first: `.exec`'s
+ *  first-match-only behaviour is what let a `.connected-end { width: 100% }`
+ *  appended to `index.css` pass its own guard (test-integrity sweep, P17). */
 function ruleBody(selector: string): string {
-  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = new RegExp(`${escaped}\\s*\\{([^}]*)\\}`).exec(
-    indexCssStripped,
-  );
-  expect(match, `expected a rule for ${selector}`).not.toBeNull();
-  return match![1];
+  const bodies = cssRules(indexCssStripped)
+    .filter((rule) => rule.selectors.includes(selector))
+    .map((rule) => rule.body);
+  expect(bodies, `expected exactly one rule for ${selector}`).toHaveLength(1);
+  return bodies[0]!;
 }
 
-/** The phone timer's OWN landscape media query — located by the exact
- *  `@media (orientation: landscape) { .timer-screen {` shape that opens it
- *  (unique in this file: no other landscape query's FIRST rule is
- *  `.timer-screen`), then closed by counting braces from there. Comments
- *  are already stripped file-wide before this runs, so no comment's own
- *  `{`/`}` can throw the count off. */
-function timerLandscapeBlock(): string {
-  const opener = /@media \(orientation: landscape\)\s*\{\s*\.timer-screen\s*\{/;
-  const match = opener.exec(indexCssStripped);
+/** The body of the ONE TOP-LEVEL rule for `selector` — no media query. That
+ *  is what "by default, in both orientations" means, and asserting it is
+ *  the half `ruleBody` alone cannot give. */
+function baseRuleBody(selector: string): string {
+  const bodies = scopedRuleBodies(indexCssStripped, selector);
   expect(
-    match,
-    "expected the phone timer's own landscape media query",
-  ).not.toBeNull();
-  const mediaBraceIdx = indexCssStripped.indexOf("{", match!.index);
-  let depth = 0;
-  let i = mediaBraceIdx;
-  for (; i < indexCssStripped.length; i++) {
-    if (indexCssStripped[i] === "{") depth++;
-    else if (indexCssStripped[i] === "}") {
-      depth -= 1;
-      if (depth === 0) break;
-    }
-  }
-  expect(i, "expected a matching close brace").toBeLessThan(
-    indexCssStripped.length,
-  );
-  return indexCssStripped.slice(match!.index, i + 1);
+    bodies,
+    `expected exactly one TOP-LEVEL rule for ${selector}`,
+  ).toHaveLength(1);
+  return bodies[0]!;
+}
+
+/** The rule list of the phone timer's OWN landscape media query — the one
+ *  of `index.css`'s FIVE `@media (orientation: landscape)` queries whose
+ *  first rule is `.timer-screen`.
+ *
+ *  Parsed by `cssRules`/`atRuleBodies` (`../test/cssView`, a brace-depth
+ *  scanner) rather than by regex-and-slice. The old `ruleBody` had no
+ *  notion of enclosing at-rules at all, which is test-integrity sweep P7:
+ *  `.timer-screen .timer-phase-title { display: inline; flex: none; }`
+ *  moved OUT of this query to top level — a duplicate workout title
+ *  becoming visible in portrait, exactly the regression the test below
+ *  names — left all 79 tests in this file green. */
+function timerLandscapeRules(): CssRule[] {
+  const blocks = atRuleBodies(
+    indexCssStripped,
+    "@media (orientation: landscape)",
+  )
+    .map((body) => cssRules(body))
+    .filter((rules) => rules[0]?.selectors[0] === ".timer-screen");
+  expect(
+    blocks,
+    "expected exactly one landscape query opening on .timer-screen",
+  ).toHaveLength(1);
+  return blocks[0]!;
 }
 
 describe("index.css: RUNNING/countdown/ELAPSED/targets — the ink ruling and the token scale (spec §7)", () => {
@@ -1815,9 +1828,25 @@ describe("index.css: RUNNING/countdown/ELAPSED/targets — the ink ruling and th
   // by default (portrait keeps `.timer-name` as the only visible copy),
   // shown only inside the timer's own scoped landscape block.
   it(".timer-phase-title is hidden by default and shown only inside the timer's own scoped landscape block", () => {
-    expect(ruleBody(".timer-phase-title")).toContain("display: none");
-    const landscapeBody = ruleBody(".timer-screen .timer-phase-title");
-    expect(landscapeBody).toContain("display: inline");
+    // "By default" = a TOP-LEVEL rule, so portrait gets it too.
+    expect(baseRuleBody(".timer-phase-title")).toContain("display: none");
+    // "Only inside the landscape block" = the `display: inline` override
+    // is genuinely nested in the timer's own query, and nowhere else. The
+    // second assertion is the one P7 was missing: at top level, the same
+    // declaration would show a duplicate title in PORTRAIT.
+    const shown = timerLandscapeRules().filter((rule) =>
+      rule.selectors.includes(".timer-screen .timer-phase-title"),
+    );
+    expect(shown).toHaveLength(1);
+    expect(shown[0]!.body).toContain("display: inline");
+    expect(
+      cssRules(indexCssStripped).filter(
+        (rule) =>
+          rule.at.length === 0 &&
+          rule.selectors.some((s) => s.includes(".timer-phase-title")) &&
+          /display\s*:\s*inline/.test(rule.body),
+      ),
+    ).toStrictEqual([]);
   });
 
   it("Pause (.timer-control-pause) follows the mockup, not the pre-Task-7 accent fill: surface background, ink border, ink text", () => {
@@ -1829,13 +1858,11 @@ describe("index.css: RUNNING/countdown/ELAPSED/targets — the ink ruling and th
   });
 
   it("the phase-progress fill and the total-bar fill both stay accent (two of the surface's three accent jobs)", () => {
-    // Passed as it literally appears in index.css (a comma-joined selector
-    // list across two lines) — `ruleBody` escapes its argument as literal
-    // text, so a regex metacharacter like `\s*` typed here would itself be
-    // escaped into a useless literal rather than matching whitespace.
-    expect(ruleBody(".timer-phase-bar span,\n.timer-total-bar span")).toContain(
-      "var(--accent)",
-    );
+    // One comma-joined rule in the source, across two lines. `ruleBody`
+    // splits the selector list, so each half is asked for by name rather
+    // than by reproducing the stylesheet's own line breaks.
+    expect(ruleBody(".timer-phase-bar span")).toContain("var(--accent)");
+    expect(ruleBody(".timer-total-bar span")).toContain("var(--accent)");
   });
 
   // EXHAUSTIVE (fix round 1, review Minor-4: the report's first-draft
@@ -1869,27 +1896,22 @@ describe("index.css: RUNNING/countdown/ELAPSED/targets — the ink ruling and th
 
 describe("index.css: the landscape leak is closed (spec §7, adversarial finding)", () => {
   it("every selector inside the phone timer's own landscape media query is scoped under .timer-screen — none can reach a connected pane", () => {
-    const block = timerLandscapeBlock();
-    // Strip the query's own opening `@media (...) {` and its final closing
-    // `}` (the outermost pair, already balanced by construction) so what
-    // remains is exactly its rule list.
-    const inner = block
-      .replace(/^@media \(orientation: landscape\)\s*\{/, "")
-      .replace(/\}$/, "");
-    const selectorLists = Array.from(inner.matchAll(/([^{}]+)\{/g)).map(
-      (m) => m[1],
-    );
-    expect(selectorLists.length).toBeGreaterThan(10); // sanity: the block is real
-    for (const list of selectorLists) {
-      const selectors = list
-        .split(",")
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0);
-      expect(selectors.length).toBeGreaterThan(0);
-      for (const selector of selectors) {
-        expect(
+    const rules = timerLandscapeRules();
+    // EXACT, not `> 10` (test-integrity sweep, S0c): a floor still passed
+    // with half the block deleted, and the per-selector loop below would
+    // then have run against a truncated set. 30 rules today; a deliberate
+    // addition or removal updates this line, and the author sees the
+    // scoping rule it guards while doing so.
+    expect(rules).toHaveLength(30);
+    for (const rule of rules) {
+      expect(rule.selectors.length).toBeGreaterThan(0);
+      for (const selector of rule.selectors) {
+        // The selector is asserted alongside the boolean so a failure's own
+        // diff names which one leaked.
+        expect([
+          selector,
           selector === ".timer-screen" || selector.startsWith(".timer-screen "),
-        ).toBe(true);
+        ]).toStrictEqual([selector, true]);
       }
     }
   });
