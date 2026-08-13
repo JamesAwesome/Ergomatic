@@ -7185,18 +7185,37 @@ section:not(.news-pinned) .news-row:last-of-type {
      physical edge while its 44px of tappable content sits clear of the
      housing.
 
-     `--edge-inset` MAKES THE CONTENT COLUMN ROTATION-STABLE (James's erg
-     walk, 2026-08-13, defect 5: "it holds but the black bar makes it wider
-     if you put it on the notch side"). The gutter is always laid out on
-     the layout's LEFT, but which PHYSICAL side that is depends on which
-     way the phone was turned, so the notch lands on the gutter's side in
-     one rotation and on the content column's side in the other. Keying
-     the gutter off `env(safe-area-inset-left)` alone therefore made the
-     whole surface change shape on rotation. MEASURED at 844x390 with a
-     59px notch inset injected via CDP, before this fix:
+     `--edge-inset` IS FOR ANDROID, AND THE ASYMMETRY IT FIXES DOES NOT
+     EXIST ON iOS. Read this before "simplifying" it either way.
+
+     It was added 2026-08-13 believing it cured a defect James reported at
+     the erg ("it holds but the black bar makes it wider if you put it on
+     the notch side"). The pre-fix measurement, at 844x390 with a 59px
+     inset injected via CDP:
 
        notch LEFT   gutter 44 -> 103px, content column x=103, width 741
        notch RIGHT  gutter 44px,        content column x=44,  width 741
+
+     That asymmetry was OURS. Research the same day (primary sources
+     collected in the connected-revamp handoff notes) establishes that iOS
+     reports the landscape side inset on BOTH sides — 44/44 on iPhone X
+     through 62/62 on a 16 Pro and 68/68 on an Air — regardless of which
+     side the housing is physically on, and that CSS cannot determine which
+     side it is, deliberately. The one-sided condition above came from
+     `Emulation.setSafeAreaInsetsOverride`, where WE chose the side. No
+     measured report of an asymmetric inset on any iPhone exists.
+
+     So on iOS `max()` is INERT: both terms are already equal, and the
+     surface never changed shape on rotation. KEEP IT ANYWAY — Android's
+     `DisplayCutout` genuinely is asymmetric, and this is the only thing
+     standing between that platform and the defect we thought we had.
+
+     What James actually saw is PERCEPTUAL and still worth fixing: the two
+     62pt bands are identical in width, but one is lit display painted with
+     the gutter's own `--surface-sunken` fill and the other is physical
+     black housing, so they read as different widths. Deleting the
+     decorative housing bar in the same round may already have addressed
+     it; ROADMAP Phase CR2 item 2 owns the question.
 
      — the width happened to match, but the column JUMPED 59px sideways
      and the gutter itself doubled in width, which is the part James could

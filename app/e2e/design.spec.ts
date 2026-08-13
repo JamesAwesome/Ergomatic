@@ -4516,19 +4516,25 @@ test.describe("connected screens (fake-driven)", () => {
   // the CDP call `getComputedStyle(...).paddingLeft` read `0px`, AFTER it
   // read the injected value exactly). No Playwright-level API wraps this —
   // it goes through `page.context().newCDPSession(page)` directly.
-  // ROTATION-STABILITY, not just inset-absorption. This test used to assert
-  // `railBox.width === 44 + INSET` in the ONE rotation it measured, with a
-  // comment calling that correct — and it was walk defect #5 written down as
-  // an invariant. James, at the erg (2026-08-13): "it holds but the black
-  // bar makes it wider if you put it on the notch side." The gutter is
-  // always on the layout's LEFT, but the notch is only physically on that
-  // side in one of the two landscape rotations, so keying the gutter off
-  // `env(safe-area-inset-left)` alone made the whole surface change shape
-  // when the phone was remounted the other way up. Measured at 844x390 with
-  // the same 59px inset, BEFORE the fix:
+  // ROTATION-STABILITY UNDER AN ASYMMETRIC INSET — which is ANDROID's case,
+  // not iOS's. Read the correction before trusting this test's premise.
+  //
+  // It replaced an assertion that pinned `railBox.width === 44 + INSET` in
+  // the ONE rotation it measured, with a comment calling that correct. That
+  // much was a genuine defect: a test blessing a shape nobody had checked in
+  // the other rotation. Measured at 844x390 with a 59px inset, before:
   //
   //   notch LEFT   gutter 103px, content column x=103, width 741
   //   notch RIGHT  gutter  44px, content column x= 44, width 741
+  //
+  // But that asymmetry was manufactured HERE. iOS reports the landscape side
+  // inset on BOTH sides regardless of which side the housing is on, and CSS
+  // cannot tell which side it is; the one-sided condition exists only
+  // because `measure(INSET, 0)` below chooses it. So this does not reproduce
+  // a defect James's phone ever had — his report was perceptual (identical
+  // bands, one lit display and one black housing). It remains a real and
+  // load-bearing test for Android's `DisplayCutout`, which IS asymmetric,
+  // and it is the reason `max()` must not be "simplified" away.
   //
   // Green then, and green for the wrong reason. What this test asserts now
   // is the rule rather than one side of it: the two rotations must agree,
