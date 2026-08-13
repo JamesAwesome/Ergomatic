@@ -4315,6 +4315,16 @@ test.describe("connected screens (fake-driven)", () => {
   // portrait run is defense in depth against a future portrait grid, not a
   // live regression guard. Kept deliberately, and said out loud so nobody
   // reads a passing portrait as proof the mechanism is covered there.
+  //
+  // Measured, and worse than the disclosure said (test-integrity sweep,
+  // P1): in portrait the body's width is set entirely by the container
+  // (390 - 40 = 350) and the forced-wide mutation leaves it at 350 even
+  // with the `min-width: 0` this test exists to guard DELETED. Landscape
+  // goes 800 -> 1292 with the same deletion, so that instance is a real
+  // pin. Rather than cheapen the parameterisation, the portrait run now
+  // asserts the GUARD ITSELF as well as its consequence: `min-width: 0` is
+  // a computed fact in both orientations even where only one of them can
+  // demonstrate what it buys.
   for (const viewport of [
     { width: 390, height: 844, label: "portrait" },
     { width: 844, height: 390, label: "landscape" },
@@ -4367,6 +4377,13 @@ test.describe("connected screens (fake-driven)", () => {
       });
       const onGridForcedWide = await box();
       expect(onGridForcedWide).toStrictEqual(onLive);
+
+      // The guard itself, directly — the assertion that can fail in
+      // PORTRAIT too (see this block's HONEST SCOPE note above).
+      const minWidth = await page
+        .locator(".connected-surface-body")
+        .evaluate((el) => getComputedStyle(el).minWidth);
+      expect(minWidth).toBe("0px");
 
       await cleanupAllConnected(page, title);
     });
@@ -4694,9 +4711,12 @@ test.describe("connected screens (fake-driven)", () => {
     // file via CDP's `setSafeAreaInsetsOverride`), so the surface's own
     // height should equal the viewport's exactly — not 26px short of it,
     // which is what this test would have caught before the fix.
+    // Two assertions, not three (test-integrity sweep, S2): `toBeCloseTo(_,
+    // 0)` is a +/-0.5 window, so the `y + height` line that used to follow
+    // admitted a +/-1.0 error these two individually forbid. It added no
+    // coverage and read as a third check. Measured exactly: {y: 0, h: 390}.
     expect(surfaceBox!.height).toBeCloseTo(390, 0);
     expect(surfaceBox!.y).toBeCloseTo(0, 0);
-    expect(surfaceBox!.y + surfaceBox!.height).toBeCloseTo(390, 0);
 
     await cleanupAllConnected(page, title);
   });

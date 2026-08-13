@@ -2288,17 +2288,20 @@ for (const name of CONNECTED_STATES) {
       // THE SAFETY FIX, MEASURED (James 2026-08-12): End's hit box is a
       // small fraction of the surface's width, not the full-width bar this
       // replaces (the old `.connected-end` was `button-l2`'s own
-      // `width: 100%`, spanning the entire 390px). A generous ceiling
-      // (150px, well under half the frame) proves "not full-bleed" without
-      // being brittle to the button's own padding/font tuning.
-      const surfaceBox = await page.locator(".connected-surface").boundingBox();
+      // `width: 100%`, spanning the entire 390px).
+      //
+      // ONE ceiling, and a measured one (test-integrity sweep, P3). The
+      // pair that used to sit here was `< 150` and `< surfaceWidth * 0.4`;
+      // 0.4 of 390 is 156 and of 844 is 337.6, both above 150, so the
+      // second line was satisfied by anything the first admitted and read
+      // as an independent check without being one. The button measures
+      // 45.8px, so 80 is a real ceiling rather than 3.3x headroom, and it
+      // is still slack enough for padding and font tuning.
       const endBox = await page
         .getByRole("button", { name: "End session" })
         .boundingBox();
-      expect(surfaceBox).not.toBeNull();
       expect(endBox).not.toBeNull();
-      expect(endBox!.width).toBeLessThan(150);
-      expect(endBox!.width).toBeLessThan(surfaceBox!.width * 0.4);
+      expect(endBox!.width).toBeLessThan(80);
       // OUT OF THE SWIPE CORRIDOR: pinned to the surface's TOP edge, not
       // hovering mid-screen where a rower's thumb actually crosses when
       // swiping panes.
@@ -2324,11 +2327,17 @@ for (const name of CONNECTED_STATES) {
       // integer alone hides how close it came, and the shipped 13 was 4px
       // from reading 14. All four numbers are asserted instead: the row's
       // own fixed height, the scroller's exact height (the real budget, and
-      // the one a font or padding drift moves), the count as a floor at the
-      // claimed value, and zero document overflow. Rows cannot shrink to
+      // the one a font or padding drift moves), the count EXACTLY at the
+      // ruling's number, and zero document overflow. Rows cannot shrink to
       // fake a higher count (the height is exact), content cannot spill
       // (overflow is zero), and a drift fails on `clientHeight` with the px
       // delta in the message rather than on a bare integer.
+      //
+      // The count was a floor until the test-integrity sweep (P2): given
+      // the two exact assertions above it, `floor(612/40)` is 15 and the
+      // floor could not fail unless one of them had already failed and
+      // aborted the test. James's ruling is a number, so the number is what
+      // is pinned. Measured, not derived: 15, at an exact fit of 15.3.
       const m = await page.evaluate(() => {
         const scroller = document.querySelector(".connected-grid-rows")!;
         const box = scroller.getBoundingClientRect();
@@ -2347,7 +2356,7 @@ for (const name of CONNECTED_STATES) {
       });
       expect(m.rowHeight).toBe(40);
       expect(m.clientHeight).toBe(PORTRAIT_GRID_SCROLLER_PX);
-      expect(m.visible).toBeGreaterThanOrEqual(15);
+      expect(m.visible).toBe(15);
       // The pane itself never scrolls: only the rows do (DEVIATIONS row 2).
       // Landscape has always pinned this; portrait did not until the fix
       // round, which is how a portrait overflow could have gone unseen.
@@ -2404,14 +2413,12 @@ for (const name of CONNECTED_STATES) {
       // THE SAFETY FIX, MEASURED — landscape (844×390). Same claims as the
       // portrait block above: not full-width, and pinned to the top edge
       // rather than the vertical middle a swipe crosses.
-      const surfaceBox = await page.locator(".connected-surface").boundingBox();
       const endBox = await page
         .getByRole("button", { name: "End session" })
         .boundingBox();
-      expect(surfaceBox).not.toBeNull();
       expect(endBox).not.toBeNull();
-      expect(endBox!.width).toBeLessThan(150);
-      expect(endBox!.width).toBeLessThan(surfaceBox!.width * 0.4);
+      // One measured ceiling, for the reason the portrait block sets out.
+      expect(endBox!.width).toBeLessThan(80);
       expect(endBox!.y).toBeLessThan(60);
     }
     if (name === "connected-log-sheet") {
@@ -2522,7 +2529,12 @@ for (const name of CONNECTED_STATES) {
       });
       expect(m.rowHeight).toBe(32);
       expect(m.clientHeight).toBe(LANDSCAPE_GRID_SCROLLER_PX);
-      expect(m.visible).toBeGreaterThanOrEqual(8);
+      // EXACT, not a floor, for the reason the portrait block sets out
+      // (test-integrity sweep, P2): `floor(276/32)` is 8, so the floor was
+      // implied by the two exact assertions above it. Measured 8, at an
+      // exact fit of 8.625 — the packet's own count, restored by the
+      // task-6 footer reclaim.
+      expect(m.visible).toBe(8);
       // ...and the pane itself never scrolls: only the rows do (DEVIATIONS
       // row 2). The document is exactly the viewport.
       expect(m.docOverflow).toBe(0);
