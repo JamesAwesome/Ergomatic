@@ -20,19 +20,19 @@ The authoritative UI/UX reference is the design handoff in `docs/design/`
 
 ## Locked decisions
 
-| Area | Decision |
-|---|---|
-| Name | **Ergomatic** in UI and docs (design files say "Erg Log") |
-| Architecture | Server-backed SPA: React 19 + Vite 8 client, Express 5 API, TypeScript, ESM, pnpm |
-| Data | PostgreSQL 18 + Drizzle ORM; per-user data throughout |
-| Offline | Active session (timer state, in-progress log) persists in localStorage; reload or dropped connection never loses a workout; log save syncs to the API |
-| Auth | Google OAuth (authorization code flow) only at launch; self-hosted cookie sessions in Postgres; no auth SaaS |
-| Local enforcement | husky + lint-staged — pre-commit: lint + typecheck on staged files; pre-push: full test suite |
-| CI | GitHub Actions: install → lint → typecheck → coverage-gated tests → build → docker build (push: false) |
-| Tests | Vitest three-project setup: unit (node), client (jsdom + Testing Library), integration (Testcontainers Postgres); enforced coverage thresholds |
-| Deployment | Full CD: push to main → self-hosted runner → SSH deploy script → health-gated auto-rollback (nataliesawacritter pattern) |
-| Hosting | Docker Compose (hardened: read_only, cap_drop ALL, non-root) fronted by a Cloudflare tunnel behind a compose profile |
-| Time display | House time format is elastic positional: seconds always shown, an hour group only when nonzero, the leading group never zero-padded — `0:45`, `20:00`, `1:05:00` (`domain/duration.ts`, Phase 5F). Totals stay unit-labelled (`302 MIN`, `302′`), which is what keeps a colon value's meaning unambiguous |
+| Area              | Decision                                                                                                                                                                                                                                                                                                  |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Name              | **Ergomatic** in UI and docs (design files say "Erg Log")                                                                                                                                                                                                                                                 |
+| Architecture      | Server-backed SPA: React 19 + Vite 8 client, Express 5 API, TypeScript, ESM, pnpm                                                                                                                                                                                                                         |
+| Data              | PostgreSQL 18 + Drizzle ORM; per-user data throughout                                                                                                                                                                                                                                                     |
+| Offline           | Active session (timer state, in-progress log) persists in localStorage; reload or dropped connection never loses a workout; log save syncs to the API                                                                                                                                                     |
+| Auth              | Google OAuth (authorization code flow) only at launch; self-hosted cookie sessions in Postgres; no auth SaaS                                                                                                                                                                                              |
+| Local enforcement | husky + lint-staged — pre-commit: lint + typecheck on staged files; pre-push: full test suite                                                                                                                                                                                                             |
+| CI                | GitHub Actions: install → lint → typecheck → coverage-gated tests → build → docker build (push: false)                                                                                                                                                                                                    |
+| Tests             | Vitest three-project setup: unit (node), client (jsdom + Testing Library), integration (Testcontainers Postgres); enforced coverage thresholds                                                                                                                                                            |
+| Deployment        | Full CD: push to main → self-hosted runner → SSH deploy script → health-gated auto-rollback (nataliesawacritter pattern)                                                                                                                                                                                  |
+| Hosting           | Docker Compose (hardened: read_only, cap_drop ALL, non-root) fronted by a Cloudflare tunnel behind a compose profile                                                                                                                                                                                      |
+| Time display      | House time format is elastic positional: seconds always shown, an hour group only when nonzero, the leading group never zero-padded — `0:45`, `20:00`, `1:05:00` (`domain/duration.ts`, Phase 5F). Totals stay unit-labelled (`302 MIN`, `302′`), which is what keeps a colon value's meaning unambiguous |
 
 Reference codebases for conventions: `nataliesawacritter.info` (primary template),
 `pool_monitor` (design-token CSS approach).
@@ -125,7 +125,7 @@ they go stale (this has burned us before). Concretely:
 **Status:** Done
 **Goal:** The Erg Book math, encoded once, pure, and heavily tested.
 
-- [x] Drizzle schema + migrations: baselines, workouts + steps, session logs (with frozen paces), plan progress, preferences, test history — all per-user *(migration infrastructure + users/sessions landed in Phase 2; this item adds the domain tables)*
+- [x] Drizzle schema + migrations: baselines, workouts + steps, session logs (with frozen paces), plan progress, preferences, test history — all per-user _(migration infrastructure + users/sessions landed in Phase 2; this item adds the domain tables)_
 - [x] Pure domain module (no framework imports): pace resolution (`baseline + off + nudge`), tolerance ranges, `m:ss` formatting, phase expansion (`liveSteps()`/`phases()` incl. reps and rest insertion), pace-ref parser (`^(2k|6k)\s*([+-]?\d+(\.\d+)?)?$`), plan preset sequences (sprint / head race, 84 sessions, test placements), suggestion engine (`plan[doneN]` → filtered/sorted pool)
 - [x] **Distance-based work steps as a first-class axis**: a work step is `{kind:'time', minutes}` OR `{kind:'distance', meters}` (e.g. `2500m at 2k-4`); displayed workout duration estimates distance steps from the resolved target pace (labeled estimate); schema's log steps carry per-step actuals from day one: `{targetSplit, actualSplit?, actualSource: 'assumed'|'stopwatch'|'pm5'}` (expand-only discipline: model now, never migrate later)
 - [x] Heaviest unit-test coverage in the app; canonical fixtures (e.g. Lucky Penny → 25 phases / 50 min)
@@ -291,7 +291,7 @@ a real effort reference, not a stand-in offset.
       `stepToRow`; a stored effort ref falling back to a split (e.g. an
       older client) resolves to `6k+0`, judged sane
 - [x] The PACE control becomes a four-chip radiogroup (`2K | 6K | MAX |
-      MIN`) — checking an effort chip hides the offset stepper entirely
+    MIN`) — checking an effort chip hides the offset stepper entirely
       (unmounted, not just visually hidden; efforts take no offset) and the
       TARGET strip shows the effort word instead of a resolved range
 - [x] The detail screen (`StepRow`) renders an effort step as its word, with
@@ -328,7 +328,7 @@ text-selection callout instead of activating it.
 - [x] A personal (non-global) workout's library row wears a `CUSTOM` badge
       on its second line (`WorkoutRow.tsx`); a `CUSTOM` filter chip
       (`FilterChips.tsx`) ANDs with every other filter exactly like `PAIN
-      ≤3` — `ALL` clears it, and filtering to `CUSTOM` with no personal
+    ≤3` — `ALL` clears it, and filtering to `CUSTOM` with no personal
       workouts renders a builder-link empty state instead of a bare "no
       matches" message
 - [x] iOS device report (2026-08-01): long-pressing a button, chip,
@@ -527,9 +527,9 @@ is exactly what 6C's own save flow is for.
       a bare dash, see `docs/design/DEVIATIONS.md`), the per-step list
       (frozen split + a stopwatch-only ACTUAL line), Held/Under/Over, pain
       **1–5** (Ergomatic's scale, not the handoff's 1–10), notes, `Save
-      session` (54px, pinned by a computed-style regression test). The
+    session` (54px, pinned by a computed-style regression test). The
       session door hides the tab bar and offers a staged `Discard without
-      logging`; the manual door has neither — nothing staged to discard,
+    logging`; the manual door has neither — nothing staged to discard,
       so the tab bar stays visible there as the only way out
 - [x] Save posts to the already-existing `POST /api/logs` route (no NEW
       route or store needed this phase — the one server change was Task
@@ -1004,7 +1004,7 @@ still holds: no pairing, subscribe-only, Web Bluetooth is Chromium-only.
       phase's one permitted UI touch
 - [x] `src/monitor/transports/capacitorBle.ts`
       (`@capacitor-community/bluetooth-le`) and `src/monitor/transports/
-      webBluetooth.ts` (`navigator.bluetooth`): thin `Transport` adapters
+    webBluetooth.ts` (`navigator.bluetooth`): thin `Transport` adapters
       for the two real radios, compile-tested shapes, deliberately excluded
       from the coverage gate alongside `src/native/**` — no BLE radio
       exists in CI to prove either one against
@@ -1061,7 +1061,7 @@ below.
       instead of comparing: accept `(status & 0x30) === 0x00`, reject
       `(status & 0x30) === 0x10`, `bad`/`not-ready` for the other two
       previous-frame values, `status & 0x0F` the slave state, `status &
-      0x80` the frame toggle (never tested for failure), bit `0x40`
+    0x80` the frame toggle (never tested for failure), bit `0x40`
       reserved. `REJECT_STATUS_BYTE` is retired, and `CsafeResponse` gained
       a `kind: "unparseable"` member so a garbled frame is no longer
       conflated with a genuine reject; `buildAckFrame` and the fake
@@ -1462,7 +1462,7 @@ nothing here is new work. Effort guesses are S/M/L.
       `src/adapters/`), not the transport-resolution seam
       (`src/monitor/transports/index.ts`'s own doc comment). Fixed
       (BACK-walks-the-stack batch, batch A): `src/adapters/
-      monitorTransport.ts` adds the platform-conditional default — native
+    monitorTransport.ts` adds the platform-conditional default — native
       dynamic-imports `createCapacitorBleTransport`, web delegates
       unchanged to `transports/index.ts`'s `resolveDefaultTransport` —
       wired through `useMonitorSession.ts`'s existing `??` fallback. **M**
@@ -1639,6 +1639,7 @@ above records the same resolution).
 `docs/monitor/pm5-ble-ecosystem-review.md`'s ranked list; R1/R2
 close in this phase, R5/R6 are no-action/design-input already) —
 explicitly NOT this wave's scope:
+
 - **R3** — switch `webBluetooth.ts`'s CSAFE writes from
   without-response to acked `writeValue`, matching every surveyed
   client and our own iOS path; cheap insurance against a chunk
@@ -1715,6 +1716,7 @@ the pixel truth).
 questions (`docs/design/handoffs/2026-08-11-connected-revamp/README.md`,
 "Open questions for the build session"), each unbuilt because the
 answer is a hardware fact nobody has yet:
+
 - **Projected finish split** per interval, if the driver layer can
   expose one — it wants the live pane's metric row.
 - **Reconnect backfill**: whether the monitor can replay per-interval
@@ -1726,6 +1728,7 @@ answer is a hardware fact nobody has yet:
 
 **Parked, found by this wave** (each is real, none is this wave's
 scope):
+
 - `scripts/stack-env.sh` derives per-worktree container names from
   `cksum % 100000` but its host ports from `cksum % 400`, so two
   worktrees can hold distinct stacks and still collide on `APP_PORT`/
@@ -1748,6 +1751,7 @@ scope):
 
 **Exit:** James's erg look, on his iPhone against a real PM5, one
 item at a time —
+
 - (a) both panes in landscape: the content column's left edge and
   width do not move when swiping LIVE <-> GRID (the reported bug, on
   hardware);
@@ -1766,8 +1770,8 @@ item at a time —
   whether that trade is right;
 - (c) both heroes readable at arm's length mid-piece, and the grid's
   rows legible at 8 visible.
-Anything he wants changed goes through a fix round before the PR;
-then the PR (rich body, before/after captures) and his merge word.
+  Anything he wants changed goes through a fix round before the PR;
+  then the PR (rich body, before/after captures) and his merge word.
 
 ## Phase CP — The pause that isn't
 
@@ -1793,11 +1797,12 @@ observation is load-bearing elsewhere — it is precisely WHY
 running clock never repeats and PAUSED could never fire at all.
 
 **So the two surfaces use one word for opposite things:**
-- *Phone timer (unconnected):* `pause` is a COMMAND. `engine.ts` sets
+
+- _Phone timer (unconnected):_ `pause` is a COMMAND. `engine.ts` sets
   `pausedAt` as the clock's right edge and `resume` folds the span into
   `pausedTotalMs`, subtracting it. Time genuinely does not accrue. The
   rower's piece is suspended.
-- *Connected (PM5):* PAUSED is an OBSERVATION, derived from three
+- _Connected (PM5):_ PAUSED is an OBSERVATION, derived from three
   metrics freezing for `PAUSED_FRAME_HOLD` frames. Nothing is
   suspended. The interval clock is draining the whole time the word is
   on screen, and the rower's piece is quietly getting shorter.
@@ -1817,6 +1822,7 @@ believe the workout is suspended, we cover the evidence that it is not.
 trade; this reframes the same pixels as an information question.)
 
 **Open questions for the brainstorm** — none of these are decided:
+
 1. Is the honest word STOPPED, or RESTING, or "NOT ROWING", rather than
    PAUSED? `PULL TO RESUME` already carries the right instruction; the
    noun above it is what overstates.
@@ -1835,6 +1841,39 @@ trade; this reframes the same pixels as an information question.)
 **Cheapest useful next step:** questions 1 and 2 are copy plus a
 `bottom`/`background` change and could ride a bugfix round; 3 and 4 are
 design. Do not start any of it before James rules on the word.
+
+## Phase LG — The log screen's own words
+
+**Status:** filed 2026-08-13 from James ("the log flow should also change to
+help people understand. I was confused by it"). Deliberately NOT folded into
+#89. Needs a brainstorm and his ruling.
+**Goal:** the post-row self-report stops using two words that mean the
+opposite thing one screen away.
+
+**Why it is its own phase, not a copy tweak.** `LogSession.tsx` offers
+HELD / UNDER / OVER, backed by `api/useRecentLogs.ts`'s
+`HeldResult = "held" | "under" | "over"` and, underneath that, a Postgres
+enum — `pgEnum("held_result", ["held","under","over"])`, `notNull` on every
+logged row (`server/db/schema.ts`). Three separable pieces:
+
+1. **Copy only** (cheap, no migration): keep the stored values, change the
+   button labels and whatever sentence frames them. Available today.
+2. **The values themselves** (migration): renaming the enum members touches
+   real tester rows and wants a considered plan.
+3. **The question** (design): "did you hold your target?" is a different
+   question from the live judgement the connected panes make, and the answer
+   set may not be three buttons at all.
+
+**The collision that makes this urgent.** As of 2026-08-13 the live
+judgement renamed `"over"`/`"under"` to `"faster"`/`"slower"` (blue/red,
+DEVIATIONS' own row), because James had been reading "under" as FASTER while
+the code meant SLOWER. The log screen still uses the old pair, for a related
+but distinct question, with no stated direction at all. A rower who learns
+the panes' vocabulary now meets its opposite on the screen right after.
+
+**Also on this screen, unresolved:** which direction UNDER/OVER even mean
+here is not written down anywhere — code, comment, or copy. Establish that
+BEFORE renaming anything, or the rename ships a guess.
 
 ## Bugfix rounds
 
@@ -1971,7 +2010,7 @@ next phase. One line per round, newest first.
   read the just-saved log's own step actual and pre-fill (never silently
   overwrite) the relevant baseline field.
 - **Move programming limits onto `MonitorCapabilities`**: `domain/monitor/
-  program.ts` hardcodes PM5 Table 19 limits (`MIN_TIME_SECONDS = 20`,
+program.ts` hardcodes PM5 Table 19 limits (`MIN_TIME_SECONDS = 20`,
   `MIN_DISTANCE_METERS = 100`, `MAX_REST_SECONDS = 595`,
   `MAX_INTERVALS = 50`) and its six `CompileError` branches emit
   user-facing copy naming "the PM5" directly. `compileProgram` is the only

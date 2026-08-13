@@ -938,14 +938,14 @@ describe("judged cells: pane C goes through the ONE helper", () => {
       row(4).querySelectorAll('[class*="timer-card-actual-"]'),
     ).toHaveLength(0);
 
-    // Row 2's actual was rowed 6 s/500m faster than asked -> ochre "over"
+    // Row 2's actual was rowed 6 s/500m faster than asked -> ochre "faster"
     // (the effort direction, `domain/judge.ts`'s rule), and one stroke
-    // under the programmed rate -> teal "under".
+    // under the programmed rate -> teal "slower".
     expect(row(2).querySelector(".connected-grid-pace")!.className).toContain(
-      "timer-card-actual-over",
+      "timer-card-actual-faster",
     );
     expect(row(2).querySelector(".connected-grid-spm")!.className).toContain(
-      "timer-card-actual-under",
+      "timer-card-actual-slower",
     );
   });
 
@@ -1013,10 +1013,10 @@ describe("judged cells: pane C goes through the ONE helper", () => {
     // the rate: ochre and teal, and they stay ochre and teal.
     expect(row(2).className).toContain("connected-grid-completed");
     expect(row(2).querySelector(".connected-grid-pace")!.className).toContain(
-      "timer-card-actual-over",
+      "timer-card-actual-faster",
     );
     expect(row(2).querySelector(".connected-grid-spm")!.className).toContain(
-      "timer-card-actual-under",
+      "timer-card-actual-slower",
     );
     // Row 1 is the warm-up — no programmed target, so `within` either way.
     // What matters is that it is not GREY: it has nothing to be stale about.

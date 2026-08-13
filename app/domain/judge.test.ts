@@ -16,7 +16,7 @@ describe("judgeActual: pace boundaries (PACE_TOLERANCE_SECONDS = 2)", () => {
   });
 
   // A SMALLER split is a FASTER boat, so a number below the target is
-  // MORE effort than asked — `"over"`, the ochre state (7B Task 6; the
+  // MORE effort than asked — `"faster"`, the ochre state (7B Task 6; the
   // handoff's own table and its `1:57.8` vs `TARGET 2:00.0` mockup, drawn
   // ochre). This is the direction Task 3 had numerically inverted.
   it("is 'over' one second FASTER than the tolerance allows (a smaller split)", () => {
@@ -27,7 +27,7 @@ describe("judgeActual: pace boundaries (PACE_TOLERANCE_SECONDS = 2)", () => {
         target,
         stale: false,
       }),
-    ).toBe("over");
+    ).toBe("faster");
   });
 
   it("is 'within' exactly AT the tolerance above target — the boundary itself is not a deviation", () => {
@@ -49,7 +49,7 @@ describe("judgeActual: pace boundaries (PACE_TOLERANCE_SECONDS = 2)", () => {
         target,
         stale: false,
       }),
-    ).toBe("under");
+    ).toBe("slower");
   });
 
   // The two kinds do NOT share a direction, which is the whole reason the
@@ -68,8 +68,8 @@ describe("judgeActual: pace boundaries (PACE_TOLERANCE_SECONDS = 2)", () => {
       target: 22,
       stale: false,
     });
-    expect(faster).toBe("over");
-    expect(slowerRate).toBe("under");
+    expect(faster).toBe("faster");
+    expect(slowerRate).toBe("slower");
   });
 
   it("is 'within' when actual exactly equals target", () => {
@@ -101,7 +101,7 @@ describe("judgeActual: spm boundaries (SPM_TOLERANCE = 2)", () => {
         target,
         stale: false,
       }),
-    ).toBe("under");
+    ).toBe("slower");
   });
 
   it("is 'within' exactly AT the tolerance above target", () => {
@@ -123,7 +123,7 @@ describe("judgeActual: spm boundaries (SPM_TOLERANCE = 2)", () => {
         target,
         stale: false,
       }),
-    ).toBe("over");
+    ).toBe("faster");
   });
 });
 
@@ -141,7 +141,7 @@ describe("judgeActual: stale overrides everything", () => {
   // because those particular fixtures already resolve to "within" on
   // their own — coincidence, not proof. This fixture is the minimal case
   // that isolates precedence from magnitude: `target + tolerance + 1` is
-  // the SMALLEST actual that reads "over" at all (one past the boundary),
+  // the SMALLEST actual that reads "faster" at all (one past the boundary),
   // so a precedence bug has nowhere to hide behind "well, it was an
   // extreme value anyway."
   it("reads 'stale' even one unit past the 'over' boundary — the minimal over case, not just a deep outlier (pins precedence, not coincidence)", () => {
