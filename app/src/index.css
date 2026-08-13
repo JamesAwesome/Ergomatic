@@ -120,6 +120,7 @@ main {
 
 .tagline {
   color: var(--ink-3);
+  white-space: nowrap;
 }
 
 .notice {
@@ -1242,7 +1243,6 @@ button:disabled {
   font-family: var(--font-mono);
   font-size: 13px;
   color: var(--ink-3);
-  white-space: nowrap;
 }
 
 .step-row-range {
@@ -4162,11 +4162,32 @@ button:disabled {
   gap: 10px;
 }
 
+/* `nowrap` on a two-word label, kept as a cheap guard rather than as a
+   proven fix — and the distinction is the point.
+
+   The close-out review reported that at the notched landscape width (682px,
+   after the rotation fix took `max(left, right)` on both sides) this label
+   broke between its words on the warm-up and paused fixtures: 12px of label
+   becoming 24, the strip 23 becoming 32. I could NOT reproduce that against
+   the same fixture at the same viewport and a 59px injected inset, after
+   close-out A corrected the fixture's arithmetic and B removed both the
+   empty caption span and the housing — any of which could have returned the
+   pixels the wrap needed. So either the review measured a shape that no
+   longer exists, or the wrap is nearer the edge than either measurement
+   shows.
+
+   Cost of the declaration is zero and the failure it prevents is real in
+   principle, so it stays; the honest record is that it is defensive, not
+   corrective. The invariant itself is pinned by `design.spec.ts`'s
+   "nothing in the UP NEXT strip reflows at the notched content width",
+   which compares the two inset conditions to each other and does NOT depend
+   on this rule being the thing that holds them equal. */
 .timer-upnext-label {
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.12em;
   color: var(--ink-3);
+  white-space: nowrap;
 }
 
 .timer-upnext-value {
@@ -4747,8 +4768,11 @@ button:disabled {
      ONE RULE, not two (tail review, M-3). These were separate rules four
      lines apart, the only duplicated selector in this whole landscape
      block, and the duplicate is the entire reason `Timer.test.tsx`'s
-     scoping ratchet moved 30 -> 31. Merged, the count is back at 30 and
-     the comment sits against the declarations it describes — this file has
+     scoping ratchet moved 30 -> 31. Merging it took the count to 30, and
+     deleting the housing's own landscape rule in the same round took it to
+     29, which is what that test asserts today — the two moves are
+     independent and both are recorded there. The comment now sits against
+     the declarations it describes — this file has
      already paid once (review N3) for a comment separated from its rule by
      an intervening block. */
   .timer-screen .timer-control {

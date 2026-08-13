@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { signInViaBackdoor, stableBoundingBox } from "./helpers";
@@ -4612,6 +4614,85 @@ test.describe("connected screens (fake-driven)", () => {
     expect(Math.abs(notchLeft.liveX - INSET)).toBeLessThanOrEqual(1);
 
     await cleanupAllConnected(page, title);
+  });
+
+  // THE NOTCHED WIDTH IS A WIDTH NO OTHER GATE RENDERS. Headless Chromium
+  // reports all four safe-area insets as 0, so every one of the other e2e
+  // tests and all 62 committed captures draw the landscape content column at
+  // 800px — while a real notched iPhone draws it at 682, because the
+  // rotation fix above takes `max(left, right)` on both sides. Four of the
+  // five defects James found at the erg were invisible for exactly this
+  // reason, and the close-out review then found a fifth: at 682 the UP NEXT
+  // label broke between its two words, 12px of label becoming 24.
+  //
+  // So this measures the SAME element at both widths and requires them to
+  // agree. It is deliberately not a pin on 12px: the point is not the
+  // number, it is that the notched width must not reflow anything the
+  // un-notched width fits. A future strip that grows a third word fails here
+  // rather than on James's phone.
+  test("nothing in the UP NEXT strip reflows at the notched content width", async ({
+    page,
+  }) => {
+    // Loads the committed WARM-UP fixture rather than driving the fake to a
+    // rowing state, because the wrap is CONTENT-dependent: the strip is a
+    // flex row of label + value, and only the warm-up's longer value
+    // ("WORK 2:06.0 · then REST 3:00") squeezes the label enough to break
+    // it. A first attempt at this test used the rowing story and passed
+    // with and without the fix — recorded here because that is the third
+    // time this branch has written an assertion that could not fail.
+    const markup = readFileSync(
+      path.join(process.cwd(), "e2e/fixtures/connected-pane-live-warmup.html"),
+      { encoding: "utf-8" },
+    );
+    await page.setViewportSize({ width: 844, height: 390 });
+    await page.goto("/", { waitUntil: "load" });
+    await page.waitForFunction(
+      () =>
+        getComputedStyle(document.documentElement)
+          .getPropertyValue("--page")
+          .trim() !== "",
+    );
+    await page.evaluate((html) => {
+      document.body.innerHTML = `<div class="app-shell">${html}</div>`;
+    }, markup);
+    await expect(page.locator(".connected-surface")).toBeVisible();
+
+    const client = await page.context().newCDPSession(page);
+    async function stripAt(left: number) {
+      await client.send("Emulation.setSafeAreaInsetsOverride", {
+        insets: { top: 0, left, bottom: 0, right: 0 },
+      });
+      await page.evaluate(
+        () => new Promise((r) => requestAnimationFrame(() => r(null))),
+      );
+      const [label, main, pane] = await Promise.all([
+        page.locator(".timer-upnext-label").boundingBox(),
+        page.locator(".timer-upnext-main").boundingBox(),
+        page.locator(".connected-pane").boundingBox(),
+      ]);
+      return {
+        labelHeight: Math.round(label!.height),
+        mainHeight: Math.round(main!.height),
+        contentWidth: Math.round(pane!.width),
+      };
+    }
+
+    const unnotched = await stripAt(0);
+    const notched = await stripAt(59);
+
+    // The premise: the two conditions really are different widths. Without
+    // this the test passes trivially the day the inset override stops
+    // working — which is the failure mode that hid the original defect,
+    // since headless Chromium reports every inset as 0 and no other gate in
+    // this repo ever renders the 682px column a notched iPhone draws.
+    expect(notched.contentWidth).toBeLessThan(unnotched.contentWidth);
+
+    // Not a pin on 12px. The claim is that the notched width must not
+    // reflow anything the un-notched width fits, so the two conditions are
+    // compared to EACH OTHER — a strip that grows a third word later fails
+    // here rather than on James's phone.
+    expect(notched.labelHeight).toBe(unnotched.labelHeight);
+    expect(notched.mainHeight).toBe(unnotched.mainHeight);
   });
 
   test("portrait keeps its narrower 54px two-tab bar, unaffected by the landscape full-bleed rule", async ({
