@@ -105,17 +105,38 @@ const LONG_FIXTURE = libraryFixture("Sea Smoke", 6);
 function actualFor(index: number, program: WorkoutProgram): IntervalActual {
   const interval = program.intervals[index]!;
   const split = interval.targetSplit ?? 132;
-  const meters = interval.kind === "distance" ? interval.value : 2384;
+  const avgSplit = split - 6;
+  // THE ROW MUST BE PHYSICALLY POSSIBLE (tail review M-6). An interval fixes
+  // ONE of its two dimensions — a time piece its seconds, a distance piece
+  // its metres — and the other follows from it AT THE PACE THIS ROW SAYS IT
+  // WAS ROWED, which is `avgSplit`, not the target. Both used to be free:
+  // the warm-up's metres were the literal 2384 (8:00 at 1:40.7, faster than
+  // the workout's own 2:06 work target and impossible beside its own
+  // reported split), and a distance row's seconds were priced at the TARGET
+  // while its split claimed six seconds better. `c8c209c` then promoted the
+  // warm-up figure into `TOTAL M` on the live pane, so a number that could
+  // not be true became a number the rower reads.
+  const meters =
+    interval.kind === "distance"
+      ? interval.value
+      : Math.round((interval.value / avgSplit) * 500);
+  const elapsedSeconds =
+    interval.kind === "time" ? interval.value : (meters / 500) * avgSplit;
   return {
     index,
-    elapsedSeconds:
-      interval.kind === "time" ? interval.value : (meters / 500) * split,
+    elapsedSeconds,
     distanceMeters: meters,
-    avgSplit: split - 6,
+    avgSplit,
     avgSpm: (interval.displaySpm ?? 20) - 4,
     avgHeartRateBpm: 158 + index,
   };
 }
+
+/** The warm-up's own rowed distance, from the SAME derivation the grid rows
+ *  use rather than a second literal beside it — the two disagreeing is what
+ *  M-6 was. Filling Low's 8:00 warm-up carries no target, so `actualFor`
+ *  prices it at 132 - 6 = 126 s/500m: 1905 m. */
+const WARMUP_ACTUAL_METERS = actualFor(0, FIXTURE.program).distanceMeters;
 
 /** Mid-way through the first 2000 m rep, going a little too hard: the
  *  handoff's own mockup shows `1:57.8` against a `2:00.0` target, so the
@@ -133,7 +154,7 @@ function liveFrame(overrides: Partial<MonitorFrame> = {}): MonitorFrame {
   // SAME number as the interval's own distance — so `TOTAL M 800` sat beside
   // `METERS LEFT 1200` looking like two readings of one interval, when the
   // first is the whole session. A rower one interval into Filling Low has
-  // the 8:00 warm-up behind them: `actualFor`'s own 2384 m for a time
+  // the 8:00 warm-up behind them: `actualFor`'s own metres for that time
   // interval, plus this interval's 800. The picture now shows two visibly
   // different scopes instead of a coincidence, which is what made the screen
   // scan wrong. `sessionElapsedSeconds` was always a genuine session value
@@ -143,7 +164,7 @@ function liveFrame(overrides: Partial<MonitorFrame> = {}): MonitorFrame {
     elapsedSeconds: 828,
     distanceMeters: 800,
     sessionElapsedSeconds: 828,
-    sessionDistanceMeters: 2384 + 800,
+    sessionDistanceMeters: WARMUP_ACTUAL_METERS + 800,
     currentSplit: 117.8,
     spm: 21,
     heartRateBpm: 164,
@@ -154,15 +175,22 @@ function liveFrame(overrides: Partial<MonitorFrame> = {}): MonitorFrame {
     rowingActive: true,
     ...overrides,
   };
+  // ONE re-mirror, deliberately, and the asymmetry is the point.
+  // `sessionElapsedSeconds` follows `elapsedSeconds` whenever a case
+  // overrides only the raw half, because the two genuinely coincide for a
+  // frame that never crosses an interval reset. `sessionDistanceMeters` does
+  // NOT: mirroring it unconditionally is exactly what discarded the default
+  // above and made every capture's session total equal to its interval
+  // distance. There is no line for it here — the spread already carries
+  // either the default or the case's own override, which is what "does not
+  // mirror" means (tail review M-2: this used to be spelled out as
+  // `sessionDistanceMeters: f.sessionDistanceMeters`, a no-op after the
+  // spread that read like working code). A case that wants the mirror says
+  // so itself, and the warm-up fixture below does, where nothing precedes
+  // the warm-up so the two really are equal.
   return {
     ...f,
     sessionElapsedSeconds: overrides.sessionElapsedSeconds ?? f.elapsedSeconds,
-    // `f.sessionDistanceMeters`, NOT `f.distanceMeters`: mirroring the raw
-    // value unconditionally is what discarded the default above and made
-    // every capture's session total equal to its interval distance. A case
-    // that wants the mirror now says so (the warm-up fixture does, where the
-    // two genuinely are equal because nothing precedes a warm-up).
-    sessionDistanceMeters: f.sessionDistanceMeters,
   };
 }
 
@@ -234,6 +262,44 @@ function tripleTapGrid(): void {
   fireEvent.click(target);
   fireEvent.click(target);
 }
+
+// A CAPTURE CAN ONLY BE AS HONEST AS THE FIXTURE BEHIND IT (tail review
+// M-6). The snapshots below would happily record an impossible row — they
+// pin what the component renders, not whether the numbers could have
+// happened — so the arithmetic gets its own assertion. A future editor who
+// hardcodes a metre count again fails HERE, with a reason, rather than
+// producing a snapshot diff that looks like a deliberate re-shoot.
+describe("the fixtures are physically possible", () => {
+  it("every actual's distance, time and split agree with each other", () => {
+    for (const { program } of [FIXTURE, LONG_FIXTURE]) {
+      for (let i = 0; i < program.intervals.length; i += 1) {
+        const a = actualFor(i, program);
+        // `avgSplit` is nullable on `IntervalActual` (a machine that never
+        // reported one), but this factory always sets it — and a `null`
+        // here would make the arithmetic below vacuous rather than false.
+        expect(a.avgSplit).not.toBeNull();
+        // distance / time IS the split, by definition of s/500m. Half a
+        // metre of slack for `Math.round` on the derived metre count, and
+        // nothing like enough to admit the old 2384 (which implied 1:40.7
+        // beside a reported 2:06.0).
+        expect((a.elapsedSeconds / a.avgSplit!) * 500).toBeCloseTo(
+          a.distanceMeters,
+          0,
+        );
+      }
+    }
+  });
+
+  it("the live frame's session total is the warm-up plus this interval, both real", () => {
+    // The two scopes `c8c209c` separated: `TOTAL M` is the session, `METERS
+    // LEFT` the interval. Asserted against `actualFor`'s own output so the
+    // pane's session figure cannot drift away from the grid row above it.
+    expect(liveFrame().sessionDistanceMeters).toBe(
+      actualFor(0, FIXTURE.program).distanceMeters + 800,
+    );
+    expect(liveFrame().distanceMeters).toBe(800);
+  });
+});
 
 describe("screen fixtures for pnpm screenshots", () => {
   it("pane B, rowing", async () => {

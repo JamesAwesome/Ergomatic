@@ -758,9 +758,17 @@ describe("degenerate inputs", () => {
     // Still the DASH here, and this is the ONLY case that keeps it: with
     // no phase there is no word to show. Everywhere else the slot names the
     // phase (James, 2026-08-12).
+    //
+    // BOTH SLOTS, not just the split (tail review M-1). `Free` is a claim
+    // about a phase — "this piece asks for no particular rate" — and with
+    // no phase at all there is nothing to make that claim about; the rate
+    // slot went on saying it while the split slot honestly dashed, and only
+    // the split half was pinned, so the disagreement was invisible.
     expect(m.targetSplit.main).toBe("—");
     expect(m.targetSplit.absent).toBe(true);
     expect(m.targetSplitCaption).toBe("");
+    expect(m.targetRate.main).toBe("—");
+    expect(m.targetRate.absent).toBe(true);
     expect(m.intervalLabel).toBe("INTERVAL 1 OF 4 · WORK");
   });
 

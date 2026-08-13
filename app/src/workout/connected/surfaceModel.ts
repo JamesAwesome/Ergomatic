@@ -326,8 +326,11 @@ export interface SurfaceModel {
   paceWhole: string;
   paceTenths: string;
   rate: JudgedValue;
-  /** The rate hero's own target row: `DASH` when the phase carries no spm
-   *  (the same no-target signal `targetSplit.main` uses). Connected-revamp
+  /** The rate hero's own target row: `FREE` when the phase carries no spm,
+   *  and the house `DASH` when there is no phase at all — exactly the two
+   *  cases `targetSplit.main` distinguishes, since a rate slot cannot claim
+   *  a phase asks for no particular rate when no phase exists (tail review
+   *  M-1). Connected-revamp
    *  Task 3 fix round 1 (task-3-review.md Minor-3): this replaced a string
    *  caption (`"NO RATE TARGET"` / `` `TARGET ${targetSpm}` ``) PaneLive
    *  used to parse for its numeral — `targetSpm` was already in hand two
@@ -562,10 +565,21 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
     rate,
     // `Free`, not a dash, for the same reason `targetSplit` names its phase
     // (James, 2026-08-12): the phone timer has always said `free` here, and
-    // the two surfaces now share a language. Capitalized to sit beside
-    // `Easy`/`Rest`/`All out`, which the phase vocabulary already Title-cases.
+    // the two surfaces now share a language. Capitalized to sit beside the
+    // phase-kind words `Easy`/`Rest`/`All out`, which are already Title case.
+    //
+    // ...but only when there IS a phase (tail review M-1). `Free` says "this
+    // piece asks for no particular rate"; with no phase there is no piece to
+    // say it about, and the split slot above already dashes for exactly that
+    // reason. The two halves of the slot now agree on every path, which is
+    // the invariant a reader assumes when they see one of them.
     targetRate: {
-      main: targetSpm === null ? FREE : String(targetSpm),
+      main:
+        phase === undefined
+          ? DASH
+          : targetSpm === null
+            ? FREE
+            : String(targetSpm),
       absent: targetSpm === null,
     },
     meters,
