@@ -10,8 +10,14 @@
 //
 // CONNECTED-REVAMP TASK 5 (design spec §6, revision §4): every row is now
 // SINGLE-LINE at a FIXED height (32px landscape / 40px portrait, JAMES
-// RULING 2026-08-12 superseding the packet's 8-at-36 for landscape — the
-// measured landscape scroller is 232px and 8x36 cannot fit it). There is no
+// RULING 2026-08-12 superseding the packet's 8-at-36 for landscape). The
+// ruling was made against a landscape scroller measured at 232px, which
+// 8x36 = 288 cannot fit; the figure has moved twice since (Task 5 measured
+// 239 — an un-zeroed UA margin on a caption `<p>` — and Task 6's footer
+// reclaim took it to 276, where it stands). The conclusion is unchanged:
+// 8x32 = 256 fits 276 with 20 to spare, and 8x36 still does not. 232 is
+// history, framed as history the way `index.css`'s own `.connected-pane-
+// grid` landscape comment frames it. There is no
 // second line and no third line — the OLD two-line portrait row
 // (`.connected-grid-line1`/`-line2`, folded into one row by `display:
 // contents` in landscape) and the active row's `REMAINING · TARGET …`

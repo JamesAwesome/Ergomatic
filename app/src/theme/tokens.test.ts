@@ -186,6 +186,26 @@ describe("the size-token scale (tokens.css portrait + index.css landscape)", () 
     expect(namesIn(LANDSCAPE_ROOT)).toStrictEqual(scaleNames.toSorted());
   });
 
+  // THE DEAD TOKEN, AND THE RULE THAT KEEPS ANOTHER ONE FROM SHIPPING
+  // (final review, Minor-1; the sweep's S0d confirms it independently).
+  // `--size-total` shipped declared in both `:root` blocks and pinned three
+  // ways by the tests above, with nothing in `index.css` referencing it —
+  // while `.timer-total-value` carried a hardcoded `font-size: 22px`. So
+  // 22px lived in three places, the tests guarded a number no pixel
+  // depended on, and this file's own header invoked the repo's
+  // `spec-blind-tests` rule ("Tasks 3/5/7 are the first real callers")
+  // while that promise went unkept for one of nine. The literal is now
+  // `var(--size-total)` and this asserts the general rule: every name in
+  // the scale has at least one real consumer. Counted off the
+  // comment-stripped source, so a prose mention cannot satisfy it.
+  it("every token in the scale is actually CONSUMED by index.css — no more dead names", () => {
+    const consumers = (name: string) =>
+      indexCss.split(`var(${name})`).length - 1;
+    for (const name of [...SCALE.map((s) => s.name), ELAPSED_NAME]) {
+      expect([name, consumers(name) > 0]).toStrictEqual([name, true]);
+    }
+  });
+
   it(`${ELAPSED_NAME}: ${ELAPSED_PX}px in tokens.css's :root, exactly once, and absent from the landscape block`, () => {
     expect(declarationCount(PORTRAIT_ROOT, ELAPSED_NAME, ELAPSED_PX)).toBe(1);
     expect(LANDSCAPE_ROOT).not.toContain(ELAPSED_NAME);
