@@ -73,6 +73,32 @@
      the corner of an eye. */
   --judge-faster: #1d4e89;
   --judge-slower: #962718;
+  /* GOLD MEANS "LOOK HERE", NEVER "YOU ARE BEHIND" (James, 2026-08-13:
+     "use gold for 'not a judgement' since we switched to red"). The
+     connected panes mark the one cell that is counting down
+     (`.connected-grid-countdown`); until now that mark was --accent, a
+     brick red — which was fine while the verdict colours were teal and
+     ochre, and became a trap the moment slower-than-target went red. Two
+     brick reds, one column apart, meaning "watch this cell" and "you are
+     behind": exactly the confusion a rower has no attention to spare for
+     mid-piece.
+
+     A ROLE TOKEN, not a colour name: anything on these panes that POINTS at
+     something rather than judging it belongs here, so the next marker
+     cannot quietly pick red again. It is also not --type-at (#8a5f18), the
+     ochre the verdicts just vacated — reusing a type colour is the coupling
+     --judge-* was split out to end, and that ochre only measures 4.69:1 on
+     --surface-sunken, the thinnest of the three grid backgrounds.
+
+     Contrast on all three backgrounds a grid cell sits on: --surface
+     6.49:1, --page 5.85:1, --surface-sunken 5.50:1. Comfortable on every
+     one, which the value it replaces (--accent: 5.94 / 5.35 / 5.03) was
+     too, so this trades no legibility for the clarity.
+
+     Retires the last accent declaration on the connected panes: DEVIATIONS
+     row 0's "accent appears nowhere" is now literally true there, where it
+     previously carried a documented single exception. */
+  --marker: #7d5510;
   /* Fix round 1 (James's ruling): was #b5341f, IDENTICAL to --accent — every
      TR chip/badge filled with what was structurally "accent", quietly
      breaking the ui-fix round's own "accent means exactly four things,
