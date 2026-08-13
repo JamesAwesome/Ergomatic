@@ -2338,6 +2338,14 @@ for (const name of CONNECTED_STATES) {
       // floor could not fail unless one of them had already failed and
       // aborted the test. James's ruling is a number, so the number is what
       // is pinned. Measured, not derived: 15, at an exact fit of 15.3.
+      //
+      // And the count is NOT merely implied by the two heights above, as
+      // the fix round's own note claimed (the re-review corrected it):
+      // `rowHeight` samples `children[0]` alone while `visible` walks every
+      // child, so later rows can diverge from the first. Proven — giving
+      // `.connected-grid-row:not(:first-child)` a 50px height leaves
+      // `rowHeight` 40 and `clientHeight` 612 both green and fails here on
+      // 12 (5 in landscape). This line detects on its own.
       const m = await page.evaluate(() => {
         const scroller = document.querySelector(".connected-grid-rows")!;
         const box = scroller.getBoundingClientRect();
@@ -2530,8 +2538,10 @@ for (const name of CONNECTED_STATES) {
       expect(m.rowHeight).toBe(32);
       expect(m.clientHeight).toBe(LANDSCAPE_GRID_SCROLLER_PX);
       // EXACT, not a floor, for the reason the portrait block sets out
-      // (test-integrity sweep, P2): `floor(276/32)` is 8, so the floor was
-      // implied by the two exact assertions above it. Measured 8, at an
+      // (test-integrity sweep, P2): `floor(276/32)` is 8, so the FLOOR was
+      // implied by the two exact assertions above it. The exact count is
+      // not — `rowHeight` samples only `children[0]`, so uneven later rows
+      // fail here (5) with both heights still green. Measured 8, at an
       // exact fit of 8.625 — the packet's own count, restored by the
       // task-6 footer reclaim.
       expect(m.visible).toBe(8);
