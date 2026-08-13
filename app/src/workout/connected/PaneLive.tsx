@@ -114,9 +114,29 @@ export default function PaneLive({ model }: { model: SurfaceModel }) {
             >
               {model.targetSplit.main}
             </span>
-            <span className="connected-hero-target-ref">
-              {model.targetSplitCaption}
-            </span>
+            {/* NOTHING AT ALL when there is no caption, rather than an
+                empty span (tail review M-5), matching how
+                `TimerTargets.tsx` guards its own `sub`. `targetSplitCaption`
+                was documented as "never blank" and is in fact blank on
+                every no-target phase — Easy, Rest, All out, and both effort
+                words — so this slot was empty more often than not.
+
+                MEASURED before removing it, because "keep the slot for
+                layout stability" is the obvious counter-argument and it
+                turns out to be false here: `.connected-hero-target` is a
+                left-aligned `display: flex` row with `gap: 10px`, so the
+                empty span sat at x=259.97 with width 0 and consumed a 10px
+                gap AFTER the last painted thing. Removing it moved every
+                other box by exactly 0.00px (TARGET label x=20 w=44.41, the
+                value x=74.41 w=175.56, both identical with and without),
+                because nothing follows it and the row does not stretch. So
+                the slot buys no stability; it only puts an empty node in
+                the DOM and the accessibility tree. */}
+            {model.targetSplitCaption !== "" && (
+              <span className="connected-hero-target-ref">
+                {model.targetSplitCaption}
+              </span>
+            )}
           </div>
         </div>
         <span className="connected-hero-divider" aria-hidden="true" />

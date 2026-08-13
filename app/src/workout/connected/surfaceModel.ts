@@ -349,7 +349,10 @@ export interface SurfaceModel {
    *  the phase kinds, and `ALL OUT`/`EASY` for a work phase at an effort
    *  ref (`domain/pace.ts`'s `effortWord`, caps on purpose — see the `FREE`
    *  comment in `session/TimerTargets.tsx`) — so the caption would only
-   *  repeat the value above it. */
+   *  repeat the value above it. Empty is therefore the COMMON case, not the
+   *  edge one, and `PaneLive.tsx` renders no element at all for it rather
+   *  than an empty span (tail review M-5; that file's own comment carries
+   *  the measurement behind the choice). */
   targetSplitCaption: string;
   /** Pane C. Built here, not in the pane, so its actual cells go through
    *  the same `judgedValue` path every other pane's do. */

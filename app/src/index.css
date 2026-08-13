@@ -3687,7 +3687,7 @@ button:disabled {
 
 /* THE GUTTER WRAPPER (connected-revamp Task 7, revision §5). `display:
    contents` here (portrait's own default) makes `.timer-gutter` disappear
-   from the box tree — its three children (back/housing/end) become direct
+   from the box tree — its two children (back/end) become direct
    flex items of `.timer-header` above, ordered onto its one header line by
    `order` below rather than DOM position (`.timer-name` sits AFTER this
    wrapper in the markup, but visually belongs BETWEEN back and end). The
@@ -3695,8 +3695,8 @@ button:disabled {
    `.timer-header` ITSELF into `display: contents` too, promoting this
    wrapper a second level up to become a direct grid child of
    `.timer-screen` — where IT stops being `contents` and becomes the real
-   44px gutter column, mirroring `.connected-pager`'s own back/housing/
-   target column (index.css) for the connected surface. One `.timer-end`
+   44px gutter column, mirroring `.connected-pager`'s own back/target
+   column (index.css) for the connected surface. One `.timer-end`
    button exists in the DOM either way; only its CSS position moves. */
 .timer-gutter {
   display: contents;
@@ -3707,13 +3707,6 @@ button:disabled {
   font-family: var(--font-mono);
   font-size: 15px;
   color: var(--ink);
-}
-
-/* Zero footprint in portrait — same idiom as `.connected-pager-housing`
-   (index.css): the decorative camera-housing spacer only exists once the
-   gutter is a real column, in landscape. */
-.timer-gutter-housing {
-  display: none;
 }
 
 .timer-name {
@@ -4288,7 +4281,11 @@ button:disabled {
   align-items: center;
   justify-content: center;
   /* Portrait stretches these to the grid's half-columns; landscape pins
-     them back to 56px squares. */
+     them back to a fixed 56px width. MEASURED at both frames (tail review
+     M-4, which caught this comment claiming "56px squares"): portrait
+     renders 171x56, landscape 56x44 — neither is a square, and landscape
+     is not one because its own `min-height: 44px` override (a deliberate
+     documented budget decision) still applies over this rule's 56. */
   width: auto;
   min-height: 56px;
   background: var(--surface);
@@ -4411,7 +4408,7 @@ button:disabled {
    gutter/content-grouped DOM order, so auto-placement would interleave
    rows unpredictably) — `.timer-header` and its nested `.timer-gutter` both
    go `display: contents` here, promoting `.timer-gutter-back`/
-   `.timer-gutter-housing`/`.timer-end`/`.timer-name` to be independently
+   `.timer-end`/`.timer-name` to be independently
    placeable grid items in their own right (see `.timer-header`'s own base
    rule for the portrait half of this trick). Reference frame 844×390
    (revision's own "no scroll" frames), not the older 844×420 swap size —
@@ -4456,9 +4453,8 @@ button:disabled {
      shape): a real 44px column now, not `display: contents` any more —
      portrait's promotion trick (base rule) reverses here, one level back
      in. `justify-content: space-between` plus the 12px vertical padding is
-     what puts back at the top, END at the bottom and the housing spacer
-     exactly between them — byte-for-byte the same layout math
-     `.connected-pager` already uses for LIVE/[housing]/GRID. */
+     what puts back at the top and END at the bottom — byte-for-byte the
+     same layout math `.connected-pager` already uses for LIVE/GRID. */
   .timer-screen .timer-header .timer-gutter {
     display: flex;
     flex-direction: column;
@@ -4478,14 +4474,6 @@ button:disabled {
     align-items: center;
     justify-content: center;
     font-size: 15px;
-  }
-
-  .timer-screen .timer-header .timer-gutter-housing {
-    display: block;
-    width: 11px;
-    height: 104px;
-    background: var(--ink);
-    border-radius: 6px;
   }
 
   /* END, in the gutter: 44×44, accent-outlined (fix round 1, review
@@ -4514,7 +4502,7 @@ button:disabled {
   /* `.timer-gutter` itself keeps `display: flex` (the override just above)
      — only its PARENT promotes here, one level, so `.timer-gutter` becomes
      a direct grid child in its own right (placed at `grid-column: 1;
-     grid-row: 1 / -1;` above) while its OWN children (back/housing/end)
+     grid-row: 1 / -1;` above) while its OWN children (back/end)
      stay real flex items inside it, not promoted a second time. */
   .timer-screen .timer-header {
     display: contents;
@@ -4738,22 +4726,33 @@ button:disabled {
        row's own trailing padding was part of the 66px overflow. */
     padding-bottom: 0;
     /* Back to flex: the base rule's two half-columns are PORTRAIT's answer
-       to James's 2026-08-12 ruling. Landscape keeps the two 56px squares
-       right-aligned — this row shares its band with the ruler, so stretched
-       controls would sit under totals they have nothing to do with. */
+       to James's 2026-08-12 ruling. Landscape keeps the two controls at
+       their own fixed size, right-aligned — this row shares its band with
+       the ruler, so stretched controls would sit under totals they have
+       nothing to do with. MEASURED 56x44 here, not the "56px squares" this
+       comment used to claim (tail review M-4); portrait's are 171x56. */
     display: flex;
     justify-content: flex-end;
   }
 
+  /* 56 WIDE, 44 TALL — measured 56x44 in a real browser at 844x390, not
+     the base rule's 56x56 square. The width pins the two controls back to
+     a fixed size after PORTRAIT stretched them across the grid's two half
+     columns (James's 2026-08-12 ruling); the height is the same measured
+     budget finding as the rest of this block, and 44 still comfortably
+     clears the house's 44x44 tap-target floor — it is just no longer the
+     portrait size, on a surface with less than half portrait's vertical
+     room to spend.
+
+     ONE RULE, not two (tail review, M-3). These were separate rules four
+     lines apart, the only duplicated selector in this whole landscape
+     block, and the duplicate is the entire reason `Timer.test.tsx`'s
+     scoping ratchet moved 30 -> 31. Merged, the count is back at 30 and
+     the comment sits against the declarations it describes — this file has
+     already paid once (review N3) for a comment separated from its rule by
+     an intervening block. */
   .timer-screen .timer-control {
     width: 56px;
-  }
-
-  /* 44px, not the base rule's 56 (same measured budget finding) — still
-     comfortably clears the house's 44×44 tap-target floor, just no longer
-     the portrait size on a surface with less than half portrait's vertical
-     room to spend. */
-  .timer-screen .timer-control {
     min-height: 44px;
   }
 
@@ -5968,10 +5967,39 @@ section:not(.news-pinned) .news-row:last-of-type {
      task-6 fix round), which a flat `gap` would otherwise spend on a
      boundary with nothing to separate most sessions. */
   gap: 0;
-  height: calc(
-    100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) -
-      26px
-  );
+  /* THE SAFE-AREA INSETS ARE NOT SUBTRACTED HERE (James's erg walk,
+     2026-08-13, defect 3: in portrait "LEFT IN INTERVAL wraps to two lines
+     and the TOTAL LEFT row is cut off at the bottom edge").
+
+     This element is anchored at `y = 0` and carries `.screen`, whose own
+     padding ALREADY spends the insets (`:401-406`, `calc(6px + env(top))`
+     and the two horizontal sides). `box-sizing: border-box` is global, so
+     that padding lives INSIDE this `height` — subtracting the insets here
+     as well charged each one twice. MEASURED at 390x844 with iPhone 14
+     insets injected via CDP (top 47, bottom 34), before this fix: the live
+     pane's content needs 579px and got 554 (`scrollHeight` 579 vs
+     `clientHeight` 554), so `.timer-total` — the TOTAL LEFT row — hung
+     25px past the pane's foot and `.connected-pane`'s `overflow: clip`
+     simply cut it off. At iPhone 14 Pro's 59px top inset it was 49px short
+     and almost the whole row went. At ZERO insets the same pane measures
+     `scrollHeight` 682 = `clientHeight` 682 with 103px of absorbed slack —
+     which is exactly why every gate, every capture and every design sweep
+     called this screen clean: the defect only exists on a device with a
+     notch, and nothing in the suite had one until this walk.
+
+     Dropping the two inset terms restores 128px (the top inset twice plus
+     the bottom once) and the pane clears its content with 56px to spare on
+     both phones. Content still sits clear of the home indicator: the flat
+     26px below plus `.screen`'s own 20px bottom padding give 46px of foot,
+     more than the 34px indicator needs.
+
+     THE `- 26px` STAYS, deliberately. It is pre-existing (byte-identical
+     on `origin/main`) and it is the "portrait dead 26px / 818 in an 844
+     frame" item James has already PARKED. Unlike the inset terms it is not
+     inert — removing it would move portrait geometry at zero insets and
+     re-shoot every portrait capture — so it stays parked and is not this
+     branch's to spend. */
+  height: calc(100dvh - 26px);
   /* Horizontal swipe is the primary navigation (handoff §3, 60px
      threshold) — the browser must not claim the gesture for its own
      back-navigation or overscroll first. Vertical panning stays with the
@@ -6998,14 +7026,6 @@ section:not(.news-pinned) .news-row:last-of-type {
   cursor: pointer;
 }
 
-/* No gutter, no housing to represent in portrait — the landscape-only
-   camera-housing spacer between the two targets (see the landscape query)
-   takes zero space here rather than just being visually hidden, so it can
-   never perturb the two targets' `flex: 1` split. */
-.connected-pager-housing {
-  display: none;
-}
-
 .connected-pager-mark {
   width: 9px;
   height: 9px;
@@ -7139,11 +7159,32 @@ section:not(.news-pinned) .news-row:last-of-type {
      is not discarded, only relocated: `.connected-pager` below absorbs it
      via its own `padding-left`, so the gutter's fill still reaches the
      physical edge while its 44px of tappable content sits clear of the
-     housing. RIGHT stays here unchanged — nothing on this surface's right
-     edge plays the gutter's role, so the ordinary inset behaviour is
-     correct there. Which physical side the housing actually falls on
-     depends on rotation direction, which neither the revision nor this
-     fix addresses — that is a design call, not an implementation one.
+     housing.
+
+     `--edge-inset` MAKES THE CONTENT COLUMN ROTATION-STABLE (James's erg
+     walk, 2026-08-13, defect 5: "it holds but the black bar makes it wider
+     if you put it on the notch side"). The gutter is always laid out on
+     the layout's LEFT, but which PHYSICAL side that is depends on which
+     way the phone was turned, so the notch lands on the gutter's side in
+     one rotation and on the content column's side in the other. Keying
+     the gutter off `env(safe-area-inset-left)` alone therefore made the
+     whole surface change shape on rotation. MEASURED at 844x390 with a
+     59px notch inset injected via CDP, before this fix:
+
+       notch LEFT   gutter 44 -> 103px, content column x=103, width 741
+       notch RIGHT  gutter 44px,        content column x=44,  width 741
+
+     — the width happened to match, but the column JUMPED 59px sideways
+     and the gutter itself doubled in width, which is the part James could
+     see. Taking `max()` of the two horizontal insets and spending it on
+     BOTH sides makes every term rotation-invariant: after this fix both
+     rotations measure gutter 103, content column x=103, width 682. The
+     cost is 59px of content width in the rotation that did not strictly
+     need it; the benefit is that a mounted phone's numbers do not move
+     when it is remounted the other way up, which is what the rower
+     actually experiences. At zero insets `max()` is 0 and every figure is
+     unchanged (gutter 44, column x=44, width 800), so this is inert in
+     Chromium and in every committed capture.
 
      `height` RECLAIMS THE DEAD 26px (connected-revamp Task 3 fix round,
      task-3-review.md Scrutiny 1(b)/Important-1). The base rule's `height:
@@ -7155,15 +7196,32 @@ section:not(.news-pinned) .news-row:last-of-type {
      the padding but never touched the height term, so landscape's own
      border-box has ended 26px short of the viewport ever since — measured
      directly against this worktree pre-fix: `.connected-surface`
-     `[0, 364]` inside a 390px frame, nothing painting `364→390`. Dropping
-     the term here (landscape only — portrait's own copy of this same
-     defect is a separate, unverified finding this fix round did not
-     touch; see the report) turns that dead space into 26px more content
-     budget, which is what makes the hero over-constraint below (Important-1)
-     and the UP NEXT/line-height divergences fixable in the same pass. */
+     `[0, 364]` inside a 390px frame, nothing painting `364→390`.
+
+     …and the INSET terms go with it (James's erg walk, 2026-08-13, defect
+     4: "the gutter's own background ends above the screen edge leaving a
+     visible ledge"). This element is anchored at `y = 0`, so ANY term
+     subtracted from `100dvh` makes its border box stop short of the
+     viewport's foot — and because the very same rule ALSO spends the
+     insets as `padding` two lines below, each one was being charged twice:
+     once shrinking the box and once again inside it. MEASURED at 844x390
+     with a 21px home-indicator inset injected, before this fix: surface
+     `[0, 369]`, the gutter's `--surface-sunken` fill ending at `y = 348`,
+     nothing painting `348→390`. That is the ledge — 42px of dead bottom,
+     21px of it a hard horizontal edge across the gutter's own fill, which
+     is why this wave's full-bleed gutter is what made a pre-existing gap
+     VISIBLE. `height: 100dvh` puts the border box back on the viewport so
+     the fill reaches the physical edge, while the untouched `padding` keeps
+     the CONTENT clear of the notch and the home indicator — the inset is
+     honoured exactly once. Inert at zero insets (390 either way), so no
+     capture moves. */
   .connected-surface {
     display: grid;
-    grid-template-columns: calc(44px + env(safe-area-inset-left, 0px)) 1fr;
+    --edge-inset: max(
+      env(safe-area-inset-left, 0px),
+      env(safe-area-inset-right, 0px)
+    );
+    grid-template-columns: calc(44px + var(--edge-inset)) 1fr;
     /* A fourth track, connected-revamp Task 6: the header (End) is now
        always on screen, above the lost banner's own row. `auto` sizes it
        to the button's own `min-height: 44px` plus the header's own top
@@ -7199,11 +7257,9 @@ section:not(.news-pinned) .news-row:last-of-type {
     row-gap: 0;
     max-width: none;
     margin: 0;
-    padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px)
+    padding: env(safe-area-inset-top, 0px) var(--edge-inset)
       env(safe-area-inset-bottom, 0px) 0;
-    height: calc(
-      100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)
-    );
+    height: 100dvh;
   }
 
   /* One line in landscape: 390px of height cannot spare the two-line
@@ -7315,18 +7371,18 @@ section:not(.news-pinned) .news-row:last-of-type {
      1 of the grid above, with no column-gap ahead of it — `#efeade`
      (`--surface-sunken`) with a 1px inner rule on the side facing the
      content. `space-between` plus the 12px vertical padding is what puts
-     LIVE at the top, GRID at the bottom and the housing spacer exactly
-     between them, mirroring the mockup's own gutter column byte for byte.
+     LIVE at the top and GRID at the bottom, mirroring the mockup's own
+     gutter column.
 
      `width`/`padding-left` carry the inset the surface no longer does (see
-     the comment above `.connected-surface`'s own `grid-template-columns`):
-     `width` grows by the same `env(safe-area-inset-left, 0px)` the column
-     track does, and `box-sizing: border-box` (global, `index.css:1`) means
-     that growth is exactly absorbed by `padding-left` — the CONTENT box
-     (where LIVE/the housing/GRID actually sit) stays a constant 44px,
-     pushed clear of the notch, while the `#efeade` fill underneath the
-     padding still paints all the way to the true physical edge. Never an
-     inset override: the inset is relocated, not dropped. */
+     `--edge-inset` on `.connected-surface` above): `width` grows by the
+     same `--edge-inset` the column track does, and `box-sizing: border-box`
+     (global, `index.css:1`) means that growth is exactly absorbed by
+     `padding-left` — the CONTENT box (where LIVE and GRID actually sit)
+     stays a constant 44px, pushed clear of the notch, while the `#efeade`
+     fill underneath the padding still paints all the way to the true
+     physical edge. Never an inset override: the inset is relocated, not
+     dropped. */
   .connected-pager {
     grid-column: 1;
     grid-row: 1 / -1;
@@ -7335,8 +7391,24 @@ section:not(.news-pinned) .news-row:last-of-type {
     justify-content: space-between;
     gap: 0;
     height: auto;
-    width: calc(44px + env(safe-area-inset-left, 0px));
-    padding: 12px 0 12px env(safe-area-inset-left, 0px);
+    width: calc(44px + var(--edge-inset));
+    /* THE FILL REACHES THE PHYSICAL BOTTOM EDGE (James's erg walk,
+       2026-08-13, defect 4 — the other half of it). `.connected-surface`
+       above keeps `padding-bottom: env(safe-area-inset-bottom)` so that
+       everything in the CONTENT column — including the paused block, which
+       hangs upward from `.connected-surface-footer` at the foot of that
+       column — stays clear of the home indicator. But this gutter is not
+       content: it is a painted edge, and a background that stops 21px
+       above the glass is precisely the ledge James saw. MEASURED at 844x390
+       with a 21px bottom inset: the fill ended at y=369 inside a 390px
+       frame. The negative margin lets this one grid item's border box grow
+       back down through the surface's padding to y=390 while the matching
+       `padding-bottom` holds GRID exactly where it already sat (bottom edge
+       357 before and after) — so the fill moves and the tap target does
+       not. */
+    margin-bottom: calc(-1 * env(safe-area-inset-bottom, 0px));
+    padding: 12px 0 calc(12px + env(safe-area-inset-bottom, 0px))
+      var(--edge-inset);
     background: var(--surface-sunken);
     border-top: none;
     border-right: 1px solid var(--rule);
@@ -7354,22 +7426,6 @@ section:not(.news-pinned) .news-row:last-of-type {
   .connected-pager-mark {
     width: 10px;
     height: 10px;
-  }
-
-  /* The camera-housing bump between the two gutter targets (`PagerRail.tsx`'s
-     own comment on why it exists). Zero footprint in portrait, where
-     `.connected-pager-housing` renders (see the portrait rule below) but
-     there is no gutter or housing to represent. `border-radius: 6px`, not
-     the house's `--radius` (2px) — a deliberate, mockup-faithful exception,
-     recorded in `DEVIATIONS.md` rather than silently matching the mockup's
-     `r6` against the house rule it departs from. */
-  .connected-pager-housing {
-    width: 11px;
-    height: 104px;
-    flex: none;
-    display: block;
-    background: var(--ink);
-    border-radius: 6px;
   }
 
   .connected-pager-label-long {
@@ -7738,7 +7794,7 @@ section:not(.news-pinned) .news-row:last-of-type {
   /* 32px, not the packet's 36 (JAMES RULING 2026-08-12): 8 rows at 36px is
      288px, more than any measured build of this frame has ever offered,
      and 32 is what fits the packet's count into the 276px this scroller
-     actually has (256, with 20 to spare) — DEVIATIONS row 102 records the
+     actually has (256, with 20 to spare) — DEVIATIONS row 101 records the
      ROW HEIGHT, no longer the count, which is back at the packet's 8 since
      the task-6 fix round reclaimed the empty footer. */
   .connected-grid-row {

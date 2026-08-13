@@ -19,7 +19,14 @@
 // hand-built minimum.
 
 import { readFileSync } from "node:fs";
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -364,6 +371,18 @@ describe("the pager is LABELLED (handoff §3, DEVIATIONS row 4)", () => {
     const buttons = within(pager).getAllByRole("button");
     // Two targets, and every one of them names what is behind it.
     expect(buttons).toHaveLength(2);
+    // …and the rail holds NOTHING BUT those two (James's erg walk,
+    // 2026-08-13): the decorative 11x104 camera-housing spacer that used to
+    // interleave between them is deleted — `PagerRail.tsx`'s own header
+    // says why. A child census rather than a `querySelector` null check
+    // because landscape divides this column with `justify-content:
+    // space-between`, which places its children by COUNT: a third child
+    // reappearing would push LIVE and GRID off the ends it puts them on,
+    // and only counting catches that.
+    expect(Array.from(pager.children).map((el) => el.tagName)).toStrictEqual([
+      "BUTTON",
+      "BUTTON",
+    ]);
     for (const button of buttons) {
       expect(
         button.querySelector(".connected-pager-label-long"),
@@ -477,6 +496,38 @@ describe("pane B — live (connected-revamp Task 3: two heroes)", () => {
 
     expect(document.querySelector(".timer-card")).toBeNull();
     expect(document.querySelector(".connected-cards-triple")).toBeNull();
+  });
+
+  it("renders the split target's ref line only when there IS one — no empty span on a no-target phase", () => {
+    // BOTH BRANCHES, on the same real fixture, because "renders nothing"
+    // is only meaningful beside a case that renders something (tail review
+    // M-5). Filling Low's interval 1 is a work piece at a 6K ref; its
+    // warm-up carries no target at all, which is the shape most phases
+    // have — Easy, Rest, All out and both effort words all caption blank.
+    renderSurface({ frame: frame({ intervalIndex: 1 }) });
+    const withRef = document.querySelector(".connected-hero-target-ref");
+    expect(withRef).not.toBeNull();
+    expect(withRef!.textContent).not.toBe("");
+    cleanup();
+
+    renderSurface({
+      frame: frame({
+        intervalIndex: 0,
+        intervalRemaining: { kind: "time", value: 120 },
+      }),
+    });
+    // Not "is empty" — ABSENT. An empty span still occupies a flex slot and
+    // still lands in the accessibility tree, which is exactly what M-5 was
+    // about, so a `textContent === ""` assertion would pass against the
+    // defect it is meant to catch.
+    expect(document.querySelector(".connected-hero-target-ref")).toBeNull();
+    // …and the slot it used to sit in still holds the two things that are
+    // really there, so this is a deletion and not a collapse.
+    const box = document.querySelector(".connected-hero-target")!;
+    expect(Array.from(box.children).map((c) => c.className)).toStrictEqual([
+      "connected-hero-target-label",
+      "connected-hero-target-value connected-value-absent",
+    ]);
   });
 
   it("puts both targets under their hero in INK, never accent (the supersession)", () => {

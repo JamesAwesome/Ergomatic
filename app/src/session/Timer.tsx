@@ -672,25 +672,30 @@ export default function Timer() {
     <main className="screen timer-screen">
       <div className="timer-header">
         {/* THE GUTTER (connected-revamp Task 7, revision §5): "Landscape
-            gutter holds back (←, top) and END (bottom) either side of the
-            housing. Portrait puts both on the header line." One `.timer-end`
+            gutter holds back (←, top) and END (bottom)." One `.timer-end`
             button, not two — `display: contents` on `.timer-gutter`
-            promotes `.timer-gutter-back`/`.timer-gutter-housing`/`.timer-end`
-            to be direct flex children of THIS row (portrait's own base
-            rule, unchanged, ordered back/name/end via CSS `order`); the
-            landscape override turns `.timer-header` ITSELF into `display:
-            contents` too, so `.timer-gutter` is promoted a second level up
-            to become a direct grid child of `.timer-screen`, where it
-            becomes the real 44px column (mirroring `.connected-pager`'s own
-            back/housing/target column, index.css). `←` is decorative
-            (`aria-hidden`) — this surface has nothing behind it to
-            navigate back TO mid-session; the mockup itself draws it as a
-            bare glyph, no button chrome, unlike END beside it. */}
+            promotes `.timer-gutter-back`/`.timer-end` to be direct flex
+            children of THIS row (portrait's own base rule, unchanged,
+            ordered back/name/end via CSS `order`); the landscape override
+            turns `.timer-header` ITSELF into `display: contents` too, so
+            `.timer-gutter` is promoted a second level up to become a
+            direct grid child of `.timer-screen`, where it becomes the real
+            44px column (mirroring `.connected-pager`'s own back/target
+            column, index.css). `←` is decorative (`aria-hidden`) — this
+            surface has nothing behind it to navigate back TO mid-session;
+            the mockup itself draws it as a bare glyph, no button chrome,
+            unlike END beside it.
+
+            The decorative camera-housing spacer that used to sit between
+            them is GONE (James's erg walk, 2026-08-13) — see
+            `PagerRail.tsx`'s own header for the reasoning; this was its
+            twin and goes with it. `space-between` on the landscape gutter
+            is what puts back at the top and END at the bottom, so removing
+            the middle child changes no position. */}
         <div className="timer-gutter">
           <span className="timer-gutter-back" aria-hidden="true">
             ←
           </span>
-          <span className="timer-gutter-housing" aria-hidden="true" />
           <button type="button" className="timer-end" onClick={handleEndTap}>
             END →
           </button>
