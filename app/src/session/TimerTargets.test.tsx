@@ -205,7 +205,11 @@ describe("TimerTargets (component)", () => {
   it("renders the effort WORD in the domain's own caps for a real library effort phase, never the estimate behind it", () => {
     const easy = effortPhaseOf("Fog Bow");
     const allOut = effortPhaseOf("Rear Flank");
-    expect(easy.targetSplit).not.toBeUndefined(); // the estimate exists...
+    // EXACT, not `not.toBeUndefined()` (close-out review, Minor 7): the
+    // premise of this test is that a REAL estimate is hidden, and a
+    // presence check passes on `null` — which would make the assertion
+    // below prove nothing. 6k 122 + 20 = 142.
+    expect(easy.targetSplit).toBe(142); // the estimate exists...
 
     const first = render(<TimerTargets phase={easy} />);
     expect(screen.getByText("EASY")).toBeInTheDocument();

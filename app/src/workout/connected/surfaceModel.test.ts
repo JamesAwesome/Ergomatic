@@ -446,7 +446,10 @@ describe("live", () => {
       actuals: [],
     });
     expect(EFFORT_MIN.phases[1]!.targetKind).toBe("effort");
-    expect(EFFORT_MIN.phases[1]!.targetSplit).not.toBeUndefined();
+    // EXACT, same reason as `TimerTargets.test.tsx`'s twin (close-out
+    // review, Minor 7): the point is that a REAL number is being
+    // withheld from the slot, and a presence check passes on `null`.
+    expect(EFFORT_MIN.phases[1]!.targetSplit).toBe(142);
     expect(easy.targetSplit.main).toBe("EASY");
     expect(easy.targetSplit.sub).toBeNull();
     expect(easy.targetSplit.absent).toBe(true);
