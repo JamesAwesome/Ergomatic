@@ -16,10 +16,11 @@ describe("judgeActual: pace boundaries (PACE_TOLERANCE_SECONDS = 2)", () => {
   });
 
   // A SMALLER split is a FASTER boat, so a number below the target is
-  // MORE effort than asked — `"faster"`, the ochre state (7B Task 6; the
-  // handoff's own table and its `1:57.8` vs `TARGET 2:00.0` mockup, drawn
-  // ochre). This is the direction Task 3 had numerically inverted.
-  it("is 'over' one second FASTER than the tolerance allows (a smaller split)", () => {
+  // MORE effort than asked — `"faster"`, the blue state (7B Task 6; the
+  // handoff's own table and its `1:57.8` vs `TARGET 2:00.0` mockup, which
+  // drew that state ochre before the 2026-08-13 repaint). This is the
+  // direction Task 3 had numerically inverted.
+  it("is 'faster' one second past the tolerance on the FASTER side (a smaller split)", () => {
     expect(
       judgeActual({
         kind: "pace",
@@ -41,7 +42,7 @@ describe("judgeActual: pace boundaries (PACE_TOLERANCE_SECONDS = 2)", () => {
     ).toBe("within");
   });
 
-  it("is 'under' one second SLOWER than the tolerance allows (a bigger split)", () => {
+  it("is 'slower' one second past the tolerance on the SLOWER side (a bigger split)", () => {
     expect(
       judgeActual({
         kind: "pace",
@@ -93,7 +94,7 @@ describe("judgeActual: spm boundaries (SPM_TOLERANCE = 2)", () => {
     ).toBe("within");
   });
 
-  it("is 'under' one stroke past the tolerance below target", () => {
+  it("is 'slower' one stroke past the tolerance below target", () => {
     expect(
       judgeActual({
         kind: "spm",
@@ -115,7 +116,7 @@ describe("judgeActual: spm boundaries (SPM_TOLERANCE = 2)", () => {
     ).toBe("within");
   });
 
-  it("is 'over' one stroke past the tolerance above target", () => {
+  it("is 'faster' one stroke past the tolerance above target", () => {
     expect(
       judgeActual({
         kind: "spm",
@@ -128,23 +129,28 @@ describe("judgeActual: spm boundaries (SPM_TOLERANCE = 2)", () => {
 });
 
 describe("judgeActual: stale overrides everything", () => {
-  it("reads 'stale' even when actual is deep 'over' territory", () => {
+  it("reads 'stale' even when actual is deep 'slower' territory", () => {
     expect(
       judgeActual({ kind: "pace", actual: 200, target: 120, stale: true }),
     ).toBe("stale");
   });
 
   // Task-3 review's own mutation (stale demoted to "only wins if the
-  // non-stale path would already be 'within'"): the deep-over test above
+  // non-stale path would already be 'within'"): the deep-slower test above
   // still catches that bug, but the other two tests in this block
   // (actual===target; both null) pass EVEN UNDER the wrong precedence,
   // because those particular fixtures already resolve to "within" on
   // their own — coincidence, not proof. This fixture is the minimal case
-  // that isolates precedence from magnitude: `target + tolerance + 1` is
-  // the SMALLEST actual that reads "faster" at all (one past the boundary),
-  // so a precedence bug has nowhere to hide behind "well, it was an
-  // extreme value anyway."
-  it("reads 'stale' even one unit past the 'over' boundary — the minimal over case, not just a deep outlier (pins precedence, not coincidence)", () => {
+  // that isolates precedence from magnitude: for a PACE, `target +
+  // tolerance + 1` is the smallest actual that reads `"slower"` at all (one
+  // past the boundary on the slower side), so a precedence bug has nowhere
+  // to hide behind "well, it was an extreme value anyway."
+  //
+  // Both this title and the one above said `'over'` until 2026-08-13, which
+  // was wrong in the old vocabulary too, not merely renamed: old `"over"`
+  // meant the FASTER side (a smaller split), and both fixtures sit on the
+  // slower one. The rename is what made the mislabel visible.
+  it("reads 'stale' even one unit past the 'slower' boundary — the minimal slower case, not just a deep outlier (pins precedence, not coincidence)", () => {
     expect(
       judgeActual({
         kind: "pace",

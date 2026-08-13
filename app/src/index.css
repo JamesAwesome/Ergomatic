@@ -4092,7 +4092,7 @@ button:disabled {
 }
 
 /* The judgement-keyed classes below (`timer-card-actual-slower/-within/
-   -over/-stale`, from `domain/judge.ts`'s own `Judgement` union) are the
+   -faster/-stale`, from `domain/judge.ts`'s own `Judgement` union) are the
    tint hooks Task 3 declared and Task 6 filled in. Every connected pane's
    live actual wears exactly one of them, assigned by ONE code path
    (`src/workout/connected/surfaceModel.ts`'s `judgedValue`, the only
@@ -4127,8 +4127,8 @@ button:disabled {
    renderers of the judgement-keyed hook are `connected/PaneLive.tsx` and
    `connected/PaneGrid.tsx` (connected-revamp Task 3's fix round retired
    the third, `connected/JudgedCard.tsx`, along with the cards it wrapped —
-   see that task's own report), and they use the `-under`/`-over`/`-stale`
-   suffixed classes only. */
+   see that task's own report), and they use the
+   `-slower`/`-faster`/`-stale` suffixed classes only. */
 
 /* Handoff: "every stale value greys to --ink-3" — task-3 review HIGH-1:
    this shipped as `--ink-5` (2.76:1 against --surface, FAILS the house's
@@ -4138,7 +4138,8 @@ button:disabled {
    TimerTargets.test.tsx, which reads this exact rule
    out of this file's own source text. The rule it describes is
    `.timer-card-actual-stale`, third below — this comment used to sit
-   immediately above `-under`, which is not it (review N3). */
+   immediately above the first of the pair (`-slower`, `-under` as it was
+   named then), which is not it (review N3). */
 .timer-card-actual-slower {
   color: var(--judge-slower);
 }
@@ -5898,13 +5899,14 @@ section:not(.news-pinned) .news-row:last-of-type {
       has to be the neutral reference, or the rower is reading three
       judgement colours.
    2. THE ACTUAL CARRIES THE JUDGEMENT, and only on the value.
-      `.timer-card-actual-slower/-over` (declared with the other
-      `timer-card-*` rules above, Task 3) resolve to `--type-o2` teal and
-      `--type-at` ochre — DEVIATIONS row 3's sanctioned second meaning for
-      two existing type tokens. Measured against `--surface` (#fffdf7):
-      teal 6.65:1, ochre 5.54:1; `--ink-3` (the stale/absent grey) 7.44:1
-      against `--surface` and 6.30:1 against `--surface-sunken`. All clear
-      the house's 4.5:1 floor.
+      `.timer-card-actual-faster/-slower` (declared with the other
+      `timer-card-*` rules above, Task 3) resolve to `--judge-faster` blue
+      and `--judge-slower` red — dedicated verdict tokens since 2026-08-13,
+      not the reused `--type-at`/`--type-o2` ochre and teal DEVIATIONS row 3
+      had sanctioned a second meaning for. Measured against `--surface`
+      (#fffdf7): blue 8.25:1, red 7.94:1; `--ink-3` (the stale/absent grey)
+      7.44:1 against `--surface` and 6.30:1 against `--surface-sunken`. All
+      clear the house's 4.5:1 floor.
 
    Height: no `- var(--tap)` term — the tab bar this surface renders
    underneath (`/library/:id` still shows it by ROUTE) is HIDDEN by the

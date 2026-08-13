@@ -70,7 +70,7 @@ function toleranceFor(kind: "pace" | "spm" | "hr" | "meters"): number | null {
 /** Judges a single live actual against its target. Precedence, in order:
  *
  *  1. `stale` overrides everything — a reading the driver itself has
- *     flagged as no-longer-fresh is never "within," "under," or "faster" no
+ *     flagged as no-longer-fresh is never "within," "slower," or "faster" no
  *     matter how close `actual`/`target` are, even if one or both are
  *     `null`.
  *  2. A `null` `actual` OR a `null` `target` reads `"within"` — there is

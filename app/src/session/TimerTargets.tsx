@@ -67,7 +67,7 @@ export function targetSplitDisplay(phase: EnginePhase): {
 }
 
 /** RATE card content: the spm value + its `"spm"` caption when the phase
- *  has one, or the phrase `"free"` alone (never a bare dash) when it
+ *  has one, or `FREE` above (the word `"Free"`) alone (never a bare dash) when it
  *  doesn't — true for every warm-up/rest/test phase (none carries `spm`),
  *  and for a work phase whose author never set a stroke rate and whose
  *  confirm-screen SPM stepper was never touched either. */
