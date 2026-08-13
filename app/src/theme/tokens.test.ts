@@ -1,12 +1,15 @@
 // The size-token scale (connected-revamp Task 2, design spec §8) — pinned
 // in a fix round after review (Important-2): sixteen load-bearing numbers
-// and eight names shipped with nothing asserting any of them, and nothing
-// consumes them yet either (Tasks 3/5/7 are the first real callers), so a
-// typo'd name or a transposed portrait/landscape pair would have failed
-// silently until someone eyeballed a screenshot. This is the repo's own
-// `spec-blind-tests` rule: an unconsumed semantic helper needs a spec
-// re-derivation at review, first consumer in the same task where possible.
-// Neither happened at Task 2 time; this file is the re-derivation.
+// and eight names shipped with nothing asserting any of them, and at Task 2
+// time nothing consumed them either (Tasks 3/5/7 were to be the first real
+// callers), so a typo'd name or a transposed portrait/landscape pair would
+// have failed silently until someone eyeballed a screenshot. This is the
+// repo's own `spec-blind-tests` rule: an unconsumed semantic helper needs a
+// spec re-derivation at review, first consumer in the same task where
+// possible. Neither happened at Task 2 time; this file is the
+// re-derivation. Eight of the nine did get their caller; `--size-total` did
+// not until the fix round below, which is why the consumer census at the
+// bottom of this file now exists.
 //
 // jsdom never loads either stylesheet as real rules — Vitest mocks every
 // `.css` import to an empty string for this project (`TimerTargets.test.tsx`'s
