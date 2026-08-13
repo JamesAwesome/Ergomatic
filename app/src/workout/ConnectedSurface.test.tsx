@@ -133,7 +133,7 @@ function fillingLow(): {
 
 const FIXTURE = fillingLow();
 
-/** The first work phase's own resolved split — every "under"/"over"
+/** The first work phase's own resolved split — every "slower"/"faster"
  *  fixture below is built relative to the WORKOUT's number, never a
  *  literal typed into this file. */
 const WORK_PHASE = (() => {
@@ -464,7 +464,7 @@ describe("pane B — live (connected-revamp Task 3: two heroes)", () => {
     renderSurface();
     const rateHero = document.querySelector(".connected-hero-rate")!;
     expect(
-      within(rateHero as HTMLElement).getByText("NOW · SPM"),
+      within(rateHero as HTMLElement).getByText("NOW"),
     ).toBeInTheDocument();
     expect(rateHero.querySelector(".connected-hero-value")).not.toBeNull();
     expect(
@@ -530,7 +530,7 @@ describe("pane B — live (connected-revamp Task 3: two heroes)", () => {
       frame: frame({
         intervalIndex: 1,
         state: "resting",
-        // Numbers that would scream "over"/"under" against any real
+        // Numbers that would scream "faster"/"slower" against any real
         // target, to prove the absent target is what suppresses the tint.
         currentSplit: 60,
         spm: 40,
@@ -607,21 +607,21 @@ describe("judgement: one helper, every pane (handoff §3)", () => {
     const heroClass = document.querySelector(
       ".connected-hero-value",
     )!.className;
-    expect(heroClass).toContain("timer-card-actual-over");
+    expect(heroClass).toContain("timer-card-actual-faster");
     fast.unmount();
 
     renderSurface({ frame: frame({ currentSplit: target + 10 }) });
     expect(
       document.querySelector(".connected-hero-value")!.className,
-    ).toContain("timer-card-actual-under");
+    ).toContain("timer-card-actual-slower");
   });
 
   it("judges within tolerance as plain ink, no tint class beyond -within", () => {
     renderSurface({ frame: frame({ currentSplit: target }) });
     const hero = document.querySelector(".connected-hero-value")!;
     expect(hero.className).toContain("timer-card-actual-within");
-    expect(hero.className).not.toContain("timer-card-actual-over");
-    expect(hero.className).not.toContain("timer-card-actual-under");
+    expect(hero.className).not.toContain("timer-card-actual-faster");
+    expect(hero.className).not.toContain("timer-card-actual-slower");
   });
 
   it("EVERY judged cell on pane B goes through the helper — none opts out", () => {
@@ -630,20 +630,54 @@ describe("judgement: one helper, every pane (handoff §3)", () => {
     // hero + rate + HR + meters
     expect(cells).toHaveLength(4);
     for (const cell of cells) {
-      expect(["under", "within", "over", "stale"]).toContain(cell.judgement);
+      expect(["slower", "within", "faster", "stale"]).toContain(cell.judgement);
     }
-    expect(cells.some((c) => c.judgement === "over")).toBe(true);
+    expect(cells.some((c) => c.judgement === "faster")).toBe(true);
   });
 
-  it("index.css paints the two verdicts with the handoff's own tokens", () => {
-    const under = ruleBody(".timer-card-actual-under");
-    const over = ruleBody(".timer-card-actual-over");
-    expect(under).toContain("var(--type-o2)");
-    expect(over).toContain("var(--type-at)");
+  it("index.css paints faster BLUE and slower RED, from the judgement's own tokens", () => {
+    const slower = ruleBody(".timer-card-actual-slower");
+    const faster = ruleBody(".timer-card-actual-faster");
+    // Tester feedback via James, 2026-08-13. `--judge-*` now, NOT the
+    // handoff's `--type-o2`/`--type-at`: a workout's TYPE and a live verdict
+    // are unrelated facts that happened to share a swatch. The negative
+    // assertion pins the separation, so a palette move on the type side
+    // cannot quietly repaint a verdict.
+    expect(faster).toContain("var(--judge-faster)");
+    expect(slower).toContain("var(--judge-slower)");
+    expect(faster).not.toContain("--type-");
+    expect(slower).not.toContain("--type-");
     // Accent is never a judgement colour: it is the target's, everywhere
     // else in the app, and on these panes the target is ink.
-    expect(under).not.toContain("--accent");
-    expect(over).not.toContain("--accent");
+    expect(slower).not.toContain("--accent");
+    expect(faster).not.toContain("--accent");
+  });
+
+  it("the two verdict tokens are declared, distinct, and actually blue and red", () => {
+    // Without this, the rule above only proves the CLASSES reference the
+    // tokens: a token never declared, or declared twice as the same colour,
+    // would leave both verdicts identical and still pass. Read from
+    // tokens.css because that is where they live.
+    const tokens = readFileSync(
+      indexCssPath().replace(/index\.css$/, "theme/tokens.css"),
+      "utf-8",
+    );
+    const faster = /--judge-faster:\s*(#[0-9a-f]{6})/i.exec(tokens)?.[1];
+    const slower = /--judge-slower:\s*(#[0-9a-f]{6})/i.exec(tokens)?.[1];
+    expect(faster).toBeDefined();
+    expect(slower).toBeDefined();
+    expect(faster).not.toBe(slower);
+    const rgb = (hex: string) => ({
+      r: parseInt(hex.slice(1, 3), 16),
+      g: parseInt(hex.slice(3, 5), 16),
+      b: parseInt(hex.slice(5, 7), 16),
+    });
+    const f = rgb(faster!);
+    const s = rgb(slower!);
+    // The testers asked for blue and red by name, so assert the hue, not
+    // just that two different strings are present.
+    expect(f.b).toBeGreaterThan(f.r); // blue, not the old teal
+    expect(s.r).toBeGreaterThan(s.b); // red, not the old ochre
   });
 });
 
@@ -885,12 +919,17 @@ describe("disconnected: lose and degrade (spec C5)", () => {
       document.querySelector(".connected-line-mark-hollow"),
     ).not.toBeNull();
     expect(screen.getByText(`${DEVICE} · LOST`)).toBeInTheDocument();
-    expect(screen.getByText("LAST · /500M")).toBeInTheDocument();
+    // BOTH heroes, not one: the labels are bare NOW/LAST now that the unit
+    // moved next to the numeral (testers via James, 2026-08-13), so a
+    // `getByText` would throw on the second match rather than assert it.
+    // Exactly two, and no NOW left anywhere on the pane.
+    expect(screen.getAllByText("LAST")).toHaveLength(2);
+    expect(screen.queryByText("NOW")).toBeNull();
   });
 
   it("THE STALE OVERRIDE BEATS EVERY JUDGEMENT, on every cell of the pane", () => {
     const target = WORK_PHASE.targetSplit!;
-    // Numbers that would otherwise scream "over" and "over".
+    // Numbers that would otherwise scream "faster" and "faster".
     const wild = frame({ currentSplit: target - 40, spm: 60 });
 
     renderSurface({ phase: "disconnected", frame: wild });

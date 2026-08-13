@@ -290,7 +290,11 @@ export interface SurfaceModel {
    *  name already occupies the left of the row). The denominator counts
    *  WORKING intervals only — see `intervalNumbering`. */
   intervalLabelShort: string;
-  /** `NOW · /500M` live; `LAST · /500M` once the link is gone (handoff §4). */
+  /** `NOW` live; `LAST` once the link is gone (handoff §4). The unit used
+   *  to ride in this label (`NOW · /500M`); testers asked for it beside the
+   *  NUMERAL instead (James, 2026-08-13), and `PaneLive.tsx` renders it
+   *  there now — carrying it in both places would say `/500m` twice inside
+   *  one hero. */
   nowLabel: string;
   upNext: string;
   thenNext: string | null;
@@ -526,7 +530,7 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
     deviceCaption: deviceCaptionFor(deviceName, status),
     intervalLabel: ordinal === null ? kindWord : `INTERVAL ${counted}`,
     intervalLabelShort: ordinal === null ? kindWord : counted,
-    nowLabel: stale ? "LAST · /500M" : "NOW · /500M",
+    nowLabel: stale ? "LAST" : "NOW",
     upNext: upNextTextAt(phases, phaseIndex),
     thenNext: thenNextTextAt(phases, phaseIndex),
     totalSeconds,

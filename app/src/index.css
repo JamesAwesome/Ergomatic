@@ -4091,22 +4091,29 @@ button:disabled {
   color: var(--ink-3);
 }
 
-/* The judgement-keyed classes below (`timer-card-actual-under/-within/
+/* The judgement-keyed classes below (`timer-card-actual-slower/-within/
    -over/-stale`, from `domain/judge.ts`'s own `Judgement` union) are the
    tint hooks Task 3 declared and Task 6 filled in. Every connected pane's
    live actual wears exactly one of them, assigned by ONE code path
    (`src/workout/connected/surfaceModel.ts`'s `judgedValue`, the only
    caller of `judgeActual` in `src/`).
 
-   The colours are the handoff's teal/ochre, which are ALREADY the existing
-   `--type-o2`/`--type-at` tokens (handoff §3, sanctioned for this second,
-   non-type meaning by DEVIATIONS row 3 — the same reuse `TypeBadge.tsx`'s
-   `TYPE_COLOR_VAR` pattern establishes for a value->token lookup). Neither
-   is `--accent`: on these panes the target is the neutral ink reference
+   BLUE FOR FASTER, RED FOR SLOWER (tester feedback via James, 2026-08-13),
+   from the dedicated `--judge-faster`/`--judge-slower` tokens — see
+   `tokens.css` for the values, the contrast measurements, and why they are
+   no longer the handoff's `--type-o2`/`--type-at` teal and ochre. Still
+   never `--accent`: on these panes the target is the neutral ink reference
    and accent appears nowhere (DEVIATIONS row 0).
 
-   Measured against `--surface` (#fffdf7): `--type-o2` 6.65:1,
-   `--type-at` 5.54:1, `--ink-3` 7.44:1 (and 6.30:1 against
+   ONE PAIR SERVES BOTH JUDGED METRICS. The testers also asked that the spm
+   colours match the split's; they already did, and this is why — the class
+   suffix IS the `Judgement` value, and `judgeActual` resolves both metrics
+   to the same union (a faster split and a higher rate are both `"faster"`,
+   which is exactly the direction rule that file exists to hold). There is
+   no per-metric colour branch to keep in step, here or in either pane.
+
+   Measured against `--surface` (#fffdf7): `--judge-faster` 8.25:1,
+   `--judge-slower` 7.94:1, `--ink-3` 7.44:1 (and 6.30:1 against
    `--surface-sunken`). All clear the house's 4.5:1 floor. `-within`
    deliberately declares nothing: within tolerance IS plain `--ink`, and a
    rule restating that would be one more place for the neutral case to
@@ -4132,12 +4139,12 @@ button:disabled {
    out of this file's own source text. The rule it describes is
    `.timer-card-actual-stale`, third below — this comment used to sit
    immediately above `-under`, which is not it (review N3). */
-.timer-card-actual-under {
-  color: var(--type-o2);
+.timer-card-actual-slower {
+  color: var(--judge-slower);
 }
 
-.timer-card-actual-over {
-  color: var(--type-at);
+.timer-card-actual-faster {
+  color: var(--judge-faster);
 }
 
 .timer-card-actual-stale {
@@ -5889,7 +5896,7 @@ section:not(.news-pinned) .news-row:last-of-type {
       a target sitting inches from a tinted actual has to be the neutral
       reference, or the rower is reading three judgement colours.
    2. THE ACTUAL CARRIES THE JUDGEMENT, and only on the value.
-      `.timer-card-actual-under/-over` (declared with the other
+      `.timer-card-actual-slower/-over` (declared with the other
       `timer-card-*` rules above, Task 3) resolve to `--type-o2` teal and
       `--type-at` ochre — DEVIATIONS row 3's sanctioned second meaning for
       two existing type tokens. Measured against `--surface` (#fffdf7):
@@ -6190,6 +6197,48 @@ section:not(.news-pinned) .news-row:last-of-type {
 /* "The eye should land on the seconds, not the decimal" (handoff §3). */
 .connected-hero-tenths {
   font-size: var(--size-hero-tenths);
+}
+
+/* THE UNIT BESIDE THE NUMERAL (testers via James, 2026-08-13: "next to rate
+   there should be a small /500m", "next to the stroke rate there should be
+   a small SPM"). It used to live only in the hero's own label — `NOW ·
+   /500M` — which sits at --size-label 10px above a 112px numeral, far
+   enough away that a rower glancing mid-piece read the number with no unit
+   attached to it. The label keeps NOW/LAST, which is the part that actually
+   changes; the unit moved here.
+
+   Sized off --size-label rather than a new step: it is an annotation, not a
+   reading, and the size scale earns a step only when a value needs one.
+   --ink-3, the same token `.connected-hero-label` directly above it already
+   uses — the unit and the NOW/LAST label are the same size, the same
+   family, and the same class of annotation, so they should not be two
+   different greys. This was --ink-4 for one commit on the theory that
+   --ink-3 "is the stale tint" and would read as a dropped link; the theory
+   was wrong twice over. The label beside it has been --ink-3 permanently
+   and nobody reads it as stale, and --ink-4 is BANNED at this size anyway:
+   it measures 4.48:1 against --surface-sunken, under the AA floor, which
+   `design.spec.ts`'s `assertNoFailingInk4Labels` sweep catches by walking
+   every small mono leaf rather than a fixed list. It caught this one. */
+/* `.connected-hero` is a flex COLUMN, so the value and its unit need their
+   own row box or the unit drops to a line of its own. `baseline`, not
+   `center`: the unit should sit on the numeral's feet the way a unit does
+   in print, and the split hero's own tenths span already establishes that
+   the hero's baseline is the one everything here aligns to. `min-width: 0`
+   so a long reading cannot push the unit out of the pane — the same
+   defence `.connected-surface-body` needed at the column level. */
+.connected-hero-reading {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.connected-hero-unit {
+  font-family: var(--font-mono);
+  font-size: var(--size-label);
+  letter-spacing: 0.12em;
+  color: var(--ink-3);
+  white-space: nowrap;
 }
 
 .connected-hero-target {

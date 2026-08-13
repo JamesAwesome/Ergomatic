@@ -118,7 +118,7 @@ function actualFor(index: number, program: WorkoutProgram): IntervalActual {
 
 /** Mid-way through the first 2000 m rep, going a little too hard: the
  *  handoff's own mockup shows `1:57.8` against a `2:00.0` target so the
- *  ochre "over" state is what the picture actually shows. */
+ *  ochre "faster" state is what the picture actually shows. */
 function liveFrame(overrides: Partial<MonitorFrame> = {}): MonitorFrame {
   // The session pair mirrors the raw pair unless a case overrides it — see
   // `connected/surfaceModel.test.ts`'s own copy of this factory for the

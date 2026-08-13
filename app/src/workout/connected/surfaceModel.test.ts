@@ -194,7 +194,7 @@ describe("splitHero: the hero's whole/tenths cut", () => {
 });
 
 describe("judgedValue: the one judgement path", () => {
-  // `"over"`/`"under"` are OVER/UNDER THE EFFORT ASKED, not the number: a
+  // `"faster"`/`"slower"` are OVER/UNDER THE EFFORT ASKED, not the number: a
   // smaller split is a faster boat (`domain/judge.ts`'s direction rule).
   it("tints under/within/over off the real tolerance, not a guess", () => {
     const target = 120;
@@ -220,8 +220,8 @@ describe("judgedValue: the one judgement path", () => {
       format: String,
     });
     expect(within.judgement).toBe("within");
-    expect(slower.judgement).toBe("under");
-    expect(faster.judgement).toBe("over");
+    expect(slower.judgement).toBe("slower");
+    expect(faster.judgement).toBe("faster");
   });
 
   it("a null actual is `—`, absent, and never a fabricated verdict", () => {
@@ -286,10 +286,10 @@ describe("live", () => {
     // Ten seconds per 500 m FASTER than asked is over the effort, ochre.
     expect(
       model({ frame: frame({ currentSplit: target - 10 }) }).pace.judgement,
-    ).toBe("over");
+    ).toBe("faster");
     expect(
       model({ frame: frame({ currentSplit: target + 10 }) }).pace.judgement,
-    ).toBe("under");
+    ).toBe("slower");
     expect(
       model({ frame: frame({ currentSplit: target }) }).pace.judgement,
     ).toBe("within");
@@ -299,10 +299,10 @@ describe("live", () => {
     const spm = firstWorkPhase().spm!;
     expect(spm).toBe(22);
     expect(model({ frame: frame({ spm: spm + 10 }) }).rate.judgement).toBe(
-      "over",
+      "faster",
     );
     expect(model({ frame: frame({ spm: spm - 10 }) }).rate.judgement).toBe(
-      "under",
+      "slower",
     );
     expect(model().targetRate.main).toBe(String(spm));
   });
@@ -379,7 +379,7 @@ describe("live", () => {
       frame: frame({
         intervalIndex: 1,
         state: "resting",
-        // A reading that would otherwise scream "over" against ANY real
+        // A reading that would otherwise scream "faster" against ANY real
         // target, to prove the no-target case is what suppresses the
         // tint, not a coincidentally-within actual.
         currentSplit: 60,
@@ -545,7 +545,7 @@ describe("a zero split is not a reading (7B iteration: the pre-pull ochre 0:00.0
     const m = model({ phase: "live", frame: frame({ currentSplit: 0 }) });
     expect(m.pace.display).toBe("—");
     expect(m.pace.absent).toBe(true);
-    expect(m.pace.judgement).not.toBe("over");
+    expect(m.pace.judgement).not.toBe("faster");
   });
 
   it("a real split still judges exactly as before", () => {
@@ -571,7 +571,7 @@ describe("paused", () => {
     const m = model({ phase: "paused" });
     expect(m.stale).toBe(false);
     expect(m.linked).toBe(true);
-    expect(m.nowLabel).toBe("NOW · /500M");
+    expect(m.nowLabel).toBe("NOW");
   });
 
   it("holds the interval clock's last value rather than blanking it", () => {
@@ -599,7 +599,7 @@ describe("disconnected: lose and degrade (spec C5)", () => {
 
   it("relabels NOW as LAST and hollows the indicator", () => {
     const m = model({ phase: "disconnected" });
-    expect(m.nowLabel).toBe("LAST · /500M");
+    expect(m.nowLabel).toBe("LAST");
     expect(m.linked).toBe(false);
   });
 
@@ -823,7 +823,7 @@ describe("the warm-up is flagged, never counted", () => {
     expect(m.targetSplit.absent).toBe(true);
     expect(m.targetRate.main).toBe("Free");
     expect(m.targetRate.absent).toBe(true);
-    expect(m.pace.judgement).toBe("within"); // ungraded, not "over"
+    expect(m.pace.judgement).toBe("within"); // ungraded, not "faster"
     expect(m.rate.judgement).toBe("within");
     expect(m.pace.display).toBe("1:35.0"); // and the reading itself is shown
   });

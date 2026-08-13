@@ -42,6 +42,37 @@
   --type-o2: #2a6275;
   --type-at: #8a5f18;
   --type-an: #5c4382;
+  /* THE LIVE JUDGEMENT PAIR (tester feedback via James, 2026-08-13: "faster
+     than target split should be blue, slower should be red, make sure the
+     spm colors are the same"). Read by `.timer-card-actual-faster/-slower`
+     in index.css, whose suffixes come straight from `domain/judge.ts`'s
+     `Judgement` union — so both judged metrics, split and rate, are tinted
+     by this one pair with no per-metric branch anywhere. That is what makes
+     the testers' "same colors" request structural rather than a convention
+     someone has to remember.
+
+     THEIR OWN TOKENS, not a third borrowing of --type-o2/--type-at (the
+     teal/ochre the handoff specified, sanctioned for this second meaning by
+     DEVIATIONS row 3). A workout's TYPE and a live reading's verdict are
+     unrelated facts that happened to share a swatch, and the borrowing
+     could not survive this change regardless: blue reads nothing like O2
+     teal, and red is not AT ochre. Split now, so a later palette move on
+     either side cannot silently repaint the other.
+
+     Deliberately NOT --accent (#b5341f) for the red: accent means exactly
+     four things and a live verdict is not one of them — DEVIATIONS row 0
+     keeps accent off these panes entirely. --judge-slower is a deeper,
+     browner red so the two never read as the same ink.
+
+     Contrast, measured against both backgrounds a judged value sits on
+     (--surface #fffdf7, --page #f4f1e8): --judge-faster 8.25:1 / 7.43:1,
+     --judge-slower 7.94:1 / 7.15:1. Both clear the house 4.5:1 floor with
+     more headroom than the teal/ochre they replace (6.65 / 5.53 against
+     --surface), which matters more here than anywhere else in the app:
+     this is the one tint a rower reads mid-piece, at arm's length, out of
+     the corner of an eye. */
+  --judge-faster: #1d4e89;
+  --judge-slower: #962718;
   /* Fix round 1 (James's ruling): was #b5341f, IDENTICAL to --accent — every
      TR chip/badge filled with what was structurally "accent", quietly
      breaking the ui-fix round's own "accent means exactly four things,

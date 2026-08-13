@@ -30,7 +30,7 @@
 export const PACE_TOLERANCE_SECONDS = 2;
 export const SPM_TOLERANCE = 2;
 
-export type Judgement = "under" | "within" | "over" | "stale";
+export type Judgement = "slower" | "within" | "faster" | "stale";
 
 /** The two judged kinds' tolerance, or `null` for a kind this task doesn't
  *  judge yet. `"hr"`/`"meters"` are in the `kind` union below because
@@ -70,7 +70,7 @@ function toleranceFor(kind: "pace" | "spm" | "hr" | "meters"): number | null {
 /** Judges a single live actual against its target. Precedence, in order:
  *
  *  1. `stale` overrides everything — a reading the driver itself has
- *     flagged as no-longer-fresh is never "within," "under," or "over" no
+ *     flagged as no-longer-fresh is never "within," "under," or "faster" no
  *     matter how close `actual`/`target` are, even if one or both are
  *     `null`.
  *  2. A `null` `actual` OR a `null` `target` reads `"within"` — there is
@@ -83,19 +83,28 @@ function toleranceFor(kind: "pace" | "spm" | "hr" | "meters"): number | null {
  *  4. Otherwise, `|actual - target| <= tolerance` is `"within"` (the
  *     boundary itself is not a deviation, the same "boundary itself is not
  *     suspect" convention `src/session/Timer.tsx`'s own `isSuspectActual`
- *     uses); past it, `"under"` or `"over"` — see the direction rule below,
+ *     uses); past it, `"slower"` or `"faster"` — see the direction rule below,
  *     which is NOT the same for both judged kinds.
  *
- *  **`"under"`/`"over"` MEAN UNDER/OVER THE EFFORT ASKED FOR, not below/
- *  above the number** (7B Task 6, correcting Task 3's original purely
- *  numeric rule). The connected-mode handoff's own table is explicit, and
- *  its mockup demonstrates it: `1:57.8` against a `TARGET 2:00.0` is drawn
- *  in OCHRE, the `"over"` colour.
+ *  **`"faster"`/`"slower"` MEAN WHAT THEY SAY — faster or slower than the
+ *  target, from the ROWER's point of view, never above/below the numeral.**
+ *  `1:57.8` against a `TARGET 2:00.0` is `"faster"`.
  *
- *  | State | Handoff's own words |
- *  |---|---|
- *  | `"under"` | "Under the target (split SLOWER than asked, rate below)" |
- *  | `"over"`  | "Over the target (split FASTER than asked, rate above)"  |
+ *  | State | The rower is | pace (s/500m) | spm |
+ *  |---|---|---|---|
+ *  | `"faster"` | ahead of target, working harder | a SMALLER number | a LARGER number |
+ *  | `"slower"` | behind target, working easier | a LARGER number | a SMALLER number |
+ *
+ *  THESE WERE `"over"`/`"under"` until 2026-08-13 (James: "I've been using
+ *  'under' to mean 'faster' and you just did the opposite"). They meant
+ *  over/under the EFFORT asked, so `"over"` was the FASTER split — a
+ *  defensible rule that is unguessable and the exact inverse of how a rower
+ *  says it. Two more reasons the words had to go: the same pair already
+ *  means something else in this codebase (`api/useRecentLogs.ts`'s
+ *  `HeldResult`, the log screen's own held/under/over self-report — which
+ *  this rename deliberately did NOT touch), and 7B Task 6 had already spent
+ *  a fix round correcting a direction bug under the old names.
+ *  `"faster"`/`"slower"` cannot be read backwards.
  *
  *  For `"spm"` that is the plain numeric reading: a higher rate is more
  *  effort. For `"pace"` it is the INVERSE, because a split is
@@ -122,7 +131,7 @@ export function judgeActual(args: {
   if (tolerance === null) return "within";
   const diff = actual - target;
   if (Math.abs(diff) <= tolerance) return "within";
-  // A smaller split is MORE effort; a smaller rate is LESS.
-  const harderThanAsked = kind === "pace" ? diff < 0 : diff > 0;
-  return harderThanAsked ? "over" : "under";
+  // A smaller split is FASTER; a smaller rate is SLOWER.
+  const fasterThanTarget = kind === "pace" ? diff < 0 : diff > 0;
+  return fasterThanTarget ? "faster" : "slower";
 }

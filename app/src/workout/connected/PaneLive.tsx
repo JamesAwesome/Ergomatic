@@ -71,7 +71,7 @@ export default function PaneLive({ model }: { model: SurfaceModel }) {
   // just paused" (paused values hold, they are not stale) — the same rule
   // `nowLabel` uses for the split hero's own NOW/LAST swap, mirrored here
   // rather than a second label field for one string.
-  const rateLabel = model.stale ? "LAST · SPM" : "NOW · SPM";
+  const rateLabel = model.stale ? "LAST" : "NOW";
 
   return (
     <div className="connected-pane connected-pane-live">
@@ -79,11 +79,23 @@ export default function PaneLive({ model }: { model: SurfaceModel }) {
       <div className="connected-heroes">
         <div className="connected-hero connected-hero-split">
           <span className="connected-hero-label">{model.nowLabel}</span>
-          <span className={judgedClass("connected-hero-value", model.pace)}>
-            {model.paceWhole}
-            {model.paceTenths !== "" && (
-              <span className="connected-hero-tenths">{model.paceTenths}</span>
-            )}
+          {/* The unit sits BESIDE the numeral, on its baseline (testers via
+              James, 2026-08-13) — hence the row wrapper: `.connected-hero`
+              is a flex COLUMN, so an unwrapped unit span becomes its own
+              line under the value instead of sitting next to it. OUTSIDE
+              the judged span on purpose: `/500m` is a fact about the
+              metric, not about how the rower is doing, so it must not turn
+              blue or red with the reading it annotates. */}
+          <span className="connected-hero-reading">
+            <span className={judgedClass("connected-hero-value", model.pace)}>
+              {model.paceWhole}
+              {model.paceTenths !== "" && (
+                <span className="connected-hero-tenths">
+                  {model.paceTenths}
+                </span>
+              )}
+            </span>
+            <span className="connected-hero-unit">/500m</span>
           </span>
           <div className="connected-hero-target">
             <span className="connected-hero-target-label">TARGET</span>
@@ -104,8 +116,11 @@ export default function PaneLive({ model }: { model: SurfaceModel }) {
         <span className="connected-hero-divider" aria-hidden="true" />
         <div className="connected-hero connected-hero-rate">
           <span className="connected-hero-label">{rateLabel}</span>
-          <span className={judgedClass("connected-hero-value", model.rate)}>
-            {model.rate.display}
+          <span className="connected-hero-reading">
+            <span className={judgedClass("connected-hero-value", model.rate)}>
+              {model.rate.display}
+            </span>
+            <span className="connected-hero-unit">SPM</span>
           </span>
           <div className="connected-hero-target">
             <span className="connected-hero-target-label">TARGET</span>
