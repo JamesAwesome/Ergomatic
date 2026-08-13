@@ -1854,6 +1854,20 @@ reintroduces that.
 photographed next to the app's. Any fix should be walked the same way, with
 both screens in one frame.
 
+**AND IT IS REPRODUCIBLE WITHOUT HARDWARE — start here, not at the erg.**
+The committed captures in `docs/monitor/sessions/` are driver-level frame
+logs that carry both the per-frame `(elapsedSeconds, distanceMeters)` pair
+the fold consumes AND the `boundary` events with each interval's own
+`actual.distanceMeters`. The intervals' actuals summed ARE the session
+total, so replaying a capture through the fold gives an oracle with no PM5
+attached: if `offsetDistance + base.distanceMeters` exceeds the sum of the
+boundary actuals, the fold is banking more than once per interval, which is
+exactly the hypothesis above. Note the captures predate the accumulator, so
+they carry no `sessionDistanceMeters` of their own to compare against —
+the boundary sum is the reference. Write that test FIRST; it should fail
+before anything is changed, and it turns a bug that needed an erg and a
+camera into one the suite catches.
+
 ---
 
 ### Item 1 — Fix the pause behaviour (was Phase CP)
