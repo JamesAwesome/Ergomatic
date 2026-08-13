@@ -291,7 +291,7 @@ a real effort reference, not a stand-in offset.
       `stepToRow`; a stored effort ref falling back to a split (e.g. an
       older client) resolves to `6k+0`, judged sane
 - [x] The PACE control becomes a four-chip radiogroup (`2K | 6K | MAX |
-    MIN`) — checking an effort chip hides the offset stepper entirely
+MIN`) — checking an effort chip hides the offset stepper entirely
       (unmounted, not just visually hidden; efforts take no offset) and the
       TARGET strip shows the effort word instead of a resolved range
 - [x] The detail screen (`StepRow`) renders an effort step as its word, with
@@ -328,7 +328,7 @@ text-selection callout instead of activating it.
 - [x] A personal (non-global) workout's library row wears a `CUSTOM` badge
       on its second line (`WorkoutRow.tsx`); a `CUSTOM` filter chip
       (`FilterChips.tsx`) ANDs with every other filter exactly like `PAIN
-    ≤3` — `ALL` clears it, and filtering to `CUSTOM` with no personal
+≤3` — `ALL` clears it, and filtering to `CUSTOM` with no personal
       workouts renders a builder-link empty state instead of a bare "no
       matches" message
 - [x] iOS device report (2026-08-01): long-pressing a button, chip,
@@ -527,9 +527,9 @@ is exactly what 6C's own save flow is for.
       a bare dash, see `docs/design/DEVIATIONS.md`), the per-step list
       (frozen split + a stopwatch-only ACTUAL line), Held/Under/Over, pain
       **1–5** (Ergomatic's scale, not the handoff's 1–10), notes, `Save
-    session` (54px, pinned by a computed-style regression test). The
+session` (54px, pinned by a computed-style regression test). The
       session door hides the tab bar and offers a staged `Discard without
-    logging`; the manual door has neither — nothing staged to discard,
+logging`; the manual door has neither — nothing staged to discard,
       so the tab bar stays visible there as the only way out
 - [x] Save posts to the already-existing `POST /api/logs` route (no NEW
       route or store needed this phase — the one server change was Task
@@ -1004,7 +1004,7 @@ still holds: no pairing, subscribe-only, Web Bluetooth is Chromium-only.
       phase's one permitted UI touch
 - [x] `src/monitor/transports/capacitorBle.ts`
       (`@capacitor-community/bluetooth-le`) and `src/monitor/transports/
-    webBluetooth.ts` (`navigator.bluetooth`): thin `Transport` adapters
+webBluetooth.ts` (`navigator.bluetooth`): thin `Transport` adapters
       for the two real radios, compile-tested shapes, deliberately excluded
       from the coverage gate alongside `src/native/**` — no BLE radio
       exists in CI to prove either one against
@@ -1061,7 +1061,7 @@ below.
       instead of comparing: accept `(status & 0x30) === 0x00`, reject
       `(status & 0x30) === 0x10`, `bad`/`not-ready` for the other two
       previous-frame values, `status & 0x0F` the slave state, `status &
-    0x80` the frame toggle (never tested for failure), bit `0x40`
+0x80` the frame toggle (never tested for failure), bit `0x40`
       reserved. `REJECT_STATUS_BYTE` is retired, and `CsafeResponse` gained
       a `kind: "unparseable"` member so a garbled frame is no longer
       conflated with a genuine reject; `buildAckFrame` and the fake
@@ -1352,10 +1352,9 @@ is still owed.
 
 ## Phase 7D — Phone BLE
 
-**Status:** In flight (2026-08-10). Tasks 1-4 (transport rework, the
-`permission-denied`/`picking` surface, the Bluetooth capability
-adapter, iOS wiring) are done on the `phone-ble` branch; Task 5, the
-hardware walk, is what remains before merge.
+**Status:** Done (merged 2026-08-11 as PR #79, after a THREE-DAY
+hardware walk that found and fixed four wire truths live). Shipped to
+TestFlight in v0.7.0, build 564.
 **Goal:** The PM5 connects, programs, rows, and saves on an iPhone
 through the existing transport seam, closing 7B/7C's owed hardware
 walk on a real device instead of the fake transport.
@@ -1448,7 +1447,7 @@ word.
 
 ## Phase CL — Cleanup
 
-**Status:** In closing — list adjudicated 2026-08-10, release staged
+**Status:** Done — list adjudicated 2026-08-10; the release it was staging shipped as v0.7.0 (2026-08-11, build 564)
 **Goal:** One home for the remainders the phases above left behind, so a
 close-out round can be scheduled from a list instead of rediscovered from a
 grep. Collection only: every line below already existed somewhere, and
@@ -1462,7 +1461,7 @@ nothing here is new work. Effort guesses are S/M/L.
       `src/adapters/`), not the transport-resolution seam
       (`src/monitor/transports/index.ts`'s own doc comment). Fixed
       (BACK-walks-the-stack batch, batch A): `src/adapters/
-    monitorTransport.ts` adds the platform-conditional default — native
+monitorTransport.ts` adds the platform-conditional default — native
       dynamic-imports `createCapacitorBleTransport`, web delegates
       unchanged to `transports/index.ts`'s `resolveDefaultTransport` —
       wired through `useMonitorSession.ts`'s existing `??` fallback. **M**
@@ -1527,10 +1526,10 @@ testers meet the rebalanced library).
 
 ## Phase CL2 — Post-release authoring parity
 
-**Status:** Not started. **Scheduled AFTER the v0.7.0 TestFlight
-release, which the gate ruling (James, 2026-08-10) ties to Phase 7D
-landing and walking, not to Phase CL or the library rebalance —
-this phase must not block getting the app into testers' hands.**
+**Status:** Not started, and now UNBLOCKED — the v0.7.0 release it was
+scheduled behind shipped 2026-08-11 (build 564), as did v0.8.0 and
+v0.9.0. Nothing gates this any more except sequencing against Phase CR2
+below.
 **Goal:** The builder can author what the domain, the import, and a
 third of the library already are: N lead lines, then a repeated block.
 
@@ -1592,9 +1591,8 @@ they row.
 
 ## Phase FF — Fast-follow: finish authority, one door to start
 
-**Status:** Implementation complete on the `fast-follow` branch
-(Tasks 1-6 of 7); the erg confirmation walk (Task 7) is the only
-step left before the PR and James's merge word.
+**Status:** Done (merged 2026-08-11 as PR #85, walk passed on a real
+PM5). Shipped to TestFlight in v0.8.0, build 587.
 **Goal:** three tester-facing hardenings, first post-release wave
 after v0.7.0 (build 564, on TestFlight): (a) a dropped final split
 can no longer cost the last interval's data; (b) no connect path
@@ -1655,9 +1653,12 @@ on James's iPhone against a real PM5, and James gives the merge word.
 
 ## Phase CR — Connected revamp: two panes, two heroes, one honest bar
 
-**Status:** PR #89 open, rebased over #87/#88, CI green (unit 3853+1
-across 157 files, e2e 283, screenshots 62). James's erg look (Task 9)
-is the only step left before his merge word.
+**Status:** Done — merged 2026-08-13 as PR #89, released the same day as
+v0.9.0 (build 641). All five exit items discharged: four verified by
+James on a real PM5, and the paused-block occlusion deliberately
+deferred by his ruling ("we're revisiting pause in a future phase
+because it's fake"). Final gates 3862+1 across 157 files, e2e 286,
+screenshots 62. **Its follow-on work is Phase CR2 below.**
 **Goal:** connected mode becomes two panes whose landscape geometry
 cannot drift; the live pane reads as two big judged numerals over
 ink targets; the grid becomes single-line rows with its totals in
@@ -1770,77 +1771,236 @@ item at a time —
   whether that trade is right;
 - (c) both heroes readable at arm's length mid-piece, and the grid's
   rows legible at 8 visible.
-  Anything he wants changed goes through a fix round before the PR;
-  then the PR (rich body, before/after captures) and his merge word.
 
-## Phase CP — The pause that isn't
+**How it actually went (2026-08-13, two sessions on a real PM5).** (a)
+PASSED — "it holds", the reported bug dead; James then found its
+neighbour by hand, the gutter reading wider on the notch side, which
+turned out to be perceptual rather than geometric (see Phase CR2's item
+2). (b) PASSED against a real boundary. (b2) PASSED end to end: `WARM-UP`
+during it, the span filling in its own tone as he rowed, then `1 OF 2 ·
+WORK`. (c) PASSED. (b3) NOT judged: he confirmed the block covers TOTAL
+LEFT and ruled the question into Phase CR2 rather than answering it in
+isolation, "because it's fake".
 
-**Status:** filed 2026-08-12 from James's question ("the PM5 doesn't
-pause, so why do we?"). CONFIRMED in full; needs a brainstorm and his
-ruling before any code. Not a blocker for #89.
-**Goal:** stop one word meaning two opposite things across two surfaces
-that now deliberately look alike.
+The sequencing was inverted and it is worth recording why the phase felt
+like it was creeping: this exit says a fix round comes BEFORE the PR, and
+the PR opened first. Every walk finding then arrived against an open PR.
+A close-out round of three tasks plus a review ran between the walk and
+the merge, which is what the exit had always asked for, just later.
 
-**The confirmation, from our own record.** There is no paused state on
-the PM5 wire. `MonitorFrame.state` is
-`idle | armed | rowing | resting | finished | terminated` and its own
-comment says so ("There is NO paused state on the wire"), with a test
-that asserts `state` never equals `"paused"`. We send the monitor
-nothing when we show PAUSED: no pause command exists in the driver, and
-none is implementable — the PM starts on the first stroke and
-`SET_STARTTYPE` is `<Not implemented>` in rev 0.27. James's memory of
-the clock continuing is exactly right, and it is on hardware in the
-2026-08-08 recording: LEFT IN INTERVAL counted 4:38 -> 3:47 while
-meters sat pinned at 30, split at 4:16.1 and rate at 68. That
-observation is load-bearing elsewhere — it is precisely WHY
-`elapsedSeconds` is excluded from `freezeKey`, since a key containing a
-running clock never repeats and PAUSED could never fire at all.
+## Phase CR2 — Connected cleanup
 
-**So the two surfaces use one word for opposite things:**
+**Status:** NEXT UP, not started. Scoped by James 2026-08-13 immediately
+after v0.9.0 shipped: "I want to work next on cleanup for this phase" —
+three items, below. **Phase CP ("the pause that isn't") is folded in as
+item 1 and no longer has its own section**; it was filed 2026-08-12 and
+would otherwise be a second home for the same work.
+**Goal:** finish what Phase CR started. Everything here was found by the
+wave itself, by its adversarial reviews, or by James on the erg, and every
+item is written down with the evidence rather than the symptom, because
+the phase is being PARKED at this line and whoever picks it up will not
+have the conversation.
 
-- _Phone timer (unconnected):_ `pause` is a COMMAND. `engine.ts` sets
-  `pausedAt` as the clock's right edge and `resume` folds the span into
-  `pausedTotalMs`, subtracting it. Time genuinely does not accrue. The
-  rower's piece is suspended.
-- _Connected (PM5):_ PAUSED is an OBSERVATION, derived from three
-  metrics freezing for `PAUSED_FRAME_HOLD` frames. Nothing is
-  suspended. The interval clock is draining the whole time the word is
-  on screen, and the rower's piece is quietly getting shorter.
+---
 
-Phase CR just unified these two surfaces' visual language, which makes
-the collision sharper rather than softer: the same treatment now says
-"I stopped your clock" on one screen and "I noticed you stopped" on the
-other.
+### Item 1 — Fix the pause behaviour (was Phase CP)
 
-**The part that is arguably a bug, not just wording.** The connected
-paused block is `position: absolute; bottom: 0; height: 52px` on an
-opaque `--ink` fill, so it OCCLUDES the bottom of the live pane — TOTAL
-LEFT and the progress bar. Those are the two elements that would show
-the clock still running. At the exact moment a rower is most likely to
-believe the workout is suspended, we cover the evidence that it is not.
-(Phase CR walk item (b3) asks James to judge the occlusion as a layout
-trade; this reframes the same pixels as an information question.)
+**The confirmation, from our own record.** There is no paused state on the
+PM5 wire. `MonitorFrame.state` is
+`idle | armed | rowing | resting | finished | terminated`, its own comment
+says "There is NO paused state on the wire", and a test asserts `state`
+never equals `"paused"`. We send the monitor nothing when we show PAUSED:
+no pause command exists in the driver, and none is implementable — the PM
+starts on the first stroke and `SET_STARTTYPE` is `<Not implemented>` in
+rev 0.27. **The clock keeps running**, on hardware: the 2026-08-08
+recording shows LEFT IN INTERVAL counting 4:38 -> 3:47 with meters pinned
+at 30, split at 4:16.1 and rate at 68. That fact is already load-bearing —
+it is WHY `elapsedSeconds` is excluded from `freezeKey`, since a key
+containing a running clock never repeats and PAUSED could never fire.
 
-**Open questions for the brainstorm** — none of these are decided:
+**So one word means opposite things on two surfaces the revamp taught to
+look alike.** On the phone timer `pause` is a COMMAND: `engine.ts` sets
+`pausedAt` as the clock's right edge and `resume` folds the span into
+`pausedTotalMs`, so time genuinely does not accrue. In connected mode
+PAUSED is an OBSERVATION derived from three metrics freezing for
+`PAUSED_FRAME_HOLD` frames. Nothing is suspended; the interval is draining
+the whole time the word is on screen.
 
-1. Is the honest word STOPPED, or RESTING, or "NOT ROWING", rather than
-   PAUSED? `PULL TO RESUME` already carries the right instruction; the
-   noun above it is what overstates.
-2. Should the connected block stop occluding TOTAL LEFT and the bar,
-   or go further and make the still-draining clock the LOUDEST thing on
-   screen while the rower is stopped?
+**And the block hides the evidence.** `.connected-paused` is
+`position: absolute; bottom: 0; height: 52px` on an opaque `--ink` fill, so
+it OCCLUDES TOTAL LEFT and the progress bar — the two elements that would
+show the clock still running. James confirmed this on hardware
+2026-08-13 ("the total left") and ruled it into this phase rather than
+judging it in isolation: "we're revisiting pause in a future phase because
+it's fake."
+
+**Open questions, none decided:**
+
+1. Is the honest word STOPPED, or RESTING, or "NOT ROWING"? `PULL TO
+RESUME` already carries the instruction; the noun above it overstates.
+2. Should the block stop occluding TOTAL LEFT and the bar — or go further
+   and make the still-draining clock the LOUDEST thing on screen while the
+   rower is stopped?
 3. Does the phone timer's real pause deserve visual separation from the
    connected observation, now that they share a design language?
-4. Is there anything worth doing about the underlying reality — e.g.
-   telling the rower how much of their interval they spent stopped, on
-   the finish screen or in the log?
-5. Distance intervals are UNWATCHED here. The clock is expected to run
-   on them identically, but the freeze has only ever been observed on a
-   timed piece (the caveat `PAUSED_FRAME_HOLD` already carries).
+4. Is there anything worth doing about the underlying reality — telling the
+   rower how much of their interval they spent stopped, on the finish
+   screen or in the log?
+5. Distance intervals are UNWATCHED. The clock is expected to run on them
+   identically, but the freeze has only ever been observed on a timed
+   piece (the caveat `PAUSED_FRAME_HOLD` already carries).
 
-**Cheapest useful next step:** questions 1 and 2 are copy plus a
-`bottom`/`background` change and could ride a bugfix round; 3 and 4 are
-design. Do not start any of it before James rules on the word.
+**Also here:** the paused RATE hero has no suppression equivalent to the
+split's (`livePace` suppresses at `surfaceModel.ts:367-370`; `rate` has
+nothing at `:441-446`), so a stopped rower sees a dash beside a pinned
+nonzero rate, both labelled NOW — and `surfaceModel.test.ts:558-583` has a
+rate-shaped hole in its `paused` describe that hid it.
+
+---
+
+### Item 2 — Move the live/grid controls
+
+**James is commissioning a design recommendation for this one** (his words,
+2026-08-13: "i'll have claude design make a recommendation"). Do not
+implement ahead of it. What follows is the constraint envelope any
+recommendation has to live inside — all of it measured or primary-sourced
+this week, in `<scratchpad>/revamp-artifacts/notch-research.md` (993 lines,
+111 cited URLs, claims tagged PRIMARY/SECONDARY/INFERENCE) and
+`gutter-thin-report.md`.
+
+**What James wants:** the gutter thinner, the display wider. His own
+framing: "what if we just always put the controls on the opposite of the
+notch? And have a thinner band there? Goal is to maximize width used for
+display."
+
+**Six facts that bound it:**
+
+1. **Apple states the landscape side inset protects the sensor housing AND
+   the display's rounded corners**, and says to inset controls to avoid
+   both (Tech Talk 801). The corner is not spare space.
+2. **The corner, not the camera, sets the floor.** On these devices the
+   landscape inset is almost exactly the corner radius (55 vs 59; 62 vs
+   62). LIVE and GRID sit in the two corners. Pushed to the edge, the LIVE
+   target loses 14% of its area off-display at r=55 and 19.6% at r=62 —
+   an effective 40.8x40.8 against a hard 44x44 rule. Measured in James's
+   own photos: the display boundary cuts 23.5-24.4px into the target.
+3. **The notch's vertical extent is obtainable by nobody.** `css-env-1`
+   defines four scalars; the variables we would want are CSSWG issue #4721,
+   open and unimplemented since January 2020. The corner radius is private
+   API even natively.
+4. **The island is not a fixed size.** Apple publishes 230pt compact and
+   371pt expanded while a Live Activity runs; at expanded, both targets sit
+   inside it.
+5. **iOS reports the inset on BOTH sides regardless of which side the
+   housing is on** (44/44 through 68/68), and CSS cannot tell which side it
+   is — by design. But `screen.orientation.angle` (90 vs 270) CAN, and that
+   is the hinge James's idea turns on. It needs a device spike: the shell
+   must be shown to report it correctly and update on rotation.
+6. **Device spread matters** — deployment target is iOS 15.0, where the
+   clearance collapses to 1px on a 12 mini and 6px on an X.
+
+**Therefore:** switching sides alone reclaims nothing, because all four
+corners are rounded. The win only exists if the switchers ALSO leave the
+corners for the middle of the edge, which is the one region clear of both
+the housing and both corners. Then the notch side keeps its content
+clearance and carries no controls, the other side needs only the 44px the
+targets occupy, and content goes from roughly 676 to roughly 738.
+
+**What that costs, and what the design recommendation must rule on:** the
+rail changes sides when the phone is rotated; the switchers move from the
+corners to the edge's middle, changing thumb reach; and JavaScript enters
+layout, on a screen read mid-piece.
+
+**A 65px middle path exists and was rejected for now** — the corner-radius
+floor rather than the camera's, a 37% narrowing with both targets whole and
+content unmoved. It hard-codes a radius `env()` never exposes and that
+already grew 55 -> 62 on the 16 Pro, and it still sits inside the strip the
+OS expands its island into.
+
+---
+
+### Item 3 — Handle the red 0
+
+**The symptom:** before the first stroke the PM5 reports `spm: 0`, a real
+number, so it is judged against the rate target and the hero paints RED.
+The screen tells a rower who has not started that they are behind. The
+split has no reading at all, so it renders the house DASH at
+`--size-hero` — a 104px black rectangle. James, at the erg: "spm starts red
+as 0 but should start -".
+
+**It is not a value bug, it is an unmodelled state.** `surfaceStatusFor`
+returns `null` for `ready` and `surfaceModel.ts:397` launders it with
+`?? "live"`, while `ConnectedInterstitial.tsx:486-536` falls through to the
+surface with the phase still `ready` the moment the rower taps "Show me the
+numbers". **The whole model is told LIVE while the machine is ARMED.** The
+red zero is one symptom; `nowLabel` reading NOW, the gold counting-cell
+mark, and a full TOTAL LEFT bar are the others.
+
+**A zero-rule would be wrong.** An armed PM5 reports the PREVIOUS piece's
+rate — eight armed frames in our own captures read 13/16/43/46/50/80/88/96
+with matching nonzero splits. So on piece TWO of any session the hero shows
+a large number judged BLUE at a rower who has not pulled. James's "leave
+spm 0" ruling covers the red zero and does not cover that.
+
+**JAMES'S DESIGN DIRECTION, and the whole answer to the seam question**
+(2026-08-13): "Let the erg drive. That's our golden rule. Match the erg,
+even in pre-row state." The erg in WAITTOBEGIN does not tell a rower they
+are behind. Mirror the machine; do not judge before the first stroke. That
+keeps 0 on screen (0 is what the erg shows) and removes the verdict.
+
+**HARDWARE QUESTION OWED, and it decides the fix:** on piece TWO, before
+the rower pulls, what does the PM5's own screen show for rate? Our captures
+prove the WIRE carries the previous piece's value; whether the MONITOR
+displays it is unknown, and it decides whether we blank or mirror.
+
+**Two traps for whoever implements this.** `transports/fake.ts`'s
+`zeroedStatus` zeroes spm and split on re-arm, so tests written against the
+carried-over case pass while proving nothing. And there is currently **ZERO
+honest coverage of the armed state**: `buildSurfaceModel` is never called
+with `phase: "ready"` anywhere in the tree, while `surfaceModel.test.ts:265`
+pins `surfaceStatusFor("ready") === null` — the suite certifies both halves
+of the contradiction separately and never composes them. Fifteen browser
+tests walk THROUGH the broken state via `walkToSurface()` and immediately
+`pumpUntilText()` past it. The gap is a missing fixture, not a missing
+capability.
+
+---
+
+### Carried debt — smaller, all disclosed, none blocking
+
+- **Correct the record first, it is cheap and it is wrong today.** Comments
+  and a `DEVIATIONS` row claim the rotation fix cured a device defect. It
+  cured an artefact of our own harness: we injected a one-sided inset via
+  CDP that iOS never produces. `max(left, right)` is INERT on iOS — keep it,
+  Android's `DisplayCutout` really is asymmetric.
+- **`MONITOR_SPM_MIN = 0`** (`logDraft.ts:773-777`) persists a zero average
+  rate as a real logged value, while the sibling `avgSplit` check is `> 0`
+  with the comment "0 means the wire had no reading". PERSISTED DATA.
+- **The phone timer's landscape gutter absorbs no left inset at all**, so
+  END sits under a left notch. Mirror of the defect CR fixed on the
+  connected surface; fix already known.
+- **Portrait's own dead 26px** on the connected surface — pre-existing, and
+  NOT inert: closing it re-shoots every portrait capture.
+- **`LEFT IN INTERVAL` wraps to two lines** in the pre-rowing state. This
+  wave's (main has no `.connected-metric-cell`), but it no longer clips
+  anything and the only fixes are copy calls.
+- **iPhone 17 / iPhone Air report a landscape TOP inset of 20pt** where
+  every prior generation reported 0. The 8-row grid count was measured
+  against 0.
+- **`height: 100dvh` under `viewport-fit=cover` is broken on iOS 26**
+  (WebKit bug 315945) — the exact construction the connected surface height
+  uses.
+- **`e2e/helpers.ts`'s `stableBoundingBox`** loops 20 rAF then returns an
+  UNSETTLED box instead of deferring to Playwright's retry budget. That is
+  the `design.spec.ts:1697` flake that failed at gates three tasks running.
+- **`scripts/stack-env.sh` port collision** — `cksum % 400` for ports
+  against `% 100000` for project names; ~25% birthday odds at 17 live
+  stacks.
+- **The ordinal-guard substitute** — the wave ended with slightly less
+  integration coverage of `frame.state` reaching the surface than it began.
+
+**Exit:** items 1-3 shipped and walked on a real PM5, the record corrected,
+and the carried debt either cleared or explicitly re-parked with a reason.
 
 ## Phase LG — The log screen's own words
 
