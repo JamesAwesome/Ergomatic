@@ -6,9 +6,25 @@ import type { EnginePhase } from "./engine";
  *  show (James, 2026-08-12, from #89's warm-up captures). It lives here,
  *  not in `surfaceModel.ts`, because that file already imports this one:
  *  the connected surface reads the phone timer's vocabulary, never the
- *  reverse. Title case to match the phase words it sits beside (`Easy`,
- *  `Rest`, `All out`) — lowercase `free` was the only exception, and on the
- *  timer the two render side by side as a pair. */
+ *  reverse. Title case to match the PHASE-KIND words it sits beside
+ *  (`Easy`, `Rest`, `All out`, the literals `domain/expand.ts` and
+ *  `engine.ts` stamp on warm-up/rest/test phases) — lowercase `free` was
+ *  the only exception, and on the timer the two render side by side as a
+ *  pair.
+ *
+ *  THE EFFORT WORD IS NOT ONE OF THOSE and is deliberately NOT title-cased:
+ *  a work phase at `MAX`/`MIN` labels itself from `domain/pace.ts`'s
+ *  `effortWord`, which is `ALL OUT`/`EASY` in caps, and that literal is what
+ *  the split slot beside this one shows for it (tail review I-1, measured
+ *  2026-08-13 against `Fog Bow` and `Rear Flank`). Caps because the same
+ *  field feeds the strip directly above the card (`Timer.tsx`'s
+ *  `phaseAnnouncement` -> `WORK ALL OUT`), `StepRow`'s library rows, and
+ *  `logDraft.ts`, which reads it back through `effortFromWord` on a cast —
+ *  title-casing it for this one card would disagree with its own neighbour
+ *  and break the round-trip. The mixed case is the vocabulary saying which
+ *  KIND of thing it names: a phase kind, or the effort the rower asked for.
+ *  `session/TimerTargets.test.tsx` and `connected/surfaceModel.test.ts` both
+ *  pin it against real library workouts. */
 export const FREE = "Free";
 
 /** TARGET SPLIT card content: `main` is the mono `--size-subhero` value

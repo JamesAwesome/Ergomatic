@@ -23,6 +23,7 @@ import type { WarmupSetting } from "../../api/usePreferences";
 import { LIBRARY_WORKOUTS } from "../../../server/seed/library/index";
 import { buildDraft } from "../../session/draft";
 import { buildRun, type EnginePhase } from "../../session/engine";
+import { targetSplitDisplay } from "../../session/TimerTargets";
 import {
   buildSurfaceModel,
   intervalNumbering,
@@ -71,6 +72,25 @@ const FIXTURE = libraryFixture("Filling Low", { kind: "time", minutes: 8 });
  *  untouched. Four intervals, no warm-up, and every caption the plain
  *  `N OF M` it has always been. */
 const NO_WARMUP = libraryFixture("Filling Low", null);
+
+/** THE EFFORT CASE, which Filling Low does not have at all: every one of
+ *  its work steps carries a split ref, so no fixture in this file reached
+ *  the `targetKind: "effort"` branch of the target slot until now — the
+ *  gap the tail review's I-1 found (the 2026-08-13 no-target ruling routed
+ *  effort work through `phase.label` with nothing exercising it).
+ *
+ *  Two real library workouts rather than one, because the two effort words
+ *  are two different literals from `domain/pace.ts`'s `effortWord` and a
+ *  fixture that only ever saw `max` would not notice a mapping that always
+ *  returned it:
+ *  - `Fog Bow` (O2) is 30' at 6k+12, 5' at MIN, 25' at 6k+10 — the EASY
+ *    word sandwiched between two numeric targets in ONE program, so the
+ *    same model can be asked for both kinds of slot without changing
+ *    fixture.
+ *  - `Rear Flank` (AN) is 5 x (1'/2'/3' at MAX) — every work interval an
+ *    ALL OUT, the shape where the caps question is unavoidable. */
+const EFFORT_MIN = libraryFixture("Fog Bow", null);
+const EFFORT_MAX = libraryFixture("Rear Flank", null);
 
 /** The session pair MIRRORS the raw pair unless a case overrides it
  *  outright. 0x0031's `elapsedSeconds`/`distanceMeters` are PER-INTERVAL
@@ -398,6 +418,85 @@ describe("live", () => {
     expect(m.targetRate.absent).toBe(true);
     expect(m.rate.judgement).toBe("within");
     expect(m.rate.absent).toBe(false);
+  });
+
+  // THE EFFORT WORK PHASE (tail review I-1). An effort target's split is an
+  // ESTIMATE `compileProgram` deliberately never programs, so this slot has
+  // no number either — and since 2026-08-13 it names the phase like every
+  // other no-target case. The word is `domain/pace.ts`'s `effortWord`, which
+  // is CAPS, and caps is what ships: `phase.label` for an effort phase is
+  // that literal everywhere else in the app too (the timer's UP NEXT strip
+  // one row above this slot, `StepRow`'s library rows, and `logDraft.ts`,
+  // which reads it back through `effortFromWord` on a cast). Title-casing it
+  // here alone would put `All out` in the card and `WORK ALL OUT` in the
+  // strip beside it. See the FREE comment in `session/TimerTargets.tsx`.
+  it("an EFFORT work phase names its effort in the target slot, in the domain's own caps, greyed and unjudged", () => {
+    const easy = buildSurfaceModel({
+      phases: EFFORT_MIN.phases,
+      program: EFFORT_MIN.program,
+      phase: "live",
+      frame: frame({
+        intervalIndex: 1,
+        // A split that would read `"faster"` against the 5' paddle's own
+        // estimate (6k+20 = 142) if anything judged against it. Nothing
+        // may: the estimate is not a programmed target.
+        currentSplit: 100,
+      }),
+      deviceName: DEVICE,
+      actuals: [],
+    });
+    expect(EFFORT_MIN.phases[1]!.targetKind).toBe("effort");
+    expect(EFFORT_MIN.phases[1]!.targetSplit).not.toBeUndefined();
+    expect(easy.targetSplit.main).toBe("EASY");
+    expect(easy.targetSplit.sub).toBeNull();
+    expect(easy.targetSplit.absent).toBe(true);
+    expect(easy.targetSplitCaption).toBe("");
+    expect(easy.pace.judgement).toBe("within");
+    // The RATE half is a real programmed target on this phase (Fog Bow's
+    // paddle is authored @20), so the two halves of the slot differ — which
+    // is what proves `absent` is keyed on the split, not on the phase kind.
+    expect(easy.targetRate.main).toBe("20");
+    expect(easy.targetRate.absent).toBe(false);
+
+    // The SAME model's neighbouring interval carries a split ref, so the
+    // number and the word come out of one program, one call, one fixture.
+    const numeric = buildSurfaceModel({
+      phases: EFFORT_MIN.phases,
+      program: EFFORT_MIN.program,
+      phase: "live",
+      frame: frame({ intervalIndex: 0 }),
+      deviceName: DEVICE,
+      actuals: [],
+    });
+    expect(numeric.targetSplit.main).toBe("2:14.0"); // 6k 122 + 12
+    expect(numeric.targetSplit.absent).toBe(false);
+    expect(numeric.targetSplitCaption).toBe("6K +12");
+
+    const allOut = buildSurfaceModel({
+      phases: EFFORT_MAX.phases,
+      program: EFFORT_MAX.program,
+      phase: "live",
+      frame: frame({ intervalIndex: 0, currentSplit: 100 }),
+      deviceName: DEVICE,
+      actuals: [],
+    });
+    expect(EFFORT_MAX.phases[0]!.targetKind).toBe("effort");
+    expect(allOut.targetSplit.main).toBe("ALL OUT");
+    expect(allOut.targetSplit.absent).toBe(true);
+    expect(allOut.pace.judgement).toBe("within");
+
+    // AND THE PHONE TIMER SAYS THE SAME THING. The two surfaces share
+    // `targetSplitDisplay`, so this holds by construction today — pinning it
+    // is what stops the connected branch from growing its own effort case
+    // (the `main: phase ? phase.label : DASH` fallback above is one edit
+    // away from being that). `session/TimerTargets.test.tsx` renders the
+    // other half against the same two workouts.
+    expect(easy.targetSplit.main).toBe(
+      targetSplitDisplay(EFFORT_MIN.phases[1]!).main,
+    );
+    expect(allOut.targetSplit.main).toBe(
+      targetSplitDisplay(EFFORT_MAX.phases[0]!).main,
+    );
   });
 
   it("prices TOTAL LEFT off the workout's own phases, not the machine's guess", () => {
