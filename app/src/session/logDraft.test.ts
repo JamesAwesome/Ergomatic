@@ -11,6 +11,7 @@ import type { SessionDraft } from "./draft";
 import { buildRun } from "./engine";
 import type { SessionRun } from "./run";
 import type { MonitorRun } from "../monitor/monitorRun.js";
+import { loadMonitorRun, MONITOR_RUN_KEY } from "../monitor/monitorRun";
 import {
   buildLogSeed,
   buildLogSteps,
@@ -1346,6 +1347,101 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
       terminated: false,
     };
     const steps = buildMonitorLogSteps(run);
+    expect(steps).toHaveLength(1);
+    expect(steps[0]!.label).toBe(logSeed.steps[1]!.label);
+    expect(steps[0]!.actualSource).toBe("pm5");
+    expect(steps[0]!.actualSeconds).toBe(37.8);
+    expect(steps[0]!.actualMeters).toBe(102);
+  });
+
+  // THE PRE-WAVE RECORD, READ BY POST-WAVE CODE (close-out C, antagonist
+  // R1). The connected revamp made `ProgramInterval.type` REQUIRED, a
+  // `MonitorRun` embeds a whole `WorkoutProgram`, and `isMonitorRun`
+  // validates that program shallowly and deliberately
+  // (`Array.isArray(program.intervals)`, its own comment) with no version
+  // bump — so a record written before the update loads cleanly after it,
+  // carrying `interval.type === undefined` on a field TypeScript believes
+  // is a string.
+  //
+  // `buildMonitorLogSteps` is the ONLY production reader of a program that
+  // came back out of localStorage (every other consumer, the connected
+  // surface included, gets a program `WorkoutDetail` compiled fresh in
+  // memory at Connect), and it is safe for exactly one reason this test
+  // exists to keep true: it decides warm-up-ness from
+  // `logSeed.steps[i].kind`, never from `ProgramInterval.type`. `LogSeed`'s
+  // own doc comment above calls `kind` "REDUNDANT with
+  // `ProgramInterval.type`" and contemplates retiring it; retiring it in
+  // favour of `type` would silently emit a warm-up row for every record
+  // that straddles the update. So this walks the REAL stored shape —
+  // JSON in localStorage, through `loadMonitorRun`, with the legacy
+  // intervals — rather than a hand-built object that happens to carry the
+  // new field.
+  it("a stored run written before `type` existed still drops its warm-up when loaded back", () => {
+    localStorage.clear();
+    const draft = buildDraft({
+      id: "id-walk4-legacy-variant",
+      title: "Walk 4 (legacy stored variant)",
+      type: "AT",
+      steps: [
+        {
+          k: "w",
+          duration: { kind: "distance", meters: 100 },
+          ref: { base: "6k", off: 0 },
+        },
+      ],
+    });
+    const built = buildRun(draft, BASELINES, NOW, { kind: "time", minutes: 1 });
+    const program = compileOrThrow(built.phases);
+    const logSeed = buildLogSeed(built.phases, BASELINES);
+    expect(program.intervals.map((i) => i.type)).toStrictEqual([
+      "warmup",
+      "work",
+    ]);
+
+    // The old shape, built by DELETING the field this wave added rather
+    // than by hand-writing a program: whatever else `compileProgram` emits
+    // stays exactly as production wrote it.
+    const legacyIntervals = program.intervals.map((interval) => {
+      const copy: Record<string, unknown> = { ...interval };
+      delete copy.type;
+      return copy;
+    });
+    localStorage.setItem(
+      MONITOR_RUN_KEY,
+      JSON.stringify({
+        v: 2,
+        workoutId: draft.workoutId,
+        title: draft.title,
+        program: { ...program, intervals: legacyIntervals },
+        logSeed,
+        actuals: [
+          {
+            index: 1,
+            elapsedSeconds: 37.8,
+            distanceMeters: 102,
+            avgSplit: 185.3,
+            avgSpm: 25,
+            avgHeartRateBpm: 132,
+          },
+        ],
+        deviceName: "PM5 432331249",
+        startedAt: NOW.toISOString(),
+        completedAt: NOW.toISOString(),
+        terminated: false,
+      }),
+    );
+
+    const loaded = loadMonitorRun();
+    // The record is NOT discarded — see `monitorRun.ts`'s own note on why
+    // this wave did not bump `v`. A rower who finished a piece before the
+    // update can still log it from the machine's numbers.
+    expect(loaded).not.toBeNull();
+    // The premise, proven rather than assumed: the field really is absent
+    // on the loaded record, so what follows is tested against the gap and
+    // not around it.
+    expect(loaded!.program.intervals[0]).not.toHaveProperty("type");
+
+    const steps = buildMonitorLogSteps(loaded!);
     expect(steps).toHaveLength(1);
     expect(steps[0]!.label).toBe(logSeed.steps[1]!.label);
     expect(steps[0]!.actualSource).toBe("pm5");

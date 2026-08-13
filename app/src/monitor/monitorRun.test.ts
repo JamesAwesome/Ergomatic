@@ -196,6 +196,19 @@ describe("saveMonitorRun / loadMonitorRun / clearMonitorRun", () => {
   // (never having `v: 2` in scope, never having the key at all, not just
   // "the field happens to be absent from an object built by today's code")
   // still loads clean.
+  //
+  // CLOSE-OUT C: the connected revamp added `type: "work"` to this
+  // interval, and taking it back out is the whole point of the edit. The
+  // fixture's ONE job is to be a record the code of its own era could
+  // actually have written, and code predating `logSeed` predates
+  // `ProgramInterval.type` by two more phases — a v1 record carrying it is
+  // not a v1 record. That single "helpful" field is why the legacy program
+  // shape had no coverage at all (CLAUDE.md recurring failure #3): the only
+  // fixture in the repo that claims to be a pre-change record had been
+  // quietly taught the post-change shape, so nothing could disprove the
+  // premise that old records still read correctly. Nothing forced the
+  // addition either — this is an untyped JSON literal, so the compiler
+  // never asked for it.
   it("loads a v1 record with no logSeed field at all — no throw, no migration, simply no seed", () => {
     const v1Json = JSON.stringify({
       v: 1,
@@ -204,7 +217,6 @@ describe("saveMonitorRun / loadMonitorRun / clearMonitorRun", () => {
       program: {
         intervals: [
           {
-            type: "work",
             kind: "time",
             value: 480,
             targetSplit: null,
@@ -226,6 +238,13 @@ describe("saveMonitorRun / loadMonitorRun / clearMonitorRun", () => {
     expect(loaded).not.toBeNull();
     expect(loaded!.v).toBe(1);
     expect(loaded!.logSeed).toBeUndefined();
+    // The interval really is missing `type`, and the record loaded anyway:
+    // `isMonitorRun`'s shallow program check is deliberate, and this is the
+    // consequence stated out loud rather than left implicit in the fixture.
+    // What SAVES a rower from that gap is not the validator — it is that no
+    // reader of a loaded program consults `type`; `logDraft.test.ts`'s own
+    // legacy-record test pins that side.
+    expect(loaded!.program.intervals[0]).not.toHaveProperty("type");
     expect(loaded).toStrictEqual(JSON.parse(v1Json));
   });
 
