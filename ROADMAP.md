@@ -1792,7 +1792,12 @@ the merge, which is what the exit had always asked for, just later.
 
 **Status:** NEXT UP, not started. Scoped by James 2026-08-13 immediately
 after v0.9.0 shipped: "I want to work next on cleanup for this phase" —
-three items, below. **Phase CP ("the pause that isn't") is folded in as
+three items, below. **AMENDED the same evening**, after he rowed "Sun
+fret" on v0.9.0 and photographed the PM5 beside the phone: two more items,
+and one of them (item 0) is a correctness bug in numbers the rower reads,
+so it leads. **Items 2 and 4 are both going through Claude design first**
+— they are the same question asked twice, and answering them apart risks
+two answers. **Phase CP ("the pause that isn't") is folded in as
 item 1 and no longer has its own section**; it was filed 2026-08-12 and
 would otherwise be a second home for the same work.
 **Goal:** finish what Phase CR started. Everything here was found by the
@@ -1800,6 +1805,54 @@ wave itself, by its adversarial reviews, or by James on the erg, and every
 item is written down with the evidence rather than the symptom, because
 the phase is being PARKED at this line and whoever picks it up will not
 have the conversation.
+
+---
+
+### Item 0 — The session totals are wrong on the wire (NEW, 2026-08-13, and the most serious thing here)
+
+**Found by James rowing "Sun fret" on a real PM5, with the monitor
+photographed beside the phone.** Two symptoms, almost certainly ONE cause,
+and both are numbers a rower reads and trusts.
+
+**Symptom A — TOTAL M is badly wrong.** The PM5's own screen read
+`4384 m total` (interval 2, 3933 m in that interval, 2:17.3 average). The
+app read **`TOTAL M 16938`** on the same piece at the same moment. Roughly
+3.9x. An earlier shot in the same session, during interval 1's rest, read
+`TOTAL M 12529`.
+
+**Symptom B — TOTAL LEFT hit 0:00 during the FIRST rest and never
+recovered.** The bar was fully filled with `WORK 2:15.0 · then FINISH`
+still up next, and stayed that way through interval 2. James: "the progress
+bar filled up prematurely at rest and never recovered."
+
+**Why one cause is likely.** `surfaceModel.ts` computes
+`totalLeftSeconds = max(0, totalSeconds - frame.sessionElapsedSeconds)`, and
+the METERS cell is `frame.sessionDistanceMeters` — the same accumulator
+pair. Over-accumulate the pair and you get exactly this: meters far too
+high, and TOTAL LEFT driven past zero, where the `max(0, …)` clamps it
+permanently.
+
+**Where it lives.** `app/src/monitor/driver.ts:1681-1692`, "THE SESSION
+FOLD". 0x0031's elapsed and distance both reset at each new work interval,
+so the driver banks the previous interval's pair into
+`offsetElapsed`/`offsetDistance` when it sees the clock DROP by more than
+`SESSION_RESET_ELAPSED_DROP` (2 s, `:830`).
+
+**The hypothesis to test first — it is a hypothesis, not a finding.** The
+fold fires on ANY elapsed drop over 2 s, but an interval's count "spans its
+own work plus its trailing rest" (the accumulator's own doc comment). If
+the clock also drops at a work→rest or rest→work boundary, or more than
+once per interval, the fold banks more often than there are intervals and
+re-banks distance already counted. A 2-interval workout with rest plus a
+warm-up offers roughly four such boundaries, which is the right order of
+magnitude for a 3.9x overshoot. **Verify against the wire before changing
+anything** — the fold was itself a walk-4 fix for the opposite bug (TOTAL
+LEFT rising at interval 2, METERS falling 109 -> 50), so a naive revert
+reintroduces that.
+
+**What makes this findable now and not before:** the erg's own total was
+photographed next to the app's. Any fix should be walked the same way, with
+both screens in one frame.
 
 ---
 
@@ -1966,6 +2019,38 @@ capability.
 
 ---
 
+### Item 4 — Small type is unreadable at full pull (NEW, 2026-08-13)
+
+**James, after rowing "Sun fret":** "any font smaller than WORK above the
+target bar is hard to read. Not a problem in some places but makes
+'warm-up', '1 of 2' and the 'now' above targets very difficult to read when
+at full pull."
+
+**He wants this worked through with Claude design**, alongside item 2 — the
+two are the same question asked twice (what a rower can actually resolve
+mid-stroke at arm's length), and answering them separately risks two
+different answers.
+
+**What is implicated.** Everything at `--size-label` (10px) and the
+interval caption on the connected surface: the `WARM-UP` / `1 OF 2 · WORK`
+line top-right, the `NOW` above each hero, `TARGET`, and the metric row's
+own labels (`LEFT IN INTERVAL`, `TOTAL M`, `HR`). The `/500m` and `SPM`
+units added the same day are the same size.
+
+**Note the tension before redesigning.** Arm's-length legibility of the
+BIG numbers was verified on hardware the same day and passed — "yes",
+both heroes and the grid rows readable mid-stroke. So this is specifically
+about the small supporting type, and the fix cannot come out of the heroes'
+budget without re-walking (c). The landscape metric row already fits three
+labels on one line, which is why `TOTAL M` is abbreviated at all.
+
+**Related, already recorded:** the `--ink-4` floor (5.29:1 on `--surface`,
+4.76:1 on `--page`, and BANNED at this size against `--surface-sunken`
+where it measures 4.48:1) constrains how much contrast can be traded for
+size, and `design.spec.ts`'s `assertNoFailingInk4Labels` sweep enforces it.
+
+---
+
 ### Carried debt — smaller, all disclosed, none blocking
 
 - **Correct the record first, it is cheap and it is wrong today.** Comments
@@ -1999,8 +2084,16 @@ capability.
 - **The ordinal-guard substitute** — the wave ended with slightly less
   integration coverage of `frame.state` reaching the surface than it began.
 
-**Exit:** items 1-3 shipped and walked on a real PM5, the record corrected,
-and the carried debt either cleared or explicitly re-parked with a reason.
+**Exit:** items 0-4 shipped and walked on a real PM5, and the carried debt
+either cleared or explicitly re-parked with a reason. (The record
+correction that was listed here shipped early, in PR #91.)
+
+**Walk the exit the way item 0 was found:** the erg's own screen
+photographed in the same frame as the phone's. Every number this phase
+touches — session metres, TOTAL LEFT, the interval count — is checkable
+against the monitor, and the app disagreeing with the erg by 3.9x survived
+a nine-task wave, three adversarial reviews and a five-item hardware walk
+because nobody had put the two displays side by side.
 
 ## Phase LG — The log screen's own words
 
