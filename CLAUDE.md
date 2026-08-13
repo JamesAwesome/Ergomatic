@@ -130,7 +130,7 @@ often they recur.
    roving-tabindex radiogroups; each shipped untested and needed a follow-up.
    **Reuse `PaceRefInput`/`ClassificationCard`'s pattern and copy its keyboard
    tests.**
-9. **Letting `docs/design/DEVIATIONS.md` drift.** It documents *current state*,
+9. **Letting `docs/design/DEVIATIONS.md` drift.** It documents _current state_,
    not history. Rows have described deleted code and contradicted each other.
    **When you change or remove something it describes, reconcile the row.**
 10. **Assuming the plan is right.** Plans in this repo have contained factual
@@ -139,6 +139,18 @@ often they recur.
     was impossible because a type change forces compilation coupling. **If the
     brief contradicts what you observe, say so in your report instead of
     working around it silently.**
+11. **Verifying the app only against itself.** Every gate this repo has —
+    fixtures, captures, unit tests, design sweeps, even the hardware walks —
+    checks the app for INTERNAL consistency. A nine-task wave, three
+    adversarial reviews, a test-integrity sweep and a five-item erg walk all
+    passed while the app reported 16938 m against the PM5's own 4384 m
+    (2026-08-13, "Sun fret"). James found it in one session by
+    photographing the monitor and the phone in the SAME FRAME. **When the
+    machine reports a number we also compute, compare them** — on hardware
+    with both screens in one shot, or in a test by replaying a capture from
+    `docs/monitor/sessions/` and checking the derived total against the
+    intervals' own `boundary` actuals. An agreement with our own fixtures
+    proves nothing about the erg.
 
 ## Commands
 
