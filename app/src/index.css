@@ -7663,9 +7663,9 @@ section:not(.news-pinned) .news-row:last-of-type {
   /* 32px, not the packet's 36 (JAMES RULING 2026-08-12): 8 rows at 36px is
      288px, more than any measured build of this frame has ever offered,
      and 32 is what fits the packet's count into the 276px this scroller
-     actually has (256, with 20 to spare) — DEVIATIONS row owed (Task 8) for
-     the ROW HEIGHT, no longer for the count, which is back at the packet's
-     8 since the task-6 fix round reclaimed the empty footer. */
+     actually has (256, with 20 to spare) — DEVIATIONS row 102 records the
+     ROW HEIGHT, no longer the count, which is back at the packet's 8 since
+     the task-6 fix round reclaimed the empty footer. */
   .connected-grid-row {
     height: 32px;
   }
