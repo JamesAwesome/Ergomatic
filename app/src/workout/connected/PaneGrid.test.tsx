@@ -784,23 +784,28 @@ function accentClassesFromCss(): string[] {
   return [...found];
 }
 
-describe("THE ACCENT CENSUS: one sanctioned accent on the whole surface", () => {
+describe("THE ACCENT CENSUS: accent is a CONTROL colour, and nothing else", () => {
   it("finds the accent-bearing classes in the stylesheet, not in this test", () => {
     const classes = accentClassesFromCss();
-    // The grid's countdown, the header's own End control (connected-revamp
-    // Task 6 — it belongs to the shell's header now, not to a pane, same
-    // reasoning the paused block's `END` outline already established), and
-    // the paused block's `END` outline itself (handoff §4).
-    expect(classes).toContain("connected-grid-countdown");
+    // Everything left is a CONTROL: the header's own End (connected-revamp
+    // Task 6 — it belongs to the shell's header now, not to a pane, the
+    // same reasoning the paused block's `END` outline established) and that
+    // paused `END` outline with its armed state (handoff §4).
+    //
+    // The grid's countdown LEFT this list on 2026-08-13 (James: "use gold
+    // for 'not a judgement' since we switched to red"). It was the only
+    // accent that painted DATA rather than a control, and once
+    // slower-than-target became red it sat one column from a colour meaning
+    // the opposite kind of thing. Its absence here is the assertion.
+    expect(classes).not.toContain("connected-grid-countdown");
     expect(classes.toSorted()).toStrictEqual([
       "connected-end",
-      "connected-grid-countdown",
       "connected-paused-end",
       "connected-paused-end-armed",
     ]);
   });
 
-  it("pane B carries NONE of them, and pane C carries exactly one", () => {
+  it("NEITHER pane carries one: accent reaches no value on the surface", () => {
     const selector = accentClassesFromCss()
       .map((c) => `.${c}`)
       .join(",");
@@ -829,17 +834,37 @@ describe("THE ACCENT CENSUS: one sanctioned accent on the whole surface", () => 
     // typed here, so a rule added later is caught without this test
     // changing.
     expect(paneAccents("live")).toHaveLength(0);
+    // ZERO now, not one. Pane C's countdown was the last accented value on
+    // either pane; it is `--marker` gold as of 2026-08-13.
+    expect(paneAccents("grid")).toHaveLength(0);
+  });
 
-    const accented = paneAccents("grid");
-    expect(accented).toHaveLength(1);
-    // And it is the ACTIVE ROW'S COUNTDOWN, not something else that
-    // happened to pick up the class.
-    const only = accented[0]!;
-    expect(only.className).toContain("connected-grid-countdown");
+  it("the countdown still MARKS the active row's counting cell, now in gold", () => {
+    // The census above proves accent is gone. This proves the MARK is not —
+    // deleting the rule outright would also have satisfied a zero-accent
+    // assertion, and the rower would have lost the only indication of which
+    // cell is counting down.
+    localStorage.setItem(LAST_PANE_KEY, "grid");
+    render(
+      <ConnectedSurface
+        phases={FILLING_LOW.phases}
+        program={FILLING_LOW.program}
+        session={session({ actuals: [actualFor(0, FILLING_LOW.program)] })}
+        onEnded={vi.fn()}
+      />,
+    );
+    const marked = Array.from(
+      document
+        .querySelector(".connected-surface-body")!
+        .querySelectorAll(".connected-grid-countdown"),
+    );
+    expect(marked).toHaveLength(1);
+    const only = marked[0]!;
     expect(only.closest(".connected-grid-row")!.className).toContain(
       "connected-grid-active",
     );
     expect(only.textContent).toBe("1200");
+    cleanupRender();
   });
 
   it("no upcoming or completed row can reach the accent class", () => {
@@ -888,7 +913,15 @@ describe("THE ACCENT CENSUS: one sanctioned accent on the whole surface", () => 
     // as every other value in the row, tinted, not enlarged — the density
     // this task exists for has no room for a bigger digit.
     const rule = baseRule(".connected-grid-countdown");
-    expect(rule).toContain("color: var(--accent)");
+    // GOLD, and specifically NOT red (James, 2026-08-13: "use gold for 'not
+    // a judgement' since we switched to red"). The negatives are the point:
+    // this mark POINTS at the counting-down cell, so it must never wear
+    // accent's brick red again, and never a verdict colour — either would
+    // put "watch this" and "you are behind" in the same hue one column
+    // apart, which is what it was doing before.
+    expect(rule).toContain("color: var(--marker)");
+    expect(rule).not.toContain("--accent");
+    expect(rule).not.toContain("--judge-");
     expect(rule).not.toContain("font-size");
     // And no landscape query re-enlarges it behind the base rule's back.
     expect(

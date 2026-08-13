@@ -5889,12 +5889,14 @@ section:not(.news-pinned) .news-row:last-of-type {
    Two rules govern every colour below and are worth stating once:
 
    1. TARGETS ARE INK (DEVIATIONS row 0, the phase's own supersession).
-      `--accent` appears NOWHERE in this block. On these panes accent's
-      only remaining job is pane C's active-interval countdown
-      (`.connected-grid-countdown`, the one accent declaration on the
-      panes);
-      a target sitting inches from a tinted actual has to be the neutral
-      reference, or the rower is reading three judgement colours.
+      `--accent` appears NOWHERE in this block — and, since 2026-08-13,
+      nowhere on the connected panes at all. Accent's last job here was
+      pane C's active-interval countdown, which is `--marker` gold now
+      (James: "use gold for 'not a judgement' since we switched to red"),
+      so row 0's claim is finally literal rather than carrying one
+      documented exception. A target sitting inches from a tinted actual
+      has to be the neutral reference, or the rower is reading three
+      judgement colours.
    2. THE ACTUAL CARRIES THE JUDGEMENT, and only on the value.
       `.timer-card-actual-slower/-over` (declared with the other
       `timer-card-*` rules above, Task 3) resolve to `--type-o2` teal and
@@ -6665,9 +6667,14 @@ section:not(.news-pinned) .news-row:last-of-type {
    Task 5 dropped the old enlarged size (22px/26px): the revision's
    own mockup draws the countdown at the SAME `--size-row` as every other
    value, tinted, not enlarged — the density this task exists for has no
-   room for a bigger digit. */
+   room for a bigger digit.
+
+   GOLD, not the accent red it used to be (James, 2026-08-13). This mark
+   POINTS at the cell that is counting down; it is not a verdict, and once
+   slower-than-target went red it was one column away from a colour that
+   says the opposite kind of thing. See `--marker` in tokens.css. */
 .connected-grid-countdown {
-  color: var(--accent);
+  color: var(--marker);
 }
 
 /* Pinned under the scroller: the distance rule, in words, never a glyph. */
