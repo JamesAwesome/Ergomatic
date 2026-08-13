@@ -152,7 +152,17 @@ export default function PaneLive({ model }: { model: SurfaceModel }) {
           </span>
         </div>
         <div className="connected-metric-cell">
-          <span className="connected-metric-label">METERS</span>
+          {/* `TOTAL M`, not `METERS` (James, 2026-08-13). This cell is
+              `frame.sessionDistanceMeters` — the WHOLE session — and it sat
+              beside `METERS LEFT`, which is this INTERVAL counting down.
+              Two scopes, one word, no way to tell them apart; the bare
+              label invited exactly the misreading that found it. `TOTAL`
+              is the word this surface already uses for session scope
+              (`TOTAL LEFT`, and pane C's own `39:48 TOTAL`), so the pair
+              now reads TOTAL LEFT / TOTAL M rather than METERS / METERS
+              LEFT. Abbreviated because the landscape metric row puts three
+              labels on one line. */}
+          <span className="connected-metric-label">TOTAL M</span>
           <span className={judgedClass("connected-metric-value", model.meters)}>
             {model.meters.display}
           </span>
