@@ -122,9 +122,9 @@ describe("rateDisplay", () => {
     });
   });
 
-  it("shows 'free' with no caption when spm is unset — never a dash", () => {
+  it("shows 'Free' with no caption when spm is unset — never a dash", () => {
     expect(rateDisplay(phase({}))).toStrictEqual({
-      main: "free",
+      main: "Free",
       caption: null,
     });
   });
@@ -163,10 +163,10 @@ describe("TimerTargets (component)", () => {
     expect(screen.queryByText(/–/)).not.toBeInTheDocument();
   });
 
-  it("renders 'free' with no stray caption for a warm-up phase", () => {
+  it("renders 'Free' with no stray caption for a warm-up phase", () => {
     render(<TimerTargets phase={phase({ type: "warmup", label: "Easy" })} />);
     expect(screen.getByText("Easy")).toBeInTheDocument();
-    expect(screen.getByText("free")).toBeInTheDocument();
+    expect(screen.getByText("Free")).toBeInTheDocument();
     expect(screen.queryByText("spm")).not.toBeInTheDocument();
     expect(screen.queryByText("—")).not.toBeInTheDocument();
   });
@@ -194,7 +194,7 @@ describe("TimerTargets (component)", () => {
     label: "1:40.0",
   });
   const PINNED_DEFAULT_HTML =
-    '<div class="timer-cards"><div class="timer-card"><span class="timer-card-label">TARGET SPLIT</span><span class="timer-card-value">1:40.0</span><span class="timer-card-caption">2K</span></div><div class="timer-card"><span class="timer-card-label">RATE</span><span class="timer-card-value">free</span></div></div>';
+    '<div class="timer-cards"><div class="timer-card"><span class="timer-card-label">TARGET SPLIT</span><span class="timer-card-value">1:40.0</span><span class="timer-card-caption">2K</span></div><div class="timer-card"><span class="timer-card-label">RATE</span><span class="timer-card-value">Free</span></div></div>';
 
   it("renders byte-identical to the pre-Task-3 markup", () => {
     const { container } = render(<TimerTargets phase={pinnedPhase} />);

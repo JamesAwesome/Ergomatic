@@ -525,13 +525,13 @@ describe("pane B — live (connected-revamp Task 3: two heroes)", () => {
   // `--ink-3` (`connected-value-absent`); the actual above stays UNJUDGED
   // (plain ink — no `-over`/`-under`/`-stale` class), because a value with
   // nothing to compare against must not be tinted.
-  it("during REST both targets read the dash, and both actuals above stay unjudged", () => {
+  it("during REST both targets name the phase (Rest / Free) in the absent tone, and both actuals above stay unjudged", () => {
     renderSurface({
       frame: frame({
         intervalIndex: 1,
         state: "resting",
         // Numbers that would scream "over"/"under" against any real
-        // target, to prove the dash-target is what suppresses the tint.
+        // target, to prove the absent target is what suppresses the tint.
         currentSplit: 60,
         spm: 40,
       }),
@@ -540,8 +540,14 @@ describe("pane B — live (connected-revamp Task 3: two heroes)", () => {
       ".connected-hero-target-value",
     );
     expect(targets).toHaveLength(2);
+    // The WORDS, in order (split hero then rate hero) — a shared loop over
+    // both would pass if the two slots swapped, which is exactly the kind
+    // of thing this rename could break. The absent CLASS is what keeps
+    // §6's concern answered now that the slot carries a word: greyed, so
+    // it cannot read as a programmed number.
+    expect(targets[0]!.textContent).toBe("Rest");
+    expect(targets[1]!.textContent).toBe("Free");
     for (const target of targets) {
-      expect(target.textContent).toBe("—");
       expect(target.className).toContain("connected-value-absent");
     }
 

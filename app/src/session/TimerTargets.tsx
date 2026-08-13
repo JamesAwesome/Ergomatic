@@ -2,6 +2,15 @@ import { fmtSplit } from "../../domain/format.js";
 import { refLabel } from "../../domain/pace.js";
 import type { EnginePhase } from "./engine";
 
+/** The rate target when the phase never set one — the word BOTH surfaces
+ *  show (James, 2026-08-12, from #89's warm-up captures). It lives here,
+ *  not in `surfaceModel.ts`, because that file already imports this one:
+ *  the connected surface reads the phone timer's vocabulary, never the
+ *  reverse. Title case to match the phase words it sits beside (`Easy`,
+ *  `Rest`, `All out`) — lowercase `free` was the only exception, and on the
+ *  timer the two render side by side as a pair. */
+export const FREE = "Free";
+
 /** TARGET SPLIT card content: `main` is the mono `--size-subhero` value
  *  (connected-revamp Task 7, revision §5: "both TARGET · /500M and
  *  TARGET · SPM, both 56px landscape / 52px portrait, both ink" — no
@@ -70,7 +79,7 @@ export function rateDisplay(phase: EnginePhase): {
   if (phase.spm !== undefined) {
     return { main: String(phase.spm), caption: "spm" };
   }
-  return { main: "free", caption: null };
+  return { main: FREE, caption: null };
 }
 
 /** The phone timer's own rendering — the ONLY rendering this component has
