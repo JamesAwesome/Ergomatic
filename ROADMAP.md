@@ -1838,35 +1838,80 @@ so the driver banks the previous interval's pair into
 `offsetElapsed`/`offsetDistance` when it sees the clock DROP by more than
 `SESSION_RESET_ELAPSED_DROP` (2 s, `:830`).
 
-**The hypothesis to test first — it is a hypothesis, not a finding.** The
-fold fires on ANY elapsed drop over 2 s, but an interval's count "spans its
-own work plus its trailing rest" (the accumulator's own doc comment). If
-the clock also drops at a work→rest or rest→work boundary, or more than
-once per interval, the fold banks more often than there are intervals and
-re-banks distance already counted. A 2-interval workout with rest plus a
-warm-up offers roughly four such boundaries, which is the right order of
-magnitude for a 3.9x overshoot. **Verify against the wire before changing
-anything** — the fold was itself a walk-4 fix for the opposite bug (TOTAL
-LEFT rising at interval 2, METERS falling 109 -> 50), so a naive revert
-reintroduces that.
+**THE CAUSE IS KNOWN. The hypothesis previously written here was WRONG on
+both counts and is kept only so nobody re-derives it** (see
+`docs/monitor/state-architecture-review.md` §F2, which measured it).
+
+It guessed that the clock drops at work/rest boundaries. Measured on the
+committed captures: work→rest **never** drops the clock (0 of 7 — it runs
+straight through the rest), and rest→work drops exactly once and correctly
+(4 of 4). An investigator following the old text would have confirmed four
+boundaries, four banks, and found nothing.
+
+**What actually happens:** the fold's founding premise — asserted in the
+driver at `:1062-1063` and again on the public type at `types.ts:37-39`,
+that "BOTH fields reset TOGETHER at each new work interval" — is false on
+the wire. Across the captures there are 25 elapsed-drops over the 2 s
+threshold and **9 of them do not reset distance at all**. Every one of
+those carrying real distance is a TERMINATE: elapsed jumps backwards to a
+smaller NON-ZERO value while distance stands exactly still (CSAFE-DEF
+footnote 12, quoted in the driver's own comments twenty lines above the
+bug). The fold banks a distance the machine never cleared, then keeps
+counting it. Reproduced three times independently, twice through the real
+`createPm5Driver`: a 24 m piece ended by Terminate reports **47.8 m,
+exactly 2.00x**; a segment with no completed interval at all reports
+108.4 m against a truth of 0.
+
+**No threshold change fixes it** — six of the nine bad drops are between
+11 s and 87 s, far above anything that still catches a real 60 s interval.
+
+**The oracle previously prescribed here is also unsound** and would have
+misled. It proposed summing the `boundary` actuals; the captures contain
+zero events of that name (14 are `intervalComplete`), some intervals emit
+none at all, and the two quantities are not the same thing even when both
+are right — 0x0031's per-interval pair includes the trailing rest, and one
+measured 30 s rest contributed **76.1 m** of coasting. On the one sound
+segment in the record that oracle reports a 2.14x failure for a fold that
+is correct. **The sound oracle is the sum of each interval's own final
+pre-reset reading**, independent of the boundary path.
+
+**The fix is a change of kind, not of tuning:** the accumulator is
+edge-triggered where it must be level-triggered. The machine already
+publishes an absolute Total Work Distance; the captures carry it
+(`totalWorkDistanceMeters`, seven samples). Concept2 ship an
+accumulate-it-yourself counter on ANT+ and an absolute total on BLE, and
+we implemented the ANT+ model on the BLE interface. Still do not revert
+the fold blindly — it was the walk-4 fix for the opposite bug (TOTAL LEFT
+rising at interval 2, METERS falling 109 -> 50).
+
+**AND IT IS A PREREQUISITE, NOT A PARALLEL ITEM.** The same nine lines
+that overcount today undercount by up to the whole session across a link
+gap: a measured 237.0 m reported for a 455.1 m piece, and one outage shape
+where an entire 261 m interval vanishes with no event, no log line and no
+visual difference. A fold cannot survive a gap by construction. **The
+parked reconnect work depends on fixing this first.**
+
+**Do R0 before designing anything.** `logSummaryTotals`
+(`driver.ts:2001-2018`) already prints 0x0039's decoded whole-workout
+totals; it does not print the accumulator. Add
+`sessionElapsedSeconds`/`sessionDistanceMeters` and
+`raw.totalWorkDistanceMeters` beside them, plus a `divergence` entry when
+the fold banks. One string, no behaviour change. On "Sun fret" it would
+have printed `0x0039 decoded: distance=4384m` next to an accumulator
+holding 16938, in the app's own stash, with no camera — and BOTH of this
+item's verification routes are blocked without it, since the iPhone has no
+per-frame capture, only the ring.
 
 **What makes this findable now and not before:** the erg's own total was
 photographed next to the app's. Any fix should be walked the same way, with
 both screens in one frame.
 
-**AND IT IS REPRODUCIBLE WITHOUT HARDWARE — start here, not at the erg.**
-The committed captures in `docs/monitor/sessions/` are driver-level frame
-logs that carry both the per-frame `(elapsedSeconds, distanceMeters)` pair
-the fold consumes AND the `boundary` events with each interval's own
-`actual.distanceMeters`. The intervals' actuals summed ARE the session
-total, so replaying a capture through the fold gives an oracle with no PM5
-attached: if `offsetDistance + base.distanceMeters` exceeds the sum of the
-boundary actuals, the fold is banking more than once per interval, which is
-exactly the hypothesis above. Note the captures predate the accumulator, so
-they carry no `sessionDistanceMeters` of their own to compare against —
-the boundary sum is the reference. Write that test FIRST; it should fail
-before anything is changed, and it turns a bug that needed an erg and a
-camera into one the suite catches.
+**REPRODUCIBLE WITHOUT HARDWARE — and already reproduced.** The captures in
+`docs/monitor/sessions/` were replayed through the real `createPm5Driver`
+during the architecture review and the overcount falls out at 2.00x on the
+Terminate segment. Use the SOUND oracle described above (each interval's
+final pre-reset reading), not the boundary sum. Write the failing test
+first; it fails today on committed data.
 
 ---
 
