@@ -91,12 +91,30 @@ Roadmap: `ROADMAP.md` (phases + standing rules). Design reference: `docs/design/
     covers the one number that would have told the rower so. We KNEW the
     wire fact the whole time; nobody asked the product question.
 - **Two standing agents, `product-manager` and `antagonist`
-  (`.claude/agents/`), keep ledgers that are part of the repo.** Use the
-  antagonist BEFORE building, not only after — every use so far has been
-  post-hoc and each one found something a spec-time pass would have found
-  cheaper. Both agents append what they learn to their ledger at the end
-  of an engagement; a dispatch that skips the ledger update wastes the
-  half of them that compounds.
+  (`.claude/agents/`), keep ledgers that are part of the repo.** Both
+  append what they learn to their ledger at the end of an engagement; a
+  dispatch that skips the ledger update wastes the half of them that
+  compounds. **They have fixed trigger points (James, 2026-08-14) — these
+  are gates, not suggestions:**
+  - **`product-manager` runs twice per phase.** Once when a DESIGN is
+    presented, before James approves it — its job there is scope, shape
+    and whether this should be built now. Once when the FINAL PR is
+    posted, before James's merge word — its job there is exit criteria
+    against what actually happened, tester impact, the release call, and
+    what landed after the last review. Present its verdict with the PR;
+    do not merge on green CI alone.
+  - **`antagonist` runs on every SPEC and on every TASK BRIEF.** On a
+    spec it is the full adversarial pass this repo already runs between
+    spec and plan (`spec → adversarial → plan → SDD`) — that step IS this
+    agent now. On a task brief it is a narrower PREMISE pass before
+    dispatch: does this brief assert anything unverified, invent a
+    mechanism without checking prior art, or contradict what the code
+    does? Briefs have shipped factual errors here and an implementer who
+    works around one silently costs a review round.
+  - **Scope control for task briefs:** the premise pass is cheap and
+    scoped to the brief's claims, not a review of the whole task. If a
+    wave's briefs are near-identical, one pass over the set is enough —
+    say so rather than running ten.
 - **Mid-phase requests batch to the phase's close-out task** (or the fast
   path after merge) instead of resuming a live agent — one review instead
   of several resumed contexts. Exception: anything that invalidates
@@ -123,6 +141,16 @@ Roadmap: `ROADMAP.md` (phases + standing rules). Design reference: `docs/design/
   (docs/RELEASING.md): "recommended: <reasons>" or "not needed". Versions
   come ONLY from annotated vX.Y.Z tags; API changes additive-only between
   tags.
+- **After every NON-FAST-PATH merge, also check the agent configs**
+  (James, 2026-08-14) and say explicitly which: "agent configs updated:
+  <what>" or "no change needed: <why>". The question is whether this work
+  taught us something the next agent should start with — a ruling for
+  `pm-ledger.md`, a falsified claim and the technique that caught it for
+  `antagonist-ledger.md`, a new recurring failure for this file, or a
+  correction to a definition in `.claude/agents/`. Pair it with the
+  release recommendation so both happen in the same breath. Fast-path
+  merges are exempt by definition: if a change was small enough to skip
+  the cycle, it is small enough to teach nothing.
 
 ## Recurring failures — read before you start
 

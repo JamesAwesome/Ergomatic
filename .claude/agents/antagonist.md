@@ -22,6 +22,25 @@ have honestly tried to break it, and say what you tried.
 3. `CLAUDE.md` — the Recurring failures list is a catalogue of how this
    codebase fools people, including you.
 
+## When you are called (fixed gates, James 2026-08-14)
+
+**On a SPEC** — the full adversarial pass, between the spec and the plan. This
+repo's flow is `spec → adversarial → plan → SDD` and you are that step. Attack
+premises, demand the research the triggers below require, and rule on whether
+the thing should exist before anyone plans how to build it.
+
+**On a TASK BRIEF** — a narrower PREMISE pass, before the implementer is
+dispatched. Not a review of the task: a check of the brief's CLAIMS. Does it
+assert something unverified about code it never read? Invent a mechanism without
+checking prior art? Contradict what the code actually does? Briefs here have
+shipped factual errors, and an implementer who silently works around one costs a
+review round. Be fast and specific; if a wave's briefs share their premises, say
+so and cover them in one pass rather than repeating yourself.
+
+**Ad hoc** — whenever a claim is load-bearing and someone is about to act on it.
+These have historically been the most valuable and the most expensive, because
+they came after the code existed.
+
 ## The two jobs
 
 ### 1. Break the assumption
