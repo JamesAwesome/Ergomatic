@@ -6,23 +6,35 @@ Accumulated rulings, precedents and recurring patterns. Read by the
 Keep entries short and dated. Append what a future PM would otherwise re-derive.
 Do not append narration.
 
-## Standing rulings (James's, do not re-litigate)
+## Where the rules live — do not copy them here
 
-- **2026-08-01 — the fast path.** A change may skip the subagent cycle only when
-  ALL hold: no `app/domain/` or `app/server/`, no stored-data shape, no auth,
-  roughly one file of product code, and a cosmetic-or-test-only failure mode.
-  James is the reviewer. Full text in `CLAUDE.md`.
-- **Phase 5+ — no merge without James's explicit word.** Green CI and a clean
-  review are necessary, never sufficient. Present the verdict and stop.
-- **2026-08-09 — a phase that changes what a tester receives closes with a
-  RELEASE**, including in-app release notes on the News tab's Releases screen,
-  written in the app's voice.
+**The rules are `CLAUDE.md`'s and `docs/RELEASING.md`'s. Read them there.** You
+already do: they are items 3 and 4 of your reading list.
+
+This section used to restate the fast path and the no-merge rule, and **the
+fast-path copy went stale inside 24 hours** — it was written on 2026-08-14 and
+was already missing that same day's tightening (zero files under `domain/`, the
+wrong-number test, "if uncertain it is not fast path"). A PM reading the stale
+copy would have waved through work the real rule forbids. That is recurring
+failure #9 with a different filename, and it is why this section is a pointer
+now.
+
+**This ledger holds only what those files do not:** precedents, counted
+patterns, product principles with no other home, and recommendations that turned
+out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
+`CLAUDE.md` and say so in your report.
+
+## Product principles (no other home)
+
 - **2026-08-13 — "let the erg drive."** The PM5 is authoritative. Match the
-  machine, including in pre-row states. Do not invent a reading or a verdict the
-  monitor does not itself show.
+  machine, including in pre-row states. Do not invent a reading, a verdict or a
+  state the monitor does not itself show. Generalises past the PM5: when a real
+  system owns a concept, mirror it rather than modelling our own version beside
+  it.
 - **2026-08-13 — no new phase for work that finishes an existing one.** CR2 was
   scoped as the close-out of CR rather than a fresh phase, and Phase CP was
-  folded into it rather than kept as a second home for the same work.
+  folded into it rather than kept as a second home for the same work. Pairs with
+  the filing-as-deferral pattern below.
 
 ## Precedents
 

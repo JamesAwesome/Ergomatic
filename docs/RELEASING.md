@@ -7,6 +7,7 @@ merge — it is the Bluetooth-less prototype. TestFlight releases are
 ## When to release
 
 Cut a release when any of:
+
 - Native-relevant code changed: auth/session flow, live timer, Capacitor
   config or plugins.
 - A user-visible capability is complete (typically a phase exit).
@@ -15,6 +16,13 @@ Cut a release when any of:
 
 Do NOT release for: web-prototype iterations, docs, infra/CI, refactors
 invisible on device.
+
+**A release that changes what a tester receives also updates the in-app
+release notes** (James, 2026-08-09) — the News tab's Releases screen,
+written in the app's own voice, covering what testers actually get rather
+than what merged. The notes PR merges BEFORE the tag: the screen names the
+version they are about to receive, and three e2e pins force a deliberate
+touch when it changes. v0.8.0 and v0.9.0 both went out this way.
 
 **Standing rule:** after every merge to main, Claude posts an explicit
 recommendation — "TestFlight release recommended: <reasons>" or "No release
