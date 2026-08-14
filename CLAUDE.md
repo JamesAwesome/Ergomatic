@@ -65,6 +65,38 @@ Roadmap: `ROADMAP.md` (phases + standing rules). Design reference: `docs/design/
   a reviewer to probe"). Anything that surprises mid-change escalates to
   the full cycle, stated in the PR. A fast-path change that ships a bug
   sends the next change of its kind back to the full cycle.
+- **Brainstorming carries a research pass and a does-it-exist question
+  (added 2026-08-14).** Before a design is presented for approval, two
+  things happen, and the spec records both — including "nothing found",
+  which is itself a result.
+  - **Research the triggers.** Anything the OS, browser or device OWNS
+    (safe areas, permissions, background execution, Bluetooth lifecycle,
+    wake locks, storage); any wire or protocol semantics (what a field
+    means, when it resets, what is authoritative); any mechanism we are
+    about to INVENT (a reconciler, an accumulator, a scheduler, a state
+    machine) — who solved this already and what did they learn; and any
+    accessibility or platform convention with a published standard.
+    Vendor docs and specs first, implementation source second, blog posts
+    last and labelled. Tag claims PRIMARY / SECONDARY / INFERENCE.
+    _Cost of skipping, measured:_ the connected gutter was derived from
+    first principles across two sessions and a NO-GO, when Apple
+    documents that the landscape inset protects the rounded corners as
+    well as the housing — which was the whole answer.
+  - **Ask whether the underlying system HAS the concept.** Before
+    designing a state, mode or capability, establish that the real system
+    (the PM5, iOS, the browser) has it. If it does not, name what we are
+    asserting on its behalf and who is wrong when it matters. _Cost of
+    skipping:_ we shipped a PAUSED state the PM5 does not have and cannot
+    have, on a monitor whose clock keeps running, and the block we drew
+    covers the one number that would have told the rower so. We KNEW the
+    wire fact the whole time; nobody asked the product question.
+- **Two standing agents, `product-manager` and `antagonist`
+  (`.claude/agents/`), keep ledgers that are part of the repo.** Use the
+  antagonist BEFORE building, not only after — every use so far has been
+  post-hoc and each one found something a spec-time pass would have found
+  cheaper. Both agents append what they learn to their ledger at the end
+  of an engagement; a dispatch that skips the ledger update wastes the
+  half of them that compounds.
 - **Mid-phase requests batch to the phase's close-out task** (or the fast
   path after merge) instead of resuming a live agent — one review instead
   of several resumed contexts. Exception: anything that invalidates
