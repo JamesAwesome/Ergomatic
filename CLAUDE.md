@@ -54,16 +54,29 @@ Roadmap: `ROADMAP.md` (phases + standing rules). Design reference: `docs/design/
   `git status` on the main checkout** before removing the worktree; stray
   writes there have happened four times and are only cheap to fix while the
   branch still exists.
-- **Fast path (James-approved, 2026-08-01):** a change may skip the
-  subagent implement/review cycle when ALL hold: no `app/domain/` or
-  `app/server/` code, no stored-data shape, no auth; roughly one file of
-  product code (tests/CSS/docs don't count against it); and the failure
-  mode if wrong is cosmetic or test-only. Fast-path changes still get a
-  worktree, failing-test-first, self-mutation, the scoped gates, and a PR —
-  Claude implements inline and **James is the reviewer**, with the PR
-  carrying screenshots and a one-paragraph risk note ("what I'd have asked
-  a reviewer to probe"). Anything that surprises mid-change escalates to
-  the full cycle, stated in the PR. A fast-path change that ships a bug
+- **Fast path (James-approved, 2026-08-01; tightened 2026-08-14):** a
+  change may skip the subagent implement/review cycle when ALL FIVE hold.
+  Check them mechanically, against `git diff --stat`, not by feel.
+  (1) ZERO files under `app/domain/` or `app/server/` — not "only comments
+  there", zero. (2) No stored-data shape: no persisted type, no `pgEnum`,
+  no localStorage shape, no migration. (3) No auth. (4) Roughly one file
+  of product code; tests, CSS, docs and captures do not count against it.
+  (5) The failure mode if wrong is cosmetic or test-only — words, pixels,
+  or a red suite. **If a wrong version would produce a wrong NUMBER, a
+  lost record, or a wrong device interaction, it is not fast path. If any
+  check is uncertain, it is not fast path.** The rule exists to save a
+  cycle on trivia, not to be argued into.
+  Fast-path changes still get a worktree, failing-test-first,
+  self-mutation, the scoped gates, and a PR — Claude implements inline and
+  **James is the reviewer**, with the PR carrying screenshots and a
+  one-paragraph risk note ("what I'd have asked a reviewer to probe").
+  **Escalate mid-change, do not finish and disclose:** the moment a
+  fast-path change reaches into `domain/`, a stored shape, or a second
+  product file, stop and take the full cycle. _This has been violated:_
+  on 2026-08-13 five commits landed inline as fast path — 42 files, +764
+  lines, including a rename through `app/domain/judge.ts` — and two
+  independent adversarial reviews named that tail as the only place an
+  unknown defect could still hide. A fast-path change that ships a bug
   sends the next change of its kind back to the full cycle.
 - **Brainstorming carries a research pass and a does-it-exist question
   (added 2026-08-14).** Before a design is presented for approval, two
@@ -115,6 +128,17 @@ Roadmap: `ROADMAP.md` (phases + standing rules). Design reference: `docs/design/
     scoped to the brief's claims, not a review of the whole task. If a
     wave's briefs are near-identical, one pass over the set is enough —
     say so rather than running ten.
+  - **NEITHER AGENT RUNS ON FAST-PATH WORK (James, 2026-08-14).** The
+    fast path has no spec and no task brief, so the antagonist has
+    nothing to attack, and by its own criteria a fast-path change cannot
+    alter what the product does — so there is nothing for a PM to judge.
+    **The PM gate is about FUNCTION, not diff size:** it runs when a
+    change alters what the app DOES, what a tester RECEIVES as a
+    capability, or the shape and sequence of planned work. It does NOT
+    run for copy, styling, comments, tests, docs, captures, or a refactor
+    with no behaviour change — however many files those touch. A
+    thousand-line docs PR needs no PM; a one-line change to what a number
+    means does.
 - **Mid-phase requests batch to the phase's close-out task** (or the fast
   path after merge) instead of resuming a live agent — one review instead
   of several resumed contexts. Exception: anything that invalidates
