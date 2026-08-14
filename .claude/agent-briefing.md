@@ -77,6 +77,21 @@ standing rules live here so they cannot drift between dispatches.
   Three gate rewrites once chased a skip that was a designed timer in a
   different component.
 
+## Research before invention (2026-08-14)
+
+- If your task invents a mechanism, or touches something the OS, browser or
+  device owns, or turns on what a wire field MEANS — read the primary source
+  before you design. Vendor docs and specs first, implementation source
+  second, blog posts last and labelled. Tag claims PRIMARY / SECONDARY /
+  INFERENCE and cite URLs. "Nothing authoritative found" is a result: record it.
+- Before modelling a state or capability, establish the real system HAS it.
+  A PAUSED state shipped here that the PM5 does not have; the wire fact was
+  known and written down, and nobody asked the product question.
+- The `antagonist` agent (`.claude/agents/antagonist.md`) exists for both jobs
+  and keeps a ledger of how this codebase has fooled people before. Reading
+  `.claude/agents/antagonist-ledger.md` is worth the two minutes: the same
+  shapes recur.
+
 ## Environment
 
 - All commands run from `app/`. Node 26 is required:
@@ -90,18 +105,18 @@ standing rules live here so they cannot drift between dispatches.
   trusting any further commit.
 - **Coverage:** the 90×4 gate is a repo-wide aggregate and will not notice an
   uncovered branch in a file you touched — read the per-file rows. The
-  coverage *text* reporter omits some directories; the HTML report under
+  coverage _text_ reporter omits some directories; the HTML report under
   `app/coverage/` is authoritative. Say which source you used.
   `app/domain/**` is pinned at 100%.
 
 ## Gates, scoped by change class
 
-| Your diff touches | You must run |
-|---|---|
-| any product code under `app/src/` | `pnpm lint` · `typecheck` · `format:check` · `test --project unit --project client` · **`pnpm e2e`** (and `pnpm screenshots` if a screen's layout changed — open the images and describe what you see) |
-| `app/domain/` or `app/server/` only | lint · typecheck · format:check · `test --project unit` (+ integration if Docker is available) |
-| tests only | lint · typecheck · format:check · the covering project(s) |
-| comments/docs only | lint · typecheck · format:check |
+| Your diff touches                   | You must run                                                                                                                                                                                           |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| any product code under `app/src/`   | `pnpm lint` · `typecheck` · `format:check` · `test --project unit --project client` · **`pnpm e2e`** (and `pnpm screenshots` if a screen's layout changed — open the images and describe what you see) |
+| `app/domain/` or `app/server/` only | lint · typecheck · format:check · `test --project unit` (+ integration if Docker is available)                                                                                                         |
+| tests only                          | lint · typecheck · format:check · the covering project(s)                                                                                                                                              |
+| comments/docs only                  | lint · typecheck · format:check                                                                                                                                                                        |
 
 The final whole-branch review always runs everything regardless — these
 scopes exist for task and fix rounds, not the last gate. Leaving e2e red
@@ -163,7 +178,7 @@ a value where they agree).
   CACHE can still serve a stale image after a real source change even
   inside your own per-worktree stack (not a multi-session artifact) — if
   the served bundle doesn't match your latest source, `docker compose -f
-  compose.yml -f compose.e2e.yml build --no-cache` before `up`.
+compose.yml -f compose.e2e.yml build --no-cache` before `up`.
 - **Never override the e2e env contract**: `scripts/e2e.sh` and
   `e2e/helpers.ts` hardcode their shared `TEST_AUTH_SECRET`
   (`e2e-secret`); forcing your own value into the compose env 401s every
