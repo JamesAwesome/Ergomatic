@@ -146,7 +146,7 @@ describe("recording serialization", () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify failure** — `pnpm test --project unit -- transports/recording` (or the client project if jsdom is required by the project split; this file has no DOM use, so unit). Expected: FAIL, module not found.
+- [ ] **Step 2: Run to verify failure** — `pnpm test --project client -- transports/recording`. **The client project owns ALL `src/**` tests regardless of DOM use (`vitest.config.ts:26`); the unit project includes only `server/**`, `domain/**`, `scripts/**` — running it here silently executes an unrelated suite (antagonist premise pass, measured).** Note also: the trailing positional filter does NOT narrow the run in this repo's pnpm+vitest invocation — the whole client project runs; read the new file's own FAIL lines in the output. Expected: FAIL, module not found.
 
 - [ ] **Step 3: Implement** `recording.ts` exactly to the Produces block. `serializeRecording` = `[JSON.stringify(header), ...events.map(e => JSON.stringify(e))].join("\n") + "\n"`. `parseRecording` splits on `\n`, filters empty lines, validates `header.v === RECORDING_FORMAT_TAG`.
 
@@ -364,8 +364,9 @@ export function createReplayTransport(
   `createPm5Driver` from `./driver`; `createEventLog` from `./eventLog`;
   a `WorkoutProgram` fixture — reuse the pattern of
   `ConnectedSurface.test.tsx:1358`'s fake-driven setup or
-  `sessionTotals.test.ts`'s `SEEDED`-style program literal (copy a 2-interval
-  time program literal into this file; do NOT import from a test file).
+  `sessionTotals.test.ts:188-201`'s `TWO_INTERVAL_REST_PROGRAM` literal
+  (copy a 2-interval time program literal into this file; do NOT import
+  from a test file).
 
 **What it proves (and what it cannot — spec §A3):** the tap records
 faithfully and the replay scheduler drives the REAL driver through
@@ -383,11 +384,17 @@ const tap = createRecordingTransport(fake, () => virtualNow); // drive virtualNo
 const recDriver = createPm5Driver(tap.transport, createEventLog(), { deviceName: "PM5 432331249" });
 const recorded: MonitorEvent[] = [];
 recDriver.events((e) => recorded.push(e));
-await recDriver.connect("fake-id"); // + program() + pump fake.tick(...) to terminal, mirroring the fake-driven walk in ConnectedSurface.test.tsx
+// MonitorDriver has NO connect() (controller ruling): connection is
+// Transport-level. Follow ConnectedSurface.test.tsx's fake-driven order:
+const [dev] = await tap.transport.scan();
+await tap.transport.connect(dev.id);
+// then program() + pump fake.tick(...) to terminal
 // ... session reaches "workoutComplete"/terminal ...
 const file = buildRecordingFile(tap, { app: "roundtrip", transport: "fake", program: PROGRAM });
 
 const replay = createReplayTransport(parseRecording(file));
+const [rdev] = await replay.transport.scan();
+await replay.transport.connect(rdev.id);
 const repDriver = createPm5Driver(replay.transport, createEventLog(), {
   deviceName: "PM5 432331249",
   now: () => replay.clock.now(),          // B2: the driver's clock IS the replay clock
@@ -414,8 +421,9 @@ expect(replayed).toEqual(recorded);      // the whole point, in one line
 - [ ] **Step 3: Fix whatever the round trip exposes** in `replay.ts`/
   `recording.ts` (this task is the integration shakeout; expect ordering
   drains to need tuning). No product files outside the two new modules.
-- [ ] **Step 4: Run the full monitor test directory** —
-  `pnpm test --project unit -- src/monitor` — all green.
+- [ ] **Step 4: Run the client project** — `pnpm test --project client` —
+  all green (this is the project that owns every `src/**` test; there is no
+  narrower honest scope, the positional filter does not narrow).
 - [ ] **Step 5: Commit** — `git commit -m "test: a recorded session replays into a second driver, event for event"`.
 
 ---
@@ -511,7 +519,7 @@ async function handleDownloadRecording(): Promise<void> {
   if (!rec) return;
   const { buildRecordingFile } = await import("../../monitor/transports/recording");
   const text = buildRecordingFile(rec, {
-    app: import.meta.env.VITE_APP_VERSION ?? "dev",
+    app: "dev", // VITE_APP_VERSION confirmed absent in this repo; no new build arg
     transport: "web",
     ua: navigator.userAgent,
     program, // the new prop, from ConnectedSurface's own `program` (B4)
@@ -527,10 +535,10 @@ async function handleDownloadRecording(): Promise<void> {
 }
 ```
 
-  (`Date.now()` in a filename is UI code, not domain — allowed; check
-  whether `VITE_APP_VERSION` exists in this repo's env conventions first —
-  `grep -rn "VITE_APP" src/ vite.config.ts` — and if it does not, use the
-  literal `"dev"` and note it; do NOT invent a new build arg in this task.)
+  (`Date.now()` in a filename is UI code, not domain — allowed.
+  `VITE_APP_VERSION` is CONFIRMED ABSENT from this repo (antagonist premise
+  pass, grep over `src/` + `vite.config.ts`): use the literal `"dev"`; do
+  NOT invent a new build arg in this task.)
 
 - [ ] **Step 1: Write the failing tests** (client project, jsdom):
   1. Button absent when `window.__pm5Recording__` is undefined.
@@ -583,9 +591,10 @@ async function handleDownloadRecording(): Promise<void> {
 - [ ] **Step 4: `driver.ts` stale prose** — `:377` and `:3526` say
   `verifyTicks` defaults to 20; `DEFAULT_VERIFY_TICKS = 30` (`:628`).
   Change both comments to 30.
-- [ ] **Step 5:** `pnpm test --project unit -- captureReplay` (comment-only
-  change, but run it: a comment edit inside a test file has broken loading
-  before — check BOTH summary lines, "Test Files" included).
+- [ ] **Step 5:** `pnpm test --project client` (captureReplay.test.ts is a
+  `src/**` file, so client project; comment-only change, but run it: a
+  comment edit inside a test file has broken loading before — check BOTH
+  summary lines, "Test Files" included).
 - [ ] **Step 6: Commit** — `git commit -m "docs: the harness gets a roadmap home, and three stale claims get corrected"`.
 
 ---

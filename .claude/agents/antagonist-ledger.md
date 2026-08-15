@@ -378,3 +378,28 @@ toolkit, not a history.
   ErgometerJS's source); the oracle-independence rule; and the tap's cost, which is
   ~6.6 events/s of one hex encode — disproven as a perturbation risk by arithmetic
   rather than by argument.
+
+## Task-brief pass, 2026-08-15 (PM5 record-replay Stage A plan)
+
+- **"`pnpm test --project unit -- <filter>` verifies TDD red/green for the new
+  `src/monitor/transports/*.test.ts` and `src/monitor/captureReplay.test.ts`
+  files."** False, and it would have made three tasks' verification steps
+  silently no-ops. `vitest.config.ts:9-17`'s "unit" project only includes
+  `server/**`, `domain/**`, `scripts/**` — nothing under `src/`, regardless of
+  whether a file touches the DOM (the plan's own stated reasoning, "no DOM
+  use, so unit," conflates the two). Measured: `pnpm test --project unit --
+  src/monitor` returns the exact same 43 files/1163 tests as `pnpm test
+  --project unit` with no filter at all — the filter matched nothing and the
+  command ran an unrelated, pre-existing suite. `pnpm test --project client --
+  src/monitor` correctly returns 104-105 files including every touched
+  module. **Technique: when a plan claims a `--project`/filter combination
+  scopes a run, diff its reported file count against that same project run
+  with NO filter.** An identical count is proof the filter did nothing —
+  cheaper than reading the include globs by eye, and it catches what eye-
+  reading missed here. Corollary, same session: the trailing `-- <fragment>`
+  positional filter this plan uses throughout doesn't narrow at all in this
+  repo's pnpm+vitest invocation (a filter guaranteed to match zero files
+  still ran the full 104-file client project) — every "run to verify
+  failure/pass" step in this plan already runs the WHOLE selected project;
+  only the `--project` choice itself matters, and getting that right is where
+  the entire defect lived.
