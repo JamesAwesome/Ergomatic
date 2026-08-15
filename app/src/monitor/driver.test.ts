@@ -7542,7 +7542,24 @@ describe("createPm5Driver: walk 5 — the last split always lands (the end-of-wo
 // to the floor mid-piece.
 // ---------------------------------------------------------------------------
 
-describe("createPm5Driver: sessionElapsedSeconds/sessionDistanceMeters accumulate across 0x0031's per-interval resets (walk 4)", () => {
+// CR2 spec 1, Task 4: this describe block's own tests never arm a program
+// (`replayWalk4`/the backwards-noise test both build a bare driver and skip
+// `programViaStub` — a deliberate choice predating this task, testing the
+// accumulator in isolation from program state). Under the OLD fold that made
+// no difference: the reset was detected on the raw elapsed drop alone,
+// program or no program. Under the register map it matters completely —
+// `session`'s own doc comment: "an EMPTY map falls back to the raw pair: a
+// JustRow with no program armed has no interval identity at all, and there
+// per-interval IS the session" — because `toProgramIndex` returns `null`
+// unconditionally whenever `programLength <= 0`
+// (`domain/monitor/pm5/intervalIndex.ts`), so nothing ever seeds a key and
+// every one of these frames falls back to the raw pair verbatim. The four
+// tests below that asserted CROSS-RESET ACCUMULATION are rewritten to pin
+// that fallback instead — genuine armed-program accumulation is now
+// `sessionTotals.test.ts`'s job (Task 2/3/4's own suite, which arms a real
+// program on every case). Confirmed by tracing `driver.ts`'s
+// `maybeEmitFrame` this session, not assumed.
+describe("createPm5Driver: sessionElapsedSeconds/sessionDistanceMeters with NO program armed (walk 4) — CR2 spec 1 falls back to the raw pair", () => {
   /** Brings `seen.as1`/`seen.as2` up so that the general-status
    *  notifications below actually produce frames. Content is irrelevant to
    *  the accumulator — zero-filled payloads of the documented lengths, the
@@ -7558,9 +7575,11 @@ describe("createPm5Driver: sessionElapsedSeconds/sessionDistanceMeters accumulat
 
   /** Walk 4's own trace, state word by state word and value by value: the
    *  arm, one early rowing tick, the end of interval 1's rest, the RESET
-   *  into interval 2, that interval's own rest, and the finish. Each
-   *  interval's count spans its work plus its trailing rest, which is why
-   *  the two banked readings are 37.81/101.8 and 33.07/109.7. */
+   *  into interval 2, that interval's own rest, and the finish. No program
+   *  is armed anywhere in this describe block (see its own header comment),
+   *  so `session.seen` never gets a key and every frame below reports its
+   *  own raw `(elapsed, distance)` unchanged — there is no "banked reading"
+   *  under CR2 spec 1 without a program to key against. */
   const WALK_4: { state: number; elapsed: number; distance: number }[] = [
     { state: WORKOUTSTATE_WAITTOBEGIN, elapsed: 0, distance: 0 },
     { state: WORKOUTSTATE_INTERVALWORKTIME, elapsed: 1.23, distance: 3.5 },
@@ -7597,36 +7616,38 @@ describe("createPm5Driver: sessionElapsedSeconds/sessionDistanceMeters accumulat
     );
   });
 
-  it("the session pair is MONOTONE NON-DECREASING across every frame", () => {
+  it("the session pair EQUALS the raw pair, resets included — no program means no key to accumulate into", () => {
     const frames = replayWalk4();
 
-    for (let i = 1; i < frames.length; i += 1) {
-      expect(frames[i]!.sessionElapsedSeconds).toBeGreaterThanOrEqual(
-        frames[i - 1]!.sessionElapsedSeconds,
-      );
-      expect(frames[i]!.sessionDistanceMeters).toBeGreaterThanOrEqual(
-        frames[i - 1]!.sessionDistanceMeters,
-      );
-    }
+    // Not monotone: frame 3's raw elapsed (0) is genuinely less than frame
+    // 2's (37.81), and with no program armed the session pair tracks it
+    // exactly rather than banking across the drop.
+    expect(frames.map((f) => f.sessionElapsedSeconds)).toStrictEqual(
+      WALK_4.map((t) => t.elapsed),
+    );
+    expect(frames.map((f) => f.sessionDistanceMeters)).toStrictEqual(
+      WALK_4.map((t) => t.distance),
+    );
   });
 
-  it("ends at interval 1's banked reading plus interval 2's own", () => {
+  it("ends at the finish tick's own raw reading, not a sum of the two intervals", () => {
     const last = replayWalk4().at(-1)!;
 
-    // 37.81 + 33.07 and 101.8 + 109.7 — the two intervals' final readings,
-    // added. `toBeCloseTo` only because summing two decimals in binary
-    // floating point lands a few ulps off the decimal literal.
-    expect(last.sessionElapsedSeconds).toBeCloseTo(37.81 + 33.07, 9);
-    expect(last.sessionDistanceMeters).toBeCloseTo(101.8 + 109.7, 9);
+    // Was 37.81 + 33.07 / 101.8 + 109.7 under the old fold; with no program
+    // armed there is no key for either interval's final reading to bank
+    // into, so the last frame reports exactly its own raw pair.
+    expect(last.sessionElapsedSeconds).toBe(33.07);
+    expect(last.sessionDistanceMeters).toBe(109.7);
   });
 
-  it("folds ONLY the pre-reset frame — the frame after a reset carries its own reading on top", () => {
+  it("the reset frame carries only its own reading — nothing from before it survives", () => {
     const frames = replayWalk4();
 
-    // Frame 3 is the reset frame (`elapsed=0 distance=0.7`): interval 1's
-    // whole 37.81/101.8 is banked, and this frame's own 0/0.7 sits on it.
-    expect(frames[3]!.sessionElapsedSeconds).toBeCloseTo(37.81, 9);
-    expect(frames[3]!.sessionDistanceMeters).toBeCloseTo(101.8 + 0.7, 9);
+    // Frame 3 is the reset frame (`elapsed=0 distance=0.7`). Was
+    // 37.81 / 101.8+0.7 under the old fold (interval 1's whole reading
+    // banked underneath it); with no program armed nothing is banked.
+    expect(frames[3]!.sessionElapsedSeconds).toBe(0);
+    expect(frames[3]!.sessionDistanceMeters).toBe(0.7);
   });
 
   it("the interval countdown is NOT touched — it still reads the raw per-interval pair", () => {
@@ -7670,10 +7691,21 @@ describe("createPm5Driver: sessionElapsedSeconds/sessionDistanceMeters accumulat
     primeSiblings(transport);
 
     await programViaStub(driver, transport, MINIMAL_PROGRAM);
-    // One reset inside run 1, so it genuinely banks an offset...
+    // MINIMAL_PROGRAM has exactly one interval, so there is no genuine
+    // mid-run reset to construct (CR2 spec 1 removed the old fold's
+    // elapsed-drop heuristic, the only thing that ever let a single-key
+    // sequence "reset" at all). This climbs the one key to a genuinely
+    // nonzero total, then ends on WORKOUTEND — required so the second
+    // `programViaStub` below does not hang waiting for
+    // `waitForPrepareSettle` (`:1861`'s own comment: a still-rowing machine
+    // arms that wait). A `"finished"` tick is neither `"rowing"` nor
+    // `"resting"`, so CR2 spec 1's `activeKey` never writes it (see
+    // `session`'s own doc comment) — its own 25/60 reading is intentionally
+    // NOT part of the expected total below; only the last ROWING tick's
+    // 45/110 is.
     for (const tick of [
       { state: WORKOUTSTATE_INTERVALWORKTIME, elapsed: 20, distance: 50 },
-      { state: WORKOUTSTATE_INTERVALWORKTIME, elapsed: 0, distance: 1 },
+      { state: WORKOUTSTATE_INTERVALWORKTIME, elapsed: 45, distance: 110 },
       { state: WORKOUTSTATE_WORKOUTEND, elapsed: 25, distance: 60 },
     ]) {
       transport.notify(

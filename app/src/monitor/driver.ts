@@ -817,18 +817,6 @@ const DEFAULT_PREPARE_SETTLE_TICKS = 10;
  *  diverge independently if a future finding ever needs them to. */
 const DEFAULT_ERROR_TYPE_TICKS = 3;
 
-/** How far 0x0031's Elapsed Time must fall between two consecutive frames
- *  before the session accumulator treats it as a per-interval RESET rather
- *  than noise (walk 4 — see the `session` accumulator's own doc comment).
- *  Two seconds, chosen against the record from both sides: the largest
- *  BACKWARDS tick anywhere in the capture is -0.57 s
- *  (`docs/monitor/sessions/pm5-session3-final.log:4632-4633`), and the
- *  smallest genuine reset drops the clock by the whole interval that just
- *  ended (walk 4's own were 37.81 s and 29.44 s). Nothing observed lives
- *  between those two populations, and this sits roughly 3.5x above the
- *  noise floor and an order of magnitude below the smallest real reset. */
-const SESSION_RESET_ELAPSED_DROP = 2;
-
 export function createPm5Driver(
   t: Transport,
   log: MonitorEventLog,
@@ -1053,49 +1041,40 @@ export function createPm5Driver(
   // exact shape instead of catching it).
   let lastRawFrameIntervalIndex: number | null = null;
   let lastLoggedFrameState: MonitorFrame["state"] | null = null;
-  /**
-   * THE SESSION ACCUMULATOR (Phase 7B, hardware walk 4 — interface-notes.md
-   * §18, 2026-08-08). 0x0031's Elapsed Time and Distance are PER-INTERVAL,
-   * not session-cumulative: a 2x100m produced `state=resting elapsed=37.81
-   * distance=101.8` and then, one frame later, `state=rowing elapsed=0
-   * distance=0.7` — both fields reset TOGETHER at each new work interval,
-   * and each interval's count spans its own work plus its trailing rest.
-   * Every consumer that wanted a whole-session total was reading a value
-   * that falls back to zero mid-piece: TOTAL LEFT went 1:30 -> 1:11 and
-   * then ROSE to 1:38 at interval 2, and the METERS card fell 109 -> 50.
+  /** THE SESSION REGISTER MAP (CR2 spec 1, replacing walk 4's fold).
    *
-   * `prev` is the previous RAW frame's `(elapsedSeconds, distanceMeters)`;
-   * `offsetElapsed`/`offsetDistance` are everything banked from intervals
-   * already finished. A reset is detected on ELAPSED alone, and only when
-   * it drops by MORE than `SESSION_RESET_ELAPSED_DROP` seconds — the
-   * capture's own backwards noise maxes out at -0.57 s
-   * (`docs/monitor/sessions/pm5-session3-final.log:4632-4633`), so a 2 s
-   * threshold sits an order of magnitude clear of it while any genuine
-   * boundary drops the clock by the whole interval's length.
+   *  0x0031's Elapsed Time and Distance are PER-INTERVAL. The fold this
+   *  replaces detected a new interval by watching the clock DROP, which is
+   *  edge-triggered, and a missed or misread edge is permanent: a Terminate
+   *  re-bases elapsed to a smaller non-zero value while distance stands
+   *  still (CSAFE-DEF footnote 12), and the fold banked a distance the
+   *  machine never cleared — an exact 2.00x, six times in the record.
    *
-   * **HONEST CAVEAT — a display estimate, not a record.** The fold banks
-   * the last pre-reset frame this driver actually SAW, which at the
-   * observed ~2 Hz cadence can be up to one status tick short of the
-   * interval's true final reading: roughly 0.5 s and ~1 m may be
-   * undercounted per boundary. That is acceptable for the two things these
-   * fields feed (a countdown and a meters card) and unacceptable for a
-   * record — which is why the RECORD does not use them at all: an
-   * interval's real actuals come from 0x0037/0x0038 (`toIntervalActual`),
-   * untouched by this.
+   *  This holds each interval's reading under the key the frame already
+   *  carries, merged by MAXIMUM. No edge is detected, so none can be missed.
    *
-   * Reset with the rest of the per-program state when `program()` opens a
-   * new run (beside `boundaryHalves`, below).
+   *  Maximum, not last-write-wins, for two independently-found reasons:
+   *  `toProgramIndex` clamps at both ends so the key is not injective; and
+   *  at a work->work boundary with NO intervening rest, 0x0031's counters
+   *  reset one notification BEFORE 0x0033's Interval Count increments, so a
+   *  (0,0) frame still carrying the completed interval's key would clobber
+   *  it (pm5-session4b L2835-2838, 74.4m). The counters are monotone within
+   *  an interval, so maximum equals last in every honest case.
+   *
+   *  HONEST LIMIT: an interval that produces ZERO frames is lost, because
+   *  nothing ever writes its key. That is bounded (it cannot compound) and
+   *  it errs SAFE — an undercount makes TOTAL LEFT read high, where the old
+   *  defect made it read zero mid-session. It is reported, not silent: see
+   *  the interval-count divergence at the finish.
    */
   let session = {
-    offsetElapsed: 0,
-    offsetDistance: 0,
-    prev: null as { elapsedSeconds: number; distanceMeters: number } | null,
+    seen: new Map<number, { elapsedSeconds: number; distanceMeters: number }>(),
   };
   /** R0 (CR2 spec 1, Task 1). The last totals actually PUT ON A FRAME.
    *  `logSummaryTotals` fires on 0x0039, which carries no per-interval pair
    *  of its own, so the value the rower last saw has to be remembered
    *  rather than recomputed — `logSummaryTotals` has no `base` frame in
-   *  hand to fold `session.offsetDistance + base.distanceMeters` itself.
+   *  hand to sum `session.seen`'s registers itself.
    *  Set in `maybeEmitFrame` right after `frame` is built; read only in
    *  `logSummaryTotals`. Diagnostics only, same as `session` above: nothing
    *  here decides anything. */
@@ -1690,32 +1669,54 @@ export function createPm5Driver(
       base.state,
       programLength,
     );
-    // THE SESSION FOLD (walk 4 — see `session`'s own doc comment). Done
-    // BEFORE the frame is finished so the emitted frame already carries the
-    // accumulated pair, and deliberately AFTER `computeRemainingForFrame`'s
+    // THE REGISTER WRITE (CR2 spec 1 — see `session`'s own doc comment).
+    // Done BEFORE the frame is finished so the emitted frame already carries
+    // the totals, and deliberately AFTER `computeRemainingForFrame`'s
     // inputs are untouched: `intervalRemaining` reads the RAW per-interval
-    // pair against 0x0033's own last-split reference and walk 4 proved that
-    // countdown correct exactly as it stands.
-    if (
-      session.prev !== null &&
-      session.prev.elapsedSeconds - base.elapsedSeconds >
-        SESSION_RESET_ELAPSED_DROP
-    ) {
-      session.offsetElapsed += session.prev.elapsedSeconds;
-      session.offsetDistance += session.prev.distanceMeters;
+    // pair and walk 4 proved that countdown correct exactly as it stands.
+    const activeKey =
+      intervalIndex ??
+      // The machine is rowing/resting but reports an identity the armed
+      // program cannot explain. Attributing to the newest key keeps the
+      // rower's number MOVING (freezing it reproduces the very symptom this
+      // change exists to fix) and, being a max into an existing key, cannot
+      // double count. Logged as divergence below, never silent.
+      ((base.state === "rowing" || base.state === "resting") &&
+      session.seen.size > 0
+        ? Math.max(...session.seen.keys())
+        : null);
+
+    if (activeKey !== null) {
+      const prior = session.seen.get(activeKey);
+      session.seen.set(activeKey, {
+        elapsedSeconds: Math.max(
+          prior?.elapsedSeconds ?? 0,
+          base.elapsedSeconds,
+        ),
+        distanceMeters: Math.max(
+          prior?.distanceMeters ?? 0,
+          base.distanceMeters,
+        ),
+      });
     }
-    session.prev = {
-      elapsedSeconds: base.elapsedSeconds,
-      distanceMeters: base.distanceMeters,
-    };
 
     const frameWithIndex: MonitorFrame = { ...base, intervalIndex };
+    const totals = [...session.seen.values()];
     const frame: MonitorFrame = {
       ...frameWithIndex,
       intervalRemaining: computeRemainingForFrame(frameWithIndex),
       intervalAccrued: computeAccruedForFrame(frameWithIndex),
-      sessionElapsedSeconds: session.offsetElapsed + base.elapsedSeconds,
-      sessionDistanceMeters: session.offsetDistance + base.distanceMeters,
+      // An EMPTY map falls back to the raw pair: a JustRow with no program
+      // armed has no interval identity at all, and there per-interval IS the
+      // session.
+      sessionElapsedSeconds:
+        totals.length === 0
+          ? base.elapsedSeconds
+          : totals.reduce((a, r) => a + r.elapsedSeconds, 0),
+      sessionDistanceMeters:
+        totals.length === 0
+          ? base.distanceMeters
+          : totals.reduce((a, r) => a + r.distanceMeters, 0),
     };
     // R0 (CR2 spec 1, Task 1): cache the pair `logSummaryTotals` cannot
     // recompute for itself (`lastEmittedTotals`'s own doc comment).
@@ -3718,14 +3719,15 @@ export function createPm5Driver(
         }
         boundaryHalves.split = null;
         boundaryHalves.asSplit = null;
-        // The session accumulator is per-RUN state for the same reason a
-        // pending boundary half is (walk 4 — `session`'s own doc comment):
-        // a new program's totals start at zero, and the outgoing run's
-        // banked offsets must not be carried into it. `prev` goes with
-        // them — the first frame of the new run would otherwise be measured
-        // against the last frame of the old one and fold its whole elapsed
-        // in as a phantom interval.
-        session = { offsetElapsed: 0, offsetDistance: 0, prev: null };
+        // The session register map is per-RUN state for the same reason a
+        // pending boundary half is (`session`'s own doc comment): a new
+        // program's totals start at zero, and the outgoing run's keys must
+        // not be carried into it — the new run's first frame would otherwise
+        // max-merge into a key that belongs to a workout it never saw.
+        session = { seen: new Map() };
+        // Diagnostics-only (R0, Task 1's own doc comment): the outgoing
+        // run's last-seen totals belong to that run, not the new one.
+        lastEmittedTotals = { elapsedSeconds: 0, distanceMeters: 0 };
         // A reconcile deadline still standing belongs to the run being
         // replaced, and is cancelled here for the same reason a pending
         // boundary half is dropped above (fast-follow Task 2): both are

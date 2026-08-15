@@ -17,12 +17,20 @@
 // All three reproduced below (VERDICT: all three agree — see each test's own
 // comment). Because they agree, the plan is NOT halted; Tasks 3/4 may proceed.
 //
-// These are PERMANENT tests documenting TODAY'S accumulator, not throwaway
+// These are PERMANENT tests documenting the accumulator, not throwaway
 // scratch: Task 3 adds the seven-shape suite (four more today-passing shapes,
-// three more that fail), and Task 4 flips the two genuinely-buggy expectations
-// here to the fixed numbers once the fold is corrected — the third (the sound
-// segment) already matches its own truth and stays as a permanent regression
-// guard, per Task 4's own brief.
+// three more that fail). Task 4 (CR2 spec 1's register-map fix) flips ONLY the
+// terminate row (47.8 -> 23.9) — the row this task's brief actually names.
+// The "no completed interval" row does NOT flip: the register map, like the
+// fold it replaces, has no notion of "completed" at all — it accumulates
+// whatever key is currently active, finished or not — so 108.4 stays
+// correct. That row's own 0 m "truth" measures a different quantity (the
+// completed-`IntervalActual` oracle from finding #3 above), not what
+// `sessionDistanceMeters` reports; this file originally predicted (wrongly)
+// that Task 4 would flip it too, corrected here once the fixed
+// implementation was run against it (Task 4 report, "the plan is right"
+// deviation). The 3x1:00 row already matched its own truth and stays a
+// permanent regression guard.
 
 import { describe, expect, it } from "vitest";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
@@ -297,12 +305,12 @@ interface Harness {
  *  merges into the driver's internal `raw` state regardless of the `seen`
  *  gate (`verifyArmed` reads `raw` directly), but `maybeEmitFrame` — the
  *  function that would otherwise treat that armed readback as the session
- *  fold's first-ever frame — returns immediately while `seen.as1`/`seen.as2`
- *  are still false. So by the time `tick()` fires the first REAL frame,
- *  `session.prev` is still `null`, exactly the fresh-driver starting
- *  condition the review's own §5.2 replay recipe describes ("build a fresh
- *  driver per segment"). Confirmed by reading `driver.ts:1667-1719` this
- *  session, not assumed. */
+ *  register map's first-ever write — returns immediately while
+ *  `seen.as1`/`seen.as2` are still false. So by the time `tick()` fires the
+ *  first REAL frame, `session.seen` is still empty, exactly the fresh-driver
+ *  starting condition the review's own §5.2 replay recipe describes ("build
+ *  a fresh driver per segment"). Confirmed by reading `driver.ts`'s
+ *  `maybeEmitFrame` this session, not assumed. */
 /** The prepare/sequence/verify ack exchange `program()` always runs,
  *  factored out of `programmed()` (below) so Task 3's Step 5 ("re-arm after
  *  terminate") can drive a SECOND `program()` call on an already-built
@@ -438,21 +446,25 @@ async function tick(
 
 describe("session accumulator: §F2 stop-gate — reproducing the architecture review's three published numbers", () => {
   it(
-    "a 24 m piece ended by Terminate: today's fold reports 47.8 m for 23.9 m " +
-      "rowed, exactly 2.00x (documents the CURRENT defect; Task 4 flips this " +
-      "expectation)",
+    "a 24 m piece ended by Terminate: the register map reports 23.9 m for " +
+      "23.9 m rowed, no double count (CR2 spec 1 fix; was 47.8 m, exactly " +
+      "2.00x, before Task 4)",
     async () => {
       // §F2 row 2 / state-architecture-review.md:432. Shape: CSAFE-DEF
       // footnote 12 — a Terminate frame's Elapsed Time jumps BACKWARDS to a
       // smaller NON-ZERO value while Distance stands exactly still (six of
-      // these are in the committed captures, per §F2's own count). The fold
-      // (`driver.ts:1699-1706`) triggers its reset on the elapsed drop ALONE
-      // — it never checks that distance also reset — so it banks the
-      // pre-terminate reading into `offsetDistance` and then adds the
-      // terminate frame's OWN (unchanged) distance on top: exactly a double
-      // count. Numbers taken verbatim from task-3-brief.md's own Step 1 (the
-      // corrected version of this same test), so Task 3 can reuse this exact
-      // tick sequence unmodified.
+      // these are in the committed captures, per §F2's own count). The OLD
+      // fold triggered its reset on the elapsed drop ALONE — it never
+      // checked that distance also reset — so it banked the pre-terminate
+      // reading into `offsetDistance` and then added the terminate frame's
+      // OWN (unchanged) distance on top: exactly a double count. The
+      // register map has no edge to misread: `"terminated"` is neither
+      // `"rowing"` nor `"resting"`, so `activeKey` is `null` for the
+      // terminate frame itself (`driver.ts`'s own `activeKey` derivation)
+      // and nothing is written — the total stays exactly what interval 0's
+      // one work tick already registered. Numbers taken verbatim from
+      // task-3-brief.md's own Step 1 (the corrected version of this same
+      // test), so Task 3 could reuse this exact tick sequence unmodified.
       const h = await programmed(seaFretProgram());
 
       await tick(
@@ -470,16 +482,16 @@ describe("session accumulator: §F2 stop-gate — reproducing the architecture r
         state: WORKOUTSTATE_TERMINATE,
       });
 
-      // §F2: 23.9 truth -> 47.8 reported, exactly 2.00x.
-      expect(f.sessionDistanceMeters).toBeCloseTo(47.8, 1);
-      expect(f.sessionDistanceMeters / 23.9).toBeCloseTo(2.0, 2);
+      // §F2: 23.9 truth -> 23.9 reported, 1.00x (was 47.8, 2.00x).
+      expect(f.sessionDistanceMeters).toBeCloseTo(23.9, 1);
+      expect(f.sessionDistanceMeters / 23.9).toBeCloseTo(1.0, 2);
     },
   );
 
   it(
-    "a segment with no completed interval at all: today's fold reports the " +
-      "raw 108.4 m against a truth of 0 completed intervals (documents the " +
-      "CURRENT defect; Task 4 flips this expectation)",
+    "a segment with no completed interval at all: the register map still " +
+      "reports the raw 108.4 m against a truth of 0 completed intervals " +
+      "(NOT a defect the register map fixes — see this file's own header)",
     async () => {
       // §F2 row 3 / state-architecture-review.md:433, citing session 4a
       // (pm5-interface-notes.md §19.13 / :2615-2630): a program armed over a
@@ -488,15 +500,15 @@ describe("session accumulator: §F2 stop-gate — reproducing the architecture r
       // entire way — no resting transition, no boundary, no
       // intervalComplete at all." The shape is therefore the SIMPLEST
       // possible one: state=rowing throughout, elapsed/distance climbing
-      // monotonically with no reset ever firing (offsetDistance stays 0 for
-      // the whole segment) — which is exactly why this row is instructive
-      // despite being arithmetically trivial: the fold has no way to know
-      // that a session with zero completed intervals should read anything
-      // other than "whatever the wire currently says", so it reports the
-      // full raw distance as if it were a real total. The TRUTH side of the
-      // table (0 m) is the record's own oracle — the sum of completed
-      // `IntervalActual`s — which is 0 because no boundary (0x0037/0x0038)
-      // ever arrived: asserted directly below via zero `intervalComplete`
+      // monotonically, one key (0) the whole time — which is exactly why
+      // this row is instructive despite being arithmetically trivial: the
+      // register map has no notion of "completed" at all, only "the key
+      // currently active", so it reports interval 0's own running register
+      // as the total, same as the raw wire value. That is not the bug this
+      // task fixes and the map does not change it — see this file's own
+      // header for why the "0 m" truth column is a different quantity
+      // (completed-`IntervalActual` sum) from what `sessionDistanceMeters`
+      // reports. Asserted directly below via zero `intervalComplete`
       // events, not inferred.
       const h = await programmed(MINIMAL_PROGRAM);
 
@@ -525,10 +537,10 @@ describe("session accumulator: §F2 stop-gate — reproducing the architecture r
   );
 
   it(
-    "3 x 1:00 with rest, both fields resetting together: today's fold's " +
-      "total already equals the sum of the three per-interval finals " +
-      "(passes today — a regression guard Task 4 must keep green, not a " +
-      "defect to flip)",
+    "3 x 1:00 with rest, both fields resetting together: the total equals " +
+      "the sum of the three per-interval finals under both the old fold " +
+      "and the new register map (permanent regression guard, not a defect " +
+      "to flip)",
     async () => {
       // §F2 row 1 / state-architecture-review.md:431: the ONE row where
       // truth and report already agree. Shape, per task-2-brief.md Step 4:
@@ -551,7 +563,19 @@ describe("session accumulator: §F2 stop-gate — reproducing the architecture r
       const interval1Final = { elapsed: 85.9, distance: 152.0 };
       const interval2Final = { elapsed: 86.0, distance: 153.1 };
 
-      // Interval 0: work, then its trailing rest's own final reading.
+      // Interval 0: work, then its trailing rest's own final reading. The
+      // REST tick's own 0x0033 Interval Count is forward-attributed to the
+      // interval it is heading INTO (`intervalIndex.ts`'s own doc comment,
+      // interface-notes.md §18 #3: "rest-after-work0, resting, machineIndex
+      // 1 -> our 0") — machine index 1, not 0, even though this reading
+      // still belongs to (and finalizes) our interval 0. Corrected here
+      // (Task 4): the pre-Task-4 fixture used machineIndex 0 for this tick,
+      // which happened to be inconsequential only because `toProgramIndex`
+      // clamps machineIndex 0 while resting to the same key (0) that the
+      // correct forward-attributed value also produces — an equivalence
+      // that stops holding at the two interior boundaries below, where
+      // getting this wrong silently overwrote the WRONG key once the
+      // register map (unlike the old fold) started reading 0x0033 at all.
       await tick(
         h,
         { elapsed: 30, distance: 75.0, state: WORKOUTSTATE_INTERVALWORKTIME },
@@ -564,7 +588,7 @@ describe("session accumulator: §F2 stop-gate — reproducing the architecture r
           distance: interval0Final.distance,
           state: WORKOUTSTATE_INTERVALREST,
         },
-        0,
+        1,
       );
 
       // rest -> work boundary: BOTH fields reset together (unlike the
@@ -579,6 +603,12 @@ describe("session accumulator: §F2 stop-gate — reproducing the architecture r
         { elapsed: 30, distance: 76.0, state: WORKOUTSTATE_INTERVALWORKTIME },
         1,
       );
+      // Interval 1's own trailing rest: forward-attributed to machine index
+      // 2 (heading into interval 2), same rule as above — this is the
+      // interior boundary where the pre-Task-4 fixture's machineIndex 1 was
+      // genuinely wrong (no clamp rescues it): it wrote interval1Final onto
+      // KEY 0, clobbering interval 0's own final reading instead of
+      // finalizing interval 1's.
       await tick(
         h,
         {
@@ -586,7 +616,7 @@ describe("session accumulator: §F2 stop-gate — reproducing the architecture r
           distance: interval1Final.distance,
           state: WORKOUTSTATE_INTERVALREST,
         },
-        1,
+        2,
       );
 
       // Second rest -> work boundary.
@@ -600,6 +630,12 @@ describe("session accumulator: §F2 stop-gate — reproducing the architecture r
         { elapsed: 30, distance: 76.0, state: WORKOUTSTATE_INTERVALWORKTIME },
         2,
       );
+      // Interval 2's own trailing rest: forward-attributed to machine index
+      // 3 (heading into a fourth interval that does not exist), which
+      // `toProgramIndex`'s own upper clamp (`candidate === programLength`)
+      // brings back to key 2 — the same clamp-equivalence Task 3's
+      // "clean rest boundary" shape relies on, cited in that test's own
+      // comment.
       const f = await tick(
         h,
         {
@@ -607,7 +643,7 @@ describe("session accumulator: §F2 stop-gate — reproducing the architecture r
           distance: interval2Final.distance,
           state: WORKOUTSTATE_INTERVALREST,
         },
-        2,
+        3,
       );
 
       const expectedTotal =
@@ -622,20 +658,26 @@ describe("session accumulator: §F2 stop-gate — reproducing the architecture r
 
 // ---------------------------------------------------------------------------
 // Task 3 — the seven shapes the wire actually produces (task-3-brief.md).
-// These run against the SAME current (broken) accumulator as the §F2 suite
-// above. Per the brief's own split: Steps 1 and 7 are marked `it.fails` —
-// they document the current defect, and Task 4 removes the `.fails` once
-// the fold is fixed. Steps 2, 3, 5, 6 pass today and are regression guards
-// Task 4 must keep green. Step 4 is written per the brief's exact code but,
-// traced and RUN against today's fold, PASSES today (see task-3-report.md
-// for the full trace) — contrary to the brief's own prediction that it
-// would fail; reported there as a discrepancy, not silently corrected away.
+// Ran against the OLD (broken) accumulator when Task 3 wrote this file. Per
+// the brief's own split: Steps 1 and 7 were marked `it.fails` — they
+// documented the current defect. Task 4 (CR2 spec 1's register-map fix)
+// removes Step 1's `.fails`: the terminate shape now reports correctly, no
+// edge to misread. Step 7 STAYS `it.fails` — its numeric half is fixed by
+// the same register map, but it also asserts an `"intervals seen"`
+// divergence log entry that does not exist until Task 5; see that test's own
+// comment. Steps 2, 3, 5, 6 passed under the old fold and are regression
+// guards this task keeps green. Step 4 was written per the brief's exact
+// code but, traced and RUN against the old fold, PASSED then (see
+// task-3-report.md for the full trace) — contrary to the brief's own
+// prediction that it would fail; reported there as a discrepancy, not
+// silently corrected away. It stays green under the register map too.
 // ---------------------------------------------------------------------------
 
-describe("session accumulator: seven shapes (Task 3) — three of them red", () => {
-  it.fails(
+describe("session accumulator: seven shapes (Task 3) — one of them still red", () => {
+  it(
     "a terminate does not double the session distance " +
-      "(documents the CURRENT defect; Task 4 removes .fails)",
+      "(CR2 spec 1 fix, Task 4: was `it.fails`, documenting the old " +
+      "fold's exact-2x defect; the register map has no edge to misread)",
     async () => {
       // CSAFE-DEF footnote 12: elapsed jumps BACK to a smaller non-zero
       // value, distance stands exactly still. Six of these are in the
@@ -657,7 +699,7 @@ describe("session accumulator: seven shapes (Task 3) — three of them red", () 
         distance: 23.9,
         state: WORKOUTSTATE_TERMINATE,
       });
-      expect(f.sessionDistanceMeters).toBeCloseTo(23.9, 1); // today: 47.8
+      expect(f.sessionDistanceMeters).toBeCloseTo(23.9, 1); // was 47.8
     },
   );
 
