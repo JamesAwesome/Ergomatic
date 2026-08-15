@@ -1082,27 +1082,28 @@ export function createPm5Driver(
    *  it (pm5-session4b L2835-2838, 74.4m). The counters are monotone within
    *  an interval, so maximum equals last in every honest case.
    *
-   *  HONEST LIMITS — one still open, one closed by CR2 spec 1 Task 5 (a
-   *  controller ruling after Task 4's own review), both bounded and both
-   *  reported WHENEVER THE MACHINE DELIVERS AN END-OF-WORKOUT SUMMARY
-   *  (0x0039) — never on every run (review I2 scoped this: `logSummaryTotals`
-   *  has exactly one call site, `noteSummary`, which only runs off the
-   *  0x0039 handler. A run that ends without one — link death, terminate —
-   *  gets no check at all, silently):
+   *  HONEST LIMITS — one still open, two closed (CR2 spec 1 Task 5, a
+   *  controller ruling after Task 4's own review; and Task 11, the walk's
+   *  own falsification), all three bounded and the first two reported
+   *  WHENEVER THE MACHINE DELIVERS AN END-OF-WORKOUT SUMMARY (0x0039) —
+   *  never on every run (review I2 scoped this: `logSummaryTotals` has
+   *  exactly one call site, `noteSummary`, which only runs off the 0x0039
+   *  handler. A run that ends without one — link death, terminate — gets
+   *  no check at all, silently):
    *  - STILL OPEN: an interval that produces ZERO frames is lost, because
    *    nothing ever writes its key. Bounded (it cannot compound) and errs
    *    SAFE — an undercount makes TOTAL LEFT read high, where the old
    *    defect made it read zero mid-session. Reported at the finish IF a
    *    0x0039 arrives: see the interval-count divergence in
    *    `logSummaryTotals`.
-   *  - CLOSED: the final counter bump that arrives ON the WORKOUTEND tick
-   *    itself used to be lost too — a `"finished"` frame's `intervalIndex`
-   *    is always `null` (`toProgramIndex` never names an interval outside
-   *    rowing/resting) and the old write rule only covered rowing/resting,
-   *    so the run's very last reading wrote no key at all (observed 3.63
-   *    s/8.7 m on walk-4 hardware; WALK_4's own fixture: finished
-   *    33.07/109.7 against a last resting reading of 29.44/101 — the old
-   *    walk-4 FOLD passed this reading through, so this was a small
+   *  - CLOSED (Task 5): the final counter bump that arrives ON the
+   *    WORKOUTEND tick itself used to be lost too — a `"finished"` frame's
+   *    `intervalIndex` is always `null` (`toProgramIndex` never names an
+   *    interval outside rowing/resting) and the old write rule only covered
+   *    rowing/resting, so the run's very last reading wrote no key at all
+   *    (observed 3.63 s/8.7 m on walk-4 hardware; WALK_4's own fixture:
+   *    finished 33.07/109.7 against a last resting reading of 29.44/101 —
+   *    the old walk-4 FOLD passed this reading through, so this was a small
    *    regression this map introduced, not a limit it inherited). Now
    *    CAPTURED: `maybeEmitFrame`'s `activeKey` fallback treats `"finished"`
    *    the same as `"rowing"`/`"resting"`, max-merged into the highest
@@ -1111,6 +1112,20 @@ export function createPm5Driver(
    *    anything. `"terminated"`/`"idle"`/`"armed"` stay excluded; a
    *    mid-terminate boundary has no stable identity to capture in the
    *    first place (CSAFE-DEF footnote 12).
+   *  - CLOSED (Task 11, `docs/monitor/sessions/walk-2026-08-15/` session B):
+   *    a stale tick from an un-reset 0x0031 pair could OPEN a key that did
+   *    not exist yet (rather than merely growing one that did), banking a
+   *    completed interval's own pair as the next interval's opening
+   *    register — permanent once written, since max-merge cannot lower it
+   *    again. The open-on-reset guard (`maybeEmitFrame`'s own comment,
+   *    right before the write below) closes this: a NEW key may open only
+   *    when this tick's elapsed is a genuine reset relative to the highest
+   *    existing key's own register. Its own disclosed, still-bounded edge —
+   *    a genuinely new interval's first observed tick landing exactly on
+   *    (or past) the previous key's own gap-truncated register, which
+   *    misattributes into the old key instead of opening the new one — is
+   *    logged as a "divergence" on refusal, never silent (see the guard's
+   *    own comment for the full argument and the walk citation).
    */
   let session = {
     seen: new Map<number, { elapsedSeconds: number; distanceMeters: number }>(),
@@ -1743,7 +1758,7 @@ export function createPm5Driver(
     // the totals, and deliberately AFTER `computeRemainingForFrame`'s
     // inputs are untouched: `intervalRemaining` reads the RAW per-interval
     // pair and walk 4 proved that countdown correct exactly as it stands.
-    const activeKey =
+    let activeKey =
       intervalIndex ??
       // Two genuinely different reasons land in this fallback, both
       // resolved by the same rule:
@@ -1798,6 +1813,82 @@ export function createPm5Driver(
       session.seen.size > 0
         ? Math.max(...session.seen.keys())
         : null);
+
+    // THE OPEN-ON-RESET GUARD (CR2 spec 1 Task 11 — the walk's own
+    // falsification, `docs/monitor/sessions/walk-2026-08-15/` session B, a
+    // 2x1:00 @6k (r30/r0): ~23s into interval 2 the PM5 read 19m into the
+    // interval while TOTAL M read 353, against an honest 195.5-198.7m).
+    //
+    // The mechanism: `parse.ts`'s WORKOUTSTATE_INTERVALWORKTIMETOREST (8) is
+    // an ephemeral work->rest transition state that still maps to "rowing".
+    // `session-a-multitest.json` seq 26 is a captured 0x0031 sample in that
+    // exact state, one entry before the "resting" flip, still carrying the
+    // COMPLETED interval's own pair. If 0x0033's Interval Count has already
+    // incremented at that tick (the one unrecorded half — SECONDARY, no
+    // capture shows the byte itself at that instant), `toProgramIndex`
+    // resolves the NEXT interval's program index while the reading on the
+    // wire still belongs to the interval that just finished — opening that
+    // next key with the completed interval's own (larger) pair, which the
+    // max-merge below then makes PERMANENT: the genuine next interval's own
+    // honest, smaller readings could never lower it again.
+    //
+    // The guard: a NEW key (one `session.seen` does not already hold) may
+    // open only when `session.seen` is empty, or when this tick's elapsed is
+    // STRICTLY LESS than the elapsed already on record for the highest
+    // existing key. Otherwise the reading folds into that highest key
+    // instead (the same safe max-merge every other write here already
+    // performs) and is logged as a refused open, never silently dropped.
+    //
+    // Why the elapsed comparison is guaranteed, not lucky: within one
+    // un-reset 0x0031 pair, elapsed is monotone non-decreasing, and the
+    // highest key's register is a max over readings from THAT SAME PAIR —
+    // so a poison tick (a later sample of the same pair) always has
+    // elapsed >= the register, and strict-`<` refuses it, while a genuinely
+    // new interval's first tick comes from a RESET pair and is strictly
+    // smaller. The predicate is exactly "has the pair reset since the
+    // highest key was last written?" — level-triggered, no constants, no
+    // edge memory.
+    //
+    // N-1 poisons: `toProgramIndex`'s own clamp folds a final-boundary
+    // candidate onto the last EXISTING index (never opens a key beyond
+    // `programLength - 1`), so this guard only ever has to refuse the
+    // programLength - 1 NON-final boundaries — consistent with session A (3
+    // intervals, "ours higher than the erg", 2 poisons) and session B (1
+    // poison, photographed above).
+    //
+    // Deliberately NO distance clause: distance re-bases only on Terminate,
+    // already excluded from writes by the state gate above (`"terminated"`
+    // is neither `"rowing"` nor `"resting"` nor `"finished"`), and a
+    // distance-based guard would collapse two genuinely different keys
+    // whenever a previous interval's own register holds <=0.8m (a rower who
+    // never pulled) — losing ~60s of session elapsed for nothing the elapsed
+    // clause does not already catch.
+    //
+    // Disclosed bounded edge: a genuinely new interval whose FIRST seen tick
+    // already has elapsed >= the previous key's register (needs a boundary
+    // into a restSeconds:0 interval AND a multi-second frame gap AND a short
+    // previous interval's own last-seen reading) misattributes into the old
+    // key. The total stays monotone; the undercount is bounded by that one
+    // tick's own reading, and the divergence log below is what a future
+    // capture can use to tell this apart from the poison it guards against.
+    if (
+      activeKey !== null &&
+      session.seen.size > 0 &&
+      !session.seen.has(activeKey)
+    ) {
+      const openKey = Math.max(...session.seen.keys());
+      const openRegister = session.seen.get(openKey)!;
+      if (!(base.elapsedSeconds < openRegister.elapsedSeconds)) {
+        log.record(
+          "divergence",
+          `key ${activeKey} refused open: elapsed=${base.elapsedSeconds} ` +
+            `distance=${base.distanceMeters} is not before key ${openKey}'s ` +
+            `own elapsed register (${openRegister.elapsedSeconds}) — merged ` +
+            `into key ${openKey} instead`,
+        );
+        activeKey = openKey;
+      }
+    }
 
     if (activeKey !== null) {
       const prior = session.seen.get(activeKey);

@@ -43,6 +43,7 @@ import {
 import {
   WORKOUTSTATE_INTERVALREST,
   WORKOUTSTATE_INTERVALWORKTIME,
+  WORKOUTSTATE_INTERVALWORKTIMETOREST,
   WORKOUTSTATE_TERMINATE,
   WORKOUTSTATE_WAITTOBEGIN,
   WORKOUTSTATE_WORKOUTEND,
@@ -1219,9 +1220,11 @@ describe("session accumulator: accumulator-vs-machine divergence (CR2 spec 1 Tas
 
 describe("session accumulator: review I3 — outage shapes 2 and 3 (§5.2, spec exit criterion 10)", () => {
   it(
-    "shape 2 — a gap spanning ONE boundary loses exactly the un-banked " +
-      "tail of the departing interval, silently (no divergence entry: " +
-      "both intervals still produced at least one frame)",
+    "shape 2 — a gap spanning ONE boundary, into a restSeconds:0 interval, " +
+      "is CR2 spec 1 Task 11's own disclosed bounded edge: interval 1's " +
+      "opening reading cannot prove a reset against key 0's own " +
+      "gap-truncated register, so it folds into key 0 instead of opening " +
+      "key 1 (REVISED post-Task-11 — see this test's own history below)",
     async () => {
       // TWO_INTERVAL_REST_PROGRAM, same fixture and same interval-0/1
       // finals ({87.3, 150.0} / {59.0, 130.0}, truth 280.0 m) as this
@@ -1263,32 +1266,56 @@ describe("session accumulator: review I3 — outage shapes 2 and 3 (§5.2, spec 
         2,
       );
 
-      // BY HAND, from `session.seen`'s own max-merge-per-key rule: key 0
-      // freezes at 75.0 (the last reading the gap let through for
-      // interval 0 — nothing between 75.0 and interval 0's true final
-      // 150.0 was ever seen, so the map has no way to know it exists).
-      // key 1 banks its own true final, 130.0, on first arrival (a single
-      // write is still a max-merge write). Reported total = 75.0 + 130.0
-      // = 205.0. Truth (both intervals' true finals) = 150.0 + 130.0 =
-      // 280.0. Bounded loss = 280.0 - 205.0 = 75.0 m — exactly interval
-      // 0's own true final minus its last-seen-before-the-gap reading
-      // (150.0 - 75.0 = 75.0), the un-banked tail the gap ate.
-      const reportedTotal = 205.0;
+      // PRE-TASK-11: `session.seen`'s own max-merge-per-key rule opened
+      // key 1 unconditionally on this tick (interval 1 had never been seen
+      // before), banking its own true final (59.0s/130.0m) directly. Key 0
+      // stayed frozen at its own last-seen-before-the-gap reading
+      // (30s/75.0m — nothing between there and interval 0's true final
+      // 87.3s/150.0m was ever observed). Reported total was 75.0 + 130.0 =
+      // 205.0 against a 280.0 truth — a 75.0 m bounded loss, exactly
+      // interval 0's own un-banked tail (150.0 - 75.0).
+      //
+      // POST-TASK-11 (task-11-brief.md's own "Disclosed bounded edge",
+      // verbatim): this exact shape is the named edge case — a genuinely
+      // new interval (1, restSeconds:0, an "r0 boundary") whose FIRST seen
+      // tick already has elapsed (59.0) NOT strictly less than the
+      // previous key's own register (key 0's gap-truncated 30.0), because
+      // a multi-second frame gap ate the reset tick the guard needs to see.
+      // The open-on-reset guard therefore CANNOT tell this tick apart from
+      // a state-8 poison and, by its own contract, folds it into key 0
+      // instead of opening key 1 — logged as a "refused open" divergence,
+      // never silent. Key 0 becomes {59.0, 130.0} (max-merged over its own
+      // {30, 75.0}); key 1 never opens. Reported total is now 130.0
+      // (key 0 alone) against the same 280.0 truth — 150.0 m bounded loss,
+      // strictly larger than before but still monotone and still bounded:
+      // this is the guard trading a smaller, silent misattribution (the
+      // pre-Task-11 shape) for a larger, LOGGED one, in exchange for
+      // closing the walk's own falsification (task-11-brief.md's own
+      // 353m-vs-195.5-198.7m photograph). The total can never go DOWN from
+      // here; the loss is fully accounted by the divergence entries below.
+      const reportedTotal = 130.0;
       const truth = 280.0;
-      const boundedLoss = 75.0;
+      const boundedLoss = 150.0;
       expect(truth - reportedTotal).toBeCloseTo(boundedLoss, 1);
       expect(f.sessionDistanceMeters).toBeCloseTo(reportedTotal, 1);
 
-      // Silent by the map's own design (not a bug this task introduces):
-      // BOTH intervals produced at least one frame (`session.seen.size`
-      // is 2, matching `programIntervals` = 2), so `logSummaryTotals`'s
-      // "intervals seen" divergence — the check that exists specifically
-      // to catch a lost interval — has nothing to report even though 75 m
-      // of real distance is gone; it counts INTERVALS represented, not
-      // metres. Fires the summary path to make this observable. (A
-      // SEPARATE divergence — accumulator-vs-machine-TWD — does fire here,
-      // an orthogonal, already-tested check: `tick()`'s own default wires
-      // 0x0031's TWD to each call's own per-tick `distance`, not a
+      // The refused-open divergence fires on the very tick that redirects.
+      const refused = h.log
+        .entries()
+        .filter((e) => e.kind === "divergence" && e.detail.includes("refused"));
+      expect(refused).toHaveLength(1);
+      expect(refused[0]!.detail).toContain("key 1");
+      expect(refused[0]!.detail).toContain("key 0");
+
+      // `session.seen.size` is now 1, not 2 (key 1 never opened), so
+      // `logSummaryTotals`'s "intervals seen" divergence — the check that
+      // exists specifically to catch a lost interval — now DOES fire
+      // (pre-Task-11 it stayed quiet: both intervals had their own key).
+      // This is the same trade the total's own comment above describes:
+      // the guard turns a silent misattribution into a logged one. (A
+      // SEPARATE divergence — accumulator-vs-machine-TWD — also fires
+      // here, an orthogonal, already-tested check: `tick()`'s own default
+      // wires 0x0031's TWD to each call's own per-tick `distance`, not a
       // realistic monotonic session TWD, so the raw 0x0031 field this
       // fixture produces is not the shape that check is about; it is not
       // this test's concern.)
@@ -1298,7 +1325,7 @@ describe("session accumulator: review I3 — outage shapes 2 and 3 (§5.2, spec 
         .filter(
           (e) => e.kind === "divergence" && e.detail.includes("intervals seen"),
         );
-      expect(div).toHaveLength(0);
+      expect(div).toHaveLength(1);
     },
   );
 
@@ -1352,6 +1379,184 @@ describe("session accumulator: review I3 — outage shapes 2 and 3 (§5.2, spec 
       // is real and entirely unreported.
       const div = h.log.entries().filter((e) => e.kind === "divergence");
       expect(div).toHaveLength(0);
+    },
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Task 11 — the walk's falsification (CR2 spec 1, 2026-08-15).
+// `docs/monitor/sessions/walk-2026-08-15/` session B, a 2x1:00 @6k (r30/r0):
+// ~23s into interval 2 the PM5 read 19m into the interval while the phone
+// read TOTAL M 353 — honest total 195.5-198.7m. The mechanism: WORKOUTSTATE_
+// INTERVALWORKTIMETOREST (8) is an ephemeral work->rest transition state
+// that still maps to "rowing" (`parse.ts`'s own `WORKOUTSTATE_TO_STATE`).
+// `session-a-multitest.json` seq 26 is a captured 0x0031 sample in exactly
+// this state, one entry before the "resting" flip, carrying the COMPLETED
+// interval's own pair. If 0x0033's Interval Count has already incremented at
+// that tick (the one unrecorded half — SECONDARY, inferred from the capture
+// window rather than directly observed on this exact byte), `toProgramIndex`
+// resolves the NEXT interval's program index while the reading on the wire
+// still belongs to the interval that just finished — opening that next key
+// with the completed interval's own (larger) pair, which max-merge then
+// makes permanent.
+// ---------------------------------------------------------------------------
+
+describe("session accumulator: the walk's falsification (CR2 spec 1 Task 11)", () => {
+  it(
+    "a state-8 poison tick cannot open the next interval's register " +
+      "(HEAD: 353.0m/150.05s — a state-8 poison opens key 1 with the " +
+      "completed interval's own pair, permanent via max-merge; fixed: " +
+      "198.7m/113s, both fields)",
+    async () => {
+      // TWO_INTERVAL_REST_PROGRAM: work0 r30 / work1 r0 — the exact shape
+      // walk session B rowed. programLength 2.
+      const h = await programmed(TWO_INTERVAL_REST_PROGRAM);
+
+      // #1 — key0 opens normally.
+      await tick(
+        h,
+        {
+          elapsed: 52.14,
+          distance: 173.3,
+          state: WORKOUTSTATE_INTERVALWORKTIME,
+        },
+        0,
+      );
+
+      // #2 — THE POISON TICK. State 8 still maps to "rowing"
+      // (`WORKOUTSTATE_TO_STATE`'s own `8: "rowing"` row), but 0x0033's own
+      // Interval Count has already incremented to 1 — the one unrecorded
+      // half this session's own capture window implies (SECONDARY: no
+      // capture shows this exact byte at this exact instant, only the
+      // resulting frame shape). `toProgramIndex(1, "rowing", 2)` resolves
+      // program index 1, a key `session.seen` does not hold yet — without
+      // the guard this OPENS key 1 with interval 0's own completed pair.
+      await tick(
+        h,
+        {
+          elapsed: 60.05,
+          distance: 173.3,
+          state: WORKOUTSTATE_INTERVALWORKTIMETOREST,
+        },
+        1,
+      );
+
+      // #3 — the genuine rest tick. `toProgramIndex(1, "resting", 2)` folds
+      // back to program index 0 (the resting -1 offset), so this always
+      // grows key 0 regardless of the guard.
+      await tick(
+        h,
+        { elapsed: 61.48, distance: 175, state: WORKOUTSTATE_INTERVALREST },
+        1,
+      );
+
+      // #4 — key 0's true final rest reading.
+      await tick(
+        h,
+        { elapsed: 90, distance: 179.7, state: WORKOUTSTATE_INTERVALREST },
+        1,
+      );
+
+      // #5 — interval 2 genuinely starts: elapsed resets to 0, distance to
+      // 0.8. 0x0033's Interval Count still reads 1 here (the same
+      // unrecorded half noted above) so `toProgramIndex(1, "rowing", 2)`
+      // resolves program index 1 again. HEAD: key 1 already exists
+      // (poisoned by #2), so this is a max no-op — 0 < 60.05 and
+      // 0.8 < 173.3 change nothing. FIXED: key 1 does not exist yet (the
+      // guard redirected #2 into key 0), and 0 IS strictly less than key
+      // 0's own elapsed register (90) — a genuine reset — so the guard
+      // OPENS key 1 here instead, honestly.
+      await tick(
+        h,
+        { elapsed: 0, distance: 0.8, state: WORKOUTSTATE_INTERVALWORKTIME },
+        1,
+      );
+
+      // #6 — 23s into interval 2, matching the photographed moment.
+      const f = await tick(
+        h,
+        { elapsed: 23, distance: 19, state: WORKOUTSTATE_INTERVALWORKTIME },
+        1,
+      );
+
+      // Post-fix: key0 = (90, 179.7), key1 = (23, 19).
+      // 179.7 = 353 - 173.3 (HEAD's own key-0 register, derived rather than
+      // independently re-measured) and is bounded by the max-merge order
+      // constraint key0 >= key1 the ledger entry works through; 198.7 is
+      // 179.7 + 19, the honest sum this fix restores.
+      expect(f.sessionDistanceMeters).toBeCloseTo(198.7, 1); // was 353.0
+      expect(f.sessionElapsedSeconds).toBeCloseTo(113, 1); // was 150.05
+    },
+  );
+
+  it(
+    "logs a divergence naming the refused key and the register it merged " +
+      "into, on the poison tick itself",
+    async () => {
+      const h = await programmed(TWO_INTERVAL_REST_PROGRAM);
+
+      await tick(
+        h,
+        {
+          elapsed: 52.14,
+          distance: 173.3,
+          state: WORKOUTSTATE_INTERVALWORKTIME,
+        },
+        0,
+      );
+      await tick(
+        h,
+        {
+          elapsed: 60.05,
+          distance: 173.3,
+          state: WORKOUTSTATE_INTERVALWORKTIMETOREST,
+        },
+        1,
+      );
+
+      const div = h.log
+        .entries()
+        .filter((e) => e.kind === "divergence" && e.detail.includes("refused"));
+      expect(div).toHaveLength(1);
+      // Names the refused key, the reading (elapsed + distance), and the
+      // register it merged into.
+      expect(div[0]!.detail).toContain("key 1");
+      expect(div[0]!.detail).toContain("60.05");
+      expect(div[0]!.detail).toContain("173.3");
+      expect(div[0]!.detail).toContain("key 0");
+    },
+  );
+
+  it(
+    "the guard's own boundary is strict: elapsed EXACTLY equal to the " +
+      "open key's register does not prove a reset, and is refused " +
+      "(mutation pin — a non-strict `<=` would let this tick open the " +
+      "next key instead, and no other test in this file distinguishes " +
+      "strict-`<` from `<=`)",
+    async () => {
+      const h = await programmed(TWO_INTERVAL_REST_PROGRAM);
+
+      await tick(
+        h,
+        { elapsed: 30, distance: 75, state: WORKOUTSTATE_INTERVALWORKTIME },
+        0,
+      );
+      // Elapsed exactly 30 — equal to, not less than, key 0's own register.
+      // Monotonicity only guarantees a poison tick has elapsed >= the
+      // register; equality is squarely inside that "cannot prove a reset"
+      // zone, so the guard must refuse here too.
+      const f = await tick(
+        h,
+        { elapsed: 30, distance: 76, state: WORKOUTSTATE_INTERVALREST },
+        2,
+      );
+
+      // Refused: folds into key 0, does not open key 1.
+      expect(f.sessionDistanceMeters).toBeCloseTo(76, 1);
+      const div = h.log
+        .entries()
+        .filter((e) => e.kind === "divergence" && e.detail.includes("refused"));
+      expect(div).toHaveLength(1);
     },
   );
 });
