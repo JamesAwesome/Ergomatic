@@ -9,8 +9,18 @@ import type { Baselines, PaceRef, Step } from "../types.js";
  *  (Today.tsx's BaselineCard swap), and phases() would throw anyway. */
 export interface PieceRow {
   duration: string;
+  /** The ONE ref form: "at 6k +10" / "at 6k pace", null for effort and
+   *  test pieces. There used to be a second, offset-only field
+   *  (`refTextCompact`, "at +10") that Today's compressed layout showed
+   *  whenever every split piece shared a base. James retired it
+   *  2026-08-14 — "we always need full form so people know what the
+   *  exercise is, we can do that without losing much compression":
+   *  nothing else on the card names the base, so a compressed row
+   *  reading "at +12" could not say whether the piece was 2k- or
+   *  6k-anchored, which is what tells a rower the workout's character.
+   *  Both layouts read this field now; the name is kept because
+   *  `joinsRun` compares it. */
   refTextFull: string | null;
-  refTextCompact: string | null;
   effortText: string | null;
   restText: string | null;
   split: string | null;
@@ -38,18 +48,6 @@ function fmtRest(minutes: number, suffix: string): string {
 export function pieceList(steps: Step[], baselines: Baselines): PieceRow[] {
   const all = phases(steps, baselines);
   const rows: PieceRow[] = [];
-  const bases = new Set<string>();
-  for (const p of all) {
-    if (
-      p.type === "work" &&
-      p.targetKind === "split" &&
-      p.ref &&
-      !isEffortRef(p.ref)
-    ) {
-      bases.add(p.ref.base);
-    }
-  }
-  const sharedBase = bases.size === 1;
   for (const p of all) {
     if (p.type === "rest") {
       // attach to the preceding piece (spec: rest belongs to the piece
@@ -82,7 +80,6 @@ export function pieceList(steps: Step[], baselines: Baselines): PieceRow[] {
       rows.push({
         duration: p.label,
         refTextFull: null,
-        refTextCompact: null,
         effortText: null,
         restText: null,
         split: null,
@@ -103,7 +100,6 @@ export function pieceList(steps: Step[], baselines: Baselines): PieceRow[] {
       rows.push({
         duration,
         refTextFull: null,
-        refTextCompact: null,
         effortText: p.label.toUpperCase(),
         restText: null,
         split: null,
@@ -114,18 +110,10 @@ export function pieceList(steps: Step[], baselines: Baselines): PieceRow[] {
     } else {
       const ref = p.ref as Extract<PaceRef, { base: string }>;
       const off = ref.off;
-      const full =
-        off === 0 ? `at ${ref.base} pace` : `at ${ref.base} ${fmtOff(off)}`;
-      const compact =
-        off === 0
-          ? `at ${ref.base} pace`
-          : sharedBase
-            ? `at ${fmtOff(off)}`
-            : full;
       rows.push({
         duration,
-        refTextFull: full,
-        refTextCompact: compact,
+        refTextFull:
+          off === 0 ? `at ${ref.base} pace` : `at ${ref.base} ${fmtOff(off)}`,
         effortText: null,
         restText: null,
         // this branch only runs for targetKind "split" (the "effort" case
@@ -298,9 +286,22 @@ function refToken(ref: PaceRef): string {
   return ref.off === 0 ? base : `${base}${fmtOff(ref.off)}`;
 }
 
-/** Offsets-only range, largest → smallest, zero as the bare base
- *  (uppercase). Collapses when all offsets are equal. Split refs only
- *  and single-base only — callers gate. */
+/** Range of offsets, largest → smallest, with the baseline named ONCE on
+ *  the slow (left) end in refToken's own uppercase idiom: `6K+12 → +10`.
+ *  Zero renders as the bare base at either end, so a range that reaches
+ *  baseline reads `6K+4 → 6K` and one that starts there reads `6K → −4`
+ *  — never a manufactured `6K+0`. Collapses to a single reference when
+ *  all offsets are equal. Split refs only and single-base only — callers
+ *  gate, which is what lets the fast end stay bare: every piece in the
+ *  range rides the base the slow end names.
+ *
+ *  The base used to be dropped from this form entirely (`+12 → +10`),
+ *  leaving 94 of the 300 seeded Library lines with no baseline token at
+ *  all. James, 2026-08-14: "we always need full form so people know what
+ *  the exercise is, we can do that without losing much compression." Two
+ *  characters buys it; the longest range line in the library goes 54 → 56
+ *  characters, against a 101-character worst case the format-6 lines
+ *  already ship. */
 function offsetRange(pieces: AuthPiece[]): string {
   const splitRefs = pieces
     .map((p) => p.ref)
@@ -312,9 +313,10 @@ function offsetRange(pieces: AuthPiece[]): string {
   const offs = splitRefs.map((r) => r.off);
   const hi = Math.max(...offs);
   const lo = Math.min(...offs);
-  const end = (o: number) => (o === 0 ? base : fmtOff(o));
-  if (hi === lo) return hi === 0 ? base : `${base}${fmtOff(hi)}`;
-  return `${end(hi)} → ${end(lo)}`;
+  const named = (o: number) => (o === 0 ? base : `${base}${fmtOff(o)}`);
+  const bare = (o: number) => (o === 0 ? base : fmtOff(o));
+  if (hi === lo) return named(hi);
+  return `${named(hi)} → ${bare(lo)}`;
 }
 
 /** The clause appears only when every INTER-PIECE rest is equal (spec's

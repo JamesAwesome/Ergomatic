@@ -61,14 +61,11 @@ piece.
 interface PieceRow {
   duration: string;        // "18:00" (fmtDuration) or "500m"; a test
                            // piece prints its label ("All out") here
-  refTextFull: string | null;    // "at 6k +10" / "at 6k pace"; the
-                                 // two-line rows' form (mocks name the
-                                 // base there even when shared)
-  refTextCompact: string | null; // "at +10" when the set shares one
-                                 // base (the compressed rows' form);
-                                 // "at 6k pace" at offset 0; equals
-                                 // refTextFull for mixed bases; null
-                                 // for effort and test pieces
+  refTextFull: string | null;    // "at 6k +10" / "at 6k pace"; null
+                                 // for effort and test pieces. BOTH
+                                 // layouts render this (AMENDED
+                                 // 2026-08-14, below) — the base is
+                                 // never hoisted away
   effortText: string | null; // "ALL OUT" / "EASY" in the pace slot
                            // for effort pieces; test pieces show
                            // nothing there
@@ -100,12 +97,12 @@ pass's repairs):
    authored pieces are N identical work steps (identical duration,
    ref, spm; rest equality not required for identity — the rest
    clause rule below governs what is claimed about rest)
-3. two unequal pieces — `18:00 + 9:00 @ +10 → +6 · 3′ REST`
+3. two unequal pieces — `18:00 + 9:00 @ 6K+10 → +6 · 3′ REST`
 4. longer sets, expanded count ≤ 8 — duration chain + offset range:
-   `2-4-6-8-6-4-2 @ +6 → 6K · 2′ REST`. Chain tokens: whole minutes
+   `2-4-6-8-6-4-2 @ 6K+6 → 6K · 2′ REST`. Chain tokens: whole minutes
    bare (`4`), fractional as fmtDuration (`4:30`).
 5. longer than 8 expanded pieces (and not format 2) — count fallback:
-   `12 PIECES @ +8 → +2 · 2′ REST` (a 24-piece chain states less
+   `12 PIECES @ 6K+8 → +2 · 2′ REST` (a 24-piece chain states less
    than a count does)
 6. mixed frames (James's ruling) — each segment names its base:
    `4:00 @ 2K+4 + 10:00 @ 6K+8 · 2′ REST`; effort pieces print their
@@ -113,11 +110,12 @@ pass's repairs):
    to format 5's count form (test pieces have no duration to chain)
 7. distance — `8 × 500m @ 6K−4 · 1′ REST`
 
-**Offset range rule** (the pass's finding 5): the range runs from the
-LARGEST offset to the SMALLEST (slowest to fastest pace), independent
-of piece order: `@ +6 → 6K` (zero renders as the bare base, per the
-mock). Equal endpoints collapse to a single `@ 6K+N`. Mixed-sign
-ranges render both signs (`@ +4 → −2`). This reproduces both mock
+**Offset range rule** (the pass's finding 5; AMENDED 2026-08-14,
+below): the range runs from the LARGEST offset to the SMALLEST
+(slowest to fastest pace), independent of piece order: `@ 6K+6 → 6K`
+(the baseline is named once, on the slow end; zero renders as the bare
+base at either end, per the mock). Equal endpoints collapse to a
+single `@ 6K+N`. Mixed-sign ranges render both signs (`@ 6K+4 → −2`). This reproduces both mock
 examples and is total over non-monotonic sets.
 
 **Rest clause rule:** `· N′ REST` (whole minutes; fmtDuration
@@ -230,3 +228,36 @@ display (none of these surfaces shows it).
 Named shapes; estimated distance on time pieces; nested scrolling /
 the pinned-scroller alternative; detail adopting the expanded view;
 warm-up display; dark theme tokens.
+
+## Amendment, 2026-08-14 — the base is always named
+
+James: "We always need full form so people know what the exercise is,
+we can do that without losing much compression."
+
+This spec hoisted the baseline out of two forms whenever the whole set
+shared one, and never gave the hoisted base a home: nothing else on
+Today's card or in the Library row names it. A rower reading `at +12`
+or `4-6-8-6-4 @ +12 → +10` cannot tell a 2k-anchored piece from a
+6k-anchored one, and that is what tells them the workout's character.
+Measured against the 300-workout seed: 86 cards rendered compressed
+and 68 of them lost their base (the `sharedBase` set ignored effort
+refs, so a single-base set with one MAX piece suppressed too); 94 of
+the 300 Library lines carried no base token at all.
+
+Both hoists are retired.
+
+- `PieceRow.refTextCompact` and the `sharedBase` computation are
+  DELETED, not aliased — a field that duplicates another drifts.
+  Today's compressed and two-line layouts both render `refTextFull`.
+  The `compact` flag still selects the row class and geometry;
+  only the ref text stopped varying.
+- `offsetRange` names the baseline once, on the slow (left) end, in
+  `refToken`'s existing uppercase idiom: `6K+12 → +10`. The fast end
+  stays a bare offset because callers already gate the range on a
+  single base. Zero still renders as the bare base at either end
+  (`6K+4 → 6K`, `6K → −4`) — never `6K+0`.
+
+Cost, measured against the seed: the longest range line goes from 54
+to 56 characters, against the 101-character format-6 line the library
+already ships (`Giant Hail`). The compressed piece row grows by three
+characters ("6k ").

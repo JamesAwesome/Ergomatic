@@ -215,6 +215,23 @@ describe("structure line (line 2 of 3)", () => {
     expect(screen.getByText("2-3-4-3-2 @ 6K+12 · 1′ REST")).toBeInTheDocument();
   });
 
+  it("shows the verbatim line for a real workout whose pieces move through a RANGE of offsets — the base is named on the slow end (format 4 + offsetRange)", () => {
+    // "Ground Fog" (server/seed/library/o2.ts): 4-6-8-6-4 minutes at
+    // 6k+12/+11/+10/+11/+12, 1' interior rest. Before James's 2026-08-14
+    // ruling this row read "4-6-8-6-4 @ +12 → +10 · 1′ REST" and named no
+    // baseline at all — 94 of the 300 seeded lines were that shape, and a
+    // rower cannot tell a 2k workout from a 6k one without it.
+    render(
+      <MemoryRouter>
+        <WorkoutRow workout={fromSeed("Ground Fog")} durationMinutes={32} />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByText("4-6-8-6-4 @ 6K+12 → +10 · 1′ REST"),
+    ).toBeInTheDocument();
+  });
+
   it("still shows the line when durationMinutes is null (no baselines set)", () => {
     // HOARFROST above: 2×12:00 at 6k+12, 3' rest — same reps-marker shape
     // as "Sea Fret". Library.tsx passes durationMinutes={null} for every
