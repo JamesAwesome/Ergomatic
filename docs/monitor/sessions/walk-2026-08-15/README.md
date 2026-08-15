@@ -94,17 +94,20 @@ in any capture.
    comparison**: with no rest there are no rest-coast metres to argue
    about, so the summary total must read exactly twice the piece on both
    screens. The only confound-free totals oracle available (see item 3).
-3. **The both-totals photo happens at the FINISH SUMMARY SCREEN, not
-   mid-piece** (researched 2026-08-15, vendor docs): the PM5 has NO live
-   session-cumulative view during interval workouts — every documented
-   Display view is split-scoped (PRIMARY: Concept2's own All Data field
-   list), and the Units button changes unit, not scope. The one on-device
-   cumulative figure is the finish screen's "final result for the total
-   distance" (PRIMARY: Concept2, Viewing Workouts/Memory). Photograph THAT
-   beside the app before touching Menu. Open reconciliation, one line: the
-   original Sun fret photo showed "4384 m total" live — which no documented
-   interval view provides; what view that was is unrecorded and worth one
-   glance if it recurs.
+3. **The app's half of the comparison comes from the ring, not the screen**
+   (James's protocol change; `final-totals` entry, commit c3e0505): at the
+   terminal transition the driver writes the accumulator pair, the machine's
+   TWD, and every register into the diagnostics ring, which survives the
+   auto-navigation via the stash. The PM5's half is the finish summary
+   screen — the machine's ONLY session-cumulative figure (researched
+   2026-08-15, vendor docs: every live Display view during intervals is
+   split-scoped; the finish screen's "final result for the total distance"
+   is PRIMARY, Concept2 Viewing Workouts/Memory). **Protocol: photograph the
+   PM5 summary before touching Menu; read `final-totals` from diagnostics
+   afterwards. One photo, zero phone timing.** Open reconciliation, one
+   line: the original Sun fret photo showed "4384 m total" live — which no
+   documented interval view provides; what view that was is unrecorded and
+   worth one glance if it recurs.
 4. Walk Q4 — whether the machine's total includes rest-coasting metres —
    is undocumented even in vendor docs (checked; the logbook tracks work
    and rest meters as two figures, SECONDARY/forum). Settle it by
