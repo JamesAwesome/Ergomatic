@@ -132,6 +132,48 @@ const THREE_INTERVAL_PROGRAM: WorkoutProgram = {
   })),
 };
 
+/** Two 60s work intervals with NO trailing rest on either (task-3-brief.md
+ *  Step 2's own name; `restSeconds: 0` compiles per
+ *  `domain/monitor/program.test.ts:761`) — the no-rest work->work boundary
+ *  shape, where state never visits `"resting"` at all and 0x0033's own
+ *  index is the only signal a boundary happened. */
+const TWO_INTERVAL_NO_REST_PROGRAM: WorkoutProgram = {
+  intervals: Array.from({ length: 2 }, () => ({
+    type: "work" as const,
+    kind: "time" as const,
+    value: 60,
+    targetSplit: 120,
+    displaySpm: 22,
+    restSeconds: 0,
+  })),
+};
+
+/** Two 60s work intervals, the first with a 30s trailing rest — Step 3's
+ *  "clean rest boundary" shape: unlike `TWO_INTERVAL_NO_REST_PROGRAM` above,
+ *  this genuinely visits `"resting"` between the two work intervals, so a
+ *  test built on it exercises `toProgramIndex`'s resting-state (`index - 1`)
+ *  path, not just its rowing (identity) one. */
+const TWO_INTERVAL_REST_PROGRAM: WorkoutProgram = {
+  intervals: [
+    {
+      type: "work" as const,
+      kind: "time" as const,
+      value: 60,
+      targetSplit: 120,
+      displaySpm: 22,
+      restSeconds: 30,
+    },
+    {
+      type: "work" as const,
+      kind: "time" as const,
+      value: 60,
+      targetSplit: 120,
+      displaySpm: 22,
+      restSeconds: 0,
+    },
+  ],
+};
+
 // ---------------------------------------------------------------------------
 // The harness (task-2-brief.md Step 1). `tick`/`Harness` are the names Task 3
 // consumes (its own brief's Step 1 code block already writes against them) —
@@ -261,19 +303,23 @@ interface Harness {
  *  condition the review's own §5.2 replay recipe describes ("build a fresh
  *  driver per segment"). Confirmed by reading `driver.ts:1667-1719` this
  *  session, not assumed. */
-async function programmed(p: WorkoutProgram): Promise<Harness> {
-  const transport = stubTransport();
-  const log = createEventLog();
-  const driver = createPm5Driver(transport, log, {});
-  const events: MonitorEvent[] = [];
-  driver.events((e) => events.push(e));
-
+/** The prepare/sequence/verify ack exchange `program()` always runs,
+ *  factored out of `programmed()` (below) so Task 3's Step 5 ("re-arm after
+ *  terminate") can drive a SECOND `program()` call on an already-built
+ *  harness — same driver, same transport, same subscriptions, per
+ *  `driver.test.ts`'s own precedent for exactly this shape
+ *  (`programViaStub`, reused there for its "program() succeeds again after
+ *  a completed run" test). Identical wire choreography either time:
+ *  `program()`'s own `waitForPrepareSettle` short-circuits once the prior
+ *  machine state is anything but rowing/resting (`driver.ts:3293`), which a
+ *  terminated or freshly-armed machine always is. */
+async function armProgram(h: Harness, p: WorkoutProgram): Promise<void> {
   const prepareChunkCount = buildTerminate()[0]!.length;
   const sent = (): number =>
-    transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
+    h.transport.writes.filter((w) => w.uuid === RECEIVE_CHARACTERISTIC_UUID)
       .length;
   const start = sent();
-  const pending = driver.program(p);
+  const pending = h.driver.program(p);
   await waitUntil(() => sent() > start);
   // The prepare step's own outcome is swallowed unconditionally by
   // `sendPrepare` (anything but a disconnect) — an "ok" ack here is the
@@ -282,25 +328,47 @@ async function programmed(p: WorkoutProgram): Promise<Harness> {
   // ACCEPT), unlike `driver.test.ts`'s own long-legacy "reject" default
   // (that file's own comment flags the accept as the honest choice for any
   // NEW helper).
-  transport.notify(
+  h.transport.notify(
     TRANSMIT_CHARACTERISTIC_UUID,
     buildAckFrame({ frameStatus: "ok" }),
   );
   await waitUntil(() => sent() > start + prepareChunkCount);
-  transport.notify(
+  h.transport.notify(
     TRANSMIT_CHARACTERISTIC_UUID,
     buildAckFrame({ frameStatus: "ok" }),
   );
   // Drain until `verifyArmed()` has registered its wait, so the armed
   // status below is never merged before anything is watching for it.
   for (let i = 0; i < 50; i += 1) await Promise.resolve();
-  transport.notify(GENERAL_STATUS_UUID, armedStatusFor(p));
+  h.transport.notify(GENERAL_STATUS_UUID, armedStatusFor(p));
   await pending;
+}
+
+async function programmed(p: WorkoutProgram): Promise<Harness> {
+  const transport = stubTransport();
+  const log = createEventLog();
+  const driver = createPm5Driver(transport, log, {});
+  const events: MonitorEvent[] = [];
+  driver.events((e) => events.push(e));
+  const h: Harness = { transport, log, driver, events, program: p };
+
+  await armProgram(h, p);
 
   transport.notify(ADDITIONAL_STATUS_1_UUID, new Uint8Array(17));
   transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));
 
-  return { transport, log, driver, events, program: p };
+  return h;
+}
+
+/** Re-arms an ALREADY-BUILT harness with a second `program()` call (Step 5:
+ *  "re-arm after terminate writes no key"). AS1/AS2 are deliberately NOT
+ *  re-notified: `seen.as1`/`seen.as2` (`driver.ts:1130`) are set true once
+ *  and never reset by the driver itself — `driver.test.ts`'s own
+ *  second-run test notifies them only once, before the FIRST `program()`
+ *  call, for the same reason. */
+async function reprogram(h: Harness, p: WorkoutProgram): Promise<void> {
+  await armProgram(h, p);
+  h.program = p;
 }
 
 /** Feeds one 0x0031 (and optionally a 0x0033 interval-count update) and
@@ -548,6 +616,254 @@ describe("session accumulator: §F2 stop-gate — reproducing the architecture r
         interval2Final.distance;
       expect(f.sessionDistanceMeters).toBeCloseTo(expectedTotal, 1);
       expect(f.sessionDistanceMeters).toBeCloseTo(455.1, 1);
+    },
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Task 3 — the seven shapes the wire actually produces (task-3-brief.md).
+// These run against the SAME current (broken) accumulator as the §F2 suite
+// above. Per the brief's own split: Steps 1 and 7 are marked `it.fails` —
+// they document the current defect, and Task 4 removes the `.fails` once
+// the fold is fixed. Steps 2, 3, 5, 6 pass today and are regression guards
+// Task 4 must keep green. Step 4 is written per the brief's exact code but,
+// traced and RUN against today's fold, PASSES today (see task-3-report.md
+// for the full trace) — contrary to the brief's own prediction that it
+// would fail; reported there as a discrepancy, not silently corrected away.
+// ---------------------------------------------------------------------------
+
+describe("session accumulator: seven shapes (Task 3) — three of them red", () => {
+  it.fails(
+    "a terminate does not double the session distance " +
+      "(documents the CURRENT defect; Task 4 removes .fails)",
+    async () => {
+      // CSAFE-DEF footnote 12: elapsed jumps BACK to a smaller non-zero
+      // value, distance stands exactly still. Six of these are in the
+      // record (task-3-brief.md Step 1, same tick shape as the §F2
+      // terminate reproduction above, on the minimal program instead of
+      // Sea Fret).
+      const h = await programmed(MINIMAL_PROGRAM);
+      await tick(
+        h,
+        {
+          elapsed: 33.57,
+          distance: 23.9,
+          state: WORKOUTSTATE_INTERVALWORKTIME,
+        },
+        0,
+      );
+      const f = await tick(h, {
+        elapsed: 21.51,
+        distance: 23.9,
+        state: WORKOUTSTATE_TERMINATE,
+      });
+      expect(f.sessionDistanceMeters).toBeCloseTo(23.9, 1); // today: 47.8
+    },
+  );
+
+  it(
+    "keeps a completed interval when 0x0033's index lags 0x0031's reset " +
+      "(passes today — a regression guard the fold's real design must " +
+      "keep green, since last-write-wins would flip it)",
+    async () => {
+      const h = await programmed(TWO_INTERVAL_NO_REST_PROGRAM);
+      await tick(
+        h,
+        {
+          elapsed: 59.83,
+          distance: 74.4,
+          state: WORKOUTSTATE_INTERVALWORKTIME,
+        },
+        0,
+      );
+      // pm5-session4b L2837: the counters reset one notification BEFORE
+      // the interval count increments, so this frame still carries key 0.
+      await tick(
+        h,
+        { elapsed: 0, distance: 0, state: WORKOUTSTATE_INTERVALWORKTIME },
+        0,
+      );
+      // L2838: the index catches up.
+      const f = await tick(
+        h,
+        { elapsed: 0.5, distance: 1.2, state: WORKOUTSTATE_INTERVALWORKTIME },
+        1,
+      );
+      // 74.4 must survive. Last-write-wins writes (0,0) onto key 0 and
+      // reports 1.2.
+      expect(f.sessionDistanceMeters).toBeGreaterThan(74);
+    },
+  );
+
+  it(
+    "a clean rest boundary sums both intervals, driven through a resting " +
+      "tick so toProgramIndex's state-keyed (resting) path is exercised " +
+      "(passes today)",
+    async () => {
+      const h = await programmed(TWO_INTERVAL_REST_PROGRAM);
+
+      const interval0Final = { elapsed: 87.3, distance: 150.0 };
+      const interval1Final = { elapsed: 59.0, distance: 130.0 };
+
+      await tick(
+        h,
+        { elapsed: 30, distance: 75.0, state: WORKOUTSTATE_INTERVALWORKTIME },
+        0,
+      );
+      await tick(
+        h,
+        {
+          elapsed: interval0Final.elapsed,
+          distance: interval0Final.distance,
+          state: WORKOUTSTATE_INTERVALREST,
+        },
+        0,
+      );
+
+      // rest -> work boundary: both fields reset together (unlike the
+      // no-rest shape above, this frame's own state is genuinely
+      // "resting" beforehand, exercising toProgramIndex's index-1 branch).
+      await tick(
+        h,
+        { elapsed: 0.5, distance: 1.0, state: WORKOUTSTATE_INTERVALWORKTIME },
+        1,
+      );
+      await tick(
+        h,
+        { elapsed: 30, distance: 76.0, state: WORKOUTSTATE_INTERVALWORKTIME },
+        1,
+      );
+      const f = await tick(
+        h,
+        {
+          elapsed: interval1Final.elapsed,
+          distance: interval1Final.distance,
+          state: WORKOUTSTATE_INTERVALWORKTIME,
+        },
+        1,
+      );
+
+      const expectedTotal = interval0Final.distance + interval1Final.distance;
+      expect(f.sessionDistanceMeters).toBeCloseTo(expectedTotal, 1);
+    },
+  );
+
+  it(
+    "keeps the total moving when the machine reports no interval identity " +
+      "(brief predicts FAIL today; traced and run, this PASSES today — " +
+      "see task-3-report.md)",
+    async () => {
+      const h = await programmed(MINIMAL_PROGRAM);
+      await tick(
+        h,
+        { elapsed: 30, distance: 100, state: WORKOUTSTATE_INTERVALWORKTIME },
+        0,
+      );
+      // An interval count the armed program cannot explain -> toProgramIndex
+      // returns null while the machine is genuinely rowing. 21% of rowing
+      // frames in the record look like this.
+      const f = await tick(
+        h,
+        { elapsed: 40, distance: 140, state: WORKOUTSTATE_INTERVALWORKTIME },
+        99,
+      );
+      expect(f.sessionDistanceMeters).toBeGreaterThan(100); // must NOT freeze
+    },
+  );
+
+  it(
+    "a re-arm after terminate starts the total fresh, no carried key " +
+      "(passes today — program()'s own success path unconditionally " +
+      "resets `session`, driver.ts:3728)",
+    async () => {
+      const h = await programmed(MINIMAL_PROGRAM);
+
+      // Bank the same doubled offset Step 1 documents, deliberately, so
+      // this test would catch a re-arm that forgot to clear `session` —
+      // not just one that happens to start small anyway.
+      await tick(
+        h,
+        { elapsed: 30, distance: 80, state: WORKOUTSTATE_INTERVALWORKTIME },
+        0,
+      );
+      await tick(h, {
+        elapsed: 15,
+        distance: 80,
+        state: WORKOUTSTATE_TERMINATE,
+      });
+
+      await reprogram(h, MINIMAL_PROGRAM);
+
+      const f = await tick(
+        h,
+        { elapsed: 5, distance: 11, state: WORKOUTSTATE_INTERVALWORKTIME },
+        0,
+      );
+
+      // Only the new run's own reading — nothing carried from the
+      // terminated run.
+      expect(f.sessionDistanceMeters).toBeCloseTo(11, 1);
+    },
+  );
+
+  it(
+    "a gap inside an interval converges on the resumed reading, not the " +
+      "sum (passes today)",
+    async () => {
+      const h = await programmed(MINIMAL_PROGRAM);
+
+      await tick(
+        h,
+        { elapsed: 10, distance: 20, state: WORKOUTSTATE_INTERVALWORKTIME },
+        0,
+      );
+      // Several ticks skipped here — a genuine connection gap mid-interval,
+      // same key (0) on both sides of the gap.
+      const f = await tick(
+        h,
+        { elapsed: 45, distance: 95, state: WORKOUTSTATE_INTERVALWORKTIME },
+        0,
+      );
+
+      // The resumed reading alone, not 20 + 95.
+      expect(f.sessionDistanceMeters).toBeCloseTo(95, 1);
+    },
+  );
+
+  it.fails(
+    "loses an interval it never saw, and logs that it did " +
+      "(documents the CURRENT defect; Task 4 removes .fails — the " +
+      "'intervals seen' divergence entry does not exist until Task 5, so " +
+      "this fails today regardless of the total's own arithmetic)",
+    async () => {
+      const h = await programmed(THREE_INTERVAL_PROGRAM);
+
+      // Interval 0: worked and rested normally.
+      await tick(
+        h,
+        { elapsed: 30, distance: 75.0, state: WORKOUTSTATE_INTERVALWORKTIME },
+        0,
+      );
+      await tick(
+        h,
+        { elapsed: 87.3, distance: 150.0, state: WORKOUTSTATE_INTERVALREST },
+        0,
+      );
+
+      // Interval 1 (its whole work+rest span) is never fed a single tick —
+      // a genuine connection gap spanning an entire interval.
+
+      // Resume mid-interval-2, rowing.
+      const f = await tick(
+        h,
+        { elapsed: 5.0, distance: 10.0, state: WORKOUTSTATE_INTERVALWORKTIME },
+        2,
+      );
+
+      const expectedWithoutInterval1 = 150.0 + 10.0;
+      expect(f.sessionDistanceMeters).toBeCloseTo(expectedWithoutInterval1, 1);
+      const div = h.log.entries().filter((e) => e.kind === "divergence");
+      expect(div.some((e) => e.detail.includes("intervals seen"))).toBe(true);
     },
   );
 });
