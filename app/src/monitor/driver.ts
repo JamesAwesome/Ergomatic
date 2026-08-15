@@ -1508,19 +1508,39 @@ export function createPm5Driver(
         }),
       );
     }
-    // THE SUMMARY GATE's deadline, cancelled here for the same reason
-    // `disconnect()` cancels it (fix round 1, review Minor-5): the radio is
-    // gone, so no 0x0039 can still arrive to change the verdict, and a
-    // driver that leaves live timers behind is a driver a test cannot
-    // finish cleanly. Above the `activeRun.closed` early-return below, not
-    // after it — a drop AFTER a natural finish is exactly the case with a
-    // deadline still standing, and it is the one that return skips.
-    // Cancelling costs the run nothing it still had: whatever evidence
-    // arrived before the drop is already in the trace, and a fill after the
-    // link died could no longer be released to a screen that is being torn
-    // down.
-    pendingSummaryReconcile?.();
-    pendingSummaryReconcile = null;
+    // THE SUMMARY GATE's deadline (F7, architecture review). Only its
+    // ability to WAIT for more wire evidence is cancelled here — never a
+    // verdict it can already reach. The radio is gone, so no 0x0039 or
+    // split can arrive after this point to change today's answer; that
+    // much of fix round 1's reasoning (review Minor-5) still holds, and is
+    // why the scheduled callback is always cancelled below, whatever
+    // happens next. What does NOT hold, and is why this used to throw the
+    // verdict away outright: "cancelling costs the run nothing it still
+    // had" is false whenever a summary already arrived — the fill is
+    // synthesized entirely from `run.summaryInGrace`/`run.recordedActuals`,
+    // evidence already in hand, and needs no further wire traffic to
+    // complete. "A screen that is being torn down" is false too: the
+    // hand-off hold that keeps that screen mounted
+    // (`useMonitorSession.ts`'s `FINISH_HANDOFF_HOLD_MS`, 3500ms) exists for
+    // precisely this window and outlives it — both deadlines open in the
+    // same synchronous emit (`FINISH_GRACE_MS`'s own doc comment) and the
+    // hold is STRICTLY the longer of the two, so a reconcile run
+    // synchronously here — necessarily before this grace's own scheduled
+    // firing, which a still-pending `pendingSummaryReconcile` proves has not
+    // happened yet — always lands inside the hold. So: cancel the wait,
+    // then let the reconcile answer with whatever evidence this run has
+    // already earned — filled, split-won, or declined; a link death is not
+    // a reason to keep a resolvable verdict out of the trace.
+    if (pendingSummaryReconcile !== null) {
+      pendingSummaryReconcile();
+      pendingSummaryReconcile = null;
+      // `armSummaryReconcile` is armed from exactly one call site (the
+      // `finished` branch above, immediately after `activeRun!.closed =
+      // true`), and `program()`'s own replacement path cancels this same
+      // field before a new run ever opens — so a deadline still pending
+      // here can only name the CURRENT `activeRun`, closed and non-null.
+      if (activeRun !== null) reconcileSummary(activeRun);
+    }
     if (activeRun !== null && activeRun.closed) {
       // The old `terminalLatched` flag's SECOND consumer, re-scoped to the
       // run (Task 4, spec §4: replaced, never deleted). Appendix E (cited

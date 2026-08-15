@@ -8579,27 +8579,66 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     expect(detail).toContain("§23 walk item 2");
   });
 
-  it("A LINK DROP INSIDE THE GRACE takes the deadline with it too — a fill cannot outlive the radio (review Minor-5)", async () => {
+  it("A LINK DROP INSIDE THE GRACE cancels the WAIT, not a verdict already in hand: a summary that already arrived still fills (F7)", async () => {
     const g = primedGate();
     await rowToFinish(g);
     g.clock.advance(400);
     g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(62.5, 214));
     expect(g.timer.pending()).not.toBeNull();
+    // Not yet filed — a split still has until the deadline (or, now, the
+    // drop) to arrive and win (test (b)'s own precedence).
+    expect(boundaries(g.events)).toHaveLength(0);
 
-    // The radio drops while the deadline is still standing. Cancelled on
-    // the TRANSPORT's own disconnect, not only on a caller-initiated
-    // `disconnect()` — and cancelled ahead of the "after the current run
+    // The radio drops while the deadline is still standing, well inside
+    // BOTH windows (400ms, against a 3000ms grace and a 3500ms hand-off
+    // hold — `FINISH_HANDOFF_HOLD_MS` in `useMonitorSession.ts`). Cancelled
+    // on the TRANSPORT's own disconnect, not only on a caller-initiated
+    // `disconnect()` — and handled ahead of the "after the current run
     // closed, ignored" early-return, which this case would otherwise skip.
     g.transport.fireDisconnect("fixture: the radio dropped mid-grace");
 
-    // The CANCELLER was called, which is the whole contract: in production
-    // `schedule`'s default is `setTimeout`/`clearTimeout`, so a cancelled
-    // deadline never reaches its callback at all. (This stub's `fire()`
-    // would still invoke it — deliberately not asserted here, because
-    // firing a cancelled timer by hand tests the stub, not the driver.)
+    // The SCHEDULED WAIT is still cancelled: in production `schedule`'s
+    // default is `setTimeout`/`clearTimeout`, so a live timer never outlives
+    // the driver either way — that half of the old contract survives.
     expect(g.timer.calls[0]!.cancelled).toBe(true);
     expect(g.timer.pending()).toBeNull();
+
+    // The VERDICT it could already reach does NOT die with the wait: the
+    // summary was already in hand, so the drop runs the reconcile right
+    // there instead of discarding it — the rower's log screen gets its real
+    // numbers, not "0 OF 1 INTERVALS MEASURED" over a trace that had them
+    // the whole time.
+    expect(boundaries(g.events)).toHaveLength(1);
+    expect(boundaries(g.events)[0]).toMatchObject({
+      kind: "intervalComplete",
+      actual: { index: 0, elapsedSeconds: 62.5, distanceMeters: 214 },
+      finalBoundary: true,
+    });
+    const verdict = verdicts(g.log);
+    expect(verdict).toHaveLength(1);
+    expect(verdict[0]!.detail).toContain("filled-from-summary");
+  });
+
+  it("A LINK DROP BEFORE ANY SUMMARY ARRIVES declines synchronously instead of leaving the trace silent — no more evidence is ever coming either way", async () => {
+    const g = primedGate();
+    await rowToFinish(g);
+    g.clock.advance(400);
+    // No 0x0039 this time — the split simply never showed up and neither did
+    // the summary before the radio died.
+    expect(g.timer.pending()).not.toBeNull();
+
+    g.transport.fireDisconnect(
+      "fixture: the radio dropped with no summary held",
+    );
+
+    expect(g.timer.calls[0]!.cancelled).toBe(true);
+    // Nothing to fill — the trace says so instead of staying silent about a
+    // deadline that quietly vanished.
     expect(boundaries(g.events)).toHaveLength(0);
+    const verdict = verdicts(g.log);
+    expect(verdict).toHaveLength(1);
+    expect(verdict[0]!.detail).toContain("declined");
+    expect(verdict[0]!.detail).toContain("no 0x0039 arrived");
   });
 
   it("A REPLACED RUN takes its deadline with it: the stale reconcile fires into nothing and cannot fill the NEW run's last interval", async () => {
