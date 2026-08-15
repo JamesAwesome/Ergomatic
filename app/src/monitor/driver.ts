@@ -2043,6 +2043,35 @@ export function createPm5Driver(
     // The run-close is symmetric; the CONSUMER-facing event is not, because
     // 7C has to tell "logged 12 of 12" from "abandoned at 8"
     // (`domain/monitor/types.ts`'s own note on why the pair exists).
+    // THE FINAL TOTALS, into the ring, at the terminal transition itself
+    // (James's walk protocol change, 2026-08-15). Two facts orphaned every
+    // other route to this comparison: the PM5 has no live session-cumulative
+    // view during interval workouts (vendor docs — every Display view is
+    // split-scoped, so the only machine total is the finish summary screen),
+    // and the hook auto-navigates to the log screen at the hand-off release,
+    // which both takes TOTAL M off the phone's screen and tears down the
+    // link before 0x0039 usually arrives (`summary-totals` loses that race
+    // on-device; both walk rings end without one). The ring survives via the
+    // sessionStorage stash, so writing the finals HERE means a re-walk needs
+    // exactly one photograph (the PM5 summary) and zero phone timing.
+    {
+      const n = (v: number) => Number(v.toFixed(1));
+      const regs = [...session.seen.entries()]
+        .sort(([a], [b]) => a - b)
+        .map(
+          ([k, r]) => `${k}:(${n(r.elapsedSeconds)}s,${n(r.distanceMeters)}m)`,
+        )
+        .join(" ");
+      const programmed = activeRun!.program.intervals.length;
+      log.record(
+        "final-totals",
+        `accumulator=${n(lastEmittedTotals.distanceMeters)}m ` +
+          `accumulatorElapsed=${n(lastEmittedTotals.elapsedSeconds)}s ` +
+          `machineTotal=${raw.totalWorkDistanceMeters ?? "?"}m ` +
+          `durationType=${raw.workoutDurationType ?? "?"} ` +
+          `registers=${session.seen.size} of ${programmed} programmed ${regs}`,
+      );
+    }
     if (frame.state === "finished") {
       // THE FINISH GRACE opens here and nowhere else (walk 5, re-bounded on
       // walk day 3 — `activeRun.finishGraceUntil`'s own doc comment carries

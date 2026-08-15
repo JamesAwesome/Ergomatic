@@ -1680,3 +1680,101 @@ describe("session accumulator: the walk's falsification (CR2 spec 1 Task 11)", (
     },
   );
 });
+
+describe("session accumulator: final totals reach the ring (walk 2026-08-15, James's protocol change)", () => {
+  // The walk established two facts that together orphaned the app's half of
+  // the totals comparison: the PM5 has NO live session-cumulative view
+  // during interval workouts (vendor docs — every Display view is
+  // split-scoped), and the app auto-navigates to the log screen at the
+  // finish, so the phone's TOTAL M is off-screen by the time the machine's
+  // summary appears. The 0x0039 route (`summary-totals`) loses a race to
+  // that same navigation. James's ruling: put the finals in the ring, which
+  // survives navigation via the sessionStorage stash — so the re-walk needs
+  // exactly one photograph (the PM5 summary screen) and zero phone timing.
+  it("records final-totals at a natural finish, carrying the accumulator, the registers, and the machine's own total", async () => {
+    const h = await programmed(TWO_INTERVAL_REST_PROGRAM);
+
+    await tick(
+      h,
+      {
+        elapsed: 52,
+        distance: 490.4,
+        state: WORKOUTSTATE_INTERVALWORKTIME,
+        twd: 490,
+      },
+      0,
+    );
+    await tick(
+      h,
+      {
+        elapsed: 60,
+        distance: 500.1,
+        state: WORKOUTSTATE_INTERVALREST,
+        twd: 500,
+      },
+      1,
+    );
+    await tick(
+      h,
+      {
+        elapsed: 0.5,
+        distance: 2.1,
+        state: WORKOUTSTATE_INTERVALWORKTIME,
+        twd: 502,
+      },
+      1,
+    );
+    await tick(
+      h,
+      {
+        elapsed: 58,
+        distance: 499.8,
+        state: WORKOUTSTATE_INTERVALWORKTIME,
+        twd: 999,
+      },
+      1,
+    );
+    await tick(h, {
+      elapsed: 60,
+      distance: 500.2,
+      state: WORKOUTSTATE_WORKOUTEND,
+      twd: 1000,
+    });
+
+    const finals = h.log.entries().filter((e) => e.kind === "final-totals");
+    expect(finals).toHaveLength(1);
+    // The consequence, not the existence: the numbers a re-walk reads.
+    expect(finals[0]!.detail).toContain("accumulator=1000.3m");
+    expect(finals[0]!.detail).toContain("accumulatorElapsed=120s");
+    expect(finals[0]!.detail).toContain("machineTotal=1000m");
+    expect(finals[0]!.detail).toContain("registers=2 of 2 programmed");
+    expect(finals[0]!.detail).toContain("0:(60s,500.1m)");
+    expect(finals[0]!.detail).toContain("1:(60s,500.2m)");
+  });
+
+  it("records final-totals on a terminate too, since an abandoned session's numbers are the ones nobody can re-read", async () => {
+    const h = await programmed(TWO_INTERVAL_REST_PROGRAM);
+
+    await tick(
+      h,
+      {
+        elapsed: 30,
+        distance: 120.5,
+        state: WORKOUTSTATE_INTERVALWORKTIME,
+        twd: 120,
+      },
+      0,
+    );
+    // CSAFE-DEF footnote 12: elapsed re-bases backwards, distance stands.
+    await tick(h, {
+      elapsed: 21.5,
+      distance: 120.5,
+      state: WORKOUTSTATE_TERMINATE,
+    });
+
+    const finals = h.log.entries().filter((e) => e.kind === "final-totals");
+    expect(finals).toHaveLength(1);
+    expect(finals[0]!.detail).toContain("accumulator=120.5m");
+    expect(finals[0]!.detail).toContain("registers=1 of 2 programmed");
+  });
+});
