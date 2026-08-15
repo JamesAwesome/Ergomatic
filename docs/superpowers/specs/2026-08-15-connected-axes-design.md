@@ -111,32 +111,46 @@ say NOW, no gold counting mark, no full TOTAL LEFT bar. The fake learns the
 carried-over armed reading so tests exercise the wire's actual behaviour
 (13–96 spm ghosts), not `zeroedStatus`'s fiction.
 
-**Item 1 — the fake pause becomes an instruction.** The opaque
-`.connected-paused` block (52 px, occluding TOTAL LEFT and the bar — the two
-witnesses that show the clock draining) becomes a **thin banner reading
-`PULL TO RESUME`**, positioned to occlude nothing. Suppressed during genuine
-rest intervals — a resting rower is *supposed* to be stopped, and the banner
-firing there would be the old PAUSED mistake with politer words. The paused
-**rate** hero gains the suppression the split hero already has
-(`surfaceModel.ts`'s asymmetry, review Cluster A). `paused` leaves
-`ConnectedPhase`; the freeze predicate itself is kept (it is correct) and
-feeds `activity` instead.
+**Item 1 — the fake pause becomes an instruction, state now, styling in
+spec 3** (PM design gate: spec 3 replaces this footer wholesale, so a
+bespoke banner would be styled twice and re-pin every e2e/screenshot
+twice). What 2a builds is the STATE: the noun is deleted — the block reads
+**`PULL TO RESUME`** alone; the block is repositioned/shrunk only as far as
+needed to stop occluding TOTAL LEFT and the bar (the two witnesses that
+show the clock draining), keeping the current visual vocabulary otherwise;
+suppressed during genuine rest intervals — a resting rower is *supposed*
+to be stopped. The paused **rate** hero gains the suppression the split
+already has (review Cluster A). `paused` leaves `ConnectedPhase`; the
+freeze predicate is kept (it is correct) and feeds `activity`.
+**Kept, explicitly:** the block's END/AGAIN button (connected-revamp
+Task 6's "ending without reaching for the header") — deleting it is a
+product decision that belongs to spec 3's design, not this cleanup.
 
-**F6 — a reload offers a choice, not an assertion.** The PM's three
-objections from spec 1's gate are the requirements:
+**F6 — a reload offers a choice, not an assertion — built as a twin of a
+surface the house already designed** (PM design gate: the does-it-exist
+question applies to SURFACES too). `Today.tsx:480`'s `UnloggedRow` already
+renders exactly this transaction for a `SessionRun` — "{title}: unlogged
+session." + a "Log it" link + a staged ✕ Discard on `useStagedDiscard`
+(two-tap arm, copy approved, focus behaviour already fixed by review). F6
+is a `MonitorRun`-shaped twin of that row on Today, not a new prompt, new
+route, or new idiom. Requirements preserved from spec 1's gate:
 
-1. *No state asserted on the machine's behalf:* a reload that finds a
-   stranded `MonitorRun` shows a prompt — **"A connected session was
-   interrupted. Log what was measured / Discard."** Nothing is auto-closed;
-   the rower rules.
-2. *A real door:* the monitor-log route gains an `interrupted` entry point
-   (the `?from=monitor` gate learns a second, explicit origin), so "Log what
-   was measured" lands on the log screen with the measured actuals loaded.
-3. *An honest duration:* the logged record's totals come from the **recorded
-   actuals** (exact, boundary-measured — the 500-not-499.5 distinction James
-   probed), never `completedAt − startedAt` wall-clock. The record is marked
-   interrupted (`endedBy: "interrupted"` on the existing record shape's
-   additive field), not stamped as a normal completion.
+1. *No state asserted on the machine's behalf:* the row describes the
+   evidence ("interrupted connected session"), never claims the workout
+   ended; the rower rules via Log-it / Discard.
+2. *The door:* investigate first whether stamping `completedAt` at the
+   rower's choice makes `monitorModeRun`'s existing `completedAt !== null`
+   gate suffice — if it does, NO new route entry exists at all. The record
+   gains an additive `endedBy: "interrupted"` field; the stored-shape read
+   path is stated explicitly (a v1/v2 record with no field reads as a
+   normal completion, per `loadMonitorRun`'s never-migrate discipline).
+3. *An honest duration, LABELED:* totals come from the **recorded actuals**
+   (exact, boundary-measured), never wall-clock. Recorded actuals carry NO
+   rest time, so an interrupted session's duration is work-only and reads
+   low — a stored number with a deliberate error direction. Resolution is
+   James's call (open question 2): work-only labeled as such, or
+   work + programmed-rest-for-completed-intervals (the allowance
+   `logSummaryTotals` already computes).
 
 Adoption (resuming a live session after reload) stays **out** — reconnect's
 spec, R10, unchanged.
@@ -145,17 +159,37 @@ spec, R10, unchanged.
 every ending routes through (natural finish, terminate, END, transport drop,
 reload-discard), replacing today's per-path improvisations:
 
-- **Corroboration before a mid-session close.** A finished-family tick
-  arriving while the session is mid-interval or mid-rest does NOT close the
-  run instantly. It opens a short confirmation window: a second terminal
-  tick, a 0x0039, or the machine's WAITTOBEGIN confirms the end; a
-  rowing/resting tick with advancing counters cancels it as noise. The
-  afternoon session-killer ring is the failing test. **Hard constraint: the
-  NORMAL finish path must not regress** — a natural finish (terminal tick
-  followed within the existing grace by boundary + 0x0039, as in both
-  re-walk rings) must file, log finals, and release the handoff on the same
-  schedule it does today; the corroboration window may only *delay* closes
-  that today happen instantly-and-wrongly.
+- **Suspicion before a mid-session close — a SYNCHRONOUS predicate, never a
+  timer** (REWRITTEN at the PM design gate, which falsified the first
+  draft's window against the committed record: 3 of 4 `finished` episodes
+  in `pm5-session4b` arrive out of `resting` — a trailing rest on the last
+  interval is the NORMAL ending for 161 of the 300 seeded workouts (§15
+  #9) — and 3 of 4 are a SINGLE frame, so "a second terminal tick
+  confirms" fails most honest finishes; a `rowing`-tick cancel would refuse
+  genuinely terminated runs, because terminate AUTO-REARMS).
+
+  The corrected rule, over evidence already in hand at the terminal tick,
+  scoped to `finished` only (never `terminated`):
+
+  - A `finished` is **unsuspicious** — closes exactly as today — when a
+    0x0039 has already arrived for this run, OR the recorded actuals /
+    register count reconcile with the programmed interval count (a
+    `finished` at 3-of-3 is normal; the legitimate early stops are
+    `terminated` and END, not `finished`).
+  - A **suspicious** `finished` (mid-program, no summary, counts short —
+    the afternoon killer's exact shape: interval 1 of 2, 0 actuals, no
+    0x0039) is logged loudly (`suspicious-terminal`, with the raw bytes
+    `terminal-raw` already captures) and **still closes, fail-open**, today:
+    the gate itself ships only when a second occurrence carries bytes, per
+    the briefing's rule that an unobserved wire premise never ships as a
+    hard gate. The convicting log is the deliverable; the block is not.
+  - **Window-coupling constraint, named:** `finishGraceUntil` and
+    `armSummaryReconcile` are armed at the terminal tick BEFORE the
+    `workoutComplete` emit, and that ordering is what makes "the fill
+    happens before navigation" a fact about the code (driver's own
+    comment; both re-walk rings depended on the grace catching their final
+    boundary). Nothing this spec adds may reorder that arming or delay the
+    emit relative to it.
 - **`final-totals` on every close**, including END: the terminal entry
   writes before teardown, so no ending loses its finals again.
 - **The disconnect() twin, fixed with ordering**: teardown runs the
@@ -165,12 +199,20 @@ reload-discard), replacing today's per-path improvisations:
 
 ### 3. METERS LEFT (the mixed-program countdown)
 
-`computeRemainingForFrame`'s interval-start reference rebases when the
-**distance counter resets**, not only on the elapsed edge — the premise
-correction spec 1 made for the accumulator, applied to the one consumer that
-kept the old assumption. Failing test first from the committed session-A ring:
-the 578 = 500 − (102.7 − 181.2) signature must reproduce, then read 397.3.
-Mixed time→distance programs get their first coverage anywhere in the tree.
+**The observation is solid; the mechanism is OPEN** (PM design gate caught
+the first draft prescribing a fix for a mechanism nobody verified —
+`computeRemainingForFrame` holds no reference state at all; it subtracts
+0x0033's `lastSplitDistanceMeters`/`lastSplitTimeSeconds` from 0x0031's
+per-interval pair, so there is nothing in it to "rebase"). The hardware
+signature stands: 578 = 500 − (102.7 − 181.2), from the committed session-A
+ring, and interface-notes §17 item 17's surviving assumption ("deliberately
+still read against the raw per-interval pair") is the falsified sentence.
+Two candidate mechanisms with DIFFERENT fixes: 0x0033's Last Split pair not
+advancing across a goal-dimension change, or a per-interval-vs-cumulative
+unit mismatch in one of the two operands. **The antagonist's premise pass
+adjudicates the mechanism against the ring data before this enters a plan**;
+the failing test (signature reproduces, then 397.3) is fixed either way, the
+fix is not.
 
 ### 4. The reducer, last (R11)
 
@@ -186,8 +228,17 @@ grep says nothing reads it.
 
 ### 5. Testing
 
-- **The walk rings are fixtures**: the session-killer test replays the
-  afternoon ring's shape; METERS LEFT replays session A's.
+- **Fixtures PARAMETERISED BY the walk rings' hardware numbers** — not
+  replays; the rings are the driver's own state-change-only testimony (53
+  and 45 entries), not wire bytes, and `captureReplay.test.ts`'s header
+  says at length why they cannot drive `createPm5Driver`. Spec 1's
+  discipline: the ring supplies the shapes and the numbers, hand-built
+  payloads supply the wire. The evening re-walk rings are now COMMITTED
+  (`session-c`/`session-d`) so every cited number has data behind it.
+- **The keystone re-run** (PM gate — the canary transfers into the phase):
+  because this spec touches the terminal path where `final-totals` is
+  written and the register map last read, the phase walk re-runs spec 1's
+  oracle row (2×250 m r0, a-priori 500) alongside spec 2's own items.
 - **The fake learns**: armed carry-over (nonzero spm/split on re-arm) and the
   corroboration shapes (lone terminal tick, terminal+0x0039, terminal then
   rowing). A fix verified against a fake that cannot exhibit the bug proves
@@ -196,13 +247,14 @@ grep says nothing reads it.
   armed surface are visible. Captures are re-shot deliberately, with real
   data, and looked at (recurring failures #1 and #7).
 - **Per-file coverage per touched file**; consequences, never existence.
-- **Spec 2's own walk list** (rides the phase's next erg session, not a gate
-  per item — the phase exit still walks everything): (a) piece two, before
-  pulling: the app now shows 0 unjudged — photograph beside the PM5 showing
-  the same; (b) a deliberate 10 s mid-rest stop: the banner appears, TOTAL
-  LEFT stays visible and draining, and no session-killer fires with
-  `terminal-raw` armed to convict it if it does; (c) an END mid-session: the
-  ring carries `final-totals`.
+- **Spec 2's own walk list** (rides the phase's next erg session): (a)
+  CONFIRMATION row, not a question — the hardware answer is already on
+  record (PM5 shows 0 pre-pull): does OUR screen now match it, photographed
+  together; (b) a deliberate 10 s mid-rest stop: the instruction banner
+  appears, TOTAL LEFT stays visible and draining, and any session-killer
+  recurrence convicts itself via `terminal-raw` + `suspicious-terminal`;
+  (c) an END mid-session: the ring carries `final-totals`; (d) the keystone
+  re-run (2×250 r0 → 500 exactly, above).
 
 ## Non-goals
 
@@ -247,16 +299,25 @@ grep says nothing reads it.
     photographed, mid-rest stop with banner + no kill, END finals) — walked
     at the phase's next erg session per James's release ruling.
 
-## Open questions
+## Questions the PM gate closed
 
-1. **The corroboration window's length and confirmants.** Proposed: confirm
-   on (second terminal-family tick) OR (0x0039) OR (WAITTOBEGIN/REARM);
-   cancel on any rowing/resting tick whose counters advance; window bounded
-   by the existing finish-grace order of magnitude (~2–3 s at the observed
-   ~2 Hz cadence). Needs the antagonist's attack: what does a REAL machine
-   send between a true finish's terminal tick and its 0x0039 (both orderings
-   are on record), and can the cancel condition misfire on rest coasting?
-2. **The F6 prompt's copy and the Discard consequence** (does Discard keep
-   the stash for diagnostics?). James sees the copy at PR time on
-   screenshots; flagged per the PM gate's precedent that copy on new product
-   surface gets his eyes.
+1. **The corroboration window** — replaced wholesale by the synchronous
+   predicate + fail-open convict-log above; the window design was falsified
+   against the committed record (majority-path firing, absent corroborator,
+   unsafe cancel).
+2. **F6's surface** — `UnloggedRow` twin, house idiom, copy question
+   dissolved into an existing approved pattern.
+
+## Open questions (James)
+
+1. **PR structure and the reducer** — the PM recommends landing this as 2a
+   (axes + display + driver lifecycle + METERS LEFT) then 2b (F6, the only
+   piece with a persisted-shape field and a destructive action), and CUTTING
+   the reducer to its own later spec (nothing in 2a/2b requires it, and
+   "introduced beside the hook with no consumer" is the unconsumed-helper
+   trap). This reverses part of James's approach pick; his call.
+2. **F6's interrupted-session duration** — work-only labeled as such, or
+   work + programmed rest for completed intervals. A number the rower keeps.
+3. **Discard's consequence** — proposed: discards the record, keeps the
+   diagnostics stash (it is the tab's own sessionStorage and dies with the
+   tab anyway).
