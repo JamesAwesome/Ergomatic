@@ -1790,7 +1790,12 @@ the merge, which is what the exit had always asked for, just later.
 
 ## Phase CR2 — Connected cleanup
 
-**Status:** NEXT UP, not started. Scoped by James 2026-08-13 immediately
+**Status:** IN FLIGHT as three spec cycles (James, 2026-08-15): spec 1
+"numbers" (R0 + item 0 + F7) is IMPLEMENTED — PR #99 open, all gates green,
+**merge gated on the hardware walk**, not CI; F6 moved to spec 2 by ruling.
+Spec 2 "state axes" (items 3 + 1 + F6) and spec 3 "redesign" (items 2 + 4,
+design handoff committed at `docs/design/handoffs/2026-08-15-connected-v2/`)
+are not started. Originally scoped by James 2026-08-13 immediately
 after v0.9.0 shipped: "I want to work next on cleanup for this phase" —
 three items, below. **AMENDED the same evening**, after he rowed "Sun
 fret" on v0.9.0 and photographed the PM5 beside the phone: two more items,

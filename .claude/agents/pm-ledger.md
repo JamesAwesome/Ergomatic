@@ -122,3 +122,35 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   ruled it into the state-axes spec, where the session lifecycle already lives.
   **A "half" that is described by what it does not need (no stored shape) has not
   been described.**
+
+## Final-PR gate, 2026-08-15 (Phase CR2 spec 1, PR #99)
+
+- **Judge an unreviewed tail by its BLAST RADIUS, not its size.** PR #99's tail
+  was one commit (`e7f3d2b`, nine review findings) with a SCOPED re-review — which
+  answers "were the findings fixed", never "did a fix break something else". The
+  useful check is not the diff stat: read the tail for behavioural lines and ask
+  what they can reach. #99's reached only the diagnostic ring (a log-guard
+  quantisation and a per-run reset), so the numbers were untouched by it. Contrast
+  #89, whose tail reached `app/domain/`. The question "how big was it" would have
+  ranked these wrongly in both directions.
+
+- **A walk must re-observe every symptom in the original report, not just the one
+  the fix targets.** CR2 item 0 recorded TWO things James photographed: TOTAL M at
+  3.9x, and TOTAL LEFT stuck at 0:00 with the bar prematurely full. The PR's
+  five-item walk list carried the first and dropped the second — which the fix
+  reaches only transitively (`surfaceModel.ts:528` shares the accumulator pair)
+  and which no test on the branch touched. Caught at this gate and added. When a
+  defect was found by observation, enumerate the original observations and check
+  each has a walk item.
+
+- **Flipping a defect's ERROR DIRECTION is a release event even with zero visual
+  change.** Spec 1 replaces an overcount with a deliberate undercount (two shapes
+  lose metres silently, bounded and disclosed). Testers on the previous build will
+  see lower totals for the same rowing. A release note that says only "bug fixes"
+  makes that unfalsifiable by the cohort — name the change so a tester knows what
+  to check.
+
+- **Release shape for a correctness-only fix:** PATCH, alone, and not bundled with
+  the redesign specs that follow it. Releasing spec 1 by itself is the canary the
+  3.9x defect never got; if a later build still disagrees with the erg, a solo
+  release is the only thing that says which change owns it.
