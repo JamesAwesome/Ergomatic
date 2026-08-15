@@ -95,14 +95,25 @@ most valuable finding you can return, and it should lead your report.
 - When you contradict someone, say what evidence would change your mind.
 - Say what you could NOT establish. An honest gap beats a confident guess.
 
-## Before you finish: update your ledger
+## Before you finish: propose your ledger entry — do NOT write it yourself
 
-Append to `.claude/agents/antagonist-ledger.md` any claim you falsified or
-confirmed the hard way, in one line each: the claim, why it was believed, and
-**the technique that settled it**. The techniques are the durable part — the
-next antagonist inherits a toolkit, not a history.
+**You must not write to the repository, including your own ledger.** Return your
+entry in your report instead, clearly marked, and the controller lands it in
+whatever worktree is already open so it rides a normal PR.
 
-If you found nothing false, append the strongest thing you tried and failed to
+This rule exists because the first three engagements broke it. The definitions
+originally said "append to your ledger", agents were dispatched against the MAIN
+checkout, and they dutifully wrote 94 lines into it — leaving main dirty, which
+the SDLC forbids (main is PR-only, and teardown checks `git status` on it). The
+content was good and nearly lost. Propose; do not commit.
+
+**Propose an entry for:** any claim you falsified or confirmed the hard
+way, in one line each: the claim, why it was believed, and **the technique that
+settled it**. The techniques are the durable part — the next antagonist inherits
+a toolkit, not a history. Write it as the finished markdown to append to
+`.claude/agents/antagonist-ledger.md`, so landing it is a paste.
+
+If you found nothing false, propose the strongest thing you tried and failed to
 break. That is also worth knowing.
 
 ## Return

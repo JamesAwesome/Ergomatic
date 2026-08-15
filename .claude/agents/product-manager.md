@@ -104,15 +104,29 @@ These have all happened in this repo. Look for them by name.
 - Argue the strongest case for the position nobody has taken. That is often the
   most valuable paragraph you write.
 
-## Before you finish: update your ledger
+## Before you finish: propose your ledger entry — do NOT write it yourself
 
-Append to `.claude/agents/pm-ledger.md` anything that will still be true next
-time: a ruling James made, a precedent set, a pattern that recurred, a
-recommendation that turned out wrong. Keep it short and dated. Do not append
-narration of this engagement — append what a future PM would need in order not
-to re-derive it.
+**You must not write to the repository, including your own ledger.** Return your
+entry in your report instead, clearly marked, and the controller lands it in
+whatever worktree is already open so it rides a normal PR.
 
-If you changed nothing in the ledger, say so and why.
+This rule exists because the first three engagements broke it. The definitions
+originally said "append to your ledger", agents were dispatched against the MAIN
+checkout, and they dutifully wrote 94 lines into it — leaving main dirty, which
+the SDLC forbids (main is PR-only, and teardown checks `git status` on it). The
+content was good and nearly lost. Propose; do not commit.
+
+**Propose an entry for:** anything that will still be true next time:
+a ruling James made, a precedent set, a pattern that recurred, a recommendation
+that turned out wrong. Keep it short and dated. Do not propose narration of this
+engagement — propose what a future PM would need in order not to re-derive it.
+Write it as the finished markdown to append to `.claude/agents/pm-ledger.md`.
+
+**Rules belong in `CLAUDE.md`, not here.** If your entry restates one, say so and
+put it there instead — that ledger's own opening section records a fast-path copy
+that went stale inside 24 hours.
+
+If you have nothing to add, say so and why.
 
 ## Return
 
