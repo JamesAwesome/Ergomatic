@@ -1091,6 +1091,15 @@ export function createPm5Driver(
     offsetDistance: 0,
     prev: null as { elapsedSeconds: number; distanceMeters: number } | null,
   };
+  /** R0 (CR2 spec 1, Task 1). The last totals actually PUT ON A FRAME.
+   *  `logSummaryTotals` fires on 0x0039, which carries no per-interval pair
+   *  of its own, so the value the rower last saw has to be remembered
+   *  rather than recomputed — `logSummaryTotals` has no `base` frame in
+   *  hand to fold `session.offsetDistance + base.distanceMeters` itself.
+   *  Set in `maybeEmitFrame` right after `frame` is built; read only in
+   *  `logSummaryTotals`. Diagnostics only, same as `session` above: nothing
+   *  here decides anything. */
+  let lastEmittedTotals = { elapsedSeconds: 0, distanceMeters: 0 };
   /**
    * Task 1 (fix-3, interface-notes.md §17 item 12): the machine's own idea
    * of the ARMED workout's shape — `workoutType`/`workoutDurationRaw`/
@@ -1109,6 +1118,15 @@ export function createPm5Driver(
     workoutDurationRaw: number;
     workoutDurationType: number;
   } | null = null;
+  /** R0 (CR2 spec 1). 0x0031 carries an absolute Total Work Distance that
+   *  `parseGeneralStatus` has always decoded and this driver has always
+   *  thrown away, so the one field that could retire the accumulator has
+   *  never been observed mid-piece — an absence that was OURS, not the
+   *  machine's (see the spec's own correction). Sampled on WHOLE-METRE
+   *  CHANGE only, the same on-change discipline `lastLoggedStructure` uses
+   *  and for the identical flood reason: 0x0031 notifies ~2/second and the
+   *  ring holds 500 entries. */
+  let lastLoggedTwd: number | null = null;
   const seen = { general: false, as1: false, as2: false };
   /**
    * D4 (Task 1's hardware verdict, interface-notes.md §18 #3): the
@@ -1699,6 +1717,12 @@ export function createPm5Driver(
       sessionElapsedSeconds: session.offsetElapsed + base.elapsedSeconds,
       sessionDistanceMeters: session.offsetDistance + base.distanceMeters,
     };
+    // R0 (CR2 spec 1, Task 1): cache the pair `logSummaryTotals` cannot
+    // recompute for itself (`lastEmittedTotals`'s own doc comment).
+    lastEmittedTotals = {
+      elapsedSeconds: frame.sessionElapsedSeconds,
+      distanceMeters: frame.sessionDistanceMeters,
+    };
     // Raw tracking for the OLD (fix-round MED-2) raw-vs-raw comparison —
     // see `lastRawFrameIntervalIndex`'s own doc comment for why this stays
     // in the machine's numbering, not `frame.intervalIndex`'s new one.
@@ -1994,6 +2018,14 @@ export function createPm5Driver(
    * read — which is exactly what neither the verdict entries nor a
    * PM5-screen photograph could do on their own.
    *
+   * R0 (CR2 spec 1, Task 1) adds the comparison spec 1 exists for: the
+   * frame accumulator this driver has emitted (`lastEmittedTotals`,
+   * deliberately BROKEN — see that variable's own comment and Task 4) next
+   * to 0x0031's own `totalWorkDistanceMeters`/`workoutDurationType`, read
+   * off `raw` the same way every other closure function in this file does.
+   * Landing the instrumentation on the defect is the point: it makes the
+   * before/after of Task 4's fix measurable instead of asserted.
+   *
    * Diagnostics only: nothing here decides anything, and the numbers are
    * reported, never reconciled. `deriveFinalIntervalFromSummary` remains
    * the only place either premise is USED.
@@ -2013,7 +2045,12 @@ export function createPm5Driver(
         : `this run has recorded ${recorded.length} interval(s) totalling ${recordedElapsed}s/${recordedMeters}m from 0x0037/0x0038, over a program with ${programmedRest}s of rest`;
     log.record(
       "summary-totals",
-      `0x0039 decoded: elapsed=${summary.elapsedSeconds}s distance=${summary.meters}m workoutType=${summary.workoutType} (${against}). §23 walk items 2 and 4 settle HERE, by comparing the two elapsed figures: equal = cumulative AND rest-exclusive, both premises hold; equal to the recorded total plus ${programmedRest}s = item 4 mismatch (0x0039 counts rest, 0x0037 does not); equal to the LAST interval's own elapsed alone = item 2 false (0x0039 is per-interval, not cumulative)`,
+      `0x0039 decoded: elapsed=${summary.elapsedSeconds}s distance=${summary.meters}m ` +
+        `workoutType=${summary.workoutType} | accumulator=${lastEmittedTotals.distanceMeters}m ` +
+        `accumulatorElapsed=${lastEmittedTotals.elapsedSeconds}s ` +
+        `machineTotal=${raw.totalWorkDistanceMeters ?? "?"}m ` +
+        `durationType=${raw.workoutDurationType ?? "?"} (${against}). ` +
+        `§23 walk items 2 and 4 settle HERE, by comparing the two elapsed figures: equal = cumulative AND rest-exclusive, both premises hold; equal to the recorded total plus ${programmedRest}s = item 4 mismatch (0x0039 counts rest, 0x0037 does not); equal to the LAST interval's own elapsed alone = item 2 false (0x0039 is per-interval, not cumulative)`,
     );
   }
 
@@ -2665,6 +2702,21 @@ export function createPm5Driver(
         log.record(
           "structure",
           `workoutType=${structure.workoutType} durationRaw=${structure.workoutDurationRaw} durationType=${structure.workoutDurationType} raw=${toHex(bytes)}`,
+        );
+      }
+      // R0 (CR2 spec 1): the machine's own Total Work Distance, sampled on
+      // WHOLE-METRE CHANGE only (`lastLoggedTwd`'s own comment).
+      // `workoutState`/`durationType` ride along on purpose: the antagonist
+      // established that characterising when this field appears without
+      // decoding the state byte is exactly how the last wrong conclusion
+      // was reached.
+      if (decoded.totalWorkDistanceMeters !== lastLoggedTwd) {
+        lastLoggedTwd = decoded.totalWorkDistanceMeters;
+        log.record(
+          "twd-sample",
+          `machineTotal=${decoded.totalWorkDistanceMeters}m at elapsed=${decoded.elapsedSeconds}s ` +
+            `distance=${decoded.distanceMeters}m workoutState=${decoded.workoutState} ` +
+            `durationRaw=${decoded.workoutDurationRaw} durationType=${decoded.workoutDurationType}`,
         );
       }
       // The ack-timeout policy's tick pulse (`DriverOptions.ackTimeout`,

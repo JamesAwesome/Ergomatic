@@ -8593,3 +8593,129 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     });
   });
 });
+
+describe("createPm5Driver: R0 instrumentation (CR2 spec 1) — the accumulator lands beside the numbers it contradicts", () => {
+  // This task lands on the BROKEN accumulator deliberately (CR2 spec 1
+  // Task 1). Nothing about the accumulator's own arithmetic changes here —
+  // the point is only that the instrumentation exists on the defect, so
+  // Task 4's fix has a measurable before/after.
+
+  const R0_SUMMARY_FIELDS = {
+    avgStrokeRate: 24,
+    endingHeartRateBpm: 168,
+    avgHeartRateBpm: 152,
+    minHeartRateBpm: 96,
+    maxHeartRateBpm: 175,
+    dragFactorAverage: 128,
+    recoveryHeartRateBpm: 120,
+    avgPaceSecondsPer500m: 125,
+  };
+
+  /** `stubTransport` idiom (driver.test.ts:492), not the fake's own
+   *  scripted timeline: both tests below need `distanceMeters` and
+   *  `totalWorkDistanceMeters` set to two INDEPENDENT values on the same
+   *  0x0031 payload, which only direct control over the encoded bytes can
+   *  give. Brings `seen.as1`/`seen.as2` up first, the same shortcut the
+   *  'seen' gating tests and `primedGate()` above take, so the General
+   *  Status notifications below actually reach `maybeEmitFrame`. */
+  function r0Harness(): {
+    transport: ReturnType<typeof stubTransport>;
+    log: ReturnType<typeof createEventLog>;
+    driver: ReturnType<typeof createPm5Driver>;
+  } {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log, {});
+    transport.notify(ADDITIONAL_STATUS_1_UUID, new Uint8Array(17));
+    transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));
+    return { transport, log, driver };
+  }
+
+  it("prints the accumulator and the machine's own total beside 0x0039's", async () => {
+    const { transport, log, driver } = r0Harness();
+    await programViaStub(driver, transport, MINIMAL_PROGRAM);
+
+    // Row far enough to put something in the accumulator.
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      buildGeneralStatusBytes({
+        elapsedSeconds: 30,
+        distanceMeters: 120.5,
+        workoutType: 8,
+        intervalType: 0,
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        rowingState: 1,
+        strokeState: 2,
+        totalWorkDistanceMeters: 120,
+        workoutDurationRaw: 6000,
+        workoutDurationType: 0,
+        dragFactor: 130,
+      }),
+    );
+    transport.notify(
+      END_OF_WORKOUT_SUMMARY_UUID,
+      buildEndOfWorkoutSummaryBytes({
+        ...R0_SUMMARY_FIELDS,
+        elapsedSeconds: 30,
+        meters: 120,
+        workoutType: 8,
+      }),
+    );
+
+    const entry = log.entries().find((e) => e.kind === "summary-totals");
+    expect(entry).toBeDefined();
+    // The consequence, not the existence: all five numbers are present.
+    expect(entry!.detail).toContain("distance=120m");
+    expect(entry!.detail).toContain("accumulator=120.5m");
+    expect(entry!.detail).toContain("accumulatorElapsed=30s");
+    expect(entry!.detail).toContain("machineTotal=120m");
+  });
+
+  it("samples the machine's own total mid-piece, at a bounded cadence", async () => {
+    // No `programViaStub` here (unlike the test above): the twd-sample
+    // check runs unconditionally in the 0x0031 handler, gated on nothing
+    // but `lastLoggedTwd`'s own on-change comparison — arming a program
+    // first would notify one extra General Status of its own (the armed
+    // readback, `totalWorkDistanceMeters=0`), which is a REAL, correctly
+    // logged sample and would make "whole-metre changes below" six, not
+    // five. Skipping the arm keeps this test's only 0x0031 traffic the ten
+    // notifications the assertion is about.
+    const { transport, log } = r0Harness();
+
+    const status = (d: number, twd: number): Uint8Array =>
+      buildGeneralStatusBytes({
+        elapsedSeconds: d / 4,
+        distanceMeters: d,
+        workoutType: 8,
+        intervalType: 0,
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        rowingState: 1,
+        strokeState: 2,
+        totalWorkDistanceMeters: twd,
+        workoutDurationRaw: 6000,
+        workoutDurationType: 0,
+        dragFactor: 130,
+      });
+    // Ten frames, but the machine's whole-metre total only advances five
+    // times.
+    for (const [d, twd] of [
+      [1, 1],
+      [1.4, 1],
+      [2, 2],
+      [2.6, 2],
+      [3, 3],
+      [3.4, 3],
+      [4, 4],
+      [4.6, 4],
+      [5, 5],
+      [5.5, 5],
+    ] as const) {
+      transport.notify(GENERAL_STATUS_UUID, status(d, twd));
+    }
+
+    const samples = log.entries().filter((e) => e.kind === "twd-sample");
+    // Bounded: one per whole-metre change, not one per notification.
+    expect(samples).toHaveLength(5);
+    expect(samples[4]!.detail).toContain("machineTotal=5m");
+  });
+});
