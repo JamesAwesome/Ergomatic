@@ -14,6 +14,13 @@ describe("hex helpers", () => {
     expect(hex).toBe("f1 76 04 00 ff");
     expect(Array.from(fromHexString(hex))).toStrictEqual(Array.from(bytes));
   });
+
+  it("round-trips an empty byte array through hex", () => {
+    const empty = new Uint8Array([]);
+    const hex = toHexString(empty);
+    expect(hex).toBe("");
+    expect(Array.from(fromHexString(hex))).toStrictEqual(Array.from(empty));
+  });
 });
 
 describe("recording serialization", () => {

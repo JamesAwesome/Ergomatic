@@ -37,6 +37,9 @@ export function toHexString(bytes: Uint8Array): string {
 }
 
 export function fromHexString(hex: string): Uint8Array {
+  if (hex.length === 0) {
+    return new Uint8Array([]);
+  }
   const bytes = hex.split(" ").map((h) => parseInt(h, 16));
   return new Uint8Array(bytes);
 }
