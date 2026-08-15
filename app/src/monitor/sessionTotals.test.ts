@@ -1200,3 +1200,158 @@ describe("session accumulator: accumulator-vs-machine divergence (CR2 spec 1 Tas
     },
   );
 });
+
+// ---------------------------------------------------------------------------
+// Review I3 (spec exit criterion 10): §5.2's outage table
+// (state-architecture-review.md:930-952) named FOUR outage shapes against a
+// session whose truth is 155.61s/455.1m — "none" and "5s, inside one
+// interval" are already covered (the §F2/seven-shapes suites above; the
+// latter is this file's own "a gap inside an interval converges on the
+// resumed reading" test). The other two — "spans one boundary" and "spans
+// the boundary and the finish" — were never given a test against the
+// CURRENT driver. §5.2's own Reported column (431.1 m / 237.0 m) measured
+// the OLD FOLD, replaced by this spec's register map; those numbers do not
+// carry over; each test below derives the register map's OWN number by
+// hand, from `session.seen`'s own max-merge-per-key rule
+// (`driver.ts`'s own doc comment), not by re-deriving §5.2's fold-era
+// figures.
+// ---------------------------------------------------------------------------
+
+describe("session accumulator: review I3 — outage shapes 2 and 3 (§5.2, spec exit criterion 10)", () => {
+  it(
+    "shape 2 — a gap spanning ONE boundary loses exactly the un-banked " +
+      "tail of the departing interval, silently (no divergence entry: " +
+      "both intervals still produced at least one frame)",
+    async () => {
+      // TWO_INTERVAL_REST_PROGRAM, same fixture and same interval-0/1
+      // finals ({87.3, 150.0} / {59.0, 130.0}, truth 280.0 m) as this
+      // file's own "a clean rest boundary sums both intervals" test above
+      // — reused rather than restated so the truth figure is traceable to
+      // an already-verified shape.
+      const h = await programmed(TWO_INTERVAL_REST_PROGRAM);
+
+      // Interval 0's own mid-work reading is recorded (key 0 = 75.0 m) —
+      // then the CONNECTION GAP opens: no further notification arrives
+      // until well after the boundary. Interval 0's own true final rest
+      // reading (87.3s/150.0m) is never reported at all — the gap
+      // swallows it, the boundary transition, AND interval 1's opening —
+      // and the radio resumes only once interval 1 has ALREADY reached
+      // its own true final rest reading (59.0s/130.0m), fed directly with
+      // no intermediate tick.
+      await tick(
+        h,
+        { elapsed: 30, distance: 75.0, state: WORKOUTSTATE_INTERVALWORKTIME },
+        0,
+      );
+      // (the gap: no ticks fed for interval 0's rest, the boundary, or
+      // interval 1's own work phase)
+      //
+      // intervalCount is 2, not 1: `intervalIndex.ts`'s own observed table
+      // ("rest after work1 -> machine 2, the phantom") forward-attributes a
+      // REST tick to the interval it is heading INTO, and `toProgramIndex`'s
+      // upper clamp (`candidate === programLength`) brings machine index 2
+      // back to our own index 1 on this 2-interval program — the same
+      // upper-clamp equivalence THREE_INTERVAL_PROGRAM's own §F2
+      // reproduction cites for its own trailing rest above.
+      const f = await tick(
+        h,
+        {
+          elapsed: 59.0,
+          distance: 130.0,
+          state: WORKOUTSTATE_INTERVALREST,
+        },
+        2,
+      );
+
+      // BY HAND, from `session.seen`'s own max-merge-per-key rule: key 0
+      // freezes at 75.0 (the last reading the gap let through for
+      // interval 0 — nothing between 75.0 and interval 0's true final
+      // 150.0 was ever seen, so the map has no way to know it exists).
+      // key 1 banks its own true final, 130.0, on first arrival (a single
+      // write is still a max-merge write). Reported total = 75.0 + 130.0
+      // = 205.0. Truth (both intervals' true finals) = 150.0 + 130.0 =
+      // 280.0. Bounded loss = 280.0 - 205.0 = 75.0 m — exactly interval
+      // 0's own true final minus its last-seen-before-the-gap reading
+      // (150.0 - 75.0 = 75.0), the un-banked tail the gap ate.
+      const reportedTotal = 205.0;
+      const truth = 280.0;
+      const boundedLoss = 75.0;
+      expect(truth - reportedTotal).toBeCloseTo(boundedLoss, 1);
+      expect(f.sessionDistanceMeters).toBeCloseTo(reportedTotal, 1);
+
+      // Silent by the map's own design (not a bug this task introduces):
+      // BOTH intervals produced at least one frame (`session.seen.size`
+      // is 2, matching `programIntervals` = 2), so `logSummaryTotals`'s
+      // "intervals seen" divergence — the check that exists specifically
+      // to catch a lost interval — has nothing to report even though 75 m
+      // of real distance is gone; it counts INTERVALS represented, not
+      // metres. Fires the summary path to make this observable. (A
+      // SEPARATE divergence — accumulator-vs-machine-TWD — does fire here,
+      // an orthogonal, already-tested check: `tick()`'s own default wires
+      // 0x0031's TWD to each call's own per-tick `distance`, not a
+      // realistic monotonic session TWD, so the raw 0x0031 field this
+      // fixture produces is not the shape that check is about; it is not
+      // this test's concern.)
+      h.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, new Uint8Array(20));
+      const div = h.log
+        .entries()
+        .filter(
+          (e) => e.kind === "divergence" && e.detail.includes("intervals seen"),
+        );
+      expect(div).toHaveLength(0);
+    },
+  );
+
+  it(
+    "shape 3 — a gap spanning the boundary AND the finish: no " +
+      "workoutComplete ever fires, and per review I2's scoping the " +
+      "interval-count divergence check never runs either (it lives only " +
+      "on the 0x0039 path) — the loss is currently silent, undocumented " +
+      "by any log entry",
+    async () => {
+      // THREE_INTERVAL_PROGRAM — its own truth (455.1 m) is §5.2's own
+      // cited truth figure (155.61s/455.1m) for continuity with the
+      // table's numbers, even though this shape's REPORTED figure does
+      // not (§5.2's 237.0 m measured the old fold; see this describe
+      // block's own header).
+      const h = await programmed(THREE_INTERVAL_PROGRAM);
+      const events: import("../../domain/monitor/types.js").MonitorEvent[] = [];
+      h.driver.events((e) => events.push(e));
+
+      const f = await tick(
+        h,
+        { elapsed: 30, distance: 75.0, state: WORKOUTSTATE_INTERVALWORKTIME },
+        0,
+      );
+
+      // The gap opens here and NEVER closes: the connection dies for
+      // good mid-interval-0. No further General Status notification, no
+      // interval boundary, no finish, no 0x0039 — the run is simply
+      // truncated. Nothing else is fed.
+
+      // BY HAND: key 0 is the only key ever written, frozen at 75.0 (the
+      // one reading before the connection died). Truth = 455.1 (all
+      // three intervals' true finals, summed as this file's own §F2
+      // "3 x 1:00" reproduction establishes). Bounded loss = 455.1 -
+      // 75.0 = 380.1 m — 83.5% of the truth, and NOTHING in the trace
+      // says so.
+      const reportedTotal = 75.0;
+      const truth = 455.1;
+      const boundedLoss = 380.1;
+      expect(truth - reportedTotal).toBeCloseTo(boundedLoss, 1);
+      expect(f.sessionDistanceMeters).toBeCloseTo(reportedTotal, 1);
+
+      // No workoutComplete: a terminal state (`"finished"`/`"terminated"`)
+      // never arrived, and that MonitorEvent only fires off one
+      // (`driver.ts`'s own "a terminal state closes THE RUN" comment).
+      expect(events.some((e) => e.kind === "workoutComplete")).toBe(false);
+      // No divergence entry either — review I2's scoping made this
+      // honest: `logSummaryTotals` (the ONLY place the interval-count
+      // divergence is computed) has exactly one call site, the 0x0039
+      // handler, and no 0x0039 ever arrived here. The bounded loss above
+      // is real and entirely unreported.
+      const div = h.log.entries().filter((e) => e.kind === "divergence");
+      expect(div).toHaveLength(0);
+    },
+  );
+});

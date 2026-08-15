@@ -8825,51 +8825,94 @@ describe("createPm5Driver: R0 instrumentation (CR2 spec 1) — the accumulator l
     expect(entry!.detail).toContain("machineTotal=120m");
   });
 
-  it("samples the machine's own total mid-piece, at a bounded cadence", async () => {
-    // No `programViaStub` here (unlike the test above): the twd-sample
-    // check runs unconditionally in the 0x0031 handler, gated on nothing
-    // but `lastLoggedTwd`'s own on-change comparison — arming a program
-    // first would notify one extra General Status of its own (the armed
-    // readback, `totalWorkDistanceMeters=0`), which is a REAL, correctly
-    // logged sample and would make "whole-metre changes below" six, not
-    // five. Skipping the arm keeps this test's only 0x0031 traffic the ten
-    // notifications the assertion is about.
-    const { transport, log } = r0Harness();
+  it(
+    "samples the machine's own total mid-piece, at a bounded cadence " +
+      "(review I1: a PRODUCTION-shaped fixture — no one rows 8:20/500)",
+    async () => {
+      // No `programViaStub` here (unlike the test above): the twd-sample
+      // check runs unconditionally in the 0x0031 handler, gated on nothing
+      // but `lastLoggedTwd`'s own bucket comparison — arming a program
+      // first would notify one extra General Status of its own (the armed
+      // readback, `totalWorkDistanceMeters=0`), a REAL, correctly logged
+      // sample that would shift every count below by one. Skipping the arm
+      // keeps this test's only 0x0031 traffic the 30 notifications below.
+      const { transport, log } = r0Harness();
 
-    const status = (d: number, twd: number): Uint8Array =>
-      buildGeneralStatusBytes({
-        elapsedSeconds: d / 4,
-        distanceMeters: d,
-        workoutType: 8,
-        intervalType: 0,
-        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
-        rowingState: 1,
-        strokeState: 2,
-        totalWorkDistanceMeters: twd,
-        workoutDurationRaw: 6000,
-        workoutDurationType: 0,
-        dragFactor: 130,
-      });
-    // Ten frames, but the machine's whole-metre total only advances five
-    // times.
-    for (const [d, twd] of [
-      [1, 1],
-      [1.4, 1],
-      [2, 2],
-      [2.6, 2],
-      [3, 3],
-      [3.4, 3],
-      [4, 4],
-      [4.6, 4],
-      [5, 5],
-      [5.5, 5],
-    ] as const) {
-      transport.notify(GENERAL_STATUS_UUID, status(d, twd));
-    }
+      const status = (elapsed: number, d: number, twd: number): Uint8Array =>
+        buildGeneralStatusBytes({
+          elapsedSeconds: elapsed,
+          distanceMeters: d,
+          workoutType: 8,
+          intervalType: 0,
+          workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+          rowingState: 1,
+          strokeState: 2,
+          totalWorkDistanceMeters: twd,
+          workoutDurationRaw: 6000,
+          workoutDurationType: 0,
+          dragFactor: 130,
+        });
 
-    const samples = log.entries().filter((e) => e.kind === "twd-sample");
-    // Bounded: one per whole-metre change, not one per notification.
-    expect(samples).toHaveLength(5);
-    expect(samples[4]!.detail).toContain("machineTotal=5m");
-  });
+      // 30 ticks at a 2:00/500 split (500 m / 120 s = 4.1667 m/s), fed at
+      // 0.5 s/tick — 2.0833 m/tick, comfortably inside "rowing" territory
+      // and nowhere near the review's flagged 0.4-0.6 m/tick (8:20/500)
+      // fixture that certified the broken guard. `distanceMeters` (0x0031's
+      // decimal field) and the rounded integer `totalWorkDistanceMeters`
+      // both climb tick over tick, exactly as the wire reports them.
+      // [elapsedSeconds, distanceMeters, totalWorkDistanceMeters]
+      const ticks: readonly [number, number, number][] = [
+        [0.5, 2.1, 2],
+        [1, 4.2, 4],
+        [1.5, 6.3, 6],
+        [2, 8.3, 8],
+        [2.5, 10.4, 10],
+        [3, 12.5, 13],
+        [3.5, 14.6, 15],
+        [4, 16.7, 17],
+        [4.5, 18.8, 19],
+        [5, 20.8, 21],
+        [5.5, 22.9, 23],
+        [6, 25, 25],
+        [6.5, 27.1, 27],
+        [7, 29.2, 29],
+        [7.5, 31.3, 31],
+        [8, 33.3, 33],
+        [8.5, 35.4, 35],
+        [9, 37.5, 38],
+        [9.5, 39.6, 40],
+        [10, 41.7, 42],
+        [10.5, 43.8, 44],
+        [11, 45.8, 46],
+        [11.5, 47.9, 48],
+        [12, 50, 50],
+        [12.5, 52.1, 52],
+        [13, 54.2, 54],
+        [13.5, 56.3, 56],
+        [14, 58.3, 58],
+        [14.5, 60.4, 60],
+        [15, 62.5, 63],
+      ];
+      for (const [elapsed, d, twd] of ticks) {
+        transport.notify(GENERAL_STATUS_UUID, status(elapsed, d, twd));
+      }
+
+      const samples = log.entries().filter((e) => e.kind === "twd-sample");
+      // Hand-derived from the fixture's own `twd` column above (not
+      // re-run through the driver's own formula — that would be the exact
+      // tautology `intervalIndex.ts`'s header warns against): the 25 m
+      // bucket (`Math.floor(twd / 25)`) is 0 for ticks 1-11 (twd 2..23), a
+      // NEW bucket 1 the instant twd reaches 25 at tick 12, still 1 through
+      // tick 23 (twd 23..48), and a NEW bucket 2 the instant twd reaches 50
+      // at tick 24. Three bucket VALUES visited (0, 1, 2) -> three log
+      // entries, at ticks 1, 12 and 24 — over all 30 notifications. Budget
+      // check: this 62.5 m stretch produced 3 entries; a full 6000 m piece
+      // at the same cadence would produce 6000 / 25 = 240, the number
+      // `TWD_SAMPLE_BUCKET_METERS`'s own comment states and stays well
+      // inside the 500-entry ring.
+      expect(samples).toHaveLength(3);
+      expect(samples[0]!.detail).toContain("machineTotal=2m");
+      expect(samples[1]!.detail).toContain("machineTotal=25m");
+      expect(samples[2]!.detail).toContain("machineTotal=50m");
+    },
+  );
 });

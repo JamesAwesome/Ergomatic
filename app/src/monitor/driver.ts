@@ -817,6 +817,27 @@ const DEFAULT_PREPARE_SETTLE_TICKS = 10;
  *  diverge independently if a future finding ever needs them to. */
 const DEFAULT_ERROR_TYPE_TICKS = 3;
 
+/** `lastLoggedTwd`'s own sampling bucket (review I1). A whole-METRE change
+ *  guard sounded coarse but is not: 0x0031's `totalWorkDistanceMeters` is an
+ *  INTEGER, and at any rowing pace faster than ~4:10/500 it advances at
+ *  least 1 m per status tick — the guard fired on nearly every 0x0031
+ *  arrival, the exact ~2/second flood `"twd-sample"` exists to avoid
+ *  (comment above `lastLoggedFrameState`, driver.ts, "the first laptop
+ *  session… evicted the whole programming trace… from the 500-entry ring
+ *  inside about four minutes" — this was the SAME defect, on a different
+ *  field, that comment already documents fixing once). Quantising to 25 m
+ *  buckets (`Math.floor(twd / TWD_SAMPLE_BUCKET_METERS)`) bounds the entry
+ *  count independently of pace: a 6000 m (6 km) piece — a long but not
+ *  extreme single row — produces at most `6000 / 25 = 240` `"twd-sample"`
+ *  entries, leaving more than half the 500-entry ring (`eventLog.ts`'s
+ *  `DEFAULT_CAPACITY`) for every other kind this file logs (`"frame"`,
+ *  `"structure"`, `"divergence"`, boundary/summary entries, writes/acks).
+ *  25 was chosen, not derived from a hardware measurement: coarse enough
+ *  that even a sub-2:00/500 pace (order 500 m in 120s, ~4.2 m/s) crosses a
+ *  bucket roughly once every 6 seconds rather than every tick, fine enough
+ *  that the TWD trend is still legible in the log. */
+const TWD_SAMPLE_BUCKET_METERS = 25;
+
 export function createPm5Driver(
   t: Transport,
   log: MonitorEventLog,
@@ -1063,12 +1084,17 @@ export function createPm5Driver(
    *
    *  HONEST LIMITS — one still open, one closed by CR2 spec 1 Task 5 (a
    *  controller ruling after Task 4's own review), both bounded and both
-   *  reported, never silent:
+   *  reported WHENEVER THE MACHINE DELIVERS AN END-OF-WORKOUT SUMMARY
+   *  (0x0039) — never on every run (review I2 scoped this: `logSummaryTotals`
+   *  has exactly one call site, `noteSummary`, which only runs off the
+   *  0x0039 handler. A run that ends without one — link death, terminate —
+   *  gets no check at all, silently):
    *  - STILL OPEN: an interval that produces ZERO frames is lost, because
    *    nothing ever writes its key. Bounded (it cannot compound) and errs
    *    SAFE — an undercount makes TOTAL LEFT read high, where the old
-   *    defect made it read zero mid-session. Reported at the finish: see
-   *    the interval-count divergence in `logSummaryTotals`.
+   *    defect made it read zero mid-session. Reported at the finish IF a
+   *    0x0039 arrives: see the interval-count divergence in
+   *    `logSummaryTotals`.
    *  - CLOSED: the final counter bump that arrives ON the WORKOUTEND tick
    *    itself used to be lost too — a `"finished"` frame's `intervalIndex`
    *    is always `null` (`toProgramIndex` never names an interval outside
@@ -1120,10 +1146,14 @@ export function createPm5Driver(
    *  `parseGeneralStatus` has always decoded and this driver has always
    *  thrown away, so the one field that could retire the accumulator has
    *  never been observed mid-piece — an absence that was OURS, not the
-   *  machine's (see the spec's own correction). Sampled on WHOLE-METRE
-   *  CHANGE only, the same on-change discipline `lastLoggedStructure` uses
-   *  and for the identical flood reason: 0x0031 notifies ~2/second and the
-   *  ring holds 500 entries. */
+   *  machine's (see the spec's own correction). Sampled on a 25 m BUCKET
+   *  CHANGE (`TWD_SAMPLE_BUCKET_METERS`'s own comment has the budget
+   *  arithmetic and review I1's finding), not on-change like
+   *  `lastLoggedStructure`: TWD is an integer that itself changes on nearly
+   *  every 0x0031 arrival at ordinary rowing pace, so a whole-metre guard
+   *  degenerates to logging almost every tick — the exact flood this field
+   *  exists to avoid, caught once already for `"frame"`/state (comment
+   *  above `lastLoggedFrameState`) and repeated here until I1. */
   let lastLoggedTwd: number | null = null;
   const seen = { general: false, as1: false, as2: false };
   /**
@@ -1736,6 +1766,28 @@ export function createPm5Driver(
       //     workout's own boundary has no stable identity to begin with
       //     (CSAFE-DEF footnote 12), so there is nothing comparable to
       //     lose for those states.
+      //     WALK_4 is a SINGLE-interval capture (that describe block never
+      //     arms a program), so on its own it cannot discriminate "the
+      //     finished frame carries the LAST INTERVAL's own reading" from
+      //     "the finished frame carries a session-cumulative sum" — with
+      //     one interval the two are the same number. The multi-interval
+      //     record settles it (review I4): `docs/monitor/sessions/
+      //     pm5-session4b-final.log.gz` L418, a 3+-interval row
+      //     (`intervalIndex: 2` on the frames immediately before it, so the
+      //     armed program has at least three intervals) whose finished
+      //     frame reads `elapsedSeconds: 64.3, distanceMeters: 194.1` —
+      //     identical to interval 2's own last "resting" reading just
+      //     above it in the capture, not any larger session-wide sum. The
+      //     same file's L2475 (a 2-interval row) shows the identical shape:
+      //     finished 86.57/104.8 matches interval 1's own last reading
+      //     exactly, not the two intervals' combined total (88 + 82 = 170).
+      //     Checked against every one of the 10,408 frames in that same
+      //     file (`captureReplay.test.ts`'s full record): of the 96 frames
+      //     where state transitions INTO `"finished"`, none reads more than
+      //     20 m over the immediately preceding frame — the WALK_4-shaped
+      //     terminal bump this arm exists to capture stays small and
+      //     bounded everywhere in the record; nowhere does a finished
+      //     frame jump by anything resembling a multi-interval sum.
       // Both are, being a max into an existing key, safe: a dishonest
       // smaller reading (rowing/resting OR finished) cannot lower the
       // total, only a genuinely higher one can raise it. Logged as
@@ -2830,12 +2882,24 @@ export function createPm5Driver(
         );
       }
       // R0 (CR2 spec 1): the machine's own Total Work Distance, sampled on
-      // WHOLE-METRE CHANGE only (`lastLoggedTwd`'s own comment).
+      // a 25 m BUCKET CHANGE (review I1; `TWD_SAMPLE_BUCKET_METERS`'s own
+      // comment and `lastLoggedTwd`'s own comment have the full reasoning
+      // and the ring-budget arithmetic) — NOT on whole-metre change, which
+      // degenerates to one entry per tick at any pace faster than ~4:10/500
+      // and evicted the programming trace exactly like the defect
+      // `lastLoggedFrameState`'s own comment already documents fixing once.
       // `workoutState`/`durationType` ride along on purpose: the antagonist
       // established that characterising when this field appears without
       // decoding the state byte is exactly how the last wrong conclusion
       // was reached.
-      if (decoded.totalWorkDistanceMeters !== lastLoggedTwd) {
+      const twdBucket = Math.floor(
+        decoded.totalWorkDistanceMeters / TWD_SAMPLE_BUCKET_METERS,
+      );
+      const lastLoggedTwdBucket =
+        lastLoggedTwd === null
+          ? null
+          : Math.floor(lastLoggedTwd / TWD_SAMPLE_BUCKET_METERS);
+      if (twdBucket !== lastLoggedTwdBucket) {
         lastLoggedTwd = decoded.totalWorkDistanceMeters;
         log.record(
           "twd-sample",
@@ -3852,6 +3916,12 @@ export function createPm5Driver(
         // Diagnostics-only (R0, Task 1's own doc comment): the outgoing
         // run's last-seen totals belong to that run, not the new one.
         lastEmittedTotals = { elapsedSeconds: 0, distanceMeters: 0 };
+        // M5 (review): `lastLoggedTwd` is the same kind of per-run
+        // diagnostic state as `lastEmittedTotals` right above it — reset it
+        // alongside its siblings so a re-arm's very first `"twd-sample"`
+        // entry is judged against nothing carried from the outgoing run,
+        // not against a bucket that workout happened to leave `twd` in.
+        lastLoggedTwd = null;
         // A reconcile deadline still standing belongs to the run being
         // replaced, and is cancelled here for the same reason a pending
         // boundary half is dropped above (fast-follow Task 2): both are

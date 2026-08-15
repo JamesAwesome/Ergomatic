@@ -61,10 +61,13 @@ export interface MonitorFrame {
   //   a distance the machine never cleared. A DISPLAY ESTIMATE, never a
   //   record: an interval that produces ZERO frames is lost entirely,
   //   because nothing ever writes its key — bounded (it cannot compound)
-  //   and reported, never silent (`logSummaryTotals`'s own interval-count
-  //   divergence check). The RECORD's per-interval actuals come from
-  //   0x0037/0x0038 (`IntervalActual`) and are not derived from these at
-  //   all.
+  //   and reported whenever the machine delivers an end-of-workout summary
+  //   (0x0039) — `logSummaryTotals`'s own interval-count divergence check,
+  //   which fires only off that notification (review I2: its one call site
+  //   is the 0x0039 handler). A run that ends without one (link death,
+  //   terminate) gets no check — the loss is silent for that run. The
+  //   RECORD's per-interval actuals come from 0x0037/0x0038
+  //   (`IntervalActual`) and are not derived from these at all.
   //
   //   Same caveat as `intervalIndex` below: a `MonitorFrame` built directly
   //   by `pm5/parse.ts`'s `toMonitorFrame` has no history to accumulate

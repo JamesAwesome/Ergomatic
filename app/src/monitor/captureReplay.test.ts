@@ -143,9 +143,19 @@ const session3 = parseFrames("pm5-session3-final.log.gz");
 const session4a = parseFrames("pm5-session4a-final.log.gz");
 const session4b = parseFrames("pm5-session4b-final.log.gz");
 
-/** Elapsed-drop threshold, matching the driver's own `SESSION_RESET_ELAPSED_
- *  DROP` (`src/monitor/driver.ts`) — a drop of MORE than this many seconds
- *  between consecutive frames is a candidate boundary. */
+/** Elapsed-drop threshold — a drop of MORE than this many seconds between
+ *  consecutive frames is a candidate boundary. Review M1: this is the
+ *  CAPTURE-DERIVED noise floor, not a mirror of any driver constant —
+ *  `SESSION_RESET_ELAPSED_DROP` was deleted by Task 4 (the edge-triggered
+ *  fold it gated no longer exists; the register map has no elapsed-drop
+ *  threshold of its own to match). `2` comes from this file's own data: the
+ *  worst BACKWARDS noise anywhere in the record is -0.57 s
+ *  (`driver.test.ts`'s own "a BACKWARDS-NOISE tick does not fold" test,
+ *  `pm5-session3-final.log:4632-4633`), so `2` sits comfortably clear of
+ *  ordinary jitter while still catching every genuine reset below — this
+ *  file's own classification tests (below) confirm the choice against the
+ *  full 25-drop population, independently of whatever the driver does or
+ *  does not do with it. */
 const ELAPSED_DROP_THRESHOLD_SECONDS = 2;
 
 interface Drop {
@@ -238,6 +248,27 @@ describe("drop-population classification (reset detection, never intervalIndex)"
     expect(drops.length).toBe(25);
     expect(realResets.length).toBe(16);
     expect(nonReset.length).toBe(9);
+  });
+
+  // Review M2: the design spec (`docs/superpowers/specs/
+  // 2026-08-15-connected-numbers-design.md:87`) prints "real resets (n=19)"
+  // for this same capture — a different number from this file's own 16,
+  // with no reconciliation written down anywhere. Reconciled here,
+  // mechanically: of the 9 non-reset drops above, only 6 carry real
+  // distance (the terminated-frame shape the driver must not fold);
+  // the other 3 carry ZERO distance across the boundary — a drop this
+  // file's own oracle correctly excludes from "real reset" (no distance
+  // moved, so nothing was lost or gained either way), but which is not the
+  // shape the driver's fold logic ever needed to distinguish FROM a reset
+  // — a harmless bucket the spec's own count folded back in. 16 (this
+  // file's strict resets) + 3 (the zero-distance non-resets) = 19, the
+  // spec's own figure.
+  it("reconciles against the spec's own n=19: 16 strict resets + 3 zero-distance non-resets", () => {
+    const zeroDistanceNonResets = nonReset.filter(
+      (d) => d.cur.distanceMeters === 0,
+    );
+    expect(zeroDistanceNonResets.length).toBe(3);
+    expect(realResets.length + zeroDistanceNonResets.length).toBe(19);
   });
 
   it("6 of the 9 non-reset drops carry real distance, and all 6 land in state: terminated", () => {
