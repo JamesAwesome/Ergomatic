@@ -308,3 +308,73 @@ toolkit, not a history.
   **Technique: when new code breaks an old fixture, ask which of the fixture's
   premises the new code is the first to observe — and check whether that premise
   was ever hardware-settled before blaming an open question.**
+
+## Spec-stage pass, 2026-08-15 (PM5 record-and-replay harness)
+
+- **"A replay can serve recorded notifications on the recorded clock while
+  matching the driver's writes in order."** False for any ack-gated driver, and
+  the spec's own cited prior art already solved it. `sendSequence` awaits each
+  frame's ack before the next write (`driver.ts:3876-3892`) and `discardStaleAcks`
+  (`:3857`, `:1405-1413`) purges anything that arrived before the sequence began —
+  so an ack released by the clock is discarded and `program()` hangs with no
+  timeout; released late, it burns `verifyArmed`'s 30-tick budget (`:628`, `:3229`)
+  and rejects `"not-observed"`. ErgometerJS's `ReplayDriver.checkQueue()` only ever
+  inspects `_events[0]`: the total order is a BARRIER — a recorded notification
+  cannot fire until the caller issues the write ahead of it — and its README says
+  so ("otherwise it will sometimes wait for a response which was not recorded").
+  **Technique: when a spec cites prior art, read the prior art's SOURCE, not its
+  summary. A design that adopts a format and drops the scheduling rule has adopted
+  the part that does not matter.** Corollary: the repo's own reactive harness
+  (`sessionTotals.test.ts:360-389` — wait for the write, then ack, then drain 50
+  microtasks) was the local proof, sitting in the file the spec cited for something
+  else.
+
+- **"Instant mode ignores `t`, so replay is deterministic."** False: this driver
+  reads a wall clock. `FINISH_GRACE_MS = 3000` (`driver.ts:794`) is compared with
+  `now()` (`:2100`, `:2783`) and armed via `schedule(..., 3000)` (`:2465`); both
+  default to `Date.now`/`setTimeout` (`:858`, `:863`). A session replayed in ~0 ms
+  of wall clock never expires its finish grace — the machinery that decided whether
+  every interval was measured, twice, on the walk. **Technique: before calling a
+  replay deterministic, grep the code under replay for its own clock reads. "The
+  engine consumes recorded time" is a property of the ENGINE, and ours has two
+  injectable clocks precisely because it does not.**
+
+- **"Extend the bundle probe to the recorder's identifier."** Vacuous, and this
+  repo had already measured why: `scripts/dist-grep.sh`'s header records that
+  grepping for the identifier `createFakeTransport` came back CLEAN against a build
+  that genuinely contained `fake.ts`, because minification renames identifiers —
+  every needle there is a string literal on purpose. **Technique: for any
+  "prove X is absent from the bundle" criterion, ask what survives minification.
+  The gate that passes on a bundle it should have failed is the expensive kind.**
+
+- **"The wire-capable fake zero-fills 0x0033."** False, and inherited verbatim from
+  a test-file header (`captureReplay.test.ts:23-26`) into a spec. `fake.ts:649`
+  computes `intervalCount` via `toMachineIndex` — the algebraic inverse of the
+  `toProgramIndex` under test, which `intervalIndex.ts:41-47` says is kept
+  separately written for exactly that reason — and `fake.ts:1064-1066` emits
+  0x0033 BEFORE 0x0031 atomically, so the fake has zero inter-characteristic skew,
+  in the opposite order to the hardware the walk logged twice. The zero-fill is the
+  test PRIMING shortcut (`sessionTotals.test.ts:402`), a different object.
+  **Technique: when a spec repeats a code comment's parenthetical, open the file
+  the comment names. A wrong "our harness is blind here" is more dangerous than no
+  claim: it hides a harness that is blind somewhere ELSE.**
+
+- **"The delivered notification rate is unmeasured (estimates disagree 5x)."**
+  False twice. Measured from the committed record: 2,651 status frames over 1,190
+  machine-seconds of rowing/resting in `pm5-session4b-final.log.gz` = **2.23/s,
+  modal spacing 0.50 s** (`maybeEmitFrame` is one frame per 0x0031,
+  `driver.ts:2990-2996`). And the 5x is a PLATFORM fact already written down:
+  `pm5-interface-notes.md:4403`, "~90-180ms spacing on iOS (vs the slower effective
+  cadence the desktop walks logged)". So a dev/web walk cannot produce the on-device
+  number a Tier 2 gate was going to wait for. **Technique: a rate is measurable from
+  any capture that carries the machine's OWN clock — count events per unit of
+  MACHINE time, not per unit of ours. And before believing two estimates conflict,
+  check whether they are estimates of two different transports.**
+
+- **Attacked and not broken:** the seam choice, against the primary source — the
+  live CDP `BluetoothEmulation` listing has 15 commands and none injects a
+  characteristic notification with data, so browser-level fake BLE genuinely cannot
+  replay a PM5 stream; the totally-ordered single log (independently confirmed in
+  ErgometerJS's source); the oracle-independence rule; and the tap's cost, which is
+  ~6.6 events/s of one hex encode — disproven as a perturbation risk by arithmetic
+  rather than by argument.
