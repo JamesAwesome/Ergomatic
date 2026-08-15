@@ -185,7 +185,26 @@ and before the frame is finished:
 
 - `intervalIndex !== null` → merge into `seen` at that key by **taking the
   maximum of each field**, not by overwriting.
-- `intervalIndex === null` → write nothing.
+- `intervalIndex === null` **and the machine is `rowing` or `resting`** → merge
+  into the **highest key already in `seen`** (see the divergence rule below). If
+  `seen` is empty, write nothing.
+- `intervalIndex === null` and the machine is anything else (`armed`, `idle`,
+  `finished`, `terminated`) → write nothing.
+
+**The divergence rule, and why the honest-looking answer was wrong** (James's
+ruling, 2026-08-15, on the antagonist's HIGH 5). **481 of 2265 rowing frames in
+the capture — 21% — carry `intervalIndex: null`**, and the first draft simply
+excluded them, reasoning that inventing an attribution is worse than omitting
+one. That is true at the driver's altitude and wrong at the rower's: with `seen`
+already non-empty, no key is written, **the displayed total stops moving while
+the rower keeps rowing**. That is the same symptom class as the `TOTAL LEFT`
+stuck at `0:00` that this item exists to fix, and the fold did not have it.
+
+Merging into the highest key seen keeps the number moving, and because it is a
+*max into an existing key* it cannot double-count. It undercounts if the machine
+has genuinely moved on to a later interval — but freezing undercounts too **and**
+stops the display, so this dominates. The assumption is stated in the driver and
+logged as a `divergence` entry, so it is never silent.
 
 **Why maximum and not last-write-wins** (PM design gate, 2026-08-15). The key is
 **not injective**: `toProgramIndex` clamps both ends (`intervalIndex.ts:180-182`,
@@ -273,12 +292,14 @@ saw, which is what last-seen means.
 | --- | --- | --- |
 | Terminate mid-piece | no key written, total unchanged | terminated frames carry no identity |
 | Re-arm after terminate | no key written until rowing resumes | armed carries no identity either |
-| Trailing rest of the last interval | overwrites that interval's key with a larger reading | the clamp attributes it to the interval whose rest it is |
+| Trailing rest of the last interval | raises that interval's key to a larger reading | the clamp attributes it to the interval whose rest it is |
 | 1-interval program, phantom indices | all collapse onto index 0 | there is only one interval; maximum is correct and clamp-proof |
+| **No-rest work→work boundary (L2837)** | **the post-reset `(0,0)` cannot lower key 0** | **0x0033's index lags 0x0031's counters here; max is what saves it** |
 | JustRow, no program armed | `programLength <= 0` → every index `null` → `seen` empty → total is the raw pair | a single continuous piece; per-interval *is* the session |
-| `rowing` with `intervalIndex === null` (divergence) | reading is excluded from the total | already logged as `divergence`; inventing an attribution would be worse |
+| `rowing` with `intervalIndex === null`, `seen` non-empty (divergence) | merged into the highest key seen; total keeps moving | freezing the rower's number is the symptom this item exists to fix |
+| `rowing` with `intervalIndex === null`, `seen` empty | fallback: total is the raw pair | nothing to attribute it to yet |
 | `program()` replaces an open run | `seen` cleared | a new program's totals start at zero |
-| Link gap **inside** an interval | key overwritten on resume; total converges | last-write-wins is idempotent |
+| Link gap **inside** an interval | key raised on resume; total converges | max-merge is idempotent |
 | Link gap **across** a whole interval | that interval's key is never written; its distance is lost | **bounded loss — stated, not hidden** |
 
 That last row is the honest limit of this approach and must be written down in
@@ -411,29 +432,88 @@ itself. The suite's entire notion of the machine is a 1905-line fake we wrote,
 and **25,511 captured frames in `docs/monitor/sessions/` are read by no test at
 all.**
 
-1. **A capture-replay rung** (review R12), new file. It reads
-   `docs/monitor/sessions/*.log.gz`, drives the **real** `createPm5Driver`, and
-   asserts the summed map against **each interval's own final pre-reset
-   reading**. Written failing first.
+### The strategy changed — the obvious test cannot work
 
-   The three segment results below are §F2's replay measurements, not mine — I
-   verified the drop *shape* that produces them (the table above) but not the
-   driver's output. **The first job of this test is to reproduce them.** If it
-   does not, the plan stops and the discrepancy is investigated before any fix
-   is written; a fix aimed at numbers we could not reproduce would be a fix
-   aimed at nothing.
+**A capture-replay rung as the review's R12 describes it, and as this spec's
+first draft specified it, CANNOT EXERCISE THE MAP AT ALL** (antagonist,
+2026-08-15; verified). Three independent reasons, any one of which is fatal:
 
-   | Segment | Truth | §F2 says the driver reports |
-   | --- | --- | --- |
-   | 3 x 1:00 with rest, both fields resetting | 455.1 m | 455.1 m, exact |
-   | a 24 m piece ended by Terminate | 23.9 m | 47.8 m, exactly 2.00x |
-   | a segment with no completed interval | 0 m | 108.4 m |
-2. **Not the boundary sum.** That oracle is unsound and the reason is measured:
+1. The captures store the driver's **decoded output** — `[event]` lines carrying
+   `MonitorFrame` JSON — not wire payloads. The only raw 0x0031 bytes anywhere in
+   the record are the 16 `structure` entries.
+2. The review's own re-encode harness **zero-fills 0x0033**, so
+   `status.intervalCount` is always 0.
+3. A replay never calls `program()`, so `activeRun` is null, `programLength` is
+   0, and `intervalIndex.ts:167` returns `null` **before it looks at state** —
+   for every state, every frame.
+
+So `seen` stays empty for the entire replay, the empty-map fallback fires on
+every frame, and the test reports the last frame's raw pair. The first draft's
+exit criteria 1, 2 and 4 were unachievable and criterion 3 passed **vacuously**.
+The harness reproduces §F2's published numbers exactly while being structurally
+incapable of writing a single map key — which is the whole lesson: *a harness
+that reproduces known numbers can still be blind to the mechanism the next fix
+turns on.*
+
+**The strategy James chose (2026-08-15): the capture supplies the SHAPES, a
+fixture supplies the WIRE.**
+
+- The capture is the authority on **which shapes are real**. Each one below is
+  cited to a line in `pm5-session4b-final.log.gz`, so no shape is invented.
+- The tests drive the **real `createPm5Driver`**, call `program()`, and feed
+  synthesized 0x0031/0x0033 payloads reproducing each shape. Nothing under test
+  is fabricated: the accumulator is what is being tested, and it sees genuine
+  wire-shaped input.
+- A separate, coarser **replay rung is kept** but scoped honestly — frame-level
+  invariants only, never map keys — so the 25,511 frames stop being read by no
+  test at all without the rung claiming more than it can deliver.
+
+The shapes, each a required test:
+
+| Shape | Cited at | What it must prove |
+| --- | --- | --- |
+| Terminate re-base | L5342, L8826, L9695, L10118, L10244 | no key written; total unmoved (today: 2.00x) |
+| **No-rest work→work boundary** | **L2835-2838** | **74.4 m survives; last-write-wins loses it** |
+| Clean rest boundary | L2293, L4631 | both keys present, summed |
+| Divergence stretch, 47 rowing frames | L8989 | total keeps moving (see the rule below) |
+| Re-arm after terminate | L4068 | no key written |
+| Gap inside an interval | synthesized | converges on resume |
+| Gap across a whole interval | synthesized | bounded loss, and the key-count divergence fires |
+
+**Two numbers the plan must not chase into the ground.** §F2's 455.1 m is *not*
+reproducible from the recipe its Appendix gives (segmenting at each `armed`
+yields 525.2 m); the antagonist located the real slice as **frames L1–L428 of
+`pm5-session3-final.log.gz`**. And **no capture carries a 0x0039 at all**
+(`notify-first` lists only 0x0031/32/33/37/38), so `logSummaryTotals` — whose
+single call site is the 0x0039 path, `driver.ts:1958` — can never fire on a
+replay. Its divergence entries are tested with a synthesized 0x0039, not a
+replay.
+
+**Not the boundary sum.** That oracle is unsound and the reason is measured:
    0x0031's per-interval pair includes the trailing rest while `IntervalActual`
    is work only — one 30 s rest contributed 76.1 m of coasting — so on the one
    sound segment in the record it reports a 2.14x failure for a fold that is
    correct. The captures also contain zero events named `boundary` (14 are
    `intervalComplete`).
+
+**PIN THE ORACLE'S RECIPE, because one reading of it is tautological.** "Each
+interval's own final pre-reset reading" has two implementations and only one is
+valid:
+
+- **Valid — detect the resets.** Group frames by an elapsed drop >2 s **and** a
+  distance drop, using no interval index at all. Computed this way the oracle is
+  independent of the map, and it is what caught the L2837 failure.
+- **Invalid — group by the recorded `intervalIndex`.** That is the more natural
+  reading of the phrase, and it derives the oracle from the same field the
+  implementation keys on, so the two agree by construction. This repo has shipped
+  exactly that shape before; it is in the antagonist's ledger.
+
+The plan must state which, in the test file, in a comment.
+
+**And this oracle does not discharge recurring failure #11.** It is an internal
+oracle over our own 0x0031 stream — two of our own numbers agreeing. Only the
+hardware walk compares the app against the erg. The spec should not imply
+otherwise, and the first draft did.
 3. **The fake learns the terminate shape.** `transports/fake.ts` cannot currently
    produce elapsed jumping backwards to a smaller non-zero value while distance
    stands still, so a fix verified against it is verified against a machine that
@@ -468,19 +548,28 @@ all.**
 
 ## Exit criteria
 
-1. The capture-replay test passes against all three committed captures, using the
-   per-interval-final oracle, driving the real driver.
-2. The terminate segment reports 23.9 m for 23.9 m of rowing (§F2 measures 47.8 m
-   today, and the test reproduces that before the fix lands).
-3. The segment with no completed interval reports 0 m (§F2 measures 108.4 m today).
-4. The sound segment that is already correct **stays** correct at 455.1 m — the
-   regression guard, and the one §F2's rejected oracle got wrong.
+**Rewritten after the antagonist pass — the first draft's criteria 1, 2 and 4
+were unachievable and 3 passed vacuously.** Every criterion below is reachable by
+the strategy above.
+
+1. Every shape in the shapes table has a test that drives the **real**
+   `createPm5Driver` through `program()` and synthesized wire payloads, and each
+   asserts a number.
+2. **The no-rest boundary test fails on last-write-wins and passes on max.** This
+   is the criterion that proves the design change rather than the design; if it
+   passes under both, it is not testing what it claims.
+3. The terminate shapes move the total by 0 m where today they double it.
+4. The oracle is computed by **reset detection, not by grouping on
+   `intervalIndex`**, and the test file says so in a comment.
 5. A drop inside the finish grace, after 0x0039 has arrived, produces a filled log
    screen rather than `0 OF 1 INTERVALS MEASURED`.
-6. `summary-totals` prints all five numbers; the mid-piece TWD samples appear at
-   a bounded cadence in a replayed capture; and the divergence entry fires both
-   when the map and TWD disagree and when `seen.size` disagrees with the
-   program's interval count.
+6. `summary-totals` prints all five numbers, with a **synthesized 0x0039** since
+   no capture carries one; the mid-piece TWD sample appears at a bounded cadence;
+   and the divergence entry fires when the map and TWD disagree, when `seen.size`
+   disagrees with the program's interval count, and when a rowing frame arrives
+   with no interval identity.
+7. The kept replay rung asserts frame-level invariants only, and its file states
+   why it cannot assert map keys.
 8. Scoped gates green: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm e2e`
    with no screenshot churn, per-file coverage inspected for every file touched.
 9. **`app/domain/monitor/types.ts:37-39` is corrected.** "BOTH fields reset
@@ -510,14 +599,35 @@ covering items 0 and 3 together. So the order is: implement spec 1 → walk R6
 once → merge spec 1 and finalise spec 2's design from that session. Asking twice
 spends the scarcest resource in this phase.
 
-## Open questions
+## Questions the antagonist closed
 
-1. **Divergence tolerance.** What delta between the summed map and
-   `totalWorkDistanceMeters` should raise the entry? TWD is truncated to whole
-   metres, so the floor is at least 1 m plus one status tick of rowing. Proposed:
-   log unconditionally at the finish, and raise a `divergence` only above 5 m or
-   5%, whichever is larger. **Needs the antagonist's view before it is fixed.**
-2. **Distance-goal suppression.** Because TWD reads the goal on distance-goal
-   pieces, the divergence comparison is meaningless there. Proposed: record the
-   numbers, suppress the divergence verdict when `workoutDurationType === 128`,
-   and say so in the entry.
+1. **Divergence tolerance — a fixed 5 m absolute; the percentage arm is dropped.**
+   TWD truncates to whole metres (<1 m) and one status tick at ~2 Hz is ~2.1 m at
+   2:00/500 m pace, so a 4–5 m absolute floor is the right order. The first
+   draft's "5 m or 5%, whichever is larger" is actively harmful: it makes the
+   alarm **less sensitive as the session lengthens**, and one lost 500 m interval
+   in a 20×500 is *exactly* 5% — so it would not fire on precisely the failure
+   mode this design introduces. Log the pair unconditionally at the finish; raise
+   the verdict above 5 m absolute.
+2. **Distance-goal suppression — yes, and wider than proposed.** Now PRIMARY
+   rather than inferred, thanks to the mid-row state-5 sample. But
+   `workoutDurationType` is a per-frame field whose scope (whole workout vs
+   current interval) is not established, and `compileProgram` emits **mixed**
+   time/distance programs since `ProgramInterval.kind` is per-interval — so the
+   flag may flip mid-session. Suppress the verdict when
+   `workoutDurationType === 128` **or** the armed program contains any
+   `kind: "distance"` interval, and record both facts in the entry.
+
+## Still open — carried to the walk
+
+- Whether the 0x0031/0x0033 skew occurs at **every** no-rest boundary or only
+  some. The record contains exactly one.
+- Whether TWD on a **multi-interval distance-goal** program reads the per-interval
+  goal or the programmed total. Only single-interval 500 m goals are in the
+  record. Either reading supports suppression, so this does not block.
+- **Whether the PM5's own displayed session total includes rest-coasting metres.**
+  §7.5 proves our per-interval counter accrues 76.1 m over a 30 s rest. If the
+  monitor's total excludes them, the map is systematically **high** against what
+  James actually reads on the erg — and since no capture carries a 0x0039, this
+  is unsettleable offline. **This is the single most important walk question, and
+  it decides whether the fix is finished.**
