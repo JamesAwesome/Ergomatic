@@ -283,3 +283,28 @@ toolkit, not a history.
   Terminate re-base, which the write rule already excludes, while its cost — a
   previous key holding ≤0.8 m collapses two keys and loses ~60 s of session
   elapsed — is reachable by a rower who simply doesn't pull.
+
+- **Addendum to the Task 11 pass — one of its own "attacked and not broken"
+  rows was falsified a day later by the implementation.** The pass certified
+  "the trailing-rest phantom (clamp → existing key, never an open)". Shape 2 of
+  the outage suite IS a trailing-rest clamp, and it DOES open — when a frame gap
+  has kept the next key from ever being opened, the clamped phantom is the first
+  write to reach it. The guard still behaves safely there (refused, merged,
+  logged), but the certification was wrong: the clamp guarantees the KEY VALUE
+  is an existing interval's, not that the key is already IN the map.
+  **Technique: for every "never happens" row in a soundness table, ask what
+  state the claim quietly assumes (here: that earlier frames already opened the
+  key) and construct the run where that state is absent.** A frame gap is
+  always the cheapest absence generator in this codebase.
+
+- **A test fixture's premises can collide with new code while both are
+  "settled".** The Sea Fret happy-path fixture modeled 0x0031's elapsed/distance
+  as session-cumulative (never resetting) — wire-impossible, hardware-settled as
+  per-interval by walk 4 and re-confirmed twice in walk-2026-08-15 — and the
+  open-on-reset guard is the first code whose behaviour DIFFERS on the
+  impossible shape, so the flagship test broke on a fixture bug, not a code bug.
+  The first draft blamed interface-notes item 24, a category error: item 24 is
+  about 0x0033's Last Split CHECKPOINT pair, not 0x0031's own counters.
+  **Technique: when new code breaks an old fixture, ask which of the fixture's
+  premises the new code is the first to observe — and check whether that premise
+  was ever hardware-settled before blaming an open question.**
