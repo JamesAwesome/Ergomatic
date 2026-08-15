@@ -241,8 +241,10 @@ or `4-6-8-6-4 @ +12 → +10` cannot tell a 2k-anchored piece from a
 6k-anchored one, and that is what tells them the workout's character.
 Measured against the 300-workout seed: 86 cards rendered compressed
 and 68 of them lost their base (the `sharedBase` set ignored effort
-refs, so a single-base set with one MAX piece suppressed too); 94 of
-the 300 Library lines carried no base token at all.
+refs, so a single-base set with one MAX piece suppressed too). 94 of
+the 300 Library lines carried no base token, but only **62** are range
+lines this changes — the other 32 are MAX/effort lines, which correctly
+carry no baseline and are untouched.
 
 Both hoists are retired.
 
