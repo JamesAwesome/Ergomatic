@@ -34,20 +34,38 @@ export interface MonitorFrame {
   //   them — and they are PER-INTERVAL, not session-cumulative. Hardware
   //   walk 4 (2026-08-08, `docs/monitor/pm5-interface-notes.md` §18) settled
   //   it on a 2x100m: `state=resting elapsed=37.81 distance=101.8` was
-  //   followed immediately by `state=rowing elapsed=0 distance=0.7` — BOTH
-  //   fields reset together at each new work interval, and each interval's
-  //   count spans its own work plus its trailing rest. Anything that wants
-  //   "how far into THIS interval" reads these; anything that wants a
-  //   whole-session total reads the pair below instead.
+  //   followed immediately by `state=rowing elapsed=0 distance=0.7` — a
+  //   rest->work boundary resets BOTH fields together, and each interval's
+  //   count spans its own work plus its trailing rest. That does NOT
+  //   generalize to every drop in `elapsedSeconds`, though it was once
+  //   taken to (CR2 spec 1, `docs/superpowers/specs/
+  //   2026-08-15-connected-numbers-design.md`, "The fold's failure shape"):
+  //   replaying `docs/monitor/sessions/pm5-session4b-final.log.gz` found 6
+  //   of 25 threshold-crossing elapsed-drops carrying real distance while
+  //   `distanceMeters` stood EXACTLY STILL — every one of them a
+  //   TERMINATE, which re-bases elapsed backward to a smaller non-zero
+  //   value without clearing distance at all (CSAFE-DEF footnote 12).
+  //   Anything that wants "how far into THIS interval" reads these;
+  //   anything that wants a whole-session total reads the pair below
+  //   instead.
   sessionElapsedSeconds: number;
   sessionDistanceMeters: number;
   // ^ The whole-session running totals the pair above only LOOKED like
-  //   before walk 4 — accumulated by `src/monitor/driver.ts`, which folds
-  //   each interval's last pre-reset reading into a running offset (see
-  //   that file's own accumulator for the exact rule and its honest
-  //   undercount caveat). A DISPLAY ESTIMATE, never a record: the fold can
-  //   miss up to one status tick (~0.5 s / ~1 m) per interval boundary,
-  //   because it can only bank the last reading it actually SAW. The
+  //   before walk 4. Held by `src/monitor/driver.ts`'s SESSION REGISTER MAP
+  //   (CR2 spec 1, `session.seen` — see that variable's own doc comment for
+  //   the exact rule and its honest limits): each interval's reading is
+  //   kept under its own key and merged by MAXIMUM, never folded into a
+  //   running offset on an elapsed-drop edge-trigger — that fold is what
+  //   this map replaced, precisely because the edge it watched for
+  //   (elapsed dropping) fires on a Terminate too, and the old fold banked
+  //   a distance the machine never cleared. A DISPLAY ESTIMATE, never a
+  //   record: an interval that produces ZERO frames is lost entirely,
+  //   because nothing ever writes its key — bounded (it cannot compound)
+  //   and reported whenever the machine delivers an end-of-workout summary
+  //   (0x0039) — `logSummaryTotals`'s own interval-count divergence check,
+  //   which fires only off that notification (review I2: its one call site
+  //   is the 0x0039 handler). A run that ends without one (link death,
+  //   terminate) gets no check — the loss is silent for that run. The
   //   RECORD's per-interval actuals come from 0x0037/0x0038
   //   (`IntervalActual`) and are not derived from these at all.
   //

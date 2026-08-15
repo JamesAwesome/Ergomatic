@@ -586,7 +586,7 @@ describe("createFakeTransport: programming — byte-for-byte verification, ack p
     ]);
   });
 
-  it("a distance-kind program's status bundle carries intervalType=1", async () => {
+  it("a distance-kind program's status bundle carries intervalType=1, and totalWorkDistanceMeters reads the GOAL, not the metres rowed", async () => {
     const fake = createFakeTransport({
       program: DISTANCE_PROGRAM,
       events: [
@@ -609,6 +609,39 @@ describe("createFakeTransport: programming — byte-for-byte verification, ack p
     fake.tick(100);
     expect(generals).toHaveLength(1);
     expect(decodeGeneral(generals[0]!).intervalType).toBe(1);
+    // CR2 spec 1 Task 8, Step 3 (design doc's own TWD table): a
+    // distance-goal piece reports its own 500 m GOAL on 0x0031's Total
+    // Work Distance field, live and mid-row (workoutState 5/`rowing`) —
+    // NEVER the 50 m this tick has actually rowed. Confirmed even a live
+    // mid-row sample in the design doc's own capture (13.4/31.5 m rowed,
+    // TWD still 500 on a 500 m goal).
+    expect(decodeGeneral(generals[0]!).totalWorkDistanceMeters).toBe(500);
+  });
+
+  it("a time-kind program's totalWorkDistanceMeters tracks metres rowed, TRUNCATED to whole metres (never the goal)", async () => {
+    const fake = createFakeTransport({
+      program: PROGRAM,
+      events: [
+        {
+          atMs: 100,
+          kind: "status",
+          workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+          elapsedSeconds: 33.57,
+          distanceMeters: 23.9,
+          spm: 24,
+          currentSplit: 110,
+          heartRateBpm: 140,
+          programIntervalIndex: 0,
+        },
+      ],
+    });
+    await programIt(fake, PROGRAM);
+    const generals: Uint8Array[] = [];
+    fake.subscribe(GENERAL_STATUS_UUID, (b) => generals.push(b));
+    fake.tick(100);
+    // Design doc's own TWD table: 23.9 m rowed -> 23, the FLOOR, not 24
+    // (Math.round would give the wrong answer here).
+    expect(decodeGeneral(generals[0]!).totalWorkDistanceMeters).toBe(23);
   });
 });
 
@@ -1705,11 +1738,13 @@ describe("createFakeTransport: the prepare step's own machine reaction (§18 ses
       WORKOUTSTATE_REARM,
       WORKOUTSTATE_WAITTOBEGIN,
     ]);
-    // Carried over from what the machine last reported, exactly as the
-    // app's own explicit `terminate()` does (`synthesizeTerminated` is one
-    // function with two callers): the terminate reading keeps the piece's
-    // own elapsed/distance, and the re-arm zeroes them.
-    expect(decodeGeneral(generals[1]!).elapsedSeconds).toBe(10);
+    // CR2 spec 1 Task 8: CSAFE-DEF footnote 12's own re-base, exactly as the
+    // app's own explicit `terminate()` gets (`synthesizeTerminated` is one
+    // function with two callers) — elapsed re-bases BACKWARD to a smaller,
+    // non-zero value (halved here: this fake's own representative rebase,
+    // not a derived formula — see that function's own doc comment) while
+    // distance stands EXACTLY still; the re-arm then zeroes both.
+    expect(decodeGeneral(generals[1]!).elapsedSeconds).toBe(5);
     expect(decodeGeneral(generals[1]!).distanceMeters).toBe(40);
     expect(decodeGeneral(generals[3]!).elapsedSeconds).toBe(0);
 

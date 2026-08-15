@@ -575,6 +575,46 @@ function toHex(bytes: Uint8Array): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join(" ");
 }
 
+/** CR2 spec 1, Task 8 — Step 3. `totalWorkDistanceMeters` (0x0031 byte 11,
+ *  `parse.ts`) is NOT the live distance mirrored back: `state-architecture-
+ *  review.md`'s own decode of all 16 distinct `structure` entries in
+ *  `pm5-session4b-final.log.gz` (the design doc's TWD table) gives two
+ *  DIFFERENT rules keyed on the armed interval's goal type, verbatim:
+ *
+ *    Goal type   durationType   Samples                    TWD reads
+ *    Time        0              20.9/23.9/25.8 m rowed     20/23/25 — rowed, truncated
+ *    Distance    128            13.4 and 31.5 m rowed,     500/500/500/500 — the GOAL
+ *                                goal 500
+ *
+ *  and one of the distance-goal samples is a LIVE mid-row reading
+ *  (workoutState 5/`rowing`, elapsed 76.54s, distance 31.5m, TWD still
+ *  500) — not an arming artefact, so the suppression is not "TWD reads 0
+ *  until something rowed", it reads the goal from the very first status
+ *  tick after arming and never tracks metres at all on a distance piece.
+ *  `distanceGoalMeters` is that goal, `null` for a time-goal interval (the
+ *  caller derives it from `interval.value`, `ProgramInterval.kind ===
+ *  "distance"`'s own field, `domain/monitor/program.ts` — the same armed
+ *  interval `statusBundle` already looks up for `isDistance`, so this
+ *  function stays pure and does not re-index `program.intervals` itself).
+ *  `Math.trunc`, not `Math.round`, for the time-goal case: the table's own
+ *  three samples are the FLOOR of the metres rowed (20.9 -> 20, not 21),
+ *  never the nearest whole metre.
+ *
+ *  Genuinely open (design doc's own "Still open" section): whether a
+ *  MULTI-interval distance-goal program reports the per-interval goal or
+ *  the programmed total — only single-interval 500 m pieces are in the
+ *  record. This reads the CURRENTLY ARMED interval's own goal, the
+ *  narrower and better-evidenced of the two readings and the one every
+ *  captured sample is consistent with. */
+function totalWorkDistanceFor(
+  distanceGoalMeters: number | null,
+  distanceMeters: number,
+): number {
+  return distanceGoalMeters !== null
+    ? distanceGoalMeters
+    : Math.trunc(distanceMeters);
+}
+
 /** Builds the merged General/AdditionalStatus1/AdditionalStatus2 triple for
  *  one `FakeStatusEvent` — the "full bundle" this fake always sends
  *  together for a status tick, in this fixed order, so the driver (which
@@ -642,7 +682,10 @@ function statusBundle(
       rowingState:
         e.rowingState ?? (toMonitorState(e.workoutState) === "rowing" ? 1 : 0),
       strokeState: 0,
-      totalWorkDistanceMeters: e.distanceMeters,
+      totalWorkDistanceMeters: totalWorkDistanceFor(
+        isDistance ? interval!.value : null,
+        e.distanceMeters,
+      ),
       // 0x0031's STRUCTURE fields — `workoutType` plus the interval-0
       // duration pair (fix-3 Task 5). The CALLER decides which structure
       // this particular tick reports (`structureForTick()`, below) — this
@@ -1224,16 +1267,49 @@ export function createFakeTransport(
   }
 
   /**
-   * The TERMINATE status the machine reports in reaction to a terminate
-   * command, carried over from whatever it last reported. ONE definition,
-   * two callers on purpose (Task 3): the app's own explicit `terminate()`
-   * (`onArmedFrameComplete`) and `program()`'s leading PREPARE step
-   * (`queueTerminateAutoCycle` via `onClearingFrameComplete`) send the SAME
-   * wire command — `buildTerminate()`, byte for byte — so they get the SAME
-   * machine reaction. That equivalence is the finding, not an
-   * implementation convenience: interface-notes.md §18 session 3 shows
-   * `{"kind":"terminated"}` firing off the prepare step's terminate in
-   * every mid-session arm it recorded (Step 5 and the REPRO row, both
+   * CR2 spec 1, Task 8. CSAFE-DEF footnote 12 (p.25) — quoted twenty lines
+   * above the bug it caused, `driver.ts`'s own `session` doc comment — and
+   * `state-architecture-review.md` §7.5's replay of
+   * `pm5-session4b-final.log.gz`: a genuine Terminate re-bases Elapsed Time
+   * BACKWARD to a smaller, NON-ZERO value while Distance stands EXACTLY
+   * still. Six instances are in that one capture:
+   *
+   *   rowing      33.57  23.9  -> terminated  21.51  23.9
+   *   rowing      31.55  20.9  -> terminated  15.52  20.9
+   *   terminated  24.78  13.4  -> terminated  13.88  13.4
+   *   terminated  25.70  23.9  -> terminated  14.29  23.9
+   *   rowing      25.98  25.8  -> terminated  13.85  25.8
+   *   rowing     110.51  31.5  -> terminated  23.42  31.5
+   *
+   * No consistent ratio holds across them (21.51/33.57 = 0.64 down to
+   * 23.42/110.51 = 0.21) — this file's own knowledge boundary (its header:
+   * "Concept2 byte-level knowledge stays confined to what this file calls
+   * INTO `pm5/`") stops short of inventing a derived formula for a number
+   * nothing in [CSAFE-DEF] specifies. Halving is a REPRESENTATIVE rebase,
+   * not a derived one: the only property every one of the six samples
+   * shares, and the only one any consumer of this fake needs, is SMALLER
+   * and NON-ZERO — which halving guarantees for any positive input, and
+   * `0` stays `0` (nothing to re-base from a machine that had not yet
+   * rowed; that shape is `WORKOUTSTATE_REARM`'s own `zeroedStatus`, the
+   * auto-cycle's NEXT step, not this one).
+   *
+   * ALWAYS applied, not a script opt-in (unlike the truly synthetic hooks
+   * in this file, `failNextProgramFrame`/`refuseNextPrepare`, whose own doc
+   * comments say "NEVER OBSERVED ON HARDWARE"): this shape is independently
+   * observed six times on real hardware in the ONE capture this repo has
+   * (the captures are nested prefixes of each other — see the spec's own
+   * "the captures are ONE capture, not three" finding), which is exactly
+   * the bar this file's header sets for an honest DEFAULT rather than
+   * something a test must ask for.
+   *
+   * ONE definition, two callers on purpose (Task 3): the app's own explicit
+   * `terminate()` (`onArmedFrameComplete`) and `program()`'s leading
+   * PREPARE step (`queueTerminateAutoCycle` via `onClearingFrameComplete`)
+   * send the SAME wire command — `buildTerminate()`, byte for byte — so
+   * they get the SAME machine reaction. That equivalence is the finding,
+   * not an implementation convenience: interface-notes.md §18 session 3
+   * shows `{"kind":"terminated"}` firing off the prepare step's terminate
+   * in every mid-session arm it recorded (Step 5 and the REPRO row, both
    * mid-send), and this file used to ack that frame and change NOTHING —
    * no transition, no status — which is why CI could never see either the
    * empty arm or the settle that prevents it.
@@ -1242,7 +1318,8 @@ export function createFakeTransport(
    * lands after `phase` became `"armed"` but before fix-round 1's F1
    * withheld armed bundle has reached the wire even once): the fallback below is the
    * state the machine is in at that moment — armed, nothing rowed — not a
-   * defensive guess.
+   * defensive guess. (Elapsed `0` there stays `0`, exactly like every other
+   * fallback case above.)
    */
   function synthesizeTerminated(): FakeStatusEvent {
     const previous: FakeStatusEvent =
@@ -1251,7 +1328,8 @@ export function createFakeTransport(
       atMs: virtualClock,
       kind: "status",
       workoutState: WORKOUTSTATE_TERMINATE,
-      elapsedSeconds: previous.elapsedSeconds,
+      elapsedSeconds:
+        previous.elapsedSeconds > 0 ? previous.elapsedSeconds / 2 : 0,
       distanceMeters: previous.distanceMeters,
       spm: 0,
       currentSplit: previous.currentSplit,

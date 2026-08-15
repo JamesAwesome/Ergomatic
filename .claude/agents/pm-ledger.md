@@ -75,3 +75,82 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   drops the clock; the prescribed boundary-sum oracle fails a correct fold).
   Lesson: a written hypothesis in a roadmap is load-bearing — an investigator
   will follow it and stop. Mark speculation as speculation, or measure first.
+
+## Design-gate rulings, 2026-08-15 (Phase CR2 spec 1, "numbers")
+
+- **"The captures don't show X" is a claim about our LOGGING, not the machine.**
+  The design gate was handed a fresh finding — `totalWorkDistanceMeters` appears
+  in the committed captures only at 16 arm/terminate moments, therefore R7 is
+  hardware-gated — and it was wrong. TWD is bytes 11-13 of 0x0031
+  (`parse.ts:135`), decoded ~2/second all session and discarded; its bytes reach
+  the ring only inside the `structure` log entry, which fires **on change of the
+  workout-structure triple only** (`driver.ts:2656-2668`), a flood guard. The
+  absence was ours. It had already propagated into the architecture review's R7
+  caveat, whose "distance-goal TWD reads the goal" finding is measured entirely
+  inside the first ~30 m because every sample is arm-adjacent. **Before an
+  absence in our own record reclassifies work as hardware-gated, find the code
+  that decides what gets recorded.** Sibling of recurring failure #11: there we
+  verified the app against itself; here we inferred the machine's behaviour from
+  our own logging policy.
+
+- **Cutting a display does not retire the number behind it.** Asked whether a
+  pending redesign that removes `TOTAL M` from the connected LIVE pane demotes
+  the session-total fix, the answer was no: the same accumulator also drives
+  `totalLeftSeconds` (`surfaceModel.ts:528`) and `elapsedDisplay` (`:562`, which
+  is PaneLive's clock AND the log sheet's `SESSION m:ss`), and the redesign KEEPS
+  both. It cut the only consumer with a possible machine authority and kept the
+  two the machine cannot source (0x0031 carries no Total Work Time). **Trace
+  every consumer of the value, not the label, before letting a redesign reorder a
+  correctness fix.** Generalised form of the review's own hazard: a surface
+  change that hides a wrong number is worse than one that shows it.
+
+- **An item's own text can set a stricter bar than its phase's exit.** CR2's exit
+  reads "items 0-4 shipped and walked on a real PM5", but item 0 separately says
+  "any fix should be walked the same way, with both screens in one frame".
+  Splitting a phase into spec cycles does not dissolve per-item bars into the
+  phase gate: spec 1 owes the photograph on its own PR and **merges on the walk,
+  not on CI**. When a phase is decomposed, re-read each item for sentences that
+  bind independently.
+
+- **"Make it loggable" hid three decisions.** F6-half was presented as the cheap
+  half ("a reload can CLOSE the stranded run"). It asserts the session ended on
+  evidence that is only a page reload — the PAUSED shape again; it needs a new
+  entry point, because `monitorModeRun` gates on `?from=monitor`
+  (`LogSession.tsx:281`) and no route reaches it after a reload; and it would
+  ship a wrong duration, because `monitorLogTotals` (`:330-337`) is wall-clock
+  `completedAt - startedAt` and `IntervalActual` carries no timestamps. James
+  ruled it into the state-axes spec, where the session lifecycle already lives.
+  **A "half" that is described by what it does not need (no stored shape) has not
+  been described.**
+
+## Final-PR gate, 2026-08-15 (Phase CR2 spec 1, PR #99)
+
+- **Judge an unreviewed tail by its BLAST RADIUS, not its size.** PR #99's tail
+  was one commit (`e7f3d2b`, nine review findings) with a SCOPED re-review — which
+  answers "were the findings fixed", never "did a fix break something else". The
+  useful check is not the diff stat: read the tail for behavioural lines and ask
+  what they can reach. #99's reached only the diagnostic ring (a log-guard
+  quantisation and a per-run reset), so the numbers were untouched by it. Contrast
+  #89, whose tail reached `app/domain/`. The question "how big was it" would have
+  ranked these wrongly in both directions.
+
+- **A walk must re-observe every symptom in the original report, not just the one
+  the fix targets.** CR2 item 0 recorded TWO things James photographed: TOTAL M at
+  3.9x, and TOTAL LEFT stuck at 0:00 with the bar prematurely full. The PR's
+  five-item walk list carried the first and dropped the second — which the fix
+  reaches only transitively (`surfaceModel.ts:528` shares the accumulator pair)
+  and which no test on the branch touched. Caught at this gate and added. When a
+  defect was found by observation, enumerate the original observations and check
+  each has a walk item.
+
+- **Flipping a defect's ERROR DIRECTION is a release event even with zero visual
+  change.** Spec 1 replaces an overcount with a deliberate undercount (two shapes
+  lose metres silently, bounded and disclosed). Testers on the previous build will
+  see lower totals for the same rowing. A release note that says only "bug fixes"
+  makes that unfalsifiable by the cohort — name the change so a tester knows what
+  to check.
+
+- **Release shape for a correctness-only fix:** PATCH, alone, and not bundled with
+  the redesign specs that follow it. Releasing spec 1 by itself is the canary the
+  3.9x defect never got; if a later build still disagrees with the erg, a solo
+  release is the only thing that says which change owns it.

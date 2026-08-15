@@ -394,6 +394,17 @@ export const WORKOUTSTATE_WAITTOBEGIN = 0;
 export const WORKOUTSTATE_INTERVALREST = 3;
 export const WORKOUTSTATE_INTERVALWORKTIME = 4;
 export const WORKOUTSTATE_INTERVALWORKDISTANCE = 5;
+/** The ephemeral work->rest transition state (root `IntervalWorkTime`,
+ *  `WORKOUTSTATE_TO_STATE`'s own `8: "rowing"` row below) — added for the
+ *  walk-falsification fix (CR2 spec 1 Task 11, `docs/monitor/sessions/
+ *  walk-2026-08-15/`): `session-a-multitest.json` seq 26 is a captured
+ *  0x0031 sample in this exact state, one entry before the `resting` flip,
+ *  still carrying the COMPLETED interval's own pair — the tick
+ *  `driver.ts`'s open-on-reset guard exists to keep from opening the next
+ *  interval's register. Named here, rather than left a bare `8` in
+ *  `src/monitor/sessionTotals.test.ts`'s fixture, for the same reason the
+ *  other seven ordinals are exported (see this block's own doc comment). */
+export const WORKOUTSTATE_INTERVALWORKTIMETOREST = 8;
 export const WORKOUTSTATE_WORKOUTEND = 10;
 export const WORKOUTSTATE_TERMINATE = 11;
 export const WORKOUTSTATE_REARM = 13;

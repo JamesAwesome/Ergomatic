@@ -817,17 +817,26 @@ const DEFAULT_PREPARE_SETTLE_TICKS = 10;
  *  diverge independently if a future finding ever needs them to. */
 const DEFAULT_ERROR_TYPE_TICKS = 3;
 
-/** How far 0x0031's Elapsed Time must fall between two consecutive frames
- *  before the session accumulator treats it as a per-interval RESET rather
- *  than noise (walk 4 — see the `session` accumulator's own doc comment).
- *  Two seconds, chosen against the record from both sides: the largest
- *  BACKWARDS tick anywhere in the capture is -0.57 s
- *  (`docs/monitor/sessions/pm5-session3-final.log:4632-4633`), and the
- *  smallest genuine reset drops the clock by the whole interval that just
- *  ended (walk 4's own were 37.81 s and 29.44 s). Nothing observed lives
- *  between those two populations, and this sits roughly 3.5x above the
- *  noise floor and an order of magnitude below the smallest real reset. */
-const SESSION_RESET_ELAPSED_DROP = 2;
+/** `lastLoggedTwd`'s own sampling bucket (review I1). A whole-METRE change
+ *  guard sounded coarse but is not: 0x0031's `totalWorkDistanceMeters` is an
+ *  INTEGER, and at any rowing pace faster than ~4:10/500 it advances at
+ *  least 1 m per status tick — the guard fired on nearly every 0x0031
+ *  arrival, the exact ~2/second flood `"twd-sample"` exists to avoid
+ *  (comment above `lastLoggedFrameState`, driver.ts, "the first laptop
+ *  session… evicted the whole programming trace… from the 500-entry ring
+ *  inside about four minutes" — this was the SAME defect, on a different
+ *  field, that comment already documents fixing once). Quantising to 25 m
+ *  buckets (`Math.floor(twd / TWD_SAMPLE_BUCKET_METERS)`) bounds the entry
+ *  count independently of pace: a 6000 m (6 km) piece — a long but not
+ *  extreme single row — produces at most `6000 / 25 = 240` `"twd-sample"`
+ *  entries, leaving more than half the 500-entry ring (`eventLog.ts`'s
+ *  `DEFAULT_CAPACITY`) for every other kind this file logs (`"frame"`,
+ *  `"structure"`, `"divergence"`, boundary/summary entries, writes/acks).
+ *  25 was chosen, not derived from a hardware measurement: coarse enough
+ *  that even a sub-2:00/500 pace (order 500 m in 120s, ~4.2 m/s) crosses a
+ *  bucket roughly once every 6 seconds rather than every tick, fine enough
+ *  that the TWD trend is still legible in the log. */
+const TWD_SAMPLE_BUCKET_METERS = 25;
 
 export function createPm5Driver(
   t: Transport,
@@ -1053,44 +1062,104 @@ export function createPm5Driver(
   // exact shape instead of catching it).
   let lastRawFrameIntervalIndex: number | null = null;
   let lastLoggedFrameState: MonitorFrame["state"] | null = null;
-  /**
-   * THE SESSION ACCUMULATOR (Phase 7B, hardware walk 4 — interface-notes.md
-   * §18, 2026-08-08). 0x0031's Elapsed Time and Distance are PER-INTERVAL,
-   * not session-cumulative: a 2x100m produced `state=resting elapsed=37.81
-   * distance=101.8` and then, one frame later, `state=rowing elapsed=0
-   * distance=0.7` — both fields reset TOGETHER at each new work interval,
-   * and each interval's count spans its own work plus its trailing rest.
-   * Every consumer that wanted a whole-session total was reading a value
-   * that falls back to zero mid-piece: TOTAL LEFT went 1:30 -> 1:11 and
-   * then ROSE to 1:38 at interval 2, and the METERS card fell 109 -> 50.
+  /** The last raw 0x0031 payload, byte-for-byte — see the 0x0031 handler's
+   *  own comment; read only by the terminal-raw entry. */
+  let lastRaw0x0031: Uint8Array | null = null;
+  /** THE SESSION REGISTER MAP (CR2 spec 1, replacing walk 4's fold).
    *
-   * `prev` is the previous RAW frame's `(elapsedSeconds, distanceMeters)`;
-   * `offsetElapsed`/`offsetDistance` are everything banked from intervals
-   * already finished. A reset is detected on ELAPSED alone, and only when
-   * it drops by MORE than `SESSION_RESET_ELAPSED_DROP` seconds — the
-   * capture's own backwards noise maxes out at -0.57 s
-   * (`docs/monitor/sessions/pm5-session3-final.log:4632-4633`), so a 2 s
-   * threshold sits an order of magnitude clear of it while any genuine
-   * boundary drops the clock by the whole interval's length.
+   *  0x0031's Elapsed Time and Distance are PER-INTERVAL. The fold this
+   *  replaces detected a new interval by watching the clock DROP, which is
+   *  edge-triggered, and a missed or misread edge is permanent: a Terminate
+   *  re-bases elapsed to a smaller non-zero value while distance stands
+   *  still (CSAFE-DEF footnote 12), and the fold banked a distance the
+   *  machine never cleared — an exact 2.00x, six times in the record.
    *
-   * **HONEST CAVEAT — a display estimate, not a record.** The fold banks
-   * the last pre-reset frame this driver actually SAW, which at the
-   * observed ~2 Hz cadence can be up to one status tick short of the
-   * interval's true final reading: roughly 0.5 s and ~1 m may be
-   * undercounted per boundary. That is acceptable for the two things these
-   * fields feed (a countdown and a meters card) and unacceptable for a
-   * record — which is why the RECORD does not use them at all: an
-   * interval's real actuals come from 0x0037/0x0038 (`toIntervalActual`),
-   * untouched by this.
+   *  This holds each interval's reading under the key the frame already
+   *  carries, merged by MAXIMUM. No edge is detected, so none can be missed.
    *
-   * Reset with the rest of the per-program state when `program()` opens a
-   * new run (beside `boundaryHalves`, below).
+   *  Maximum, not last-write-wins, for two independently-found reasons:
+   *  `toProgramIndex` clamps at both ends so the key is not injective; and
+   *  at a work->work boundary with NO intervening rest, 0x0031's counters
+   *  reset one notification BEFORE 0x0033's Interval Count increments, so a
+   *  (0,0) frame still carrying the completed interval's key would clobber
+   *  it (pm5-session4b L2835-2838, 74.4m). The counters are monotone within
+   *  an interval, so maximum equals last in every honest case.
+   *
+   *  HONEST LIMITS — one still open, two closed (CR2 spec 1 Task 5, a
+   *  controller ruling after Task 4's own review; and Task 11, the walk's
+   *  own falsification), all three bounded and the first two reported
+   *  WHENEVER THE MACHINE DELIVERS AN END-OF-WORKOUT SUMMARY (0x0039) —
+   *  never on every run (review I2 scoped this: `logSummaryTotals` has
+   *  exactly one call site, `noteSummary`, which only runs off the 0x0039
+   *  handler. A run that ends without one — link death, terminate — gets
+   *  no check at all, silently):
+   *  - STILL OPEN: an interval that produces ZERO frames is lost, because
+   *    nothing ever writes its key. Bounded (it cannot compound) and errs
+   *    SAFE — an undercount makes TOTAL LEFT read high, where the old
+   *    defect made it read zero mid-session. Reported at the finish IF a
+   *    0x0039 arrives: see the interval-count divergence in
+   *    `logSummaryTotals`.
+   *  - CLOSED (Task 5): the final counter bump that arrives ON the
+   *    WORKOUTEND tick itself used to be lost too — a `"finished"` frame's
+   *    `intervalIndex` is always `null` (`toProgramIndex` never names an
+   *    interval outside rowing/resting) and the old write rule only covered
+   *    rowing/resting, so the run's very last reading wrote no key at all
+   *    (observed 3.63 s/8.7 m on walk-4 hardware; WALK_4's own fixture:
+   *    finished 33.07/109.7 against a last resting reading of 29.44/101 —
+   *    the old walk-4 FOLD passed this reading through, so this was a small
+   *    regression this map introduced, not a limit it inherited). Now
+   *    CAPTURED: `maybeEmitFrame`'s `activeKey` fallback treats `"finished"`
+   *    the same as `"rowing"`/`"resting"`, max-merged into the highest
+   *    existing key — safe for the same reason every other write here is,
+   *    since a finished frame with a dishonest SMALLER reading cannot lower
+   *    anything. `"terminated"`/`"idle"`/`"armed"` stay excluded; a
+   *    mid-terminate boundary has no stable identity to capture in the
+   *    first place (CSAFE-DEF footnote 12).
+   *  - CLOSED (Task 11, `docs/monitor/sessions/walk-2026-08-15/` session B):
+   *    a stale tick from an un-reset 0x0031 pair could OPEN a key that did
+   *    not exist yet (rather than merely growing one that did), banking a
+   *    completed interval's own pair as the next interval's opening
+   *    register — permanent once written, since max-merge cannot lower it
+   *    again. The open-on-reset guard (`maybeEmitFrame`'s own comment,
+   *    right before the write below) closes this: a NEW key may open only
+   *    when this tick's elapsed is a genuine reset relative to the highest
+   *    existing key's own register. Its own disclosed, still-bounded edge —
+   *    a genuinely new interval's first observed tick landing exactly on
+   *    (or past) the previous key's own gap-truncated register, which
+   *    misattributes into the old key instead of opening the new one — is
+   *    logged as a "divergence" on refusal, never silent (see the guard's
+   *    own comment for the full argument and the walk citation).
    */
   let session = {
-    offsetElapsed: 0,
-    offsetDistance: 0,
-    prev: null as { elapsedSeconds: number; distanceMeters: number } | null,
+    seen: new Map<number, { elapsedSeconds: number; distanceMeters: number }>(),
   };
+  /** FIRST-SIGHTING GATE for the open-on-reset guard's "refused open"
+   *  divergence (CR2 spec 1 Task 11 fix round, review IMPORTANT-3) — same
+   *  idiom as `seenCharacteristics` above (a `Set` recording the first
+   *  arrival of something, silent after). The disclosed-edge scenario the
+   *  guard's own comment names refuses on EVERY tick of the affected
+   *  interval, not just the poison tick: once a key is wrongly refused, the
+   *  open key it folds into keeps growing to match each new (still
+   *  climbing) reading, so the NEXT tick refuses too — self-sustaining for
+   *  as long as the interval runs, at the ~2/s status-tick rate, which at a
+   *  240s interval is up to ~480 entries into the SAME 500-entry ring the
+   *  `"frame"`/`"twd-sample"`/`"structure"` on-change gates above already
+   *  exist to protect (their own comments cite the identical flood
+   *  mechanism). Logged once per DISTINCT refused key, not once ever: a
+   *  second key refused later in the same run is a second, genuinely new
+   *  fact and still gets its own entry. Reset alongside `session` on every
+   *  successful `program()` (below) — a re-armed run's own first refusal
+   *  is a new fact too, not a repeat of the outgoing run's. */
+  let refusedKeysLogged = new Set<number>();
+  /** R0 (CR2 spec 1, Task 1). The last totals actually PUT ON A FRAME.
+   *  `logSummaryTotals` fires on 0x0039, which carries no per-interval pair
+   *  of its own, so the value the rower last saw has to be remembered
+   *  rather than recomputed — `logSummaryTotals` has no `base` frame in
+   *  hand to sum `session.seen`'s registers itself.
+   *  Set in `maybeEmitFrame` right after `frame` is built; read only in
+   *  `logSummaryTotals`. Diagnostics only, same as `session` above: nothing
+   *  here decides anything. */
+  let lastEmittedTotals = { elapsedSeconds: 0, distanceMeters: 0 };
   /**
    * Task 1 (fix-3, interface-notes.md §17 item 12): the machine's own idea
    * of the ARMED workout's shape — `workoutType`/`workoutDurationRaw`/
@@ -1109,6 +1178,19 @@ export function createPm5Driver(
     workoutDurationRaw: number;
     workoutDurationType: number;
   } | null = null;
+  /** R0 (CR2 spec 1). 0x0031 carries an absolute Total Work Distance that
+   *  `parseGeneralStatus` has always decoded and this driver has always
+   *  thrown away, so the one field that could retire the accumulator has
+   *  never been observed mid-piece — an absence that was OURS, not the
+   *  machine's (see the spec's own correction). Sampled on a 25 m BUCKET
+   *  CHANGE (`TWD_SAMPLE_BUCKET_METERS`'s own comment has the budget
+   *  arithmetic and review I1's finding), not on-change like
+   *  `lastLoggedStructure`: TWD is an integer that itself changes on nearly
+   *  every 0x0031 arrival at ordinary rowing pace, so a whole-metre guard
+   *  degenerates to logging almost every tick — the exact flood this field
+   *  exists to avoid, caught once already for `"frame"`/state (comment
+   *  above `lastLoggedFrameState`) and repeated here until I1. */
+  let lastLoggedTwd: number | null = null;
   const seen = { general: false, as1: false, as2: false };
   /**
    * D4 (Task 1's hardware verdict, interface-notes.md §18 #3): the
@@ -1492,19 +1574,39 @@ export function createPm5Driver(
         }),
       );
     }
-    // THE SUMMARY GATE's deadline, cancelled here for the same reason
-    // `disconnect()` cancels it (fix round 1, review Minor-5): the radio is
-    // gone, so no 0x0039 can still arrive to change the verdict, and a
-    // driver that leaves live timers behind is a driver a test cannot
-    // finish cleanly. Above the `activeRun.closed` early-return below, not
-    // after it — a drop AFTER a natural finish is exactly the case with a
-    // deadline still standing, and it is the one that return skips.
-    // Cancelling costs the run nothing it still had: whatever evidence
-    // arrived before the drop is already in the trace, and a fill after the
-    // link died could no longer be released to a screen that is being torn
-    // down.
-    pendingSummaryReconcile?.();
-    pendingSummaryReconcile = null;
+    // THE SUMMARY GATE's deadline (F7, architecture review). Only its
+    // ability to WAIT for more wire evidence is cancelled here — never a
+    // verdict it can already reach. The radio is gone, so no 0x0039 or
+    // split can arrive after this point to change today's answer; that
+    // much of fix round 1's reasoning (review Minor-5) still holds, and is
+    // why the scheduled callback is always cancelled below, whatever
+    // happens next. What does NOT hold, and is why this used to throw the
+    // verdict away outright: "cancelling costs the run nothing it still
+    // had" is false whenever a summary already arrived — the fill is
+    // synthesized entirely from `run.summaryInGrace`/`run.recordedActuals`,
+    // evidence already in hand, and needs no further wire traffic to
+    // complete. "A screen that is being torn down" is false too: the
+    // hand-off hold that keeps that screen mounted
+    // (`useMonitorSession.ts`'s `FINISH_HANDOFF_HOLD_MS`, 3500ms) exists for
+    // precisely this window and outlives it — both deadlines open in the
+    // same synchronous emit (`FINISH_GRACE_MS`'s own doc comment) and the
+    // hold is STRICTLY the longer of the two, so a reconcile run
+    // synchronously here — necessarily before this grace's own scheduled
+    // firing, which a still-pending `pendingSummaryReconcile` proves has not
+    // happened yet — always lands inside the hold. So: cancel the wait,
+    // then let the reconcile answer with whatever evidence this run has
+    // already earned — filled, split-won, or declined; a link death is not
+    // a reason to keep a resolvable verdict out of the trace.
+    if (pendingSummaryReconcile !== null) {
+      pendingSummaryReconcile();
+      pendingSummaryReconcile = null;
+      // `armSummaryReconcile` is armed from exactly one call site (the
+      // `finished` branch above, immediately after `activeRun!.closed =
+      // true`), and `program()`'s own replacement path cancels this same
+      // field before a new run ever opens — so a deadline still pending
+      // here can only name the CURRENT `activeRun`, closed and non-null.
+      if (activeRun !== null) reconcileSummary(activeRun);
+    }
     if (activeRun !== null && activeRun.closed) {
       // The old `terminalLatched` flag's SECOND consumer, re-scoped to the
       // run (Task 4, spec §4: replaced, never deleted). Appendix E (cited
@@ -1672,32 +1774,190 @@ export function createPm5Driver(
       base.state,
       programLength,
     );
-    // THE SESSION FOLD (walk 4 — see `session`'s own doc comment). Done
-    // BEFORE the frame is finished so the emitted frame already carries the
-    // accumulated pair, and deliberately AFTER `computeRemainingForFrame`'s
+    // THE REGISTER WRITE (CR2 spec 1 — see `session`'s own doc comment).
+    // Done BEFORE the frame is finished so the emitted frame already carries
+    // the totals, and deliberately AFTER `computeRemainingForFrame`'s
     // inputs are untouched: `intervalRemaining` reads the RAW per-interval
-    // pair against 0x0033's own last-split reference and walk 4 proved that
-    // countdown correct exactly as it stands.
+    // pair and walk 4 proved that countdown correct exactly as it stands.
+    let activeKey =
+      intervalIndex ??
+      // Two genuinely different reasons land in this fallback, both
+      // resolved by the same rule:
+      // (1) the machine is rowing/resting but reports an identity the armed
+      //     program cannot explain. Attributing to the newest key keeps the
+      //     rower's number MOVING (freezing it reproduces the very symptom
+      //     this change exists to fix).
+      // (2) the machine has reported `"finished"` (controller ruling after
+      //     Task 4's own review, CR2 spec 1 Task 5). `toProgramIndex`
+      //     ALWAYS returns `null` for a terminal state
+      //     (`intervalIndex.ts`'s own doc comment: "states outside
+      //     rowing/resting ... always return null"), so without this arm
+      //     the WORKOUTEND tick's own reading writes no key at all and its
+      //     final counter bump is lost — observed 3.63 s/8.7 m on walk-4
+      //     hardware, WALK_4's own fixture: finished 33.07/109.7 against a
+      //     last resting reading of 29.44/101. The old fold (walk 4)
+      //     passed the finished frame's reading straight through; the
+      //     register map dropped it until this fix. `"terminated"`,
+      //     `"idle"`, and `"armed"` stay OUT on purpose — a terminated
+      //     workout's own boundary has no stable identity to begin with
+      //     (CSAFE-DEF footnote 12), so there is nothing comparable to
+      //     lose for those states.
+      //     WALK_4 is a SINGLE-interval capture (that describe block never
+      //     arms a program), so on its own it cannot discriminate "the
+      //     finished frame carries the LAST INTERVAL's own reading" from
+      //     "the finished frame carries a session-cumulative sum" — with
+      //     one interval the two are the same number. The multi-interval
+      //     record settles it (review I4): `docs/monitor/sessions/
+      //     pm5-session4b-final.log.gz` L418, a 3+-interval row
+      //     (`intervalIndex: 2` on the frames immediately before it, so the
+      //     armed program has at least three intervals) whose finished
+      //     frame reads `elapsedSeconds: 64.3, distanceMeters: 194.1` —
+      //     identical to interval 2's own last "resting" reading just
+      //     above it in the capture, not any larger session-wide sum. The
+      //     same file's L2475 (a 2-interval row) shows the identical shape:
+      //     finished 86.57/104.8 matches interval 1's own last reading
+      //     exactly, not the two intervals' combined total (88 + 82 = 170).
+      //     Checked against every one of the 10,408 frames in that same
+      //     file (`captureReplay.test.ts`'s full record): of the 96 frames
+      //     where state transitions INTO `"finished"`, none reads more than
+      //     20 m over the immediately preceding frame — the WALK_4-shaped
+      //     terminal bump this arm exists to capture stays small and
+      //     bounded everywhere in the record; nowhere does a finished
+      //     frame jump by anything resembling a multi-interval sum.
+      // Both are, being a max into an existing key, safe: a dishonest
+      // smaller reading (rowing/resting OR finished) cannot lower the
+      // total, only a genuinely higher one can raise it. Logged as
+      // divergence below, never silent.
+      ((base.state === "rowing" ||
+        base.state === "resting" ||
+        base.state === "finished") &&
+      session.seen.size > 0
+        ? Math.max(...session.seen.keys())
+        : null);
+
+    // THE OPEN-ON-RESET GUARD (CR2 spec 1 Task 11 — the walk's own
+    // falsification, `docs/monitor/sessions/walk-2026-08-15/` session B, a
+    // 2x1:00 @6k (r30/r0): ~23s into interval 2 the PM5 read 19m into the
+    // interval while TOTAL M read 353, against an honest 195.5-198.7m).
+    //
+    // The mechanism: `parse.ts`'s WORKOUTSTATE_INTERVALWORKTIMETOREST (8) is
+    // an ephemeral work->rest transition state that still maps to "rowing".
+    // `session-a-multitest.json` seq 26 is a captured 0x0031 sample in that
+    // exact state, one entry before the "resting" flip, still carrying the
+    // COMPLETED interval's own pair. If 0x0033's Interval Count has already
+    // incremented at that tick (the one unrecorded half — SECONDARY, no
+    // capture shows the byte itself at that instant), `toProgramIndex`
+    // resolves the NEXT interval's program index while the reading on the
+    // wire still belongs to the interval that just finished — opening that
+    // next key with the completed interval's own (larger) pair, which the
+    // max-merge below then makes PERMANENT: the genuine next interval's own
+    // honest, smaller readings could never lower it again.
+    //
+    // The guard: a NEW key (one `session.seen` does not already hold) may
+    // open only when `session.seen` is empty, or when this tick's elapsed is
+    // STRICTLY LESS than the elapsed already on record for the highest
+    // existing key. Otherwise the reading folds into that highest key
+    // instead (the same safe max-merge every other write here already
+    // performs) and is logged as a refused open, never silently dropped.
+    //
+    // Why the elapsed comparison is guaranteed, not lucky: within one
+    // un-reset 0x0031 pair, elapsed is monotone non-decreasing, and the
+    // highest key's register is a max over readings from THAT SAME PAIR —
+    // so a poison tick (a later sample of the same pair) always has
+    // elapsed >= the register, and strict-`<` refuses it, while a genuinely
+    // new interval's first tick comes from a RESET pair and is strictly
+    // smaller. The predicate is exactly "has the pair reset since the
+    // highest key was last written?" — level-triggered, no constants, no
+    // edge memory.
+    //
+    // N-1 poisons: `toProgramIndex`'s own clamp folds a final-boundary
+    // candidate onto the last EXISTING index (never opens a key beyond
+    // `programLength - 1`), so this guard only ever has to refuse the
+    // programLength - 1 NON-final boundaries — consistent with session A (3
+    // intervals, "ours higher than the erg", 2 poisons) and session B (1
+    // poison, photographed above).
+    //
+    // Deliberately NO distance clause: distance re-bases only on Terminate,
+    // already excluded from writes by the state gate above (`"terminated"`
+    // is neither `"rowing"` nor `"resting"` nor `"finished"`), and a
+    // distance-based guard would collapse two genuinely different keys
+    // whenever a previous interval's own register holds <=0.8m (a rower who
+    // never pulled) — losing ~60s of session elapsed for nothing the elapsed
+    // clause does not already catch.
+    //
+    // Disclosed bounded edge: a genuinely new interval whose FIRST seen tick
+    // already has elapsed >= the previous key's register (needs a boundary
+    // into a restSeconds:0 interval AND a multi-second frame gap AND a short
+    // previous interval's own last-seen reading) misattributes into the old
+    // key. The total stays monotone; the undercount is bounded by that one
+    // tick's own reading, and the divergence log below is what a future
+    // capture can use to tell this apart from the poison it guards against.
+    //
+    // The LOG is gated by `refusedKeysLogged` (its own comment, above) —
+    // ONE entry the first time a given key is refused, silent on every
+    // later refusal of that SAME key. The WRITE below (folding into
+    // `openKey`) is never gated: every refused tick's reading still
+    // max-merges in, so the total stays exactly as accurate as it would be
+    // with the log unthrottled — only the trace volume changes.
     if (
-      session.prev !== null &&
-      session.prev.elapsedSeconds - base.elapsedSeconds >
-        SESSION_RESET_ELAPSED_DROP
+      activeKey !== null &&
+      session.seen.size > 0 &&
+      !session.seen.has(activeKey)
     ) {
-      session.offsetElapsed += session.prev.elapsedSeconds;
-      session.offsetDistance += session.prev.distanceMeters;
+      const openKey = Math.max(...session.seen.keys());
+      const openRegister = session.seen.get(openKey)!;
+      if (!(base.elapsedSeconds < openRegister.elapsedSeconds)) {
+        if (!refusedKeysLogged.has(activeKey)) {
+          refusedKeysLogged.add(activeKey);
+          log.record(
+            "divergence",
+            `key ${activeKey} refused open: elapsed=${base.elapsedSeconds} ` +
+              `distance=${base.distanceMeters} is not before key ${openKey}'s ` +
+              `own elapsed register (${openRegister.elapsedSeconds}) — merged ` +
+              `into key ${openKey} instead`,
+          );
+        }
+        activeKey = openKey;
+      }
     }
-    session.prev = {
-      elapsedSeconds: base.elapsedSeconds,
-      distanceMeters: base.distanceMeters,
-    };
+
+    if (activeKey !== null) {
+      const prior = session.seen.get(activeKey);
+      session.seen.set(activeKey, {
+        elapsedSeconds: Math.max(
+          prior?.elapsedSeconds ?? 0,
+          base.elapsedSeconds,
+        ),
+        distanceMeters: Math.max(
+          prior?.distanceMeters ?? 0,
+          base.distanceMeters,
+        ),
+      });
+    }
 
     const frameWithIndex: MonitorFrame = { ...base, intervalIndex };
+    const totals = [...session.seen.values()];
     const frame: MonitorFrame = {
       ...frameWithIndex,
       intervalRemaining: computeRemainingForFrame(frameWithIndex),
       intervalAccrued: computeAccruedForFrame(frameWithIndex),
-      sessionElapsedSeconds: session.offsetElapsed + base.elapsedSeconds,
-      sessionDistanceMeters: session.offsetDistance + base.distanceMeters,
+      // An EMPTY map falls back to the raw pair: a JustRow with no program
+      // armed has no interval identity at all, and there per-interval IS the
+      // session.
+      sessionElapsedSeconds:
+        totals.length === 0
+          ? base.elapsedSeconds
+          : totals.reduce((a, r) => a + r.elapsedSeconds, 0),
+      sessionDistanceMeters:
+        totals.length === 0
+          ? base.distanceMeters
+          : totals.reduce((a, r) => a + r.distanceMeters, 0),
+    };
+    // R0 (CR2 spec 1, Task 1): cache the pair `logSummaryTotals` cannot
+    // recompute for itself (`lastEmittedTotals`'s own doc comment).
+    lastEmittedTotals = {
+      elapsedSeconds: frame.sessionElapsedSeconds,
+      distanceMeters: frame.sessionDistanceMeters,
     };
     // Raw tracking for the OLD (fix-round MED-2) raw-vs-raw comparison —
     // see `lastRawFrameIntervalIndex`'s own doc comment for why this stays
@@ -1786,6 +2046,49 @@ export function createPm5Driver(
     // The run-close is symmetric; the CONSUMER-facing event is not, because
     // 7C has to tell "logged 12 of 12" from "abandoned at 8"
     // (`domain/monitor/types.ts`'s own note on why the pair exists).
+    // THE FINAL TOTALS, into the ring, at the terminal transition itself
+    // (James's walk protocol change, 2026-08-15). Two facts orphaned every
+    // other route to this comparison: the PM5 has no live session-cumulative
+    // view during interval workouts (vendor docs — every Display view is
+    // split-scoped, so the only machine total is the finish summary screen),
+    // and the hook auto-navigates to the log screen at the hand-off release,
+    // which both takes TOTAL M off the phone's screen and tears down the
+    // link before 0x0039 usually arrives (`summary-totals` loses that race
+    // on-device; both walk rings end without one). The ring survives via the
+    // sessionStorage stash, so writing the finals HERE means a re-walk needs
+    // exactly one photograph (the PM5 summary) and zero phone timing.
+    {
+      const n = (v: number) => Number(v.toFixed(1));
+      const regs = [...session.seen.entries()]
+        .sort(([a], [b]) => a - b)
+        .map(
+          ([k, r]) => `${k}:(${n(r.elapsedSeconds)}s,${n(r.distanceMeters)}m)`,
+        )
+        .join(" ");
+      const programmed = activeRun!.program.intervals.length;
+      log.record(
+        "final-totals",
+        `accumulator=${n(lastEmittedTotals.distanceMeters)}m ` +
+          `accumulatorElapsed=${n(lastEmittedTotals.elapsedSeconds)}s ` +
+          `machineTotal=${raw.totalWorkDistanceMeters ?? "?"}m ` +
+          `durationType=${raw.workoutDurationType ?? "?"} ` +
+          `registers=${session.seen.size} of ${programmed} programmed ${regs}`,
+      );
+    }
+    // THE TERMINAL FRAME'S OWN BYTES (walk 2026-08-15, the mid-rest
+    // finished frame — see `lastRaw0x0031`'s declaration comment). One
+    // entry per session end, so the flood argument that keeps 0x0031 out
+    // of the raw-hex notify branch does not apply here.
+    log.record(
+      "terminal-raw",
+      lastRaw0x0031 === null
+        ? `state=${frame.state} 0x0031=never seen`
+        : `state=${frame.state} 0x0031=${toHex(lastRaw0x0031)}`,
+    );
+    // The TWD verdict runs HERE, not at 0x0039-time — the machine settles
+    // its own total at the finish (re-walk 2026-08-15, seq 36's false
+    // "differ by 183.8m" against a TWD one tick from settling).
+    recordTwdVerdict(activeRun);
     if (frame.state === "finished") {
       // THE FINISH GRACE opens here and nowhere else (walk 5, re-bounded on
       // walk day 3 — `activeRun.finishGraceUntil`'s own doc comment carries
@@ -1994,6 +2297,14 @@ export function createPm5Driver(
    * read — which is exactly what neither the verdict entries nor a
    * PM5-screen photograph could do on their own.
    *
+   * R0 (CR2 spec 1, Task 1) adds the comparison spec 1 exists for: the
+   * frame accumulator this driver has emitted (`lastEmittedTotals`,
+   * deliberately BROKEN — see that variable's own comment and Task 4) next
+   * to 0x0031's own `totalWorkDistanceMeters`/`workoutDurationType`, read
+   * off `raw` the same way every other closure function in this file does.
+   * Landing the instrumentation on the defect is the point: it makes the
+   * before/after of Task 4's fix measurable instead of asserted.
+   *
    * Diagnostics only: nothing here decides anything, and the numbers are
    * reported, never reconciled. `deriveFinalIntervalFromSummary` remains
    * the only place either premise is USED.
@@ -2013,8 +2324,85 @@ export function createPm5Driver(
         : `this run has recorded ${recorded.length} interval(s) totalling ${recordedElapsed}s/${recordedMeters}m from 0x0037/0x0038, over a program with ${programmedRest}s of rest`;
     log.record(
       "summary-totals",
-      `0x0039 decoded: elapsed=${summary.elapsedSeconds}s distance=${summary.meters}m workoutType=${summary.workoutType} (${against}). §23 walk items 2 and 4 settle HERE, by comparing the two elapsed figures: equal = cumulative AND rest-exclusive, both premises hold; equal to the recorded total plus ${programmedRest}s = item 4 mismatch (0x0039 counts rest, 0x0037 does not); equal to the LAST interval's own elapsed alone = item 2 false (0x0039 is per-interval, not cumulative)`,
+      `0x0039 decoded: elapsed=${summary.elapsedSeconds}s distance=${summary.meters}m ` +
+        `workoutType=${summary.workoutType} | accumulator=${lastEmittedTotals.distanceMeters}m ` +
+        `accumulatorElapsed=${lastEmittedTotals.elapsedSeconds}s ` +
+        `machineTotal=${raw.totalWorkDistanceMeters ?? "?"}m ` +
+        `durationType=${raw.workoutDurationType ?? "?"} (${against}). ` +
+        `§23 walk items 2 and 4 settle HERE, by comparing the two elapsed figures: equal = cumulative AND rest-exclusive, both premises hold; equal to the recorded total plus ${programmedRest}s = item 4 mismatch (0x0039 counts rest, 0x0037 does not); equal to the LAST interval's own elapsed alone = item 2 false (0x0039 is per-interval, not cumulative)`,
     );
+
+    // THE INTERVAL-COUNT DIVERGENCE (CR2 spec 1, Task 5). The finish is the
+    // one moment `session`'s own HONEST LIMIT (its own doc comment) can be
+    // checked against ground truth: how many of the ARMED program's
+    // intervals actually produced a frame, versus how many the program
+    // declares. An interval that produced zero frames writes no key
+    // (`maybeEmitFrame`'s register write) and is missing from
+    // `sessionDistanceMeters`/`sessionElapsedSeconds` with nothing on
+    // screen to say so — this is the entry that says so, at the one point
+    // in the run's life where the true denominator (`programIntervals`) is
+    // known and stable. Gated on a program actually being armed (`run`
+    // non-null and non-empty), same reason every other program-shaped
+    // divergence in this file is: with none, there is no denominator to
+    // diverge from.
+    const programIntervals = run?.program.intervals.length ?? 0;
+    if (programIntervals > 0 && session.seen.size !== programIntervals) {
+      log.record(
+        "divergence",
+        `${session.seen.size} intervals seen of ${programIntervals} programmed — ` +
+          `the session total is missing any interval that produced no frames ` +
+          `(bounded loss, CR2 spec 1). Keys seen: ${[...session.seen.keys()].join(",")}`,
+      );
+    }
+
+    // The accumulator-vs-machine VERDICT used to live here too, and the
+    // re-walk's first row proved that wrong (2026-08-15, seq 36): the
+    // 0x0039 can arrive BEFORE the machine's own totalWorkDistanceMeters
+    // has ticked past the previous interval's value — it fired "differ by
+    // 183.8m" one tick before TWD settled at 367 against an accumulator of
+    // 367.8. The machine settles its total AT the finish, so the verdict
+    // runs at the terminal transition now (`recordTwdVerdict`, called
+    // beside `final-totals`, which already reads the settled value). The
+    // unconditional print above stays: raw numbers at 0x0039-time are
+    // evidence, verdicts on unsettled numbers are noise.
+  }
+
+  /** THE ACCUMULATOR-VS-MACHINE VERDICT (CR2 spec 1, Task 5; moved from
+   *  `logSummaryTotals` after the re-walk caught it firing on a lagging
+   *  TWD — see the comment at that call site). `lastEmittedTotals` is what
+   *  the rower's screen last showed; `raw.totalWorkDistanceMeters` is the
+   *  machine's own running distance, settled by the time a terminal state
+   *  arrives. A persistent gap is exactly what a lost interval or a
+   *  mis-keyed register write would produce.
+   *
+   *  5 METERS ABSOLUTE, NOT A PERCENTAGE. A percentage arm would make the
+   *  alarm LESS sensitive as the session lengthens, and the failure mode
+   *  this design introduces is a single lost interval — one dropped 500 m
+   *  interval in a 20x500 m session is exactly 5% of the total, precisely
+   *  the case a percentage threshold would wave through.
+   *
+   *  SUPPRESSED on a distance goal: `totalWorkDistanceMeters` reports the
+   *  GOAL there, not the distance actually rowed (confirmed PRIMARY, 500 m
+   *  goal read against 13.4 m genuinely rowed, mid-row at workoutState 5 —
+   *  not merely at arm). `workoutDurationType` is PER-FRAME and
+   *  `compileProgram` can emit a MIXED program, so the suppression widens
+   *  to "the armed program contains ANY distance interval" — a mixed
+   *  program's time-goal intervals would otherwise light this up exactly
+   *  when the machine legitimately reports its distance-goal neighbor's
+   *  target instead of a rowed total. */
+  function recordTwdVerdict(run: typeof activeRun): void {
+    const distanceGoal =
+      raw.workoutDurationType === 128 ||
+      (run?.program.intervals.some((i) => i.kind === "distance") ?? false);
+    const delta = Math.abs(
+      lastEmittedTotals.distanceMeters - (raw.totalWorkDistanceMeters ?? 0),
+    );
+    if (!distanceGoal && delta > 5) {
+      log.record(
+        "divergence",
+        `accumulator and machine total differ by ${delta.toFixed(1)}m`,
+      );
+    }
   }
 
   /** WHY the summary gate was shut when a 0x0039 turned up — four genuinely
@@ -2639,6 +3027,15 @@ export function createPm5Driver(
     parseGeneralStatus,
     (decoded, bytes) => {
       seen.general = true;
+      // The walk's mid-rest finished frame (2026-08-15): a payload our
+      // parser read as finished/elapsed=60/distance=0 killed a session 16s
+      // into interval 1's rest, and the ring had no bytes to decode after
+      // the fact — the raw-hex notify branch excludes 0x0031 as a flood,
+      // and frame entries carry decoded fields only. Kept here per tick
+      // (a 19-byte copy, no hex work) and logged ONLY at a terminal
+      // transition, so each session end costs one ring entry and the next
+      // mid-rest terminal convicts its own state byte.
+      lastRaw0x0031 = bytes.slice();
       // Task 1 (fix-3): the machine's idea of the armed workout's structure,
       // already decoded by `parseGeneralStatus` (interface-notes.md §10) —
       // recorded ON CHANGE ONLY, comparing the three DECODED fields rather
@@ -2665,6 +3062,33 @@ export function createPm5Driver(
         log.record(
           "structure",
           `workoutType=${structure.workoutType} durationRaw=${structure.workoutDurationRaw} durationType=${structure.workoutDurationType} raw=${toHex(bytes)}`,
+        );
+      }
+      // R0 (CR2 spec 1): the machine's own Total Work Distance, sampled on
+      // a 25 m BUCKET CHANGE (review I1; `TWD_SAMPLE_BUCKET_METERS`'s own
+      // comment and `lastLoggedTwd`'s own comment have the full reasoning
+      // and the ring-budget arithmetic) — NOT on whole-metre change, which
+      // degenerates to one entry per tick at any pace faster than ~4:10/500
+      // and evicted the programming trace exactly like the defect
+      // `lastLoggedFrameState`'s own comment already documents fixing once.
+      // `workoutState`/`durationType` ride along on purpose: the antagonist
+      // established that characterising when this field appears without
+      // decoding the state byte is exactly how the last wrong conclusion
+      // was reached.
+      const twdBucket = Math.floor(
+        decoded.totalWorkDistanceMeters / TWD_SAMPLE_BUCKET_METERS,
+      );
+      const lastLoggedTwdBucket =
+        lastLoggedTwd === null
+          ? null
+          : Math.floor(lastLoggedTwd / TWD_SAMPLE_BUCKET_METERS);
+      if (twdBucket !== lastLoggedTwdBucket) {
+        lastLoggedTwd = decoded.totalWorkDistanceMeters;
+        log.record(
+          "twd-sample",
+          `machineTotal=${decoded.totalWorkDistanceMeters}m at elapsed=${decoded.elapsedSeconds}s ` +
+            `distance=${decoded.distanceMeters}m workoutState=${decoded.workoutState} ` +
+            `durationRaw=${decoded.workoutDurationRaw} durationType=${decoded.workoutDurationType}`,
         );
       }
       // The ack-timeout policy's tick pulse (`DriverOptions.ackTimeout`,
@@ -3666,14 +4090,25 @@ export function createPm5Driver(
         }
         boundaryHalves.split = null;
         boundaryHalves.asSplit = null;
-        // The session accumulator is per-RUN state for the same reason a
-        // pending boundary half is (walk 4 — `session`'s own doc comment):
-        // a new program's totals start at zero, and the outgoing run's
-        // banked offsets must not be carried into it. `prev` goes with
-        // them — the first frame of the new run would otherwise be measured
-        // against the last frame of the old one and fold its whole elapsed
-        // in as a phantom interval.
-        session = { offsetElapsed: 0, offsetDistance: 0, prev: null };
+        // The session register map is per-RUN state for the same reason a
+        // pending boundary half is (`session`'s own doc comment): a new
+        // program's totals start at zero, and the outgoing run's keys must
+        // not be carried into it — the new run's first frame would otherwise
+        // max-merge into a key that belongs to a workout it never saw.
+        session = { seen: new Map() };
+        // `refusedKeysLogged`'s own comment: the gate is per-run state,
+        // same as `session` it rides alongside — a re-armed run's own
+        // first refusal is a new fact, not a repeat of the outgoing run's.
+        refusedKeysLogged = new Set();
+        // Diagnostics-only (R0, Task 1's own doc comment): the outgoing
+        // run's last-seen totals belong to that run, not the new one.
+        lastEmittedTotals = { elapsedSeconds: 0, distanceMeters: 0 };
+        // M5 (review): `lastLoggedTwd` is the same kind of per-run
+        // diagnostic state as `lastEmittedTotals` right above it — reset it
+        // alongside its siblings so a re-arm's very first `"twd-sample"`
+        // entry is judged against nothing carried from the outgoing run,
+        // not against a bucket that workout happened to leave `twd` in.
+        lastLoggedTwd = null;
         // A reconcile deadline still standing belongs to the run being
         // replaced, and is cancelled here for the same reason a pending
         // boundary half is dropped above (fast-follow Task 2): both are

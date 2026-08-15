@@ -1255,7 +1255,42 @@ describe("createPm5Driver: the full happy path over a real compiled workout (Sea
     // stays quiet and the MED-2 raw-vs-raw one has nothing to report
     // either (0x0033 and 0x0037/38 agree at every boundary, which is
     // precisely why the raw values alone could never have caught D3).
-    expect(log.entries().some((e) => e.kind === "divergence")).toBe(false);
+    //
+    // One EXCEPTION, carved out by name rather than by a narrowed allowlist
+    // (task-11 fix round, review IMPORTANT-1: an allowlist of two kinds
+    // goes silent on every future divergence kind this test would
+    // otherwise still catch): CR2 spec 1 Task 11's open-on-reset guard also
+    // logs kind "divergence", and this fixture's own 0x0031 elapsed/
+    // distance values do not reset at interval 1's own opening tick
+    // (elapsed continues 120 -> 360 rather than dropping back near zero).
+    // That is NOT an open question about the wire — 0x0031's elapsed/
+    // distance being PER-INTERVAL is hardware-settled (walk 4;
+    // re-confirmed twice in the very walk this task cites:
+    // `walk-2026-08-15/session-b-poisoned.json` seq 26 "elapsed=60
+    // distance=173.3" -> seq 28 "elapsed=0 distance=0.8", and
+    // `session-a-multitest.json` seq 27 "elapsed=60.4 distance=182" -> seq
+    // 29 "elapsed=0.03 distance=0", both genuine boundary resets). This
+    // fixture's own elapsed/distance values are simply unrealistic here and
+    // owed a fix; `interface-notes.md` item 24's still-open question is
+    // about a DIFFERENT field (0x0033's Last Split checkpoint pair,
+    // `lastSplitTimeSeconds`/`lastSplitDistanceMeters`, which
+    // `computeRemainingForFrame` subtracts from 0x0031's own elapsed to
+    // recover per-interval progress) — item 24 is only why fixing this
+    // fixture is more than a two-number edit: the fake currently roots that
+    // checkpoint at each boundary's own CUMULATIVE totals
+    // (`lastBoundaryCumulative`, `fake.ts`), so making elapsed itself
+    // reset per-interval would also require reworking that rooting (and
+    // every downstream `intervalRemaining` assertion in this test) to stay
+    // consistent — out of scope for Task 11, tracked separately. Denylist
+    // form below so a real future divergence (any OTHER kind) still fails
+    // this test, exactly as it did before Task 11 existed.
+    expect(
+      log
+        .entries()
+        .filter(
+          (e) => e.kind === "divergence" && !e.detail.includes("refused open"),
+        ),
+    ).toHaveLength(0);
     // D5, end to end over a real workout: the closing tick had no belt, and
     // the fake sent the byte the machine sent for that — `0`, not 255.
     // Either way this must reach a consumer as "no reading".
@@ -4077,13 +4112,20 @@ describe("createPm5Driver: Task 5 — actuals normalize via toActualIndex (minus
         cumulativeDistanceMeters: 200,
       },
       // The machine rows straight on into interval 1 with no state change
-      // of any kind — the whole point of the shape.
+      // of any kind — the whole point of the shape. Elapsed/distance reset
+      // (5/20, not a continuation of interval 0's own 50/180-then-60/200)
+      // because 0x0031's fields are PER-INTERVAL (`session`'s own doc
+      // comment, driver.ts) — CR2 spec 1 Task 11's open-on-reset guard
+      // relies on exactly this reset to tell a genuine new interval from a
+      // poison tick, and a non-resetting fixture here would trip its
+      // "refused open" divergence for a reason unrelated to what this test
+      // actually checks (`toActualIndex` normalization, below).
       {
         atMs: 300,
         kind: "status",
         workoutState: WORKOUTSTATE_INTERVALWORKTIME,
-        elapsedSeconds: 90,
-        distanceMeters: 320,
+        elapsedSeconds: 5,
+        distanceMeters: 20,
         spm: 22,
         currentSplit: 120,
         heartRateBpm: 141,
@@ -7542,7 +7584,24 @@ describe("createPm5Driver: walk 5 — the last split always lands (the end-of-wo
 // to the floor mid-piece.
 // ---------------------------------------------------------------------------
 
-describe("createPm5Driver: sessionElapsedSeconds/sessionDistanceMeters accumulate across 0x0031's per-interval resets (walk 4)", () => {
+// CR2 spec 1, Task 4: this describe block's own tests never arm a program
+// (`replayWalk4`/the backwards-noise test both build a bare driver and skip
+// `programViaStub` — a deliberate choice predating this task, testing the
+// accumulator in isolation from program state). Under the OLD fold that made
+// no difference: the reset was detected on the raw elapsed drop alone,
+// program or no program. Under the register map it matters completely —
+// `session`'s own doc comment: "an EMPTY map falls back to the raw pair: a
+// JustRow with no program armed has no interval identity at all, and there
+// per-interval IS the session" — because `toProgramIndex` returns `null`
+// unconditionally whenever `programLength <= 0`
+// (`domain/monitor/pm5/intervalIndex.ts`), so nothing ever seeds a key and
+// every one of these frames falls back to the raw pair verbatim. The four
+// tests below that asserted CROSS-RESET ACCUMULATION are rewritten to pin
+// that fallback instead — genuine armed-program accumulation is now
+// `sessionTotals.test.ts`'s job (Task 2/3/4's own suite, which arms a real
+// program on every case). Confirmed by tracing `driver.ts`'s
+// `maybeEmitFrame` this session, not assumed.
+describe("createPm5Driver: sessionElapsedSeconds/sessionDistanceMeters with NO program armed (walk 4) — CR2 spec 1 falls back to the raw pair", () => {
   /** Brings `seen.as1`/`seen.as2` up so that the general-status
    *  notifications below actually produce frames. Content is irrelevant to
    *  the accumulator — zero-filled payloads of the documented lengths, the
@@ -7558,9 +7617,11 @@ describe("createPm5Driver: sessionElapsedSeconds/sessionDistanceMeters accumulat
 
   /** Walk 4's own trace, state word by state word and value by value: the
    *  arm, one early rowing tick, the end of interval 1's rest, the RESET
-   *  into interval 2, that interval's own rest, and the finish. Each
-   *  interval's count spans its work plus its trailing rest, which is why
-   *  the two banked readings are 37.81/101.8 and 33.07/109.7. */
+   *  into interval 2, that interval's own rest, and the finish. No program
+   *  is armed anywhere in this describe block (see its own header comment),
+   *  so `session.seen` never gets a key and every frame below reports its
+   *  own raw `(elapsed, distance)` unchanged — there is no "banked reading"
+   *  under CR2 spec 1 without a program to key against. */
   const WALK_4: { state: number; elapsed: number; distance: number }[] = [
     { state: WORKOUTSTATE_WAITTOBEGIN, elapsed: 0, distance: 0 },
     { state: WORKOUTSTATE_INTERVALWORKTIME, elapsed: 1.23, distance: 3.5 },
@@ -7597,36 +7658,38 @@ describe("createPm5Driver: sessionElapsedSeconds/sessionDistanceMeters accumulat
     );
   });
 
-  it("the session pair is MONOTONE NON-DECREASING across every frame", () => {
+  it("the session pair EQUALS the raw pair, resets included — no program means no key to accumulate into", () => {
     const frames = replayWalk4();
 
-    for (let i = 1; i < frames.length; i += 1) {
-      expect(frames[i]!.sessionElapsedSeconds).toBeGreaterThanOrEqual(
-        frames[i - 1]!.sessionElapsedSeconds,
-      );
-      expect(frames[i]!.sessionDistanceMeters).toBeGreaterThanOrEqual(
-        frames[i - 1]!.sessionDistanceMeters,
-      );
-    }
+    // Not monotone: frame 3's raw elapsed (0) is genuinely less than frame
+    // 2's (37.81), and with no program armed the session pair tracks it
+    // exactly rather than banking across the drop.
+    expect(frames.map((f) => f.sessionElapsedSeconds)).toStrictEqual(
+      WALK_4.map((t) => t.elapsed),
+    );
+    expect(frames.map((f) => f.sessionDistanceMeters)).toStrictEqual(
+      WALK_4.map((t) => t.distance),
+    );
   });
 
-  it("ends at interval 1's banked reading plus interval 2's own", () => {
+  it("ends at the finish tick's own raw reading, not a sum of the two intervals", () => {
     const last = replayWalk4().at(-1)!;
 
-    // 37.81 + 33.07 and 101.8 + 109.7 — the two intervals' final readings,
-    // added. `toBeCloseTo` only because summing two decimals in binary
-    // floating point lands a few ulps off the decimal literal.
-    expect(last.sessionElapsedSeconds).toBeCloseTo(37.81 + 33.07, 9);
-    expect(last.sessionDistanceMeters).toBeCloseTo(101.8 + 109.7, 9);
+    // Was 37.81 + 33.07 / 101.8 + 109.7 under the old fold; with no program
+    // armed there is no key for either interval's final reading to bank
+    // into, so the last frame reports exactly its own raw pair.
+    expect(last.sessionElapsedSeconds).toBe(33.07);
+    expect(last.sessionDistanceMeters).toBe(109.7);
   });
 
-  it("folds ONLY the pre-reset frame — the frame after a reset carries its own reading on top", () => {
+  it("the reset frame carries only its own reading — nothing from before it survives", () => {
     const frames = replayWalk4();
 
-    // Frame 3 is the reset frame (`elapsed=0 distance=0.7`): interval 1's
-    // whole 37.81/101.8 is banked, and this frame's own 0/0.7 sits on it.
-    expect(frames[3]!.sessionElapsedSeconds).toBeCloseTo(37.81, 9);
-    expect(frames[3]!.sessionDistanceMeters).toBeCloseTo(101.8 + 0.7, 9);
+    // Frame 3 is the reset frame (`elapsed=0 distance=0.7`). Was
+    // 37.81 / 101.8+0.7 under the old fold (interval 1's whole reading
+    // banked underneath it); with no program armed nothing is banked.
+    expect(frames[3]!.sessionElapsedSeconds).toBe(0);
+    expect(frames[3]!.sessionDistanceMeters).toBe(0.7);
   });
 
   it("the interval countdown is NOT touched — it still reads the raw per-interval pair", () => {
@@ -7670,19 +7733,38 @@ describe("createPm5Driver: sessionElapsedSeconds/sessionDistanceMeters accumulat
     primeSiblings(transport);
 
     await programViaStub(driver, transport, MINIMAL_PROGRAM);
-    // One reset inside run 1, so it genuinely banks an offset...
+    // MINIMAL_PROGRAM has exactly one interval, so there is no genuine
+    // mid-run reset to construct (CR2 spec 1 removed the old fold's
+    // elapsed-drop heuristic, the only thing that ever let a single-key
+    // sequence "reset" at all). This climbs the one key to a genuinely
+    // nonzero total, then ends on WORKOUTEND — required so the second
+    // `programViaStub` below does not hang waiting for
+    // `waitForPrepareSettle` (`:1861`'s own comment: a still-rowing machine
+    // arms that wait).
+    //
+    // UPDATED, CR2 spec 1 Task 5 (controller ruling after this task's own
+    // review — the ruling `session`'s own doc comment cites): a `"finished"`
+    // tick is neither `"rowing"` nor `"resting"`, but it is NOT excluded from
+    // `activeKey` any more — the WORKOUTEND tick's own final reading is now
+    // max-merged into the highest existing key, same as every other write.
+    // This test's own trailing reading (was 25/60, LOWER than the 45/110
+    // rowing tick before it, so the old exclusion and the new inclusion were
+    // numerically indistinguishable here) is changed to 50/115 — HIGHER than
+    // 45/110 — specifically so this test can tell the two rules apart: the
+    // expected total below is the finished tick's own bump, not the last
+    // rowing tick's.
     for (const tick of [
       { state: WORKOUTSTATE_INTERVALWORKTIME, elapsed: 20, distance: 50 },
-      { state: WORKOUTSTATE_INTERVALWORKTIME, elapsed: 0, distance: 1 },
-      { state: WORKOUTSTATE_WORKOUTEND, elapsed: 25, distance: 60 },
+      { state: WORKOUTSTATE_INTERVALWORKTIME, elapsed: 45, distance: 110 },
+      { state: WORKOUTSTATE_WORKOUTEND, elapsed: 50, distance: 115 },
     ]) {
       transport.notify(
         GENERAL_STATUS_UUID,
         generalStatusIn(tick.state, tick.elapsed, tick.distance),
       );
     }
-    expect(framesFrom(events).at(-1)!.sessionElapsedSeconds).toBe(45);
-    expect(framesFrom(events).at(-1)!.sessionDistanceMeters).toBe(110);
+    expect(framesFrom(events).at(-1)!.sessionElapsedSeconds).toBe(50);
+    expect(framesFrom(events).at(-1)!.sessionDistanceMeters).toBe(115);
 
     // ...and run 2 must not inherit a metre or a second of it.
     await programViaStub(driver, transport, MINIMAL_PROGRAM);
@@ -7694,6 +7776,81 @@ describe("createPm5Driver: sessionElapsedSeconds/sessionDistanceMeters accumulat
     const last = framesFrom(events).at(-1)!;
     expect(last.sessionElapsedSeconds).toBe(5);
     expect(last.sessionDistanceMeters).toBe(10);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// CR2 spec 1, Task 8: `transports/fake.ts`'s own `synthesizeTerminated()` now
+// reproduces CSAFE-DEF footnote 12's re-base (elapsed jumps BACKWARD to a
+// smaller non-zero value, distance stands exactly still) as its honest
+// DEFAULT reaction to a terminate — not a hand-built byte sequence. This is
+// the fake-driven counterpart to `sessionTotals.test.ts`'s own terminate
+// reproduction (that file's own `stubTransport` comment, written before this
+// task, says the shape is "not a shape any scripted fake transport's
+// timeline can produce" — this test is the proof that claim no longer holds
+// for a genuine `driver.terminate()` reaction, even though that file still
+// needs the stub for its OTHER hand-picked shapes; see its own updated
+// comment). Drives the REAL `createPm5Driver` through the REAL fake, not
+// synthesized bytes.
+// ---------------------------------------------------------------------------
+
+describe("createPm5Driver: the fake's own terminate re-base does not double the session total (CR2 spec 1 Task 8)", () => {
+  function framesFrom(events: MonitorEvent[]): MonitorFrame[] {
+    return events.flatMap((e) => (e.kind === "frame" ? [e.frame] : []));
+  }
+
+  it("driver.terminate() mid-piece: the fake re-bases elapsed backward to a smaller non-zero value while distance stands still, and sessionDistanceMeters does not double (today's design: was exactly 2.00x under the old elapsed-drop fold)", async () => {
+    // Same numbers as sessionTotals.test.ts's own terminate reproduction
+    // (pm5-session4b's own capture, state-architecture-review.md §7.5):
+    // 33.57s/23.9m rowing, distance UNCHANGED at the terminate.
+    const timeline: FakeTimelineEvent[] = [
+      {
+        atMs: 100,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        elapsedSeconds: 33.57,
+        distanceMeters: 23.9,
+        spm: 24,
+        currentSplit: 110,
+        heartRateBpm: null,
+        programIntervalIndex: 0,
+      },
+    ];
+    const { fake, driver, events } = harness(
+      { program: MINIMAL_PROGRAM, events: timeline },
+      { settleTicks: 0 }, // unrelated to this test's own focus; see the sibling tests' comment
+    );
+
+    await programAndArm(driver, fake, MINIMAL_PROGRAM);
+    fake.tick(100); // delivers the rowing tick above
+
+    const before = framesFrom(events).at(-1)!;
+    expect(before.state).toBe("rowing");
+    expect(before.sessionElapsedSeconds).toBeCloseTo(33.57, 2);
+    expect(before.sessionDistanceMeters).toBeCloseTo(23.9, 1);
+
+    await driver.terminate();
+
+    const after = framesFrom(events).at(-1)!;
+    expect(after.state).toBe("terminated");
+    // The SHAPE this task teaches the fake: elapsed jumps BACKWARD to a
+    // smaller, non-zero value; distance stands EXACTLY still.
+    expect(after.elapsedSeconds).toBeLessThan(before.elapsedSeconds);
+    expect(after.elapsedSeconds).toBeGreaterThan(0);
+    expect(after.distanceMeters).toBe(before.distanceMeters);
+
+    // The consequence CR2 spec 1's register map exists to fix: the total
+    // does not double, and does not regress either. Under the OLD fold this
+    // exact shape reported 47.8 (2.00x); the register map writes no key for
+    // a "terminated" frame at all (`toProgramIndex` returns `null` for
+    // every state that is not rowing/resting), so BOTH session totals stay
+    // exactly what interval 0's rowing tick already registered — including
+    // `sessionElapsedSeconds`, which a write-rule that let a terminated
+    // frame's own (rebased, smaller) elapsed overwrite the key would pull
+    // backward (see this task's own report for the self-mutation proving
+    // this pair of assertions bites).
+    expect(after.sessionElapsedSeconds).toBeCloseTo(33.57, 2);
+    expect(after.sessionDistanceMeters).toBeCloseTo(23.9, 1);
   });
 });
 
@@ -8539,27 +8696,66 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     expect(detail).toContain("§23 walk item 2");
   });
 
-  it("A LINK DROP INSIDE THE GRACE takes the deadline with it too — a fill cannot outlive the radio (review Minor-5)", async () => {
+  it("A LINK DROP INSIDE THE GRACE cancels the WAIT, not a verdict already in hand: a summary that already arrived still fills (F7)", async () => {
     const g = primedGate();
     await rowToFinish(g);
     g.clock.advance(400);
     g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(62.5, 214));
     expect(g.timer.pending()).not.toBeNull();
+    // Not yet filed — a split still has until the deadline (or, now, the
+    // drop) to arrive and win (test (b)'s own precedence).
+    expect(boundaries(g.events)).toHaveLength(0);
 
-    // The radio drops while the deadline is still standing. Cancelled on
-    // the TRANSPORT's own disconnect, not only on a caller-initiated
-    // `disconnect()` — and cancelled ahead of the "after the current run
+    // The radio drops while the deadline is still standing, well inside
+    // BOTH windows (400ms, against a 3000ms grace and a 3500ms hand-off
+    // hold — `FINISH_HANDOFF_HOLD_MS` in `useMonitorSession.ts`). Cancelled
+    // on the TRANSPORT's own disconnect, not only on a caller-initiated
+    // `disconnect()` — and handled ahead of the "after the current run
     // closed, ignored" early-return, which this case would otherwise skip.
     g.transport.fireDisconnect("fixture: the radio dropped mid-grace");
 
-    // The CANCELLER was called, which is the whole contract: in production
-    // `schedule`'s default is `setTimeout`/`clearTimeout`, so a cancelled
-    // deadline never reaches its callback at all. (This stub's `fire()`
-    // would still invoke it — deliberately not asserted here, because
-    // firing a cancelled timer by hand tests the stub, not the driver.)
+    // The SCHEDULED WAIT is still cancelled: in production `schedule`'s
+    // default is `setTimeout`/`clearTimeout`, so a live timer never outlives
+    // the driver either way — that half of the old contract survives.
     expect(g.timer.calls[0]!.cancelled).toBe(true);
     expect(g.timer.pending()).toBeNull();
+
+    // The VERDICT it could already reach does NOT die with the wait: the
+    // summary was already in hand, so the drop runs the reconcile right
+    // there instead of discarding it — the rower's log screen gets its real
+    // numbers, not "0 OF 1 INTERVALS MEASURED" over a trace that had them
+    // the whole time.
+    expect(boundaries(g.events)).toHaveLength(1);
+    expect(boundaries(g.events)[0]).toMatchObject({
+      kind: "intervalComplete",
+      actual: { index: 0, elapsedSeconds: 62.5, distanceMeters: 214 },
+      finalBoundary: true,
+    });
+    const verdict = verdicts(g.log);
+    expect(verdict).toHaveLength(1);
+    expect(verdict[0]!.detail).toContain("filled-from-summary");
+  });
+
+  it("A LINK DROP BEFORE ANY SUMMARY ARRIVES declines synchronously instead of leaving the trace silent — no more evidence is ever coming either way", async () => {
+    const g = primedGate();
+    await rowToFinish(g);
+    g.clock.advance(400);
+    // No 0x0039 this time — the split simply never showed up and neither did
+    // the summary before the radio died.
+    expect(g.timer.pending()).not.toBeNull();
+
+    g.transport.fireDisconnect(
+      "fixture: the radio dropped with no summary held",
+    );
+
+    expect(g.timer.calls[0]!.cancelled).toBe(true);
+    // Nothing to fill — the trace says so instead of staying silent about a
+    // deadline that quietly vanished.
     expect(boundaries(g.events)).toHaveLength(0);
+    const verdict = verdicts(g.log);
+    expect(verdict).toHaveLength(1);
+    expect(verdict[0]!.detail).toContain("declined");
+    expect(verdict[0]!.detail).toContain("no 0x0039 arrived");
   });
 
   it("A REPLACED RUN takes its deadline with it: the stale reconcile fires into nothing and cannot fill the NEW run's last interval", async () => {
@@ -8592,4 +8788,173 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
       actual: { elapsedSeconds: 62.5, distanceMeters: 214 },
     });
   });
+});
+
+describe("createPm5Driver: R0 instrumentation (CR2 spec 1) — the accumulator lands beside the numbers it contradicts", () => {
+  // This task lands on the BROKEN accumulator deliberately (CR2 spec 1
+  // Task 1). Nothing about the accumulator's own arithmetic changes here —
+  // the point is only that the instrumentation exists on the defect, so
+  // Task 4's fix has a measurable before/after.
+
+  const R0_SUMMARY_FIELDS = {
+    avgStrokeRate: 24,
+    endingHeartRateBpm: 168,
+    avgHeartRateBpm: 152,
+    minHeartRateBpm: 96,
+    maxHeartRateBpm: 175,
+    dragFactorAverage: 128,
+    recoveryHeartRateBpm: 120,
+    avgPaceSecondsPer500m: 125,
+  };
+
+  /** `stubTransport` idiom (driver.test.ts:492), not the fake's own
+   *  scripted timeline: both tests below need `distanceMeters` and
+   *  `totalWorkDistanceMeters` set to two INDEPENDENT values on the same
+   *  0x0031 payload, which only direct control over the encoded bytes can
+   *  give. Brings `seen.as1`/`seen.as2` up first, the same shortcut the
+   *  'seen' gating tests and `primedGate()` above take, so the General
+   *  Status notifications below actually reach `maybeEmitFrame`. */
+  function r0Harness(): {
+    transport: ReturnType<typeof stubTransport>;
+    log: ReturnType<typeof createEventLog>;
+    driver: ReturnType<typeof createPm5Driver>;
+  } {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log, {});
+    transport.notify(ADDITIONAL_STATUS_1_UUID, new Uint8Array(17));
+    transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));
+    return { transport, log, driver };
+  }
+
+  it("prints the accumulator and the machine's own total beside 0x0039's", async () => {
+    const { transport, log, driver } = r0Harness();
+    await programViaStub(driver, transport, MINIMAL_PROGRAM);
+
+    // Row far enough to put something in the accumulator.
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      buildGeneralStatusBytes({
+        elapsedSeconds: 30,
+        distanceMeters: 120.5,
+        workoutType: 8,
+        intervalType: 0,
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        rowingState: 1,
+        strokeState: 2,
+        totalWorkDistanceMeters: 120,
+        workoutDurationRaw: 6000,
+        workoutDurationType: 0,
+        dragFactor: 130,
+      }),
+    );
+    transport.notify(
+      END_OF_WORKOUT_SUMMARY_UUID,
+      buildEndOfWorkoutSummaryBytes({
+        ...R0_SUMMARY_FIELDS,
+        elapsedSeconds: 30,
+        meters: 120,
+        workoutType: 8,
+      }),
+    );
+
+    const entry = log.entries().find((e) => e.kind === "summary-totals");
+    expect(entry).toBeDefined();
+    // The consequence, not the existence: all five numbers are present.
+    expect(entry!.detail).toContain("distance=120m");
+    expect(entry!.detail).toContain("accumulator=120.5m");
+    expect(entry!.detail).toContain("accumulatorElapsed=30s");
+    expect(entry!.detail).toContain("machineTotal=120m");
+  });
+
+  it(
+    "samples the machine's own total mid-piece, at a bounded cadence " +
+      "(review I1: a PRODUCTION-shaped fixture — no one rows 8:20/500)",
+    async () => {
+      // No `programViaStub` here (unlike the test above): the twd-sample
+      // check runs unconditionally in the 0x0031 handler, gated on nothing
+      // but `lastLoggedTwd`'s own bucket comparison — arming a program
+      // first would notify one extra General Status of its own (the armed
+      // readback, `totalWorkDistanceMeters=0`), a REAL, correctly logged
+      // sample that would shift every count below by one. Skipping the arm
+      // keeps this test's only 0x0031 traffic the 30 notifications below.
+      const { transport, log } = r0Harness();
+
+      const status = (elapsed: number, d: number, twd: number): Uint8Array =>
+        buildGeneralStatusBytes({
+          elapsedSeconds: elapsed,
+          distanceMeters: d,
+          workoutType: 8,
+          intervalType: 0,
+          workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+          rowingState: 1,
+          strokeState: 2,
+          totalWorkDistanceMeters: twd,
+          workoutDurationRaw: 6000,
+          workoutDurationType: 0,
+          dragFactor: 130,
+        });
+
+      // 30 ticks at a 2:00/500 split (500 m / 120 s = 4.1667 m/s), fed at
+      // 0.5 s/tick — 2.0833 m/tick, comfortably inside "rowing" territory
+      // and nowhere near the review's flagged 0.4-0.6 m/tick (8:20/500)
+      // fixture that certified the broken guard. `distanceMeters` (0x0031's
+      // decimal field) and the rounded integer `totalWorkDistanceMeters`
+      // both climb tick over tick, exactly as the wire reports them.
+      // [elapsedSeconds, distanceMeters, totalWorkDistanceMeters]
+      const ticks: readonly [number, number, number][] = [
+        [0.5, 2.1, 2],
+        [1, 4.2, 4],
+        [1.5, 6.3, 6],
+        [2, 8.3, 8],
+        [2.5, 10.4, 10],
+        [3, 12.5, 13],
+        [3.5, 14.6, 15],
+        [4, 16.7, 17],
+        [4.5, 18.8, 19],
+        [5, 20.8, 21],
+        [5.5, 22.9, 23],
+        [6, 25, 25],
+        [6.5, 27.1, 27],
+        [7, 29.2, 29],
+        [7.5, 31.3, 31],
+        [8, 33.3, 33],
+        [8.5, 35.4, 35],
+        [9, 37.5, 38],
+        [9.5, 39.6, 40],
+        [10, 41.7, 42],
+        [10.5, 43.8, 44],
+        [11, 45.8, 46],
+        [11.5, 47.9, 48],
+        [12, 50, 50],
+        [12.5, 52.1, 52],
+        [13, 54.2, 54],
+        [13.5, 56.3, 56],
+        [14, 58.3, 58],
+        [14.5, 60.4, 60],
+        [15, 62.5, 63],
+      ];
+      for (const [elapsed, d, twd] of ticks) {
+        transport.notify(GENERAL_STATUS_UUID, status(elapsed, d, twd));
+      }
+
+      const samples = log.entries().filter((e) => e.kind === "twd-sample");
+      // Hand-derived from the fixture's own `twd` column above (not
+      // re-run through the driver's own formula — that would be the exact
+      // tautology `intervalIndex.ts`'s header warns against): the 25 m
+      // bucket (`Math.floor(twd / 25)`) is 0 for ticks 1-11 (twd 2..23), a
+      // NEW bucket 1 the instant twd reaches 25 at tick 12, still 1 through
+      // tick 23 (twd 23..48), and a NEW bucket 2 the instant twd reaches 50
+      // at tick 24. Three bucket VALUES visited (0, 1, 2) -> three log
+      // entries, at ticks 1, 12 and 24 — over all 30 notifications. Budget
+      // check: this 62.5 m stretch produced 3 entries; a full 6000 m piece
+      // at the same cadence would produce 6000 / 25 = 240, the number
+      // `TWD_SAMPLE_BUCKET_METERS`'s own comment states and stays well
+      // inside the 500-entry ring.
+      expect(samples).toHaveLength(3);
+      expect(samples[0]!.detail).toContain("machineTotal=2m");
+      expect(samples[1]!.detail).toContain("machineTotal=25m");
+      expect(samples[2]!.detail).toContain("machineTotal=50m");
+    },
+  );
 });

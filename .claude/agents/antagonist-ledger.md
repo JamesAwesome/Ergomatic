@@ -170,3 +170,141 @@ toolkit, not a history.
   acknowledgement.
 - One judgement call site, enforced by a census test, held across seven phases.
 - The view layer deriving everything and storing nothing.
+
+## Spec-stage pass, 2026-08-15 (Phase CR2 spec 1, "numbers")
+
+- **"A capture-replay test can drive the real driver and exercise an
+  interval-keyed accumulator."** False, twice over, and it was about to become
+  four exit criteria. `docs/monitor/sessions/*.log.gz` carry the driver's
+  DECODED OUTPUT (`[event]` MonitorFrame JSON), not wire bytes — the only raw
+  0x0031 payloads in the whole record are 16 `structure` log entries. The
+  review's own re-encode harness zero-fills 0x0033, so `intervalCount` is always
+  0; and a replay never calls `program()`, so `programLength` is 0 and
+  `intervalIndex.ts:167` returns `null` before it looks at state. Every frame
+  keys to nothing. **Technique: before trusting a replay-based exit criterion,
+  ask what the harness FEEDS the field under test.** A harness that faithfully
+  reproduces three published numbers can still be structurally blind to the
+  mechanism the next fix turns on — ours reproduced 47.8 m and 108.4 m exactly
+  while being incapable of writing a single map key.
+
+- **"The three committed captures are three captures."** False:
+  `session3 ⊂ session4a ⊂ session4b`, byte-for-byte prefixes (1,114,926 /
+  1,877,344 / 2,036,658 B). Every "measured across all three captures" in the
+  spec AND in the architecture review's §F2 has the evidential weight of one.
+  **Technique: when a README records a prefix relation for ONE pair in a set (it
+  did, for sessions 2/3), test the rest of the set.** Three lines of
+  `bytes.startswith()` deleted a whole class of "independently confirmed".
+
+- **"Last-write-wins on an interval-keyed map holds each interval's final
+  reading."** False. At a work→work boundary with NO intervening rest, 0x0031's
+  counters reset one notification BEFORE 0x0033's Interval Count increments, so a
+  `(0, 0)` frame still carrying the completed interval's key clobbers it —
+  permanently, with no link gap involved. Measured (`pm5-session4b`
+  L2835-2838): oracle 74.4 m, the existing fold 74.4 m, the proposed map
+  **0.0 m** — a regression on a segment the old code got right. 35 of the 300
+  seeded library workouts contain such a boundary (`compileProgram` defaults
+  `restSeconds: 0`, `program.ts:554`). **Technique: when a design keys one
+  characteristic's value by another characteristic's field, ask what makes them
+  ATOMIC.** Here nothing does — and the clean boundaries in the capture were
+  clean only because `toProgramIndex` keys off `state`, which rides in the SAME
+  payload as the pair. Enumerate which cases have that property and which do not;
+  the ones that do will make the design look correct.
+
+- **"No threshold change fixes it — the bad drops are far above any threshold
+  that still catches a real 60 s interval."** Right conclusion, backwards reason.
+  Measured: real resets span 14.14-156.76 s, bad drops 10.90-117.43 s, and the
+  four smallest bad drops sit BELOW the smallest real reset — a ~13 s threshold
+  would eliminate four of nine. The claim survives on the OVERLAP, not on "far
+  above". **Technique: when a spec argues "no scalar separates these", print BOTH
+  populations sorted.** The stated direction was wrong and a reader acting on it
+  would have retuned the constant upward.
+
+- **"`totalWorkDistanceMeters` appears only at arm and terminate moments."**
+  False in its literal form, and the correction strengthened the design:
+  `raw=e6 1d 00 3b 01 00 08 01 05 …` is workoutState 5 (INTERVALWORKDISTANCE →
+  `rowing`), elapsed 76.54 s, distance 31.5 m, TWD 500 on a 500 m goal — a live
+  mid-row sample proving TWD reads the GOAL while rowing, not merely as an arm
+  artefact. The operative claim (no mid-piece TIME-goal sample) survives.
+  **Technique: decode the STATE BYTE of every sample before characterising when a
+  field appears.** "Only at arm and terminate" was a summary of the states
+  someone expected, not of the states present.
+
+- **A cheap catch worth repeating: an oracle can share a premise with the fix.**
+  "Each interval's own final pre-reset reading" is sound when computed by RESET
+  DETECTION (elapsed drop + distance drop, no index involved) and tautological
+  when computed by grouping frames on their recorded `intervalIndex` — the field
+  the implementation keys on. Both are natural readings of the same English
+  sentence. **Technique: for any oracle, name the field it must NOT touch.**
+
+## Task-brief pass, 2026-08-15 (CR2 spec 1 Task 11, the walk's falsification)
+
+- **"The poisoned tick is not in the ring; the mechanism is arithmetic
+  inference."** Understated. `parse.ts` maps workoutState **8**
+  (`INTERVALWORKTIMETOREST`, an ephemeral PM5 transition state) to `"rowing"`,
+  and `walk-2026-08-15/session-a-multitest.json` seq 26 is a captured 0x0031
+  sample IN state 8 carrying the completed interval's pair (60.05 s / 181.2 m),
+  one entry before the `resting` flip at 60.4 s. The poison WINDOW is recorded;
+  only 0x0033's count at that instant is not. **Technique: before tagging a
+  mechanism INFERENCE, check whether the state byte you are theorising about is
+  a DOCUMENTED state with its own ordinal — and grep the capture for that
+  ordinal.** A brief that reasons about "a work/rowing state" in prose skips the
+  question of WHICH of the five ordinals our own map calls rowing.
+
+- **"353 ≈ 176 + 177 — both registers hold interval-1-sized distance."** The
+  conclusion is right and the decomposition is impossible. Key 0 keeps receiving
+  rest ticks from the same monotone pair AFTER the poison, so `key0 ≥ key1`
+  always; that forces key1 ∈ [173.3, 176.5] and key0 ∈ [176.5, 179.7], honest
+  total 195.5-198.7 (not "≈195"), and it pins the poison to within ~3 s of the
+  work→rest boundary. **Technique: a max-merge accumulator imposes ORDER
+  constraints between its own registers. Before accepting a decomposition of an
+  observed total, ask which register is downstream of which — the arithmetic
+  bounds the timing for free, with no new capture.**
+
+- **A guard's own defence table had the inequality backwards, and its test
+  fixture instantiated the failure.** The brief argued "59.5 NOT < register only
+  if register already ≥ 59.5" (false: `59.5 < R` is true when `R > 59.5`) and
+  ordered its failing test rest-ticks-then-poison, so key 0's register held 90
+  and the guard would have opened the poisoned key anyway — red before AND after
+  the fix. The predicate is nonetheless sound, for a reason the brief never
+  stated: within one un-reset pair elapsed is monotone, and the register is a max
+  over readings from that SAME pair, so a poison can never be strictly smaller.
+  **Technique: for any guard expressed as a comparison, hand-execute it on the
+  brief's OWN fixture in the brief's OWN order before reading its argument. The
+  ordering of a synthetic fixture is a factual claim about the wire, and it is
+  the claim briefs get wrong.**
+
+- **Attacked and not broken:** the elapsed-only open predicate, against seven
+  recorded and constructed shapes including both skew directions at an r0
+  boundary, the trailing-rest phantom (which `toProgramIndex`'s upper clamp makes
+  immune — the poison bites only at NON-final boundaries, so an N-interval
+  program takes exactly N-1 of them), and a null-index tick inside the poisoned
+  window. Adding a distance clause was considered and rejected: its only
+  motivating shape (elapsed re-bases while distance stands still) is the
+  Terminate re-base, which the write rule already excludes, while its cost — a
+  previous key holding ≤0.8 m collapses two keys and loses ~60 s of session
+  elapsed — is reachable by a rower who simply doesn't pull.
+
+- **Addendum to the Task 11 pass — one of its own "attacked and not broken"
+  rows was falsified a day later by the implementation.** The pass certified
+  "the trailing-rest phantom (clamp → existing key, never an open)". Shape 2 of
+  the outage suite IS a trailing-rest clamp, and it DOES open — when a frame gap
+  has kept the next key from ever being opened, the clamped phantom is the first
+  write to reach it. The guard still behaves safely there (refused, merged,
+  logged), but the certification was wrong: the clamp guarantees the KEY VALUE
+  is an existing interval's, not that the key is already IN the map.
+  **Technique: for every "never happens" row in a soundness table, ask what
+  state the claim quietly assumes (here: that earlier frames already opened the
+  key) and construct the run where that state is absent.** A frame gap is
+  always the cheapest absence generator in this codebase.
+
+- **A test fixture's premises can collide with new code while both are
+  "settled".** The Sea Fret happy-path fixture modeled 0x0031's elapsed/distance
+  as session-cumulative (never resetting) — wire-impossible, hardware-settled as
+  per-interval by walk 4 and re-confirmed twice in walk-2026-08-15 — and the
+  open-on-reset guard is the first code whose behaviour DIFFERS on the
+  impossible shape, so the flagship test broke on a fixture bug, not a code bug.
+  The first draft blamed interface-notes item 24, a category error: item 24 is
+  about 0x0033's Last Split CHECKPOINT pair, not 0x0031's own counters.
+  **Technique: when new code breaks an old fixture, ask which of the fixture's
+  premises the new code is the first to observe — and check whether that premise
+  was ever hardware-settled before blaming an open question.**
