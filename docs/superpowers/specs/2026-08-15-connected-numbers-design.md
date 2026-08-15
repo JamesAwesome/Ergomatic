@@ -27,6 +27,19 @@ The order is deliberate. The axes give the redesign the model its first-frame
 and stale states need, and the redesign deletes work that would otherwise be
 done twice in item 1.
 
+## The captures are ONE capture, not three
+
+**Established 2026-08-15 (antagonist), verified independently:**
+`pm5-session3-final.log.gz` ⊂ `pm5-session4a-final.log.gz` ⊂
+`pm5-session4b-final.log.gz`, **byte-for-byte prefixes** (1,114,926 /
+1,877,344 / 2,036,658 bytes). The sessions README already records this relation
+for sessions 2 and 3; nobody extended the test to the rest of the set.
+
+Every "measured across all three captures" — in this spec's first draft **and in
+the architecture review's §F2** — therefore carries the evidential weight of
+**one** session. Nothing below claims independent confirmation it does not have,
+and the phrase does not appear again in this document.
+
 ## Evidence this spec rests on
 
 Everything below was verified this session against code and the committed
@@ -65,10 +78,20 @@ driver's own comments twenty lines above the bug. The fold banks a distance the
 machine never cleared and then keeps counting it, which is where the exact 2.00x
 comes from.
 
-**No threshold change fixes it.** Measured across all three captures, the bad
-drops span **10.9 s to 87.1 s** — every one of them far above any threshold that
-still catches a real 60 s interval. The constant is not mistunable; it is the
-wrong mechanism.
+**No threshold change fixes it — but the first draft of this spec gave the wrong
+reason, and a reader acting on it would have retuned the constant upward**
+(antagonist, 2026-08-15). Printing both populations sorted:
+
+```
+bad drops   (n=6)  10.90  11.41  12.06  12.13  16.03  87.09
+real resets (n=19) 14.14  14.66  15.10  16.34  22.36  24.10  51.96 … 156.76
+```
+
+The four smallest bad drops sit **below** the smallest real reset, so a ~13 s
+threshold *would* eliminate four of six. The claim survives on the **overlap**,
+not on "far above": 16.03 s and 87.09 s sit strictly inside the real-reset range,
+so no scalar separates the populations. The constant is not mistunable because
+the two distributions interleave — it is the wrong mechanism.
 
 ### Why a terminate cannot corrupt an interval-keyed map
 
@@ -87,7 +110,7 @@ counter still running.
 
 `totalWorkDistanceMeters` is decoded at `app/domain/monitor/pm5/parse.ts:135`
 (U24LE at byte 11 of 0x0031) and is read by nothing outside tests and the fake.
-Decoding all 16 `structure` entries across the three committed captures:
+Decoding all 16 distinct `structure` entries in the record:
 
 | Goal type | `durationType` | Samples | `totalWorkDistanceMeters` reads |
 | --- | --- | --- | --- |
@@ -113,11 +136,22 @@ number the whole time. We have been throwing it away.
 
 Two consequences, both of which change work:
 
-1. **The table above is measured entirely in arm-adjacent windows.** Every
-   `structure` entry fires at a program or arm change, so all sixteen samples sit
-   in roughly the first 30 m of a piece. Whether distance-goal TWD *stays* at the
-   goal, counts down, or begins tracking after that is **unobserved** — not
+1. **The table above is measured almost entirely in arm-adjacent windows**, so
+   whether *time*-goal TWD keeps tracking mid-piece is **unobserved** — not
    observed-and-contrary. §7.2's caveat inherits the same limit.
+
+   **One exception, and it strengthens the design** (antagonist, 2026-08-15). The
+   claim "TWD appears only at arm and terminate moments" is false in its literal
+   form: `raw=e6 1d 00 3b 01 00 08 01 05 …` decodes to **workoutState 5**
+   (INTERVALWORKDISTANCE → `rowing`), elapsed 76.54 s, distance 31.5 m, TWD 500
+   on a 500 m goal. That is a **live mid-row sample**, and it proves TWD reads the
+   GOAL *while rowing* rather than as an arming artefact. So distance-goal
+   suppression moves from INFERENCE to PRIMARY. The operative claim survives: no
+   mid-piece **time**-goal sample exists.
+
+   Lesson for the next reader: decode the **state byte** of every sample before
+   characterising when a field appears. "Only at arm and terminate" was a summary
+   of the states someone expected, not of the states present.
 2. **R0 must widen** (see below) so that the next capture settles this offline
    instead of leaving it unmeasurable for no reason.
 
@@ -167,6 +201,46 @@ an interval** — they only ever grow until they reset, and a reset means a new
 interval, which means a new key. So in every honest case maximum *equals* last,
 and in the dishonest cases it refuses to go backwards. It also cannot overcount,
 which last-write-wins can.
+
+**And the antagonist proved this is not a precaution — last-write-wins would have
+shipped a regression.** `pm5-session4b`, line 2837, the §17 #13 "2 × TIME, NO
+rest" piece:
+
+```
+L2835  rowing  idx=0  e=59.83  d=74.4     <- interval 0's real final reading
+L2836  intervalComplete {index: 0, distanceMeters: 74}
+L2837  rowing  idx=0  e= 0.00  d= 0.0     <- the RESET, still carrying key 0
+L2838  rowing  idx=1  e= 0.00  d= 0.0     <- the index catches up one tick later
+```
+
+Under last-write-wins, `(0, 0)` lands on key 0 and **74.4 m of real rowing
+vanishes** — permanently, with no link gap involved, on a segment the *existing
+fold gets right*. Under maximum it survives. Two independent gates reached
+maximum from different evidence: the PM gate from the clamp's non-injectivity,
+the antagonist from this replay.
+
+**The mechanism, which generalises and which nothing in the codebase had named.**
+`maybeEmitFrame` fires on 0x0031's arrival and reads `status.intervalCount` out of
+the merged `raw` — a value that arrived on **0x0033, a different
+characteristic**. At a *rest* boundary our index changes because `toProgramIndex`
+keys off `state` (`intervalIndex.ts:171`), and `state` is byte 8 of the *same*
+0x0031 payload — so no skew is possible, which is exactly why the rest boundaries
+in the record are clean. **At a no-rest boundary there is no state change**, so
+the index must change on 0x0033's byte, and it lags by a notification. The clean
+boundaries are clean for a reason that does not apply here.
+
+`driver.ts:1047-1049` already says the two fields "are independently-incrementing
+… this driver correlates them but does not assume they can't skew" — about 0x0033
+versus 0x0037/38. This is a **new instance** of that hazard, observed rather than
+inferred, between 0x0031's counters and 0x0033's index.
+
+**Blast radius:** `compileProgram` defaults every interval to `restSeconds: 0`
+(`program.ts:554`), so no-rest boundaries are ordinary — **35 of the 300 seeded
+library workouts contain at least one** (162 of 1379 intervals).
+
+_Honest limit:_ the record contains exactly one no-rest boundary, so the
+observation is PROVEN once and the generalisation is INFERENCE — but with a
+mechanism that predicts it.
 
 **The read rule.**
 
