@@ -16,14 +16,16 @@ import { LIBRARY_WORKOUTS } from "../../server/seed/library/index.js";
 // (fmtDuration's "10:00"/"1:05:00" or "500m"); TOKEN_BARE additionally
 // allows the chain's own bare integers ("8"). REF is a single reference
 // ("6K+10"/"6K"/"MAX"); RANGE is either a collapsed single reference or
-// two RANGE ends ("+4 → −2", "6K → +2") per offsetRange's own idiom
-// (a bare offset has no base prefix unless it collapses to a single
-// value or the offset is 0).
+// a two-ended range whose SLOW end always carries the base
+// ("6K+4 → −2", "6K → +2") per offsetRange's own idiom (James,
+// 2026-08-14: a range that names no base cannot say what the exercise
+// is). Only the fast end may be a bare offset.
 const TOKEN = String.raw`\d+:\d{2}(?::\d{2})?|\d+m`;
 const TOKEN_BARE = String.raw`\d+:\d{2}(?::\d{2})?|\d+m|\d+`;
 const REF = String.raw`(?:2K|6K)(?:[+−]\d+)?|MAX|MIN`;
-const RANGE_END = String.raw`2K|6K|[+−]\d+`;
-const RANGE = String.raw`(?:2K|6K)(?:[+−]\d+)?|(?:${RANGE_END}) → (?:${RANGE_END})`;
+const RANGE_HI = String.raw`(?:2K|6K)(?:[+−]\d+)?`;
+const RANGE_LO = String.raw`2K|6K|[+−]\d+`;
+const RANGE = String.raw`(?:2K|6K)(?:[+−]\d+)?|(?:${RANGE_HI}) → (?:${RANGE_LO})`;
 const CLAUSE = String.raw`(?: · (?:\d+′|\d+:\d{2}) REST)?`;
 const F1 = String.raw`(?:${TOKEN}) @ (?:${REF})${CLAUSE}`; // single piece
 const F2 = String.raw`\d+ × (?:${TOKEN}) @ (?:${REF})${CLAUSE}`; // uniform repeats / distance
@@ -56,7 +58,6 @@ describe("pieceList", () => {
     expect(rows[0]).toMatchObject({
       duration: "18:00",
       refTextFull: "at 6k +10",
-      refTextCompact: "at +10",
       restText: "3′ r",
       split: "2:15.0",
       spm: 22,
@@ -97,14 +98,13 @@ describe("pieceList", () => {
     expect(rows[0]).toMatchObject({ count: 3, restText: "2′ r" }); // authored on the step; deviation shows it, rolling collapses the 3 identical rows
   });
 
-  it("offset 0 reads 'at 6k pace' in both forms; fractional rest uses the clock", () => {
+  it("offset 0 reads 'at 6k pace'; fractional rest uses the clock", () => {
     const rows = pieceList([w(8, 0, 28, 2.5), w(2, 4)], B);
     expect(rows[0].refTextFull).toBe("at 6k pace");
-    expect(rows[0].refTextCompact).toBe("at 6k pace");
     expect(rows[0].restText).toBe("2:30 r");
   });
 
-  it("mixed bases keep the base in compact form", () => {
+  it("mixed bases name each piece's own base", () => {
     const steps: Step[] = [
       {
         k: "w",
@@ -114,8 +114,73 @@ describe("pieceList", () => {
       w(10, 8),
     ];
     const rows = pieceList(steps, B);
-    expect(rows[0].refTextCompact).toBe("at 2k +4");
-    expect(rows[1].refTextCompact).toBe("at 6k +8");
+    expect(rows[0].refTextFull).toBe("at 2k +4");
+    expect(rows[1].refTextFull).toBe("at 6k +8");
+  });
+
+  // ---- James's 2026-08-14 ruling: the base is never hoisted away ----
+  // "We always need full form so people know what the exercise is, we can
+  // do that without losing much compression." A rower reading "at +12"
+  // cannot tell a 2k-based piece from a 6k-based one, and that is what
+  // tells them the workout's character. Nothing else on Today's card
+  // names the base, so the row must.
+
+  it("Ground Fog (real seed: 5 pieces, one shared 6k base — the reported case) names 6k on EVERY row, not just the mixed-base sets", () => {
+    const gf = LIBRARY_WORKOUTS.find((x) => x.title === "Ground Fog");
+    expect(gf, "Ground Fog left the seeded library").toBeDefined();
+    const rows = pieceList(gf!.steps, B);
+    // 5 rows is what puts this card into Today's compressed layout
+    // (Today.tsx's `rows.length >= 5`) — the exact condition that used to
+    // strip the base. Adjacent durations differ, so rollRuns never fires.
+    expect(rows).toHaveLength(5);
+    expect(rows.map((r) => r.refTextFull)).toStrictEqual([
+      "at 6k +12",
+      "at 6k +11",
+      "at 6k +10",
+      "at 6k +11",
+      "at 6k +12",
+    ]);
+  });
+
+  it("Outflow Boundary (real seed: 6 split pieces sharing 2k plus one MAX) names 2k on every split row — the effort piece is not counted as a second base", () => {
+    // The retired `sharedBase` set skipped effort refs, so a set that
+    // mixes one MAX into a single-base group still read as "shared" and
+    // still lost its base. Six seeded workouts are that shape.
+    const ob = LIBRARY_WORKOUTS.find((x) => x.title === "Outflow Boundary");
+    expect(ob, "Outflow Boundary left the seeded library").toBeDefined();
+    const rows = pieceList(ob!.steps, B);
+    expect(rows).toHaveLength(7);
+    expect(rows.map((r) => r.refTextFull)).toStrictEqual([
+      "at 2k −4",
+      "at 2k −4",
+      "at 2k −3",
+      "at 2k −3",
+      "at 2k −4",
+      "at 2k −4",
+      null, // the MAX piece: effort word only, no ref text at all
+    ]);
+    expect(rows[6].effortText).toBe("ALL OUT");
+  });
+
+  it("property: not one split-ref row in the whole 300-workout library renders a bare offset — every one names its base", () => {
+    const NAMED = /^at (?:2k|6k) (?:[+−]\d+|pace)$/;
+    let checked = 0;
+    for (const wk of LIBRARY_WORKOUTS) {
+      for (const row of pieceList(wk.steps, B)) {
+        if (row.refTextFull === null) continue;
+        checked++;
+        expect(row.refTextFull, `${wk.title}: "${row.refTextFull}"`).toMatch(
+          NAMED,
+        );
+      }
+    }
+    // guard the guard: an empty sweep would pass vacuously.
+    expect(checked).toBeGreaterThan(500);
+  });
+
+  it("the retired compact field is GONE from the row object, not merely equal to the full one (a duplicated field drifts)", () => {
+    const rows = pieceList([w(18, 10, 22, 3), w(9, 6)], B);
+    expect(Object.keys(rows[0])).not.toContain("refTextCompact");
   });
 
   it("effort pieces: word in effortText, no split, no off", () => {
@@ -427,22 +492,22 @@ describe("structureLine", () => {
   });
   it("format 3, two unequal pieces: offsets-only range, zero renders the base", () => {
     expect(line([w(18, 10, undefined, 3), w(9, 6)])).toBe(
-      "18:00 + 9:00 @ +10 → +6 · 3′ REST",
+      "18:00 + 9:00 @ 6K+10 → +6 · 3′ REST",
     );
     expect(line([w(18, 6, undefined, 3), w(9, 0)])).toBe(
-      "18:00 + 9:00 @ +6 → 6K · 3′ REST",
+      "18:00 + 9:00 @ 6K+6 → 6K · 3′ REST",
     );
   });
   it("mixed-sign offset range renders both signs", () => {
     expect(line([w(6, 4, undefined, 2), w(4, -2)])).toBe(
-      "6:00 + 4:00 @ +4 → −2 · 2′ REST",
+      "6:00 + 4:00 @ 6K+4 → −2 · 2′ REST",
     );
   });
   it("format 4-vs-5 precedence boundary: exactly 8 pieces chains, 9 falls to count form", () => {
     const eight = [1, 2, 3, 4, 5, 6, 7, 8].map((o) => w(2, o));
-    expect(line(eight)).toBe("2-2-2-2-2-2-2-2 @ +8 → +1");
+    expect(line(eight)).toBe("2-2-2-2-2-2-2-2 @ 6K+8 → +1");
     const nine = [1, 2, 3, 4, 5, 6, 7, 8, 9].map((o) => w(2, o));
-    expect(line(nine)).toBe("9 PIECES @ +9 → +1");
+    expect(line(nine)).toBe("9 PIECES @ 6K+9 → +1");
   });
   it("format 4, chain ≤8 with max→min range; fractional minutes as clock", () => {
     expect(
@@ -455,9 +520,9 @@ describe("structureLine", () => {
         w(4, 4, undefined, 2),
         w(2, 6),
       ]),
-    ).toBe("2-4-6-8-6-4-2 @ +6 → 6K · 2′ REST");
+    ).toBe("2-4-6-8-6-4-2 @ 6K+6 → 6K · 2′ REST");
     expect(line([w(4.5, 4, undefined, 1), w(2, 2)])).toBe(
-      "4:30 + 2:00 @ +4 → +2 · 1′ REST",
+      "4:30 + 2:00 @ 6K+4 → +2 · 1′ REST",
     );
   });
   it("format 5, count fallback past 8 pieces (range kept when split refs exist)", () => {
@@ -467,7 +532,7 @@ describe("structureLine", () => {
       w(1, 2, undefined, 1),
       w(3, 4, undefined, 1),
     ];
-    expect(line(steps)).toBe("12 PIECES @ +8 → +2 · 1′ REST");
+    expect(line(steps)).toBe("12 PIECES @ 6K+8 → +2 · 1′ REST");
   });
   it("format 6, mixed frames name each base; effort prints its word", () => {
     const steps: Step[] = [
@@ -550,6 +615,52 @@ describe("structureLine", () => {
     ];
     expect(line(steps)).toBe("3 × 5:00 @ 6K+4");
   });
+  // ---- James's 2026-08-14 ruling, the Library half ----
+  // The offset range used to print `+12 → +10` and drop the base
+  // entirely; 94 of the 300 seeded lines carried no base token at all.
+  // The base is now named ONCE, on the slow end, in refToken's existing
+  // uppercase idiom (`6K+12`) — two characters, no new token shape.
+
+  it("Ground Fog's real Library line names its base on the slow end of the range (was '4-6-8-6-4 @ +12 → +10 · 1′ REST')", () => {
+    const gf = LIBRARY_WORKOUTS.find((x) => x.title === "Ground Fog");
+    expect(gf, "Ground Fog left the seeded library").toBeDefined();
+    expect(structureLine(gf!.steps)).toBe("4-6-8-6-4 @ 6K+12 → +10 · 1′ REST");
+  });
+
+  it("Gale Warning — the LONGEST range line in the seeded library — takes the base too (worst-case width case)", () => {
+    const gw = LIBRARY_WORKOUTS.find((x) => x.title === "Gale Warning");
+    expect(gw, "Gale Warning left the seeded library").toBeDefined();
+    expect(structureLine(gw!.steps)).toBe(
+      "1000m-500m-1000m-500m-1000m-500m @ 2K+1 → −1 · 2:30 REST",
+    );
+  });
+
+  it("Puelche: the count fallback's range carries the base as well, not just the chain forms", () => {
+    const pu = LIBRARY_WORKOUTS.find((x) => x.title === "Puelche");
+    expect(pu, "Puelche left the seeded library").toBeDefined();
+    expect(structureLine(pu!.steps)).toBe("10 PIECES @ 6K+14 → +8");
+  });
+
+  it("a zero-offset SLOW end still renders as the bare base, unprefixed (there is nothing to prefix)", () => {
+    // offs [0, −4]: hi is 0, so the slow end IS the base already. The
+    // prefix rule must not manufacture "6K+0".
+    expect(line([w(6, 0, undefined, 2), w(4, -4)])).toBe(
+      "6:00 + 4:00 @ 6K → −4 · 2′ REST",
+    );
+  });
+
+  it("property: no line in the 300-workout library that has a split ref fails to name a base", () => {
+    let checked = 0;
+    for (const wk of LIBRARY_WORKOUTS) {
+      const hasSplitRef = wk.steps.some((s) => s.k === "w" && "base" in s.ref);
+      if (!hasSplitRef) continue;
+      checked++;
+      expect(structureLine(wk.steps), `${wk.title}`).toMatch(/2K|6K/);
+    }
+    // guard the guard: a vacuous sweep would pass.
+    expect(checked).toBeGreaterThan(250);
+  });
+
   it("property: every one of the 300 real workouts matches one of the seven format shapes", () => {
     for (const wk of LIBRARY_WORKOUTS) {
       const out = structureLine(wk.steps);

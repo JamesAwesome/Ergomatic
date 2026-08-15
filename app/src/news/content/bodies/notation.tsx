@@ -30,9 +30,10 @@ export function NotationBody() {
         work, 2K anchors the short sharp stuff. Plus means slower and easier;
         minus means faster, and for most rowers harder. When the pieces move
         through different offsets, the line shows the range slowest first, like
-        +3 → −1, and every piece in it rides the same baseline. A bare 6K or 2K
-        means exactly baseline pace. When a piece says MAX or ALL OUT instead,
-        that is deliberate: some efforts are not supposed to have a number.
+        2K+3 → −1: the baseline is named once, on the slow end, and every piece
+        in the range rides it. A bare 6K or 2K means exactly baseline pace. When
+        a piece says MAX or ALL OUT instead, that is deliberate: some efforts
+        are not supposed to have a number.
       </p>
 
       <p>
@@ -97,9 +98,9 @@ export function NotationBody() {
       <p>
         The full vocabulary in one line: 1,100 metres, then three MINUTES, then
         550 metres, then one minute, sliding from three seconds slower than
-        baseline to one second faster. The letter is dropped because every piece
-        rides one baseline, here the 2k. Metres wear their m; bare numbers are
-        time.
+        baseline to one second faster. The 2k is stated once and covers the
+        whole slide, so the fast end needs no letter of its own. Metres wear
+        their m; bare numbers are time.
       </p>
 
       <p>

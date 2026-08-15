@@ -2572,9 +2572,13 @@ describe("Today (piece region)", () => {
     const rows = document.querySelectorAll(".today-piece-row-compact");
     expect(rows).toHaveLength(4);
     // A comma joins ref+rest when both are present (same convention as the
-    // two-line rows above) — row 1 carries a "2′ r" rest too.
+    // two-line rows above) — row 1 carries a "2′ r" rest too. The base is
+    // named here even though the compressed layout is in force and every
+    // split piece in this set shares 2k: James's 2026-08-14 ruling ("we
+    // always need full form so people know what the exercise is"). This
+    // row used to read "at −4," and nothing else on the card said 2k.
     expect(rows[0].querySelector(".today-piece-ref")?.textContent).toBe(
-      "at −4,",
+      "at 2k −4,",
     );
     expect(rows[0].querySelector(".today-piece-spm")?.textContent).toBe("32");
     expect(rows[0].querySelector(".today-piece-split")?.textContent).toBe(
@@ -2607,6 +2611,26 @@ describe("Today (piece region)", () => {
     const tinted = document.querySelectorAll(".today-piece-peak");
     expect(tinted).toHaveLength(1);
     expect(tinted[0]).toBe(rows[3]);
+  });
+
+  it("names the base on EVERY compressed row of a single-base set (Ground Fog, the reported case — 5 real 6k pieces; the whole card said '6k' nowhere before)", async () => {
+    mockReady({
+      plan: FREESTYLE_PLAN,
+      workouts: [libraryEntry("Ground Fog", "w-groundfog", null)],
+    });
+    await renderToday();
+    expect(
+      await screen.findByRole("heading", { name: "Ground Fog" }),
+    ).toBeVisible();
+
+    // 5 rows -> compressed layout, capped at 4 visible. Every visible row
+    // shares the 6k base, which is exactly the condition the retired
+    // `sharedBase` hoist used to strip.
+    const rows = document.querySelectorAll(".today-piece-row-compact");
+    expect(rows).toHaveLength(4);
+    expect(
+      [...rows].map((r) => r.querySelector(".today-piece-ref")?.textContent),
+    ).toStrictEqual(["at 6k +12,", "at 6k +11,", "at 6k +10,", "at 6k +11,"]);
   });
 
   it("rolls all 8 identical pieces into ONE row with an 'N × ' duration prefix, leaving no more-row at all (Rime Ice; was 8 rows compressed behind a +4-more cutoff before rolling)", async () => {
@@ -2664,10 +2688,9 @@ describe("Today (piece region)", () => {
     expect(rows[0].querySelector(".today-piece-text")?.textContent).toContain(
       "9 × 1000m",
     );
-    // Only 1 row (< 5) -> two-line, non-compressed layout -> refTextFull,
-    // which includes the base name ("at 6k +2") rather than the
-    // offset-only compact form ("at +2") — see this task's report for why
-    // this diverges from the brief's own illustrative wording.
+    // Every row names its base, in either layout — there is only one ref
+    // form now (`refTextFull`), James's 2026-08-14 ruling having retired
+    // the offset-only compact one.
     expect(rows[0].querySelector(".today-piece-ref")?.textContent).toBe(
       "at 6k +2,",
     );

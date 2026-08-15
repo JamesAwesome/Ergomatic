@@ -591,7 +591,13 @@ function TodayPieceRow({
   compact: boolean;
   peak: boolean;
 }) {
-  const refText = compact ? row.refTextCompact : row.refTextFull;
+  // One ref form in BOTH layouts (James, 2026-08-14): the compressed row
+  // used to swap in an offset-only string ("at +12") whenever the set
+  // shared one base, and nothing else on the card named that base — so
+  // the rower could not tell a 2k piece from a 6k one. `compact` still
+  // decides the row's class and geometry below; only the ref text stopped
+  // varying.
+  const refText = row.refTextFull;
   // Effort pieces carry their word ("ALL OUT"/"EASY") in the SAME slot a
   // split target would occupy (Task 1's own PieceRow doc comment: "in the
   // pace slot") — test pieces have neither and the slot renders empty.
