@@ -7737,6 +7737,81 @@ describe("createPm5Driver: sessionElapsedSeconds/sessionDistanceMeters with NO p
   });
 });
 
+// ---------------------------------------------------------------------------
+// CR2 spec 1, Task 8: `transports/fake.ts`'s own `synthesizeTerminated()` now
+// reproduces CSAFE-DEF footnote 12's re-base (elapsed jumps BACKWARD to a
+// smaller non-zero value, distance stands exactly still) as its honest
+// DEFAULT reaction to a terminate — not a hand-built byte sequence. This is
+// the fake-driven counterpart to `sessionTotals.test.ts`'s own terminate
+// reproduction (that file's own `stubTransport` comment, written before this
+// task, says the shape is "not a shape any scripted fake transport's
+// timeline can produce" — this test is the proof that claim no longer holds
+// for a genuine `driver.terminate()` reaction, even though that file still
+// needs the stub for its OTHER hand-picked shapes; see its own updated
+// comment). Drives the REAL `createPm5Driver` through the REAL fake, not
+// synthesized bytes.
+// ---------------------------------------------------------------------------
+
+describe("createPm5Driver: the fake's own terminate re-base does not double the session total (CR2 spec 1 Task 8)", () => {
+  function framesFrom(events: MonitorEvent[]): MonitorFrame[] {
+    return events.flatMap((e) => (e.kind === "frame" ? [e.frame] : []));
+  }
+
+  it("driver.terminate() mid-piece: the fake re-bases elapsed backward to a smaller non-zero value while distance stands still, and sessionDistanceMeters does not double (today's design: was exactly 2.00x under the old elapsed-drop fold)", async () => {
+    // Same numbers as sessionTotals.test.ts's own terminate reproduction
+    // (pm5-session4b's own capture, state-architecture-review.md §7.5):
+    // 33.57s/23.9m rowing, distance UNCHANGED at the terminate.
+    const timeline: FakeTimelineEvent[] = [
+      {
+        atMs: 100,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        elapsedSeconds: 33.57,
+        distanceMeters: 23.9,
+        spm: 24,
+        currentSplit: 110,
+        heartRateBpm: null,
+        programIntervalIndex: 0,
+      },
+    ];
+    const { fake, driver, events } = harness(
+      { program: MINIMAL_PROGRAM, events: timeline },
+      { settleTicks: 0 }, // unrelated to this test's own focus; see the sibling tests' comment
+    );
+
+    await programAndArm(driver, fake, MINIMAL_PROGRAM);
+    fake.tick(100); // delivers the rowing tick above
+
+    const before = framesFrom(events).at(-1)!;
+    expect(before.state).toBe("rowing");
+    expect(before.sessionElapsedSeconds).toBeCloseTo(33.57, 2);
+    expect(before.sessionDistanceMeters).toBeCloseTo(23.9, 1);
+
+    await driver.terminate();
+
+    const after = framesFrom(events).at(-1)!;
+    expect(after.state).toBe("terminated");
+    // The SHAPE this task teaches the fake: elapsed jumps BACKWARD to a
+    // smaller, non-zero value; distance stands EXACTLY still.
+    expect(after.elapsedSeconds).toBeLessThan(before.elapsedSeconds);
+    expect(after.elapsedSeconds).toBeGreaterThan(0);
+    expect(after.distanceMeters).toBe(before.distanceMeters);
+
+    // The consequence CR2 spec 1's register map exists to fix: the total
+    // does not double, and does not regress either. Under the OLD fold this
+    // exact shape reported 47.8 (2.00x); the register map writes no key for
+    // a "terminated" frame at all (`toProgramIndex` returns `null` for
+    // every state that is not rowing/resting), so BOTH session totals stay
+    // exactly what interval 0's rowing tick already registered — including
+    // `sessionElapsedSeconds`, which a write-rule that let a terminated
+    // frame's own (rebased, smaller) elapsed overwrite the key would pull
+    // backward (see this task's own report for the self-mutation proving
+    // this pair of assertions bites).
+    expect(after.sessionElapsedSeconds).toBeCloseTo(33.57, 2);
+    expect(after.sessionDistanceMeters).toBeCloseTo(23.9, 1);
+  });
+});
+
 describe("createPm5Driver: construction-time subscriptions (fast-follow Task 1, design spec §5)", () => {
   it("subscribes 0x0039 AND 0x003A alongside every existing characteristic — the full pinned list", () => {
     const transport = stubTransport();

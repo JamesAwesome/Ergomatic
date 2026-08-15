@@ -215,9 +215,21 @@ const TWO_INTERVAL_REST_PROGRAM: WorkoutProgram = {
 /** A bare hand-rolled `Transport`, ported from `driver.test.ts`'s own
  *  `stubTransport` (that file's helpers are module-private, not importable) —
  *  direct control over exactly which characteristic fires with exactly which
- *  bytes, which every reproduction below needs (an elapsed value that jumps
- *  BACKWARDS while distance stands still is not a shape any scripted fake
- *  transport's timeline can produce). */
+ *  bytes, which every reproduction below needs: arbitrary, hand-picked
+ *  elapsed/distance/0x0033-index combinations at each tick this file
+ *  chooses, not a machine's own reaction to a command.
+ *
+ *  CR2 spec 1 Task 8 taught `transports/fake.ts` the terminate-elapsed
+ *  re-base ITSELF (`synthesizeTerminated()`, its own doc comment) — as the
+ *  fake's honest default reaction to a genuine `driver.terminate()` call or
+ *  `program()`'s prepare step landing on a running machine, exercised
+ *  end-to-end in `driver.test.ts`'s own "the fake's own terminate re-base…"
+ *  test. That is a REACTION the fake computes from what it last reported;
+ *  it is not a substitute for this file's ability to hand-author an
+ *  arbitrary tick — the "no completed interval" and "3x1:00" shapes below
+ *  need exact machine-index/elapsed/distance triples no scripted timeline
+ *  event or terminate reaction can produce on demand, which is why this
+ *  file keeps the stub. */
 function stubTransport(): Transport & {
   notify(uuid: string, bytes: Uint8Array): void;
   writes: { uuid: string; bytes: Uint8Array }[];
