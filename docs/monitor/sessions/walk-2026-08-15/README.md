@@ -17,22 +17,29 @@ in any capture.
 
 **Falsified — and it gates the merge:**
 
-- **The register map's write rule is poisoned by a LEADING 0x0033 increment at
-  a work→rest boundary.** Session B, photographed: at ~23 s into interval 2
-  the PM5 read 19 m into the interval while the phone read TOTAL M **353** —
-  ≈ 176 (interval 1 + rest coast) + **177 (interval 1's reading again, in
-  interval 2's register)**. Mechanism: near interval 1's end, 0x0033's
-  Interval Count increments EARLY — at least one tick reads
-  `rowing, count=1` while 0x0031's pair still carries interval 1's large
-  values (~173 m) — writing interval 1's reading into interval 2's key. And
-  **max-merge makes the poison permanent**: interval 2's honest readings can
-  never lower it. Last-write-wins would have healed this shape; max cannot.
-  This is the mirror image of the LAGGING skew found at no-rest boundaries
-  (pm5-session4b L2835-2838), and the spec-pass reviewer's own warning was
-  exact: *"the clean boundaries in the capture were clean for a reason that
-  does not generalise."* The lab record contains no leading increment; the
-  erg does. James's symptom report matches to the tick: "pretty 1:1 until we
-  resumed from rest," then TOTAL M "skyrocketed."
+- **The register map's write rule is poisoned at the work→rest boundary, and
+  max-merge makes the poison permanent.** Session B, photographed: at ~23 s
+  into interval 2 the PM5 read 19 m into the interval while the phone read
+  TOTAL M **353** against an honest **195.5–198.7**. Mechanism (upgraded from
+  inference to SECONDARY by the antagonist's premise pass): `parse.ts` maps
+  **workoutState 8, `INTERVALWORKTIMETOREST`** — an ephemeral transition
+  state at the work→rest boundary — to `"rowing"`, and **session A seq 26 is
+  a captured 0x0031 sample in state 8** carrying the completed interval's
+  pair (60.05 s / 181.2 m), one entry before the `resting` flip. If 0x0033's
+  count has already incremented at that tick (the one unrecorded half), the
+  completed pair OPENS the next interval's register, and max-merge means the
+  honest readings that follow can never lower it. Last-write-wins would have
+  healed this shape; max cannot. The clamp protects final boundaries, so an
+  N-interval program takes exactly **N−1 poisons** — consistent with both
+  sessions. The max-merge order constraint (`key0 ≥ key1`, since key 0 keeps
+  receiving rest ticks after the poison) bounds the decomposition to
+  key1 ∈ [173.3, 176.5] / key0 ∈ [176.5, 179.7] and pins the poison to
+  within ~3 s of the boundary. **One implication:** TOTAL M was already ~350
+  during the rest, ~30 s before the resume James named — his "skyrocketed at
+  the resume" is likely when he looked, not when it happened; re-walk item 1
+  settles it by reading TOTAL M during the rest. The spec-pass reviewer's
+  warning was exact either way: *"the clean boundaries in the capture were
+  clean for a reason that does not generalise."*
 
 **Confirmed fixed (spec 1's claims that survived):**
 
@@ -75,7 +82,12 @@ in any capture.
 **Still open — the re-walk list (James, 2026-08-15):**
 
 1. **Re-row the falsifying shape** (2×1:00 with rest) on the fixed build:
-   TOTAL M must track ≈1:1 through the rest and the resume.
+   TOTAL M must track ≈1:1 through the rest and the resume — and **read
+   TOTAL M DURING the rest**, which discriminates the boundary-poison from
+   any resume-time mechanism (on the broken build it is already ~350 there).
+   The same photograph carries a second channel: session elapsed should read
+   honest (~113 s at the photo moment), not inflated by a duplicated
+   interval (~150 s).
 2. **A double-distance piece: 2× distance, NO warm-up, NO rest** (James's
    addition) — a distance→distance r0 boundary exists in no capture (the
    lagging-skew evidence was time→time), and it is a clean totals oracle:

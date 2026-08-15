@@ -235,3 +235,51 @@ toolkit, not a history.
   when computed by grouping frames on their recorded `intervalIndex` — the field
   the implementation keys on. Both are natural readings of the same English
   sentence. **Technique: for any oracle, name the field it must NOT touch.**
+
+## Task-brief pass, 2026-08-15 (CR2 spec 1 Task 11, the walk's falsification)
+
+- **"The poisoned tick is not in the ring; the mechanism is arithmetic
+  inference."** Understated. `parse.ts` maps workoutState **8**
+  (`INTERVALWORKTIMETOREST`, an ephemeral PM5 transition state) to `"rowing"`,
+  and `walk-2026-08-15/session-a-multitest.json` seq 26 is a captured 0x0031
+  sample IN state 8 carrying the completed interval's pair (60.05 s / 181.2 m),
+  one entry before the `resting` flip at 60.4 s. The poison WINDOW is recorded;
+  only 0x0033's count at that instant is not. **Technique: before tagging a
+  mechanism INFERENCE, check whether the state byte you are theorising about is
+  a DOCUMENTED state with its own ordinal — and grep the capture for that
+  ordinal.** A brief that reasons about "a work/rowing state" in prose skips the
+  question of WHICH of the five ordinals our own map calls rowing.
+
+- **"353 ≈ 176 + 177 — both registers hold interval-1-sized distance."** The
+  conclusion is right and the decomposition is impossible. Key 0 keeps receiving
+  rest ticks from the same monotone pair AFTER the poison, so `key0 ≥ key1`
+  always; that forces key1 ∈ [173.3, 176.5] and key0 ∈ [176.5, 179.7], honest
+  total 195.5-198.7 (not "≈195"), and it pins the poison to within ~3 s of the
+  work→rest boundary. **Technique: a max-merge accumulator imposes ORDER
+  constraints between its own registers. Before accepting a decomposition of an
+  observed total, ask which register is downstream of which — the arithmetic
+  bounds the timing for free, with no new capture.**
+
+- **A guard's own defence table had the inequality backwards, and its test
+  fixture instantiated the failure.** The brief argued "59.5 NOT < register only
+  if register already ≥ 59.5" (false: `59.5 < R` is true when `R > 59.5`) and
+  ordered its failing test rest-ticks-then-poison, so key 0's register held 90
+  and the guard would have opened the poisoned key anyway — red before AND after
+  the fix. The predicate is nonetheless sound, for a reason the brief never
+  stated: within one un-reset pair elapsed is monotone, and the register is a max
+  over readings from that SAME pair, so a poison can never be strictly smaller.
+  **Technique: for any guard expressed as a comparison, hand-execute it on the
+  brief's OWN fixture in the brief's OWN order before reading its argument. The
+  ordering of a synthetic fixture is a factual claim about the wire, and it is
+  the claim briefs get wrong.**
+
+- **Attacked and not broken:** the elapsed-only open predicate, against seven
+  recorded and constructed shapes including both skew directions at an r0
+  boundary, the trailing-rest phantom (which `toProgramIndex`'s upper clamp makes
+  immune — the poison bites only at NON-final boundaries, so an N-interval
+  program takes exactly N-1 of them), and a null-index tick inside the poisoned
+  window. Adding a distance clause was considered and rejected: its only
+  motivating shape (elapsed re-bases while distance stands still) is the
+  Terminate re-base, which the write rule already excludes, while its cost — a
+  previous key holding ≤0.8 m collapses two keys and loses ~60 s of session
+  elapsed — is reachable by a rower who simply doesn't pull.
