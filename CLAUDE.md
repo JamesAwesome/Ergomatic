@@ -128,6 +128,13 @@ Roadmap: `ROADMAP.md` (phases + standing rules). Design reference: `docs/design/
     scoped to the brief's claims, not a review of the whole task. If a
     wave's briefs are near-identical, one pass over the set is enough —
     say so rather than running ten.
+  - **They PROPOSE ledger entries; the controller lands them.** Neither
+    agent writes to the repo, including its own ledger — they are usually
+    dispatched against the main checkout, and main is PR-only. The
+    definitions originally said "append", three engagements did exactly
+    that, and 94 good lines sat uncommitted in the main checkout until
+    someone noticed. The entry comes back in the report as ready-to-paste
+    markdown and rides whatever PR is already open.
   - **NEITHER AGENT RUNS ON FAST-PATH WORK (James, 2026-08-14).** The
     fast path has no spec and no task brief, so the antagonist has
     nothing to attack, and by its own criteria a fast-path change cannot
