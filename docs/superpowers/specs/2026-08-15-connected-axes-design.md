@@ -91,28 +91,69 @@ existing hook state, with **zero behaviour change on day one**:
 type LinkAxis = "none" | "connecting" | "up" | "lost";
 type ProgramAxis = "none" | "sending" | "armed" | "failed";
 type SessionAxis = "none" | "live" | "ended";
-type ActivityAxis = "stroking" | "coasting";   // observation, never a claim
+type ActivityAxis = "moving" | "frozen" | "unknown";
+// named for what it MEASURES (the freeze predicate fired / did not / has no
+// evidence) — never for what the rower is doing. "coasting" at idle, or
+// during a programmed rest, would be the PAUSED mistake with new words
+// (antagonist: rests reset the freeze run by construction, so a
+// stroking/coasting pair would have read "stroking" at a resting rower).
 ```
 
-Every derivation `switch`es exhaustively with a `never` guard. An eleventh
-`ConnectedPhase` member added tomorrow fails to *compile* instead of
-laundering into a live surface — F3's mechanism dies structurally.
+Every derivation `switch`es exhaustively over ALL TEN members of
+`ConnectedPhase` (`idle | picking | pairing | programming | ready | failed |
+live | paused | disconnected | ended`) with a `never` guard. An eleventh
+member fails to *compile* instead of laundering into a live surface — F3's
+mechanism dies structurally.
+
+**Three facts the derivation needs that the hook does not publish today —
+2a's first real API change, named** (antagonist): the freeze state
+(`freezeRef`) for `activity`; run-openness (`runRef`) for `session` (at
+`disconnected` the record deliberately stays open, so phase alone cannot
+say); and `error.reason` for `link` at `failed` (a ProgramRejection leaves
+the transport CONNECTED, a radio failure does not). `MonitorSession` widens
+by exactly those three read-only facts. **The collapse to one
+`SurfaceStatus` states its precedence in code** — ended > disconnected >
+(armed | mirror | live) — today implicit in early-returns; unwritten, "zero
+behaviour change" is unfalsifiable.
 
 **First consumer: `surfaceStatusFor`.** `armed` becomes a real
 `SurfaceStatus`; the `?? "live"` is deleted; `buildSurfaceModel` takes a
-**non-nullable** status computed by the caller. The type change forces every
-call site to answer the product question instead of defaulting it (R1
-verbatim). Then the interstitial's ladder, then the freeze predicate, one
+**non-nullable** status computed by the caller (one production call site +
+67 test calls, counted). The type change forces every call site to answer
+the product question (R1 verbatim). Then the interstitial's ladder —
+**including the fall-through the type change cannot force**: `disconnected`
+is absent from the ladder today, so a link drop during `pairing`/`ready`
+lands the rower on the three-pane surface with no run and no frame; the
+axes close it explicitly (link=lost ∧ session=none ⇒ the interstitial's
+disconnected treatment, never the surface). Then the freeze predicate. One
 reviewable step each.
 
 ### 2. The defects the migration dissolves
 
-**Item 3 — the armed surface mirrors the machine.** At `armed`: rate shows
-**0** in plain ink (the machine's own display, per the walk), split shows the
-target ghost per frame 2D's convention, nothing is judged, `nowLabel` does not
-say NOW, no gold counting mark, no full TOTAL LEFT bar. The fake learns the
-carried-over armed reading so tests exercise the wire's actual behaviour
-(13–96 spm ghosts), not `zeroedStatus`'s fiction.
+**Item 3 — mirror the machine wherever ITS display shows 0, not only at
+`armed`** (antagonist: the walk's sentence — "before the first pull of piece
+TWO" — is a mid-session boundary where our phase is `live`, and three of the
+four rings carry the spm ghost at exactly that frame: 25/28/25). Two cases,
+one rule:
+
+- At `armed` (pre-first-stroke of the session): the full 2D treatment — rate
+  0 plain ink, split target ghost, nothing judged, no NOW, no gold mark, no
+  full TOTAL LEFT bar.
+- At a mid-session interval boundary before the first pull: heroes show
+  0/unjudged while the wire carries the previous interval's ghost, keyed on
+  the OBSERVED discriminator present in all three ring frames —
+  `rowingActive === false` with the per-interval distance at/near reset (the
+  same guard family the freeze predicate already uses; no unobserved byte).
+
+The substitution lives in `buildSurfaceModel` before `pace`/`rate` are
+built, so panes B and C agree by construction. **The mirror must not survive
+a progressing wire reading** — any frame with advancing distance ends it
+(`?? "live"` is today the accidental mitigation for a stuck ready-gate; the
+mirror must not become a lie at a rower who is actually rowing). The
+diagnostics sheet reads the raw ring and keeps showing the ghost — correct,
+stated so nobody files it. No conflict with the deferred R4 cluster (parse
+seam vs display). The fake learns the carried-over armed reading (13–96 spm
+ghosts), not `zeroedStatus`'s fiction.
 
 **Item 1 — the fake pause becomes an instruction, state now, styling in
 spec 3** (PM design gate: spec 3 replaces this footer wholesale, so a
@@ -141,12 +182,22 @@ route, or new idiom. Requirements preserved from spec 1's gate:
 1. *No state asserted on the machine's behalf:* the row describes the
    evidence ("interrupted connected session"), never claims the workout
    ended; the rower rules via Log-it / Discard.
-2. *The door:* investigate first whether stamping `completedAt` at the
-   rower's choice makes `monitorModeRun`'s existing `completedAt !== null`
-   gate suffice — if it does, NO new route entry exists at all. The record
-   gains an additive `endedBy: "interrupted"` field; the stored-shape read
-   path is stated explicitly (a v1/v2 record with no field reads as a
-   normal completion, per `loadMonitorRun`'s never-migrate discipline).
+2. *The door:* stamping `completedAt` at the rower's choice passes
+   `monitorModeRun`'s gates (verified: flag, record, workoutId match,
+   buildMonitorLogSteps) — **but the screen it opens computes its header
+   duration WALL-CLOCK (`monitorLogTotals`), which ruling 3 forbids**
+   (antagonist). The interrupted path therefore touches TWO product files:
+   the Today twin, and `monitorLogTotals` learning the actuals+allowance
+   duration (or `completedAt` stamped from the last measured boundary — the
+   plan picks one and says why). The record gains an additive
+   `endedBy: "interrupted"` field; a v1/v2 record without it reads as a
+   normal completion per `loadMonitorRun`'s never-migrate discipline.
+   Stated latents: an anonymous run (`workoutId === null`) has no log route
+   and gets no "Log it" (unreachable today — only WorkoutDetail programs);
+   a COMPLETED-but-unlogged MonitorRun still has no Today row (same idiom —
+   filed, ruled OUT of 2b); Today's stale-draft guard stops protecting a
+   stale draft once the record is stamped — a small behaviour change in the
+   right direction, named.
 3. *An honest duration* (James's ruling): **recorded work + programmed rest
    for completed intervals** — the allowance `logSummaryTotals` already
    computes — never wall-clock, nothing invented past the last measured
@@ -175,10 +226,16 @@ reload-discard), replacing today's per-path improvisations:
   scoped to `finished` only (never `terminated`):
 
   - A `finished` is **unsuspicious** — closes exactly as today — when a
-    0x0039 has already arrived for this run, OR the recorded actuals /
-    register count reconcile with the programmed interval count (a
-    `finished` at 3-of-3 is normal; the legitimate early stops are
-    `terminated` and END, not `finished`).
+    0x0039 has already arrived for this run, OR **recorded actuals ≥
+    programmed − 1** (antagonist, hand-tracing all four committed rings:
+    the final boundary ROUTINELY arrives after the finished tick, inside
+    the finish grace — that is what the grace is FOR — so an honest natural
+    finish reads N−1 of N at the terminal tick, and the first draft's
+    tighter predicate marked two of the four honest finishes suspicious).
+    Register counts discriminate NOTHING here (at the killer's instant they
+    read 1-of-2, byte-identical to an honest 2×1:00 terminal) and are not
+    consulted. Admitted residual: on a 1-interval program N−1 = 0, so the
+    killer shape is undetectable there by construction.
   - A **suspicious** `finished` (mid-program, no summary, counts short —
     the afternoon killer's exact shape: interval 1 of 2, 0 actuals, no
     0x0039) is logged loudly (`suspicious-terminal`, with the raw bytes
@@ -195,39 +252,73 @@ reload-discard), replacing today's per-path improvisations:
     emit relative to it.
 - **`final-totals` on every close**, including END: the terminal entry
   writes before teardown, so no ending loses its finals again.
-- **The disconnect() twin, fixed with ordering**: teardown runs the
-  still-reachable reconcile *before* unsubscribing the listener — the
-  who's-listening design the reviewer's asymmetry analysis demands. The F7
-  rule (cancel the wait, not the verdict) then applies uniformly.
+- **The disconnect() twin, fixed with a FOUR-STEP ordering**: teardown runs
+  **reconcile → stash → unsubscribe → disconnect** — the reconcile while a
+  listener still exists (the who's-listening demand) AND before the ring is
+  exported to sessionStorage (antagonist: a `final-totals` written after
+  the stash exists only in memory and dies with the tab; the ring IS the
+  stash — §22's own recorded trap). The F7 rule (cancel the wait, not the
+  verdict) then applies uniformly.
 
-### 3. METERS LEFT (the mixed-program countdown)
+### 3. The interval clock (was "METERS LEFT, mixed programs" — mechanism SETTLED, blast radius WIDER)
 
-**The observation is solid; the mechanism is OPEN** (PM design gate caught
-the first draft prescribing a fix for a mechanism nobody verified —
-`computeRemainingForFrame` holds no reference state at all; it subtracts
-0x0033's `lastSplitDistanceMeters`/`lastSplitTimeSeconds` from 0x0031's
-per-interval pair, so there is nothing in it to "rebase"). The hardware
-signature stands: 578 = 500 − (102.7 − 181.2), from the committed session-A
-ring, and interface-notes §17 item 17's surviving assumption ("deliberately
-still read against the raw per-interval pair") is the falsified sentence.
-Two candidate mechanisms with DIFFERENT fixes: 0x0033's Last Split pair not
-advancing across a goal-dimension change, or a per-interval-vs-cumulative
-unit mismatch in one of the two operands. **The antagonist's premise pass
-adjudicates the mechanism against the ring data before this enters a plan**;
-the failing test (signature reproduces, then 397.3) is fixed either way, the
-fix is not.
+**Adjudicated by the antagonist from committed data, independently
+re-verified** (225 time frames + 161 distance frames at interval index 1,
+zero mismatches): `intervalRemaining` is `V − (obs − checkpoint)`, so the
+0x0033 Last Split checkpoint inverts out of the lab captures. Measured: **the
+checkpoint is 0 throughout interval indices 0 and 1** — even after a fully
+completed interval 0 — and at interval index 2 it holds **181**: interval 0's
+end, one boundary BEHIND the current interval's start. The pair **lags one
+boundary**, exactly as 0x0033's Interval Count does (logged live twice in
+session-d). Both earlier candidate mechanisms are falsified; "mixed-program
+bug" was an artifact of where the walk observed it.
 
-### 4. The reducer, last (R11)
+**Blast radius:** wrong from **interval index 2 onward on ANY program, both
+dimensions** — every library workout with ≥3 intervals. **`intervalAccrued`
+shares the checkpoint, carries the identical defect, and renders on screen**
+(grid active row). No committed capture or ring could have shown this: no arm
+in the record reaches interval index 2 with a remaining value.
 
-`useMonitorSession`'s nine frame/armed/terminal patch sites collapse into one
-pure `reduce(state, event)` — introduced **beside** the hook and tested
-against recorded transitions (walk rings + lab captures) before a single call
-site moves. The five hard-won invariants each get a **named test before the
-migration touches its area**: the synchronous ref mirror, the atomic
-phase-plus-frame patch, the P3b pin, `cancel()`'s synchronous driver claim,
-and record-identity-is-what-we-sent. The promise-shaped `connect`/`program`
-transitions move last. `ConnectedPhase` is deleted in the final task, when
-grep says nothing reads it.
+**The fix is narrow, in the driver:** `progress = frame.elapsedSeconds` /
+`frame.distanceMeters` — 0x0031's pair is already per-interval (walk 4,
+re-confirmed in both re-walk rings); the checkpoint subtraction is deleted
+for BOTH `intervalRemaining` and `intervalAccrued`. No-op for intervals 0-1
+(checkpoint already 0), correct from 2 on.
+
+**The fake must learn the Last Split semantics** (0 at intervals ≤1, lagging
+one boundary after). Today it books the scenario's own cumulative pair as the
+checkpoint — a self-consistent fiction in which the subtraction is CORRECT,
+which is why this survived; a failing test against today's fake cannot
+reproduce the bug.
+
+**Record corrections riding along:** the walk README's signature restated
+honestly (the field carries whole meters — LSD = 181, true remaining 578.3;
+"181.2" is a value the field cannot carry); interface-notes §17 items 17/24
+updated with what is now measured. **Walk item added:** a 4-interval program
+with deliberately UNEQUAL intervals — the only shape separating lag-by-one
+from previous-split's-own-value (both fit all committed data and imply the
+same fix; not plan-blocking).
+
+### 4. PR structure, and where the reducer went (James's ruling on the PM gate)
+
+**Two PRs.** **2a** = axes + mirror surface + pause state + driver lifecycle
++ the interval clock — no persisted shape, no destructive action, no new
+product surface. **2b** = F6 alone — the one piece carrying a stored-shape
+field (`endedBy`) and a destructive action (Discard), its own reviewable
+transaction after 2a.
+
+**The reducer is DEFERRED to its own spec.** Nothing in 2a/2b requires it;
+landing it beside the hook with no consumer is the unconsumed-helper trap;
+the review sequences it after the record work (R8-R10). What survives of R11
+here is its first step — the pure axes derivation — plus every CONSUMER
+migrating to the axes. Stated honestly: **`ConnectedPhase` is NOT deleted in
+this spec.** It stays the hook's internal state variable; the `paused` member
+is removed (its consumers move to `activity`), every reader outside the hook
+reads axes, and a lint/grep pin prevents new outside readers. The enum's
+deletion, the hook's 11 phase writers (recounted; the review said 9), and the
+five named invariants (sync ref mirror, atomic phase+frame patch, P3b pin,
+`cancel()`'s synchronous claim, record-identity-is-what-we-sent) are the
+reducer spec's subject.
 
 ### 5. Testing
 
@@ -272,19 +363,27 @@ grep says nothing reads it.
 
 ## Exit criteria
 
-1. `connectedAxes.ts` exists with exhaustive never-guarded derivations, and a
-   test proves day-one derivation changes zero behaviour across every
-   transition in the recorded rings.
+1. `connectedAxes.ts` exists with exhaustive never-guarded derivations, and
+   zero-behaviour-change is proved by an **exhaustive table over all ten
+   members × the three extra inputs** — not a ring replay (the rings carry
+   no phase entries, and state-change-only frames make a freeze sequence
+   unwitnessable by construction). Freeze/`activity` fixtures come from the
+   lab captures' one real stop (216 identical frames, pm5-session3);
+   hook-phase shapes are hand-built; the rings serve the terminal shapes.
 2. `buildSurfaceModel` takes a non-nullable status; `?? "live"` is gone;
    `armed` renders the mirror surface (0 plain, target ghost, nothing judged)
    against the fake's carried-over reading, not `zeroedStatus`.
 3. The banner: stopped mid-interval shows `PULL TO RESUME` occluding nothing;
    suppressed during genuine rests; paused rate hero suppresses like the
    split; screenshots re-shot and inspected.
-4. The afternoon session-killer ring replays into a test that FAILS on
-   today's instant close and PASSES with corroboration — and the normal
-   finish path's timing is pinned unchanged (both re-walk rings replay with
-   identical file/log/release behaviour).
+4. The suspicion predicate is LOG-ONLY (fail-open ships no close-behaviour
+   change; a test asserting a changed close would contradict §2's own
+   ruling): a hand-built killer-shaped fixture (mid-program `finished`, no
+   0x0039, actuals < N−1 — the afternoon ring was never committed, so the
+   shape is synthesized, cited to the walk README) produces exactly one
+   `suspicious-terminal` entry and still closes as today; all four
+   committed rings' shapes produce zero suspicious entries; the normal
+   finish path's timing is pinned unchanged.
 5. F6: reload → choice prompt; "Log what was measured" lands through the
    `interrupted` door with actuals-derived totals; "Discard" cleans up;
    Connect never again asks "Replace it?" about a dead run. No wall-clock
@@ -292,8 +391,11 @@ grep says nothing reads it.
 6. END and disconnect() route through the terminal path: `final-totals` in
    the ring on every ending; the twin's reconcile-before-unsubscribe ordering
    has a test that fails under today's order.
-7. METERS LEFT: 578-signature reproduces then reads 397.3; mixed-program
-   coverage exists.
+7. The interval clock: the 578-signature reproduces (LSD=181, whole
+   meters) then reads 397.3; a ≥3-interval SAME-dimension program shows the
+   index-2 defect failing-first for BOTH `intervalRemaining` and
+   `intervalAccrued`, then correct; the fake's Last Split fiction is
+   replaced by the measured semantics.
 8. Every consumer outside `useMonitorSession` reads axes, `paused` is gone
    from `ConnectedPhase`, and a lint/grep pin prevents NEW readers of the
    enum outside the hook (the enum's deletion is the reducer spec's exit,
