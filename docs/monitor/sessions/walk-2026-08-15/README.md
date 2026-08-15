@@ -90,12 +90,26 @@ in any capture.
    interval (~150 s).
 2. **A double-distance piece: 2× distance, NO warm-up, NO rest** (James's
    addition) — a distance→distance r0 boundary exists in no capture (the
-   lagging-skew evidence was time→time), and it is a clean totals oracle:
-   the session must read exactly twice the piece, on both screens.
-3. The PM5's **total-meters display view** photographed beside the phone
-   (the strict both-totals-one-frame item; the interval view resets per
-   interval and is not a session total).
-4. Walk Q4 — whether the machine's displayed total includes rest-coasting
-   metres — read off that same view.
+   lagging-skew evidence was time→time), and it is **the keystone
+   comparison**: with no rest there are no rest-coast metres to argue
+   about, so the summary total must read exactly twice the piece on both
+   screens. The only confound-free totals oracle available (see item 3).
+3. **The both-totals photo happens at the FINISH SUMMARY SCREEN, not
+   mid-piece** (researched 2026-08-15, vendor docs): the PM5 has NO live
+   session-cumulative view during interval workouts — every documented
+   Display view is split-scoped (PRIMARY: Concept2's own All Data field
+   list), and the Units button changes unit, not scope. The one on-device
+   cumulative figure is the finish screen's "final result for the total
+   distance" (PRIMARY: Concept2, Viewing Workouts/Memory). Photograph THAT
+   beside the app before touching Menu. Open reconciliation, one line: the
+   original Sun fret photo showed "4384 m total" live — which no documented
+   interval view provides; what view that was is unrecorded and worth one
+   glance if it recurs.
+4. Walk Q4 — whether the machine's total includes rest-coasting metres —
+   is undocumented even in vendor docs (checked; the logbook tracks work
+   and rest meters as two figures, SECONDARY/forum). Settle it by
+   subtraction: item 2's no-rest piece pins the honest baseline; a
+   with-rest piece whose summary gap ≈ coast distance answers Q4 without a
+   single new instrument.
 5. The bar sitting slightly past the notch at rest (noted, unexplained,
    possibly the rest-coasting inclusion).
