@@ -79,7 +79,41 @@ in any capture.
   `computeRemainingForFrame`, which this PR deliberately did not touch and
   which had never been run on a time→distance program. Spec 2 evidence.
 
-**Still open — the re-walk list (James, 2026-08-15):**
+## THE RE-WALK PASSED (2026-08-15, evening — Chrome/Web Bluetooth from the worktree dev server)
+
+**Row 1, the falsifying shape re-rowed (2×1:00 @6k r30):** 1:1 at the exact
+minute that read 373 in the afternoon — mid-rest photo, phone TOTAL M 184
+beside the PM5 rest screen's `m total` 184 (the rest screen DOES show a live
+session total, falsifying the vendor-docs sweep's conclusion; it also
+explains the original Sun fret "4384 m total" photo). `final-totals`:
+accumulator 367.8 m/120 s vs the machine's own 0x0039 summary 367 m/120 s —
+agreement to the machine's truncation. The 0x0039 arrived BEFORE the finished
+frame (beating navigation), and its elapsed test settled interface-notes §23:
+cumulative AND rest-exclusive. `terminal-raw`: finish byte 0x0c (ordinal 12,
+WORKOUTLOGGED). One false alarm caught and fixed the same evening: the TWD
+verdict fired at 0x0039-time against a not-yet-settled machine total
+("differ by 183.8m", one tick before TWD read 367) — moved to the terminal
+(commit e1cb329). No refused-open fired: the boundary poison did not occur
+this session, consistent with the mechanism being intermittent.
+
+**Row 2, the keystone (2×250 m, r0, no warm-up):** a-priori truth 500.
+`final-totals`: accumulator 499.5 m (last-seen semantics, documented),
+registers `0:(80.1s,249.5m) 1:(85.1s,250m)`, machine's own TWD **500 m**.
+Both r0 boundaries crossed clean, and the lagging 0x0033 skew was logged
+live at both (`intervalIndex=0 vs actual.index=1`) — the guard's premise
+observed on hardware twice. `terminal-raw`: finish byte 0x0a (ordinal 10,
+WORKOUTEND) — so real finishes arrive as 10 OR 12, both now documented with
+bytes. The PM5's finish screen for a distance-goal piece shows TIMES, not
+meters (the result is the complement of the goal dimension) — the display
+comparison for distance pieces lives on the rest screen or in Memory.
+
+**Merge-gate verdict: MET.** Machine-display agreement (184=184, one frame),
+machine-summary agreement (367 vs 367.8), a-priori oracle (500 vs 499.5),
+symptom B re-observed fixed, no session-killer recurrence (the afternoon
+kill remains one occurrence, ordinal unknown; terminal-raw now convicts any
+recurrence).
+
+**Was still open before the re-walk (now historical):**
 
 1. **Re-row the falsifying shape** (2×1:00 with rest) on the fixed build:
    TOTAL M must track ≈1:1 through the rest and the resume — and **read
