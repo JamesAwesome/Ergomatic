@@ -174,8 +174,11 @@ describe("pieceList", () => {
         );
       }
     }
-    // guard the guard: an empty sweep would pass vacuously.
-    expect(checked).toBeGreaterThan(500);
+    // Guard the guard: an empty sweep passes vacuously. EXACT, not a floor
+    // (review Minor-4) — the count is knowable and a floor would survive the
+    // library shrinking by a third. Update it deliberately when the seed
+    // changes; that is the point.
+    expect(checked).toBe(845);
   });
 
   it("the retired compact field is GONE from the row object, not merely equal to the full one (a duplicated field drifts)", () => {
@@ -655,10 +658,13 @@ describe("structureLine", () => {
       const hasSplitRef = wk.steps.some((s) => s.k === "w" && "base" in s.ref);
       if (!hasSplitRef) continue;
       checked++;
-      expect(structureLine(wk.steps), `${wk.title}`).toMatch(/2K|6K/);
+      // Anchored on the RANGE and collapsed forms specifically: a bare
+      // /2K|6K/ (review Minor-4) also passes on a line whose only base
+      // token sits in an unrelated position, which is not the claim.
+      expect(structureLine(wk.steps), `${wk.title}`).toMatch(/@ [26]K/);
     }
-    // guard the guard: a vacuous sweep would pass.
-    expect(checked).toBeGreaterThan(250);
+    // Guard the guard, exact for the reason above.
+    expect(checked).toBe(268);
   });
 
   it("property: every one of the 300 real workouts matches one of the seven format shapes", () => {
