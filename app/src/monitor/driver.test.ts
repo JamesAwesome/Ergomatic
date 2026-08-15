@@ -7698,23 +7698,31 @@ describe("createPm5Driver: sessionElapsedSeconds/sessionDistanceMeters with NO p
     // nonzero total, then ends on WORKOUTEND — required so the second
     // `programViaStub` below does not hang waiting for
     // `waitForPrepareSettle` (`:1861`'s own comment: a still-rowing machine
-    // arms that wait). A `"finished"` tick is neither `"rowing"` nor
-    // `"resting"`, so CR2 spec 1's `activeKey` never writes it (see
-    // `session`'s own doc comment) — its own 25/60 reading is intentionally
-    // NOT part of the expected total below; only the last ROWING tick's
-    // 45/110 is.
+    // arms that wait).
+    //
+    // UPDATED, CR2 spec 1 Task 5 (controller ruling after this task's own
+    // review — the ruling `session`'s own doc comment cites): a `"finished"`
+    // tick is neither `"rowing"` nor `"resting"`, but it is NOT excluded from
+    // `activeKey` any more — the WORKOUTEND tick's own final reading is now
+    // max-merged into the highest existing key, same as every other write.
+    // This test's own trailing reading (was 25/60, LOWER than the 45/110
+    // rowing tick before it, so the old exclusion and the new inclusion were
+    // numerically indistinguishable here) is changed to 50/115 — HIGHER than
+    // 45/110 — specifically so this test can tell the two rules apart: the
+    // expected total below is the finished tick's own bump, not the last
+    // rowing tick's.
     for (const tick of [
       { state: WORKOUTSTATE_INTERVALWORKTIME, elapsed: 20, distance: 50 },
       { state: WORKOUTSTATE_INTERVALWORKTIME, elapsed: 45, distance: 110 },
-      { state: WORKOUTSTATE_WORKOUTEND, elapsed: 25, distance: 60 },
+      { state: WORKOUTSTATE_WORKOUTEND, elapsed: 50, distance: 115 },
     ]) {
       transport.notify(
         GENERAL_STATUS_UUID,
         generalStatusIn(tick.state, tick.elapsed, tick.distance),
       );
     }
-    expect(framesFrom(events).at(-1)!.sessionElapsedSeconds).toBe(45);
-    expect(framesFrom(events).at(-1)!.sessionDistanceMeters).toBe(110);
+    expect(framesFrom(events).at(-1)!.sessionElapsedSeconds).toBe(50);
+    expect(framesFrom(events).at(-1)!.sessionDistanceMeters).toBe(115);
 
     // ...and run 2 must not inherit a metre or a second of it.
     await programViaStub(driver, transport, MINIMAL_PROGRAM);

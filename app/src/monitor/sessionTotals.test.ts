@@ -45,10 +45,12 @@ import {
   WORKOUTSTATE_INTERVALWORKTIME,
   WORKOUTSTATE_TERMINATE,
   WORKOUTSTATE_WAITTOBEGIN,
+  WORKOUTSTATE_WORKOUTEND,
 } from "../../domain/monitor/pm5/parse.js";
 import {
   ADDITIONAL_STATUS_1_UUID,
   ADDITIONAL_STATUS_2_UUID,
+  END_OF_WORKOUT_SUMMARY_UUID,
   GENERAL_STATUS_UUID,
   RECEIVE_CHARACTERISTIC_UUID,
   TRANSMIT_CHARACTERISTIC_UUID,
@@ -117,6 +119,27 @@ const MINIMAL_PROGRAM: WorkoutProgram = {
       type: "work",
       kind: "time",
       value: 60,
+      targetSplit: 120,
+      displaySpm: 22,
+      restSeconds: 0,
+    },
+  ],
+};
+
+/** A single 500 m work interval — CR2 spec 1 Task 5's own distance-goal
+ *  suppression fixture. Only `kind` differs from `MINIMAL_PROGRAM` above;
+ *  it exists so the accumulator-vs-machine divergence's suppression rule
+ *  (`logSummaryTotals`'s own doc comment: "the armed program contains ANY
+ *  distance interval") can be exercised without needing `workoutDurationType
+ *  === 128` on the wire, which this file's `tick()` helper cannot produce
+ *  (hardcoded to `0`, time). The suppression is an OR of the two conditions,
+ *  and this fixture tests the program-shape half on its own. */
+const DISTANCE_PROGRAM: WorkoutProgram = {
+  intervals: [
+    {
+      type: "work",
+      kind: "distance",
+      value: 500,
       targetSplit: 120,
       displaySpm: 22,
       restSeconds: 0,
@@ -661,19 +684,21 @@ describe("session accumulator: §F2 stop-gate — reproducing the architecture r
 // Ran against the OLD (broken) accumulator when Task 3 wrote this file. Per
 // the brief's own split: Steps 1 and 7 were marked `it.fails` — they
 // documented the current defect. Task 4 (CR2 spec 1's register-map fix)
-// removes Step 1's `.fails`: the terminate shape now reports correctly, no
-// edge to misread. Step 7 STAYS `it.fails` — its numeric half is fixed by
-// the same register map, but it also asserts an `"intervals seen"`
-// divergence log entry that does not exist until Task 5; see that test's own
-// comment. Steps 2, 3, 5, 6 passed under the old fold and are regression
-// guards this task keeps green. Step 4 was written per the brief's exact
-// code but, traced and RUN against the old fold, PASSED then (see
-// task-3-report.md for the full trace) — contrary to the brief's own
+// removed Step 1's `.fails`: the terminate shape now reports correctly, no
+// edge to misread. Step 7's own `.fails` is removed by TASK 5 (this file's
+// current task): its numeric half was already fixed by the register map,
+// and Task 5 adds the `"intervals seen"` divergence entry
+// (`driver.ts`'s `logSummaryTotals`) that test asserts — see that test's own
+// comment for how it reaches that entry (0x0039 notify, since that is where
+// the entry is logged). Steps 2, 3, 5, 6 passed under the old fold and are
+// regression guards this task keeps green. Step 4 was written per the
+// brief's exact code but, traced and RUN against the old fold, PASSED then
+// (see task-3-report.md for the full trace) — contrary to the brief's own
 // prediction that it would fail; reported there as a discrepancy, not
 // silently corrected away. It stays green under the register map too.
 // ---------------------------------------------------------------------------
 
-describe("session accumulator: seven shapes (Task 3) — one of them still red", () => {
+describe("session accumulator: seven shapes (Task 3) — all green as of Task 5", () => {
   it(
     "a terminate does not double the session distance " +
       "(CR2 spec 1 fix, Task 4: was `it.fails`, documenting the old " +
@@ -872,11 +897,13 @@ describe("session accumulator: seven shapes (Task 3) — one of them still red",
     },
   );
 
-  it.fails(
+  it(
     "loses an interval it never saw, and logs that it did " +
-      "(documents the CURRENT defect; Task 4 removes .fails — the " +
-      "'intervals seen' divergence entry does not exist until Task 5, so " +
-      "this fails today regardless of the total's own arithmetic)",
+      "(Task 5: the numeric half already passed under Task 4's register " +
+      "map — this test's own history is the removed `.fails`; the " +
+      "'intervals seen' divergence entry is logged in `logSummaryTotals`, " +
+      "which fires on 0x0039, so this test notifies END_OF_WORKOUT_SUMMARY_UUID " +
+      "once the run has something to diverge from)",
     async () => {
       const h = await programmed(THREE_INTERVAL_PROGRAM);
 
@@ -904,8 +931,205 @@ describe("session accumulator: seven shapes (Task 3) — one of them still red",
 
       const expectedWithoutInterval1 = 150.0 + 10.0;
       expect(f.sessionDistanceMeters).toBeCloseTo(expectedWithoutInterval1, 1);
+
+      // `logSummaryTotals` (`driver.ts`) is where the interval-count
+      // divergence is recorded, and it only ever runs on 0x0039 — a
+      // zero-filled 20-byte payload decodes fine (`parseEndOfWorkoutSummary`
+      // only checks length), and the content is irrelevant to this
+      // assertion, same shortcut `driver.test.ts`'s own summary tests take
+      // where the values don't matter.
+      h.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, new Uint8Array(20));
+
       const div = h.log.entries().filter((e) => e.kind === "divergence");
       expect(div.some((e) => e.detail.includes("intervals seen"))).toBe(true);
+    },
+  );
+});
+
+// ---------------------------------------------------------------------------
+// SANCTIONED SCOPE ADDITION (controller ruling after Task 4's own review,
+// disclosed as a spec deviation — task-5-brief.md's own dispatch note):
+// Task 4's `activeKey` write rule dropped the final counter bump that
+// arrives ON the WORKOUTEND tick itself. `driver.test.ts`'s own WALK_4
+// describe block never arms a program (see that block's own header
+// comment), so it could not exercise this — an armed program is required
+// before `session.seen` has a key for a finished frame to max-merge into at
+// all. This file arms one, reproducing WALK_4's own shape (finished
+// 33.07/109.7 after a last resting reading of 29.44/101 — the exact
+// hardware-observed gap, 3.63 s/8.7 m).
+// ---------------------------------------------------------------------------
+
+describe("session accumulator: the finish's own reading (CR2 spec 1 Task 5, controller ruling)", () => {
+  it(
+    "captures the WORKOUTEND tick's own bump over the last resting reading " +
+      "(WALK_4-shaped: rest 29.44/101, finished 33.07/109.7 — the total " +
+      "must include the bump, not stop at the rest reading)",
+    async () => {
+      const h = await programmed(MINIMAL_PROGRAM);
+
+      // The last resting reading before the finish (WALK_4's own trace).
+      // MINIMAL_PROGRAM has one interval, so `toProgramIndex`'s own resting
+      // clamp (`machineIndex - 1` clamped to 0) puts this on key 0 exactly
+      // like a genuine trailing rest would.
+      await tick(
+        h,
+        { elapsed: 29.44, distance: 101, state: WORKOUTSTATE_INTERVALREST },
+        0,
+      );
+
+      // The WORKOUTEND tick itself, reading HIGHER than the rest tick above
+      // — the terminal bump this ruling exists to capture. `toProgramIndex`
+      // returns `null` for `"finished"` regardless of the 0x0033 value, so
+      // no `intervalCount` is fed here; the fallback in `activeKey` is what
+      // must attribute this reading to key 0.
+      const f = await tick(h, {
+        elapsed: 33.07,
+        distance: 109.7,
+        state: WORKOUTSTATE_WORKOUTEND,
+      });
+
+      // Before this ruling: sessionDistanceMeters stayed at 101 (the rest
+      // tick's own reading) and sessionElapsedSeconds at 29.44 — the
+      // finished tick wrote no key at all, and the run's own final bump
+      // never reached the rower's screen.
+      expect(f.sessionElapsedSeconds).toBeCloseTo(33.07, 2);
+      expect(f.sessionDistanceMeters).toBeCloseTo(109.7, 1);
+    },
+  );
+
+  it(
+    "a finished reading LOWER than the running max cannot pull the total " +
+      "down (max-merge, same rule as every other register write)",
+    async () => {
+      const h = await programmed(MINIMAL_PROGRAM);
+
+      await tick(
+        h,
+        { elapsed: 40, distance: 120, state: WORKOUTSTATE_INTERVALWORKTIME },
+        0,
+      );
+      // A dishonest/late finished reading, smaller than the tick above —
+      // the PM5 is not observed to do this, but the rule must be safe
+      // against it regardless (`activeKey`'s own comment: "a dishonest
+      // smaller reading cannot lower anything").
+      const f = await tick(h, {
+        elapsed: 10,
+        distance: 30,
+        state: WORKOUTSTATE_WORKOUTEND,
+      });
+
+      expect(f.sessionElapsedSeconds).toBeCloseTo(40, 2);
+      expect(f.sessionDistanceMeters).toBeCloseTo(120, 1);
+    },
+  );
+});
+
+// ---------------------------------------------------------------------------
+// R0's TWD comparison gets its verdict (CR2 spec 1, Task 5). `logSummaryTotals`
+// states the raw numbers unconditionally (`summary-totals`, R0 — Task 1); this
+// task adds the RULING on them: a `"divergence"` entry when the frame
+// accumulator (`lastEmittedTotals.distanceMeters`) and the machine's own
+// `totalWorkDistanceMeters` (0x0031) disagree by more than 5 m, suppressed on
+// a distance goal (`workoutDurationType === 128` OR the armed program
+// contains any `kind: "distance"` interval) — the brief's own reasoning for
+// 5 m ABSOLUTE, not a percentage: a percentage would grow LESS sensitive as
+// the session lengthens, and one lost 500 m interval in a 20x500 m session is
+// exactly 5% of the total, precisely the failure mode this design introduces.
+// ---------------------------------------------------------------------------
+
+describe("session accumulator: accumulator-vs-machine divergence (CR2 spec 1 Task 5)", () => {
+  it(
+    "logs a divergence when the accumulator and the machine's own total " +
+      "differ by more than 5 m (no distance goal)",
+    async () => {
+      const h = await programmed(MINIMAL_PROGRAM);
+
+      // The accumulator banks 50 m (this tick's own distance); the machine's
+      // own totalWorkDistanceMeters (`twd`) is fed a deliberately different
+      // 100 m — a 50 m gap, comfortably past the 5 m tolerance.
+      await tick(
+        h,
+        {
+          elapsed: 30,
+          distance: 50,
+          twd: 100,
+          state: WORKOUTSTATE_INTERVALWORKTIME,
+        },
+        0,
+      );
+
+      h.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, new Uint8Array(20));
+
+      const div = h.log
+        .entries()
+        .filter(
+          (e) =>
+            e.kind === "divergence" &&
+            e.detail.includes("accumulator and machine total differ"),
+        );
+      expect(div).toHaveLength(1);
+      expect(div[0]!.detail).toContain("50.0m");
+    },
+  );
+
+  it(
+    "does NOT log the accumulator-vs-machine divergence when the armed " +
+      "program contains a distance interval, however large the gap " +
+      "(distance-goal suppression, program-shape half of the OR)",
+    async () => {
+      const h = await programmed(DISTANCE_PROGRAM);
+
+      // Same 50 m accumulator, but the machine's own total is fed a huge
+      // gap (950 m) — this would fire the divergence above the 5 m
+      // tolerance many times over if the suppression were not applied.
+      await tick(
+        h,
+        {
+          elapsed: 30,
+          distance: 50,
+          twd: 1000,
+          state: WORKOUTSTATE_INTERVALWORKTIME,
+        },
+        0,
+      );
+
+      h.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, new Uint8Array(20));
+
+      const div = h.log
+        .entries()
+        .filter(
+          (e) =>
+            e.kind === "divergence" &&
+            e.detail.includes("accumulator and machine total differ"),
+        );
+      expect(div).toHaveLength(0);
+    },
+  );
+
+  it(
+    "does NOT log the accumulator-vs-machine divergence when the two agree " +
+      "within the 5 m tolerance",
+    async () => {
+      const h = await programmed(MINIMAL_PROGRAM);
+
+      // twd omitted -> defaults to the same 50 m the accumulator itself
+      // banks (`tick()`'s own doc comment: "f.twd ?? f.distance").
+      await tick(
+        h,
+        { elapsed: 30, distance: 50, state: WORKOUTSTATE_INTERVALWORKTIME },
+        0,
+      );
+
+      h.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, new Uint8Array(20));
+
+      const div = h.log
+        .entries()
+        .filter(
+          (e) =>
+            e.kind === "divergence" &&
+            e.detail.includes("accumulator and machine total differ"),
+        );
+      expect(div).toHaveLength(0);
     },
   );
 });

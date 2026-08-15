@@ -1061,11 +1061,30 @@ export function createPm5Driver(
    *  it (pm5-session4b L2835-2838, 74.4m). The counters are monotone within
    *  an interval, so maximum equals last in every honest case.
    *
-   *  HONEST LIMIT: an interval that produces ZERO frames is lost, because
-   *  nothing ever writes its key. That is bounded (it cannot compound) and
-   *  it errs SAFE — an undercount makes TOTAL LEFT read high, where the old
-   *  defect made it read zero mid-session. It is reported, not silent: see
-   *  the interval-count divergence at the finish.
+   *  HONEST LIMITS — one still open, one closed by CR2 spec 1 Task 5 (a
+   *  controller ruling after Task 4's own review), both bounded and both
+   *  reported, never silent:
+   *  - STILL OPEN: an interval that produces ZERO frames is lost, because
+   *    nothing ever writes its key. Bounded (it cannot compound) and errs
+   *    SAFE — an undercount makes TOTAL LEFT read high, where the old
+   *    defect made it read zero mid-session. Reported at the finish: see
+   *    the interval-count divergence in `logSummaryTotals`.
+   *  - CLOSED: the final counter bump that arrives ON the WORKOUTEND tick
+   *    itself used to be lost too — a `"finished"` frame's `intervalIndex`
+   *    is always `null` (`toProgramIndex` never names an interval outside
+   *    rowing/resting) and the old write rule only covered rowing/resting,
+   *    so the run's very last reading wrote no key at all (observed 3.63
+   *    s/8.7 m on walk-4 hardware; WALK_4's own fixture: finished
+   *    33.07/109.7 against a last resting reading of 29.44/101 — the old
+   *    walk-4 FOLD passed this reading through, so this was a small
+   *    regression this map introduced, not a limit it inherited). Now
+   *    CAPTURED: `maybeEmitFrame`'s `activeKey` fallback treats `"finished"`
+   *    the same as `"rowing"`/`"resting"`, max-merged into the highest
+   *    existing key — safe for the same reason every other write here is,
+   *    since a finished frame with a dishonest SMALLER reading cannot lower
+   *    anything. `"terminated"`/`"idle"`/`"armed"` stay excluded; a
+   *    mid-terminate boundary has no stable identity to capture in the
+   *    first place (CSAFE-DEF footnote 12).
    */
   let session = {
     seen: new Map<number, { elapsedSeconds: number; distanceMeters: number }>(),
@@ -1676,12 +1695,34 @@ export function createPm5Driver(
     // pair and walk 4 proved that countdown correct exactly as it stands.
     const activeKey =
       intervalIndex ??
-      // The machine is rowing/resting but reports an identity the armed
-      // program cannot explain. Attributing to the newest key keeps the
-      // rower's number MOVING (freezing it reproduces the very symptom this
-      // change exists to fix) and, being a max into an existing key, cannot
-      // double count. Logged as divergence below, never silent.
-      ((base.state === "rowing" || base.state === "resting") &&
+      // Two genuinely different reasons land in this fallback, both
+      // resolved by the same rule:
+      // (1) the machine is rowing/resting but reports an identity the armed
+      //     program cannot explain. Attributing to the newest key keeps the
+      //     rower's number MOVING (freezing it reproduces the very symptom
+      //     this change exists to fix).
+      // (2) the machine has reported `"finished"` (controller ruling after
+      //     Task 4's own review, CR2 spec 1 Task 5). `toProgramIndex`
+      //     ALWAYS returns `null` for a terminal state
+      //     (`intervalIndex.ts`'s own doc comment: "states outside
+      //     rowing/resting ... always return null"), so without this arm
+      //     the WORKOUTEND tick's own reading writes no key at all and its
+      //     final counter bump is lost — observed 3.63 s/8.7 m on walk-4
+      //     hardware, WALK_4's own fixture: finished 33.07/109.7 against a
+      //     last resting reading of 29.44/101. The old fold (walk 4)
+      //     passed the finished frame's reading straight through; the
+      //     register map dropped it until this fix. `"terminated"`,
+      //     `"idle"`, and `"armed"` stay OUT on purpose — a terminated
+      //     workout's own boundary has no stable identity to begin with
+      //     (CSAFE-DEF footnote 12), so there is nothing comparable to
+      //     lose for those states.
+      // Both are, being a max into an existing key, safe: a dishonest
+      // smaller reading (rowing/resting OR finished) cannot lower the
+      // total, only a genuinely higher one can raise it. Logged as
+      // divergence below, never silent.
+      ((base.state === "rowing" ||
+        base.state === "resting" ||
+        base.state === "finished") &&
       session.seen.size > 0
         ? Math.max(...session.seen.keys())
         : null);
@@ -2053,6 +2094,69 @@ export function createPm5Driver(
         `durationType=${raw.workoutDurationType ?? "?"} (${against}). ` +
         `§23 walk items 2 and 4 settle HERE, by comparing the two elapsed figures: equal = cumulative AND rest-exclusive, both premises hold; equal to the recorded total plus ${programmedRest}s = item 4 mismatch (0x0039 counts rest, 0x0037 does not); equal to the LAST interval's own elapsed alone = item 2 false (0x0039 is per-interval, not cumulative)`,
     );
+
+    // THE INTERVAL-COUNT DIVERGENCE (CR2 spec 1, Task 5). The finish is the
+    // one moment `session`'s own HONEST LIMIT (its own doc comment) can be
+    // checked against ground truth: how many of the ARMED program's
+    // intervals actually produced a frame, versus how many the program
+    // declares. An interval that produced zero frames writes no key
+    // (`maybeEmitFrame`'s register write) and is missing from
+    // `sessionDistanceMeters`/`sessionElapsedSeconds` with nothing on
+    // screen to say so — this is the entry that says so, at the one point
+    // in the run's life where the true denominator (`programIntervals`) is
+    // known and stable. Gated on a program actually being armed (`run`
+    // non-null and non-empty), same reason every other program-shaped
+    // divergence in this file is: with none, there is no denominator to
+    // diverge from.
+    const programIntervals = run?.program.intervals.length ?? 0;
+    if (programIntervals > 0 && session.seen.size !== programIntervals) {
+      log.record(
+        "divergence",
+        `${session.seen.size} intervals seen of ${programIntervals} programmed — ` +
+          `the session total is missing any interval that produced no frames ` +
+          `(bounded loss, CR2 spec 1). Keys seen: ${[...session.seen.keys()].join(",")}`,
+      );
+    }
+
+    // THE ACCUMULATOR-VS-MACHINE DIVERGENCE (CR2 spec 1, Task 5; R0's own
+    // TWD comparison above states the raw numbers, this is the verdict on
+    // them). `lastEmittedTotals.distanceMeters` is what the rower's own
+    // screen last showed; `raw.totalWorkDistanceMeters` (0x0031) is the
+    // machine's own running distance. On an ordinary session the two should
+    // track closely — a persistent gap is exactly what a lost interval (the
+    // divergence above) or a mis-keyed register write would produce.
+    //
+    // 5 METERS ABSOLUTE, NOT A PERCENTAGE. A percentage arm would make the
+    // alarm LESS sensitive as the session lengthens, and the failure mode
+    // this design introduces is a single lost interval — one dropped 500 m
+    // interval in a 20x500 m session is exactly 5% of the total, precisely
+    // the case a percentage threshold would wave through. A fixed absolute
+    // bound catches that regardless of how long the rest of the session is.
+    //
+    // SUPPRESSED on a distance goal: `totalWorkDistanceMeters` reports the
+    // GOAL there, not the distance actually rowed (confirmed PRIMARY,
+    // 500 m goal read against 13.4 m genuinely rowed, and confirmed
+    // mid-row at workoutState 5 — INTERVALWORKDISTANCE — not merely at
+    // arm, so this is not a startup transient). `workoutDurationType`'s own
+    // scope is PER-FRAME, but `compileProgram` can emit a MIXED program (a
+    // time-goal piece alongside a distance-goal one), so the suppression is
+    // widened to "the armed program contains ANY distance interval" rather
+    // than trusting the current frame's own duration type alone — a mixed
+    // program's time-goal intervals would otherwise light this up exactly
+    // when the machine legitimately reports its distance-goal neighbor's
+    // target instead of a rowed total.
+    const distanceGoal =
+      raw.workoutDurationType === 128 ||
+      (run?.program.intervals.some((i) => i.kind === "distance") ?? false);
+    const delta = Math.abs(
+      lastEmittedTotals.distanceMeters - (raw.totalWorkDistanceMeters ?? 0),
+    );
+    if (!distanceGoal && delta > 5) {
+      log.record(
+        "divergence",
+        `accumulator and machine total differ by ${delta.toFixed(1)}m`,
+      );
+    }
   }
 
   /** WHY the summary gate was shut when a 0x0039 turned up — four genuinely
