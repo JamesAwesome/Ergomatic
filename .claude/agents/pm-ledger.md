@@ -154,3 +154,59 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   the redesign specs that follow it. Releasing spec 1 by itself is the canary the
   3.9x defect never got; if a later build still disagrees with the erg, a solo
   release is the only thing that says which change owns it.
+
+## Design-gate rulings, 2026-08-15 (PM5 record-and-replay harness)
+
+- **"It's a dev capability" is a claim about INTENT; ask where the code
+  RUNS.** The record-and-replay design opened with "tester impact: none (dev
+  capability)" and its part 1 put an always-on wrapper in the phone's
+  notification path during live sessions. `transports/index.ts:39-54` documents
+  a dead-code-elimination contract gated at `:208-209` on
+  `import.meta.env.DEV || VITE_ENABLE_FAKE_MONITOR`: inside it, code never
+  enters the production bundle; outside it, it ships. **For any capability
+  claiming to be dev-only, name which side of that gate it lands on.** The safe
+  seams already exist and need no product change at all —
+  `MonitorSessionDeps.createTransport`/`createLog`
+  (`useMonitorSession.ts:339`,`:343`), with `autoTicking`
+  (`transports/index.ts:155-182`) as a written `Transport` decorator template.
+
+- **The definitive hardware walk was a WEB walk.** The 2026-08-15 re-walk that
+  gated PR #99's merge ran "Chrome/Web Bluetooth from the worktree dev server"
+  (`docs/monitor/sessions/walk-2026-08-15/README.md:82`). A dev/web-gated
+  instrument covers the walks that actually settle questions, at zero tester
+  exposure. Before accepting "it must ship to the phone", check which surface
+  the last conclusive measurement was taken on.
+
+- **A phase whose later parts need a capture its earlier parts produce is TWO
+  phases with a hardware walk between them.** The harness presented six parts as
+  one scope while conceding its CI rung needed a recording no walk had yet made.
+  Split at the walk and make the recorder ride a walk that was already
+  scheduled — the live verification then costs one photograph instead of a trip.
+  Same shape as the "spec 2 owes it" deferral, one level up.
+
+- **Exit criteria for a VALIDATION capability must include "the gate can go
+  red".** "Recorder verified live at the next walk" is passed by a non-empty
+  file. The falsifiable set is: (1) a named prior measurement reproduces from
+  the recording with no hardware — here the re-walk's 2x250m r0 keystone,
+  accumulator 499.5 m vs machine TWD 500 (walk README:99-103); (2) recording ON
+  does not change the session's agreement with the machine; (3) a deliberate
+  mutation of the code under test turns the rung red. Building a second gate
+  that agrees with us is recurring failure #4 at phase scale.
+
+- **An unreleased canary is a live constraint on the NEXT merge, not just on
+  its own PR.** PR #99 merged 2026-08-15 (`7c2be9f`) with the newest tag still
+  v0.9.0 and no notes PR. This ledger had already ruled spec 1 releases PATCH
+  and alone. Anything merged before that tag bundles into it — and the harness
+  as designed would have bundled always-on notification-path code into the very
+  build meant to isolate a numbers fix. **When a solo release is owed, say so at
+  the top of the next design gate, before scope.** (James subsequently ruled,
+  same day: hold TestFlight until further UI fixes land — the canary is
+  knowingly forfeited; record the override, not just the rule.)
+
+- **We had already built this capability three times in instalments.**
+  `structure` raw-on-change (`driver.ts:3053-3066`), `twd-sample` on a 25 m
+  bucket (`:3078-3093`), `terminal-raw` from a one-frame buffer (`:2082-2087`).
+  Each was a walk paying for a general instrument in narrow patches, and >99% of
+  inbound traffic is still discarded (`driver.ts:1661-1666`). **Three special
+  cases for the same missing general mechanism is a build signal**, and it is
+  the honest cost argument — stronger than any single defect.
