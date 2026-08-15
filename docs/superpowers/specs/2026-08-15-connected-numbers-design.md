@@ -96,16 +96,35 @@ Decoding all 16 `structure` entries across the three committed captures:
 
 So a naive read displays 500 m the instant a 500 m piece is armed.
 
-**And, new this session: the field is unsettleable offline.** It appears in the
-captures *only* in those 16 `structure` entries, which are arm and terminate
-moments. There is not one mid-piece sample on a time-goal multi-interval piece
-anywhere in the record. Separately there is **no Total Work Time in 0x0031's 19
-bytes at all**, so the elapsed half of TOTAL LEFT has no known machine source and
-any eventual fix may be asymmetric.
+**CORRECTION, PM design gate 2026-08-15 — and it is a correction to this spec's
+own first draft.** That draft claimed the field was "unsettleable offline"
+because it appears in the captures only in those 16 `structure` entries. That
+inference was false, and it was false in a way this repo has a name for: it
+described **our logging policy, not the machine**.
 
-Reading the machine's total (review R7) is therefore **out of scope for this
-spec** and gated on the R6 hardware walk — which is precisely what R0 below
-exists to arm.
+`parseGeneralStatus` decodes TWD on *every* 0x0031 notification — roughly twice a
+second, all session — and the driver then drops it: it never reaches
+`MonitorFrame`, and its bytes reach the ring only inside the `structure` entry,
+which fires **only when `workoutType`/`workoutDurationRaw`/`workoutDurationType`
+change** (`driver.ts:2656-2668`, state at `:1107-1110`). That guard is a
+deliberate flood defence whose own comment says 0x0031 "notifies ~2/second, a
+flood the 500-entry ring cannot survive". The machine has been sending this
+number the whole time. We have been throwing it away.
+
+Two consequences, both of which change work:
+
+1. **The table above is measured entirely in arm-adjacent windows.** Every
+   `structure` entry fires at a program or arm change, so all sixteen samples sit
+   in roughly the first 30 m of a piece. Whether distance-goal TWD *stays* at the
+   goal, counts down, or begins tracking after that is **unobserved** — not
+   observed-and-contrary. §7.2's caveat inherits the same limit.
+2. **R0 must widen** (see below) so that the next capture settles this offline
+   instead of leaving it unmeasurable for no reason.
+
+Reading the machine's total (review R7) stays **out of scope for this spec** —
+its semantics are genuinely unknown mid-piece and the map ships first regardless
+— but it is gated on *a capture that records the field*, which R0 now produces,
+not on some property of the protocol.
 
 ## Design
 
@@ -130,8 +149,24 @@ let session = {
 **The write rule.** On every 0x0031 frame, after `intervalIndex` is normalized
 and before the frame is finished:
 
-- `intervalIndex !== null` → `seen.set(intervalIndex, { elapsedSeconds, distanceMeters })`, last write wins.
+- `intervalIndex !== null` → merge into `seen` at that key by **taking the
+  maximum of each field**, not by overwriting.
 - `intervalIndex === null` → write nothing.
+
+**Why maximum and not last-write-wins** (PM design gate, 2026-08-15). The key is
+**not injective**: `toProgramIndex` clamps both ends (`intervalIndex.ts:180-182`,
+`candidate === -1 → 0` and `candidate === programLength → programLength - 1`), so
+two different machine indices can land on one of ours. Under last-write-wins a
+clamped write can overwrite a completed interval's reading with a *smaller* one
+and silently undercount. F8 already names exactly this non-injectivity as a
+defect for `toActualIndex`; adopting last-write-wins here would import the same
+shape one file over.
+
+Maximum is safe because the machine's per-interval counters are **monotone within
+an interval** — they only ever grow until they reset, and a reset means a new
+interval, which means a new key. So in every honest case maximum *equals* last,
+and in the dishonest cases it refuses to go backwards. It also cannot overcount,
+which last-write-wins can.
 
 **The read rule.**
 
@@ -165,7 +200,7 @@ saw, which is what last-seen means.
 | Terminate mid-piece | no key written, total unchanged | terminated frames carry no identity |
 | Re-arm after terminate | no key written until rowing resumes | armed carries no identity either |
 | Trailing rest of the last interval | overwrites that interval's key with a larger reading | the clamp attributes it to the interval whose rest it is |
-| 1-interval program, phantom indices | all collapse onto index 0 | there is only one interval; last write wins is correct |
+| 1-interval program, phantom indices | all collapse onto index 0 | there is only one interval; maximum is correct and clamp-proof |
 | JustRow, no program armed | `programLength <= 0` → every index `null` → `seen` empty → total is the raw pair | a single continuous piece; per-interval *is* the session |
 | `rowing` with `intervalIndex === null` (divergence) | reading is excluded from the total | already logged as `divergence`; inventing an attribution would be worse |
 | `program()` replaces an open run | `seen` cleared | a new program's totals start at zero |
@@ -173,9 +208,27 @@ saw, which is what last-seen means.
 | Link gap **across** a whole interval | that interval's key is never written; its distance is lost | **bounded loss — stated, not hidden** |
 
 That last row is the honest limit of this approach and must be written down in
-the driver as well as here. It is strictly better than the fold, which loses or
-doubles without bound, and it is not the full fix; the full fix is a
-machine-owned absolute total, which the walk has to unblock first.
+the driver as well as here. Three things make it acceptable, and they belong in
+the spec so nobody re-opens the question later:
+
+1. **It errs in the safe direction.** An undercount makes TOTAL LEFT read high
+   and TOTAL M read low, so a rower who trusts it rows *more*. Today's defect
+   errs the unsafe way — the clock says finished while the piece is still
+   running. That asymmetry, not the magnitude, is the argument.
+2. **The loss is narrower than "a gap loses data".** Within an interval the
+   machine's counter is absolute, so a gap covering an interval's *start* still
+   converges the moment one frame arrives. The map only loses an interval that
+   produced **zero** frames — which, from the app's point of view, is an interval
+   that never happened.
+3. **The loss is made visible, not silent.** The review's worst outage shape is
+   damning precisely because "an entire 261 m interval vanishes with no event, no
+   log line and no visual difference". So: compare `seen.size` against the armed
+   program's interval count at the finish and log a `divergence` when they
+   disagree. Same idiom as R0, near-zero cost, and it converts a silent hole into
+   a signal.
+
+It is still not the full fix. The full fix is a machine-owned absolute total, and
+R0 below is what makes that measurable.
 
 ### 2. R0 — put the accumulator into the comparison that already exists
 
@@ -201,6 +254,20 @@ blocked without it: the iPhone has no per-frame capture, only the 500-entry ring
 2. **R0 lands first, on its own commit, before the map.** The instrumentation
    must exist on the broken code, so the walk can be replayed against both and
    the fix is demonstrated rather than asserted.
+
+**And R0 widens (PM design gate, 2026-08-15).** `logSummaryTotals` fires once, at
+the finish — one more arm-distant TWD sample, which does not produce the *series*
+R7 needs. So R0 also emits a **bounded-cadence mid-piece TWD sample**: its own
+`lastLogged` on a quantised value, in the same on-change idiom
+`lastLoggedStructure` and the `frame` entry already use, so the 500-entry ring
+survives a long piece. Quantising on whole metres of TWD change is the obvious
+candidate; the exact cadence is an implementation call bounded by a stated ring
+budget.
+
+Cost: one counter and one string. Payoff: **the next capture taken settles R7's
+distance-goal semantics offline**, instead of that question staying unmeasurable
+because of a flood guard nobody revisited. Without it the map ships as the
+interim fix while the thing that would retire it stays unobservable.
 
 _Cost against it:_ it adds entries to a 500-entry ring already tight on a long
 piece. Accepted — it is one entry per finish plus a bounded divergence entry.
@@ -299,9 +366,11 @@ all.**
 6. **Assert consequences, not existence** (docs/TESTING.md §3, recurring failure
    #4). Every test here invokes the driver and asserts a number.
 
-`pnpm e2e` and `pnpm screenshots` are **not** required by this spec — the diff
-touches nothing under `app/src/` that renders. If that stops being true mid-
-implementation, both become required (recurring failure #1).
+7. **`pnpm e2e` runs and must be green with NO screenshot churn** (PM design
+   gate). The spec claims this cycle changes nothing visible; a changed
+   screenshot is that claim being false. This is the cheap proof, and it inverts
+   recurring failure #1 — the diff does touch `app/src/`, so the suite runs
+   regardless of the claim.
 
 ## Non-goals
 
@@ -327,13 +396,34 @@ implementation, both become required (recurring failure #1).
    subsequent Connect does not ask "Replace it?".
 7. `summary-totals` prints all five numbers, and the divergence entry fires on a
    replayed capture where the map and TWD disagree.
-8. Scoped gates green: `pnpm lint`, `pnpm typecheck`, `pnpm test`, per-file
-   coverage inspected for every file touched.
-9. **The hardware walk is owed but does not gate this PR.** CR2's phase exit
-   requires the erg's own screen photographed in the same frame as the phone's;
-   that is a phase-level exit, and R0 shipping here is what makes the walk
-   decisive. The walk item this spec creates: read `summary-totals` from the stash
-   after a multi-interval row and confirm the accumulator, 0x0039 and TWD agree.
+8. Scoped gates green: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm e2e`
+   with no screenshot churn, per-file coverage inspected for every file touched.
+9. **`app/domain/monitor/types.ts:37-39` is corrected.** "BOTH fields reset
+   TOGETHER at each new work interval" is false on the wire, it sits on a public
+   type, and it survived the review. Same for `driver.ts:1062-1063`.
+10. Each of §5.2's outage shapes has a test **with its expected bounded loss
+    stated as a number**, including the one where an entire 261 m interval
+    vanishes — that case must now produce the key-count `divergence` entry.
+
+**THE WALK GATES THE MERGE (PM design gate, 2026-08-15 — this overturns the
+first draft, which said it did not).** The first draft treated the photograph as
+a phase-level exit. It is not: item 0's own text says "any fix should be walked
+the same way, with both screens in one frame", and a sentence inside an item
+binds independently of the phase's exit line. Decomposing a phase into cycles
+does not dissolve per-item bars into the phase gate.
+
+So spec 1's PR is reviewed and approved on CI, and **merges on the walk, not on
+CI.** Per recurring failure #11, a green replay against our own captures proves
+nothing about the erg. The walk item: row a multi-interval piece, read
+`summary-totals` from the stash, and confirm the accumulator, 0x0039 and TWD
+agree — with the PM5 and the phone photographed in one frame.
+
+**Sequencing note the decomposition did not carry:** spec 2 needs the *same* erg
+session (item 3's "on piece two, before the rower pulls, what does the PM5's own
+screen show for rate?"), and the review's R6 is already written as one walk
+covering items 0 and 3 together. So the order is: implement spec 1 → walk R6
+once → merge spec 1 and finalise spec 2's design from that session. Asking twice
+spends the scarcest resource in this phase.
 
 ## Open questions
 
