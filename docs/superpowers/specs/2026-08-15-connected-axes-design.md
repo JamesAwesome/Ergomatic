@@ -1,8 +1,10 @@
 # Connected state axes — Phase CR2, spec 2 of 3 (PRs 2a + 2b)
 
 **Status:** design approved by James 2026-08-15 (evening, same day spec 1
-merged). PM design-gate verdict pending fold-in; antagonist pass owed before a
-plan is written.
+merged); PM design-gate verdict FOLDED IN (corroboration window falsified and
+replaced, F6 re-scoped to an UnloggedRow twin, reducer deferred, 2a/2b split)
+and its three James-level questions RULED. Antagonist pass owed before a plan
+is written.
 **Branch:** `cr2-axes`, worktree `.claude/worktrees/cr2-axes`, base `7c2be9f`
 (main, containing spec 1).
 
@@ -37,9 +39,10 @@ evidence dowry spec 1's hardware walks produced.
    an instruction-only banner — `PULL TO RESUME` — that occludes nothing. No
    noun means no claim about machine state that can be wrong. The code axis is
    named as a plain observation.
-4. **Migration:** the review's R11 path — derive the axes *from* the existing
-   enum as pure functions with zero behaviour change, migrate consumers one at
-   a time, absorb the hook's patch sites into a reducer, delete the enum last.
+4. **Migration:** R11's derivation-first path — derive the axes *from* the
+   existing enum as pure functions with zero behaviour change, migrate
+   consumers one at a time. AMENDED at the PM gate (James's ruling): the
+   reducer and the enum's deletion are DEFERRED to their own spec; see §4.
 5. **Item 3's hardware answer (from the walk):** the PM5's own screen shows
    **0** for stroke rate before the first pull of piece two, though the wire
    carries the previous piece's value. **Mirror the machine: show 0, judge
