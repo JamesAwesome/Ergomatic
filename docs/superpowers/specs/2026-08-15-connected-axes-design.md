@@ -1,4 +1,4 @@
-# Connected state axes — Phase CR2, spec 2 of 3
+# Connected state axes — Phase CR2, spec 2 of 3 (PRs 2a + 2b)
 
 **Status:** design approved by James 2026-08-15 (evening, same day spec 1
 merged). PM design-gate verdict pending fold-in; antagonist pass owed before a
@@ -144,13 +144,13 @@ route, or new idiom. Requirements preserved from spec 1's gate:
    gains an additive `endedBy: "interrupted"` field; the stored-shape read
    path is stated explicitly (a v1/v2 record with no field reads as a
    normal completion, per `loadMonitorRun`'s never-migrate discipline).
-3. *An honest duration, LABELED:* totals come from the **recorded actuals**
-   (exact, boundary-measured), never wall-clock. Recorded actuals carry NO
-   rest time, so an interrupted session's duration is work-only and reads
-   low — a stored number with a deliberate error direction. Resolution is
-   James's call (open question 2): work-only labeled as such, or
-   work + programmed-rest-for-completed-intervals (the allowance
-   `logSummaryTotals` already computes).
+3. *An honest duration* (James's ruling): **recorded work + programmed rest
+   for completed intervals** — the allowance `logSummaryTotals` already
+   computes — never wall-clock, nothing invented past the last measured
+   boundary. **Discard** (James's ruling): the record is discarded, the
+   diagnostics stash is KEPT (it is the tab's own sessionStorage and dies
+   with the tab; a rower reporting a bug right after discarding keeps the
+   evidence).
 
 Adoption (resuming a live session after reload) stays **out** — reconnect's
 spec, R10, unchanged.
@@ -291,8 +291,10 @@ grep says nothing reads it.
    has a test that fails under today's order.
 7. METERS LEFT: 578-signature reproduces then reads 397.3; mixed-program
    coverage exists.
-8. The reducer passes the five named invariant tests and every recorded
-   transition; `ConnectedPhase` is deleted; grep proves it.
+8. Every consumer outside `useMonitorSession` reads axes, `paused` is gone
+   from `ConnectedPhase`, and a lint/grep pin prevents NEW readers of the
+   enum outside the hook (the enum's deletion is the reducer spec's exit,
+   not this one's).
 9. Scoped gates green: lint, typecheck, full test, e2e, screenshots
    (changed, deliberately), per-file coverage inspected.
 10. The phase-exit walk covers spec 2's three walk items (armed mirror
@@ -308,16 +310,9 @@ grep says nothing reads it.
 2. **F6's surface** — `UnloggedRow` twin, house idiom, copy question
    dissolved into an existing approved pattern.
 
-## Open questions (James)
+## Questions James closed (2026-08-15, evening)
 
-1. **PR structure and the reducer** — the PM recommends landing this as 2a
-   (axes + display + driver lifecycle + METERS LEFT) then 2b (F6, the only
-   piece with a persisted-shape field and a destructive action), and CUTTING
-   the reducer to its own later spec (nothing in 2a/2b requires it, and
-   "introduced beside the hook with no consumer" is the unconsumed-helper
-   trap). This reverses part of James's approach pick; his call.
-2. **F6's interrupted-session duration** — work-only labeled as such, or
-   work + programmed rest for completed intervals. A number the rower keeps.
-3. **Discard's consequence** — proposed: discards the record, keeps the
-   diagnostics stash (it is the tab's own sessionStorage and dies with the
-   tab anyway).
+1. **PR structure and the reducer**: the PM's shape — 2a then 2b, reducer
+   deferred to its own spec (§4).
+2. **F6 duration**: work + programmed rest for completed intervals.
+3. **Discard**: record discarded, diagnostics stash kept.
