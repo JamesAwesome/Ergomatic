@@ -1778,3 +1778,53 @@ describe("session accumulator: final totals reach the ring (walk 2026-08-15, Jam
     expect(finals[0]!.detail).toContain("registers=1 of 2 programmed");
   });
 });
+
+describe("session accumulator: the terminal frame's own raw bytes reach the ring (walk 2026-08-15, the mid-rest finished frame)", () => {
+  // The re-walk's first session was killed 16s into interval 1's rest by a
+  // frame our parser read as finished/elapsed=60/distance=0 — a
+  // finished-family state mid-rest on a 2-interval program, in no prior
+  // capture. The ring carried no raw bytes for it (frames log decoded
+  // fields only; the raw-hex notify branch excludes 0x0031 as a flood), so
+  // whether the machine sent ordinal 10, 12, or garbage is unknowable.
+  // This entry records the raw 19-byte 0x0031 payload at TERMINAL
+  // transitions only — bounded to one entry per session end — so the next
+  // occurrence convicts the actual state byte.
+  it("records terminal-raw with the exact payload that produced the terminal", async () => {
+    const h = await programmed(TWO_INTERVAL_REST_PROGRAM);
+
+    await tick(
+      h,
+      {
+        elapsed: 30,
+        distance: 120.5,
+        state: WORKOUTSTATE_INTERVALWORKTIME,
+        twd: 120,
+      },
+      0,
+    );
+    const finishBytes = buildGeneralStatusBytes({
+      elapsedSeconds: 60,
+      distanceMeters: 0,
+      workoutType: 8,
+      intervalType: 255,
+      workoutState: WORKOUTSTATE_WORKOUTEND,
+      rowingState: 0,
+      strokeState: 0,
+      totalWorkDistanceMeters: 120,
+      workoutDurationRaw: 6000,
+      workoutDurationType: 0,
+      dragFactor: 130,
+    });
+    // The stub's notify is synchronous — the terminal fires inside this call.
+    h.transport.notify(GENERAL_STATUS_UUID, finishBytes);
+
+    const raws = h.log.entries().filter((e) => e.kind === "terminal-raw");
+    expect(raws).toHaveLength(1);
+    const expectedHex = Array.from(finishBytes, (b) =>
+      b.toString(16).padStart(2, "0"),
+    ).join(" ");
+    // The consequence: the ring holds the byte-exact payload, so a
+    // mid-rest finished frame on hardware can be decoded after the fact.
+    expect(raws[0]!.detail).toBe(`state=finished 0x0031=${expectedHex}`);
+  });
+});

@@ -1062,6 +1062,9 @@ export function createPm5Driver(
   // exact shape instead of catching it).
   let lastRawFrameIntervalIndex: number | null = null;
   let lastLoggedFrameState: MonitorFrame["state"] | null = null;
+  /** The last raw 0x0031 payload, byte-for-byte — see the 0x0031 handler's
+   *  own comment; read only by the terminal-raw entry. */
+  let lastRaw0x0031: Uint8Array | null = null;
   /** THE SESSION REGISTER MAP (CR2 spec 1, replacing walk 4's fold).
    *
    *  0x0031's Elapsed Time and Distance are PER-INTERVAL. The fold this
@@ -2072,6 +2075,16 @@ export function createPm5Driver(
           `registers=${session.seen.size} of ${programmed} programmed ${regs}`,
       );
     }
+    // THE TERMINAL FRAME'S OWN BYTES (walk 2026-08-15, the mid-rest
+    // finished frame — see `lastRaw0x0031`'s declaration comment). One
+    // entry per session end, so the flood argument that keeps 0x0031 out
+    // of the raw-hex notify branch does not apply here.
+    log.record(
+      "terminal-raw",
+      lastRaw0x0031 === null
+        ? `state=${frame.state} 0x0031=never seen`
+        : `state=${frame.state} 0x0031=${toHex(lastRaw0x0031)}`,
+    );
     if (frame.state === "finished") {
       // THE FINISH GRACE opens here and nowhere else (walk 5, re-bounded on
       // walk day 3 — `activeRun.finishGraceUntil`'s own doc comment carries
@@ -3001,6 +3014,15 @@ export function createPm5Driver(
     parseGeneralStatus,
     (decoded, bytes) => {
       seen.general = true;
+      // The walk's mid-rest finished frame (2026-08-15): a payload our
+      // parser read as finished/elapsed=60/distance=0 killed a session 16s
+      // into interval 1's rest, and the ring had no bytes to decode after
+      // the fact — the raw-hex notify branch excludes 0x0031 as a flood,
+      // and frame entries carry decoded fields only. Kept here per tick
+      // (a 19-byte copy, no hex work) and logged ONLY at a terminal
+      // transition, so each session end costs one ring entry and the next
+      // mid-rest terminal convicts its own state byte.
+      lastRaw0x0031 = bytes.slice();
       // Task 1 (fix-3): the machine's idea of the armed workout's structure,
       // already decoded by `parseGeneralStatus` (interface-notes.md §10) —
       // recorded ON CHANGE ONLY, comparing the three DECODED fields rather
