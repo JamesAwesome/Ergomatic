@@ -19,8 +19,8 @@ Phase CR2 is decomposed into three spec → plan → implement cycles (James,
 
 | Spec | Contents | Surface |
 | --- | --- | --- |
-| **1 — numbers (this one)** | R0, item 0, F7, the closing half of F6 | none; driver, hook and record only |
-| 2 — state axes | CR2 items 3 + 1 (review F3: one enum, four concerns) | model, light visual |
+| **1 — numbers (this one)** | R0, item 0, F7 | none; driver and record only |
+| 2 — state axes | CR2 items 3 + 1 (review F3: one enum, four concerns), **plus F6** | model, light visual |
 | 3 — redesign | CR2 items 2 + 4, the design handoff v2 recreation | both panes, both orientations |
 
 The order is deliberate. The axes give the redesign the model its first-frame
@@ -297,30 +297,38 @@ must check the hook's hold is still open rather than assume it, and the comment
 is rewritten whatever the behaviour ends up being — a comment that argues from a
 screen lifetime that no longer exists is a trap for the next reader.
 
-### 4. F6 — closing half only
+### 4. F6 is NOT in this spec — moved to spec 2
 
-The connected surface is not a route: it exists only while `WorkoutDetail`'s
-`connecting` state is non-null, and a reload destroys it. Nothing in the monitor
-flow calls `loadMonitorRun` (`monitorRun.ts:188`), and `completeMonitorRun`
-(`monitorRun.ts:414`) has one caller operating on an in-memory ref the reload
-destroyed (`useMonitorSession.ts:761`). So `completedAt` can never be stamped
-after a reload, and every consumer reads `completedAt: null` as *live*:
+An earlier draft of this spec took F6's "closing half" on the grounds that it
+needs no stored shape. **James moved it to spec 2 on 2026-08-15**, after the PM
+design gate showed that the one-line framing — "a reload can close the stranded
+run and make it loggable" — concealed three decisions rather than describing a
+cheap fix. All three were verified against the code:
 
-- `monitorModeRun` requires `completedAt !== null`, so the PM5's measured actuals
-  become permanently unreachable and the rower re-types numbers the app is
-  holding in `localStorage`.
-- `connectGuardStage()` (`monitorRun.ts:580`) returns `"in-progress"` forever, so
-  every future Connect is preceded by "A session is in progress. Replace it?".
-- `Today.tsx` treats it as live and permanently suppresses stale-draft cleanup.
+1. **"Close" asserts something the system cannot support.** A reload is not
+   evidence the session ended; the common cause is iOS reaping the tab while the
+   rower is still on the erg. Stamping `completedAt` asserts on the machine's
+   behalf that the piece is over. That is the exact shape of the PAUSED state
+   this repo shipped and regretted — and CLAUDE.md's own does-it-exist rule
+   exists because of it. Who is wrong when it matters: the rower who kept rowing,
+   whose remaining intervals now belong to no run.
+2. **It is not a stamp, it needs a door.** `monitorModeRun` returns `null` unless
+   the URL carries `?from=monitor` (`LogSession.tsx:281`), and after a reload no
+   route reaches that. Making the run loggable requires a new entry point with
+   new copy — real product surface, and the part the framing hid.
+3. **It would ship a wrong number inside the spec whose subject is a wrong
+   number.** `monitorLogTotals` (`LogSession.tsx:330-337`) computes the header
+   duration as wall-clock `completedAt - startedAt`, and `IntervalActual`
+   (`domain/monitor/types.ts:114-146`) carries no timestamps. Stamp
+   `completedAt = now` on a run stranded overnight and the log reads "840 MIN".
 
-**In scope:** a stranded run can be **closed** and made loggable, so `completedAt`
-gets stamped, the actuals are reachable through the monitor log door, and the
-guard stops firing forever. This needs no persisted shape.
+**Its home is spec 2.** F3 lists "the session lifecycle (`live`, `ended`)" among
+the four concerns the enum conflates, and F6 *is* a session-lifecycle bug.
+Answering it there costs nothing and stops the lifecycle question being answered
+twice.
 
-**Out of scope, by James's ruling 2026-08-15:** adopting an existing
-`MonitorRun` — the capability reconnect needs, and the one that forces
-`EnginePhase[]` into storage. That goes with the reconnect spec, where the
-review sequences it as R10.
+The generalisation, for whoever writes spec 2: **a "half" described by what it
+does not need — "no stored shape" — has not been described.**
 
 ## Testing
 
@@ -374,12 +382,15 @@ all.**
 
 ## Non-goals
 
-- Reading `totalWorkDistanceMeters` as the session's authority (R7). Hardware-gated; see above.
+- Reading `totalWorkDistanceMeters` as the session's authority (R7). Its mid-piece
+  semantics are unknown; R0 is what makes the next capture able to settle them.
 - Retuning `SESSION_RESET_ELAPSED_DROP`. No value of it helps; the constant is deleted.
 - Any change to `ConnectedPhase`, `SurfaceStatus`, or the panes. That is spec 2.
 - Any visual change at all. That is spec 3.
-- Adopting an existing `MonitorRun`. That is the reconnect spec.
-- `MONITOR_SPM_MIN` (`logDraft.ts:773-777`). Persisted data, carried debt, not this spec.
+- **F6 in either half.** Moved to spec 2 by James's ruling; see §4.
+- `MONITOR_SPM_MIN` (`logDraft.ts:773-777`). Persisted rows; belongs with item 3 in spec 2.
+- **The liveness axis (R5).** Tempting beside the map, but it needs a
+  hardware-derived threshold and it is an *axis* — spec 2's subject.
 
 ## Exit criteria
 
@@ -392,10 +403,10 @@ all.**
    regression guard, and the one §F2's rejected oracle got wrong.
 5. A drop inside the finish grace, after 0x0039 has arrived, produces a filled log
    screen rather than `0 OF 1 INTERVALS MEASURED`.
-6. A reload mid-session leaves a run that can be closed and logged, and a
-   subsequent Connect does not ask "Replace it?".
-7. `summary-totals` prints all five numbers, and the divergence entry fires on a
-   replayed capture where the map and TWD disagree.
+6. `summary-totals` prints all five numbers; the mid-piece TWD samples appear at
+   a bounded cadence in a replayed capture; and the divergence entry fires both
+   when the map and TWD disagree and when `seen.size` disagrees with the
+   program's interval count.
 8. Scoped gates green: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm e2e`
    with no screenshot churn, per-file coverage inspected for every file touched.
 9. **`app/domain/monitor/types.ts:37-39` is corrected.** "BOTH fields reset
