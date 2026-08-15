@@ -1086,7 +1086,14 @@ describe("session accumulator: accumulator-vs-machine divergence (CR2 spec 1 Tas
         0,
       );
 
-      h.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, new Uint8Array(20));
+      // The verdict runs at the TERMINAL since the re-walk (seq 36's false
+      // alarm) — trigger it with a finished frame carrying the same gap.
+      await tick(h, {
+        elapsed: 30,
+        distance: 50,
+        twd: 100,
+        state: WORKOUTSTATE_WORKOUTEND,
+      });
 
       const div = h.log
         .entries()
@@ -1121,7 +1128,12 @@ describe("session accumulator: accumulator-vs-machine divergence (CR2 spec 1 Tas
         0,
       );
 
-      h.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, new Uint8Array(20));
+      await tick(h, {
+        elapsed: 30,
+        distance: 50,
+        twd: 1000,
+        state: WORKOUTSTATE_WORKOUTEND,
+      });
 
       const div = h.log
         .entries()
@@ -1161,7 +1173,13 @@ describe("session accumulator: accumulator-vs-machine divergence (CR2 spec 1 Tas
         0,
       );
 
-      h.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, new Uint8Array(20));
+      await tick(h, {
+        elapsed: 30,
+        distance: 50,
+        twd: 100,
+        state: WORKOUTSTATE_WORKOUTEND,
+        workoutDurationType: 128,
+      });
 
       const div = h.log
         .entries()
@@ -1188,7 +1206,11 @@ describe("session accumulator: accumulator-vs-machine divergence (CR2 spec 1 Tas
         0,
       );
 
-      h.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, new Uint8Array(20));
+      await tick(h, {
+        elapsed: 30,
+        distance: 50,
+        state: WORKOUTSTATE_WORKOUTEND,
+      });
 
       const div = h.log
         .entries()
@@ -1826,5 +1848,69 @@ describe("session accumulator: the terminal frame's own raw bytes reach the ring
     // The consequence: the ring holds the byte-exact payload, so a
     // mid-rest finished frame on hardware can be decoded after the fact.
     expect(raws[0]!.detail).toBe(`state=finished 0x0031=${expectedHex}`);
+  });
+});
+
+describe("session accumulator: the TWD comparison runs at the terminal, not at 0x0039 (walk 2026-08-15 re-row, seq 36)", () => {
+  // Row 1 of the re-walk produced a FALSE divergence: the 0x0039 arrived
+  // before the machine's own totalWorkDistanceMeters had ticked past
+  // interval 1's value (184 against an accumulator of 367.8 — "differ by
+  // 183.8m"), and one tick later TWD read 367. The machine settles its own
+  // total AT the finish, so the comparison belongs at the terminal
+  // transition, where final-totals already reads the settled value.
+  it("does not fire on a TWD that lags at 0x0039-time and settles by the terminal", async () => {
+    const h = await programmed(TWO_INTERVAL_REST_PROGRAM);
+
+    await tick(
+      h,
+      {
+        elapsed: 60,
+        distance: 184.4,
+        twd: 184,
+        state: WORKOUTSTATE_INTERVALWORKTIME,
+      },
+      0,
+    );
+    await tick(
+      h,
+      {
+        elapsed: 0.5,
+        distance: 2,
+        twd: 184,
+        state: WORKOUTSTATE_INTERVALWORKTIME,
+      },
+      1,
+    );
+    await tick(
+      h,
+      {
+        elapsed: 59,
+        distance: 183.4,
+        twd: 184,
+        state: WORKOUTSTATE_INTERVALWORKTIME,
+      },
+      1,
+    );
+    // The 0x0039 arrives while TWD still reads interval 1's 184 — the
+    // re-row's exact ordering.
+    h.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, new Uint8Array(20));
+    // One tick later the machine settles: finished frame, TWD 367.
+    await tick(h, {
+      elapsed: 60,
+      distance: 183.4,
+      twd: 367,
+      state: WORKOUTSTATE_WORKOUTEND,
+    });
+
+    const div = h.log
+      .entries()
+      .filter(
+        (e) =>
+          e.kind === "divergence" &&
+          e.detail.includes("accumulator and machine total differ"),
+      );
+    // Honest agreement (367.8 vs 367) — no divergence anywhere, neither at
+    // 0x0039-time (the lag is not a defect) nor at the terminal.
+    expect(div).toHaveLength(0);
   });
 });
