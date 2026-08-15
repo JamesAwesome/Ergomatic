@@ -538,6 +538,32 @@ test("library", async ({ page }) => {
     path: path.join(SCREENSHOTS_DIR, "library.png"),
   });
 
+  // THE RANGE LINE HAS A VISUAL RECORD (review of the always-name-the-base
+  // change, Minor-3). Every row visible in `library.png` above carries a
+  // COLLAPSED single ref (`@ 6K+12`), so before this capture no committed
+  // image showed `structureLine`'s range form at all — the one place the
+  // baseline used to go missing was the one place nothing photographed.
+  // Ground Fog is the reported case: five pieces, offsets +12 down to +10.
+  const rangeRow = page
+    .locator(".workout-row")
+    .filter({ hasText: "Ground Fog" });
+  await rangeRow.scrollIntoViewIfNeeded();
+  // Assert the state BEFORE shooting: a capture of an empty or wrong row is
+  // recurring failure #7, and this one exists specifically to prove a string.
+  await expect(rangeRow.locator(".workout-row-structure")).toHaveText(
+    "4-6-8-6-4 @ 6K+12 → +10 · 1′ REST",
+  );
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "library-range.png"),
+  });
+  // Scroll back before the captures below: `scrollIntoViewIfNeeded` above
+  // leaves the list mid-page, and `library-sheet.png` shot the scrolled
+  // list behind its dialog the first time this ran. A capture that moves
+  // because a NEIGHBOURING capture moved is the drift these files exist to
+  // make visible, so undo the scroll rather than re-baselining the sibling.
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expect(page.locator(".workout-row").first()).toBeInViewport();
+
   // Select the chip row's own O2 chip (library-filter-unification round,
   // Task 2, spec §2 — TYPE's control now lives here, not in the sheet):
   // applies immediately, fills the chip with its own type colour, and
