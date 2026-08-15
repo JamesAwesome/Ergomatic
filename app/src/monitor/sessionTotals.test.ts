@@ -413,10 +413,25 @@ async function reprogram(h: Harness, p: WorkoutProgram): Promise<void> {
  *  trigger a `"frame"` event (`driver.ts:2639-2648`, "AS1/AS2 only merge
  *  into `raw`... they do NOT themselves trigger a frame event"), so this
  *  ordering is the only one that lets a single `tick()` call both update the
- *  count and observe its effect in the SAME returned frame. */
+ *  count and observe its effect in the SAME returned frame.
+ *
+ *  `f.workoutDurationType` (CR2 spec 1 Task 5 review, IMPORTANT-1): defaults
+ *  to `0` (time), the value every prior caller relied on implicitly. Added
+ *  so a test can feed `128` (distance) and isolate `logSummaryTotals`'s
+ *  `distanceGoal`'s WIRE arm (`raw.workoutDurationType === 128`) from its
+ *  PROGRAM-SHAPE arm (`run?.program.intervals.some(kind === "distance")`)
+ *  — the two are independently reachable halves of one OR, and only the
+ *  program-shape half had a program fixture (`DISTANCE_PROGRAM`) able to
+ *  drive it before this change. */
 async function tick(
   h: Harness,
-  f: { elapsed: number; distance: number; state: number; twd?: number },
+  f: {
+    elapsed: number;
+    distance: number;
+    state: number;
+    twd?: number;
+    workoutDurationType?: number;
+  },
   intervalCount?: number,
 ): Promise<MonitorFrame> {
   if (intervalCount !== undefined) {
@@ -448,7 +463,7 @@ async function tick(
       strokeState: 2,
       totalWorkDistanceMeters: f.twd ?? f.distance,
       workoutDurationRaw: 6000,
-      workoutDurationType: 0,
+      workoutDurationType: f.workoutDurationType ?? 0,
       dragFactor: 130,
     }),
   );
@@ -1089,6 +1104,46 @@ describe("session accumulator: accumulator-vs-machine divergence (CR2 spec 1 Tas
           distance: 50,
           twd: 1000,
           state: WORKOUTSTATE_INTERVALWORKTIME,
+        },
+        0,
+      );
+
+      h.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, new Uint8Array(20));
+
+      const div = h.log
+        .entries()
+        .filter(
+          (e) =>
+            e.kind === "divergence" &&
+            e.detail.includes("accumulator and machine total differ"),
+        );
+      expect(div).toHaveLength(0);
+    },
+  );
+
+  it(
+    "does NOT log the accumulator-vs-machine divergence when 0x0031's own " +
+      "workoutDurationType reads 128 (distance goal), ISOLATED from the " +
+      "program-shape arm — a time-kind program armed throughout, so only " +
+      "the wire byte can be suppressing this (review IMPORTANT-1: the prior " +
+      "suite had no test able to reach this arm on its own, since tick()'s " +
+      "workoutDurationType was hardcoded to 0)",
+    async () => {
+      const h = await programmed(MINIMAL_PROGRAM); // kind: "time" throughout
+
+      // Same shape as the "logs a divergence" test above (50 m accumulator,
+      // 100 m machine total, a 50 m gap past the 5 m tolerance) — the ONLY
+      // difference is `workoutDurationType: 128` on the wire. If this test
+      // passes for any reason OTHER than the wire arm, MINIMAL_PROGRAM's own
+      // kind ("time") rules out the program-shape arm as an explanation.
+      await tick(
+        h,
+        {
+          elapsed: 30,
+          distance: 50,
+          twd: 100,
+          state: WORKOUTSTATE_INTERVALWORKTIME,
+          workoutDurationType: 128,
         },
         0,
       );
