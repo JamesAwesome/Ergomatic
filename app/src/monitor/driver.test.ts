@@ -1255,37 +1255,42 @@ describe("createPm5Driver: the full happy path over a real compiled workout (Sea
     // stays quiet and the MED-2 raw-vs-raw one has nothing to report
     // either (0x0033 and 0x0037/38 agree at every boundary, which is
     // precisely why the raw values alone could never have caught D3).
-    // Scoped to those two checks by their own `detail` text (Task 11 note
-    // below), not a blanket "zero divergence entries of any kind" — CR2
-    // spec 1 Task 11's open-on-reset guard also logs kind "divergence", and
-    // this fixture's own elapsed/distance values (session-cumulative
-    // "elapsed 300+60=360" per this file's own comment above, chosen for
-    // `computeRemainingForFrame`'s checkpoint-subtraction design) collide
-    // with the register map's own per-interval premise (walk 4;
-    // `driver.ts`'s `session` doc comment) at interval 1's own opening
-    // tick: 360 is not less than key 0's own register, so the guard
-    // (correctly, by its own contract) treats the tick as unable to prove a
-    // reset and folds it into key 0 instead, logging a "refused open".
-    // This is `interface-notes.md` item 24's own still-OPEN question
-    // (whether 0x0033's Last Split checkpoint is session-cumulative or
-    // interval-relative) surfacing through a fixture built around the
-    // former reading colliding with an accumulator built around the
-    // latter — not a defect in either mechanism this test otherwise
-    // checks, and not something Task 11 resolves.
+    //
+    // One EXCEPTION, carved out by name rather than by a narrowed allowlist
+    // (task-11 fix round, review IMPORTANT-1: an allowlist of two kinds
+    // goes silent on every future divergence kind this test would
+    // otherwise still catch): CR2 spec 1 Task 11's open-on-reset guard also
+    // logs kind "divergence", and this fixture's own 0x0031 elapsed/
+    // distance values do not reset at interval 1's own opening tick
+    // (elapsed continues 120 -> 360 rather than dropping back near zero).
+    // That is NOT an open question about the wire — 0x0031's elapsed/
+    // distance being PER-INTERVAL is hardware-settled (walk 4;
+    // re-confirmed twice in the very walk this task cites:
+    // `walk-2026-08-15/session-b-poisoned.json` seq 26 "elapsed=60
+    // distance=173.3" -> seq 28 "elapsed=0 distance=0.8", and
+    // `session-a-multitest.json` seq 27 "elapsed=60.4 distance=182" -> seq
+    // 29 "elapsed=0.03 distance=0", both genuine boundary resets). This
+    // fixture's own elapsed/distance values are simply unrealistic here and
+    // owed a fix; `interface-notes.md` item 24's still-open question is
+    // about a DIFFERENT field (0x0033's Last Split checkpoint pair,
+    // `lastSplitTimeSeconds`/`lastSplitDistanceMeters`, which
+    // `computeRemainingForFrame` subtracts from 0x0031's own elapsed to
+    // recover per-interval progress) — item 24 is only why fixing this
+    // fixture is more than a two-number edit: the fake currently roots that
+    // checkpoint at each boundary's own CUMULATIVE totals
+    // (`lastBoundaryCumulative`, `fake.ts`), so making elapsed itself
+    // reset per-interval would also require reworking that rooting (and
+    // every downstream `intervalRemaining` assertion in this test) to stay
+    // consistent — out of scope for Task 11, tracked separately. Denylist
+    // form below so a real future divergence (any OTHER kind) still fails
+    // this test, exactly as it did before Task 11 existed.
     expect(
       log
         .entries()
-        .some(
-          (e) =>
-            e.kind === "divergence" &&
-            e.detail.includes("has no corresponding interval"),
+        .filter(
+          (e) => e.kind === "divergence" && !e.detail.includes("refused open"),
         ),
-    ).toBe(false);
-    expect(
-      log
-        .entries()
-        .some((e) => e.kind === "divergence" && e.detail.includes("0x0037/38")),
-    ).toBe(false);
+    ).toHaveLength(0);
     // D5, end to end over a real workout: the closing tick had no belt, and
     // the fake sent the byte the machine sent for that — `0`, not 255.
     // Either way this must reach a consumer as "no reading".

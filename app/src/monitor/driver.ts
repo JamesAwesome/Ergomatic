@@ -1130,6 +1130,24 @@ export function createPm5Driver(
   let session = {
     seen: new Map<number, { elapsedSeconds: number; distanceMeters: number }>(),
   };
+  /** FIRST-SIGHTING GATE for the open-on-reset guard's "refused open"
+   *  divergence (CR2 spec 1 Task 11 fix round, review IMPORTANT-3) — same
+   *  idiom as `seenCharacteristics` above (a `Set` recording the first
+   *  arrival of something, silent after). The disclosed-edge scenario the
+   *  guard's own comment names refuses on EVERY tick of the affected
+   *  interval, not just the poison tick: once a key is wrongly refused, the
+   *  open key it folds into keeps growing to match each new (still
+   *  climbing) reading, so the NEXT tick refuses too — self-sustaining for
+   *  as long as the interval runs, at the ~2/s status-tick rate, which at a
+   *  240s interval is up to ~480 entries into the SAME 500-entry ring the
+   *  `"frame"`/`"twd-sample"`/`"structure"` on-change gates above already
+   *  exist to protect (their own comments cite the identical flood
+   *  mechanism). Logged once per DISTINCT refused key, not once ever: a
+   *  second key refused later in the same run is a second, genuinely new
+   *  fact and still gets its own entry. Reset alongside `session` on every
+   *  successful `program()` (below) — a re-armed run's own first refusal
+   *  is a new fact too, not a repeat of the outgoing run's. */
+  let refusedKeysLogged = new Set<number>();
   /** R0 (CR2 spec 1, Task 1). The last totals actually PUT ON A FRAME.
    *  `logSummaryTotals` fires on 0x0039, which carries no per-interval pair
    *  of its own, so the value the rower last saw has to be remembered
@@ -1871,6 +1889,13 @@ export function createPm5Driver(
     // key. The total stays monotone; the undercount is bounded by that one
     // tick's own reading, and the divergence log below is what a future
     // capture can use to tell this apart from the poison it guards against.
+    //
+    // The LOG is gated by `refusedKeysLogged` (its own comment, above) —
+    // ONE entry the first time a given key is refused, silent on every
+    // later refusal of that SAME key. The WRITE below (folding into
+    // `openKey`) is never gated: every refused tick's reading still
+    // max-merges in, so the total stays exactly as accurate as it would be
+    // with the log unthrottled — only the trace volume changes.
     if (
       activeKey !== null &&
       session.seen.size > 0 &&
@@ -1879,13 +1904,16 @@ export function createPm5Driver(
       const openKey = Math.max(...session.seen.keys());
       const openRegister = session.seen.get(openKey)!;
       if (!(base.elapsedSeconds < openRegister.elapsedSeconds)) {
-        log.record(
-          "divergence",
-          `key ${activeKey} refused open: elapsed=${base.elapsedSeconds} ` +
-            `distance=${base.distanceMeters} is not before key ${openKey}'s ` +
-            `own elapsed register (${openRegister.elapsedSeconds}) — merged ` +
-            `into key ${openKey} instead`,
-        );
+        if (!refusedKeysLogged.has(activeKey)) {
+          refusedKeysLogged.add(activeKey);
+          log.record(
+            "divergence",
+            `key ${activeKey} refused open: elapsed=${base.elapsedSeconds} ` +
+              `distance=${base.distanceMeters} is not before key ${openKey}'s ` +
+              `own elapsed register (${openRegister.elapsedSeconds}) — merged ` +
+              `into key ${openKey} instead`,
+          );
+        }
         activeKey = openKey;
       }
     }
@@ -4004,6 +4032,10 @@ export function createPm5Driver(
         // not be carried into it — the new run's first frame would otherwise
         // max-merge into a key that belongs to a workout it never saw.
         session = { seen: new Map() };
+        // `refusedKeysLogged`'s own comment: the gate is per-run state,
+        // same as `session` it rides alongside — a re-armed run's own
+        // first refusal is a new fact, not a repeat of the outgoing run's.
+        refusedKeysLogged = new Set();
         // Diagnostics-only (R0, Task 1's own doc comment): the outgoing
         // run's last-seen totals belong to that run, not the new one.
         lastEmittedTotals = { elapsedSeconds: 0, distanceMeters: 0 };

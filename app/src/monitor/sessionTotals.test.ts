@@ -1559,4 +1559,124 @@ describe("session accumulator: the walk's falsification (CR2 spec 1 Task 11)", (
       expect(div).toHaveLength(1);
     },
   );
+
+  it(
+    "the refusal divergence is a FIRST-SIGHTING gate per refused key, not " +
+      "unthrottled (fix round review IMPORTANT-3): the disclosed-edge " +
+      "shape refuses on EVERY tick of the affected interval (~2/s), which " +
+      "would otherwise evict the 500-entry ring's programming trace and " +
+      "walk evidence — only the first refusal of a given key logs",
+    async () => {
+      const h = await programmed(TWO_INTERVAL_REST_PROGRAM);
+
+      await tick(
+        h,
+        { elapsed: 30, distance: 75, state: WORKOUTSTATE_INTERVALWORKTIME },
+        0,
+      );
+
+      // Six consecutive ticks that all resolve to program index 1 (a NEW
+      // key relative to `session.seen`, which only ever holds key 0 here)
+      // and all refuse: key 0 keeps absorbing each reading by max-merge,
+      // growing to match it exactly, so the NEXT tick's own (still
+      // climbing) elapsed is never less than key 0's own just-updated
+      // register — the self-sustaining shape the review named. Every one
+      // of these six is individually a genuine refusal (traced by hand,
+      // not merely repeated inputs): 59 refused against key 0's 30, then
+      // 65 against 59, 70 against 65, 75 against 70, 80 against 75, 85
+      // against 80 — six distinct comparisons, six distinct refusals.
+      const readings = [
+        { elapsed: 59, distance: 130 },
+        { elapsed: 65, distance: 140 },
+        { elapsed: 70, distance: 150 },
+        { elapsed: 75, distance: 160 },
+        { elapsed: 80, distance: 170 },
+        { elapsed: 85, distance: 180 },
+      ];
+      for (const r of readings) {
+        await tick(
+          h,
+          {
+            elapsed: r.elapsed,
+            distance: r.distance,
+            state: WORKOUTSTATE_INTERVALREST,
+          },
+          2,
+        );
+      }
+
+      // Exactly ONE "refused open" entry for key 1 despite six refusing
+      // ticks — the first sighting, then silence for the rest of this run.
+      const refused = h.log
+        .entries()
+        .filter((e) => e.kind === "divergence" && e.detail.includes("refused"));
+      expect(refused).toHaveLength(1);
+      expect(refused[0]!.detail).toContain("key 1");
+      // The FIRST refused tick's own reading (59/130), not a later one —
+      // first sighting means the earliest occurrence is what's on record.
+      expect(refused[0]!.detail).toContain("59");
+      expect(refused[0]!.detail).toContain("130");
+
+      // The total still reflects every refused reading (max-merge keeps
+      // growing key 0 on every tick; only the LOG is throttled, never the
+      // write).
+      const f = await tick(
+        h,
+        { elapsed: 85, distance: 180, state: WORKOUTSTATE_INTERVALREST },
+        2,
+      );
+      expect(f.sessionDistanceMeters).toBeCloseTo(180, 1);
+    },
+  );
+
+  it(
+    "a re-armed run's own first refusal logs again — the first-sighting " +
+      "gate is per-RUN state, not permanent process state",
+    async () => {
+      const h = await programmed(TWO_INTERVAL_REST_PROGRAM);
+
+      await tick(
+        h,
+        { elapsed: 30, distance: 75, state: WORKOUTSTATE_INTERVALWORKTIME },
+        0,
+      );
+      await tick(
+        h,
+        { elapsed: 59, distance: 130, state: WORKOUTSTATE_INTERVALREST },
+        2,
+      );
+      const firstRunRefusals = h.log
+        .entries()
+        .filter((e) => e.kind === "divergence" && e.detail.includes("refused"));
+      expect(firstRunRefusals).toHaveLength(1);
+
+      // Close the run before re-arming (`reprogram`'s own doc comment cites
+      // this file's other re-arm test doing the same) — a terminate first,
+      // matching the one other re-arm test in this file.
+      await tick(h, {
+        elapsed: 60,
+        distance: 130,
+        state: WORKOUTSTATE_TERMINATE,
+      });
+      await reprogram(h, TWO_INTERVAL_REST_PROGRAM);
+
+      await tick(
+        h,
+        { elapsed: 20, distance: 50, state: WORKOUTSTATE_INTERVALWORKTIME },
+        0,
+      );
+      // Same shape, same key (1), in the NEW run — if the gate were global
+      // (not reset alongside `session` on re-arm) this would stay silent.
+      await tick(
+        h,
+        { elapsed: 40, distance: 90, state: WORKOUTSTATE_INTERVALREST },
+        2,
+      );
+
+      const allRefusals = h.log
+        .entries()
+        .filter((e) => e.kind === "divergence" && e.detail.includes("refused"));
+      expect(allRefusals).toHaveLength(2);
+    },
+  );
 });
