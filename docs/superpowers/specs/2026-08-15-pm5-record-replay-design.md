@@ -97,6 +97,20 @@ not a PM5 concept; the PM5's authoritative time rides in the payloads.
   arrival order is exactly where our last two defects lived (the
   0x0031/0x0033 skew).
 
+### Adopt-vs-build (verified against the registry, 2026-08-15)
+
+No third-party package is adopted; each candidate was checked, not assumed:
+ErgometerJS is unpublished on npm and bound to its own driver stack
+(pattern source only); `web-bluetooth-mock` is stale (2023) and mocks
+`navigator.bluetooth`, a seam below ours that cannot cover Capacitor;
+`react-native-ble-plx-mock-recorder` is bound to the RN BLE library's API;
+rrweb records the DOM and Polly.js records HTTP. Compression needs no
+dependency: `CompressionStream` is native in browser and Node 26 (verified
+locally), and the Node test side already uses `node:zlib`. The virtual
+clock uses the driver's own injectable `now`/`schedule`. The one component
+with engineering weight — the barrier scheduler honouring our driver's
+ack-gating — is bespoke to that driver by nature; no package supplies it.
+
 ## Scope ruling (PM design gate, 2026-08-15)
 
 PM verdict: **GO-WITH-CHANGES**, all four changes accepted by James:
