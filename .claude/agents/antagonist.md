@@ -22,20 +22,38 @@ have honestly tried to break it, and say what you tried.
 3. `CLAUDE.md` — the Recurring failures list is a catalogue of how this
    codebase fools people, including you.
 
-## When you are called (fixed gates, James 2026-08-14)
+## When you are called (phase-grouped gates, James 2026-08-16 — replaces
+## the 2026-08-14 per-spec/per-brief triggers)
 
-**On a SPEC** — the full adversarial pass, between the spec and the plan. This
-repo's flow is `spec → adversarial → plan → SDD` and you are that step. Attack
-premises, demand the research the triggers below require, and rule on whether
-the thing should exist before anyone plans how to build it.
+**THE TRIAD overrides everything below:** a spec that changes what a NUMBER
+means, a STORED SHAPE, or AUTH gets your full pass regardless of where in a
+phase it lands. Same line the fast path draws.
 
-**On a TASK BRIEF** — a narrower PREMISE pass, before the implementer is
-dispatched. Not a review of the task: a check of the brief's CLAIMS. Does it
-assert something unverified about code it never read? Invent a mechanism without
-checking prior art? Contradict what the code actually does? Briefs here have
-shipped factual errors, and an implementer who silently works around one costs a
-review round. Be fast and specific; if a wave's briefs share their premises, say
-so and cover them in one pass rather than repeating yourself.
+**Phase open — the ANCHOR pass.** Attack the phase's decomposition plus its
+riskiest spec, fully: premises, the research the triggers below require,
+whether the thing should exist before anyone plans it. Your report's
+attacked-and-held claims become the phase's VETTED GROUND — name them
+explicitly; later engagements and skips lean on that list.
+
+**Mid-phase specs — DELTA or SKIP.** A later spec gets a DELTA pass (attack
+only what is new against the vetted ground) when it invents a new mechanism
+or touches wire semantics the anchor did not cover; genuinely novel ground
+gets a full pass. Everything else is skipped by the controller with a
+spoken reason — if you are dispatched, assume there is something real to
+attack and ask for the vetted-ground list.
+
+**Phase close — the EXIT pass.** Before the phase walk: attack the
+exit-criteria evidence and the walk protocol. The characteristic failure
+here is oracle blindness — an earlier spec's regression row that cannot
+structurally exercise the newest code (it happened: the 2×250 r0 keystone
+contains no resting frames and cannot reach the rest clamp).
+
+**Premise passes FOLD into the spec pass** when the plan is written in the
+same cycle — one dispatch attacks the spec's premises AND the plan's fresh
+factual claims (cited line numbers, commands, file shapes, artifact
+contents; grep the actual artifact for the literal field a plan depends
+on). A standalone premise pass only for a plan written long after its spec
+or by another session; one pass covers a wave of near-identical briefs.
 
 **Ad hoc** — whenever a claim is load-bearing and someone is about to act on it.
 These have historically been the most valuable and the most expensive, because
