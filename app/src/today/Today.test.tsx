@@ -1,7 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
+import {
+  MemoryRouter,
+  Route,
+  Routes,
+  useLocation,
+  useParams,
+} from "react-router-dom";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import { ONBOARDING_LIBRARY_WORKOUTS } from "../../server/seed/library/onboarding";
 import type { LibraryWorkout } from "../api/useWorkouts";
@@ -256,6 +262,19 @@ function LocationProbe() {
   const location = useLocation();
   const from = (location.state as { from?: unknown } | null)?.from;
   return <p>PROBE from={String(from)}</p>;
+}
+
+// F6 (2b), Task 4: "Log it"'s target is `/library/:id/log?from=monitor` —
+// a real query string, not `state`, so the probe reads `useParams`/
+// `location.search` rather than `LocationProbe`'s own `location.state`.
+function LogRouteProbe() {
+  const { id } = useParams();
+  const location = useLocation();
+  return (
+    <p>
+      LOG ROUTE PROBE id={id} search={location.search}
+    </p>
+  );
 }
 
 // Today links into both a workout's detail page (the suggestion card) and
@@ -1628,6 +1647,26 @@ describe("Today (empty library)", () => {
   });
 });
 
+// Phase 7A Task 5 fixture, hoisted to module scope in the F6 spec 2b round
+// so both this describe block's own LIVE/completed guard tests below AND
+// the "interrupted connected session row" describe further down (2b, Task
+// 4) can build a MonitorRun from the same shape rather than two near-copies
+// drifting apart.
+function makeMonitorRun(overrides: Partial<MonitorRun>): MonitorRun {
+  return {
+    v: 1,
+    workoutId: "w-warmfront",
+    title: "Stationary Front",
+    program: { intervals: [] },
+    actuals: [],
+    deviceName: "PM5 (test)",
+    startedAt: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(),
+    completedAt: null,
+    terminated: false,
+    ...overrides,
+  };
+}
+
 describe("Today (stale draft discard on mount)", () => {
   function makeDraft(overrides: Partial<SessionDraft>): SessionDraft {
     return {
@@ -1740,22 +1779,8 @@ describe("Today (stale draft discard on mount)", () => {
   // Today.tsx's own comment on why a MONITOR run protects while LIVE
   // (nothing sets this draft's `startedAt` while the erg, not this
   // screen's timer, owns pacing) rather than while completed-and-unlogged
-  // like the sessionRun case.
-  function makeMonitorRun(overrides: Partial<MonitorRun>): MonitorRun {
-    return {
-      v: 1,
-      workoutId: "w-warmfront",
-      title: "Stationary Front",
-      program: { intervals: [] },
-      actuals: [],
-      deviceName: "PM5 (test)",
-      startedAt: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(),
-      completedAt: null,
-      terminated: false,
-      ...overrides,
-    };
-  }
-
+  // like the sessionRun case. `makeMonitorRun` itself is now module-scope
+  // (see above) — used here and in the 2b interrupted-row describe below.
   it("keeps a stale, never-started-looking draft when a monitor run is LIVE", async () => {
     const stale = makeDraft({
       createdAt: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(),
@@ -2149,6 +2174,245 @@ describe("Today (Task 3: unlogged row's staged Discard)", () => {
     expect(document.querySelector(".today-card")?.getAttribute("href")).toBe(
       cardHrefBefore,
     );
+  });
+});
+
+// F6 (2b), Task 4: Today's OTHER twin row — an interrupted connected
+// session (`MonitorRun`, `completedAt === null`) the rower is closing
+// through Today rather than through the monitor itself. Same staged-Discard
+// shape as Task 3's `UnloggedRow` above, deliberately mirrored fixture for
+// fixture (`unloggedRunFor`/`makeMonitorRun`), so a reviewer can read the
+// two describe blocks side by side and see exactly where they diverge: the
+// copy ("interrupted connected session." vs "unlogged session."), Log it's
+// target (a stamp-then-navigate button, not a bare `<Link>`), the discard
+// body (`clearMonitorRun()` only — the session/draft records are a
+// DIFFERENT rower's-in-progress-phone-timer concern this row must never
+// touch), and the null-`workoutId` latent (no Log it at all).
+describe("Today (2b): the interrupted connected session row", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("shows the row for a dead MonitorRun, naming the workout and the evidence", async () => {
+    localStorage.setItem(
+      MONITOR_RUN_KEY,
+      JSON.stringify(makeMonitorRun({ completedAt: null })),
+    );
+    mockReady();
+    await renderToday();
+
+    const row = screen
+      .getByText(/interrupted connected session\./)
+      .closest(".today-unlogged-line");
+    if (!row) throw new Error("row not found");
+    const rowScope = within(row as HTMLElement);
+    expect(rowScope.getByText("Stationary Front")).toBeVisible();
+    expect(rowScope.getByRole("button", { name: "Log it" })).toBeVisible();
+    expect(
+      rowScope.getByRole("button", {
+        name: "Discard connected session without logging",
+      }),
+    ).toBeVisible();
+  });
+
+  it("shows no row when there is no MonitorRun record at all", async () => {
+    mockReady();
+    await renderToday();
+    expect(
+      screen.queryByText(/interrupted connected session/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows no row for a completed MonitorRun — a completed-but-unlogged monitor record is ruled OUT of 2b", async () => {
+    localStorage.setItem(
+      MONITOR_RUN_KEY,
+      JSON.stringify(makeMonitorRun({ completedAt: new Date().toISOString() })),
+    );
+    mockReady();
+    await renderToday();
+    expect(
+      screen.queryByText(/interrupted connected session/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("Log it stamps the interrupted door and lands on the monitor log route", async () => {
+    localStorage.setItem(
+      MONITOR_RUN_KEY,
+      JSON.stringify(
+        makeMonitorRun({ completedAt: null, workoutId: "w-warmfront" }),
+      ),
+    );
+    mockReady();
+    const { default: Today } = await import("./Today");
+    render(
+      <MemoryRouter initialEntries={["/today"]}>
+        <Routes>
+          <Route path="/today" element={<Today />} />
+          <Route path="/library/:id/log" element={<LogRouteProbe />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await screen.findByRole("heading", { name: "Today" });
+
+    await userEvent.click(screen.getByRole("button", { name: "Log it" }));
+
+    expect(
+      await screen.findByText(
+        "LOG ROUTE PROBE id=w-warmfront search=?from=monitor",
+      ),
+    ).toBeVisible();
+
+    const { loadMonitorRun } = await import("../monitor/monitorRun");
+    const stamped = loadMonitorRun();
+    expect(stamped?.completedAt).not.toBeNull();
+    expect(stamped?.endedBy).toBe("interrupted");
+  });
+
+  it("discard is staged: first tap arms in place, second tap clears ONLY the monitor record", async () => {
+    // A completed-but-unlogged SessionRun AND a draft, both real fixtures —
+    // the exact records `useStagedDiscard().fire()` would clear (wrongly,
+    // for this row) if `handleDiscardClick` ever called it instead of
+    // `clearMonitorRun()` directly. Both rows render at once (Task 3's
+    // UnloggedRow beside this one), which is why every query below is
+    // scoped with `within()` on the row under test.
+    const sessionRun = unloggedRunFor(
+      new Date("2026-08-01T11:00:00.000Z"),
+      new Date("2026-08-01T11:40:00.000Z"),
+    );
+    localStorage.setItem(RUN_KEY, JSON.stringify(sessionRun));
+
+    const w = LIBRARY_WORKOUTS.find((s) => s.title === "Filling Low");
+    if (!w) throw new Error("missing library fixture: Filling Low");
+    const draft = buildDraft({
+      id: "w-fillinglow",
+      title: w.title,
+      type: w.type as WorkoutType,
+      steps: w.steps,
+    });
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+
+    localStorage.setItem(
+      MONITOR_RUN_KEY,
+      JSON.stringify(makeMonitorRun({ completedAt: null })),
+    );
+
+    // Realistic exported-log-shaped strings (the shape `useMonitorSession`'s
+    // own teardown stash writes, `useMonitorSession.test.ts`'s own
+    // fixtures) — not empty strings, so "the stash survives" means
+    // something.
+    const monitorLog = JSON.stringify([
+      { seq: 1, kind: "write", detail: "0x0031 general status" },
+      { seq: 2, kind: "record-actual", detail: "accepted index=0" },
+    ]);
+    const rowedLog = JSON.stringify([
+      { seq: 1, kind: "write", detail: "0x0031 general status" },
+    ]);
+    sessionStorage.setItem("ergomatic:last-monitor-log", monitorLog);
+    sessionStorage.setItem("ergomatic:last-rowed-log", rowedLog);
+
+    mockReady();
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    await renderToday();
+
+    const row = screen
+      .getByText(/interrupted connected session\./)
+      .closest(".today-unlogged-line");
+    if (!row) throw new Error("row not found");
+    const rowScope = within(row as HTMLElement);
+
+    await userEvent.click(
+      rowScope.getByRole("button", {
+        name: "Discard connected session without logging",
+      }),
+    );
+    await userEvent.click(rowScope.getByRole("button", { name: "Tap again" }));
+
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+    // The wrong records — Discard clears the MONITOR record only.
+    expect(localStorage.getItem(RUN_KEY)).not.toBeNull();
+    expect(localStorage.getItem(DRAFT_KEY)).not.toBeNull();
+    expect(sessionStorage.getItem("ergomatic:last-monitor-log")).toBe(
+      monitorLog,
+    );
+    expect(sessionStorage.getItem("ergomatic:last-rowed-log")).toBe(rowedLog);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(
+      screen.queryByText(/interrupted connected session/),
+    ).not.toBeInTheDocument();
+    // No navigation: still on Today.
+    expect(screen.getByRole("heading", { name: "Today" })).toBeVisible();
+  });
+
+  it("armed row moves focus to the confirm button and blur disarms (parity with UnloggedRow)", async () => {
+    localStorage.setItem(
+      MONITOR_RUN_KEY,
+      JSON.stringify(makeMonitorRun({ completedAt: null })),
+    );
+    mockReady();
+    await renderToday();
+
+    await userEvent.click(
+      screen.getByRole("button", {
+        name: "Discard connected session without logging",
+      }),
+    );
+    const armed = screen.getByRole("button", { name: "Tap again" });
+    expect(document.activeElement).toBe(armed);
+
+    act(() => armed.blur());
+
+    expect(
+      screen.getByRole("button", {
+        name: "Discard connected session without logging",
+      }),
+    ).toBeInTheDocument();
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).not.toBeNull();
+  });
+
+  it("auto-disarms after 4s (parity)", async () => {
+    localStorage.setItem(
+      MONITOR_RUN_KEY,
+      JSON.stringify(makeMonitorRun({ completedAt: null })),
+    );
+    mockReady();
+    await renderToday();
+    vi.useFakeTimers();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Discard connected session without logging",
+      }),
+    );
+    expect(
+      screen.getByRole("button", { name: "Tap again" }),
+    ).toBeInTheDocument();
+
+    await act(() => vi.advanceTimersByTimeAsync(4000));
+
+    expect(
+      screen.getByRole("button", {
+        name: "Discard connected session without logging",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("an anonymous run (workoutId null) gets the row without Log it — unreachable today (only WorkoutDetail programs), latent per spec", async () => {
+    localStorage.setItem(
+      MONITOR_RUN_KEY,
+      JSON.stringify(makeMonitorRun({ completedAt: null, workoutId: null })),
+    );
+    mockReady();
+    await renderToday();
+
+    expect(screen.getByText(/interrupted connected session\./)).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Log it" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: "Discard connected session without logging",
+      }),
+    ).toBeVisible();
   });
 });
 

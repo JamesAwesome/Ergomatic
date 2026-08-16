@@ -53,8 +53,19 @@ describe("Today's cold-start guard is untouched by Phase 7B (spec §3)", () => {
     // inside the block above: the collapsing helper may be NAMED in this
     // screen (its guard comment explains at length why it isn't used) but
     // must never be imported, which is the only way it could be called.
+    //
+    // F6 spec 2b, Task 4 (antagonist correction 2, binding): the import
+    // WIDENED to bring in `clearMonitorRun`/`completeInterruptedRun`/
+    // `MonitorRun` for Today's own new interrupted-connected-session row —
+    // `loadMonitorRun` itself is untouched and still comes from the same
+    // module via a named import, so the guard-block constant above (the
+    // thing this pin actually protects) needed no change. Widening this
+    // one line is exactly what this file's own header sanctions ("If a
+    // LATER phase legitimately changes this guard, update this constant
+    // ... and say why") for the import line specifically, since the import
+    // is asserted here as a SEPARATE claim from the guard block itself.
     expect(source).toContain(
-      'import { loadMonitorRun } from "../monitor/monitorRun";',
+      'import {\n  loadMonitorRun,\n  clearMonitorRun,\n  completeInterruptedRun,\n  type MonitorRun,\n} from "../monitor/monitorRun";',
     );
     expect(source).not.toMatch(/import\s*\{[^}]*\banyLiveSession\b/);
   });
