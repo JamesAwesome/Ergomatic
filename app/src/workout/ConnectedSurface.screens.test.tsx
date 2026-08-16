@@ -48,7 +48,7 @@ import type {
 import { buildDraft } from "../session/draft";
 import { buildRun, type EnginePhase } from "../session/engine";
 import ConnectedSurface, { LAST_PANE_KEY } from "./ConnectedSurface";
-import type { PaneId } from "./connected/PagerRail";
+import type { PaneId } from "./connected/SegmentedControl";
 
 const baselines: Baselines = { k2Seconds: 112, k6Seconds: 122 };
 const t0 = new Date("2026-08-07T09:00:00.000Z");
@@ -263,7 +263,7 @@ function capture(pane: PaneId, options: CaptureOptions = {}): string {
 }
 
 /** The rower's own gesture, not a prop: three deliberate presses on one
- *  pager target (handoff §5). */
+ *  control half (handoff §5). */
 function tripleTapGrid(): void {
   const target = screen.getByRole("button", { name: "Grid pane" });
   fireEvent.click(target);

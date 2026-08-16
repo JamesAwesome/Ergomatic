@@ -51,14 +51,12 @@ import { totalSessionSecondsOf } from "../session/Timer";
 import { ARM_TIMEOUT_MS } from "../session/useStagedDiscard";
 import { commentStrippedSource, type CssRule, cssRules } from "../test/cssView";
 import { buildSurfaceModel } from "./connected/surfaceModel";
-import { PANES } from "./connected/PagerRail";
+import { PANES } from "./connected/SegmentedControl";
 import ConnectedInterstitial from "./ConnectedInterstitial";
 import ConnectedSurface, {
   DEFAULT_PANE,
   LAST_PANE_KEY,
-  SWIPE_THRESHOLD_PX,
   loadLastPane,
-  paneAfterSwipe,
 } from "./ConnectedSurface";
 
 // A spy over the REAL implementation, not a stub (the same
@@ -255,17 +253,12 @@ function renderSurface(
   return { ...view, session: current, onEnded };
 }
 
-/** The rail is the fallback; these are its two targets by accessible name
- *  (the visible long/short label pair is `aria-hidden` — both ship in
- *  every orientation, so neither can be the name). */
-function railButton(pane: "Live" | "Grid") {
+/** The segmented control's two halves, by accessible name (the visible
+ *  `LIVE`/`GRID` word is `aria-hidden` — RULING, antagonist correction 2:
+ *  the names carry over from the retired `PagerRail` unchanged, since ~27
+ *  selectors across unit/e2e/fixtures already anchor on them). */
+function controlHalf(pane: "Live" | "Grid") {
   return screen.getByRole("button", { name: `${pane} pane` });
-}
-
-function swipe(deltaX: number): void {
-  const surface = document.querySelector(".connected-surface")!;
-  fireEvent.touchStart(surface, { touches: [{ clientX: 200 }] });
-  fireEvent.touchEnd(surface, { changedTouches: [{ clientX: 200 + deltaX }] });
 }
 
 beforeEach(() => {
@@ -359,18 +352,18 @@ describe("armed's first frame, in the DOM (I-1)", () => {
 describe("landing and persistence (handoff §3: per ROWER, first-ever lands B)", () => {
   it("lands on pane B the first time this rower ever connects", () => {
     renderSurface();
-    expect(railButton("Live")).toHaveAttribute("aria-current", "page");
+    expect(controlHalf("Live")).toHaveAttribute("aria-current", "page");
     expect(DEFAULT_PANE).toBe("live");
   });
 
   it("lands on whichever pane the rower last used, not on the workout's", async () => {
     const first = renderSurface();
-    await userEvent.click(railButton("Grid"));
+    await userEvent.click(controlHalf("Grid"));
     expect(localStorage.getItem(LAST_PANE_KEY)).toBe("grid");
     first.unmount();
 
     renderSurface();
-    expect(railButton("Grid")).toHaveAttribute("aria-current", "page");
+    expect(controlHalf("Grid")).toHaveAttribute("aria-current", "page");
   });
 
   it("ignores a garbage stored value rather than rendering nothing", () => {
@@ -396,7 +389,7 @@ describe("landing and persistence (handoff §3: per ROWER, first-ever lands B)",
     expect(loadLastPane()).toBe(DEFAULT_PANE);
     // And the real surface renders it, not just the loader function.
     renderSurface();
-    expect(railButton("Live")).toHaveAttribute("aria-current", "page");
+    expect(controlHalf("Live")).toHaveAttribute("aria-current", "page");
   });
 
   it("survives storage throwing outright", () => {
@@ -407,139 +400,40 @@ describe("landing and persistence (handoff §3: per ROWER, first-ever lands B)",
   });
 });
 
-describe("swipe is the real navigation, 60px (handoff §3)", () => {
-  // The constant itself, not just behaviour relative to it: every other
-  // test in this block reads `SWIPE_THRESHOLD_PX`, so a changed threshold
-  // would move them all in lockstep and none of them would notice.
-  it("is 60px, the handoff's own number", () => {
-    expect(SWIPE_THRESHOLD_PX).toBe(60);
-  });
+// The swipe handler is GONE (CR2 spec 3 task 1, design spec Ruling 4: "not
+// riding the phase's only canary build. It can return later behind a device
+// verification"). `SegmentedControl` is the only way to change panes now —
+// its own `SegmentedControl.test.tsx` covers the control in isolation; the
+// describe block below covers it wired into the real shell (triple-tap,
+// focus restore, landmark structure).
 
-  it("moves the pane at a literal 60px drag and not at 59", () => {
+describe("the control is LABELLED (handoff §3, DEVIATIONS row 4)", () => {
+  it("carries exactly two labelled halves, never bare dots", () => {
+    // `SegmentedControl` (CR2 spec 3 task 1) drops `PagerRail`'s decorative
+    // mark and its long/short label pair entirely — a single visible word
+    // per half, `--c-size-control` the same size in every orientation
+    // (design spec §1), so unlike the retired rail there is no second class
+    // pair for a media query to toggle.
     renderSurface();
-    swipe(59);
-    expect(railButton("Live")).toHaveAttribute("aria-current", "page");
-    swipe(-60);
-    expect(railButton("Grid")).toHaveAttribute("aria-current", "page");
-  });
-
-  it("does nothing below the threshold", () => {
-    expect(paneAfterSwipe("live", -(SWIPE_THRESHOLD_PX - 1))).toBe("live");
-    expect(paneAfterSwipe("live", SWIPE_THRESHOLD_PX - 1)).toBe("live");
-  });
-
-  it("moves at exactly the threshold", () => {
-    expect(paneAfterSwipe("live", -SWIPE_THRESHOLD_PX)).toBe("grid");
-    expect(paneAfterSwipe("grid", SWIPE_THRESHOLD_PX)).toBe("live");
-  });
-
-  it("clamps at both ends rather than wrapping", () => {
-    expect(paneAfterSwipe("live", SWIPE_THRESHOLD_PX * 2)).toBe("live");
-    expect(paneAfterSwipe("grid", -SWIPE_THRESHOLD_PX * 2)).toBe("grid");
-  });
-
-  it("drives the real surface, and persists what it lands on", () => {
-    renderSurface();
-    expect(railButton("Live")).toHaveAttribute("aria-current", "page");
-
-    swipe(-(SWIPE_THRESHOLD_PX + 10));
-    expect(railButton("Grid")).toHaveAttribute("aria-current", "page");
-    expect(localStorage.getItem(LAST_PANE_KEY)).toBe("grid");
-
-    swipe(SWIPE_THRESHOLD_PX + 10);
-    expect(railButton("Live")).toHaveAttribute("aria-current", "page");
-    expect(localStorage.getItem(LAST_PANE_KEY)).toBe("live");
-  });
-
-  it("ignores a touch end with no touch start behind it", () => {
-    renderSurface();
-    const surface = document.querySelector(".connected-surface")!;
-    // A gesture that began somewhere else entirely (a scroll handed off, a
-    // synthetic event): there is no origin to measure against.
-    fireEvent.touchEnd(surface, { changedTouches: [{ clientX: 500 }] });
-    expect(railButton("Live")).toHaveAttribute("aria-current", "page");
-  });
-
-  it("ignores a touch start that carries no touch, and its end", () => {
-    renderSurface();
-    const surface = document.querySelector(".connected-surface")!;
-    fireEvent.touchStart(surface, { touches: [] });
-    fireEvent.touchEnd(surface, { changedTouches: [{ clientX: 500 }] });
-    expect(railButton("Live")).toHaveAttribute("aria-current", "page");
-
-    fireEvent.touchStart(surface, { touches: [{ clientX: 200 }] });
-    fireEvent.touchEnd(surface, { changedTouches: [] });
-    expect(railButton("Live")).toHaveAttribute("aria-current", "page");
-  });
-
-  it("a short drag leaves the pane alone", () => {
-    renderSurface();
-    swipe(SWIPE_THRESHOLD_PX - 1);
-    expect(railButton("Live")).toHaveAttribute("aria-current", "page");
-  });
-});
-
-describe("the pager is LABELLED (handoff §3, DEVIATIONS row 4)", () => {
-  it("carries both label sets in both orientations, never bare dots", () => {
-    // LIVE and GRID's own long and short forms are IDENTICAL text (unlike
-    // the retired TIMER/TMR pair), so a `textContent` check can no longer
-    // prove both label spans exist — this checks the DOM shape instead:
-    // every target renders both classes, whichever the orientation query
-    // then shows or hides.
-    renderSurface();
-    const pager = screen.getByRole("navigation", { name: "Connected panes" });
-    const buttons = within(pager).getAllByRole("button");
-    // Two targets, and every one of them names what is behind it.
+    const nav = screen.getByRole("navigation", { name: "Connected panes" });
+    const buttons = within(nav).getAllByRole("button");
     expect(buttons).toHaveLength(2);
-    // …and the rail holds NOTHING BUT those two (James's erg walk,
-    // 2026-08-13): the decorative 11x104 camera-housing spacer that used to
-    // interleave between them is deleted — `PagerRail.tsx`'s own header
-    // says why. A child census rather than a `querySelector` null check
-    // because landscape divides this column with `justify-content:
-    // space-between`, which places its children by COUNT: a third child
-    // reappearing would push LIVE and GRID off the ends it puts them on,
-    // and only counting catches that.
-    expect(Array.from(pager.children).map((el) => el.tagName)).toStrictEqual([
+    // …and the control holds NOTHING BUT those two (carried over from the
+    // rail's own child census, James's erg walk 2026-08-13): a child census
+    // rather than a `querySelector` null check because landscape divides
+    // this column with CSS that places children by COUNT, so a third child
+    // reappearing would push LIVE and GRID off the ends it puts them on.
+    expect(Array.from(nav.children).map((el) => el.tagName)).toStrictEqual([
       "BUTTON",
       "BUTTON",
     ]);
-    for (const button of buttons) {
-      expect(
-        button.querySelector(".connected-pager-label-long"),
-      ).not.toBeNull();
-      expect(
-        button.querySelector(".connected-pager-label-short"),
-      ).not.toBeNull();
-    }
-
-    // "IN BOTH ORIENTATIONS" — the half of this title that had no assertion
-    // under it at all (test-integrity sweep, S0f). jsdom cannot compute
-    // which set is drawn, and since Task 2 made the long and short forms
-    // IDENTICAL text (`LIVE`/`LIVE`), a screenshot cannot distinguish them
-    // either. The rules can be read, and now are: the short form is hidden
-    // at the top level and flips in landscape, the long form is the other
-    // way round, so exactly one set paints per orientation.
-    expect(
-      rulesFor(".connected-pager-label-short").map((rule) => [
-        rule.at,
-        /display:\s*([a-z]+)/.exec(rule.body)?.[1],
-      ]),
-    ).toStrictEqual([
-      [[], "none"],
-      [["@media (orientation: landscape)"], "block"],
-    ]);
-    expect(
-      rulesFor(".connected-pager-label-long").map((rule) => [
-        rule.at,
-        /display:\s*([a-z]+)/.exec(rule.body)?.[1],
-      ]),
-    ).toStrictEqual([[["@media (orientation: landscape)"], "none"]]);
+    expect(buttons.map((b) => b.textContent)).toStrictEqual(["LIVE", "GRID"]);
   });
 
   it("reaches pane C, the grid (Task 7 filled the slot)", async () => {
     renderSurface();
-    await userEvent.click(railButton("Grid"));
-    expect(railButton("Grid")).toHaveAttribute("aria-current", "page");
+    await userEvent.click(controlHalf("Grid"));
+    expect(controlHalf("Grid")).toHaveAttribute("aria-current", "page");
     expect(document.querySelector(".connected-pane-grid")).not.toBeNull();
     // The placeholder this replaced is gone for good — a stale rule left
     // behind is what makes a dead class look load-bearing.
@@ -975,12 +869,13 @@ describe("frozen (handoff §4, restyled by connected-axes 2a task 5)", () => {
 
   it("THE FOOTER GROWS INTO THE PANE, NOT OVER IT: the header and the pane's own top row never move", () => {
     // The header (End's own home) is a THIRD invariant alongside the
-    // footer: it renders the same single child regardless of state, so its
-    // own fixed height can never be what moves the pane body underneath
-    // it.
+    // footer: it renders the same two children regardless of state
+    // (`ConnectionLine` + End, CR2 spec 3 task 1 — was End alone before
+    // `ConnectionLine` moved here from the panes), so its own fixed height
+    // can never be what moves the pane body underneath it.
     const live = renderSurface();
     const liveHeader = document.querySelector(".connected-header")!;
-    expect(liveHeader.children).toHaveLength(1);
+    expect(liveHeader.children).toHaveLength(2);
     const liveFooter = document.querySelector(".connected-surface-footer")!;
     // Empty while rowing — End no longer lives here, and the task-6 ruling's
     // zero-cost-while-rowing property survives task 5's own rework of the
@@ -990,23 +885,24 @@ describe("frozen (handoff §4, restyled by connected-axes 2a task 5)", () => {
 
     renderSurface({ frozen: true });
     const frozenHeader = document.querySelector(".connected-header")!;
-    expect(frozenHeader.children).toHaveLength(1);
+    expect(frozenHeader.children).toHaveLength(2);
     const frozenFooter = document.querySelector(".connected-surface-footer")!;
     // One child now — the frozen block alone in the slot End vacated, IN
     // FLOW (task 5) rather than overlaid — the mechanism behind the
     // no-occlusion fix the CSS test below pins directly.
     expect(frozenFooter.children).toHaveLength(1);
     // The footer sits in the SAME place in the tree either way — directly
-    // after the pane body, directly before the pager — so the only thing
-    // that differs between the two states is whether it has a child; task 5
-    // deliberately spends the footer's own HEIGHT to buy that (it used to
-    // cost nothing at all, via the overlay this task retires — see the CSS
-    // test's own comment for why that overlay was the occlusion bug).
+    // after the pane body, directly before the segmented control — so the
+    // only thing that differs between the two states is whether it has a
+    // child; task 5 deliberately spends the footer's own HEIGHT to buy
+    // that (it used to cost nothing at all, via the overlay this task
+    // retires — see the CSS test's own comment for why that overlay was
+    // the occlusion bug).
     expect(frozenFooter.previousElementSibling!.className).toContain(
       "connected-surface-body",
     );
     expect(frozenFooter.nextElementSibling!.className).toContain(
-      "connected-pager",
+      "connected-control",
     );
   });
 
@@ -1382,55 +1278,11 @@ describe("End's hit box is small and out of the swipe corridor (safety fix, Jame
     expect(headerRules[1]!.body).not.toMatch(/justify-content\s*:/);
   });
 
-  // THE MECHANISM (mutation-tested below in the report, not just asserted
-  // here): `handleTouchStart`/`handleTouchEnd` live on `<main>`, the
-  // surface's OWN element — a touch that starts on a descendant (End) still
-  // bubbles to them exactly as one starting anywhere else on the surface
-  // does, because nothing on End's own button stops that propagation. A
-  // full 60px+ swipe whose pointerdown happens to land on End must
-  // therefore still read as pane navigation, never as an arm.
-  it("a swipe that starts ON End still changes pane — it never arms the confirm", () => {
-    renderSurface();
-    const endButton = screen.getByRole("button", { name: "End session" });
-    fireEvent.touchStart(endButton, { touches: [{ clientX: 200 }] });
-    fireEvent.touchEnd(document.querySelector(".connected-surface")!, {
-      changedTouches: [{ clientX: 200 - (SWIPE_THRESHOLD_PX + 10) }],
-    });
-    expect(railButton("Grid")).toHaveAttribute("aria-current", "page");
-    // Still "End session", never staged — the swipe did not touch it.
-    expect(
-      screen.getByRole("button", { name: "End session" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Tap again to end" }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("the SAME swipe, originating on End, works in the other direction too", () => {
-    // REWRITTEN (task-6 review, I3): the first version of this started on
-    // the DEFAULT pane and swiped the way `paneAfterSwipe` clamps, so both
-    // of its assertions — Live is current, End is unarmed — were already
-    // true of the very first render. The reviewer deleted the whole gesture
-    // and it still passed. It has a real discriminator now: the surface
-    // starts on GRID, and only the swipe can put it back on Live.
-    renderSurface();
-    fireEvent.click(railButton("Grid"));
-    expect(railButton("Grid")).toHaveAttribute("aria-current", "page");
-
-    const endButton = screen.getByRole("button", { name: "End session" });
-    fireEvent.touchStart(endButton, { touches: [{ clientX: 200 }] });
-    fireEvent.touchEnd(document.querySelector(".connected-surface")!, {
-      changedTouches: [{ clientX: 200 + (SWIPE_THRESHOLD_PX + 10) }],
-    });
-    // A POSITIVE delta walks backward through `PANES` (["live","grid"]), so
-    // this is grid → live: the mirror of the leftward case above, still
-    // starting its touch on End itself.
-    expect(railButton("Live")).toHaveAttribute("aria-current", "page");
-    expect(railButton("Grid")).not.toHaveAttribute("aria-current");
-    expect(
-      screen.queryByRole("button", { name: "Tap again to end" }),
-    ).not.toBeInTheDocument();
-  });
+  // The swipe-originates-on-End tests retired with the swipe handler
+  // itself (CR2 spec 3 task 1, design spec Ruling 4) — End's hit box no
+  // longer shares a gesture surface with pane navigation at all; the
+  // remaining safety-fix invariant (small, out of the footer, never
+  // full-width) is covered by the two tests above.
 });
 
 // ---------------------------------------------------------------------------

@@ -23,7 +23,7 @@
 // through).
 
 import { readFileSync } from "node:fs";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -1210,12 +1210,10 @@ describe("contained scroll: only the rows move", () => {
     expect(spy).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps the surface's own vertical panning available to the browser", () => {
-    // `touch-action: pan-y` on the surface is what lets the rows scroll at
-    // all while the horizontal swipe stays ours (handoff §3's 60px pager
-    // gesture).
-    expect(baseRule(".connected-surface")).toContain("touch-action: pan-y");
-  });
+  // `touch-action: pan-y` retired with the swipe handler (CR2 spec 3 task
+  // 1, design spec Ruling 4, antagonist correction 3): the grid scroller
+  // manages its own overflow with nothing left to coordinate with, so
+  // there is no rule left to pin here.
 });
 
 // ---------------------------------------------------------------------------
@@ -1501,7 +1499,12 @@ describe("tab order through pane C", () => {
     ]) {
       expect([selector, scanned.has(selector)]).toStrictEqual([selector, true]);
     }
-    expect(paneCRules.length).toBeGreaterThanOrEqual(30); // measured: 32
+    // CR2 spec 3 task 1 dropped three rules the census used to count: the
+    // `.connected-pane-grid .connected-line`/`.connected-line-device`
+    // landscape overrides and `.connected-grid-headline`'s own landscape
+    // fold, all retired when `ConnectionLine` moved out of this pane into
+    // the shell's header (32 -> 29, measured against this worktree).
+    expect(paneCRules.length).toBeGreaterThanOrEqual(29); // measured: 29
     expect(
       paneCRules
         .filter((rule) => /\border\s*:/.test(rule.body))
@@ -1546,7 +1549,7 @@ describe("tab order through pane C", () => {
     }
   });
 
-  it("tabs End, then the grid, then the two pager targets", async () => {
+  it("tabs End, then the grid, then the two control halves", async () => {
     // THE REAL BROWSER ORDER, REWRITTEN A SECOND TIME (design spec §9:
     // "Tab order changes twice" — Task 2 dropped Timer from the rail
     // (`scroller → End → Timer → Live → Grid` became `scroller → End →
@@ -1577,7 +1580,7 @@ describe("tab order through pane C", () => {
 });
 
 describe("the grid never grows a control of its own", () => {
-  it("keeps End as the surface's only button outside the pager", () => {
+  it("keeps End as the surface's only button outside the segmented control", () => {
     renderGrid();
     const buttons = screen
       .getAllByRole("button")
@@ -1586,14 +1589,9 @@ describe("the grid never grows a control of its own", () => {
     expect(document.querySelector(".button-l1")).toBeNull();
   });
 
-  it("does not swallow the swipe: the pager still reaches pane B", () => {
-    renderGrid();
-    const surface = document.querySelector(".connected-surface")!;
-    fireEvent.touchStart(surface, { touches: [{ clientX: 300 }] });
-    fireEvent.touchEnd(surface, { changedTouches: [{ clientX: 400 }] });
-    expect(screen.getByRole("button", { name: "Live pane" })).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
-  });
+  // The swipe-reaches-pane-B pin retired with the swipe handler itself
+  // (CR2 spec 3 task 1, design spec Ruling 4, antagonist correction 3):
+  // `SegmentedControl` is the only navigation left, and its own click
+  // tests (`SegmentedControl.test.tsx`, `ConnectedSurface.test.tsx`) cover
+  // it reaching every pane.
 });

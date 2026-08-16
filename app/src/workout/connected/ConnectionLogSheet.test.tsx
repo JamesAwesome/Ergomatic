@@ -1,9 +1,9 @@
 // The diagnostics sheet and the gesture that opens it (7B Task 7, handoff
 // §5). Two halves:
 //
-// - **The door.** Three deliberate taps on a pager target open it; two do
+// - **The door.** Three deliberate taps on a control half open it; two do
 //   not. Driven through the REAL `ConnectedSurface` and the REAL
-//   `PagerRail`, because the gesture is a property of the shell's own
+//   `SegmentedControl`, because the gesture is a property of the shell's own
 //   handler, not of the sheet.
 // - **The sheet.** Rendered from a REAL `createEventLog()` that a REAL
 //   `createPm5Driver` has written into, so the lines on screen are lines
@@ -176,13 +176,13 @@ function renderSurface(overrides: Partial<MonitorSession> = {}) {
   return { ...view, session: current };
 }
 
-function pagerTarget(pane: "Live" | "Grid"): HTMLElement {
+function controlHalf(pane: "Live" | "Grid"): HTMLElement {
   return screen.getByRole("button", { name: `${pane} pane` });
 }
 
 async function tap(pane: "Live" | "Grid", times: number) {
   for (let i = 0; i < times; i += 1) {
-    await userEvent.click(pagerTarget(pane));
+    await userEvent.click(controlHalf(pane));
   }
 }
 
@@ -225,7 +225,7 @@ describe("triple-tap opens diagnostics (handoff §5)", () => {
     // `beforeEach` lands on grid; one tap on live is the pane change.
     await tap("Live", 1);
     expect(sheet()).toBeNull();
-    expect(pagerTarget("Live")).toHaveAttribute("aria-current", "page");
+    expect(controlHalf("Live")).toHaveAttribute("aria-current", "page");
   });
 
   it("works on ANY target, not just the grid's", async () => {
@@ -239,9 +239,9 @@ describe("triple-tap opens diagnostics (handoff §5)", () => {
     // connected-revamp Task 2 dropped the pager to two targets — alternating
     // between them still never lands three consecutive taps on the SAME
     // one, which is the property this test proves either way.
-    await userEvent.click(pagerTarget("Live"));
-    await userEvent.click(pagerTarget("Grid"));
-    await userEvent.click(pagerTarget("Live"));
+    await userEvent.click(controlHalf("Live"));
+    await userEvent.click(controlHalf("Grid"));
+    await userEvent.click(controlHalf("Live"));
     expect(sheet()).toBeNull();
   });
 
@@ -249,16 +249,16 @@ describe("triple-tap opens diagnostics (handoff §5)", () => {
     vi.useFakeTimers();
     try {
       renderSurface();
-      fireEvent.click(pagerTarget("Grid"));
-      fireEvent.click(pagerTarget("Grid"));
+      fireEvent.click(controlHalf("Grid"));
+      fireEvent.click(controlHalf("Grid"));
       act(() => {
         vi.advanceTimersByTime(TRIPLE_TAP_WINDOW_MS);
       });
       // The third tap is now the FIRST tap of a new gesture.
-      fireEvent.click(pagerTarget("Grid"));
+      fireEvent.click(controlHalf("Grid"));
       expect(sheet()).toBeNull();
-      fireEvent.click(pagerTarget("Grid"));
-      fireEvent.click(pagerTarget("Grid"));
+      fireEvent.click(controlHalf("Grid"));
+      fireEvent.click(controlHalf("Grid"));
       expect(sheet()).not.toBeNull();
     } finally {
       vi.useRealTimers();
@@ -269,31 +269,19 @@ describe("triple-tap opens diagnostics (handoff §5)", () => {
     vi.useFakeTimers();
     try {
       renderSurface();
-      fireEvent.click(pagerTarget("Grid"));
+      fireEvent.click(controlHalf("Grid"));
       act(() => {
         vi.advanceTimersByTime(TRIPLE_TAP_WINDOW_MS - 1);
       });
-      fireEvent.click(pagerTarget("Grid"));
+      fireEvent.click(controlHalf("Grid"));
       act(() => {
         vi.advanceTimersByTime(TRIPLE_TAP_WINDOW_MS - 1);
       });
-      fireEvent.click(pagerTarget("Grid"));
+      fireEvent.click(controlHalf("Grid"));
       expect(sheet()).not.toBeNull();
     } finally {
       vi.useRealTimers();
     }
-  });
-
-  it("a swipe between panes never reaches the gesture", async () => {
-    // Three swipes move three panes; the diagnostics door is taps only.
-    renderSurface();
-    const surface = document.querySelector(".connected-surface")!;
-    for (let i = 0; i < 3; i += 1) {
-      surface.dispatchEvent(
-        new TouchEvent("touchstart", { bubbles: true, touches: [] }),
-      );
-    }
-    expect(sheet()).toBeNull();
   });
 
   it("Close puts it away and hands focus back to the target that opened it", async () => {
@@ -302,7 +290,7 @@ describe("triple-tap opens diagnostics (handoff §5)", () => {
     expect(sheet()).not.toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(sheet()).toBeNull();
-    expect(document.activeElement).toBe(pagerTarget("Live"));
+    expect(document.activeElement).toBe(controlHalf("Live"));
   });
 });
 

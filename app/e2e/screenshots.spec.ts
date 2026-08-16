@@ -2440,8 +2440,18 @@ const CONNECTED_STATES = [
  *  flex-none siblings above and below it carry explicit heights in
  *  `index.css` for exactly this reason, so these are arithmetic, not
  *  typography. */
-const PORTRAIT_GRID_SCROLLER_PX = 612;
-const LANDSCAPE_GRID_SCROLLER_PX = 276;
+// CR2 spec 3 task 1 moved `ConnectionLine` out of `.connected-grid-headline`
+// into the shell's own header (`ConnectedSurface.tsx`), which is what moves
+// both figures below — re-measured against this worktree, not derived:
+// PORTRAIT gains the headline's own 14px it no longer spends stacking a
+// device row under a totals row (612 -> 626, one line now in both
+// orientations, `index.css`'s own `.connected-grid-headline` comment).
+// LANDSCAPE moves the other way, by 2px (276 -> 274) — a real, measured
+// consequence of the header row now sharing its track with
+// `.connected-control` (`index.css`'s own two-column landscape comment on
+// `.connected-surface`), not independently decomposed further than that.
+const PORTRAIT_GRID_SCROLLER_PX = 626;
+const LANDSCAPE_GRID_SCROLLER_PX = 274;
 
 for (const name of CONNECTED_STATES) {
   test(name, async ({ page }) => {
@@ -2519,10 +2529,13 @@ for (const name of CONNECTED_STATES) {
       // delta in the message rather than on a bare integer.
       //
       // The count was a floor until the test-integrity sweep (P2): given
-      // the two exact assertions above it, `floor(612/40)` is 15 and the
+      // the two exact assertions above it, `floor(626/40)` is 15 and the
       // floor could not fail unless one of them had already failed and
       // aborted the test. James's ruling is a number, so the number is what
-      // is pinned. Measured, not derived: 15, at an exact fit of 15.3.
+      // is pinned. Measured, not derived: 15, at an exact fit of 15.65
+      // (CR2 spec 3 task 1 moved the scroller's own budget from 612 to 626
+      // — this block's own top comment has the reason — which only widens
+      // the margin here, from 12px slack under 15 rows to 26px).
       //
       // And the count is NOT merely implied by the two heights above, as
       // the fix round's own note claimed (the re-review corrected it):
@@ -2723,7 +2736,7 @@ for (const name of CONNECTED_STATES) {
       expect(m.rowHeight).toBe(32);
       expect(m.clientHeight).toBe(LANDSCAPE_GRID_SCROLLER_PX);
       // EXACT, not a floor, for the reason the portrait block sets out
-      // (test-integrity sweep, P2): `floor(276/32)` is 8, so the FLOOR was
+      // (test-integrity sweep, P2): `floor(274/32)` is 8, so the FLOOR was
       // implied by the two exact assertions above it. The exact count is
       // not — `rowHeight` samples only `children[0]`, so uneven later rows
       // fail here (5) with both heights still green. Measured 8, at an

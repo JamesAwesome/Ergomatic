@@ -99,6 +99,17 @@
      row 0's "accent appears nowhere" is now literally true there, where it
      previously carried a documented single exception. */
   --marker: #7d5510;
+  /* CR2 spec 3 (2026-08-16), design spec §1: the new progress bar's
+     upcoming-vs-active distinction on the connected surfaces (task 3
+     builds `ConnectedProgressBar`; this task only reserves the name and
+     the value). DECORATION-ONLY, NEVER TEXT — the spec's own disclosed
+     residual is that `#8a8478` on `#ded8c9` measures 2.61:1, under WCAG
+     1.4.11's 3:1 floor for meaningful graphics; accepted there because the
+     same state is redundantly carried in the status text beside the bar
+     (`3 OF 12 · WORK`), which is why this token must never be reused as a
+     text colour — nothing redundantly restates a value that fails 4.5:1
+     on its own. */
+  --progress-active: #8a8478;
   /* Fix round 1 (James's ruling): was #b5341f, IDENTICAL to --accent — every
      TR chip/badge filled with what was structurally "accent", quietly
      breaking the ui-fix round's own "accent means exactly four things,

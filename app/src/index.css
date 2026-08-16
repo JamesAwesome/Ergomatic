@@ -3705,8 +3705,11 @@ button:disabled {
    `.timer-header` ITSELF into `display: contents` too, promoting this
    wrapper a second level up to become a direct grid child of
    `.timer-screen` — where IT stops being `contents` and becomes the real
-   44px gutter column, mirroring `.connected-pager`'s own back/target
-   column (index.css) for the connected surface. One `.timer-end`
+   44px gutter column — this screen's own, unrelated to and unaffected by
+   the connected surface's shell (CR2 spec 3 task 1 retired that surface's
+   own gutter along with `PagerRail.tsx`; this timer screen is a separate
+   product surface the PM gate's "forks, not shared-component edits"
+   condition keeps that spec from reaching). One `.timer-end`
    button exists in the DOM either way; only its CSS position moves. */
 .timer-gutter {
   display: contents;
@@ -4480,12 +4483,13 @@ button:disabled {
       env(safe-area-inset-bottom, 0px) 0;
   }
 
-  /* THE GUTTER (revision §5, mirroring `.connected-pager`'s own landscape
-     shape): a real 44px column now, not `display: contents` any more —
-     portrait's promotion trick (base rule) reverses here, one level back
-     in. `justify-content: space-between` plus the 12px vertical padding is
-     what puts back at the top and END at the bottom — byte-for-byte the
-     same layout math `.connected-pager` already uses for LIVE/GRID. */
+  /* THE GUTTER (revision §5) — this screen's own; the connected surface's
+     former gutter this comment used to compare it to retired with
+     `PagerRail.tsx` (CR2 spec 3 task 1). A real 44px column now, not
+     `display: contents` any more — portrait's promotion trick (base rule)
+     reverses here, one level back in. `justify-content: space-between`
+     plus the 12px vertical padding is what puts back at the top and END
+     at the bottom. */
   .timer-screen .timer-header .timer-gutter {
     display: flex;
     flex-direction: column;
@@ -6034,11 +6038,36 @@ section:not(.news-pinned) .news-row:last-of-type {
      re-shoot every portrait capture — so it stays parked and is not this
      branch's to spend. */
   height: calc(100dvh - 26px);
-  /* Horizontal swipe is the primary navigation (handoff §3, 60px
-     threshold) — the browser must not claim the gesture for its own
-     back-navigation or overscroll first. Vertical panning stays with the
-     browser: nothing on panes A or B scrolls, but pane C's rows will. */
-  touch-action: pan-y;
+  /* THE CONNECTED-ONLY TYPE SCALE, PORTRAIT HALF (CR2 spec 3 task 1, design
+     spec §1: "Type scale — connected-scoped tokens, NOT the shared
+     `--size-*` family"). `--size-*` is a global `:root` pair the phone
+     timer also reads (`--size-label` reaches `.timer-card-label` and the
+     timer's own END, `--size-total` reaches `.timer-total-value`) — a
+     second surface consuming the same names by construction, which is
+     exactly what the PM gate's "forks, not shared-component edits"
+     condition forbids touching. `--c-size-*` is declared ON THIS CLASS,
+     never `:root`, so it is invisible to the phone timer and to
+     `tokens.test.ts`'s existing `:root`-scoped membership pins — a
+     genuinely separate family, checked by its own pin
+     (`theme/tokens.test.ts`). Landscape redefines the same ten names below
+     (this file's own `@media (orientation: landscape)` block), never a
+     second name for either value — the same "one name, two values" rule
+     `--size-*` already follows.
+
+     ONLY `--progress-active` (`tokens.css`) and this token family are new
+     this task; every existing rule on these panes still reads `--size-*`
+     until Tasks 4-5 migrate it (task-1 brief step 6's own scoped grep
+     pin) — wiring these names to real elements is later work. */
+  --c-size-hero: 100px;
+  --c-size-hero-2: 84px;
+  --c-size-tenths: 52px;
+  --c-size-target: 36px;
+  --c-size-band: 28px;
+  --c-size-status: 21px;
+  --c-size-row: 19px;
+  --c-size-label: 14px;
+  --c-size-control: 13px;
+  --c-size-thead: 12px;
 }
 
 /* `min-width: 0` beside the existing `min-height: 0` (design spec §4, the
@@ -6144,10 +6173,22 @@ section:not(.news-pinned) .news-row:last-of-type {
 
 /* The connection indicator (handoff §3): 8px filled square + the device's
    real advertised name. Hollow square once the link is gone. */
+/* `flex: 1; min-width: 0` (CR2 spec 3 task 1): this component's ONLY
+   remaining render site is the shell's own header row
+   (`ConnectedSurface.tsx` — it used to also render inside `PaneLive`/
+   `PaneGrid`, both retired this task), where it is the flexible child that
+   fills whatever width `.connected-end` does not need. That is the whole
+   mechanism behind "control and END never adjacent" (design spec §2A): as
+   long as this element has non-empty content — the device caption always
+   does — it occupies real space between them. `min-width: 0` is what lets
+   it actually SHRINK below its own content's natural width rather than
+   pushing End off the header's own edge on a long device name. */
 .connected-line {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex: 1;
+  min-width: 0;
 }
 
 .connected-line-mark {
@@ -6162,8 +6203,26 @@ section:not(.news-pinned) .news-row:last-of-type {
   border: 1px solid var(--ink);
 }
 
+/* KNOWN INTERIM GAP, NOT SILENTLY PAPERED OVER (found in this task's own
+   screenshot sweep, `connected-disconnected.html`'s portrait capture — CR2
+   spec 3 task 1): now that this line shares the header row with End
+   (`ConnectedSurface.tsx`'s own header comment), its available width is the
+   header's narrower remainder, not the pane's full content column the line
+   used to render in. `deviceCaption` grows from `PM5 <id>` to
+   `PM5 <id> · LOST` at the one status that actually reaches this width
+   (`surfaceModel.ts`), and at that length it wraps this row onto a second
+   line in portrait rather than overflowing.
+   A `text-overflow: ellipsis` version was tried and reverted: it hid the
+   word "LOST" itself behind the ellipsis, which is strictly worse than a
+   wrap — the ONE word on this whole surface that has to stay legible when
+   the link is down must never be the one a layout fix truncates away. So
+   this stays a wrap: the header's `auto` row height absorbs it, nothing
+   clips, and the fix that actually belongs here is shortening or resizing
+   the string itself (Task 2's model differentiation, `--c-size-status`),
+   not a CSS truncation on this element. */
 .connected-line-device {
   flex: 1;
+  min-width: 0;
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.12em;
@@ -6171,6 +6230,12 @@ section:not(.news-pinned) .news-row:last-of-type {
 }
 
 .connected-line-trailing {
+  flex: none;
+  /* Never wraps either (the sibling rule's own comment has the trap this
+     guards, same header-row width squeeze): a status string that ran out
+     of room would otherwise wrap onto its own line before it ever got a
+     chance to be pushed out by the device span's own truncation. */
+  white-space: nowrap;
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.12em;
@@ -6448,14 +6513,14 @@ section:not(.news-pinned) .news-row:last-of-type {
 }
 
 /* THE HEADLINE (Task 5, revision §4: "session totals move into the header
-   line"). Two children: `ConnectionLine`'s own `.connected-line` (the mark
-   and device name) and `.connected-grid-totals` (the interval caption and
-   the whole-session total). Portrait stacks them — device + END would be
-   one line and interval + total a second, except this pane renders no END
-   of its own (that lives in the shell's HEADER, above every pane, since
-   connected-revamp Task 6) — so this is simply two lines. Landscape folds
-   both into ONE line the same way the columns below fold, in the landscape
-   query.
+   line"). ONE child now, `.connected-grid-totals` (the interval caption and
+   the whole-session total) — `ConnectionLine`'s own `.connected-line` (the
+   mark and device name) moved OUT of this pane into the shell's own header
+   (CR2 spec 3 task 1, design spec §3), alongside End, so there is no longer
+   a device row for this element to stack a totals row underneath. One line
+   in BOTH orientations now; the old portrait-stacks/landscape-folds split
+   retired with the second child (its own landscape override, below, is
+   gone too).
 
    EXPLICIT HEIGHT (task-6 review, Scrutiny 1 recommendation 2 — applied to
    all three of this pane's flex-none siblings: this rule,
@@ -6463,27 +6528,16 @@ section:not(.news-pinned) .news-row:last-of-type {
    between them is `flex: 0 1 auto` fill, so its height is whatever these
    three leave — and while their own heights were TEXT METRICS (line boxes
    at 11/13px), the visible row count was a derived integer resting on
-   sub-pixel typography. The review reproduced a 3px landscape swing purely
-   by measuring before `document.fonts.ready`, which is what the "13 one
-   run, 14 the next" report actually was. Pinning these three the way the
-   ROWS were already pinned makes the whole budget arithmetic: 28 = the two
-   14px line boxes this column stacks (landscape's one-line fold steps it to
-   14 below), measured against the served bundle with the self-hosted face
-   applied. A face that renders shorter can no longer quietly hand the
-   scroller a row's worth of extra space, and one that renders taller
-   overflows its own 28px rather than stealing from the rows. */
+   sub-pixel typography. Pinning these three the way the ROWS were already
+   pinned makes the budget arithmetic honest: 14px is one line box at this
+   element's own 11px mono content, measured against the served bundle with
+   the self-hosted face applied. A face that renders taller overflows its
+   own 14px rather than stealing from the rows. */
 .connected-grid-headline {
   flex: none;
-  height: 28px;
+  height: 14px;
   display: flex;
-  flex-direction: column;
-  /* 0, not 6 (connected-revamp Task 6): trimmed to give the portrait
-     scroller back what the new always-on header above the pane body took
-     — see `.connected-surface`'s margin-based-gap comment. The two lines
-     it separates (device row, totals row) still read as two distinct
-     lines without a gap between them; nothing here needs the breathing
-     room a stacked flex column usually wants. */
-  gap: 0;
+  align-items: center;
 }
 
 .connected-grid-totals {
@@ -6882,19 +6936,27 @@ section:not(.news-pinned) .news-row:last-of-type {
   gap: 10px;
 }
 
-/* --- The header: End, small and out of the swipe corridor (connected-
-   revamp Task 6, revision §2) ------------------------------------------ */
+/* --- The header: ConnectionLine + End (connected-revamp Task 6, revision
+   §2; restructured by CR2 spec 3 task 1, design spec §3) --------------- */
 
 /* A thin, ALWAYS-PRESENT strip above the pane body — constant height
    whichever of End's two labels is showing (the button's own `min-height`
    is what's fixed; the text only changes its WIDTH) — so the pane body's
-   top edge never moves. `justify-content: flex-end` puts the small control
-   at the row's own right edge without stretching it: the row itself may
-   span the surface, but nothing forces the BUTTON to. */
+   top edge never moves. Two children now: `.connected-line` (the mark,
+   device caption and status — moved here from inside the panes this task)
+   and End. `.connected-line` carries its own `flex: 1` (that rule's own
+   comment), which is what actually keeps End pinned to the row's right
+   edge; `justify-content: flex-end` stays declared too — inert once the
+   flexed child already consumes the remaining width, but harmless, and it
+   is what the single-child header still relied on before this task (a
+   future child order change gets the same right-alignment for free either
+   way). */
 .connected-header {
   flex: none;
   display: flex;
+  align-items: center;
   justify-content: flex-end;
+  gap: 12px;
   padding: 4px 12px 0;
   margin-bottom: 4px;
 }
@@ -7039,62 +7101,52 @@ section:not(.news-pinned) .news-row:last-of-type {
   color: var(--on-color);
 }
 
-/* --- The labelled pager (handoff §3, DEVIATIONS row 4) -------------- */
+/* --- The segmented control (CR2 spec 3 task 1, design spec §3) --------
+   `PagerRail`'s gutter-and-band shape is gone — no decorative mark, no
+   long/short label pair (a single `--c-size-control` size now serves both
+   orientations, design spec §1's role mapping: 13px landscape AND
+   portrait). ONE markup (`SegmentedControl.tsx`) for both shapes; only
+   POSITION and the border/radius differ, both by media query below.
 
-/* Portrait: a 54px band at the bottom, two equal halves (195×54 each on a
-   390px frame — `flex: 1` is what makes that exact at 390 and still correct
-   on any other width), 9px square + mono 10px label (revision §2: "Portrait
-   keeps a 54px two-tab bar"). connected-revamp Task 2 dropped the pager
-   from three targets to two along with the timer pane. */
-.connected-pager {
+   PORTRAIT (this rule): a 54px band at the bottom, two equal halves
+   (195×54 each on a 390px frame — `flex: 1` is what makes that exact at
+   390 and still correct on any other width), matching the rail's own
+   "Portrait keeps a 54px two-tab bar" (revision §2) geometry — only the
+   target's own content changed, from a stacked mark+label to a single mono
+   word. */
+.connected-control {
   flex: none;
   display: flex;
   height: 54px;
   border-top: 1px solid var(--rule);
 }
 
-.connected-pager-target {
+.connected-control-half {
   flex: 1;
   min-width: 0;
-  height: 54px;
+  min-height: 44px;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 5px;
   background: none;
   border: none;
-  padding: 0;
+  padding: 0 16px;
+  font-family: var(--font-mono);
+  font-size: var(--c-size-control);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: var(--ink-3);
   cursor: pointer;
 }
 
-.connected-pager-mark {
-  width: 9px;
-  height: 9px;
-  display: block;
-  background: var(--rule-3);
-}
-
-.connected-pager-target-active .connected-pager-mark {
+/* The active half's fill carries the state (design spec Ruling 3: the
+   ~200ms pane slide is cut, so this fill IS the only signal an instant
+   swap gets). Ink fill, `--surface` text — the same "this is where you
+   are" vocabulary `.connected-end-armed` and every other filled control on
+   this surface already use. */
+.connected-control-half-active {
   background: var(--ink);
-}
-
-.connected-pager-label {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.14em;
-  color: var(--ink-3);
-}
-
-.connected-pager-target-active .connected-pager-label {
-  color: var(--ink);
-}
-
-/* Both label sets ship in every orientation (PagerRail.tsx's header says
-   why); the media queries below choose which one is drawn. Portrait gets
-   the long form. */
-.connected-pager-label-short {
-  display: none;
+  color: var(--surface);
 }
 
 /* --- Pane B's two heroes ---------------------------------------------- */
@@ -7103,36 +7155,34 @@ section:not(.news-pinned) .news-row:last-of-type {
    the `order` declarations below make PORTRAIT reading order diverge from DOM
    order, and `order` moves the paint, never the tab sequence or the screen
    reader's. Harmless today — neither pane contains anything focusable; every
-   control on this surface belongs to the shell (End, the pager) and sits
-   outside both panes. Put a button in a reordered slot and it will be read
-   and tabbed to in the wrong place. The fix then is to reorder the DOM and
-   drop the `order` for that item, not to add a `tabindex`.
+   control on this surface belongs to the shell (End, the segmented control)
+   and sits outside both panes. Put a button in a reordered slot and it will
+   be read and tabbed to in the wrong place. The fix then is to reorder the
+   DOM and drop the `order` for that item, not to add a `tabindex`.
 
    PORTRAIT: `.connected-heroes` (`display: contents`, declared above)
    promotes its two hero children to direct flex items of
    `.connected-pane-live`, and `order` puts them back into the revision §3
    portrait sequence — so one markup serves both orientations and nothing
-   re-mounts on rotation. LANDSCAPE (below) turns the same wrapper into a
+   re-mounts on rotation. `.connected-line` no longer lives inside this pane
+   (CR2 spec 3 task 1 moved it to the shell's header) and so carries no
+   `order` here any more. LANDSCAPE (below) turns the same wrapper into a
    real flex row instead, the two heroes side by side: connected-revamp
    Task 3's own reason is the same one this trick solved for pane A/B
    before it (a shared grid track lets one child's numeral force the row
    the other child's content lives in) — this rebuild only needed it for
    the two heroes, not a second, independent readouts column. */
 @media (orientation: portrait) {
-  .connected-pane-live .connected-line {
+  .connected-pane-live .connected-hero-split {
     order: 1;
   }
 
-  .connected-pane-live .connected-hero-split {
+  .connected-pane-live .connected-hero-rate {
     order: 2;
   }
 
-  .connected-pane-live .connected-hero-rate {
-    order: 3;
-  }
-
   .connected-pane-live .connected-metric-row {
-    order: 4;
+    order: 3;
   }
 
   /* UP NEXT nests inside `.connected-metric-row` now (index.css's own
@@ -7141,7 +7191,7 @@ section:not(.news-pinned) .news-row:last-of-type {
      line) is `.connected-metric-row .timer-upnext`'s `flex: 1 1 100%`,
      declared with that class above. */
   .connected-pane-live .timer-total {
-    order: 5;
+    order: 4;
   }
 }
 
@@ -7179,29 +7229,23 @@ section:not(.news-pinned) .news-row:last-of-type {
   /* THE SURFACE GOES FULL-BLEED (design spec §6/ruling 10, revision §6):
      `.screen`'s 480px cap and its fixed 20px/6px padding are sized for a
      portrait document column, not a HUD on a mounted phone. Landscape
-     breaks both so the gutter below can reach the housing at the true
-     physical edge instead of floating ~42px inboard of it (the previous
-     56px-cap-plus-padding shape) — safe-area insets still apply (they are
-     real device geometry, not the app's own layout choice), only the
-     app-chosen 20px/6px on top of them is dropped.
+     breaks both — safe-area insets still apply (they are real device
+     geometry, not the app's own layout choice), only the app-chosen
+     20px/6px on top of them is dropped.
 
-     LEFT is deliberately ABSENT from this padding (task-2 fix round,
-     review Important-1). The naive version — `env(safe-area-inset-left,
-     0px)` here, same as the other three sides — reintroduces the exact
-     defect full-bleed exists to kill: the gutter is `grid-column: 1`
-     INSIDE this padding, so a real inset would push its own left edge to
-     `x = inset-left` instead of `x = 0`, floating it inboard of the
-     housing again (worse: revision §2's own premise is that the 44pt
-     gutter IS the reserved sensor area, so stacking an inset in front of
-     it double-counts to ~90px of chrome where the design asks for 44).
-     Chromium reports every `env(safe-area-inset-*)` as `0px` — confirmed
-     empirically via CDP's `Emulation.setSafeAreaInsetsOverride`, which
-     DOES work in this repo's Chromium and is what the fix-round e2e test
-     below uses — so this was invisible to every existing gate. The inset
-     is not discarded, only relocated: `.connected-pager` below absorbs it
-     via its own `padding-left`, so the gutter's fill still reaches the
-     physical edge while its 44px of tappable content sits clear of the
-     housing.
+     CR2 SPEC 3 TASK 1 (2026-08-16): the 44px sensor gutter (revision §2)
+     that used to sit in `grid-column: 1` is GONE — design spec §3
+     "Structure": `PagerRail` retired, and the segmented control that
+     replaces it is a small header-row pill now, not a full-height edge
+     column (`.connected-control`'s own landscape rule, below). Everything
+     this comment used to say about the gutter absorbing the inset on its
+     own `padding-left` is history, not current mechanism: **this
+     element's own `padding-left` takes `var(--edge-inset)` directly now**
+     (the paragraph below keeps the `max()` term and its Android
+     reasoning verbatim — design spec §3 "Safe-area relocation" — only
+     WHERE it is spent changed). The surface stays single-column
+     (`grid-template-columns`, below): there is no longer a second track
+     for anything to float inboard of.
 
      `--edge-inset` IS FOR ANDROID, AND THE ASYMMETRY IT FIXES DOES NOT
      EXIST ON iOS. Read this before "simplifying" it either way.
@@ -7235,17 +7279,12 @@ section:not(.news-pinned) .news-row:last-of-type {
      decorative housing bar in the same round may already have addressed
      it; ROADMAP Phase CR2 item 2 owns the question.
 
-     — the width happened to match, but the column JUMPED 59px sideways
-     and the gutter itself doubled in width, which is the part James could
-     see. Taking `max()` of the two horizontal insets and spending it on
-     BOTH sides makes every term rotation-invariant: after this fix both
-     rotations measure gutter 103, content column x=103, width 682. The
-     cost is 59px of content width in the rotation that did not strictly
-     need it; the benefit is that a mounted phone's numbers do not move
-     when it is remounted the other way up, which is what the rower
-     actually experiences. At zero insets `max()` is 0 and every figure is
-     unchanged (gutter 44, column x=44, width 800), so this is inert in
-     Chromium and in every committed capture.
+     HISTORY (pre-CR2-spec-3-task-1): the paragraph above's own measurements
+     were taken against the gutter — "gutter 103, content column x=103,
+     width 682" — which no longer exists as a grid track. The `max()` term
+     and the rotation-invariance property it buys are unchanged; only the
+     ELEMENT that spent it changed, from `.connected-pager`'s width/
+     padding-left to this element's own padding-left (below).
 
      `height` RECLAIMS THE DEAD 26px (connected-revamp Task 3 fix round,
      task-3-review.md Scrutiny 1(b)/Important-1). The base rule's `height:
@@ -7261,28 +7300,56 @@ section:not(.news-pinned) .news-row:last-of-type {
 
      …and the INSET terms go with it (James's erg walk, 2026-08-13, defect
      4: "the gutter's own background ends above the screen edge leaving a
-     visible ledge"). This element is anchored at `y = 0`, so ANY term
-     subtracted from `100dvh` makes its border box stop short of the
-     viewport's foot — and because the very same rule ALSO spends the
-     insets as `padding` two lines below, each one was being charged twice:
-     once shrinking the box and once again inside it. MEASURED at 844x390
-     with a 21px home-indicator inset injected, before this fix: surface
-     `[0, 369]`, the gutter's `--surface-sunken` fill ending at `y = 348`,
-     nothing painting `348→390`. That is the ledge — 42px of dead bottom,
-     21px of it a hard horizontal edge across the gutter's own fill, which
-     is why this wave's full-bleed gutter is what made a pre-existing gap
-     VISIBLE. `height: 100dvh` puts the border box back on the viewport so
-     the fill reaches the physical edge, while the untouched `padding` keeps
-     the CONTENT clear of the notch and the home indicator — the inset is
-     honoured exactly once. Inert at zero insets (390 either way), so no
-     capture moves. */
+     visible ledge" — HISTORY: the fill this defect named was the gutter's
+     own `--surface-sunken`, since retired with the gutter; the mechanism
+     it forced, below, is unchanged). This element is anchored at `y = 0`,
+     so ANY term subtracted from `100dvh` makes its border box stop short
+     of the viewport's foot — and because the very same rule ALSO spends
+     the insets as `padding` two lines below, each one was being charged
+     twice: once shrinking the box and once again inside it. `height:
+     100dvh` puts the border box back on the viewport so the fill reaches
+     the physical edge, while the untouched `padding` keeps the CONTENT
+     clear of the notch and the home indicator — the inset is honoured
+     exactly once. Inert at zero insets (390 either way), so no capture
+     moves. */
   .connected-surface {
+    /* THE CONNECTED-ONLY TYPE SCALE, LANDSCAPE HALF (CR2 spec 3 task 1,
+       design spec §1). Redefined here, on the SAME selector the portrait
+       values are declared on (base rule, above), never `:root` — a
+       genuine "one name, two values" pair, not a second name (the same
+       rule the `--size-*` block just above already follows, applied to a
+       class instead of the root). `tokens.test.ts` pins both halves.
+       Declared in THIS rule, not a separate one, so `.connected-surface`
+       still resolves to exactly one landscape block for that pin to find. */
+    --c-size-hero: 112px;
+    --c-size-hero-2: 92px;
+    --c-size-tenths: 58px;
+    --c-size-target: 40px;
+    --c-size-band: 30px;
+    --c-size-status: 22px;
+    --c-size-row: 19px;
+    --c-size-label: 15px;
+    --c-size-control: 13px;
+    --c-size-thead: 12px;
     display: grid;
     --edge-inset: max(
       env(safe-area-inset-left, 0px),
       env(safe-area-inset-right, 0px)
     );
-    grid-template-columns: calc(44px + var(--edge-inset)) 1fr;
+    /* TWO COLUMNS, but the surface is still "single column" in the sense
+       design spec §3 means it (task-1 brief step 5): only ROW 1 (the
+       header) uses the second track, to hold `.connected-control` beside
+       `.connected-header`'s own content (design spec §2A: "segmented
+       control far LEFT... status... END far right" — one 44px header, two
+       DOM siblings sharing its row by CSS placement, since `.connected-
+       control` is deliberately NOT a DOM child of `.connected-header`,
+       design spec §3 "Components"). Every OTHER row (`.connected-lost`,
+       `.connected-surface-body`, `.connected-surface-footer`, below) spans
+       both tracks (`grid-column: 1 / -1`), so nothing sits indented under
+       an empty first column the way a real second content column would
+       leave one. `auto` sizes the control column to the control's own
+       content — a small pill, not a fixed-width rail. */
+    grid-template-columns: auto 1fr;
     /* A fourth track, connected-revamp Task 6: the header (End) is now
        always on screen, above the lost banner's own row. `auto` sizes it
        to the button's own `min-height: 44px` plus the header's own top
@@ -7290,9 +7357,10 @@ section:not(.news-pinned) .news-row:last-of-type {
        unconditionally), so this new row can never itself be the thing
        that shifts the body below it. */
     grid-template-rows: auto auto 1fr auto;
-    /* No column-gap: the gutter's own 1px inner rule (below) is the only
-       separation between it and the content column — "content starts
-       immediately after the gutter, no extra inset" (revision §2).
+    /* No column-gap: row 1's own two tracks (control, header) already
+       separate themselves with the header's own `gap` (`.connected-header`
+       above); every other row spans both tracks, so a column-gap would
+       only ever apply where nothing needs it.
 
        ROW-GAP IS ZERO HERE, DELIBERATELY (connected-revamp Task 6): a
        uniform `row-gap` charges EVERY row boundary the same 8px whether or
@@ -7318,28 +7386,36 @@ section:not(.news-pinned) .news-row:last-of-type {
     row-gap: 0;
     max-width: none;
     margin: 0;
-    padding: env(safe-area-inset-top, 0px) var(--edge-inset)
-      env(safe-area-inset-bottom, 0px) 0;
+    /* THE SAFE-AREA RELOCATION (CR2 spec 3 task 1, design spec §3
+       "Safe-area relocation"): with the gutter gone, THIS element's own
+       `padding-left` takes `var(--edge-inset)` — still the `max()` above,
+       never simplified to a single-sided `env()`. `padding-right` takes
+       the same term (symmetric, matching what the old gutter+content pair
+       already summed to). TOP moves to `.connected-header`'s own
+       `padding-top` instead of living here (below): only the header row
+       actually touches the notch's own vertical band, so only it needs to
+       pay for it — every row after it inherits nothing from this rule
+       that it did not already have. */
+    padding: 0 var(--edge-inset) env(safe-area-inset-bottom, 0px)
+      var(--edge-inset);
     height: 100dvh;
   }
 
   /* One line in landscape: 390px of height cannot spare the two-line
      block, and the banner's whole job is to be noticed, not to be tall.
 
-     `grid-column: 2`, not `1` (found and fixed this session, connected-
-     revamp Task 3 — pre-existing, not caused by this task's own edits):
-     `1` is the GUTTER column Task 2 introduced (`.connected-pager`'s own
-     `grid-column: 1`), and this rule was never updated when that column
-     was added. Landing a full-width banner in a 44px-wide gutter cell
-     forced its body copy to wrap one word per line down a narrow column —
-     confirmed directly against this worktree (`connected-disconnected-
-     landscape.png`'s own re-shoot this task, before this fix: "Row on."
-     word-wrapped seven lines deep, and the pane beneath it lost ~160px of
-     its own 296px budget to the banner's inflated height, which is what
-     first surfaced this while chasing an unrelated hero-overlap bug). `2`
-     is the content column every other row of this grid already uses. */
+     `grid-column: 1 / -1` (CR2 spec 3 task 1 — was `2`, the content track
+     beside the now-retired gutter column; that second track is gone below
+     row 1, see `.connected-surface`'s own comment, so every row after the
+     header spans the full width instead of sitting in a single named
+     track). Landing a full-width banner in a narrow first-column cell was
+     the original defect this rule existed to fix (connected-revamp Task 3
+     — history, preserved: "Landing a full-width banner in a 44px-wide
+     gutter cell forced its body copy to wrap one word per line down a
+     narrow column"); spanning both tracks is the same fix, restated for
+     the new template. */
   .connected-lost {
-    grid-column: 2;
+    grid-column: 1 / -1;
     /* Row 2, not 1 (connected-revamp Task 6): the header's own new row
        took 1. `margin-bottom` (not `row-gap`, see `.connected-surface`'s
        own comment) — this row's gap only exists when this element does. */
@@ -7351,12 +7427,17 @@ section:not(.news-pinned) .news-row:last-of-type {
     margin-bottom: 8px;
   }
 
-  /* THE HEADER'S OWN ROW (connected-revamp Task 6). `justify-content:
-     flex-end` (the base rule, unchanged here) already keeps the button off
-     the gutter edge; landscape only needs the grid placement, a trimmed
-     top padding and its own `margin-bottom` (see `.connected-surface`'s
-     comment on why this replaced `row-gap`) — this frame is 454px shorter
-     than portrait and every row here is measured, same discipline as
+  /* THE HEADER'S OWN ROW (connected-revamp Task 6; CR2 spec 3 task 1
+     restructures it). `grid-column: 2` (not `1 / -1` like the rows below)
+     is deliberate: this is the ONE row that still has two tracks, column 1
+     for `.connected-control` (its own rule, below), column 2 for this
+     element's own content. `justify-content: flex-end` (the base rule,
+     unchanged here) already keeps End off this column's own right edge;
+     landscape only needs the grid placement, the notch's own top inset
+     (moved here from `.connected-surface`'s own padding, design spec §3
+     "Safe-area relocation" — no device constant assumed, §1's deviation
+     row) and a trimmed side padding — this frame is 454px shorter than
+     portrait and every row here is measured, same discipline as
      `.connected-pane .timer-upnext`'s own trim just below. */
   .connected-header {
     grid-column: 2;
@@ -7366,7 +7447,9 @@ section:not(.news-pinned) .news-row:last-of-type {
        has no spare 8px to also spend on this row's own gap the way the
        others get — 2px keeps a visible separation without reopening the
        overlap this margin-based reclaim exists to close. */
-    padding: 0 12px 0;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-right: 12px;
+    padding-left: 12px;
     margin-bottom: 0;
   }
 
@@ -7400,7 +7483,7 @@ section:not(.news-pinned) .news-row:last-of-type {
   }
 
   .connected-surface-body {
-    grid-column: 2;
+    grid-column: 1 / -1;
     /* Row 3, not 2 (connected-revamp Task 6): the header's new row pushed
        every row after it down by one. `margin-bottom` replaces this row's
        own share of the old `row-gap` (see `.connected-surface`'s comment)
@@ -7426,80 +7509,36 @@ section:not(.news-pinned) .news-row:last-of-type {
      Nothing to place here beyond the track coordinates; the base rule no
      longer has a margin for this one to cancel. */
   .connected-surface-footer {
-    grid-column: 2;
+    grid-column: 1 / -1;
     grid-row: 4;
   }
 
-  /* THE GUTTER (revision §2/§6): a 44px column at the PHYSICAL edge — column
-     1 of the grid above, with no column-gap ahead of it — `#efeade`
-     (`--surface-sunken`) with a 1px inner rule on the side facing the
-     content. `space-between` plus the 12px vertical padding is what puts
-     LIVE at the top and GRID at the bottom, mirroring the mockup's own
-     gutter column.
-
-     `width`/`padding-left` carry the inset the surface no longer does (see
-     `--edge-inset` on `.connected-surface` above): `width` grows by the
-     same `--edge-inset` the column track does, and `box-sizing: border-box`
-     (global, `index.css:1`) means that growth is exactly absorbed by
-     `padding-left` — the CONTENT box (where LIVE and GRID actually sit)
-     stays a constant 44px, pushed clear of the notch, while the `#efeade`
-     fill underneath the padding still paints all the way to the true
-     physical edge. Never an inset override: the inset is relocated, not
-     dropped. */
-  .connected-pager {
+  /* THE SEGMENTED CONTROL, IN THE HEADER ROW (CR2 spec 3 task 1 — design
+     spec §3: "landscape it is placed into grid row 1 beside the header
+     content"). The 44px sensor gutter this used to be (revision §2/§6, a
+     full-height column at the physical edge) is GONE: the rail it held
+     retired with `PagerRail`, and its replacement is a small pill that
+     lives ONLY in row 1, column 1 — `.connected-surface`'s own comment has
+     the two-track reasoning. No width/height math left to inherit from the
+     gutter: `auto` on both axes sizes this to its own two buttons, and
+     `align-self: center` centers it in the 44px-tall row the way the
+     device caption beside it is centered by `.connected-header`'s own
+     `align-items: center`. */
+  .connected-control {
     grid-column: 1;
-    grid-row: 1 / -1;
-    flex-direction: column;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0;
+    grid-row: 1;
+    align-self: center;
     height: auto;
-    width: calc(44px + var(--edge-inset));
-    /* THE FILL REACHES THE PHYSICAL BOTTOM EDGE (James's erg walk,
-       2026-08-13, defect 4 — the other half of it). `.connected-surface`
-       above keeps `padding-bottom: env(safe-area-inset-bottom)` so that
-       everything in the CONTENT column — including the frozen block, which
-       sits in flow inside `.connected-surface-footer` at the foot of that
-       column (task 5: no longer an overlay hanging off it) — stays clear of
-       the home indicator. But this gutter is not
-       content: it is a painted edge, and a background that stops 21px
-       above the glass is precisely the ledge James saw. MEASURED at 844x390
-       with a 21px bottom inset: the fill ended at y=369 inside a 390px
-       frame. The negative margin lets this one grid item's border box grow
-       back down through the surface's padding to y=390 while the matching
-       `padding-bottom` holds GRID exactly where it already sat (bottom edge
-       357 before and after) — so the fill moves and the tap target does
-       not. */
-    margin-bottom: calc(-1 * env(safe-area-inset-bottom, 0px));
-    padding: 12px 0 calc(12px + env(safe-area-inset-bottom, 0px))
-      var(--edge-inset);
-    background: var(--surface-sunken);
-    border-top: none;
-    border-right: 1px solid var(--rule);
+    border: 1px solid var(--ink);
+    border-radius: var(--radius);
+    /* The active half's own ink fill must not paint past the pill's
+       rounded corners. */
+    overflow: hidden;
   }
 
-  /* 44x44 targets (revision §2), abbreviated labels. */
-  .connected-pager-target {
+  .connected-control-half {
     flex: none;
-    width: 44px;
     height: 44px;
-  }
-
-  /* 10x10 in the gutter, up from the shared 9x9 base (revision §2: "Dot
-     10×10, label mono 9px"). */
-  .connected-pager-mark {
-    width: 10px;
-    height: 10px;
-  }
-
-  .connected-pager-label-long {
-    display: none;
-  }
-
-  .connected-pager-label-short {
-    display: block;
-    font-size: 9px;
-    letter-spacing: 0.06em;
   }
 
   /* Two columns, each sizing itself. Padding lives HERE, not on the removed
@@ -7508,7 +7547,10 @@ section:not(.news-pinned) .news-row:last-of-type {
      no extra inset ahead of it, then carries this exact padding of its own
      (`Ergomatic connected mode.dc.html`'s Live/Grid landscape frames both
      use `12px 16px 12px 14px`) — shared by both panes, since both frames
-     use the identical figure. */
+     use the identical figure. CR2 spec 3 task 1: the gutter this padding
+     used to start "immediately after" is gone, but the figure itself is
+     untouched — it is the panes' own internal padding, never the gutter's,
+     and the panes keep their current internals this task. */
   .connected-pane {
     flex-direction: row;
     gap: 16px;
@@ -7824,31 +7866,11 @@ section:not(.news-pinned) .news-row:last-of-type {
     gap: 0;
   }
 
-  /* THE HEADLINE FOLDS TO ONE LINE. `display: contents` on both of its
-     children promotes the mark, the device name, the interval caption and
-     the total to direct flex items of `.connected-grid-headline` (which
-     becomes a row below), so the four sit on one line — mirroring the
-     mockup's landscape header exactly. `.connected-line-device`'s own
-     `flex: 1` (shared with pane B's header, where it is the ONLY flexible
-     child) would otherwise compete with `.connected-grid-interval` for the
-     growing space; only the interval caption may grow here. */
-  .connected-grid-headline {
-    /* One line, so one 14px line box — the base rule's 28 is two of them
-       stacked. Same pinning rationale; see that rule's comment. */
-    height: 14px;
-    flex-direction: row;
-    align-items: center;
-    gap: 9px;
-  }
-
-  .connected-pane-grid .connected-line,
-  .connected-pane-grid .connected-grid-totals {
-    display: contents;
-  }
-
-  .connected-pane-grid .connected-line-device {
-    flex: none;
-  }
+  /* CR2 spec 3 task 1 retired this rule: `.connected-grid-headline` is one
+     line in BOTH orientations now (the base rule, above), so landscape no
+     longer needs to fold a two-line portrait shape into one — the
+     `ConnectionLine` child that used to force the fold moved to the
+     shell's header. */
 
   .connected-grid-row,
   .connected-grid-head {

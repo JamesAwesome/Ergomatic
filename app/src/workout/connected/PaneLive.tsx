@@ -48,7 +48,6 @@
 import type { Judgement } from "../../../domain/judge.js";
 import UpNextStrip from "../../components/UpNextStrip";
 import TimerRuler from "../../session/TimerRuler";
-import ConnectionLine from "./ConnectionLine";
 import { type SurfaceModel } from "./surfaceModel";
 
 // `Judgement`, not `string` (tail review M-7): the class suffix IS the union
@@ -86,7 +85,10 @@ export default function PaneLive({ model }: { model: SurfaceModel }) {
 
   return (
     <div className="connected-pane connected-pane-live">
-      <ConnectionLine model={model} trailing={model.intervalLabelShort} />
+      {/* `ConnectionLine` moved OUT of this pane and into the shell's header
+         (CR2 spec 3 task 1, design spec §3): the header now carries the
+         mark, device caption and status for both panes, so this pane no
+         longer renders its own copy. */}
       <div className="connected-heroes">
         <div className="connected-hero connected-hero-split">
           {/* NOTHING AT ALL when armed (I-1: `model.nowLabel` is `""` there,

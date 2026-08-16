@@ -12,12 +12,14 @@
 // SINGLE-LINE at a FIXED height (32px landscape / 40px portrait, JAMES
 // RULING 2026-08-12 superseding the packet's 8-at-36 for landscape). The
 // ruling was made against a landscape scroller measured at 232px, which
-// 8x36 = 288 cannot fit; the figure has moved twice since (Task 5 measured
-// 239 — an un-zeroed UA margin on a caption `<p>` — and Task 6's footer
-// reclaim took it to 276, where it stands). The conclusion is unchanged:
-// 8x32 = 256 fits 276 with 20 to spare, and 8x36 still does not. 232 is
-// history, framed as history the way `index.css`'s own `.connected-pane-
-// grid` landscape comment frames it. There is no
+// 8x36 = 288 cannot fit; the figure has moved three times since (Task 5
+// measured 239 — an un-zeroed UA margin on a caption `<p>` — Task 6's
+// footer reclaim took it to 276, and CR2 spec 3 task 1's own header
+// restructure — `ConnectionLine` moving out of this pane's headline —
+// moved it again, by 2px, to 274, where it stands). The conclusion is
+// unchanged: 8x32 = 256 fits 274 with 18 to spare, and 8x36 still does
+// not. 232 is history, framed as history the way `index.css`'s own
+// `.connected-pane-grid` landscape comment frames it. There is no
 // second line and no third line — the OLD two-line portrait row
 // (`.connected-grid-line1`/`-line2`, folded into one row by `display:
 // contents` in landscape) and the active row's `REMAINING · TARGET …`
@@ -36,17 +38,16 @@
 // `N OF M` (below) cannot disagree — they are the same `intervalNumbering`
 // call.
 //
-// THE HEADER CARRIES THE SESSION TOTALS (revision §4): `3 OF 12 · WORK ·
+// THE HEADLINE CARRIES THE SESSION TOTALS (revision §4): `3 OF 12 · WORK ·
 // 0:47 LEFT` and `38:20 TOTAL`, composed from three scalar `SurfaceModel`
 // fields that already exist for other panes
 // (`intervalLabelShort`/`intervalClockValue`/`totalLeftDisplay`) — no new
 // model field, the same precedent this component's old `trailing` prop
-// already set. Portrait stacks this as its own line under the device row
-// (390px has no room for one line carrying all of it — measured: device +
-// interval + total exceeds the 354px content width); landscape folds both
-// into ONE line the same way rows fold their own columns — `display:
-// contents` on `.connected-line` and `.connected-grid-totals`, promoting
-// their children to direct flex items of `.connected-grid-headline`.
+// already set. CR2 spec 3 task 1 moved `ConnectionLine` (the device row)
+// out of this pane into the shell's own header, so this headline is now a
+// single line in BOTH orientations — no more portrait-stacks/landscape-
+// folds split (`index.css`'s own `.connected-grid-headline` comment has
+// the current shape).
 //
 // THE ONE SCROLL ON THIS SURFACE (DEVIATIONS row 2, handoff §3: "pane C is
 // the single exception to the no-scroll rule, and it is contained"). The
@@ -86,7 +87,6 @@
 // order — moving End is what put the two in agreement.
 
 import { useEffect, useRef } from "react";
-import ConnectionLine from "./ConnectionLine";
 import type { GridRow, GridValue, SurfaceModel } from "./surfaceModel";
 
 /** The tint class every judged actual on this surface wears — pane B puts
@@ -116,7 +116,9 @@ export default function PaneGrid({ model }: { model: SurfaceModel }) {
   return (
     <div className="connected-pane connected-pane-grid">
       <div className="connected-grid-headline">
-        <ConnectionLine model={model} />
+        {/* `ConnectionLine` moved OUT of this pane and into the shell's
+           header (CR2 spec 3 task 1) — this headline now carries only the
+           session totals below. */}
         {/* The session totals (revision §4). `flex: 1` on the interval span
             and `flex: none` on the total is what leaves the growing space to
             the one field whose length actually varies (WARM-UP vs

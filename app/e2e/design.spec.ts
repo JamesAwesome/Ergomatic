@@ -4672,10 +4672,10 @@ test.describe("connected screens (fake-driven)", () => {
   // (`ConnectedSurface.tsx:324-325`), so `.connected-surface-body` — a grid
   // item in landscape's `1fr` track — measured its
   // automatic minimum against whichever pane happened to be showing, and
-  // within the grid pane, against its own content. The pin: swipe (here, the
-  // rail's own equivalent — a tap on "Grid pane", the same state transition
-  // `handleRailPress` drives a real swipe through) between LIVE and GRID and
-  // the content column must not move a pixel, in BOTH orientations.
+  // within the grid pane, against its own content. The pin: a tap on "Grid
+  // pane" (the segmented control's own click, `handleControlPress`) between
+  // LIVE and GRID and the content column must not move a pixel, in BOTH
+  // orientations.
   //
   // FINDING, evidence-backed (measured against this worktree, pre-fix): the
   // fixture this describe block already uses (`CONNECTED_PROGRAM`, five
@@ -4858,17 +4858,19 @@ test.describe("connected screens (fake-driven)", () => {
     await cleanupAllConnected(page, title);
   });
 
-  // --- Task 2 (design spec §6/ruling 10): full-bleed + the sensor gutter ---
+  // --- Task 2 (design spec §6/ruling 10): full-bleed; CR2 spec 3 task 1
+  // retired the sensor gutter this test used to pin alongside it ----------
   //
   // Load-bearing geometry only (ruling 4): the surface reaches the true
-  // physical edge in landscape, and the gutter sitting there is exactly
-  // 44px wide — both load-bearing per the brief ("the landscape surface's
-  // left edge is 0 (full-bleed) and the gutter is exactly 44px wide sitting
-  // at the edge"). Portrait is checked separately: it keeps its narrower
-  // 54px two-tab bar, unaffected by the landscape-only full-bleed rule.
-  test("the surface is full-bleed and the gutter sits at the physical edge — landscape (844x390)", async ({
-    page,
-  }) => {
+  // physical edge in landscape — load-bearing per the original brief ("the
+  // landscape surface's left edge is 0 (full-bleed)"). The 44px-wide
+  // full-height gutter that also sat at that edge is GONE (design spec §3
+  // "Structure" — its replacement, the segmented control, is a small
+  // header-row pill now, pinned separately below alongside the header it
+  // shares a row with). Portrait is checked separately: it keeps its
+  // narrower 54px two-tab bar, unaffected by the landscape-only full-bleed
+  // rule.
+  test("the surface is full-bleed — landscape (844x390)", async ({ page }) => {
     const title = "Design Connected Gutter Workout";
     await page.setViewportSize({ width: 844, height: 390 });
     await injectConnectedFake(page, ROWING_STORY);
@@ -4877,9 +4879,7 @@ test.describe("connected screens (fake-driven)", () => {
     await pumpUntilText(page, "2 OF 5");
 
     const surfaceBox = await page.locator(".connected-surface").boundingBox();
-    const railBox = await page.locator(".connected-pager").boundingBox();
     expect(surfaceBox).not.toBeNull();
-    expect(railBox).not.toBeNull();
     // Full-bleed: the surface itself starts at the viewport's true left
     // edge, not `.screen`'s usual 20px-plus-max-width inset — and it runs
     // all the way to the RIGHT edge too (fix round, review Minor-11): a
@@ -4887,21 +4887,24 @@ test.describe("connected screens (fake-driven)", () => {
     // and the right edge is the half `max-width: none` is actually doing.
     expect(surfaceBox!.x).toBeCloseTo(0, 0);
     expect(surfaceBox!.x + surfaceBox!.width).toBeCloseTo(844, 0);
-    // The gutter is the surface's own first column, so it starts there too
-    // — "reaches the housing", not floating inboard of it.
-    expect(railBox!.x).toBeCloseTo(0, 0);
-    expect(railBox!.width).toBeCloseTo(44, 0);
+    // The segmented control is the surface's own first grid column now
+    // (row 1 only, `.connected-surface`'s own comment), so it starts at
+    // the physical edge too — "reaches the housing", not floating inboard
+    // of it, the same claim the gutter used to carry.
+    const controlBox = await page.locator(".connected-control").boundingBox();
+    expect(controlBox).not.toBeNull();
+    expect(controlBox!.x).toBeCloseTo(0, 0);
 
     await cleanupAllConnected(page, title);
   });
 
   // Fix round (review Important-1): Chromium reports every
   // `env(safe-area-inset-*)` as `0px` on a normal run — which is exactly why
-  // the test above cannot tell "the gutter reaches x=0 because there is no
-  // inset" from "the gutter reaches x=0 because insets are silently
+  // the test above cannot tell "the surface reaches x=0 because there is no
+  // inset" from "the surface reaches x=0 because insets are silently
   // dropped". The two are different claims, and the second one is a broken
   // promise: "never override an inset" means a REAL inset must still push
-  // something, just not the gutter's own physical position. This test
+  // something, just not the surface's own physical position. This test
   // proves the distinction with a SIMULATED inset via Chrome DevTools
   // Protocol's `Emulation.setSafeAreaInsetsOverride` — verified empirically
   // this fix round to actually move `env(safe-area-inset-left)` in this
@@ -4912,28 +4915,25 @@ test.describe("connected screens (fake-driven)", () => {
   // ROTATION-STABILITY UNDER AN ASYMMETRIC INSET — which is ANDROID's case,
   // not iOS's. Read the correction before trusting this test's premise.
   //
-  // It replaced an assertion that pinned `railBox.width === 44 + INSET` in
-  // the ONE rotation it measured, with a comment calling that correct. That
-  // much was a genuine defect: a test blessing a shape nobody had checked in
-  // the other rotation. Measured at 844x390 with a 59px inset, before:
-  //
-  //   notch LEFT   gutter 103px, content column x=103, width 741
-  //   notch RIGHT  gutter  44px, content column x= 44, width 741
-  //
-  // But that asymmetry was manufactured HERE. iOS reports the landscape side
-  // inset on BOTH sides regardless of which side the housing is on, and CSS
-  // cannot tell which side it is; the one-sided condition exists only
-  // because `measure(INSET, 0)` below chooses it. So this does not reproduce
-  // a defect James's phone ever had — his report was perceptual (identical
-  // bands, one lit display and one black housing). It remains a real and
-  // load-bearing test for Android's `DisplayCutout`, which IS asymmetric,
-  // and it is the reason `max()` must not be "simplified" away.
+  // REWRITTEN (CR2 spec 3 task 1, design spec §3 "Safe-area relocation"):
+  // the gutter this test used to measure (`.connected-pager`, a fixed
+  // 44px-plus-inset column absorbing the inset on its own `padding-left`)
+  // is gone. The mechanism this test actually protects — `max()` of both
+  // horizontal insets, spent identically regardless of which physical side
+  // reports it — is UNCHANGED; only WHERE it lands changed, from the
+  // gutter's own box to `.connected-surface`'s own `padding-left`/
+  // `padding-right`. So the content column (`.connected-pane`) and the
+  // segmented control (`.connected-control`, now sharing the header row
+  // rather than running the surface's full height) both start at the
+  // SAME x now — `edge-inset` in from the surface's own left edge, not the
+  // old "44px gutter, then content" relationship — and that shared
+  // starting point is what must survive a rotation unmoved.
   //
   // Green then, and green for the wrong reason. What this test asserts now
   // is the rule rather than one side of it: the two rotations must agree,
   // on every term, and the way to falsify that is to measure BOTH and
   // compare them to each other rather than to a literal.
-  test("the gutter and the content column are IDENTICAL in both landscape rotations, notch left or notch right (844x390)", async ({
+  test("the segmented control and the content column are IDENTICAL in both landscape rotations, notch left or notch right (844x390)", async ({
     page,
   }) => {
     const title = "Design Connected Gutter Inset Workout";
@@ -4959,17 +4959,16 @@ test.describe("connected screens (fake-driven)", () => {
       await page.evaluate(
         () => new Promise((r) => requestAnimationFrame(() => r(null))),
       );
-      const [surface, rail, pane, live] = await Promise.all([
+      const [surface, control, pane, live] = await Promise.all([
         page.locator(".connected-surface").boundingBox(),
-        page.locator(".connected-pager").boundingBox(),
+        page.locator(".connected-control").boundingBox(),
         page.locator(".connected-pane").boundingBox(),
         page.getByRole("button", { name: "Live pane" }).boundingBox(),
       ]);
       const round = (n: number) => Math.round(n * 100) / 100;
       return {
         surfaceX: round(surface!.x),
-        railX: round(rail!.x),
-        railWidth: round(rail!.width),
+        controlX: round(control!.x),
         contentX: round(pane!.x),
         contentWidth: round(pane!.width),
         liveX: round(live!.x),
@@ -4993,24 +4992,21 @@ test.describe("connected screens (fake-driven)", () => {
     // round existed to kill.
     //
     // The surface still starts at the true physical edge: the inset is the
-    // gutter's job, not a `.connected-surface` padding term stacked in front
-    // of it.
+    // surface's OWN padding now, not a term stacked in front of it.
     expect(notchLeft.surfaceX).toBeCloseTo(0, 0);
-    // The gutter's own box starts there too, so its `#efeade` fill reaches
-    // the physical edge. With the inset applied to the surface's padding
-    // instead (the pre-task-2 shape) this would read x ≈ 59.
-    expect(notchLeft.railX).toBeCloseTo(0, 0);
-    // The gutter still ABSORBS a real inset rather than discarding it —
-    // 44px of tappable column plus the notch it has to clear.
-    expect(notchLeft.railWidth).toBeCloseTo(44 + INSET, 0);
+    // The control and the content column share the same starting point —
+    // both are grid items inside the same padded box, and neither has a
+    // fixed-width column ahead of it any more.
+    expect(notchLeft.controlX).toBeCloseTo(INSET, 0);
+    expect(notchLeft.contentX).toBeCloseTo(INSET, 0);
     // And the actual tappable content (LIVE) sits CLEAR of the notch: its
-    // own left edge lands at the inset, not at the physical edge — the
-    // 44px of "tappable content" the fix comment promises, pushed in from
-    // a fill that still reaches x=0 underneath it. ±1px, not `toBeCloseTo`'s
-    // usual 0.5px: measured sub-pixel rendering lands this one at exactly
-    // 58.5 against an integer 59px inset, half a pixel outside
+    // own left edge lands close to the inset (a hair past it — the
+    // control's own 1px border sits between the two), not at the physical
+    // edge. ±1px, not `toBeCloseTo`'s usual 0.5px: measured sub-pixel
+    // rendering lands this one at exactly 58.5 against an integer 59px
+    // inset in the pre-task-1 version of this pin, half a pixel outside
     // `toBeCloseTo(INSET, 0)`'s own tolerance.
-    expect(Math.abs(notchLeft.liveX - INSET)).toBeLessThanOrEqual(1);
+    expect(Math.abs(notchLeft.liveX - INSET)).toBeLessThanOrEqual(2);
 
     await cleanupAllConnected(page, title);
   });
@@ -5107,11 +5103,13 @@ test.describe("connected screens (fake-driven)", () => {
     await walkToSurface(page);
     await pumpUntilText(page, "2 OF 5");
 
-    const pagerBox = await page.locator(".connected-pager").boundingBox();
-    expect(pagerBox).not.toBeNull();
-    expect(pagerBox!.height).toBeCloseTo(54, 0);
-    // Still labelled, still exactly two targets — the rail lost its third
-    // target (Timer) but not its labels (handoff §3, DEVIATIONS row 4).
+    const controlBox = await page.locator(".connected-control").boundingBox();
+    expect(controlBox).not.toBeNull();
+    expect(controlBox!.height).toBeCloseTo(54, 0);
+    // Still labelled, still exactly two halves — the retired rail's third
+    // target (Timer) went with connected-revamp Task 2, and the label
+    // itself survived `SegmentedControl`'s own rebuild (handoff §3,
+    // DEVIATIONS row 4).
     expect(
       await page
         .getByRole("navigation", { name: "Connected panes" })
@@ -5257,7 +5255,15 @@ test.describe("connected screens (fake-driven)", () => {
   // test-integrity sweep and a re-review. The branch had the instrument, the
   // measurement and the frame in one file and never crossed them vertically.
   // This is that crossing.
-  test("under a real bottom inset the surface AND the gutter's fill still reach the physical bottom edge — landscape (844x390)", async ({
+  //
+  // TRIMMED (CR2 spec 3 task 1): the gutter this test used to measure —
+  // `#efeade`, `grid-row: 1 / -1`, the only fill on this surface that ran
+  // its full height — is gone, and GRID (the control's own half) no longer
+  // sits anywhere near the bottom edge to have "breathing room above the
+  // home indicator" from (it lives in the 44px header row now). What
+  // survives is the surface's own bottom-edge claim, which never depended
+  // on the gutter.
+  test("under a real bottom inset the surface still reaches the physical bottom edge — landscape (844x390)", async ({
     page,
   }) => {
     const title = "Design Connected Bottom Inset Workout";
@@ -5278,28 +5284,13 @@ test.describe("connected screens (fake-driven)", () => {
       () => new Promise((r) => requestAnimationFrame(() => r(null))),
     );
 
-    const [surfaceBox, railBox, gridTarget] = await Promise.all([
-      page.locator(".connected-surface").boundingBox(),
-      page.locator(".connected-pager").boundingBox(),
-      page.getByRole("button", { name: "Grid pane" }).boundingBox(),
-    ]);
+    const surfaceBox = await page.locator(".connected-surface").boundingBox();
 
     // The surface's border box reaches the foot of the viewport. Before the
     // fix its height was `calc(100dvh - top - bottom)` while the element is
     // anchored at y=0 AND spends the same insets as padding — each one
     // charged twice — so this measured [0, 369] in a 390px frame.
     expect(surfaceBox!.y + surfaceBox!.height).toBeCloseTo(390, 0);
-    // THE LEDGE ITSELF. The gutter is the only thing on this surface with a
-    // fill of its own (`--surface-sunken`, `grid-row: 1 / -1`), so it is the
-    // gutter's bottom edge — not the surface's — that a rower sees stop
-    // short. Measured at 348 before the fix: 42px of dead band, 21px of it a
-    // hard horizontal edge across the fill.
-    expect(railBox!.y + railBox!.height).toBeCloseTo(390, 0);
-    // …and the fill reaching the glass must NOT have dragged the tap target
-    // down with it. GRID keeps its 12px of breathing room ABOVE the home
-    // indicator, so its bottom edge sits at 390 - 21 - 12 = 357: the fill
-    // moved and the button did not.
-    expect(gridTarget!.y + gridTarget!.height).toBeCloseTo(357, 0);
 
     await cleanupAllConnected(page, title);
   });

@@ -257,3 +257,143 @@ describe("the size-token scale (tokens.css portrait + index.css landscape)", () 
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// THE CONNECTED-ONLY SCALE, `--c-size-*` (CR2 spec 3 task 1, design spec §1:
+// "Type scale — connected-scoped tokens, NOT the shared `--size-*` family").
+// Same shape as the `--size-*` pin above, deliberately: this is the SAME
+// "one name, two values, never a second name" rule, applied to a family
+// scoped to `.connected-surface` instead of `:root` — antagonist finding 2
+// on the parent spec is what forced the scoping (the shared `--size-*` pair
+// reaches the phone timer too; a connected-only family declared on `:root`
+// would have been invisible to nobody).
+//
+// UNLIKE `--size-*`, this family is genuinely UNCONSUMED as of this task —
+// wiring it into real elements is Tasks 4/5's job (task-1 brief step 5's own
+// framing: "wiring these names to real elements is later work"). So there is
+// no "every token is consumed" test here yet; adding one now would either
+// fail honestly (nothing consumes them) or, worse, tempt a premature `var()`
+// reference into an unrelated rule just to satisfy it. That test belongs
+// with the task that does the wiring.
+// ---------------------------------------------------------------------------
+
+const C_SIZE_SCALE = [
+  { name: "--c-size-hero", portrait: 100, landscape: 112 },
+  { name: "--c-size-hero-2", portrait: 84, landscape: 92 },
+  { name: "--c-size-tenths", portrait: 52, landscape: 58 },
+  { name: "--c-size-target", portrait: 36, landscape: 40 },
+  { name: "--c-size-band", portrait: 28, landscape: 30 },
+  { name: "--c-size-status", portrait: 21, landscape: 22 },
+  { name: "--c-size-row", portrait: 19, landscape: 19 },
+  { name: "--c-size-label", portrait: 14, landscape: 15 },
+  { name: "--c-size-control", portrait: 13, landscape: 13 },
+  { name: "--c-size-thead", portrait: 12, landscape: 12 },
+] as const;
+
+const CONNECTED_SURFACE_SELECTOR = ".connected-surface";
+
+/** Both halves live in `index.css` — portrait ON the class at the top
+ *  level, landscape redefined inside the SAME `@media (orientation:
+ *  landscape)` query the `--size-*` landscape half uses (that block's own
+ *  comment explains why a second landscape query must never exist). */
+const C_SIZE_PORTRAIT_ROOTS = scopedRuleBodies(
+  indexCss,
+  CONNECTED_SURFACE_SELECTOR,
+);
+const C_SIZE_LANDSCAPE_ROOTS = scopedRuleBodies(
+  indexCss,
+  CONNECTED_SURFACE_SELECTOR,
+  [LANDSCAPE_QUERY],
+);
+const C_SIZE_PORTRAIT_ROOT = C_SIZE_PORTRAIT_ROOTS[0] ?? "";
+const C_SIZE_LANDSCAPE_ROOT = C_SIZE_LANDSCAPE_ROOTS[0] ?? "";
+
+describe("the --c-size-* connected-only scale (index.css, on .connected-surface)", () => {
+  it("`.connected-surface` resolves to exactly one top-level rule and one landscape rule", () => {
+    // The same P8/P9 shape as the `--size-*` pin above: a second rule for
+    // this exact selector at the same specificity would win the cascade on
+    // whichever property it redeclared, silently, and `.exec`-style
+    // first-match tests would never see it.
+    expect(C_SIZE_PORTRAIT_ROOTS).toHaveLength(1);
+    expect(C_SIZE_LANDSCAPE_ROOTS).toHaveLength(1);
+  });
+
+  it.each(C_SIZE_SCALE)(
+    "$name: portrait $portrait px on .connected-surface, exactly once",
+    ({ name, portrait }) => {
+      expect(declarationCount(C_SIZE_PORTRAIT_ROOT, name, portrait)).toBe(1);
+    },
+  );
+
+  it.each(C_SIZE_SCALE)(
+    "$name: landscape $landscape px on .connected-surface, exactly once",
+    ({ name, landscape }) => {
+      expect(declarationCount(C_SIZE_LANDSCAPE_ROOT, name, landscape)).toBe(1);
+    },
+  );
+
+  it("names exactly the ten tokens in both blocks — no extra, none missing", () => {
+    const namesIn = (block: string) =>
+      Array.from(block.matchAll(/(--c-size-[a-z0-9-]+)\s*:/g))
+        .map((m) => m[1])
+        .toSorted();
+    const scaleNames = C_SIZE_SCALE.map((s) => s.name).toSorted();
+    expect(namesIn(C_SIZE_PORTRAIT_ROOT)).toStrictEqual(scaleNames);
+    expect(namesIn(C_SIZE_LANDSCAPE_ROOT)).toStrictEqual(scaleNames);
+  });
+
+  it("differs between orientations exactly where the spec says it differs, never where it doesn't", () => {
+    // Same honest-scope disclosure as the `--size-*` version of this test:
+    // not a second independent check, kept because it states the
+    // differ/don't-differ shape in one place and names the offending token.
+    for (const { name, portrait, landscape } of C_SIZE_SCALE) {
+      const actualPortrait = declaredValue(C_SIZE_PORTRAIT_ROOT, name);
+      const actualLandscape = declaredValue(C_SIZE_LANDSCAPE_ROOT, name);
+      expect([name, actualPortrait === actualLandscape]).toStrictEqual([
+        name,
+        portrait === landscape,
+      ]);
+    }
+  });
+
+  it("never introduces a second name for one role, and never leaks onto :root", () => {
+    for (const source of [tokensCss, indexCss]) {
+      expect(source).not.toMatch(/--c-size-[a-z0-9-]+-landscape/);
+      expect(source).not.toMatch(/--c-size-[a-z0-9-]+-portrait/);
+    }
+    // The whole point of scoping to `.connected-surface` (design spec §1,
+    // antagonist finding 2): declared on `:root`, the family would reach
+    // the phone timer too. This greps the ACTUAL `:root` blocks this file
+    // already isolates above, so a `--c-size-*` declaration accidentally
+    // added to either one fails here, not by a reviewer noticing.
+    expect(PORTRAIT_ROOT).not.toMatch(/--c-size-/);
+    expect(LANDSCAPE_ROOT).not.toMatch(/--c-size-/);
+  });
+
+  // TASK-1-SCOPED GREP PIN (task-1 brief step 6): the full spec exit
+  // criterion is "connected rules stop consuming `--size-*` entirely"
+  // (design spec §1), but this task only MOVES two things off it — the
+  // header and the segmented control, `PagerRail`'s replacement — while
+  // every pane keeps its current internals (and therefore its current
+  // `--size-*` reads) until Tasks 4/5 migrate them. So this pin is scoped
+  // to the rules THIS task actually touches, not every `.connected-*`
+  // rule in the file; Task 5's own step widens it to the full selector
+  // family and this comment is where that widening belongs.
+  it("the rules THIS task touches (.connected-header, .connected-control*, .connected-line*) never consume var(--size-*)", () => {
+    const rules = cssRules(indexCss).filter((rule) =>
+      rule.selectors.some(
+        (s) =>
+          /(^|[\s,])\.connected-header(\s|$|:|\.|>)/.test(`${s} `) ||
+          /(^|[\s,])\.connected-control[\w-]*(\s|$|:|\.|>)/.test(`${s} `) ||
+          /(^|[\s,])\.connected-line[\w-]*(\s|$|:|\.|>)/.test(`${s} `),
+      ),
+    );
+    expect(rules.length).toBeGreaterThan(0);
+    for (const rule of rules) {
+      expect([rule.selectors.join(", "), rule.body]).toStrictEqual([
+        rule.selectors.join(", "),
+        expect.not.stringContaining("var(--size-"),
+      ]);
+    }
+  });
+});

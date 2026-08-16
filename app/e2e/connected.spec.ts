@@ -352,41 +352,6 @@ async function cleanupByTitle(page: Page, title: string): Promise<void> {
   }
 }
 
-/** A native `TouchEvent` swipe on `.connected-surface` — the ONLY thing
- *  `page.touchscreen` cannot do is a two-point gesture with a real delta
- *  (it only exposes `tap()`), and `ConnectedSurface.tsx`'s own swipe is
- *  read from `onTouchStart`/`onTouchEnd`'s `clientX`, which a synthetic
- *  `Touch`/`TouchEvent` pair satisfies exactly like a real finger would.
- *  `deltaX` follows `paneAfterSwipe`'s own convention: negative moves
- *  forward through `PANES`, positive moves backward. */
-async function swipeSurface(page: Page, deltaX: number): Promise<void> {
-  await page.evaluate((dx) => {
-    const el = document.querySelector(".connected-surface");
-    if (!el) throw new Error("no .connected-surface to swipe");
-    const rect = el.getBoundingClientRect();
-    const startX = rect.left + rect.width / 2;
-    const y = rect.top + rect.height / 2;
-    const touch = (x: number, id: number) =>
-      new Touch({ identifier: id, target: el, clientX: x, clientY: y });
-    el.dispatchEvent(
-      new TouchEvent("touchstart", {
-        bubbles: true,
-        cancelable: true,
-        touches: [touch(startX, 1)],
-        changedTouches: [touch(startX, 1)],
-      }),
-    );
-    el.dispatchEvent(
-      new TouchEvent("touchend", {
-        bubbles: true,
-        cancelable: true,
-        touches: [],
-        changedTouches: [touch(startX + dx, 1)],
-      }),
-    );
-  }, deltaX);
-}
-
 /**
  * Advances the fake's virtual clock and reads whether `PAUSED` is on
  * screen, in the SAME `page.evaluate` round trip — the fix for a discovery
@@ -643,9 +608,9 @@ async function walkSurfaceToLog(
   const resumedHeaderTop = (await header.boundingBox())!.y;
   expect(resumedHeaderTop).toBeCloseTo(pausedHeaderTop, 0);
 
-  // Pane navigation VIA THE RAIL. Interval 0's boundary has certainly landed
-  // by now (it precedes even the freeze), so the grid read below is against
-  // SETTLED data, not a race.
+  // Pane navigation VIA THE SEGMENTED CONTROL. Interval 0's boundary has
+  // certainly landed by now (it precedes even the freeze), so the grid read
+  // below is against SETTLED data, not a race.
   await page.getByRole("button", { name: "Grid pane" }).click();
   await expect(page.getByRole("button", { name: "Grid pane" })).toHaveAttribute(
     "aria-current",
@@ -657,11 +622,10 @@ async function walkSurfaceToLog(
   await expect(page.locator(".connected-grid-completed")).toHaveCount(1);
   await expect(page.locator(".connected-grid-active")).toHaveCount(1);
 
-  // Pane navigation VIA SWIPE, back from grid to live — `paneAfterSwipe`: a
-  // POSITIVE delta moves backward through `PANES` (["live","grid"]), and
-  // "live" is the far end, so one swipe is the whole round trip there is
-  // (connected-revamp Task 2 dropped the timer pane, PANES's third stop).
-  await swipeSurface(page, 120);
+  // Back to LIVE, the same control (CR2 spec 3 task 1, design spec Ruling
+  // 4: the swipe this walk used to exercise here is gone — the segmented
+  // control is the only navigation left, in both directions).
+  await page.getByRole("button", { name: "Live pane" }).click();
   await expect(page.getByRole("button", { name: "Live pane" })).toHaveAttribute(
     "aria-current",
     "page",
@@ -773,7 +737,7 @@ async function walkSurfaceToLog(
 test.setTimeout(90_000);
 
 test.describe("Phase 7B Task 8: the connected walk, fake-driven — portrait (390×844)", () => {
-  test("connect -> pairing -> programming -> ready -> the surface (rail + swipe) -> paused -> resumed -> End -> the log screen", async ({
+  test("connect -> pairing -> programming -> ready -> the surface (segmented control) -> paused -> resumed -> End -> the log screen", async ({
     page,
   }) => {
     const title = `Connected Walk Portrait ${RUN_ID}`;
@@ -804,32 +768,29 @@ test.describe("Phase 7B Task 8: the connected walk, fake-driven — landscape (8
       deviceName,
     );
 
-    // NEW ASSERTION TERRITORY (this task's own brief): the pager rail,
-    // measured against the exact 390px-tall landscape frame every pane
-    // spec's own column math is quoted in. connected-revamp Task 2 moved
-    // the rail INTO the sensor gutter: `.connected-pager` is now a 44px
-    // WIDE column at the PHYSICAL edge (`x === 0`, revision §2/§6) in
-    // landscape (`index.css`'s own landscape media query, `grid-row: 1 /
-    // -1`) that spans the full SURFACE height (not the raw 390px viewport —
-    // `.connected-surface`'s own height formula reserves 26px above it,
-    // with no separate `- var(--tap)` term to steal ANOTHER 44px from it,
-    // Task 8's own `:has()` conversion) with no truncation of its own on
-    // top of that.
-    const surfaceBox = await page.locator(".connected-surface").boundingBox();
-    const railBox = await page.locator(".connected-pager").boundingBox();
-    expect(surfaceBox).not.toBeNull();
-    expect(railBox).not.toBeNull();
-    expect(railBox!.width).toBeCloseTo(44, 0);
-    expect(railBox!.x).toBeCloseTo(0, 0);
-    // The rail spans (most of) the surface's own full height — comfortably
-    // more than the 320px-vs-364px, clipped-UP-NEXT-strip shape the task-6
-    // review measured BEFORE `.connected-surface`'s own `:has()` rule
-    // existed, and nowhere near a truncated-rail shape. Not pinned to the
-    // pixel: grid-row sizing in this engine measures a few pixels different
-    // from the surface's own reported box, which is the CSS's business, not
-    // this walk's.
-    expect(railBox!.height).toBeGreaterThan(surfaceBox!.height - 30);
-    expect(railBox!.y + railBox!.height).toBeGreaterThan(390 - 60);
+    // NEW ASSERTION TERRITORY (CR2 spec 3 task 1's own brief), REWRITTEN
+    // FROM THE GUTTER'S OWN VERSION: `PagerRail`'s 44px-wide, full-height
+    // sensor-gutter column is gone (design spec §3 "Structure" — the
+    // segmented control that replaces it is a small pill living ONLY in
+    // the 44px header row now, beside `ConnectionLine`, not a second
+    // column running the surface's full height). What survives from the
+    // old claim: the control still sits at the PHYSICAL left edge in
+    // Chromium (`x === 0`, `--edge-inset` is 0 there — the same fact the
+    // old gutter pin relied on), because it is grid-column 1 of a surface
+    // whose own `padding-left` is `var(--edge-inset)`.
+    const control = page.locator(".connected-control");
+    const controlBox = await control.boundingBox();
+    expect(controlBox).not.toBeNull();
+    expect(controlBox!.x).toBeCloseTo(0, 0);
+    // The control's own tap floor (design spec §3: each half >=44px), not
+    // the surface's full height — it is a header-row pill now, so its
+    // height is close to the 44px row it shares with End, never anywhere
+    // near the ~360px a full-height gutter measured.
+    expect(controlBox!.height).toBeGreaterThanOrEqual(44);
+    expect(controlBox!.height).toBeLessThan(80);
+    // Sits at the very top of the frame, in the header row — not spanning
+    // down toward the pane body the way the retired gutter did.
+    expect(controlBox!.y).toBeLessThan(20);
 
     await walkSurfaceToLog(page, title, deviceName);
     await cleanupByTitle(page, title);
