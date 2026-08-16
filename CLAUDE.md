@@ -181,9 +181,12 @@ Roadmap: `ROADMAP.md` (phases + standing rules). Design reference: `docs/design/
   - Line one: **"This PR [outcome]"** — the result, not the mechanism.
   - Then bullets, not paragraphs. ~6 max, one line each: what changed, why,
     tester impact, how to try it.
-  - No spec codenames (B1, criterion 4) and no invented nouns above the
-    fold. Plain words: "replay waits for the app's own writes", not "the
-    barrier-gated rx scheduler".
+  - Codenames and file paths are fine as references. The failure mode is
+    WHAT-without-WHY prose: naming mechanisms ("four honest axes, derived
+    never guarded, exhaustive table over nine members") without saying
+    what problem they solve or what a human now sees differently. Every
+    bullet above the fold answers "so what?" — James is technical; he is
+    not the spec's co-author.
   - Everything else — evidence, probe outputs, cross-refs, risk notes,
     agent context — goes in a collapsed `<details>` block titled
     **"Record (for agents and audits)"**. Depth lives there, not up top.
