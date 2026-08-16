@@ -136,7 +136,12 @@ declare global {
      *  chunk. `ConnectionLogSheet.tsx`'s "Download recording" control reads
      *  this to decide whether to render at all, and calls `lines()`/
      *  `eventCount()` to build the download — see `recording.ts`'s own
-     *  `RecordingTap` for what each returns. */
+     *  `RecordingTap` for what each returns. **Overwrite-on-reconnect: each
+     *  qualifying `resolveDefaultTransport()` call REPLACES this global
+     *  with a brand-new tap — latest session wins, unconditionally. A
+     *  rower who reconnects (a fresh call resolves) before downloading an
+     *  earlier session's recording loses that earlier recording the
+     *  instant the new tap is assigned here; nothing preserves it.** */
     __pm5Recording__?: { lines(): string[]; eventCount(): number };
   }
 }

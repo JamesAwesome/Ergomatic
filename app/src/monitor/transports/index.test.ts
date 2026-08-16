@@ -252,6 +252,40 @@ describe("resolveDefaultTransport", () => {
     expect(transport).not.toBeNull();
     expect(window.__pm5Recording__).toBeUndefined();
   });
+
+  it("a second resolveDefaultTransport() call REPLACES the global — a reconnect's tap fully supersedes the earlier session's, review finding", async () => {
+    const restore = stubBluetooth({});
+    vi.mocked(createWebBluetoothTransport).mockReturnValue(stubWebTransport());
+
+    // First session: one write, one recorded event.
+    const first = await resolveDefaultTransport();
+    await first!.write(SAMPLE_RATE_UUID, new Uint8Array(1));
+    const firstSeam = window.__pm5Recording__!;
+    expect(firstSeam.eventCount()).toBe(1);
+
+    // Second session (a reconnect): a fresh call, a fresh tap.
+    vi.mocked(createWebBluetoothTransport).mockReturnValue(stubWebTransport());
+    const second = await resolveDefaultTransport();
+    const secondSeam = window.__pm5Recording__!;
+
+    // The global now points at the SECOND tap, not the first — a distinct
+    // object, starting from zero, unaffected by the first session's write.
+    expect(secondSeam).not.toBe(firstSeam);
+    expect(secondSeam.eventCount()).toBe(0);
+
+    await second!.write(SAMPLE_RATE_UUID, new Uint8Array(1));
+
+    // The seam reflects only the SECOND tap's events — the first session's
+    // recorded write is no longer reachable through window.__pm5Recording__
+    // at all; only a reference the caller separately held onto (`firstSeam`
+    // here) still sees it, which is the whole point of the finding: nothing
+    // product code held that reference, so a rower who reconnects before
+    // downloading loses it.
+    expect(window.__pm5Recording__!.eventCount()).toBe(1);
+    expect(firstSeam.eventCount()).toBe(1);
+
+    restore();
+  });
 });
 
 // ---------------------------------------------------------------------------
