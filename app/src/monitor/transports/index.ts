@@ -126,6 +126,18 @@ declare global {
      *  screenshot script or a human just watching, where a several-times
      *  slower real clock costs nothing), the two are not exclusive. */
     __pm5FakeControls__?: FakeControls;
+    /** Set by THIS file, the instant it wraps the REAL web transport (never
+     *  the injected fake) in a `recording.ts` tap — never by product code.
+     *  `undefined` on every path except this same `fakeMonitorEnabled` gate
+     *  the fake arm above lives behind, so a real deploy's build — where
+     *  both halves of that gate are statically `false` — never sets it
+     *  either; `scripts/dist-grep.sh`'s `pm5-recording` needle is that
+     *  file's own proof that `recording.ts` never ships in a production
+     *  chunk. `ConnectionLogSheet.tsx`'s "Download recording" control reads
+     *  this to decide whether to render at all, and calls `lines()`/
+     *  `eventCount()` to build the download — see `recording.ts`'s own
+     *  `RecordingTap` for what each returns. */
+    __pm5Recording__?: { lines(): string[]; eventCount(): number };
   }
 }
 
@@ -183,10 +195,14 @@ export function autoTicking(
 
 /**
  * The one place production code decides which `Transport` to build. Returns
- * synchronously (`Transport | null`) on every path except the DEV-injected
- * fake, which is behind a dynamic `import()` and therefore a `Promise` —
- * `useMonitorSession.ts`'s `connect()` awaits whatever this returns either
- * way, so the two shapes are indistinguishable to every caller.
+ * synchronously (`Transport | null`) only when the fake-injection gate
+ * (`fakeMonitorEnabled` below) is closed — the real path a production
+ * deploy always takes. When the gate is open (DEV, or an e2e build's
+ * `VITE_ENABLE_FAKE_MONITOR`), EVERY path is a `Promise`: the DEV-injected
+ * fake and the recording-wrapped real transport are both behind a dynamic
+ * `import()`. `useMonitorSession.ts`'s `connect()` awaits whatever this
+ * returns either way, so the sync/async shapes are indistinguishable to
+ * every caller.
  *
  * **Web-only, on purpose.** This function never chooses Capacitor BLE —
  * that choice is a PLATFORM conditional, and platform conditionals are
@@ -219,6 +235,24 @@ export function resolveDefaultTransport():
         return autoTicking(fake);
       });
     }
+    // No injected fake script, but the gate is open (DEV, or an e2e build's
+    // VITE_ENABLE_FAKE_MONITOR): wrap the REAL web transport in a recording
+    // tap so a dev session or an e2e walk can capture one. Dynamic
+    // `import("./recording")`, same as the fake arm above, for the same
+    // reason — this whole block, `recording.ts`'s module graph included,
+    // folds away with the gate in a real deploy's build.
+    const real = navigator.bluetooth ? createWebBluetoothTransport() : null;
+    if (real) {
+      return import("./recording").then(({ createRecordingTransport }) => {
+        const tap = createRecordingTransport(real);
+        window.__pm5Recording__ = {
+          lines: tap.lines,
+          eventCount: tap.eventCount,
+        };
+        return tap.transport;
+      });
+    }
+    return null;
   }
   return navigator.bluetooth ? createWebBluetoothTransport() : null;
 }

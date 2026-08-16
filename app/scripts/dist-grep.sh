@@ -5,11 +5,12 @@
 # an existing "lab/bridge" check being "extended to fake"; none existed
 # (verified: `.github/workflows/ci.yml`'s own history and today's tree have
 # no prior grep step at all). This script is the gate, wired into CI's `app`
-# job right after `pnpm build` (`ci.yml`), and it checks all three names
-# together — not just the one Task 8 added — because a single gate that only
-# ever grows is easier to trust than three that might drift apart.
+# job right after `pnpm build` (`ci.yml`), and it checks every name together
+# — not just the one Task 8 added (a fourth, `pm5-recording`, joined later,
+# record/replay stage A) — because a single gate that only ever grows is
+# easier to trust than several that might drift apart.
 #
-# Three needles, three different reasons — and every needle is a STRING
+# Four needles, four different reasons — and every needle is a STRING
 # LITERAL from the source, deliberately never a function/variable
 # identifier: `vite build` minifies the production bundle, which renames
 # every identifier it can (verified empirically this task — grepping for
@@ -42,6 +43,14 @@
 #   Node script nothing in `src/`/`domain/` ever imports (that file's own
 #   header: "Nothing in the app imports this"); this exists for the same
 #   reason as the `pm5-lab` check, one layer over.
+# - `pm5-recording` — a substring of `RECORDING_FORMAT_TAG`
+#   (`src/monitor/transports/recording.ts`, `"pm5-recording/v1"`), the
+#   literal every recording file's header line and `parseRecording`'s own
+#   format check carry verbatim. `recording.ts` is reached only through
+#   `transports/index.ts`'s OWN dynamic `import("./recording")`, one gate
+#   layer under the SAME `fakeMonitorEnabled` condition as `fake.ts` above —
+#   this string appearing in a production build means that gate failed the
+#   same way the `fake transport` check's would.
 #
 # Usage: `bash scripts/dist-grep.sh` from `app/`, AFTER `pnpm build` has
 # populated `dist/client`. Exits non-zero (and prints every match) the
@@ -55,7 +64,7 @@ if [ ! -d "$DIST" ]; then
   exit 1
 fi
 
-NEEDLES=("fake transport" "PM5 lab (dev harness" "PM5_BRIDGE_PORT")
+NEEDLES=("fake transport" "PM5 lab (dev harness" "PM5_BRIDGE_PORT" "pm5-recording")
 FAILED=0
 
 for needle in "${NEEDLES[@]}"; do
@@ -75,4 +84,4 @@ if [ "$FAILED" -ne 0 ]; then
   exit 1
 fi
 
-echo "dist-grep: OK — no dev-only monitor tooling (fake/lab/bridge) found in $DIST."
+echo "dist-grep: OK — no dev-only monitor tooling (fake/lab/bridge/recording) found in $DIST."
