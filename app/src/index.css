@@ -6470,6 +6470,108 @@ section:not(.news-pinned) .news-row:last-of-type {
   letter-spacing: -0.03em;
 }
 
+/* --- The redesigned progress bar (CR2 spec 3 task 3, design spec §2A)
+   `ConnectedProgressBar.tsx`. NOT mounted this task — the component ships
+   complete with its own CSS regardless (spec §2A: "the bar consumes
+   `boundaries` + `totalSeconds` + elapsed for both modes"), task 4 wires
+   it into `.connected-pane-live` in place of `.timer-total*`. Nothing here
+   collides with those rules: this component uses its own class family
+   throughout, never `.timer-total-bar`/`.timer-ruler`. --------------- */
+
+.connected-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* 6px, full-width, 3px gaps (design spec §2A) — the unfilled `--rule-2`
+   track shows through every gap and through fallback mode's own unfilled
+   remainder, so one background serves both modes. */
+.connected-progress-track {
+  display: flex;
+  height: 6px;
+  gap: 3px;
+  background: var(--rule-2);
+}
+
+/* Segment mode. Each segment's WIDTH is set inline
+   (`ConnectedProgressBar.tsx`: `flexGrow` = the interval's own duration in
+   seconds) — duration-proportional, per the spec's own comparison ("a
+   10:00 piece beside a 0:30 rest" must not draw equal-width). `flex-basis:
+   0` is what makes `flex-grow` a pure ratio between segments regardless of
+   how many share the row; `flex-shrink: 0` keeps the 3px gaps themselves
+   from being the thing that shrinks under pressure. */
+.connected-progress-seg {
+  flex-grow: 1;
+  flex-shrink: 0;
+  flex-basis: 0;
+  height: 100%;
+}
+
+.connected-progress-seg-done {
+  background: var(--ink);
+}
+
+/* DECORATION-ONLY, NEVER TEXT (tokens.css's own comment on
+   `--progress-active`, carried here verbatim because this is the rule
+   that actually paints it): `#8a8478` on the `--rule-2` track (`#ded8c9`)
+   measures 2.61:1 — under WCAG 1.4.11's 3:1 floor for meaningful
+   graphics. Disclosed and accepted, design spec §2A: the active segment's
+   state is redundantly carried in the status text beside this bar
+   (`3 OF 12 · WORK`), so the bar is reinforcement, never the sole
+   carrier. `--progress-active` must never be reused as a TEXT colour,
+   where that redundancy does not exist and 2.61:1 would fail outright
+   (WCAG 1.4.3's 4.5:1 floor for text). */
+.connected-progress-seg-active {
+  background: var(--progress-active);
+}
+
+.connected-progress-seg-upcoming {
+  background: var(--rule-2);
+}
+
+/* Fallback mode (>16 boundaries, design spec §2A): the segments above are
+   replaced wholesale by one proportional fill sized `elapsed/total`
+   (`ConnectedProgressBar.tsx`'s `fallbackFillPercent`) — the fallback
+   DRAWS, it does not degrade to an unfilled ruler. */
+.connected-progress-fill {
+  height: 100%;
+  background: var(--ink);
+}
+
+/* The quarter-tick row (`¼`/`½`/`¾`/session-minutes) — the same visual
+   vocabulary `.timer-ruler`/`.timer-ruler-tick` already draws for the
+   phone timer's own fallback, reproduced rather than shared (this file's
+   own header comment on why `connected/` never imports `TimerRuler`).
+   12px labels, not the phone timer's 9px: this task's binding preamble
+   floors all connected-surface text at 12px, so the two rows cannot be
+   byte-identical even though they say the same four words. */
+.connected-progress-ticks {
+  display: flex;
+}
+
+.connected-progress-tick {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.connected-progress-tick-mark {
+  width: 1px;
+  height: 5px;
+  background: var(--rule-3);
+  display: block;
+}
+
+.connected-progress-tick-label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-3);
+  transform: translateX(50%);
+}
+
 /* --- Pane C, the grid (Task 7, handoff §3; rebuilt connected-revamp
    Task 5, design spec §6/revision §4) ---------------------------------- */
 
