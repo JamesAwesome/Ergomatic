@@ -1153,6 +1153,16 @@ export function createPm5Driver(
    *  successful `program()` (below) — a re-armed run's own first refusal
    *  is a new fact too, not a repeat of the outgoing run's. */
   let refusedKeysLogged = new Set<number>();
+  /** The stale-count rest clamp's own throttle (rest-keying spec,
+   *  2026-08-16), the same idiom as `refusedKeysLogged` right above it: one
+   *  `"divergence"` entry per distinct clamped key, not once per tick — a
+   *  clamped resting frame recurs at the ~2/s status-tick rate for as long
+   *  as the poisoned key stays newest, which would otherwise flood the same
+   *  ring buffer `refusedKeysLogged`'s own comment describes. Reset
+   *  alongside `session` and `refusedKeysLogged` on every successful
+   *  `program()` (below) — a re-armed run's own first clamp is a new fact
+   *  too, not a repeat of the outgoing run's. */
+  let clampedKeysLogged = new Set<number>();
   /** R0 (CR2 spec 1, Task 1). The last totals actually PUT ON A FRAME.
    *  `logSummaryTotals` fires on 0x0039, which carries no per-interval pair
    *  of its own, so the value the rower last saw has to be remembered
@@ -1843,6 +1853,38 @@ export function createPm5Driver(
       session.seen.size > 0
         ? Math.max(...session.seen.keys())
         : null);
+
+    // THE STALE-COUNT REST CLAMP (rest-keying spec, 2026-08-16). The PM5
+    // notifies 0x0031 before 0x0033 in every measured burst (983/983,
+    // walk-2026-08-16), so the first resting tick of interval N's rest can
+    // still carry count N; the resting -1 arm then keys N-1 and max-merge
+    // would keep the poison. Rest always belongs to the newest key (the
+    // machine numbers rests forward; keys only grow within a run), so a
+    // resting frame below max(seen) is the stale window by construction.
+    // Placed BEFORE the refused-open guard: the clamp's output is a key
+    // already in `seen`, which short-circuits that guard's own gate — the
+    // value is order-independent (both orders simulated), the LOG is not,
+    // and this order makes the specific diagnosis win the log. A stale
+    // ROWING frame needs no clamp: it keys its own just-finished interval,
+    // where its pair is a max-merge no-op — do not generalise this.
+    if (
+      base.state === "resting" &&
+      activeKey !== null &&
+      session.seen.size > 0
+    ) {
+      const newestKey = Math.max(...session.seen.keys());
+      if (activeKey < newestKey) {
+        if (!clampedKeysLogged.has(activeKey)) {
+          clampedKeysLogged.add(activeKey);
+          log.record(
+            "divergence",
+            `stale-count rest clamp: resting key ${activeKey} lifted to ` +
+              `${newestKey} (count lags state at the boundary)`,
+          );
+        }
+        activeKey = newestKey;
+      }
+    }
 
     // THE OPEN-ON-RESET GUARD (CR2 spec 1 Task 11 — the walk's own
     // falsification, `docs/monitor/sessions/walk-2026-08-15/` session B, a
@@ -4241,6 +4283,11 @@ export function createPm5Driver(
         // same as `session` it rides alongside — a re-armed run's own
         // first refusal is a new fact, not a repeat of the outgoing run's.
         refusedKeysLogged = new Set();
+        // `clampedKeysLogged`'s own comment: the gate is per-run state,
+        // same as `session` and `refusedKeysLogged` it rides alongside — a
+        // re-armed run's own first clamp is a new fact, not a repeat of
+        // the outgoing run's.
+        clampedKeysLogged = new Set();
         // Diagnostics-only (R0, Task 1's own doc comment): the outgoing
         // run's last-seen totals belong to that run, not the new one.
         lastEmittedTotals = { elapsedSeconds: 0, distanceMeters: 0 };
