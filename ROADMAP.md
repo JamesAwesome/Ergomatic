@@ -992,10 +992,12 @@ still holds: no pairing, subscribe-only, Web Bluetooth is Chromium-only.
       sequencing over a pending-ack queue for coalesced BLE notifications,
       a state machine with terminal-state latching (Appendix E's auto-cycle
       never un-finishes a session), an optional tick-driven ack-timeout
-      policy, and `intervalRemaining` rooted on 0x0033's own Last Split
-      Time/Distance fields; `src/monitor/transports/fake.ts` simulates a
-      real PM5 end to end for CI (byte-for-byte programming verification,
-      six injection hooks)
+      policy, and `intervalRemaining`/`intervalAccrued` reading 0x0031's own
+      per-interval Elapsed Time/Distance pair directly (CR2 spec 2a Task 6
+      deleted an earlier 0x0033 Last Split checkpoint subtraction the
+      inversion result falsified — interface-notes.md §20 items 17/24);
+      `src/monitor/transports/fake.ts` simulates a real PM5 end to end for
+      CI (byte-for-byte programming verification, six injection hooks)
 - [x] `src/monitor/monitorRun.ts`: the monitor-driven session record
       (`MonitorRun`, localStorage, mirroring `session/run.ts`'s idiom), the
       cross-clear rule (creating a `MonitorRun` clears any `SessionRun`),

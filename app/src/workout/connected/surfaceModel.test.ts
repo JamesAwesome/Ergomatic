@@ -1290,3 +1290,46 @@ describe("boundaries: where the intervals actually are", () => {
     expect(m.boundaries.seconds.at(-1)!).toBeLessThan(m.totalSeconds);
   });
 });
+
+describe("Task 6: the active row's accrued cell at interval index 2 (the checkpoint the driver no longer subtracts)", () => {
+  it("interval 2 of Filling Low is a real DISTANCE interval — the shape the driver-level walk signature test exercises", () => {
+    expect(FIXTURE.program.intervals[2]!.kind).toBe("distance");
+  });
+
+  it("renders the driver's post-fix intervalAccrued directly — 45s reads '0:45' in the TIME cell (the complement of a distance interval)", () => {
+    // Task 6 (interface-notes.md §20 items 17/24): `computeAccruedForFrame`
+    // no longer subtracts 0x0033's Last Split checkpoint, so a frame at
+    // interval index 2 carries the driver's raw per-interval Elapsed Time
+    // straight through as `intervalAccrued` — this is the on-screen half of
+    // the same fix `driver.test.ts`'s "walk signature" test exercises at
+    // the driver level (45s accrued on that same distance-kind shape).
+    // Pre-fix, the SAME wire tick (with a nonzero lagged checkpoint two
+    // boundaries deep) would have clamped this to `intervalAccrued: {
+    // kind: "time", value: 0 }` — rendering '0:00', not '0:45'.
+    const m = model({
+      frame: frame({
+        intervalIndex: 2,
+        intervalRemaining: { kind: "distance", value: 1602.7 },
+        intervalAccrued: { kind: "time", value: 45 },
+      }),
+    });
+    const activeRow = m.grid.rows[m.grid.activeIndex]!;
+    expect(activeRow.index).toBe(2);
+    // A distance interval's countdown lives in `meters`; its complement
+    // (accrual) lives in `time` — `buildGridModel`'s own ternary.
+    expect(activeRow.time).toBe("0:45");
+    expect(activeRow.meters).toBe("1603"); // countdownDisplayFor rounds
+  });
+
+  it("a checkpoint-poisoned reading (intervalAccrued clamped to 0) is what the on-screen half looked like BEFORE this task — pinned so a regression is visible in the display string, not just the driver's own numbers", () => {
+    const m = model({
+      frame: frame({
+        intervalIndex: 2,
+        intervalRemaining: { kind: "distance", value: 1602.7 },
+        intervalAccrued: { kind: "time", value: 0 },
+      }),
+    });
+    const activeRow = m.grid.rows[m.grid.activeIndex]!;
+    expect(activeRow.time).toBe("0:00");
+  });
+});

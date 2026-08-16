@@ -1691,22 +1691,26 @@ export function createPm5Driver(
    * how far INTO the current interval `frame` represents, in the
    * interval's own unit.
    *
-   * Fix-round HIGH-2 (re-rooted per review): sourced from 0x0033's own
-   * "Last Split Time"/"Last Split Distance" fields (`RawPm5Status.
-   * lastSplitTimeSeconds`/`lastSplitDistanceMeters`, interface-notes.md
-   * §10 offset 14-19) — the session-cumulative point at which the CURRENT
-   * interval began, reported on EVERY regular status tick, needing no
-   * local observation history at all. `frame.elapsedSeconds`/
-   * `distanceMeters` minus that pair is "how far into this interval",
-   * correct on the VERY FIRST tick the driver ever observes for a given
-   * interval (unlike an earlier version of this function, which rooted a
-   * checkpoint at whichever tick it happened to see first — permanently
-   * wrong for any interval whose first observed tick wasn't also its
-   * true start, e.g. a late-arriving first tick, or a reconnect that
-   * skipped straight into the interval already in progress; see the
-   * report and interface-notes.md §15 #8 for the assumption this now
-   * rests on instead). No driver-local state is needed to compute this —
-   * every input is read straight from the current merged `raw`/`frame`.
+   * Task 6 (CR2 spec 2a, interface-notes.md §20 items 17/24): NO checkpoint
+   * subtraction — `frame.distanceMeters`/`elapsedSeconds` (0x0031's own
+   * Distance/Elapsed Time pair) IS progress into the current interval
+   * already, because that pair is per-interval on the wire to begin with
+   * (item 12: it resets at every boundary). A fix-round HIGH-2 predecessor
+   * of this function subtracted 0x0033's "Last Split Time"/"Last Split
+   * Distance" fields from this same pair on the theory that they were
+   * session-cumulative and 0x0031 was too — correct by construction against
+   * the fake's own self-consistent fiction of the day, but never checked
+   * against a real capture. The inversion (225+161 frames replayed off
+   * `docs/monitor/sessions/walk-2026-08-15/`, zero mismatches) settled
+   * item 24's open question the other way: the checkpoint reads ZERO
+   * through interval indices 0 and 1, then LAGS one boundary behind from
+   * index 2 on, which makes the old subtraction a harmless no-op at
+   * indices 0-1 (0 subtracted is nothing) and a genuine wrong answer from
+   * index 2 on — walk 4's own "intervalRemaining correct as it stood"
+   * verdict, cited by the code this replaces, was drawn from a
+   * single-interval capture that could never have exercised the lag at
+   * all. No driver-local state is needed here now, same as before: every
+   * input is read straight from the current merged `raw`/`frame`.
    */
   function computeRemainingForFrame(
     frame: MonitorFrame,
@@ -1714,25 +1718,23 @@ export function createPm5Driver(
     const p = armedProgram();
     if (!p || frame.intervalIndex === null) return null;
     const interval = p.intervals[frame.intervalIndex];
-    const status = raw as RawPm5Status;
     const progress =
       interval?.kind === "distance"
-        ? frame.distanceMeters - status.lastSplitDistanceMeters
-        : frame.elapsedSeconds - status.lastSplitTimeSeconds;
+        ? frame.distanceMeters
+        : frame.elapsedSeconds;
     return computeIntervalRemaining(interval, progress);
   }
 
   /**
    * `intervalAccrued`'s per-frame wiring — the exact mirror of
-   * `computeRemainingForFrame` above, sharing the SAME 0x0033 "Last Split"
-   * checkpoint pair for the OTHER dimension (ROADMAP CL item 7): both
-   * `lastSplitTimeSeconds` and `lastSplitDistanceMeters` already arrive on
-   * every regular status tick regardless of which one the interval counts
-   * down, so no new wire data is needed, and the two functions' progress
-   * ternaries are exact mirrors of each other (whichever dimension
-   * `computeRemainingForFrame` does NOT read, this one does). Same guard as
-   * its sibling — `!p || frame.intervalIndex === null` — so the two fields
-   * are always both-null or both-set on any given frame.
+   * `computeRemainingForFrame` above, reading the SAME 0x0031 per-interval
+   * pair's OTHER field for the complement dimension (ROADMAP CL item 7):
+   * whichever of `elapsedSeconds`/`distanceMeters`
+   * `computeRemainingForFrame` does NOT read, this one does, with no
+   * checkpoint subtraction here either (Task 6, same citation as its
+   * sibling above). Same guard as its sibling — `!p || frame.intervalIndex
+   * === null` — so the two fields are always both-null or both-set on any
+   * given frame.
    */
   function computeAccruedForFrame(
     frame: MonitorFrame,
@@ -1740,11 +1742,10 @@ export function createPm5Driver(
     const p = armedProgram();
     if (!p || frame.intervalIndex === null) return null;
     const interval = p.intervals[frame.intervalIndex];
-    const status = raw as RawPm5Status;
     const progress =
       interval?.kind === "distance"
-        ? frame.elapsedSeconds - status.lastSplitTimeSeconds
-        : frame.distanceMeters - status.lastSplitDistanceMeters;
+        ? frame.elapsedSeconds
+        : frame.distanceMeters;
     return computeIntervalAccrued(interval, progress);
   }
 

@@ -622,15 +622,18 @@ function totalWorkDistanceFor(
  *  always warmed up by the time a real session begins.
  *
  *  `lastSplit` is 0x0033's "Last Split Time"/"Last Split Distance" pair
- *  (interface-notes.md §10, §15 #8) — the session-cumulative point at
- *  which the CURRENT interval began, i.e. wherever the most recent
- *  boundary (if any) left off. The driver's `computeRemainingForFrame`
- *  (fix-round HIGH-1) subtracts this from the live `elapsedSeconds`/
- *  `distanceMeters` above to recover "progress into this interval" with
- *  no observation history of its own — an earlier version of this fake
- *  hardcoded both fields to 0 forever, which made every interval after
- *  the first compute a wrong (too-generous) `intervalRemaining` the
- *  moment it wasn't the interval that started the whole session. */
+ *  (interface-notes.md §10, §20 items 17/24) — the caller (`wireLastSplit`)
+ *  passes the MEASURED semantics, not the naive "current interval's own
+ *  start" reading an earlier fiction assumed: ZERO through interval
+ *  indices 0 and 1, then LAGGING one boundary behind from interval 2 on
+ *  (the cumulative point at which the PREVIOUS interval began). Task 6's
+ *  inversion (225+161 frames, zero mismatches) settled interface-notes.md
+ *  §20 item 24's open question this way. Nothing downstream subtracts this
+ *  pair any more — `driver.ts`'s `computeRemainingForFrame`/
+ *  `computeAccruedForFrame` read the per-interval 0x0031 pair directly —
+ *  so this field is now sent purely to keep the wire model honest for
+ *  whatever else reads 0x0033, not because a consumer still re-derives
+ *  progress from it. */
 function statusBundle(
   program: WorkoutProgram,
   e: FakeStatusEvent,
@@ -1056,15 +1059,27 @@ export function createFakeTransport(
   // `tick`/`completeReconnect` doc comments.
   let latestStatus: FakeStatusEvent | null = null;
   let latestBoundary: FakeBoundaryEvent | null = null;
-  // The MACHINE's own last-known "where did the current interval start"
-  // checkpoint (0x0033's Last Split Time/Distance, fed to every
-  // `statusBundle()` call — see that function's own doc comment). Updated
-  // in `deliverOrCache` the moment a boundary is PROCESSED, regardless of
-  // `linkDown` — the real PM keeps this bookkeeping up to date whether or
-  // not the phone is currently connected to hear about it (design spec §4's
-  // iOS note), which is exactly what makes the reconnect path's very first
-  // post-reconnect status tick already carry the correct value.
+  // The MOST RECENT boundary's own cumulative totals — internal bookkeeping
+  // only, never sent on the wire directly (see `wireLastSplit` below for
+  // what actually reaches 0x0033). Updated in `deliverOrCache` the moment a
+  // boundary is PROCESSED, regardless of `linkDown` — the real PM keeps
+  // this up to date whether or not the phone is currently connected to hear
+  // about it (design spec §4's iOS note), which is exactly what makes the
+  // reconnect path's very first post-reconnect status tick already carry
+  // the correct value.
   let lastBoundaryCumulative = { elapsedSeconds: 0, distanceMeters: 0 };
+  // What 0x0033's Last Split Time/Distance actually reports (Task 6, the
+  // inversion result: 225+161 frames replayed with zero mismatches,
+  // interface-notes.md §20 items 17/24) — ZERO through interval indices 0
+  // and 1, then LAGGING one boundary behind `lastBoundaryCumulative` from
+  // interval 2 onward: the wire holds the cumulative point at which the
+  // PREVIOUS interval began, not the current one. Shifted in
+  // `deliverOrCache` the instant BEFORE `lastBoundaryCumulative` itself
+  // advances, so it is always exactly one boundary stale. This is the
+  // field `statusBundle()` actually sends; `computeRemainingForFrame`/
+  // `computeAccruedForFrame` (`driver.ts`) no longer read it at all — the
+  // per-interval 0x0031 pair alone is progress, checkpoint or not.
+  let wireLastSplit = { elapsedSeconds: 0, distanceMeters: 0 };
   // The machine's CURRENT state word, in `MonitorFrame` terms — updated
   // from every status event this fake processes (delivered or merely
   // cached; the PM keeps rowing whether or not the phone is listening).
@@ -1093,7 +1108,7 @@ export function createFakeTransport(
     const { general, as1, as2 } = statusBundle(
       script.program,
       e,
-      lastBoundaryCumulative,
+      wireLastSplit,
       structureForTick(),
     );
     notify(ADDITIONAL_STATUS_2_UUID, buildAdditionalStatus2Bytes(as2));
@@ -1655,16 +1670,14 @@ export function createFakeTransport(
       // on, the driver holds its frames until this cycle has finished.)
       autoCycle = [];
       // …and the SESSION bookkeeping that belonged to the previous workout
-      // goes with it (Task 6 fix round, review MED-2). 0x0033's Last Split
-      // Time/Distance is "where the interval currently running began",
-      // session-cumulative — a number that means nothing across a workout
-      // boundary. Left standing, run 2's very first status frame told the
-      // driver its 300s interval had begun at second 300, and
-      // `computeRemainingForFrame` dutifully reported 500s remaining of a
-      // 300s interval. The cached boundary goes for the same reason: a
-      // reconnect early in run 2 would otherwise flush run 1's LAST
-      // boundary into run 2 as if it had just happened.
+      // goes with it (Task 6 fix round, review MED-2) — both the internal
+      // `lastBoundaryCumulative` and the WIRE-facing `wireLastSplit` it
+      // feeds (CR2 spec 2a Task 6), a number that means nothing across a
+      // workout boundary either way. The cached boundary goes for the same
+      // reason: a reconnect early in run 2 would otherwise flush run 1's
+      // LAST boundary into run 2 as if it had just happened.
       lastBoundaryCumulative = { elapsedSeconds: 0, distanceMeters: 0 };
+      wireLastSplit = { elapsedSeconds: 0, distanceMeters: 0 };
       latestBoundary = null;
       // Fix-round 1, F1: withheld until a subsequent `tick()` (or
       // `deliverArmedNow()`) — see `tick()`'s own doc comment for why
@@ -1746,6 +1759,18 @@ export function createFakeTransport(
       // comment). This is what a later status tick (live or, after
       // `completeReconnect()`, the very first post-reconnect one) picks up
       // automatically, with no separate reconnect-specific logic needed.
+      //
+      // The WIRE checkpoint (`wireLastSplit`) shifts to the OLD
+      // `lastBoundaryCumulative` first, one line before `lastBoundaryCumulative`
+      // itself advances to this boundary — that ordering is the whole
+      // lag-one-boundary model (Task 6, `wireLastSplit`'s own comment):
+      // whatever this boundary just made current stays ONE boundary away
+      // from what the wire reports until the NEXT boundary shifts it in
+      // turn. At the very first boundary (completing interval 0),
+      // `lastBoundaryCumulative` is still its `{0, 0}` initial value, so
+      // `wireLastSplit` shifts to `{0, 0}` too — exactly why the wire reads
+      // 0 through interval 1 as well as interval 0.
+      wireLastSplit = lastBoundaryCumulative;
       lastBoundaryCumulative = {
         elapsedSeconds: event.cumulativeElapsedSeconds,
         distanceMeters: event.cumulativeDistanceMeters,

@@ -2240,3 +2240,180 @@ describe("createFakeTransport: subscriptionCount", () => {
     expect(fake.subscriptionCount()).toBe(0);
   });
 });
+
+describe("createFakeTransport: 0x0033's Last Split checkpoint — Task 6's inversion result", () => {
+  // interface-notes.md §20 items 17/24: the checkpoint reads ZERO through
+  // interval indices 0 and 1, then LAGS one boundary behind from index 2
+  // on (the cumulative point at which the PREVIOUS interval began), not the
+  // "current interval's own start" a self-consistent-but-falsified earlier
+  // model of this fake assumed. Lab numbers: checkpoint 0 at interval 1
+  // right after a completed 60s interval 0; ~181m (interval 0's own end) at
+  // interval 2.
+  const CHECKPOINT_PROGRAM: WorkoutProgram = {
+    intervals: [
+      {
+        type: "work",
+        kind: "time",
+        value: 60,
+        targetSplit: null,
+        displaySpm: null,
+        restSeconds: 0,
+      },
+      {
+        type: "work",
+        kind: "time",
+        value: 60,
+        targetSplit: null,
+        displaySpm: null,
+        restSeconds: 0,
+      },
+      {
+        type: "work",
+        kind: "time",
+        value: 60,
+        targetSplit: null,
+        displaySpm: null,
+        restSeconds: 0,
+      },
+    ],
+  };
+  const CHECKPOINT_EVENTS: FakeTimelineEvent[] = [
+    {
+      atMs: 100,
+      kind: "status",
+      workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+      elapsedSeconds: 30,
+      distanceMeters: 90,
+      spm: 22,
+      currentSplit: 130,
+      heartRateBpm: 138,
+      programIntervalIndex: 0,
+    },
+    // Interval 0 ends at 181m — the lab's own "~181m, interval 0's own end".
+    {
+      atMs: 200,
+      kind: "boundary",
+      actual: {
+        index: 0,
+        elapsedSeconds: 60,
+        distanceMeters: 181,
+        avgSplit: 130,
+        avgSpm: 22,
+        avgHeartRateBpm: 138,
+      },
+      cumulativeElapsedSeconds: 60,
+      cumulativeDistanceMeters: 181,
+    },
+    {
+      atMs: 300,
+      kind: "status",
+      workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+      elapsedSeconds: 22,
+      distanceMeters: 75,
+      spm: 22,
+      currentSplit: 129,
+      heartRateBpm: 139,
+      programIntervalIndex: 1,
+    },
+    {
+      atMs: 400,
+      kind: "boundary",
+      actual: {
+        index: 1,
+        elapsedSeconds: 60,
+        distanceMeters: 150,
+        avgSplit: 129,
+        avgSpm: 22,
+        avgHeartRateBpm: 139,
+      },
+      cumulativeElapsedSeconds: 120,
+      cumulativeDistanceMeters: 331,
+    },
+    {
+      atMs: 500,
+      kind: "status",
+      workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+      elapsedSeconds: 18,
+      distanceMeters: 60,
+      spm: 22,
+      currentSplit: 128,
+      heartRateBpm: 140,
+      programIntervalIndex: 2,
+    },
+  ];
+
+  it("reads 0/0 on interval 0's own first tick (nothing has completed yet)", async () => {
+    const fake = createFakeTransport({
+      program: CHECKPOINT_PROGRAM,
+      events: CHECKPOINT_EVENTS,
+    });
+    await programIt(fake, CHECKPOINT_PROGRAM);
+    const as2: Uint8Array[] = [];
+    fake.subscribe(ADDITIONAL_STATUS_2_UUID, (b) => as2.push(b));
+    fake.tick(100);
+    expect(as2).toHaveLength(1);
+    expect(decodeAs2(as2[0]!)).toMatchObject({
+      lastSplitTimeSeconds: 0,
+      lastSplitDistanceMeters: 0,
+    });
+  });
+
+  it("STILL reads 0/0 on interval 1's own first tick — one boundary has already fired", async () => {
+    const fake = createFakeTransport({
+      program: CHECKPOINT_PROGRAM,
+      events: CHECKPOINT_EVENTS,
+    });
+    await programIt(fake, CHECKPOINT_PROGRAM);
+    const as2: Uint8Array[] = [];
+    fake.subscribe(ADDITIONAL_STATUS_2_UUID, (b) => as2.push(b));
+    fake.tick(300); // delivers tick@100, boundary@200, tick@300
+    expect(as2).toHaveLength(2);
+    expect(decodeAs2(as2[1]!)).toMatchObject({
+      lastSplitTimeSeconds: 0,
+      lastSplitDistanceMeters: 0,
+    });
+  });
+
+  it("LAGS to interval 0's own boundary at interval 2 — not interval 1's, which just fired", async () => {
+    const fake = createFakeTransport({
+      program: CHECKPOINT_PROGRAM,
+      events: CHECKPOINT_EVENTS,
+    });
+    await programIt(fake, CHECKPOINT_PROGRAM);
+    const as2: Uint8Array[] = [];
+    fake.subscribe(ADDITIONAL_STATUS_2_UUID, (b) => as2.push(b));
+    fake.tick(500); // delivers every scripted event through the interval-2 tick
+    expect(as2).toHaveLength(3);
+    // Interval 0's own boundary (60s/181m) — NOT interval 1's (120s/331m),
+    // which fired more recently but is exactly the one boundary this
+    // checkpoint stays behind.
+    expect(decodeAs2(as2[2]!)).toMatchObject({
+      lastSplitTimeSeconds: 60,
+      lastSplitDistanceMeters: 181,
+    });
+  });
+
+  it("resets to 0/0 across a re-arm — a new workout owes nothing to the last one's checkpoint", async () => {
+    const fake = createFakeTransport({
+      program: CHECKPOINT_PROGRAM,
+      events: CHECKPOINT_EVENTS,
+    });
+    await programIt(fake, CHECKPOINT_PROGRAM);
+    fake.tick(500); // reach interval 2, checkpoint lagged to 60s/181m
+    await fake.write(RECEIVE_CHARACTERISTIC_UUID, buildTerminate()[0]![0]!);
+    for (const chunk of buildTerminate()[0]!.slice(1)) {
+      await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+    }
+    const as2: Uint8Array[] = [];
+    fake.subscribe(ADDITIONAL_STATUS_2_UUID, (b) => as2.push(b));
+    for (const chunk of buildProgrammingSequence(CHECKPOINT_PROGRAM)[0]!) {
+      await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+    }
+    fake.tick(0); // flushes the fresh armed bundle (fix-round 1, F1)
+    expect(as2.length).toBeGreaterThan(0);
+    expect(decodeAs2(as2[0]!)).toMatchObject({
+      lastSplitTimeSeconds: 0,
+      lastSplitDistanceMeters: 0,
+    });
+  });
+});
