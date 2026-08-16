@@ -3,6 +3,15 @@ import path from "node:path";
 import type { Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 import { signInViaBackdoor } from "./helpers";
+import { LIBRARY_WORKOUTS } from "../server/seed/library/index.js";
+import type { Step, WorkoutType } from "../domain/types.js";
+import { compileProgram } from "../domain/monitor/program.js";
+import type { WorkoutProgram } from "../domain/monitor/program.js";
+import type { IntervalActual } from "../domain/monitor/types.js";
+import { buildDraft, startDraft } from "../src/session/draft";
+import { buildRun } from "../src/session/engine";
+import { buildLogSeed } from "../src/session/logDraft";
+import { MONITOR_RUN_KEY, type MonitorRun } from "../src/monitor/monitorRun";
 
 // Committed into docs/screenshots/ for PR bodies. NOT diff-asserted — a
 // human judges these, this spec only judges "did it render" (see
@@ -469,6 +478,136 @@ test("today-unlogged", async ({ page }) => {
   });
 
   await cleanupByTitle(page, title);
+});
+
+// F6 spec 2b, Task 5: the twin row's own capture — a dead `MonitorRun`
+// (`completedAt === null`) the rower closes through Today rather than the
+// monitor itself. Duplicated helper set from e2e/design.spec.ts's own
+// identical block (this file's own stated precedent, `cleanupByTitle`'s
+// comment above) — a real `buildDraft -> startDraft -> buildRun ->
+// compileProgram -> buildLogSeed` compile against the real seeded library
+// workout "Hoarfrost", with `workoutId` fetched from the compose stack's
+// own `/api/workouts`, never a hand-typed record. No `cleanupByTitle` call
+// needed: "Hoarfrost" is a global library workout, not a personal one this
+// user created, and the `MonitorRun` itself lives in localStorage.
+
+function library(title: string) {
+  const w = LIBRARY_WORKOUTS.find((s) => s.title === title);
+  if (!w) throw new Error(`missing library fixture: ${title}`);
+  return w;
+}
+
+function compileOrThrow(
+  phases: Parameters<typeof compileProgram>[0],
+): WorkoutProgram {
+  const result = compileProgram(phases);
+  if ("code" in result) {
+    throw new Error(
+      `fixture failed to compile (${result.code}): ${result.message}`,
+    );
+  }
+  return result;
+}
+
+const MONITOR_FIXED_NOW = new Date("2026-08-01T12:00:00.000Z");
+const MONITOR_FIXTURE_BASELINES = { k2Seconds: 100, k6Seconds: 120 };
+
+async function libraryWorkoutId(page: Page, title: string): Promise<string> {
+  const result = await page.evaluate(async (t) => {
+    const res = await fetch("/api/workouts");
+    if (!res.ok) return { ok: false as const, status: res.status, id: null };
+    const workouts = (await res.json()) as Array<{
+      id: string;
+      title: string;
+    }>;
+    return {
+      ok: true as const,
+      status: res.status,
+      id: workouts.find((w) => w.title === t)?.id ?? null,
+    };
+  }, title);
+  if (!result.ok) {
+    throw new Error(`workout lookup failed for "${title}": ${result.status}`);
+  }
+  if (result.id === null) {
+    throw new Error(`workout not found in the seeded library: "${title}"`);
+  }
+  return result.id;
+}
+
+function buildInterruptedMonitorRun(workoutId: string): MonitorRun {
+  const hoarfrost = library("Hoarfrost");
+  const timeWork = hoarfrost.steps.find((s) => s.k === "w") as Extract<
+    Step,
+    { k: "w" }
+  >;
+  const calmSea = library("Calm Sea");
+  const distanceWork = calmSea.steps.find((s) => s.k === "w") as Extract<
+    Step,
+    { k: "w" }
+  >;
+  const draft = buildDraft({
+    id: workoutId,
+    title: hoarfrost.title,
+    type: hoarfrost.type as WorkoutType,
+    steps: [timeWork, distanceWork],
+  });
+  const started = startDraft(draft);
+  const built = buildRun(
+    started,
+    MONITOR_FIXTURE_BASELINES,
+    MONITOR_FIXED_NOW,
+    {
+      kind: "time",
+      minutes: 4,
+    },
+  );
+  const program = compileOrThrow(built.phases);
+  const logSeed = buildLogSeed(built.phases, MONITOR_FIXTURE_BASELINES);
+  const actuals: IntervalActual[] = [
+    {
+      index: 1,
+      elapsedSeconds: 360,
+      distanceMeters: 1200,
+      avgSplit: 150,
+      avgSpm: 22,
+      avgHeartRateBpm: 130,
+    },
+  ];
+  return {
+    v: 2,
+    workoutId,
+    title: hoarfrost.title,
+    program,
+    logSeed,
+    actuals,
+    deviceName: "PM5 432331249 Row",
+    startedAt: MONITOR_FIXED_NOW.toISOString(),
+    completedAt: null,
+    terminated: false,
+  };
+}
+
+test("today-interrupted", async ({ page }) => {
+  const title = "Hoarfrost";
+  await signInViaBackdoor(page, {
+    email: "screenshots-today-interrupted@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await setBaselines(page);
+  const workoutId = await libraryWorkoutId(page, title);
+  const run = buildInterruptedMonitorRun(workoutId);
+  await page.evaluate(({ key, value }) => localStorage.setItem(key, value), {
+    key: MONITOR_RUN_KEY,
+    value: JSON.stringify(run),
+  });
+
+  await page.goto("/today");
+  await expect(page.getByText(/interrupted connected session\./)).toBeVisible();
+
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "today-interrupted.png"),
+  });
 });
 
 test("plan", async ({ page }) => {
