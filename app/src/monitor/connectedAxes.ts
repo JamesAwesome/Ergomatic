@@ -18,17 +18,18 @@
 // `switch`, zero exhaustiveness guards, an unenumerated phase laundered by
 // `?? "live"` into a full live surface).
 //
-// PRECEDENCE FOR THE FUTURE COLLAPSE TO ONE `SurfaceStatus` (NOT decided
-// here — this module answers four separate questions, never one):
-// `ended` > `disconnected` > (`armed` | mirror | `live`). Today implicit in
-// `surfaceStatusFor`'s early returns; written down here because "zero
-// behaviour change" is unfalsifiable unless the intended order is on record
-// before the collapse itself is built (spec §1, later task).
-//
-// ZERO BEHAVIOUR CHANGE ON DAY ONE: nothing in the app calls `deriveAxes`
-// yet — `connectedAxes.test.ts`'s exhaustive table is the proof (spec exit
-// criterion 1), not a replay of any recorded session (the rings carry no
-// phase entries at all).
+// PRECEDENCE FOR THE COLLAPSE TO ONE `SurfaceStatus` (this module still
+// answers four separate questions, never one — the collapse lives in the
+// CALLER): `stale` (the link is lost) beats `armed` (a program sits on the
+// machine with no session open yet) beats `paused` (the freeze predicate
+// fired) beats `live` (everything else). `"ended"` is not part of that
+// collapse at all — the caller renders its own hand-off frame for it and
+// never reaches the axes-to-status decision. Realized in exactly one place
+// (task 2, connected-axes design spec §1): `ConnectedSurface.tsx`'s own
+// call to `deriveAxes`, whose comment carries this same order. There is no
+// `surfaceStatusFor` any more — `deriveAxes` plus that one caller-side
+// ternary replaced it, and the `?? "live"` laundering §F3 named is gone
+// with it.
 
 import type { ConnectedPhase } from "./useMonitorSession";
 

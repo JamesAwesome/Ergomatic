@@ -31,7 +31,6 @@ import {
   phaseIndexForInterval,
   splitHero,
   staleFor,
-  surfaceStatusFor,
   type SurfaceModelInput,
 } from "./surfaceModel";
 
@@ -126,7 +125,7 @@ function model(over: Partial<SurfaceModelInput> = {}) {
   return buildSurfaceModel({
     phases: FIXTURE.phases,
     program: FIXTURE.program,
-    phase: "live",
+    status: "live",
     frame: frame(),
     deviceName: DEVICE,
     actuals: [],
@@ -269,21 +268,50 @@ describe("judgedValue: the one judgement path", () => {
   });
 });
 
-describe("staleFor / surfaceStatusFor", () => {
+describe("staleFor: the single place that decides WHEN a reading is stale", () => {
   it("only a lost link makes a reading stale — a paused erg is still talking", () => {
-    expect(staleFor("disconnected")).toBe(true);
+    expect(staleFor("stale")).toBe(true);
     expect(staleFor("paused")).toBe(false);
     expect(staleFor("live")).toBe(false);
-    expect(staleFor("ended")).toBe(false);
+    expect(staleFor("armed")).toBe(false);
+  });
+});
+
+// `surfaceStatusFor` is GONE (task 2, connected-axes design spec §1): it
+// used to narrow a `ConnectedPhase` to the four the surface draws and
+// return `null` for everything else, which `buildSurfaceModel` laundered
+// into `"live"` with its own `?? "live"` — the exact mechanism
+// `docs/monitor/state-architecture-review.md` §F3 named as the shape that
+// let an unenumerated phase (`"ready"`, once the rower asked for the
+// numbers) render as a full live surface instead of the armed one it
+// actually was. The caller now computes a real, non-nullable `status` from
+// `connectedAxes.ts`'s four axes (`ConnectedSurface.tsx`'s own precedence
+// comment) and this module never sees a `ConnectedPhase` at all.
+describe('status plumbs through, non-nullable — the `?? "live"` laundering is gone', () => {
+  it('an "armed" status renders as armed — the exact rendering (nowLabel, no judged colours) is Task 3\'s', () => {
+    const m = model({ status: "armed" });
+    expect(m.status).toBe("armed");
   });
 
-  it("narrows only the four phases the surface draws", () => {
-    expect(surfaceStatusFor("live")).toBe("live");
-    expect(surfaceStatusFor("paused")).toBe("paused");
-    expect(surfaceStatusFor("disconnected")).toBe("disconnected");
-    expect(surfaceStatusFor("ended")).toBe("ended");
-    expect(surfaceStatusFor("ready")).toBeNull();
-    expect(surfaceStatusFor("pairing")).toBeNull();
+  it("rejects a call with no status at all (@ts-expect-error) — there is nothing left to launder it into", () => {
+    // @ts-expect-error — `status` is a required field of
+    // `SurfaceModelInput`; the old `phase: ConnectedPhase` field (optional
+    // in effect, since `surfaceStatusFor` mapped anything it didn't
+    // recognise to `null` and this function's own `?? "live"` covered for
+    // it) is gone, and so is the fallback.
+    const m = buildSurfaceModel({
+      phases: FIXTURE.phases,
+      program: FIXTURE.program,
+      frame: frame(),
+      deviceName: DEVICE,
+      actuals: [],
+    });
+    // If this suppression were ever exercised for real — a caller that
+    // bypasses the type system, not one that fails to compile — the result
+    // is an honestly undefined status, never a silent live surface: proof
+    // the `?? "live"` laundering has nowhere left to hide, not just that it
+    // no longer appears in this file.
+    expect(m.status).toBeUndefined();
   });
 });
 
@@ -434,7 +462,7 @@ describe("live", () => {
     const easy = buildSurfaceModel({
       phases: EFFORT_MIN.phases,
       program: EFFORT_MIN.program,
-      phase: "live",
+      status: "live",
       frame: frame({
         intervalIndex: 1,
         // A split that would read `"faster"` against the 5' paddle's own
@@ -466,7 +494,7 @@ describe("live", () => {
     const numeric = buildSurfaceModel({
       phases: EFFORT_MIN.phases,
       program: EFFORT_MIN.program,
-      phase: "live",
+      status: "live",
       frame: frame({ intervalIndex: 0 }),
       deviceName: DEVICE,
       actuals: [],
@@ -478,7 +506,7 @@ describe("live", () => {
     const allOut = buildSurfaceModel({
       phases: EFFORT_MAX.phases,
       program: EFFORT_MAX.program,
-      phase: "live",
+      status: "live",
       frame: frame({ intervalIndex: 0, currentSplit: 100 }),
       deviceName: DEVICE,
       actuals: [],
@@ -646,14 +674,14 @@ describe("a zero split is not a reading (7B iteration: the pre-pull tinted 0:00.
     // verdict colour at a rower who had not taken a stroke. (The walk saw
     // it in ochre; that state is blue since the 2026-08-13 repaint. The
     // colour is not what the test is about.)
-    const m = model({ phase: "live", frame: frame({ currentSplit: 0 }) });
+    const m = model({ status: "live", frame: frame({ currentSplit: 0 }) });
     expect(m.pace.display).toBe("—");
     expect(m.pace.absent).toBe(true);
     expect(m.pace.judgement).not.toBe("faster");
   });
 
   it("a real split still judges exactly as before", () => {
-    const m = model({ phase: "live", frame: frame({ currentSplit: 117 }) });
+    const m = model({ status: "live", frame: frame({ currentSplit: 117 }) });
     expect(m.pace.absent).toBe(false);
     expect(m.pace.display).not.toBe("—");
   });
@@ -666,13 +694,13 @@ describe("paused", () => {
   // hero's own no-target/paused treatment is the dash itself — nothing on
   // pane B has a slot for a fourth caption line explaining it.
   it("has no current pace: NOW goes to `—`", () => {
-    const m = model({ phase: "paused", frame: frame({ currentSplit: 117 }) });
+    const m = model({ status: "paused", frame: frame({ currentSplit: 117 }) });
     expect(m.pace.display).toBe("—");
     expect(m.pace.absent).toBe(true);
   });
 
   it("is NOT stale: the erg is still talking, so nothing greys as unvouched", () => {
-    const m = model({ phase: "paused" });
+    const m = model({ status: "paused" });
     expect(m.stale).toBe(false);
     expect(m.linked).toBe(true);
     expect(m.nowLabel).toBe("NOW");
@@ -680,7 +708,7 @@ describe("paused", () => {
 
   it("holds the interval clock's last value rather than blanking it", () => {
     const m = model({
-      phase: "paused",
+      status: "paused",
       frame: frame({ intervalRemaining: { kind: "time", value: 41 } }),
     });
     expect(m.intervalClockValue).toBe("0:41");
@@ -691,7 +719,7 @@ describe("disconnected: lose and degrade (spec C5)", () => {
   it("greys EVERY actual, whatever it would otherwise have judged", () => {
     const target = firstWorkPhase().targetSplit!;
     const m = model({
-      phase: "disconnected",
+      status: "stale",
       frame: frame({ currentSplit: target - 30, spm: 40 }),
     });
     expect(m.stale).toBe(true);
@@ -702,7 +730,7 @@ describe("disconnected: lose and degrade (spec C5)", () => {
   });
 
   it("relabels NOW as LAST and hollows the indicator", () => {
-    const m = model({ phase: "disconnected" });
+    const m = model({ status: "stale" });
     expect(m.nowLabel).toBe("LAST");
     expect(m.linked).toBe(false);
   });
@@ -711,7 +739,7 @@ describe("disconnected: lose and degrade (spec C5)", () => {
     // The exact caption forbids "TRYING" on its own; the extra
     // `not.toContain("TRYING")` trailer that used to follow could not fail
     // once this line passed (test-integrity sweep, S0g).
-    const m = model({ phase: "disconnected" });
+    const m = model({ status: "stale" });
     expect(m.deviceCaption).toBe(`${DEVICE} · LOST`);
   });
 });
@@ -742,9 +770,9 @@ describe("degenerate inputs", () => {
     // without a picker result, which is a caller bug — but it renders a
     // word, not `undefined`.
     expect(model({ deviceName: null }).deviceCaption).toBe("PM5");
-    expect(
-      model({ deviceName: null, phase: "disconnected" }).deviceCaption,
-    ).toBe("PM5 · LOST");
+    expect(model({ deviceName: null, status: "stale" }).deviceCaption).toBe(
+      "PM5 · LOST",
+    );
   });
 
   it("renders an empty phase list without inventing a phase", () => {
@@ -753,7 +781,7 @@ describe("degenerate inputs", () => {
     const m = buildSurfaceModel({
       phases: [],
       program: FIXTURE.program,
-      phase: "live",
+      status: "live",
       frame: frame(),
       deviceName: DEVICE,
       actuals: [],
@@ -878,7 +906,7 @@ describe("the warm-up is flagged, never counted", () => {
     const m = buildSurfaceModel({
       phases: withRest.phases,
       program: withRest.program,
-      phase: "live",
+      status: "live",
       frame: frame({ intervalIndex: 0, state: "resting" }),
       deviceName: DEVICE,
       actuals: [],
@@ -900,7 +928,7 @@ describe("the warm-up is flagged, never counted", () => {
       const m = buildSurfaceModel({
         phases: NO_WARMUP.phases,
         program: NO_WARMUP.program,
-        phase: "live",
+        status: "live",
         frame: frame({ intervalIndex: i }),
         deviceName: DEVICE,
         actuals: [],
@@ -996,7 +1024,7 @@ describe("boundaries: where the intervals actually are", () => {
     const bare = buildSurfaceModel({
       phases: NO_WARMUP.phases,
       program: NO_WARMUP.program,
-      phase: "live",
+      status: "live",
       frame: frame(),
       deviceName: DEVICE,
       actuals: [],
@@ -1068,7 +1096,7 @@ describe("boundaries: where the intervals actually are", () => {
     const m = buildSurfaceModel({
       phases,
       program: FIXTURE.program,
-      phase: "live",
+      status: "live",
       frame: frame(),
       deviceName: DEVICE,
       actuals: [],
@@ -1083,7 +1111,7 @@ describe("boundaries: where the intervals actually are", () => {
     const m = buildSurfaceModel({
       phases,
       program: FIXTURE.program,
-      phase: "live",
+      status: "live",
       frame: frame(),
       deviceName: DEVICE,
       actuals: [],

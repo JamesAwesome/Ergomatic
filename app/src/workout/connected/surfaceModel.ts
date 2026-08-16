@@ -32,7 +32,6 @@ import type {
   IntervalActual,
   MonitorFrame,
 } from "../../../domain/monitor/types.js";
-import type { ConnectedPhase } from "../../monitor/useMonitorSession";
 import type { EnginePhase } from "../../session/engine";
 import {
   intervalBoundaries,
@@ -46,10 +45,20 @@ import {
 } from "../../session/Timer";
 import { FREE, targetSplitDisplay } from "../../session/TimerTargets";
 
-/** The four `ConnectedPhase` values the surface is mounted for. Everything
- *  earlier (`idle`/`picking`/`pairing`/`programming`/`ready`/`failed`) still
- *  belongs to the interstitial (Task 5). */
-export type SurfaceStatus = "live" | "paused" | "disconnected" | "ended";
+/** What the surface itself renders differently — NOT a narrowed
+ *  `ConnectedPhase` any more (connected-axes design spec §1, task 2). The
+ *  CALLER (`ConnectedSurface.tsx`) derives this from `connectedAxes.ts`'s
+ *  four axes, in one place, in the precedence that module's own header
+ *  comment writes down: `stale` (the link is lost) beats `armed` (a program
+ *  sits on the machine with no session open yet — `"ready"`, once the rower
+ *  has asked for the numbers, used to launder into `"live"` here via this
+ *  file's own `?? "live"`; it no longer does, which is this task's whole
+ *  reason to exist) beats `paused` (the freeze predicate fired) beats
+ *  `live` (everything else the surface draws). `"ended"` is not a member:
+ *  `ConnectedSurface.tsx` renders its own hand-off frame and returns before
+ *  `buildSurfaceModel` is ever called for it, so this module never has to
+ *  answer for a phase with no live pane at all. */
+export type SurfaceStatus = "live" | "paused" | "stale" | "armed";
 
 /** One live actual, ready to place: the formatted string and the verdict
  *  that colours it. `absent` is NOT a fifth judgement — it is "there is no
@@ -95,23 +104,7 @@ export function judgedValue(args: {
  *  unchanged across N frames", not "no frames"), so paused values are held
  *  and greyed by their own treatment, not judged `"stale"`. */
 export function staleFor(status: SurfaceStatus): boolean {
-  return status === "disconnected";
-}
-
-/** `ConnectedPhase` narrowed to the four the surface draws. Anything else
- *  reaching here is a caller bug — the interstitial's own phase gate is what
- *  decides the surface is on screen at all — so this returns `null` rather
- *  than guessing a state. */
-export function surfaceStatusFor(phase: ConnectedPhase): SurfaceStatus | null {
-  switch (phase) {
-    case "live":
-    case "paused":
-    case "disconnected":
-    case "ended":
-      return phase;
-    default:
-      return null;
-  }
+  return status === "stale";
 }
 
 /**
@@ -210,7 +203,14 @@ const NO_FRAME: MonitorFrame = {
 export interface SurfaceModelInput {
   phases: EnginePhase[];
   program: WorkoutProgram;
-  phase: ConnectedPhase;
+  /** The precedence-resolved status the CALLER computed from
+   *  `connectedAxes.ts`'s four axes (design spec §1) — this module no
+   *  longer narrows a `ConnectedPhase` itself; `surfaceStatusFor` and this
+   *  function's own `?? "live"` laundering are both gone (task 2). Required,
+   *  not optional: every caller must say which of the four states this
+   *  render is, and a `// @ts-expect-error` test pins that a missing one is
+   *  a compile error, not a silent live surface. */
+  status: SurfaceStatus;
   frame: MonitorFrame | null;
   deviceName: string | null;
   /** Everything the machine has reported finishing, straight off the hook.
@@ -405,8 +405,7 @@ function livePace(frame: MonitorFrame, status: SurfaceStatus): number | null {
 const PACE_HERO_CAP_SECONDS = 599.9;
 
 export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
-  const { phases, program, deviceName } = input;
-  const status = surfaceStatusFor(input.phase) ?? "live";
+  const { phases, program, deviceName, status } = input;
   const frame = input.frame ?? NO_FRAME;
   const stale = staleFor(status);
 
@@ -545,7 +544,7 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
   return {
     status,
     stale,
-    linked: status !== "disconnected",
+    linked: status !== "stale",
     deviceCaption: deviceCaptionFor(deviceName, status),
     intervalLabel: ordinal === null ? kindWord : `INTERVAL ${counted}`,
     intervalLabelShort: ordinal === null ? kindWord : counted,
@@ -943,7 +942,7 @@ function deviceCaptionFor(
   status: SurfaceStatus,
 ): string {
   const name = deviceName ?? "PM5";
-  return status === "disconnected" ? `${name} · LOST` : name;
+  return status === "stale" ? `${name} · LOST` : name;
 }
 
 function intervalClockValueFor(

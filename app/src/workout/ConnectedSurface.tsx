@@ -44,6 +44,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
+import { deriveAxes } from "../monitor/connectedAxes";
 import type { MonitorSession } from "../monitor/useMonitorSession";
 import { ARM_TIMEOUT_MS } from "../session/useStagedDiscard";
 import type { EnginePhase } from "../session/engine";
@@ -51,7 +52,10 @@ import ConnectionLogSheet from "./connected/ConnectionLogSheet";
 import PagerRail, { PANES, type PaneId } from "./connected/PagerRail";
 import PaneGrid from "./connected/PaneGrid";
 import PaneLive from "./connected/PaneLive";
-import { buildSurfaceModel } from "./connected/surfaceModel";
+import {
+  buildSurfaceModel,
+  type SurfaceStatus,
+} from "./connected/surfaceModel";
 
 /** Which pane the rower was last on, PER ROWER — not per workout (handoff
  *  §3: "whichever pane the rower last used (per rower, not per workout)…
@@ -288,18 +292,13 @@ export default function ConnectedSurface({
     void session.endSession();
   }
 
-  const model = buildSurfaceModel({
-    phases,
-    program,
-    phase: session.phase,
-    frame: session.frame,
-    deviceName: session.deviceName,
-    actuals: session.actuals,
-  });
-
   if (session.phase === "ended") {
     // One frame, then gone (see the header's mount decision). Not a dead
     // end: `onEnded` has already fired above, and its caller navigates.
+    // No `SurfaceStatus` describes "ended" any more (connected-axes design
+    // spec §1, task 2: the type dropped it outright) — `buildSurfaceModel`
+    // is never called for this frame, which is drawn straight off `session`
+    // instead.
     return (
       <main className="screen connected-surface connected-surface-ended">
         <p className="connected-status-label">SESSION ENDED</p>
@@ -312,6 +311,46 @@ export default function ConnectedSurface({
       </main>
     );
   }
+
+  // THE STATUS PRECEDENCE, REALIZED (connected-axes design spec §1;
+  // `connectedAxes.ts`'s own header comment names the order this collapses
+  // to: `ended > disconnected > (armed | mirror | live)`). `ended` is
+  // handled above, before axes are even derived, so this is the one
+  // decision left: `stale` (the link is lost) beats `armed` (a program sits
+  // on the machine with no session open yet — `"ready"`, once the rower has
+  // asked for the numbers) beats `paused` (the freeze predicate fired)
+  // beats `live` (everything else).
+  //
+  // `failureLeavesLinkUp: null` — the conservative "no evidence of a
+  // surviving link" reading (`AxesInput`'s own doc comment) — is not a
+  // guess this component is dodging: `"failed"` never reaches here at all.
+  // `ConnectedInterstitial.tsx`'s own phase gate renders its OWN screen for
+  // `phase === "failed"` and never hands this component a session in that
+  // phase, so the one axis this argument feeds (`deriveLink`'s `"failed"`
+  // case) is provably never consulted by this call.
+  const axes = deriveAxes({
+    phase: session.phase,
+    frozen: session.frozen,
+    runOpen: session.runOpen,
+    failureLeavesLinkUp: null,
+  });
+  const status: SurfaceStatus =
+    axes.link === "lost"
+      ? "stale"
+      : axes.program === "armed" && axes.session === "none"
+        ? "armed"
+        : axes.activity === "frozen"
+          ? "paused"
+          : "live";
+
+  const model = buildSurfaceModel({
+    phases,
+    program,
+    status,
+    frame: session.frame,
+    deviceName: session.deviceName,
+    actuals: session.actuals,
+  });
 
   return (
     <main

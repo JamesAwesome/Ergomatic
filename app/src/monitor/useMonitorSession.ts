@@ -282,14 +282,16 @@ export interface MonitorSession {
   handoffHeld: boolean;
   /** Mirrors `freezeRef` — `isPausedRun(freezeRef.current)` at the instant
    *  of the last `update()`. Published for `connectedAxes.ts`'s `activity`
-   *  axis (design spec §1); no consumer yet — read-only, derived, not a
-   *  second source of truth (`freezeRef` still owns the write). */
+   *  axis (design spec §1) — read-only, derived, not a second source of
+   *  truth (`freezeRef` still owns the write). Consumed since task 2:
+   *  `ConnectedSurface.tsx`'s `deriveAxes` call feeds this straight through. */
   frozen: boolean;
   /** Mirrors `runRef`: `true` iff this hook's own record is open
    *  (`runRef.current !== null && runRef.current.completedAt === null`) at
    *  the instant of the last `update()`. Published for `connectedAxes.ts`'s
    *  `session` axis (design spec §1) — at `disconnected` the record
-   *  deliberately stays open, so `phase` alone cannot say. No consumer yet. */
+   *  deliberately stays open, so `phase` alone cannot say. Consumed since
+   *  task 2, the same call `frozen` is. */
   runOpen: boolean;
   /** Opens the platform's monitor chooser (`"picking"`), then connects (`"pairing"`) and
    *  builds the driver around the picked device's REAL advertised name.
