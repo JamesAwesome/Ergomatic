@@ -1321,15 +1321,13 @@ describe("Task 6: the active row's accrued cell at interval index 2 (the checkpo
     expect(activeRow.meters).toBe("1603"); // countdownDisplayFor rounds
   });
 
-  it("a checkpoint-poisoned reading (intervalAccrued clamped to 0) is what the on-screen half looked like BEFORE this task — pinned so a regression is visible in the display string, not just the driver's own numbers", () => {
-    const m = model({
-      frame: frame({
-        intervalIndex: 2,
-        intervalRemaining: { kind: "distance", value: 1602.7 },
-        intervalAccrued: { kind: "time", value: 0 },
-      }),
-    });
-    const activeRow = m.grid.rows[m.grid.activeIndex]!;
-    expect(activeRow.time).toBe("0:00");
-  });
+  // MINOR-5, Task 6 fix round: a third test here (feeding `intervalAccrued:
+  // { kind: "time", value: 0 }` and asserting the display string "0:00")
+  // was deleted rather than kept — it proved only that `fmtDuration(0 / 60)
+  // === "0:00"`, since the model layer cannot tell a genuinely-fresh 0
+  // apart from a checkpoint-clamped 0 (both are the same literal input to
+  // `accruedDisplayFor`, and there is no code path left, post-Task-6, that
+  // still produces the clamped kind). The 45 -> "0:45" test above is the
+  // real discriminating coverage: it fails if the display math regresses in
+  // either direction.
 });

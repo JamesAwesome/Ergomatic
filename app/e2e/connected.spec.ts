@@ -200,6 +200,13 @@ function buildStoryEvents(): (FakeStatusEventLike | FakeBoundaryEventLike)[] {
       cumulativeElapsedSeconds: 15,
       cumulativeDistanceMeters: 100,
     },
+    // WIRE-IMPOSSIBLE (review IMPORTANT-2, Task 6 fix round): elapsed/
+    // distance continue cumulatively from interval 0's own boundary above
+    // (15s/100m) instead of resetting per-interval (item 12) — post-Task-6
+    // this renders METERS LEFT = 0 (Math.max clamp) through every
+    // interval-1 frame this story reaches, not a real countdown.
+    // Rewriting this walk to per-interval-reset values also moves TOTAL M
+    // and needs its own pass; deferred, not fixed this round.
     {
       atMs: t + 900,
       kind: "status",
@@ -229,6 +236,13 @@ function buildStoryEvents(): (FakeStatusEventLike | FakeBoundaryEventLike)[] {
     // superseded four-metric key would have left this walk GREEN. With the
     // clock running, the browser gate proves the finding end to end: a key
     // that includes elapsed can never repeat here, and PAUSED never fires.
+    //
+    // WIRE-IMPOSSIBLE, same disclosure as the interval-1 tick above
+    // (review IMPORTANT-2): `distanceMeters: 140` continues this story's
+    // own already-cumulative interval-1 narrative (115 there), not a
+    // per-interval reset — this block's own purpose is testing the freeze
+    // derivation, not METERS LEFT, but post-Task-6 it still renders 0
+    // (clamped) throughout. Same deferral: not fixed this round.
     ...FREEZE_OFFSETS.map((offset, i) => ({
       atMs: t + 900 + offset,
       kind: "status" as const,

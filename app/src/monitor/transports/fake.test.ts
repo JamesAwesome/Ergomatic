@@ -2394,9 +2394,37 @@ describe("createFakeTransport: 0x0033's Last Split checkpoint — Task 6's inver
   });
 
   it("resets to 0/0 across a re-arm — a new workout owes nothing to the last one's checkpoint", async () => {
+    // Review IMPORTANT-1: `as2[0]` after a re-arm is the WAITTOBEGIN armed
+    // bundle, and `armedBundle()` passes a LITERAL `{elapsedSeconds: 0,
+    // distanceMeters: 0}` as `lastSplit` (that function's own doc comment:
+    // "nothing to root it at before the session's own first interval even
+    // starts") — never `wireLastSplit`. Asserting only `as2[0]` proves
+    // `armedBundle`'s hardcoded zero, not that `wireLastSplit` itself was
+    // actually reset; the reset line in `deliverOrCache`'s re-arm branch
+    // could be deleted and this test would still pass. Fixed: a scripted
+    // STATUS TICK after the re-arm, which routes through `statusBundle`
+    // and `wireLastSplit` for real, is what this test now asserts against.
+    const REARM_EVENTS: FakeTimelineEvent[] = [
+      ...CHECKPOINT_EVENTS,
+      // Interval 0 of the RE-ARMED program (same `CHECKPOINT_PROGRAM`,
+      // fresh session) — if `wireLastSplit` had NOT been reset, this tick
+      // would still carry the first session's lagged checkpoint
+      // (60s/181m, reached above) instead of 0/0.
+      {
+        atMs: 600,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        elapsedSeconds: 5,
+        distanceMeters: 12,
+        spm: 20,
+        currentSplit: 135,
+        heartRateBpm: 130,
+        programIntervalIndex: 0,
+      },
+    ];
     const fake = createFakeTransport({
       program: CHECKPOINT_PROGRAM,
-      events: CHECKPOINT_EVENTS,
+      events: REARM_EVENTS,
     });
     await programIt(fake, CHECKPOINT_PROGRAM);
     fake.tick(500); // reach interval 2, checkpoint lagged to 60s/181m
@@ -2412,6 +2440,14 @@ describe("createFakeTransport: 0x0033's Last Split checkpoint — Task 6's inver
     fake.tick(0); // flushes the fresh armed bundle (fix-round 1, F1)
     expect(as2.length).toBeGreaterThan(0);
     expect(decodeAs2(as2[0]!)).toMatchObject({
+      lastSplitTimeSeconds: 0,
+      lastSplitDistanceMeters: 0,
+    });
+    // The REAL pin: a live status tick after the re-arm, routed through
+    // `wireLastSplit` for real (not `armedBundle`'s hardcoded literal).
+    fake.tick(100); // 500 -> 600, delivers the scripted post-rearm tick
+    expect(as2.length).toBeGreaterThan(1);
+    expect(decodeAs2(as2.at(-1)!)).toMatchObject({
       lastSplitTimeSeconds: 0,
       lastSplitDistanceMeters: 0,
     });

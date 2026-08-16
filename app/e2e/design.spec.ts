@@ -3906,6 +3906,13 @@ const ROWING_STORY = [
     cumulativeElapsedSeconds: 15,
     cumulativeDistanceMeters: 100,
   },
+  // WIRE-IMPOSSIBLE (review IMPORTANT-2, Task 6 fix round): elapsed/
+  // distance continue cumulatively from interval 0's own boundary (15s/
+  // 100m) instead of resetting per-interval (item 12) — post-Task-6 this
+  // renders METERS LEFT = 0 (Math.max clamp) through every interval-1 frame
+  // this story reaches, not a real countdown. Rewriting these walks to
+  // per-interval-reset values also moves TOTAL M and needs its own pass;
+  // deferred, not fixed this round.
   rowingAt(CONNECTED_STORY_START_MS + 600, {
     elapsedSeconds: 17,
     distanceMeters: 115,
@@ -3942,6 +3949,9 @@ const EXTREME_SPLIT_STORY = [
     cumulativeElapsedSeconds: 15,
     cumulativeDistanceMeters: 100,
   },
+  // WIRE-IMPOSSIBLE (review IMPORTANT-2, same shape as `ROWING_STORY`'s own
+  // interval-1 tick above — session-cumulative, not per-interval-reset):
+  // renders METERS LEFT = 0 post-Task-6. Deferred, not fixed this round.
   rowingAt(CONNECTED_STORY_START_MS + 600, {
     elapsedSeconds: 17,
     distanceMeters: 115,
@@ -3955,6 +3965,10 @@ const EXTREME_SPLIT_STORY = [
  *  stays on screen indefinitely instead of racing the sweep. */
 const FREEZING_STORY = [
   ...ROWING_STORY,
+  // WIRE-IMPOSSIBLE (review IMPORTANT-2, same shape again — 20s/140m
+  // continues cumulatively past `ROWING_STORY`'s own 17s/115m rather than
+  // resetting per-interval): renders METERS LEFT = 0 post-Task-6 through
+  // every one of these frozen frames. Deferred, not fixed this round.
   ...Array.from({ length: 12 }, (_, i) =>
     rowingAt(CONNECTED_STORY_START_MS + 900 + i * 300, {
       elapsedSeconds: 20,

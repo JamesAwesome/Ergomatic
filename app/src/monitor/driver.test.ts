@@ -1685,19 +1685,42 @@ describe("createPm5Driver: the full happy path over a real compiled workout (Sea
       frame: { state: "finished", heartRateBpm: null },
     });
 
-    // intervalRemaining reads 0x0031's own elapsed pair directly since
-    // Task 6 (no checkpoint subtraction any more, interface-notes.md §20
-    // items 17/24) — and this fixture's own elapsed is deliberately still
-    // session-cumulative (this describe block's own "One EXCEPTION" comment
-    // above), so interval 1's live tick reads 360s of a 240s interval:
-    // `computeIntervalRemaining` clamps that overshoot to 0
-    // (`Math.max(0, ...)`, its own doc comment — "a quantization overshoot
-    // ... must never render as a negative countdown"), not a real interval
-    // ever actually finishing early. A REALISTIC per-interval tick (60s
-    // into 240s, matching the reconnect-boundary test's own fixed fixture
-    // just above this describe block) would read 180 here instead; this
-    // fixture cannot be made realistic without also fixing the separate
-    // TWD/accumulator gap this task's own comment above documents.
+    // Controller ruling (review IMPORTANT-3, Task 6 fix round): this
+    // assertion's `value: 0` is ACCEPTED as-is, on four conditions, all
+    // recorded here rather than scattered:
+    //
+    // (a) THE INPUT IS WIRE-IMPOSSIBLE. This fixture's elapsed is still
+    //     session-cumulative (300 -> 360 across the interval-0/1 boundary,
+    //     not a reset near zero) — a real PM5 does not produce this
+    //     (item 12: "Both fields reset together at each new work
+    //     interval"). Proved unfixable this round, not merely left alone:
+    //     task-6-report.md's "Deviation from the brief" section works the
+    //     algebra showing NO choice of this fixture's numbers can satisfy
+    //     `recordTwdVerdict`'s own check once real per-interval accumulator
+    //     keys open (exhaustion proof, condition (d) below is why).
+    // (b) THE ASSERTED 0 IS THE CLAMP'S HONEST OUTPUT FOR THAT INPUT.
+    //     `computeIntervalRemaining`'s `Math.max(0, interval.value -
+    //     progress)` — its own doc comment: "a quantization overshoot ...
+    //     must never render as a negative countdown" — turns 240 - 360 into
+    //     0, not a negative number. This is the clamp working correctly on
+    //     a bad input, not a new defect.
+    // (c) THIS LINE IS MUTATION-BLIND AT INDEX 1, BY MEASUREMENT, not by
+    //     assumption: the wire's own checkpoint reads 0 at interval index 1
+    //     regardless of whether the (deleted) subtraction still existed —
+    //     reintroducing it here would subtract 0 from 360 and still clamp
+    //     to 0, so THIS assertion cannot discriminate Task 6's fix from its
+    //     absence. It documents clamp behavior on a known-bad input, not a
+    //     regression guard; the real regression coverage for the fix is the
+    //     dedicated index-2 tests in the "Task 6" describe block below,
+    //     whose self-mutation this task's report shows biting.
+    // (d) THE REALISTIC-FIXTURE REWORK IS A NAMED FOLLOW-UP, not silently
+    //     deferred: "the fake's independent machine total" — giving
+    //     `fake.ts`'s `totalWorkDistanceFor`/`recordTwdVerdict` a TWD field
+    //     that tracks a real running session total independent of the
+    //     per-tick `distanceMeters` item 12 says must be per-interval,
+    //     rather than deriving one from the other. Tracked as the CARRY-2
+    //     ledger line in `.superpowers/sdd/2026-08-15-connected-axes-2a/
+    //     progress.md`'s T6 entry.
     const interval1Frame = events.find(
       (e) => e.kind === "frame" && e.frame.intervalIndex === 1,
     );
@@ -5397,14 +5420,26 @@ describe("createPm5Driver: a SECOND workout over the same fake, no reconnect (in
       2,
     );
 
-    // Review MED-2: run 2 must not inherit run 1's SESSION bookkeeping.
-    // 0x0033's Last Split Time/Distance says where the interval currently
-    // running began, session-cumulative — meaningless across a workout
-    // boundary. Left standing at run 1's final boundary (300s/1200m), run
-    // 2's very first frame reported `{kind:"time", value:500}`: 500 seconds
-    // remaining of a 300-second interval, because progress computed as
-    // 100 - 300 = -200. The number below is the same one run 1 reported
-    // from the identical tick.
+    // Review MED-2 (historical — MINOR-4, Task 6 fix round): run 2 must
+    // not inherit run 1's SESSION bookkeeping. AT THE TIME this test was
+    // written, `computeRemainingForFrame` subtracted 0x0033's Last Split
+    // Time/Distance — "where the interval currently running began",
+    // session-cumulative — from 0x0031's own elapsed, so a checkpoint left
+    // standing at run 1's final boundary (300s/1200m) made run 2's very
+    // first frame report `{kind:"time", value:500}`: 500 seconds remaining
+    // of a 300-second interval, from progress computed as 100 - 300 = -200.
+    // Task 6 (interface-notes.md §20 items 17/24) deleted that subtraction
+    // entirely — `intervalRemaining` now reads 0x0031's own per-interval
+    // pair directly, with no checkpoint of any kind to inherit wrongly.
+    // This assertion stays a genuine regression guard regardless: it is at
+    // interval index 0 (both runs' own opening tick), where the checkpoint
+    // was always 0 even before Task 6, so nothing here moved — but the
+    // ORIGINAL defect this test pins (run 2 silently carrying run 1's
+    // internal state) still has a live analogue: `fake.ts`'s own
+    // `lastBoundaryCumulative`/`wireLastSplit` reset on re-arm, which
+    // `fake.test.ts`'s dedicated re-arm test (Task 6) now pins directly at
+    // the fake level, self-mutation included. The number below is the same
+    // one run 1 reported from the identical tick.
     expect(firstRowingFrameAfter(run2Start)?.intervalRemaining).toStrictEqual({
       kind: "time",
       value: 200,
@@ -8089,9 +8124,19 @@ describe("createPm5Driver: sessionElapsedSeconds/sessionDistanceMeters with NO p
   });
 
   it("the interval countdown is NOT touched — it still reads the raw per-interval pair", () => {
-    // Walk 4 proved `intervalRemaining` correct as it stood, so nothing in
-    // this task may re-source it. With no program armed there is nothing to
-    // count down against, which is exactly what it must keep reporting.
+    // MINOR-4, Task 6 fix round: corrected from present to past tense. AT
+    // THE TIME this test (CR2 spec 1, Task 1) was written, walk 4's
+    // single-interval capture had proved `intervalRemaining` correct as it
+    // stood — a checkpoint-subtracting `computeRemainingForFrame` that this
+    // capture's own checkpoint (always 0, no boundary in a one-interval
+    // session) could never distinguish from having no checkpoint at all —
+    // so nothing in THAT task was allowed to re-source it. Task 6
+    // (interface-notes.md §20 items 17/24) later did re-source it: the
+    // checkpoint subtraction is gone, `intervalRemaining` reads 0x0031's
+    // own per-interval pair directly. This assertion is untouched by that
+    // change regardless — with no program armed, `computeRemainingForFrame`
+    // returns `null` on its own `!p` guard, before either version's
+    // progress math ever runs.
     expect(replayWalk4().every((f) => f.intervalRemaining === null)).toBe(true);
   });
 
