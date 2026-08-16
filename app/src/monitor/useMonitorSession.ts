@@ -280,6 +280,17 @@ export interface MonitorSession {
    *  Always `false` unless a machine FINISH left the run missing its last
    *  interval's actual. */
   handoffHeld: boolean;
+  /** Mirrors `freezeRef` — `isPausedRun(freezeRef.current)` at the instant
+   *  of the last `update()`. Published for `connectedAxes.ts`'s `activity`
+   *  axis (design spec §1); no consumer yet — read-only, derived, not a
+   *  second source of truth (`freezeRef` still owns the write). */
+  frozen: boolean;
+  /** Mirrors `runRef`: `true` iff this hook's own record is open
+   *  (`runRef.current !== null && runRef.current.completedAt === null`) at
+   *  the instant of the last `update()`. Published for `connectedAxes.ts`'s
+   *  `session` axis (design spec §1) — at `disconnected` the record
+   *  deliberately stays open, so `phase` alone cannot say. No consumer yet. */
+  runOpen: boolean;
   /** Opens the platform's monitor chooser (`"picking"`), then connects (`"pairing"`) and
    *  builds the driver around the picked device's REAL advertised name.
    *  Assumes the Connect guard has already cleared (see this file's
@@ -574,6 +585,15 @@ interface SessionState {
   actuals: IntervalActual[];
   endedBy: "machine" | "user" | null;
   handoffHeld: boolean;
+  /** Mirrors `freezeRef` (`isPausedRun(freezeRef.current)`), kept as
+   *  published STATE rather than read off the ref at return time — reading
+   *  a ref during render is exactly what `react-hooks/refs` exists to
+   *  catch. Updated at every site that writes `freezeRef`. */
+  frozen: boolean;
+  /** Mirrors `runRef` (`runRef.current !== null && runRef.current.completedAt
+   *  === null`), same reason. Updated at every site that opens or closes
+   *  `runRef`'s record. */
+  runOpen: boolean;
 }
 
 const INITIAL_STATE: SessionState = {
@@ -584,6 +604,8 @@ const INITIAL_STATE: SessionState = {
   actuals: [],
   endedBy: null,
   handoffHeld: false,
+  frozen: false,
+  runOpen: false,
 };
 
 /** Everything a rejected `program()` can throw, mapped onto the typed
@@ -928,15 +950,26 @@ export function useMonitorSession(
             },
             nowDate(),
           );
-          freezeRef.current = nextFreezeRun(null, frame);
-          update({ frame, phase: "live", actuals: [] });
+          const freeze = nextFreezeRun(null, frame);
+          freezeRef.current = freeze;
+          update({
+            frame,
+            phase: "live",
+            actuals: [],
+            frozen: isPausedRun(freeze),
+            runOpen: true,
+          });
           return;
         }
       }
       if (phase === "live" || phase === "paused") {
         const freeze = nextFreezeRun(freezeRef.current, frame);
         freezeRef.current = freeze;
-        update({ frame, phase: isPausedRun(freeze) ? "paused" : "live" });
+        update({
+          frame,
+          phase: isPausedRun(freeze) ? "paused" : "live",
+          frozen: isPausedRun(freeze),
+        });
         return;
       }
       // Every other phase still SEES the frame (the machine's current
@@ -975,7 +1008,12 @@ export function useMonitorSession(
       // wait for and nothing to hold. The phase flips either way, in one
       // patch with the hold flag.
       const held = terminated ? false : openHandoffHold();
-      update({ phase: "ended", endedBy: "machine", handoffHeld: held });
+      update({
+        phase: "ended",
+        endedBy: "machine",
+        handoffHeld: held,
+        runOpen: false,
+      });
     },
     [closeRecord, openHandoffHold, update],
   );
@@ -1303,6 +1341,7 @@ export function useMonitorSession(
         const run = runRef.current;
         if (run !== null && run.completedAt === null) {
           closeRecord(true);
+          update({ runOpen: false });
           // ...and leave the erg terminated rather than holding an orphan —
           // best-effort, ignored on failure. EXCEPT on `disconnected`,
           // where the link is gone and there is nothing to send a terminate
@@ -1331,7 +1370,7 @@ export function useMonitorSession(
     // report `terminated`, which comes straight back as an event, and this
     // is what makes that event a no-op instead of a second ending.
     closeRecord(true);
-    update({ phase: "ended", endedBy: "user" });
+    update({ phase: "ended", endedBy: "user", runOpen: false });
     const driver = driverRef.current;
     if (driver === null || linkGone) return;
     try {
@@ -1417,6 +1456,8 @@ export function useMonitorSession(
     actuals: state.actuals,
     endedBy: state.endedBy,
     handoffHeld: state.handoffHeld,
+    frozen: state.frozen,
+    runOpen: state.runOpen,
     connect,
     program,
     endSession,

@@ -1,0 +1,215 @@
+// Four axes derived — never invented — from today's `ConnectedPhase` plus
+// the three facts the hook does not publish on its own (design spec
+// docs/superpowers/specs/2026-08-15-connected-axes-design.md §1): the freeze
+// predicate's own verdict (`frozen`, mirrors `useMonitorSession`'s
+// `freezeRef` via `isPausedRun`), whether this hook's own record is still
+// open (`runOpen`, mirrors `runRef` — `disconnected` deliberately leaves the
+// record open, so `phase` alone cannot say what `session` should read), and
+// whether a `failed` program attempt left the transport connected
+// (`failureLeavesLinkUp`, computed by the CALLER from `ConnectedError.reason`
+// — a genuine `ProgramRejection` the PM5 itself sent leaves the link up; a
+// radio/transport failure on our own side does not — this module only
+// consumes the already-computed boolean, it does not classify reasons).
+//
+// Every derivation below `switch`es EXHAUSTIVELY over all ten
+// `ConnectedPhase` members with a `never` guard: an eleventh member fails to
+// COMPILE here rather than falling through into a guessed default — the
+// mechanism `docs/monitor/state-architecture-review.md` §F3 named (one
+// `switch`, zero exhaustiveness guards, an unenumerated phase laundered by
+// `?? "live"` into a full live surface).
+//
+// PRECEDENCE FOR THE FUTURE COLLAPSE TO ONE `SurfaceStatus` (NOT decided
+// here — this module answers four separate questions, never one):
+// `ended` > `disconnected` > (`armed` | mirror | `live`). Today implicit in
+// `surfaceStatusFor`'s early returns; written down here because "zero
+// behaviour change" is unfalsifiable unless the intended order is on record
+// before the collapse itself is built (spec §1, later task).
+//
+// ZERO BEHAVIOUR CHANGE ON DAY ONE: nothing in the app calls `deriveAxes`
+// yet — `connectedAxes.test.ts`'s exhaustive table is the proof (spec exit
+// criterion 1), not a replay of any recorded session (the rings carry no
+// phase entries at all).
+
+import type { ConnectedPhase } from "./useMonitorSession";
+
+/** Is the radio link to the monitor available right now? Never invented —
+ *  `"up"` only where a transport connection is known (or, at `failed`,
+ *  reported by the caller) to exist; `"lost"` is the CONSERVATIVE answer
+ *  whenever that is not established. */
+export type LinkAxis = "none" | "connecting" | "up" | "lost";
+
+/** Where the workout program stands, relative to the machine. */
+export type ProgramAxis = "none" | "sending" | "armed" | "failed";
+
+/** Is THIS hook's own record open? Independent of `phase` at `disconnected`
+ *  — the record deliberately stays open across a link drop (spec's C5
+ *  lose-and-degrade), which is exactly why `AxesInput` carries `runOpen`
+ *  rather than letting this axis read `phase` alone. */
+export type SessionAxis = "none" | "live" | "ended";
+
+/** What the freeze predicate measures — fired, did not fire, or has no
+ *  evidence to measure at all — named for the MEASUREMENT, never for what
+ *  the rower is doing. "Coasting" at `idle`, or through a programmed rest
+ *  (which resets the freeze run by construction — `nextFreezeRun`'s own
+ *  `distanceMeters <= 0` guard), would be the fake-PAUSED mistake wearing
+ *  new words: a stroking/coasting pair would misread a genuinely resting
+ *  rower as "stroking". `idle`/`picking`/`pairing`/`failed` (no rowing
+ *  frames observed yet) and `programming`/`ready`/`disconnected`/`ended`
+ *  (no freeze evidence current enough to trust) all report `"unknown"` —
+ *  never a claim this module cannot back with a live measurement. */
+export type ActivityAxis = "moving" | "frozen" | "unknown";
+
+export interface ConnectedAxes {
+  link: LinkAxis;
+  program: ProgramAxis;
+  session: SessionAxis;
+  activity: ActivityAxis;
+}
+
+export interface AxesInput {
+  phase: ConnectedPhase;
+  /** Mirrors `useMonitorSession`'s `freezeRef` verdict —
+   *  `isPausedRun(freezeRef.current)` at the instant of derivation. */
+  frozen: boolean;
+  /** Mirrors `useMonitorSession`'s `runRef`: `true` iff a record is open
+   *  (`runRef.current !== null && runRef.current.completedAt === null`). */
+  runOpen: boolean;
+  /** Whether the most recent `failed` phase left the transport connected.
+   *  `null` when there is nothing to ask (every phase but `failed`) — and,
+   *  at `failed`, `null` reads exactly like `false`: no evidence of a
+   *  surviving link is not evidence of one. */
+  failureLeavesLinkUp: boolean | null;
+}
+
+function assertNever(value: never): never {
+  throw new Error(
+    `connectedAxes: unhandled ConnectedPhase member ${JSON.stringify(value)}`,
+  );
+}
+
+// The four sub-derivations are exported, not just `deriveAxes`, so each
+// `never`-guarded switch's own default branch is independently reachable
+// from a test: `deriveAxes` calls them in a fixed order and THROWS on the
+// first one that meets an invalid phase, so a single call through the
+// composed function can only ever exercise one of the four guards — the
+// other three's `assertNever` lines would read as uncovered dead code
+// otherwise, exactly the kind of gap recurring failure #2 warns about.
+
+export function deriveLink(input: AxesInput): LinkAxis {
+  const { phase, failureLeavesLinkUp } = input;
+  switch (phase) {
+    case "idle":
+      return "none";
+    case "picking":
+      return "connecting";
+    case "pairing":
+    case "programming":
+    case "ready":
+    case "live":
+    case "paused":
+      // "Connected is not programmed" (`connect`'s own comment): `pairing`
+      // spans both the transport-connect settle and the wait on the
+      // caller's `program()`, and every phase downstream of it still has a
+      // live driver until something moves the phase off it.
+      return "up";
+    case "failed":
+      return failureLeavesLinkUp === true ? "up" : "lost";
+    case "disconnected":
+      return "lost";
+    case "ended":
+      // The link was up a moment ago — every path that reaches `ended`
+      // passes through a connected phase first — and nothing here retracts
+      // that. A link that drops AFTER `ended` is swallowed by the P3b
+      // idempotence guard today (`endByMachine`'s own early return on an
+      // already-`ended` phase) rather than surfacing as `disconnected`; an
+      // existing quirk this module observes, not one it corrects.
+      return "up";
+    default:
+      return assertNever(phase);
+  }
+}
+
+export function deriveProgram(phase: ConnectedPhase): ProgramAxis {
+  switch (phase) {
+    case "idle":
+    case "picking":
+    case "pairing":
+      return "none";
+    case "programming":
+      return "sending";
+    case "ready":
+    case "live":
+    case "paused":
+      return "armed";
+    case "failed":
+      return "failed";
+    case "disconnected":
+    case "ended":
+      // Moot once the link is gone or the session is over: "armed" would
+      // claim the machine still holds a program worth acting on.
+      return "none";
+    default:
+      return assertNever(phase);
+  }
+}
+
+export function deriveSession(input: AxesInput): SessionAxis {
+  const { phase, runOpen } = input;
+  switch (phase) {
+    case "idle":
+    case "picking":
+    case "pairing":
+    case "programming":
+    case "ready":
+    case "failed":
+      return "none";
+    case "live":
+    case "paused":
+      return "live";
+    case "disconnected":
+      // The record deliberately stays open across a link drop (spec's C5
+      // lose-and-degrade) — `phase` alone cannot say, so this is the one
+      // axis `runOpen` exists to answer.
+      return runOpen ? "live" : "none";
+    case "ended":
+      return "ended";
+    default:
+      return assertNever(phase);
+  }
+}
+
+export function deriveActivity(input: AxesInput): ActivityAxis {
+  const { phase, frozen } = input;
+  switch (phase) {
+    case "idle":
+    case "picking":
+    case "pairing":
+    case "programming":
+    case "ready":
+    case "failed":
+    case "disconnected":
+    case "ended":
+      return "unknown";
+    case "live":
+      // Checked, not trusted from `phase` alone: today the hook always
+      // flips to `"paused"` the instant the freeze predicate fires (so this
+      // branch is redundant with the one below in practice), but this is
+      // the exact seam the enum's `paused` member retires through later
+      // (spec §4, a different task) — `live` + `frozen` is already what
+      // carries the true signal, `phase` is not.
+      return frozen ? "frozen" : "moving";
+    case "paused":
+      return "frozen";
+    default:
+      return assertNever(phase);
+  }
+}
+
+export function deriveAxes(input: AxesInput): ConnectedAxes {
+  return {
+    link: deriveLink(input),
+    program: deriveProgram(input.phase),
+    session: deriveSession(input),
+    activity: deriveActivity(input),
+  };
+}
