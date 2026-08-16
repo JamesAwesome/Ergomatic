@@ -755,6 +755,7 @@ describe("distance intervals (handoff §3's distance rules)", () => {
         liveRate: NO_READING,
         liveHr: NO_READING,
         numbering: intervalNumbering(intervals),
+        armed: false,
       }).caption;
     };
 

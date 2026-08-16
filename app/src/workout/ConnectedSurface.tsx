@@ -327,7 +327,11 @@ export default function ConnectedSurface({
   // `ConnectedInterstitial.tsx`'s own phase gate renders its OWN screen for
   // `phase === "failed"` and never hands this component a session in that
   // phase, so the one axis this argument feeds (`deriveLink`'s `"failed"`
-  // case) is provably never consulted by this call.
+  // case) is provably never consulted by this call. This is the SECOND of
+  // the two production call sites `AxesInput.failureLeavesLinkUp`'s own
+  // doc comment names as dead-third-fact evidence (M-1, final whole-branch
+  // review): both hardcode `null`, neither call reaches `deriveAxes` with
+  // `phase === "failed"`.
   const axes = deriveAxes({
     phase: session.phase,
     frozen: session.frozen,

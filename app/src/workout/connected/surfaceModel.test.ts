@@ -13,6 +13,7 @@
 
 import { describe, expect, it } from "vitest";
 import { compileProgram } from "../../../domain/monitor/program.js";
+import { fmtDuration } from "../../../domain/duration.js";
 import { fmtSplit } from "../../../domain/format.js";
 import { PACE_TOLERANCE_SECONDS } from "../../../domain/judge.js";
 import type {
@@ -24,6 +25,7 @@ import type { WarmupSetting } from "../../api/usePreferences";
 import { LIBRARY_WORKOUTS } from "../../../server/seed/library/index";
 import { buildDraft } from "../../session/draft";
 import { buildRun, type EnginePhase } from "../../session/engine";
+import { totalSessionSecondsOf } from "../../session/Timer";
 import { targetSplitDisplay } from "../../session/TimerTargets";
 import {
   buildSurfaceModel,
@@ -442,6 +444,95 @@ describe("the mirror: 0 wherever the machine's own display shows 0", () => {
     expect(activeRow.spm.judged).toBe(m.rate);
     expect(activeRow.pace.display).toBe(fmtSplit(target.targetSplit!));
     expect(activeRow.spm.display).toBe("0");
+  });
+});
+
+// I-1, final whole-branch review fix wave: three properties design frame
+// 2D names (`docs/design/handoffs/2026-08-15-connected-v2/README.md`, "2D ·
+// First frame") that the mirror above never touched, dropped at the task
+// seam ConnectedSurface.test.tsx's own comment names ("Task 3 owns the armed
+// pane"). All three are asserted at the MODEL layer per this task's brief —
+// the consequence a pane renders, not a DOM smoke test standing in for it.
+describe("armed's first frame (I-1): the three properties 2D asks for beyond the mirror", () => {
+  it('carries no "NOW" over either hero — 2D shows no label at all above the heroes, unlike live/paused', () => {
+    const m = model({ status: "armed", frame: frame({ state: "armed" }) });
+    expect(m.nowLabel).toBe("");
+    // The stale case is untouched by this change — still LAST, never armed's
+    // empty string leaking into a different status.
+    expect(model({ status: "stale" }).nowLabel).toBe("LAST");
+    expect(model({ status: "live" }).nowLabel).toBe("NOW");
+    expect(model({ status: "paused" }).nowLabel).toBe("NOW");
+  });
+
+  it("the grid's active row carries no gold counting mark — nothing is counting down before the first stroke", () => {
+    const m = buildSurfaceModel({
+      phases: NO_WARMUP.phases,
+      program: NO_WARMUP.program,
+      status: "armed",
+      frame: frame({
+        state: "armed",
+        intervalIndex: 0,
+        rowingActive: false,
+        distanceMeters: 0,
+      }),
+      deviceName: DEVICE,
+      actuals: [],
+    });
+    const activeRow = m.grid.rows[m.grid.activeIndex]!;
+    expect(activeRow.state).toBe("active");
+    expect(activeRow.countdown).toBeNull();
+    // A live status on the SAME row shape still marks it — this is an
+    // armed-only suppression, not a regression of the mark itself
+    // (PaneGrid.test.tsx's own "still MARKS" test covers the live case in
+    // the DOM; this pins the model field that mark reads).
+    const liveModel = buildSurfaceModel({
+      phases: NO_WARMUP.phases,
+      program: NO_WARMUP.program,
+      status: "live",
+      frame: frame({ intervalIndex: 0 }),
+      deviceName: DEVICE,
+      actuals: [],
+    });
+    expect(
+      liveModel.grid.rows[liveModel.grid.activeIndex]!.countdown,
+    ).not.toBeNull();
+  });
+
+  it("TOTAL LEFT reads the whole session, un-started — never the wire's carried-over elapsed", () => {
+    const totalSeconds = totalSessionSecondsOf(NO_WARMUP.phases);
+    const m = buildSurfaceModel({
+      phases: NO_WARMUP.phases,
+      program: NO_WARMUP.program,
+      status: "armed",
+      // A non-zero sessionElapsedSeconds on the armed frame — the same
+      // shape a stale carried-over reading would have (the design's own
+      // §2 Item 3 citation: only spm/currentSplit genuinely carry over on
+      // the wire, elapsed/distance genuinely zero — but the surface must
+      // say "un-started" REGARDLESS of what the frame happens to hold,
+      // the same defensive stance the pace/rate mirror already takes
+      // rather than trusting the wire not to glitch).
+      frame: frame({
+        state: "armed",
+        intervalIndex: 0,
+        rowingActive: false,
+        distanceMeters: 0,
+        elapsedSeconds: 900,
+        sessionElapsedSeconds: 900,
+      }),
+      deviceName: DEVICE,
+      actuals: [],
+    });
+    expect(m.totalLeftSeconds).toBe(totalSeconds);
+    expect(m.totalLeftDisplay).toBe(fmtDuration(totalSeconds / 60));
+    // Not armed: the ordinary subtraction still applies, so this is a
+    // suppression scoped to armed, not a change to the live formula.
+    const liveModel = model({
+      status: "live",
+      frame: frame({ sessionElapsedSeconds: 900, elapsedSeconds: 900 }),
+    });
+    expect(liveModel.totalLeftSeconds).not.toBe(
+      totalSessionSecondsOf(FIXTURE.phases),
+    );
   });
 });
 

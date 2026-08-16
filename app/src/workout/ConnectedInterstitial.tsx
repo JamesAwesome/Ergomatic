@@ -562,6 +562,9 @@ export default function ConnectedInterstitial({
     phase: session.phase,
     frozen: session.frozen,
     runOpen: session.runOpen,
+    // Always `null` here: `session.phase === "failed"` already returned
+    // above, so `deriveLink`'s `"failed"` case never runs off this call
+    // (M-1, `AxesInput.failureLeavesLinkUp`'s own doc comment).
     failureLeavesLinkUp: null,
   });
   if (session.phase === "disconnected" && axes.session === "none") {

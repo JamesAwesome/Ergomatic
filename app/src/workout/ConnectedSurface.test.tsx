@@ -33,6 +33,7 @@ import {
   compileProgram,
   type WorkoutProgram,
 } from "../../domain/monitor/program.js";
+import { fmtDuration } from "../../domain/duration.js";
 import { WORKOUTSTATE_INTERVALWORKTIME } from "../../domain/monitor/pm5/parse.js";
 import type { MonitorFrame } from "../../domain/monitor/types.js";
 import type { Baselines, WorkoutType } from "../../domain/types.js";
@@ -46,6 +47,7 @@ import type {
 import { buildDraft } from "../session/draft";
 import { buildRun, type EnginePhase } from "../session/engine";
 import type { LogSeed } from "../session/logDraft";
+import { totalSessionSecondsOf } from "../session/Timer";
 import { ARM_TIMEOUT_MS } from "../session/useStagedDiscard";
 import { commentStrippedSource, type CssRule, cssRules } from "../test/cssView";
 import { buildSurfaceModel } from "./connected/surfaceModel";
@@ -307,6 +309,46 @@ describe("the status precedence reaches buildSurfaceModel (task-2 review finding
     renderSurface({ phase: "live", frozen: true, runOpen: true });
     const lastCall = mockBuildSurfaceModel.mock.calls.at(-1)!;
     expect(lastCall[0].status).toBe("paused");
+  });
+});
+
+// I-1, final whole-branch review fix wave — "Task 3 owns the armed pane"
+// (this file's own comment above), finally given a pixel: `armed` now
+// renders visibly differently from `live`, not merely a different `status`
+// string the model happened to receive.
+describe("armed's first frame, in the DOM (I-1)", () => {
+  it("neither hero shows NOW — the label is gone, not merely relabelled", () => {
+    renderSurface({
+      phase: "ready",
+      frame: frame({ state: "armed", elapsedSeconds: 0, distanceMeters: 0 }),
+    });
+    expect(screen.queryByText("NOW")).toBeNull();
+    expect(screen.queryByText("LAST")).toBeNull();
+  });
+
+  it("the grid's active row carries no gold countdown mark", () => {
+    localStorage.setItem(LAST_PANE_KEY, "grid");
+    renderSurface({
+      phase: "ready",
+      frame: frame({ state: "armed", elapsedSeconds: 0, distanceMeters: 0 }),
+    });
+    expect(document.querySelector(".connected-grid-countdown")).toBeNull();
+  });
+
+  it("TOTAL LEFT reads the whole session — never the default fixture's mid-session 600s", () => {
+    renderSurface({
+      phase: "ready",
+      // The default `frame()` fixture is deliberately mid-session-shaped
+      // (`sessionElapsedSeconds: 600`, `intervalIndex: 1`) — this is the
+      // exact carried-over shape that would leak a partial bar if the
+      // armed suppression were removed.
+      frame: frame({ state: "armed" }),
+    });
+    // Pane defaults to "live" (`DEFAULT_PANE`): read pane B's own TOTAL
+    // LEFT bar value directly.
+    expect(document.querySelector(".timer-total-value")!.textContent).toBe(
+      fmtDuration(totalSessionSecondsOf(FIXTURE.phases) / 60),
+    );
   });
 });
 

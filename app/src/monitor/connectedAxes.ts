@@ -80,7 +80,28 @@ export interface AxesInput {
   /** Whether the most recent `failed` phase left the transport connected.
    *  `null` when there is nothing to ask (every phase but `failed`) — and,
    *  at `failed`, `null` reads exactly like `false`: no evidence of a
-   *  surviving link is not evidence of one. */
+   *  surviving link is not evidence of one.
+   *
+   *  THE DEAD THIRD FACT (M-1, final whole-branch review). This input is
+   *  `null` at BOTH production call sites today — `ConnectedInterstitial.
+   *  tsx` and `ConnectedSurface.tsx` each hardcode `failureLeavesLinkUp:
+   *  null` and neither ever calls `deriveAxes` while `session.phase ===
+   *  "failed"` (`ConnectedInterstitial.tsx`'s own early return on that
+   *  phase, `ConnectedSurface.tsx`'s own comment on why `"failed"` never
+   *  reaches it) — so `deriveLink`'s `"failed"` case is live CODE with no
+   *  live CALLER: `failureLeavesLinkUp === true` never actually happens.
+   *  "Failed" never reaches a consumer, in other words, not because the
+   *  axis is wrong but because nothing today passes a real value.
+   *
+   *  This is a DOCUMENTED GAP, not a defect to close here — building a
+   *  consumer is out of scope for this task. Whoever FIRST passes a real
+   *  (non-null) value inherits the NOT_A_MACHINE_REFUSAL-semantics ruling
+   *  this axis was built against (a transport-side failure reads `"lost"`,
+   *  a genuine `ProgramRejection` the PM5 itself sent reads `"up"` —
+   *  `deriveLink`'s own case, above), and the enum-deletion spec that
+   *  eventually retires `ConnectedPhase`'s `"failed"` member inherits this
+   *  same gap: it cannot verify the `"up"` branch is reachable from real
+   *  code either, only that the TYPE still allows it. */
   failureLeavesLinkUp: boolean | null;
 }
 

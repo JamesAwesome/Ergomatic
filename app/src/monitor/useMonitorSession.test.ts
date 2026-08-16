@@ -1982,11 +1982,17 @@ describe("useMonitorSession: ending", () => {
     expect(stashed).not.toBeNull();
     const entries = JSON.parse(stashed!) as { kind: string; detail: string }[];
     const finalTotals = entries.filter((e) => e.kind === "final-totals");
-    // Exactly one: the machine's own terminal-frame path never fired at
-    // all (proof the entry below came from `terminate()`'s own dispatch,
-    // not a second source racing it), and the guard on BOTH call sites
-    // (`recordFinalTotals`'s own doc comment) means a run that already
-    // has one never gets a second.
+    // Exactly one — but NOT because both call sites guard against a
+    // double-write (I-2, final whole-branch review: `recordFinalTotals`'s
+    // own doc comment used to claim that and it was false). This test
+    // passes because `fake.injectTimeout()` above suppresses the machine's
+    // own terminal status frame from ever arriving, so `maybeEmitFrame`'s
+    // terminal branch — the ONLY call site with no guard of its own — never
+    // runs at all; the entry below comes solely from `terminate()`'s
+    // guarded call. A run where the machine's own terminal frame DOES
+    // arrive after `terminate()` has already written one gets a SECOND,
+    // near-identical entry (empirically reproduced, progress.md's own CARRY
+    // line) — dedupe stays deferred, this test does not exercise that path.
     expect(finalTotals).toHaveLength(1);
     expect(finalTotals[0]!.detail).toContain("accumulator=");
     expect(finalTotals[0]!.detail).toContain("accumulatorElapsed=");

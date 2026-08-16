@@ -631,10 +631,18 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
   // recorded falling 1:30 -> 1:11 and then RISING to 1:38 as interval 2
   // started. The driver's accumulated total is monotone across those resets,
   // which is the only thing that makes this subtraction a countdown.
-  const totalLeftSeconds = Math.max(
-    0,
-    totalSeconds - frame.sessionElapsedSeconds,
-  );
+  // ARMED READS UN-STARTED, ALWAYS (I-1, final whole-branch review). Frame
+  // 2D's own words: "Progress bar all-upcoming" and `TOTAL LEFT 50:00` — the
+  // whole session, nothing subtracted. This is the SAME defensive stance the
+  // pace/rate mirror above already takes: the wire's own carry-over rule
+  // (design spec §2 Item 3) says elapsed/distance genuinely zero at armed,
+  // but the surface says "un-started" on the STATUS, not on trusting
+  // `frame.sessionElapsedSeconds` to actually be zero every time — the same
+  // reasoning `armedMirror`'s own block gives for previewing the target
+  // instead of reading the wire's ghost.
+  const totalLeftSeconds = armedMirror
+    ? totalSeconds
+    : Math.max(0, totalSeconds - frame.sessionElapsedSeconds);
 
   const remaining = frame.intervalRemaining;
   const distanceInterval = remaining?.kind === "distance";
@@ -655,7 +663,17 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
     deviceCaption: deviceCaptionFor(deviceName, status),
     intervalLabel: ordinal === null ? kindWord : `INTERVAL ${counted}`,
     intervalLabelShort: ordinal === null ? kindWord : counted,
-    nowLabel: stale ? "LAST" : "NOW",
+    // ARMED CARRIES NO LABEL AT ALL (I-1, final whole-branch review — the
+    // task seam that dropped this: `ConnectedSurface.test.tsx`'s own "Task
+    // 3 owns the armed pane"). Frame 2D draws the heroes with no `NOW`
+    // above them — the rower has taken no stroke yet, so there is nothing
+    // "now" to caption — and `stale` still wins outright over `armed`
+    // (never reachable: `armedMirror` only fires when `status === "armed"`,
+    // and `stale` is a different status entirely, but the precedence is
+    // written explicitly rather than assumed). `PaneLive.tsx` renders
+    // nothing for the empty string, the same "absent, not blank" idiom the
+    // target-ref caption beside it already uses.
+    nowLabel: stale ? "LAST" : armedMirror ? "" : "NOW",
     upNext: upNextTextAt(phases, phaseIndex),
     thenNext: thenNextTextAt(phases, phaseIndex),
     totalSeconds,
@@ -708,6 +726,7 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
       liveRate: rate,
       liveHr: hr,
       numbering,
+      armed: armedMirror,
     }),
   };
 }
@@ -794,8 +813,18 @@ export function buildGridModel(args: {
    *  and the header's `N OF M` are structurally the same array and cannot
    *  drift apart. */
   numbering: IntervalNumbering;
+  /** I-1, final whole-branch review: `status === "armed"`, straight through
+   *  from `buildSurfaceModel`'s own `armedMirror`. Before the first stroke
+   *  nothing on the machine is actually counting down — the active row's
+   *  countdown cell holds the PROGRAMMED full value (`countdownDisplayFor`'s
+   *  own fallback), not a live reading — so the gold `--marker` mark that
+   *  says "this is the one you're on and it's moving" would be claiming a
+   *  motion that has not started. Suppressing `countdown` here is the same
+   *  "nothing is judged" stance frame 2D takes on pane B's heroes, carried
+   *  to pane C's own analogous mark. */
+  armed: boolean;
 }): GridModel {
-  const { intervals, activeIndex, remaining, accrued, numbering } = args;
+  const { intervals, activeIndex, remaining, accrued, numbering, armed } = args;
   // An actual whose own `index` is `null` belongs to no interval we can
   // name (`IntervalActual.index`'s own contract: "A CONSUMER MUST NOT TREAT
   // `null` AS INTERVAL 0"), so it files against no row rather than against
@@ -820,7 +849,7 @@ export function buildGridModel(args: {
         state: "active",
         time: interval.kind === "time" ? countdown : accrual,
         meters: interval.kind === "distance" ? countdown : accrual,
-        countdown: interval.kind === "time" ? "time" : "meters",
+        countdown: armed ? null : interval.kind === "time" ? "time" : "meters",
         pace: { display: args.livePace.display, judged: args.livePace },
         spm: { display: args.liveRate.display, judged: args.liveRate },
         hr: args.liveHr.display,

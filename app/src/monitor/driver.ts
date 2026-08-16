@@ -2427,11 +2427,32 @@ export function createPm5Driver(
    *    caller-initiated ending writes it itself, from whatever this run
    *    has accumulated so far.
    *
-   *  Guarded at both call sites on the run being OPEN (`activeRun !==
-   *  null && !activeRun.closed`), never inside this function: a run the
-   *  machine's own frame already closed has already told its one story
-   *  through the first call site, and `terminate()`'s guard is what keeps
-   *  it from re-telling a shorter version of the same one. */
+   *  GUARDED AT ONLY ONE OF THE TWO CALL SITES (I-2, final whole-branch
+   *  review — this doc comment used to claim both, which was false).
+   *  `terminate()`'s own call is the guarded one: `if (activeRun !== null
+   *  && !activeRun.closed)`. The `maybeEmitFrame` terminal branch above has
+   *  NO guard of its own — it reaches this call unconditionally once
+   *  `runIsOpen()` has let it into that branch, having just set
+   *  `activeRun.closed = true` two lines earlier in THIS pass, not in a
+   *  prior one.
+   *
+   *  The gap this leaves: `terminate()` (the END/cancel path) never sets
+   *  `activeRun.closed` itself — only the machine-frame branch does. So
+   *  END-then-the-machine's-own-terminal-frame is a real double-write: (1)
+   *  `terminate()` fires, sees `!activeRun.closed`, writes `final-totals`,
+   *  and returns without closing the run; (2) the machine's own
+   *  finished/terminated status frame arrives shortly after (the ordinary
+   *  shape once END has already sent Terminate), `runIsOpen()` is still
+   *  true, so this branch sets `closed = true` and calls
+   *  `recordFinalTotals` a SECOND time for the same run, unguarded — two
+   *  near-identical `final-totals` entries in the ring. Empirically
+   *  reproduced (Task 7 review, progress.md's own CARRY line: "END +
+   *  machine-frame-arrives writes TWO identical final-totals entries...
+   *  diagnostic-only, no consumer"). DIAGNOSTIC-ONLY: nothing reads this
+   *  ring entry programmatically, only a human auditing a walk's log — nothing
+   *  computational disagrees with itself. Dedupe stays DEFERRED, per that
+   *  same ledger line ("fast-follow: assert 2-ok or dedupe") — not fixed by
+   *  this task, which corrects the comment's claim, not the mechanism. */
   function recordFinalTotals(run: NonNullable<typeof activeRun>): void {
     const n = (v: number): number => Number(v.toFixed(1));
     const regs = [...session.seen.entries()]
