@@ -53,7 +53,12 @@ Roadmap: `ROADMAP.md` (phases + standing rules). Design reference: `docs/design/
   live there, not in per-dispatch boilerplate. **Phase teardown checks
   `git status` on the main checkout** before removing the worktree; stray
   writes there have happened four times and are only cheap to fix while the
-  branch still exists.
+  branch still exists. **Teardown also downs the worktree's compose stack**
+  (`docker compose -p <its ergomatic-NNNNN name> down -v`, or run the gate
+  once with `E2E_KEEP=0`) — per-worktree stacks outlive their worktrees
+  otherwise; `app/scripts/stack-reap.sh` reaps forgotten ones at the next
+  e2e/screenshots boot, but four orphaned stacks (twelve containers) had
+  accumulated before it existed, so don't rely on the net alone.
 - **Fast path (James-approved, 2026-08-01; tightened 2026-08-14):** a
   change may skip the subagent implement/review cycle when ALL FIVE hold.
   Check them mechanically, against `git diff --stat`, not by feel.
@@ -244,6 +249,17 @@ often they recur.
     `boundary` events, and the boundary-actual sum is an unsound oracle —
     architecture review §F2). An agreement with our own fixtures proves
     nothing about the erg.
+12. **Settling a claim about build output by reading code instead of
+    building it.** Twice now: `dist-grep.sh`'s own header records an
+    identifier needle coming back clean against a build that genuinely
+    contained `fake.ts` (minification renamed it), and PR #100's planned
+    download path — a dynamic `import()` behind a runtime check — read
+    correctly and still emitted the whole module graph as its own chunk,
+    because Rollup only folds an `import()` behind a BUILD-TIME constant.
+    Both were caught by producing the artifact, never by review. **Any
+    claim of the form "X is not in the production bundle" is settled by
+    `pnpm build` plus a string-literal grep over `dist/`, in both
+    directions — prove the probe can go red before trusting its green.**
 
 ## Commands
 
