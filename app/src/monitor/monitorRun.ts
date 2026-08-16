@@ -457,12 +457,13 @@ export function completeMonitorRun(
  * received) keeps `terminated` meaning "what the machine said," full stop,
  * with `endedBy` free to carry the orthogonal "the rower said" story.
  *
- * Idempotent by the same rule `completeMonitorRun` uses, for the same
- * reason: an already-closed record is returned UNCHANGED and nothing is
- * persisted, so a slow tap racing an in-flight `workoutComplete`/
- * `terminated` event can never overwrite a real completion with a stamped
- * `endedBy` after the fact — the machine's own account, when one exists,
- * always wins.
+ * Idempotent by the same rule `completeMonitorRun` uses: an already-closed
+ * record is returned UNCHANGED and nothing is persisted. The check reads
+ * the caller's in-memory argument, not storage, so the guarantee is
+ * single-tab: Today has no live monitor hook, so within a tab the record
+ * it captured at mount cannot have gained a machine completion since. A
+ * second tab driving a live session is the pre-existing shared-storage
+ * hazard family, same premise the Connect door's dead-run rule rests on.
  */
 export function completeInterruptedRun(run: MonitorRun, now: Date): MonitorRun {
   if (run.completedAt !== null) return run;
@@ -477,9 +478,10 @@ export function completeInterruptedRun(run: MonitorRun, now: Date): MonitorRun {
 
 /**
  * "How much of this workout actually happened", for a run the rower ended
- * through the interrupted door above — the number F6's Today card shows in
- * place of the machine's own total, which for an interrupted session never
- * arrives. Built entirely from the record's OWN `actuals` and `program`,
+ * through the interrupted door above — the number the monitor-mode log
+ * header shows (via `monitorLogTotals`) in place of the wall-clock span,
+ * which for an interrupted record can be days. The Today row itself shows
+ * no number. Built entirely from the record's OWN `actuals` and `program`,
  * never wall-clock time past the last measured boundary: the spec's own
  * constraint is that nothing here is invented past what the machine
  * actually reported.
