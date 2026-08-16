@@ -158,7 +158,11 @@ declare global {
     __pm5Recording__?: {
       lines(): string[];
       eventCount(): number;
-      download(program: WorkoutProgram): Promise<void>;
+      /** `program` optional (walk-2026-08-16 close-out): the post-session
+       *  log screen downloads AFTER the session ended, where nothing still
+       *  holds the compiled program — the header just omits it there, the
+       *  shape the committed hardware captures already have. */
+      download(program?: WorkoutProgram): Promise<void>;
     };
   }
 }

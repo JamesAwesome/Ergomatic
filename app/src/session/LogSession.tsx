@@ -853,7 +853,44 @@ function LogScreen({
         {discardSlot}
       </div>
       <MonitorLogRow />
+      <RecordingDownloadRow />
     </main>
+  );
+}
+
+/** The recording's quiet door (walk-2026-08-16 close-out) — the monitor
+ *  log row's sibling, same vocabulary, same invisibility to production.
+ *  The walk proved the in-session sheet's Download button is unreachable
+ *  at the one moment the operator wants it: the finish auto-navigates
+ *  HERE and the sheet dies with the session, so James fell back to a
+ *  DevTools console call that silently produced a program-less header.
+ *  The recording seam itself survives that navigation
+ *  (`transports/index.ts`'s latest-session-wins global, set only inside
+ *  the dev/fake-monitor gate — absent in every production build, which is
+ *  the whole render gate this row needs). `download()` is argument-less
+ *  on purpose: nothing on this screen still holds the compiled program,
+ *  and the header simply omits it (the replay tests never read it). */
+function RecordingDownloadRow() {
+  const [seam] = useState(() => window.__pm5Recording__ ?? null);
+  const [state, setState] = useState<"idle" | "saved" | "failed">("idle");
+  if (seam === null) return null;
+  return (
+    <button
+      type="button"
+      className="log-monitor-diag"
+      onClick={() => {
+        seam
+          .download()
+          .then(() => setState("saved"))
+          .catch(() => setState("failed"));
+      }}
+    >
+      {state === "idle"
+        ? "RECORDING · DOWNLOAD"
+        : state === "saved"
+          ? "RECORDING · DOWNLOADED"
+          : "RECORDING · FAILED"}
+    </button>
   );
 }
 

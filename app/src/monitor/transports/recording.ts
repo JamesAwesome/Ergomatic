@@ -238,10 +238,19 @@ export function buildRecordingFile(
  * together, so production behavior is unaffected; the second check is what
  * actually keeps a test run on the plain-`.jsonl` fallback path exercised
  * below.
+ *
+ * `program` is OPTIONAL (walk-2026-08-16 close-out): the post-session log
+ * screen's download row fires after the session ended, where no component
+ * still holds the compiled program — the header simply omits the key
+ * there, exactly the shape the committed hardware captures already have.
+ * The replay tests never read `header.program` (they hand-transcribe the
+ * literal and byte-verify it against the recorded programming frames), so
+ * an absent program costs the record nothing. The in-session sheet still
+ * passes it when it has it.
  */
 export async function downloadRecording(
   tap: Pick<RecordingTap, "lines">,
-  program: WorkoutProgram,
+  program?: WorkoutProgram,
 ): Promise<void> {
   const text = buildRecordingFile(tap, {
     app: "dev",
