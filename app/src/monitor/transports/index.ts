@@ -76,6 +76,7 @@
 // specific moments, immune to a backgrounded tab's timer throttling — see
 // that property's own doc comment.
 
+import type { WorkoutProgram } from "../../../domain/monitor/program.js";
 import type { Transport } from "../../../domain/monitor/types.js";
 import { createWebBluetoothTransport } from "./webBluetooth";
 
@@ -134,15 +135,31 @@ declare global {
      *  either; `scripts/dist-grep.sh`'s `pm5-recording` needle is that
      *  file's own proof that `recording.ts` never ships in a production
      *  chunk. `ConnectionLogSheet.tsx`'s "Download recording" control reads
-     *  this to decide whether to render at all, and calls `lines()`/
-     *  `eventCount()` to build the download — see `recording.ts`'s own
-     *  `RecordingTap` for what each returns. **Overwrite-on-reconnect: each
-     *  qualifying `resolveDefaultTransport()` call REPLACES this global
-     *  with a brand-new tap — latest session wins, unconditionally. A
-     *  rower who reconnects (a fresh call resolves) before downloading an
-     *  earlier session's recording loses that earlier recording the
-     *  instant the new tap is assigned here; nothing preserves it.** */
-    __pm5Recording__?: { lines(): string[]; eventCount(): number };
+     *  this to decide whether to render at all, and calls `download()` to
+     *  hand the rower the file — see `recording.ts`'s own `RecordingTap`
+     *  for what `lines()`/`eventCount()` return, and its `downloadRecording`
+     *  for what `download()` closes over. **`download` deliberately lives
+     *  entirely inside `recording.ts`, never in the sheet component: a
+     *  fix-round finding (record/replay stage A, Task 6) — a dynamic
+     *  `import()` in `ConnectionLogSheet.tsx` gated only on THIS global's
+     *  runtime presence still shipped `recording.ts`'s module graph as its
+     *  own chunk in a production `dist/`, because Rollup can only drop an
+     *  `import()` call site behind a condition it can fold at BUILD time,
+     *  and a runtime presence check never is. `download` is set here,
+     *  behind the SAME `fakeMonitorEnabled`-gated dynamic
+     *  `import("./recording")` as the tap itself, one line below — the
+     *  seam Task 5's dist-grep already proves never reaches production.**
+     *  Overwrite-on-reconnect: each qualifying `resolveDefaultTransport()`
+     *  call REPLACES this global with a brand-new tap — latest session
+     *  wins, unconditionally. A rower who reconnects (a fresh call
+     *  resolves) before downloading an earlier session's recording loses
+     *  that earlier recording the instant the new tap is assigned here;
+     *  nothing preserves it. */
+    __pm5Recording__?: {
+      lines(): string[];
+      eventCount(): number;
+      download(program: WorkoutProgram): Promise<void>;
+    };
   }
 }
 
@@ -248,14 +265,23 @@ export function resolveDefaultTransport():
     // folds away with the gate in a real deploy's build.
     const real = navigator.bluetooth ? createWebBluetoothTransport() : null;
     if (real) {
-      return import("./recording").then(({ createRecordingTransport }) => {
-        const tap = createRecordingTransport(real);
-        window.__pm5Recording__ = {
-          lines: tap.lines,
-          eventCount: tap.eventCount,
-        };
-        return tap.transport;
-      });
+      return import("./recording").then(
+        ({ createRecordingTransport, downloadRecording }) => {
+          const tap = createRecordingTransport(real);
+          window.__pm5Recording__ = {
+            lines: tap.lines,
+            eventCount: tap.eventCount,
+            // Closes over THIS tap and the real `downloadRecording` — both
+            // stay inside `recording.ts`'s module graph, reached only
+            // through this same gated `import()`, never through
+            // `ConnectionLogSheet.tsx` (fix round: see the `declare
+            // global` comment above for why the sheet may not import
+            // `recording.ts` itself, dynamically or otherwise).
+            download: (program) => downloadRecording(tap, program),
+          };
+          return tap.transport;
+        },
+      );
     }
     return null;
   }

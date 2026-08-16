@@ -246,6 +246,45 @@ describe("resolveDefaultTransport", () => {
     restore();
   });
 
+  it("wires a working download() through the seam — not merely present, invoked (fix round, Task 6)", async () => {
+    // Rule #4 (this repo's own recurring-failure list): a thing existing is
+    // not a thing working — invoke it and assert the consequence, the same
+    // way `ConnectionLogSheet.test.tsx`'s B4 test does for the sheet side
+    // of this seam.
+    const restore = stubBluetooth({});
+    vi.mocked(createWebBluetoothTransport).mockReturnValue(stubWebTransport());
+    const { parseRecording } = await import("./recording");
+
+    const transport = await resolveDefaultTransport();
+    await transport!.write(SAMPLE_RATE_UUID, new Uint8Array(1));
+
+    const createObjectURL = vi
+      .spyOn(URL, "createObjectURL")
+      .mockReturnValue("blob:mock-index-seam");
+    const revokeObjectURL = vi
+      .spyOn(URL, "revokeObjectURL")
+      .mockImplementation(() => undefined);
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => undefined);
+
+    await window.__pm5Recording__!.download(PROGRAM);
+
+    expect(click).toHaveBeenCalledTimes(1);
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
+    const blob = createObjectURL.mock.calls[0]![0] as Blob;
+    const parsed = parseRecording(await blob.text());
+    expect(parsed.header.app).toBe("dev");
+    expect(parsed.header.transport).toBe("web");
+    expect(parsed.header.program).toStrictEqual(PROGRAM);
+    // The one write above, recorded by the SAME tap `download()` closes
+    // over — not a fresh/empty one.
+    expect(parsed.events).toHaveLength(1);
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:mock-index-seam");
+
+    restore();
+  });
+
   it("the FAKE arm never sets window.__pm5Recording__ — recording only wraps the real radio", async () => {
     window.__pm5FakeScript__ = { program: PROGRAM };
     const transport = await resolveDefaultTransport();

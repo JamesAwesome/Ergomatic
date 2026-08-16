@@ -213,3 +213,53 @@ export function buildRecordingFile(
   ];
   return lines.join("\n") + "\n";
 }
+
+/**
+ * Composes a tap's recording and hands it to the browser as a download.
+ * Lives HERE — inside `recording.ts`, reached only through
+ * `transports/index.ts`'s `fakeMonitorEnabled`-gated dynamic `import()`,
+ * the same build-time-foldable seam `createRecordingTransport` already sits
+ * behind — and NOT in `ConnectionLogSheet.tsx` (fix round: a dynamic
+ * `import()` whose only guard is a RUNTIME presence check, e.g.
+ * `window.__pm5Recording__`, still emits this module's whole graph as its
+ * own chunk on disk; Rollup can only drop an `import()` call site behind a
+ * condition it can fold at BUILD time, which a runtime value never is).
+ * `window.__pm5Recording__.download` is a closure over this function plus
+ * the one live tap — see `transports/index.ts`'s own `declare global`
+ * comment for the wiring.
+ *
+ * `app: "dev"` is a literal, not a build arg — this repo has no
+ * `VITE_APP_VERSION` (confirmed absent, task-6 brief). Feature-detects BOTH
+ * `CompressionStream` and `Blob.prototype.stream` (not just the former):
+ * under this file's own test suite (Node 26 + jsdom), Node's global
+ * `CompressionStream` leaks through unshadowed, but jsdom's `Blob` polyfill
+ * has no `.stream()` — checking `CompressionStream` alone reads as
+ * "supported" and then throws. Every real evergreen browser ships both
+ * together, so production behavior is unaffected; the second check is what
+ * actually keeps a test run on the plain-`.jsonl` fallback path exercised
+ * below.
+ */
+export async function downloadRecording(
+  tap: Pick<RecordingTap, "lines">,
+  program: WorkoutProgram,
+): Promise<void> {
+  const text = buildRecordingFile(tap, {
+    app: "dev",
+    transport: "web",
+    ua: navigator.userAgent,
+    program,
+  });
+  const canCompress =
+    typeof CompressionStream !== "undefined" &&
+    typeof Blob.prototype.stream === "function";
+  const gz = canCompress
+    ? await new Response(
+        new Blob([text]).stream().pipeThrough(new CompressionStream("gzip")),
+      ).blob()
+    : new Blob([text]);
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(gz);
+  a.download = `pm5-recording-${Date.now()}.jsonl${canCompress ? ".gz" : ""}`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}

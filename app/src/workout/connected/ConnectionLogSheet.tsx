@@ -102,50 +102,6 @@ export default function ConnectionLogSheet({
   const [entries] = useState(() => parseLogEntries(raw));
   const [copy, setCopy] = useState<CopyState>("idle");
 
-  /** DEV-ONLY. `window.__pm5Recording__` is set only by the dev/e2e gate's
-   *  real-transport arm (`transports/index.ts`) — undefined in a production
-   *  build and in the e2e fake arm, which is what gates the button below on
-   *  presence alone. `recording.ts` is imported DYNAMICALLY, here, inside
-   *  the handler: a static import would ship `buildRecordingFile` — and
-   *  the `pm5-recording/v1` literal it closes over — in the product bundle
-   *  and break Task 5's dist-grep proof that the tap format never ships. */
-  async function handleDownloadRecording(): Promise<void> {
-    const rec = window.__pm5Recording__;
-    if (!rec) return;
-    const { buildRecordingFile } =
-      await import("../../monitor/transports/recording");
-    const text = buildRecordingFile(rec, {
-      app: "dev", // no VITE_APP_VERSION in this repo (confirmed, task-6 brief)
-      transport: "web",
-      ua: navigator.userAgent,
-      program,
-    });
-    // Feature-detect BOTH halves, not just CompressionStream: under this
-    // component's own test suite (Node 26 + jsdom), Node's global
-    // `CompressionStream` leaks through unshadowed, but jsdom's own `Blob`
-    // polyfill has no `.stream()` — checking `CompressionStream` alone
-    // reads as "supported" and then throws on the very next line. Every
-    // real evergreen browser ships both together, so this still resolves
-    // true there; it is jsdom's split implementation that makes the second
-    // check load-bearing, and it is what actually keeps the test suite on
-    // the plain-.jsonl fallback path — the gzip branch runs only in a real
-    // browser (task-6 brief named CompressionStream alone as jsdom's gap;
-    // observed behavior here is narrower, see task-6-report.md).
-    const canCompress =
-      typeof CompressionStream !== "undefined" &&
-      typeof Blob.prototype.stream === "function";
-    const gz = canCompress
-      ? await new Response(
-          new Blob([text]).stream().pipeThrough(new CompressionStream("gzip")),
-        ).blob()
-      : new Blob([text]);
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(gz);
-    a.download = `pm5-recording-${Date.now()}.jsonl${canCompress ? ".gz" : ""}`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-  }
-
   async function handleCopy(): Promise<void> {
     try {
       await navigator.clipboard.writeText(raw);
@@ -215,13 +171,24 @@ export default function ConnectionLogSheet({
           dev session and in an e2e run that opts into the real-transport
           recording arm — and renders in NEITHER a production build nor the
           e2e fake arm, since only that one gate ever sets the global
-          (`transports/index.ts`). `.button-l3` again: another in-sheet
-          action, same 48px hit target. */}
+          (`transports/index.ts`). This component knows NOTHING about
+          `recording.ts` — no import of it anywhere, static or dynamic
+          (fix round: a dynamic `import()` gated only on this runtime
+          presence check still ships `recording.ts`'s whole module graph,
+          `pm5-recording/v1` included, as its own chunk on disk — Rollup can
+          only drop an `import()` call site behind a condition it can fold
+          at BUILD time, and `window.__pm5Recording__` is a runtime value.
+          `download` lives entirely inside `transports/index.ts`'s own
+          `fakeMonitorEnabled`-gated dynamic import — the same
+          build-time-foldable seam Task 5's dist-grep already proves never
+          reaches production — so this handler is just a call through the
+          seam). `.button-l3` again: another in-sheet action, same 48px hit
+          target. */}
       {window.__pm5Recording__ && (
         <button
           type="button"
           className="button-l3"
-          onClick={() => void handleDownloadRecording()}
+          onClick={() => void window.__pm5Recording__?.download(program)}
         >
           Download recording
         </button>
