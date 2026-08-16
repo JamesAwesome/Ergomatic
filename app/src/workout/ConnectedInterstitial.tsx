@@ -23,6 +23,7 @@ import { fmtSplit } from "../../domain/format.js";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
 import type { Baselines } from "../../domain/types.js";
 import { canOpenAppSettings, openAppSettings } from "../adapters/appSettings";
+import { deriveAxes } from "../monitor/connectedAxes";
 import {
   useMonitorSession,
   type ConnectedError,
@@ -110,6 +111,26 @@ function failedSerifLine(error: ConnectedError): string {
   if (NOT_A_MACHINE_REFUSAL[error.reason]) return error.detail;
   return "The monitor wouldn't take it";
 }
+
+/** Connected-axes 2a, Task 4: stands in for `session.error` at
+ *  `phase === "disconnected"`, which is always `null` there —
+ *  `useMonitorSession.ts`'s own `event.kind === "disconnected"` handler
+ *  sets `phase: "disconnected"` directly and never goes through `fail()`,
+ *  so there is no `ConnectedError` this raw link drop ever produces. Reused
+ *  rather than invented (house rule: new user-facing strings need James's
+ *  eyes) — `detail` is `mapRadioFailure`'s own EXISTING fallback text for a
+ *  connect-time link failure (`useMonitorSession.ts`'s `link-failed` case),
+ *  already shown to a rower today; it says only that the link failed, with
+ *  no claim about which step was interrupted (unlike `driver.ts`'s
+ *  `REJECTION_VERBS.disconnected`, "…before completing", which is
+ *  specifically about an in-flight programming send this case never had).
+ *  `reason: "disconnected"` (not `"link-failed"`) so `failedSerifLine`/
+ *  `NOT_A_MACHINE_REFUSAL` read it as the non-machine-refusal case it is —
+ *  the DETAIL panel's own reason line is cosmetic only, unlike this. */
+const LINK_LOST_NO_RUN_ERROR: ConnectedError = {
+  reason: "disconnected",
+  detail: "The link to the monitor failed.",
+};
 
 function ChecklistLine({
   label,
@@ -398,8 +419,16 @@ export default function ConnectedInterstitial({
     );
   }
 
-  if (session.phase === "failed") {
-    const error = session.error;
+  /** State 6's element, now shared with the new `disconnected`-no-run
+   *  branch below (Task 4, connected-axes 2a) rather than duplicated —
+   *  reusing the JSX is what makes reusing its COPY honest too. `disabled=
+   *  {!canRetry}` is no longer unreachable-by-construction the way the old
+   *  LOW-7 note (task-5 review) had it: `canRetry` is still `phase ===
+   *  "failed"`, so this button really is always enabled at THIS call site,
+   *  but the second call site (`disconnected`, no run open) renders the
+   *  same element with `canRetry` `false` — belt-and-braces there is load-
+   *  bearing now, not merely defensive. */
+  function renderFailureScreen(error: ConnectedError | null) {
     return (
       <main className="screen connected-interstitial">
         <div className="connected-interstitial-body">
@@ -455,14 +484,6 @@ export default function ConnectedInterstitial({
           <button
             type="button"
             className="button-l1"
-            // Unreachable while this branch renders at all (LOW-7,
-            // task-5 review): `canRetry` is `phase === "failed"`, and this
-            // button only exists inside the `phase === "failed"` render
-            // branch, so it is always `true` here. Kept anyway, belt-and-
-            // braces, same call `useMonitorSession.ts`'s own LOW-5 makes
-            // for `armed`'s `error: null` — the real inertness guarantee is
-            // "does not render outside failed" (the tests pin that), not
-            // this attribute.
             disabled={!canRetry}
             onClick={handleTryAgain}
           >
@@ -481,6 +502,10 @@ export default function ConnectedInterstitial({
         </div>
       </main>
     );
+  }
+
+  if (session.phase === "failed") {
+    return renderFailureScreen(session.error);
   }
 
   if (session.phase === "ready" && !numbersRequested) {
@@ -518,14 +543,40 @@ export default function ConnectedInterstitial({
     );
   }
 
+  // Task 4 (connected-axes 2a, design spec §1): `link lost ∧ session none
+  // ⇒ the interstitial's own disconnected treatment, never the surface`.
+  // Before this branch existed, `disconnected` fell straight off the
+  // ladder into `<ConnectedSurface>` below with no run ever opened and no
+  // frame ever received — a link drop during `pairing`/`ready` landed the
+  // rower on three panes with nothing to show. `axes.session` (not `phase`
+  // alone) is what decides, because `deriveSession` reads
+  // `session.runOpen`: the record deliberately stays open across a drop
+  // that happens AFTER a run began (`connectedAxes.ts`'s own header
+  // comment) — that is the OTHER path through this same phase, the
+  // mid-session drop, and it must keep reaching the surface
+  // (`ConnectedSurface.tsx`'s own `stale` treatment, unchanged by this
+  // task). `axes.link` is unconditionally `"lost"` whenever `phase` is
+  // `"disconnected"` (`deriveLink`'s own switch), so the phase check below
+  // already carries that half of the spec's rule.
+  const axes = deriveAxes({
+    phase: session.phase,
+    frozen: session.frozen,
+    runOpen: session.runOpen,
+    failureLeavesLinkUp: null,
+  });
+  if (session.phase === "disconnected" && axes.session === "none") {
+    return renderFailureScreen(LINK_LOST_NO_RUN_ERROR);
+  }
+
   // THE PHASE GATE (Task 5's seam, filled by Task 6). Every phase from here
   // on — "ready" once the rower asked for the numbers, "live", "paused",
-  // "disconnected", "ended"
-  // — is the three-pane connected surface. The SAME `useMonitorSession`
-  // instance this file owns keeps running underneath it: nothing unmounts
-  // and nothing reconnects at the handoff, which is why `session` is handed
-  // down as a value rather than the surface calling the hook a second time
-  // (two hooks would mean two drivers and two records).
+  // "ended", and "disconnected" WITH a run open (the mid-session drop,
+  // above) — is the three-pane connected surface. The SAME
+  // `useMonitorSession` instance this file owns keeps running underneath
+  // it: nothing unmounts and nothing reconnects at the handoff, which is
+  // why `session` is handed down as a value rather than the surface
+  // calling the hook a second time (two hooks would mean two drivers and
+  // two records).
   return (
     <ConnectedSurface
       phases={phases}

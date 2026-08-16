@@ -932,11 +932,12 @@ describe("state 7: ready", () => {
 });
 
 // ---------------------------------------------------------------------------
-// The phase gate (Task 5's seam choice) — live/paused/disconnected/ended
+// The phase gate (Task 5's seam choice) — live/paused/ended, plus
+// disconnected's TWO paths (Task 4, connected-axes 2a, below)
 // ---------------------------------------------------------------------------
 
 describe("the phase gate — the connected surface (Task 6)", () => {
-  it.each(["live", "paused", "disconnected"] as const)(
+  it.each(["live", "paused"] as const)(
     "phase %s hands off to the three-pane surface",
     (phase) => {
       renderInterstitial({ phase, deviceName: DEVICE_NAME });
@@ -960,6 +961,85 @@ describe("the phase gate — the connected surface (Task 6)", () => {
       screen.queryByRole("navigation", { name: "Connected panes" }),
     ).not.toBeInTheDocument();
     expect(onEnded).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 4 (connected-axes 2a): `disconnected` has TWO paths, and only
+// `session.runOpen` (via `deriveAxes`) tells them apart — `phase` alone
+// cannot (`connectedAxes.ts`'s own header comment: the record deliberately
+// stays open across a drop that happens after a run began). Before this
+// task, BOTH paths fell through the ladder into `<ConnectedSurface>`; the
+// `it.each` above used to include `"disconnected"` as a third case that
+// asserted exactly the bug this closes (default `runOpen: false`, from the
+// `session()` fixture's own default, landed on the surface with no run and
+// no frame — the premise-pass finding this task starts from).
+// ---------------------------------------------------------------------------
+
+describe("phase disconnected — the fall-through this task closes", () => {
+  it("no run open (a drop during pairing/ready, before any session began): the interstitial's OWN disconnected treatment, never the surface", () => {
+    renderInterstitial({
+      phase: "disconnected",
+      deviceName: DEVICE_NAME,
+      runOpen: false,
+    });
+    expect(
+      screen.queryByRole("navigation", { name: "Connected panes" }),
+    ).not.toBeInTheDocument();
+    // Reuses state 6's own element/copy (no ConnectedError exists for a
+    // raw phase-level drop, so `LINK_LOST_NO_RUN_ERROR` stands in) — the
+    // same serif line a connect-time link failure already shows a rower
+    // today (`useMonitorSession.ts`'s `mapRadioFailure` fallback).
+    expect(
+      screen.getByText("The link to the monitor failed.", {
+        selector: ".connected-serif-line",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("YOUR WORKOUT AND NUDGES ARE KEPT"),
+    ).toBeInTheDocument();
+    // Not the machine-refusal body line — there is nothing on a monitor
+    // screen to "end"; the link is simply gone.
+    expect(
+      screen.queryByText(
+        "End whatever is showing on the monitor, then try again.",
+      ),
+    ).not.toBeInTheDocument();
+    // Try again stays disabled here (`canRetry` is `phase === "failed"`,
+    // and this is `"disconnected"`) — Row on the phone timer instead and
+    // Cancel are the two live escape hatches.
+    expect(screen.getByRole("button", { name: "Try again" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Row on the phone timer instead" }),
+    ).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeEnabled();
+  });
+
+  it("a run open (the mid-session drop): still hands off to the surface, unchanged — this task's rule keys on session, not phase", () => {
+    renderInterstitial({
+      phase: "disconnected",
+      deviceName: DEVICE_NAME,
+      runOpen: true,
+    });
+    expect(
+      screen.getByRole("navigation", { name: "Connected panes" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("The link to the monitor failed."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("Row on the phone timer instead cancels the session and hands off with targets intact, from the no-run-open treatment too", async () => {
+    const { session: s, onRowInstead } = renderInterstitial({
+      phase: "disconnected",
+      deviceName: DEVICE_NAME,
+      runOpen: false,
+    });
+    await userEvent.click(
+      screen.getByRole("button", { name: "Row on the phone timer instead" }),
+    );
+    expect(s.cancel).toHaveBeenCalledTimes(1);
+    expect(onRowInstead).toHaveBeenCalledTimes(1);
   });
 });
 
