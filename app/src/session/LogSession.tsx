@@ -36,6 +36,7 @@ import {
 import { clearRun, loadRun, type SessionRun } from "./run";
 import {
   clearMonitorRun,
+  interruptedTotalSeconds,
   loadMonitorRun,
   type MonitorRun,
 } from "../monitor/monitorRun";
@@ -310,23 +311,43 @@ function monitorCaption(
   return `FROM ${deviceName} · ${measuredPart}`;
 }
 
-/** Monitor mode's header line (7C spec §4: "Date and duration from the
- *  run's `startedAt`/`completedAt` stamps") — the `MonitorRun` twin of
- *  `logTotals` above, same formula (wall-clock `completedAt - startedAt`,
- *  floored at 0, rounded to the nearest minute), recomputed independently
- *  rather than widening `logTotals`' own `SessionRun`-typed signature to
- *  accept either record (the two run types are deliberately NOT unified —
- *  `monitorRun.ts`'s own header comment on why — and this is six lines,
- *  not worth blurring that line for). `completedAt!`: this function's only
- *  caller only ever holds a `MonitorRun` that already passed
- *  `monitorModeRun`'s own condition 2 (`completedAt !== null`) — the same
- *  "guaranteed by the caller, not re-checked here" convention this file's
- *  `activeRun`/`activeWorkout` aliases already use for a narrowing that
- *  doesn't survive across a function boundary. */
+/** Monitor mode's header line — two branches now (F6 Task 3, spec 2b).
+ *
+ *  **Normal completion** (7C spec §4: "Date and duration from the run's
+ *  `startedAt`/`completedAt` stamps") — the `MonitorRun` twin of `logTotals`
+ *  above, same formula (wall-clock `completedAt - startedAt`, floored at 0,
+ *  rounded to the nearest minute), recomputed independently rather than
+ *  widening `logTotals`' own `SessionRun`-typed signature to accept either
+ *  record (the two run types are deliberately NOT unified — `monitorRun.ts`'s
+ *  own header comment on why — and this is six lines, not worth blurring
+ *  that line for). `completedAt!`: this function's only caller only ever
+ *  holds a `MonitorRun` that already passed `monitorModeRun`'s own
+ *  condition 2 (`completedAt !== null`) — the same "guaranteed by the
+ *  caller, not re-checked here" convention this file's `activeRun`/
+ *  `activeWorkout` aliases already use for a narrowing that doesn't survive
+ *  across a function boundary. This branch's behaviour is UNCHANGED by F6 —
+ *  see `LogSession.test.tsx`'s own inverse pin.
+ *
+ *  **Interrupted** (`endedBy: "interrupted"`, F6 Task 3): wall-clock is
+ *  forbidden here — `completedAt` is only the moment the rower chose "Log
+ *  it" through Today's row, possibly days after the row itself
+ *  (`monitorRun.ts`'s `completeInterruptedRun`), so `completedAt -
+ *  startedAt` would show elapsed CALENDAR time, not session duration.
+ *  Duration comes from `interruptedTotalSeconds` (Task 1: measured work
+ *  plus each completed interval's own programmed rest) instead. The date is
+ *  the plan's own ruling (plan "Decisions" #2, not a spec quote — the spec
+ *  only orders the duration): the row's own `startedAt`, since `completedAt`
+ *  is the "Log it" moment and not when the row happened. */
 function monitorLogTotals(run: MonitorRun): {
   dateLabel: string;
   totalMinutes: number;
 } {
+  if (run.endedBy === "interrupted") {
+    return {
+      dateLabel: formatLogDate(run.startedAt),
+      totalMinutes: Math.round(interruptedTotalSeconds(run) / 60),
+    };
+  }
   const completedAt = run.completedAt!;
   const totalMinutes = Math.round(
     Math.max(

@@ -2581,6 +2581,71 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
   });
 });
 
+// F6 Task 3 (spec 2b): `monitorLogTotals`'s interrupted branch stops
+// reading wall-clock (`completedAt - startedAt`) entirely for a run the
+// rower ended through Today's row (`endedBy: "interrupted"`) — that gap can
+// span days between the row and the moment "Log it" was pressed, and none
+// of it happened. Duration comes from `interruptedTotalSeconds` (Task 1:
+// measured work plus each completed interval's own programmed rest) and
+// the date comes from the run's OWN `startedAt` (the plan's ruling, not a
+// spec quote — see `monitorLogTotals`'s own doc comment).
+describe("LogSession: the interrupted header stops reading wall-clock (F6 Task 3)", () => {
+  it("an interrupted record shows measured minutes (work + completed rest), not the day-long wall-clock gap, and dateLabel from startedAt", async () => {
+    const { run, workout } = buildMonitorFixture({
+      // Only interval 1 (Hoarfrost's time work, restSeconds 300 per its
+      // own auto-inserted rest phase) measured — interval 2 never reached.
+      // work 360s + rest 300s = 660s = 11 min exactly: nowhere near the
+      // day-long wall-clock gap below, so a regression back to wall-clock
+      // cannot pass this assertion by accident.
+      actuals: [
+        {
+          index: 1,
+          elapsedSeconds: 360,
+          distanceMeters: 1200,
+          avgSplit: 150,
+          avgSpm: 22,
+          avgHeartRateBpm: 130,
+        },
+      ],
+    });
+    const interrupted: MonitorRun = {
+      ...run,
+      // startedAt Aug 1, completedAt a full day later (Aug 2) — "Log it"
+      // pressed the next day, the exact gap `endedBy: "interrupted"`
+      // exists to stop this header from reading as duration.
+      startedAt: "2026-08-01T12:00:00.000Z",
+      completedAt: "2026-08-02T12:05:00.000Z",
+      endedBy: "interrupted",
+    };
+    saveMonitorRun(interrupted);
+    mockWorkouts([workout]);
+    mockBaselines();
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Log Hoarfrost" });
+
+    // 11 MIN (measured), dated AUG 1 (startedAt) — never AUG 2 (completedAt)
+    // and never the ~1440 MIN wall-clock gap.
+    expect(screen.getByText("AUG 1 · 11 MIN")).toBeInTheDocument();
+    expect(screen.queryByText(/AUG 2/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/1440 MIN/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/1445 MIN/)).not.toBeInTheDocument();
+  });
+
+  it("inverse pin: a normal-completion record (no endedBy) still shows wall-clock minutes and dateLabel from completedAt", async () => {
+    const { run, workout } = buildMonitorFixture();
+    // buildMonitorFixture's own default: startedAt FIXED_NOW (Aug 1),
+    // completedAt FIXED_NOW + 20 min, no endedBy — the normal-completion
+    // branch this change must leave byte-identical in behaviour.
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Log Hoarfrost" });
+
+    expect(screen.getByText("AUG 1 · 20 MIN")).toBeInTheDocument();
+  });
+});
+
 // Task 3 (outside-plan logging): both doors share `useLogForm`'s
 // `outsidePlan` state and `LogScreen`'s own toggle markup verbatim (see
 // LogSession.tsx's own header comments on why the toggle lives in the
