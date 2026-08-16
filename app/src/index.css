@@ -7579,6 +7579,11 @@ section:not(.news-pinned) .news-row:last-of-type {
     grid-column: 1;
     grid-row: 1;
     align-self: center;
+    /* The portrait rule's bottom-bar `border-top` must not leak into the
+       landscape pill (re-review Minor: it painted a stray --rule hairline
+       atop the pill and, via border-box, shaved the 44px content box to
+       43). The pill's outline is the inset box-shadow alone. */
+    border-top: none;
     /* EXPLICIT `44px`, not `auto` (fix round, review Important-2, same
        spirit as `grid-template-rows`'s own pin above): this element's
        `auto` height measured 45px against this worktree even with both
