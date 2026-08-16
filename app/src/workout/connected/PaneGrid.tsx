@@ -12,25 +12,24 @@
 // SINGLE-LINE at a FIXED height (32px landscape / 40px portrait, JAMES
 // RULING 2026-08-12 superseding the packet's 8-at-36 for landscape). The
 // ruling was made against a landscape scroller measured at 232px, which
-// 8x36 = 288 cannot fit; the figure has moved twice since (Task 5 measured
-// 239 — an un-zeroed UA margin on a caption `<p>` — and Task 6's footer
-// reclaim took it to 276, where it stands). CR2 spec 3 task 1's own header
-// restructure moved `ConnectionLine` out of this pane's headline, which
-// briefly moved this figure too (a fix-round defect in that same task —
-// a real `border` on `.connected-control` grew grid row 1 past its own
-// 44px, `index.css`'s own review Important-2 comment has the fix) — with
-// that defect corrected, row 1 is pinned back to the exact 44px it held
-// before this task touched it, so this pane's own scroller budget is
-// unchanged and 276 still stands. The conclusion is unchanged: 8x32 = 256
-// fits 276 with 20 to spare, and 8x36 still does not. 232 is history,
-// framed as history the way `index.css`'s own `.connected-pane-grid`
-// landscape comment frames it. There is no
-// second line and no third line — the OLD two-line portrait row
+// 8x36 = 288 cannot fit; the figure has moved several times since (Task 5
+// measured 239 — an un-zeroed UA margin on a caption `<p>` — Task 6's
+// footer reclaim took it to 276, and CR2 spec 3 Task 1's header restructure
+// left it there too, after correcting its own fix-round defect (a real
+// `border` on `.connected-control` briefly grew grid row 1 past its own
+// 44px — `index.css`'s own review Important-2 comment has the fix). CR2
+// spec 3 TASK 5 MOVES IT AGAIN: this task deletes the headline outright
+// (below), so the scroller's own three flex-none siblings drop from three
+// to two (the column head and the caption) — `index.css`'s own
+// `.connected-pane-grid`/`.connected-grid-rows` comments carry the current
+// measured figure and `e2e/screenshots.spec.ts`'s
+// `LANDSCAPE_GRID_SCROLLER_PX`/`PORTRAIT_GRID_SCROLLER_PX` pin it. There is
+// no second line and no third line — the OLD two-line portrait row
 // (`.connected-grid-line1`/`-line2`, folded into one row by `display:
 // contents` in landscape) and the active row's `REMAINING · TARGET …`
-// caption both retired with this task (retirement-inventory.md §6). Every
-// row, in both orientations, is now the SAME flat markup: `#` then six or
-// seven columns as direct flex children of `.connected-grid-row`. The only
+// caption both retired earlier (retirement-inventory.md §6). Every row, in
+// both orientations, is now the SAME flat markup: `#` then six or seven
+// columns as direct flex children of `.connected-grid-row`. The only
 // orientation difference left is which columns are visible (portrait drops
 // REST, `index.css`'s own `display: none` toggle) and the handful of size
 // tokens (row height, `#` column width) the landscape media query steps.
@@ -39,20 +38,23 @@
 // `row.ordinal` is `null` for the warm-up, which renders `WU` — never a
 // number — and work numbering starts at 1 on the first work piece. This
 // component does not decide that; it reads `GridRow.ordinal` exactly as
-// `surfaceModel.ts` computed it, so the `#` column and the header's own
-// `N OF M` (below) cannot disagree — they are the same `intervalNumbering`
-// call.
+// `surfaceModel.ts` computed it, so the `#` column and the shell header's
+// own `N OF M` (see `ConnectedSurface.tsx`) cannot disagree — they are the
+// same `intervalNumbering` call.
 //
-// THE HEADLINE CARRIES THE SESSION TOTALS (revision §4): `3 OF 12 · WORK ·
-// 0:47 LEFT` and `38:20 TOTAL`, composed from three scalar `SurfaceModel`
-// fields that already exist for other panes
-// (`intervalLabelShort`/`intervalClockValue`/`totalLeftDisplay`) — no new
-// model field, the same precedent this component's old `trailing` prop
-// already set. CR2 spec 3 task 1 moved `ConnectionLine` (the device row)
-// out of this pane into the shell's own header, so this headline is now a
-// single line in BOTH orientations — no more portrait-stacks/landscape-
-// folds split (`index.css`'s own `.connected-grid-headline` comment has
-// the current shape).
+// THE HEADLINE IS GONE (CR2 spec 3 Task 5, design spec §2B's composition
+// note): the session totals this pane used to draw for itself
+// (`3 OF 12 · WORK · 0:47 LEFT` / `38:20 TOTAL`) duplicated the shell
+// header's own status caption, which read `3 OF 12 · WORK` one row above
+// this pane's headline on the SAME screen. The redesign closes that gap by
+// deleting this pane's own copy outright and composing the ONE surviving
+// header instead: `ConnectedSurface.tsx` now feeds `ConnectionLine`'s
+// trailing slot `intervalOrdinalLabel · <totalLeftDisplay LEFT>` (marker
+// gold) whenever the GRID pane is active, reusing `SurfaceModel` fields
+// that already existed for other panes — no new model field, the same
+// precedent this component's own old `trailing` prop used to set. This
+// pane's DOM starts directly at `.connected-grid-head` now; there is no
+// `.connected-grid-headline` any more.
 //
 // THE ONE SCROLL ON THIS SURFACE (DEVIATIONS row 2, handoff §3: "pane C is
 // the single exception to the no-scroll rule, and it is contained"). The
@@ -120,23 +122,6 @@ export default function PaneGrid({ model }: { model: SurfaceModel }) {
 
   return (
     <div className="connected-pane connected-pane-grid">
-      <div className="connected-grid-headline">
-        {/* `ConnectionLine` moved OUT of this pane and into the shell's
-           header (CR2 spec 3 task 1) — this headline now carries only the
-           session totals below. */}
-        {/* The session totals (revision §4). `flex: 1` on the interval span
-            and `flex: none` on the total is what leaves the growing space to
-            the one field whose length actually varies (WARM-UP vs
-            `3 OF 12 · WORK`); the total's own width is fixed by its digits. */}
-        <div className="connected-grid-totals">
-          <span className="connected-grid-interval">
-            {model.intervalLabelShort} · {model.intervalClockValue} LEFT
-          </span>
-          <span className="connected-grid-total">
-            {model.totalLeftDisplay} TOTAL
-          </span>
-        </div>
-      </div>
       <div className="connected-grid-head">
         <span className="connected-grid-num">#</span>
         <span className="connected-grid-time">TIME</span>

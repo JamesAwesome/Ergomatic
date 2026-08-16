@@ -265,7 +265,10 @@ export interface GridModel {
   activeIndex: number;
   /** The handoff's own words-not-glyphs caption naming which rows count
    *  METERS down, or `null` when the session has no distance interval and
-   *  therefore nothing to explain. */
+   *  therefore nothing to explain. CR2 spec 3 Task 5 (design spec §2B):
+   *  merged with the README's own scroll hint — `N MORE BELOW` prefixed
+   *  ahead of the distance sentence, e.g. `5 MORE BELOW · ROW 5 IS A
+   *  500 M PIECE` — built by `footerCaptionFor` below. */
   caption: string | null;
 }
 
@@ -281,10 +284,14 @@ export interface SurfaceModel {
    *  (design spec §5b — the ordinal belongs to the interval and a warm-up
    *  has none, so there is no `INTERVAL` prefix left to hang on it). No
    *  current renderer: its only one, `PaneTimer.tsx`'s pane A, retired with
-   *  connected-revamp Task 2. Casualty list (design spec §3) rehomes it to
-   *  the grid header (revision §4's `3 OF 12 · WORK · 0:47 LEFT`) — a later
-   *  task's job, not this field's; the value stays computed and correct in
-   *  the meantime. */
+   *  connected-revamp Task 2. CR2 spec 3 Task 5 CORRECTS an earlier plan
+   *  assumption carried in this comment: the grid header does NOT rehome
+   *  THIS field — it composes `intervalOrdinalLabel` (below) with
+   *  `totalLeftDisplay` instead, because this field bakes the phase word
+   *  in and the grid header never wants it (`ConnectedSurface.tsx`'s own
+   *  header comment). So this field stays computed, correct and genuinely
+   *  unrendered — kept for the same reason `intervalLabelShort` is kept
+   *  alongside it, not because a future task still owes it a home. */
   intervalLabel: string;
   /** `3 OF 24 · WORK`, or `WARM-UP` (pane B's header line, where the device
    *  name already occupies the left of the row). The denominator counts
@@ -353,13 +360,6 @@ export interface SurfaceModel {
    *  own actuals; see `session/intervalBoundaries.ts`. */
   boundaries: IntervalBoundaries;
   elapsedDisplay: string;
-  /** CR2 spec 3 Task 4 deleted the sibling `intervalClockLabel` field
-   *  (`LEFT IN INTERVAL`/`METERS LEFT`, spec §3 fate table): `PaneLive`'s
-   *  metric-row cell was its only render site, and the redesign cuts the
-   *  cell outright. THIS field survives — `PaneGrid.tsx`'s own headline
-   *  and the active row's own countdown cell (`GridRow`) both still read
-   *  it (Task 5's business, not this one's — antagonist correction 2). */
-  intervalClockValue: string;
   pace: JudgedValue;
   /** The hero split, cut so the tenths can be set smaller (handoff §3: "the
    *  eye should land on the seconds, not the decimal"). `paceTenths` is `""`
@@ -786,7 +786,6 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
     // the piece's running clock — both mean the whole session, so it reads
     // the accumulated pair for the same walk-4 reason TOTAL LEFT does.
     elapsedDisplay: fmtDuration(frame.sessionElapsedSeconds / 60),
-    intervalClockValue: intervalClockValueFor(remaining),
     pace,
     paceWhole,
     paceTenths,
@@ -1044,7 +1043,7 @@ export function buildGridModel(args: {
   return {
     rows,
     activeIndex,
-    caption: distanceCaptionFor(intervals, numbering),
+    caption: footerCaptionFor(intervals, numbering, activeIndex),
   };
 }
 
@@ -1086,6 +1085,35 @@ function accruedDisplayFor(
   return otherKind === "distance"
     ? String(Math.round(accrued.value))
     : fmtDuration(accrued.value / 60);
+}
+
+/** CR2 spec 3 Task 5 (design spec §2B): the footer caption merges the
+ *  README's own scroll hint ahead of the distance sentence —
+ *  `5 MORE BELOW · ROW 5 IS A 500 M PIECE`. "N MORE BELOW" is the count of
+ *  program rows strictly after the ACTIVE one (every row past `activeIndex`
+ *  is `"upcoming"` by construction — `buildGridModel`'s own three-state
+ *  rule above is positional, not actual-backed), never a count of rows
+ *  scrolled off the visible viewport: this module is pure (no React, no
+ *  DOM — this file's own header comment) and has no way to ask the
+ *  scroller what is actually on screen, so "below" reads the list's own
+ *  order, the same "below" the active row's auto-scroll
+ *  (`PaneGrid.tsx`'s `scrollIntoView`) keeps in view.
+ *
+ *  TWO SUPPRESSIONS, both deliberate: `below === 0` (the active row is the
+ *  last one — nothing left to hint at) omits the prefix rather than
+ *  printing `0 MORE BELOW`, and a `null` distance caption (no distance
+ *  interval in the program at all) stays `null` outright — the hint's only
+ *  job is to point at the sentence beneath it, and pointing at nothing
+ *  would be its own false claim. */
+function footerCaptionFor(
+  intervals: ProgramInterval[],
+  numbering: IntervalNumbering,
+  activeIndex: number,
+): string | null {
+  const distance = distanceCaptionFor(intervals, numbering);
+  if (distance === null) return null;
+  const below = intervals.length - 1 - activeIndex;
+  return below > 0 ? `${below} MORE BELOW · ${distance}` : distance;
 }
 
 /** Handoff §3: "A mono caption under the grid names it in words — `ROW 5 IS
@@ -1182,13 +1210,4 @@ function deviceCaptionFor(
 ): string {
   const name = deviceName ?? "PM5";
   return status === "stale" ? `${name} · LOST` : name;
-}
-
-function intervalClockValueFor(
-  remaining: MonitorFrame["intervalRemaining"],
-): string {
-  if (remaining === null) return DASH;
-  return remaining.kind === "distance"
-    ? String(Math.round(remaining.value))
-    : fmtDuration(remaining.value / 60);
 }

@@ -182,21 +182,23 @@
      under `@media (orientation: landscape)` inside `index.css`'s own
      connected-surface query, not duplicated here under a second name.
 
-     FOUR OF THE ORIGINAL EIGHT RETIRED (CR2 spec 3 Task 4): `--size-hero`,
-     `--size-hero-tenths`, `--size-target` and `--size-metric` were, in
-     practice, connected-only despite living in this "shared" family — the
-     redesign forks the connected surface onto its own `--c-size-*` family
-     entirely (`.connected-surface`'s own scale, index.css), which left
-     these four with ZERO consumers anywhere in `index.css` (the phone
-     timer never read them; `tokens.test.ts`'s own "no more dead names"
-     rule is exactly the guard that caught it). Deleted rather than left as
-     dead weight — the four surviving roles below (`--size-subhero`,
-     `--size-total`, `--size-row`, `--size-label`) are the ones the phone
-     timer, or the still-unmigrated connected grid (Task 5), genuinely
-     read. */
+     FIVE OF THE ORIGINAL EIGHT RETIRED (CR2 spec 3 Tasks 4 and 5):
+     `--size-hero`, `--size-hero-tenths`, `--size-target` and `--size-metric`
+     were, in practice, connected-only despite living in this "shared"
+     family — the redesign forks the connected surface onto its own
+     `--c-size-*` family entirely (`.connected-surface`'s own scale,
+     index.css), which left these four with ZERO consumers anywhere in
+     `index.css` (the phone timer never read them; `tokens.test.ts`'s own
+     "no more dead names" rule is exactly the guard that caught it).
+     `--size-row` joins them at Task 5: the connected grid was its last
+     real consumer (`.connected-grid-row > span`, `index.css`), migrated
+     onto `--c-size-row` in the same task that finished the family's own
+     migration off `--size-*` entirely. Deleted rather than left as dead
+     weight — the three surviving roles below (`--size-subhero`,
+     `--size-total`, `--size-label`) are the ones the phone timer alone
+     still reads; nothing connected-scoped consumes `--size-*` any more. */
   --size-subhero: 52px;
   --size-total: 22px;
-  --size-row: 19px;
   --size-label: 10px;
 
   /* connected-revamp Task 7 (revision §5): the phone timer's own countdown

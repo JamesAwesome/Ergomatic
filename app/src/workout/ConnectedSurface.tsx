@@ -51,6 +51,7 @@
 // ever wants the surface to persist past `ended`, THAT change is what has
 // to add the explicit hang-up — the offer stands, unexercised.
 
+import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
 import { deriveAxes } from "../monitor/connectedAxes";
@@ -67,8 +68,47 @@ import SegmentedControl, {
 } from "./connected/SegmentedControl";
 import {
   buildSurfaceModel,
+  type SurfaceModel,
   type SurfaceStatus,
 } from "./connected/surfaceModel";
+
+/** CR2 spec 3 Task 5 (design spec §2B's composition note, and the known
+ *  interim defect Task 5 closes: on GRID the header used to read
+ *  `3 OF 12 · WORK` while the pane's OWN headline directly below it read
+ *  `3 OF 12 · WORK · 0:47 LEFT` — the same fact, twice, one row apart).
+ *  GRID's own header trailing is DIFFERENT from every other pane's: it
+ *  joins `intervalOrdinalLabel` with `totalLeftDisplay`
+ *  (`3 OF 12 · 38:20 LEFT`) instead of `intervalLabelShort`, which bakes
+ *  the phase word in (`3 OF 12 · WORK`) — `intervalOrdinalLabel`'s own doc
+ *  comment names the reason the two cannot be the same field. The
+ *  countdown half wears `--marker` gold (Ruling 1's own deviation from the
+ *  README's accent), which is presentation, not a value — `surfaceModel.ts`
+ *  is pure (no React, its own header comment) and cannot hand back a
+ *  coloured span itself, so this composition lives at the CALLER, one
+ *  level above the pane that used to own it, and `ConnectionLine`'s own
+ *  `trailing` prop takes a full `ReactNode` for exactly this reason
+ *  (`ConnectionLine.tsx`'s own comment) rather than the surface passing a
+ *  second, pane-specific trailing prop through `ConnectionLine` itself —
+ *  one composed node at the one call site that already knows which pane is
+ *  active, versus a second optional prop on a component that would then
+ *  have to reconcile two "what goes here" inputs. On the unnumbered
+ *  warm-up (`intervalOrdinalLabel === null`) GRID falls back to
+ *  `intervalLabelShort` too — the same `WARM-UP`/`READY` word every other
+ *  pane already shows, since there is no ordinal to join
+ *  `totalLeftDisplay` onto. */
+function headerTrailing(model: SurfaceModel, pane: PaneId): ReactNode {
+  if (pane !== "grid" || model.intervalOrdinalLabel === null) {
+    return model.intervalLabelShort;
+  }
+  return (
+    <>
+      {model.intervalOrdinalLabel} ·{" "}
+      <span className="connected-header-countdown">
+        {model.totalLeftDisplay} LEFT
+      </span>
+    </>
+  );
+}
 
 /** Which pane the rower was last on, PER ROWER — not per workout (handoff
  *  §3: "whichever pane the rower last used (per rower, not per workout)…
@@ -339,12 +379,14 @@ export default function ConnectedSurface({
       {/* THE HEADER (connected-revamp Task 6's safety fix, restructured by
           CR2 spec 3 task 1 — design spec §3 "Structure"). Two children now,
           not one: `ConnectionLine` (the mark, device caption and status —
-          moved here from inside the panes, `model.intervalLabelShort`
-          threaded as the trailing status exactly as `PaneLive` used to) and
-          End. `ConnectionLine` carries `flex: 1` (index.css) so it fills
-          whatever width End does not need, which is what keeps End pinned
-          to the row's own right edge without the two ever sitting adjacent
-          — spec §2A: "Control and END never adjacent."
+          moved here from inside the panes) and End. The trailing status is
+          `headerTrailing(model, pane)` (above, CR2 spec 3 Task 5) — GRID
+          gets its own composed `N OF M · <countdown> LEFT` node, every
+          other pane keeps `model.intervalLabelShort` exactly as `PaneLive`
+          used to thread it. `ConnectionLine` carries `flex: 1` (index.css)
+          so it fills whatever width End does not need, which is what keeps
+          End pinned to the row's own right edge without the two ever
+          sitting adjacent — spec §2A: "Control and END never adjacent."
 
           `SegmentedControl` is NOT rendered inside this `<div>` (spec §3:
           "own grid item of `.connected-surface`... NOT a DOM child of
@@ -374,7 +416,7 @@ export default function ConnectedSurface({
           collide with the paused block's own `END`, and "END" is a prefix
           of "End session" so WCAG 2.5.3's label-in-name still holds. */}
       <div className="connected-header">
-        <ConnectionLine model={model} trailing={model.intervalLabelShort} />
+        <ConnectionLine model={model} trailing={headerTrailing(model, pane)} />
         <button
           type="button"
           className={

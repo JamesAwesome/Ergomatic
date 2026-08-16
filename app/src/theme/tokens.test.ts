@@ -11,11 +11,15 @@
 // not until the fix round below, which is why the consumer census at the
 // bottom of this file now exists.
 //
-// FOUR OF THE ORIGINAL NINE RETIRED (CR2 spec 3 Task 4): the connected
-// surface forked onto its own `--c-size-*` family, which was these four's
-// only real consumer despite the "shared" name — `SCALE` below is the
-// CURRENT membership, five names plus `--size-elapsed`, not the original
-// nine this header paragraph describes as history.
+// FIVE OF THE ORIGINAL NINE RETIRED (CR2 spec 3 Tasks 4 and 5): the
+// connected surface forked onto its own `--c-size-*` family, which was
+// these five's only real consumer despite the "shared" name — Task 4 took
+// four (`--size-hero`, `--size-hero-tenths`, `--size-target`,
+// `--size-metric`), Task 5 the fifth (`--size-row`, once the connected grid
+// migrated its last remaining `var(--size-row)` onto `--c-size-row`).
+// `SCALE` below is the CURRENT membership, four names plus
+// `--size-elapsed`, not the original nine this header paragraph describes
+// as history.
 //
 // jsdom never loads either stylesheet as real rules — Vitest mocks every
 // `.css` import to an empty string for this project (`TimerTargets.test.tsx`'s
@@ -96,22 +100,23 @@ const LANDSCAPE_ROOT = LANDSCAPE_ROOTS[0] ?? "";
  *  §8 list both write it this way; the revision's §6 recap uses the
  *  opposite landscape/portrait order for the identical values, cross-
  *  checked against its per-element tables at implementation time). */
-// FOUR NAMES RETIRED (CR2 spec 3 Task 4): `--size-hero`, `--size-hero-
-// tenths`, `--size-target` and `--size-metric` were, in practice,
+// FIVE NAMES RETIRED (CR2 spec 3 Tasks 4 and 5): `--size-hero`, `--size-
+// hero-tenths`, `--size-target` and `--size-metric` were, in practice,
 // connected-only — the redesign forks the connected surface onto its own
 // `--c-size-*` family entirely, leaving these four with zero consumers
-// anywhere in `index.css`. `tokens.css`'s own comment on the portrait
-// `:root` block has the full reasoning; this table shrinks to match the
-// CSS it pins.
+// anywhere in `index.css`. Task 5 retires the fifth, `--size-row`: the
+// connected grid was its last real consumer and migrated onto
+// `--c-size-row` instead, completing design spec §1's "connected rules
+// stop consuming `--size-*` entirely". `tokens.css`'s own comment on the
+// portrait `:root` block has the full reasoning; this table shrinks to
+// match the CSS it pins.
 const SCALE = [
   { name: "--size-subhero", portrait: 52, landscape: 56 },
-  // These three are DELIBERATELY identical in both orientations — not an
-  // oversight, the spec's own table gives them one figure each ("total 22",
-  // "row 19"). Asserted here anyway, in both blocks, so a future edit that
-  // accidentally diverges them is caught the same way a deliberate
-  // divergence is.
+  // Identical in both orientations — not an oversight, the spec's own
+  // table gives it one figure ("total 22"). Asserted here anyway, in both
+  // blocks, so a future edit that accidentally diverges it is caught the
+  // same way a deliberate divergence is.
   { name: "--size-total", portrait: 22, landscape: 22 },
-  { name: "--size-row", portrait: 19, landscape: 19 },
   { name: "--size-label", portrait: 10, landscape: 11 },
   // connected-revamp Task 7's own extra step (revision §5: "Countdown
   // 128px landscape / 118px portrait") — declared and redefined in both
@@ -186,7 +191,7 @@ describe("the size-token scale (tokens.css portrait + index.css landscape)", () 
     },
   );
 
-  it("names exactly five tokens in the landscape block, six in portrait (the five plus --size-elapsed) — no extra, none missing", () => {
+  it("names exactly four tokens in the landscape block, five in portrait (the four plus --size-elapsed) — no extra, none missing", () => {
     const namesIn = (block: string) =>
       Array.from(block.matchAll(/(--size-[a-z-]+)\s*:/g))
         .map((m) => m[1])
@@ -277,13 +282,19 @@ describe("the size-token scale (tokens.css portrait + index.css landscape)", () 
 // reaches the phone timer too; a connected-only family declared on `:root`
 // would have been invisible to nobody).
 //
-// UNLIKE `--size-*`, this family is genuinely UNCONSUMED as of this task —
-// wiring it into real elements is Tasks 4/5's job (task-1 brief step 5's own
-// framing: "wiring these names to real elements is later work"). So there is
-// no "every token is consumed" test here yet; adding one now would either
-// fail honestly (nothing consumes them) or, worse, tempt a premature `var()`
-// reference into an unrelated rule just to satisfy it. That test belongs
-// with the task that does the wiring.
+// NINE OF TEN NOW WIRED (CR2 spec 3 Tasks 1, 4 and 5): `--c-size-control`
+// (Task 1, `SegmentedControl`), `--c-size-hero`/`-hero-2`/`-tenths`/
+// `-target`/`-band` (Task 4, the heroes and the band) and, this task,
+// `--c-size-row`/`-thead` (the grid's own row values and table head,
+// `.connected-grid-row > span`/`.connected-grid-head > span`). ONE holdout:
+// `--c-size-status` belongs to `.connected-line-trailing`, a rule shared by
+// EVERY pane's header status, not a grid rule — Task 5's own brief scopes
+// its migration to "grid rules", and resizing a rule every pane's header
+// reads is a bigger, cross-pane change than that scope covers
+// (`ConnectedSurface.tsx`'s own `headerTrailing` comment has the fuller
+// reasoning). The test below names the holdout explicitly rather than
+// either skipping the "every token is consumed" check entirely or letting
+// it fail on a token nobody has claimed yet.
 // ---------------------------------------------------------------------------
 
 const C_SIZE_SCALE = [
@@ -341,6 +352,22 @@ describe("the --c-size-* connected-only scale (index.css, on .connected-surface)
     },
   );
 
+  // CR2 spec 3 Task 5: nine of the ten now have a real consumer in
+  // `index.css` — counted off the comment-stripped source, so a prose
+  // mention cannot satisfy it, the same idiom the `--size-*` version of
+  // this test above uses. `--c-size-status` is the one deliberate
+  // exception (this block's own header comment has the reason); if a
+  // later task wires it, this test's own failure is the prompt to drop
+  // the exception, not to add a second one beside it.
+  it("nine of the ten tokens are CONSUMED by index.css — --c-size-status is the one still-unwired holdout", () => {
+    const consumers = (name: string) =>
+      indexCss.split(`var(${name})`).length - 1;
+    for (const { name } of C_SIZE_SCALE) {
+      const expectWired = name !== "--c-size-status";
+      expect([name, consumers(name) > 0]).toStrictEqual([name, expectWired]);
+    }
+  });
+
   it("names exactly the ten tokens in both blocks — no extra, none missing", () => {
     const namesIn = (block: string) =>
       Array.from(block.matchAll(/(--c-size-[a-z0-9-]+)\s*:/g))
@@ -379,23 +406,19 @@ describe("the --c-size-* connected-only scale (index.css, on .connected-surface)
     expect(LANDSCAPE_ROOT).not.toMatch(/--c-size-/);
   });
 
-  // TASK-1-SCOPED GREP PIN (task-1 brief step 6): the full spec exit
-  // criterion is "connected rules stop consuming `--size-*` entirely"
-  // (design spec §1), but this task only MOVES two things off it — the
-  // header and the segmented control, `PagerRail`'s replacement — while
-  // every pane keeps its current internals (and therefore its current
-  // `--size-*` reads) until Tasks 4/5 migrate them. So this pin is scoped
-  // to the rules THIS task actually touches, not every `.connected-*`
-  // rule in the file; Task 5's own step widens it to the full selector
-  // family and this comment is where that widening belongs.
-  it("the rules THIS task touches (.connected-header, .connected-control*, .connected-line*) never consume var(--size-*)", () => {
+  // THE FULL SPEC EXIT CRITERION, NOW ALL OF IT (design spec §1: "connected
+  // rules stop consuming `--size-*` entirely"). Task 1 shipped this pin
+  // scoped to only the rules it touched itself (the header and the
+  // segmented control, `PagerRail`'s replacement), because every pane kept
+  // its own internals — and therefore its own `--size-*` reads — until
+  // Tasks 4 and 5 migrated them. Task 4 moved the two heroes' family onto
+  // `--c-size-*` entirely; Task 5 (this widening) moves the grid's last
+  // holdout, `--size-row` → `--c-size-row` (`.connected-grid-row > span`,
+  // `index.css`), which is what makes the WHOLE `.connected-*` selector
+  // family — not a scoped subset — safe to assert here.
+  it("EVERY `.connected-*` rule in index.css never consumes var(--size-*)", () => {
     const rules = cssRules(indexCss).filter((rule) =>
-      rule.selectors.some(
-        (s) =>
-          /(^|[\s,])\.connected-header(\s|$|:|\.|>)/.test(`${s} `) ||
-          /(^|[\s,])\.connected-control[\w-]*(\s|$|:|\.|>)/.test(`${s} `) ||
-          /(^|[\s,])\.connected-line[\w-]*(\s|$|:|\.|>)/.test(`${s} `),
-      ),
+      rule.selectors.some((s) => /(^|[\s,])\.connected-[\w-]+/.test(`${s} `)),
     );
     expect(rules.length).toBeGreaterThan(0);
     for (const rule of rules) {

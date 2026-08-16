@@ -585,7 +585,8 @@ describe("READY (design spec §2D): the armed branch of intervalLabelShort", () 
 
 // CR2 spec 3 Task 2 (design spec §3, composition note under §2B): the
 // ordinal-only sibling `intervalLabelShort` bakes its phase word out of —
-// Task 3's grid header joins this with `totalLeftDisplay` instead.
+// Task 5's grid header (`ConnectedSurface.tsx`'s `headerTrailing`) joins
+// this with `totalLeftDisplay` instead.
 describe("intervalOrdinalLabel: the ordinal without the phase word (design spec §3)", () => {
   it("is the ordinal plus the work count when the interval is numbered", () => {
     const m = model({ frame: frame({ intervalIndex: 1 }) });
@@ -795,28 +796,17 @@ describe("live", () => {
   });
 
   // `intervalClockLabel` (`METERS LEFT`/`LEFT IN INTERVAL`) died off
-  // `SurfaceModel` (CR2 spec 3 Task 4, spec §3 fate table) — `PaneLive`'s
+  // `SurfaceModel` at CR2 spec 3 Task 4 (spec §3 fate table) — `PaneLive`'s
   // own metric-row cell was its only render site, and the redesign cuts
-  // that cell outright. `intervalClockValue` SURVIVES (antagonist
-  // correction 2, Task 5's business): the grid's active-row countdown cell
-  // still reads it, so these two tests keep proving the VALUE counts down
-  // correctly on both interval kinds, minus the now-dead label assertion.
-  it("counts distance down on a distance interval", () => {
-    const m = model({
-      frame: frame({ intervalRemaining: { kind: "distance", value: 1200 } }),
-    });
-    expect(m.intervalClockValue).toBe("1200");
-  });
-
-  it("counts time down on a time interval", () => {
-    const m = model({
-      frame: frame({
-        intervalIndex: 0,
-        intervalRemaining: { kind: "time", value: 41 },
-      }),
-    });
-    expect(m.intervalClockValue).toBe("0:41");
-  });
+  // that cell outright. `intervalClockValue` — the sibling this describe
+  // block's own two tests used to pin — dies HERE, at Task 5 (antagonist
+  // correction 1): the grid headline that read it is deleted outright
+  // (`PaneGrid.tsx`'s own header comment), and the grid's active-row
+  // countdown cell was never actually fed by this field — it has its own
+  // independent computation, `countdownDisplayFor` below, which
+  // `buildGridModel`'s own describe blocks pin directly. Both tests are
+  // gone with the field; "the four fields die" describe block further down
+  // this file (now five) pins the deletion structurally.
 
   // `intervalProgressPct`'s own two its (the fill-direction pin and the
   // 0-100 clamp) retired with the field itself (connected-revamp Task 3,
@@ -1129,13 +1119,10 @@ describe("paused", () => {
     expect(m.nowLabel).toBe("");
   });
 
-  it("holds the interval clock's last value rather than blanking it", () => {
-    const m = model({
-      status: "paused",
-      frame: frame({ intervalRemaining: { kind: "time", value: 41 } }),
-    });
-    expect(m.intervalClockValue).toBe("0:41");
-  });
+  // `intervalClockValue`'s own "holds the last value rather than blanking
+  // it" pin retired with the field itself (CR2 spec 3 Task 5) — its own
+  // describe block, above, has the full account of where its coverage
+  // went.
 
   // connected-axes 2a, task 5: the split hero already suppressed to `—`
   // above (`livePace`'s own doc comment); the rate hero never did — a
@@ -1194,7 +1181,6 @@ describe("degenerate inputs", () => {
     // it too, not to special-case it away.)
     expect(m.pace.display).toBe("0:00.0");
     expect(m.pace.judgement).toBe("within");
-    expect(m.intervalClockValue).toBe("—");
     expect(m.intervalLabel).toBe("WARM-UP");
   });
 
@@ -1627,15 +1613,17 @@ describe("Task 6: the active row's accrued cell at interval index 2 (the checkpo
 });
 
 // ---------------------------------------------------------------------------
-// CR2 spec 3 Task 4: the four dying fields, actually gone (task brief's own
-// "deletion pins" — `PaneLive.tsx`'s TOTAL M/HR/LEFT IN INTERVAL cells and
-// `TimerRuler`'s TOTAL LEFT row are cut outright, spec §3 fate table).
-// `intervalClockValue` is explicitly NOT one of the four (antagonist
-// correction 2) — it survives for the grid, Task 5's business.
+// CR2 spec 3 Tasks 4 and 5: the five dying fields, actually gone (task
+// briefs' own "deletion pins" — `PaneLive.tsx`'s TOTAL M/HR/LEFT IN
+// INTERVAL cells and `TimerRuler`'s TOTAL LEFT row are cut outright, spec
+// §3 fate table). Task 4 shipped this block naming `intervalClockValue` as
+// explicitly NOT one of the four, reserved for Task 5's own deletion
+// (antagonist correction 1) — Task 5 is that task, so the fifth key joins
+// the other four here rather than opening a second, near-identical block.
 // ---------------------------------------------------------------------------
 
 /** COMPILE-TIME PIN, checked by `tsc`, not by a runtime assertion: if any of
- *  the four dying keys reappears on `SurfaceModel`, `Extract<keyof
+ *  the five dying keys reappears on `SurfaceModel`, `Extract<keyof
  *  SurfaceModel, DeadKeys>` stops being `never` and this file fails to
  *  typecheck — `const _pin: DeadKeysGone = true` no longer accepts `true`.
  *  A naive `DeadKeys extends keyof SurfaceModel ? never : true` version
@@ -1643,17 +1631,22 @@ describe("Task 6: the active row's accrued cell at interval index 2 (the checkpo
  *  conditional over a union type parameter, so ONE surviving key produces
  *  `never` for that member alone, and `never` vanishes silently inside the
  *  resulting union (`never | true` collapses to `true`) — a regression on
- *  any three of the four keys would still pass. `Extract` has no such
+ *  any four of the five keys would still pass. `Extract` has no such
  *  collapse: it is non-empty the instant ANY dead key overlaps
- *  `keyof SurfaceModel`, so the whole pin depends on ALL FOUR being gone. */
-type DeadKeys = "meters" | "hr" | "intervalClockLabel" | "totalLeftSeconds";
+ *  `keyof SurfaceModel`, so the whole pin depends on ALL FIVE being gone. */
+type DeadKeys =
+  | "meters"
+  | "hr"
+  | "intervalClockLabel"
+  | "totalLeftSeconds"
+  | "intervalClockValue";
 type DeadKeysGone =
   Extract<keyof SurfaceModel, DeadKeys> extends never ? true : false;
 
-describe("the four fields die (CR2 spec 3 Task 4, spec §3 fate table)", () => {
-  it("meters, hr, intervalClockLabel and totalLeftSeconds are gone from the TYPE", () => {
+describe("the five fields die (CR2 spec 3 Tasks 4 and 5, spec §3 fate table)", () => {
+  it("meters, hr, intervalClockLabel, totalLeftSeconds and intervalClockValue are gone from the TYPE", () => {
     // `deadKeysGone` is `true` at compile time only if `DeadKeysGone`
-    // resolved to the literal type `true` — if any of the four keys
+    // resolved to the literal type `true` — if any of the five keys
     // reappeared on `SurfaceModel`, `DeadKeysGone` would be `false` and this
     // assignment would fail to typecheck (`tsc -b`, this repo's own
     // `pnpm typecheck`), not merely fail at runtime.
@@ -1672,8 +1665,6 @@ describe("the four fields die (CR2 spec 3 Task 4, spec §3 fate table)", () => {
     expect(keys).not.toContain("hr");
     expect(keys).not.toContain("intervalClockLabel");
     expect(keys).not.toContain("totalLeftSeconds");
-    // The survivor, named here so nobody mistakes its absence above for a
-    // typo: `intervalClockValue` is Task 5's to delete, not this one's.
-    expect(keys).toContain("intervalClockValue");
+    expect(keys).not.toContain("intervalClockValue");
   });
 });

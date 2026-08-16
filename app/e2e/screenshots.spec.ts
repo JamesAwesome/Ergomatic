@@ -2436,33 +2436,28 @@ const CONNECTED_STATES = [
  *  (`showConnectedFixture` waits on `document.fonts.ready`; the review
  *  reproduced a 3px swing by skipping that wait, which is what the original
  *  "13 one run, 14 the next" report actually was). Both are `clientHeight`
- *  of `.connected-grid-rows` on the 25-interval fixture. The three
- *  flex-none siblings above and below it carry explicit heights in
- *  `index.css` for exactly this reason, so these are arithmetic, not
- *  typography. */
-// CR2 spec 3 task 1 moved `ConnectionLine` out of `.connected-grid-headline`
-// into the shell's own header (`ConnectedSurface.tsx`), which is what moves
-// PORTRAIT's own figure below — re-measured against this worktree, not
-// derived: the headline no longer spends 14px stacking a device row under
-// a totals row (612 -> 626, one line now in both orientations, `index
-// .css`'s own `.connected-grid-headline` comment).
-//
-// LANDSCAPE is DERIVED, not re-measured, and stays at the pre-task figure
-// (276) — this is the fix-round correction of a genuine defect this file
-// briefly carried (274, one round of this task): a first version of
-// `.connected-control` grew grid row 1 from 44px to 46px (a real `border`
-// on the pill added 2px OUTSIDE its content box, `index.css`'s own review
-// Important-2 comment on that rule has the fix and the measurement), which
-// shrank the scroller by exactly the 2px the row grew. `.connected-header`
-// and `.connected-control` are now both pinned to the SAME 44px this row
-// held before this task's own header restructure ever touched it (`index
-// .css`'s `grid-template-rows: 44px auto 1fr auto` — an explicit pin, not
-// an `auto` this task's own restructure made ambiguous), so the row's own
-// contribution to the scroller's budget is unchanged from pre-task-1 — the
-// two are the same number for the same reason, not a coincidence: nothing
-// else in this row's own height accounting moved.
-const PORTRAIT_GRID_SCROLLER_PX = 626;
-const LANDSCAPE_GRID_SCROLLER_PX = 276;
+ *  of `.connected-grid-rows` on the 25-interval fixture. The TWO flex-none
+ *  siblings above and below it (`.connected-grid-head` and
+ *  `.connected-grid-caption`) carry explicit heights in `index.css` for
+ *  exactly this reason, so these are arithmetic, not typography.
+ *
+ *  CR2 spec 3 task 1 moved `ConnectionLine` out of `.connected-grid-headline`
+ *  into the shell's own header, which moved PORTRAIT's own figure once
+ *  already (612 -> 626). CR2 spec 3 TASK 5 MOVES BOTH FIGURES AGAIN,
+ *  re-measured against this worktree, not derived — three things changed
+ *  at once: the headline (a THIRD flex-none sibling, 14px, one shared gap
+ *  each side) is deleted outright (`.connected-grid-head`'s own comment),
+ *  `.connected-grid-head` steps 17px -> 19px (its own migration to
+ *  `--c-size-thead`, 10px -> 12px mono) and `.connected-grid-caption` steps
+ *  13px -> 15px (the same token). PORTRAIT gains MORE than LANDSCAPE for a
+ *  structural reason, not a measurement error: portrait's own
+ *  `.connected-pane-grid` carries a real 4px `gap` between its children
+ *  (landscape zeroes it), so losing one child also loses ONE 4px gap
+ *  portrait was paying and landscape never was — 626 -> 640 (headline's
+ *  14px + the freed 4px gap, less the two rules' own +4px combined growth)
+ *  against landscape's 276 -> 286 (the same rule heights, no gap term). */
+const PORTRAIT_GRID_SCROLLER_PX = 640;
+const LANDSCAPE_GRID_SCROLLER_PX = 286;
 
 for (const name of CONNECTED_STATES) {
   test(name, async ({ page }) => {
@@ -2544,20 +2539,25 @@ for (const name of CONNECTED_STATES) {
       // delta in the message rather than on a bare integer.
       //
       // The count was a floor until the test-integrity sweep (P2): given
-      // the two exact assertions above it, `floor(626/40)` is 15 and the
+      // the two exact assertions above it, `floor(640/40)` is 16 and the
       // floor could not fail unless one of them had already failed and
       // aborted the test. James's ruling is a number, so the number is what
-      // is pinned. Measured, not derived: 15, at an exact fit of 15.65
-      // (CR2 spec 3 task 1 moved the scroller's own budget from 612 to 626
-      // — this block's own top comment has the reason — which only widens
-      // the margin here, from 12px slack under 15 rows to 26px).
+      // is pinned. Measured, not derived: 16, at an EXACT fit — 640/40 is
+      // 16.0 precisely, zero px of slack (CR2 spec 3 task 1 moved the
+      // scroller's own budget from 612 to 626; Task 5 moves it again, to
+      // 640, deleting the headline outright rather than merely relocating
+      // its device row — this block's own top comment has the full
+      // arithmetic). A zero-slack fit is still an EXACT number, not a
+      // fragile one: `clientHeight` is pinned above this assertion, so any
+      // future px drift fails there FIRST, by its own delta, before this
+      // line could ever see a fractional row.
       //
       // And the count is NOT merely implied by the two heights above, as
       // the fix round's own note claimed (the re-review corrected it):
       // `rowHeight` samples `children[0]` alone while `visible` walks every
       // child, so later rows can diverge from the first. Proven — giving
       // `.connected-grid-row:not(:first-child)` a 50px height leaves
-      // `rowHeight` 40 and `clientHeight` 612 both green and fails here on
+      // `rowHeight` 40 and `clientHeight` 640 both green and fails here on
       // 12 (5 in landscape). This line detects on its own.
       const m = await page.evaluate(() => {
         const scroller = document.querySelector(".connected-grid-rows")!;
@@ -2577,7 +2577,7 @@ for (const name of CONNECTED_STATES) {
       });
       expect(m.rowHeight).toBe(40);
       expect(m.clientHeight).toBe(PORTRAIT_GRID_SCROLLER_PX);
-      expect(m.visible).toBe(15);
+      expect(m.visible).toBe(16);
       // The pane itself never scrolls: only the rows do (DEVIATIONS row 2).
       // Landscape has always pinned this; portrait did not until the fix
       // round, which is how a portrait overflow could have gone unseen.
@@ -2751,11 +2751,14 @@ for (const name of CONNECTED_STATES) {
       expect(m.rowHeight).toBe(32);
       expect(m.clientHeight).toBe(LANDSCAPE_GRID_SCROLLER_PX);
       // EXACT, not a floor, for the reason the portrait block sets out
-      // (test-integrity sweep, P2): `floor(276/32)` is 8, so the FLOOR was
+      // (test-integrity sweep, P2): `floor(286/32)` is 8, so the FLOOR was
       // implied by the two exact assertions above it. The exact count is
       // not — `rowHeight` samples only `children[0]`, so uneven later rows
       // fail here (5) with both heights still green. Measured 8, at an
-      // exact fit of 8.625 — the packet's own count, restored by the
+      // exact fit of 8.9375 (CR2 spec 3 Task 5 widens the budget from 276
+      // to 286 — this block's own top comment has the arithmetic — which
+      // only grows the margin under 8 rows, from 20px slack to 30px; still
+      // short of fitting a 9th) — the packet's own count, restored by the
       // task-6 footer reclaim.
       expect(m.visible).toBe(8);
       // ...and the pane itself never scrolls: only the rows do (DEVIATIONS

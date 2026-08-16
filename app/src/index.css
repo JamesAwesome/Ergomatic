@@ -5997,9 +5997,10 @@ section:not(.news-pinned) .news-row:last-of-type {
      `margin-bottom` on the children that actually render (below) is what
      the header, the pane body and the footer pay unconditionally — the
      lost banner's own 10px only when it's actually on screen — reclaiming
-     the pane's row-count budget (15 rows portrait, 8 landscape after the
-     task-6 fix round), which a flat `gap` would otherwise spend on a
-     boundary with nothing to separate most sessions. */
+     the pane's row-count budget (16 rows portrait, 8 landscape as of CR2
+     spec 3 Task 5's own headline deletion; 15/8 after the task-6 fix
+     round), which a flat `gap` would otherwise spend on a boundary with
+     nothing to separate most sessions. */
   gap: 0;
   /* THE SAFE-AREA INSETS ARE NOT SUBTRACTED HERE (James's erg walk,
      2026-08-13, defect 3: in portrait "LEFT IN INTERVAL wraps to two lines
@@ -6209,6 +6210,20 @@ section:not(.news-pinned) .news-row:last-of-type {
   font-size: 11px;
   letter-spacing: 0.12em;
   color: var(--ink-3);
+}
+
+/* GRID's own countdown half of the composed header trailing (CR2 spec 3
+   Task 5, design spec §2B, Ruling 1's own deviation from the README's
+   accent red): `--marker` gold, the SAME tint the grid's own active-row
+   countdown cell wears (`.connected-grid-countdown`'s own comment has the
+   full reasoning) — kept a SEPARATE class rather than reusing that one,
+   because this span lives in the shell's header, not inside a pane's row,
+   and the two rules diverging later (a size step, say) should not have to
+   fight one selector serving both roles. `ConnectedSurface.tsx`'s
+   `headerTrailing` is the only place that ever renders it, and only when
+   the GRID pane is active with a numbered interval. */
+.connected-header-countdown {
+  color: var(--marker);
 }
 
 /* `.connected-clock-value-held` DIED HERE (CR2 spec 3 Task 4): its one
@@ -6621,87 +6636,55 @@ section:not(.news-pinned) .news-row:last-of-type {
   overflow: visible;
 }
 
-/* THE HEADLINE (Task 5, revision §4: "session totals move into the header
-   line"). ONE child now, `.connected-grid-totals` (the interval caption and
-   the whole-session total) — `ConnectionLine`'s own `.connected-line` (the
-   mark and device name) moved OUT of this pane into the shell's own header
-   (CR2 spec 3 task 1, design spec §3), alongside End, so there is no longer
-   a device row for this element to stack a totals row underneath. One line
-   in BOTH orientations now; the old portrait-stacks/landscape-folds split
-   retired with the second child (its own landscape override, below, is
-   gone too).
+/* THE HEADLINE IS GONE (CR2 spec 3 Task 5, design spec §2B's composition
+   note): its old job — the interval caption and the whole-session total —
+   duplicated the shell header's own status caption one row above it
+   (`PaneGrid.tsx`'s own header comment has the full defect this closes).
+   `ConnectedSurface.tsx` composes the ONE surviving header instead. This
+   pane's scroller now has only TWO flex-none siblings pinning its budget,
+   not three (`.connected-grid-head` and `.connected-grid-caption`, both
+   below) — `.connected-grid-head`'s own explicit-height comment carries
+   the rationale that used to live here.
 
-   EXPLICIT HEIGHT (task-6 review, Scrutiny 1 recommendation 2 — applied to
-   all three of this pane's flex-none siblings: this rule,
-   `.connected-grid-head` and `.connected-grid-caption`). The scroller
-   between them is `flex: 0 1 auto` fill, so its height is whatever these
-   three leave — and while their own heights were TEXT METRICS (line boxes
-   at 11/13px), the visible row count was a derived integer resting on
-   sub-pixel typography. Pinning these three the way the ROWS were already
-   pinned makes the budget arithmetic honest: 14px is one line box at this
-   element's own 11px mono content, measured against the served bundle with
-   the self-hosted face applied. A face that renders taller overflows its
-   own 14px rather than stealing from the rows. */
-.connected-grid-headline {
-  flex: none;
-  height: 14px;
-  display: flex;
-  align-items: center;
-}
-
-.connected-grid-totals {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-}
-
-/* Grows to take whatever space the total's fixed width leaves — the field
-   whose length actually varies (`WARM-UP` vs `3 OF 12 · WORK`). */
-.connected-grid-interval {
-  flex: 1;
-  min-width: 0;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.14em;
-  color: var(--ink-3);
-}
-
-.connected-grid-total {
-  flex: none;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.14em;
-  color: var(--ink-3);
-}
-
-/* ONE FLAT ROW, both orientations (Task 5 dropped the old two-line
+   ONE FLAT ROW, both orientations (Task 5 dropped the old two-line
    portrait shape entirely) — the head row and every data row below share
    this same seven-column flex layout; only which columns are VISIBLE
    differs (REST is portrait-hidden, `.connected-grid-rest` below) and a
    handful of size tokens the landscape query steps. */
 .connected-grid-head {
   flex: none;
-  /* Explicit, for the reason `.connected-grid-headline` above sets out at
-     length. 17 = the 10px labels' own 13px line box + this rule's 2px
-     `padding-bottom` + its 2px `border-bottom`, which `box-sizing:
-     border-box` (global, `index.css:1`) folds into the same 17. Identical
-     in both orientations, so no landscape step is needed. */
-  height: 17px;
+  /* EXPLICIT HEIGHT (task-6 review, Scrutiny 1 recommendation 2 — applied
+     to both of this pane's remaining flex-none siblings: this rule and
+     `.connected-grid-caption` below; the headline that used to be a third
+     one retired with CR2 spec 3 Task 5, above). The scroller between them
+     is `flex: 0 1 auto` fill, so its height is whatever these two leave —
+     and because their own heights are TEXT METRICS, not literal box
+     heights, the visible row count is a derived integer resting on
+     sub-pixel typography; pinning them explicitly (the way the ROWS were
+     already pinned) makes that arithmetic honest instead of guessed. 19px
+     = this rule's own `--c-size-thead` (12px, CR2 spec 3 Task 5's
+     migration off the old literal 10px) line box + 2px `padding-bottom` +
+     2px `border-bottom`, which `box-sizing: border-box` (global,
+     `index.css:1`) folds into one box height — measured against the served
+     bundle with the self-hosted face applied. A face that renders taller
+     overflows its own 19px rather than stealing from the rows. */
+  height: 19px;
   display: flex;
   align-items: baseline;
   gap: 8px;
   border-bottom: 2px solid var(--ink);
-  /* 2px, not 5 (connected-revamp Task 6): trimmed for the same reason as
-     `.connected-grid-headline`'s own gap just above — the border itself
-     still separates the column heads from the rows without the extra
+  /* 2px, not 5 (connected-revamp Task 6): trimmed so the border itself
+     still separates the column heads from the rows without extra
      padding. */
   padding-bottom: 2px;
 }
 
+/* `--c-size-thead` (12/12, CR2 spec 3 Task 5's migration — design spec §2B:
+   "mono 12px tracking 0.12em ink-3"), off the old literal 10px/0.1em. */
 .connected-grid-head > span {
   font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.1em;
+  font-size: var(--c-size-thead);
+  letter-spacing: 0.12em;
   color: var(--ink-3);
 }
 
@@ -6735,12 +6718,16 @@ section:not(.news-pinned) .news-row:last-of-type {
   /* ZERO (Task 5, JAMES RULING 2026-08-12): a row's own border IS the
      separator now — the old 6px/3px gap was budget the new density cannot
      spare. Measured against this worktree's own build after the task-6 fix
-     round reclaimed the empty footer: the landscape scroller is 276px and
+     round reclaimed the empty footer: the landscape scroller was 276px and
      8 rows at the fixed 32px height take 256, leaving 20px of real margin
      — which is the packet's own original count, recovered. The ruling's
      231/232/239 figures all came from builds of this header that no longer
      exist; `e2e/screenshots.spec.ts` pins the budget itself now
-     (`LANDSCAPE_GRID_SCROLLER_PX`), not just the count derived from it.
+     (`LANDSCAPE_GRID_SCROLLER_PX`), not just the count derived from it. CR2
+     spec 3 Task 5 moves the figure AGAIN, to 286 (deleting the pane's own
+     headline outright rather than relocating its device row —
+     `.connected-grid-head`'s own comment has the full arithmetic); the row
+     count stays 8 either way (256 fits both 276 and 286, 288 fits neither).
 
      NO PADDING HERE EITHER (Task 5 fix round, JAMES RULING 2026-08-12,
      reversing this task's own first attempt): portrait's scroller has more
@@ -6750,9 +6737,12 @@ section:not(.news-pinned) .news-row:last-of-type {
      force the count down to 12; that is the "old code" pattern the ruling
      names — nothing may exist whose only job is to hide capacity. Portrait
      now takes every row its own 40px-fixed-height budget actually holds:
-     612px of scroller, 15 rows at 40 = 600, 12px of margin.
-     `e2e/screenshots.spec.ts` measures and pins both the budget and the
-     count. */
+     was 612px of scroller (15 rows at 40 = 600, 12px of margin), CR2 spec 3
+     Task 5 moves it to 640 (the same headline deletion, plus portrait's own
+     4px inter-child `gap` losing one boundary — `.connected-grid-head`'s
+     own comment has the arithmetic) — an EXACT fit for 16 rows, zero px of
+     margin left. `e2e/screenshots.spec.ts` measures and pins both the
+     budget and the count. */
   gap: 0;
 }
 
@@ -6804,13 +6794,17 @@ section:not(.news-pinned) .news-row:last-of-type {
   border-bottom: 1px solid var(--ink);
 }
 
-/* Row values, mono `--size-row` (Task 2's own token, 19px in both
-   orientations — the revision's own table gives the same pixel value
-   for landscape and portrait, so no media-query redefinition is needed
-   here the way the hero/target tokens need one). */
+/* Row values, mono `--c-size-row` (19px in both orientations — the
+   revision's own table gives the same pixel value for landscape and
+   portrait, so no media-query redefinition is needed here the way the
+   hero/target tokens need one). CR2 spec 3 Task 5 migrates this off the
+   shared `--size-row` (Task 2's own token, retired below — `tokens.css`'s
+   own comment on why once this was its last consumer) onto the
+   connected-only family, completing design spec §1's "connected rules stop
+   consuming `--size-*` entirely". */
 .connected-grid-row > span {
   font-family: var(--font-mono);
-  font-size: var(--size-row);
+  font-size: var(--c-size-row);
 }
 
 .connected-grid-num {
@@ -6822,7 +6816,7 @@ section:not(.news-pinned) .news-row:last-of-type {
 }
 
 /* Row number: mono 13px, both orientations (revision §4's own table) —
-   overrides the generic `--size-row` value type above for this one
+   overrides the generic `--c-size-row` value type above for this one
    column, the same way the OLD line1/line2 split used to. */
 .connected-grid-row .connected-grid-num {
   font-size: 13px;
@@ -6893,7 +6887,7 @@ section:not(.news-pinned) .news-row:last-of-type {
    that set from THIS FILE rather than trusting this comment.
 
    Task 5 dropped the old enlarged size (22px/26px): the revision's
-   own mockup draws the countdown at the SAME `--size-row` as every other
+   own mockup draws the countdown at the SAME `--c-size-row` as every other
    value, tinted, not enlarged — the density this task exists for has no
    room for a bigger digit.
 
@@ -6905,21 +6899,48 @@ section:not(.news-pinned) .news-row:last-of-type {
   color: var(--marker);
 }
 
-/* Pinned under the scroller: the distance rule, in words, never a glyph. */
+/* Pinned under the scroller: the distance rule (and, since CR2 spec 3
+   Task 5, the README's own "N MORE BELOW" scroll hint merged ahead of it —
+   `surfaceModel.ts`'s `footerCaptionFor`), in words, never a glyph. */
 .connected-grid-caption {
   flex: none;
-  /* Explicit, for the reason `.connected-grid-headline` above sets out at
-     length: 13px, the 10px mono line box, both orientations. */
-  height: 13px;
-  /* A `<p>` carries the UA stylesheet's own `1em` block margin — 10px at
+  /* EXPLICIT, for the reason `.connected-grid-head`'s own comment sets out
+     at length (this rule is that comment's second flex-none sibling): 15px,
+     this element's own `--c-size-thead` (12px, CR2 spec 3 Task 5's
+     migration off the old literal 10px — the same token the table head
+     shares, since the README gives both roles the identical 12px mono
+     ink-3 treatment and the family names no separate caption role) mono
+     line box, both orientations. */
+  height: 15px;
+  /* A `<p>` carries the UA stylesheet's own `1em` block margin — 12px at
      THIS element's font-size, both sides — which a tight scroller budget
      cannot spare (measured: worth a full row's height at the landscape
      32px row). Zeroed rather than inherited. */
   margin: 0;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--c-size-thead);
   letter-spacing: 0.14em;
   color: var(--ink-3);
+  /* SINGLE LINE, TRUNCATED — NOT WRAPPED (CR2 spec 3 Task 5, found in this
+     task's own screenshot sweep, recurring failure #7's exact reason to
+     look at the image rather than trust the assertion): the "N MORE BELOW"
+     merge lengthens this caption past what portrait's 342px content column
+     holds at one line (a real case — the 25-interval fixture's own
+     `16 MORE BELOW · 24 ROWS ARE DISTANCE PIECES · METERS COUNT DOWN` is
+     ~56 characters, well past the ~38 a 12px/0.14em mono line fits there),
+     and this rule's own EXPLICIT `height` (the reason above) does not grow
+     to fit a second line — text wrapped by the browser paints straight
+     through that fixed box and collides with `SegmentedControl`'s bottom
+     bar directly beneath it (portrait's own 16-row exact-fit leaves zero
+     margin to absorb it). Ellipsis over a taller reserved box on purpose:
+     doubling the height to fit two lines would cost a real row off the
+     16-row budget for a caption that is a SCROLL HINT, not the row data
+     itself — the rower who wants the full sentence has it already, spoken
+     at natural length, on the landscape frame where 844px never truncates
+     it (checked against the same worst-case string above). */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* --- The diagnostics sheet (Task 7, handoff §5) --------------------- */
@@ -7315,14 +7336,13 @@ section:not(.news-pinned) .news-row:last-of-type {
      second surface). ONE name, two values, never a second name for either
      half.
 
-     FOUR NAMES RETIRED (CR2 spec 3 Task 4) — `--size-hero`,
-     `--size-hero-tenths`, `--size-target`, `--size-metric` — matching
-     `tokens.css`'s own portrait-half deletion; see that file's comment for
-     why. */
+     FIVE NAMES RETIRED (CR2 spec 3 Tasks 4 and 5) — `--size-hero`,
+     `--size-hero-tenths`, `--size-target`, `--size-metric` and (Task 5)
+     `--size-row` — matching `tokens.css`'s own portrait-half deletion; see
+     that file's comment for why. */
   :root {
     --size-subhero: 56px;
     --size-total: 22px;
-    --size-row: 19px;
     --size-label: 11px;
     /* connected-revamp Task 7: the phone timer's own countdown token
        (tokens.css's own comment on `--size-countdown`'s portrait half) —
@@ -7984,24 +8004,20 @@ section:not(.news-pinned) .news-row:last-of-type {
   .connected-pane-grid {
     flex-direction: column;
     /* 0, not the portrait 8 nor Task 5's original 4 (connected-revamp
-       Task 6): the header line, the column head, the scroller and the
-       caption share a scroller budget that lost real height to the new
-       always-on header above the pane body — see `.connected-surface`'s
-       own margin-based-gap comment for the mechanism. James's original
-       ruling (2026-08-12: "7 rows at 32px fit 232px with 8px left over")
-       measured BEFORE this task's header existed; this pane's own 3
-       internal gaps had no more to give once trimmed to zero — the
-       column head's own `border-bottom`/`padding-bottom` (`:5824-5825`)
-       still separates it visually from the headline above it, so the
-       lost gap does not read as elements touching. */
+       Task 6): the column head, the scroller and the caption share a
+       scroller budget that lost real height to the new always-on header
+       above the pane body — see `.connected-surface`'s own margin-based-gap
+       comment for the mechanism. James's original ruling (2026-08-12:
+       "7 rows at 32px fit 232px with 8px left over") measured BEFORE this
+       task's header existed; this pane's own internal gaps had no more to
+       give once trimmed to zero — the column head's own
+       `border-bottom`/`padding-bottom` still separates it visually from
+       the scroller below it, so the lost gap does not read as elements
+       touching. CR2 spec 3 Task 5 deletes this pane's own headline
+       outright (`.connected-grid-head`'s own comment), which only widens
+       this budget further — nothing here needed to change for that. */
     gap: 0;
   }
-
-  /* CR2 spec 3 task 1 retired this rule: `.connected-grid-headline` is one
-     line in BOTH orientations now (the base rule, above), so landscape no
-     longer needs to fold a two-line portrait shape into one — the
-     `ConnectionLine` child that used to force the fold moved to the
-     shell's header. */
 
   .connected-grid-row,
   .connected-grid-head {

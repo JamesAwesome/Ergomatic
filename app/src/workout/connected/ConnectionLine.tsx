@@ -3,10 +3,16 @@
 // hollow once it is lost. "It is the same caption family as every other
 // label, deliberately unremarkable."
 //
-// The right-hand slot differs per pane (pane B puts the interval count
-// there, pane C the whole session's own time left), so the caller supplies
-// it.
+// The right-hand slot differs per pane (LIVE puts the phase status there,
+// GRID composes the ordinal with the session's own time left, CR2 spec 3
+// Task 5), so the caller supplies it — as a full `ReactNode`, not a plain
+// string, because GRID's own composition wraps its countdown half in a
+// `--marker`-gold span (`ConnectedSurface.tsx`'s own header comment has the
+// reasoning for why that composition lives at the CALLER, not here: this
+// component stays a dumb slot, same as `TokenRow`'s own `trailing` prop
+// takes a node rather than growing a second, string-only sibling prop).
 
+import type { ReactNode } from "react";
 import type { SurfaceModel } from "./surfaceModel";
 
 export default function ConnectionLine({
@@ -14,7 +20,7 @@ export default function ConnectionLine({
   trailing = null,
 }: {
   model: SurfaceModel;
-  trailing?: string | null;
+  trailing?: ReactNode;
 }) {
   return (
     <div className="connected-line">

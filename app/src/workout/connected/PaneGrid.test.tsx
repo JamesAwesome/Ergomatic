@@ -479,6 +479,52 @@ describe("the fixtures are what this file says they are", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// The shell header's composed GRID trailing (CR2 spec 3 Task 5, design spec
+// §2B's composition note): `PaneGrid.tsx`'s own headline dies this task, and
+// the header's status caption — `ConnectionLine`'s `trailing` slot,
+// `ConnectedSurface.tsx`'s `headerTrailing` — grows a GRID-only branch.
+// Exercised here (not `ConnectedSurface.test.tsx`) because `renderGrid`
+// already mounts the full surface with the GRID pane active, the same
+// helper the row-state tests below share.
+// ---------------------------------------------------------------------------
+
+describe("the shell header's composed GRID trailing (design spec §2B)", () => {
+  it("joins the ordinal with the session countdown, the countdown half in --marker gold", () => {
+    // Default `frame()` (intervalIndex 1) is Filling Low's first work
+    // piece — ordinal `1 OF 4` — with a real `totalLeftDisplay` behind it.
+    renderGrid();
+    const trailing = document.querySelector(".connected-line-trailing")!;
+    const countdown = trailing.querySelector(".connected-header-countdown")!;
+    expect(countdown).not.toBeNull();
+    expect(countdown.textContent).toBe("39:48 LEFT");
+    // The ordinal half sits OUTSIDE the marker span, in the trailing's own
+    // inherited ink-3 — only the countdown wears the mark, never the whole
+    // caption (spec §2B: "the countdown portion in --marker gold").
+    expect(trailing.textContent).toBe("1 OF 4 · 39:48 LEFT");
+  });
+
+  it("falls back to the plain WARM-UP caption on the unnumbered warm-up — no ordinal to join TOTAL LEFT onto", () => {
+    // intervalIndex 0 is Filling Low's own warm-up (`intervalOrdinalLabel`
+    // is `null` there — `surfaceModel.test.ts`'s own pin on the field).
+    renderGrid({ frame: frame({ intervalIndex: 0 }) });
+    const trailing = document.querySelector(".connected-line-trailing")!;
+    expect(trailing.textContent).toBe("WARM-UP");
+    expect(trailing.querySelector(".connected-header-countdown")).toBeNull();
+  });
+
+  it("index.css paints the composed countdown span in --marker gold, never accent or a verdict", () => {
+    // The same negatives `.connected-grid-countdown`'s own census enforces,
+    // pinned separately for this SEPARATE class (`index.css`'s own comment
+    // on why the two rules stay apart) — a rule added to one must not be
+    // assumed to cover the other.
+    const rule = baseRule(".connected-header-countdown");
+    expect(rule).toContain("color: var(--marker)");
+    expect(rule).not.toContain("--accent");
+    expect(rule).not.toContain("--judge-");
+  });
+});
+
 describe("row states (handoff §3's three treatments)", () => {
   it("draws completed actuals, the active card and upcoming programmed values", () => {
     renderGrid({ actuals: [actualFor(0, FILLING_LOW.program)] });
@@ -677,9 +723,18 @@ describe("distance intervals (handoff §3's distance rules)", () => {
     // indices — Filling Low's four 2000 m reps are program indices 1-4
     // (the warm-up occupies index 0), but the caption names them 1-4, the
     // same numbers their own `#` cells show, never 2-5.
+    //
+    // Every expected string below is prefixed `N MORE BELOW ·` (CR2 spec 3
+    // Task 5, design spec §2B): the default `frame()` fixture's own
+    // `intervalIndex: 1` puts the active row one past the warm-up, so `N`
+    // is the program's own row count minus 2 (the warm-up plus the active
+    // row itself) — `footerCaptionFor`'s own doc comment has the exact
+    // formula (`surfaceModel.ts`).
     const many = renderGrid();
     expect(
-      screen.getByText("ROWS 1, 2, 3, 4 ARE 2000 M PIECES · METERS COUNT DOWN"),
+      screen.getByText(
+        "3 MORE BELOW · ROWS 1, 2, 3, 4 ARE 2000 M PIECES · METERS COUNT DOWN",
+      ),
     ).toBeInTheDocument();
     many.unmount();
 
@@ -688,14 +743,18 @@ describe("distance intervals (handoff §3's distance rules)", () => {
     // warm-up) but WORK ordinal 1 — the caption and the row's `#` agree.
     const one = renderGrid({}, SPLIT_FRONT);
     expect(
-      screen.getByText("ROW 1 IS AN 8000 M PIECE · METERS COUNT DOWN"),
+      screen.getByText(
+        "4 MORE BELOW · ROW 1 IS AN 8000 M PIECE · METERS COUNT DOWN",
+      ),
     ).toBeInTheDocument();
     one.unmount();
 
     // Twenty-four row numbers is not a caption. It counts instead.
     renderGrid({}, SEA_SMOKE);
     expect(
-      screen.getByText("24 ROWS ARE DISTANCE PIECES · METERS COUNT DOWN"),
+      screen.getByText(
+        "23 MORE BELOW · 24 ROWS ARE DISTANCE PIECES · METERS COUNT DOWN",
+      ),
     ).toBeInTheDocument();
   });
 
@@ -731,9 +790,12 @@ describe("distance intervals (handoff §3's distance rules)", () => {
     // `#` cell reads `GridRow.ordinal`, not "is this row 0".
     expect(bare.num).toBe("WU");
     // ...and the one distance row now reads with the indefinite article the
-    // handoff's own sentence uses.
+    // handoff's own sentence uses. `reordered` has 3 intervals total and
+    // the active row is index 1, so exactly one row sits below it.
     expect(
-      screen.getByText("ROW 1 IS A 500 M PIECE · METERS COUNT DOWN"),
+      screen.getByText(
+        "1 MORE BELOW · ROW 1 IS A 500 M PIECE · METERS COUNT DOWN",
+      ),
     ).toBeInTheDocument();
   });
 
@@ -792,9 +854,13 @@ describe("distance intervals (handoff §3's distance rules)", () => {
     // 2000 m pieces plus one non-matching 1000 m warm-up would break
     // uniformity and fall to the OTHER branch entirely — "5 ROWS ARE
     // DISTANCE PIECES", not the four-item list. The exact list proves both
-    // the count (4, not 5) and the numbers (1-4, not 2-5 or 1-5).
+    // the count (4, not 5) and the numbers (1-4, not 2-5 or 1-5). Same
+    // 5-interval shape as Filling Low itself, active row 1 by default: 3
+    // rows sit below it.
     expect(
-      screen.getByText("ROWS 1, 2, 3, 4 ARE 2000 M PIECES · METERS COUNT DOWN"),
+      screen.getByText(
+        "3 MORE BELOW · ROWS 1, 2, 3, 4 ARE 2000 M PIECES · METERS COUNT DOWN",
+      ),
     ).toBeInTheDocument();
   });
 
@@ -813,6 +879,41 @@ describe("distance intervals (handoff §3's distance rules)", () => {
     renderGrid({}, timeOnly);
     expect(document.querySelector(".connected-grid-caption")).toBeNull();
     expect(document.body.textContent).not.toContain("COUNT DOWN");
+  });
+
+  // CR2 spec 3 Task 5 (design spec §2B): the README's own "N MORE BELOW"
+  // scroll hint, merged ahead of the distance sentence. The positive case
+  // is already pinned above (Sea Smoke, a real seeded 25-row program, at
+  // its default active row 1: "23 MORE BELOW"). These two pin the model's
+  // own two deliberate suppressions (`footerCaptionFor`'s doc comment,
+  // `surfaceModel.ts`).
+  it("omits the prefix when the active row is the LAST one — never '0 MORE BELOW'", () => {
+    // Sea Smoke: 25 intervals, so program index 24 is the very last row.
+    // Nothing sits below it.
+    renderGrid({ frame: frame({ intervalIndex: 24 }) }, SEA_SMOKE);
+    expect(
+      screen.getByText("24 ROWS ARE DISTANCE PIECES · METERS COUNT DOWN"),
+    ).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("MORE BELOW");
+  });
+
+  it("omits the prefix on a time-only program too, even with real rows below the active one", () => {
+    // `below` would be positive here (Split Front's own warm-up plus its
+    // four time reps, five rows total, active row 0 of 5 — four genuinely
+    // sit below it) — but there is no distance caption for the hint to
+    // merge into, and the hint's own job is to point at that sentence, not
+    // to exist alone.
+    const timeOnly: Fixture = {
+      ...SPLIT_FRONT,
+      program: {
+        intervals: SPLIT_FRONT.program.intervals.filter(
+          (i) => i.kind === "time",
+        ),
+      },
+    };
+    renderGrid({ frame: frame({ intervalIndex: 0 }) }, timeOnly);
+    expect(document.querySelector(".connected-grid-caption")).toBeNull();
+    expect(document.body.textContent).not.toContain("MORE BELOW");
   });
 });
 
@@ -965,7 +1066,7 @@ describe("THE ACCENT CENSUS: accent is a CONTROL colour, and nothing else", () =
 
   it("the countdown's mark is a COLOUR, never an enlarged size — and gold, never accent or a verdict", () => {
     // Connected-revamp Task 5 dropped the old 22px/26px special case: the
-    // revision's own mockup draws the countdown at the SAME `--size-row`
+    // revision's own mockup draws the countdown at the SAME `--c-size-row`
     // as every other value in the row, tinted, not enlarged — the density
     // this task exists for has no room for a bigger digit.
     const rule = baseRule(".connected-grid-countdown");
@@ -1163,6 +1264,19 @@ describe("contained scroll: only the rows move", () => {
 
     expect(baseRule(".connected-grid-head")).toContain("flex: none");
     expect(baseRule(".connected-grid-caption")).toContain("flex: none");
+  });
+
+  it("truncates the caption to ONE line rather than letting a long 'N MORE BELOW' merge wrap into the control bar below it", () => {
+    // Found in this task's own screenshot sweep (recurring failure #7): the
+    // 25-interval fixture's caption wraps to a second line in portrait at
+    // the old rule's own fixed single-line height, and that second line
+    // paints straight through the box into `SegmentedControl`'s bottom bar
+    // — jsdom cannot see the collision (no real layout), so this pins the
+    // THREE declarations that prevent it from a real browser instead.
+    const rule = baseRule(".connected-grid-caption");
+    expect(rule).toContain("white-space: nowrap");
+    expect(rule).toContain("overflow: hidden");
+    expect(rule).toContain("text-overflow: ellipsis");
   });
 
   it("SCROLLS THE ACTIVE ROW INTO VIEW, and again when the machine moves on", () => {
@@ -1497,8 +1611,12 @@ describe("tab order through pane C", () => {
     // `.connected-pane-grid .connected-line`/`.connected-line-device`
     // landscape overrides and `.connected-grid-headline`'s own landscape
     // fold, all retired when `ConnectionLine` moved out of this pane into
-    // the shell's header (32 -> 29, measured against this worktree).
-    expect(paneCRules.length).toBeGreaterThanOrEqual(29); // measured: 29
+    // the shell's header (32 -> 29, measured against this worktree). CR2
+    // spec 3 Task 5 drops four more: `.connected-grid-headline` itself,
+    // `.connected-grid-totals`, `.connected-grid-interval` and
+    // `.connected-grid-total` — the whole headline this pane used to draw
+    // is gone (29 -> 25, measured against this worktree).
+    expect(paneCRules.length).toBeGreaterThanOrEqual(25); // measured: 25
     expect(
       paneCRules
         .filter((rule) => /\border\s*:/.test(rule.body))
