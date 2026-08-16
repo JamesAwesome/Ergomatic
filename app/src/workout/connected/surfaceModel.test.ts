@@ -13,6 +13,7 @@
 
 import { describe, expect, it } from "vitest";
 import { compileProgram } from "../../../domain/monitor/program.js";
+import { fmtSplit } from "../../../domain/format.js";
 import { PACE_TOLERANCE_SECONDS } from "../../../domain/judge.js";
 import type {
   IntervalActual,
@@ -312,6 +313,135 @@ describe('status plumbs through, non-nullable — the `?? "live"` laundering is 
     // the `?? "live"` laundering has nowhere left to hide, not just that it
     // no longer appears in this file.
     expect(m.status).toBeUndefined();
+  });
+});
+
+// THE MIRROR (design spec §2, Item 3; 2a plan Task 3): wherever the
+// MACHINE's own display shows 0, this surface must say the same thing —
+// never the wire's carried-over ghost, and never a colour derived from
+// comparing that ghost to a target.
+describe("the mirror: 0 wherever the machine's own display shows 0", () => {
+  /** NO_WARMUP, not FIXTURE: interval 0 IS the first work phase here (a
+   *  real split + rate target), whereas FIXTURE's interval 0 is the
+   *  warm-up (no target at all) — armed is "before the first pull of the
+   *  SESSION", interval 0, so this is the realistic fixture for it. */
+  function firstNoWarmupWorkPhase(): EnginePhase {
+    const p = NO_WARMUP.phases[0];
+    if (!p || p.type !== "work" || !p.targetSplit || p.spm === undefined) {
+      throw new Error("fixture has no split-and-rate first work phase");
+    }
+    return p;
+  }
+
+  it("armed: rate mirrors to 0 plain (no judgement class); split mirrors to the TARGET as a preview, never the wire's carried-over ghost", () => {
+    const target = firstNoWarmupWorkPhase();
+    const m = buildSurfaceModel({
+      phases: NO_WARMUP.phases,
+      program: NO_WARMUP.program,
+      status: "armed",
+      frame: frame({
+        state: "armed",
+        intervalIndex: 0,
+        rowingActive: false,
+        distanceMeters: 0,
+        // The fake's own taught ghost (fake.test.ts): a re-armed machine
+        // carries the PREVIOUS piece's spm/split, not zero — the lab
+        // captures' 13-96 spm range (spec's evidence dowry). Chosen far
+        // from both 0 and the target so a leak of either failure mode
+        // (still zero, or the raw ghost) is unmistakable.
+        spm: 46,
+        currentSplit: 251,
+      }),
+      deviceName: DEVICE,
+      actuals: [],
+    });
+
+    expect(m.rate.display).toBe("0");
+    expect(m.rate.judgement).toBe("within");
+    expect(m.rate.absent).toBe(false);
+
+    expect(m.pace.display).toBe(fmtSplit(target.targetSplit!));
+    expect(m.pace.judgement).toBe("within");
+    expect(m.pace.absent).toBe(false);
+    // Not the wire's own ghost, and not a plain zero either.
+    expect(m.pace.display).not.toBe(fmtSplit(251));
+    expect(m.pace.display).not.toBe("0:00.0");
+  });
+
+  it("mid-session boundary: heroes mirror 0/unjudged while the wire still carries the previous interval's ghost (the walk's own observed frame)", () => {
+    // session-b seq28 (docs/monitor/sessions/walk-2026-08-15/
+    // session-b-poisoned.json): state=rowing, distance=0.8, rowingActive
+    // false, spm 28 — status stays `live` (this is mid-session, not
+    // pre-session `armed`).
+    const m = model({
+      status: "live",
+      frame: frame({
+        state: "rowing",
+        intervalIndex: 1,
+        rowingActive: false,
+        distanceMeters: 0.8,
+        spm: 28,
+        currentSplit: 133,
+      }),
+    });
+    expect(m.pace.display).toBe("0:00.0");
+    expect(m.pace.judgement).toBe("within");
+    expect(m.pace.absent).toBe(false);
+    expect(m.rate.display).toBe("0");
+    expect(m.rate.judgement).toBe("within");
+    expect(m.rate.absent).toBe(false);
+  });
+
+  it("the guard: once distance advances past the reset window, the mirror ends and judged values return — even with rowingActive still false", () => {
+    const target = firstWorkPhase();
+    const m = model({
+      status: "live",
+      frame: frame({
+        state: "rowing",
+        intervalIndex: 1,
+        // Still false — isolating the DISTANCE half of the discriminator:
+        // a mutant that dropped only the distance check would still pass
+        // if this test also flipped rowingActive true.
+        rowingActive: false,
+        distanceMeters: 5.4, // the walk's own guard case: 0.8 -> 5.4
+        spm: target.spm! + 10,
+        currentSplit: target.targetSplit! - 10,
+      }),
+    });
+    expect(m.pace.display).not.toBe("0:00.0");
+    expect(m.pace.judgement).toBe("faster"); // 10s quicker than target
+    expect(m.rate.display).toBe(String(target.spm! + 10));
+    expect(m.rate.judgement).toBe("faster"); // a higher rate reads faster
+  });
+
+  it("grid agreement: buildGridModel's active row shares the SAME mirrored JudgedValue objects pane B renders", () => {
+    const target = firstNoWarmupWorkPhase();
+    const m = buildSurfaceModel({
+      phases: NO_WARMUP.phases,
+      program: NO_WARMUP.program,
+      status: "armed",
+      frame: frame({
+        state: "armed",
+        intervalIndex: 0,
+        rowingActive: false,
+        distanceMeters: 0,
+        spm: 46,
+        currentSplit: 251,
+      }),
+      deviceName: DEVICE,
+      actuals: [],
+    });
+    const activeRow = m.grid.rows[m.grid.activeIndex]!;
+    expect(activeRow.index).toBe(0);
+    // Referential identity, not just equal values (`buildGridModel`'s own
+    // comment: "the SAME objects, so a rower swiping cannot find the split
+    // judged one way on one pane and another way on the next") — this is
+    // what makes it structurally impossible for the grid to disagree with
+    // pane B about the mirror, rather than merely unlikely today.
+    expect(activeRow.pace.judged).toBe(m.pace);
+    expect(activeRow.spm.judged).toBe(m.rate);
+    expect(activeRow.pace.display).toBe(fmtSplit(target.targetSplit!));
+    expect(activeRow.spm.display).toBe("0");
   });
 });
 
@@ -747,7 +877,17 @@ describe("disconnected: lose and degrade (spec C5)", () => {
 describe("degenerate inputs", () => {
   it("renders before the machine has sent a single frame", () => {
     const m = model({ frame: null });
-    expect(m.pace.display).toBe("—");
+    // Task 3, the mirror: `NO_FRAME` honestly reports `rowingActive: false`
+    // and `distanceMeters: 0` — the same shape the mid-session boundary
+    // mirror keys on — so a `live`-status caller with no frame yet now
+    // mirrors `0/unjudged` rather than dashing. (A real caller reaches this
+    // shape as `armed`, not `live` — Task 2's own "phase ready -> status
+    // armed" — where the mirror instead previews the TARGET; this
+    // `status: "live"` combination is the degenerate one this describe
+    // block is about, and the mirror's job is to say something honest for
+    // it too, not to special-case it away.)
+    expect(m.pace.display).toBe("0:00.0");
+    expect(m.pace.judgement).toBe("within");
     expect(m.intervalClockValue).toBe("—");
     expect(m.intervalLabel).toBe("WARM-UP");
   });

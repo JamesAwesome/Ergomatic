@@ -404,6 +404,24 @@ function livePace(frame: MonitorFrame, status: SurfaceStatus): number | null {
  *  comment). */
 const PACE_HERO_CAP_SECONDS = 599.9;
 
+/** THE MID-SESSION MIRROR's own reset window (design spec §2, Item 3; 2a
+ *  plan Task 3) — how close `frame.distanceMeters` (0x0031's PER-INTERVAL
+ *  distance, `domain/monitor/types.ts`'s own field, never
+ *  `sessionDistanceMeters`) must sit to zero for a `rowingActive === false`
+ *  frame to count as "before the first pull of the next piece" rather than
+ *  a genuinely stalled rower mid-piece.
+ *
+ *  Tuned against the walk's own committed rings
+ *  (`docs/monitor/sessions/walk-2026-08-15/`), the ONLY observed values at
+ *  this exact boundary: session-a seq29 `distance=0`, session-b seq28
+ *  `distance=0.8`, session-c seq26 `distance=0` — all three
+ *  `rowingActive=false`. `1` sits strictly above the largest of those and
+ *  strictly below the guard's own advancing-distance case (this file's
+ *  tests move to `5.4`), so it is not a coin-flip between the two: it is a
+ *  reset window with real headroom on both sides of the only readings that
+ *  exist. */
+const MID_SESSION_RESET_METERS = 1;
+
 export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
   const { phases, program, deviceName, status } = input;
   const frame = input.frame ?? NO_FRAME;
@@ -436,21 +454,84 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
       : null;
   const targetSpm = phase?.spm ?? null;
 
+  // THE MIRROR (design spec §2, Item 3 — "mirror the machine wherever ITS
+  // display shows 0, not only at armed"; 2a plan Task 3). Wherever the
+  // MACHINE's own screen would show 0 (or, at `armed`, a preview rather
+  // than a reading), this surface must say the same thing — never the
+  // wire's carried-over ghost from the piece that just ended, and never a
+  // colour derived from comparing that ghost to a target. Two trigger
+  // conditions the plan names as ONE rule, but which substitute DIFFERENT
+  // values (design frame 2D, `docs/design/handoffs/2026-08-15-connected-v2/
+  // README.md`'s own "Nothing is judged" line):
+  //
+  //  - `armedMirror` (pre-first-stroke of the whole SESSION): rate shows
+  //    `0` in plain ink; split shows the TARGET value itself, as a preview
+  //    — there is no live reading yet, so the hero previews what the rower
+  //    is about to chase rather than an uninformative zero. (The "ghost"
+  //    ink-4 STYLING that word names is a presentation concern, Task 5's;
+  //    this file only has to produce the right VALUE and the right
+  //    judgement.)
+  //  - `midSessionMirror` (a mid-session interval boundary, before the
+  //    first pull of the NEXT piece): `rowingActive === false` with
+  //    `distanceMeters` at/near reset is the OBSERVED discriminator (the
+  //    evidence dowry above `MID_SESSION_RESET_METERS`'s own comment) —
+  //    here BOTH heroes read `0`: the machine's own display goes to zero at
+  //    exactly this instant, and there is no earlier-in-the-piece target
+  //    worth previewing (the rower has already seen it for the whole piece
+  //    that just ended).
+  //
+  // `armedMirror` is checked separately from — not "OR'd blindly with" —
+  // `midSessionMirror`: `status` is the CALLER's fact (Task 2's axes),
+  // `rowingActive`/`distanceMeters` are THIS FRAME's. An armed frame's own
+  // distance is always at reset anyway (the session has not begun), so the
+  // two conditions never actually collide; naming them apart keeps the two
+  // DIFFERENT substitutions legible rather than one boolean hiding two
+  // answers.
+  //
+  // NEVER survives advancing distance (the plan's own words) —
+  // `midSessionMirror` re-evaluates every frame, so the instant
+  // `distanceMeters` moves past the reset window the mirror simply stops
+  // firing; nothing here "latches" or needs an explicit end condition of
+  // its own.
+  const armedMirror = status === "armed";
+  const midSessionMirror =
+    !armedMirror &&
+    frame.rowingActive === false &&
+    frame.distanceMeters <= MID_SESSION_RESET_METERS;
+  const mirrored = armedMirror || midSessionMirror;
+
   const rawPace = livePace(frame, status);
-  const paceActual =
+  const cappedPace =
     rawPace !== null && rawPace > PACE_HERO_CAP_SECONDS ? null : rawPace;
+  // The ACTUAL slot substitutes; the TARGET slot rendered beneath it
+  // (`targetSplit`/`targetRate` below) does not — those still name the
+  // real programmed target regardless of the mirror, which is exactly what
+  // `armedMirror`'s split preview borrows its number FROM. The JUDGING
+  // target is forced `null` whenever mirrored (`judgeActual`'s own rule 2:
+  // a `null` target is never a deviation) rather than relying on
+  // `paceActual === targetSplitSeconds` happening to diff to zero at
+  // `armedMirror` — that would be a coincidence this substitution should
+  // not depend on for the "nothing judged" guarantee.
+  const paceActual = mirrored
+    ? armedMirror
+      ? targetSplitSeconds
+      : 0
+    : cappedPace;
+  const paceJudgeTarget = mirrored ? null : targetSplitSeconds;
+  const rateActual = mirrored ? 0 : frame.spm;
+  const rateJudgeTarget = mirrored ? null : targetSpm;
 
   const pace = judgedValue({
     kind: "pace",
     actual: paceActual,
-    target: targetSplitSeconds,
+    target: paceJudgeTarget,
     stale,
     format: fmtSplit,
   });
   const rate = judgedValue({
     kind: "spm",
-    actual: frame.spm,
-    target: targetSpm,
+    actual: rateActual,
+    target: rateJudgeTarget,
     stale,
     format: (v) => String(Math.round(v)),
   });

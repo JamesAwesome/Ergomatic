@@ -763,11 +763,21 @@ function boundaryBundle(
   };
 }
 
-/** The WAITTOBEGIN bundle the fake sends the instant programming finishes
- *  (design spec §2: "armed" = WAITTOBEGIN) — zeroed progress, no interval
- *  active yet, and no split has ever completed (`lastSplit` is always
- *  `{0, 0}` here — nothing to root it at before the session's own first
- *  interval even starts).
+/** The WAITTOBEGIN bundle the fake sends the instant programming finishes,
+ *  and re-sends every tick for as long as the armed level holds
+ *  (`deliverArmedBundle`, design spec §2: "armed" = WAITTOBEGIN) — zeroed
+ *  progress, no interval active yet, and no split has ever completed
+ *  (`lastSplit` is always `{0, 0}` here — nothing to root it at before the
+ *  session's own first interval even starts).
+ *
+ *  `ghost` is spm/currentSplit ONLY — connected-axes design spec §2, Item 3
+ *  ("Armed carry-over is real on the wire"): the PM does not reset those
+ *  two to zero on re-arm, elapsed/distance are what genuinely zero
+ *  (`armedGhost`'s own comment has the full citation). Defaults to zero for
+ *  the caller's convenience on a machine that has never rowed anything —
+ *  the same "nothing to carry over" case `armedGhost`'s own initial value
+ *  models — never a second source of truth for the carry-over rule, which
+ *  lives in `armedGhost` alone.
  *
  *  `structure` is the caller's decision (`structureForTick()`), same as
  *  `statusBundle`'s own parameter — this is the bundle SESSION 4a's
@@ -776,6 +786,7 @@ function boundaryBundle(
 function armedBundle(
   program: WorkoutProgram,
   structure: WireArmedStructure,
+  ghost: { spm: number; currentSplit: number } = { spm: 0, currentSplit: 0 },
 ): {
   general: GeneralStatus;
   as1: AdditionalStatus1;
@@ -789,8 +800,8 @@ function armedBundle(
       workoutState: WORKOUTSTATE_WAITTOBEGIN,
       elapsedSeconds: 0,
       distanceMeters: 0,
-      spm: 0,
-      currentSplit: 0,
+      spm: ghost.spm,
+      currentSplit: ghost.currentSplit,
       heartRateBpm: null,
       programIntervalIndex: 0,
     },
@@ -925,6 +936,30 @@ export function createFakeTransport(
   // reading of it — see `clearArmedLevel()` for the two places the level
   // drops.
   let armedLevel = false;
+  // Connected-axes design spec §2, Item 3 ("Armed carry-over is real on the
+  // wire"): eight armed frames in the lab captures read 13/16/43/46/50/80/
+  // 88/96 spm with matching nonzero splits — the PM does NOT reset stroke
+  // rate/split to zero the instant it re-arms; it keeps reporting the
+  // PREVIOUS piece's numbers until the first pull of the next one resets
+  // them. `zeroedStatus` below used to invent the zero itself
+  // (`{spm:0, currentSplit:0}` unconditionally), which is why no test could
+  // exercise this half of item 3 (2a plan Task 3, R1: "teaching the fake is
+  // part of this spec's cost") — the app's own mirror substitution
+  // (`surfaceModel.ts`) has nothing real to mirror if the fake never
+  // produces the ghost it is mirroring. Refreshed by
+  // `queueTerminateAutoCycle()` alone, from whatever `latestStatus` was
+  // reporting the instant BEFORE the terminate landed — the only caller,
+  // guarded by `onClearingFrameComplete`'s own `machineState === "rowing" ||
+  // "resting"` check, so `latestStatus` there is always a genuine reading,
+  // never a synthetic one. Stays at the cold-start default until the first
+  // such cycle runs, which is the honest state for a machine that has never
+  // rowed anything to carry over (`zeroedStatus`'s own pre-existing
+  // "nothing to re-base from a machine that had not yet rowed" reasoning,
+  // now shared with `synthesizeTerminated`'s elapsed re-base).
+  let armedGhost: { spm: number; currentSplit: number } = {
+    spm: 0,
+    currentSplit: 0,
+  };
   // Fix-round 1, F1's ORDERING half, kept separate from the level above:
   // the FIRST armed report after an accept goes out ahead of anything the
   // script has due on that same tick, so a timeline's own opening entry is
@@ -1088,10 +1123,12 @@ export function createFakeTransport(
   /** A status event with nothing rowed yet, in the given wire state — the
    *  shape every "the machine is not mid-piece" reading this file
    *  synthesizes has: armed after a program lands, and each step of the
-   *  post-terminate auto-cycle (`queueTerminateAutoCycle`), where the PM's
-   *  own readout is back at zero (§18's Control row records exactly that
-   *  for a re-armed machine: `state=armed, elapsedSeconds=0,
-   *  distanceMeters=0`). */
+   *  post-terminate auto-cycle (`queueTerminateAutoCycle`). Elapsed/distance
+   *  ARE genuinely zero (§18's Control row records exactly that for a
+   *  re-armed machine: `state=armed, elapsedSeconds=0, distanceMeters=0`) —
+   *  but spm/currentSplit are NOT: they carry `armedGhost` (see that
+   *  variable's own comment), the previous piece's reading, exactly as the
+   *  lab captures show. */
   function zeroedStatus(workoutState: number): FakeStatusEvent {
     return {
       atMs: virtualClock,
@@ -1099,8 +1136,8 @@ export function createFakeTransport(
       workoutState,
       elapsedSeconds: 0,
       distanceMeters: 0,
-      spm: 0,
-      currentSplit: 0,
+      spm: armedGhost.spm,
+      currentSplit: armedGhost.currentSplit,
       heartRateBpm: null,
       programIntervalIndex: 0,
     };
@@ -1110,6 +1147,7 @@ export function createFakeTransport(
     const { general, as1, as2 } = armedBundle(
       script.program,
       structureForTick(),
+      armedGhost,
     );
     notify(ADDITIONAL_STATUS_2_UUID, buildAdditionalStatus2Bytes(as2));
     notify(ADDITIONAL_STATUS_1_UUID, buildAdditionalStatus1Bytes(as1));
@@ -1393,6 +1431,22 @@ export function createFakeTransport(
    *   is.
    */
   function queueTerminateAutoCycle(): void {
+    // Refresh the ghost from whatever the machine was ACTUALLY reporting
+    // the instant before this terminate — `onClearingFrameComplete`'s own
+    // `machineState === "rowing" || "resting"` guard is this function's
+    // ONLY caller, and `machineState` only ever leaves `"idle"` through
+    // `setLatestStatus`, so `latestStatus` here is PROVABLY non-null: a
+    // defensive `if (latestStatus)` around this assignment would be a
+    // branch no test could ever reach (the repo's own "a guard nothing
+    // exercises is a guard nobody knows works" — `surfaceModel.ts`'s
+    // `phaseIndexForInterval` names the same tradeoff the other way, where
+    // the guard IS reachable). Captured BEFORE `synthesizeTerminated()`/
+    // `zeroedStatus()` below, which read `latestStatus`/`armedGhost`
+    // themselves but never advance either.
+    armedGhost = {
+      spm: latestStatus!.spm,
+      currentSplit: latestStatus!.currentSplit,
+    };
     autoCycle = [
       synthesizeTerminated(),
       zeroedStatus(WORKOUTSTATE_REARM),

@@ -17,6 +17,15 @@
 // clipboard are the same bytes, and a bug report cannot arrive holding a
 // prettier re-encoding of a log we never had. Nothing here re-stringifies
 // anything.
+//
+// THE MIRROR (`surfaceModel.ts`'s Item 3, connected-axes design spec §2)
+// DOES NOT REACH HERE, ON PURPOSE. This sheet's entries are the driver's
+// own raw event ring — never routed through `buildSurfaceModel` — so a
+// carried-over spm/split ghost the heroes now mirror to 0 still shows up
+// here at its real wire value. That is correct, not a gap: the sheet's job
+// is showing what the machine actually said, and stating it here means
+// nobody re-discovers it as a bug and "fixes" the one place a rower
+// reporting a defect can see the truth.
 
 import { useState, type RefObject } from "react";
 import { SheetShell } from "../../components/SheetShell";

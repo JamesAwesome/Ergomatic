@@ -6,6 +6,7 @@ import {
 import {
   HEARTRATE_NO_BELT,
   parseAdditionalSplitIntervalData,
+  parseAdditionalStatus1,
   parseAdditionalStatus2,
   parseEndOfWorkoutSummary,
   parseGeneralStatus,
@@ -151,6 +152,13 @@ function joinChunks(chunks: Uint8Array[]): Uint8Array {
 
 function decodeGeneral(bytes: Uint8Array) {
   const decoded = parseGeneralStatus(bytes);
+  if ("error" in decoded)
+    throw new Error("unexpected parse error in test fixture");
+  return decoded;
+}
+
+function decodeAs1(bytes: Uint8Array) {
+  const decoded = parseAdditionalStatus1(bytes);
   if ("error" in decoded)
     throw new Error("unexpected parse error in test fixture");
   return decoded;
@@ -1752,6 +1760,61 @@ describe("createFakeTransport: the prepare step's own machine reaction (§18 ses
     // has nothing further to say on its own.
     fake.tick(0);
     expect(generals).toHaveLength(4);
+  });
+
+  // Connected-axes design spec §2, Item 3 ("Armed carry-over is real on the
+  // wire"): eight armed frames in the lab captures read 13/16/43/46/50/80/
+  // 88/96 spm with matching nonzero splits, not zero. `zeroedStatus` used
+  // to invent the zero itself; this is the fake TEACHING half of Task 3 —
+  // `surfaceModel.ts`'s mirror has nothing real to substitute for if the
+  // fake it is driven against never produces the ghost being mirrored.
+  it("re-arm keeps the previous piece's spm/split — the wire's own ghost, not zeroedStatus's zero fiction", async () => {
+    const ghostTick: FakeTimelineEvent = {
+      atMs: 0,
+      kind: "status",
+      workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+      elapsedSeconds: 10,
+      distanceMeters: 40,
+      spm: 46,
+      currentSplit: 251,
+      heartRateBpm: 150,
+      programIntervalIndex: 0,
+    };
+    const fake = createFakeTransport({ program: PROGRAM, events: [ghostTick] });
+    const as1: Uint8Array[] = [];
+    fake.subscribe(ADDITIONAL_STATUS_1_UUID, (b) => as1.push(b));
+
+    fake.tick(0); // delivers ghostTick
+    expect(decodeAs1(as1[0]!)).toMatchObject({ spm: 46, currentSplit: 251 });
+
+    await sendPrepare(fake);
+    fake.tick(0); // TERMINATE
+    fake.tick(0); // REARM
+    fake.tick(0); // WAITTOBEGIN — the auto-cycle's own re-arm report
+    const rearmReading = decodeAs1(as1.at(-1)!);
+    // NOT zeroedStatus's old fiction (spm 0, currentSplit 0) — the same
+    // reading the rower was actually at, the instant before the terminate.
+    expect(rearmReading.spm).toBe(46);
+    expect(rearmReading.currentSplit).toBe(251);
+
+    // The ghost also has to survive into a FULL reprogram's own
+    // steady-state WAITTOBEGIN reporting (`deliverArmedBundle`/
+    // `armedBundle`, called every tick the armed level holds) — the
+    // mechanism the app actually polls while waiting for the next piece's
+    // first pull, not just the one-shot three-tick auto-cycle above.
+    await sendProgram(fake, PROGRAM);
+    fake.deliverArmedNow();
+    const steadyReading = decodeAs1(as1.at(-1)!);
+    expect(steadyReading.spm).toBe(46);
+    expect(steadyReading.currentSplit).toBe(251);
+  });
+
+  it("a FRESH arm (no prior rowing) reports 0/0 — there is nothing to carry over", async () => {
+    const fake = createFakeTransport({ program: PROGRAM });
+    const as1: Uint8Array[] = [];
+    fake.subscribe(ADDITIONAL_STATUS_1_UUID, (b) => as1.push(b));
+    await programIt(fake, PROGRAM); // its own doc comment: ends with deliverArmedNow()
+    expect(decodeAs1(as1.at(-1)!)).toMatchObject({ spm: 0, currentSplit: 0 });
   });
 
   it("a prepare landing on an IDLE machine is a plain accept — no transition, no cycle (§18 s3 item 15's captured byte)", async () => {
