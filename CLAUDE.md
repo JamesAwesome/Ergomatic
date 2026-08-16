@@ -174,7 +174,8 @@ Roadmap: `ROADMAP.md` (phases + standing rules). Design reference: `docs/design/
   `--no-verify`; fix the failure.
 - pnpm only. ESM only. Server imports use `.js` extensions.
 - **Write for James first, the record second (James, 2026-08-16).** Binding
-  for every PR body, design presentation, and discussion:
+  for every PR body, design presentation, discussion, and SUMMARY — session
+  wrap-ups, status updates, and verdict presentations included:
   - Line one: **"This PR [outcome]"** — the result, not the mechanism.
   - Then bullets, not paragraphs. ~6 max, one line each: what changed, why,
     tester impact, how to try it.
@@ -187,8 +188,10 @@ Roadmap: `ROADMAP.md` (phases + standing rules). Design reference: `docs/design/
   - The test: the top reads aloud in 30 seconds. The `product-manager`
     final-PR gate checks this and fails the PR presentation on it.
   - Specs open with a plain-language "What and why" paragraph before any
-    machinery. Worked examples: PR #100 and #101's bodies (retro-edited
-    to this shape).
+    machinery. Worked examples: PR #100 and #101's bodies.
+  - Summaries follow the same shape: outcome line, then bullets, plain
+    words. A verdict or wrap-up that needs decoding wastes the turn it
+    reports on.
 - After every merge to main, post a TestFlight release recommendation
   (docs/RELEASING.md): "recommended: <reasons>" or "not needed". Versions
   come ONLY from annotated vX.Y.Z tags; API changes additive-only between
