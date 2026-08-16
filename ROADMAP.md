@@ -2141,7 +2141,17 @@ the tap and scheduler; `app/scripts/dist-grep.sh` carries a new
 
 **Stage B — gated on spec 2's hardware walk**, which must run Chrome/Web
 Bluetooth from the dev server with the recording tab foregrounded (the
-phone's native adapter routes past the tap and records nothing). A Vitest
+phone's native adapter routes past the tap and records nothing). **The walk
+protocol opens with a download dry run, before any rowing** (PM final-gate
+note, 2026-08-15): no test can reach `downloadRecording`'s gzip arm under
+jsdom, so the one file the walk exists to produce is written by an
+untested path. Chrome exposes `navigator.bluetooth`, so the tap and seam
+exist before any PM5 connection: open the connected screen, open the log
+sheet, click Download, gunzip the file, run it through `parseRecording`.
+Two minutes, no erg; a failure found here costs nothing instead of a
+re-walk. Evaluate exit criterion 2's inter-arrival distribution BEFORE
+trusting the walk's numbers — the tap now sits in the walk's own path and
+is a suspect that did not exist last time. A Vitest
 CI rung drives the real driver through the committed real recording and
 asserts our derived totals against the machine's own wire numbers, decoded
 by a reader that never shares code with the driver under test. Exit
