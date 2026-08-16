@@ -6248,7 +6248,12 @@ section:not(.news-pinned) .news-row:last-of-type {
   flex-direction: column;
   min-width: 0;
   border-top: 2px solid var(--ink);
-  padding-top: 10px;
+  /* 16px (design spec §2C: "2px ink rule above split block, 1px --rule
+     above rate block, 16px padding-top each") — was 10px, a pre-existing
+     figure carried through the Task 4 rebuild undisclosed (review
+     Important-2). Both heroes share this rule (`.connected-hero-rate`
+     below overrides only `border-top`), so one change covers both. */
+  padding-top: 16px;
 }
 
 /* The rate hero's own rule is the lighter of the two portrait `border-top`
