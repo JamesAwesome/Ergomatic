@@ -843,6 +843,18 @@ describe("paused", () => {
     });
     expect(m.intervalClockValue).toBe("0:41");
   });
+
+  // connected-axes 2a, task 5: the split hero already suppressed to `—`
+  // above (`livePace`'s own doc comment); the rate hero never did — a
+  // paused erg's spm is PINNED at its last value (the freeze predicate's
+  // own three-metric key holds spm right alongside split and distance),
+  // and rendering that pinned number claimed a live rate reading nobody
+  // has. `liveRate` mirrors `livePace` exactly, one function below it.
+  it("has no current rate either: NOW goes to `—`, not the erg's last pinned spm", () => {
+    const m = model({ status: "paused", frame: frame({ spm: 68 }) });
+    expect(m.rate.display).toBe("—");
+    expect(m.rate.absent).toBe(true);
+  });
 });
 
 describe("disconnected: lose and degrade (spec C5)", () => {

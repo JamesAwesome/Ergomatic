@@ -1,8 +1,9 @@
 // The zero-behaviour-change proof for `connectedAxes.ts` (design spec §1,
-// exit criterion 1): an EXHAUSTIVE table over all ten `ConnectedPhase`
-// members, plus every load-bearing extra-input combination the spec names
-// by name. Not a ring replay — the recorded rings carry no phase entries at
-// all, and state-change-only frames make a freeze sequence unwitnessable by
+// exit criterion 1): an EXHAUSTIVE table over all nine `ConnectedPhase`
+// members (`"paused"` retired, connected-axes 2a task 5), plus every
+// load-bearing extra-input combination the spec names by name. Not a ring
+// replay — the recorded rings carry no phase entries at all, and
+// state-change-only frames make a freeze sequence unwitnessable by
 // construction (spec's own note).
 import { describe, expect, it } from "vitest";
 import {
@@ -23,7 +24,7 @@ interface Row {
   expect: ConnectedAxes;
 }
 
-// One row per `ConnectedPhase` member (ten), PLUS extra rows wherever the
+// One row per `ConnectedPhase` member (nine), PLUS extra rows wherever the
 // spec names a load-bearing combination that a phase's default row alone
 // does not exercise (the three `failed` link outcomes, both `live` freeze
 // outcomes, both `disconnected` session outcomes).
@@ -146,21 +147,8 @@ const ROWS: Row[] = [
     },
   },
   {
-    name: "live + frozen:true — activity trusts `frozen`, not `phase` alone (the seam paused retires through)",
+    name: "live + frozen:true — activity trusts `frozen`, not `phase` alone (the seam `paused` retired through, task 5)",
     phase: "live",
-    frozen: true,
-    runOpen: true,
-    failureLeavesLinkUp: null,
-    expect: {
-      link: "up",
-      program: "armed",
-      session: "live",
-      activity: "frozen",
-    },
-  },
-  {
-    name: "paused: the freeze predicate fired — activity frozen",
-    phase: "paused",
     frozen: true,
     runOpen: true,
     failureLeavesLinkUp: null,
@@ -222,10 +210,10 @@ describe("deriveAxes — the exhaustive table (spec §1 exit criterion 1)", () =
     },
   );
 
-  it("covers all ten ConnectedPhase members exactly once each", () => {
+  it("covers all nine ConnectedPhase members exactly once each", () => {
     const covered = ROWS.map((row) => row.phase).sort();
     const distinct = [...new Set(covered)].sort();
-    const allTen: AxesInput["phase"][] = [
+    const allNine: AxesInput["phase"][] = [
       "idle",
       "picking",
       "pairing",
@@ -233,16 +221,15 @@ describe("deriveAxes — the exhaustive table (spec §1 exit criterion 1)", () =
       "ready",
       "failed",
       "live",
-      "paused",
       "disconnected",
       "ended",
     ].sort() as AxesInput["phase"][];
-    expect(distinct).toStrictEqual(allTen);
+    expect(distinct).toStrictEqual(allNine);
   });
 
-  it("rejects an eleventh phase at compile time (@ts-expect-error) and throws at runtime rather than laundering it", () => {
+  it("rejects a tenth phase at compile time (@ts-expect-error) and throws at runtime rather than laundering it", () => {
     // @ts-expect-error — "bogus" is not a real `ConnectedPhase` member; only
-    // the ten enumerated ones type-check as `AxesInput["phase"]`. The
+    // the nine enumerated ones type-check as `AxesInput["phase"]`. The
     // exhaustive `switch` + `never` guard is what makes this fail to
     // compile at all, and is also what throws below if the suppression is
     // ever exercised at runtime — no silent `?? "live"`-style fallback.
@@ -265,13 +252,13 @@ describe("deriveAxes — the exhaustive table (spec §1 exit criterion 1)", () =
   // Each is exported and probed directly here for exactly that reason.
   const invalidPhase = "bogus" as AxesInput["phase"];
 
-  it("deriveProgram rejects an eleventh phase rather than laundering it", () => {
+  it("deriveProgram rejects a tenth phase rather than laundering it", () => {
     expect(() => deriveProgram(invalidPhase)).toThrow(
       /unhandled ConnectedPhase/,
     );
   });
 
-  it("deriveSession rejects an eleventh phase rather than laundering it", () => {
+  it("deriveSession rejects a tenth phase rather than laundering it", () => {
     expect(() =>
       deriveSession({
         phase: invalidPhase,
@@ -282,7 +269,7 @@ describe("deriveAxes — the exhaustive table (spec §1 exit criterion 1)", () =
     ).toThrow(/unhandled ConnectedPhase/);
   });
 
-  it("deriveActivity rejects an eleventh phase rather than laundering it", () => {
+  it("deriveActivity rejects a tenth phase rather than laundering it", () => {
     expect(() =>
       deriveActivity({
         phase: invalidPhase,

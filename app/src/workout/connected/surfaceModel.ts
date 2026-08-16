@@ -380,6 +380,26 @@ function livePace(frame: MonitorFrame, status: SurfaceStatus): number | null {
   return frame.currentSplit === 0 ? null : frame.currentSplit;
 }
 
+/** THE RATE HERO'S OWN VERSION OF `livePace`, ADDED task 5 (connected-axes
+ *  2a — the brief's own "gaining what livePace has"). A stopped rower's spm
+ *  does not fall to zero the way a REST boundary's does; the freeze
+ *  predicate's own three-metric key (`useMonitorSession.ts`'s `freezeKey`)
+ *  holds it PINNED at its last value right alongside split and distance —
+ *  that pinned value is the very evidence `PAUSED_FRAME_HOLD` fires on. So
+ *  without this suppression the rate hero would keep showing a live-looking
+ *  number (a real erg's own last cadence, e.g. 68) at a rower who has
+ *  stopped pulling, exactly the "claims a reading it doesn't have" defect
+ *  the split hero was already fixed against. No zero-split-is-not-a-reading
+ *  twin exists for rate (0 spm is a real, honest reading — a rest, or the
+ *  instant before the first stroke — `judgedValue`'s own `null`-only
+ *  absence rule already covers it), so this function is shorter than
+ *  `livePace`: paused suppresses, everything else passes the frame's spm
+ *  straight through. */
+function liveRate(frame: MonitorFrame, status: SurfaceStatus): number | null {
+  if (status === "paused") return null;
+  return frame.spm;
+}
+
 /** THE HERO CANNOT CLIP (design spec §6/revision §3): `min-width: 0` and
  *  `white-space: nowrap` (`PaneLive.tsx`, `index.css`) keep a real split
  *  from wrapping mid-numeral, but nothing bounds how WIDE a live reading
@@ -518,7 +538,13 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
       : 0
     : cappedPace;
   const paceJudgeTarget = mirrored ? null : targetSplitSeconds;
-  const rateActual = mirrored ? 0 : frame.spm;
+  // `liveRate`, not `frame.spm` straight through (task 5): composes with
+  // the mirror rather than fighting it — `mirrored` is checked FIRST in
+  // this ternary exactly as `paceActual`'s own does, so an armed/reset
+  // frame still gets its `0` regardless of `status`, and `liveRate`'s own
+  // paused suppression only ever applies on the branch mirroring is not
+  // already deciding.
+  const rateActual = mirrored ? 0 : liveRate(frame, status);
   const rateJudgeTarget = mirrored ? null : targetSpm;
 
   const pace = judgedValue({

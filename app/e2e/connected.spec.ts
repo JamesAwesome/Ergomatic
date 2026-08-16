@@ -398,7 +398,7 @@ async function pumpUntilPaused(page: Page, maxRealMs = 20_000): Promise<void> {
     if (Date.now() >= deadline) {
       // One last, honest assertion — surfaces a real Playwright failure
       // against the actual DOM rather than a bespoke timeout error.
-      await expect(page.getByText("PAUSED · PULL TO RESUME")).toBeVisible();
+      await expect(page.getByText("PULL TO RESUME")).toBeVisible();
       return;
     }
   }
@@ -418,7 +418,7 @@ async function pumpUntilResumed(page: Page, maxRealMs = 10_000): Promise<void> {
     });
     if (!stillPaused) return;
     if (Date.now() >= deadline) {
-      await expect(page.getByText("PAUSED · PULL TO RESUME")).toBeHidden();
+      await expect(page.getByText("PULL TO RESUME")).toBeHidden();
       return;
     }
   }
@@ -497,9 +497,9 @@ async function walkToReady(
  *  screen — everything past `walkToReady` that does not depend on
  *  orientation.
  *
- *  PAUSED/RESUMED are checked FIRST, before any pane navigation — a
- *  discovery from this file's own first real runs: `PAUSED · PULL TO
- *  RESUME` renders in the surface's shared FOOTER regardless of which pane
+ *  FROZEN/RESUMED are checked FIRST, before any pane navigation — a
+ *  discovery from this file's own first real runs: `PULL TO RESUME`
+ *  renders in the surface's shared FOOTER regardless of which pane
  *  is active (`ConnectedSurface.tsx`'s own render — the footer's own
  *  content sits outside the per-pane body entirely), so nothing about
  *  observing it requires being on any particular pane first. Checking it
@@ -524,28 +524,29 @@ async function walkSurfaceToLog(
     "page",
   );
 
-  // NOTHING ABOVE SHIFTS (connected-revamp Task 6, revision §2/§4): End
+  // THE HEADER NEVER SHIFTS (connected-revamp Task 6, revision §2/§4): End
   // moved out of the footer into the header, which now renders
-  // UNCONDITIONALLY, so the pane body's own top edge should never move
-  // because the erg paused or resumed — real pixel proof, not the
-  // structural jsdom pin `ConnectedSurface.test.tsx` carries for the same
-  // claim. Measured PAUSED-vs-RESUMED rather than against this walk's own
-  // opening frame: portrait's `.connected-pane` still uses the base
-  // `justify-content: space-between` (landscape overrides it to
-  // `flex-start`, the reason this pin is portrait-only below), which
-  // redistributes ITS OWN gaps against total content height — comparing
-  // across the pause/resume transition ALONE (same interval, same UP NEXT
-  // reference either side) isolates the footer's own occupancy as the one
-  // variable, where comparing against the walk's very first frame does
-  // not: `programIntervalIndex` advances between "just landed" and
-  // "PAUSED", changing UP NEXT's own resolved length and, through
-  // `space-between`, every gap in the pane — a confound this file's first
-  // attempt at this pin measured directly (a real, reproducible ~10px
-  // difference with the SAME footer state on both sides). Since the task-6
-  // fix round the slot is out of the flow entirely, which makes the claim
-  // harder still to break — and this pin is what would catch it going back
-  // into the flow.
-  const metricRow = page.locator(".connected-metric-row");
+  // UNCONDITIONALLY, so the header's own top edge should never move because
+  // the erg froze or resumed — real pixel proof, not the structural jsdom
+  // pin `ConnectedSurface.test.tsx` carries for the same claim.
+  //
+  // THE PANE'S OWN BOTTOM CONTENT DOES NOW MOVE, DELIBERATELY (connected-
+  // axes 2a, task 5 — this used to also pin the metric row's own top
+  // position as unchanging; that invariant is GONE ON PURPOSE, not a
+  // regression). The task-6 round bought "nothing moves at all" by
+  // painting the frozen block OVER the pane's own last 52px as an
+  // absolutely-positioned overlay — free of any layout shift, but at the
+  // one moment it rendered, it covered TOTAL LEFT, the number the freeze
+  // exists to keep the rower reading (spec 2a's own trigger: "the block we
+  // drew covers the one number that would have told the rower so"). Task 5
+  // puts the block back IN FLOW, so the pane's own `1fr` track genuinely
+  // shrinks while frozen and grows back on resume — the metric row's own Y
+  // position is EXPECTED to differ between the two reads below, and the new
+  // pixel proof this walk carries is the no-overlap one further down
+  // instead: TOTAL LEFT's own bar never sits under the frozen block, in
+  // either direction.
+  const header = page.locator(".connected-header");
+  const totalLeftBar = page.locator(".timer-total");
 
   // PAUSED — the freeze in `buildStoryEvents()` above lands here. The
   // footer's own content swaps from empty to the paused block (End keeps
@@ -556,8 +557,21 @@ async function walkSurfaceToLog(
   // `pumpUntilPaused` (this file's own header on why an ordinary
   // `expect(...).toBeVisible()` cannot be trusted to catch it).
   await pumpUntilPaused(page);
-  await expect(page.getByText("PAUSED · PULL TO RESUME")).toBeVisible();
-  const pausedMetricTop = (await metricRow.boundingBox())!.y;
+  await expect(page.getByText("PULL TO RESUME")).toBeVisible();
+  const pausedHeaderTop = (await header.boundingBox())!.y;
+  // NO OCCLUSION, THE REAL-PIXEL PROOF (task 5's own fix): TOTAL LEFT's own
+  // bar sits ENTIRELY above the frozen block, never under it — the box
+  // painting the exact number the task-6 overlay used to cover.
+  const [ruler, frozenBlock] = await Promise.all([
+    totalLeftBar.boundingBox(),
+    page.locator(".connected-paused").boundingBox(),
+  ]);
+  expect(ruler, ".timer-total").not.toBeNull();
+  expect(frozenBlock, ".connected-paused").not.toBeNull();
+  expect(
+    frozenBlock!.y,
+    `.connected-paused (top ${frozenBlock!.y}) overlaps .timer-total (bottom ${ruler!.y + ruler!.height})`,
+  ).toBeGreaterThanOrEqual(ruler!.y + ruler!.height);
   // Cards are gone from pane B (connected-revamp Task 3, revision §3: "the
   // old three metric cards are gone") — METERS is now a plain metric-row
   // cell, `.connected-metric-cell` in place of the old `.timer-card`.
@@ -595,7 +609,7 @@ async function walkSurfaceToLog(
   // through the freeze, exactly as a real PM5 does.
   await page.waitForTimeout(700);
   await expect(metersValue).toHaveText(pausedMeters ?? "");
-  await expect(page.getByText("PAUSED · PULL TO RESUME")).toBeVisible();
+  await expect(page.getByText("PULL TO RESUME")).toBeVisible();
   // ...and the clock really did move while PAUSED held (erg-day review,
   // MEDIUM-4: without this the four-metric key would still pass here).
   expect(await totalLeftValue.textContent()).not.toBe(pausedTotalLeft);
@@ -603,17 +617,17 @@ async function walkSurfaceToLog(
   // RESUMED — the changed frame in `buildStoryEvents()` clears the freeze
   // (700ms of clearance past the freeze's own last tick).
   await pumpUntilResumed(page);
-  await expect(page.getByText("PAUSED · PULL TO RESUME")).toBeHidden();
+  await expect(page.getByText("PULL TO RESUME")).toBeHidden();
   await expect(page.getByRole("button", { name: "End session" })).toBeVisible();
-  // NOTHING ABOVE SHIFTED, the actual pixel proof: the paused block just
-  // came and went, and the pane body's top — this metric row's own top —
-  // reads the same either side of it. The block is an OVERLAY as of the
-  // task-6 fix round (`index.css`'s `.connected-surface-footer { height: 0;
-  // position: relative }` plus `.connected-paused { position: absolute }`),
-  // so it costs the flow nothing in EITHER state; before that, the footer
-  // reserved 52px all session long to buy the same invariant.
-  const resumedMetricTop = (await metricRow.boundingBox())!.y;
-  expect(resumedMetricTop).toBeCloseTo(pausedMetricTop, 0);
+  // THE HEADER'S OWN TOP NEVER MOVED, the actual pixel proof for the one
+  // invariant task 5 keeps: End's control renders unconditionally at a
+  // fixed height (connected-revamp Task 6), so its top edge is identical
+  // whether or not the frozen block is on screen below it. The PANE's own
+  // bottom content is NOT asserted unchanged here any more — task 5 spends
+  // exactly that space to stop occluding TOTAL LEFT (the no-overlap
+  // assertion above, while frozen, is this walk's replacement proof).
+  const resumedHeaderTop = (await header.boundingBox())!.y;
+  expect(resumedHeaderTop).toBeCloseTo(pausedHeaderTop, 0);
 
   // Pane navigation VIA THE RAIL. Interval 0's boundary has certainly landed
   // by now (it precedes even the freeze), so the grid read below is against

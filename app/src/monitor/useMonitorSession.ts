@@ -69,11 +69,12 @@ import {
 } from "./monitorRun";
 import { defaultTransport } from "../adapters/monitorTransport";
 
-/** The session state machine (design spec §2, verbatim). Every value here
- *  is reached by a REAL event or frame field — never by a timer and never
- *  by an optimistic guess — with ONE deliberate exception, `"programming"`,
- *  which flips SYNCHRONOUSLY at the top of `program()` before anything is
- *  awaited (the double-fire pin; see `program` below).
+/** The session state machine (design spec §2, verbatim, MINUS `"paused"` —
+ *  connected-axes 2a, task 5). Every value here is reached by a REAL event
+ *  or frame field — never by a timer and never by an optimistic guess —
+ *  with ONE deliberate exception, `"programming"`, which flips
+ *  SYNCHRONOUSLY at the top of `program()` before anything is awaited (the
+ *  double-fire pin; see `program` below).
  *
  *  There is no `"choosing"`: the platform's chooser owns the interaction
  *  while `picking` — on iOS it is the plugin's in-process list sheet over
@@ -81,7 +82,22 @@ import { defaultTransport } from "../adapters/monitorTransport";
  *  (`requestDevice`'s own modal, single-result chooser the app never sees a
  *  device list from) — so interstitial states 1-3 remain descoped and
  *  `"picking"` is "their chooser is open, we draw only a quiet floor under
- *  it". */
+ *  it".
+ *
+ *  NO LONGER `"paused"` (task 5). The freeze predicate below
+ *  (`nextFreezeRun`/`isPausedRun`) still runs exactly as before — it is the
+ *  MEASUREMENT that decides whether the erg has stopped, and that
+ *  measurement was never wrong. What retired is routing its verdict through
+ *  a NINTH phase value: the session never actually left `"live"` while
+ *  frozen (a stopped erg is still a live session, still talking), so
+ *  `"paused"` was a phase in name that carried no state transition of its
+ *  own — every consumer that branched on it was really asking "is `frozen`
+ *  true?" one layer removed. `frozen` (published on `MonitorSession`,
+ *  Task 1) is now the one fact; `phase` stays `"live"` throughout a freeze
+ *  and its resume alike. `connectedAxes.ts`'s own `deriveActivity` reads
+ *  `frozen` exactly this way already (its own header comment named this
+ *  exact seam before the member was gone: "this is the exact seam the
+ *  enum's `paused` member retires through later"). */
 export type ConnectedPhase =
   | "idle"
   | "picking"
@@ -90,7 +106,6 @@ export type ConnectedPhase =
   | "ready"
   | "failed"
   | "live"
-  | "paused"
   | "disconnected"
   | "ended";
 
@@ -964,14 +979,17 @@ export function useMonitorSession(
           return;
         }
       }
-      if (phase === "live" || phase === "paused") {
+      if (phase === "live") {
+        // THE PREDICATE IS UNCHANGED (task 5); only how it's PUBLISHED is —
+        // via `frozen` (Task 1's fact), never by moving `phase` off `"live"`.
+        // A frozen session is still a live one: the driver is still
+        // talking, the record is still open, nothing about "which session
+        // state is this" actually changed when the erg stopped. `phase`
+        // stays `"live"` through the whole freeze-and-resume; only `frozen`
+        // flips.
         const freeze = nextFreezeRun(freezeRef.current, frame);
         freezeRef.current = freeze;
-        update({
-          frame,
-          phase: isPausedRun(freeze) ? "paused" : "live",
-          frozen: isPausedRun(freeze),
-        });
+        update({ frame, frozen: isPausedRun(freeze) });
         return;
       }
       // Every other phase still SEES the frame (the machine's current
@@ -1391,7 +1409,9 @@ export function useMonitorSession(
     // over) the control is End, which closes the record; there is nothing
     // for Cancel to do that End does not do better, and silently discarding
     // a live run would be the destruction path the spec forbids.
-    if (phase === "live" || phase === "paused" || phase === "ended") return;
+    // `"paused"` dropped from this guard with the phase member (task 5): a
+    // frozen session is still `"live"`, so this already covered it.
+    if (phase === "live" || phase === "ended") return;
     const driver = driverRef.current;
     // MEDIUM-9 (task-5 re-review), landed by the fix wave's H1: CLAIM the
     // ref synchronously, before the `await driver.terminate()` below

@@ -11,12 +11,14 @@
 // radio/transport failure on our own side does not — this module only
 // consumes the already-computed boolean, it does not classify reasons).
 //
-// Every derivation below `switch`es EXHAUSTIVELY over all ten
-// `ConnectedPhase` members with a `never` guard: an eleventh member fails to
-// COMPILE here rather than falling through into a guessed default — the
-// mechanism `docs/monitor/state-architecture-review.md` §F3 named (one
-// `switch`, zero exhaustiveness guards, an unenumerated phase laundered by
-// `?? "live"` into a full live surface).
+// Every derivation below `switch`es EXHAUSTIVELY over all nine
+// `ConnectedPhase` members (`"paused"` retired, connected-axes 2a task 5 —
+// see `useMonitorSession.ts`'s own `ConnectedPhase` doc comment) with a
+// `never` guard: a tenth member fails to COMPILE here rather than falling
+// through into a guessed default — the mechanism `docs/monitor/
+// state-architecture-review.md` §F3 named (one `switch`, zero exhaustiveness
+// guards, an unenumerated phase laundered by `?? "live"` into a full live
+// surface).
 //
 // PRECEDENCE FOR THE COLLAPSE TO ONE `SurfaceStatus` (this module still
 // answers four separate questions, never one — the collapse lives in the
@@ -107,11 +109,12 @@ export function deriveLink(input: AxesInput): LinkAxis {
     case "programming":
     case "ready":
     case "live":
-    case "paused":
       // "Connected is not programmed" (`connect`'s own comment): `pairing`
       // spans both the transport-connect settle and the wait on the
       // caller's `program()`, and every phase downstream of it still has a
-      // live driver until something moves the phase off it.
+      // live driver until something moves the phase off it. A frozen
+      // session is `"live"` (task 5 — `"paused"` retired), so it needs no
+      // case of its own here any more than it ever needed a SEPARATE one.
       return "up";
     case "failed":
       return failureLeavesLinkUp === true ? "up" : "lost";
@@ -140,7 +143,6 @@ export function deriveProgram(phase: ConnectedPhase): ProgramAxis {
       return "sending";
     case "ready":
     case "live":
-    case "paused":
       return "armed";
     case "failed":
       return "failed";
@@ -165,7 +167,6 @@ export function deriveSession(input: AxesInput): SessionAxis {
     case "failed":
       return "none";
     case "live":
-    case "paused":
       return "live";
     case "disconnected":
       // The record deliberately stays open across a link drop (spec's C5
@@ -192,15 +193,14 @@ export function deriveActivity(input: AxesInput): ActivityAxis {
     case "ended":
       return "unknown";
     case "live":
-      // Checked, not trusted from `phase` alone: today the hook always
-      // flips to `"paused"` the instant the freeze predicate fires (so this
-      // branch is redundant with the one below in practice), but this is
-      // the exact seam the enum's `paused` member retires through later
-      // (spec §4, a different task) — `live` + `frozen` is already what
-      // carries the true signal, `phase` is not.
+      // THE SEAM `paused` RETIRED THROUGH (task 5 — this comment used to
+      // predict that retirement; it has now happened). `phase` never left
+      // `"live"` for a frozen session even before this task — the hook
+      // always published the freeze through `frozen` alongside it — so this
+      // branch was already carrying the true signal on its own, and the
+      // separate `"paused"` case below it was the redundant one, not this
+      // one. `live` + `frozen` decides; `phase` alone never did.
       return frozen ? "frozen" : "moving";
-    case "paused":
-      return "frozen";
     default:
       return assertNever(phase);
   }

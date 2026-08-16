@@ -402,22 +402,22 @@ export default function ConnectedSurface({
         {pane === "live" && <PaneLive model={model} />}
         {pane === "grid" && <PaneGrid model={model} />}
       </div>
-      {/* End's old footer slot survives as the paused block's home (handoff
-          §4: "Same height, so nothing above shifts"), but it no longer
-          RESERVES anything — JAMES RULING 2026-08-12, fix round: the 52px
-          this wrapper used to hold open stood empty for the whole session
-          and the rower only ever saw it as dead space between the pane and
-          the pager. It is now a zero-height anchor (`index.css`'s
-          `.connected-surface-footer { height: 0; position: relative }`) and
-          the paused block is absolutely positioned out of flow inside it,
-          painting UP from the pane's bottom edge when the erg stops. Both
-          halves of handoff §4's promise still hold, and more literally than
-          the reserved-slot version did: nothing above shifts (the block
-          costs the layout nothing in EITHER state, so there is no height to
-          change), and the space the reservation was spending goes back to
-          the pane — a whole extra grid row in each orientation. What the
-          rower sees while paused is the ink band OVER the bottom 52px of
-          the pane, not the pane rearranging itself underneath it. */}
+      {/* End's old footer slot survives as the frozen block's home, but its
+          MECHANISM changed under connected-axes 2a (task 5) — this comment
+          replaces the task-6 fix round's own version, which is no longer
+          true. That round made this slot a zero-height, `position:
+          relative` anchor and painted the block OVER the pane's bottom 52px
+          as an absolutely-positioned overlay: free while rowing, but at the
+          one moment it actually rendered it covered TOTAL LEFT — the single
+          number that would have told the rower the erg's own clock never
+          stopped (spec 2a's own trigger for this task: "the block we drew
+          covers the one number that would have told the rower so"). Task 5
+          puts the block back IN FLOW instead: still nothing while rowing
+          (no child renders, so the row still costs zero — `index.css`'s own
+          comment on `.connected-surface-footer` carries the mechanism), but
+          while frozen the slot takes its own real height out of the pane's
+          `1fr` track rather than painting over it, so TOTAL LEFT and its bar
+          stay fully on screen every frame the block is up. */}
       <div className="connected-surface-footer">
         {model.status === "paused" && (
           <PausedBlock armed={end.armed} onEnd={handleEnd} />
@@ -458,23 +458,33 @@ function LostBanner() {
   );
 }
 
-/** Handoff §4's paused treatment. CONNECTED-REVAMP TASK 6: this used to
- *  take End's OWN 52px slot (the two were mutually exclusive occupants of
- *  one footer); End now lives in the header instead (always on screen,
- *  never hidden by pause), and this block owns that slot ALONE — as an
- *  OVERLAY, out of flow, so the slot costs nothing while rowing (see the
- *  footer's own comment above). The phone owns no Pause, so there is no
- *  transport row to hide, and nothing above may shift when the rower stops
- *  pulling — nothing MOVES at all now, in either direction. `END`
- *  stays inside it, 64×44 and accent-outlined, so ending is still possible
- *  without reaching for the header, and it is "staged as everywhere else"
- *  (§5's own caption) off the SAME arm state the header's End control uses
- *  — a rower who armed either one and then stopped (or started) pulling
- *  finds the other in the same armed state, not silently reset. */
+/** Handoff §4's frozen treatment, restyled by connected-axes 2a (task 5) to
+ *  drop the "paused" noun entirely (never rendered here in caps again — see
+ *  this file's own source-sweep test). The PM5 has no paused state — its
+ *  own clock runs the whole time a rower is stopped — and a block whose own
+ *  copy claimed one, while sitting over the very number (TOTAL LEFT) that
+ *  would have shown the clock still moving, is exactly the "does the
+ *  underlying system have this concept" mistake `.claude/agent-briefing.md`
+ *  names by name (a paused state the PM5 does not have, on a monitor whose
+ *  clock keeps running). `PULL TO RESUME` is an instruction, not a status
+ *  word: it says what to do, not what mode the machine is supposedly in.
+ *  The internal `SurfaceStatus` member this component renders FOR stays
+ *  named `"paused"` — that is CODE, not copy (`surfaceModel.ts`'s own doc
+ *  comment on `SurfaceStatus`) — and this component's own name is kept for
+ *  the same reason. Everything else about the CONTROL is untouched
+ *  (connected-revamp Task 6's own reasoning still holds): End lives in the
+ *  header (always on screen, never hidden by a freeze), and this block owns
+ *  the footer slot alone. What DID change is the slot's own layout
+ *  participation — see the caller's comment on `.connected-surface-footer`
+ *  for the no-occlusion mechanism this task exists for. `END`/`AGAIN`
+ *  stays 64×44 and accent-outlined, staged off the SAME arm state the
+ *  header's End control uses — a rower who armed either one and then
+ *  stopped (or started) pulling finds the other in the same armed state,
+ *  not silently reset. */
 function PausedBlock({ armed, onEnd }: { armed: boolean; onEnd: () => void }) {
   return (
     <div className="connected-paused">
-      <span className="connected-paused-label">PAUSED · PULL TO RESUME</span>
+      <span className="connected-paused-label">PULL TO RESUME</span>
       <button
         type="button"
         className={

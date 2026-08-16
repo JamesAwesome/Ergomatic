@@ -932,15 +932,24 @@ describe("state 7: ready", () => {
 });
 
 // ---------------------------------------------------------------------------
-// The phase gate (Task 5's seam choice) — live/paused/ended, plus
+// The phase gate (Task 5's seam choice) — live (frozen or not)/ended, plus
 // disconnected's TWO paths (Task 4, connected-axes 2a, below)
 // ---------------------------------------------------------------------------
 
 describe("the phase gate — the connected surface (Task 6)", () => {
-  it.each(["live", "paused"] as const)(
-    "phase %s hands off to the three-pane surface",
-    (phase) => {
-      renderInterstitial({ phase, deviceName: DEVICE_NAME });
+  // `"paused"` retired from `ConnectedPhase` (connected-axes 2a, task 5): a
+  // frozen session is still `phase: "live"`, published through `frozen`
+  // instead (`useMonitorSession.ts`'s own `ConnectedPhase` doc comment). The
+  // gate below reads `phase` alone (this file's job is "does live open the
+  // surface", not "does the surface then draw it right" — `ConnectedSurface
+  // .test.tsx` owns that), so both rows exercise the SAME gate branch; the
+  // `frozen: true` row is kept anyway as the one that would break first if
+  // this file's mock of `useMonitorSession` ever stopped honouring `frozen`
+  // the way the real hook does.
+  it.each([{ frozen: false }, { frozen: true }] as const)(
+    "phase live (frozen: $frozen) hands off to the three-pane surface",
+    ({ frozen }) => {
+      renderInterstitial({ phase: "live", frozen, deviceName: DEVICE_NAME });
       expect(
         screen.getByRole("navigation", { name: "Connected panes" }),
       ).toBeInTheDocument();

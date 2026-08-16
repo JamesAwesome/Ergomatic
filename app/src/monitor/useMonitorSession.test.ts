@@ -40,6 +40,7 @@ import {
   nextFreezeRun,
   nextRowingStreak,
   useMonitorSession,
+  type ConnectedPhase,
   type FreezeRun,
   type MonitorSessionDeps,
   type RunIdentity,
@@ -3120,6 +3121,51 @@ describe("the paused derivation, replayed frame by frame from the record", () =>
     expect(run.frames).toBe(1);
     expect(isPausedRun(run)).toBe(false);
   });
+
+  // TASK 5 STEP 4 (connected-axes 2a): "rest suppression is NOT new code" —
+  // `deriveActivity`'s own `"unknown"` for a non-`live` phase already
+  // covers a rest that happens BEFORE the erg ever goes live, and this
+  // predicate's `distanceMeters <= 0` guard (above) already covers a rest
+  // mid-session, which is the case pinned here. Not a new mechanism, one
+  // extra frame count on the existing guard: a REST that runs far longer
+  // than `PAUSED_FRAME_HOLD` — the shape a real 3:00 rest between work
+  // pieces actually has, not the single reset frame the test above uses —
+  // never accumulates a single frame toward the hold, because every one of
+  // those frames resets the count outright rather than merely skipping the
+  // increment. `isPausedRun` can therefore never see anything but `frames:
+  // 0` from a resting stream, however long it runs.
+  //
+  // THE COMMENT THE BRIEF ASKS FOR: this guarantee lives ENTIRELY in
+  // `nextFreezeRun`'s `frame.state !== "rowing"` branch (above) — the
+  // moment `activity`/`frozen` is re-derived from anything else (a status
+  // word, a different frame field, a second freeze predicate written for a
+  // different screen), this pin stops proving anything about THAT path and
+  // must be re-derived alongside it, not assumed to still hold.
+  it("a resting STREAM, arbitrarily long, never accumulates a single frame toward frozen", () => {
+    // `distanceMeters: 30`, NOT the factory's default 0 — a real rest holds
+    // "distance-still" (this predicate's own doc comment: "resting
+    // legitimately freezes spm 0 / split 0 / distance-still for its whole
+    // duration"), i.e. banked at whatever the just-finished work interval
+    // left it, not reset to zero. A resting fixture at distance 0 would
+    // pass this test off the `distanceMeters <= 0` guard ALONE and never
+    // exercise the `state !== "rowing"` branch at all — this value is
+    // chosen specifically so the mutation below (dropping the state check)
+    // is the one thing that can make this test fail.
+    const resting = frame({
+      state: "resting",
+      distanceMeters: 30,
+      currentSplit: 0,
+      spm: 0,
+    });
+    let run: FreezeRun | null = null;
+    // Ten resting frames — well past `PAUSED_FRAME_HOLD` (4) — is a real
+    // rest bout's own shape, not a synthetic edge case.
+    for (let i = 0; i < 10; i += 1) {
+      run = nextFreezeRun(run, resting);
+      expect(run.frames).toBe(0);
+      expect(isPausedRun(run)).toBe(false);
+    }
+  });
 });
 
 describe("nextRowingStreak: the rowingActive fallback's own counter", () => {
@@ -3153,11 +3199,14 @@ describe("nextRowingStreak: the rowingActive fallback's own counter", () => {
   });
 });
 
-describe("useMonitorSession: paused, end to end", () => {
+describe("useMonitorSession: frozen (the freeze predicate), end to end", () => {
   /** The recorded stop, delivered as real status ticks through the fake so
    *  the whole path — wire bytes, driver, hook — is exercised, not just the
-   *  predicate. */
-  it("four frozen frames put the session in paused; the next change puts it back", async () => {
+   *  predicate. `phase` stays `"live"` throughout (task 5, connected-axes
+   *  2a: `"paused"` retired off `ConnectedPhase` — a frozen session never
+   *  actually left `"live"`, so this test now pins `frozen` instead of a
+   *  phase transition that no longer happens). */
+  it("four frozen frames publish frozen:true; the next change clears it — phase never leaves live", async () => {
     const frozen = {
       elapsedSeconds: 57.78,
       distanceMeters: 108.4,
@@ -3185,17 +3234,38 @@ describe("useMonitorSession: paused, end to end", () => {
 
     tick(fake, 100);
     expect(result.current.phase).toBe("live");
+    expect(result.current.frozen).toBe(false);
     tick(fake, 100);
     tick(fake, 100);
     tick(fake, 100);
-    // Three frozen frames is still LIVE — the boundary-reset margin.
+    // Three frozen frames is still NOT frozen — the boundary-reset margin.
     expect(result.current.phase).toBe("live");
+    expect(result.current.frozen).toBe(false);
 
     tick(fake, 100);
-    expect(result.current.phase).toBe("paused");
+    expect(result.current.phase).toBe("live");
+    expect(result.current.frozen).toBe(true);
 
     tick(fake, 100);
     expect(result.current.phase).toBe("live");
+    expect(result.current.frozen).toBe(false);
+  });
+
+  // THE ENUM-READER PIN'S OWN COMPILE-TIME HALF (task 5 step 1, requirement
+  // 4 — the source-sweep pin lives in `connectedPhaseReaders.test.ts`; this
+  // is the type-level guarantee a grep cannot give). Same idiom
+  // `connectedAxes.test.ts`'s own `@ts-expect-error` pin uses for "an
+  // eleventh phase" (now "a tenth"): if `"paused"` were ever re-added to
+  // `ConnectedPhase`, this line would stop erroring, `@ts-expect-error`
+  // would become an UNUSED directive, and `pnpm typecheck` would fail on
+  // that alone — a regression this test catches without ever running.
+  it('ConnectedPhase no longer admits "paused" (compile-time pin)', () => {
+    // @ts-expect-error — "paused" was removed from `ConnectedPhase`
+    // (connected-axes 2a, task 5): the freeze predicate now publishes
+    // through `frozen` (Task 1's fact) with `phase` staying `"live"`, never
+    // through a ninth phase value.
+    const phase: ConnectedPhase = "paused";
+    expect(phase).toBe("paused");
   });
 
   it("the recorded no-rest boundary reset keeps the session LIVE all the way through", async () => {

@@ -216,6 +216,12 @@ interface CaptureOptions {
   endedBy?: MonitorSession["endedBy"];
   actuals?: IntervalActual[];
   fixture?: { program: WorkoutProgram; phases: EnginePhase[] };
+  /** The freeze predicate's own published fact (Task 1) — this is how a
+   *  frozen capture is built now that `"paused"` is gone from
+   *  `ConnectedPhase` (connected-axes 2a, task 5): `phase` stays `"live"`,
+   *  `frozen: true` is what the caller's own status ternary
+   *  (`ConnectedSurface.tsx`) reads to produce `SurfaceStatus`'s `"paused"`. */
+  frozen?: boolean;
   /** Runs against the mounted surface before the markup is read — the
    *  diagnostics sheet has no prop of its own, it is opened by the same
    *  triple-tap a rower uses. */
@@ -234,7 +240,7 @@ function capture(pane: PaneId, options: CaptureOptions = {}): string {
     actuals: options.actuals ?? [],
     endedBy: options.endedBy ?? null,
     handoffHeld: false,
-    frozen: false,
+    frozen: options.frozen ?? false,
     runOpen: true,
     connect: vi.fn().mockResolvedValue(undefined),
     program: vi.fn().mockResolvedValue(undefined),
@@ -350,10 +356,10 @@ describe("screen fixtures for pnpm screenshots", () => {
     ).toMatchFileSnapshot("../../e2e/fixtures/connected-pane-live-nohr.html");
   });
 
-  it("pane B, erg paused", async () => {
+  it("pane B, erg frozen (the freeze predicate fired — no more `paused` phase)", async () => {
     await expect(
       capture("live", {
-        phase: "paused",
+        frozen: true,
         frame: { intervalRemaining: { kind: "time", value: 41 } },
       }),
     ).toMatchFileSnapshot("../../e2e/fixtures/connected-paused.html");

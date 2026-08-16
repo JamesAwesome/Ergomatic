@@ -569,9 +569,11 @@ export default function ConnectedInterstitial({
   }
 
   // THE PHASE GATE (Task 5's seam, filled by Task 6). Every phase from here
-  // on — "ready" once the rower asked for the numbers, "live", "paused",
-  // "ended", and "disconnected" WITH a run open (the mid-session drop,
-  // above) — is the three-pane connected surface. The SAME
+  // on — "ready" once the rower asked for the numbers, "live" (frozen or
+  // not — connected-axes 2a task 5 retired the separate "paused" phase;
+  // `frozen` is a fact ALONGSIDE "live", not a different phase), "ended",
+  // and "disconnected" WITH a run open (the mid-session drop, above) — is
+  // the three-pane connected surface. The SAME
   // `useMonitorSession` instance this file owns keeps running underneath
   // it: nothing unmounts and nothing reconnects at the handoff, which is
   // why `session` is handed down as a value rather than the surface

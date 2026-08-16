@@ -4257,20 +4257,70 @@ test.describe("connected screens (fake-driven)", () => {
     await cleanupAllConnected(page, title);
   });
 
-  test("the surface's PAUSED footer: axe, the 44px floor and the ink-4 rule", async ({
-    page,
-  }) => {
-    const title = "Design Connected Paused Workout";
-    await injectConnectedFake(page, FREEZING_STORY);
-    await openConnected(page, title, "design-connected-paused@e2e.test");
-    await walkToSurface(page);
-    // `FREEZING_STORY` never resumes, so once the hold trips the footer
-    // stays swapped for as long as the sweep needs.
-    await pumpUntil(page, ".connected-paused");
-    await expect(page.getByText("PAUSED · PULL TO RESUME")).toBeVisible();
-    await sweep(page);
-    await cleanupAllConnected(page, title);
-  });
+  // NO-OVERLAP, TASK 5 (connected-axes 2a): the geometry half of the fix —
+  // the `design.spec's own idiom (`design-connected-live-nooverlap-*`
+  // above): read the two real boxes and assert neither intersects, rather
+  // than trusting jsdom's structural CSS proof (`ConnectedSurface.test
+  // .tsx`'s own "IN FLOW, not overlaid" pin) to stand in for real layout.
+  // TOTAL LEFT's own bar (`.timer-total`, `PaneLive.tsx:219-223`) is the
+  // element the old overlay covered — spec 2a's own trigger line names it
+  // by number ("the block we drew covers the one number that would have
+  // told the rower so"), so THAT box, not just the frozen block's presence,
+  // is what this pin reads.
+  for (const viewport of [
+    { width: 390, height: 844, label: "portrait" },
+    { width: 844, height: 390, label: "landscape" },
+  ] as const) {
+    test(`the frozen footer never covers TOTAL LEFT — ${viewport.label} (${viewport.width}x${viewport.height})`, async ({
+      page,
+    }) => {
+      const title = `Design Connected Frozen No-Overlap ${viewport.label}`;
+      await page.setViewportSize({
+        width: viewport.width,
+        height: viewport.height,
+      });
+      await injectConnectedFake(page, FREEZING_STORY);
+      await openConnected(
+        page,
+        title,
+        `design-connected-frozen-nooverlap-${viewport.label}@e2e.test`,
+      );
+      await walkToSurface(page);
+      // `FREEZING_STORY` never resumes, so once the hold trips the footer
+      // stays swapped for as long as the sweep needs.
+      await pumpUntil(page, ".connected-paused");
+      // THE NOUN IS GONE (task 5 step 1): an instruction, never a status
+      // word claiming a mode the PM5 does not have.
+      await expect(page.getByText("PULL TO RESUME")).toBeVisible();
+      await expect(page.getByText(/PAUSED/)).toHaveCount(0);
+
+      const totalLeft = page.locator(".timer-total");
+      const frozenBlock = page.locator(".connected-paused");
+      const [ruler, block] = await Promise.all([
+        totalLeft.boundingBox(),
+        frozenBlock.boundingBox(),
+      ]);
+      expect(ruler, ".timer-total").not.toBeNull();
+      expect(block, ".connected-paused").not.toBeNull();
+      // Same idiom as the live pane's own no-overlap pin above: the block
+      // sits ENTIRELY below the ruler's own bottom edge, never intersecting
+      // it — the structural guarantee (no `position: absolute` left on
+      // `.connected-paused`) made real on an actual rendered frame.
+      expect(
+        block!.y,
+        `.connected-paused (top ${block!.y}) overlaps .timer-total (bottom ${ruler!.y + ruler!.height})`,
+      ).toBeGreaterThanOrEqual(ruler!.y + ruler!.height);
+      // And the ruler itself is fully inside the viewport, not clipped off
+      // by the pane's own `overflow: clip` squeezing it out to make room —
+      // the OTHER way this fix could have failed (shrinking the pane could
+      // clip TOTAL LEFT instead of the block covering it, which reads
+      // identically to a rower — the number is gone either way).
+      expect(ruler!.y + ruler!.height).toBeLessThanOrEqual(viewport.height);
+
+      await sweep(page);
+      await cleanupAllConnected(page, title);
+    });
+  }
 
   // --- Task 1 (design spec §4): the content column's width invariant -------
   //
