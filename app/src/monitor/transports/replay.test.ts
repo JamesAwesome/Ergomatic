@@ -88,6 +88,31 @@ describe("createReplayTransport", () => {
     expect(result.divergences[0]).toMatch(/barrier timeout/);
   });
 
+  it("the stream continues after a timeout release — a later rx still delivers", async () => {
+    // Test 3 above (recording ends at the timed-out tx) can't distinguish
+    // "playback continues past a released timeout" from "playback stalls
+    // there" — this one puts an rx after the timed-out tx to prove the
+    // walk genuinely resumes, not merely that run() eventually settles.
+    const recording = buildRecording([
+      { t: 100, dir: "tx", char: "W", hex: "01" },
+      { t: 110, dir: "rx", char: "A", hex: "02" },
+    ]);
+    const { transport, run } = createReplayTransport(recording, {
+      barrierTimeoutMs: 50,
+    });
+
+    let fired = false;
+    transport.subscribe("A", () => {
+      fired = true;
+    });
+
+    const result = await run();
+
+    expect(fired).toBe(true);
+    expect(result.divergences).toHaveLength(1);
+    expect(result.divergences[0]).toMatch(/barrier timeout/);
+  });
+
   it("fires the virtual clock's scheduled callbacks in due order", async () => {
     const recording = buildRecording([
       { t: 0, dir: "rx", char: "A", hex: "01" },

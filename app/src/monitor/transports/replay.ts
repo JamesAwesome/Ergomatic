@@ -50,7 +50,7 @@ import {
   toHexString,
   type ParsedRecording,
   type RecordedEvent,
-} from "./recording.js";
+} from "./recording";
 
 export interface ReplayClock {
   /** Current virtual-clock reading, in ms — bind as `DriverOptions.now`. */
