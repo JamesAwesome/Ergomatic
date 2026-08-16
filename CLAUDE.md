@@ -173,6 +173,22 @@ Roadmap: `ROADMAP.md` (phases + standing rules). Design reference: `docs/design/
   loudly and block if the active Node major is below `.nvmrc`. Don't bypass with
   `--no-verify`; fix the failure.
 - pnpm only. ESM only. Server imports use `.js` extensions.
+- **Write for James first, the record second (James, 2026-08-16).** Binding
+  for every PR body, design presentation, and discussion:
+  - Line one: **"This PR [outcome]"** — the result, not the mechanism.
+  - Then bullets, not paragraphs. ~6 max, one line each: what changed, why,
+    tester impact, how to try it.
+  - No spec codenames (B1, criterion 4) and no invented nouns above the
+    fold. Plain words: "replay waits for the app's own writes", not "the
+    barrier-gated rx scheduler".
+  - Everything else — evidence, probe outputs, cross-refs, risk notes,
+    agent context — goes in a collapsed `<details>` block titled
+    **"Record (for agents and audits)"**. Depth lives there, not up top.
+  - The test: the top reads aloud in 30 seconds. The `product-manager`
+    final-PR gate checks this and fails the PR presentation on it.
+  - Specs open with a plain-language "What and why" paragraph before any
+    machinery. Worked examples: PR #100 and #101's bodies (retro-edited
+    to this shape).
 - After every merge to main, post a TestFlight release recommendation
   (docs/RELEASING.md): "recommended: <reasons>" or "not needed". Versions
   come ONLY from annotated vX.Y.Z tags; API changes additive-only between
