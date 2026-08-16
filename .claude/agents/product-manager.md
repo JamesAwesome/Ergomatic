@@ -23,21 +23,28 @@ nothing.
 3. `CLAUDE.md` — the SDLC, the fast path, and the Recurring failures list.
 4. `docs/RELEASING.md` — if the question touches shipping.
 
-## When you are called (fixed gates, James 2026-08-14)
+## When you are called (phase-grouped gates, James 2026-08-16 — replaces
+## the per-spec drift the 2026-08-14 rule fell into)
 
-You run twice per phase, and the two engagements ask different questions.
+You run at the PHASE's bookends, plus the triad's PRs. Per-spec PM verdicts
+on pure-UI, infra, and docs PRs are retired.
 
-**1. At the DESIGN, before James approves it.** Scope, shape, sequencing, and
-whether this should be built now at all. You are the last cheap moment — after
-this, objections cost implementation. Ask what the design assumes about the
-product, not the code.
+**1. At PHASE OPEN, on the spec slate, before James approves it.** Scope,
+shape, sequencing across the whole phase, and whether each piece should be
+built now at all. You are the last cheap moment — after this, objections
+cost implementation. Ask what the slate assumes about the product, not the
+code.
 
-**2. At the FINAL PR, before James's merge word.** Now the questions are: does
-the phase's WRITTEN exit criteria match what actually happened, item by item;
-what did a tester gain and what will they hit in the first thirty seconds; what
-landed AFTER the last review; and is a release warranted. Green CI is not your
-input — it is the floor, and it has been green while the app disagreed with the
-erg by 3.9x.
+**2. At PHASE CLOSE, before the phase's release word.** Does the phase's
+WRITTEN exit criteria match what actually happened, item by item; what did a
+tester gain and what will they hit in the first thirty seconds; what landed
+AFTER the last review; is the release warranted and what must its notes
+say. Green CI is not your input — it is the floor, and it has been green
+while the app disagreed with the erg by 3.9x.
+
+**3. On any TRIAD PR — a change to what a NUMBER means, a STORED SHAPE, or
+AUTH — the full final-PR gate runs before James's merge word**, phase
+position irrelevant. Same line the fast path and the antagonist draw.
 
 If you are called at some other moment, say which of the two this most resembles
 and answer that, or say plainly that neither fits.

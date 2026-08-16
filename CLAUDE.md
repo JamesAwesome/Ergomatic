@@ -114,25 +114,40 @@ Roadmap: `ROADMAP.md` (phases + standing rules). Design reference: `docs/design/
   dispatch that skips the ledger update wastes the half of them that
   compounds. **They have fixed trigger points (James, 2026-08-14) — these
   are gates, not suggestions:**
-  - **`product-manager` runs twice per phase.** Once when a DESIGN is
-    presented, before James approves it — its job there is scope, shape
-    and whether this should be built now. Once when the FINAL PR is
-    posted, before James's merge word — its job there is exit criteria
-    against what actually happened, tester impact, the release call, and
-    what landed after the last review. Present its verdict with the PR;
-    do not merge on green CI alone.
-  - **`antagonist` runs on every SPEC and on every TASK BRIEF.** On a
-    spec it is the full adversarial pass this repo already runs between
-    spec and plan (`spec → adversarial → plan → SDD`) — that step IS this
-    agent now. On a task brief it is a narrower PREMISE pass before
-    dispatch: does this brief assert anything unverified, invent a
-    mechanism without checking prior art, or contradict what the code
-    does? Briefs have shipped factual errors here and an implementer who
-    works around one silently costs a review round.
-  - **Scope control for task briefs:** the premise pass is cheap and
-    scoped to the brief's claims, not a review of the whole task. If a
-    wave's briefs are near-identical, one pass over the set is enough —
-    say so rather than running ten.
+  - **Both agents are PHASE-GROUPED with a triad override (James,
+    2026-08-16 — replaces the per-spec/per-brief triggers; motivation:
+    CR2 ran ~9 antagonist dispatches where ~4-5 carried all the catches,
+    and every kill-shot in either ledger lived in four classes: invented
+    mechanisms, wire semantics, oracle soundness, number changes).**
+  - **THE TRIAD always forces the full treatment, phase position
+    irrelevant** — the same line the fast path draws: a change to what a
+    NUMBER means, a STORED SHAPE, or AUTH gets the complete antagonist
+    pass on its spec AND a PM final-PR gate on its PR. One definition of
+    "dangerous" across the whole SDLC.
+  - **`antagonist`, phase-shaped:** (1) **Phase open — the anchor pass:**
+    attack the phase's decomposition plus its riskiest spec, fully; the
+    report's attacked-and-held claims become the phase's VETTED GROUND,
+    recorded in the ledger entry. (2) **Mid-phase specs — delta or skip,
+    said aloud:** a later spec gets a DELTA pass (attack only what is new
+    against the vetted ground) when it invents a new mechanism or touches
+    wire semantics on ground the anchor did not cover; genuinely novel
+    ground gets a full pass; everything else SKIPS with a stated reason
+    ("inherits phase ground; no new invariant class") — the skip is
+    spoken, never silent. (3) **Phase close — the exit pass:** before the
+    phase walk, attack the exit-criteria evidence and the walk protocol
+    (oracle-blindness like "the keystone row cannot exercise the new
+    code" lives here). (4) **Premise passes FOLD into the spec pass**
+    when the plan is written in the same cycle — one dispatch attacks the
+    spec's premises and the plan's fresh factual claims together; a
+    standalone premise pass only for a plan written long after its spec
+    or by a different session, and one pass covers a wave of
+    near-identical briefs.
+  - **`product-manager`, phase-shaped:** at phase OPEN (the spec slate —
+    scope, shape, build-now) and phase CLOSE (exit criteria against what
+    happened, tester impact, the release call), plus the triad's per-PR
+    final gates. Pure-UI, infra, and docs PRs no longer get per-PR PM
+    verdicts. Present PM verdicts with the artifact they judge; never
+    merge on green CI alone where a PM gate applies.
   - **They PROPOSE ledger entries; the controller lands them.** Neither
     agent writes to the repo, including its own ledger — they are usually
     dispatched against the main checkout, and main is PR-only. The
