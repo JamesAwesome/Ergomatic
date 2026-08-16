@@ -635,3 +635,94 @@ toolkit, not a history.
   `monitorRun.ts:519-521`'s "both doors speak the same two sentences"
   comment dies with the change and the brief's doc sweep stops one
   comment short of it).
+
+## Spec-stage pass, 2026-08-16 (Phase CR2 spec 3, "the redesign")
+
+- **"2a's mirror model feeds frame 2D; only the ghost COLOUR and the READY
+  caption are new."** False — the up-next line is a third new thing, and
+  the spec's own 2D table demands it. `upNextTextAt` is `phases[index + 1]`
+  by construction (`Timer.tsx:272`) and `surfaceModel.ts:677` calls it with
+  no armed branch, so armed shows the coming REST, never "the first interval
+  forward". The committed capture says so outright:
+  `docs/screenshots/connected-armed-landscape.png` reads
+  `UP NEXT REST 3:00 · then WORK 2:06.0`. **Technique: when a spec says "only
+  X is new", enumerate every field the target frame renders and trace each
+  backward to its producer — and prefer the COMMITTED SCREENSHOT over the
+  code for the fields you can see. A frame's picture is a per-field
+  falsification oracle nobody has to run.**
+
+- **"The type scale ships as written" is not a value change, it is a
+  cross-surface change.** The eight `--size-*` roles are one global `:root`
+  pair (`tokens.css:173-180`, `index.css:7163-7177`) shared with the
+  unconnected phone timer — `--size-label` reaches `.timer-card-label` and
+  the timer's own END, `--size-total` reaches `.timer-total-value`,
+  `--size-subhero` is the timer's ALONE. So a spec that says "fork, do not
+  reach the phone timer" and "ship the new scale" is asking for two
+  incompatible things, and `tokens.test.ts:248` bans the obvious escape
+  (`--size-*-landscape`/`-portrait`) by name while `:180` whitelists the
+  exact token set. **Technique: before accepting a redesign's type scale,
+  grep `var(--token)` for every role it moves and list the consumers OUTSIDE
+  the surface being redesigned. A design token is a coupling; a scale table
+  hides it behind a row of pixels.**
+
+- **A high-fidelity handoff can re-propose a number the project already
+  measured and rejected.** The packet's "grid rows 36px" is the same 36px
+  `index.css:7858` records James ruling down to 32 on 2026-08-12 ("8 rows at
+  36px is 288px, more than any measured build of this frame has ever
+  offered"), documented in `DEVIATIONS.md:101` and pinned in
+  `screenshots.spec.ts` (276px scroller, rowHeight 32, visible 8).
+  **Technique: for every geometric constant a new design packet asserts,
+  grep DEVIATIONS.md and the CSS comments for that same number before
+  transcribing it. This repo writes its reversals down; a packet delivered by
+  someone who has not read them will re-propose the original.**
+
+- **"The gutter absorbs `env(safe-area-inset-left)`."** False and load-
+  bearing: it is `max(left, right)` (`index.css:7281`), spent on BOTH sides
+  (`:7321` padding-right, `:7457`/`:7475` gutter width + padding-left), and
+  the `max()` exists for Android's asymmetric `DisplayCutout` with a
+  shouting comment at `:7206` telling the next reader to keep it. A
+  relocation instruction phrased with the single-sided `env()` deletes the
+  Android fix in passing. **Technique: when a spec proposes to RELOCATE a
+  computed value, quote the declaration, not the concept — a `max()` of two
+  insets and one inset relocate differently.**
+
+- **An exit criterion can name an artifact that does not exist.** "The walk
+  sheet carries the re-pointed session-meters row" — `grep -rn "walk sheet"`
+  over `docs/`, `ROADMAP.md` and both ledgers returns only the spec itself.
+  The nearest real file is a PAST walk's `RUNSHEET.md`, whose two `TOTAL M`
+  rows the redesign invalidates; editing it to describe a future walk
+  corrupts a record. **Technique: for every exit criterion naming a document,
+  `ls` its path. A criterion whose artifact has no path cannot be checked,
+  and the file someone will edit instead is usually a record, not a plan.**
+
+- **A "carried debt" tag is not a citation.** The iPhone 17 / Air "20pt
+  landscape TOP inset" appears three times, all inside the spec, and nowhere
+  else in the repo — while `index.css:7197` records that Chromium reports
+  every `env(safe-area-inset-*)` as `0px`, so no gate here can observe it and
+  the only source of a non-zero one is our own CDP override (the harness this
+  ledger already caught inventing a rotation asymmetry). **Technique: grep
+  the whole repo for a device constant a spec attributes to "carried debt"
+  before letting a row COUNT be derived from it. Debt has a creditor; if the
+  grep finds only the spec, the number was carried in conversation.**
+
+- **The consumer inventory, done backward, found four dead fields where the
+  spec named one.** `hr`, `intervalClockLabel` and `intervalClockValue` also
+  lose their only render sites, `totalLeftSeconds` loses its (it was
+  TimerRuler's prop) while the spec lists it as SURVIVING, and
+  `elapsedDisplay` — the field that actually feeds the log sheet's SESSION
+  line — is never named at all. **Technique: for a spec that deletes a pane,
+  build the table before believing the prose — `grep "model\.<field>"` across
+  the non-test tree for EVERY field, and mark each survives/dies. Prose
+  inventories name the field the author was thinking about.**
+
+- **Attacked and not broken:** every number in §2 against the handoff README
+  (header, heroes, band, all seven grid columns, both type-scale lists,
+  `--rule` = `#d8d3c4`, `--progress-active` = `#8a8478`) — no transcription
+  error; the triple-tap port and its `logOpener` focus restore; `meters`'s
+  single render site; the TimerRuler/UpNextStrip consumer set; the
+  `.connected-paused` description; the armed TOTAL LEFT; and the
+  decoration-only ruling on `--progress-active`, whose 3.29:1 on page is
+  literally the ratio CLAUDE.md's recurring-failure #6 was written about.
+  One residual disclosed rather than fixed: the bar's active-vs-upcoming
+  segment contrast is 2.61:1, under WCAG 1.4.11's 3:1, defensible only
+  because the same state is in the status text.
