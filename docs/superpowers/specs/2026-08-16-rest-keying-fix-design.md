@@ -66,6 +66,26 @@ unfixed register map digit-for-digit first).
   hardware reading available" evidence-base sentence is now stale (three
   readings exist: both recordings show the count advancing across w→w
   boundaries 10.6-92.9 ms after the reset tick) — reconciled in this PR.
+- **The official docs' own silence supports a timing-free rule
+  (James's prompt, answered from the corpus):** the C2 BLE spec never
+  guarantees inter-characteristic ordering or lockstep —
+  `pm5-interface-notes.md` §15: "Nothing in either document guarantees
+  these two counters stay in lockstep frame-to-frame" (PRIMARY). The
+  983/983 ordering we measured is empirical, not contractual, so a fix
+  that waited on burst order would build on unspecified behavior; the
+  clamp uses only our own register history.
+- **The multiplexed characteristic (0x0080) is not an escape hatch**
+  (preempting the obvious suggestion): it still delivers one message per
+  notification — no atomic snapshot — and its 0x0032/0x0033 restatements
+  are NOT byte-identical to the GATT forms (BLE doc p.26-27 via
+  interface-notes: Average Power moves characteristics, 19/18 bytes vs
+  17/20), so our offset tables would silently misdecode there. PRIMARY.
+- **The machine's atomic read lives on the polled CSAFE channel**, not
+  the notify path: multiple GET commands in one frame return one
+  response frame — a consistent snapshot, the SDK's model (PRIMARY for
+  the framing; INFERENCE that this is why SDK-style clients never meet
+  this bug). A channel redesign, not a fix; recorded as the honest
+  answer to "does the system have the concept."
 - **Prior art for the fix shape is in-repo:** the refused-open clamp
   (`driver.ts:1911-1931`) — the same "fold a stale attribution into the
   open key, log once per key" idiom, in the other direction. Nothing
