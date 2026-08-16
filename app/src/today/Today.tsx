@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useWorkouts } from "../api/useWorkouts";
 import type { LibraryWorkout } from "../api/useWorkouts";
 import { useBaselines } from "../api/useBaselines";
@@ -32,7 +32,12 @@ import {
 } from "../../domain/onboarding.js";
 import { clearDraft, loadDraft } from "../session/draft";
 import { loadRun, type SessionRun } from "../session/run";
-import { loadMonitorRun } from "../monitor/monitorRun";
+import {
+  loadMonitorRun,
+  clearMonitorRun,
+  completeInterruptedRun,
+  type MonitorRun,
+} from "../monitor/monitorRun";
 import { useStagedDiscard } from "../session/useStagedDiscard";
 import StartHere from "./StartHere";
 import BaselineCard from "./BaselineCard";
@@ -283,6 +288,14 @@ export default function Today() {
   // surfaces this) lands the rower here with no other path back in.
   const [run] = useState<SessionRun | null>(() => loadRun());
 
+  // Same lazy-initializer, read-once-at-mount idiom as `run` above — F6
+  // spec 2b's own twin card (below, via `TodayView`) needs whatever
+  // `MonitorRun` already exists the instant this screen mounts, exactly the
+  // same "cold start with no other path back in" reasoning `run`'s own
+  // comment gives, just for the monitor's own record rather than the phone
+  // timer's.
+  const [monitorRun] = useState<MonitorRun | null>(() => loadMonitorRun());
+
   // A draft older than 24h with startedAt still null was abandoned mid-
   // confirm and never started — discard it with no ceremony (spec: "Deep-
   // link/reload rules"). A started draft (startedAt set) is left alone even
@@ -439,6 +452,7 @@ export default function Today() {
       plan={planState.plan}
       logs={recentLogsState.logs}
       run={run}
+      monitorRun={monitorRun}
     />
   );
 }
@@ -554,6 +568,133 @@ function UnloggedRow({ run }: { run: SessionRun }) {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+/** `UnloggedRow`'s twin (F6 spec 2b, Task 4) — Today's OTHER interrupted-
+ *  session line, for a `MonitorRun` the rower is closing through this
+ *  screen rather than through the monitor itself (`run !== null &&
+ *  run.completedAt === null` at the render site below is the ONE structural
+ *  difference from `UnloggedRow`'s own gate: a completed-but-unlogged
+ *  `MonitorRun` is ruled OUT of 2b, unlike the `SessionRun` case, because
+ *  7C's own log path already owns that record's "finished, not yet logged"
+ *  state — see `connectGuardStage`'s own comment in `monitorRun.ts` on why
+ *  a `MonitorRun` visible here is always a DEAD one, never one still being
+ *  driven).
+ *
+ *  Same twin discipline as `UnloggedRow` itself (this file's own copy of
+ *  the armed-focus effect, `useStagedDiscard`, and the row-owns-its-state
+ *  reasoning above), and the same reason it owns its own state rather than
+ *  `TodayView` reading it: arming/firing this row must never recompute
+ *  `TodayView`'s own `suggestion`.
+ *
+ *  Exhaustively, what differs from `UnloggedRow`:
+ *  - the copy ("interrupted connected session.", never "ended"/"finished" —
+ *    house style, no unverified claim about how the session stopped);
+ *  - "Log it" is a `<button>` that STAMPS the record
+ *    (`completeInterruptedRun`, the door Task 1 built) before navigating,
+ *    not a bare `<Link>` — the stamp is what turns the log screen's own
+ *    `monitorModeRun` gate honest for an interrupted record (Task 3);
+ *  - the discard body is `clearMonitorRun()` alone, never
+ *    `useStagedDiscard().fire()` — that hook clears the phone-timer's own
+ *    draft/run records, the WRONG ones for a `MonitorRun`. The diagnostics
+ *    stash (`ergomatic:last-monitor-log`/`ergomatic:last-rowed-log`,
+ *    `sessionStorage`) is left standing on purpose: a rower who reports a
+ *    bug right after discarding still has the wire trace to hand over;
+ *  - the null-`workoutId` latent — no "Log it" at all when `run.workoutId`
+ *    is null (unreachable today: only `WorkoutDetail`'s Connect flow
+ *    programs a `MonitorRun`, and it always carries a real workout id, but
+ *    `MonitorRun.workoutId`'s own type says otherwise, so this row honors
+ *    it rather than asserting a narrower type the record doesn't have).
+ *
+ *  Distinct accessible name on the ✕ (antagonist correction, this task's
+ *  brief): `UnloggedRow`'s own "Discard without logging" would otherwise
+ *  destroy a DIFFERENT record under the same announced name whenever both
+ *  rows render at once — a WCAG name-role-value defect this house's own AA
+ *  bar does not allow. */
+function UnloggedMonitorRow({ run }: { run: MonitorRun }) {
+  const discard = useStagedDiscard();
+  const navigate = useNavigate();
+  const [dismissed, setDismissed] = useState(false);
+  const armedButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Same structurally-different-node fix `UnloggedRow`'s own effect
+  // documents: arming here swaps in a bare `<button>` at the same tree
+  // position too, which does not inherit focus on its own.
+  useEffect(() => {
+    if (discard.armed) armedButtonRef.current?.focus();
+  }, [discard.armed]);
+
+  if (dismissed) return null;
+
+  function handleDiscardClick() {
+    if (discard.armed) {
+      // Not discard.fire(): that clears the draft and the phone-timer run,
+      // the wrong records for a MonitorRun. The diagnostics stash is KEPT
+      // on purpose (spec 2b: a rower reporting a bug right after
+      // discarding keeps the evidence) — clearMonitorRun() only ever
+      // touches MONITOR_RUN_KEY.
+      discard.disarm();
+      clearMonitorRun();
+      setDismissed(true);
+    } else {
+      discard.arm();
+    }
+  }
+
+  function handleLogIt() {
+    // Stamping is the rower's ruling, not the app's: it is what opens
+    // the monitor log screen's own `monitorModeRun` gate for an
+    // interrupted record (session/LogSession.tsx, Task 3).
+    completeInterruptedRun(run, new Date());
+    navigate(`/library/${run.workoutId}/log?from=monitor`);
+  }
+
+  if (discard.armed) {
+    return (
+      <div className="today-unlogged-line today-unlogged-line-armed">
+        <p className="today-unlogged-text">
+          Discard <strong>{run.title}</strong> without logging?
+        </p>
+        <button
+          type="button"
+          ref={armedButtonRef}
+          className="today-unlogged-discard-armed"
+          onClick={handleDiscardClick}
+          onBlur={discard.disarm}
+        >
+          Tap again
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="today-unlogged-line">
+      <p className="today-unlogged-text">
+        <strong>{run.title}</strong>: interrupted connected session.
+      </p>
+      <div className="today-unlogged-actions">
+        {run.workoutId !== null && (
+          <button
+            type="button"
+            className="today-unlogged-link"
+            onClick={handleLogIt}
+          >
+            Log it
+          </button>
+        )}
+        <button
+          type="button"
+          className="today-unlogged-discard"
+          onClick={handleDiscardClick}
+          onBlur={discard.disarm}
+          aria-label="Discard connected session without logging"
+        >
+          ✕
+        </button>
+      </div>
     </div>
   );
 }
@@ -735,6 +876,7 @@ function TodayView({
   plan,
   logs,
   run,
+  monitorRun,
 }: {
   library: LibraryWorkout[];
   baselines: Baselines | null;
@@ -750,6 +892,7 @@ function TodayView({
   plan: PlanData;
   logs: RecentLog[];
   run: SessionRun | null;
+  monitorRun: MonitorRun | null;
 }) {
   const today = todayDateString();
   // Read once per render — this screen has no ticking display (unlike
@@ -1158,6 +1301,16 @@ function TodayView({
           ever re-shuffling the suggestion card — as a side effect of
           arming or firing the discard. */}
       {run !== null && run.completedAt !== null && <UnloggedRow run={run} />}
+      {/* F6 spec 2b, Task 4: the twin row for a dead `MonitorRun`. Condition
+          is `completedAt === null` ON PURPOSE — the opposite sense from
+          `UnloggedRow`'s own gate just above — because a completed-but-
+          unlogged `MonitorRun` is ruled OUT of 2b (`UnloggedMonitorRow`'s
+          own doc comment explains why). Does not touch the stale-draft
+          guard effect above; `todayGuard.pin.test.ts` pins that guard
+          byte-identical. */}
+      {monitorRun !== null && monitorRun.completedAt === null && (
+        <UnloggedMonitorRow run={monitorRun} />
+      )}
 
       {/* Phase 6I: the no-baseline SETS YOUR BASELINE card (design spec,
           screen 2b) replaces the entire suggestion apparatus — header

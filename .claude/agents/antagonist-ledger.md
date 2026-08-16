@@ -591,3 +591,47 @@ toolkit, not a history.
   trusting that a sibling test's successful use of a type-optional field means
   THIS artifact populates it — a reader working elsewhere proves the reader
   works, not that the specific file has the data.**
+## Task-brief pass, 2026-08-16 (CR2 spec 2b, F6 Tasks 1-5)
+
+- **"`useNavigate` is already imported in Today.tsx" / "the guard pin test
+  passes unmodified."** Both false, and the second is the expensive one:
+  `todayGuard.pin.test.ts:56-58` pins the EXACT import line
+  `import { loadMonitorRun } from "../monitor/monitorRun";`, so widening
+  that import for the new twin row fails the pin with the pinned guard
+  byte-identical. **Technique: a source-pin test constrains more than its
+  headline constant — before promising "passes unmodified", read every
+  `toContain` in the pin file, not just the block it is named for.**
+
+- **"Tests to update: monitorRun.test.ts + ConnectAction.test.tsx."** The
+  set was found by grepping the function name; a third red test hid in
+  `WorkoutDetail.test.tsx:1750`, which exercises `connectGuardStage`
+  through the mounted ConnectAction and never names it. **Technique: for a
+  copy-changing behaviour change, grep the ASSERTED COPY STRING across
+  src+e2e, not the function name — host-component tests reach the guard by
+  a route that never says its name.**
+
+- **"Copy the client tests' `makeMonitorRun` shape for the e2e seed."** That
+  shape (v1, empty program, no logSeed) makes `buildMonitorLogSteps` throw
+  (`logDraft.ts:739-746`), so `monitorModeRun` silently degrades to the
+  manual door and the e2e's header assertion can never pass. **Technique:
+  before citing a fixture helper as a seed recipe, hand-run it through
+  every gate the flow under test must pass — a seed that renders is not a
+  seed that ENGAGES.**
+
+- **Recurrence, third sighting:** `pnpm test --project unit -- <src file>`
+  again briefed for a `src/` test file (unit = server/domain/scripts only,
+  `vitest.config.ts:9-17`; the positional filter doesn't narrow). The
+  2026-08-15 Stage A entry's technique caught it in seconds; the shape now
+  qualifies as a standing check on any brief's verify commands.
+
+- **Attacked and not broken:** Task 3 entirely (module-private
+  `monitorLogTotals`, single caller `:1247`, every line number exact);
+  Task 4's "not `fire()`" reasoning (`useStagedDiscard.fire()` really
+  clears draft + phone run); the `endedBy` clause as a safe tightening
+  (shallow validator, no fixture writes the field); the copy
+  "interrupted connected session." against the spec's F6 text; and the
+  Start-door blast radius (its mapping is `useStartWorkout.ts`'s own,
+  so `session.spec.ts:1295` stays green by design — but
+  `monitorRun.ts:519-521`'s "both doors speak the same two sentences"
+  comment dies with the change and the brief's doc sweep stops one
+  comment short of it).

@@ -239,6 +239,32 @@ describe("ConnectAction: the guard", () => {
     });
   });
 
+  // F6 spec 2b, Task 2, exit criterion 5: "Connect never again asks
+  // 'Replace it?' about a dead run." A MonitorRun visible at this door is
+  // always dead — the connected session lives on WorkoutDetail's own
+  // surface, and reload/navigation tears it down without touching the
+  // record — so `completedAt === null` here means interrupted, not
+  // running, unlike the SessionRun case above (a phone timer genuinely
+  // keeps running in the background).
+  describe("over a live-looking MonitorRun (completedAt: null)", () => {
+    it("stages the unlogged sentence, not the 'in progress' one", async () => {
+      connectAsTaskFiveWill();
+      expect(loadMonitorRun()!.completedAt).toBeNull();
+      renderConnect();
+
+      await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+      expect(
+        screen.getByText(
+          "You have an unlogged session. Connecting discards it.",
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText("A session is in progress. Replace it?"),
+      ).not.toBeInTheDocument();
+    });
+  });
+
   it("uses the house panel classes, not a new confirm idiom", async () => {
     saveRun(unloggedSessionRun());
     const { container } = render(

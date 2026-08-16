@@ -86,6 +86,13 @@ export interface MonitorRun {
   startedAt: string;
   completedAt: string | null;
   terminated: boolean;
+  /**
+   * Present only when the rower closed an interrupted session through
+   * Today's row (F6). Absent = normal completion. Additive and optional
+   * on purpose: a v1/v2 record without it reads exactly as before, per
+   * this file's never-migrate contract.
+   */
+  endedBy?: "interrupted";
 }
 
 // Same discipline as `session/run.ts`'s own `isPlainRecord` — "shaped
@@ -159,6 +166,7 @@ function isMonitorRun(value: unknown): value is MonitorRun {
     typeof value.startedAt === "string" &&
     (value.completedAt === null || typeof value.completedAt === "string") &&
     typeof value.terminated === "boolean" &&
+    (value.endedBy === undefined || value.endedBy === "interrupted") &&
     (logSeed === undefined ||
       (isPlainRecord(logSeed) &&
         Array.isArray(logSeed.steps) &&
@@ -426,6 +434,97 @@ export function completeMonitorRun(
   return next;
 }
 
+/**
+ * F6's own door: closes a LIVE run the rower is ending through Today's row
+ * rather than through a `workoutComplete`/`terminated` event the machine
+ * itself sent (`completeMonitorRun` above is that path; this is the other
+ * one — the phone lost the machine, or the rower simply walked away, and
+ * nothing on the wire is ever going to say "finished" for this run again).
+ *
+ * Stamps `completedAt` from `now` and `endedBy: "interrupted"` together,
+ * the same "two fields move, together and only here" discipline
+ * `completeMonitorRun`'s own doc comment states for its pair — a record
+ * that says "finished" without saying it was interrupted is the shape a
+ * later screen (F6's own Today card) cannot read.
+ *
+ * **`terminated` is deliberately left untouched.** It answers a DIFFERENT
+ * question — HOW the machine itself reported the end (`WORKOUTEND` vs
+ * `TERMINATE`, `MonitorRun.terminated`'s own comment) — and this call site
+ * has no such report to make: nothing on the wire ever closed this run.
+ * Leaving it at whatever it already was (always `false` for a still-live
+ * run, since `completeMonitorRun` is the only writer that ever sets it
+ * `true`, and that only fires on an event this path by definition never
+ * received) keeps `terminated` meaning "what the machine said," full stop,
+ * with `endedBy` free to carry the orthogonal "the rower said" story.
+ *
+ * Idempotent by the same rule `completeMonitorRun` uses: an already-closed
+ * record is returned UNCHANGED and nothing is persisted. The check reads
+ * the caller's in-memory argument, not storage, so the guarantee is
+ * single-tab: Today has no live monitor hook, so within a tab the record
+ * it captured at mount cannot have gained a machine completion since. A
+ * second tab driving a live session is the pre-existing shared-storage
+ * hazard family, same premise the Connect door's dead-run rule rests on.
+ */
+export function completeInterruptedRun(run: MonitorRun, now: Date): MonitorRun {
+  if (run.completedAt !== null) return run;
+  const next: MonitorRun = {
+    ...run,
+    completedAt: now.toISOString(),
+    endedBy: "interrupted",
+  };
+  saveMonitorRun(next);
+  return next;
+}
+
+/**
+ * "How much of this workout actually happened", for a run the rower ended
+ * through the interrupted door above — the number the monitor-mode log
+ * header shows (via `monitorLogTotals`) in place of the wall-clock span,
+ * which for an interrupted record can be days. The Today row itself shows
+ * no number. Built entirely from the record's OWN `actuals` and `program`,
+ * never wall-clock time past the last measured boundary: the spec's own
+ * constraint is that nothing here is invented past what the machine
+ * actually reported.
+ *
+ * Sums each actual's `elapsedSeconds` (the work itself), plus — for every
+ * actual that names a real interval (`index !== null`) — that interval's
+ * OWN `restSeconds` from `program.intervals`. James's verbatim ruling,
+ * stated here so a later review does not relitigate it: "work + programmed
+ * rest for completed intervals" IS the allowance, and it covers EVERY
+ * completed interval's rest, including the last one's. A rower who
+ * finished interval N and then closed the session was, by the plan, still
+ * resting until N+1 would have started — that rest is real time the plan
+ * accounted for, whether or not another working interval ever began. The
+ * "nothing invented past the last measured boundary" constraint forbids
+ * inventing time the plan never promised (guessing at partial progress
+ * into a rest, or crediting an interval that never completed at all); it
+ * does not forbid the rest a completed interval's own program entry
+ * already promises.
+ *
+ * `actual.index === null` (an unattributable boundary,
+ * `IntervalActual.index`'s own doc comment: "must not be treated as
+ * interval 0") contributes its work seconds and nothing else — there is no
+ * honest program position to look rest up FROM. An out-of-range index
+ * (defensive; array position in `actuals` is not program position, this
+ * file's header comment on `MonitorRun.actuals`) is handled the identical
+ * way: `program.intervals[index]` is simply `undefined`, so the rest term
+ * is skipped rather than thrown. Never reads `ProgramInterval.type`
+ * (loaded-program invariant, this file's `isMonitorRun` comment above) —
+ * `restSeconds` is the one interval field every era of this record's
+ * shape has always carried.
+ */
+export function interruptedTotalSeconds(run: MonitorRun): number {
+  let total = 0;
+  for (const actual of run.actuals) {
+    total += actual.elapsedSeconds;
+    if (actual.index !== null) {
+      const interval = run.program.intervals[actual.index];
+      if (interval !== undefined) total += interval.restSeconds;
+    }
+  }
+  return total;
+}
+
 type RecordState = "absent" | "live" | "unlogged";
 
 function sessionRunState(): RecordState {
@@ -516,8 +615,14 @@ export function anyLiveSession(): "none" | "phone" | "monitor" {
 }
 
 /** What a Connect press has to warn about before it is allowed through, or
- *  `null` when nothing is at risk. Mirrors `WorkoutDetail`'s own
- *  `replaceStage` union 1:1 so both doors speak the same two sentences. */
+ *  `null` when nothing is at risk. Shares its shape with `WorkoutDetail`'s
+ *  own `replaceStage` union, but the two doors no longer agree on when
+ *  `"in-progress"` applies: Start's door can genuinely have a live
+ *  `SessionRun` (a phone timer running in the background), while any
+ *  MonitorRun the Connect door can see is always dead (F6 spec 2b, exit
+ *  criterion 5 — see `connectGuardStage`'s own doc comment below). The
+ *  `SessionRun` case here still uses `"in-progress"`; only the `MonitorRun`
+ *  case never does. */
 export type ConnectGuardStage = "unlogged" | "in-progress" | null;
 
 /**
@@ -576,7 +681,22 @@ export type ConnectGuardStage = "unlogged" | "in-progress" | null;
  * exactly ONCE, not twice, and the `SessionRun`'s own sentence wins ties
  * the same way `handleStart`'s ordering already resolves them. No new copy:
  * both sentences already exist and are shared with the `SessionRun` case
- * above. */
+ * above.
+ *
+ * **F6 spec 2b, Task 2 — the `MonitorRun` check no longer branches on
+ * `completedAt`.** It used to mirror the `SessionRun` check above,
+ * staging `"in-progress"` for a `completedAt === null` record on the
+ * theory that the erg was mid-piece. That theory was never true at this
+ * door: a connected session's own screen is WorkoutDetail, and both a
+ * reload and a navigation away tear the `useMonitorSession` hook down
+ * without ever touching the record — so any `MonitorRun` still visible
+ * here, live-looking or not, is a run nothing is driving anymore. Exit
+ * criterion 5 names the defect this produced ("Connect never again asks
+ * 'Replace it?' about a dead run"): every `MonitorRun` this function can
+ * see now stages `"unlogged"`, matching the finished case it already used
+ * to reach. The `SessionRun` branch above is untouched — a phone timer
+ * genuinely does keep running in the background across reload/navigation,
+ * so `"in-progress"` stays true there. */
 export function connectGuardStage(): ConnectGuardStage {
   const run = loadRun();
   if (run !== null) {
@@ -584,7 +704,11 @@ export function connectGuardStage(): ConnectGuardStage {
   }
   const monitorRun = loadMonitorRun();
   if (monitorRun !== null) {
-    return monitorRun.completedAt === null ? "in-progress" : "unlogged";
+    // A MonitorRun visible at a Connect door is dead: the connected
+    // session lives on WorkoutDetail's surface and reload/navigation
+    // tears it down. "In progress" would assert machine state we do
+    // not have (spec 2b, exit criterion 5).
+    return "unlogged";
   }
   return null;
 }

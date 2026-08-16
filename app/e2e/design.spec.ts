@@ -3,6 +3,15 @@ import path from "node:path";
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { signInViaBackdoor, stableBoundingBox } from "./helpers";
+import { LIBRARY_WORKOUTS } from "../server/seed/library/index.js";
+import type { Step, WorkoutType } from "../domain/types.js";
+import { compileProgram } from "../domain/monitor/program.js";
+import type { WorkoutProgram } from "../domain/monitor/program.js";
+import type { IntervalActual } from "../domain/monitor/types.js";
+import { buildDraft, startDraft } from "../src/session/draft";
+import { buildRun } from "../src/session/engine";
+import { buildLogSeed } from "../src/session/logDraft";
+import { MONITOR_RUN_KEY, type MonitorRun } from "../src/monitor/monitorRun";
 
 /** Deletes a signed-in user's own (non-global) workout by title, so a
  *  design-sweep test that has to create real data via bulk import doesn't
@@ -1542,6 +1551,326 @@ test.describe("today screen (unlogged session row)", () => {
     await expect(
       page.locator(".today-log-row").filter({ hasText: title }),
     ).toHaveCount(0);
+  });
+});
+
+// F6 spec 2b, Task 5: Today's OTHER twin row — a dead `MonitorRun`
+// (`completedAt === null`) the rower is closing through Today rather than
+// through the monitor itself. No PM5/Bluetooth radio exists in CI, so
+// unlike the phone-timer row above (a real timer driven to
+// /session/complete), this record is SEEDED — but through the SAME real
+// `buildDraft -> startDraft -> buildRun -> compileProgram -> buildLogSeed`
+// pipeline `LogSession.test.tsx`'s own `buildMonitorFixture` uses, never a
+// hand-typed `MonitorRun` literal (antagonist correction, this task's
+// brief: a seed that merely RENDERS is not a seed that ENGAGES
+// `monitorModeRun`'s four-condition gate in `LogSession.tsx`). Two things
+// make this seed honest, not just shaped: `logSeed.steps` and
+// `program.intervals` come out of the identical compile (condition 4), and
+// `workoutId` is the compose stack's own server-assigned id for the real
+// seeded library workout "Hoarfrost" (condition 3) — fetched via
+// `libraryWorkoutId`, never the unit fixture's hand-picked literal id.
+
+function library(title: string) {
+  const w = LIBRARY_WORKOUTS.find((s) => s.title === title);
+  if (!w) throw new Error(`missing library fixture: ${title}`);
+  return w;
+}
+
+function compileOrThrow(
+  phases: Parameters<typeof compileProgram>[0],
+): WorkoutProgram {
+  const result = compileProgram(phases);
+  if ("code" in result) {
+    throw new Error(
+      `fixture failed to compile (${result.code}): ${result.message}`,
+    );
+  }
+  return result;
+}
+
+const MONITOR_FIXED_NOW = new Date("2026-08-01T12:00:00.000Z");
+const MONITOR_FIXTURE_BASELINES = { k2Seconds: 100, k6Seconds: 120 };
+
+/** Fetches the REAL, server-assigned id the compose stack's own seeded
+ *  global library gave `title` — never a client-side literal — via the
+ *  same in-page-fetch idiom `cleanupByTitle` above uses (the api
+ *  container's Secure-cookied session only survives Chromium's loopback
+ *  exemption from inside the page, not Playwright's Node-side
+ *  `page.request`). */
+async function libraryWorkoutId(page: Page, title: string): Promise<string> {
+  const result = await page.evaluate(async (t) => {
+    const res = await fetch("/api/workouts");
+    if (!res.ok) return { ok: false as const, status: res.status, id: null };
+    const workouts = (await res.json()) as Array<{
+      id: string;
+      title: string;
+    }>;
+    const match = workouts.find((w) => w.title === t);
+    return { ok: true as const, status: res.status, id: match?.id ?? null };
+  }, title);
+  if (!result.ok) {
+    throw new Error(`workout lookup failed for "${title}": ${result.status}`);
+  }
+  if (result.id === null) {
+    throw new Error(`workout not found in the seeded library: "${title}"`);
+  }
+  return result.id;
+}
+
+/** Hoarfrost's own time-work step (restMinutes 5, its auto-inserted rest
+ *  phase — folds into `program.intervals[1].restSeconds`, `program.ts`'s
+ *  own "no rest interval of its own" rule) plus Calm Sea's own
+ *  distance-work step, the SAME two real library steps
+ *  `LogSession.test.tsx`'s own `buildMonitorFixture` assembles — real
+ *  library data, never a hand-built minimum (recurring failure #3). Only
+ *  interval 1 (Hoarfrost's time work) is measured: 360s elapsed + 300s its
+ *  own programmed rest = 660s = 11 MIN, the EXACT fixture
+ *  `LogSession.test.tsx`'s own "the interrupted header stops reading
+ *  wall-clock" unit test already proves — reusing a proven number here
+ *  instead of a fresh one this file would have to re-derive. */
+function buildInterruptedMonitorRun(workoutId: string): MonitorRun {
+  const hoarfrost = library("Hoarfrost");
+  const timeWork = hoarfrost.steps.find((s) => s.k === "w") as Extract<
+    Step,
+    { k: "w" }
+  >;
+  const calmSea = library("Calm Sea");
+  const distanceWork = calmSea.steps.find((s) => s.k === "w") as Extract<
+    Step,
+    { k: "w" }
+  >;
+  const draft = buildDraft({
+    id: workoutId,
+    title: hoarfrost.title,
+    type: hoarfrost.type as WorkoutType,
+    steps: [timeWork, distanceWork],
+  });
+  const started = startDraft(draft);
+  const built = buildRun(
+    started,
+    MONITOR_FIXTURE_BASELINES,
+    MONITOR_FIXED_NOW,
+    {
+      kind: "time",
+      minutes: 4,
+    },
+  );
+  const program = compileOrThrow(built.phases);
+  const logSeed = buildLogSeed(built.phases, MONITOR_FIXTURE_BASELINES);
+  const actuals: IntervalActual[] = [
+    {
+      index: 1,
+      elapsedSeconds: 360,
+      distanceMeters: 1200,
+      avgSplit: 150,
+      avgSpm: 22,
+      avgHeartRateBpm: 130,
+    },
+  ];
+  return {
+    v: 2,
+    workoutId,
+    title: hoarfrost.title,
+    program,
+    logSeed,
+    actuals,
+    // Real hardware's own BLE advertising name (Concept2's own naming,
+    // verbatim) — same literal `LogSession.test.tsx`'s own
+    // `buildMonitorFixture` uses.
+    deviceName: "PM5 432331249 Row",
+    startedAt: MONITOR_FIXED_NOW.toISOString(),
+    completedAt: null,
+    terminated: false,
+  };
+}
+
+/** Seeds the record and writes it via an in-page `localStorage.setItem` —
+ *  `MONITOR_RUN_KEY`/`run` are passed as `evaluate`'s own argument, not
+ *  closed over, since a `page.evaluate` callback runs in the browser's own
+ *  global scope, where neither this file's outer consts nor its imports
+ *  exist. */
+async function seedInterruptedMonitorRun(page: Page): Promise<void> {
+  const workoutId = await libraryWorkoutId(page, "Hoarfrost");
+  const run = buildInterruptedMonitorRun(workoutId);
+  await page.evaluate(({ key, value }) => localStorage.setItem(key, value), {
+    key: MONITOR_RUN_KEY,
+    value: JSON.stringify(run),
+  });
+}
+
+test.describe("today screen (interrupted connected session row)", () => {
+  test.beforeEach(async ({ page }, testInfo) => {
+    await signInViaBackdoor(page, {
+      email: `design-interrupted-${testInfo.parallelIndex}@e2e.test`,
+      name: "Design Interrupted Tester",
+    });
+    await seedInterruptedMonitorRun(page);
+    await page.goto("/today");
+    await expect(
+      page.getByText(/interrupted connected session\./),
+    ).toBeVisible();
+  });
+
+  // Step 1 (task brief): proves the seed ENGAGES `monitorModeRun`'s gate,
+  // not merely renders past it. If the seed's `logSeed`/`program.intervals`
+  // alignment were wrong, or `workoutId` didn't match the route's own real
+  // id, `monitorModeRun` (LogSession.tsx) would return null and this
+  // landing would silently show the MANUAL door's own (baseline-priced,
+  // wall-clock-dated) header instead — a visibly different heading and a
+  // different number, which the assertions below would catch.
+  test("Log it stamps the record and opens the log screen with the actuals-derived minutes, not a wall-clock guess", async ({
+    page,
+  }) => {
+    await page.getByRole("button", { name: "Log it" }).click();
+
+    await expect(page).toHaveURL(/\/library\/[^/]+\/log\?from=monitor$/);
+    await expect(
+      page.getByRole("heading", { name: "Log Hoarfrost" }),
+    ).toBeVisible();
+
+    // The monitor-mode header's own minutes NUMBER: 360s measured + 300s
+    // Hoarfrost's own programmed rest = 660s = 11 MIN
+    // (`interruptedTotalSeconds`) — nowhere near the wall-clock gap between
+    // `startedAt` (seeded Aug 1) and `completedAt` (stamped just now by
+    // this very click), which a regression back to wall-clock reading
+    // would show instead.
+    await expect(page.getByText("AUG 1 · 11 MIN")).toBeVisible();
+
+    const stamped = await page.evaluate(() => {
+      const raw = localStorage.getItem("ergomatic.monitorRun");
+      return raw === null
+        ? null
+        : (JSON.parse(raw) as {
+            completedAt: string | null;
+            endedBy?: string;
+          });
+    });
+    expect(stamped?.completedAt).not.toBeNull();
+    expect(stamped?.endedBy).toBe("interrupted");
+  });
+
+  test("every visible interactive element has a >=44x44 tap target", async ({
+    page,
+  }) => {
+    await assertTapTargets(page);
+  });
+
+  test("zero WCAG 2A/2AA violations", async ({ page }) => {
+    await assertNoA11yViolations(page);
+  });
+
+  // The DEFAULT state's own ✕ — outlined, never solid (DEVIATIONS.md #2) —
+  // and carrying a DISTINCT accessible name from the phone-timer row's own
+  // ✕ (antagonist correction, this task's brief), the same shared
+  // `.today-unlogged-discard` class both rows use.
+  test("the row's ✕ is 44x44 and accent-outlined at rest, under its own distinct accessible name", async ({
+    page,
+  }) => {
+    const discardBtn = page.getByRole("button", {
+      name: "Discard connected session without logging",
+    });
+    const box = (await discardBtn.boundingBox())!;
+    expect(box.width).toBe(44);
+    expect(box.height).toBe(44);
+    const styles = await discardBtn.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { background: s.backgroundColor, borderColor: s.borderColor };
+    });
+    expect(styles.background).toBe("rgba(0, 0, 0, 0)"); // no fill
+    expect(styles.borderColor).toBe("rgb(181, 52, 31)"); // --accent
+  });
+
+  // "Log it" is a `<button>` here (it stamps before navigating), not the
+  // phone-timer row's bare `<Link>` — same shared `.today-unlogged-link`
+  // pill class either way (Task 4's own antagonist correction: `font:
+  // inherit`/`cursor: pointer` ADDED, never a reset), so the two usages
+  // must look identical, not merely both clear 44px.
+  test("Log it is >=44x44, sharing the phone-timer row's own pill style", async ({
+    page,
+  }) => {
+    const logIt = page.getByRole("button", { name: "Log it" });
+    const box = (await logIt.boundingBox())!;
+    expect(box.width).toBeGreaterThanOrEqual(44);
+    expect(box.height).toBeGreaterThanOrEqual(44);
+    const styles = await logIt.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return {
+        background: s.backgroundColor,
+        borderColor: s.borderColor,
+        color: s.color,
+        cursor: s.cursor,
+      };
+    });
+    expect(styles.background).toBe("rgb(255, 253, 247)"); // --surface
+    expect(styles.borderColor).toBe("rgb(27, 26, 23)"); // --ink
+    expect(styles.color).toBe("rgb(27, 26, 23)"); // --ink
+    expect(styles.cursor).toBe("pointer");
+  });
+
+  // Arming swaps the ROW's CONTENTS, not its layout — the same contract
+  // the phone-timer row's own identical test proves, mirrored here for the
+  // twin's own copy ("interrupted connected session" naming, the discard
+  // question naming the run's title) and its own distinctly-named ✕.
+  test("arming swaps the row's contents in place — border to accent, text to the discard question, ✕ to a solid 'Tap again' — without moving the row", async ({
+    page,
+  }) => {
+    const row = page.locator(".today-unlogged-line");
+    const boxBefore = (await row.boundingBox())!;
+
+    await page
+      .getByRole("button", {
+        name: "Discard connected session without logging",
+      })
+      .click();
+    await page.mouse.move(0, 0);
+
+    await expect(row).toHaveClass(/today-unlogged-line-armed/);
+    const rowBorderColor = await row.evaluate(
+      (el) => getComputedStyle(el).borderColor,
+    );
+    expect(rowBorderColor).toBe("rgb(181, 52, 31)"); // --accent
+    await expect(
+      page.getByText("Discard Hoarfrost without logging?"),
+    ).toBeVisible();
+    const tapAgain = page.getByRole("button", { name: "Tap again" });
+    const tapAgainStyles = await tapAgain.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { background: s.backgroundColor, color: s.color };
+    });
+    expect(tapAgainStyles.background).toBe("rgb(181, 52, 31)"); // --accent
+    expect(tapAgainStyles.color).toBe("rgb(255, 253, 247)"); // --on-color
+    // "Log it" is gone while armed — replaced, not merely joined.
+    await expect(page.getByRole("button", { name: "Log it" })).toHaveCount(0);
+
+    const boxAfter = (await row.boundingBox())!;
+    expect(Math.round(boxAfter.y)).toBe(Math.round(boxBefore.y));
+    expect(Math.round(boxAfter.height)).toBe(Math.round(boxBefore.height));
+  });
+
+  // arm -> tap -> gone: the row disappears in place with no navigation,
+  // and clears ONLY the monitor record — `clearMonitorRun()`, never
+  // `useStagedDiscard().fire()` (the phone-timer row's own body, which
+  // would clear the WRONG records for a `MonitorRun`).
+  test("a second press while armed fires the discard — the row disappears in place, no navigation, and clears only the monitor record", async ({
+    page,
+  }) => {
+    await page
+      .getByRole("button", {
+        name: "Discard connected session without logging",
+      })
+      .click();
+    await page.getByRole("button", { name: "Tap again" }).click();
+
+    await expect(page.getByText(/interrupted connected session/i)).toHaveCount(
+      0,
+    );
+    await expect(page).toHaveURL(/\/today$/);
+    await expect(page.getByRole("heading", { name: "Today" })).toBeVisible();
+
+    const runAfter = await page.evaluate(() =>
+      localStorage.getItem("ergomatic.monitorRun"),
+    );
+    expect(runAfter).toBeNull();
   });
 });
 

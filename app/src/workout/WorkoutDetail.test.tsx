@@ -1747,7 +1747,7 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
       expect(loadMonitorRun()).toBeNull();
     });
 
-    it("a LIVE MonitorRun (the erg is mid-piece) stages the 'in progress' sentence instead", async () => {
+    it("a LIVE-looking MonitorRun (completedAt: null) still stages the unlogged sentence: any MonitorRun at this door is dead (F6 spec 2b, exit criterion 5)", async () => {
       mockHooks(BASELINES, [PERSONAL_WORKOUT]);
       saveMonitorRun(monitorRunFor(null));
       await renderDetail("/library/w3");
@@ -1755,8 +1755,13 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
       await userEvent.click(screen.getByRole("button", { name: "Connect" }));
 
       expect(
-        screen.getByText("A session is in progress. Replace it?"),
+        screen.getByText(
+          "You have an unlogged session. Connecting discards it.",
+        ),
       ).toBeInTheDocument();
+      expect(
+        screen.queryByText("A session is in progress. Replace it?"),
+      ).not.toBeInTheDocument();
     });
   });
 });

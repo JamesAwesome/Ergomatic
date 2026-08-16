@@ -1777,7 +1777,15 @@ button:disabled {
    is the row's OWN L2-geometry control — ink-bordered, surface-filled,
    44px (the mockup's own literal cell, not this app's full-width 52px
    `.button-l2` — this row's controls are inline pills, not stack blocks) —
-   not the bare accent-colored text link this task's first pass shipped. */
+   not the bare accent-colored text link this task's first pass shipped.
+   F6 spec 2b, Task 4: `UnloggedMonitorRow`'s own "Log it" is a `<button>`
+   (it stamps the record before navigating, unlike UnloggedRow's bare
+   `<Link>`), sharing this exact class — `font: inherit`/`cursor: pointer`
+   are ADDED, never a `background: none`/`border: none` reset (the
+   antagonist's own correction on this task's brief): a `<button>` element
+   does not inherit the page font the way an `<a>` does, and needs an
+   explicit pointer cursor an anchor gets for free, but the ink-bordered,
+   surface-filled pill look itself is exactly what both usages want. */
 .today-unlogged-link {
   display: inline-flex;
   align-items: center;
@@ -1789,8 +1797,10 @@ button:disabled {
   border: 1px solid var(--ink);
   border-radius: var(--radius);
   color: var(--ink);
+  font: inherit;
   font-weight: 600;
   text-decoration: none;
+  cursor: pointer;
 }
 
 .today-unlogged-link:hover {
