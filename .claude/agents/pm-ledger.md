@@ -403,3 +403,33 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   one** (HEAD `25614f4` = the whole-branch review's upper bound). Worth naming
   as the standard: the final review's diff range should END at the PR tip, and
   that is a two-command check.
+
+## Final-PR gate, 2026-08-16 (Phase CR2 spec 2b, PR #105)
+
+- **"Green CI is the floor" includes checking that CI EXISTS at the gate.** #105
+  arrived at its gate `mergeable: CONFLICTING` with an EMPTY check rollup — a
+  sibling PR (#104) had merged one minute after this branch's closing commit.
+  Nothing in the branch was wrong; the gate would still have waved through a
+  merge with no CI run against real main. Run `gh pr view --json
+  mergeable,statusCheckRollup` before reading anything else.
+
+- **The propose-don't-write ledger rule has a predictable collision cost:** two
+  concurrent PRs each carrying a proposed ledger entry conflict in the ledger
+  file itself (#104 and #105 both appended to `antagonist-ledger.md`; product
+  code was disjoint). The conflict is always resolve-keep-both, and it is not a
+  signal about the code — but it will recur whenever two specs are in flight,
+  and it silently suppresses CI on whichever PR merges second.
+
+- **A "no wall-clock anywhere" criterion is checked at the CONSUMER, with the
+  trap in the assertion.** Criterion 5's strongest evidence was not the new
+  function but the e2e that seeds a day-old interrupted record and asserts the
+  header reads the actuals-derived 11 MIN against a ~1445-minute wall-clock
+  trap. A criterion phrased as an absence ("no wall-clock") is only falsifiable
+  when a test constructs the input where the forbidden path would visibly
+  differ — demand that shape, not a unit test on the replacement.
+
+- **Un-released stack count at this gate: six** (#99 error-direction flip,
+  #100 recorder, #101 stack fix, #103 docs, #102 axes, #104 rest-keying);
+  2b makes seven. Spec 3 is the last gate before the phase build that carries
+  all of it — its walk list is now the phase's entire canary and already owes
+  four items (keystone, END finals, F6 reload check, plus its own).
