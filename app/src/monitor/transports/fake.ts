@@ -198,12 +198,12 @@ export interface FakeStatusEvent {
  *  `splitIntervalDistanceMeters` — what `actual` is built from,
  *  `pm5/parse.ts`'s own `toIntervalActual`) AND a top-level, SESSION-
  *  cumulative `elapsedSeconds`/`distanceMeters` field on the very same
- *  characteristic (interface-notes.md §10). The driver's
- *  `computeRemainingForFrame` roots its next-interval checkpoint in the
- *  cumulative pair at the moment of the boundary — conflating the two
- *  (an earlier version of this file sent the per-interval value for BOTH)
- *  makes every interval after the first compute a wrong `intervalRemaining`
- *  the moment the session isn't just "one interval starting at zero". */
+ *  characteristic (interface-notes.md §10). The driver no longer roots any
+ *  checkpoint in either pair (CR2 spec 2a Task 6 deleted the subtraction);
+ *  this fake still models BOTH fields honestly — `wireLastSplit` carries the
+ *  measured lag-one-boundary semantics — because a fake that conflates the
+ *  two is exactly how the deleted mechanism survived a year (an earlier
+ *  version sent the per-interval value for BOTH). */
 export interface FakeBoundaryEvent {
   atMs: number;
   kind: "boundary";

@@ -1799,7 +1799,7 @@ PR #101's stack-reap fix); F6 moved to spec 2 by ruling, then split again.
 **Spec 2 "state axes" (items 3 + 1 + F6) is now two PRs** (James's ruling,
 design spec §4): **spec 2a** — axes, mirror surface, pause state, driver
 lifecycle, the interval clock fix, the terminal path, the suspicion verdict
-— is IMPLEMENTED, PR pending review (not yet opened); **spec 2b** — F6
+— is IMPLEMENTED, **PR #102 open, in review**; **spec 2b** — F6
 alone, the one piece carrying a stored-shape field (`endedBy`) and a
 destructive action — is next, sequenced after 2a. The reducer this spec
 once proposed is DEFERRED to its own spec. Spec 3 "redesign" (items 2 + 4,

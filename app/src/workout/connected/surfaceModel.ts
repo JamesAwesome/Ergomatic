@@ -781,9 +781,10 @@ function measuredWorkSeconds(
  * `elapsedSeconds`/`distanceMeters` ARE per-interval (walk 4,
  * interface-notes.md §18) but span the interval's work AND its trailing
  * rest as one count, answering a different question than "meters accrued
- * rowing this interval". `intervalAccrued` avoids both traps by reading the
- * SAME 0x0033 per-interval checkpoint `intervalRemaining` already trusts,
- * for the complement dimension — see `driver.ts`'s `computeAccruedForFrame`.
+ * rowing this interval". `intervalAccrued` reads 0x0031's own per-interval
+ * pair directly (CR2 spec 2a Task 6 — the old 0x0033 checkpoint subtraction
+ * was deleted after the checkpoint was measured lagging one boundary); see
+ * `driver.ts`'s `computeAccruedForFrame`.
  * Same reasoning still applies, unrelated field, to task 6's own
  * `TOTAL`-not-`THIS INTERVAL` row (panes A/B's meters card).
  */

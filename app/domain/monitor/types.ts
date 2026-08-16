@@ -114,11 +114,12 @@ export interface MonitorFrame {
   //   one accrues time. Same absence rule as `intervalRemaining`: `null`
   //   under the identical conditions (no program armed, or no interval
   //   current) — the two fields are always both-null or both-set together,
-  //   since `src/monitor/driver.ts` computes them from the same guard and
-  //   the same per-interval baseline. `elapsedSeconds`/`distanceMeters` on
-  //   this frame are the wrong inputs for this (see the sibling field's own
-  //   caveat and `driver.ts`'s `computeAccruedForFrame`); this reads the
-  //   same 0x0033 checkpoint `intervalRemaining` already trusts.
+  //   since `src/monitor/driver.ts` computes them from the same guard.
+  //   `elapsedSeconds`/`distanceMeters` on this frame ARE the inputs (CR2
+  //   spec 2a Task 6): 0x0031's pair is per-interval on the wire, and the
+  //   old 0x0033 Last Split checkpoint subtraction was DELETED after the
+  //   checkpoint was measured to read 0 through interval index 1 and to
+  //   lag one boundary after (interface-notes.md §20 items 17/24).
   state: "idle" | "armed" | "rowing" | "resting" | "finished" | "terminated";
   // ^ maps the PM's WORKOUTSTATE honestly: "armed" = WAITTOBEGIN (the
   //   PM starts on the first stroke — there is NO start command;
