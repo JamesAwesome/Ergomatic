@@ -726,3 +726,98 @@ toolkit, not a history.
   One residual disclosed rather than fixed: the bar's active-vs-upcoming
   segment contrast is 2.61:1, under WCAG 1.4.11's 3:1, defensible only
   because the same state is in the status text.
+
+## Task-brief pass, 2026-08-16 (Phase CR2 spec 3, six briefs)
+
+- **"Consumes X, Y, Z — the same values `TimerRuler` receives today from the
+  model."** Three claims, three wrong: `boundaries` is `IntervalBoundaries`
+  (an object, `surfaceModel.ts:315` / `intervalBoundaries.ts:47-49`), not
+  `number[]`; TimerRuler receives no elapsed at all (`PaneLive.tsx:234-238`
+  passes `totalLeftSeconds`/`totalSeconds`/`boundaries`); and `SurfaceModel`
+  has no numeric elapsed field anywhere — only `elapsedDisplay: string`. The
+  bar's only route to elapsed was `totalSeconds - totalLeftSeconds`, and
+  `totalLeftSeconds` is the field the same spec's fate table deletes.
+  **Technique: a props claim is settled by reading the CALL SITE's prop list
+  and the interface's field types, never by the sentence "the same values X
+  gets today" — that sentence is a memory of a concept, and a component that
+  takes `remaining` does not take `elapsed`.**
+
+- **A brief said "rewrite `PaneLive.test.tsx`" and "delete `PagerRail.tsx`
+  (+ its test file)". Neither test file exists.** PaneLive's assertions live
+  in a 1619-line `ConnectedSurface.test.tsx` and a 5593-line
+  `design.spec.ts`, neither in the brief's Files list — so "rewrite one
+  colocated file" was really "create one, then do surgery on two big ones".
+  **Technique: `ls` every test path a brief names before believing its
+  SCALE. A colocated `.test.tsx` is a convention here, not a guarantee, and
+  the brief's estimate of a task's size is carried entirely by that
+  assumption.**
+
+- **"Copy the existing rail triple-tap tests — they exist."** They did — in
+  `connected/ConnectionLogSheet.test.tsx:207-300`, eight of them through a
+  `pagerTarget()` helper, in a file the brief never listed. The named file
+  had zero (its one `triple` hit was an unrelated CSS class).
+  **Technique: locate existing tests by grepping their ASSERTION HELPER or
+  the selector string, not the feature word — behaviour tests in this repo
+  routinely live in the file that owns the CONSEQUENCE (the sheet), not the
+  one that owns the GESTURE (the surface).**
+
+- **The fate table that calls itself "THE inventory" omitted the field that
+  breaks.** `thenNext` appears in no row, while `upNext` gets an armed
+  branch — but `thenNextTextAt` is `phases[index + 2]` (`Timer.tsx:290-298`),
+  so shifting only `upNext` makes the armed band read
+  `WORK 10:00 · then <the interval after the rest>`, skipping the REST the
+  spec's own example names. The exit criterion greps the table, so the gap
+  is self-concealing. **Technique: for a paired field (`upNext`/`thenNext`,
+  `label`/`value`, `start`/`end`), check the SIBLING's producer whenever one
+  of the pair changes index arithmetic. Inventories are written from the
+  field the author was thinking about; pairs are where the other one hides.**
+
+- **A deletion assigned to "the task that removes its render site" is wrong
+  when the field has TWO render sites in two tasks.** `intervalClockValue`
+  dies in Task 4 by the brief, but `PaneGrid.tsx:126` still reads it and
+  `PaneGrid.tsx` is not in Task 4's files — the spec's own table said "PaneLive
+  cell + PaneGrid headline" and the brief compressed it to one.
+  **Technique: for every field a wave deletes, grep `model.<field>` across
+  the non-test tree and check the SITE COUNT against the task that owns the
+  deletion. One field, two tasks, is a typecheck failure the plan cannot see.**
+
+- **A "regenerate the fixtures at the end" step can be a gate at the
+  BEGINNING.** The ten frozen `e2e/fixtures/connected-*.html` are written by
+  `ConnectedSurface.screens.test.tsx` via `toMatchFileSnapshot`, in the
+  CLIENT project — so the first task that changes the DOM fails that test,
+  not the last one. **Technique: before believing a plan's ordering for a
+  captured artifact, find the writer. `toMatchFileSnapshot` turns a
+  documentation step into a per-task green-suite obligation.**
+
+- **"DEVIATIONS row N" is a LINE NUMBER, and the citations have already
+  rotted.** The file says so itself (`DEVIATIONS.md:112-115`: add rows only at
+  the bottom, citations rot on any insertion above) — and `index.css:7042`
+  and `ConnectedSurface.test.tsx:482` both cite "row 4", which is prose, not
+  a row. **Technique: when a brief says "reconcile the DEVIATIONS row",
+  check the file's own citation convention first and find the row by
+  CONTENT. Reconciling by deleting a row silently rots every citation below
+  it, in CSS comments and test names where no compiler looks.**
+
+- **A brief file is not the plan.** All six briefs were verbatim slices of
+  the plan's task sections and carried none of its header — so the VALUE
+  AUTHORITY ruling ("the spec's tables outrank any number this plan states")
+  and the Global Constraints reached nobody who would implement against
+  them. **Technique: when a wave's briefs are generated by slicing a plan,
+  diff a brief against the plan and ask what the SLICE DROPPED. The header
+  is where the rulings live and the slice never includes it.**
+
+- **Attacked and not broken:** every line anchor in Task 1 (`PANES`/`PaneId`
+  `PagerRail.tsx:28,30`; `useTripleTap` `:166`; `logOpener` `:225`;
+  `handleRailPress` `:263-267`; `SWIPE_THRESHOLD_PX` `:93`; `paneAfterSwipe`
+  `:99`); Task 5's "both row-height pins intact" (`index.css:6607`/`:7864`,
+  `screenshots.spec.ts:2550`/`:2723`); Task 6's "regenerate by the existing
+  route" (the route is real); and — the one I most expected to break —
+  "extend `tokens.test.ts`" for a family scoped to `.connected-surface`.
+  That file reads BOTH stylesheets as source text and locates blocks with a
+  selector-agnostic scanner (`:66,69` + `scopedRuleBodies`), and
+  `.connected-surface` has exactly one base and one landscape block, so the
+  `:root` framing is convention, not capability, and the `toHaveLength(1)`
+  idiom transfers unchanged. **Technique for the near-miss: before calling a
+  pin file "structurally unable to see X", read its HELPER's signature — a
+  test named for `:root` may be a general CSS-source scanner wearing one
+  selector.**

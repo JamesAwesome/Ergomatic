@@ -304,8 +304,9 @@ this merges, per the PM gate.
    `docs/monitor/sessions/walk-phase-cr2-exit/RUNSHEET.md` EXISTS in this PR
    and carries the re-pointed session-meters row, the 8-item on-erg list,
    and the already-owed items (keystone re-run, rest-bearing row, END
-   finals, F6 reload check); DEVIATIONS.md's grid-row and unlogged-line rows
-   are reconciled.
+   finals, F6 reload check); DEVIATIONS.md's affected rows are reconciled
+   in place (the antagonist's brief-pass list — the "unlogged-line" item
+   this criterion once named was 2b's edit, already landed in PR #105).
 5. Scoped gates green: lint, typecheck, full test, e2e, screenshots
    (changed, deliberately), per-file coverage inspected.
 6. The phase-exit walk (with this spec's added items) is the release gate —
