@@ -1063,7 +1063,9 @@ export function createPm5Driver(
   let lastRawFrameIntervalIndex: number | null = null;
   let lastLoggedFrameState: MonitorFrame["state"] | null = null;
   /** The last raw 0x0031 payload, byte-for-byte — see the 0x0031 handler's
-   *  own comment; read only by the terminal-raw entry. */
+   *  own comment; read by the terminal-raw entry and, since Task 8, by
+   *  `suspicious-terminal` too (the same bytes, deliberately — see that
+   *  entry's own comment). */
   let lastRaw0x0031: Uint8Array | null = null;
   /** THE SESSION REGISTER MAP (CR2 spec 1, replacing walk 4's fold).
    *
@@ -1191,6 +1193,18 @@ export function createPm5Driver(
    *  exists to avoid, caught once already for `"frame"`/state (comment
    *  above `lastLoggedFrameState`) and repeated here until I1. */
   let lastLoggedTwd: number | null = null;
+  /** THE SUSPICION VERDICT's own half of "in hand at the terminal tick"
+   *  (Task 8, log-only, fail-open). Set unconditionally at the very top of
+   *  `noteSummary`, before that gate's decode/`run`/`graceIsOpen` checks —
+   *  never read `run.summaryInGrace` for this, which is `null` on exactly
+   *  the shape this flag exists to catch (walk 2026-08-15, re-walk row 1 /
+   *  session-c: the 0x0039 arrived BEFORE the terminal frame, so no grace
+   *  was open yet, `noteSummary`'s `!graceIsOpen` branch logged
+   *  `out-of-window` and stored nothing — a `summaryInGrace`-based flag
+   *  would read `null` there and convict a run that is not suspicious at
+   *  all). "0x0039 seen" is a fact about the NOTIFICATION arriving, not
+   *  about whether the gate accepted it. */
+  let summarySeen = false;
   const seen = { general: false, as1: false, as2: false };
   /**
    * D4 (Task 1's hardware verdict, interface-notes.md §18 #3): the
@@ -2065,17 +2079,53 @@ export function createPm5Driver(
     // finished frame — see `lastRaw0x0031`'s declaration comment). One
     // entry per session end, so the flood argument that keeps 0x0031 out
     // of the raw-hex notify branch does not apply here.
-    log.record(
-      "terminal-raw",
+    const terminalRawDetail =
       lastRaw0x0031 === null
         ? `state=${frame.state} 0x0031=never seen`
-        : `state=${frame.state} 0x0031=${toHex(lastRaw0x0031)}`,
-    );
+        : `state=${frame.state} 0x0031=${toHex(lastRaw0x0031)}`;
+    log.record("terminal-raw", terminalRawDetail);
     // The TWD verdict runs HERE, not at 0x0039-time — the machine settles
     // its own total at the finish (re-walk 2026-08-15, seq 36's false
     // "differ by 183.8m" against a TWD one tick from settling).
     recordTwdVerdict(activeRun);
+    // THE SUSPICION VERDICT (Task 8, spec §2, PM/antagonist-corrected) —
+    // LOG-ONLY and FAIL-OPEN: nothing below this block, and nothing this
+    // block itself does, changes any close behaviour — no field on `run`
+    // is touched, no event is altered, `workoutComplete`/`terminated` still
+    // emit exactly as before. `terminated` is NEVER suspicious (a
+    // mid-terminate boundary carries no stable identity, CSAFE-DEF
+    // footnote 12 via interface-notes.md §19.8 — a short terminate is the
+    // ORDINARY shape for that ending, not evidence of a kill), so this
+    // gates on `frame.state === "finished"` and does not run at all for
+    // the other branch below.
+    //
+    // A `finished` is UNSUSPICIOUS iff EITHER a 0x0039 was seen for this
+    // run (`summarySeen`, set unconditionally at the top of `noteSummary` —
+    // deliberately NOT `run.summaryInGrace`, which is `null` on exactly
+    // the shape this OR exists to catch: session-c, walk 2026-08-15, the
+    // 0x0039 arrived BEFORE the terminal frame and was discarded
+    // `out-of-window` because no grace was open yet) OR this run has
+    // recorded at least `programmed − 1` of its own intervals — one short
+    // is the ordinary "final boundary lands one notification after the
+    // terminal frame" shape the finish grace right below already exists
+    // for, not a kill. All four committed rings clear this bar (session-a
+    // 2 of 3, session-b 1 of 2 — both exactly N−1; session-c by the
+    // summary half; session-d 2 of 2) — see `sessionTotals.test.ts`'s own
+    // "suspicion verdict" describe block, which also carries the one shape
+    // that DOES trip it (mid-program, no summary, well short of N−1 — the
+    // afternoon walk's session-killer signature, hand-built there since
+    // that ring itself was never committed).
+    //
+    // Admitted residual, not silently accepted: a 1-interval program can
+    // never trip this (`programmed − 1 === 0`, and an actuals count is
+    // never negative, so the OR's right side is always already satisfied).
     if (frame.state === "finished") {
+      const programmedCount = activeRun!.program.intervals.length;
+      const unsuspicious =
+        summarySeen || activeRun!.recordedActuals.size >= programmedCount - 1;
+      if (!unsuspicious) {
+        log.record("suspicious-terminal", terminalRawDetail);
+      }
       // THE FINISH GRACE opens here and nowhere else (walk 5, re-bounded on
       // walk day 3 — `activeRun.finishGraceUntil`'s own doc comment carries
       // the capture and `FINISH_GRACE_MS` the measurement).
@@ -2212,8 +2262,17 @@ export function createPm5Driver(
    * here would displace a split that was merely late, which is the exact
    * loss R1 exists to prevent (the split carries per-interval averages
    * that no whole-workout summary can reconstruct).
+   *
+   * `summarySeen` (Task 8) is set UNCONDITIONALLY on the very first line,
+   * before the decode below and before any of the three gates that follow
+   * it — deliberately not derived from anything this function decides.
+   * "0x0039 arrived" and "0x0039's evidence was accepted" are different
+   * facts (session-c, walk 2026-08-15: the notification arrived and was
+   * discarded `out-of-window` in the same tick, because no grace was open
+   * yet) and only the first one is what the suspicion verdict needs.
    */
   function noteSummary(bytes: Uint8Array): void {
+    summarySeen = true;
     const summary = parseEndOfWorkoutSummary(bytes);
     if (summary === null) {
       // A RECEIPT-LEVEL note, under its own kind, NOT a `summary-reconciled`
@@ -4170,6 +4229,10 @@ export function createPm5Driver(
         // entry is judged against nothing carried from the outgoing run,
         // not against a bucket that workout happened to leave `twd` in.
         lastLoggedTwd = null;
+        // `summarySeen`'s own comment (Task 8): whether a 0x0039 arrived is
+        // a fact about THIS run, and a re-arm's own summary has not arrived
+        // yet just because the outgoing run's did.
+        summarySeen = false;
         // A reconcile deadline still standing belongs to the run being
         // replaced, and is cancelled here for the same reason a pending
         // boundary half is dropped above (fast-follow Task 2): both are
