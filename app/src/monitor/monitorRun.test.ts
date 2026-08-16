@@ -803,9 +803,23 @@ describe("connectGuardStage: the Connect door's lock", () => {
     expect(connectGuardStage()).toBe("unlogged");
   });
 
-  it("a live MonitorRun (no SessionRun on record): 'in-progress' — the erg is mid-piece right now", () => {
+  it("a live MonitorRun (no SessionRun on record): 'unlogged' — dead-run truth: any MonitorRun visible at Connect's door is dead (the connected session lives on WorkoutDetail's surface, and reload/navigation tears it down), so completedAt === null here means interrupted, not running (F6 spec 2b, exit criterion 5)", () => {
     saveMonitorRun(freshMonitorRun());
-    expect(connectGuardStage()).toBe("in-progress");
+    expect(connectGuardStage()).toBe("unlogged");
+  });
+
+  // Pin, not a red-first case (antagonist correction #3): completedAt !==
+  // null already mapped to "unlogged" before this task. Recorded anyway
+  // because `completeInterruptedRun`'s stamp is the shape Today's own
+  // "end this interrupted session" door will actually produce, and this
+  // guard must agree with it.
+  it("a MonitorRun stamped via completeInterruptedRun: 'unlogged' too", () => {
+    const stamped = completeInterruptedRun(
+      freshMonitorRun(),
+      new Date(finishedAt),
+    );
+    saveMonitorRun(stamped);
+    expect(connectGuardStage()).toBe("unlogged");
   });
 
   it("a SessionRun on record wins over a MonitorRun — same descending-severity order handleStart already uses", () => {

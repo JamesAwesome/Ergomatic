@@ -613,8 +613,14 @@ export function anyLiveSession(): "none" | "phone" | "monitor" {
 }
 
 /** What a Connect press has to warn about before it is allowed through, or
- *  `null` when nothing is at risk. Mirrors `WorkoutDetail`'s own
- *  `replaceStage` union 1:1 so both doors speak the same two sentences. */
+ *  `null` when nothing is at risk. Shares its shape with `WorkoutDetail`'s
+ *  own `replaceStage` union, but the two doors no longer agree on when
+ *  `"in-progress"` applies: Start's door can genuinely have a live
+ *  `SessionRun` (a phone timer running in the background), while any
+ *  MonitorRun the Connect door can see is always dead (F6 spec 2b, exit
+ *  criterion 5 — see `connectGuardStage`'s own doc comment below). The
+ *  `SessionRun` case here still uses `"in-progress"`; only the `MonitorRun`
+ *  case never does. */
 export type ConnectGuardStage = "unlogged" | "in-progress" | null;
 
 /**
@@ -673,7 +679,22 @@ export type ConnectGuardStage = "unlogged" | "in-progress" | null;
  * exactly ONCE, not twice, and the `SessionRun`'s own sentence wins ties
  * the same way `handleStart`'s ordering already resolves them. No new copy:
  * both sentences already exist and are shared with the `SessionRun` case
- * above. */
+ * above.
+ *
+ * **F6 spec 2b, Task 2 — the `MonitorRun` check no longer branches on
+ * `completedAt`.** It used to mirror the `SessionRun` check above,
+ * staging `"in-progress"` for a `completedAt === null` record on the
+ * theory that the erg was mid-piece. That theory was never true at this
+ * door: a connected session's own screen is WorkoutDetail, and both a
+ * reload and a navigation away tear the `useMonitorSession` hook down
+ * without ever touching the record — so any `MonitorRun` still visible
+ * here, live-looking or not, is a run nothing is driving anymore. Exit
+ * criterion 5 names the defect this produced ("Connect never again asks
+ * 'Replace it?' about a dead run"): every `MonitorRun` this function can
+ * see now stages `"unlogged"`, matching the finished case it already used
+ * to reach. The `SessionRun` branch above is untouched — a phone timer
+ * genuinely does keep running in the background across reload/navigation,
+ * so `"in-progress"` stays true there. */
 export function connectGuardStage(): ConnectGuardStage {
   const run = loadRun();
   if (run !== null) {
@@ -681,7 +702,11 @@ export function connectGuardStage(): ConnectGuardStage {
   }
   const monitorRun = loadMonitorRun();
   if (monitorRun !== null) {
-    return monitorRun.completedAt === null ? "in-progress" : "unlogged";
+    // A MonitorRun visible at a Connect door is dead: the connected
+    // session lives on WorkoutDetail's surface and reload/navigation
+    // tears it down. "In progress" would assert machine state we do
+    // not have (spec 2b, exit criterion 5).
+    return "unlogged";
   }
   return null;
 }
