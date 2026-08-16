@@ -1801,7 +1801,23 @@ design spec §4): **spec 2a** — axes, mirror surface, pause state, driver
 lifecycle, the interval clock fix, the terminal path, the suspicion verdict
 — MERGED (PR #102, 2026-08-16, `d7271a3`); **spec 2b** — F6
 alone, the one piece carrying a stored-shape field (`endedBy`) and a
-destructive action — is next, sequenced after 2a. **A fourth SDD cycle
+destructive action — MERGED (PR #105, 2026-08-16, `beaef4f`). **Spec 3
+"redesign" is IN FLIGHT** (branch `cr2-redesign`; spec
+`docs/superpowers/specs/2026-08-16-connected-redesign-design.md`,
+approved 2026-08-16 with the design-gate rulings: tester colors and the
+32px row ruling govern over the handoff's stale values; CAL/ZONE, the
+pane slide, and the swipe handler are all OUT). **Queued follow-up, no
+phase owner yet — "session calories, folded":** the PM design gate
+falsified the handoff's calorie premise by decoding both walk-2026-08-16
+recordings — 0x0033's `totalCalories` is INTERVAL-scoped (resets to 0 at
+every boundary; keystone ends reading 15 for a ~30-cal session) and the
+0x0039 summary carries no calorie field, so an honest session CAL needs
+the same register-fold discipline spec 1 built for distance, plus an
+honest ramping fake (today's emits a constant 0 — nothing can go red) and
+a walk row photographing the PM5's calorie display beside the phone. ZONE
+rides behind it, needing a strap plus a max-HR source the app does not
+have. Neither is CR2's; schedule when a phase wants them.
+**A fourth SDD cycle
 rode the 2026-08-16 walk's own finding: the rest-keying fix (PR #104,
 spec `docs/superpowers/specs/2026-08-16-rest-keying-fix-design.md`) —
 the stale-count rest clamp plus both walk recordings as permanent CI
