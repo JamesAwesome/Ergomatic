@@ -9,7 +9,13 @@
 //   `createPm5Driver` has written into, so the lines on screen are lines
 //   the driver actually records — not three tidy strings this file made up.
 
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -463,5 +469,89 @@ describe("COPY LOG (handoff §5: level 3, it acts inside the sheet)", () => {
     expect(
       screen.getByRole("button", { name: "COPY FAILED" }),
     ).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Download recording (Task 6): dev-only, gated on window.__pm5Recording__
+// ---------------------------------------------------------------------------
+
+describe("Download recording (dev-only capture control)", () => {
+  afterEach(() => {
+    delete (window as { __pm5Recording__?: unknown }).__pm5Recording__;
+  });
+
+  it("is absent when no recording tap is active — production and the e2e fake arm both leave the global unset", async () => {
+    renderSurface({ exportLog: () => "[]" });
+    await tap("Grid", 3);
+    expect(
+      screen.queryByRole("button", { name: "Download recording" }),
+    ).toBeNull();
+  });
+
+  it("downloads the composed recording — header carries the program prop, byte for byte via parseRecording (B4)", async () => {
+    window.__pm5Recording__ = {
+      lines: () => ['{"seq":0,"t":0,"kind":"connect","id":"PM5 abc"}'],
+      eventCount: () => 1,
+    };
+    const createObjectURL = vi
+      .spyOn(URL, "createObjectURL")
+      .mockReturnValue("blob:mock-recording");
+    const revokeObjectURL = vi
+      .spyOn(URL, "revokeObjectURL")
+      .mockImplementation(() => undefined);
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => undefined);
+
+    renderSurface({ exportLog: () => "[]" });
+    await tap("Grid", 3);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Download recording" }),
+    );
+
+    // The handler is async (a dynamic import, then the Blob/gzip work) —
+    // userEvent.click does not await it, so the assertions wait for the
+    // anchor's own click, the last thing the handler does.
+    await waitFor(() => expect(click).toHaveBeenCalledTimes(1));
+
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
+    const blob = createObjectURL.mock.calls[0]![0] as Blob;
+    const text = await blob.text();
+    const { parseRecording } =
+      await import("../../monitor/transports/recording");
+    const parsed = parseRecording(text);
+    expect(parsed.header.app).toBe("dev");
+    expect(parsed.header.transport).toBe("web");
+    // B4: the header carries the SAME program object the surface compiled,
+    // not a re-derived or partial one.
+    expect(parsed.header.program).toStrictEqual(FIXTURE.program);
+    expect(parsed.events).toStrictEqual([
+      { seq: 0, t: 0, kind: "connect", id: "PM5 abc" },
+    ]);
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:mock-recording");
+  });
+
+  it("is a 44px hit target sharing the sheet's existing button class", async () => {
+    window.__pm5Recording__ = { lines: () => [], eventCount: () => 0 };
+    renderSurface({ exportLog: () => "[]" });
+    await tap("Grid", 3);
+    expect(
+      screen.getByRole("button", { name: "Download recording" }),
+    ).toHaveClass("button-l3");
+  });
+
+  it("guards against the global disappearing between render and click — a stale click composes nothing", async () => {
+    window.__pm5Recording__ = { lines: () => [], eventCount: () => 0 };
+    const createObjectURL = vi.spyOn(URL, "createObjectURL");
+    renderSurface({ exportLog: () => "[]" });
+    await tap("Grid", 3);
+    const button = screen.getByRole("button", { name: "Download recording" });
+    // The button stays mounted (this sheet never re-renders after open —
+    // "a window, not a source") even if the global it was gated on at
+    // render time is gone by click time.
+    delete (window as { __pm5Recording__?: unknown }).__pm5Recording__;
+    await userEvent.click(button);
+    expect(createObjectURL).not.toHaveBeenCalled();
   });
 });
