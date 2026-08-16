@@ -48,6 +48,7 @@ import { buildRun, type EnginePhase } from "../session/engine";
 import type { LogSeed } from "../session/logDraft";
 import { ARM_TIMEOUT_MS } from "../session/useStagedDiscard";
 import { commentStrippedSource, type CssRule, cssRules } from "../test/cssView";
+import { buildSurfaceModel } from "./connected/surfaceModel";
 import { PANES } from "./connected/PagerRail";
 import ConnectedInterstitial from "./ConnectedInterstitial";
 import ConnectedSurface, {
@@ -57,6 +58,25 @@ import ConnectedSurface, {
   loadLastPane,
   paneAfterSwipe,
 } from "./ConnectedSurface";
+
+// A spy over the REAL implementation, not a stub (the same
+// `vi.importActual` idiom `ConnectedInterstitial.test.tsx` uses for
+// `useMonitorSession`) — every pane in this file still renders off a real
+// `SurfaceModel`, so nothing else in this suite has to change; the spy
+// exists purely so the tests below can read what `status` ConnectedSurface
+// actually PASSED, which is otherwise unobservable once `"armed"` and
+// `"live"` render identically (Task 3 owns the armed pane; task-2 review
+// finding: the ternary that picks `"armed"` had no test that could detect
+// its own deletion — self-mutation #5 in the task-2 report proved it,
+// 138/138 unaffected with the branch removed).
+vi.mock("./connected/surfaceModel", async () => {
+  const actual = await vi.importActual<
+    typeof import("./connected/surfaceModel")
+  >("./connected/surfaceModel");
+  return { ...actual, buildSurfaceModel: vi.fn(actual.buildSurfaceModel) };
+});
+
+const mockBuildSurfaceModel = vi.mocked(buildSurfaceModel);
 
 /** `index.css`'s path on disk. Plain string surgery on `import.meta.url`,
  *  not the global `URL` constructor: this project's jsdom environment
@@ -232,6 +252,42 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+});
+
+// ---------------------------------------------------------------------------
+// THE STATUS PRECEDENCE reaches buildSurfaceModel (connected-axes design
+// spec §1, task 2). CALLER-level, not model-level: `surfaceModel.test.ts`
+// already proves `buildSurfaceModel` renders correctly FOR a given status;
+// these two prove `ConnectedSurface` computes the RIGHT status from a
+// session in the first place — the ternary this component owns. Both cases
+// are otherwise unobservable through the DOM today: nothing renders
+// `"armed"` differently from `"live"` yet (Task 3's job), which is exactly
+// why the task-2 review found this gap — reading the spy's own call args is
+// the only way to catch a regression here before Task 3 gives it a pixel.
+// ---------------------------------------------------------------------------
+
+describe("the status precedence reaches buildSurfaceModel (task-2 review finding)", () => {
+  it('phase "ready" (numbers already requested) — an armed program with no session open — calls buildSurfaceModel with status "armed"', () => {
+    // `"ready"` reaching this component at all only happens once the rower
+    // has asked for the numbers (`ConnectedInterstitial.tsx`'s own phase
+    // gate) — this test renders `ConnectedSurface` directly with that
+    // phase, the same "hand it a session, it draws whatever it's given"
+    // strategy every other describe block in this file uses (see header).
+    renderSurface({ phase: "ready" });
+    expect(mockBuildSurfaceModel).toHaveBeenCalled();
+    const lastCall = mockBuildSurfaceModel.mock.calls.at(-1)!;
+    expect(lastCall[0].status).toBe("armed");
+  });
+
+  it('the freeze predicate having fired ("frozen") calls buildSurfaceModel with status "paused", even at phase "live"', () => {
+    // The mirror case, isolated from the armed branch on purpose: `"live"`
+    // with an open session never satisfies `session === "none"`, so this
+    // proves the SEPARATE `activity === "frozen"` arm of the same ternary,
+    // not a second path to the same result.
+    renderSurface({ phase: "live", frozen: true, runOpen: true });
+    const lastCall = mockBuildSurfaceModel.mock.calls.at(-1)!;
+    expect(lastCall[0].status).toBe("paused");
+  });
 });
 
 // ---------------------------------------------------------------------------
