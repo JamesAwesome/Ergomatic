@@ -2442,16 +2442,27 @@ const CONNECTED_STATES = [
  *  typography. */
 // CR2 spec 3 task 1 moved `ConnectionLine` out of `.connected-grid-headline`
 // into the shell's own header (`ConnectedSurface.tsx`), which is what moves
-// both figures below — re-measured against this worktree, not derived:
-// PORTRAIT gains the headline's own 14px it no longer spends stacking a
-// device row under a totals row (612 -> 626, one line now in both
-// orientations, `index.css`'s own `.connected-grid-headline` comment).
-// LANDSCAPE moves the other way, by 2px (276 -> 274) — a real, measured
-// consequence of the header row now sharing its track with
-// `.connected-control` (`index.css`'s own two-column landscape comment on
-// `.connected-surface`), not independently decomposed further than that.
+// PORTRAIT's own figure below — re-measured against this worktree, not
+// derived: the headline no longer spends 14px stacking a device row under
+// a totals row (612 -> 626, one line now in both orientations, `index
+// .css`'s own `.connected-grid-headline` comment).
+//
+// LANDSCAPE is DERIVED, not re-measured, and stays at the pre-task figure
+// (276) — this is the fix-round correction of a genuine defect this file
+// briefly carried (274, one round of this task): a first version of
+// `.connected-control` grew grid row 1 from 44px to 46px (a real `border`
+// on the pill added 2px OUTSIDE its content box, `index.css`'s own review
+// Important-2 comment on that rule has the fix and the measurement), which
+// shrank the scroller by exactly the 2px the row grew. `.connected-header`
+// and `.connected-control` are now both pinned to the SAME 44px this row
+// held before this task's own header restructure ever touched it (`index
+// .css`'s `grid-template-rows: 44px auto 1fr auto` — an explicit pin, not
+// an `auto` this task's own restructure made ambiguous), so the row's own
+// contribution to the scroller's budget is unchanged from pre-task-1 — the
+// two are the same number for the same reason, not a coincidence: nothing
+// else in this row's own height accounting moved.
 const PORTRAIT_GRID_SCROLLER_PX = 626;
-const LANDSCAPE_GRID_SCROLLER_PX = 274;
+const LANDSCAPE_GRID_SCROLLER_PX = 276;
 
 for (const name of CONNECTED_STATES) {
   test(name, async ({ page }) => {
@@ -2736,7 +2747,7 @@ for (const name of CONNECTED_STATES) {
       expect(m.rowHeight).toBe(32);
       expect(m.clientHeight).toBe(LANDSCAPE_GRID_SCROLLER_PX);
       // EXACT, not a floor, for the reason the portrait block sets out
-      // (test-integrity sweep, P2): `floor(274/32)` is 8, so the FLOOR was
+      // (test-integrity sweep, P2): `floor(276/32)` is 8, so the FLOOR was
       // implied by the two exact assertions above it. The exact count is
       // not — `rowHeight` samples only `children[0]`, so uneven later rows
       // fail here (5) with both heights still green. Measured 8, at an

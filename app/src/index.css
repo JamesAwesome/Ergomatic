@@ -7350,13 +7350,26 @@ section:not(.news-pinned) .news-row:last-of-type {
        leave one. `auto` sizes the control column to the control's own
        content — a small pill, not a fixed-width rail. */
     grid-template-columns: auto 1fr;
-    /* A fourth track, connected-revamp Task 6: the header (End) is now
-       always on screen, above the lost banner's own row. `auto` sizes it
-       to the button's own `min-height: 44px` plus the header's own top
-       padding — a fixed, state-independent height (the header renders
-       unconditionally), so this new row can never itself be the thing
-       that shifts the body below it. */
-    grid-template-rows: auto auto 1fr auto;
+    /* Row 1 is an EXPLICIT `44px`, not `auto` (fix round, review
+       Important-2). `auto` measured 45px in this worktree with both row
+       1 items (`.connected-header`, `.connected-control`) individually
+       resolving their own natural content height to 44px — End's
+       `min-height: 44px`, the control's own 44px halves — which is NOT a
+       sub-pixel rounding artefact this comment is guessing at: it is
+       `auto`-track sizing under the grid algorithm's default `align-
+       self: stretch` on `.connected-header` (the one row-1 item that
+       never got an explicit `align-self`, unlike `.connected-control`'s
+       own `align-self: center`) computing a hypothetical size that does
+       not collapse back to exactly 44 once BOTH items' track
+       contributions are reconciled. Rather than chase the exact
+       algorithm step further, this pins the number design spec §2A
+       already requires ("Header row | 44px") directly: End's 44px and
+       the control's 44px halves both fit it with zero slack, and the
+       row can never again silently grow past what the spec says it is.
+       A fixed, state-independent height either way — the header renders
+       unconditionally — so this row still can never be the thing that
+       shifts the body below it. */
+    grid-template-rows: 44px auto 1fr auto;
     /* No column-gap: row 1's own two tracks (control, header) already
        separate themselves with the header's own `gap` (`.connected-header`
        above); every other row spans both tracks, so a column-gap would
@@ -7391,13 +7404,28 @@ section:not(.news-pinned) .news-row:last-of-type {
        `padding-left` takes `var(--edge-inset)` — still the `max()` above,
        never simplified to a single-sided `env()`. `padding-right` takes
        the same term (symmetric, matching what the old gutter+content pair
-       already summed to). TOP moves to `.connected-header`'s own
-       `padding-top` instead of living here (below): only the header row
-       actually touches the notch's own vertical band, so only it needs to
-       pay for it — every row after it inherits nothing from this rule
-       that it did not already have. */
-    padding: 0 var(--edge-inset) env(safe-area-inset-bottom, 0px)
-      var(--edge-inset);
+       already summed to).
+
+       TOP STAYS HERE, NOT ON `.connected-header` (fix round, review
+       Important-1). A version of this rule tried moving the top inset to
+       `.connected-header`'s own `padding-top` instead — the reasoning
+       looked right ("only the header row touches the notch's vertical
+       band") but was wrong about WHICH ELEMENT is at risk: `.connected-
+       control` is a SIBLING grid item in the SAME row as `.connected-
+       header` (`.connected-surface`'s own two-track comment above), not a
+       DOM child of it, so `.connected-header`'s own padding never reached
+       it. Measured with `Emulation.setSafeAreaInsetsOverride({top: 20})`
+       at 844x390 under that version: End landed at y=20 (correct, inside
+       `.connected-header`'s padding), the control landed at y=9 h=46 —
+       11px of a 44px tap target sitting under the notch band, because
+       `align-self: center` centered the control across a row that grew
+       taller than 44px with nothing pushing the control's own top edge
+       down. Padding HERE protects every grid item the row contains,
+       uniformly, the same way it always did before this task's own
+       restructure — the fix is where the term lived pre-task-1, not a new
+       mechanism. */
+    padding: env(safe-area-inset-top, 0px) var(--edge-inset)
+      env(safe-area-inset-bottom, 0px) var(--edge-inset);
     height: 100dvh;
   }
 
@@ -7433,12 +7461,19 @@ section:not(.news-pinned) .news-row:last-of-type {
      for `.connected-control` (its own rule, below), column 2 for this
      element's own content. `justify-content: flex-end` (the base rule,
      unchanged here) already keeps End off this column's own right edge;
-     landscape only needs the grid placement, the notch's own top inset
-     (moved here from `.connected-surface`'s own padding, design spec §3
-     "Safe-area relocation" — no device constant assumed, §1's deviation
-     row) and a trimmed side padding — this frame is 454px shorter than
-     portrait and every row here is measured, same discipline as
-     `.connected-pane .timer-upnext`'s own trim just below. */
+     landscape only needs the grid placement and a trimmed side padding —
+     this frame is 454px shorter than portrait and every row here is
+     measured, same discipline as `.connected-pane .timer-upnext`'s own
+     trim just below.
+
+     `padding-top: 0`, NOT `env(safe-area-inset-top)` (fix round, review
+     Important-1 — this rule tried the inset here first and it was wrong
+     twice over: it protected only this element's own DOM children, never
+     the sibling `.connected-control`, and stacking it on top of
+     `.connected-surface`'s own top padding — restored below, the actual
+     fix — would have charged the inset twice). The surface's own padding
+     already pushes this entire row clear of the notch; this rule owns
+     nothing but its own trimmed horizontal spacing. */
   .connected-header {
     grid-column: 2;
     grid-row: 1;
@@ -7447,7 +7482,7 @@ section:not(.news-pinned) .news-row:last-of-type {
        has no spare 8px to also spend on this row's own gap the way the
        others get — 2px keeps a visible separation without reopening the
        overlap this margin-based reclaim exists to close. */
-    padding-top: env(safe-area-inset-top, 0px);
+    padding-top: 0;
     padding-right: 12px;
     padding-left: 12px;
     margin-bottom: 0;
@@ -7523,22 +7558,82 @@ section:not(.news-pinned) .news-row:last-of-type {
      gutter: `auto` on both axes sizes this to its own two buttons, and
      `align-self: center` centers it in the 44px-tall row the way the
      device caption beside it is centered by `.connected-header`'s own
-     `align-items: center`. */
+     `align-items: center`.
+
+     `box-shadow: inset`, NOT `border` (fix round, review Important-2). A
+     real `border` sits OUTSIDE this element's content box and adds to its
+     layout height — 44px of button plus 1px top plus 1px bottom is 46px,
+     which pulled grid row 1 (sized to the tallest item it contains) from
+     44px to 46px, which is where the unexplained 2px in the landscape grid
+     scroller's own budget actually came from (`PaneGrid.tsx`'s own
+     comment, corrected below). `box-shadow` never participates in the box
+     model — it is a paint effect, not a layout one — so this element's
+     outer height stays exactly 44px, matching its own 44px-tall children,
+     while still rendering visually identical to a 1px ink border (an inset
+     shadow respects `border-radius` exactly the way a real border does).
+     The two half buttons keep their own real 44px height — this is not
+     the "shrink the button to fit inside a bordered 44px box" version of
+     the fix, which would have taken the halves below the 44px tap floor
+     the spec sets for each of them. */
   .connected-control {
     grid-column: 1;
     grid-row: 1;
     align-self: center;
-    height: auto;
-    border: 1px solid var(--ink);
+    /* EXPLICIT `44px`, not `auto` (fix round, review Important-2, same
+       spirit as `grid-template-rows`'s own pin above): this element's
+       `auto` height measured 45px against this worktree even with both
+       of its own `.connected-control-half` children individually
+       confirmed at exactly 44px — a flex auto-height sub-pixel
+       discrepancy this round did not fully chase to ground. Pinning the
+       number design spec §3 already requires directly removes the
+       ambiguity rather than leaving a future reader to re-derive it. */
+    height: 44px;
+    /* Explicit, not the flex default `stretch` (fix round, review
+       Important-2's own follow-on): `stretch` combined with each half's
+       own explicit `height: 44px` is what produced the 1px vertical
+       offset the comment above measures — an explicit cross-size on a
+       flex item does not disable `stretch`'s own positioning fallback
+       the way it disables the SIZING half of stretch, so the half still
+       aligned as if searching for extra space to distribute. `center` on
+       an exact-height parent with exact-height children is a no-op
+       everywhere it can be (0px of slack to center within), and removes
+       the fallback path entirely where it could not be. */
+    align-items: center;
+    box-shadow: inset 0 0 0 1px var(--ink);
     border-radius: var(--radius);
-    /* The active half's own ink fill must not paint past the pill's
-       rounded corners. */
-    overflow: hidden;
+    /* NO `overflow: hidden` HERE (fix round, review Important-2's own
+       follow-on): a first version of this rule used it to clip the
+       active half's square-cornered fill to the pill's rounded corners,
+       which — combined with the same sub-pixel discrepancy the comment
+       above names — clipped a genuine 1px sliver off the BOTTOM of a
+       half's own tap target too (measured: the half's own box rendered
+       one pixel taller than this element's pinned 44px, and `overflow:
+       hidden` does not distinguish "clip the fill" from "clip the tap
+       target," since it acts on the whole box). Rounding the PILL's own
+       two end corners directly on the end halves (`.connected-control-
+       half:first-child`/`:last-child`, below) gets the identical visual
+       result without an ancestor clip that could ever cost either half
+       a pixel of its own real hit area. */
   }
 
   .connected-control-half {
     flex: none;
     height: 44px;
+  }
+
+  /* The pill's own two end corners (fix round, review Important-2's
+     follow-on — replaces an ancestor `overflow: hidden` clip, this
+     block's own comment on `.connected-control` has the reason). Only
+     visible on whichever half is ACTIVE (the inactive half paints no
+     background at all), but declared on both regardless of active state
+     — active can be either half, and a static rule here is simpler and
+     no less correct than a rule keyed on the active class too. */
+  .connected-control-half:first-child {
+    border-radius: var(--radius) 0 0 var(--radius);
+  }
+
+  .connected-control-half:last-child {
+    border-radius: 0 var(--radius) var(--radius) 0;
   }
 
   /* Two columns, each sizing itself. Padding lives HERE, not on the removed

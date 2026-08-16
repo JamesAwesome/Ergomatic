@@ -12,14 +12,19 @@
 // SINGLE-LINE at a FIXED height (32px landscape / 40px portrait, JAMES
 // RULING 2026-08-12 superseding the packet's 8-at-36 for landscape). The
 // ruling was made against a landscape scroller measured at 232px, which
-// 8x36 = 288 cannot fit; the figure has moved three times since (Task 5
-// measured 239 — an un-zeroed UA margin on a caption `<p>` — Task 6's
-// footer reclaim took it to 276, and CR2 spec 3 task 1's own header
-// restructure — `ConnectionLine` moving out of this pane's headline —
-// moved it again, by 2px, to 274, where it stands). The conclusion is
-// unchanged: 8x32 = 256 fits 274 with 18 to spare, and 8x36 still does
-// not. 232 is history, framed as history the way `index.css`'s own
-// `.connected-pane-grid` landscape comment frames it. There is no
+// 8x36 = 288 cannot fit; the figure has moved twice since (Task 5 measured
+// 239 — an un-zeroed UA margin on a caption `<p>` — and Task 6's footer
+// reclaim took it to 276, where it stands). CR2 spec 3 task 1's own header
+// restructure moved `ConnectionLine` out of this pane's headline, which
+// briefly moved this figure too (a fix-round defect in that same task —
+// a real `border` on `.connected-control` grew grid row 1 past its own
+// 44px, `index.css`'s own review Important-2 comment has the fix) — with
+// that defect corrected, row 1 is pinned back to the exact 44px it held
+// before this task touched it, so this pane's own scroller budget is
+// unchanged and 276 still stands. The conclusion is unchanged: 8x32 = 256
+// fits 276 with 20 to spare, and 8x36 still does not. 232 is history,
+// framed as history the way `index.css`'s own `.connected-pane-grid`
+// landscape comment frames it. There is no
 // second line and no third line — the OLD two-line portrait row
 // (`.connected-grid-line1`/`-line2`, folded into one row by `display:
 // contents` in landscape) and the active row's `REMAINING · TARGET …`

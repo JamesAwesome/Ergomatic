@@ -5011,6 +5011,67 @@ test.describe("connected screens (fake-driven)", () => {
     await cleanupAllConnected(page, title);
   });
 
+  // THE TOP AXIS (fix round, review Important-1) — the rotation test above
+  // only ever drives LEFT/RIGHT insets; nothing in this file's own gates
+  // exercised the TOP one until this round's own hardware-adjacent review
+  // measured it directly and found the control sitting 11px under a
+  // notch's own vertical band. A version of `.connected-header`'s own
+  // `padding-top: env(safe-area-inset-top)` protected End (a DOM child of
+  // that element) but not `.connected-control` (a SIBLING grid item in
+  // the SAME row, `.connected-surface`'s own two-track comment) — the
+  // control just centred itself (`align-self: center`) across whatever
+  // taller row the header's own padding produced, landing its own top
+  // edge inside the inset instead of clear of it. The fix moves the term
+  // back to `.connected-surface`'s own padding, which protects every grid
+  // item in the row uniformly (that rule's own comment has the measured
+  // before/after). This test is what proves it, and what would have
+  // caught the regression: it failed red against the `padding-top` on
+  // `.connected-header` version (measured directly against this
+  // worktree: control y=9 h=46, 11px of a 44px target under a 20px
+  // inset) before this fix round moved the term back.
+  test("the segmented control clears a real TOP inset — landscape (844x390)", async ({
+    page,
+  }) => {
+    const title = "Design Connected Top Inset Workout";
+    await page.setViewportSize({ width: 844, height: 390 });
+    await injectConnectedFake(page, ROWING_STORY);
+    await openConnected(page, title, "design-connected-top-inset@e2e.test");
+    await walkToSurface(page);
+    await pumpUntilText(page, "2 OF 5");
+
+    // 20px: a real measured iOS landscape-TOP inset order of magnitude
+    // (the status-bar-free notch band a mounted phone's rotation still
+    // reports on the short physical edge), not a round number chosen to
+    // make the arithmetic easy.
+    const TOP = 20;
+    const client = await page.context().newCDPSession(page);
+    await client.send("Emulation.setSafeAreaInsetsOverride", {
+      insets: { top: TOP, left: 0, bottom: 0, right: 0 },
+    });
+    await page.evaluate(
+      () => new Promise((r) => requestAnimationFrame(() => r(null))),
+    );
+
+    const [controlBox, endBox] = await Promise.all([
+      page.locator(".connected-control").boundingBox(),
+      page.getByRole("button", { name: "End session" }).boundingBox(),
+    ]);
+    expect(controlBox).not.toBeNull();
+    expect(endBox).not.toBeNull();
+
+    // BOTH grid items in row 1 clear the inset — not just End, which a
+    // header-scoped fix could protect on its own while leaving the
+    // control (a sibling, not a child) exposed.
+    expect(controlBox!.y).toBeGreaterThanOrEqual(TOP);
+    expect(endBox!.y).toBeGreaterThanOrEqual(TOP);
+    // And the control's own tap target survives whole under the inset —
+    // not just its top edge clearing the line, but the full 44px height
+    // the spec requires for each half still landing entirely below it.
+    expect(controlBox!.height).toBeGreaterThanOrEqual(44);
+
+    await cleanupAllConnected(page, title);
+  });
+
   // THE NOTCHED WIDTH IS A WIDTH NO OTHER GATE RENDERS. Headless Chromium
   // reports all four safe-area insets as 0, so every one of the other e2e
   // tests and all 62 committed captures draw the landscape content column at
