@@ -81,6 +81,18 @@ Lint catches the mechanical failures above. It cannot tell you whether a
 passing suite would notice a *wrong* line of code — that's a semantic
 question, and mutation testing is the deep check for it.
 
+**React 19 + jsdom: a synchronous throw inside an event handler does NOT
+propagate through `fireEvent`/`userEvent`'s call frame** (learned building
+PR #100's stale-global-guard test). React's discrete-event dispatch
+reports the error through the global error channel instead, so
+`expect(() => fireEvent.click(...)).toThrow()` passes whether or not the
+handler throws — a mutation that removes the guard survives it. The
+working pattern: register a `window.addEventListener("error", ...)` spy
+(capturing and `preventDefault()`ing), fire the event, then await one
+macrotask tick (`await new Promise((r) => setTimeout(r, 0))`) before
+asserting on the captured error. Prove the probe bites: temporarily break
+the guard and confirm the listener test goes red before trusting it.
+
 **Mutation testing** (`pnpm mutate`, Stryker, scoped to `domain/**`,
 `server/stores/**`, `server/routes/**`): flips small pieces of source
 (a `<` to `<=`, a `&&` to `||`, a boolean literal) and reruns the suite. A

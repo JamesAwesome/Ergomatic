@@ -13,6 +13,9 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)" # compose.yml li
 
 # Per-worktree stack identity — see stack-env.sh for the why.
 source "$(dirname "${BASH_SOURCE[0]}")/stack-env.sh"
+# Reap stacks orphaned by torn-down worktrees before booting ours — see
+# stack-reap.sh for the leak this closes.
+source "$(dirname "${BASH_SOURCE[0]}")/stack-reap.sh"
 
 export POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-devpass}"
 export TEST_AUTH_SECRET="${TEST_AUTH_SECRET:-e2e-secret}"
