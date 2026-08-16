@@ -353,3 +353,53 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   row verifying the phase's largest correctness fix is a PRIMARY both-screens
   comparison, not a rounding footnote at the bottom of six. Rewritten so at
   this gate.
+
+## Final-PR gate, 2026-08-16 (Phase CR2 rest-keying fix, PR #104)
+
+- **A spec edit AFTER the plan is fine; a criteria edit is not — check the
+  block, not the file.** #104's spec's last commit (`a061f58`) postdates its
+  plan, which by the #100 rule reads as drift. Diffing the `## Exit criteria`
+  block across all three spec commits showed it byte-identical since the
+  antagonist pass — the late commit added 20 lines of research. The one-command
+  check is `git show <sha>:<spec> | sed -n '/^## Exit criteria/,$p'` per commit.
+  Sharpen the earlier ruling: freeze the CRITERIA before implementation, not the
+  file before the plan.
+- **The v1→v2 criteria diff is where softening hides, and here it hardened.**
+  v1 cited a `>` mutant; v2 replaced it with three mutants each chosen to differ
+  from the revert AND said why `>` was dropped (byte-identical to the revert on
+  these recordings). Read the criteria's own history, not just their final text —
+  a criterion that gained a justification is as informative as one that lost a
+  clause.
+- **An earlier spec's regression oracle can be structurally blind to the later
+  fix.** CR2's keystone row (2×250 r0) is the phase's standing both-screens
+  oracle — and it contains no resting frames, so it cannot execute the rest
+  clamp at all; the spec concedes it "replays clean, fix or no fix." Re-running
+  the old oracle row would have shipped the clamp to testers unexercised on
+  hardware. **Before accepting "the walk re-runs the earlier oracle", ask
+  whether that row's shape can reach the new code.** Corollary to the
+  2026-08-15 re-run-the-oracle rule, and it nearly inverted it.
+- **A walk HANDOFF is an assignment document; it goes stale the moment the
+  assignment is discharged.** walk-2026-08-16's leads named WORK-frame
+  attribution as the defect and called rest-coast attribution "CORRECT
+  throughout" — the exact inverse of the diagnosis. Falsified leads in a
+  committed handoff are read by the next walk as findings. Reconcile the
+  handoff in the PR that discharges it, same as a design handoff.
+- **"Compares against photographed numbers" was not true, in the sentence
+  written to prove we weren't grading our own homework.** #104's oracle is the
+  machine's wire-reported TWD (legitimate, machine-authoritative), photo-
+  corroborated at exactly one of nine points; the session's final total was
+  never photographed (the finish-pair photo is untranscribed). The wire number
+  is good evidence — the overclaim was free and would have been believed.
+  **At this gate, ask which specific assertion the word "photographed" attaches
+  to.**
+- **The un-released stack at this gate: FIVE merges behind v0.9.0 (#99, #100,
+  #101, #102, #104), and TWO of them independently lower the same number.** The
+  canary is thrice-forfeited by recorded override. When two corrections to one
+  number ride one tag, the release notes must name the direction ("totals read
+  lower and correct") or the cohort cannot falsify either. As of this gate that
+  sentence exists only in a PR body — grep confirmed it is absent from ROADMAP,
+  RELEASING, releaseNotes.ts and docs/monitor.
+- **Zero unreviewed tail is achievable and this is the first CR2 PR to have
+  one** (HEAD `25614f4` = the whole-branch review's upper bound). Worth naming
+  as the standard: the final review's diff range should END at the PR tip, and
+  that is a two-command check.

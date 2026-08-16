@@ -77,8 +77,13 @@ import type { MonitorFrame } from "../types.js";
  * despite no rest), which is what proves the offset is per-characteristic,
  * not a single shared rule.** This function (and `toProgramIndex`, which it
  * inverts) is UNCHANGED by that finding — 0x0033's own no-rest behavior
- * stays whatever the identity pass-through already modeled, since the one
- * hardware reading available for it (`0`) matches identity exactly. The
+ * stays whatever the identity pass-through already modeled. The evidence
+ * base for that is now three readings, not one (rest-keying spec,
+ * 2026-08-16): both walk-2026-08-16 recordings show 0x0033's own count
+ * advancing across w→w boundaries 10.6-92.9 ms AFTER the 0x0031 reset tick
+ * (session 1 seq 447/449; session 2 seq 243/245) — identity keying during
+ * work is unchanged by that timing, only its count-vs-state skew, which the
+ * stale-count rest clamp (`src/monitor/driver.ts`) now handles. The
  * driver's old `"index-unverified"` log entry, which existed to flag this
  * exact assumption while it was still open, is RETIRED (its question is
  * answered); 0x0037/38's own corrected rule lives in `toActualIndex`,

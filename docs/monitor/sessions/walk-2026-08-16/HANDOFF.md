@@ -1,5 +1,22 @@
 # Handoff: walk 2026-08-16 recordings → the recorder (Stage B) session
 
+> **ASSIGNMENT DISCHARGED (2026-08-16, PR #104 + the rest-keying spec).**
+> The register misattribution is diagnosed and fixed, and both recordings
+> are now permanent CI tests (`app/src/monitor/registerReplay.test.ts`).
+> **The leads below are part of the historical record and the primary one
+> is FALSIFIED**: the defect was not work-frame attribution downstream of
+> the wu boundary — it was REST-frame attribution at every work→rest
+> boundary whose burst missed the transitional ws=8 tick (0x0031 arrives
+> before 0x0033 in 983/983 measured bursts; the first resting tick can
+> carry the old count, keying the finished interval one register low, and
+> max-merge kept the poison). "Rest-coast attribution appears CORRECT
+> throughout" was the exact inverse of the mechanism. The wu was causally
+> irrelevant. See `docs/superpowers/specs/2026-08-16-rest-keying-fix-design.md`.
+> Still open from this file: the untranscribed photos (§ transcriptions),
+> the MaxListenersExceeded observation (filed: Node-side, likely Vite's
+> proxy — not the tap), and the header-without-program discrepancy (filed
+> in session memory as recording-header-program-gap).
+
 Two full wire recordings (pm5-recording/v1, gunzipped JSONL, committed
 beside this file), captured per RUNSHEET.md over Chrome/Web Bluetooth with
 the recording tab foregrounded. Photos live in James's ~/Desktop/walk-1 and

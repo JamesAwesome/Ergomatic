@@ -494,3 +494,100 @@ toolkit, not a history.
   **Technique: when a brief bundles two "same area" claims into one file
   path, verify each claim's OWN grep hit — UI proximity is not tree
   proximity.**
+
+## Spec-stage pass, 2026-08-16 (the stale-count rest fix + Stage B)
+
+- **"Poisoned writes +233.3 m, register under-read of TWD elsewhere −12.6 m,
+  net +220.7."** Only the SUM is right; both summands are wrong and the
+  second has the wrong sign. Measured over the recording: poison +219.8 m,
+  and the honest registers OVER-read TWD by +0.9 m (1599.9 vs 1599). The
+  error is reconstructible to the digit — `461.4−260.1 = 201.3` plus
+  `501.6−469.6 = 32.0` = 233.3, where 469.6 is the distance immediately
+  after the @285.4 s mid-rest elapsed re-base: the honest baseline cut an
+  interval short at a re-base, the exact misclassification the spec's own
+  Stage B oracle was supposed to avoid. A Stage B band built on −12.6 m
+  would have failed a correct fix. **Technique: when a spec offers a
+  decomposition (A + B = observed), recompute BOTH summands, not the total.
+  A decomposition that reconciles to the observed number is the most
+  convincing way to be wrong, because the sum is the only part anyone
+  checks — and reverse-engineering which wrong intermediate reproduces the
+  stated figure EXACTLY names the analytical error for free.**
+
+- **"A mutation of the clamp's comparison direction (`>` for `<`) is also
+  caught."** True but worthless: with `>` the clamp never fires on either
+  committed recording, so it is byte-identical to REVERTING the clamp —
+  same registers (1819.7 m), same zero logs. It is the revert test wearing
+  a hat, presented as independent evidence. Simulation found the two
+  mutants that actually matter: `<=` for `<` survives every numeric
+  assertion (identical 1599.9 m; caught only by an EXACT clamp-log count),
+  and **dropping the `state === "resting"` guard is totally silent** —
+  identical registers, totals AND log entries on both recordings, so the
+  rule's entire scoping predicate is untested by the capture rung.
+  **Technique: run each proposed mutant through the fixture and compare its
+  output to the REVERT's output, not to the correct output. A mutant whose
+  result equals the revert's tests nothing new; a mutant whose result
+  equals the correct one is a hole in the suite.** Both are invisible if
+  you only ask "does the test go red".
+
+- **"The order of two clamps that both rewrite `activeKey` is a silent
+  implementer trap."** Not here: enumerating all four cases showed every
+  path converges on `max(seen)`, because the clamp's output is always a key
+  already in `session.seen`, which short-circuits the refused-open guard's
+  own `!session.seen.has(activeKey)` (`driver.ts:1914`). Simulating both
+  orders gave identical registers and identical logs. **Technique: before
+  writing an ordering finding, ask whether the first transform's OUTPUT
+  falsifies the second's GUARD. Two clamps compose commutatively whenever
+  one lands inside the other's exclusion set — cheaper to check than to
+  reason about, and it turns an "ambiguous, must pin" into a "pin it for
+  the log, the value is safe".**
+
+- **"982 of 983 bursts put 0x0031 first (the 983rd is the first-ever
+  notification)."** 983 of 983, and the excused case does not exist — the
+  first 0x0031 precedes the first 0x0033 by 0.5 ms. **Technique: a
+  hand-excused exception in a counted claim is the part to check first. It
+  costs three lines of pairing to confirm, and "N−1 of N, because <story>"
+  is how a plausible narrative gets written over a clean measurement.**
+
+- **A capture can validate the FIX and still be blind to its RULE.** Both
+  2026-08-16 recordings pin the clamp's arithmetic perfectly (post-fix
+  accumulator tracks the PM5's own TWD within −1.3..+0.9 m at eight
+  sampled instants, including the photographed frame) while pinning none of
+  its scoping conditions. **Technique: for every conjunct in a new
+  predicate, delete it and re-run the capture. The conjuncts that survive
+  deletion are the ones needing a synthetic fixture — and they are exactly
+  the ones a spec describes most confidently, because the capture agreed
+  with them.**
+
+- **Attacked and not broken:** the clamp rule itself, against reconnect
+  (`session.seen` is reset only inside `program()`, `driver.ts:4239`, so a
+  mid-session link gap preserves `max(seen)`), JustRow (structurally
+  unreachable — `programLength 0 → null index → empty map → null key`,
+  forever), the D3 phantom and `count = programLength + 1` (both folded by
+  `toProgramIndex`'s upper clamp, `intervalIndex.ts:177`), the finished
+  fallback, and the "keys only grow" universality claim within one run.
+  One residual, disclosed rather than fixed: `session.seen` outlives the
+  RUN, so a rower re-starting a workout on the erg without the app
+  re-arming carries the old `max(seen)` — already broken today, but the
+  clamp changes the failure's direction from undercount to inflating the
+  previous workout's top key.
+
+## Task-brief premise pass, 2026-08-16 (rest-keying-fix plan, Task 1)
+
+- **"The armed program comes from each recording's header (`header.program`)."**
+  Believed because the sibling harness (`recordReplay.roundtrip.test.ts`) reads
+  `header.program` successfully and `RecordingHeader.program` is a typed field.
+  FALSE for the two committed 2026-08-16 hardware captures:
+  `grep -c '"program"' session-{1,2}-*.jsonl` returns 0 for both — the header
+  line captured over real Web Bluetooth carries only `v`/`app`/`transport`/`ua`,
+  no `program` key. The sibling test only has a populated `header.program`
+  because it BUILDS its own header itself (`buildRecordingFile(tap, {...,
+  program: ROUNDTRIP_PROGRAM})` around a synthetic fake-driven session) — it
+  never reads one out of a real capture, because a real Web Bluetooth capture
+  never has one to read. `driver.program(p)` requires `WorkoutProgram`, not
+  `WorkoutProgram | undefined`, so the plan's own interface (as written) is
+  either a typecheck error or a `!`-suppressed runtime crash on the first
+  hardware-replay test written against it. **Technique: grep the actual
+  committed artifact for the literal field name a plan depends on, rather than
+  trusting that a sibling test's successful use of a type-optional field means
+  THIS artifact populates it — a reader working elsewhere proves the reader
+  works, not that the specific file has the data.**

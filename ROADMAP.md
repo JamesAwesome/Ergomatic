@@ -1799,9 +1799,19 @@ PR #101's stack-reap fix); F6 moved to spec 2 by ruling, then split again.
 **Spec 2 "state axes" (items 3 + 1 + F6) is now two PRs** (James's ruling,
 design spec §4): **spec 2a** — axes, mirror surface, pause state, driver
 lifecycle, the interval clock fix, the terminal path, the suspicion verdict
-— is IMPLEMENTED, **PR #102 open, in review**; **spec 2b** — F6
+— MERGED (PR #102, 2026-08-16, `d7271a3`); **spec 2b** — F6
 alone, the one piece carrying a stored-shape field (`endedBy`) and a
-destructive action — is next, sequenced after 2a. The reducer this spec
+destructive action — is next, sequenced after 2a. **A fourth SDD cycle
+rode the 2026-08-16 walk's own finding: the rest-keying fix (PR #104,
+spec `docs/superpowers/specs/2026-08-16-rest-keying-fix-design.md`) —
+the stale-count rest clamp plus both walk recordings as permanent CI
+regression tests. RELEASE-NOTE OBLIGATION for the phase tag: connected
+session totals now read LOWER and correct (two independent corrections —
+#99's register map and #104's clamp — lower the same number); the notes
+must say so plainly so a tester can check rather than guess. The phase
+walk before the tag owes a REST-BEARING row with both screens in one
+frame — the 2×250 r0 keystone contains no resting frames and cannot
+exercise the clamp on hardware.** The reducer this spec
 once proposed is DEFERRED to its own spec. Spec 3 "redesign" (items 2 + 4,
 design handoff committed at `docs/design/handoffs/2026-08-15-connected-v2/`)
 is not started. Originally scoped by James 2026-08-13 immediately

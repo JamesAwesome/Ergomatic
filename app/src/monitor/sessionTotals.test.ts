@@ -2167,3 +2167,79 @@ describe("session accumulator: the suspicion verdict (Task 8, log-only, fail-ope
     ).toHaveLength(0);
   });
 });
+
+describe("session accumulator: the stale-count rest clamp's resting conjunct (rest-keying spec, 2026-08-16)", () => {
+  // The spec's own directed-fixture bullet ("The directed fixture (the
+  // conjunct no capture can test)"): dropping the clamp's
+  // `base.state === "resting"` conjunct is SILENT on BOTH committed walk
+  // recordings (identical registers, totals, and logs — antagonist F2
+  // finding). No replay can ever catch that specific deletion; this shape
+  // is the only test in the suite that can, and must be built by hand.
+  it("a stale rowing frame never lifts to the newest key", async () => {
+    const h = await programmed(TWO_INTERVAL_REST_PROGRAM);
+
+    // Establish key 0's register via an ordinary rowing tick.
+    await tick(
+      h,
+      { elapsed: 200, distance: 500, state: WORKOUTSTATE_INTERVALWORKTIME },
+      0,
+    );
+    // Establish key 1's register the same way — rowing passes through
+    // `toProgramIndex` UNADJUSTED (identity), so intervalCount 1 keys
+    // program index 1 directly, no rest boundary needed to open it.
+    await tick(
+      h,
+      { elapsed: 60, distance: 150, state: WORKOUTSTATE_INTERVALWORKTIME },
+      1,
+    );
+
+    // THE STALE FRAME: still `"rowing"`, still keyed to program index 0
+    // (0x0033's count has not yet advanced past the just-finished
+    // interval), carrying a reading smaller than key 0's own register.
+    // `session.seen.size > 0` and `activeKey (0) < max(seen) (1)` are both
+    // true here — exactly the shape the clamp's first two conjuncts alone
+    // would fire on. Only the (correctly absent) `state === "resting"`
+    // conjunct keeps this frame out of the clamp: a stale ROWING frame
+    // keys its own just-finished interval, where the pair is a max-merge
+    // no-op, not an inflation.
+    const f = await tick(
+      h,
+      { elapsed: 100, distance: 300, state: WORKOUTSTATE_INTERVALWORKTIME },
+      0,
+    );
+
+    // Correct behaviour: the stale reading merges into key 0 (a no-op,
+    // 100 < 200 and 300 < 500) and key 1 is untouched. A clamp that
+    // dropped the resting conjunct would instead lift this frame's
+    // activeKey to 1 and inflate key 1's register to (100, 300) — silent
+    // on both recordings, caught only here.
+    expect(f.sessionDistanceMeters).toBeCloseTo(650, 1); // 500 + 150, unchanged
+
+    await tick(h, {
+      elapsed: 60,
+      distance: 150,
+      state: WORKOUTSTATE_WORKOUTEND,
+      twd: 650,
+    });
+    const finals = h.log.entries().filter((e) => e.kind === "final-totals");
+    expect(finals).toHaveLength(1);
+    expect(finals[0]!.detail).toContain("registers=2 of 2 programmed");
+    // Key 0 unchanged (max-merge no-op): still (200s, 500m).
+    expect(finals[0]!.detail).toContain("0:(200s,500m)");
+    // Key 1 unchanged: still (60s, 150m), NOT (100s, 300m) — the exact
+    // inflation the dropped conjunct would produce.
+    expect(finals[0]!.detail).toContain("1:(60s,150m)");
+    expect(finals[0]!.detail).not.toContain("1:(100s,300m)");
+
+    // No clamp fired at all: this frame never satisfied `state ===
+    // "resting"`, so no divergence entry for the clamp exists.
+    const clampLogs = h.log
+      .entries()
+      .filter(
+        (e) =>
+          e.kind === "divergence" &&
+          e.detail.includes("stale-count rest clamp"),
+      );
+    expect(clampLogs).toHaveLength(0);
+  });
+});
