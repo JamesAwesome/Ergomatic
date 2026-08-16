@@ -52,6 +52,16 @@ describe("recording serialization", () => {
   it("rejects text whose first line is not a recording header", () => {
     expect(() => parseRecording('{"seq":0}\n')).toThrow(/not a pm5 recording/);
   });
+
+  it("rejects empty input", () => {
+    expect(() => parseRecording("")).toThrow(/not a pm5 recording/);
+  });
+
+  it("rejects input whose header line is not valid JSON", () => {
+    expect(() => parseRecording("not json at all\n")).toThrow(
+      /not a pm5 recording/,
+    );
+  });
 });
 
 /** A bare hand-rolled `Transport` for the tap's own edge cases — pattern
