@@ -143,12 +143,20 @@ The walk's downloads were invoked FROM THE DEVTOOLS CONSOLE —
 the first-rest and finish photos (`Promise {pending}` results in frame).
 `download(program)` takes the program as its argument; a console call
 bypasses TypeScript, `program` arrived `undefined`, and
-`JSON.stringify` dropped the key. The button path (which supplies the
-surface's own program) is intact — no product bug. **Protocol for future
-walks: download recordings via the "Download recording" BUTTON in the
-log sheet, not the console.** Replay tests are robust either way (they
-hand-transcribe program literals and byte-verify them against the
-recorded programming frames). CI coverage note: `transports/index.test.ts`
+`JSON.stringify` dropped the key. **And the console was the only option
+James had — the real gap was REACHABILITY, not operator deviation:** the
+in-session sheet's Download button dies with the session, the finish
+auto-navigates to the log screen, and that screen had no download
+affordance at all. The runsheet's "download before navigating" was
+impossible to follow at a natural finish. **FIXED in this PR: the
+post-session log screen now carries a whisper-quiet `RECORDING ·
+DOWNLOAD` row** (the monitor-log copy row's sibling, presence-gated on
+the dev-only seam, absent in production builds), and `download()`'s
+program is optional — a post-session download's header omits it, the
+shape these captures already have. **Protocol for future walks: finish
+the row, land on the log screen, tap RECORDING · DOWNLOAD.** Replay
+tests are robust either way (they hand-transcribe program literals and
+byte-verify them against the recorded programming frames). CI coverage note: `transports/index.test.ts`
 already pins `header.program` through the REAL gated arm (a wiring
 regression fails CI), and the sheet test pins the click forwarding its
 prop; only the combined real-arm-plus-real-click composite rests on the

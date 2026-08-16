@@ -809,6 +809,59 @@ describe("LogSession: the monitor log's quiet door (7B iteration)", () => {
   });
 });
 
+// The recording's quiet door (walk-2026-08-16 close-out). The walk proved
+// the in-session sheet's Download button is UNREACHABLE at the moment a
+// rower actually wants it: the finish auto-navigates here, the sheet dies
+// with the session, and James fell back to a console call that silently
+// dropped the header's program. The seam itself survives navigation
+// (latest-session-wins), so THIS screen — where the operator already lands
+// — gets a sibling of the monitor log's own quiet door.
+describe("LogSession: the recording's quiet door (walk-2026-08-16 close-out)", () => {
+  afterEach(() => {
+    delete (window as { __pm5Recording__?: unknown }).__pm5Recording__;
+  });
+
+  it("absent entirely when no recording seam exists — production and the manual path never see it", async () => {
+    const { workout } = buildSessionFixture();
+    mockWorkouts([workout]);
+    await renderLog();
+    await screen.findByRole("heading", { name: "Log Hoarfrost" });
+
+    expect(
+      screen.queryByRole("button", { name: "RECORDING · DOWNLOAD" }),
+    ).toBeNull();
+  });
+
+  it("with the seam: tapping it invokes the seam's own download and reports the save", async () => {
+    const download = vi.fn().mockResolvedValue(undefined);
+    (
+      window as {
+        __pm5Recording__?: {
+          lines(): string[];
+          eventCount(): number;
+          download(): Promise<void>;
+        };
+      }
+    ).__pm5Recording__ = {
+      lines: () => [],
+      eventCount: () => 0,
+      download,
+    };
+    const { workout } = buildSessionFixture();
+    mockWorkouts([workout]);
+    await renderLog();
+    await screen.findByRole("heading", { name: "Log Hoarfrost" });
+
+    const row = screen.getByRole("button", { name: "RECORDING · DOWNLOAD" });
+    await userEvent.click(row);
+
+    expect(download).toHaveBeenCalledTimes(1);
+    expect(
+      await screen.findByRole("button", { name: "RECORDING · DOWNLOADED" }),
+    ).toBeInTheDocument();
+  });
+});
+
 describe("LogSession: the ledger residual (workoutId mismatch)", () => {
   it("ignores a foreign draft — fallback labels render and the PACES LOCKED panel is omitted entirely (F1: no bare dash)", async () => {
     const { workout } = buildSessionFixture();
