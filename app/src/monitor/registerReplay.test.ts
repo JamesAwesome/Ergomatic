@@ -369,6 +369,17 @@ interface DriverFrameSample {
   frame: MonitorFrame;
 }
 
+/** No nearby sample within this many ms is a silent-wrong-answer hazard, not
+ *  a "closest we've got": a future capture with a radio-drop gap straddling
+ *  a checkpoint would otherwise have `nearestReading`/`nearestFrameSample`
+ *  quietly hand back a reading from well outside the gap, and the
+ *  per-instant assertion would compare against a point in time the
+ *  checkpoint was never meant to name. Both recordings here are dense
+ *  (0x0031 arrives ~2/s, `HANDOFF.md`'s own tap-neutrality measurement), so
+ *  1000ms is generous against today's data and still tight enough to catch
+ *  a real gap. */
+const NEAREST_SAMPLE_TOLERANCE_MS = 1000;
+
 function nearestReading(
   readings: MachineReading[],
   targetMs: number,
@@ -381,6 +392,12 @@ function nearestReading(
       bestDiff = diff;
       best = r;
     }
+  }
+  if (bestDiff > NEAREST_SAMPLE_TOLERANCE_MS) {
+    throw new Error(
+      `nearestReading: no 0x0031 reading within ${NEAREST_SAMPLE_TOLERANCE_MS}ms ` +
+        `of target t=${targetMs}ms — nearest is t=${best.t}ms (${bestDiff.toFixed(1)}ms away)`,
+    );
   }
   return best;
 }
@@ -397,6 +414,12 @@ function nearestFrameSample(
       bestDiff = diff;
       best = s;
     }
+  }
+  if (bestDiff > NEAREST_SAMPLE_TOLERANCE_MS) {
+    throw new Error(
+      `nearestFrameSample: no driver frame within ${NEAREST_SAMPLE_TOLERANCE_MS}ms ` +
+        `of target t=${targetMs}ms — nearest is t=${best.tMs}ms (${bestDiff.toFixed(1)}ms away)`,
+    );
   }
   return best;
 }
