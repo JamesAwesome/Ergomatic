@@ -248,9 +248,43 @@ function distanceWarmupFixture(title: string, meters: number): Fixture {
   };
 }
 
+/** THE NO-WARM-UP SHAPE (task-5-review finding, coordinator-flagged): the
+ *  warm-up preference is OFF by default (`usePreferences`'s own null
+ *  column) — Filling Low's own four 2000 m reps with NO warm-up phase at
+ *  all, so program index 0 is a real WORK interval (ordinal 1), not an
+ *  unnumbered one. Built directly through `buildRun`'s `null` warm-up arg
+ *  (`libraryFixture` above always passes a real one) rather than adding a
+ *  `warmupMinutes: 0` case to that helper, since `0` and `null` are
+ *  different inputs on the real form (`WarmupSetting | null`) and this
+ *  fixture's whole point is to be the `null` one. */
+function noWarmupFixture(title: string): Fixture {
+  const w = LIBRARY_WORKOUTS.find((s) => s.title === title);
+  if (!w) throw new Error(`missing library fixture: ${title}`);
+  const id = `${title.toLowerCase().replace(/ /g, "-")}-no-warmup`;
+  const draft = buildDraft({
+    id,
+    title: w.title,
+    type: w.type as WorkoutType,
+    steps: w.steps,
+  });
+  const phases = buildRun(draft, baselines, t0, null).phases;
+  const program = compileProgram(phases);
+  if ("code" in program) {
+    throw new Error(`fixture failed to compile: ${program.code}`);
+  }
+  return {
+    program,
+    phases,
+    identity: { workoutId: id, title: w.title, ...TEST_SEED },
+  };
+}
+
 /** 5 intervals: `time 480` warm-up, then 4 x `distance 2000` with 180 s of
  *  rest. Mixed, and short enough to assert every row of. */
 const FILLING_LOW = libraryFixture("Filling Low", 8);
+/** The no-warm-up mirror of `FILLING_LOW`: 4 x `distance 2000`, program
+ *  index 0 already a numbered work interval. */
+const FILLING_LOW_NO_WARMUP = noWarmupFixture("Filling Low");
 /** 6 intervals: `time 600`, ONE `distance 8000`, then 4 x `time 180` — the
  *  handoff's own single-distance-row caption case, and the mirror of
  *  Filling Low's shape. */
@@ -510,6 +544,38 @@ describe("the shell header's composed GRID trailing (design spec §2B)", () => {
     renderGrid({ frame: frame({ intervalIndex: 0 }) });
     const trailing = document.querySelector(".connected-line-trailing")!;
     expect(trailing.textContent).toBe("WARM-UP");
+    expect(trailing.querySelector(".connected-header-countdown")).toBeNull();
+  });
+
+  it("shows READY, not a running countdown, at armed — even with warm-up disabled and a non-null ordinal (task-5-review finding)", () => {
+    // THE REGRESSION THIS PINS. Warm-up is OFF by default
+    // (`usePreferences`'s own null column) — `FILLING_LOW_NO_WARMUP` means
+    // program index 0 is a NUMBERED work interval (ordinal 1, not null),
+    // so `headerTrailing`'s OTHER guard (`intervalOrdinalLabel === null`)
+    // does not fire here. Only an explicit `status === "armed"` check can
+    // stop the header composing a running countdown before the erg has
+    // moved. Every other armed test in this file (and
+    // `ConnectedSurface.test.tsx`'s own "armed's first frame" block) uses
+    // a warm-up-bearing fixture, where the ordinal-null guard already
+    // masked a missing status guard — this fixture is the one shape that
+    // exposes it. `phase: "ready"` is what `deriveProgram`/`deriveSession`
+    // turn into `status: "armed"` (`ConnectedSurface.test.tsx`'s own
+    // "status precedence" describe block proves that mapping).
+    renderGrid(
+      {
+        phase: "ready",
+        frame: frame({
+          state: "armed",
+          intervalIndex: 0,
+          elapsedSeconds: 0,
+          distanceMeters: 0,
+          rowingActive: false,
+        }),
+      },
+      FILLING_LOW_NO_WARMUP,
+    );
+    const trailing = document.querySelector(".connected-line-trailing")!;
+    expect(trailing.textContent).toBe("1 OF 4 · READY");
     expect(trailing.querySelector(".connected-header-countdown")).toBeNull();
   });
 
