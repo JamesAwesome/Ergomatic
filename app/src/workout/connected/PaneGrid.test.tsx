@@ -941,33 +941,26 @@ describe("THE ACCENT CENSUS: accent is a CONTROL colour, and nothing else", () =
     expect(row(3).querySelector(".connected-grid-countdown")).not.toBeNull();
   });
 
-  it("the reused phone-timer ruler is still repainted ink here", () => {
-    // The census above only looks at `.connected-*` classes, which is only
-    // honest while the ruler's fill stays overridden inside
-    // `.connected-pane` (task 6's own rule). Without this, deleting that
-    // rule would put accent back on the total-left bar and the census
-    // would not notice.
-    //
-    // `.timer-dot-past`/`.timer-dot-current`'s own override rules retired
-    // in connected-revamp Task 3's fix round (task-3-review.md
-    // Important-2): `IntervalSegments` is no longer reused on ANY
-    // connected pane — pane A's usage went with `PaneTimer.tsx` (Task 2),
-    // pane B's went with the equal-width segment bar Task 3 dropped — so
-    // no `.timer-dot*` element can render inside `.connected-pane` any
-    // more, and a test pinning those two rules' existence would have been
-    // pinning a vacuous invariant.
-    const rule =
-      /\.connected-pane\s+\.timer-total-bar\s+span\s*\{([^}]*)\}/.exec(
-        DECLARATIONS,
-      );
-    expect(rule).not.toBeNull();
-    expect(rule![1]).not.toContain("--accent");
-    // The SCOPED overrides, not the bare phone-timer classes: `.timer-dot-
-    // past`/`-current` themselves are still real (`Timer.tsx`'s own
-    // `IntervalSegments` usage), only `.connected-pane`'s repaint of them
-    // is dead.
+  // CR2 spec 3 Task 4 RETIRES THE OVERRIDE THIS TEST USED TO PIN, not just
+  // the risk it guarded: `.connected-pane .timer-total-bar span` (the rule
+  // that used to repaint `TimerRuler`'s own accent fill ink inside a
+  // connected pane) is gone along with `TimerRuler` itself — `PaneLive`
+  // forks its own `ConnectedProgressBar` now (Task 3/4), which paints ink
+  // directly, never accent, with no override needed to correct it. Same
+  // story `.timer-dot-past`/`-current`'s own retired overrides already
+  // told (this test's own history, kept below): a component that is never
+  // reused inside `.connected-pane` needs no neutralising rule, and a test
+  // that pinned one would be pinning a vacuous invariant. This test now
+  // proves the STRONGER fact directly — no reused phone-timer component
+  // renders inside a connected pane at all, so there is no accent surface
+  // left for a missing override to expose.
+  it("no phone-timer component (TimerRuler, UpNextStrip, IntervalSegments) can render inside a connected pane any more", () => {
+    expect(DECLARATIONS).not.toContain(".connected-pane .timer-total-bar");
+    expect(DECLARATIONS).not.toContain(".connected-pane .timer-total-warmup");
     expect(DECLARATIONS).not.toContain(".connected-pane .timer-dot-past");
     expect(DECLARATIONS).not.toContain(".connected-pane .timer-dot-current");
+    expect(DECLARATIONS).not.toMatch(/\.connected-pane[^{]*\.timer-upnext/);
+    expect(DECLARATIONS).not.toMatch(/\.connected-pane[^{]*\.timer-total\b/);
   });
 
   it("the countdown's mark is a COLOUR, never an enlarged size — and gold, never accent or a verdict", () => {
@@ -1046,14 +1039,15 @@ describe("judged cells: pane C goes through the ONE helper", () => {
   });
 
   it("the WHOLE SURFACE's judged-cell count, pane by pane", () => {
-    // The number the mutation round moves: pane B 4 (hero/rate/HR/meters),
-    // pane C 4 on this frame (one completed row's two cells plus the active
-    // row's two) — EIGHT in total. Break `judgeActual` and every one of
-    // them lands on the same wrong verdict at once, which is the property
-    // this file is here to keep. Pane A (3: NOW/RATE/METERS) retired with
-    // `PaneTimer.tsx` (connected-revamp Task 2); a stored `"timer"` now
-    // aliases to live via `PANES.includes`, so it is no longer a distinct
-    // pane to count.
+    // The number the mutation round moves: pane B 2 (hero/rate — CR2 spec 3
+    // Task 4 cut HR and session METERS off `PaneLive` outright, spec §3
+    // fate table), pane C 4 on this frame (one completed row's two cells
+    // plus the active row's two) — SIX in total. Break `judgeActual` and
+    // every one of them lands on the same wrong verdict at once, which is
+    // the property this file is here to keep. Pane A (3: NOW/RATE/METERS)
+    // retired with `PaneTimer.tsx` (connected-revamp Task 2); a stored
+    // `"timer"` now aliases to live via `PANES.includes`, so it is no
+    // longer a distinct pane to count.
     const counts: Record<string, number> = {};
     for (const pane of ["live", "grid"] as const) {
       localStorage.setItem(LAST_PANE_KEY, pane);
@@ -1068,7 +1062,7 @@ describe("judged cells: pane C goes through the ONE helper", () => {
       counts[pane] = judgedCells().length;
       cleanupRender();
     }
-    expect(counts).toStrictEqual({ live: 4, grid: 4 });
+    expect(counts).toStrictEqual({ live: 2, grid: 4 });
   });
 
   // THE STALE OVERRIDE, SCOPED (task-7 review, M2). Staleness is a property
@@ -1511,18 +1505,21 @@ describe("tab order through pane C", () => {
         .map((rule) => rule.selectors.join(", ")),
     ).toStrictEqual([]);
 
-    // P11: `slice(indexOf(portrait), lastIndexOf(landscape))` yielded `""`
-    // — trivially satisfying both assertions below — the moment the portrait
-    // query moved after the last landscape one, or was deleted. Proven: the
-    // portrait query moved to EOF with `.connected-grid-row { order: 3 }`
-    // added inside it passed 46/46. This reads the query's real body.
-    const portraitQueries = atRuleBodies(DECLARATIONS, PORTRAIT_QUERY);
-    expect(portraitQueries).toHaveLength(1);
-    // Two independent claims, not one: `"connected-pane-grid"` is NOT a
-    // superstring of `"connected-grid"` (the shared prefix stops at
-    // `connected-`), so neither `toContain` implies the other.
-    expect(portraitQueries[0]).not.toContain("connected-grid");
-    expect(portraitQueries[0]).not.toContain("connected-pane-grid");
+    // P11's own portrait-specific check retired ITS OWN TARGET (CR2 spec 3
+    // Task 4): the ONE `@media (orientation: portrait)` block index.css
+    // ever had was the connected-pane-live hero/metric-row/ruler `order`
+    // block this task deletes outright (natural DOM order already matches
+    // §2C's own sequence once the metric row and `TimerRuler` are gone —
+    // that deletion's own comment has the reasoning) — index.css is
+    // mobile-first, so nothing else in the file ever needed a portrait
+    // query of its own. `atRuleBodies` now finds ZERO, not one; the
+    // `paneCRules` census above (whole-file, every nesting depth, no
+    // slicing) is what still catches an `order` declaration wherever a
+    // future rule might add one, portrait query or not — this assertion
+    // is the current STRUCTURAL fact, not a re-run of P11's own slicing
+    // bug proof (nothing here can regress into that bug: `atRuleBodies`
+    // reads real brace nesting, never an `indexOf`/`slice` window).
+    expect(atRuleBodies(DECLARATIONS, PORTRAIT_QUERY)).toStrictEqual([]);
   });
 
   it("has EXACTLY ONE focusable thing of its own: the named scroller", () => {

@@ -3992,10 +3992,15 @@ button:disabled {
    is painted at all: an unrowed warm-up is plain unfilled track, like any
    other unrowed span.
 
-   THE VALUE IS A LIGHTER STEP OF WHATEVER THE SURFACE'S WORK FILL IS, which
-   is why there are two rules — the same per-surface split the fill itself
-   already has (`.connected-pane .timer-total-bar span`, below). No new hue
-   and no new token; both are ink-scale values this file already uses.
+   THE VALUE IS A LIGHTER STEP OF WHATEVER THE SURFACE'S WORK FILL IS —
+   this rule is the phone timer's own. The connected surface no longer has
+   a matching override: `ConnectedProgressBar` (CR2 spec 3 Task 3, mounted
+   Task 4) is a 3-state bar — done/active/upcoming, `.connected-progress-
+   seg-*` below — with no fourth warm-up tone at all; a warm-up interval is
+   simply its own segment, active like any other while it runs. `PaneLive`
+   no longer imports `TimerRuler`, so nothing reaches this rule from that
+   surface any more. No new hue and no new token; this rule's own value is
+   ink-scale, same as it always was.
 
    Computed WCAG relative-luminance ratios, not eyeballed:
 
@@ -4414,25 +4419,16 @@ button:disabled {
    THE LEAK, CLOSED (spec §7, adversarial finding): every selector in this
    block used to be a bare `.timer-*` class, reaching ANY element with that
    class anywhere in the DOM — including the connected surface's own panes,
-   which reuse `TimerRuler`/`UpNextStrip` (and therefore `.timer-total`/
-   `.timer-upnext*`) by design. `.connected-pane-live`'s own landscape rules
-   further down this file had to work around whatever this block set (see
-   e.g. `.connected-pane-live .connected-metric-row .timer-upnext-then`'s
-   own comment, which used to describe suppressing a value THIS block turned
-   on uninvited). EVERY SELECTOR BELOW IS NOW SCOPED to `.timer-screen` — a
-   descendant combinator, not a bare class — so nothing here can ever match
-   inside `.connected-surface` again, however similarly two components'
-   output classes happen to be named. The connected-pane overrides that used
-   to compensate for the leak are UNCHANGED (they were already the more
-   specific, deliberately-authored rules — see e.g. index.css's own
-   `.connected-pane-live .connected-metric-row .timer-upnext-then` block,
-   which sets `display: inline` as a FEATURE match to the mockup already,
-   not a leak workaround) — nothing needed deleting there because nothing
-   there was ever load-bearing on this block reaching it. The regression
-   pin lives in `e2e/design.spec.ts` (connected-revamp Task 7): a connected
-   pane's `.timer-total`/`.timer-upnext-then` computed styles, read in
-   landscape, before and after this scoping — proving the leak's removal
-   changes nothing a rower can see.
+   which USED TO reuse `TimerRuler`/`UpNextStrip` (and therefore
+   `.timer-total`/`.timer-upnext*`) by design; CR2 spec 3 Task 4 forked both
+   off the connected surface entirely (`ConnectedProgressBar`, the band's
+   own `.connected-band-*` family), so as of this task the two component
+   trees share no class names left for a leak to reach even in principle —
+   history, kept because the SCOPING below is still the right discipline
+   regardless of whether a current leak target exists. EVERY SELECTOR BELOW
+   IS SCOPED to `.timer-screen` — a descendant combinator, not a bare class
+   — so nothing here can ever match inside `.connected-surface`, however
+   similarly two components' output classes happen to be named.
 
    ONE CONTENT COLUMN, not two (revision §5's own frame: a single vertical
    stack — label line, dots, the hero row, UP NEXT + Pause, TOTAL LEFT —
@@ -6134,44 +6130,17 @@ section:not(.news-pinned) .news-row:last-of-type {
 }
 
 /* ACCENT APPEARS NOWHERE ON THESE PANES (rule 1 at the top of this block).
-   `TimerRuler`'s own TOTAL LEFT bar fills `--accent` on the phone timer,
-   and the component is reused here verbatim — on this surface the progress
-   fill is ink instead. Tasks 4 and 4b rebuilt those internals and this
-   override still reaches exactly one element — the fill — because every
-   child either of them added is a `div`, not a `span` (the notches, see
-   `.timer-total-notch` above; and §5b's warm-up fill,
-   `.timer-total-warmup`). The notches are `--ink`/`--page` on both surfaces
-   and can never pick up accent; the warm-up fill is the one child that DOES
-   take a second override here, immediately below, and it takes an ink-scale
-   value too. The sibling override this comment
-   used to describe,
-   `.connected-pane .timer-dot-past`/`-current` (the phone timer's segment
-   strip painting COMPLETED segments `--accent`), retired in the same fix
-   round that removed it: `IntervalSegments` is no longer reused on ANY
-   connected pane — pane A's own usage went with `PaneTimer.tsx`
-   (connected-revamp Task 2), and pane B's went with the equal-width
-   segment bar this task's own rebuild dropped (design spec §3's casualty
-   list). No `.timer-dot*` element can render inside `.connected-pane` any
-   more (`grep -rn "timer-dot" src --include=*.tsx`: only `components/
-   IntervalSegments.tsx`, consumed solely by `session/Timer.tsx`). */
-.connected-pane .timer-total-bar span {
-  background: var(--ink);
-}
+   The two `TimerRuler`-reuse overrides that used to live here
+   (`.connected-pane .timer-total-bar span`/`.timer-total-warmup`) died with
+   `TimerRuler` itself (CR2 spec 3 Task 4): `PaneLive` no longer imports it
+   — the redesign's own `ConnectedProgressBar` (Task 3) is a fork with its
+   own class family (`.connected-progress-*`), never `.timer-total-*`, so
+   there is nothing left inside `.connected-pane` for either override to
+   reach. `IntervalSegments`'s own sibling overrides retired earlier still
+   (connected-revamp Task 3/4) — no `.timer-dot*` or `.timer-total-*`
+   element can render inside `.connected-pane` any more.
 
-/* …and the warm-up's fill takes the matching lighter step on this surface.
-   `--ink-5` reads as a mid grey against the phone timer's `--accent` fill;
-   against an INK fill it would be the wrong distance in the wrong place
-   (6.21:1 from the fill but only 1.97:1 from the track), so the connected
-   pane steps one darker: `--ink-4` sits 3.23:1 from the ink work fill and
-   3.78:1 from the `--rule-2` track, clearing the 3:1 non-text floor on BOTH
-   sides. Full derivation at `.timer-total-warmup` itself. One rule, the
-   same shape as the fill override above it, and still no accent anywhere on
-   these panes. */
-.connected-pane .timer-total-warmup {
-  background: var(--ink-4);
-}
-
-/* The connection indicator (handoff §3): 8px filled square + the device's
+   The connection indicator (handoff §3): 8px filled square + the device's
    real advertised name. Hollow square once the link is gone. */
 /* `flex: 1; min-width: 0` (CR2 spec 3 task 1): this component's ONLY
    remaining render site is the shell's own header row
@@ -6242,34 +6211,33 @@ section:not(.news-pinned) .news-row:last-of-type {
   color: var(--ink-3);
 }
 
-/* Handoff §4: paused "greys but holds its last value". Same grey the
-   stale treatment uses — both mean "this number is not being updated".
-   Reused by `PaneLive.tsx`'s `.connected-metric-value` (connected-revamp
-   Task 2's own trap note, carried forward by Task 3: the BASE
-   `.connected-clock-value` rule that used to live here retired with
-   `PaneTimer.tsx`, pane A's only renderer; this modifier survives because
-   it is an independent second consumer — the interval countdown's own
-   metric-row cell now, `.connected-second-value` before it). */
-.connected-clock-value-held {
-  color: var(--ink-3);
-}
-
+/* `.connected-clock-value-held` DIED HERE (CR2 spec 3 Task 4): its one
+   remaining consumer, `PaneLive.tsx`'s own interval-clock metric-row cell,
+   is cut outright (`intervalClockLabel` off `SurfaceModel`, spec §3 fate
+   table) — nothing on this pane holds a value greyed-but-frozen any more
+   the way that cell did through a freeze; the split/rate heroes suppress
+   to a plain dash instead (`livePace`/`liveRate`'s own paused branch). */
 .connected-value-absent {
   color: var(--ink-3);
 }
 
-/* --- Pane B: two heroes (connected-revamp Task 3, design spec §6) ---
-   Cards are gone (revision §3: "The old three metric cards are gone; the
-   metric row costs 44px, not 120."). RATE is promoted to a second hero;
-   METERS and HR moved into `.connected-metric-row` below, alongside the
-   interval countdown, as plain judged numerals — no card, no border, no
-   per-cell caption. `JudgedCard.tsx`/`.connected-cards*`/`.connected-card-*`
-   had no other consumer and retired with them. */
+/* --- Pane B: two heroes (connected-revamp Task 3, design spec §6;
+   CARDS-AND-METRIC-ROW ERA RETIRED CR2 spec 3 Task 4) --- Cards went first
+   (revision §3: "The old three metric cards are gone"), RATE was promoted
+   to a second hero, and METERS/HR moved into a metric row alongside the
+   interval countdown — this task cut that metric row outright (`meters`/
+   `hr`/`intervalClockLabel` off `SurfaceModel`, spec §3 fate table): the
+   redesign has no slot for session meters or HR on this pane at all any
+   more (HR survives only as a grid column). `JudgedCard.tsx`/
+   `.connected-cards*`/`.connected-card-*` had no other consumer and
+   retired earlier, same story. */
 
 /* PORTRAIT: the wrapper disappears (`display: contents` promotes both
-   heroes to direct flex items of `.connected-pane-live`, stacked by the
-   portrait `order` rules below) — one markup serves both orientations.
-   LANDSCAPE (below) turns it into a real flex row, the two heroes side by
+   heroes to direct flex items of `.connected-pane-live`) — one markup
+   serves both orientations, natural DOM order doing the sequencing (this
+   file's own note where the old portrait `order` block used to live has
+   the reasoning). LANDSCAPE (below) turns it into a real flex row, the two
+   heroes side by
    side with a 1px rule between them. */
 .connected-heroes {
   display: contents;
@@ -6298,10 +6266,18 @@ section:not(.news-pinned) .news-row:last-of-type {
   display: none;
 }
 
+/* THE STALE CAPTION — the ONLY hero label left post-redesign (design spec
+   Stale table: "the ONLY place a hero label exists post-redesign", pinned
+   at label role `--c-size-label` 15/14, 0.10em, ink-3, above the value —
+   NOW/TARGET/UP NEXT all cut from LIVE outright, §2A). Migrated off the
+   shared `--size-label` (the phone timer's own token) onto the connected-
+   only family (§1: "connected rules stop consuming `--size-*`"); tracking
+   dropped from 0.18em to the redesign's own 0.10em, matching the band's
+   own label tracking below rather than the retired NOW/LAST treatment's. */
 .connected-hero-label {
   font-family: var(--font-mono);
-  font-size: var(--size-label);
-  letter-spacing: 0.18em;
+  font-size: var(--c-size-label);
+  letter-spacing: 0.1em;
   color: var(--ink-3);
 }
 
@@ -6315,61 +6291,51 @@ section:not(.news-pinned) .news-row:last-of-type {
    which would have out-ranked `connected-value-absent`'s grey the moment a
    REST phase tried to use it. Ink is the inherited default (`body{color:
    var(--ink)}`), so the ordinary within/has-a-target case is unaffected
-   either way. */
+   either way.
+
+   FONT-SIZE MOVED OFF THIS SHARED RULE (CR2 spec 3 Task 4, design spec §1's
+   role mapping): the two heroes now draw from DIFFERENT tokens
+   (`--c-size-hero` 112/100 split, `--c-size-hero-2` 92/84 rate — "Rate: …
+   same treatment" §2A, not the same SIZE), so the size is set by the two
+   selectors just below rather than by this one. */
 .connected-hero-value {
   font-family: var(--font-mono);
-  font-size: var(--size-hero);
   font-weight: 500;
   line-height: 0.9;
   letter-spacing: -0.05em;
   white-space: nowrap;
 }
 
+.connected-hero-split .connected-hero-value {
+  font-size: var(--c-size-hero);
+}
+
+.connected-hero-rate .connected-hero-value {
+  font-size: var(--c-size-hero-2);
+}
+
 /* "The eye should land on the seconds, not the decimal" (handoff §3). */
 .connected-hero-tenths {
-  font-size: var(--size-hero-tenths);
+  font-size: var(--c-size-tenths);
 }
 
-/* THE UNIT BESIDE THE NUMERAL (testers via James, 2026-08-13: "next to rate
-   there should be a small /500m", "next to the stroke rate there should be
-   a small SPM"). It used to live only in the hero's own label — `NOW ·
-   /500M` — which sits at --size-label 10px above a 112px numeral, far
-   enough away that a rower glancing mid-piece read the number with no unit
-   attached to it. The label keeps NOW/LAST, which is the part that actually
-   changes; the unit moved here.
-
-   Sized off --size-label rather than a new step: it is an annotation, not a
-   reading, and the size scale earns a step only when a value needs one.
-   --ink-3, the same token `.connected-hero-label` directly above it already
-   uses — the unit and the NOW/LAST label are the same size, the same
-   family, and the same class of annotation, so they should not be two
-   different greys. This was --ink-4 for one commit on the theory that
-   --ink-3 "is the stale tint" and would read as a dropped link; the theory
-   was wrong twice over. The label beside it has been --ink-3 permanently
-   and nobody reads it as stale, and --ink-4 is BANNED at this size anyway:
-   it measures 4.48:1 against --surface-sunken, under the AA floor, which
-   `design.spec.ts`'s `assertNoFailingInk4Labels` sweep catches by walking
-   every small mono leaf rather than a fixed list. It caught this one. */
-/* `.connected-hero` is a flex COLUMN, so the value and its unit need their
-   own row box or the unit drops to a line of its own. `baseline`, not
-   `center`: the unit should sit on the numeral's feet the way a unit does
-   in print, and the split hero's own tenths span already establishes that
-   the hero's baseline is the one everything here aligns to. `min-width: 0`
-   so a long reading cannot push the unit out of the pane — the same
-   defence `.connected-surface-body` needed at the column level. */
-.connected-hero-reading {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  min-width: 0;
-}
-
-.connected-hero-unit {
-  font-family: var(--font-mono);
-  font-size: var(--size-label);
-  letter-spacing: 0.12em;
-  color: var(--ink-3);
-  white-space: nowrap;
+/* ARMED'S GHOST (design spec §2D): the split hero's actual reading
+   previews the target VALUE at armed (`surfaceModel.ts`'s `armedMirror`),
+   with its judgement forced `"within"` by the model — indistinguishable by
+   class alone from an ordinary unjudged reading. This is the one bit of
+   presentation §2D asks for beyond the model's own value: ink-4, never
+   ink-5 ("nothing is judged" — a rower has not rowed a stroke yet, so the
+   preview must read as a PREVIEW, not a live number). `PaneLive.tsx` adds
+   this class only when `model.status === "armed"`, only on the split hero
+   — the rate hero shows `0` in plain ink at armed (§2D), no ghost. Declared
+   AFTER `.connected-hero-value` so its `color` wins over inheritance; it
+   never has to out-rank `connected-value-absent` (armed is never
+   `absent` — `armedMirror` always substitutes a real preview number, not a
+   dash) or a judgement class (armed's own judgement is always `"within"`,
+   which — like every other `-within` case — declares no `color` of its
+   own to conflict with). */
+.connected-hero-ghost {
+  color: var(--ink-4);
 }
 
 .connected-hero-target {
@@ -6379,104 +6345,56 @@ section:not(.news-pinned) .news-row:last-of-type {
   padding-top: 6px;
 }
 
-.connected-hero-target-label {
-  font-family: var(--font-mono);
-  font-size: var(--size-label);
-  letter-spacing: 0.14em;
-  color: var(--ink-3);
-}
-
 /* Ink by inheritance (see the hero-value comment above) — the handoff's own
    pane-B line says "accent value"; superseded by its own §3 ruling that the
    target is ink in connected mode, and by the phase spec (DEVIATIONS row
    0). `connected-value-absent` (declared above, wins on source order for
-   the no-target REST case) is the only thing that ever repaints it. */
+   the no-target REST case) is the only thing that ever repaints it.
+   `--c-size-target` (40/36), not the RETIRED shared `--size-target`
+   (46/36, dead the instant this migration lands — `tokens.css`'s own
+   comment on why it's gone) — CR2 spec 3 Task 4 migration, design spec
+   §2A/§2C. */
 .connected-hero-target-value {
   font-family: var(--font-mono);
-  font-size: var(--size-target);
+  font-size: var(--c-size-target);
   line-height: 1;
   letter-spacing: -0.03em;
 }
 
+/* THE SPLIT HERO'S SOURCE TAG (`6K`) — design spec §2A/§2C: "the target
+   keeps its value + tag, loses only the word TARGET". Migrated off a
+   hardcoded 12px onto `--c-size-label` (15/14), the exact value both
+   tables give this role. */
 .connected-hero-target-ref {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--c-size-label);
   letter-spacing: 0.1em;
   color: var(--ink-3);
 }
 
-/* --- Pane B: the metric row (revision §3: "left-in-interval · meters ·
-   HR sit in one 30px baseline row under a rule ... they were three cards
-   costing 120px; they now cost 44"). Three plain judged numerals, no card,
-   under the pane's 1px ink rule. The bar follows as its own sibling
-   (`TimerRuler`, notched by interval since connected-revamp Task 4 —
-   the ¼/½/¾ tick row it used to end with only renders now when §5's
-   fallbacks fire, which makes this block SHORTER than the figure below
-   assumes, never taller).
-
-   UP NEXT NESTS INSIDE this row rather than following it (`PaneLive.tsx`'s
-   own JSX comment has the full reasoning): landscape's fixed 296px budget
-   — `.connected-surface`'s own `-26px` height term plus the 52px footer
-   plus two 8px grid row-gaps, none of it new to this task — genuinely
-   cannot fit two 112px heroes AND a full extra row for UP NEXT AND the
-   78px ruler; a first version that gave UP NEXT its own row (matching this
-   file's own prose framing, "then UP NEXT, then the ruler") measured the
-   two heroes collapsing to a 4px sliver and their 112px text spilling
-   straight through the metric row and UP NEXT beneath it — caught by eye
-   in the very first `pnpm screenshots` run of this rebuild, not by any
-   automated gate (the no-scroll/no-clip pins only check the PANE's own
-   outer box, which a flex item's overflow-past-its-own-bounds does not
-   grow). `flex-wrap` is what serves both layouts from one DOM: `.timer-
-   upnext`'s own `flex: 1 1 100%` (below) forces it onto a second, wrapped
-   line by default (portrait, keeping its established pill treatment
-   unchanged) — the landscape override turns wrapping off so it lands
-   inline on the row's own baseline instead, exactly where revision §3
-   draws it. */
-.connected-metric-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 14px;
-  border-top: 1px solid var(--ink);
-  padding-top: 10px;
-}
-
-.connected-metric-row .timer-upnext {
-  flex: 1 1 100%;
-}
-
-.connected-metric-cell {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.connected-metric-label {
+/* THE RATE HERO'S OWN UNIT WORD (`SPM`), design spec §2A/§2C: "beneath
+   target … + SPM … ink-3" — SPM now sits BESIDE THE TARGET, not beside the
+   numeral the way `/500m` and `SPM` both used to (that shared
+   `.connected-hero-unit`/`.connected-hero-reading` pair died with the
+   redesign — see `PaneLive.tsx`'s own header comment). Landscape's own
+   value is 19px, coincidentally equal to `--c-size-row`; portrait's is
+   18px, NOT the token family's own 14px `--c-size-label` role nor a value
+   any `--c-size-*` token carries — the README's own figure for this exact
+   slot, which §2C's own table calls out as overriding "the portrait
+   scale's '19 table & SPM' slot" by name. Literal px, not a token, because
+   no token in the family carries this exact pair. */
+.connected-hero-rate-unit {
   font-family: var(--font-mono);
-  font-size: var(--size-label);
-  letter-spacing: 0.14em;
+  font-size: 18px;
   color: var(--ink-3);
 }
 
-/* No `color` declaration — same inheritance rule as the hero value above.
-   METERS and HR carry no target (`surfaceModel.ts` passes `target: null`
-   for both), so `judgeActual` always reads them `"within"`; the interval
-   countdown is a plain string, never judged at all. */
-.connected-metric-value {
-  font-family: var(--font-mono);
-  font-size: var(--size-metric);
-  line-height: 1;
-  letter-spacing: -0.03em;
-}
-
 /* --- The redesigned progress bar (CR2 spec 3 task 3, design spec §2A)
-   `ConnectedProgressBar.tsx`. NOT mounted this task — the component ships
-   complete with its own CSS regardless (spec §2A: "the bar consumes
-   `boundaries` + `totalSeconds` + elapsed for both modes"), task 4 wires
-   it into `.connected-pane-live` in place of `.timer-total*`. Nothing here
-   collides with those rules: this component uses its own class family
-   throughout, never `.timer-total-bar`/`.timer-ruler`. --------------- */
+   `ConnectedProgressBar.tsx`. Mounted this task (Task 4) as `PaneLive`'s
+   FIRST child, ahead of the heroes, matching §2A/§2C's own row order —
+   in place of `TimerRuler`'s old equal-height/notch bar. Nothing here
+   collides with the phone timer's own rules: this component uses its own
+   class family throughout, never `.timer-total-bar`/`.timer-ruler`. */
 
 .connected-progress {
   display: flex;
@@ -6570,6 +6488,90 @@ section:not(.news-pinned) .news-row:last-of-type {
   font-size: 12px;
   color: var(--ink-3);
   transform: translateX(50%);
+}
+
+/* --- The band: up-next + TOTAL LEFT (CR2 spec 3 Task 4, design spec §2A/
+   §2C/§3: "The up-next line is rendered by the band directly"). Replaces
+   the old metric row's UP NEXT cell AND `TimerRuler`'s own TOTAL LEFT row
+   in one element. Class names are e2e-load-bearing (task brief):
+   `connected-band`, `connected-band-upnext`, `connected-band-cell`.
+
+   PORTRAIT (this rule): a COLUMN — up-next above, `TOTAL LEFT` below, no
+   shared rule between them (§2C draws up-next with no rule of its own; the
+   `TOTAL LEFT` cell carries its OWN rule, `.connected-band-cell`'s own
+   `border-top` below). LANDSCAPE (further down) turns this into a ROW
+   instead, with ONE rule above the whole band. */
+.connected-band {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.connected-band-upnext {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Portrait-only (§2C); landscape hides it outright (§2A: "NO label") —
+   `--c-size-label`, matching every other label role on this surface. */
+.connected-band-upnext-label {
+  font-family: var(--font-mono);
+  font-size: var(--c-size-label);
+  letter-spacing: 0.1em;
+  color: var(--ink-3);
+}
+
+/* PORTRAIT'S OWN 23px (§2C: "a fit constraint for 342px content width" —
+   NOT `--c-size-band`'s own 28px portrait value; the table is explicit
+   that this one slot overrides the shared scale). `overflow`/`text-
+   overflow` are a SAFETY NET here, the same stance the retired
+   `.timer-upnext-value` took on this exact string (`UpNextStrip.tsx`'s own
+   comment) — the fit is engineered, not guaranteed by a hard wrap. */
+.connected-band-upnext-value {
+  font-family: var(--font-mono);
+  font-size: 23px;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Hidden by default — portrait's own then-less form (§2C: "the existing
+   `.timer-upnext-then { display: none }` mechanism dies with UpNextStrip,
+   so the band reproduces the drop itself"). The landscape override below
+   turns it back on, inheriting the value's own font/colour so the word
+   reads as part of the same sentence, not a second style. */
+.connected-band-upnext-then {
+  display: none;
+}
+
+/* `TOTAL LEFT`'s own rule (portrait): the ONE thing in the band that gets
+   a `border-top` outside landscape's shared band rule — §2C draws this
+   cell "on a rule", up-next above it carries none. */
+.connected-band-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-top: 1px solid var(--ink);
+  padding-top: 12px;
+}
+
+.connected-band-cell-label {
+  font-family: var(--font-mono);
+  font-size: var(--c-size-label);
+  letter-spacing: 0.1em;
+  color: var(--ink-3);
+}
+
+/* `--c-size-band` (30/28) — design spec §2A: "value mono 30px ink"; §2C:
+   "value mono 28" (the token's own portrait value, no override needed).
+   Shared with `.connected-band-upnext-value`'s own LANDSCAPE size below —
+   in landscape the two sit on one baseline at the same visual weight. */
+.connected-band-cell-value {
+  font-family: var(--font-mono);
+  font-size: var(--c-size-band);
+  color: var(--ink);
 }
 
 /* --- Pane C, the grid (Task 7, handoff §3; rebuilt connected-revamp
@@ -7006,20 +7008,33 @@ section:not(.news-pinned) .news-row:last-of-type {
   color: var(--ink-2);
 }
 
-/* The banner takes a block out of a frame that had none spare, so the two
-   heroes step down while it is up (connected-revamp Task 3: ONE rule now
-   covers both — `.connected-hero-value` is shared by the split and rate
-   heroes, where it used to be pace's alone with a second, independent rule
-   for the interval clock's own 72px). A stale reading is the one that
-   least needs to be legible from the doorway — it is not current, and it
-   is already greyed. Measured pre-Task-3: without this, pane B ran 22px
-   past the bottom of a 390x844 frame. */
-.connected-surface:has(.connected-lost) .connected-hero-value {
+/* THE DISCONNECTED STEP-DOWN (design spec §2's own table): the banner
+   takes a block out of a frame that had none spare, so the two heroes step
+   down while it is up. TWO RULES NOW, not one (CR2 spec 3 Task 4 — the
+   table's own words: "today's step-down is ONE shared rule for both
+   heroes … it splits into two"), because the two heroes no longer SHARE a
+   base size (`--c-size-hero` 112/100 split vs `--c-size-hero-2` 92/84
+   rate): portrait 100→76 split, 84→64 rate — the table's own pinned pair,
+   the README giving no portrait figures at all. A stale reading is the one
+   that least needs to be legible from the doorway — it is not current, and
+   it is already greyed. Measured pre-Task-3: without some step-down, pane
+   B ran 22px past the bottom of a 390x844 frame. */
+.connected-surface:has(.connected-lost)
+  .connected-hero-split
+  .connected-hero-value {
   font-size: 76px;
 }
 
+.connected-surface:has(.connected-lost)
+  .connected-hero-rate
+  .connected-hero-value {
+  font-size: 64px;
+}
+
+/* Tenths only exists on the split hero. 52→40 (design spec's own pinned
+   portrait pair; the README gives no portrait/tenths figures at all). */
 .connected-surface:has(.connected-lost) .connected-hero-tenths {
-  font-size: 42px;
+  font-size: 40px;
 }
 
 /* The ended hand-off frame is not a pane and has no pager: it keeps the
@@ -7166,12 +7181,24 @@ section:not(.news-pinned) .news-row:last-of-type {
   padding: 4px 12px;
 }
 
+/* RESTYLED TO THE BAND VOCABULARY (CR2 spec 3 Task 4, design spec §3: "The
+   `.connected-paused` footer … is restyled to the new band's vocabulary
+   but keeps its semantics exactly"). No §2 table row prices this element
+   directly (it is not part of any frame's property table — it is the
+   footer's OWN instruction, occluding nothing), so this is a judgment call
+   rather than a pinned figure: the hardcoded 14px this used to carry is
+   swapped for `--c-size-label` (15/14) — the token family's own label
+   role, the same one the band's own `TOTAL LEFT` caption reads — rather
+   than a second ad hoc number the redesign's token migration leaves
+   behind. Tracking follows suit, 0.14em to the band's own 0.10em.
+   Semantics untouched: still an instruction only, still its own END/AGAIN,
+   still in flow. */
 .connected-paused-label {
   flex: 1;
   font-family: var(--font-mono);
-  font-size: 14px;
+  font-size: var(--c-size-label);
   font-weight: 600;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.1em;
   color: var(--surface);
 }
 
@@ -7253,49 +7280,19 @@ section:not(.news-pinned) .news-row:last-of-type {
 
 /* --- Pane B's two heroes ---------------------------------------------- */
 
-/* TRAP FOR WHOEVER ADDS A FOCUSABLE ELEMENT TO A PANE (task-6 review, L4):
-   the `order` declarations below make PORTRAIT reading order diverge from DOM
-   order, and `order` moves the paint, never the tab sequence or the screen
-   reader's. Harmless today — neither pane contains anything focusable; every
-   control on this surface belongs to the shell (End, the segmented control)
-   and sits outside both panes. Put a button in a reordered slot and it will
-   be read and tabbed to in the wrong place. The fix then is to reorder the
-   DOM and drop the `order` for that item, not to add a `tabindex`.
-
-   PORTRAIT: `.connected-heroes` (`display: contents`, declared above)
-   promotes its two hero children to direct flex items of
-   `.connected-pane-live`, and `order` puts them back into the revision §3
-   portrait sequence — so one markup serves both orientations and nothing
-   re-mounts on rotation. `.connected-line` no longer lives inside this pane
-   (CR2 spec 3 task 1 moved it to the shell's header) and so carries no
-   `order` here any more. LANDSCAPE (below) turns the same wrapper into a
-   real flex row instead, the two heroes side by side: connected-revamp
-   Task 3's own reason is the same one this trick solved for pane A/B
-   before it (a shared grid track lets one child's numeral force the row
-   the other child's content lives in) — this rebuild only needed it for
-   the two heroes, not a second, independent readouts column. */
-@media (orientation: portrait) {
-  .connected-pane-live .connected-hero-split {
-    order: 1;
-  }
-
-  .connected-pane-live .connected-hero-rate {
-    order: 2;
-  }
-
-  .connected-pane-live .connected-metric-row {
-    order: 3;
-  }
-
-  /* UP NEXT nests inside `.connected-metric-row` now (index.css's own
-     comment on that class), so no `order` of its own is needed here — its
-     position among the metric row's OTHER children (the wrap onto its own
-     line) is `.connected-metric-row .timer-upnext`'s `flex: 1 1 100%`,
-     declared with that class above. */
-  .connected-pane-live .timer-total {
-    order: 4;
-  }
-}
+/* THE OLD PORTRAIT `order` BLOCK DIED HERE (CR2 spec 3 Task 4). It used to
+   put `.connected-heroes`' two promoted children, the metric row and the
+   ruler back into sequence by number — necessary only because THAT DOM
+   order (heroes, then the metric row's own UP NEXT, then the ruler) had to
+   be asserted rather than assumed. This task's rebuild does not need it:
+   `PaneLive.tsx` mounts the progress bar, then the heroes, then the band —
+   already the exact §2C portrait sequence — and every one of those three
+   siblings still carries `order: 0` (the default), so DOM order alone
+   produces the right paint order with nothing to reorder. Restated because
+   the next reader may look for it: the trap named in the block's own
+   retired comment (`order` moving paint but never tab sequence) no longer
+   applies to ANY connected-surface element — nothing here declares
+   `order`. */
 
 /* --- Landscape ------------------------------------------------------ */
 
@@ -7307,21 +7304,22 @@ section:not(.news-pinned) .news-row:last-of-type {
      timer included (fix round, review Minor-13: an earlier version of this
      comment read as an invitation for the timer's own landscape query,
      `:4011`/`:4199`/`:4296`, to add a SECOND `:root { --size-*: … }` —
-     it must not: two blocks redefining the same eight tokens in two
-     landscape queries is last-wins-by-source-order drift waiting to
-     happen, and nothing about `:root`'s own cascade needs a second copy to
-     reach a second surface). ONE name, two values, never a second name for
-     either half. */
+     it must not: two blocks redefining the same tokens in two landscape
+     queries is last-wins-by-source-order drift waiting to happen, and
+     nothing about `:root`'s own cascade needs a second copy to reach a
+     second surface). ONE name, two values, never a second name for either
+     half.
+
+     FOUR NAMES RETIRED (CR2 spec 3 Task 4) — `--size-hero`,
+     `--size-hero-tenths`, `--size-target`, `--size-metric` — matching
+     `tokens.css`'s own portrait-half deletion; see that file's comment for
+     why. */
   :root {
-    --size-hero: 112px;
-    --size-hero-tenths: 58px;
     --size-subhero: 56px;
-    --size-target: 46px;
-    --size-metric: 30px;
     --size-total: 22px;
     --size-row: 19px;
     --size-label: 11px;
-    /* connected-revamp Task 7: the phone timer's own ninth token
+    /* connected-revamp Task 7: the phone timer's own countdown token
        (tokens.css's own comment on `--size-countdown`'s portrait half) —
        redefined here, not in a second landscape block, per this block's
        own standing rule just above. */
@@ -7565,8 +7563,9 @@ section:not(.news-pinned) .news-row:last-of-type {
      unchanged here) already keeps End off this column's own right edge;
      landscape only needs the grid placement and a trimmed side padding —
      this frame is 454px shorter than portrait and every row here is
-     measured, same discipline as `.connected-pane .timer-upnext`'s own
-     trim just below.
+     measured, the same discipline every landscape trim on this surface
+     follows (the heroes' own `flex: 1.25/0.75` split and the band's own
+     `gap: 30px` below are both §2A's own pinned figures, not guesses).
 
      `padding-top: 0`, NOT `env(safe-area-inset-top)` (fix round, review
      Important-1 — this rule tried the inset here first and it was wrong
@@ -7760,21 +7759,14 @@ section:not(.news-pinned) .news-row:last-of-type {
     padding: 12px 16px 12px 14px;
   }
 
-  /* THE PHONE TIMER'S LANDSCAPE QUERY IS NOT SCOPED TO ITS OWN SCREEN.
-     `.timer-upnext` and `.timer-total` each get an explicit
-     `grid-column`/`grid-row` there, so the two components the connected
-     panes reuse verbatim arrive carrying the phone timer's grid placement
-     into a layout that is not a grid (task-6's own measured find:
-     `align-self: center`, inherited the same way, collapsed the segment
-     strip pane B used to render here from the column's full width to 18px
-     of content — connected-revamp Task 3 dropped that consumer, but the
-     other two survive and need the same reset). */
-  .connected-pane .timer-upnext,
-  .connected-pane .timer-total {
-    grid-column: auto;
-    grid-row: auto;
-    align-self: stretch;
-  }
+  /* THE PHONE-TIMER-LEAK WORKAROUND THAT USED TO LIVE HERE IS GONE (CR2
+     spec 3 Task 4). `TimerRuler`/`UpNextStrip` reused verbatim by the
+     connected panes — `.timer-upnext`/`.timer-total`, both carrying the
+     phone timer's own landscape `grid-column`/`grid-row` into a layout
+     that is not a grid — is history: `PaneLive` forks its own progress bar
+     and its own band now, and neither carries a `.timer-*` class, so there
+     is nothing left here for the phone timer's landscape query to leak
+     into. */
 
   /* Pane B is a COLUMN in landscape too (connected-revamp Task 3) — the
      generic `.connected-pane { flex-direction: row }` above suited the old
@@ -7831,15 +7823,17 @@ section:not(.news-pinned) .news-row:last-of-type {
     min-width: 0;
   }
 
-  /* The mockup's own uneven split (`flex: 1.18` / `0.82`): the split
-     hero's wider numeral and its ref line need the extra room the rate
-     hero's shorter two-digit value does not. */
+  /* Design spec §2A's own uneven split: "left flex 1.25 / right 0.75" —
+     the split hero's wider numeral and its ref line need the extra room
+     the rate hero's shorter two-digit value does not. Updated off the
+     handoff mockup's own 1.18/0.82 pair (CR2 spec 3 Task 4): §2's tables
+     are the value authority over the earlier mockup measurement. */
   .connected-pane-live .connected-hero-split {
-    flex: 1.18;
+    flex: 1.25;
   }
 
   .connected-pane-live .connected-hero-rate {
-    flex: 0.82;
+    flex: 0.75;
   }
 
   .connected-pane-live .connected-hero-divider {
@@ -7858,40 +7852,65 @@ section:not(.news-pinned) .news-row:last-of-type {
     line-height: 0.92;
   }
 
-  /* When the lost-link banner is on screen it takes a row of its own out of
-     an already tight frame, so both heroes step down again rather than
-     pushing the ruler off the bottom (connected-revamp Task 3: ONE pair of
-     rules now covers both heroes, sharing `.connected-hero-value`/
-     `-tenths`, where this used to be pace's alone). A stale reading is the
-     one that least needs to be legible from the doorway — it is not
-     current. */
+  /* General landscape trim (carried forward, unrelated to the lost-link
+     step-down just below): 844×390 has no headroom to spare on the
+     target row's own portrait padding. */
+  .connected-pane-live .connected-hero-target {
+    padding-top: 0;
+  }
+
+  /* The rate hero's own SPM word steps from 18px (portrait, the README's
+     own override figure) to 19px landscape (design spec §2A) — the one
+     value in the family that coincides with `--c-size-row` without
+     actually being that token (see `.connected-hero-rate-unit`'s own base
+     rule for why this stays a literal pair, not a shared var). */
+  .connected-pane-live .connected-hero-rate-unit {
+    font-size: 19px;
+  }
+
+  /* THE DISCONNECTED STEP-DOWN, LANDSCAPE HALF (design spec §2's own
+     table): the lost-link banner takes a row of its own out of an already
+     tight frame, so both heroes step down again rather than pushing the
+     band off the bottom. TWO RULES, not one (CR2 spec 3 Task 4 — the same
+     split the portrait half above makes, for the same reason: the two
+     heroes no longer share a base size): 112→86 split, 92→70 rate — the
+     table's own pinned pair, superseding the pre-redesign 82px shared
+     figure. */
   .connected-surface:has(.connected-lost)
     .connected-pane-live
+    .connected-hero-split
     .connected-hero-value {
-    font-size: 82px;
+    font-size: 86px;
   }
 
   .connected-surface:has(.connected-lost)
     .connected-pane-live
+    .connected-hero-rate
+    .connected-hero-value {
+    font-size: 70px;
+  }
+
+  /* Tenths only exists on the split hero. 58→44 (design spec's own pinned
+     landscape pair). */
+  .connected-surface:has(.connected-lost)
+    .connected-pane-live
     .connected-hero-tenths {
-    font-size: 40px;
+    font-size: 44px;
   }
 
   /* The banner's own row eats further into the same budget the general
      landscape trims (above) already tightened, so the hero's target row
-     and the metric row both lose their last few px of headroom here too —
+     and the band both lose their last few px of headroom here too —
      measured against this worktree: without these the target row still
-     read a few px into the metric row beneath it even at the smaller
-     82px hero. */
+     read a few px into the band beneath it even at the smaller stepped-down
+     hero. */
   .connected-surface:has(.connected-lost)
     .connected-pane-live
     .connected-hero-target {
     padding-top: 0;
   }
 
-  .connected-surface:has(.connected-lost)
-    .connected-pane-live
-    .connected-metric-row {
+  .connected-surface:has(.connected-lost) .connected-pane-live .connected-band {
     padding-top: 0;
   }
 
@@ -7899,149 +7918,54 @@ section:not(.news-pinned) .news-row:last-of-type {
     gap: 4px;
   }
 
-  /* 844x390 is 454px shorter than the portrait frame and every element the
-     handoff names has to fit without scrolling (pane B "cannot grow").
-     These are the measured trims that make that true — see the task-6
-     report's landscape measurement table. */
-  .connected-pane .timer-upnext {
-    padding: 9px 12px;
-  }
-
-  /* THE SAME TRIM, EXTENDED TO PANE B'S OWN NEW ROWS (connected-revamp
-     Task 3, fix round 1). Two full 112px heroes were the tightest thing
-     this frame ever had to fit beside a full metric row and the ruler —
-     measured against this worktree: the untrimmed shapes below once
-     collapsed the heroes' own box to a 4-96px sliver with text spilling
-     through whatever came next. `.connected-metric-row`'s padding/gap and
-     `.timer-total`'s gap/padding shrink by the same proportion the upnext
-     trim above already established. Fix round 1 (task-3-review.md
-     Scrutiny 1) found the REAL cause of that tightness: `.connected-
-     surface`'s own landscape `height` was paying for a 26px of `.screen`
-     padding the full-bleed rule had already zeroed (fixed at that rule,
-     `:6211-6247`), not a genuine 112px-hero-vs-frame conflict. With the
-     26px back, the ruler's quarter-tick row (marks + ¼/½/¾/N′ labels,
-     which a first version of this fix round hid entirely) fits again —
-     un-hidden below, and Task 4 then built the bar that usually replaces
-     it: a notched session draws its boundaries INSIDE the 6px bar and
-     costs this frame nothing, while spec §5's single-interval and
-     >16-boundary fallbacks fall back to that tick row and need the room
-     the 26px bought. The padding/gap trims below stay: they were never about
-     making room for the ruler, only about the five-row stack's own
-     spacing being tighter than the old two-column layout's, and they
-     still match the mockup more closely than the untrimmed shapes did. */
-  .connected-pane-live .connected-metric-row {
-    padding-top: 1px;
-  }
-
-  .connected-pane-live .connected-metric-cell {
-    gap: 1px;
-    /* `flex: none` — connected-revamp Task 6, a real bug caught by eye
-       against the FIRST landscape screenshot of this task's own UP NEXT
-       string, not by any gate (`.timer-upnext-value`'s CSS ellipsis
-       swallowed the overflow silently, and `innerText` in the e2e check
-       still reads the full un-truncated string regardless of visual
-       clipping — a blind spot in that pin, noted so it isn't trusted to
-       catch this class of bug again). The base rule's `flex: 1` makes
-       every `.connected-metric-cell` an EQUAL-width sibling of
-       `.timer-upnext` in this row — appropriate for the three-cell
-       PORTRAIT layout, wrong here: it was giving three short numerals
-       (`1200`, `800`, `164`) the same 182px UP NEXT was getting, instead
-       of sizing to their own short content and leaving the rest for the
-       one field whose length actually varies. `flex: none` plus each
-       cell's own content width is what actually frees the room revision
-       §3's "REST 2:00 · then WORK 2:09.0" example assumed UP NEXT had. */
-    flex: none;
-  }
-
-  .connected-pane-live .connected-hero-target {
-    padding-top: 0;
-  }
-
-  .connected-pane-live .timer-total {
-    gap: 1px;
-    padding-top: 1px;
-  }
-
-  /* Baseline-aligned rather than portrait's top-aligned three equal
-     columns — the mockup's own landscape metric row sits closer together
-     (revision §3), the values reading off one shared bottom edge.
-     `flex-wrap: nowrap` is the landscape half of the technique
-     `.connected-metric-row`'s own comment (index.css, base rule) explains
-     in full: UP NEXT stops wrapping onto its own line here and joins the
-     row inline instead, which is what actually makes the 296px budget
-     work — the two 112px heroes cannot fit landscape's frame at all if UP
-     NEXT keeps its own separate row on top of the ruler. */
-  .connected-pane-live .connected-metric-row {
+  /* THE BAND, LANDSCAPE (design spec §2A: "1px ink rule above, 9px
+     padding-top, bottom-aligned, 30px gaps"). Portrait's own column layout
+     (the base `.connected-band` rule, and `.connected-band-cell`'s own
+     `border-top` above) becomes a ROW here: the rule moves from the
+     TOTAL-LEFT cell alone onto the whole band, because in landscape
+     up-next and TOTAL LEFT sit on ONE shared rule, side by side, not two
+     stacked blocks. */
+  .connected-pane-live .connected-band {
+    flex-direction: row;
     align-items: flex-end;
-    flex-wrap: nowrap;
+    gap: 30px;
+    border-top: 1px solid var(--ink);
+    padding-top: 9px;
   }
 
-  /* UP NEXT sheds its portrait pill (background/border/padding) and joins
-     the metric row's own baseline as a plain right-aligned label+value
-     pair, `flex: 1` taking whatever width the three cells leave — the
-     specificity here (three classes) beats both `.timer-upnext`'s own base
-     rule and `.connected-pane .timer-upnext`'s already-reduced padding
-     above, deliberately: this is the one place on the surface UP NEXT
-     is NOT a boxed component. CONNECTED-REVAMP TASK 6: the "then" word
-     used to be suppressed entirely here (this rule set `.timer-upnext-then`
-     back to `display: none` after the base landscape leak turned it on) —
-     revision §3's own string, `REST 2:00 · then WORK 2:09.0`, wants it
-     back, on the SAME line as everything else (`UpNextStrip.tsx`'s own
-     comment on why one value span carries it); see that override just
-     below. */
-  .connected-pane-live .connected-metric-row .timer-upnext {
+  .connected-pane-live .connected-band-upnext {
     flex: 1;
     min-width: 0;
-    background: none;
-    border: none;
-    padding: 0;
-    gap: 0;
   }
 
-  .connected-pane-live .connected-metric-row .timer-upnext-main {
-    justify-content: flex-end;
-    gap: 10px;
+  /* NO LABEL IN LANDSCAPE (design spec §2A: "flex 1, nowrap, NO label"). */
+  .connected-pane-live .connected-band-upnext-label {
+    display: none;
   }
 
-  /* Revision §3's own table: "UP NEXT | label 11px + value 20px,
-     right-aligned". `.timer-upnext-label`/`-value`'s base rules (10px/13px,
-     the phone timer's own portrait-derived sizes) under-sized this by a
-     margin the row never actually needed — fix round 1 (task-3-review.md,
-     Divergence 1): the metric row's own 30px numerals already set its
-     height, so a 20px UP NEXT value fits under that ceiling with room to
-     spare, not budget-forced like the trims above. `white-space: nowrap`
-     matches the mockup's own `white-space:nowrap` on this exact span; the
-     clip/ellipsis pair is a SAFETY NET, not the fix for a real bug this
-     task caught by eye in its own first landscape screenshot: the combined
-     "REST 2:00 · then WORK 2:09.0" string (longer than the bare kind word
-     this row used to carry) was rendering as "REST 3:00 …", silently
-     clipped, because `.connected-metric-cell`'s own `flex: 1` (the base,
-     portrait-authored rule) made each 4-digit metric cell claim the SAME
-     182px share of the row as this value — three short numerals sized
-     like the one field whose length actually varies. The real fix is
-     `.connected-metric-cell`'s own `flex: none` override just above,
-     which gives the metric cells only their content's width and leaves
-     the rest for `flex: 1; min-width: 0;` here to claim; ellipsis stays
-     as the fallback for whatever real content still doesn't fit, not the
-     mechanism this task relies on. */
-  .connected-pane-live .connected-metric-row .timer-upnext-value {
-    font-size: 20px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+  /* Up-next's value shares the TOTAL LEFT cell's own `--c-size-band`
+     (30px landscape) rather than portrait's own 23px fit-constraint figure
+     — §2A draws both on one baseline at the same visual weight. */
+  .connected-pane-live .connected-band-upnext-value {
+    font-size: var(--c-size-band);
   }
 
-  /* The word "then" now RENDERS here (Task 6) instead of being hidden —
-     inherited size/colour, not the phone timer's own dimmer 11px `--ink-3`
-     treatment, because the mockup draws the whole combined string at ONE
-     weight (`Ergomatic connected mode.dc.html`'s Live landscape frame: a
-     single 20px span, "REST 2:00 · then WORK 2:09.0", no lighter sub-run
-     inside it). */
-  .connected-pane-live .connected-metric-row .timer-upnext-then {
+  /* The word "then" RENDERS here (§2A's own full form, "REST 2:00 · then
+     WORK 2:09.0") — inherited size/colour, not a dimmer treatment: the
+     design draws the whole combined string at ONE weight. */
+  .connected-pane-live .connected-band-upnext-then {
     display: inline;
     font: inherit;
     letter-spacing: inherit;
     color: inherit;
+  }
+
+  /* The container's own rule/padding above replaces this cell's portrait
+     rule — one rule above the whole band, not a second one repeating over
+     just this cell. */
+  .connected-pane-live .connected-band-cell {
+    border-top: none;
+    padding-top: 0;
   }
 
   /* --- Pane C in landscape: fixed 32px rows, seven columns, one scroll

@@ -1953,15 +1953,28 @@ describe("index.css: the landscape leak is closed (spec §7, adversarial finding
     }
   });
 
-  it("the connected surface's own overrides for the shared UpNextStrip/TimerRuler classes are unaffected — different ancestor, never reachable from .timer-screen's own block", () => {
-    // `.connected-pane-live … .timer-upnext-then` is the rule the review
-    // found compensating for the pre-fix leak (index.css's own comment on
-    // it). It still exists, still sets `display: inline` — as a deliberate
-    // feature match to the mockup, not a leak workaround — and nothing in
-    // this file scopes IT under `.timer-screen`.
-    const body = ruleBody(
-      ".connected-pane-live .connected-metric-row .timer-upnext-then",
+  // CR2 spec 3 Task 4 RETIRES THE LEAK'S OWN TARGET, not merely closes the
+  // leak: `.connected-pane-live … .timer-upnext-then` (the rule this test
+  // used to pin, compensating for the pre-fix leak) is GONE along with
+  // `TimerRuler`/`UpNextStrip` themselves — `PaneLive` forks its own
+  // progress bar and its own band now (`ConnectedProgressBar`,
+  // `.connected-band-*`), neither carrying a `.timer-*` class. So there is
+  // nothing left for the phone timer's landscape query to leak INTO, not
+  // just a scoped rule keeping it from doing so — a stronger property than
+  // the one this test used to prove, checked structurally rather than by
+  // re-asserting one surviving override.
+  it("no connected-surface selector carries a .timer-* class any more — the leak has no target left to reach", () => {
+    const rules = cssRules(indexCssStripped).filter((rule) =>
+      rule.selectors.some((s) => s.includes(".connected-")),
     );
-    expect(body).toContain("display: inline");
+    for (const rule of rules) {
+      for (const selector of rule.selectors) {
+        if (!selector.includes(".connected-")) continue;
+        expect([selector, selector.includes(".timer-")]).toStrictEqual([
+          selector,
+          false,
+        ]);
+      }
+    }
   });
 });

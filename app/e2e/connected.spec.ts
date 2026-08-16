@@ -202,11 +202,15 @@ function buildStoryEvents(): (FakeStatusEventLike | FakeBoundaryEventLike)[] {
     },
     // WIRE-IMPOSSIBLE (review IMPORTANT-2, Task 6 fix round): elapsed/
     // distance continue cumulatively from interval 0's own boundary above
-    // (15s/100m) instead of resetting per-interval (item 12) — post-Task-6
-    // this renders METERS LEFT = 0 (Math.max clamp) through every
-    // interval-1 frame this story reaches, not a real countdown.
-    // Rewriting this walk to per-interval-reset values also moves TOTAL M
-    // and needs its own pass; deferred, not fixed this round.
+    // (15s/100m) instead of resetting per-interval (item 12) — historically
+    // this rendered METERS LEFT (`Math.max` clamp) as 0 through every
+    // interval-1 frame this story reaches, not a real countdown. CR2 spec 3
+    // Task 4 retired both METERS LEFT and TOTAL M off `PaneLive` outright
+    // (spec §3 fate table), so neither cell exists to render anything any
+    // more — this disclosure is kept as a fact about the FIXTURE's own
+    // shape (still wire-impossible, still worth knowing for whoever adds a
+    // per-interval-reset variant of this story), not as a claim about a
+    // currently-rendered cell.
     {
       atMs: t + 900,
       kind: "status",
@@ -241,8 +245,8 @@ function buildStoryEvents(): (FakeStatusEventLike | FakeBoundaryEventLike)[] {
     // (review IMPORTANT-2): `distanceMeters: 140` continues this story's
     // own already-cumulative interval-1 narrative (115 there), not a
     // per-interval reset — this block's own purpose is testing the freeze
-    // derivation, not METERS LEFT, but post-Task-6 it still renders 0
-    // (clamped) throughout. Same deferral: not fixed this round.
+    // derivation, not METERS LEFT (retired off `PaneLive` entirely, CR2
+    // spec 3 Task 4). Same fixture-shape note as above.
     ...FREEZE_OFFSETS.map((offset, i) => ({
       atMs: t + 900 + offset,
       kind: "status" as const,
@@ -519,13 +523,22 @@ async function walkSurfaceToLog(
   // exists to keep the rower reading (spec 2a's own trigger: "the block we
   // drew covers the one number that would have told the rower so"). Task 5
   // puts the block back IN FLOW, so the pane's own `1fr` track genuinely
-  // shrinks while frozen and grows back on resume — the metric row's own Y
+  // shrinks while frozen and grows back on resume — the band's own Y
   // position is EXPECTED to differ between the two reads below, and the new
   // pixel proof this walk carries is the no-overlap one further down
-  // instead: TOTAL LEFT's own bar never sits under the frozen block, in
-  // either direction.
+  // instead: the band's own TOTAL LEFT cell never sits under the frozen
+  // block, in either direction.
+  //
+  // RE-ANCHORED (CR2 spec 3 Task 4, spec §5 "Named e2e casualty" — THREE
+  // dying anchors, not two, antagonist correction 3): `TimerRuler` — and
+  // with it `.timer-total`/`.timer-total-value` — is cut outright, spec §3
+  // fate table. `.connected-band-cell-value` (the band's own TOTAL LEFT
+  // cell) replaces both the "something keeps moving" proof AND the
+  // no-occlusion box below; a frozen HERO value (dash, held) replaces the
+  // old TOTAL M cell as the "something holds" proof, since `meters` died
+  // off `PaneLive` too (same fate table).
   const header = page.locator(".connected-header");
-  const totalLeftBar = page.locator(".timer-total");
+  const totalLeftCell = page.locator(".connected-band-cell");
 
   // PAUSED — the freeze in `buildStoryEvents()` above lands here. The
   // footer's own content swaps from empty to the paused block (End keeps
@@ -538,56 +551,50 @@ async function walkSurfaceToLog(
   await pumpUntilPaused(page);
   await expect(page.getByText("PULL TO RESUME")).toBeVisible();
   const pausedHeaderTop = (await header.boundingBox())!.y;
-  // NO OCCLUSION, THE REAL-PIXEL PROOF (task 5's own fix): TOTAL LEFT's own
-  // bar sits ENTIRELY above the frozen block, never under it — the box
-  // painting the exact number the task-6 overlay used to cover.
-  const [ruler, frozenBlock] = await Promise.all([
-    totalLeftBar.boundingBox(),
+  // NO OCCLUSION, THE REAL-PIXEL PROOF (task 5's own fix, RE-ANCHORED Task
+  // 4): the band's own TOTAL LEFT cell sits ENTIRELY above the frozen
+  // block, never under it — the box painting the exact number the task-6
+  // overlay used to cover, and spec 2a's founding defect names by number.
+  // This is THE dying anchor antagonist correction 3 calls out by name
+  // (`:561`+`:579-590` in the pre-Task-4 file) — do not drop it as
+  // cosmetic: it is the one assertion in this whole walk that encodes "the
+  // frozen block must never occlude what it exists to keep visible."
+  const [totalLeftBox, frozenBlock] = await Promise.all([
+    totalLeftCell.boundingBox(),
     page.locator(".connected-paused").boundingBox(),
   ]);
-  expect(ruler, ".timer-total").not.toBeNull();
+  expect(totalLeftBox, ".connected-band-cell").not.toBeNull();
   expect(frozenBlock, ".connected-paused").not.toBeNull();
   expect(
     frozenBlock!.y,
-    `.connected-paused (top ${frozenBlock!.y}) overlaps .timer-total (bottom ${ruler!.y + ruler!.height})`,
-  ).toBeGreaterThanOrEqual(ruler!.y + ruler!.height);
-  // Cards are gone from pane B (connected-revamp Task 3, revision §3: "the
-  // old three metric cards are gone") — METERS is now a plain metric-row
-  // cell, `.connected-metric-cell` in place of the old `.timer-card`.
-  // Structural `has()`, not `hasText`. This was originally a workaround for
-  // the two labels being indistinguishable: the interval clock read "METERS
-  // LEFT" and this cell read "METERS", so a substring match on the CELL
-  // could not tell "METERS LEFT<value>" from "METERS<value>". James renamed
-  // this one to "TOTAL M" on 2026-08-13 precisely because that collision
-  // was a rower's problem before it was a test's. The structural form is
-  // kept anyway — an exact-text label child is the honest way to identify a
-  // cell, and it no longer depends on the two names staying distinguishable
-  // by accident.
-  const metersValue = page
-    .locator(".connected-metric-cell")
-    .filter({
-      has: page.locator(".connected-metric-label", { hasText: /^TOTAL M$/ }),
-    })
-    .locator(".connected-metric-value");
-  const pausedMeters = await metersValue.textContent();
-  // The ELAPSED strip retired with the same task (replaced by the metric
-  // row) and took its own MEDIUM-4 regression anchor with it — no cell the
-  // strip's replacement carries (left-in-interval, meters, HR) is
-  // guaranteed to keep moving through a pause the way a wall clock does.
-  // TOTAL LEFT is: it is priced off the SAME accumulated
-  // `sessionElapsedSeconds` the retired ELAPSED strip read
-  // (`surfaceModel.ts`'s own `totalLeftSeconds`/`elapsedDisplay`, one
-  // driver clock behind both), and `TimerRuler`'s `.timer-total-value`
-  // survives Task 3 unchanged, so it re-anchors the same proof: something
-  // on pane B keeps counting while METERS holds.
-  const totalLeftValue = page.locator(".timer-total-value");
+    `.connected-paused (top ${frozenBlock!.y}) overlaps .connected-band-cell (bottom ${totalLeftBox!.y + totalLeftBox!.height})`,
+  ).toBeGreaterThanOrEqual(totalLeftBox!.y + totalLeftBox!.height);
+  // THE FROZEN HERO VALUE HOLDS (CR2 spec 3 Task 4's own replacement for
+  // the retired TOTAL M cell — spec §5's own "frozen hero value … replace
+  // the TOTAL M cell" line). Pane B's split hero already suppresses to a
+  // dash while frozen (`livePace`'s own paused branch: nobody is pulling,
+  // so there is no current reading to show) — this proves that
+  // suppression HOLDS through the freeze rather than flickering a stale
+  // number in and out, the same "reads the same value across two checks a
+  // beat apart" proof the old METERS cell gave, now on the cell that
+  // actually still exists.
+  const splitHero = page.locator(".connected-hero-split .connected-hero-value");
+  const pausedSplit = await splitHero.textContent();
+  expect(pausedSplit).toBe("—");
+  // THE BAND'S TOTAL LEFT KEEPS MOVING (spec §5's own "… + band TOTAL LEFT
+  // replace … `.timer-total-value`" line) — priced off the SAME
+  // accumulated `sessionElapsedSeconds` the retired strip read
+  // (`surfaceModel.ts`'s `totalLeftDisplay`), one driver clock behind the
+  // split hero's own suppression, so this re-anchors the same proof:
+  // something on pane B keeps counting while the hero holds.
+  const totalLeftValue = page.locator(".connected-band-cell-value");
   const pausedTotalLeft = await totalLeftValue.textContent();
-  // Reads the same frozen METERS across two checks a beat apart — proof
-  // this is a HOLD, not a coincidence of timing. TOTAL LEFT is deliberately
-  // NOT part of that check: it is the one metric the fixture keeps moving
-  // through the freeze, exactly as a real PM5 does.
+  // Reads the same frozen hero value across two checks a beat apart —
+  // proof this is a HOLD, not a coincidence of timing. TOTAL LEFT is
+  // deliberately NOT part of that check: it is the one figure the fixture
+  // keeps moving through the freeze, exactly as a real PM5 does.
   await page.waitForTimeout(700);
-  await expect(metersValue).toHaveText(pausedMeters ?? "");
+  await expect(splitHero).toHaveText(pausedSplit ?? "");
   await expect(page.getByText("PULL TO RESUME")).toBeVisible();
   // ...and the clock really did move while PAUSED held (erg-day review,
   // MEDIUM-4: without this the four-metric key would still pass here).

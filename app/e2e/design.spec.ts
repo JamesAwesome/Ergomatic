@@ -4237,11 +4237,12 @@ const ROWING_STORY = [
   },
   // WIRE-IMPOSSIBLE (review IMPORTANT-2, Task 6 fix round): elapsed/
   // distance continue cumulatively from interval 0's own boundary (15s/
-  // 100m) instead of resetting per-interval (item 12) — post-Task-6 this
-  // renders METERS LEFT = 0 (Math.max clamp) through every interval-1 frame
-  // this story reaches, not a real countdown. Rewriting these walks to
-  // per-interval-reset values also moves TOTAL M and needs its own pass;
-  // deferred, not fixed this round.
+  // 100m) instead of resetting per-interval (item 12) — historically this
+  // rendered METERS LEFT as 0 (Math.max clamp) through every interval-1
+  // frame this story reaches, not a real countdown. CR2 spec 3 Task 4
+  // retired METERS LEFT and TOTAL M off `PaneLive` outright (spec §3 fate
+  // table); this disclosure is kept as a fact about the FIXTURE's own
+  // shape, not a claim about a currently-rendered cell.
   rowingAt(CONNECTED_STORY_START_MS + 600, {
     elapsedSeconds: 17,
     distanceMeters: 115,
@@ -4280,7 +4281,8 @@ const EXTREME_SPLIT_STORY = [
   },
   // WIRE-IMPOSSIBLE (review IMPORTANT-2, same shape as `ROWING_STORY`'s own
   // interval-1 tick above — session-cumulative, not per-interval-reset):
-  // renders METERS LEFT = 0 post-Task-6. Deferred, not fixed this round.
+  // historically rendered METERS LEFT as 0. Retired off `PaneLive`
+  // entirely (CR2 spec 3 Task 4) — same fixture-shape note as above.
   rowingAt(CONNECTED_STORY_START_MS + 600, {
     elapsedSeconds: 17,
     distanceMeters: 115,
@@ -4296,8 +4298,9 @@ const FREEZING_STORY = [
   ...ROWING_STORY,
   // WIRE-IMPOSSIBLE (review IMPORTANT-2, same shape again — 20s/140m
   // continues cumulatively past `ROWING_STORY`'s own 17s/115m rather than
-  // resetting per-interval): renders METERS LEFT = 0 post-Task-6 through
-  // every one of these frozen frames. Deferred, not fixed this round.
+  // resetting per-interval): historically rendered METERS LEFT as 0
+  // through every one of these frozen frames. Retired off `PaneLive`
+  // entirely (CR2 spec 3 Task 4) — same fixture-shape note as above.
   ...Array.from({ length: 12 }, (_, i) =>
     rowingAt(CONNECTED_STORY_START_MS + 900 + i * 300, {
       elapsedSeconds: 20,
@@ -4605,11 +4608,12 @@ test.describe("connected screens (fake-driven)", () => {
   // above): read the two real boxes and assert neither intersects, rather
   // than trusting jsdom's structural CSS proof (`ConnectedSurface.test
   // .tsx`'s own "IN FLOW, not overlaid" pin) to stand in for real layout.
-  // TOTAL LEFT's own bar (`.timer-total`, `PaneLive.tsx:219-223`) is the
-  // element the old overlay covered — spec 2a's own trigger line names it
-  // by number ("the block we drew covers the one number that would have
-  // told the rower so"), so THAT box, not just the frozen block's presence,
-  // is what this pin reads.
+  // TOTAL LEFT's own cell (`.connected-band-cell` — RE-ANCHORED, CR2 spec 3
+  // Task 4: `TimerRuler`/`.timer-total` is cut outright, spec §3 fate
+  // table) is the element the old overlay covered — spec 2a's own trigger
+  // line names it by number ("the block we drew covers the one number that
+  // would have told the rower so"), so THAT box, not just the frozen
+  // block's presence, is what this pin reads.
   for (const viewport of [
     { width: 390, height: 844, label: "portrait" },
     { width: 844, height: 390, label: "landscape" },
@@ -4637,23 +4641,23 @@ test.describe("connected screens (fake-driven)", () => {
       await expect(page.getByText("PULL TO RESUME")).toBeVisible();
       await expect(page.getByText(/PAUSED/)).toHaveCount(0);
 
-      const totalLeft = page.locator(".timer-total");
+      const totalLeft = page.locator(".connected-band-cell");
       const frozenBlock = page.locator(".connected-paused");
       const [ruler, block] = await Promise.all([
         totalLeft.boundingBox(),
         frozenBlock.boundingBox(),
       ]);
-      expect(ruler, ".timer-total").not.toBeNull();
+      expect(ruler, ".connected-band-cell").not.toBeNull();
       expect(block, ".connected-paused").not.toBeNull();
       // Same idiom as the live pane's own no-overlap pin above: the block
-      // sits ENTIRELY below the ruler's own bottom edge, never intersecting
+      // sits ENTIRELY below the cell's own bottom edge, never intersecting
       // it — the structural guarantee (no `position: absolute` left on
       // `.connected-paused`) made real on an actual rendered frame.
       expect(
         block!.y,
-        `.connected-paused (top ${block!.y}) overlaps .timer-total (bottom ${ruler!.y + ruler!.height})`,
+        `.connected-paused (top ${block!.y}) overlaps .connected-band-cell (bottom ${ruler!.y + ruler!.height})`,
       ).toBeGreaterThanOrEqual(ruler!.y + ruler!.height);
-      // And the ruler itself is fully inside the viewport, not clipped off
+      // And the cell itself is fully inside the viewport, not clipped off
       // by the pane's own `overflow: clip` squeezing it out to make room —
       // the OTHER way this fix could have failed (shrinking the pane could
       // clip TOTAL LEFT instead of the block covering it, which reads
@@ -5086,14 +5090,22 @@ test.describe("connected screens (fake-driven)", () => {
   // number, it is that the notched width must not reflow anything the
   // un-notched width fits. A future strip that grows a third word fails here
   // rather than on James's phone.
-  test("nothing in the UP NEXT strip reflows at the notched content width", async ({
+  //
+  // RE-ANCHORED (CR2 spec 3 Task 4): `UpNextStrip`'s own label-breaking-in-
+  // two defect cannot recur in landscape any more — the band's own up-next
+  // label is cut outright there (design spec §2A: "NO label"), so there is
+  // no two-word label left to wrap. The band's own VALUE (the `then` form,
+  // `REST 2:00 · then WORK 2:09.0`) is the element that now carries this
+  // frame's own squeeze risk, so this measures IT the same "must not
+  // reflow" way the label used to be measured.
+  test("nothing in the band's own up-next value reflows at the notched content width", async ({
     page,
   }) => {
     // Loads the committed WARM-UP fixture rather than driving the fake to a
     // rowing state, because the wrap is CONTENT-dependent: the strip is a
     // flex row of label + value, and only the warm-up's longer value
-    // ("WORK 2:06.0 · then REST 3:00") squeezes the label enough to break
-    // it. A first attempt at this test used the rowing story and passed
+    // ("WORK 2:06.0 · then REST 3:00") squeezes the row enough to risk
+    // reflow. A first attempt at this test used the rowing story and passed
     // with and without the fix — recorded here because that is the third
     // time this branch has written an assertion that could not fail.
     const markup = readFileSync(
@@ -5121,14 +5133,12 @@ test.describe("connected screens (fake-driven)", () => {
       await page.evaluate(
         () => new Promise((r) => requestAnimationFrame(() => r(null))),
       );
-      const [label, main, pane] = await Promise.all([
-        page.locator(".timer-upnext-label").boundingBox(),
-        page.locator(".timer-upnext-main").boundingBox(),
+      const [value, pane] = await Promise.all([
+        page.locator(".connected-band-upnext-value").boundingBox(),
         page.locator(".connected-pane").boundingBox(),
       ]);
       return {
-        labelHeight: Math.round(label!.height),
-        mainHeight: Math.round(main!.height),
+        valueHeight: Math.round(value!.height),
         contentWidth: Math.round(pane!.width),
       };
     }
@@ -5143,12 +5153,11 @@ test.describe("connected screens (fake-driven)", () => {
     // this repo ever renders the 682px column a notched iPhone draws.
     expect(notched.contentWidth).toBeLessThan(unnotched.contentWidth);
 
-    // Not a pin on 12px. The claim is that the notched width must not
-    // reflow anything the un-notched width fits, so the two conditions are
-    // compared to EACH OTHER — a strip that grows a third word later fails
-    // here rather than on James's phone.
-    expect(notched.labelHeight).toBe(unnotched.labelHeight);
-    expect(notched.mainHeight).toBe(unnotched.mainHeight);
+    // Not a pin on a specific height. The claim is that the notched width
+    // must not reflow anything the un-notched width fits, so the two
+    // conditions are compared to EACH OTHER — a value that grows a second
+    // line later fails here rather than on James's phone.
+    expect(notched.valueHeight).toBe(unnotched.valueHeight);
   });
 
   test("portrait keeps its narrower 54px two-tab bar, unaffected by the landscape full-bleed rule", async ({
@@ -5395,7 +5404,10 @@ test.describe("connected screens (fake-driven)", () => {
 
       const measured = await page.evaluate(() => {
         const pane = document.querySelector(".connected-pane-live")!;
-        const total = document.querySelector(".timer-total")!;
+        // RE-ANCHORED (CR2 spec 3 Task 4): `.timer-total` died with
+        // `TimerRuler` (spec §3 fate table) — `.connected-band` is now the
+        // pane's own last child, the same "row James lost" this measures.
+        const total = document.querySelector(".connected-band")!;
         return {
           scrollHeight: pane.scrollHeight,
           clientHeight: pane.clientHeight,
@@ -5468,25 +5480,27 @@ test.describe("connected screens (fake-driven)", () => {
       // CR2 spec 3 Task 2: `.connected-hero-label` (`NOW`) no longer
       // renders on a LIVE surface at all (design spec §2A, "Cut from LIVE:
       // NO NOW/TARGET/UP NEXT labels" — `nowLabel` collapses to
-      // `stale ? "LAST" : ""`), so the hero's own topmost element is now
-      // `.connected-hero-reading` (the value+unit row); anchored there
-      // instead of the removed label. Full connected-block rewrite against
-      // the redesign's new structure is a later task's (spec §5: "design.
-      // spec.ts's connected blocks, rewritten, not patched") — this is the
-      // minimal selector fix that keeps the invariant this pin checks
-      // (nothing spills into the header above it) alive in the meantime.
+      // `stale ? "LAST" : ""`). CR2 spec 3 Task 4 rebuilt the pane's own
+      // structure further: `.connected-hero-reading` (the old value+unit
+      // wrapper) is gone — there is no unit beside the numeral any more, so
+      // the hero's own topmost element is `.connected-hero-value` directly
+      // — and `ConnectedProgressBar` now mounts BEFORE the heroes (design
+      // spec §2A/§2C's own row order), a new neighbour pair the old list
+      // never had to check. The old metric row/`TimerRuler` pairs are
+      // replaced by the band, the element that actually sits where they
+      // used to (`.connected-band` — RE-ANCHORED, spec §3 fate table cut
+      // both `.connected-metric-row` and `.timer-total`). Full
+      // connected-block rewrite against the redesign's new structure is a
+      // later task's (spec §5: "design.spec.ts's connected blocks,
+      // rewritten, not patched") — this is the minimal selector fix that
+      // keeps the invariant this pin checks (nothing spills into its
+      // neighbour) alive in the meantime.
       const pairs: [string, string][] = [
-        [".connected-line", ".connected-hero-split .connected-hero-reading"],
-        [".connected-line", ".connected-hero-rate .connected-hero-reading"],
-        [
-          ".connected-hero-split .connected-hero-target",
-          ".connected-metric-row",
-        ],
-        [
-          ".connected-hero-rate .connected-hero-target",
-          ".connected-metric-row",
-        ],
-        [".connected-metric-row", ".timer-total"],
+        [".connected-line", ".connected-progress"],
+        [".connected-progress", ".connected-hero-split .connected-hero-value"],
+        [".connected-progress", ".connected-hero-rate .connected-hero-value"],
+        [".connected-hero-split .connected-hero-target", ".connected-band"],
+        [".connected-hero-rate .connected-hero-target", ".connected-band"],
       ];
       for (const [aboveSel, belowSel] of pairs) {
         const [above, below] = await Promise.all([

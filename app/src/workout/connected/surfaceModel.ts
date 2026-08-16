@@ -327,15 +327,12 @@ export interface SurfaceModel {
    *  rest. */
   thenNext: string | null;
   totalSeconds: number;
-  /** dies in spec-3 Task 4/5 (spec §3 fate table): `PaneLive` → `TimerRuler`
-   *  is its only render site, and the band cell that replaces it renders
-   *  `totalLeftDisplay` directly; the progress bar (Task 3's
-   *  `ConnectedProgressBar`) takes elapsed/`totalSeconds` itself rather
-   *  than this pre-subtracted figure. */
-  totalLeftSeconds: number;
-  /** `44:12`, the same figure `TimerRuler` prints — pane C has no room for
-   *  the ruler and carries it as the header line's trailing caption
-   *  instead. */
+  /** `44:12` — CR2 spec 3 Task 4 deleted the sibling `totalLeftSeconds`
+   *  field (spec §3 fate table): `PaneLive`'s own `TimerRuler` cell was its
+   *  only render site, and the band cell that replaces it renders THIS
+   *  field directly; `ConnectedProgressBar` takes elapsed/`totalSeconds`
+   *  itself rather than a pre-subtracted figure. Pane C's grid header reads
+   *  it too — there is no room for a second ruler there either. */
   totalLeftDisplay: string;
   /** CR2 spec 3 Task 2 (antagonist correction 1): the model's own numeric
    *  elapsed — `min(frame.sessionElapsedSeconds, totalSeconds)`, `0` on the
@@ -356,14 +353,12 @@ export interface SurfaceModel {
    *  own actuals; see `session/intervalBoundaries.ts`. */
   boundaries: IntervalBoundaries;
   elapsedDisplay: string;
-  /** `LEFT IN INTERVAL` on a time interval, `METERS LEFT` on a distance one
-   *  (handoff §3: "On a distance interval the second slot becomes METERS
-   *  LEFT"). dies in spec-3 Task 4/5 (spec §3 fate table): `PaneLive`'s
-   *  metric-row cell is its only render site. */
-  intervalClockLabel: string;
-  /** dies in spec-3 Task 4/5 (spec §3 fate table) — see `intervalClockLabel`
-   *  immediately above; the active row's own countdown cell (`GridRow`) is
-   *  a different field and survives. */
+  /** CR2 spec 3 Task 4 deleted the sibling `intervalClockLabel` field
+   *  (`LEFT IN INTERVAL`/`METERS LEFT`, spec §3 fate table): `PaneLive`'s
+   *  metric-row cell was its only render site, and the redesign cuts the
+   *  cell outright. THIS field survives — `PaneGrid.tsx`'s own headline
+   *  and the active row's own countdown cell (`GridRow`) both still read
+   *  it (Task 5's business, not this one's — antagonist correction 2). */
   intervalClockValue: string;
   pace: JudgedValue;
   /** The hero split, cut so the tenths can be set smaller (handoff §3: "the
@@ -385,13 +380,12 @@ export interface SurfaceModel {
    *  presentation-string coupling. Mirrors `targetSplit` below; no `sub`
    *  because a rate target carries no ref to show underneath it. */
   targetRate: { main: string; absent: boolean };
-  /** dies in spec-3 Task 4/5 (spec §3 fate table): `PaneLive`'s `TOTAL M`
-   *  cell is its only render site; `GridRow.meters` — the grid's METERS
-   *  column — is a different field and SURVIVES. */
-  meters: JudgedValue;
-  /** dies in spec-3 Task 4/5 (spec §3 fate table): `PaneLive`'s HR cell is
-   *  its only render site; HR stays as the grid COLUMN, off `GridRow`. */
-  hr: JudgedValue;
+  // `meters` and `hr` (session-wide judged distance and heart rate) DIED
+  // here (CR2 spec 3 Task 4, spec §3 fate table): `PaneLive`'s `TOTAL M`
+  // and `HR` cells were their only render sites, and both cells are cut
+  // outright — `GridRow.meters` (the grid's METERS column) is a different
+  // field and SURVIVES; HR stays as a grid COLUMN, off `GridRow`, computed
+  // locally in `buildGridModel` below rather than exposed here.
   /** The TARGET SPLIT card: resolved value + the ref it came from. */
   targetSplit: { main: string; sub: string | null; absent: boolean };
   /** That card's third line — the ref when there is one, and EMPTY when
@@ -612,23 +606,18 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
     stale,
     format: (v) => String(Math.round(v)),
   });
-  // The whole-SESSION distance — `sessionDistanceMeters`, the driver's
-  // accumulated total, NOT 0x0031's own `distanceMeters`. This comment used
-  // to call the raw field "the machine's own whole-workout distance"; walk 4
-  // (interface-notes.md §18, 2026-08-08) showed that premise is false —
-  // 0x0031's Distance RESETS at every work interval, and this card was seen
-  // falling 109 -> 50 at the 2x100m's second interval because of it.
-  // Still not per-interval meters (the mockup's `THIS INTERVAL` caption
-  // remains a claim the seam cannot back — see the task-6 report's deviation
-  // note); the `TOTAL` caption below is now literally true rather than
-  // accidentally so.
-  const meters = judgedValue({
-    kind: "meters",
-    actual: frame.sessionDistanceMeters,
-    target: null,
-    stale,
-    format: (v) => String(Math.round(v)),
-  });
+  // THE SESSION-WIDE `meters` JUDGED VALUE DIED HERE (CR2 spec 3 Task 4):
+  // it fed only `PaneLive`'s own `TOTAL M` cell, which the redesign cuts
+  // outright (spec §3 fate table) — `frame.sessionDistanceMeters` has no
+  // remaining consumer in this module. `GridRow.meters` (the grid's own
+  // METERS column, a different fact — per-interval, not session-wide) is
+  // computed separately, in `buildGridModel` below.
+  //
+  // `hr` SURVIVES as a LOCAL value only — its own `PaneLive` HR cell is cut
+  // the same way, but the grid's active row still needs a live HR reading
+  // for its own HR column (`buildGridModel`'s `liveHr` param, just below),
+  // so the computation stays; only the field's exposure on the returned
+  // `SurfaceModel` is gone.
   const hr = judgedValue({
     kind: "hr",
     actual: frame.heartRateBpm,
@@ -708,7 +697,6 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
     : Math.min(frame.sessionElapsedSeconds, totalSeconds);
 
   const remaining = frame.intervalRemaining;
-  const distanceInterval = remaining?.kind === "distance";
   const kindWord = phase ? phaseKindWord(phase.type) : "WORK";
 
   // THE ORDINAL BELONGS TO THE INTERVAL, THE WORD TO THE PHASE (§5b). An
@@ -788,7 +776,9 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
       ? thenNextTextAt(phases, phaseIndex - 1)
       : thenNextTextAt(phases, phaseIndex),
     totalSeconds,
-    totalLeftSeconds,
+    // `totalLeftSeconds` stays a LOCAL value only (CR2 spec 3 Task 4): the
+    // returned `SurfaceModel` no longer exposes it — see this field's own
+    // doc comment above.
     totalLeftDisplay: fmtDuration(totalLeftSeconds / 60),
     elapsedSeconds,
     boundaries: intervalBoundaries(phases, measuredWorkSeconds(input.actuals)),
@@ -796,7 +786,6 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
     // the piece's running clock — both mean the whole session, so it reads
     // the accumulated pair for the same walk-4 reason TOTAL LEFT does.
     elapsedDisplay: fmtDuration(frame.sessionElapsedSeconds / 60),
-    intervalClockLabel: distanceInterval ? "METERS LEFT" : "LEFT IN INTERVAL",
     intervalClockValue: intervalClockValueFor(remaining),
     pace,
     paceWhole,
@@ -821,8 +810,9 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
             : String(targetSpm),
       absent: targetSpm === null,
     },
-    meters,
-    hr,
+    // `meters`/`hr` do NOT appear here (CR2 spec 3 Task 4) — see the doc
+    // comment above `targetSplit` for what died and why; `hr` still feeds
+    // the grid's `liveHr` param a few lines below, as a local value only.
     targetSplit,
     targetSplitCaption: targetSplit.sub ?? "",
     grid: buildGridModel({

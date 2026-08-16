@@ -337,11 +337,12 @@ describe("armed's first frame, in the DOM (I-1)", () => {
       // armed suppression were removed.
       frame: frame({ state: "armed" }),
     });
-    // Pane defaults to "live" (`DEFAULT_PANE`): read pane B's own TOTAL
-    // LEFT bar value directly.
-    expect(document.querySelector(".timer-total-value")!.textContent).toBe(
-      fmtDuration(totalSessionSecondsOf(FIXTURE.phases) / 60),
-    );
+    // Pane defaults to "live" (`DEFAULT_PANE`): read the band's own TOTAL
+    // LEFT cell directly (`.timer-total-value` died with `TimerRuler`,
+    // CR2 spec 3 Task 4 — `.connected-band-cell-value` is its replacement).
+    expect(
+      document.querySelector(".connected-band-cell-value")!.textContent,
+    ).toBe(fmtDuration(totalSessionSecondsOf(FIXTURE.phases) / 60));
   });
 });
 
@@ -460,7 +461,7 @@ function judgedCells(): { text: string; judgement: string }[] {
   }));
 }
 
-describe("pane B — live (connected-revamp Task 3: two heroes)", () => {
+describe("pane B — live (connected-revamp Task 3: two heroes; CR2 spec 3 Task 4 rebuilt the pane — see PaneLive.test.tsx for the tables' own checklist)", () => {
   it("leads with the split, cut so the eye lands on the seconds", () => {
     renderSurface({ frame: frame({ currentSplit: 117.8 }) });
     const hero = document.querySelector(
@@ -472,28 +473,17 @@ describe("pane B — live (connected-revamp Task 3: two heroes)", () => {
     );
   });
 
-  it("shows METERS LEFT on a distance interval and time left on a time one, in the metric row", () => {
-    const distance = renderSurface();
-    const row = document.querySelector(".connected-metric-row")!;
-    expect(
-      within(row as HTMLElement).getByText("METERS LEFT"),
-    ).toBeInTheDocument();
-    distance.unmount();
-
-    renderSurface({
-      frame: frame({
-        intervalIndex: 0,
-        intervalRemaining: { kind: "time", value: 41 },
-      }),
-    });
-    expect(screen.getByText("LEFT IN INTERVAL")).toBeInTheDocument();
-    expect(screen.getByText("0:41")).toBeInTheDocument();
-  });
+  // The metric row (LEFT IN INTERVAL/METERS LEFT, TOTAL M, HR) is CUT
+  // outright (CR2 spec 3 Task 4, spec §3 fate table) — its old test lived
+  // here; `PaneLive.test.tsx`'s "cut from LIVE" describe block is where
+  // that absence is proven now.
 
   // Cards are gone (revision §3: "the old three metric cards are gone").
-  // RATE is a second hero, at the same scale as the split; METERS and HR
-  // sit alongside the interval countdown in the metric row.
-  it("promotes RATE to a second hero, and carries METERS/HR in the metric row — no cards anywhere", () => {
+  // RATE is a second hero, at the same scale as the split — METERS and HR
+  // have no slot on this pane any more at all (Task 4 cut the metric row
+  // that used to carry them; `PaneLive.test.tsx` covers the target/unit
+  // detail this test used to check).
+  it("promotes RATE to a second hero — no cards anywhere", () => {
     renderSurface();
     const rateHero = document.querySelector(".connected-hero-rate")!;
     // No NOW label above the hero (CR2 spec 3 Task 2, design spec §2A's
@@ -506,12 +496,9 @@ describe("pane B — live (connected-revamp Task 3: two heroes)", () => {
       rateHero.querySelector(".connected-hero-target-value"),
     ).not.toBeNull();
 
-    const row = document.querySelector(".connected-metric-row")!;
-    expect(within(row as HTMLElement).getByText("TOTAL M")).toBeInTheDocument();
-    expect(within(row as HTMLElement).getByText("HR")).toBeInTheDocument();
-
     expect(document.querySelector(".timer-card")).toBeNull();
     expect(document.querySelector(".connected-cards-triple")).toBeNull();
+    expect(document.querySelector(".connected-metric-row")).toBeNull();
   });
 
   it("renders the split target's ref line only when there IS one — no empty span on a no-target phase", () => {
@@ -537,11 +524,12 @@ describe("pane B — live (connected-revamp Task 3: two heroes)", () => {
     // about, so a `textContent === ""` assertion would pass against the
     // defect it is meant to catch.
     expect(document.querySelector(".connected-hero-target-ref")).toBeNull();
-    // …and the slot it used to sit in still holds the two things that are
-    // really there, so this is a deletion and not a collapse.
+    // …and the slot it used to sit in still holds what's really there —
+    // just the value now (CR2 spec 3 Task 4 cut the TARGET label word
+    // outright, spec §2A: "no NOW/TARGET/UP NEXT labels"), so this is a
+    // deletion and not a collapse.
     const box = document.querySelector(".connected-hero-target")!;
     expect(Array.from(box.children).map((c) => c.className)).toStrictEqual([
-      "connected-hero-target-label",
       "connected-hero-target-value connected-value-absent",
     ]);
   });
@@ -631,36 +619,11 @@ describe("pane B — live (connected-revamp Task 3: two heroes)", () => {
     expect(rateValue.className).not.toContain("connected-value-absent");
   });
 
-  it("the metric row's three values sit on one baseline: left-in-interval, meters, HR", () => {
-    renderSurface();
-    const row = document.querySelector(".connected-metric-row")!;
-    const cells = row.querySelectorAll(".connected-metric-cell");
-    expect(cells).toHaveLength(3);
-    const labels = Array.from(cells).map(
-      (cell) => cell.querySelector(".connected-metric-label")!.textContent,
-    );
-    // `TOTAL M`, not `METERS` (James, 2026-08-13): this cell is the whole
-    // session's distance and it sits beside the INTERVAL counting down, so
-    // the bare word made two scopes look like one. The exact-array
-    // assertion is what makes the pair legible here too.
-    expect(labels).toStrictEqual(["METERS LEFT", "TOTAL M", "HR"]);
-    for (const cell of cells) {
-      expect(cell.querySelector(".connected-metric-value")).not.toBeNull();
-    }
-  });
-
-  it("index.css: both heroes are --size-hero over --size-target, tenths at --size-hero-tenths, nowrap", () => {
-    const heroValue = ruleBody(".connected-hero-value");
-    expect(heroValue).toContain("var(--size-hero)");
-    expect(heroValue).toContain("white-space: nowrap");
-    expect(ruleBody(".connected-hero-tenths")).toContain(
-      "var(--size-hero-tenths)",
-    );
-    expect(ruleBody(".connected-hero-target-value")).toContain(
-      "var(--size-target)",
-    );
-    expect(ruleBody(".connected-metric-value")).toContain("var(--size-metric)");
-  });
+  // The metric row (three values on one baseline) and its own CSS rule
+  // (`--size-hero`/`--size-target`/`--size-metric`) both died with CR2
+  // spec 3 Task 4 — the pane's own hero/target/band CSS is now on the
+  // `--c-size-*` family, checked by `PaneLive.test.tsx`'s own token tests
+  // rather than duplicated here.
 });
 
 // ---------------------------------------------------------------------------
@@ -700,8 +663,10 @@ describe("judgement: one helper, every pane (handoff §3)", () => {
   it("EVERY judged cell on pane B goes through the helper — none opts out", () => {
     renderSurface({ frame: frame({ currentSplit: target + 10, spm: 99 }) });
     const cells = judgedCells();
-    // hero + rate + HR + meters
-    expect(cells).toHaveLength(4);
+    // hero + rate — HR and meters DIED off `PaneLive` (CR2 spec 3 Task 4,
+    // spec §3 fate table): they had no other judged-cell renderer on this
+    // pane, so "every" now means these two.
+    expect(cells).toHaveLength(2);
     for (const cell of cells) {
       expect(["slower", "within", "faster", "stale"]).toContain(cell.judgement);
     }
@@ -956,22 +921,15 @@ describe("frozen (handoff §4, restyled by connected-axes 2a task 5)", () => {
   // renderer was that pane's `JudgedCard`, so "NOT ROWING" has no surviving
   // renderer anywhere and the caption half of that coverage genuinely
   // lapses (the field itself stays computed and model-tested,
-  // `surfaceModel.test.ts`'s own paused describe). The dash and the
-  // held-clock grey DO still render, on pane B, so those two get pane B's
-  // own version here rather than being dropped along with pane A.
-  // Connected-revamp Task 3 moved the interval clock's own cell from a
-  // semi-hero (`.connected-second-value`) into the metric row
-  // (`.connected-metric-value`) — the grey-but-holds behaviour, and the
-  // reused `connected-clock-value-held` class, are unchanged.
-  it("the metric row's interval-clock cell greys but holds its last value", () => {
-    renderSurface({
-      frozen: true,
-      frame: frame({ intervalRemaining: { kind: "time", value: 41 } }),
-    });
-    const clock = document.querySelector(".connected-metric-value")!;
-    expect(clock.textContent).toBe("0:41");
-    expect(clock.className).toContain("connected-clock-value-held");
-  });
+  // `surfaceModel.test.ts`'s own paused describe). The dash DOES still
+  // render, on pane B, so that gets pane B's own version below.
+  //
+  // THE METRIC ROW'S OWN INTERVAL-CLOCK CELL (and `.connected-clock-value-
+  // held`, its own grey-but-holds class) DIED HERE (CR2 spec 3 Task 4):
+  // `intervalClockLabel` off `SurfaceModel`, spec §3 fate table — the cell
+  // it captioned is cut outright, so nothing on this pane holds a
+  // frozen-but-visible value through a freeze any more. Its own test used
+  // to live here.
 
   it("pane B's split hero reads `—`, because nobody is pulling", () => {
     renderSurface({ frozen: true });
@@ -1044,7 +1002,9 @@ describe("disconnected: lose and degrade (spec C5)", () => {
 
     renderSurface({ phase: "disconnected", frame: wild });
     const cells = judgedCells();
-    expect(cells).toHaveLength(4);
+    // hero + rate only (CR2 spec 3 Task 4 cut HR/meters off this pane —
+    // see the "EVERY judged cell on pane B" test above for the same count).
+    expect(cells).toHaveLength(2);
     for (const cell of cells) expect(cell.judgement).toBe("stale");
   });
 
@@ -1054,12 +1014,12 @@ describe("disconnected: lose and degrade (spec C5)", () => {
   // retired, and this pane now has no `.timer-card` at all. The stale
   // treatment survives entirely through the tint class every judged cell
   // still wears (the previous it, "THE STALE OVERRIDE BEATS EVERY
-  // JUDGEMENT" — `judgedCells()` finds all 4 and confirms `"stale"`).
+  // JUDGEMENT" — `judgedCells()` finds both and confirms `"stale"`).
   it("carries no cards at all, stale or otherwise — the tint IS the stale treatment now", () => {
     renderSurface({ phase: "disconnected" });
     expect(document.querySelector(".timer-card")).toBeNull();
     expect(document.querySelectorAll(".timer-card-actual-stale").length).toBe(
-      4,
+      2,
     );
   });
 
@@ -1075,36 +1035,15 @@ describe("disconnected: lose and degrade (spec C5)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// No HR monitor
+// No HR monitor — RETIRED (CR2 spec 3 Task 4)
 // ---------------------------------------------------------------------------
 
-// Connected-revamp Task 3 rewrites this idiom entirely for pane B (revision
-// §3: "Missing HR renders `—` in place. No dashed card, no explanatory
-// copy."). The dashed-border/"NO HR MONITOR" caption idiom was
-// `JudgedCard`'s alone and had no other consumer; HR is now a plain metric-
-// row cell like METERS, distinguished from a real reading only by the
-// shared `connected-value-absent` grey every dash on this pane wears.
-describe("no HR monitor: no dashed card, no explanatory copy (revision §3)", () => {
-  it("reads `—`, greyed, with no card and no caption", () => {
-    renderSurface({ frame: frame({ heartRateBpm: null }) });
-    const cell = screen.getByText("HR").parentElement!;
-    expect(cell.className).toBe("connected-metric-cell");
-    const value = cell.querySelector(".connected-metric-value")!;
-    expect(value.textContent).toBe("—");
-    expect(value.className).toContain("connected-value-absent");
-    expect(document.querySelector(".timer-card")).toBeNull();
-    expect(screen.queryByText("NO HR MONITOR")).not.toBeInTheDocument();
-  });
-
-  it("becomes a number with no announcement when a belt appears", () => {
-    renderSurface({ frame: frame({ heartRateBpm: 151 }) });
-    const cell = screen.getByText("HR").parentElement!;
-    const value = cell.querySelector(".connected-metric-value")!;
-    expect(value.textContent).toBe("151");
-    expect(value.className).not.toContain("connected-value-absent");
-    expect(screen.queryByText("NO HR MONITOR")).not.toBeInTheDocument();
-  });
-});
+// This describe block used to test pane B's own HR cell (a plain metric-row
+// numeral, revision §3's "no dashed card, no explanatory copy" idiom). HR
+// has no slot on `PaneLive` at all any more (`SurfaceModel.hr` off the
+// model, spec §3 fate table) — the redesign's own pane has nowhere for a
+// belt reading to render. HR survives only as the grid's own column, with
+// its own coverage in `PaneGrid.test.tsx`.
 
 // ---------------------------------------------------------------------------
 // End, staged

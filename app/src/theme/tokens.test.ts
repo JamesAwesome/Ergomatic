@@ -11,6 +11,12 @@
 // not until the fix round below, which is why the consumer census at the
 // bottom of this file now exists.
 //
+// FOUR OF THE ORIGINAL NINE RETIRED (CR2 spec 3 Task 4): the connected
+// surface forked onto its own `--c-size-*` family, which was these four's
+// only real consumer despite the "shared" name — `SCALE` below is the
+// CURRENT membership, five names plus `--size-elapsed`, not the original
+// nine this header paragraph describes as history.
+//
 // jsdom never loads either stylesheet as real rules — Vitest mocks every
 // `.css` import to an empty string for this project (`TimerTargets.test.tsx`'s
 // own header documents the empirical check) — so this reads both files'
@@ -90,23 +96,26 @@ const LANDSCAPE_ROOT = LANDSCAPE_ROOTS[0] ?? "";
  *  §8 list both write it this way; the revision's §6 recap uses the
  *  opposite landscape/portrait order for the identical values, cross-
  *  checked against its per-element tables at implementation time). */
+// FOUR NAMES RETIRED (CR2 spec 3 Task 4): `--size-hero`, `--size-hero-
+// tenths`, `--size-target` and `--size-metric` were, in practice,
+// connected-only — the redesign forks the connected surface onto its own
+// `--c-size-*` family entirely, leaving these four with zero consumers
+// anywhere in `index.css`. `tokens.css`'s own comment on the portrait
+// `:root` block has the full reasoning; this table shrinks to match the
+// CSS it pins.
 const SCALE = [
-  { name: "--size-hero", portrait: 104, landscape: 112 },
-  { name: "--size-hero-tenths", portrait: 54, landscape: 58 },
   { name: "--size-subhero", portrait: 52, landscape: 56 },
-  { name: "--size-target", portrait: 44, landscape: 46 },
   // These three are DELIBERATELY identical in both orientations — not an
-  // oversight, the spec's own table gives them one figure each ("metric
-  // 30", "total 22", "row 19"). Asserted here anyway, in both blocks, so a
-  // future edit that accidentally diverges them is caught the same way a
-  // deliberate divergence is.
-  { name: "--size-metric", portrait: 30, landscape: 30 },
+  // oversight, the spec's own table gives them one figure each ("total 22",
+  // "row 19"). Asserted here anyway, in both blocks, so a future edit that
+  // accidentally diverges them is caught the same way a deliberate
+  // divergence is.
   { name: "--size-total", portrait: 22, landscape: 22 },
   { name: "--size-row", portrait: 19, landscape: 19 },
   { name: "--size-label", portrait: 10, landscape: 11 },
-  // connected-revamp Task 7's own ninth step (revision §5: "Countdown
+  // connected-revamp Task 7's own extra step (revision §5: "Countdown
   // 128px landscape / 118px portrait") — declared and redefined in both
-  // `:root` blocks exactly like the original eight, so it belongs in this
+  // `:root` blocks exactly like the roles above, so it belongs in this
   // same table rather than a parallel one.
   { name: "--size-countdown", portrait: 118, landscape: 128 },
 ] as const;
@@ -177,7 +186,7 @@ describe("the size-token scale (tokens.css portrait + index.css landscape)", () 
     },
   );
 
-  it("names exactly nine tokens in the landscape block, ten in portrait (the ninth plus --size-elapsed) — no extra, none missing", () => {
+  it("names exactly five tokens in the landscape block, six in portrait (the five plus --size-elapsed) — no extra, none missing", () => {
     const namesIn = (block: string) =>
       Array.from(block.matchAll(/(--size-[a-z-]+)\s*:/g))
         .map((m) => m[1])

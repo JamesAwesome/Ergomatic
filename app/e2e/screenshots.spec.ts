@@ -2469,27 +2469,31 @@ for (const name of CONNECTED_STATES) {
     await showConnectedFixture(page, name);
     if (name === "connected-pane-live") {
       // UP NEXT'S PORTRAIT STRING (connected-revamp Task 6, design spec §6/
-      // revision §3): "REST 2:00 · WORK 2:09.0" — the SAME value landscape
-      // shows, minus the word "then" (`index.css`'s base rule for
-      // `.timer-upnext-then` is `display: none`, unscoped by any media
-      // query, so this is the default at any viewport that isn't
-      // landscape). This fixture's own program has a real rest next
-      // (`connected-pane-live.html`, "Filling Low"'s rest between work
-      // intervals), so there is something real to resolve to. Real CSS,
-      // real cascade — jsdom cannot prove this, only the string-building
-      // half (`UpNextStrip.test.tsx`). `innerText`, NOT `textContent`:
-      // `textContent` reads the raw DOM and includes the hidden "then "
-      // span's own text regardless of its `display: none` — caught
-      // directly running this file, first pass: `display` genuinely
-      // computed `none` on that span, yet `textContent` still read "then"
-      // anyway, because `textContent` is not CSS-aware. `innerText` IS
-      // (it approximates rendered text), which is what "the word is gone
-      // in portrait" actually means.
-      const value = await page.locator(".timer-upnext-value").innerText();
+      // revision §3; RE-ANCHORED CR2 spec 3 Task 4 — the band renders this
+      // line directly now, `.connected-band-upnext-value`/`-then`, not
+      // `UpNextStrip`'s own classes): "REST 2:00 · WORK 2:09.0" — the SAME
+      // value landscape shows, minus the word "then" (`index.css`'s base
+      // rule for `.connected-band-upnext-then` is `display: none`,
+      // unscoped by any media query, so this is the default at any
+      // viewport that isn't landscape). This fixture's own program has a
+      // real rest next (`connected-pane-live.html`, "Filling Low"'s rest
+      // between work intervals), so there is something real to resolve to.
+      // Real CSS, real cascade — jsdom cannot prove this, only the string-
+      // building half (`PaneLive.test.tsx`). `innerText`, NOT
+      // `textContent`: `textContent` reads the raw DOM and includes the
+      // hidden "then " span's own text regardless of its `display: none` —
+      // caught directly running this file, first pass (pre-redesign):
+      // `display` genuinely computed `none` on that span, yet `textContent`
+      // still read "then" anyway, because `textContent` is not CSS-aware.
+      // `innerText` IS (it approximates rendered text), which is what "the
+      // word is gone in portrait" actually means.
+      const value = await page
+        .locator(".connected-band-upnext-value")
+        .innerText();
       expect(value?.replace(/\s+/g, " ").trim()).toBe(
         "REST 3:00 · WORK 2:06.0",
       );
-      await expect(page.locator(".timer-upnext-then")).toBeHidden();
+      await expect(page.locator(".connected-band-upnext-then")).toBeHidden();
 
       // THE SAFETY FIX, MEASURED (James 2026-08-12): End's hit box is a
       // small fraction of the surface's width, not the full-width bar this
@@ -2593,34 +2597,34 @@ for (const name of CONNECTED_STATES) {
     if (name === "connected-pane-live") {
       // UP NEXT'S LANDSCAPE STRING: "REST 2:00 · then WORK 2:09.0" —
       // revision §3's own example, and the SHAPE is now literally that (the
-      // fixture's own numbers differ). It was not, until the task-6 fix
-      // round: `phaseAnnouncement` used to emit "WORK · 2:06.0", putting a
-      // second "·" inside a phrase the outer "·" already separates, and
-      // this comment claimed byte-for-byte fidelity it did not have (task-6
-      // review, M2). The builder was corrected to the design, not the
-      // comment to the build. Same value as the portrait case above,
-      // plus the word "then" — proving it is one builder, not two, the
-      // same way `UpNextStrip.test.tsx` proves it structurally. `innerText`
-      // for the same reason the portrait block above uses it (rendering-
-      // aware, not raw-DOM) — nothing is hidden here, so it reads the same
-      // as `textContent` would, but consistency beats relying on that.
-      const value = await page.locator(".timer-upnext-value").innerText();
+      // fixture's own numbers differ). RE-ANCHORED (CR2 spec 3 Task 4): the
+      // band renders this line directly now, `.connected-band-upnext-
+      // value`/`-then`, not `UpNextStrip`'s own classes — same value as the
+      // portrait case above, plus the word "then" — proving it is one
+      // builder, not two, the same way `PaneLive.test.tsx` proves it
+      // structurally. `innerText` for the same reason the portrait block
+      // above uses it (rendering-aware, not raw-DOM) — nothing is hidden
+      // here, so it reads the same as `textContent` would, but consistency
+      // beats relying on that.
+      const value = await page
+        .locator(".connected-band-upnext-value")
+        .innerText();
       expect(value?.replace(/\s+/g, " ").trim()).toBe(
         "REST 3:00 · then WORK 2:06.0",
       );
-      await expect(page.locator(".timer-upnext-then")).toBeVisible();
+      await expect(page.locator(".connected-band-upnext-then")).toBeVisible();
       // NOT VISUALLY CLIPPED — the bug `innerText` above cannot catch
-      // (found by eye in this task's own first landscape screenshot:
-      // `.timer-upnext-value`'s `text-overflow: ellipsis` silently
-      // truncated this exact string to "REST 3:00 …", and `innerText`
+      // (found by eye in the pre-redesign task's own first landscape
+      // screenshot: the old `.timer-upnext-value`'s `text-overflow:
+      // ellipsis` silently truncated this exact string, and `innerText`
       // still read the full un-clipped string throughout, because
-      // ellipsis clips PAINT, not the DOM `innerText` walks). `scrollWidth
-      // > clientWidth` is what visual truncation actually looks like from
-      // script; real root cause was `.connected-metric-cell`'s own
-      // `flex: 1` claiming the same share of the row as this value
-      // (index.css's own comment on the fix has the measurement).
+      // ellipsis clips PAINT, not the DOM `innerText` walks — the same
+      // risk applies to the band's own value, which keeps the identical
+      // `text-overflow: ellipsis` safety net). `scrollWidth >
+      // clientWidth` is what visual truncation actually looks like from
+      // script.
       const overflow = await page
-        .locator(".timer-upnext-value")
+        .locator(".connected-band-upnext-value")
         .evaluate((el) => ({
           scrollWidth: el.scrollWidth,
           clientWidth: el.clientWidth,

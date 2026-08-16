@@ -173,31 +173,42 @@
      spec §8 / revision's own §3/§5/§6 tables). Before this, `tokens.css`
      carried colours, `--radius` and `--tap` and nothing else — `index.css`
      has 254 literal font-sizes of its own, and this beachhead does NOT
-     sweep them; it names only the eight roles the connected panes and the
+     sweep them; it names only the roles the connected panes and the
      unconnected phone timer share, for Task 2 and the tasks after it
      (3/5/7) to consume as they rebuild those two surfaces. Named by ROLE,
      not by pixel value, because the same role takes a different pixel
      value in each orientation — one name, two values, never two names: the
      value below is PORTRAIT; the landscape half of each pair is redefined
      under `@media (orientation: landscape)` inside `index.css`'s own
-     connected-surface query, not duplicated here under a second name. */
-  --size-hero: 104px;
-  --size-hero-tenths: 54px;
+     connected-surface query, not duplicated here under a second name.
+
+     FOUR OF THE ORIGINAL EIGHT RETIRED (CR2 spec 3 Task 4): `--size-hero`,
+     `--size-hero-tenths`, `--size-target` and `--size-metric` were, in
+     practice, connected-only despite living in this "shared" family — the
+     redesign forks the connected surface onto its own `--c-size-*` family
+     entirely (`.connected-surface`'s own scale, index.css), which left
+     these four with ZERO consumers anywhere in `index.css` (the phone
+     timer never read them; `tokens.test.ts`'s own "no more dead names"
+     rule is exactly the guard that caught it). Deleted rather than left as
+     dead weight — the four surviving roles below (`--size-subhero`,
+     `--size-total`, `--size-row`, `--size-label`) are the ones the phone
+     timer, or the still-unmigrated connected grid (Task 5), genuinely
+     read. */
   --size-subhero: 52px;
-  --size-target: 44px;
-  --size-metric: 30px;
   --size-total: 22px;
   --size-row: 19px;
   --size-label: 10px;
 
   /* connected-revamp Task 7 (revision §5): the phone timer's own countdown
-     is a bigger step than any of the eight roles above — 118/128px against
-     hero's own 104/112 — so it earns a ninth name rather than overloading
-     `--size-hero` with a second, surface-specific value (Task 2's own "one
-     name, two values, never two names" rule is about ORIENTATION, not
-     about forcing every big numeral on every surface into the same role).
-     The landscape half is redefined in `index.css`'s own landscape `:root`
-     block, alongside the original eight — see that block's own comment for
+     is a bigger step than any of the phone-timer roles above — 118/128px,
+     bigger than the connected surface's own retired hero step ever was
+     (104/112, before CR2 spec 3 Task 4 retired that role from this family
+     entirely) — so it earned its own name rather than overloading a hero
+     role with a second, surface-specific value (Task 2's own "one name,
+     two values, never two names" rule is about ORIENTATION, not about
+     forcing every big numeral on every surface into the same role). The
+     landscape half is redefined in `index.css`'s own landscape `:root`
+     block, alongside the roles above — see that block's own comment for
      why a SECOND `:root { --size-*: … }` block must never be added
      elsewhere. `--size-elapsed` carries only one value: revision §5's own
      table gives ELAPSED a single 26px figure in both orientations (unlike
