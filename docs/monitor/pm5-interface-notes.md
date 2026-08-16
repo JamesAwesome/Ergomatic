@@ -838,20 +838,20 @@ WORKOUTINTERVALCOUNT`(index 0) implicitly truncates the PM's prior
    into a 60s interval, re-rooted at 60.0 on the next interval; no further
    hardware testing needed for the cadence assumption itself). The
    lockstep half shared with item #1 above stays flagged there. The
-   driver's `intervalRemaining` checkpoint assumes 0x0033's "Last
-   Split Time"/"Last Split Distance" (§10, offset 14-19) report the
+   driver's `intervalRemaining` checkpoint ASSUMED 0x0033's "Last
+   Split Time"/"Last Split Distance" (§10, offset 14-19) reported the
    SESSION-cumulative point at which the CURRENT interval began (i.e.,
    where the previous interval/split ended) continuously, on every
    regular status tick — not merely once, at a boundary. Neither document
    states an update cadence for these two fields beyond listing them in
    the characteristic's byte table. `src/monitor/driver.ts`'s
-   `computeRemainingForFrame` subtracts this pair from
+   `computeRemainingForFrame` SUBTRACTED this pair from
    `MonitorFrame.elapsedSeconds`/`distanceMeters` to recover "progress
    into this interval" with no local observation history at all
    (replacing an earlier, buggier design that rooted a checkpoint at
-   whichever tick the driver happened to observe first) — correct only if
-   the field genuinely holds steady at the interval's start point for
-   that interval's whole duration, updating only at the NEXT boundary.
+   whichever tick the driver happened to observe first) — correct only
+   through interval indices 0-1, where the checkpoint happens to read
+   zero (§20 item 17's corrected account).
    The same computation (and its sibling divergence check,
    `src/monitor/driver.ts`'s `"divergence"` log kind) also assumes
    `MonitorFrame.intervalIndex` (0x0033's Interval Count) and
@@ -869,9 +869,16 @@ WORKOUTINTERVALCOUNT`(index 0) implicitly truncates the PM's prior
    remaining, so on interval workouts either the 0x0033 checkpoint pair
    also reads interval-relative, or it reads zero; the wording above
    (written against single-distance §18 #7 evidence) cannot be the whole
-   story. No raw 0x0033 capture exists to distinguish the two. OPEN as
-   §20 entry 24; the computation is bug-free either way on the observed
-   machine, which is why nothing in code changes under this note.
+   story. No raw 0x0033 capture existed to distinguish the two at the
+   time. **SETTLED, half-way (§20 entry 24, corrected):** the inversion of
+   `intervalRemaining` out of `docs/monitor/sessions/walk-2026-08-15/`
+   (225+161 frames, zero mismatches) showed the checkpoint reads ZERO
+   through interval indices 0 and 1, then LAGS one boundary behind from
+   index 2 on — wrong, not bug-free, from index 2 onward on any
+   multi-interval program. CR2 spec 2a Task 6 deleted the checkpoint
+   subtraction; `computeRemainingForFrame`/`computeAccruedForFrame` now
+   read 0x0031's own per-interval pair directly. Still open: lag-by-one
+   vs previous-split's-own-value (§20 item 24).
 9. **ANSWERED — CONFIRMED accepted, see §18 #8** (the 2×(work/rest)
    session's final interval's own rest counted down fully before
    `WorkoutEnd`/`workoutComplete` fired, no early termination; no further
@@ -1085,8 +1092,11 @@ narrative:
    (`18 01 00/01/02/03`) (§18 #1, item 1 below).
 4. The GATT status parse is right — distance/elapsed/pace/spm all
    cross-check against each other (§18 #1, item 1 below).
-5. `intervalRemaining`'s checkpoint computation is correct as rebuilt onto
-   0x0033's Last Split fields (§18 #7, item 7 below).
+5. `intervalRemaining`'s checkpoint computation WAS correct as rebuilt onto
+   0x0033's Last Split fields, through interval indices 0-1 only; CR2 spec
+   2a Task 6 deleted the checkpoint subtraction after the inversion showed
+   it wrong from index 2 on (§20 item 17's corrected account; §18 #7, item
+   7 below).
 6. The terminal-state latch holds in the field: `finished` +
    `workoutComplete`, no un-finishing, across a full multi-interval session
    (§18, "VALIDATED ON HARDWARE" / item 8's trailing-rest confirmation
@@ -1290,14 +1300,19 @@ settle off would be worse than one that needed a reconnect.
    shorter one (fewer intervals) without power-cycling the PM, and check
    whether the PM plays only the second program or a mix carrying a stale
    tail from the first.
-7. **STATUS: ANSWERED — CONFIRMED (§18 #7).** `intervalRemaining`'s checkpoint cadence (§15 #8,
+7. **STATUS: ANSWERED — CONFIRMED (§18 #7), corrected by §20 item 17.**
+   `intervalRemaining`'s checkpoint cadence (§15 #8,
    `computeRemainingForFrame`'s comment). Expected: 0x0033's "Last Split
    Time"/"Last Split Distance" hold steady at the current interval's start
    point for its whole duration, updating only at the next boundary.
    Observed: during a multi-interval test workout, watch whether the app's
    own `intervalRemaining` counts down smoothly and hits exactly 0 at each
    boundary, or jumps/glitches (a bad cadence assumption would show as a
-   sudden jump partway through an interval, not a boundary).
+   sudden jump partway through an interval, not a boundary). This session's
+   single-interval capture never went past interval index 1, where the
+   checkpoint reads 0 and "holds steady at the start point" is
+   numerically indistinguishable from "reads zero"; §20 item 17's
+   inversion found the actual semantics wrong from index 2 on.
 8. **STATUS: ANSWERED — CONFIRMED accepted (§18 #8).** Trailing-rest-on-final-interval acceptance (§15 #9/program.ts's rest-
    folding comment). Expected: the PM cleanly finishes counting down a
    nonzero rest programmed onto the workout's LAST interval before
@@ -2445,9 +2460,12 @@ establish about programming over a live session.
    > `CSAFE_RESET_CMD` (`0x81` as a COMMAND — unrelated to `0x81` as a
    > status byte) and `SCREENVALUEWORKOUT_GOTOMAINSCREEN` (6). See §19.5.
 7. **`intervalRemaining` checkpoint cadence (§17 item 7): CONFIRMED
-   correct.** 58.92 s remaining observed at 1.08 s into a 60 s interval,
-   re-rooted at 60.0 at the next interval's start, matching
-   `computeRemainingForFrame`'s 0x0033-"Last Split"-based design exactly.
+   correct at the interval index this capture exercised (0/1) — corrected
+   by §20 item 17.** 58.92 s remaining observed at 1.08 s into a 60 s
+   interval, re-rooted at 60.0 at the next interval's start, matching
+   `computeRemainingForFrame`'s then-current 0x0033-"Last Split"-based
+   design — a design later found wrong from interval index 2 on and
+   deleted (CR2 spec 2a Task 6).
 8. **Trailing rest on the final interval (§17 item 8): CONFIRMED
    accepted.** The 2×(work/rest) session's final interval's own rest
    counted down fully before `WorkoutEnd`/`workoutComplete` fired, with no
@@ -4254,19 +4272,33 @@ Wait for both halves of one boundary, in either order.
 **Evidence:** §18 #3's follow-up diagnosis row (D4), and §19.8's own caveat
 about which readings predate the fix.
 
-**17. 0x0033's Last Split Time and Last Split Distance hold steady for a
-whole interval.** They report the point at which the CURRENT interval began
-and update only at the next boundary, refreshing on every regular status
-tick rather than once, which is what lets a consumer recover progress into
-the current interval with no local history at all.
+**17. 0x0033's Last Split Time and Last Split Distance read ZERO through
+interval indices 0 and 1, then LAG one boundary behind from index 2 on.**
+Measured (225 time frames + 161 distance frames at interval index 1, zero
+mismatches, independently re-verified by inverting `intervalRemaining` out
+of the lab captures): the pair does NOT hold the current interval's own
+start point, and it does not refresh to a fresh value at every boundary
+either. It holds the PREVIOUS boundary's cumulative point — at interval
+index 2 it reads interval 0's end value — one boundary behind the interval
+a consumer is actually in, on every regular status tick. A consumer cannot
+recover progress into the current interval from this pair by subtraction
+past index 1; CR2 spec 2a Task 6 stopped trying to, and reads 0x0031's own
+per-interval Elapsed Time/Distance pair directly instead (no checkpoint).
 **Official docs:** SILENT on update cadence. The BLE doc lists the two
 fields (pp.14-15, §10's 0x0033 table) and nothing more.
-**Evidence:** §18 #7, §17 item 7: 58.92 s remaining observed 1.08 s into a
-60 s interval, re-rooted at 60.0 at the next interval's start. §15 #8
-describes the pair as the session-cumulative start point of the current
-interval; walk 4's per-interval finding (entry 12) left this computation
-correct as it stood, and it is deliberately still read against the raw
-per-interval pair.
+**Evidence:** the inversion off `docs/monitor/sessions/walk-2026-08-15/`
+(225+161 frames, zero mismatches) settled this. §18 #7, §17 item 7: 58.92 s
+remaining observed 1.08 s into a 60 s interval — correct only because that
+capture never left interval index 1, where the checkpoint happens to read
+0 and "holds steady at the start point" and "reads zero" are numerically
+indistinguishable. §15 #8's walk-4 addendum first raised the contradiction
+this resolves. **Still open** (§20 item 24): whether the lag is "one
+boundary behind" (interval 0's own end value, unchanged until the
+checkpoint itself next advances) or "previous split's own value" (each
+boundary contributing its own distinct prior value) — both fit every
+capture in hand and imply the same fix; only a 4-UNEQUAL-interval walk row
+separates them, since equal intervals make the two hypotheses numerically
+identical.
 
 **18. Heart rate has two sentinels in the field, and only one of them is the
 documented one.** With no belt paired, 0x0038's work-heartrate field
@@ -4383,13 +4415,30 @@ in a browser test, never measured against hardware, and nothing downstream
 treats them as a timing oracle.
 
 **24. What 0x0033's Last Split checkpoint pair actually reports on
-interval workouts.** §15 #8's session-cumulative reading and walk 4's
-per-interval 0x0031 finding cannot both be whole truths, because the
-driver subtracts one from the other and the countdown was CORRECT on
-hardware; either the checkpoint also reads interval-relative there, or
-it reads zero. One raw 0x0033 capture mid-interval-2 settles it.
+interval workouts — HALF-SETTLED.** §15 #8's session-cumulative reading and
+walk 4's per-interval 0x0031 finding could not both be whole truths, because
+the driver subtracted one from the other and the countdown was CORRECT on
+hardware only through interval indices 0-1. The inversion of
+`intervalRemaining` out of the lab captures (225 time frames + 161 distance
+frames, zero mismatches, independently re-verified) settled WHICH: the
+checkpoint reads ZERO through interval indices 0 and 1, then LAGS one
+boundary behind from index 2 on — not session-cumulative, not
+interval-relative. `src/monitor/driver.ts`'s `computeRemainingForFrame`/
+`computeAccruedForFrame` no longer read this pair at all (CR2 spec 2a
+Task 6); 0x0031's own per-interval Elapsed Time/Distance pair is read
+directly instead. **Still open:** whether the lag is "one boundary behind"
+(interval 0's own end value, repeating unchanged at every later boundary
+until the checkpoint itself next advances) or "previous split's own value"
+(each boundary contributing its own distinct prior value) — both fit every
+capture in hand and imply the same fix; only a raw 0x0033 capture across a
+4-UNEQUAL-interval program separates them, since equal intervals make the
+two hypotheses numerically identical.
 **Official docs:** SILENT (no update cadence, no basis stated).
-**Evidence for the open state:** §15 #8's walk-4 addendum.
+**Evidence:** §15 #8's walk-4 addendum first raised the contradiction; the
+inversion above (also §20 item 17) settled it half of the way; the
+2026-08-15 connected-axes design spec §3 ("The interval clock") records the
+adjudication. The deciding walk row (4 unequal intervals) is queued on the
+spec-2 walk list, `docs/monitor/sessions/walk-2026-08-15/README.md`.
 
 Other readings owed by the next hardware row are listed at the end of §18's
 2026-08-08 entry.
