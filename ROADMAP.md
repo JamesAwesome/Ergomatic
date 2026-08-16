@@ -2115,6 +2115,70 @@ size, and `design.spec.ts`'s `assertNoFailingInk4Labels` sweep enforces it.
 
 ---
 
+### Infrastructure — PM5 record-and-replay harness (NEW 2026-08-15)
+
+**Not a rower-facing item — filed here because this phase is where it pays
+off first.** Serves CLAUDE.md recurring failure #11 (when the machine
+reports a number we also compute, compare them) by making that comparison
+possible in CI with no hardware. Full design, research pass and scope
+ruling: `docs/superpowers/specs/2026-08-15-pm5-record-replay-design.md`.
+
+**Stage A — shipped this PR.** The recording tap
+(`app/src/monitor/transports/recording.ts`) captures every transport event
+unfiltered and undecoded (scan, connect, subscribe, notification, write,
+disconnect) behind the existing `fakeMonitorEnabled` gate, dev-only and
+dead-code-eliminated from production; a "Download recording" control in the
+connected log sheet's diagnostics saves it gzipped via the
+`window.__pm5Recording__` seam. The barrier-gated replay transport
+(`replay.ts`) holds recorded rx events until the driver issues the matching
+recorded write, never on the recorded clock — a recorded gap between
+subscribe and the first programming write is how long a rower took to press
+a button, not a delay replay should reproduce. A record-to-replay round trip
+over a synthesized session (the fake transport driven through a real
+`createPm5Driver`, replayed into a fresh driver, outputs compared) proves
+the tap and scheduler; `app/scripts/dist-grep.sh` carries a new
+`pm5-recording/v1` string-literal needle, proven to bite.
+
+**Stage B — gated on spec 2's hardware walk**, which must run Chrome/Web
+Bluetooth from the dev server with the recording tab foregrounded (the
+phone's native adapter routes past the tap and records nothing). A Vitest
+CI rung drives the real driver through the committed real recording and
+asserts our derived totals against the machine's own wire numbers, decoded
+by a reader that never shares code with the driver under test. Exit
+criteria, each independently falsifiable:
+
+1. **The keystone replays** — a recorded 2x250m r0 row reproduces the
+   accumulator against machine TWD to the re-walk's tolerance, with no
+   hardware and zero divergences.
+2. **Recording does not change the session** — the walk's app numbers still
+   agree with the photographed PM5 screen, and the recorded 0x0031
+   inter-arrival distribution matches the committed baseline.
+3. **The rung can go red** — a deliberate mutation of the register map's
+   write rule turns it red; restore, green.
+4. **The instrument captures the boundary** — every work/rest boundary in
+   the walk carries the full 0x0031 state-byte sequence and every 0x0033
+   sample with its Interval Count, in arrival order.
+
+**UI replay rung — filed as a spec 3 follow-on, not this phase.** The
+full-UI e2e rung and the dev replay viewer are cut from Stage A/B: the
+surface they would assert against is what spec 3 is about to rebuild
+(`docs/design/handoffs/2026-08-15-connected-v2/`), and asserting byte-level
+injection needs a type `FakeScript` doesn't have (it is semantic, not
+byte-carrying).
+
+**Tier 2 on-device recording — trigger-gated, not scheduled.** Fires only
+when a defect surfaces on-device that the dev/web recorder cannot see.
+Prerequisites before it is built: a hard byte bound, a persist trigger that
+is not the terminal transition, an export path that exists (there is
+currently zero IndexedDB in `src/`), and the on-device delivered rate
+confirmed. **The on-device rate cannot come from this phase's dev/web
+walk** — the iOS cadence is already documented as a platform difference
+(~90-180ms status-tick spacing vs the desktop's ~2/s,
+`pm5-interface-notes.md` §21 item 3), not something a desktop walk can
+measure.
+
+---
+
 ### Carried debt — smaller, all disclosed, none blocking
 
 - **Correct the record first, it is cheap and it is wrong today.** Comments
@@ -2148,9 +2212,12 @@ size, and `design.spec.ts`'s `assertNoFailingInk4Labels` sweep enforces it.
 - **The ordinal-guard substitute** — the wave ended with slightly less
   integration coverage of `frame.state` reaching the surface than it began.
 
-**Exit:** items 0-4 shipped and walked on a real PM5, and the carried debt
-either cleared or explicitly re-parked with a reason. (The record
-correction that was listed here shipped early, in PR #91.)
+**Exit:** items 0-4 shipped and walked on a real PM5, R0 and F7 (spec 1) and
+F6 (spec 2) delivered, and the carried debt either cleared or explicitly
+re-parked with a reason. (The record correction that was listed here
+shipped early, in PR #91. R0/F6/F7 were added to the phase 2026-08-15,
+inside spec 1's and spec 2's scope, without this line naming them until
+now — PM ruling.)
 
 **Walk the exit the way item 0 was found:** the erg's own screen
 photographed in the same frame as the phone's. Every number this phase

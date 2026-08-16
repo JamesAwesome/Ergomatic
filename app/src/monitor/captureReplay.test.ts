@@ -21,9 +21,16 @@
 //      is no 0x0031/0x0033 buffer to feed a codec — only the already-parsed
 //      shape on the other side of it.
 //   2. The re-encode harness that CAN produce wire bytes
-//      (`src/monitor/transports/fake.ts`) zero-fills 0x0033. Round-tripping
-//      a captured frame through it would prove the harness agrees with
-//      itself, not that the driver decodes a real PM5 correctly.
+//      (`src/monitor/transports/fake.ts`) does NOT zero-fill 0x0033 — that
+//      shortcut belongs to `sessionTotals.test.ts`'s priming helper, a
+//      different piece of code. `fake.ts:649` computes `intervalCount` via
+//      `toMachineIndex`, the algebraic inverse of the function under test,
+//      and emits the three status characteristics atomically per tick in
+//      the order 0x0033 -> 0x0032 -> 0x0031 (`fake.ts:1064-1066`) — zero
+//      inter-characteristic skew, and the OPPOSITE arrival order to
+//      hardware. Round-tripping a captured frame through it would prove the
+//      harness agrees with itself, not that the driver decodes a real PM5
+//      correctly.
 //   3. A replay never calls `program()`. Without an armed program,
 //      `programLength` is 0, and `toProgramIndex`
 //      (`../../domain/monitor/pm5/intervalIndex.ts:167`,

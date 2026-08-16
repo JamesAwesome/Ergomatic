@@ -239,9 +239,11 @@ often they recur.
     photographing the monitor and the phone in the SAME FRAME. **When the
     machine reports a number we also compute, compare them** — on hardware
     with both screens in one shot, or in a test by replaying a capture from
-    `docs/monitor/sessions/` and checking the derived total against the
-    intervals' own `boundary` actuals. An agreement with our own fixtures
-    proves nothing about the erg.
+    `docs/monitor/sessions/` and checking the derived total against each
+    interval's own final pre-reset reading (the captures contain no
+    `boundary` events, and the boundary-actual sum is an unsound oracle —
+    architecture review §F2). An agreement with our own fixtures proves
+    nothing about the erg.
 
 ## Commands
 

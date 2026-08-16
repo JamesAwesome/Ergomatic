@@ -374,7 +374,7 @@ export interface DriverOptions {
    * remove.
    *
    * **SEMANTICS CHANGED, fix-3 Task 4: omitting this no longer means "no
-   * bound" — it means the DEFAULT, `20`** (`DEFAULT_VERIFY_TICKS`, the
+   * bound" — it means the DEFAULT, `30`** (`DEFAULT_VERIFY_TICKS`, the
    * value `scripts/pm5-lab.ts` reasoned its way to on hardware cadence and
    * still passes explicitly, now redundantly). Until this task,
    * verification's only success condition was `state === "armed"`, so an
@@ -3523,7 +3523,7 @@ export function createPm5Driver(
    * why). The mismatch VERDICT inside that bound is the one thing here that
    * also reads a clock, since walk 5 proved a tick count cannot express "the
    * machine held still for longer than its own transition takes".
-   * **Omitting it means `DEFAULT_VERIFY_TICKS` (20), NOT "no bound"**
+   * **Omitting it means `DEFAULT_VERIFY_TICKS` (30), NOT "no bound"**
    * (semantics changed by this task, for the reason that field's doc
    * comment gives: unbounded + a structure predicate = a hang exactly where
    * detection was wanted). On expiry, on the stable-mismatch rule firing, or
