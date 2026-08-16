@@ -66,11 +66,19 @@ reader definition) are exact values, not suggestions.
   template, including transport-level `scan()`/`connect()`; MonitorDriver
   has NO connect()); `createEventLog` from `./eventLog`; recordings at
   `../../docs/monitor/sessions/walk-2026-08-16/session-1-keystone-2x250r0.jsonl`
-  and `session-2-wu-4unequal.jsonl` (resolve relative to
-  `import.meta.url` by string surgery, the `captureReplay.test.ts` idiom
-  — jsdom mangles `new URL` file bases). The armed program comes from
-  each recording's header (`header.program`), passed to
-  `driver.program(...)`.
+  and `session-2-wu-4unequal.jsonl` — they live at the REPO ROOT, three
+  levels above `app/src/monitor/` (resolve via the
+  `captureReplay.test.ts:112-117` idiom: `import.meta.url` string
+  surgery with a regex suffix replacement; jsdom mangles `new URL` file
+  bases, and a literal `../..` is one level short). **The armed program
+  is HAND-TRANSCRIBED as a literal per session (premise pass, 2026-08-16:
+  `header.program` is ABSENT from both committed captures — grep returns
+  zero; only the synthetic round-trip test ever had one, because it built
+  its own header).** From HANDOFF.md: session 1 = 2×250 m distance
+  intervals, r0; session 2 = wu 100 m r0 + 60 s r30 + 120 s r30 + 500 m
+  r30 + 60 s. Copy the `ROUNDTRIP_PROGRAM` literal's shape from
+  `recordReplay.roundtrip.test.ts`; do NOT read `header.program` and do
+  NOT `!`-suppress it.
 - Produces (private to the test file — exported for nothing):
 
 ```ts
@@ -132,9 +140,10 @@ a new driver API for the test.
 ### Task 2: The clamp
 
 **Files:**
-- Modify: `app/src/monitor/driver.ts` (inside `maybeEmitFrame`, after
-  `activeKey` is computed at ~`:1890`, BEFORE the refused-open guard at
-  `:1911` — verify line numbers by reading; they drift)
+- Modify: `app/src/monitor/driver.ts` (inside `maybeEmitFrame`: the
+  `activeKey` computation spans `:1791-1845`; insert the clamp AFTER
+  `:1845` and BEFORE the refused-open guard at `:1911` — NOT at ~1890,
+  which sits mid-comment. Verify by reading; lines drift.)
 
 **Interfaces:**
 - Consumes: `session.seen: Map<number, {elapsedSeconds, distanceMeters}>`,
@@ -178,8 +187,9 @@ if (
 }
 ```
 
-  Also: reset `clampedKeysLogged` wherever `refusedKeysLogged` resets
-  (find it — likely `program()`'s session reset at ~`:4239`).
+  Also: reset `clampedKeysLogged` beside `refusedKeysLogged`'s reset at
+  `driver.ts:4243` (inside `program()`'s per-run reset block; the
+  `session = { seen: new Map() }` anchor is `:4239`).
 - [ ] **Step 2: Run — session 2 GREEN now, session 1 still green,
   full client project green.** Both summary lines.
 - [ ] **Step 3: Self-mutation probes (report, never commit):**

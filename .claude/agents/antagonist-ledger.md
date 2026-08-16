@@ -570,3 +570,24 @@ toolkit, not a history.
   re-arming carries the old `max(seen)` — already broken today, but the
   clamp changes the failure's direction from undercount to inflating the
   previous workout's top key.
+
+## Task-brief premise pass, 2026-08-16 (rest-keying-fix plan, Task 1)
+
+- **"The armed program comes from each recording's header (`header.program`)."**
+  Believed because the sibling harness (`recordReplay.roundtrip.test.ts`) reads
+  `header.program` successfully and `RecordingHeader.program` is a typed field.
+  FALSE for the two committed 2026-08-16 hardware captures:
+  `grep -c '"program"' session-{1,2}-*.jsonl` returns 0 for both — the header
+  line captured over real Web Bluetooth carries only `v`/`app`/`transport`/`ua`,
+  no `program` key. The sibling test only has a populated `header.program`
+  because it BUILDS its own header itself (`buildRecordingFile(tap, {...,
+  program: ROUNDTRIP_PROGRAM})` around a synthetic fake-driven session) — it
+  never reads one out of a real capture, because a real Web Bluetooth capture
+  never has one to read. `driver.program(p)` requires `WorkoutProgram`, not
+  `WorkoutProgram | undefined`, so the plan's own interface (as written) is
+  either a typecheck error or a `!`-suppressed runtime crash on the first
+  hardware-replay test written against it. **Technique: grep the actual
+  committed artifact for the literal field name a plan depends on, rather than
+  trusting that a sibling test's successful use of a type-optional field means
+  THIS artifact populates it — a reader working elsewhere proves the reader
+  works, not that the specific file has the data.**
