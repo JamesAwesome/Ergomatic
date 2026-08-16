@@ -17,6 +17,8 @@ import {
   createMonitorRun,
   recordActual,
   completeMonitorRun,
+  completeInterruptedRun,
+  interruptedTotalSeconds,
   anyLiveSession,
   connectGuardStage,
   MONITOR_RUN_KEY,
@@ -848,5 +850,164 @@ describe("connectGuardStage: the Connect door's lock", () => {
 
     expect(anyLiveSession()).toBe("none");
     expect(connectGuardStage()).toBe("unlogged");
+  });
+});
+
+// F6 spec 2b, Task 1. `endedBy` is the additive marker a rower's own
+// "end this interrupted session" door (Today's row, a later task) stamps
+// on a `MonitorRun` that never got a `workoutComplete`/`terminated` event
+// from the machine at all — the phone was disconnected, backgrounded past
+// recovery, or the rower simply walked away. Absent means "normal
+// completion" (or "still live"); it is never inferred from `terminated`
+// or `completedAt` alone, because both of those already mean something
+// else (`MonitorRun`'s own doc comments on each field).
+describe("endedBy: the additive interrupted marker (F6)", () => {
+  beforeEach(() => localStorage.clear());
+
+  it("round-trips endedBy through save/load", () => {
+    const run: MonitorRun = {
+      ...freshMonitorRun(),
+      v: 2,
+      logSeed: TEST_SEED,
+      completedAt: new Date("2026-08-16T10:00:00.000Z").toISOString(),
+      endedBy: "interrupted",
+    };
+    saveMonitorRun(run);
+    const loaded = loadMonitorRun();
+    expect(loaded).toStrictEqual(viaJson(run));
+    expect(loaded!.endedBy).toBe("interrupted");
+  });
+
+  it("a record without endedBy loads unchanged (never-migrate: reads as normal completion)", () => {
+    const run: MonitorRun = {
+      ...freshMonitorRun(),
+      completedAt: new Date("2026-08-16T10:00:00.000Z").toISOString(),
+    };
+    saveMonitorRun(run);
+    const loaded = loadMonitorRun();
+    expect(loaded!.endedBy).toBeUndefined();
+    expect(loaded).toStrictEqual(viaJson(run));
+  });
+
+  it("rejects a record whose endedBy is any other value", () => {
+    const run = freshMonitorRun();
+    localStorage.setItem(
+      MONITOR_RUN_KEY,
+      JSON.stringify({ ...run, endedBy: "garbage" }),
+    );
+    expect(loadMonitorRun()).toBeNull();
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+  });
+});
+
+describe("completeInterruptedRun: the rower's door (F6)", () => {
+  beforeEach(() => localStorage.clear());
+
+  it("stamps completedAt from now and endedBy interrupted, persists, leaves terminated untouched", () => {
+    const run = { ...freshMonitorRun(), terminated: false };
+    saveMonitorRun(run);
+
+    const out = completeInterruptedRun(
+      run,
+      new Date("2026-08-16T10:00:00.000Z"),
+    );
+
+    expect(out.completedAt).toBe("2026-08-16T10:00:00.000Z");
+    expect(out.endedBy).toBe("interrupted");
+    expect(out.terminated).toBe(false);
+    // Persisted, not merely returned: the record outlives this call.
+    expect(loadMonitorRun()?.endedBy).toBe("interrupted");
+    // A new record, the caller's own copy untouched (`recordActual`'s
+    // and `completeMonitorRun`'s shared idiom).
+    expect(run.completedAt).toBeNull();
+  });
+
+  it("is idempotent: an already-completed record is returned unchanged and not re-stamped", () => {
+    const closed: MonitorRun = {
+      ...freshMonitorRun(),
+      completedAt: new Date("2026-08-16T09:00:00.000Z").toISOString(),
+    };
+    saveMonitorRun(closed);
+
+    const out = completeInterruptedRun(
+      closed,
+      new Date("2026-08-16T10:00:00.000Z"),
+    );
+
+    expect(out).toBe(closed);
+    expect(out.completedAt).toBe(closed.completedAt);
+    expect(out.endedBy).toBeUndefined();
+    expect(loadMonitorRun()).toStrictEqual(viaJson(closed));
+  });
+});
+
+// `interruptedTotalSeconds` answers "how much of this workout actually
+// happened" for a session the rower ended early through the interrupted
+// door, from the record's OWN actuals and program — never wall-clock time
+// past the last measured boundary (the spec's "nothing invented past the
+// last measured boundary" constraint). James's verbatim ruling is the
+// allowance, stated here so a later review does not relitigate it: EVERY
+// completed interval's programmed rest counts, including the last one's —
+// the rower was still resting inside the plan, whether or not another
+// working interval ever started.
+describe("interruptedTotalSeconds: work + programmed rest for completed intervals", () => {
+  // Hand-built program, not a compiled library fixture: these tests are
+  // about the ARITHMETIC over `restSeconds`/`index`, not about a real
+  // workout's shape, matching this file's own precedent for the v1
+  // legacy-record fixture just above.
+  function programWithRest(restSeconds: number[]): WorkoutProgram {
+    return {
+      intervals: restSeconds.map((seconds) => ({
+        type: "work" as const,
+        kind: "time" as const,
+        value: 500,
+        targetSplit: null,
+        displaySpm: null,
+        restSeconds: seconds,
+      })),
+    };
+  }
+
+  it("sums elapsed work plus each completed interval's restSeconds", () => {
+    const run: MonitorRun = {
+      ...freshMonitorRun(),
+      program: programWithRest([30, 45, 0]),
+      actuals: [
+        { ...actual1, index: 0, elapsedSeconds: 60.5 },
+        { ...actual1, index: 1, elapsedSeconds: 120.2 },
+        // interval 2 never completed: no actual names it, and its
+        // restSeconds (0) must not be summed for an interval that never
+        // finished.
+      ],
+    };
+    expect(interruptedTotalSeconds(run)).toBeCloseTo(255.7);
+  });
+
+  it("an unattributable actual (index null) contributes its work seconds and no rest", () => {
+    const run: MonitorRun = {
+      ...freshMonitorRun(),
+      program: programWithRest([30, 45]),
+      actuals: [
+        { ...actual1, index: 0, elapsedSeconds: 60 },
+        { ...actual1, index: null, elapsedSeconds: 20 },
+      ],
+    };
+    // 60 (interval 0's work) + 30 (interval 0's rest) + 20 (the
+    // unattributable actual's own work, no rest lookup at all).
+    expect(interruptedTotalSeconds(run)).toBe(110);
+  });
+
+  it("an out-of-range index contributes work only (defensive; array position is not program position)", () => {
+    const run: MonitorRun = {
+      ...freshMonitorRun(),
+      program: programWithRest([30, 45]),
+      actuals: [{ ...actual1, index: 7, elapsedSeconds: 40 }],
+    };
+    expect(() => interruptedTotalSeconds(run)).not.toThrow();
+    expect(interruptedTotalSeconds(run)).toBe(40);
+  });
+
+  it("no actuals means zero", () => {
+    expect(interruptedTotalSeconds(freshMonitorRun())).toBe(0);
   });
 });

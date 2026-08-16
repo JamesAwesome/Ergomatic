@@ -86,6 +86,13 @@ export interface MonitorRun {
   startedAt: string;
   completedAt: string | null;
   terminated: boolean;
+  /**
+   * Present only when the rower closed an interrupted session through
+   * Today's row (F6). Absent = normal completion. Additive and optional
+   * on purpose: a v1/v2 record without it reads exactly as before, per
+   * this file's never-migrate contract.
+   */
+  endedBy?: "interrupted";
 }
 
 // Same discipline as `session/run.ts`'s own `isPlainRecord` — "shaped
@@ -159,6 +166,7 @@ function isMonitorRun(value: unknown): value is MonitorRun {
     typeof value.startedAt === "string" &&
     (value.completedAt === null || typeof value.completedAt === "string") &&
     typeof value.terminated === "boolean" &&
+    (value.endedBy === undefined || value.endedBy === "interrupted") &&
     (logSeed === undefined ||
       (isPlainRecord(logSeed) &&
         Array.isArray(logSeed.steps) &&
@@ -424,6 +432,95 @@ export function completeMonitorRun(
   };
   saveMonitorRun(next);
   return next;
+}
+
+/**
+ * F6's own door: closes a LIVE run the rower is ending through Today's row
+ * rather than through a `workoutComplete`/`terminated` event the machine
+ * itself sent (`completeMonitorRun` above is that path; this is the other
+ * one — the phone lost the machine, or the rower simply walked away, and
+ * nothing on the wire is ever going to say "finished" for this run again).
+ *
+ * Stamps `completedAt` from `now` and `endedBy: "interrupted"` together,
+ * the same "two fields move, together and only here" discipline
+ * `completeMonitorRun`'s own doc comment states for its pair — a record
+ * that says "finished" without saying it was interrupted is the shape a
+ * later screen (F6's own Today card) cannot read.
+ *
+ * **`terminated` is deliberately left untouched.** It answers a DIFFERENT
+ * question — HOW the machine itself reported the end (`WORKOUTEND` vs
+ * `TERMINATE`, `MonitorRun.terminated`'s own comment) — and this call site
+ * has no such report to make: nothing on the wire ever closed this run.
+ * Leaving it at whatever it already was (always `false` for a still-live
+ * run, since `completeMonitorRun` is the only writer that ever sets it
+ * `true`, and that only fires on an event this path by definition never
+ * received) keeps `terminated` meaning "what the machine said," full stop,
+ * with `endedBy` free to carry the orthogonal "the rower said" story.
+ *
+ * Idempotent by the same rule `completeMonitorRun` uses, for the same
+ * reason: an already-closed record is returned UNCHANGED and nothing is
+ * persisted, so a slow tap racing an in-flight `workoutComplete`/
+ * `terminated` event can never overwrite a real completion with a stamped
+ * `endedBy` after the fact — the machine's own account, when one exists,
+ * always wins.
+ */
+export function completeInterruptedRun(run: MonitorRun, now: Date): MonitorRun {
+  if (run.completedAt !== null) return run;
+  const next: MonitorRun = {
+    ...run,
+    completedAt: now.toISOString(),
+    endedBy: "interrupted",
+  };
+  saveMonitorRun(next);
+  return next;
+}
+
+/**
+ * "How much of this workout actually happened", for a run the rower ended
+ * through the interrupted door above — the number F6's Today card shows in
+ * place of the machine's own total, which for an interrupted session never
+ * arrives. Built entirely from the record's OWN `actuals` and `program`,
+ * never wall-clock time past the last measured boundary: the spec's own
+ * constraint is that nothing here is invented past what the machine
+ * actually reported.
+ *
+ * Sums each actual's `elapsedSeconds` (the work itself), plus — for every
+ * actual that names a real interval (`index !== null`) — that interval's
+ * OWN `restSeconds` from `program.intervals`. James's verbatim ruling,
+ * stated here so a later review does not relitigate it: "work + programmed
+ * rest for completed intervals" IS the allowance, and it covers EVERY
+ * completed interval's rest, including the last one's. A rower who
+ * finished interval N and then closed the session was, by the plan, still
+ * resting until N+1 would have started — that rest is real time the plan
+ * accounted for, whether or not another working interval ever began. The
+ * "nothing invented past the last measured boundary" constraint forbids
+ * inventing time the plan never promised (guessing at partial progress
+ * into a rest, or crediting an interval that never completed at all); it
+ * does not forbid the rest a completed interval's own program entry
+ * already promises.
+ *
+ * `actual.index === null` (an unattributable boundary,
+ * `IntervalActual.index`'s own doc comment: "must not be treated as
+ * interval 0") contributes its work seconds and nothing else — there is no
+ * honest program position to look rest up FROM. An out-of-range index
+ * (defensive; array position in `actuals` is not program position, this
+ * file's header comment on `MonitorRun.actuals`) is handled the identical
+ * way: `program.intervals[index]` is simply `undefined`, so the rest term
+ * is skipped rather than thrown. Never reads `ProgramInterval.type`
+ * (loaded-program invariant, this file's `isMonitorRun` comment above) —
+ * `restSeconds` is the one interval field every era of this record's
+ * shape has always carried.
+ */
+export function interruptedTotalSeconds(run: MonitorRun): number {
+  let total = 0;
+  for (const actual of run.actuals) {
+    total += actual.elapsedSeconds;
+    if (actual.index !== null) {
+      const interval = run.program.intervals[actual.index];
+      if (interval !== undefined) total += interval.restSeconds;
+    }
+  }
+  return total;
 }
 
 type RecordState = "absent" | "live" | "unlogged";
