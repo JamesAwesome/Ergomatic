@@ -5462,11 +5462,22 @@ test.describe("connected screens (fake-driven)", () => {
       // construction, so a box-vs-box check one level up would have passed
       // right through the 0.4px this pin exists to catch. Each pair below
       // is deliberately the INNERMOST element on the risk side (a hero's
-      // own label above, its own target row below) against the ADJACENT
-      // row's outer box, for both heroes in both orientations.
+      // own topmost content above, its own target row below) against the
+      // ADJACENT row's outer box, for both heroes in both orientations.
+      //
+      // CR2 spec 3 Task 2: `.connected-hero-label` (`NOW`) no longer
+      // renders on a LIVE surface at all (design spec §2A, "Cut from LIVE:
+      // NO NOW/TARGET/UP NEXT labels" — `nowLabel` collapses to
+      // `stale ? "LAST" : ""`), so the hero's own topmost element is now
+      // `.connected-hero-reading` (the value+unit row); anchored there
+      // instead of the removed label. Full connected-block rewrite against
+      // the redesign's new structure is a later task's (spec §5: "design.
+      // spec.ts's connected blocks, rewritten, not patched") — this is the
+      // minimal selector fix that keeps the invariant this pin checks
+      // (nothing spills into the header above it) alive in the meantime.
       const pairs: [string, string][] = [
-        [".connected-line", ".connected-hero-split .connected-hero-label"],
-        [".connected-line", ".connected-hero-rate .connected-hero-label"],
+        [".connected-line", ".connected-hero-split .connected-hero-reading"],
+        [".connected-line", ".connected-hero-rate .connected-hero-reading"],
         [
           ".connected-hero-split .connected-hero-target",
           ".connected-metric-row",

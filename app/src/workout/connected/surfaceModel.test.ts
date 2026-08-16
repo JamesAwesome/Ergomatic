@@ -14,6 +14,7 @@
 import { describe, expect, it } from "vitest";
 import { compileProgram } from "../../../domain/monitor/program.js";
 import { fmtDuration } from "../../../domain/duration.js";
+import { phaseSeconds } from "../../../domain/expand.js";
 import { fmtSplit } from "../../../domain/format.js";
 import { PACE_TOLERANCE_SECONDS } from "../../../domain/judge.js";
 import type {
@@ -457,11 +458,14 @@ describe("armed's first frame (I-1): the three properties 2D asks for beyond the
   it('carries no "NOW" over either hero — 2D shows no label at all above the heroes, unlike live/paused', () => {
     const m = model({ status: "armed", frame: frame({ state: "armed" }) });
     expect(m.nowLabel).toBe("");
-    // The stale case is untouched by this change — still LAST, never armed's
-    // empty string leaking into a different status.
+    // CR2 spec 3 Task 2 (design spec §3 fate table): the `NOW` branch DIES
+    // outright, not just at armed — 2A's own property table cuts the label
+    // from LIVE entirely ("Cut from LIVE: NO NOW/TARGET/UP NEXT labels"),
+    // so live and paused now read the SAME empty string armed always did.
+    // `stale` is the only status this field still has a word for.
     expect(model({ status: "stale" }).nowLabel).toBe("LAST");
-    expect(model({ status: "live" }).nowLabel).toBe("NOW");
-    expect(model({ status: "paused" }).nowLabel).toBe("NOW");
+    expect(model({ status: "live" }).nowLabel).toBe("");
+    expect(model({ status: "paused" }).nowLabel).toBe("");
   });
 
   it("the grid's active row carries no gold counting mark — nothing is counting down before the first stroke", () => {
@@ -533,6 +537,210 @@ describe("armed's first frame (I-1): the three properties 2D asks for beyond the
     expect(liveModel.totalLeftSeconds).not.toBe(
       totalSessionSecondsOf(FIXTURE.phases),
     );
+  });
+});
+
+// CR2 spec 3 Task 2 (design spec §2D — "the READY word ships HERE",
+// PROVENANCE item 3): the armed branch of `intervalLabelShort`.
+describe("READY (design spec §2D): the armed branch of intervalLabelShort", () => {
+  it("armed on a numbered interval reads the ordinal plus READY, never WORK", () => {
+    const m = model({
+      status: "armed",
+      frame: frame({ state: "armed", intervalIndex: 1 }),
+    });
+    expect(m.intervalLabelShort).toBe("1 OF 4 · READY");
+    // Non-armed, the SAME interval: entirely unaffected by this task — the
+    // ordinary `N OF M · WORK` formula, still exercised at this exact
+    // index by the "live" describe block below, pinned again here so the
+    // two branches sit side by side.
+    const live = model({ frame: frame({ intervalIndex: 1 }) });
+    expect(live.intervalLabelShort).toBe("1 OF 4 · WORK");
+  });
+
+  it("armed on the WARM-UP (a realistic warm-up-bearing fixture) reads bare READY — no ordinal prefix", () => {
+    // FIXTURE (not NO_WARMUP): a real warm-up-bearing library program,
+    // armed at interval 0 — the only realistic armed case, since nothing
+    // has happened yet and the machine always starts at interval 0.
+    expect(FIXTURE.program.intervals[0]!.type).toBe("warmup");
+    const m = buildSurfaceModel({
+      phases: FIXTURE.phases,
+      program: FIXTURE.program,
+      status: "armed",
+      frame: frame({
+        state: "armed",
+        intervalIndex: 0,
+        rowingActive: false,
+        distanceMeters: 0,
+      }),
+      deviceName: DEVICE,
+      actuals: [],
+    });
+    expect(m.intervalLabelShort).toBe("READY");
+    expect(m.intervalLabelShort).not.toMatch(/OF/);
+  });
+});
+
+// CR2 spec 3 Task 2 (design spec §3, composition note under §2B): the
+// ordinal-only sibling `intervalLabelShort` bakes its phase word out of —
+// Task 3's grid header joins this with `totalLeftDisplay` instead.
+describe("intervalOrdinalLabel: the ordinal without the phase word (design spec §3)", () => {
+  it("is the ordinal plus the work count when the interval is numbered", () => {
+    const m = model({ frame: frame({ intervalIndex: 1 }) });
+    expect(m.intervalOrdinalLabel).toBe("1 OF 4");
+  });
+
+  it("is null on the warm-up — the same null rule intervalLabelShort applies", () => {
+    const m = model({ frame: frame({ intervalIndex: 0 }) });
+    expect(FIXTURE.phases[0]!.type).toBe("warmup");
+    expect(m.intervalOrdinalLabel).toBeNull();
+  });
+
+  it("never disagrees with the caption's own ordinal, on the same call", () => {
+    // One `ordinal`, read once (this file's own header rule) — the grid `#`
+    // column and the header caption already share it; this pins the new
+    // field into the same invariant rather than trusting it by inspection.
+    // The boolean is computed OUTSIDE `expect` (vitest/no-conditional-expect
+    // bans branching around the assertion itself), so every iteration still
+    // makes exactly one unconditional call.
+    for (let i = 0; i < FIXTURE.program.intervals.length; i += 1) {
+      const m = model({ frame: frame({ intervalIndex: i }) });
+      const agrees =
+        m.intervalOrdinalLabel === null
+          ? !/OF/.test(m.intervalLabelShort)
+          : m.intervalLabelShort.startsWith(m.intervalOrdinalLabel);
+      expect(agrees).toBe(true);
+    }
+  });
+});
+
+// CR2 spec 3 Task 2 (design spec §2D, antagonist corrections 2 and 3): at
+// armed, up-next reads the FIRST interval forward — `phases[phaseIndex]` /
+// `[phaseIndex + 1]` — not `phases[phaseIndex + 1]` / `[phaseIndex + 2]`,
+// which is what the ordinary (non-armed) formula reads and what the
+// committed `connected-armed-landscape.png` shows as the pre-task defect
+// (the coming REST at armed instead of the coming WORK).
+describe("armed's up-next (design spec §2D): the FIRST interval forward", () => {
+  it("armed names the CURRENT phase as up-next and the phase after it as then-next — the exact strings, not the mechanism", () => {
+    // NO_WARMUP: interval 0 IS the first work phase (phases[0] work,
+    // phases[1] its folded rest) — the realistic no-warm-up fixture most
+    // sessions actually have, armed at its only possible index, 0.
+    const work = NO_WARMUP.phases[0]!;
+    const rest = NO_WARMUP.phases[1]!;
+    if (work.type !== "work" || work.targetSplit === undefined) {
+      throw new Error("fixture assumption broke: phase 0 is not split work");
+    }
+    if (rest.type !== "rest") {
+      throw new Error("fixture assumption broke: phase 1 is not a rest");
+    }
+    const restSeconds = phaseSeconds(rest);
+    if (restSeconds === null) {
+      throw new Error("fixture assumption broke: rest has no duration");
+    }
+
+    const m = buildSurfaceModel({
+      phases: NO_WARMUP.phases,
+      program: NO_WARMUP.program,
+      status: "armed",
+      frame: frame({
+        state: "armed",
+        intervalIndex: 0,
+        rowingActive: false,
+        distanceMeters: 0,
+      }),
+      deviceName: DEVICE,
+      actuals: [],
+    });
+
+    // Derived independently of `upNextTextAt`/`thenNextTextAt` (the
+    // functions under test) via `fmtSplit`/`fmtDuration` straight off the
+    // fixture's own phases — a real check on the STRING, not a re-run of
+    // the same mechanism against itself.
+    expect(m.upNext).toBe(`WORK ${fmtSplit(work.targetSplit)}`);
+    expect(m.thenNext).toBe(`REST ${fmtDuration(restSeconds / 60)}`);
+  });
+
+  it("non-armed at the SAME index still reads phases[index+1]/[index+2] — the ordinary formula is untouched", () => {
+    const liveModel = buildSurfaceModel({
+      phases: NO_WARMUP.phases,
+      program: NO_WARMUP.program,
+      status: "live",
+      frame: frame({ intervalIndex: 0 }),
+      deviceName: DEVICE,
+      actuals: [],
+    });
+    // The ordinary (non-armed) formula at interval 0 names the REST that
+    // follows the first work phase, not the work phase itself — the exact
+    // shift the armed branch above proves it does NOT take.
+    const rest = NO_WARMUP.phases[1]!;
+    if (rest.type !== "rest") {
+      throw new Error("fixture assumption broke: phase 1 is not a rest");
+    }
+    const restSeconds = phaseSeconds(rest);
+    if (restSeconds === null) {
+      throw new Error("fixture assumption broke: rest has no duration");
+    }
+    expect(liveModel.upNext).toBe(`REST ${fmtDuration(restSeconds / 60)}`);
+
+    const armedModel = buildSurfaceModel({
+      phases: NO_WARMUP.phases,
+      program: NO_WARMUP.program,
+      status: "armed",
+      frame: frame({
+        state: "armed",
+        intervalIndex: 0,
+        rowingActive: false,
+        distanceMeters: 0,
+      }),
+      deviceName: DEVICE,
+      actuals: [],
+    });
+    expect(armedModel.upNext).not.toBe(liveModel.upNext);
+    expect(armedModel.thenNext).not.toBe(liveModel.thenNext);
+  });
+});
+
+// CR2 spec 3 Task 2 (antagonist correction 1): the model's own numeric
+// elapsed, Task 3's progress bar needs it since `totalLeftSeconds` (the
+// subtraction route) dies in Task 4/5.
+describe("elapsedSeconds: the model's own numeric elapsed (Task 3's progress bar)", () => {
+  it("mirrors sessionElapsedSeconds directly, off armed", () => {
+    const m = model({ frame: frame({ elapsedSeconds: 600 }) });
+    expect(m.elapsedSeconds).toBe(600);
+  });
+
+  it("never exceeds totalSeconds — the same overrun cap totalLeftSeconds already enforces from the other direction", () => {
+    const m = model({ frame: frame({ elapsedSeconds: 999_999 }) });
+    expect(m.elapsedSeconds).toBe(m.totalSeconds);
+    expect(m.elapsedSeconds).not.toBe(999_999);
+  });
+
+  it("reads 0 on the armedMirror branch, regardless of what the wire carries over — mirrors totalLeftSeconds's own armed stance", () => {
+    const m = buildSurfaceModel({
+      phases: NO_WARMUP.phases,
+      program: NO_WARMUP.program,
+      status: "armed",
+      // A non-zero carried-over pair, the same shape `totalLeftSeconds`'s
+      // own armed test uses, to prove the suppression does not merely
+      // coincide with an honestly-zero wire value.
+      frame: frame({
+        state: "armed",
+        intervalIndex: 0,
+        rowingActive: false,
+        distanceMeters: 0,
+        elapsedSeconds: 900,
+        sessionElapsedSeconds: 900,
+      }),
+      deviceName: DEVICE,
+      actuals: [],
+    });
+    expect(m.elapsedSeconds).toBe(0);
+    // Not armed: the ordinary mirror still applies — a suppression scoped
+    // to armed, not a change to the live formula.
+    const liveModel = model({
+      status: "live",
+      frame: frame({ sessionElapsedSeconds: 900, elapsedSeconds: 900 }),
+    });
+    expect(liveModel.elapsedSeconds).toBe(900);
   });
 });
 
@@ -924,7 +1132,9 @@ describe("paused", () => {
     const m = model({ status: "paused" });
     expect(m.stale).toBe(false);
     expect(m.linked).toBe(true);
-    expect(m.nowLabel).toBe("NOW");
+    // CR2 spec 3 Task 2: `nowLabel` no longer carries a word for `paused`
+    // either — see the "carries no NOW" test above for the full rule.
+    expect(m.nowLabel).toBe("");
   });
 
   it("holds the interval clock's last value rather than blanking it", () => {

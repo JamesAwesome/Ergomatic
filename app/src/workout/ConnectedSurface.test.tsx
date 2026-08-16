@@ -496,9 +496,11 @@ describe("pane B — live (connected-revamp Task 3: two heroes)", () => {
   it("promotes RATE to a second hero, and carries METERS/HR in the metric row — no cards anywhere", () => {
     renderSurface();
     const rateHero = document.querySelector(".connected-hero-rate")!;
-    expect(
-      within(rateHero as HTMLElement).getByText("NOW"),
-    ).toBeInTheDocument();
+    // No NOW label above the hero (CR2 spec 3 Task 2, design spec §2A's
+    // own "Cut from LIVE: NO NOW/TARGET/UP NEXT labels"): `nowLabel`
+    // collapses to `stale ? "LAST" : ""`, so PaneLive's existing `!== ""`
+    // guard renders no `.connected-hero-label` at all for a live status.
+    expect(rateHero.querySelector(".connected-hero-label")).toBeNull();
     expect(rateHero.querySelector(".connected-hero-value")).not.toBeNull();
     expect(
       rateHero.querySelector(".connected-hero-target-value"),
