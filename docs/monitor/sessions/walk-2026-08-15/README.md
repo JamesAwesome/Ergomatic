@@ -74,8 +74,11 @@ in any capture.
   not display it). CR2 item 3's hardware question: answered — **mirror the
   machine, show 0**, exactly frame 2D's drawing.
 - **METERS LEFT is wrong on mixed programs with an exact signature**:
-  phone 578 vs erg 398 on the 500 m piece — 578 = 500 − (102.7 − 181.2),
-  a stale interval-start reference (interval 0's final distance) inside
+  phone 578 vs erg 398 on the 500 m piece — true remaining 578.3 = 500 −
+  (102.7 − 181), where 181 is 0x0033's Last Split Distance at its own
+  whole-meter LSD (1 m/lsb, §20 item 19; the field cannot carry "181.2" —
+  that decimal was a transcription artifact, not a wire value), a stale
+  interval-start reference (interval 0's final distance) inside
   `computeRemainingForFrame`, which this PR deliberately did not touch and
   which had never been run on a time→distance program. Spec 2 evidence.
 

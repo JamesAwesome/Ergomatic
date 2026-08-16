@@ -32,7 +32,6 @@ import type {
   IntervalActual,
   MonitorFrame,
 } from "../../../domain/monitor/types.js";
-import type { ConnectedPhase } from "../../monitor/useMonitorSession";
 import type { EnginePhase } from "../../session/engine";
 import {
   intervalBoundaries,
@@ -46,10 +45,20 @@ import {
 } from "../../session/Timer";
 import { FREE, targetSplitDisplay } from "../../session/TimerTargets";
 
-/** The four `ConnectedPhase` values the surface is mounted for. Everything
- *  earlier (`idle`/`picking`/`pairing`/`programming`/`ready`/`failed`) still
- *  belongs to the interstitial (Task 5). */
-export type SurfaceStatus = "live" | "paused" | "disconnected" | "ended";
+/** What the surface itself renders differently — NOT a narrowed
+ *  `ConnectedPhase` any more (connected-axes design spec §1, task 2). The
+ *  CALLER (`ConnectedSurface.tsx`) derives this from `connectedAxes.ts`'s
+ *  four axes, in one place, in the precedence that module's own header
+ *  comment writes down: `stale` (the link is lost) beats `armed` (a program
+ *  sits on the machine with no session open yet — `"ready"`, once the rower
+ *  has asked for the numbers, used to launder into `"live"` here via this
+ *  file's own `?? "live"`; it no longer does, which is this task's whole
+ *  reason to exist) beats `paused` (the freeze predicate fired) beats
+ *  `live` (everything else the surface draws). `"ended"` is not a member:
+ *  `ConnectedSurface.tsx` renders its own hand-off frame and returns before
+ *  `buildSurfaceModel` is ever called for it, so this module never has to
+ *  answer for a phase with no live pane at all. */
+export type SurfaceStatus = "live" | "paused" | "stale" | "armed";
 
 /** One live actual, ready to place: the formatted string and the verdict
  *  that colours it. `absent` is NOT a fifth judgement — it is "there is no
@@ -95,23 +104,7 @@ export function judgedValue(args: {
  *  unchanged across N frames", not "no frames"), so paused values are held
  *  and greyed by their own treatment, not judged `"stale"`. */
 export function staleFor(status: SurfaceStatus): boolean {
-  return status === "disconnected";
-}
-
-/** `ConnectedPhase` narrowed to the four the surface draws. Anything else
- *  reaching here is a caller bug — the interstitial's own phase gate is what
- *  decides the surface is on screen at all — so this returns `null` rather
- *  than guessing a state. */
-export function surfaceStatusFor(phase: ConnectedPhase): SurfaceStatus | null {
-  switch (phase) {
-    case "live":
-    case "paused":
-    case "disconnected":
-    case "ended":
-      return phase;
-    default:
-      return null;
-  }
+  return status === "stale";
 }
 
 /**
@@ -210,7 +203,14 @@ const NO_FRAME: MonitorFrame = {
 export interface SurfaceModelInput {
   phases: EnginePhase[];
   program: WorkoutProgram;
-  phase: ConnectedPhase;
+  /** The precedence-resolved status the CALLER computed from
+   *  `connectedAxes.ts`'s four axes (design spec §1) — this module no
+   *  longer narrows a `ConnectedPhase` itself; `surfaceStatusFor` and this
+   *  function's own `?? "live"` laundering are both gone (task 2). Required,
+   *  not optional: every caller must say which of the four states this
+   *  render is, and a `// @ts-expect-error` test pins that a missing one is
+   *  a compile error, not a silent live surface. */
+  status: SurfaceStatus;
   frame: MonitorFrame | null;
   deviceName: string | null;
   /** Everything the machine has reported finishing, straight off the hook.
@@ -380,6 +380,26 @@ function livePace(frame: MonitorFrame, status: SurfaceStatus): number | null {
   return frame.currentSplit === 0 ? null : frame.currentSplit;
 }
 
+/** THE RATE HERO'S OWN VERSION OF `livePace`, ADDED task 5 (connected-axes
+ *  2a — the brief's own "gaining what livePace has"). A stopped rower's spm
+ *  does not fall to zero the way a REST boundary's does; the freeze
+ *  predicate's own three-metric key (`useMonitorSession.ts`'s `freezeKey`)
+ *  holds it PINNED at its last value right alongside split and distance —
+ *  that pinned value is the very evidence `PAUSED_FRAME_HOLD` fires on. So
+ *  without this suppression the rate hero would keep showing a live-looking
+ *  number (a real erg's own last cadence, e.g. 68) at a rower who has
+ *  stopped pulling, exactly the "claims a reading it doesn't have" defect
+ *  the split hero was already fixed against. No zero-split-is-not-a-reading
+ *  twin exists for rate (0 spm is a real, honest reading — a rest, or the
+ *  instant before the first stroke — `judgedValue`'s own `null`-only
+ *  absence rule already covers it), so this function is shorter than
+ *  `livePace`: paused suppresses, everything else passes the frame's spm
+ *  straight through. */
+function liveRate(frame: MonitorFrame, status: SurfaceStatus): number | null {
+  if (status === "paused") return null;
+  return frame.spm;
+}
+
 /** THE HERO CANNOT CLIP (design spec §6/revision §3): `min-width: 0` and
  *  `white-space: nowrap` (`PaneLive.tsx`, `index.css`) keep a real split
  *  from wrapping mid-numeral, but nothing bounds how WIDE a live reading
@@ -404,9 +424,26 @@ function livePace(frame: MonitorFrame, status: SurfaceStatus): number | null {
  *  comment). */
 const PACE_HERO_CAP_SECONDS = 599.9;
 
+/** THE MID-SESSION MIRROR's own reset window (design spec §2, Item 3; 2a
+ *  plan Task 3) — how close `frame.distanceMeters` (0x0031's PER-INTERVAL
+ *  distance, `domain/monitor/types.ts`'s own field, never
+ *  `sessionDistanceMeters`) must sit to zero for a `rowingActive === false`
+ *  frame to count as "before the first pull of the next piece" rather than
+ *  a genuinely stalled rower mid-piece.
+ *
+ *  Tuned against the walk's own committed rings
+ *  (`docs/monitor/sessions/walk-2026-08-15/`), the ONLY observed values at
+ *  this exact boundary: session-a seq29 `distance=0`, session-b seq28
+ *  `distance=0.8`, session-c seq26 `distance=0` — all three
+ *  `rowingActive=false`. `1` sits strictly above the largest of those and
+ *  strictly below the guard's own advancing-distance case (this file's
+ *  tests move to `5.4`), so it is not a coin-flip between the two: it is a
+ *  reset window with real headroom on both sides of the only readings that
+ *  exist. */
+const MID_SESSION_RESET_METERS = 1;
+
 export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
-  const { phases, program, deviceName } = input;
-  const status = surfaceStatusFor(input.phase) ?? "live";
+  const { phases, program, deviceName, status } = input;
   const frame = input.frame ?? NO_FRAME;
   const stale = staleFor(status);
 
@@ -437,21 +474,90 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
       : null;
   const targetSpm = phase?.spm ?? null;
 
+  // THE MIRROR (design spec §2, Item 3 — "mirror the machine wherever ITS
+  // display shows 0, not only at armed"; 2a plan Task 3). Wherever the
+  // MACHINE's own screen would show 0 (or, at `armed`, a preview rather
+  // than a reading), this surface must say the same thing — never the
+  // wire's carried-over ghost from the piece that just ended, and never a
+  // colour derived from comparing that ghost to a target. Two trigger
+  // conditions the plan names as ONE rule, but which substitute DIFFERENT
+  // values (design frame 2D, `docs/design/handoffs/2026-08-15-connected-v2/
+  // README.md`'s own "Nothing is judged" line):
+  //
+  //  - `armedMirror` (pre-first-stroke of the whole SESSION): rate shows
+  //    `0` in plain ink; split shows the TARGET value itself, as a preview
+  //    — there is no live reading yet, so the hero previews what the rower
+  //    is about to chase rather than an uninformative zero. (The "ghost"
+  //    ink-4 STYLING that word names is a presentation concern, Task 5's;
+  //    this file only has to produce the right VALUE and the right
+  //    judgement.)
+  //  - `midSessionMirror` (a mid-session interval boundary, before the
+  //    first pull of the NEXT piece): `rowingActive === false` with
+  //    `distanceMeters` at/near reset is the OBSERVED discriminator (the
+  //    evidence dowry above `MID_SESSION_RESET_METERS`'s own comment) —
+  //    here BOTH heroes read `0`: the machine's own display goes to zero at
+  //    exactly this instant, and there is no earlier-in-the-piece target
+  //    worth previewing (the rower has already seen it for the whole piece
+  //    that just ended).
+  //
+  // `armedMirror` is checked separately from — not "OR'd blindly with" —
+  // `midSessionMirror`: `status` is the CALLER's fact (Task 2's axes),
+  // `rowingActive`/`distanceMeters` are THIS FRAME's. An armed frame's own
+  // distance is always at reset anyway (the session has not begun), so the
+  // two conditions never actually collide; naming them apart keeps the two
+  // DIFFERENT substitutions legible rather than one boolean hiding two
+  // answers.
+  //
+  // NEVER survives advancing distance (the plan's own words) —
+  // `midSessionMirror` re-evaluates every frame, so the instant
+  // `distanceMeters` moves past the reset window the mirror simply stops
+  // firing; nothing here "latches" or needs an explicit end condition of
+  // its own.
+  const armedMirror = status === "armed";
+  const midSessionMirror =
+    !armedMirror &&
+    frame.rowingActive === false &&
+    frame.distanceMeters <= MID_SESSION_RESET_METERS;
+  const mirrored = armedMirror || midSessionMirror;
+
   const rawPace = livePace(frame, status);
-  const paceActual =
+  const cappedPace =
     rawPace !== null && rawPace > PACE_HERO_CAP_SECONDS ? null : rawPace;
+  // The ACTUAL slot substitutes; the TARGET slot rendered beneath it
+  // (`targetSplit`/`targetRate` below) does not — those still name the
+  // real programmed target regardless of the mirror, which is exactly what
+  // `armedMirror`'s split preview borrows its number FROM. The JUDGING
+  // target is forced `null` whenever mirrored (`judgeActual`'s own rule 2:
+  // a `null` target is never a deviation) rather than relying on
+  // `paceActual === targetSplitSeconds` happening to diff to zero at
+  // `armedMirror` — that would be a coincidence this substitution should
+  // not depend on for the "nothing judged" guarantee.
+  const paceActual = mirrored
+    ? armedMirror
+      ? targetSplitSeconds
+      : 0
+    : cappedPace;
+  const paceJudgeTarget = mirrored ? null : targetSplitSeconds;
+  // `liveRate`, not `frame.spm` straight through (task 5): composes with
+  // the mirror rather than fighting it — `mirrored` is checked FIRST in
+  // this ternary exactly as `paceActual`'s own does, so an armed/reset
+  // frame still gets its `0` regardless of `status`, and `liveRate`'s own
+  // paused suppression only ever applies on the branch mirroring is not
+  // already deciding.
+  const rateActual = mirrored ? 0 : liveRate(frame, status);
+  const rateJudgeTarget = mirrored ? null : targetSpm;
 
   const pace = judgedValue({
     kind: "pace",
     actual: paceActual,
-    target: targetSplitSeconds,
+    target: paceJudgeTarget,
     stale,
     format: fmtSplit,
   });
   const rate = judgedValue({
     kind: "spm",
-    actual: frame.spm,
-    target: targetSpm,
+    actual: rateActual,
+    target: rateJudgeTarget,
     stale,
     format: (v) => String(Math.round(v)),
   });
@@ -525,10 +631,18 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
   // recorded falling 1:30 -> 1:11 and then RISING to 1:38 as interval 2
   // started. The driver's accumulated total is monotone across those resets,
   // which is the only thing that makes this subtraction a countdown.
-  const totalLeftSeconds = Math.max(
-    0,
-    totalSeconds - frame.sessionElapsedSeconds,
-  );
+  // ARMED READS UN-STARTED, ALWAYS (I-1, final whole-branch review). Frame
+  // 2D's own words: "Progress bar all-upcoming" and `TOTAL LEFT 50:00` — the
+  // whole session, nothing subtracted. This is the SAME defensive stance the
+  // pace/rate mirror above already takes: the wire's own carry-over rule
+  // (design spec §2 Item 3) says elapsed/distance genuinely zero at armed,
+  // but the surface says "un-started" on the STATUS, not on trusting
+  // `frame.sessionElapsedSeconds` to actually be zero every time — the same
+  // reasoning `armedMirror`'s own block gives for previewing the target
+  // instead of reading the wire's ghost.
+  const totalLeftSeconds = armedMirror
+    ? totalSeconds
+    : Math.max(0, totalSeconds - frame.sessionElapsedSeconds);
 
   const remaining = frame.intervalRemaining;
   const distanceInterval = remaining?.kind === "distance";
@@ -545,11 +659,21 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
   return {
     status,
     stale,
-    linked: status !== "disconnected",
+    linked: status !== "stale",
     deviceCaption: deviceCaptionFor(deviceName, status),
     intervalLabel: ordinal === null ? kindWord : `INTERVAL ${counted}`,
     intervalLabelShort: ordinal === null ? kindWord : counted,
-    nowLabel: stale ? "LAST" : "NOW",
+    // ARMED CARRIES NO LABEL AT ALL (I-1, final whole-branch review — the
+    // task seam that dropped this: `ConnectedSurface.test.tsx`'s own "Task
+    // 3 owns the armed pane"). Frame 2D draws the heroes with no `NOW`
+    // above them — the rower has taken no stroke yet, so there is nothing
+    // "now" to caption — and `stale` still wins outright over `armed`
+    // (never reachable: `armedMirror` only fires when `status === "armed"`,
+    // and `stale` is a different status entirely, but the precedence is
+    // written explicitly rather than assumed). `PaneLive.tsx` renders
+    // nothing for the empty string, the same "absent, not blank" idiom the
+    // target-ref caption beside it already uses.
+    nowLabel: stale ? "LAST" : armedMirror ? "" : "NOW",
     upNext: upNextTextAt(phases, phaseIndex),
     thenNext: thenNextTextAt(phases, phaseIndex),
     totalSeconds,
@@ -602,6 +726,7 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
       liveRate: rate,
       liveHr: hr,
       numbering,
+      armed: armedMirror,
     }),
   };
 }
@@ -656,9 +781,10 @@ function measuredWorkSeconds(
  * `elapsedSeconds`/`distanceMeters` ARE per-interval (walk 4,
  * interface-notes.md §18) but span the interval's work AND its trailing
  * rest as one count, answering a different question than "meters accrued
- * rowing this interval". `intervalAccrued` avoids both traps by reading the
- * SAME 0x0033 per-interval checkpoint `intervalRemaining` already trusts,
- * for the complement dimension — see `driver.ts`'s `computeAccruedForFrame`.
+ * rowing this interval". `intervalAccrued` reads 0x0031's own per-interval
+ * pair directly (CR2 spec 2a Task 6 — the old 0x0033 checkpoint subtraction
+ * was deleted after the checkpoint was measured lagging one boundary); see
+ * `driver.ts`'s `computeAccruedForFrame`.
  * Same reasoning still applies, unrelated field, to task 6's own
  * `TOTAL`-not-`THIS INTERVAL` row (panes A/B's meters card).
  */
@@ -688,8 +814,18 @@ export function buildGridModel(args: {
    *  and the header's `N OF M` are structurally the same array and cannot
    *  drift apart. */
   numbering: IntervalNumbering;
+  /** I-1, final whole-branch review: `status === "armed"`, straight through
+   *  from `buildSurfaceModel`'s own `armedMirror`. Before the first stroke
+   *  nothing on the machine is actually counting down — the active row's
+   *  countdown cell holds the PROGRAMMED full value (`countdownDisplayFor`'s
+   *  own fallback), not a live reading — so the gold `--marker` mark that
+   *  says "this is the one you're on and it's moving" would be claiming a
+   *  motion that has not started. Suppressing `countdown` here is the same
+   *  "nothing is judged" stance frame 2D takes on pane B's heroes, carried
+   *  to pane C's own analogous mark. */
+  armed: boolean;
 }): GridModel {
-  const { intervals, activeIndex, remaining, accrued, numbering } = args;
+  const { intervals, activeIndex, remaining, accrued, numbering, armed } = args;
   // An actual whose own `index` is `null` belongs to no interval we can
   // name (`IntervalActual.index`'s own contract: "A CONSUMER MUST NOT TREAT
   // `null` AS INTERVAL 0"), so it files against no row rather than against
@@ -714,7 +850,7 @@ export function buildGridModel(args: {
         state: "active",
         time: interval.kind === "time" ? countdown : accrual,
         meters: interval.kind === "distance" ? countdown : accrual,
-        countdown: interval.kind === "time" ? "time" : "meters",
+        countdown: armed ? null : interval.kind === "time" ? "time" : "meters",
         pace: { display: args.livePace.display, judged: args.livePace },
         spm: { display: args.liveRate.display, judged: args.liveRate },
         hr: args.liveHr.display,
@@ -943,7 +1079,7 @@ function deviceCaptionFor(
   status: SurfaceStatus,
 ): string {
   const name = deviceName ?? "PM5";
-  return status === "disconnected" ? `${name} · LOST` : name;
+  return status === "stale" ? `${name} · LOST` : name;
 }
 
 function intervalClockValueFor(

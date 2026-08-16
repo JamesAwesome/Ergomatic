@@ -963,13 +963,17 @@ describe("createPm5Driver: HIGH-1 fix — intervalRemaining is correct on the FI
         cumulativeDistanceMeters: 500,
       },
       // The interval-1 tick also happens while disconnected — 200m into
-      // the new 1000m interval (700 session-cumulative - 500 checkpoint).
+      // the new 1000m interval. Task 6 (interface-notes.md §20 items
+      // 17/24): 0x0031's own elapsed/distance pair is PER-INTERVAL on real
+      // hardware, so the wire itself already reads 200m/40s here — not the
+      // 700m/140s session-cumulative figure an earlier (falsified) model
+      // of this fixture used, re-derived only by subtracting a checkpoint.
       {
         atMs: 300,
         kind: "status",
         workoutState: WORKOUTSTATE_INTERVALWORKTIME,
-        elapsedSeconds: 140,
-        distanceMeters: 700,
+        elapsedSeconds: 40,
+        distanceMeters: 200,
         spm: 22,
         currentSplit: 108,
         heartRateBpm: 145,
@@ -988,28 +992,391 @@ describe("createPm5Driver: HIGH-1 fix — intervalRemaining is correct on the FI
 
     const frames = events.filter((e) => e.kind === "frame");
     const latest = frames[frames.length - 1];
-    // 1000m interval, checkpoint at 500 (from the boundary that happened
-    // while disconnected), now at session distance 700 -> 200m progress
-    // -> 800m remaining. An earlier design would have checkpointed at
-    // THIS tick itself (progress 0, remaining the full 1000m) since it's
-    // the first tick the driver ever observed for interval 1.
+    // 1000m interval, 200m already read straight off 0x0031's own
+    // per-interval pair (no checkpoint subtraction, Task 6) -> 800m
+    // remaining. An earlier design would have checkpointed at THIS tick
+    // itself (progress 0, remaining the full 1000m) since it's the first
+    // tick the driver ever observed for interval 1 — this reconnect case is
+    // what that earlier HIGH-1 fix exists to cover, unaffected by Task 6
+    // deleting the (separately falsified) checkpoint subtraction.
     expect(latest).toMatchObject({
       kind: "frame",
       frame: {
         intervalIndex: 1,
-        distanceMeters: 700,
+        distanceMeters: 200,
         intervalRemaining: { kind: "distance", value: 800 },
       },
     });
-    // ROADMAP CL item 7: the boundary must re-checkpoint BOTH baselines, not
-    // only the programmed dimension's — `intervalAccrued` (time, the
-    // complement of this distance interval) proves the OTHER checkpoint
-    // (`lastSplitTimeSeconds`) moved to 100 too: accrued = 140 - 100 = 40.
-    // A driver that only re-derived the checkpoint `intervalRemaining`
-    // itself reads would leave this stuck at the interval-0 baseline (0)
-    // and report 140 instead.
+    // ROADMAP CL item 7 (and Task 6): `intervalAccrued` (time, the
+    // complement of this distance interval) reads the SAME per-interval
+    // pair's other field directly — accrued = 40, the wire's own
+    // `elapsedSeconds` for this tick, no re-checkpointing needed now that
+    // there is no checkpoint to re-derive.
     expect(latest).toMatchObject({
       frame: { intervalAccrued: { kind: "time", value: 40 } },
+    });
+  });
+});
+
+describe("createPm5Driver: Task 6 — the interval clock stops subtracting a checkpoint the wire lags", () => {
+  // The inversion result (225+161 frames replayed, zero mismatches;
+  // interface-notes.md §20 items 17/24): 0x0033's Last Split checkpoint
+  // reads ZERO through interval indices 0 and 1, then LAGS one boundary
+  // behind from index 2 on — the cumulative point at which the PREVIOUS
+  // interval began, not the current one. `computeRemainingForFrame`/
+  // `computeAccruedForFrame` (driver.ts) no longer read this field at all:
+  // progress is the interval's own 0x0031 pair directly (item 12: it is
+  // already per-interval on the wire). These tests exercise the fake as the
+  // wire model (Step 2 taught it the measured semantics first, `fake.ts`'s
+  // own `wireLastSplit`) so a regression that reintroduces the subtraction
+  // fails against a checkpoint the wire genuinely reports, not a
+  // self-consistent fiction that would paper over it.
+
+  it("the walk signature: a distance interval at index 2, checkpoint lagging to interval 0's own end, reads 397.3m remaining — not 578.3m", async () => {
+    const program: WorkoutProgram = {
+      intervals: [
+        {
+          type: "work",
+          kind: "time",
+          value: 60,
+          targetSplit: null,
+          displaySpm: null,
+          restSeconds: 0,
+        },
+        {
+          type: "work",
+          kind: "time",
+          value: 60,
+          targetSplit: null,
+          displaySpm: null,
+          restSeconds: 0,
+        },
+        {
+          type: "work",
+          kind: "distance",
+          value: 500,
+          targetSplit: null,
+          displaySpm: null,
+          restSeconds: 0,
+        },
+      ],
+    };
+    const timeline: FakeTimelineEvent[] = [
+      {
+        atMs: 100,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        elapsedSeconds: 30,
+        distanceMeters: 90,
+        spm: 24,
+        currentSplit: 120,
+        heartRateBpm: 140,
+        programIntervalIndex: 0,
+      },
+      // Interval 0 ends at 181m (whole meters — the wire field cannot carry
+      // a fraction, interface-notes.md §10). This cumulative total is what
+      // interval 2's own checkpoint LAGS to, two boundaries later.
+      {
+        atMs: 200,
+        kind: "boundary",
+        actual: {
+          index: 0,
+          elapsedSeconds: 58,
+          distanceMeters: 181,
+          avgSplit: 120,
+          avgSpm: 24,
+          avgHeartRateBpm: 140,
+        },
+        cumulativeElapsedSeconds: 58,
+        cumulativeDistanceMeters: 181,
+      },
+      {
+        atMs: 300,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        elapsedSeconds: 28,
+        distanceMeters: 85,
+        spm: 24,
+        currentSplit: 121,
+        heartRateBpm: 141,
+        programIntervalIndex: 1,
+      },
+      // Interval 1's own boundary — this is the ONE the wire checkpoint
+      // will lag BEHIND once interval 2 starts: it shifts `wireLastSplit`
+      // to interval 0's boundary (181m) rather than rooting it here.
+      {
+        atMs: 400,
+        kind: "boundary",
+        actual: {
+          index: 1,
+          elapsedSeconds: 55,
+          distanceMeters: 150,
+          avgSplit: 121,
+          avgSpm: 24,
+          avgHeartRateBpm: 141,
+        },
+        cumulativeElapsedSeconds: 113,
+        cumulativeDistanceMeters: 331,
+      },
+      // Interval 2 (distance, 500m goal): the walk signature's own numbers.
+      {
+        atMs: 500,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        elapsedSeconds: 45,
+        distanceMeters: 102.7,
+        spm: 26,
+        currentSplit: 115,
+        heartRateBpm: 145,
+        programIntervalIndex: 2,
+      },
+    ];
+    const { fake, driver, events } = harness({ program, events: timeline });
+    await programAndArm(driver, fake, program);
+    for (let i = 0; i < 5; i += 1) fake.tick(100);
+
+    const interval2Frame = events.find(
+      (e) => e.kind === "frame" && e.frame.intervalIndex === 2,
+    );
+    expect(interval2Frame).toBeDefined();
+    // 500m goal, 102.7m read straight off 0x0031's own per-interval
+    // Distance (no checkpoint subtraction) -> 397.3m remaining. TODAY (the
+    // falsified subtraction still in place) reads 578.3m instead:
+    // progress = 102.7 - 181 (interval 0's lagged checkpoint) = -78.3,
+    // remaining = 500 - (-78.3) = 578.3.
+    expect(interval2Frame).toMatchObject({
+      kind: "frame",
+      frame: { intervalRemaining: { kind: "distance", value: 397.3 } },
+    });
+    // The complement dimension (time) reads the SAME per-interval pair's
+    // other field directly: accrued = 45, this tick's own `elapsedSeconds`.
+    expect(interval2Frame).toMatchObject({
+      frame: { intervalAccrued: { kind: "time", value: 45 } },
+    });
+  });
+
+  it("the same-dimension case: a 3x1:00 program at index 2 reads 60-elapsed remaining — not 120-elapsed", async () => {
+    const program: WorkoutProgram = {
+      intervals: [
+        {
+          type: "work",
+          kind: "time",
+          value: 60,
+          targetSplit: null,
+          displaySpm: null,
+          restSeconds: 0,
+        },
+        {
+          type: "work",
+          kind: "time",
+          value: 60,
+          targetSplit: null,
+          displaySpm: null,
+          restSeconds: 0,
+        },
+        {
+          type: "work",
+          kind: "time",
+          value: 60,
+          targetSplit: null,
+          displaySpm: null,
+          restSeconds: 0,
+        },
+      ],
+    };
+    const timeline: FakeTimelineEvent[] = [
+      {
+        atMs: 100,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        elapsedSeconds: 30,
+        distanceMeters: 20,
+        spm: 22,
+        currentSplit: 130,
+        heartRateBpm: 138,
+        programIntervalIndex: 0,
+      },
+      // Interval 0 completes at exactly its own 60s duration — the lab
+      // number this test's own checkpoint (60) comes from.
+      {
+        atMs: 200,
+        kind: "boundary",
+        actual: {
+          index: 0,
+          elapsedSeconds: 60,
+          distanceMeters: 45,
+          avgSplit: 130,
+          avgSpm: 22,
+          avgHeartRateBpm: 138,
+        },
+        cumulativeElapsedSeconds: 60,
+        cumulativeDistanceMeters: 45,
+      },
+      {
+        atMs: 300,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        elapsedSeconds: 30,
+        distanceMeters: 22,
+        spm: 22,
+        currentSplit: 129,
+        heartRateBpm: 139,
+        programIntervalIndex: 1,
+      },
+      {
+        atMs: 400,
+        kind: "boundary",
+        actual: {
+          index: 1,
+          elapsedSeconds: 60,
+          distanceMeters: 46,
+          avgSplit: 129,
+          avgSpm: 22,
+          avgHeartRateBpm: 139,
+        },
+        cumulativeElapsedSeconds: 120,
+        cumulativeDistanceMeters: 91,
+      },
+      // Interval 2's live tick — 25s/90m into it.
+      {
+        atMs: 500,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        elapsedSeconds: 25,
+        distanceMeters: 90,
+        spm: 23,
+        currentSplit: 128,
+        heartRateBpm: 140,
+        programIntervalIndex: 2,
+      },
+    ];
+    const { fake, driver, events } = harness({ program, events: timeline });
+    await programAndArm(driver, fake, program);
+    for (let i = 0; i < 5; i += 1) fake.tick(100);
+
+    const interval2Frame = events.find(
+      (e) => e.kind === "frame" && e.frame.intervalIndex === 2,
+    );
+    expect(interval2Frame).toBeDefined();
+    // 60s interval, 25s read straight off 0x0031's own per-interval Elapsed
+    // Time -> 35s remaining (60 - elapsed). TODAY (the falsified
+    // subtraction) reads 120 - elapsed = 95s instead: progress = 25 - 60
+    // (interval 0's lagged checkpoint) = -35, remaining = 60 - (-35) = 95.
+    expect(interval2Frame).toMatchObject({
+      kind: "frame",
+      frame: { intervalRemaining: { kind: "time", value: 35 } },
+    });
+    // The complement dimension (distance) reads the SAME per-interval
+    // pair's other field directly: accrued = 90, this tick's own
+    // `distanceMeters` — TODAY it would instead be 90 - 45 (interval 0's
+    // lagged distance checkpoint) = 45.
+    expect(interval2Frame).toMatchObject({
+      frame: { intervalAccrued: { kind: "distance", value: 90 } },
+    });
+  });
+
+  it("intervals 0-1 are a no-op: a REALISTIC (per-interval-reset) 3-interval program reads the same remaining/accrued whether or not the checkpoint subtraction exists", async () => {
+    const program: WorkoutProgram = {
+      intervals: [
+        {
+          type: "work",
+          kind: "time",
+          value: 60,
+          targetSplit: null,
+          displaySpm: null,
+          restSeconds: 0,
+        },
+        {
+          type: "work",
+          kind: "time",
+          value: 60,
+          targetSplit: null,
+          displaySpm: null,
+          restSeconds: 0,
+        },
+        {
+          type: "work",
+          kind: "time",
+          value: 60,
+          targetSplit: null,
+          displaySpm: null,
+          restSeconds: 0,
+        },
+      ],
+    };
+    const timeline: FakeTimelineEvent[] = [
+      // Interval 0: checkpoint is 0 on hardware from the very first tick a
+      // session can ever have (nothing has completed yet) — the ORIGINAL
+      // no-op case fix-round HIGH-1 already covers, re-pinned here.
+      {
+        atMs: 100,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        elapsedSeconds: 18,
+        distanceMeters: 60,
+        spm: 22,
+        currentSplit: 130,
+        heartRateBpm: 138,
+        programIntervalIndex: 0,
+      },
+      {
+        atMs: 200,
+        kind: "boundary",
+        actual: {
+          index: 0,
+          elapsedSeconds: 60,
+          distanceMeters: 200,
+          avgSplit: 130,
+          avgSpm: 22,
+          avgHeartRateBpm: 138,
+        },
+        cumulativeElapsedSeconds: 60,
+        cumulativeDistanceMeters: 200,
+      },
+      // Interval 1: checkpoint is ALSO 0 on hardware (interface-notes.md
+      // §20 item 17/24's own inversion result) — this is the row the
+      // pre-Task-6 code got wrong for any program with a real boundary
+      // before it (see the reconnect-boundary test above, fixed by Task 6
+      // to a REALISTIC per-interval fixture), pinned here with a freshly
+      // realistic one of its own.
+      {
+        atMs: 300,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        elapsedSeconds: 22,
+        distanceMeters: 75,
+        spm: 22,
+        currentSplit: 129,
+        heartRateBpm: 139,
+        programIntervalIndex: 1,
+      },
+    ];
+    const { fake, driver, events } = harness({ program, events: timeline });
+    await programAndArm(driver, fake, program);
+    for (let i = 0; i < 3; i += 1) fake.tick(100);
+
+    const frames = events.filter((e) => e.kind === "frame");
+    const interval0Frame = frames.find((f) => f.frame.intervalIndex === 0);
+    const interval1Frame = frames.find((f) => f.frame.intervalIndex === 1);
+    expect(interval0Frame).toBeDefined();
+    expect(interval1Frame).toBeDefined();
+    // Interval 0: no boundary has ever fired, checkpoint 0 either way ->
+    // remaining = 60 - 18 = 42, accrued = 60 (this tick's own distance).
+    expect(interval0Frame).toMatchObject({
+      frame: {
+        intervalRemaining: { kind: "time", value: 42 },
+        intervalAccrued: { kind: "distance", value: 60 },
+      },
+    });
+    // Interval 1: ONE boundary has fired, but the checkpoint still reads 0
+    // (the inversion result's "through interval indices 0 AND 1") ->
+    // remaining = 60 - 22 = 38, accrued = 75, identical to a driver that
+    // never had a checkpoint to subtract in the first place.
+    expect(interval1Frame).toMatchObject({
+      frame: {
+        intervalRemaining: { kind: "time", value: 38 },
+        intervalAccrued: { kind: "distance", value: 75 },
+      },
     });
   });
 });
@@ -1053,13 +1420,27 @@ describe("createPm5Driver: the full happy path over a real compiled workout (Sea
           avgHeartRateBpm: 135,
         },
         // The session's first interval starts at cumulative 0, so its
-        // boundary's cumulative totals equal its own per-interval ones —
-        // this is what roots interval 1's checkpoint at 300s/1000m.
+        // boundary's cumulative totals equal its own per-interval ones.
+        // These `cumulative*` fields are fake-INTERNAL bookkeeping only
+        // (`lastBoundaryCumulative`/`wireLastSplit`, `fake.ts`) since Task 6
+        // deleted the driver-side checkpoint subtraction that used to read a
+        // derivative of them — nothing below depends on this number any
+        // more; it exists purely to keep 0x0033's own wire model honest.
         cumulativeElapsedSeconds: 300,
         cumulativeDistanceMeters: 1000,
       },
       // Interval 1 (240s work): one live tick 60s into THIS interval —
-      // session-cumulative elapsed is 300 (interval 0) + 60 = 360.
+      // session-cumulative elapsed is 300 (interval 0) + 60 = 360. Left
+      // session-cumulative deliberately (interface-notes.md §20 item 24,
+      // the "One EXCEPTION" note below this timeline): this fixture's own
+      // 0x0031 pair is a KNOWN, already-flagged unrealism, not fixed by
+      // Task 6 — fully resetting it per interval (item 12) is blocked by a
+      // SEPARATE, out-of-scope gap this task found but did not fix (the
+      // fake's `totalWorkDistanceFor` derives 0x0031's session-cumulative
+      // TWD field from this SAME per-tick `distanceMeters`, so genuinely
+      // separate per-interval keys make `recordTwdVerdict`'s accumulator
+      // check unsatisfiable by any fixture choice — proved by exhaustion,
+      // not left unresearched).
       {
         atMs: 300,
         kind: "status",
@@ -1103,8 +1484,9 @@ describe("createPm5Driver: the full happy path over a real compiled workout (Sea
           avgSpm: 22,
           avgHeartRateBpm: 155,
         },
-        // Checkpoint(300) + this interval's 240s work + its 60s rest —
-        // roots interval 2's checkpoint at 600s/2000m.
+        // Fake-internal bookkeeping only (see interval 0's boundary above) —
+        // checkpoint(300) + this interval's 240s work + its 60s rest —
+        // roots 600s/2000m, unused by the driver since Task 6.
         cumulativeElapsedSeconds: 600,
         cumulativeDistanceMeters: 2000,
       },
@@ -1270,20 +1652,23 @@ describe("createPm5Driver: the full happy path over a real compiled workout (Sea
     // distance=173.3" -> seq 28 "elapsed=0 distance=0.8", and
     // `session-a-multitest.json` seq 27 "elapsed=60.4 distance=182" -> seq
     // 29 "elapsed=0.03 distance=0", both genuine boundary resets). This
-    // fixture's own elapsed/distance values are simply unrealistic here and
-    // owed a fix; `interface-notes.md` item 24's still-open question is
-    // about a DIFFERENT field (0x0033's Last Split checkpoint pair,
-    // `lastSplitTimeSeconds`/`lastSplitDistanceMeters`, which
-    // `computeRemainingForFrame` subtracts from 0x0031's own elapsed to
-    // recover per-interval progress) — item 24 is only why fixing this
-    // fixture is more than a two-number edit: the fake currently roots that
-    // checkpoint at each boundary's own CUMULATIVE totals
-    // (`lastBoundaryCumulative`, `fake.ts`), so making elapsed itself
-    // reset per-interval would also require reworking that rooting (and
-    // every downstream `intervalRemaining` assertion in this test) to stay
-    // consistent — out of scope for Task 11, tracked separately. Denylist
-    // form below so a real future divergence (any OTHER kind) still fails
-    // this test, exactly as it did before Task 11 existed.
+    // fixture's own elapsed/distance values are still deliberately left
+    // session-cumulative here: Task 6 (interface-notes.md §20 items 17/24)
+    // deleted the driver-side checkpoint subtraction that used to recover
+    // per-interval progress from a pair like this one, and its own
+    // `intervalRemaining` assertion below documents the clamped-to-zero
+    // consequence of that on this fixture's known-unrealistic elapsed
+    // value — but genuinely RESETTING this fixture per interval (closing
+    // this exception for good) is blocked by a separate, out-of-scope
+    // finding Task 6 made without fixing: the fake's `totalWorkDistanceFor`
+    // derives 0x0031's session-cumulative TWD field from this SAME per-tick
+    // `distanceMeters` (`fake.ts`), so genuinely separate per-interval
+    // accumulator keys make `recordTwdVerdict`'s own check unsatisfiable by
+    // ANY choice of this fixture's numbers — proved by exhaustion this task
+    // round, not left unresearched, and owed to whichever task closes the
+    // TWD/accumulator coupling next. Denylist form below so a real future
+    // divergence (any OTHER kind) still fails this test, exactly as it did
+    // before Task 11 existed.
     expect(
       log
         .entries()
@@ -1300,15 +1685,49 @@ describe("createPm5Driver: the full happy path over a real compiled workout (Sea
       frame: { state: "finished", heartRateBpm: null },
     });
 
-    // intervalRemaining, re-derived from the checkpoint at each interval's
-    // first tick: interval 1's live tick is 60s into a 240s interval.
+    // Controller ruling (review IMPORTANT-3, Task 6 fix round): this
+    // assertion's `value: 0` is ACCEPTED as-is, on four conditions, all
+    // recorded here rather than scattered:
+    //
+    // (a) THE INPUT IS WIRE-IMPOSSIBLE. This fixture's elapsed is still
+    //     session-cumulative (300 -> 360 across the interval-0/1 boundary,
+    //     not a reset near zero) — a real PM5 does not produce this
+    //     (item 12: "Both fields reset together at each new work
+    //     interval"). Proved unfixable this round, not merely left alone:
+    //     task-6-report.md's "Deviation from the brief" section works the
+    //     algebra showing NO choice of this fixture's numbers can satisfy
+    //     `recordTwdVerdict`'s own check once real per-interval accumulator
+    //     keys open (exhaustion proof, condition (d) below is why).
+    // (b) THE ASSERTED 0 IS THE CLAMP'S HONEST OUTPUT FOR THAT INPUT.
+    //     `computeIntervalRemaining`'s `Math.max(0, interval.value -
+    //     progress)` — its own doc comment: "a quantization overshoot ...
+    //     must never render as a negative countdown" — turns 240 - 360 into
+    //     0, not a negative number. This is the clamp working correctly on
+    //     a bad input, not a new defect.
+    // (c) THIS LINE IS MUTATION-BLIND AT INDEX 1, BY MEASUREMENT, not by
+    //     assumption: the wire's own checkpoint reads 0 at interval index 1
+    //     regardless of whether the (deleted) subtraction still existed —
+    //     reintroducing it here would subtract 0 from 360 and still clamp
+    //     to 0, so THIS assertion cannot discriminate Task 6's fix from its
+    //     absence. It documents clamp behavior on a known-bad input, not a
+    //     regression guard; the real regression coverage for the fix is the
+    //     dedicated index-2 tests in the "Task 6" describe block below,
+    //     whose self-mutation this task's report shows biting.
+    // (d) THE REALISTIC-FIXTURE REWORK IS A NAMED FOLLOW-UP, not silently
+    //     deferred: "the fake's independent machine total" — giving
+    //     `fake.ts`'s `totalWorkDistanceFor`/`recordTwdVerdict` a TWD field
+    //     that tracks a real running session total independent of the
+    //     per-tick `distanceMeters` item 12 says must be per-interval,
+    //     rather than deriving one from the other. Tracked as the CARRY-2
+    //     ledger line in `.superpowers/sdd/2026-08-15-connected-axes-2a/
+    //     progress.md`'s T6 entry.
     const interval1Frame = events.find(
       (e) => e.kind === "frame" && e.frame.intervalIndex === 1,
     );
     expect(interval1Frame).toBeDefined();
     expect(interval1Frame).toMatchObject({
       kind: "frame",
-      frame: { intervalRemaining: { kind: "time", value: 180 } },
+      frame: { intervalRemaining: { kind: "time", value: 0 } },
     });
   });
 });
@@ -5001,14 +5420,26 @@ describe("createPm5Driver: a SECOND workout over the same fake, no reconnect (in
       2,
     );
 
-    // Review MED-2: run 2 must not inherit run 1's SESSION bookkeeping.
-    // 0x0033's Last Split Time/Distance says where the interval currently
-    // running began, session-cumulative — meaningless across a workout
-    // boundary. Left standing at run 1's final boundary (300s/1200m), run
-    // 2's very first frame reported `{kind:"time", value:500}`: 500 seconds
-    // remaining of a 300-second interval, because progress computed as
-    // 100 - 300 = -200. The number below is the same one run 1 reported
-    // from the identical tick.
+    // Review MED-2 (historical — MINOR-4, Task 6 fix round): run 2 must
+    // not inherit run 1's SESSION bookkeeping. AT THE TIME this test was
+    // written, `computeRemainingForFrame` subtracted 0x0033's Last Split
+    // Time/Distance — "where the interval currently running began",
+    // session-cumulative — from 0x0031's own elapsed, so a checkpoint left
+    // standing at run 1's final boundary (300s/1200m) made run 2's very
+    // first frame report `{kind:"time", value:500}`: 500 seconds remaining
+    // of a 300-second interval, from progress computed as 100 - 300 = -200.
+    // Task 6 (interface-notes.md §20 items 17/24) deleted that subtraction
+    // entirely — `intervalRemaining` now reads 0x0031's own per-interval
+    // pair directly, with no checkpoint of any kind to inherit wrongly.
+    // This assertion stays a genuine regression guard regardless: it is at
+    // interval index 0 (both runs' own opening tick), where the checkpoint
+    // was always 0 even before Task 6, so nothing here moved — but the
+    // ORIGINAL defect this test pins (run 2 silently carrying run 1's
+    // internal state) still has a live analogue: `fake.ts`'s own
+    // `lastBoundaryCumulative`/`wireLastSplit` reset on re-arm, which
+    // `fake.test.ts`'s dedicated re-arm test (Task 6) now pins directly at
+    // the fake level, self-mutation included. The number below is the same
+    // one run 1 reported from the identical tick.
     expect(firstRowingFrameAfter(run2Start)?.intervalRemaining).toStrictEqual({
       kind: "time",
       value: 200,
@@ -7693,9 +8124,19 @@ describe("createPm5Driver: sessionElapsedSeconds/sessionDistanceMeters with NO p
   });
 
   it("the interval countdown is NOT touched — it still reads the raw per-interval pair", () => {
-    // Walk 4 proved `intervalRemaining` correct as it stood, so nothing in
-    // this task may re-source it. With no program armed there is nothing to
-    // count down against, which is exactly what it must keep reporting.
+    // MINOR-4, Task 6 fix round: corrected from present to past tense. AT
+    // THE TIME this test (CR2 spec 1, Task 1) was written, walk 4's
+    // single-interval capture had proved `intervalRemaining` correct as it
+    // stood — a checkpoint-subtracting `computeRemainingForFrame` that this
+    // capture's own checkpoint (always 0, no boundary in a one-interval
+    // session) could never distinguish from having no checkpoint at all —
+    // so nothing in THAT task was allowed to re-source it. Task 6
+    // (interface-notes.md §20 items 17/24) later did re-source it: the
+    // checkpoint subtraction is gone, `intervalRemaining` reads 0x0031's
+    // own per-interval pair directly. This assertion is untouched by that
+    // change regardless — with no program armed, `computeRemainingForFrame`
+    // returns `null` on its own `!p` guard, before either version's
+    // progress math ever runs.
     expect(replayWalk4().every((f) => f.intervalRemaining === null)).toBe(true);
   });
 
@@ -8168,6 +8609,43 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     // source fed the record, and from what" in one read.
     expect(verdict[0]!.detail).toContain("62.5");
     expect(verdict[0]!.detail).toContain("214");
+  });
+
+  it("(b2) THE TWIN (Task 7): disconnect() drains a still-pending reconcile into a LIVE listener instead of discarding it, the same F7 rule onDisconnect already applies to a passive drop", async () => {
+    // `stubTransport().disconnect()` never fires the driver's own
+    // `onDisconnect` callback — exactly `Transport.onDisconnect`'s
+    // documented contract for a caller-initiated hang-up
+    // (`domain/monitor/types.ts`, `webBluetooth.ts`'s own M-2 guard) — so
+    // this exercises `disconnect()`'s OWN drain, not the passive-drop path
+    // test "A LINK DROP BEFORE ANY SUMMARY ARRIVES" above already covers.
+    const g = primedGate();
+    await rowToFinish(g);
+    g.clock.advance(400);
+    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(62.5, 214));
+
+    // NOT YET — same as (b): the deadline has not fired, so nothing is
+    // filed and the summary is only held.
+    expect(boundaries(g.events)).toHaveLength(0);
+    expect(g.timer.pending()?.ms).toBe(3000);
+
+    // The caller hangs up before the deadline — before this task this
+    // discarded the held summary outright (`disconnect()` used to just
+    // cancel `pendingSummaryReconcile`, never call `reconcileSummary`).
+    await g.driver.disconnect();
+
+    // The verdict reached the STILL-SUBSCRIBED listener.
+    expect(boundaries(g.events)).toHaveLength(1);
+    expect(boundaries(g.events)[0]).toMatchObject({
+      kind: "intervalComplete",
+      actual: { index: 0, elapsedSeconds: 62.5, distanceMeters: 214 },
+      finalBoundary: true,
+    });
+    // The timer is consumed, not left dangling — `disconnect()` still
+    // clears `pendingSummaryReconcile` the way it always did.
+    expect(g.timer.pending()).toBeNull();
+    const verdict = verdicts(g.log);
+    expect(verdict).toHaveLength(1);
+    expect(verdict[0]!.detail).toContain("filled-from-summary");
   });
 
   /** Sea Fret rowed with its first two intervals recorded the ordinary way

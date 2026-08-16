@@ -33,6 +33,7 @@ import {
   compileProgram,
   type WorkoutProgram,
 } from "../../domain/monitor/program.js";
+import { fmtDuration } from "../../domain/duration.js";
 import { WORKOUTSTATE_INTERVALWORKTIME } from "../../domain/monitor/pm5/parse.js";
 import type { MonitorFrame } from "../../domain/monitor/types.js";
 import type { Baselines, WorkoutType } from "../../domain/types.js";
@@ -46,8 +47,10 @@ import type {
 import { buildDraft } from "../session/draft";
 import { buildRun, type EnginePhase } from "../session/engine";
 import type { LogSeed } from "../session/logDraft";
+import { totalSessionSecondsOf } from "../session/Timer";
 import { ARM_TIMEOUT_MS } from "../session/useStagedDiscard";
 import { commentStrippedSource, type CssRule, cssRules } from "../test/cssView";
+import { buildSurfaceModel } from "./connected/surfaceModel";
 import { PANES } from "./connected/PagerRail";
 import ConnectedInterstitial from "./ConnectedInterstitial";
 import ConnectedSurface, {
@@ -57,6 +60,25 @@ import ConnectedSurface, {
   loadLastPane,
   paneAfterSwipe,
 } from "./ConnectedSurface";
+
+// A spy over the REAL implementation, not a stub (the same
+// `vi.importActual` idiom `ConnectedInterstitial.test.tsx` uses for
+// `useMonitorSession`) — every pane in this file still renders off a real
+// `SurfaceModel`, so nothing else in this suite has to change; the spy
+// exists purely so the tests below can read what `status` ConnectedSurface
+// actually PASSED, which is otherwise unobservable once `"armed"` and
+// `"live"` render identically (Task 3 owns the armed pane; task-2 review
+// finding: the ternary that picks `"armed"` had no test that could detect
+// its own deletion — self-mutation #5 in the task-2 report proved it,
+// 138/138 unaffected with the branch removed).
+vi.mock("./connected/surfaceModel", async () => {
+  const actual = await vi.importActual<
+    typeof import("./connected/surfaceModel")
+  >("./connected/surfaceModel");
+  return { ...actual, buildSurfaceModel: vi.fn(actual.buildSurfaceModel) };
+});
+
+const mockBuildSurfaceModel = vi.mocked(buildSurfaceModel);
 
 /** `index.css`'s path on disk. Plain string surgery on `import.meta.url`,
  *  not the global `URL` constructor: this project's jsdom environment
@@ -76,6 +98,26 @@ function indexCssPath(): string {
  *  a rule's own prose (the defect `cssView.ts`'s header records three times
  *  over). Several tests in this file used to regex the RAW source. */
 const INDEX_CSS = commentStrippedSource(readFileSync(indexCssPath(), "utf-8"));
+
+/** `ConnectedSurface.tsx`'s own source, RAW — not comment-stripped, on
+ *  purpose: the no-PAUSED-noun sweep (task 5, connected-axes 2a) checks the
+ *  whole file, comments included, because a stale doc comment quoting the
+ *  retired copy is exactly the kind of drift `.claude/agent-briefing.md`'s
+ *  own "grep for comments describing what you just changed" rule exists to
+ *  catch — this test automates that check for this one string rather than
+ *  trusting a sweep at review time. Same `import.meta.url` path-surgery
+ *  idiom `indexCssPath()` uses just above, one directory shallower (this
+ *  test file and its subject share `src/workout/`). */
+function connectedSurfaceSourcePath(): string {
+  return import.meta.url
+    .replace(/^file:\/\//, "")
+    .replace(/ConnectedSurface\.test\.tsx$/, "ConnectedSurface.tsx");
+}
+
+const CONNECTED_SURFACE_SOURCE = readFileSync(
+  connectedSurfaceSourcePath(),
+  "utf-8",
+);
 
 /** Every rule for `selector` in the stylesheet, at any nesting depth,
  *  outermost first. Plural on purpose: `.exec`'s first-match-only behaviour
@@ -186,6 +228,8 @@ function session(overrides: Partial<MonitorSession> = {}): MonitorSession {
     actuals: [],
     endedBy: null,
     handoffHeld: false,
+    frozen: false,
+    runOpen: true,
     connect: vi.fn().mockResolvedValue(undefined),
     program: vi.fn().mockResolvedValue(undefined),
     endSession: vi.fn().mockResolvedValue(undefined),
@@ -230,6 +274,82 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+});
+
+// ---------------------------------------------------------------------------
+// THE STATUS PRECEDENCE reaches buildSurfaceModel (connected-axes design
+// spec §1, task 2). CALLER-level, not model-level: `surfaceModel.test.ts`
+// already proves `buildSurfaceModel` renders correctly FOR a given status;
+// these two prove `ConnectedSurface` computes the RIGHT status from a
+// session in the first place — the ternary this component owns. Both cases
+// are otherwise unobservable through the DOM today: nothing renders
+// `"armed"` differently from `"live"` yet (Task 3's job), which is exactly
+// why the task-2 review found this gap — reading the spy's own call args is
+// the only way to catch a regression here before Task 3 gives it a pixel.
+// ---------------------------------------------------------------------------
+
+describe("the status precedence reaches buildSurfaceModel (task-2 review finding)", () => {
+  it('phase "ready" (numbers already requested) — an armed program with no session open — calls buildSurfaceModel with status "armed"', () => {
+    // `"ready"` reaching this component at all only happens once the rower
+    // has asked for the numbers (`ConnectedInterstitial.tsx`'s own phase
+    // gate) — this test renders `ConnectedSurface` directly with that
+    // phase, the same "hand it a session, it draws whatever it's given"
+    // strategy every other describe block in this file uses (see header).
+    renderSurface({ phase: "ready" });
+    expect(mockBuildSurfaceModel).toHaveBeenCalled();
+    const lastCall = mockBuildSurfaceModel.mock.calls.at(-1)!;
+    expect(lastCall[0].status).toBe("armed");
+  });
+
+  it('the freeze predicate having fired ("frozen") calls buildSurfaceModel with status "paused", even at phase "live"', () => {
+    // The mirror case, isolated from the armed branch on purpose: `"live"`
+    // with an open session never satisfies `session === "none"`, so this
+    // proves the SEPARATE `activity === "frozen"` arm of the same ternary,
+    // not a second path to the same result.
+    renderSurface({ phase: "live", frozen: true, runOpen: true });
+    const lastCall = mockBuildSurfaceModel.mock.calls.at(-1)!;
+    expect(lastCall[0].status).toBe("paused");
+  });
+});
+
+// I-1, final whole-branch review fix wave — "Task 3 owns the armed pane"
+// (this file's own comment above), finally given a pixel: `armed` now
+// renders visibly differently from `live`, not merely a different `status`
+// string the model happened to receive.
+describe("armed's first frame, in the DOM (I-1)", () => {
+  it("neither hero shows NOW — the label is gone, not merely relabelled", () => {
+    renderSurface({
+      phase: "ready",
+      frame: frame({ state: "armed", elapsedSeconds: 0, distanceMeters: 0 }),
+    });
+    expect(screen.queryByText("NOW")).toBeNull();
+    expect(screen.queryByText("LAST")).toBeNull();
+  });
+
+  it("the grid's active row carries no gold countdown mark", () => {
+    localStorage.setItem(LAST_PANE_KEY, "grid");
+    renderSurface({
+      phase: "ready",
+      frame: frame({ state: "armed", elapsedSeconds: 0, distanceMeters: 0 }),
+    });
+    expect(document.querySelector(".connected-grid-countdown")).toBeNull();
+  });
+
+  it("TOTAL LEFT reads the whole session — never the default fixture's mid-session 600s", () => {
+    renderSurface({
+      phase: "ready",
+      // The default `frame()` fixture is deliberately mid-session-shaped
+      // (`sessionElapsedSeconds: 600`, `intervalIndex: 1`) — this is the
+      // exact carried-over shape that would leak a partial bar if the
+      // armed suppression were removed.
+      frame: frame({ state: "armed" }),
+    });
+    // Pane defaults to "live" (`DEFAULT_PANE`): read pane B's own TOTAL
+    // LEFT bar value directly.
+    expect(document.querySelector(".timer-total-value")!.textContent).toBe(
+      fmtDuration(totalSessionSecondsOf(FIXTURE.phases) / 60),
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -814,29 +934,47 @@ describe("index.css: both connected screens hide the shell's tab bar (the post-:
 });
 
 // ---------------------------------------------------------------------------
-// Mid-session: paused
+// Mid-session: frozen (connected-axes 2a, task 5 — `phase: "paused"` retired
+// off `ConnectedPhase`; every fixture below is `phase: "live", frozen: true`
+// now, `useMonitorSession.ts`'s own new shape)
 // ---------------------------------------------------------------------------
 
-describe("paused (handoff §4)", () => {
+describe("frozen (handoff §4, restyled by connected-axes 2a task 5)", () => {
   // Connected-revamp Task 6: End moved out of the footer into the header
-  // (revision §2), where it now renders UNCONDITIONALLY — paused or not.
-  // The paused block gets its OWN END/AGAIN affordance in the footer slot
+  // (revision §2), where it now renders UNCONDITIONALLY — frozen or not.
+  // The frozen block gets its OWN END/AGAIN affordance in the footer slot
   // End vacated; the two are not mutually exclusive any more, they are two
   // independent controls sharing the same armed state.
-  it("End's header control survives paused, and the paused block adds its own END/AGAIN", () => {
+  it("End's header control survives a freeze, and the frozen block adds its own END/AGAIN", () => {
     // `statusWord`'s own "says PAUSED" half of this test retired with pane
     // A (`PaneTimer.tsx`, connected-revamp Task 2): it was the field's only
     // renderer, and no surviving pane shows a status word at all.
-    renderSurface({ phase: "paused" });
-    expect(screen.getByText("PAUSED · PULL TO RESUME")).toBeInTheDocument();
+    renderSurface({ frozen: true });
+    expect(screen.getByText("PULL TO RESUME")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "End session" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "END" })).toBeInTheDocument();
   });
 
-  it("NOTHING ABOVE SHIFTS: the paused block arrives without the slot ever changing height", () => {
-    // The header (End's new home) is a THIRD invariant alongside the
+  // THE NOUN IS GONE (task 5 step 1 — spec 2a's own trigger: the PM5 has no
+  // paused state, and the block covered the one number, TOTAL LEFT, that
+  // would have told the rower the clock never stopped). Source-sweep half
+  // alongside the rendered half: the component's own source carries no
+  // instance of the caps noun any more, not even in a comment describing a
+  // retired string — `ConnectedSurface.tsx`'s own copy has moved on. The
+  // `SurfaceStatus` member `"paused"` is untouched by this (`surfaceModel
+  // .ts`'s own doc comment: the internal name stays, the user-facing noun
+  // is what died) and never trips this regex since it is lower-case.
+  it("no PAUSED noun anywhere: not rendered, not in the component's own source", () => {
+    renderSurface({ frozen: true });
+    expect(screen.getByText("PULL TO RESUME")).toBeInTheDocument();
+    expect(screen.queryByText(/PAUSED/)).not.toBeInTheDocument();
+    expect(CONNECTED_SURFACE_SOURCE).not.toMatch(/PAUSED/);
+  });
+
+  it("THE FOOTER GROWS INTO THE PANE, NOT OVER IT: the header and the pane's own top row never move", () => {
+    // The header (End's own home) is a THIRD invariant alongside the
     // footer: it renders the same single child regardless of state, so its
     // own fixed height can never be what moves the pane body underneath
     // it.
@@ -844,38 +982,46 @@ describe("paused (handoff §4)", () => {
     const liveHeader = document.querySelector(".connected-header")!;
     expect(liveHeader.children).toHaveLength(1);
     const liveFooter = document.querySelector(".connected-surface-footer")!;
-    // Empty while rowing — End no longer lives here, and as of the task-6
-    // fix round the slot reserves nothing for the block that does.
+    // Empty while rowing — End no longer lives here, and the task-6 ruling's
+    // zero-cost-while-rowing property survives task 5's own rework of the
+    // mechanism (see the CSS test below for what changed and what didn't).
     expect(liveFooter.children).toHaveLength(0);
     live.unmount();
 
-    renderSurface({ phase: "paused" });
-    const pausedHeader = document.querySelector(".connected-header")!;
-    expect(pausedHeader.children).toHaveLength(1);
-    const pausedFooter = document.querySelector(".connected-surface-footer")!;
-    // One child now — the paused block alone in the slot End vacated.
-    expect(pausedFooter.children).toHaveLength(1);
+    renderSurface({ frozen: true });
+    const frozenHeader = document.querySelector(".connected-header")!;
+    expect(frozenHeader.children).toHaveLength(1);
+    const frozenFooter = document.querySelector(".connected-surface-footer")!;
+    // One child now — the frozen block alone in the slot End vacated, IN
+    // FLOW (task 5) rather than overlaid — the mechanism behind the
+    // no-occlusion fix the CSS test below pins directly.
+    expect(frozenFooter.children).toHaveLength(1);
     // The footer sits in the SAME place in the tree either way — directly
     // after the pane body, directly before the pager — so the only thing
-    // that differs between the two states is whether it has a child, never
-    // its position and (per the CSS test below) never its height.
-    expect(pausedFooter.previousElementSibling!.className).toContain(
+    // that differs between the two states is whether it has a child; task 5
+    // deliberately spends the footer's own HEIGHT to buy that (it used to
+    // cost nothing at all, via the overlay this task retires — see the CSS
+    // test's own comment for why that overlay was the occlusion bug).
+    expect(frozenFooter.previousElementSibling!.className).toContain(
       "connected-surface-body",
     );
-    expect(pausedFooter.nextElementSibling!.className).toContain(
+    expect(frozenFooter.nextElementSibling!.className).toContain(
       "connected-pager",
     );
   });
 
-  it("index.css makes the slot cost the pane NOTHING: a zero-height anchor with the block overlaid on it", () => {
-    // JAMES RULING 2026-08-12 (task-6 fix round). This assertion used to
-    // read `height: 52px` on BOTH the slot and the block: the slot held
-    // 52px open for the whole session so the block could drop into it
-    // without moving anything. The review measured what that reservation
-    // cost — an entire grid row in each orientation, spent on space the
-    // rower saw as blank for all but the seconds they were stopped. The
-    // invariant it was buying survives, more strongly: the slot has NO
-    // height in either state, so there is nothing left that could change.
+  it("index.css: the frozen block is IN FLOW, not overlaid — no occlusion by construction", () => {
+    // TASK 5's OWN FIX (connected-axes 2a — corrects the task-6 fix round's
+    // overlay). That overlay bought "nothing above shifts" for free by
+    // painting the block OVER the pane's own last 52px — which covered
+    // TOTAL LEFT, the one number the frozen state exists to keep the rower
+    // reading (spec 2a's own trigger). A normal-flow child cannot paint
+    // over anything by construction: it has no `position: absolute` left to
+    // do it with, so this is a STRUCTURAL guarantee, not a pixel one — the
+    // real geometry (TOTAL LEFT's own bounding box never intersecting the
+    // block's) is `design.spec.ts`'s job, the same idiom its no-overlap
+    // pane-B test already uses; jsdom computes no real layout for this file
+    // to check that with.
     const footers = rulesFor(".connected-surface-footer");
     // Two rules, and now WHICH is which is checked rather than assumed:
     // the base one at the top level, the landscape query's placement
@@ -884,24 +1030,22 @@ describe("paused (handoff §4)", () => {
       [],
       ["@media (orientation: landscape)"],
     ]);
-    // `\n` anchored, so `min-height: 0` could never satisfy this.
-    expect(footers[0]!.body).toMatch(/\n\s*height: 0;/);
-    // The anchor the overlay is positioned against. Without it the block
-    // would hang off the nearest positioned ancestor — the viewport — and
-    // land somewhere else entirely.
-    expect(footers[0]!.body).toContain("position: relative");
-    // And the landscape query must not put the reservation back: its own
-    // copy of the rule places the slot in the grid and nothing more.
+    // No fixed height and no positioning left to anchor an overlay against
+    // — a normal flex row that costs nothing empty and exactly its child's
+    // height once it has one.
+    expect(footers[0]!.body).not.toMatch(/height\s*:/);
+    expect(footers[0]!.body).not.toContain("position");
     expect(footers[1]!.body).not.toMatch(/height\s*:/);
-    // The block itself is unchanged in size and in where it paints; only
-    // its participation in the flow is gone.
+
     const paused = ruleBody(".connected-paused");
-    expect(paused).toContain("position: absolute");
-    expect(paused).toContain("bottom: 0");
-    expect(paused).toContain("height: 52px");
+    expect(paused).not.toContain("position: absolute");
+    expect(paused).not.toContain("bottom: 0");
+    // `flex: 1` is what spans the footer's own width now that `left: 0;
+    // right: 0` (the absolute version's own full-bleed mechanism) is gone.
+    expect(paused).toContain("flex: 1");
   });
 
-  it("index.css inverts the paused band: ink field, paper label (2026-08-08, the operator missed the grey one)", () => {
+  it("index.css inverts the frozen band: ink field, paper label (2026-08-08, the operator missed the grey one)", () => {
     expect(ruleBody(".connected-paused")).toContain("background: var(--ink)");
     expect(ruleBody(".connected-paused-label")).toContain(
       "color: var(--surface)",
@@ -923,7 +1067,7 @@ describe("paused (handoff §4)", () => {
   // reused `connected-clock-value-held` class, are unchanged.
   it("the metric row's interval-clock cell greys but holds its last value", () => {
     renderSurface({
-      phase: "paused",
+      frozen: true,
       frame: frame({ intervalRemaining: { kind: "time", value: 41 } }),
     });
     const clock = document.querySelector(".connected-metric-value")!;
@@ -932,22 +1076,33 @@ describe("paused (handoff §4)", () => {
   });
 
   it("pane B's split hero reads `—`, because nobody is pulling", () => {
-    renderSurface({ phase: "paused" });
+    renderSurface({ frozen: true });
     const hero = document.querySelector(
       ".connected-hero-split .connected-hero-value",
     )!;
     expect(hero.textContent).toBe("—");
   });
 
-  it("keeps the erg's own numbers live: paused is not stale", () => {
-    renderSurface({ phase: "paused" });
+  // Task 5's own rate-suppression fix (`surfaceModel.ts`'s `liveRate`):
+  // pane B's SECOND hero used to keep showing the erg's last pinned spm
+  // through a freeze — the split hero's own dash treatment, promoted.
+  it("pane B's rate hero reads `—` too, not the erg's last pinned spm", () => {
+    renderSurface({ frozen: true, frame: frame({ spm: 68 }) });
+    const hero = document.querySelector(
+      ".connected-hero-rate .connected-hero-value",
+    )!;
+    expect(hero.textContent).toBe("—");
+  });
+
+  it("keeps the erg's own numbers live: frozen is not stale", () => {
+    renderSurface({ frozen: true });
     expect(screen.queryByText("LOST THE MONITOR")).not.toBeInTheDocument();
     expect(document.querySelector(".connected-line-mark-hollow")).toBeNull();
     expect(document.querySelector(".timer-card-actual-stale")).toBeNull();
   });
 
   it("END still works while stopped, staged like everywhere else", async () => {
-    const { session: s } = renderSurface({ phase: "paused" });
+    const { session: s } = renderSurface({ frozen: true });
     await userEvent.click(screen.getByRole("button", { name: "END" }));
     expect(s.endSession).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: "AGAIN" }));

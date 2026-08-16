@@ -13,6 +13,8 @@
 
 import { describe, expect, it } from "vitest";
 import { compileProgram } from "../../../domain/monitor/program.js";
+import { fmtDuration } from "../../../domain/duration.js";
+import { fmtSplit } from "../../../domain/format.js";
 import { PACE_TOLERANCE_SECONDS } from "../../../domain/judge.js";
 import type {
   IntervalActual,
@@ -23,6 +25,7 @@ import type { WarmupSetting } from "../../api/usePreferences";
 import { LIBRARY_WORKOUTS } from "../../../server/seed/library/index";
 import { buildDraft } from "../../session/draft";
 import { buildRun, type EnginePhase } from "../../session/engine";
+import { totalSessionSecondsOf } from "../../session/Timer";
 import { targetSplitDisplay } from "../../session/TimerTargets";
 import {
   buildSurfaceModel,
@@ -31,7 +34,6 @@ import {
   phaseIndexForInterval,
   splitHero,
   staleFor,
-  surfaceStatusFor,
   type SurfaceModelInput,
 } from "./surfaceModel";
 
@@ -126,7 +128,7 @@ function model(over: Partial<SurfaceModelInput> = {}) {
   return buildSurfaceModel({
     phases: FIXTURE.phases,
     program: FIXTURE.program,
-    phase: "live",
+    status: "live",
     frame: frame(),
     deviceName: DEVICE,
     actuals: [],
@@ -269,21 +271,268 @@ describe("judgedValue: the one judgement path", () => {
   });
 });
 
-describe("staleFor / surfaceStatusFor", () => {
+describe("staleFor: the single place that decides WHEN a reading is stale", () => {
   it("only a lost link makes a reading stale — a paused erg is still talking", () => {
-    expect(staleFor("disconnected")).toBe(true);
+    expect(staleFor("stale")).toBe(true);
     expect(staleFor("paused")).toBe(false);
     expect(staleFor("live")).toBe(false);
-    expect(staleFor("ended")).toBe(false);
+    expect(staleFor("armed")).toBe(false);
+  });
+});
+
+// `surfaceStatusFor` is GONE (task 2, connected-axes design spec §1): it
+// used to narrow a `ConnectedPhase` to the four the surface draws and
+// return `null` for everything else, which `buildSurfaceModel` laundered
+// into `"live"` with its own `?? "live"` — the exact mechanism
+// `docs/monitor/state-architecture-review.md` §F3 named as the shape that
+// let an unenumerated phase (`"ready"`, once the rower asked for the
+// numbers) render as a full live surface instead of the armed one it
+// actually was. The caller now computes a real, non-nullable `status` from
+// `connectedAxes.ts`'s four axes (`ConnectedSurface.tsx`'s own precedence
+// comment) and this module never sees a `ConnectedPhase` at all.
+describe('status plumbs through, non-nullable — the `?? "live"` laundering is gone', () => {
+  it('an "armed" status renders as armed — the exact rendering (nowLabel, no judged colours) is Task 3\'s', () => {
+    const m = model({ status: "armed" });
+    expect(m.status).toBe("armed");
   });
 
-  it("narrows only the four phases the surface draws", () => {
-    expect(surfaceStatusFor("live")).toBe("live");
-    expect(surfaceStatusFor("paused")).toBe("paused");
-    expect(surfaceStatusFor("disconnected")).toBe("disconnected");
-    expect(surfaceStatusFor("ended")).toBe("ended");
-    expect(surfaceStatusFor("ready")).toBeNull();
-    expect(surfaceStatusFor("pairing")).toBeNull();
+  it("rejects a call with no status at all (@ts-expect-error) — there is nothing left to launder it into", () => {
+    // @ts-expect-error — `status` is a required field of
+    // `SurfaceModelInput`; the old `phase: ConnectedPhase` field (optional
+    // in effect, since `surfaceStatusFor` mapped anything it didn't
+    // recognise to `null` and this function's own `?? "live"` covered for
+    // it) is gone, and so is the fallback.
+    const m = buildSurfaceModel({
+      phases: FIXTURE.phases,
+      program: FIXTURE.program,
+      frame: frame(),
+      deviceName: DEVICE,
+      actuals: [],
+    });
+    // If this suppression were ever exercised for real — a caller that
+    // bypasses the type system, not one that fails to compile — the result
+    // is an honestly undefined status, never a silent live surface: proof
+    // the `?? "live"` laundering has nowhere left to hide, not just that it
+    // no longer appears in this file.
+    expect(m.status).toBeUndefined();
+  });
+});
+
+// THE MIRROR (design spec §2, Item 3; 2a plan Task 3): wherever the
+// MACHINE's own display shows 0, this surface must say the same thing —
+// never the wire's carried-over ghost, and never a colour derived from
+// comparing that ghost to a target.
+describe("the mirror: 0 wherever the machine's own display shows 0", () => {
+  /** NO_WARMUP, not FIXTURE: interval 0 IS the first work phase here (a
+   *  real split + rate target), whereas FIXTURE's interval 0 is the
+   *  warm-up (no target at all) — armed is "before the first pull of the
+   *  SESSION", interval 0, so this is the realistic fixture for it. */
+  function firstNoWarmupWorkPhase(): EnginePhase {
+    const p = NO_WARMUP.phases[0];
+    if (!p || p.type !== "work" || !p.targetSplit || p.spm === undefined) {
+      throw new Error("fixture has no split-and-rate first work phase");
+    }
+    return p;
+  }
+
+  it("armed: rate mirrors to 0 plain (no judgement class); split mirrors to the TARGET as a preview, never the wire's carried-over ghost", () => {
+    const target = firstNoWarmupWorkPhase();
+    const m = buildSurfaceModel({
+      phases: NO_WARMUP.phases,
+      program: NO_WARMUP.program,
+      status: "armed",
+      frame: frame({
+        state: "armed",
+        intervalIndex: 0,
+        rowingActive: false,
+        distanceMeters: 0,
+        // The fake's own taught ghost (fake.test.ts): a re-armed machine
+        // carries the PREVIOUS piece's spm/split, not zero — the lab
+        // captures' 13-96 spm range (spec's evidence dowry). Chosen far
+        // from both 0 and the target so a leak of either failure mode
+        // (still zero, or the raw ghost) is unmistakable.
+        spm: 46,
+        currentSplit: 251,
+      }),
+      deviceName: DEVICE,
+      actuals: [],
+    });
+
+    expect(m.rate.display).toBe("0");
+    expect(m.rate.judgement).toBe("within");
+    expect(m.rate.absent).toBe(false);
+
+    expect(m.pace.display).toBe(fmtSplit(target.targetSplit!));
+    expect(m.pace.judgement).toBe("within");
+    expect(m.pace.absent).toBe(false);
+    // Not the wire's own ghost, and not a plain zero either.
+    expect(m.pace.display).not.toBe(fmtSplit(251));
+    expect(m.pace.display).not.toBe("0:00.0");
+  });
+
+  it("mid-session boundary: heroes mirror 0/unjudged while the wire still carries the previous interval's ghost (the walk's own observed frame)", () => {
+    // session-b seq28 (docs/monitor/sessions/walk-2026-08-15/
+    // session-b-poisoned.json): state=rowing, distance=0.8, rowingActive
+    // false, spm 28 — status stays `live` (this is mid-session, not
+    // pre-session `armed`).
+    const m = model({
+      status: "live",
+      frame: frame({
+        state: "rowing",
+        intervalIndex: 1,
+        rowingActive: false,
+        distanceMeters: 0.8,
+        spm: 28,
+        currentSplit: 133,
+      }),
+    });
+    expect(m.pace.display).toBe("0:00.0");
+    expect(m.pace.judgement).toBe("within");
+    expect(m.pace.absent).toBe(false);
+    expect(m.rate.display).toBe("0");
+    expect(m.rate.judgement).toBe("within");
+    expect(m.rate.absent).toBe(false);
+  });
+
+  it("the guard: once distance advances past the reset window, the mirror ends and judged values return — even with rowingActive still false", () => {
+    const target = firstWorkPhase();
+    const m = model({
+      status: "live",
+      frame: frame({
+        state: "rowing",
+        intervalIndex: 1,
+        // Still false — isolating the DISTANCE half of the discriminator:
+        // a mutant that dropped only the distance check would still pass
+        // if this test also flipped rowingActive true.
+        rowingActive: false,
+        distanceMeters: 5.4, // the walk's own guard case: 0.8 -> 5.4
+        spm: target.spm! + 10,
+        currentSplit: target.targetSplit! - 10,
+      }),
+    });
+    expect(m.pace.display).not.toBe("0:00.0");
+    expect(m.pace.judgement).toBe("faster"); // 10s quicker than target
+    expect(m.rate.display).toBe(String(target.spm! + 10));
+    expect(m.rate.judgement).toBe("faster"); // a higher rate reads faster
+  });
+
+  it("grid agreement: buildGridModel's active row shares the SAME mirrored JudgedValue objects pane B renders", () => {
+    const target = firstNoWarmupWorkPhase();
+    const m = buildSurfaceModel({
+      phases: NO_WARMUP.phases,
+      program: NO_WARMUP.program,
+      status: "armed",
+      frame: frame({
+        state: "armed",
+        intervalIndex: 0,
+        rowingActive: false,
+        distanceMeters: 0,
+        spm: 46,
+        currentSplit: 251,
+      }),
+      deviceName: DEVICE,
+      actuals: [],
+    });
+    const activeRow = m.grid.rows[m.grid.activeIndex]!;
+    expect(activeRow.index).toBe(0);
+    // Referential identity, not just equal values (`buildGridModel`'s own
+    // comment: "the SAME objects, so a rower swiping cannot find the split
+    // judged one way on one pane and another way on the next") — this is
+    // what makes it structurally impossible for the grid to disagree with
+    // pane B about the mirror, rather than merely unlikely today.
+    expect(activeRow.pace.judged).toBe(m.pace);
+    expect(activeRow.spm.judged).toBe(m.rate);
+    expect(activeRow.pace.display).toBe(fmtSplit(target.targetSplit!));
+    expect(activeRow.spm.display).toBe("0");
+  });
+});
+
+// I-1, final whole-branch review fix wave: three properties design frame
+// 2D names (`docs/design/handoffs/2026-08-15-connected-v2/README.md`, "2D ·
+// First frame") that the mirror above never touched, dropped at the task
+// seam ConnectedSurface.test.tsx's own comment names ("Task 3 owns the armed
+// pane"). All three are asserted at the MODEL layer per this task's brief —
+// the consequence a pane renders, not a DOM smoke test standing in for it.
+describe("armed's first frame (I-1): the three properties 2D asks for beyond the mirror", () => {
+  it('carries no "NOW" over either hero — 2D shows no label at all above the heroes, unlike live/paused', () => {
+    const m = model({ status: "armed", frame: frame({ state: "armed" }) });
+    expect(m.nowLabel).toBe("");
+    // The stale case is untouched by this change — still LAST, never armed's
+    // empty string leaking into a different status.
+    expect(model({ status: "stale" }).nowLabel).toBe("LAST");
+    expect(model({ status: "live" }).nowLabel).toBe("NOW");
+    expect(model({ status: "paused" }).nowLabel).toBe("NOW");
+  });
+
+  it("the grid's active row carries no gold counting mark — nothing is counting down before the first stroke", () => {
+    const m = buildSurfaceModel({
+      phases: NO_WARMUP.phases,
+      program: NO_WARMUP.program,
+      status: "armed",
+      frame: frame({
+        state: "armed",
+        intervalIndex: 0,
+        rowingActive: false,
+        distanceMeters: 0,
+      }),
+      deviceName: DEVICE,
+      actuals: [],
+    });
+    const activeRow = m.grid.rows[m.grid.activeIndex]!;
+    expect(activeRow.state).toBe("active");
+    expect(activeRow.countdown).toBeNull();
+    // A live status on the SAME row shape still marks it — this is an
+    // armed-only suppression, not a regression of the mark itself
+    // (PaneGrid.test.tsx's own "still MARKS" test covers the live case in
+    // the DOM; this pins the model field that mark reads).
+    const liveModel = buildSurfaceModel({
+      phases: NO_WARMUP.phases,
+      program: NO_WARMUP.program,
+      status: "live",
+      frame: frame({ intervalIndex: 0 }),
+      deviceName: DEVICE,
+      actuals: [],
+    });
+    expect(
+      liveModel.grid.rows[liveModel.grid.activeIndex]!.countdown,
+    ).not.toBeNull();
+  });
+
+  it("TOTAL LEFT reads the whole session, un-started — never the wire's carried-over elapsed", () => {
+    const totalSeconds = totalSessionSecondsOf(NO_WARMUP.phases);
+    const m = buildSurfaceModel({
+      phases: NO_WARMUP.phases,
+      program: NO_WARMUP.program,
+      status: "armed",
+      // A non-zero sessionElapsedSeconds on the armed frame — the same
+      // shape a stale carried-over reading would have (the design's own
+      // §2 Item 3 citation: only spm/currentSplit genuinely carry over on
+      // the wire, elapsed/distance genuinely zero — but the surface must
+      // say "un-started" REGARDLESS of what the frame happens to hold,
+      // the same defensive stance the pace/rate mirror already takes
+      // rather than trusting the wire not to glitch).
+      frame: frame({
+        state: "armed",
+        intervalIndex: 0,
+        rowingActive: false,
+        distanceMeters: 0,
+        elapsedSeconds: 900,
+        sessionElapsedSeconds: 900,
+      }),
+      deviceName: DEVICE,
+      actuals: [],
+    });
+    expect(m.totalLeftSeconds).toBe(totalSeconds);
+    expect(m.totalLeftDisplay).toBe(fmtDuration(totalSeconds / 60));
+    // Not armed: the ordinary subtraction still applies, so this is a
+    // suppression scoped to armed, not a change to the live formula.
+    const liveModel = model({
+      status: "live",
+      frame: frame({ sessionElapsedSeconds: 900, elapsedSeconds: 900 }),
+    });
+    expect(liveModel.totalLeftSeconds).not.toBe(
+      totalSessionSecondsOf(FIXTURE.phases),
+    );
   });
 });
 
@@ -434,7 +683,7 @@ describe("live", () => {
     const easy = buildSurfaceModel({
       phases: EFFORT_MIN.phases,
       program: EFFORT_MIN.program,
-      phase: "live",
+      status: "live",
       frame: frame({
         intervalIndex: 1,
         // A split that would read `"faster"` against the 5' paddle's own
@@ -466,7 +715,7 @@ describe("live", () => {
     const numeric = buildSurfaceModel({
       phases: EFFORT_MIN.phases,
       program: EFFORT_MIN.program,
-      phase: "live",
+      status: "live",
       frame: frame({ intervalIndex: 0 }),
       deviceName: DEVICE,
       actuals: [],
@@ -478,7 +727,7 @@ describe("live", () => {
     const allOut = buildSurfaceModel({
       phases: EFFORT_MAX.phases,
       program: EFFORT_MAX.program,
-      phase: "live",
+      status: "live",
       frame: frame({ intervalIndex: 0, currentSplit: 100 }),
       deviceName: DEVICE,
       actuals: [],
@@ -646,14 +895,14 @@ describe("a zero split is not a reading (7B iteration: the pre-pull tinted 0:00.
     // verdict colour at a rower who had not taken a stroke. (The walk saw
     // it in ochre; that state is blue since the 2026-08-13 repaint. The
     // colour is not what the test is about.)
-    const m = model({ phase: "live", frame: frame({ currentSplit: 0 }) });
+    const m = model({ status: "live", frame: frame({ currentSplit: 0 }) });
     expect(m.pace.display).toBe("—");
     expect(m.pace.absent).toBe(true);
     expect(m.pace.judgement).not.toBe("faster");
   });
 
   it("a real split still judges exactly as before", () => {
-    const m = model({ phase: "live", frame: frame({ currentSplit: 117 }) });
+    const m = model({ status: "live", frame: frame({ currentSplit: 117 }) });
     expect(m.pace.absent).toBe(false);
     expect(m.pace.display).not.toBe("—");
   });
@@ -666,13 +915,13 @@ describe("paused", () => {
   // hero's own no-target/paused treatment is the dash itself — nothing on
   // pane B has a slot for a fourth caption line explaining it.
   it("has no current pace: NOW goes to `—`", () => {
-    const m = model({ phase: "paused", frame: frame({ currentSplit: 117 }) });
+    const m = model({ status: "paused", frame: frame({ currentSplit: 117 }) });
     expect(m.pace.display).toBe("—");
     expect(m.pace.absent).toBe(true);
   });
 
   it("is NOT stale: the erg is still talking, so nothing greys as unvouched", () => {
-    const m = model({ phase: "paused" });
+    const m = model({ status: "paused" });
     expect(m.stale).toBe(false);
     expect(m.linked).toBe(true);
     expect(m.nowLabel).toBe("NOW");
@@ -680,10 +929,22 @@ describe("paused", () => {
 
   it("holds the interval clock's last value rather than blanking it", () => {
     const m = model({
-      phase: "paused",
+      status: "paused",
       frame: frame({ intervalRemaining: { kind: "time", value: 41 } }),
     });
     expect(m.intervalClockValue).toBe("0:41");
+  });
+
+  // connected-axes 2a, task 5: the split hero already suppressed to `—`
+  // above (`livePace`'s own doc comment); the rate hero never did — a
+  // paused erg's spm is PINNED at its last value (the freeze predicate's
+  // own three-metric key holds spm right alongside split and distance),
+  // and rendering that pinned number claimed a live rate reading nobody
+  // has. `liveRate` mirrors `livePace` exactly, one function below it.
+  it("has no current rate either: NOW goes to `—`, not the erg's last pinned spm", () => {
+    const m = model({ status: "paused", frame: frame({ spm: 68 }) });
+    expect(m.rate.display).toBe("—");
+    expect(m.rate.absent).toBe(true);
   });
 });
 
@@ -691,7 +952,7 @@ describe("disconnected: lose and degrade (spec C5)", () => {
   it("greys EVERY actual, whatever it would otherwise have judged", () => {
     const target = firstWorkPhase().targetSplit!;
     const m = model({
-      phase: "disconnected",
+      status: "stale",
       frame: frame({ currentSplit: target - 30, spm: 40 }),
     });
     expect(m.stale).toBe(true);
@@ -702,7 +963,7 @@ describe("disconnected: lose and degrade (spec C5)", () => {
   });
 
   it("relabels NOW as LAST and hollows the indicator", () => {
-    const m = model({ phase: "disconnected" });
+    const m = model({ status: "stale" });
     expect(m.nowLabel).toBe("LAST");
     expect(m.linked).toBe(false);
   });
@@ -711,7 +972,7 @@ describe("disconnected: lose and degrade (spec C5)", () => {
     // The exact caption forbids "TRYING" on its own; the extra
     // `not.toContain("TRYING")` trailer that used to follow could not fail
     // once this line passed (test-integrity sweep, S0g).
-    const m = model({ phase: "disconnected" });
+    const m = model({ status: "stale" });
     expect(m.deviceCaption).toBe(`${DEVICE} · LOST`);
   });
 });
@@ -719,7 +980,17 @@ describe("disconnected: lose and degrade (spec C5)", () => {
 describe("degenerate inputs", () => {
   it("renders before the machine has sent a single frame", () => {
     const m = model({ frame: null });
-    expect(m.pace.display).toBe("—");
+    // Task 3, the mirror: `NO_FRAME` honestly reports `rowingActive: false`
+    // and `distanceMeters: 0` — the same shape the mid-session boundary
+    // mirror keys on — so a `live`-status caller with no frame yet now
+    // mirrors `0/unjudged` rather than dashing. (A real caller reaches this
+    // shape as `armed`, not `live` — Task 2's own "phase ready -> status
+    // armed" — where the mirror instead previews the TARGET; this
+    // `status: "live"` combination is the degenerate one this describe
+    // block is about, and the mirror's job is to say something honest for
+    // it too, not to special-case it away.)
+    expect(m.pace.display).toBe("0:00.0");
+    expect(m.pace.judgement).toBe("within");
     expect(m.intervalClockValue).toBe("—");
     expect(m.intervalLabel).toBe("WARM-UP");
   });
@@ -742,9 +1013,9 @@ describe("degenerate inputs", () => {
     // without a picker result, which is a caller bug — but it renders a
     // word, not `undefined`.
     expect(model({ deviceName: null }).deviceCaption).toBe("PM5");
-    expect(
-      model({ deviceName: null, phase: "disconnected" }).deviceCaption,
-    ).toBe("PM5 · LOST");
+    expect(model({ deviceName: null, status: "stale" }).deviceCaption).toBe(
+      "PM5 · LOST",
+    );
   });
 
   it("renders an empty phase list without inventing a phase", () => {
@@ -753,7 +1024,7 @@ describe("degenerate inputs", () => {
     const m = buildSurfaceModel({
       phases: [],
       program: FIXTURE.program,
-      phase: "live",
+      status: "live",
       frame: frame(),
       deviceName: DEVICE,
       actuals: [],
@@ -878,7 +1149,7 @@ describe("the warm-up is flagged, never counted", () => {
     const m = buildSurfaceModel({
       phases: withRest.phases,
       program: withRest.program,
-      phase: "live",
+      status: "live",
       frame: frame({ intervalIndex: 0, state: "resting" }),
       deviceName: DEVICE,
       actuals: [],
@@ -900,7 +1171,7 @@ describe("the warm-up is flagged, never counted", () => {
       const m = buildSurfaceModel({
         phases: NO_WARMUP.phases,
         program: NO_WARMUP.program,
-        phase: "live",
+        status: "live",
         frame: frame({ intervalIndex: i }),
         deviceName: DEVICE,
         actuals: [],
@@ -996,7 +1267,7 @@ describe("boundaries: where the intervals actually are", () => {
     const bare = buildSurfaceModel({
       phases: NO_WARMUP.phases,
       program: NO_WARMUP.program,
-      phase: "live",
+      status: "live",
       frame: frame(),
       deviceName: DEVICE,
       actuals: [],
@@ -1068,7 +1339,7 @@ describe("boundaries: where the intervals actually are", () => {
     const m = buildSurfaceModel({
       phases,
       program: FIXTURE.program,
-      phase: "live",
+      status: "live",
       frame: frame(),
       deviceName: DEVICE,
       actuals: [],
@@ -1083,7 +1354,7 @@ describe("boundaries: where the intervals actually are", () => {
     const m = buildSurfaceModel({
       phases,
       program: FIXTURE.program,
-      phase: "live",
+      status: "live",
       frame: frame(),
       deviceName: DEVICE,
       actuals: [],
@@ -1109,4 +1380,45 @@ describe("boundaries: where the intervals actually are", () => {
     expect(m.totalSeconds).toBe(3216);
     expect(m.boundaries.seconds.at(-1)!).toBeLessThan(m.totalSeconds);
   });
+});
+
+describe("Task 6: the active row's accrued cell at interval index 2 (the checkpoint the driver no longer subtracts)", () => {
+  it("interval 2 of Filling Low is a real DISTANCE interval — the shape the driver-level walk signature test exercises", () => {
+    expect(FIXTURE.program.intervals[2]!.kind).toBe("distance");
+  });
+
+  it("renders the driver's post-fix intervalAccrued directly — 45s reads '0:45' in the TIME cell (the complement of a distance interval)", () => {
+    // Task 6 (interface-notes.md §20 items 17/24): `computeAccruedForFrame`
+    // no longer subtracts 0x0033's Last Split checkpoint, so a frame at
+    // interval index 2 carries the driver's raw per-interval Elapsed Time
+    // straight through as `intervalAccrued` — this is the on-screen half of
+    // the same fix `driver.test.ts`'s "walk signature" test exercises at
+    // the driver level (45s accrued on that same distance-kind shape).
+    // Pre-fix, the SAME wire tick (with a nonzero lagged checkpoint two
+    // boundaries deep) would have clamped this to `intervalAccrued: {
+    // kind: "time", value: 0 }` — rendering '0:00', not '0:45'.
+    const m = model({
+      frame: frame({
+        intervalIndex: 2,
+        intervalRemaining: { kind: "distance", value: 1602.7 },
+        intervalAccrued: { kind: "time", value: 45 },
+      }),
+    });
+    const activeRow = m.grid.rows[m.grid.activeIndex]!;
+    expect(activeRow.index).toBe(2);
+    // A distance interval's countdown lives in `meters`; its complement
+    // (accrual) lives in `time` — `buildGridModel`'s own ternary.
+    expect(activeRow.time).toBe("0:45");
+    expect(activeRow.meters).toBe("1603"); // countdownDisplayFor rounds
+  });
+
+  // MINOR-5, Task 6 fix round: a third test here (feeding `intervalAccrued:
+  // { kind: "time", value: 0 }` and asserting the display string "0:00")
+  // was deleted rather than kept — it proved only that `fmtDuration(0 / 60)
+  // === "0:00"`, since the model layer cannot tell a genuinely-fresh 0
+  // apart from a checkpoint-clamped 0 (both are the same literal input to
+  // `accruedDisplayFor`, and there is no code path left, post-Task-6, that
+  // still produces the clamped kind). The 45 -> "0:45" test above is the
+  // real discriminating coverage: it fails if the display math regresses in
+  // either direction.
 });

@@ -40,6 +40,7 @@ import {
   nextFreezeRun,
   nextRowingStreak,
   useMonitorSession,
+  type ConnectedPhase,
   type FreezeRun,
   type MonitorSessionDeps,
   type RunIdentity,
@@ -1815,6 +1816,76 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
       entries.find((e) => e.kind === "handoff-released")?.detail,
     ).toContain("final-boundary");
   });
+
+  it("Task 7, THE ORDERING PIN: a reconcile that fires at TEARDOWN — before its own 3000ms deadline — lands in the STASH SNAPSHOT itself, not merely the in-memory ring (§22's own recorded trap: an entry written after the stash is taken dies with the tab)", async () => {
+    // Same shape as "THE DROPPED SPLIT, END TO END" above, but the rower
+    // leaves BEFORE the driver's own deadline ever fires — the exact window
+    // the twin defect lost: `disconnect()` used to just cancel the pending
+    // reconcile, and even after draining it, the hook's OLD order
+    // (unsubscribe, then disconnect) would have emitted the drain into an
+    // empty listener set.
+    const timer = manualSchedule();
+    const driverTimer = manualSchedule();
+    let driverMs = 0;
+    const { result, fake, unmount } = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [
+          status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+          finishedAt(200),
+        ],
+      },
+      {
+        schedule: timer.schedule,
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          now: () => driverMs,
+          schedule: driverTimer.schedule,
+        },
+      },
+    );
+
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    tick(fake, 100);
+    tick(fake, 100);
+
+    expect(result.current.phase).toBe("ended");
+    expect(result.current.handoffHeld).toBe(true);
+
+    // 0x0039 arrives inside the grace and is HELD — nothing is filed yet,
+    // and the deadline that would normally file it is still pending.
+    driverMs = 400;
+    act(() => {
+      fake.deliverSummary({ elapsedSeconds: 62.5, meters: 214 });
+    });
+    expect(driverTimer.pending()?.ms).toBe(3000);
+    expect(result.current.actuals).toHaveLength(0);
+
+    // The rower leaves. Teardown must reconcile BEFORE it stashes: if it
+    // stashed first, this snapshot would be serialized before the fill
+    // ever reached the ring, and every assertion below would fail even
+    // though the in-memory ring (unreachable from this test, and unread by
+    // design — the RING is not the artifact that survives the tab) had
+    // gone on to record it a line later.
+    unmount();
+
+    const stashed = sessionStorage.getItem("ergomatic:last-monitor-log");
+    expect(stashed).not.toBeNull();
+    const entries = JSON.parse(stashed!) as { kind: string; detail: string }[];
+    const verdict = entries.find((e) => e.kind === "summary-reconciled");
+    expect(verdict?.detail).toContain("filled-from-summary");
+    const filed = entries.find((e) => e.kind === "record-actual");
+    expect(filed?.detail).toContain("accepted");
+    expect(filed?.detail).toContain("finalBoundary=true");
+    expect(
+      entries.find((e) => e.kind === "handoff-released")?.detail,
+    ).toContain("final-boundary");
+    // The deadline was CONSUMED at teardown, not left dangling — the same
+    // timer-hygiene bar every other test in this file holds `teardown` to.
+    expect(driverTimer.pending()).toBeNull();
+  });
 });
 
 describe("useMonitorSession: ending", () => {
@@ -1875,6 +1946,61 @@ describe("useMonitorSession: ending", () => {
     // the one a later never-rowed attempt (a failed pairing, a
     // connect-then-cancel) cannot clobber.
     expect(sessionStorage.getItem("ergomatic:last-rowed-log")).toBe(stashed);
+  });
+
+  it("Task 7: END mid-session writes final-totals at TERMINATE-DISPATCH time — the machine's own terminated frame need not arrive at all (spec 1's own walk evidence: 'the ring ended at the terminate write'; a real library workout, Filling Low)", async () => {
+    sessionStorage.removeItem("ergomatic:last-monitor-log");
+    const { result, fake, unmount } = harness({
+      program: LIBRARY.program,
+      events: [status(100, { elapsedSeconds: 60, distanceMeters: 300 })],
+    });
+    await connect(result);
+    await programAndArm(result, fake, LIBRARY.program, LIBRARY_IDENTITY);
+    tick(fake, 100);
+    expect(result.current.phase).toBe("live");
+
+    // The monitor goes silent (fix-round HIGH-2's `injectTimeout`): no ack
+    // for the terminate ever comes back, so the fake's own synthetic
+    // terminated-status echo (`onArmedFrameComplete`, `fake.ts`) — the
+    // trigger the ORDINARY `final-totals` write (`maybeEmitFrame`'s
+    // terminal branch) waits for — never fires either. This is the walk's
+    // own shape, not a fake-only artifact: on real hardware the machine's
+    // GENERAL_STATUS report of its own "terminated" state is a separate,
+    // independently-timed notification that spec 1's re-walk found arrived
+    // AFTER teardown had already stashed and hung up.
+    fake.injectTimeout();
+    await act(async () => {
+      void result.current.endSession();
+      await flush();
+    });
+    expect(result.current.phase).toBe("ended");
+    expect(result.current.endedBy).toBe("user");
+
+    unmount();
+
+    const stashed = sessionStorage.getItem("ergomatic:last-monitor-log");
+    expect(stashed).not.toBeNull();
+    const entries = JSON.parse(stashed!) as { kind: string; detail: string }[];
+    const finalTotals = entries.filter((e) => e.kind === "final-totals");
+    // Exactly one — but NOT because both call sites guard against a
+    // double-write (I-2, final whole-branch review: `recordFinalTotals`'s
+    // own doc comment used to claim that and it was false). This test
+    // passes because `fake.injectTimeout()` above suppresses the machine's
+    // own terminal status frame from ever arriving, so `maybeEmitFrame`'s
+    // terminal branch — the ONLY call site with no guard of its own — never
+    // runs at all; the entry below comes solely from `terminate()`'s
+    // guarded call. A run where the machine's own terminal frame DOES
+    // arrive after `terminate()` has already written one gets a SECOND,
+    // near-identical entry (empirically reproduced, progress.md's own CARRY
+    // line) — dedupe stays deferred, this test does not exercise that path.
+    expect(finalTotals).toHaveLength(1);
+    expect(finalTotals[0]!.detail).toContain("accumulator=");
+    expect(finalTotals[0]!.detail).toContain("accumulatorElapsed=");
+    expect(finalTotals[0]!.detail).toContain("machineTotal=");
+    // The real program this run was armed with, not a placeholder count.
+    expect(finalTotals[0]!.detail).toContain(
+      `of ${LIBRARY.program.intervals.length} programmed`,
+    );
   });
 
   it("a session that never rowed does NOT touch the rowed-only stash", async () => {
@@ -3120,6 +3246,51 @@ describe("the paused derivation, replayed frame by frame from the record", () =>
     expect(run.frames).toBe(1);
     expect(isPausedRun(run)).toBe(false);
   });
+
+  // TASK 5 STEP 4 (connected-axes 2a): "rest suppression is NOT new code" —
+  // `deriveActivity`'s own `"unknown"` for a non-`live` phase already
+  // covers a rest that happens BEFORE the erg ever goes live, and this
+  // predicate's `distanceMeters <= 0` guard (above) already covers a rest
+  // mid-session, which is the case pinned here. Not a new mechanism, one
+  // extra frame count on the existing guard: a REST that runs far longer
+  // than `PAUSED_FRAME_HOLD` — the shape a real 3:00 rest between work
+  // pieces actually has, not the single reset frame the test above uses —
+  // never accumulates a single frame toward the hold, because every one of
+  // those frames resets the count outright rather than merely skipping the
+  // increment. `isPausedRun` can therefore never see anything but `frames:
+  // 0` from a resting stream, however long it runs.
+  //
+  // THE COMMENT THE BRIEF ASKS FOR: this guarantee lives ENTIRELY in
+  // `nextFreezeRun`'s `frame.state !== "rowing"` branch (above) — the
+  // moment `activity`/`frozen` is re-derived from anything else (a status
+  // word, a different frame field, a second freeze predicate written for a
+  // different screen), this pin stops proving anything about THAT path and
+  // must be re-derived alongside it, not assumed to still hold.
+  it("a resting STREAM, arbitrarily long, never accumulates a single frame toward frozen", () => {
+    // `distanceMeters: 30`, NOT the factory's default 0 — a real rest holds
+    // "distance-still" (this predicate's own doc comment: "resting
+    // legitimately freezes spm 0 / split 0 / distance-still for its whole
+    // duration"), i.e. banked at whatever the just-finished work interval
+    // left it, not reset to zero. A resting fixture at distance 0 would
+    // pass this test off the `distanceMeters <= 0` guard ALONE and never
+    // exercise the `state !== "rowing"` branch at all — this value is
+    // chosen specifically so the mutation below (dropping the state check)
+    // is the one thing that can make this test fail.
+    const resting = frame({
+      state: "resting",
+      distanceMeters: 30,
+      currentSplit: 0,
+      spm: 0,
+    });
+    let run: FreezeRun | null = null;
+    // Ten resting frames — well past `PAUSED_FRAME_HOLD` (4) — is a real
+    // rest bout's own shape, not a synthetic edge case.
+    for (let i = 0; i < 10; i += 1) {
+      run = nextFreezeRun(run, resting);
+      expect(run.frames).toBe(0);
+      expect(isPausedRun(run)).toBe(false);
+    }
+  });
 });
 
 describe("nextRowingStreak: the rowingActive fallback's own counter", () => {
@@ -3153,11 +3324,14 @@ describe("nextRowingStreak: the rowingActive fallback's own counter", () => {
   });
 });
 
-describe("useMonitorSession: paused, end to end", () => {
+describe("useMonitorSession: frozen (the freeze predicate), end to end", () => {
   /** The recorded stop, delivered as real status ticks through the fake so
    *  the whole path — wire bytes, driver, hook — is exercised, not just the
-   *  predicate. */
-  it("four frozen frames put the session in paused; the next change puts it back", async () => {
+   *  predicate. `phase` stays `"live"` throughout (task 5, connected-axes
+   *  2a: `"paused"` retired off `ConnectedPhase` — a frozen session never
+   *  actually left `"live"`, so this test now pins `frozen` instead of a
+   *  phase transition that no longer happens). */
+  it("four frozen frames publish frozen:true; the next change clears it — phase never leaves live", async () => {
     const frozen = {
       elapsedSeconds: 57.78,
       distanceMeters: 108.4,
@@ -3185,17 +3359,38 @@ describe("useMonitorSession: paused, end to end", () => {
 
     tick(fake, 100);
     expect(result.current.phase).toBe("live");
+    expect(result.current.frozen).toBe(false);
     tick(fake, 100);
     tick(fake, 100);
     tick(fake, 100);
-    // Three frozen frames is still LIVE — the boundary-reset margin.
+    // Three frozen frames is still NOT frozen — the boundary-reset margin.
     expect(result.current.phase).toBe("live");
+    expect(result.current.frozen).toBe(false);
 
     tick(fake, 100);
-    expect(result.current.phase).toBe("paused");
+    expect(result.current.phase).toBe("live");
+    expect(result.current.frozen).toBe(true);
 
     tick(fake, 100);
     expect(result.current.phase).toBe("live");
+    expect(result.current.frozen).toBe(false);
+  });
+
+  // THE ENUM-READER PIN'S OWN COMPILE-TIME HALF (task 5 step 1, requirement
+  // 4 — the source-sweep pin lives in `connectedPhaseReaders.test.ts`; this
+  // is the type-level guarantee a grep cannot give). Same idiom
+  // `connectedAxes.test.ts`'s own `@ts-expect-error` pin uses for "an
+  // eleventh phase" (now "a tenth"): if `"paused"` were ever re-added to
+  // `ConnectedPhase`, this line would stop erroring, `@ts-expect-error`
+  // would become an UNUSED directive, and `pnpm typecheck` would fail on
+  // that alone — a regression this test catches without ever running.
+  it('ConnectedPhase no longer admits "paused" (compile-time pin)', () => {
+    // @ts-expect-error — "paused" was removed from `ConnectedPhase`
+    // (connected-axes 2a, task 5): the freeze predicate now publishes
+    // through `frozen` (Task 1's fact) with `phase` staying `"live"`, never
+    // through a ninth phase value.
+    const phase: ConnectedPhase = "paused";
+    expect(phase).toBe("paused");
   });
 
   it("the recorded no-rest boundary reset keeps the session LIVE all the way through", async () => {

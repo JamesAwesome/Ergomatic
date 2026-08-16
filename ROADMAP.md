@@ -992,10 +992,12 @@ still holds: no pairing, subscribe-only, Web Bluetooth is Chromium-only.
       sequencing over a pending-ack queue for coalesced BLE notifications,
       a state machine with terminal-state latching (Appendix E's auto-cycle
       never un-finishes a session), an optional tick-driven ack-timeout
-      policy, and `intervalRemaining` rooted on 0x0033's own Last Split
-      Time/Distance fields; `src/monitor/transports/fake.ts` simulates a
-      real PM5 end to end for CI (byte-for-byte programming verification,
-      six injection hooks)
+      policy, and `intervalRemaining`/`intervalAccrued` reading 0x0031's own
+      per-interval Elapsed Time/Distance pair directly (CR2 spec 2a Task 6
+      deleted an earlier 0x0033 Last Split checkpoint subtraction the
+      inversion result falsified — interface-notes.md §20 items 17/24);
+      `src/monitor/transports/fake.ts` simulates a real PM5 end to end for
+      CI (byte-for-byte programming verification, six injection hooks)
 - [x] `src/monitor/monitorRun.ts`: the monitor-driven session record
       (`MonitorRun`, localStorage, mirroring `session/run.ts`'s idiom), the
       cross-clear rule (creating a `MonitorRun` clears any `SessionRun`),
@@ -1791,11 +1793,18 @@ the merge, which is what the exit had always asked for, just later.
 ## Phase CR2 — Connected cleanup
 
 **Status:** IN FLIGHT as three spec cycles (James, 2026-08-15): spec 1
-"numbers" (R0 + item 0 + F7) is IMPLEMENTED — PR #99 open, all gates green,
-**merge gated on the hardware walk**, not CI; F6 moved to spec 2 by ruling.
-Spec 2 "state axes" (items 3 + 1 + F6) and spec 3 "redesign" (items 2 + 4,
+"numbers" (R0 + item 0 + F7) MERGED (PR #99, 2026-08-15, `7c2be9f`) — its
+follow-on dev-only record-and-replay harness merged too (PR #100 Stage A,
+PR #101's stack-reap fix); F6 moved to spec 2 by ruling, then split again.
+**Spec 2 "state axes" (items 3 + 1 + F6) is now two PRs** (James's ruling,
+design spec §4): **spec 2a** — axes, mirror surface, pause state, driver
+lifecycle, the interval clock fix, the terminal path, the suspicion verdict
+— is IMPLEMENTED, **PR #102 open, in review**; **spec 2b** — F6
+alone, the one piece carrying a stored-shape field (`endedBy`) and a
+destructive action — is next, sequenced after 2a. The reducer this spec
+once proposed is DEFERRED to its own spec. Spec 3 "redesign" (items 2 + 4,
 design handoff committed at `docs/design/handoffs/2026-08-15-connected-v2/`)
-are not started. Originally scoped by James 2026-08-13 immediately
+is not started. Originally scoped by James 2026-08-13 immediately
 after v0.9.0 shipped: "I want to work next on cleanup for this phase" —
 three items, below. **AMENDED the same evening**, after he rowed "Sun
 fret" on v0.9.0 and photographed the PM5 beside the phone: two more items,
@@ -1804,7 +1813,10 @@ so it leads. **Items 2 and 4 are both going through Claude design first**
 — they are the same question asked twice, and answering them apart risks
 two answers. **Phase CP ("the pause that isn't") is folded in as
 item 1 and no longer has its own section**; it was filed 2026-08-12 and
-would otherwise be a second home for the same work.
+would otherwise be a second home for the same work. **Release deferred to
+the whole phase** (James's ruling): CR2 releases only when specs 2 and 3
+are both done; the walk rides the phase's next erg session, not this PR's
+merge.
 **Goal:** finish what Phase CR started. Everything here was found by the
 wave itself, by its adversarial reviews, or by James on the erg, and every
 item is written down with the evidence rather than the symptom, because

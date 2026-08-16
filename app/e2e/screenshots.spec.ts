@@ -2033,6 +2033,16 @@ async function openLogMonitorForm(
           cumulativeElapsedSeconds: 15,
           cumulativeDistanceMeters: 100,
         },
+        // WIRE-IMPOSSIBLE (M-2, final whole-branch review — the sixth site
+        // of this shape, `connected.spec.ts`'s own naming idiom copied
+        // here): elapsed/distance continue cumulatively from interval 0's
+        // own boundary above (15s/100m) instead of resetting per-interval,
+        // the same fixture-authoring shape review IMPORTANT-2 named at Task
+        // 6 fix round. Benign here — this frame only advances the grid's
+        // active row into interval 1 (the comment above names why that
+        // matters) and feeds `log-monitor.png`, which renders the
+        // diagnostics log's own recorded actuals, not METERS LEFT. Deferred
+        // with the other five, not fixed this round.
         {
           atMs: 3900,
           kind: "status" as const,
@@ -2246,6 +2256,16 @@ async function showConnectedFixture(page: Page, name: string): Promise<void> {
 }
 
 const CONNECTED_STATES = [
+  // I-1, final whole-branch review fix wave: frame 2D's "first frame"
+  // (before the first stroke) — the state this suite had no picture of at
+  // all. `e2e/fixtures/connected-armed.html` is a static `outerHTML`
+  // snapshot of the REAL `ConnectedSurface`, same idiom as every other
+  // fixture in this array (`showConnectedFixture`'s own header), rendered
+  // at `status: "armed"` with the mirror test's own ghost values (spm 46,
+  // currentSplit 251 — `surfaceModel.test.ts`'s "armed's first frame"
+  // describe block) so the capture can visually prove the ghost is
+  // suppressed, not merely absent because nothing was ever carried over.
+  "connected-armed",
   "connected-pane-live",
   // connected-revamp Task 4b (design spec §5b): the WARM-UP state, which had
   // no committed picture of its own — every other live fixture is already

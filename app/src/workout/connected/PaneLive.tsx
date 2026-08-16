@@ -73,18 +73,31 @@ export default function PaneLive({ model }: { model: SurfaceModel }) {
   // while the display string had nothing else to say.
   const rateAbsent = model.targetRate.absent;
   const paceTargetAbsent = model.targetSplit.absent;
-  // `model.stale` already distinguishes "the link is gone" from "the erg is
-  // just paused" (paused values hold, they are not stale) — the same rule
-  // `nowLabel` uses for the split hero's own NOW/LAST swap, mirrored here
-  // rather than a second label field for one string.
-  const rateLabel = model.stale ? "LAST" : "NOW";
+  // BOTH heroes wear the SAME label — `model.nowLabel` used to be read only
+  // by the split hero, with the rate hero re-deriving an identical string
+  // locally (`model.stale ? "LAST" : "NOW"`, "mirrored here rather than a
+  // second label field for one string"). I-1 (final whole-branch review)
+  // added a THIRD case — armed's empty string — and a re-derivation that
+  // only checked `stale` silently went stale itself: it would have kept
+  // printing `NOW` at armed while the split hero correctly went blank. One
+  // field, read twice, cannot disagree with itself the way two
+  // computations of "the same" rule can.
+  const rateLabel = model.nowLabel;
 
   return (
     <div className="connected-pane connected-pane-live">
       <ConnectionLine model={model} trailing={model.intervalLabelShort} />
       <div className="connected-heroes">
         <div className="connected-hero connected-hero-split">
-          <span className="connected-hero-label">{model.nowLabel}</span>
+          {/* NOTHING AT ALL when armed (I-1: `model.nowLabel` is `""` there,
+              never a bare span) — the same "absent, not blank" idiom the
+              target-ref caption below already uses, for the same measured
+              reason: an empty node still occupies a flex slot and the
+              accessibility tree. Frame 2D draws no label over the heroes at
+              all before the first stroke. */}
+          {model.nowLabel !== "" && (
+            <span className="connected-hero-label">{model.nowLabel}</span>
+          )}
           {/* The unit sits BESIDE the numeral, on its baseline (testers via
               James, 2026-08-13) — hence the row wrapper: `.connected-hero`
               is a flex COLUMN, so an unwrapped unit span becomes its own
@@ -141,7 +154,9 @@ export default function PaneLive({ model }: { model: SurfaceModel }) {
         </div>
         <span className="connected-hero-divider" aria-hidden="true" />
         <div className="connected-hero connected-hero-rate">
-          <span className="connected-hero-label">{rateLabel}</span>
+          {rateLabel !== "" && (
+            <span className="connected-hero-label">{rateLabel}</span>
+          )}
           <span className="connected-hero-reading">
             <span className={judgedClass("connected-hero-value", model.rate)}>
               {model.rate.display}

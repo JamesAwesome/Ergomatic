@@ -114,11 +114,12 @@ export interface MonitorFrame {
   //   one accrues time. Same absence rule as `intervalRemaining`: `null`
   //   under the identical conditions (no program armed, or no interval
   //   current) — the two fields are always both-null or both-set together,
-  //   since `src/monitor/driver.ts` computes them from the same guard and
-  //   the same per-interval baseline. `elapsedSeconds`/`distanceMeters` on
-  //   this frame are the wrong inputs for this (see the sibling field's own
-  //   caveat and `driver.ts`'s `computeAccruedForFrame`); this reads the
-  //   same 0x0033 checkpoint `intervalRemaining` already trusts.
+  //   since `src/monitor/driver.ts` computes them from the same guard.
+  //   `elapsedSeconds`/`distanceMeters` on this frame ARE the inputs (CR2
+  //   spec 2a Task 6): 0x0031's pair is per-interval on the wire, and the
+  //   old 0x0033 Last Split checkpoint subtraction was DELETED after the
+  //   checkpoint was measured to read 0 through interval index 1 and to
+  //   lag one boundary after (interface-notes.md §20 items 17/24).
   state: "idle" | "armed" | "rowing" | "resting" | "finished" | "terminated";
   // ^ maps the PM's WORKOUTSTATE honestly: "armed" = WAITTOBEGIN (the
   //   PM starts on the first stroke — there is NO start command;
@@ -297,6 +298,22 @@ export interface MonitorDriver {
   program(p: WorkoutProgram): Promise<void>;
   terminate(): Promise<void>; // the documented terminate command — no start() exists
   events: (cb: (e: MonitorEvent) => void) => () => void;
+  /**
+   * Drains a still-pending summary-gate deadline SYNCHRONOUSLY, answering
+   * with whatever evidence this run has already earned rather than
+   * leaving it to a timer that may never get the chance to fire (CR2
+   * spec 2a, Task 7 — "one terminal path"). A no-op when nothing is
+   * pending, which is every call but a teardown that lands mid-grace.
+   *
+   * The caller (`useMonitorSession.ts`'s `teardown`) MUST call this
+   * before it unsubscribes its own listener: a verdict this drains emits
+   * `intervalComplete` synchronously, and a listener that is already gone
+   * never hears it — the exact defect this method exists to close.
+   * `disconnect()` applies the same rule as a second line of defence, but
+   * by the time it runs the caller's listener is typically already
+   * unsubscribed, so it cannot substitute for calling this first.
+   */
+  reconcile(): void;
   disconnect(): Promise<void>;
 }
 

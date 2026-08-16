@@ -1063,7 +1063,9 @@ export function createPm5Driver(
   let lastRawFrameIntervalIndex: number | null = null;
   let lastLoggedFrameState: MonitorFrame["state"] | null = null;
   /** The last raw 0x0031 payload, byte-for-byte — see the 0x0031 handler's
-   *  own comment; read only by the terminal-raw entry. */
+   *  own comment; read by the terminal-raw entry and, since Task 8, by
+   *  `suspicious-terminal` too (the same bytes, deliberately — see that
+   *  entry's own comment). */
   let lastRaw0x0031: Uint8Array | null = null;
   /** THE SESSION REGISTER MAP (CR2 spec 1, replacing walk 4's fold).
    *
@@ -1191,6 +1193,18 @@ export function createPm5Driver(
    *  exists to avoid, caught once already for `"frame"`/state (comment
    *  above `lastLoggedFrameState`) and repeated here until I1. */
   let lastLoggedTwd: number | null = null;
+  /** THE SUSPICION VERDICT's own half of "in hand at the terminal tick"
+   *  (Task 8, log-only, fail-open). Set unconditionally at the very top of
+   *  `noteSummary`, before that gate's decode/`run`/`graceIsOpen` checks —
+   *  never read `run.summaryInGrace` for this, which is `null` on exactly
+   *  the shape this flag exists to catch (walk 2026-08-15, re-walk row 1 /
+   *  session-c: the 0x0039 arrived BEFORE the terminal frame, so no grace
+   *  was open yet, `noteSummary`'s `!graceIsOpen` branch logged
+   *  `out-of-window` and stored nothing — a `summaryInGrace`-based flag
+   *  would read `null` there and convict a run that is not suspicious at
+   *  all). "0x0039 seen" is a fact about the NOTIFICATION arriving, not
+   *  about whether the gate accepted it. */
+  let summarySeen = false;
   const seen = { general: false, as1: false, as2: false };
   /**
    * D4 (Task 1's hardware verdict, interface-notes.md §18 #3): the
@@ -1596,17 +1610,11 @@ export function createPm5Driver(
     // happened yet — always lands inside the hold. So: cancel the wait,
     // then let the reconcile answer with whatever evidence this run has
     // already earned — filled, split-won, or declined; a link death is not
-    // a reason to keep a resolvable verdict out of the trace.
-    if (pendingSummaryReconcile !== null) {
-      pendingSummaryReconcile();
-      pendingSummaryReconcile = null;
-      // `armSummaryReconcile` is armed from exactly one call site (the
-      // `finished` branch above, immediately after `activeRun!.closed =
-      // true`), and `program()`'s own replacement path cancels this same
-      // field before a new run ever opens — so a deadline still pending
-      // here can only name the CURRENT `activeRun`, closed and non-null.
-      if (activeRun !== null) reconcileSummary(activeRun);
-    }
+    // a reason to keep a resolvable verdict out of the trace. Extracted to
+    // `drainSummaryReconcile` (Task 7): `disconnect()` below now applies
+    // this identical rule for a caller-initiated hang-up, which used to
+    // discard the same verdict this comment refuses to.
+    drainSummaryReconcile();
     if (activeRun !== null && activeRun.closed) {
       // The old `terminalLatched` flag's SECOND consumer, re-scoped to the
       // run (Task 4, spec §4: replaced, never deleted). Appendix E (cited
@@ -1691,22 +1699,26 @@ export function createPm5Driver(
    * how far INTO the current interval `frame` represents, in the
    * interval's own unit.
    *
-   * Fix-round HIGH-2 (re-rooted per review): sourced from 0x0033's own
-   * "Last Split Time"/"Last Split Distance" fields (`RawPm5Status.
-   * lastSplitTimeSeconds`/`lastSplitDistanceMeters`, interface-notes.md
-   * §10 offset 14-19) — the session-cumulative point at which the CURRENT
-   * interval began, reported on EVERY regular status tick, needing no
-   * local observation history at all. `frame.elapsedSeconds`/
-   * `distanceMeters` minus that pair is "how far into this interval",
-   * correct on the VERY FIRST tick the driver ever observes for a given
-   * interval (unlike an earlier version of this function, which rooted a
-   * checkpoint at whichever tick it happened to see first — permanently
-   * wrong for any interval whose first observed tick wasn't also its
-   * true start, e.g. a late-arriving first tick, or a reconnect that
-   * skipped straight into the interval already in progress; see the
-   * report and interface-notes.md §15 #8 for the assumption this now
-   * rests on instead). No driver-local state is needed to compute this —
-   * every input is read straight from the current merged `raw`/`frame`.
+   * Task 6 (CR2 spec 2a, interface-notes.md §20 items 17/24): NO checkpoint
+   * subtraction — `frame.distanceMeters`/`elapsedSeconds` (0x0031's own
+   * Distance/Elapsed Time pair) IS progress into the current interval
+   * already, because that pair is per-interval on the wire to begin with
+   * (item 12: it resets at every boundary). A fix-round HIGH-2 predecessor
+   * of this function subtracted 0x0033's "Last Split Time"/"Last Split
+   * Distance" fields from this same pair on the theory that they were
+   * session-cumulative and 0x0031 was too — correct by construction against
+   * the fake's own self-consistent fiction of the day, but never checked
+   * against a real capture. The inversion (225+161 frames replayed off
+   * `docs/monitor/sessions/walk-2026-08-15/`, zero mismatches) settled
+   * item 24's open question the other way: the checkpoint reads ZERO
+   * through interval indices 0 and 1, then LAGS one boundary behind from
+   * index 2 on, which makes the old subtraction a harmless no-op at
+   * indices 0-1 (0 subtracted is nothing) and a genuine wrong answer from
+   * index 2 on — walk 4's own "intervalRemaining correct as it stood"
+   * verdict, cited by the code this replaces, was drawn from a
+   * single-interval capture that could never have exercised the lag at
+   * all. No driver-local state is needed here now, same as before: every
+   * input is read straight from the current merged `raw`/`frame`.
    */
   function computeRemainingForFrame(
     frame: MonitorFrame,
@@ -1714,25 +1726,23 @@ export function createPm5Driver(
     const p = armedProgram();
     if (!p || frame.intervalIndex === null) return null;
     const interval = p.intervals[frame.intervalIndex];
-    const status = raw as RawPm5Status;
     const progress =
       interval?.kind === "distance"
-        ? frame.distanceMeters - status.lastSplitDistanceMeters
-        : frame.elapsedSeconds - status.lastSplitTimeSeconds;
+        ? frame.distanceMeters
+        : frame.elapsedSeconds;
     return computeIntervalRemaining(interval, progress);
   }
 
   /**
    * `intervalAccrued`'s per-frame wiring — the exact mirror of
-   * `computeRemainingForFrame` above, sharing the SAME 0x0033 "Last Split"
-   * checkpoint pair for the OTHER dimension (ROADMAP CL item 7): both
-   * `lastSplitTimeSeconds` and `lastSplitDistanceMeters` already arrive on
-   * every regular status tick regardless of which one the interval counts
-   * down, so no new wire data is needed, and the two functions' progress
-   * ternaries are exact mirrors of each other (whichever dimension
-   * `computeRemainingForFrame` does NOT read, this one does). Same guard as
-   * its sibling — `!p || frame.intervalIndex === null` — so the two fields
-   * are always both-null or both-set on any given frame.
+   * `computeRemainingForFrame` above, reading the SAME 0x0031 per-interval
+   * pair's OTHER field for the complement dimension (ROADMAP CL item 7):
+   * whichever of `elapsedSeconds`/`distanceMeters`
+   * `computeRemainingForFrame` does NOT read, this one does, with no
+   * checkpoint subtraction here either (Task 6, same citation as its
+   * sibling above). Same guard as its sibling — `!p || frame.intervalIndex
+   * === null` — so the two fields are always both-null or both-set on any
+   * given frame.
    */
   function computeAccruedForFrame(
     frame: MonitorFrame,
@@ -1740,11 +1750,10 @@ export function createPm5Driver(
     const p = armedProgram();
     if (!p || frame.intervalIndex === null) return null;
     const interval = p.intervals[frame.intervalIndex];
-    const status = raw as RawPm5Status;
     const progress =
       interval?.kind === "distance"
-        ? frame.elapsedSeconds - status.lastSplitTimeSeconds
-        : frame.distanceMeters - status.lastSplitDistanceMeters;
+        ? frame.elapsedSeconds
+        : frame.distanceMeters;
     return computeIntervalAccrued(interval, progress);
   }
 
@@ -2057,39 +2066,66 @@ export function createPm5Driver(
     // on-device; both walk rings end without one). The ring survives via the
     // sessionStorage stash, so writing the finals HERE means a re-walk needs
     // exactly one photograph (the PM5 summary) and zero phone timing.
-    {
-      const n = (v: number) => Number(v.toFixed(1));
-      const regs = [...session.seen.entries()]
-        .sort(([a], [b]) => a - b)
-        .map(
-          ([k, r]) => `${k}:(${n(r.elapsedSeconds)}s,${n(r.distanceMeters)}m)`,
-        )
-        .join(" ");
-      const programmed = activeRun!.program.intervals.length;
-      log.record(
-        "final-totals",
-        `accumulator=${n(lastEmittedTotals.distanceMeters)}m ` +
-          `accumulatorElapsed=${n(lastEmittedTotals.elapsedSeconds)}s ` +
-          `machineTotal=${raw.totalWorkDistanceMeters ?? "?"}m ` +
-          `durationType=${raw.workoutDurationType ?? "?"} ` +
-          `registers=${session.seen.size} of ${programmed} programmed ${regs}`,
-      );
-    }
+    //
+    // ONE OF TWO CALL SITES (Task 7, "one terminal path" — `recordFinalTotals`'s
+    // own doc comment names the other, `terminate()`). This one fires on the
+    // machine's OWN terminal frame — the ordinary path, and the one a natural
+    // finish always takes. The END/cancel path takes the other: that frame
+    // routinely arrives after teardown has already stashed and hung up
+    // (spec 1's walk evidence), so it cannot be the only place these totals
+    // are written.
+    recordFinalTotals(activeRun!);
     // THE TERMINAL FRAME'S OWN BYTES (walk 2026-08-15, the mid-rest
     // finished frame — see `lastRaw0x0031`'s declaration comment). One
     // entry per session end, so the flood argument that keeps 0x0031 out
     // of the raw-hex notify branch does not apply here.
-    log.record(
-      "terminal-raw",
+    const terminalRawDetail =
       lastRaw0x0031 === null
         ? `state=${frame.state} 0x0031=never seen`
-        : `state=${frame.state} 0x0031=${toHex(lastRaw0x0031)}`,
-    );
+        : `state=${frame.state} 0x0031=${toHex(lastRaw0x0031)}`;
+    log.record("terminal-raw", terminalRawDetail);
     // The TWD verdict runs HERE, not at 0x0039-time — the machine settles
     // its own total at the finish (re-walk 2026-08-15, seq 36's false
     // "differ by 183.8m" against a TWD one tick from settling).
     recordTwdVerdict(activeRun);
+    // THE SUSPICION VERDICT (Task 8, spec §2, PM/antagonist-corrected) —
+    // LOG-ONLY and FAIL-OPEN: nothing below this block, and nothing this
+    // block itself does, changes any close behaviour — no field on `run`
+    // is touched, no event is altered, `workoutComplete`/`terminated` still
+    // emit exactly as before. `terminated` is NEVER suspicious (a
+    // mid-terminate boundary carries no stable identity, CSAFE-DEF
+    // footnote 12 via interface-notes.md §19.8 — a short terminate is the
+    // ORDINARY shape for that ending, not evidence of a kill), so this
+    // gates on `frame.state === "finished"` and does not run at all for
+    // the other branch below.
+    //
+    // A `finished` is UNSUSPICIOUS iff EITHER a 0x0039 was seen for this
+    // run (`summarySeen`, set unconditionally at the top of `noteSummary` —
+    // deliberately NOT `run.summaryInGrace`, which is `null` on exactly
+    // the shape this OR exists to catch: session-c, walk 2026-08-15, the
+    // 0x0039 arrived BEFORE the terminal frame and was discarded
+    // `out-of-window` because no grace was open yet) OR this run has
+    // recorded at least `programmed − 1` of its own intervals — one short
+    // is the ordinary "final boundary lands one notification after the
+    // terminal frame" shape the finish grace right below already exists
+    // for, not a kill. All four committed rings clear this bar (session-a
+    // 2 of 3, session-b 1 of 2 — both exactly N−1; session-c by the
+    // summary half; session-d 2 of 2) — see `sessionTotals.test.ts`'s own
+    // "suspicion verdict" describe block, which also carries the one shape
+    // that DOES trip it (mid-program, no summary, well short of N−1 — the
+    // afternoon walk's session-killer signature, hand-built there since
+    // that ring itself was never committed).
+    //
+    // Admitted residual, not silently accepted: a 1-interval program can
+    // never trip this (`programmed − 1 === 0`, and an actuals count is
+    // never negative, so the OR's right side is always already satisfied).
     if (frame.state === "finished") {
+      const programmedCount = activeRun!.program.intervals.length;
+      const unsuspicious =
+        summarySeen || activeRun!.recordedActuals.size >= programmedCount - 1;
+      if (!unsuspicious) {
+        log.record("suspicious-terminal", terminalRawDetail);
+      }
       // THE FINISH GRACE opens here and nowhere else (walk 5, re-bounded on
       // walk day 3 — `activeRun.finishGraceUntil`'s own doc comment carries
       // the capture and `FINISH_GRACE_MS` the measurement).
@@ -2226,8 +2262,17 @@ export function createPm5Driver(
    * here would displace a split that was merely late, which is the exact
    * loss R1 exists to prevent (the split carries per-interval averages
    * that no whole-workout summary can reconstruct).
+   *
+   * `summarySeen` (Task 8) is set UNCONDITIONALLY on the very first line,
+   * before the decode below and before any of the three gates that follow
+   * it — deliberately not derived from anything this function decides.
+   * "0x0039 arrived" and "0x0039's evidence was accepted" are different
+   * facts (session-c, walk 2026-08-15: the notification arrived and was
+   * discarded `out-of-window` in the same tick, because no grace was open
+   * yet) and only the first one is what the suspicion verdict needs.
    */
   function noteSummary(bytes: Uint8Array): void {
+    summarySeen = true;
     const summary = parseEndOfWorkoutSummary(bytes);
     if (summary === null) {
       // A RECEIPT-LEVEL note, under its own kind, NOT a `summary-reconciled`
@@ -2367,6 +2412,64 @@ export function createPm5Driver(
     // evidence, verdicts on unsettled numbers are noise.
   }
 
+  /** THE `final-totals` ENTRY, ONE BUILDER FOR BOTH TRIGGERS (Task 7, "one
+   *  terminal path"). Two call sites need the identical shape and must
+   *  never drift apart:
+   *  - `maybeEmitFrame`'s own terminal branch, at the machine's OWN
+   *    finished/terminated status frame — the ordinary path (James's walk
+   *    protocol change, 2026-08-15, that entry's own doc comment carries
+   *    the full reasoning for writing these into the ring at all).
+   *  - `terminate()`, at TERMINATE-DISPATCH time. The END/cancel path's
+   *    own terminated status frame routinely arrives AFTER teardown has
+   *    already stashed and hung up the radio (spec 1's re-walk: "the ring
+   *    ended at the terminate write") — waiting for that frame here would
+   *    lose the entry the exact same way it did before this task, so the
+   *    caller-initiated ending writes it itself, from whatever this run
+   *    has accumulated so far.
+   *
+   *  GUARDED AT ONLY ONE OF THE TWO CALL SITES (I-2, final whole-branch
+   *  review — this doc comment used to claim both, which was false).
+   *  `terminate()`'s own call is the guarded one: `if (activeRun !== null
+   *  && !activeRun.closed)`. The `maybeEmitFrame` terminal branch above has
+   *  NO guard of its own — it reaches this call unconditionally once
+   *  `runIsOpen()` has let it into that branch, having just set
+   *  `activeRun.closed = true` two lines earlier in THIS pass, not in a
+   *  prior one.
+   *
+   *  The gap this leaves: `terminate()` (the END/cancel path) never sets
+   *  `activeRun.closed` itself — only the machine-frame branch does. So
+   *  END-then-the-machine's-own-terminal-frame is a real double-write: (1)
+   *  `terminate()` fires, sees `!activeRun.closed`, writes `final-totals`,
+   *  and returns without closing the run; (2) the machine's own
+   *  finished/terminated status frame arrives shortly after (the ordinary
+   *  shape once END has already sent Terminate), `runIsOpen()` is still
+   *  true, so this branch sets `closed = true` and calls
+   *  `recordFinalTotals` a SECOND time for the same run, unguarded — two
+   *  near-identical `final-totals` entries in the ring. Empirically
+   *  reproduced (Task 7 review, progress.md's own CARRY line: "END +
+   *  machine-frame-arrives writes TWO identical final-totals entries...
+   *  diagnostic-only, no consumer"). DIAGNOSTIC-ONLY: nothing reads this
+   *  ring entry programmatically, only a human auditing a walk's log — nothing
+   *  computational disagrees with itself. Dedupe stays DEFERRED, per that
+   *  same ledger line ("fast-follow: assert 2-ok or dedupe") — not fixed by
+   *  this task, which corrects the comment's claim, not the mechanism. */
+  function recordFinalTotals(run: NonNullable<typeof activeRun>): void {
+    const n = (v: number): number => Number(v.toFixed(1));
+    const regs = [...session.seen.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([k, r]) => `${k}:(${n(r.elapsedSeconds)}s,${n(r.distanceMeters)}m)`)
+      .join(" ");
+    const programmed = run.program.intervals.length;
+    log.record(
+      "final-totals",
+      `accumulator=${n(lastEmittedTotals.distanceMeters)}m ` +
+        `accumulatorElapsed=${n(lastEmittedTotals.elapsedSeconds)}s ` +
+        `machineTotal=${raw.totalWorkDistanceMeters ?? "?"}m ` +
+        `durationType=${raw.workoutDurationType ?? "?"} ` +
+        `registers=${session.seen.size} of ${programmed} programmed ${regs}`,
+    );
+  }
+
   /** THE ACCUMULATOR-VS-MACHINE VERDICT (CR2 spec 1, Task 5; moved from
    *  `logSummaryTotals` after the re-walk caught it firing on a lagging
    *  TWD — see the comment at that call site). `lastEmittedTotals` is what
@@ -2463,6 +2566,44 @@ export function createPm5Driver(
       if (activeRun !== run) return;
       reconcileSummary(run);
     }, FINISH_GRACE_MS);
+  }
+
+  /** THE F7 RULE, AS ITS OWN FUNCTION (Task 7, "one terminal path" — this
+   *  used to be inline, only inside `t.onDisconnect`'s callback below,
+   *  whose own doc comment still carries the full reasoning for why a
+   *  still-pending deadline is DRAINED rather than merely cancelled: the
+   *  radio going away only costs the run its ability to WAIT for more wire
+   *  evidence, never a verdict already reachable from evidence already in
+   *  hand, and a synchronous reconcile always lands inside the hand-off
+   *  hold because that hold is strictly the longer of the two coupled
+   *  windows.
+   *
+   *  THE TWIN THIS TASK GIVES A SECOND CALL SITE TO FIX: `disconnect()`
+   *  below used to apply a DIFFERENT rule for the exact same situation —
+   *  a caller-initiated hang-up just cancelled the deadline and threw the
+   *  verdict away, because `Transport.onDisconnect`'s own contract
+   *  (`domain/monitor/types.ts`) is explicit that a caller-initiated
+   *  `disconnect()` never fires it (`webBluetooth.ts`'s own guard against
+   *  double-firing, M-2), so this callback was never going to run for
+   *  that path on its own. `disconnect()` and the hook's new `reconcile()`
+   *  method (`MonitorDriver.reconcile`) both call this function now, so a
+   *  reconcile-eligible verdict gets the SAME answer whichever way the
+   *  link ends. Idempotent by construction: a second call after
+   *  `pendingSummaryReconcile` is already `null` is a no-op, so calling it
+   *  from more than one of those three sites in the same teardown costs
+   *  nothing. */
+  function drainSummaryReconcile(): void {
+    if (pendingSummaryReconcile !== null) {
+      pendingSummaryReconcile();
+      pendingSummaryReconcile = null;
+      // `armSummaryReconcile` is armed from exactly one call site (the
+      // `finished` branch in `maybeEmitFrame`, immediately after
+      // `activeRun!.closed = true`), and `program()`'s own replacement
+      // path cancels this same field before a new run ever opens — so a
+      // deadline still pending here can only name the CURRENT `activeRun`,
+      // closed and non-null.
+      if (activeRun !== null) reconcileSummary(activeRun);
+    }
   }
 
   /**
@@ -4109,6 +4250,10 @@ export function createPm5Driver(
         // entry is judged against nothing carried from the outgoing run,
         // not against a bucket that workout happened to leave `twd` in.
         lastLoggedTwd = null;
+        // `summarySeen`'s own comment (Task 8): whether a 0x0039 arrived is
+        // a fact about THIS run, and a re-arm's own summary has not arrived
+        // yet just because the outgoing run's did.
+        summarySeen = false;
         // A reconcile deadline still standing belongs to the run being
         // replaced, and is cancelled here for the same reason a pending
         // boundary half is dropped above (fast-follow Task 2): both are
@@ -4151,6 +4296,24 @@ export function createPm5Driver(
     // `buildGetErrorType` cites at its own definition (interface-notes.md
     // §17 item 14).
     async terminate(): Promise<void> {
+      // TERMINATE-DISPATCH FINALS (Task 7, "one terminal path" — spec 1's
+      // re-walk: "the ring ended at the terminate write"). The END/cancel
+      // path's own terminated status frame — the trigger `maybeEmitFrame`'s
+      // terminal branch waits for — routinely arrives AFTER the hook's
+      // teardown has already stashed and hung up the radio, so waiting for
+      // it here would lose the `final-totals` entry the same way it did
+      // before this task. Writing it from THIS call instead means the
+      // caller-initiated ending's own totals are in the ring before this
+      // promise even resolves, however long the machine's own frame takes.
+      //
+      // Guarded on an OPEN run (`recordFinalTotals`'s own doc comment):
+      // nothing to summarize before `program()` ever opened one, and a run
+      // the machine's own frame already closed already told its one story
+      // through that call site — this never re-tells a shorter version of
+      // it.
+      if (activeRun !== null && !activeRun.closed) {
+        recordFinalTotals(activeRun);
+      }
       await sendSequence(buildTerminate(), "terminate-sent");
       await settleAfterTerminate();
     },
@@ -4160,15 +4323,30 @@ export function createPm5Driver(
       return () => listeners.delete(cb);
     },
 
+    // Task 7: applies the F7 rule (`drainSummaryReconcile`'s own doc
+    // comment carries the full reasoning) rather than merely cancelling —
+    // the twin defect this task fixes was this method throwing away a
+    // reconcile-eligible verdict just because the caller hung up first,
+    // where a passive drop (`t.onDisconnect` above) already answered it.
+    // Idempotent with the hook's own `reconcile()` call, which normally
+    // runs first (`useMonitorSession.ts`'s `teardown`, while the listener
+    // is still live) and leaves nothing here to drain — this call is the
+    // belt to that braces for any OTHER caller of `disconnect()`.
+    reconcile(): void {
+      drainSummaryReconcile();
+    },
+
     async disconnect(): Promise<void> {
       log.record("disconnect-requested", "caller-initiated");
       // The caller is done with this driver, so its one timer goes with it
-      // (fast-follow Task 2). No summary can arrive after the radio is
-      // hung up, so a deadline still standing here could only ever fire
-      // into a torn-down session — and a driver that leaves live timers
-      // behind is a driver a test cannot finish cleanly.
-      pendingSummaryReconcile?.();
-      pendingSummaryReconcile = null;
+      // either way (fast-follow Task 2) — draining rather than merely
+      // cancelling (Task 7) answers it first, using whatever evidence this
+      // run has already earned, rather than discarding a verdict the radio
+      // going away could not actually invalidate. No summary can arrive
+      // after the radio really is hung up below, so nothing is deferred
+      // past this line — and a driver that leaves live timers behind is a
+      // driver a test cannot finish cleanly.
+      drainSummaryReconcile();
       await t.disconnect();
     },
   };

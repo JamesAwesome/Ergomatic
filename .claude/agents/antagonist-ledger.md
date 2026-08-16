@@ -403,3 +403,94 @@ toolkit, not a history.
   failure/pass" step in this plan already runs the WHOLE selected project;
   only the `--project` choice itself matters, and getting that right is where
   the entire defect lived.
+
+## Spec-stage pass, 2026-08-15 (Phase CR2 spec 2, "state axes")
+
+- **"METERS LEFT is wrong on MIXED programs; the mechanism is either a stale
+  reference or a unit mismatch."** Both candidates false, and the real shape is
+  wider. `intervalRemaining` is `V − (obs − checkpoint)`, so the wire's 0x0033
+  Last Split pair can be INVERTED out of the committed lab captures — which
+  already ran this exact subtraction before every capture. Measured:
+  `obs + remaining ≡ V` on every unclamped frame of all three files, including
+  a fully-rowed interval INDEX 1 after a completed interval 0 — **the
+  checkpoint is 0 at interval 1**, killing both candidates; the walk's 578
+  signature pins it to **181 at interval 2** (whole meters — the spec's
+  "181.2" is a value the field cannot carry). Surviving reading: the pair LAGS
+  one boundary, as 0x0033's Interval Count already does live. Consequences:
+  bites ANY program from interval 2 onward, both dimensions; hits
+  `intervalAccrued` too (rendered on screen); no capture or ring could ever
+  have shown it. **Technique: when a derived field is published in the
+  captures, INVERT it to recover the wire input the captures do not carry —
+  after confirming with `git show <capture-commit>:<file>` that the code that
+  produced it is the code under suspicion.**
+
+- **"The fake models the wire well enough to test the fix against."** No, and
+  it is why this survived: the fake books the scenario's own cumulative pair as
+  Last Split — a self-consistent world in which the subtraction is CORRECT.
+  Hardware sends 0 (intervals ≤1) and a lagging value after. **Technique: when
+  a fix touches a wire field, read what the FAKE puts in that field before
+  writing the failing test.** An internally coherent fake is the most
+  expensive kind of wrong.
+
+- **"A suspicious `finished` is one whose counts don't reconcile."** Marked 2
+  of the 4 committed rings' HONEST finishes suspicious — the final boundary
+  routinely arrives after the finished tick, inside the finish grace (the walk
+  README celebrates it firing in exactly those two sessions), so N−1 of N is
+  the normal terminal state; the register-count leg discriminates nothing (the
+  killer's instant reads 1-of-2, byte-identical to an honest 2×1:00 terminal).
+  Fix: `0x0039 seen OR actuals ≥ programmed − 1`, admitting 1-interval
+  programs can never trip it. **Technique: hand-execute a proposed predicate
+  against EVERY committed capture and tabulate the verdicts before believing
+  the shape it was designed from.** Four rings, four rows, ten minutes.
+
+- **"The hardware answer is: mirror the machine and show 0 while ARMED."** The
+  walk's own sentence says "before the first pull of piece TWO" — a
+  mid-session boundary where our phase is `live`, not `ready`, and three of
+  four rings carry the spm ghost at exactly that frame (25/28/25, all
+  `state=rowing, rowingActive=false, distance≈0`). A fix scoped to `armed`
+  misses the observed case. **Technique: for any ruling derived from a
+  hardware observation, re-derive WHICH APP STATE the app was in at that
+  instant from the ring — not from the state the ruling's wording implies.**
+
+- **"The recorded rings are the transition inventory for a zero-behaviour-
+  change proof."** The rings contain no phase entries at all, and their frame
+  entries appear only on STATE CHANGE — four consecutive identical frames, the
+  freeze predicate's entire input, cannot exist in one by construction.
+  **Technique: before proposing a capture as a fixture, ask what its recorder
+  DROPS.** A state-change-only ring is structurally blind to every predicate
+  whose input is repetition.
+
+- **Attacked and not broken:** banner suppression during genuine rests —
+  already structurally guaranteed (`nextFreezeRun` resets on any non-`rowing`
+  frame; rests map from workoutStates 3/6/7). Caveat kept: the guarantee
+  belongs to the freeze predicate; re-deriving `activity` from anything else
+  silently removes it.
+
+## Task-brief pass, 2026-08-15 (CR2 spec 2a, Tasks 1-9)
+
+- **"interface-notes §17 items 17 and 24" name the checkpoint content Task 9
+  corrects.** False on the section: §17 has its own independently-numbered
+  list stopping at item 22; the actual prose lives in **§20** items 17/24.
+  **Technique: this doc renumbers from 1 at every `##` heading — grep the
+  phrase, not the number; a bare "item N" finds the wrong section as readily
+  as the right one.**
+
+- **"recorded-actuals count, programmed count, 0x0039-seen (all in hand at
+  the terminal tick)."** Two of three are; 0x0039-seen is NOT — `noteSummary`
+  only persists inside an open grace (`run.closed === true`), so a 0x0039
+  arriving before the terminal frame (walk-documented, real) is logged
+  out-of-window and discarded with nothing stored. **Technique: "in hand" is
+  a control-flow claim — trace whether the code path that would have stored
+  the fact runs BEFORE the point that wants to read it, not whether the
+  event happened.**
+
+- **"67 test call sites" for buildSurfaceModel: counted 63** (54 via the
+  `model()` wrapper + 9 direct). **Technique: when a brief says count,
+  count with grep on distinct lines, not by eye.**
+
+- **Task 5 filed `.connected-paused` under PaneLive.tsx; it lives in
+  ConnectedSurface.tsx:436-447 (CSS index.css:6973+).** PaneLive owns the
+  adjacent TOTAL LEFT bar, which is how two claims merged into one path.
+  **Technique: when a brief bundles two "same area" claims into one file
+  path, verify each claim's OWN grep hit — UI proximity is not tree
+  proximity.**

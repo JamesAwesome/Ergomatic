@@ -198,12 +198,12 @@ export interface FakeStatusEvent {
  *  `splitIntervalDistanceMeters` — what `actual` is built from,
  *  `pm5/parse.ts`'s own `toIntervalActual`) AND a top-level, SESSION-
  *  cumulative `elapsedSeconds`/`distanceMeters` field on the very same
- *  characteristic (interface-notes.md §10). The driver's
- *  `computeRemainingForFrame` roots its next-interval checkpoint in the
- *  cumulative pair at the moment of the boundary — conflating the two
- *  (an earlier version of this file sent the per-interval value for BOTH)
- *  makes every interval after the first compute a wrong `intervalRemaining`
- *  the moment the session isn't just "one interval starting at zero". */
+ *  characteristic (interface-notes.md §10). The driver no longer roots any
+ *  checkpoint in either pair (CR2 spec 2a Task 6 deleted the subtraction);
+ *  this fake still models BOTH fields honestly — `wireLastSplit` carries the
+ *  measured lag-one-boundary semantics — because a fake that conflates the
+ *  two is exactly how the deleted mechanism survived a year (an earlier
+ *  version sent the per-interval value for BOTH). */
 export interface FakeBoundaryEvent {
   atMs: number;
   kind: "boundary";
@@ -622,15 +622,18 @@ function totalWorkDistanceFor(
  *  always warmed up by the time a real session begins.
  *
  *  `lastSplit` is 0x0033's "Last Split Time"/"Last Split Distance" pair
- *  (interface-notes.md §10, §15 #8) — the session-cumulative point at
- *  which the CURRENT interval began, i.e. wherever the most recent
- *  boundary (if any) left off. The driver's `computeRemainingForFrame`
- *  (fix-round HIGH-1) subtracts this from the live `elapsedSeconds`/
- *  `distanceMeters` above to recover "progress into this interval" with
- *  no observation history of its own — an earlier version of this fake
- *  hardcoded both fields to 0 forever, which made every interval after
- *  the first compute a wrong (too-generous) `intervalRemaining` the
- *  moment it wasn't the interval that started the whole session. */
+ *  (interface-notes.md §10, §20 items 17/24) — the caller (`wireLastSplit`)
+ *  passes the MEASURED semantics, not the naive "current interval's own
+ *  start" reading an earlier fiction assumed: ZERO through interval
+ *  indices 0 and 1, then LAGGING one boundary behind from interval 2 on
+ *  (the cumulative point at which the PREVIOUS interval began). Task 6's
+ *  inversion (225+161 frames, zero mismatches) settled interface-notes.md
+ *  §20 item 24's open question this way. Nothing downstream subtracts this
+ *  pair any more — `driver.ts`'s `computeRemainingForFrame`/
+ *  `computeAccruedForFrame` read the per-interval 0x0031 pair directly —
+ *  so this field is now sent purely to keep the wire model honest for
+ *  whatever else reads 0x0033, not because a consumer still re-derives
+ *  progress from it. */
 function statusBundle(
   program: WorkoutProgram,
   e: FakeStatusEvent,
@@ -763,11 +766,21 @@ function boundaryBundle(
   };
 }
 
-/** The WAITTOBEGIN bundle the fake sends the instant programming finishes
- *  (design spec §2: "armed" = WAITTOBEGIN) — zeroed progress, no interval
- *  active yet, and no split has ever completed (`lastSplit` is always
- *  `{0, 0}` here — nothing to root it at before the session's own first
- *  interval even starts).
+/** The WAITTOBEGIN bundle the fake sends the instant programming finishes,
+ *  and re-sends every tick for as long as the armed level holds
+ *  (`deliverArmedBundle`, design spec §2: "armed" = WAITTOBEGIN) — zeroed
+ *  progress, no interval active yet, and no split has ever completed
+ *  (`lastSplit` is always `{0, 0}` here — nothing to root it at before the
+ *  session's own first interval even starts).
+ *
+ *  `ghost` is spm/currentSplit ONLY — connected-axes design spec §2, Item 3
+ *  ("Armed carry-over is real on the wire"): the PM does not reset those
+ *  two to zero on re-arm, elapsed/distance are what genuinely zero
+ *  (`armedGhost`'s own comment has the full citation). Defaults to zero for
+ *  the caller's convenience on a machine that has never rowed anything —
+ *  the same "nothing to carry over" case `armedGhost`'s own initial value
+ *  models — never a second source of truth for the carry-over rule, which
+ *  lives in `armedGhost` alone.
  *
  *  `structure` is the caller's decision (`structureForTick()`), same as
  *  `statusBundle`'s own parameter — this is the bundle SESSION 4a's
@@ -776,6 +789,7 @@ function boundaryBundle(
 function armedBundle(
   program: WorkoutProgram,
   structure: WireArmedStructure,
+  ghost: { spm: number; currentSplit: number } = { spm: 0, currentSplit: 0 },
 ): {
   general: GeneralStatus;
   as1: AdditionalStatus1;
@@ -789,8 +803,8 @@ function armedBundle(
       workoutState: WORKOUTSTATE_WAITTOBEGIN,
       elapsedSeconds: 0,
       distanceMeters: 0,
-      spm: 0,
-      currentSplit: 0,
+      spm: ghost.spm,
+      currentSplit: ghost.currentSplit,
       heartRateBpm: null,
       programIntervalIndex: 0,
     },
@@ -925,6 +939,30 @@ export function createFakeTransport(
   // reading of it — see `clearArmedLevel()` for the two places the level
   // drops.
   let armedLevel = false;
+  // Connected-axes design spec §2, Item 3 ("Armed carry-over is real on the
+  // wire"): eight armed frames in the lab captures read 13/16/43/46/50/80/
+  // 88/96 spm with matching nonzero splits — the PM does NOT reset stroke
+  // rate/split to zero the instant it re-arms; it keeps reporting the
+  // PREVIOUS piece's numbers until the first pull of the next one resets
+  // them. `zeroedStatus` below used to invent the zero itself
+  // (`{spm:0, currentSplit:0}` unconditionally), which is why no test could
+  // exercise this half of item 3 (2a plan Task 3, R1: "teaching the fake is
+  // part of this spec's cost") — the app's own mirror substitution
+  // (`surfaceModel.ts`) has nothing real to mirror if the fake never
+  // produces the ghost it is mirroring. Refreshed by
+  // `queueTerminateAutoCycle()` alone, from whatever `latestStatus` was
+  // reporting the instant BEFORE the terminate landed — the only caller,
+  // guarded by `onClearingFrameComplete`'s own `machineState === "rowing" ||
+  // "resting"` check, so `latestStatus` there is always a genuine reading,
+  // never a synthetic one. Stays at the cold-start default until the first
+  // such cycle runs, which is the honest state for a machine that has never
+  // rowed anything to carry over (`zeroedStatus`'s own pre-existing
+  // "nothing to re-base from a machine that had not yet rowed" reasoning,
+  // now shared with `synthesizeTerminated`'s elapsed re-base).
+  let armedGhost: { spm: number; currentSplit: number } = {
+    spm: 0,
+    currentSplit: 0,
+  };
   // Fix-round 1, F1's ORDERING half, kept separate from the level above:
   // the FIRST armed report after an accept goes out ahead of anything the
   // script has due on that same tick, so a timeline's own opening entry is
@@ -1021,15 +1059,27 @@ export function createFakeTransport(
   // `tick`/`completeReconnect` doc comments.
   let latestStatus: FakeStatusEvent | null = null;
   let latestBoundary: FakeBoundaryEvent | null = null;
-  // The MACHINE's own last-known "where did the current interval start"
-  // checkpoint (0x0033's Last Split Time/Distance, fed to every
-  // `statusBundle()` call — see that function's own doc comment). Updated
-  // in `deliverOrCache` the moment a boundary is PROCESSED, regardless of
-  // `linkDown` — the real PM keeps this bookkeeping up to date whether or
-  // not the phone is currently connected to hear about it (design spec §4's
-  // iOS note), which is exactly what makes the reconnect path's very first
-  // post-reconnect status tick already carry the correct value.
+  // The MOST RECENT boundary's own cumulative totals — internal bookkeeping
+  // only, never sent on the wire directly (see `wireLastSplit` below for
+  // what actually reaches 0x0033). Updated in `deliverOrCache` the moment a
+  // boundary is PROCESSED, regardless of `linkDown` — the real PM keeps
+  // this up to date whether or not the phone is currently connected to hear
+  // about it (design spec §4's iOS note), which is exactly what makes the
+  // reconnect path's very first post-reconnect status tick already carry
+  // the correct value.
   let lastBoundaryCumulative = { elapsedSeconds: 0, distanceMeters: 0 };
+  // What 0x0033's Last Split Time/Distance actually reports (Task 6, the
+  // inversion result: 225+161 frames replayed with zero mismatches,
+  // interface-notes.md §20 items 17/24) — ZERO through interval indices 0
+  // and 1, then LAGGING one boundary behind `lastBoundaryCumulative` from
+  // interval 2 onward: the wire holds the cumulative point at which the
+  // PREVIOUS interval began, not the current one. Shifted in
+  // `deliverOrCache` the instant BEFORE `lastBoundaryCumulative` itself
+  // advances, so it is always exactly one boundary stale. This is the
+  // field `statusBundle()` actually sends; `computeRemainingForFrame`/
+  // `computeAccruedForFrame` (`driver.ts`) no longer read it at all — the
+  // per-interval 0x0031 pair alone is progress, checkpoint or not.
+  let wireLastSplit = { elapsedSeconds: 0, distanceMeters: 0 };
   // The machine's CURRENT state word, in `MonitorFrame` terms — updated
   // from every status event this fake processes (delivered or merely
   // cached; the PM keeps rowing whether or not the phone is listening).
@@ -1058,7 +1108,7 @@ export function createFakeTransport(
     const { general, as1, as2 } = statusBundle(
       script.program,
       e,
-      lastBoundaryCumulative,
+      wireLastSplit,
       structureForTick(),
     );
     notify(ADDITIONAL_STATUS_2_UUID, buildAdditionalStatus2Bytes(as2));
@@ -1088,10 +1138,12 @@ export function createFakeTransport(
   /** A status event with nothing rowed yet, in the given wire state — the
    *  shape every "the machine is not mid-piece" reading this file
    *  synthesizes has: armed after a program lands, and each step of the
-   *  post-terminate auto-cycle (`queueTerminateAutoCycle`), where the PM's
-   *  own readout is back at zero (§18's Control row records exactly that
-   *  for a re-armed machine: `state=armed, elapsedSeconds=0,
-   *  distanceMeters=0`). */
+   *  post-terminate auto-cycle (`queueTerminateAutoCycle`). Elapsed/distance
+   *  ARE genuinely zero (§18's Control row records exactly that for a
+   *  re-armed machine: `state=armed, elapsedSeconds=0, distanceMeters=0`) —
+   *  but spm/currentSplit are NOT: they carry `armedGhost` (see that
+   *  variable's own comment), the previous piece's reading, exactly as the
+   *  lab captures show. */
   function zeroedStatus(workoutState: number): FakeStatusEvent {
     return {
       atMs: virtualClock,
@@ -1099,8 +1151,8 @@ export function createFakeTransport(
       workoutState,
       elapsedSeconds: 0,
       distanceMeters: 0,
-      spm: 0,
-      currentSplit: 0,
+      spm: armedGhost.spm,
+      currentSplit: armedGhost.currentSplit,
       heartRateBpm: null,
       programIntervalIndex: 0,
     };
@@ -1110,6 +1162,7 @@ export function createFakeTransport(
     const { general, as1, as2 } = armedBundle(
       script.program,
       structureForTick(),
+      armedGhost,
     );
     notify(ADDITIONAL_STATUS_2_UUID, buildAdditionalStatus2Bytes(as2));
     notify(ADDITIONAL_STATUS_1_UUID, buildAdditionalStatus1Bytes(as1));
@@ -1393,6 +1446,22 @@ export function createFakeTransport(
    *   is.
    */
   function queueTerminateAutoCycle(): void {
+    // Refresh the ghost from whatever the machine was ACTUALLY reporting
+    // the instant before this terminate — `onClearingFrameComplete`'s own
+    // `machineState === "rowing" || "resting"` guard is this function's
+    // ONLY caller, and `machineState` only ever leaves `"idle"` through
+    // `setLatestStatus`, so `latestStatus` here is PROVABLY non-null: a
+    // defensive `if (latestStatus)` around this assignment would be a
+    // branch no test could ever reach (the repo's own "a guard nothing
+    // exercises is a guard nobody knows works" — `surfaceModel.ts`'s
+    // `phaseIndexForInterval` names the same tradeoff the other way, where
+    // the guard IS reachable). Captured BEFORE `synthesizeTerminated()`/
+    // `zeroedStatus()` below, which read `latestStatus`/`armedGhost`
+    // themselves but never advance either.
+    armedGhost = {
+      spm: latestStatus!.spm,
+      currentSplit: latestStatus!.currentSplit,
+    };
     autoCycle = [
       synthesizeTerminated(),
       zeroedStatus(WORKOUTSTATE_REARM),
@@ -1601,16 +1670,14 @@ export function createFakeTransport(
       // on, the driver holds its frames until this cycle has finished.)
       autoCycle = [];
       // …and the SESSION bookkeeping that belonged to the previous workout
-      // goes with it (Task 6 fix round, review MED-2). 0x0033's Last Split
-      // Time/Distance is "where the interval currently running began",
-      // session-cumulative — a number that means nothing across a workout
-      // boundary. Left standing, run 2's very first status frame told the
-      // driver its 300s interval had begun at second 300, and
-      // `computeRemainingForFrame` dutifully reported 500s remaining of a
-      // 300s interval. The cached boundary goes for the same reason: a
-      // reconnect early in run 2 would otherwise flush run 1's LAST
-      // boundary into run 2 as if it had just happened.
+      // goes with it (Task 6 fix round, review MED-2) — both the internal
+      // `lastBoundaryCumulative` and the WIRE-facing `wireLastSplit` it
+      // feeds (CR2 spec 2a Task 6), a number that means nothing across a
+      // workout boundary either way. The cached boundary goes for the same
+      // reason: a reconnect early in run 2 would otherwise flush run 1's
+      // LAST boundary into run 2 as if it had just happened.
       lastBoundaryCumulative = { elapsedSeconds: 0, distanceMeters: 0 };
+      wireLastSplit = { elapsedSeconds: 0, distanceMeters: 0 };
       latestBoundary = null;
       // Fix-round 1, F1: withheld until a subsequent `tick()` (or
       // `deliverArmedNow()`) — see `tick()`'s own doc comment for why
@@ -1692,6 +1759,18 @@ export function createFakeTransport(
       // comment). This is what a later status tick (live or, after
       // `completeReconnect()`, the very first post-reconnect one) picks up
       // automatically, with no separate reconnect-specific logic needed.
+      //
+      // The WIRE checkpoint (`wireLastSplit`) shifts to the OLD
+      // `lastBoundaryCumulative` first, one line before `lastBoundaryCumulative`
+      // itself advances to this boundary — that ordering is the whole
+      // lag-one-boundary model (Task 6, `wireLastSplit`'s own comment):
+      // whatever this boundary just made current stays ONE boundary away
+      // from what the wire reports until the NEXT boundary shifts it in
+      // turn. At the very first boundary (completing interval 0),
+      // `lastBoundaryCumulative` is still its `{0, 0}` initial value, so
+      // `wireLastSplit` shifts to `{0, 0}` too — exactly why the wire reads
+      // 0 through interval 1 as well as interval 0.
+      wireLastSplit = lastBoundaryCumulative;
       lastBoundaryCumulative = {
         elapsedSeconds: event.cumulativeElapsedSeconds,
         distanceMeters: event.cumulativeDistanceMeters,

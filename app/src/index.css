@@ -6714,8 +6714,9 @@ section:not(.news-pinned) .news-row:last-of-type {
    cell is exactly that. It is the ONLY `var(--accent)` declaration inside a
    PANE. The surface's other three all belong to the shell, not to a pane:
    `.connected-end` (the header control, connected-revamp Task 6),
-   `.connected-paused-end` and `.connected-paused-end-armed` (the paused
-   overlay's own `END`, handoff §4). `PaneGrid.test.tsx`'s census derives
+   `.connected-paused-end` and `.connected-paused-end-armed` (the frozen
+   block's own `END`, handoff §4 — IN FLOW since connected-axes 2a task 5,
+   no longer an overlay). `PaneGrid.test.tsx`'s census derives
    that set from THIS FILE rather than trusting this comment.
 
    Task 5 dropped the old enlarged size (22px/26px): the revision's
@@ -6928,60 +6929,67 @@ section:not(.news-pinned) .news-row:last-of-type {
   border-color: var(--ink-2);
 }
 
-/* --- The footer: a zero-cost anchor for the paused overlay ---------- */
+/* --- The footer: home for the frozen block, IN FLOW (task 5, connected-
+   axes 2a — corrects the task-6 fix round's overlay) --------------------- */
 
-/* JAMES RULING 2026-08-12 (task-6 fix round): THIS SLOT RESERVES NOTHING.
-   It used to hold 52px + a 4px margin open unconditionally so that the
-   paused block could drop into it without moving anything — but the erg is
-   rowing for essentially the whole session, and for all of that time the
-   reservation was 56px of blank page between the pane and the pager
-   (visible as dead space in the committed `connected-pane-grid-long.png`
-   before this round). The task-6 review measured what it was costing: a
-   full grid row in each orientation.
+/* NO RESERVATION WHILE ROWING (James ruling 2026-08-12, task-6 fix round —
+   still true, only the MECHANISM below it changed). It used to hold 52px +
+   a 4px margin open unconditionally so that the paused block could drop
+   into it without moving anything — but the erg is rowing for essentially
+   the whole session, and for all of that time the reservation was 56px of
+   blank page between the pane and the pager (visible as dead space in the
+   committed `connected-pane-grid-long.png` before this round). The task-6
+   review measured what it was costing: a full grid row in each
+   orientation. This element renders no child at all unless
+   `model.status === "paused"` (`ConnectedSurface.tsx`'s own conditional),
+   so an empty flex row still costs the layout nothing — that half of the
+   ruling survives unchanged.
 
-   `height: 0` plus `position: relative` turns it into a pure anchor, and
-   `.connected-paused` below is `position: absolute; bottom: 0`, so the
-   block paints UPWARD from this element's own baseline — the bottom edge of
-   the pane in portrait, the bottom edge of the content column in landscape
-   — without ever entering the flow. Handoff §4's "Same height, so nothing
-   above shifts" is now structurally unbreakable rather than arithmetically
-   maintained: there is no height, in either state, so there is nothing to
-   change. What it costs instead is OCCLUSION — while paused, the ink band
-   covers the bottom 52px of whatever the pane is showing (the grid's
-   caption and its last row and a bit; the live pane's TOTAL LEFT bar).
-   That is the trade the ruling names, and it is a state the rower is in
-   only while stopped. `margin-bottom` is gone with the height for the same
-   reason: a gap before the pager only exists when there is something on
-   both sides of it. */
+   IN FLOW, NOT OVERLAID (task 5's own fix — the defect this correction
+   exists for). The task-6 round made this a `height: 0; position: relative`
+   anchor and painted the block OVER the pane's own last 52px via
+   `.connected-paused`'s `position: absolute; bottom: 0` — free while
+   rowing, but at the one moment it actually rendered, it covered TOTAL
+   LEFT, the single number that would have shown the erg's own clock never
+   stopped (spec 2a's own trigger for this task: "the block we drew covers
+   the one number that would have told the rower so"). A normal-flow child
+   cannot paint over anything by construction — there is no `position:
+   absolute` left to do it with — so removing the overlay removes the
+   occlusion structurally, not by luck of a redraw. The cost moves instead
+   of vanishing: the pane's own `1fr` track (`.connected-surface-body`,
+   below) shrinks by exactly the frozen block's height while it is on
+   screen, and grows back the instant it isn't. `margin-bottom` stays gone
+   for the same reason it always was: a gap before the pager only exists
+   when there is something on both sides of it. */
 .connected-surface-footer {
   flex: none;
-  height: 0;
   display: flex;
-  position: relative;
 }
 
 /* INVERTED, deliberately (2026-08-08, hardware walk 2: the operator missed
    the sunken-grey version entirely). Ink field, paper text: the loudest
-   signal the surface's own vocabulary allows without touching accent, and
-   the geometry is unchanged — same 52px, same slot, nothing above shifts.
+   signal the surface's own vocabulary allows without touching accent —
+   task 5 changed this block's PARTICIPATION in the layout (see the footer's
+   own comment above), not this half of its look.
 
-   OUT OF FLOW as of the task-6 fix round (see the footer above): `absolute`
-   against the zero-height anchor, stretched across it and hanging its own
-   52px upward from `bottom: 0`. The height is still 52 and it still lands
-   in exactly the same place on screen; what changed is that the pane no
-   longer pays for the slot while the erg is rowing. */
+   `flex: 1`, not `left: 0; right: 0` (task 5's own replacement for the
+   retired overlay's full-bleed mechanism): the footer is a one-child flex
+   row, so growing to fill it spans the same width the absolute version
+   spanned, as a normal flow child instead of one positioned out of it.
+   `min-height: 44px` keeps the WCAG hit-target floor under the END/AGAIN
+   button honest on its own terms rather than inheriting it from a fixed
+   52px the block no longer needs to declare — the button's own 44px plus
+   this rule's 4px of vertical padding is what actually produces the same
+   ~52px total height the design had before, measured, not asserted. */
 .connected-paused {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 52px;
+  flex: 1;
   display: flex;
   align-items: center;
   gap: 12px;
+  min-height: 44px;
   background: var(--ink);
   border-radius: var(--radius);
-  padding: 0 12px;
+  padding: 4px 12px;
 }
 
 .connected-paused-label {
@@ -7400,11 +7408,13 @@ section:not(.news-pinned) .news-row:last-of-type {
     margin-bottom: 2px;
   }
 
-  /* Row 4 collapses to nothing, exactly as in portrait — the base rule's
-     `height: 0`/`position: relative` carry over and the paused overlay
-     hangs upward from the bottom of the content column. Nothing to place
-     here beyond the track coordinates; the base rule no longer has a
-     margin for this one to cancel. */
+  /* Row 4, same in-flow mechanism as portrait (task 5's own fix — see the
+     base rule's comment): `auto` sizes it to whatever the footer's own
+     child needs, zero while rowing (no child renders), the frozen block's
+     real height once it does. The `1fr` track above (row 3, the pane body)
+     is what yields the difference; nothing here paints over it any more.
+     Nothing to place here beyond the track coordinates; the base rule no
+     longer has a margin for this one to cancel. */
   .connected-surface-footer {
     grid-column: 2;
     grid-row: 4;
@@ -7438,9 +7448,10 @@ section:not(.news-pinned) .news-row:last-of-type {
     /* THE FILL REACHES THE PHYSICAL BOTTOM EDGE (James's erg walk,
        2026-08-13, defect 4 — the other half of it). `.connected-surface`
        above keeps `padding-bottom: env(safe-area-inset-bottom)` so that
-       everything in the CONTENT column — including the paused block, which
-       hangs upward from `.connected-surface-footer` at the foot of that
-       column — stays clear of the home indicator. But this gutter is not
+       everything in the CONTENT column — including the frozen block, which
+       sits in flow inside `.connected-surface-footer` at the foot of that
+       column (task 5: no longer an overlay hanging off it) — stays clear of
+       the home indicator. But this gutter is not
        content: it is a painted edge, and a background that stops 21px
        above the glass is precisely the ledge James saw. MEASURED at 844x390
        with a 21px bottom inset: the fill ended at y=369 inside a 390px

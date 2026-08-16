@@ -344,6 +344,8 @@ function session(overrides: Partial<MonitorSession> = {}): MonitorSession {
     actuals: [],
     endedBy: null,
     handoffHeld: false,
+    frozen: false,
+    runOpen: true,
     connect: vi.fn().mockResolvedValue(undefined),
     program: vi.fn().mockResolvedValue(undefined),
     endSession: vi.fn().mockResolvedValue(undefined),
@@ -753,6 +755,7 @@ describe("distance intervals (handoff §3's distance rules)", () => {
         liveRate: NO_READING,
         liveHr: NO_READING,
         numbering: intervalNumbering(intervals),
+        armed: false,
       }).caption;
     };
 
@@ -1368,12 +1371,17 @@ describe("the grid, fake-driven", () => {
           cumulativeElapsedSeconds: warmup.value,
           cumulativeDistanceMeters: 1908,
         },
+        // Interval 1's own live tick, 60s/240m INTO IT — 0x0031's Elapsed
+        // Time/Distance are per-interval on the wire (interface-notes.md
+        // §20 items 12/17/24), not session-cumulative on top of the
+        // warm-up's own 480s/1908m just above, so this reads 60/240, not
+        // `warmup.value + 60`/`1908 + 240`.
         {
           atMs: 300,
           kind: "status",
           workoutState: 4,
-          elapsedSeconds: warmup.value + 60,
-          distanceMeters: 1908 + 240,
+          elapsedSeconds: 60,
+          distanceMeters: 240,
           spm: 21,
           currentSplit: 117.8,
           heartRateBpm: 164,

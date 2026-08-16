@@ -39,19 +39,28 @@ guessing is how a wrong number ships.
    clock *and* `ConnectionLogSheet.tsx:119`'s `SESSION` value). Two of the three
    survive the redesign, and neither has a machine authority available — 0x0031
    carries no Total Work Time at all.
-2. **"Compute from plan + elapsed, not the broken accumulator"** (same section,
-   about the GRID header's `38:20 LEFT`) conflicts with the architecture
-   review's R7, which moves the session total to a machine-owned authority. Spec
-   1 makes the accumulator correct, which may make this prescription unnecessary;
-   it should not be implemented as written without re-deciding it.
-3. **Item 3's hardware question is still open.** Frame 2D shows rate as `0` in
-   plain ink pre-row. Our captures prove the *wire* carries the previous piece's
-   rate on piece two (eight armed frames reading 13/16/43/46/50/80/88/96), so
-   whether 2D is right depends on what the PM5's own screen displays — unanswered,
-   and owed from James at the erg.
-4. **Item 1's pause question may be moot.** The README drops the paused state
-   entirely. ROADMAP item 1 still asks for the honest *word*. If the state is not
-   built, the word is not needed — that is spec 2's call, not an editorial one.
+2. **"Compute from plan + elapsed, not the broken accumulator" is STALE —
+   do not implement it as written** (reconciled 2026-08-15, post-merge, PM
+   spec-2 gate). The accumulator it calls broken was replaced by spec 1's
+   register map and corroborated against the machine three independent ways
+   on hardware: its own display (184 = 184, one frame), its 0x0039 summary
+   (367 vs 367.8), and an a-priori oracle (500 vs 499.5) — see
+   `docs/monitor/sessions/walk-2026-08-15/`. An implementer following the
+   original line would discard a hardware-corroborated number for a
+   plan-derived estimate. The GRID header should read the accumulator.
+3. **Item 3's hardware question is ANSWERED and BUILT** (walk 2026-08-15;
+   PR #102). The PM5's own screen shows 0 for rate before the first pull of
+   piece two, so the ruling is MIRROR — and spec 2a implements it, at
+   `armed` and at every mid-session pre-pull boundary. Frame 2D is now
+   three-quarters built: rate 0 plain, split target ghost, nothing
+   judged/no NOW/no gold mark/bar all-upcoming shipped; **the status
+   caption still reads `1 OF N · WORK` where 2D draws `READY`** — that
+   last word is spec 3's to place (see `docs/screenshots/
+   connected-armed.png` for the shipped state).
+4. **Item 1's pause question is SETTLED** (James, 2026-08-15; PR #102):
+   there is no word. The block reads `PULL TO RESUME` alone, occludes
+   nothing, and `paused` left `ConnectedPhase`. Spec 3 restyles the footer
+   it lives in; the state work is done.
 
 ## Not part of the design
 

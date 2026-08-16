@@ -261,3 +261,95 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   inter-arrival distribution vs the committed ~2.2/s, modal 0.50 s baseline)
   must be evaluated BEFORE the walk's numbers are trusted, not after — it is
   the cheap discriminator if the app and the erg disagree again.
+
+## Design-gate ruling, 2026-08-15 (Phase CR2 spec 2, "state axes")
+
+- **Before gating on a wire signature, count how often it is the NORMAL path.**
+  The corroboration window was designed around "a lone `finished` tick arriving
+  mid-rest" as the session-killer's signature. In `pm5-session4b-final.log.gz`
+  (10,408 frames) three of four `finished` episodes arrive out of `resting`,
+  because a trailing rest on the final interval is counted down before
+  `WorkoutEnd` — a shape **161 of the 300 seeded library workouts compile**
+  (`pm5-interface-notes.md` §15 #9). The proposed corroborator was equally
+  unsupported: four of five `finished` episodes in that record are a SINGLE
+  frame, so "a second terminal tick confirms" fails 80% of honest finishes.
+  A gate that fires on the majority path is not a gate. **Prefer a synchronous
+  predicate over evidence already in hand** (0x0039 already received; programmed
+  interval count reconciled) **to a timer**, and fail open with a log entry
+  naming which path fired.
+
+- **A timer added near a natural finish must state which existing window it
+  nests inside.** `driver.ts` arms `finishGraceUntil` and `armSummaryReconcile`
+  BEFORE the `workoutComplete` emit, and its own comment says that ordering is
+  what makes "the fill happens before navigation" a fact about the code rather
+  than the event loop. Both 2026-08-15 walk sessions depended on that grace
+  catching their final boundary. Any design that delays the emit decouples the
+  pair unless it says so.
+
+- **Ask the does-it-exist question of the SURFACE, not just the state.** F6's
+  design proposed a new prompt, new copy and a new route entry for "log what was
+  measured / discard". `Today.tsx`'s `UnloggedRow` already renders exactly that
+  transaction for a `SessionRun`, on the house `useStagedDiscard` two-tap idiom,
+  with the Discard consequence already approved and its focus bug already fixed
+  by review. The 2026-08-14 research rule covers product surfaces, not only
+  device concepts.
+
+- **A design handoff goes stale the moment a fix lands under it.**
+  `docs/design/handoffs/2026-08-15-connected-v2/README.md` still instructed the
+  implementer to compute TOTAL LEFT "from plan + elapsed, not the broken
+  accumulator" — written before spec 1 corroborated that accumulator against the
+  machine three ways. Reconcile a handoff at the gate that follows the fix, not
+  at the plan that follows the handoff. Recurring failure #9 with a different
+  filename.
+
+- **When a release is deferred to a whole phase, the canary has to be replaced
+  inside the phase.** James ruled (2026-08-15) that CR2 releases only when specs
+  2+3 are done. The prior ledger entry's canary argument does not evaporate; it
+  transfers to the walk. Any later spec that touches the terminal path must
+  re-run the EARLIER spec's oracle row (here: 2×250 m r0, a-priori truth 500),
+  or a regression and its own fix ship in one build with nothing to attribute
+  them.
+
+## Final-PR gate, 2026-08-16 (Phase CR2 spec 2a, PR #102)
+
+- **A review that catches ONE false doc comment has found a CLASS — grep the
+  deleted mechanism's own nouns across `src/`, `domain/` AND the design
+  handoffs before accepting the fix.** #102 deleted a 0x0033 checkpoint
+  subtraction; its doc sweep corrected `docs/monitor/` and the walk README, and
+  the final review separately caught one stale comment in `driver.ts`. Five
+  sites survived both: `domain/monitor/types.ts` (the PUBLIC seam contract,
+  still calling the new inputs "the wrong inputs"), `surfaceModel.ts:784`,
+  `fake.ts:202`, and `PROVENANCE.md` items 3 and 4 — the last two being
+  questions THIS PR answered, in the file **spec 3 is written from**, whose
+  item 2 had to be corrected at the previous gate for the identical reason.
+  Ask "what else names this mechanism", not "which docs did the brief list".
+
+- **Judge a tail by what its behavioural lines can REACH, and say the gate.**
+  #102's tail read as 14 files / +280 — larger than #99's tail by every size
+  measure, and NARROWER by blast radius: three behavioural lines all gated on
+  `status === "armed"`, reachable only at phase `ready` (pre-first-stroke,
+  capped ~2.5 s by `ROWING_ACTIVE_FALLBACK_FRAMES = 5`), plus one label
+  unification provably equivalent everywhere else. The settling check took one
+  grep: the guard is `status === "armed"` verbatim, not OR'd with the sibling
+  mid-session mirror.
+
+- **Check the exit list against ITSELF before ruling a criterion partial.**
+  #102's criterion 1 demands a table over "all TEN members"; its criterion 8
+  removes one of the ten. Nine shipped — a spec-internal collision resolved
+  the only coherent way, not a softening. Read the list as a list.
+
+- **A design FRAME is a checklist; enumerate its properties in the exit
+  criteria or the last one is lost.** Frame 2D named four properties of the
+  armed surface. Three were found unbuilt by the final whole-branch review and
+  fixed in its wave; the fourth (the `READY` status word) was disclosed only
+  in the PR body until this gate homed it into `PROVENANCE.md`, where spec 3
+  will find it. A PR body is not a record: it is unread after merge.
+
+- **When a release is deferred to a whole phase, COUNT the un-released stack
+  at every gate and say the number.** At #102's gate, `v0.9.0` is four merges
+  behind: spec 1's deliberate error-direction flip, record-replay, a stack
+  fix, and a state redesign. The canary is twice-forfeited by James's own
+  recorded override. The mitigation transfers to the walk — but only if the
+  row verifying the phase's largest correctness fix is a PRIMARY both-screens
+  comparison, not a rounding footnote at the bottom of six. Rewritten so at
+  this gate.

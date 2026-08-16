@@ -109,7 +109,7 @@ describe("MonitorEvent", () => {
 });
 
 describe("MonitorDriver", () => {
-  it("has no start() — program()/terminate()/events/disconnect only", () => {
+  it("has no start() — program()/terminate()/events/reconcile()/disconnect only", () => {
     const driver: MonitorDriver = {
       capabilities: {
         canProgram: true,
@@ -120,11 +120,16 @@ describe("MonitorDriver", () => {
       program: async () => {},
       terminate: async () => {},
       events: () => () => {},
+      reconcile: () => {},
       disconnect: async () => {},
     };
     expect("start" in driver).toBe(false);
     expect(typeof driver.program).toBe("function");
     expect(typeof driver.terminate).toBe("function");
+    // Task 7 (CR2 spec 2a): the reconcile step teardown calls BEFORE it
+    // unsubscribes, so a still-pending summary-gate deadline reaches a
+    // live listener instead of an empty one.
+    expect(typeof driver.reconcile).toBe("function");
   });
 });
 

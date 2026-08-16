@@ -69,11 +69,12 @@ import {
 } from "./monitorRun";
 import { defaultTransport } from "../adapters/monitorTransport";
 
-/** The session state machine (design spec §2, verbatim). Every value here
- *  is reached by a REAL event or frame field — never by a timer and never
- *  by an optimistic guess — with ONE deliberate exception, `"programming"`,
- *  which flips SYNCHRONOUSLY at the top of `program()` before anything is
- *  awaited (the double-fire pin; see `program` below).
+/** The session state machine (design spec §2, verbatim, MINUS `"paused"` —
+ *  connected-axes 2a, task 5). Every value here is reached by a REAL event
+ *  or frame field — never by a timer and never by an optimistic guess —
+ *  with ONE deliberate exception, `"programming"`, which flips
+ *  SYNCHRONOUSLY at the top of `program()` before anything is awaited (the
+ *  double-fire pin; see `program` below).
  *
  *  There is no `"choosing"`: the platform's chooser owns the interaction
  *  while `picking` — on iOS it is the plugin's in-process list sheet over
@@ -81,7 +82,22 @@ import { defaultTransport } from "../adapters/monitorTransport";
  *  (`requestDevice`'s own modal, single-result chooser the app never sees a
  *  device list from) — so interstitial states 1-3 remain descoped and
  *  `"picking"` is "their chooser is open, we draw only a quiet floor under
- *  it". */
+ *  it".
+ *
+ *  NO LONGER `"paused"` (task 5). The freeze predicate below
+ *  (`nextFreezeRun`/`isPausedRun`) still runs exactly as before — it is the
+ *  MEASUREMENT that decides whether the erg has stopped, and that
+ *  measurement was never wrong. What retired is routing its verdict through
+ *  a NINTH phase value: the session never actually left `"live"` while
+ *  frozen (a stopped erg is still a live session, still talking), so
+ *  `"paused"` was a phase in name that carried no state transition of its
+ *  own — every consumer that branched on it was really asking "is `frozen`
+ *  true?" one layer removed. `frozen` (published on `MonitorSession`,
+ *  Task 1) is now the one fact; `phase` stays `"live"` throughout a freeze
+ *  and its resume alike. `connectedAxes.ts`'s own `deriveActivity` reads
+ *  `frozen` exactly this way already (its own header comment named this
+ *  exact seam before the member was gone: "this is the exact seam the
+ *  enum's `paused` member retires through later"). */
 export type ConnectedPhase =
   | "idle"
   | "picking"
@@ -90,7 +106,6 @@ export type ConnectedPhase =
   | "ready"
   | "failed"
   | "live"
-  | "paused"
   | "disconnected"
   | "ended";
 
@@ -280,6 +295,19 @@ export interface MonitorSession {
    *  Always `false` unless a machine FINISH left the run missing its last
    *  interval's actual. */
   handoffHeld: boolean;
+  /** Mirrors `freezeRef` — `isPausedRun(freezeRef.current)` at the instant
+   *  of the last `update()`. Published for `connectedAxes.ts`'s `activity`
+   *  axis (design spec §1) — read-only, derived, not a second source of
+   *  truth (`freezeRef` still owns the write). Consumed since task 2:
+   *  `ConnectedSurface.tsx`'s `deriveAxes` call feeds this straight through. */
+  frozen: boolean;
+  /** Mirrors `runRef`: `true` iff this hook's own record is open
+   *  (`runRef.current !== null && runRef.current.completedAt === null`) at
+   *  the instant of the last `update()`. Published for `connectedAxes.ts`'s
+   *  `session` axis (design spec §1) — at `disconnected` the record
+   *  deliberately stays open, so `phase` alone cannot say. Consumed since
+   *  task 2, the same call `frozen` is. */
+  runOpen: boolean;
   /** Opens the platform's monitor chooser (`"picking"`), then connects (`"pairing"`) and
    *  builds the driver around the picked device's REAL advertised name.
    *  Assumes the Connect guard has already cleared (see this file's
@@ -574,6 +602,15 @@ interface SessionState {
   actuals: IntervalActual[];
   endedBy: "machine" | "user" | null;
   handoffHeld: boolean;
+  /** Mirrors `freezeRef` (`isPausedRun(freezeRef.current)`), kept as
+   *  published STATE rather than read off the ref at return time — reading
+   *  a ref during render is exactly what `react-hooks/refs` exists to
+   *  catch. Updated at every site that writes `freezeRef`. */
+  frozen: boolean;
+  /** Mirrors `runRef` (`runRef.current !== null && runRef.current.completedAt
+   *  === null`), same reason. Updated at every site that opens or closes
+   *  `runRef`'s record. */
+  runOpen: boolean;
 }
 
 const INITIAL_STATE: SessionState = {
@@ -584,6 +621,8 @@ const INITIAL_STATE: SessionState = {
   actuals: [],
   endedBy: null,
   handoffHeld: false,
+  frozen: false,
+  runOpen: false,
 };
 
 /** Everything a rejected `program()` can throw, mapped onto the typed
@@ -928,15 +967,29 @@ export function useMonitorSession(
             },
             nowDate(),
           );
-          freezeRef.current = nextFreezeRun(null, frame);
-          update({ frame, phase: "live", actuals: [] });
+          const freeze = nextFreezeRun(null, frame);
+          freezeRef.current = freeze;
+          update({
+            frame,
+            phase: "live",
+            actuals: [],
+            frozen: isPausedRun(freeze),
+            runOpen: true,
+          });
           return;
         }
       }
-      if (phase === "live" || phase === "paused") {
+      if (phase === "live") {
+        // THE PREDICATE IS UNCHANGED (task 5); only how it's PUBLISHED is —
+        // via `frozen` (Task 1's fact), never by moving `phase` off `"live"`.
+        // A frozen session is still a live one: the driver is still
+        // talking, the record is still open, nothing about "which session
+        // state is this" actually changed when the erg stopped. `phase`
+        // stays `"live"` through the whole freeze-and-resume; only `frozen`
+        // flips.
         const freeze = nextFreezeRun(freezeRef.current, frame);
         freezeRef.current = freeze;
-        update({ frame, phase: isPausedRun(freeze) ? "paused" : "live" });
+        update({ frame, frozen: isPausedRun(freeze) });
         return;
       }
       // Every other phase still SEES the frame (the machine's current
@@ -975,7 +1028,12 @@ export function useMonitorSession(
       // wait for and nothing to hold. The phase flips either way, in one
       // patch with the hold flag.
       const held = terminated ? false : openHandoffHold();
-      update({ phase: "ended", endedBy: "machine", handoffHeld: held });
+      update({
+        phase: "ended",
+        endedBy: "machine",
+        handoffHeld: held,
+        runOpen: false,
+      });
     },
     [closeRecord, openHandoffHold, update],
   );
@@ -1099,9 +1157,21 @@ export function useMonitorSession(
     [endByMachine, handleFrame, releaseHandoff, update],
   );
 
-  /** Drops the driver and the radio. Listener FIRST, so a disconnect
-   *  callback fired by our own `disconnect()` can never reach a component
-   *  that is on its way out.
+  /** Drops the driver and the radio. FOUR STEPS, IN THIS ORDER (Task 7,
+   *  "one terminal path"): **reconcile, then the hand-off release, then
+   *  stash, then unsubscribe, then disconnect** — the function body below
+   *  carries each step's own reasoning, but the shape is: reconcile is
+   *  first because it is the ONE step that needs the driver's listener
+   *  still subscribed (a still-pending summary-gate deadline drained here
+   *  emits synchronously, and a listener already gone never hears it —
+   *  the twin defect this task fixes, named at `driver.ts`'s
+   *  `drainSummaryReconcile`); stash is before unsubscribe because
+   *  `exportLog()` serializes a snapshot STRING at that call, and anything
+   *  written after it never reaches sessionStorage at all (§22's own
+   *  recorded trap); unsubscribe still runs before `disconnect()`, so a
+   *  disconnect callback fired by our own hang-up can never reach a
+   *  component that is on its way out (the ORIGINAL reason this ran
+   *  early, still true).
    *
    *  **Task 5 review fix round — terminates first when the erg is armed and
    *  nobody has terminated it yet.** `cancel()` below already does this
@@ -1131,21 +1201,60 @@ export function useMonitorSession(
    *  path always takes the `driverRef.current` branch. */
   const teardown = useCallback(
     (alreadyTerminated = false, claimed: MonitorDriver | null = null): void => {
-      // FIRST, above the stash below (review M-1): a teardown IS the hand-off
-      // completing, or the rower leaving — either way nothing is left to wait
-      // for. Releasing rather than silently cancelling buys two things: the
-      // exported trace shows a `handoff-hold` with a matching release instead
-      // of an open hold and no explanation (the one case the walk-day-2
-      // entries could not account for from a stash alone), and `handoffHeld`
-      // cannot be left `true` in a state a future "stay mounted past ended"
-      // change would then find stuck. A no-op when nothing is held, which is
-      // every teardown but one.
+      // Resolved FIRST — every step below needs the same driver, and
+      // clearing `driverRef` here (rather than after stash/unsubscribe, as
+      // this used to) is a pure reordering: a re-entrant teardown
+      // (unmount racing `cancel()`, this function's own `claimed` note)
+      // still finds nothing left to repeat either way.
+      const driver = claimed ?? driverRef.current;
+      driverRef.current = null;
+
+      // STEP 1: RECONCILE (Task 7). Before EVEN the hand-off release below
+      // — this is the one step that needs a LIVE listener still subscribed
+      // to the driver. `driver.reconcile()` drains whatever the summary
+      // gate's own deadline (`armSummaryReconcile`) is still holding and
+      // answers it synchronously with whatever evidence this run has
+      // already earned (`driver.ts`'s `drainSummaryReconcile`, the F7
+      // rule) — a no-op when nothing is pending, which is every teardown
+      // but a mid-grace unmount.
+      //
+      // THE TWIN THIS CLOSES: `driver.disconnect()` used to apply a
+      // DIFFERENT rule from a passive link drop — it just cancelled the
+      // deadline and threw the verdict away — and even after fixing
+      // `disconnect()` to drain it too, calling it there was still too
+      // late for THIS hook: `disconnect()` used to run after
+      // `unsubscribeRef.current?.()` below, so its drain would have emitted
+      // into a listener set with nothing left in it. Calling `reconcile()`
+      // here, before that unsubscribe, is what closes both halves at once
+      // — any reconcile-eligible verdict reaches `handleEvent` while it is
+      // still wired up, including its own `releaseHandoff("final-boundary")`
+      // call for a fill that lands on the way out.
+      driver?.reconcile();
+
+      // Above the stash below (review M-1, unchanged by this task): a
+      // teardown IS the hand-off completing, or the rower leaving — either
+      // way nothing is left to wait for. Releasing rather than silently
+      // cancelling buys two things: the exported trace shows a
+      // `handoff-hold` with a matching release instead of an open hold and
+      // no explanation (the one case the walk-day-2 entries could not
+      // account for from a stash alone), and `handoffHeld` cannot be left
+      // `true` in a state a future "stay mounted past ended" change would
+      // then find stuck. A no-op when nothing is held — including when the
+      // reconcile just above already released it with the more specific
+      // `"final-boundary"` reason, since `releaseHandoff` is itself
+      // idempotent (`handoffHoldRef.current === null` short-circuits it).
       releaseHandoff("teardown");
-      // THE LOG SURVIVES THE SESSION (2026-08-08, hardware walk 2): the
-      // ended hand-off frame navigates away on its first render, so the
-      // in-memory trace died exactly when the operator wanted to copy it.
-      // Teardown runs on EVERY exit path — ended, cancel, disconnect, a
-      // tab-bar escape — so one stash here covers them all.
+      // STEP 2: STASH. THE LOG SURVIVES THE SESSION (2026-08-08, hardware
+      // walk 2): the ended hand-off frame navigates away on its first
+      // render, so the in-memory trace died exactly when the operator
+      // wanted to copy it. Teardown runs on EVERY exit path — ended,
+      // cancel, disconnect, a tab-bar escape — so one stash here covers
+      // them all. Runs AFTER the reconcile above (Task 7) for the same
+      // reason it must run BEFORE the unsubscribe below: `exportLog()`
+      // serializes a snapshot STRING at THIS call, and an entry written
+      // to the ring after this line would never reach sessionStorage at
+      // all — it would die with the tab (§22's own recorded trap, and this
+      // task's own ordering-pin test).
       // sessionStorage, not localStorage: diagnostics for the tab's own
       // lifetime, not a record. Read it back from the console:
       //   copy(sessionStorage.getItem("ergomatic:last-monitor-log"))
@@ -1167,10 +1276,15 @@ export function useMonitorSession(
           // Quota or privacy mode: diagnostics never break a teardown.
         }
       }
+      // STEP 3: UNSUBSCRIBE. Listener goes now that the reconcile above has
+      // had its one chance to reach it — a disconnect callback fired by
+      // our own `disconnect()` below can still never reach a component
+      // that is on its way out (the original reason this ran early,
+      // unchanged).
       unsubscribeRef.current?.();
       unsubscribeRef.current = null;
-      const driver = claimed ?? driverRef.current;
-      driverRef.current = null;
+      // STEP 4: DISCONNECT (terminate-then-disconnect for the "armed,
+      // never pulled" case is unchanged by this task).
       if (driver === null) return;
       const phase = stateRef.current.phase;
       if (
@@ -1303,6 +1417,7 @@ export function useMonitorSession(
         const run = runRef.current;
         if (run !== null && run.completedAt === null) {
           closeRecord(true);
+          update({ runOpen: false });
           // ...and leave the erg terminated rather than holding an orphan —
           // best-effort, ignored on failure. EXCEPT on `disconnected`,
           // where the link is gone and there is nothing to send a terminate
@@ -1331,7 +1446,7 @@ export function useMonitorSession(
     // report `terminated`, which comes straight back as an event, and this
     // is what makes that event a no-op instead of a second ending.
     closeRecord(true);
-    update({ phase: "ended", endedBy: "user" });
+    update({ phase: "ended", endedBy: "user", runOpen: false });
     const driver = driverRef.current;
     if (driver === null || linkGone) return;
     try {
@@ -1350,7 +1465,9 @@ export function useMonitorSession(
     // over) the control is End, which closes the record; there is nothing
     // for Cancel to do that End does not do better, and silently discarding
     // a live run would be the destruction path the spec forbids.
-    if (phase === "live" || phase === "paused" || phase === "ended") return;
+    // `"paused"` dropped from this guard with the phase member (task 5): a
+    // frozen session is still `"live"`, so this already covered it.
+    if (phase === "live" || phase === "ended") return;
     const driver = driverRef.current;
     // MEDIUM-9 (task-5 re-review), landed by the fix wave's H1: CLAIM the
     // ref synchronously, before the `await driver.terminate()` below
@@ -1417,6 +1534,8 @@ export function useMonitorSession(
     actuals: state.actuals,
     endedBy: state.endedBy,
     handoffHeld: state.handoffHeld,
+    frozen: state.frozen,
+    runOpen: state.runOpen,
     connect,
     program,
     endSession,

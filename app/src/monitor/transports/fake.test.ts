@@ -6,6 +6,7 @@ import {
 import {
   HEARTRATE_NO_BELT,
   parseAdditionalSplitIntervalData,
+  parseAdditionalStatus1,
   parseAdditionalStatus2,
   parseEndOfWorkoutSummary,
   parseGeneralStatus,
@@ -151,6 +152,13 @@ function joinChunks(chunks: Uint8Array[]): Uint8Array {
 
 function decodeGeneral(bytes: Uint8Array) {
   const decoded = parseGeneralStatus(bytes);
+  if ("error" in decoded)
+    throw new Error("unexpected parse error in test fixture");
+  return decoded;
+}
+
+function decodeAs1(bytes: Uint8Array) {
+  const decoded = parseAdditionalStatus1(bytes);
   if ("error" in decoded)
     throw new Error("unexpected parse error in test fixture");
   return decoded;
@@ -1754,6 +1762,61 @@ describe("createFakeTransport: the prepare step's own machine reaction (§18 ses
     expect(generals).toHaveLength(4);
   });
 
+  // Connected-axes design spec §2, Item 3 ("Armed carry-over is real on the
+  // wire"): eight armed frames in the lab captures read 13/16/43/46/50/80/
+  // 88/96 spm with matching nonzero splits, not zero. `zeroedStatus` used
+  // to invent the zero itself; this is the fake TEACHING half of Task 3 —
+  // `surfaceModel.ts`'s mirror has nothing real to substitute for if the
+  // fake it is driven against never produces the ghost being mirrored.
+  it("re-arm keeps the previous piece's spm/split — the wire's own ghost, not zeroedStatus's zero fiction", async () => {
+    const ghostTick: FakeTimelineEvent = {
+      atMs: 0,
+      kind: "status",
+      workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+      elapsedSeconds: 10,
+      distanceMeters: 40,
+      spm: 46,
+      currentSplit: 251,
+      heartRateBpm: 150,
+      programIntervalIndex: 0,
+    };
+    const fake = createFakeTransport({ program: PROGRAM, events: [ghostTick] });
+    const as1: Uint8Array[] = [];
+    fake.subscribe(ADDITIONAL_STATUS_1_UUID, (b) => as1.push(b));
+
+    fake.tick(0); // delivers ghostTick
+    expect(decodeAs1(as1[0]!)).toMatchObject({ spm: 46, currentSplit: 251 });
+
+    await sendPrepare(fake);
+    fake.tick(0); // TERMINATE
+    fake.tick(0); // REARM
+    fake.tick(0); // WAITTOBEGIN — the auto-cycle's own re-arm report
+    const rearmReading = decodeAs1(as1.at(-1)!);
+    // NOT zeroedStatus's old fiction (spm 0, currentSplit 0) — the same
+    // reading the rower was actually at, the instant before the terminate.
+    expect(rearmReading.spm).toBe(46);
+    expect(rearmReading.currentSplit).toBe(251);
+
+    // The ghost also has to survive into a FULL reprogram's own
+    // steady-state WAITTOBEGIN reporting (`deliverArmedBundle`/
+    // `armedBundle`, called every tick the armed level holds) — the
+    // mechanism the app actually polls while waiting for the next piece's
+    // first pull, not just the one-shot three-tick auto-cycle above.
+    await sendProgram(fake, PROGRAM);
+    fake.deliverArmedNow();
+    const steadyReading = decodeAs1(as1.at(-1)!);
+    expect(steadyReading.spm).toBe(46);
+    expect(steadyReading.currentSplit).toBe(251);
+  });
+
+  it("a FRESH arm (no prior rowing) reports 0/0 — there is nothing to carry over", async () => {
+    const fake = createFakeTransport({ program: PROGRAM });
+    const as1: Uint8Array[] = [];
+    fake.subscribe(ADDITIONAL_STATUS_1_UUID, (b) => as1.push(b));
+    await programIt(fake, PROGRAM); // its own doc comment: ends with deliverArmedNow()
+    expect(decodeAs1(as1.at(-1)!)).toMatchObject({ spm: 0, currentSplit: 0 });
+  });
+
   it("a prepare landing on an IDLE machine is a plain accept — no transition, no cycle (§18 s3 item 15's captured byte)", async () => {
     const fake = createFakeTransport({ program: PROGRAM });
     const acks: ReturnType<typeof parseCsafeResponse>[] = [];
@@ -2175,5 +2238,218 @@ describe("createFakeTransport: subscriptionCount", () => {
     unsub();
     unsub();
     expect(fake.subscriptionCount()).toBe(0);
+  });
+});
+
+describe("createFakeTransport: 0x0033's Last Split checkpoint — Task 6's inversion result", () => {
+  // interface-notes.md §20 items 17/24: the checkpoint reads ZERO through
+  // interval indices 0 and 1, then LAGS one boundary behind from index 2
+  // on (the cumulative point at which the PREVIOUS interval began), not the
+  // "current interval's own start" a self-consistent-but-falsified earlier
+  // model of this fake assumed. Lab numbers: checkpoint 0 at interval 1
+  // right after a completed 60s interval 0; ~181m (interval 0's own end) at
+  // interval 2.
+  const CHECKPOINT_PROGRAM: WorkoutProgram = {
+    intervals: [
+      {
+        type: "work",
+        kind: "time",
+        value: 60,
+        targetSplit: null,
+        displaySpm: null,
+        restSeconds: 0,
+      },
+      {
+        type: "work",
+        kind: "time",
+        value: 60,
+        targetSplit: null,
+        displaySpm: null,
+        restSeconds: 0,
+      },
+      {
+        type: "work",
+        kind: "time",
+        value: 60,
+        targetSplit: null,
+        displaySpm: null,
+        restSeconds: 0,
+      },
+    ],
+  };
+  const CHECKPOINT_EVENTS: FakeTimelineEvent[] = [
+    {
+      atMs: 100,
+      kind: "status",
+      workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+      elapsedSeconds: 30,
+      distanceMeters: 90,
+      spm: 22,
+      currentSplit: 130,
+      heartRateBpm: 138,
+      programIntervalIndex: 0,
+    },
+    // Interval 0 ends at 181m — the lab's own "~181m, interval 0's own end".
+    {
+      atMs: 200,
+      kind: "boundary",
+      actual: {
+        index: 0,
+        elapsedSeconds: 60,
+        distanceMeters: 181,
+        avgSplit: 130,
+        avgSpm: 22,
+        avgHeartRateBpm: 138,
+      },
+      cumulativeElapsedSeconds: 60,
+      cumulativeDistanceMeters: 181,
+    },
+    {
+      atMs: 300,
+      kind: "status",
+      workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+      elapsedSeconds: 22,
+      distanceMeters: 75,
+      spm: 22,
+      currentSplit: 129,
+      heartRateBpm: 139,
+      programIntervalIndex: 1,
+    },
+    {
+      atMs: 400,
+      kind: "boundary",
+      actual: {
+        index: 1,
+        elapsedSeconds: 60,
+        distanceMeters: 150,
+        avgSplit: 129,
+        avgSpm: 22,
+        avgHeartRateBpm: 139,
+      },
+      cumulativeElapsedSeconds: 120,
+      cumulativeDistanceMeters: 331,
+    },
+    {
+      atMs: 500,
+      kind: "status",
+      workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+      elapsedSeconds: 18,
+      distanceMeters: 60,
+      spm: 22,
+      currentSplit: 128,
+      heartRateBpm: 140,
+      programIntervalIndex: 2,
+    },
+  ];
+
+  it("reads 0/0 on interval 0's own first tick (nothing has completed yet)", async () => {
+    const fake = createFakeTransport({
+      program: CHECKPOINT_PROGRAM,
+      events: CHECKPOINT_EVENTS,
+    });
+    await programIt(fake, CHECKPOINT_PROGRAM);
+    const as2: Uint8Array[] = [];
+    fake.subscribe(ADDITIONAL_STATUS_2_UUID, (b) => as2.push(b));
+    fake.tick(100);
+    expect(as2).toHaveLength(1);
+    expect(decodeAs2(as2[0]!)).toMatchObject({
+      lastSplitTimeSeconds: 0,
+      lastSplitDistanceMeters: 0,
+    });
+  });
+
+  it("STILL reads 0/0 on interval 1's own first tick — one boundary has already fired", async () => {
+    const fake = createFakeTransport({
+      program: CHECKPOINT_PROGRAM,
+      events: CHECKPOINT_EVENTS,
+    });
+    await programIt(fake, CHECKPOINT_PROGRAM);
+    const as2: Uint8Array[] = [];
+    fake.subscribe(ADDITIONAL_STATUS_2_UUID, (b) => as2.push(b));
+    fake.tick(300); // delivers tick@100, boundary@200, tick@300
+    expect(as2).toHaveLength(2);
+    expect(decodeAs2(as2[1]!)).toMatchObject({
+      lastSplitTimeSeconds: 0,
+      lastSplitDistanceMeters: 0,
+    });
+  });
+
+  it("LAGS to interval 0's own boundary at interval 2 — not interval 1's, which just fired", async () => {
+    const fake = createFakeTransport({
+      program: CHECKPOINT_PROGRAM,
+      events: CHECKPOINT_EVENTS,
+    });
+    await programIt(fake, CHECKPOINT_PROGRAM);
+    const as2: Uint8Array[] = [];
+    fake.subscribe(ADDITIONAL_STATUS_2_UUID, (b) => as2.push(b));
+    fake.tick(500); // delivers every scripted event through the interval-2 tick
+    expect(as2).toHaveLength(3);
+    // Interval 0's own boundary (60s/181m) — NOT interval 1's (120s/331m),
+    // which fired more recently but is exactly the one boundary this
+    // checkpoint stays behind.
+    expect(decodeAs2(as2[2]!)).toMatchObject({
+      lastSplitTimeSeconds: 60,
+      lastSplitDistanceMeters: 181,
+    });
+  });
+
+  it("resets to 0/0 across a re-arm — a new workout owes nothing to the last one's checkpoint", async () => {
+    // Review IMPORTANT-1: `as2[0]` after a re-arm is the WAITTOBEGIN armed
+    // bundle, and `armedBundle()` passes a LITERAL `{elapsedSeconds: 0,
+    // distanceMeters: 0}` as `lastSplit` (that function's own doc comment:
+    // "nothing to root it at before the session's own first interval even
+    // starts") — never `wireLastSplit`. Asserting only `as2[0]` proves
+    // `armedBundle`'s hardcoded zero, not that `wireLastSplit` itself was
+    // actually reset; the reset line in `deliverOrCache`'s re-arm branch
+    // could be deleted and this test would still pass. Fixed: a scripted
+    // STATUS TICK after the re-arm, which routes through `statusBundle`
+    // and `wireLastSplit` for real, is what this test now asserts against.
+    const REARM_EVENTS: FakeTimelineEvent[] = [
+      ...CHECKPOINT_EVENTS,
+      // Interval 0 of the RE-ARMED program (same `CHECKPOINT_PROGRAM`,
+      // fresh session) — if `wireLastSplit` had NOT been reset, this tick
+      // would still carry the first session's lagged checkpoint
+      // (60s/181m, reached above) instead of 0/0.
+      {
+        atMs: 600,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        elapsedSeconds: 5,
+        distanceMeters: 12,
+        spm: 20,
+        currentSplit: 135,
+        heartRateBpm: 130,
+        programIntervalIndex: 0,
+      },
+    ];
+    const fake = createFakeTransport({
+      program: CHECKPOINT_PROGRAM,
+      events: REARM_EVENTS,
+    });
+    await programIt(fake, CHECKPOINT_PROGRAM);
+    fake.tick(500); // reach interval 2, checkpoint lagged to 60s/181m
+    await fake.write(RECEIVE_CHARACTERISTIC_UUID, buildTerminate()[0]![0]!);
+    for (const chunk of buildTerminate()[0]!.slice(1)) {
+      await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+    }
+    const as2: Uint8Array[] = [];
+    fake.subscribe(ADDITIONAL_STATUS_2_UUID, (b) => as2.push(b));
+    for (const chunk of buildProgrammingSequence(CHECKPOINT_PROGRAM)[0]!) {
+      await fake.write(RECEIVE_CHARACTERISTIC_UUID, chunk);
+    }
+    fake.tick(0); // flushes the fresh armed bundle (fix-round 1, F1)
+    expect(as2.length).toBeGreaterThan(0);
+    expect(decodeAs2(as2[0]!)).toMatchObject({
+      lastSplitTimeSeconds: 0,
+      lastSplitDistanceMeters: 0,
+    });
+    // The REAL pin: a live status tick after the re-arm, routed through
+    // `wireLastSplit` for real (not `armedBundle`'s hardcoded literal).
+    fake.tick(100); // 500 -> 600, delivers the scripted post-rearm tick
+    expect(as2.length).toBeGreaterThan(1);
+    expect(decodeAs2(as2.at(-1)!)).toMatchObject({
+      lastSplitTimeSeconds: 0,
+      lastSplitDistanceMeters: 0,
+    });
   });
 });

@@ -49,16 +49,20 @@ import {
   WORKOUTSTATE_WORKOUTEND,
 } from "../../domain/monitor/pm5/parse.js";
 import {
+  ADDITIONAL_SPLIT_INTERVAL_DATA_UUID,
   ADDITIONAL_STATUS_1_UUID,
   ADDITIONAL_STATUS_2_UUID,
   END_OF_WORKOUT_SUMMARY_UUID,
   GENERAL_STATUS_UUID,
   RECEIVE_CHARACTERISTIC_UUID,
+  SPLIT_INTERVAL_DATA_UUID,
   TRANSMIT_CHARACTERISTIC_UUID,
 } from "../../domain/monitor/pm5/uuids.js";
 import {
+  buildAdditionalSplitIntervalDataBytes,
   buildAdditionalStatus2Bytes,
   buildGeneralStatusBytes,
+  buildSplitIntervalDataBytes,
 } from "../../domain/monitor/pm5/statusFrames.js";
 import { buildAckFrame } from "../../domain/monitor/pm5/response.js";
 import type {
@@ -489,6 +493,57 @@ async function tick(
     );
   }
   return frames[frames.length - 1]!.frame;
+}
+
+/** One full boundary — 0x0037 then 0x0038, the pair `emitIntervalComplete`
+ *  files into `run.recordedActuals` (ported from `driver.test.ts`'s own
+ *  `splitHalf`/`asSplitHalf`, module-private there). Task 8's suspicion
+ *  verdict reads `recordedActuals`, not `session.seen` (`tick()`'s own
+ *  registers) — the "final totals" describe block above never needed this
+ *  helper because it only asserted on `session.seen` via `tick()` alone.
+ *
+ *  `machineIndex` is the raw Split/Interval Number to put on the wire —
+ *  callers pass `programIndex + 1` (`toActualIndex`'s own doc comment:
+ *  `candidate = machineIndex - 1`, unconditionally, in `[0, programLength)`
+ *  needs no clamping for that input) rather than the normalized program
+ *  index, so a reader checking this file against `intervalIndex.ts` sees
+ *  the same arithmetic, not a restated one. */
+function emitBoundary(
+  h: Harness,
+  machineIndex: number,
+  seconds: number,
+  meters: number,
+): void {
+  h.transport.notify(
+    SPLIT_INTERVAL_DATA_UUID,
+    buildSplitIntervalDataBytes({
+      elapsedSeconds: seconds,
+      distanceMeters: meters,
+      splitIntervalTimeSeconds: seconds,
+      splitIntervalDistanceMeters: meters,
+      intervalRestTimeSeconds: 0,
+      intervalRestDistanceMeters: 0,
+      splitIntervalType: 0,
+      splitIntervalNumber: machineIndex,
+    }),
+  );
+  h.transport.notify(
+    ADDITIONAL_SPLIT_INTERVAL_DATA_UUID,
+    buildAdditionalSplitIntervalDataBytes({
+      elapsedSeconds: 0,
+      splitIntervalAvgStrokeRate: 22,
+      splitIntervalWorkHeartRateBpm: 150,
+      splitIntervalRestHeartRateBpm: 120,
+      splitIntervalAvgPace: 120,
+      splitIntervalTotalCalories: 0,
+      splitIntervalAvgCalories: 0,
+      splitIntervalSpeedMetersPerSecond: 0,
+      splitIntervalPowerWatts: 0,
+      splitAvgDragFactor: 130,
+      splitIntervalNumber: machineIndex,
+      ergMachineType: 1,
+    }),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -1912,5 +1967,203 @@ describe("session accumulator: the TWD comparison runs at the terminal, not at 0
     // Honest agreement (367.8 vs 367) — no divergence anywhere, neither at
     // 0x0039-time (the lag is not a defect) nor at the terminal.
     expect(div).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 8 — the suspicion verdict, log-only and fail-open
+// (`docs/monitor/sessions/walk-2026-08-15/README.md` names the four
+// committed rings; the fifth shape — mid-program `finished`, no summary,
+// well short of the program — is the afternoon walk's session-killer
+// signature, hand-built here since that ring itself was never committed).
+// ---------------------------------------------------------------------------
+
+describe("session accumulator: the suspicion verdict (Task 8, log-only, fail-open)", () => {
+  it(
+    "the killer-shaped fixture (mid-program finished, no summary, 0 of 2 " +
+      "actuals) convicts itself with exactly ONE suspicious-terminal " +
+      "entry, carrying terminal-raw's own bytes, and the run still closes " +
+      "exactly as today",
+    async () => {
+      const h = await programmed(TWO_INTERVAL_REST_PROGRAM);
+
+      // Some progress into interval 0 — never a completed boundary.
+      await tick(h, {
+        elapsed: 20,
+        distance: 60,
+        state: WORKOUTSTATE_INTERVALWORKTIME,
+      });
+      // The kill: a "finished" frame lands mid-program, no 0x0037/0x0038
+      // ever arrived, no 0x0039 either.
+      await tick(h, {
+        elapsed: 20,
+        distance: 60,
+        state: WORKOUTSTATE_WORKOUTEND,
+      });
+
+      const suspicious = h.log
+        .entries()
+        .filter((e) => e.kind === "suspicious-terminal");
+      expect(suspicious).toHaveLength(1);
+      const raw = h.log.entries().filter((e) => e.kind === "terminal-raw");
+      expect(raw).toHaveLength(1);
+      // The consequence, not just the existence: the SAME bytes, verbatim.
+      expect(suspicious[0]!.detail).toBe(raw[0]!.detail);
+
+      // The close's own observable consequences are unchanged — the
+      // verdict is log-only. Exactly one workoutComplete, no terminated,
+      // and final-totals still reports the honest (short) count.
+      expect(h.events.filter((e) => e.kind === "workoutComplete")).toHaveLength(
+        1,
+      );
+      expect(h.events.filter((e) => e.kind === "terminated")).toHaveLength(0);
+      // `final-totals` still fires exactly once, unaffected by the new
+      // entry above it — its own count is `session.seen` (the frame
+      // accumulator's registers), a DIFFERENT counter from the predicate's
+      // `recordedActuals` (no boundary ever completed here, so
+      // `recordedActuals` is 0; `session.seen` gained one register from
+      // the mid-piece tick alone — see `session`'s own doc comment on why
+      // the two counters diverge).
+      const finals = h.log.entries().filter((e) => e.kind === "final-totals");
+      expect(finals).toHaveLength(1);
+      expect(finals[0]!.detail).toContain("registers=1 of 2 programmed");
+    },
+  );
+
+  it("session-a's own shape (2 of 3 recorded — exactly N-1) is unsuspicious", async () => {
+    const h = await programmed(THREE_INTERVAL_PROGRAM);
+
+    await tick(h, {
+      elapsed: 60,
+      distance: 200,
+      state: WORKOUTSTATE_INTERVALWORKTIME,
+    });
+    emitBoundary(h, 1, 60, 200); // -> program index 0
+    await tick(h, {
+      elapsed: 60,
+      distance: 200,
+      state: WORKOUTSTATE_INTERVALWORKTIME,
+    });
+    emitBoundary(h, 2, 60, 200); // -> program index 1
+    // Interval 2 (the third) never gets its own boundary before the finish.
+    await tick(h, {
+      elapsed: 60,
+      distance: 200,
+      state: WORKOUTSTATE_WORKOUTEND,
+    });
+
+    expect(
+      h.log.entries().filter((e) => e.kind === "suspicious-terminal"),
+    ).toHaveLength(0);
+  });
+
+  it("session-b's own shape (1 of 2 recorded — exactly N-1) is unsuspicious", async () => {
+    const h = await programmed(TWO_INTERVAL_REST_PROGRAM);
+
+    await tick(h, {
+      elapsed: 60,
+      distance: 200,
+      state: WORKOUTSTATE_INTERVALWORKTIME,
+    });
+    emitBoundary(h, 1, 60, 200); // -> program index 0
+    // Interval 1 never gets its own boundary before the finish.
+    await tick(h, {
+      elapsed: 60,
+      distance: 200,
+      state: WORKOUTSTATE_WORKOUTEND,
+    });
+
+    expect(
+      h.log.entries().filter((e) => e.kind === "suspicious-terminal"),
+    ).toHaveLength(0);
+  });
+
+  it(
+    "session-c's own shape (0x0039 seen BEFORE the terminal frame, 0 of 2 " +
+      "recorded — the exact killer-fixture actuals shape) is unsuspicious " +
+      "ONLY because of the flag: this is why summarySeen cannot be " +
+      "`run.summaryInGrace`",
+    async () => {
+      const h = await programmed(TWO_INTERVAL_REST_PROGRAM);
+
+      await tick(h, {
+        elapsed: 20,
+        distance: 60,
+        state: WORKOUTSTATE_INTERVALWORKTIME,
+      });
+      // The 0x0039 arrives while the run is still OPEN — before any grace
+      // has ever opened, so `noteSummary`'s own `!graceIsOpen` branch fires
+      // and discards it (`summary-reconciled` "out-of-window"). Nothing is
+      // stored in `summaryInGrace`; only the unconditional `summarySeen`
+      // flag survives this.
+      h.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, new Uint8Array(20));
+      const outOfWindow = h.log
+        .entries()
+        .filter(
+          (e) =>
+            e.kind === "summary-reconciled" &&
+            e.detail.includes("out-of-window"),
+        );
+      expect(outOfWindow).toHaveLength(1);
+
+      // Same actuals shape as the killer fixture (0 of 2) — and NO
+      // boundary ever arrives either.
+      await tick(h, {
+        elapsed: 20,
+        distance: 60,
+        state: WORKOUTSTATE_WORKOUTEND,
+      });
+
+      expect(
+        h.log.entries().filter((e) => e.kind === "suspicious-terminal"),
+      ).toHaveLength(0);
+    },
+  );
+
+  it("session-d's own shape (2 of 2 recorded — full count) is unsuspicious", async () => {
+    const h = await programmed(TWO_INTERVAL_REST_PROGRAM);
+
+    await tick(h, {
+      elapsed: 60,
+      distance: 200,
+      state: WORKOUTSTATE_INTERVALWORKTIME,
+    });
+    emitBoundary(h, 1, 60, 200); // -> program index 0
+    await tick(h, {
+      elapsed: 60,
+      distance: 200,
+      state: WORKOUTSTATE_INTERVALWORKTIME,
+    });
+    emitBoundary(h, 2, 60, 200); // -> program index 1
+    await tick(h, {
+      elapsed: 60,
+      distance: 200,
+      state: WORKOUTSTATE_WORKOUTEND,
+    });
+
+    expect(
+      h.log.entries().filter((e) => e.kind === "suspicious-terminal"),
+    ).toHaveLength(0);
+  });
+
+  it("`terminated` is NEVER suspicious, even with 0 actuals recorded and no summary", async () => {
+    const h = await programmed(TWO_INTERVAL_REST_PROGRAM);
+
+    await tick(h, {
+      elapsed: 10,
+      distance: 20,
+      state: WORKOUTSTATE_INTERVALWORKTIME,
+    });
+    // CSAFE-DEF footnote 12: elapsed re-bases backwards, distance stands.
+    await tick(h, {
+      elapsed: 5,
+      distance: 20,
+      state: WORKOUTSTATE_TERMINATE,
+    });
+
+    expect(h.events.filter((e) => e.kind === "terminated")).toHaveLength(1);
+    expect(
+      h.log.entries().filter((e) => e.kind === "suspicious-terminal"),
+    ).toHaveLength(0);
   });
 });
