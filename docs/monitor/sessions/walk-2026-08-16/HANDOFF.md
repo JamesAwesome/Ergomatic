@@ -12,10 +12,12 @@
 > max-merge kept the poison). "Rest-coast attribution appears CORRECT
 > throughout" was the exact inverse of the mechanism. The wu was causally
 > irrelevant. See `docs/superpowers/specs/2026-08-16-rest-keying-fix-design.md`.
-> Still open from this file: the untranscribed photos (§ transcriptions),
-> the MaxListenersExceeded observation (filed: Node-side, likely Vite's
-> proxy — not the tap), and the header-without-program discrepancy (filed
-> in session memory as recording-header-program-gap).
+> **All follow-ups from this file are now CLOSED (2026-08-16 close-out):**
+> every photo is transcribed (§ transcriptions — rest 2's pair moves the
+> overcount onset a full rest earlier and lands +202 ≈ the first poison
+> exactly); the MaxListenersExceeded warning came from a browser
+> extension's contentscript, not our code; and the headers-without-program
+> mystery was the console (§ below) — no product bug.
 
 Two full wire recordings (pm5-recording/v1, gunzipped JSONL, committed
 beside this file), captured per RUNSHEET.md over Chrome/Web Bluetooth with
@@ -97,6 +99,11 @@ the deleted fold would have double-banked at both.
 **Also observed, minor:** Chrome console showed MaxListenersExceeded
 ("11 close listeners added") during the session — check whether the
 recording tap adds per-session listeners without removing them.
+**RESOLVED (2026-08-16 close-out):** not the tap and not our code at
+all — the photos show the warning's source column reads
+`contentscript.js`, a BROWSER EXTENSION's content script. The tap holds
+one inner subscription per characteristic (verified in review) and
+nothing in the page registers `close` listeners.
 
 ## Photo transcriptions (SCREEN evidence; wire values come from recordings)
 
@@ -108,6 +115,41 @@ recording tap adds per-session listeners without removing them.
   `TOTAL M 348` (same frame) — totals honest at rest 1.
 - walk-2/third-rest-laptop: phone `3 OF 4 · REST`, `TOTAL M 1575`,
   `METERS LEFT 0`, TOTAL LEFT visible — overcount live by rest 3.
-- walk-2/second-rest pair + third-rest-pm + finish pair: not yet
-  transcribed — view them (onset refinement + interval-4 state + the
-  machine-side totals at rests 2/3).
+- walk-2/second-rest pair (transcribed 2026-08-16 close-out): PM5 rest
+  screen at rest 2 — `:26 r`, `Interval 3`, 461 m, ave 2:10.2/500m, rate
+  26, **`828 m total`**; phone in the pair reads `2 OF 4 · REST`, NOW
+  2:14.5 Rest, 26 SPM, **`TOTAL M 1030`**, HR 149, TOTAL LEFT 3:36.
+  **Phone − PM5 = +202 m at rest 2 — the first poison's own +201.3 to
+  within rounding.** Onset refined: the overcount was live one full rest
+  earlier than the original "wrong by rest 3" read.
+- walk-2/third-rest-pm (transcribed): PM5 rest screen at rest 3 — `:24 r`,
+  `Interval 4`, 2:08.7 interval, ave 2:08.7/500m, rate 25, **`1354 m
+  total`** — the machine-side number the wire window (TWD 1343-1351)
+  predicted, now on-screen. Against the phone's already-transcribed 1575:
+  +221, the full two-poison sum.
+- walk-2/finish pair (transcribed): PM5 finish view shows the FINAL
+  INTERVAL only — interval 5, 245 m, ave 2:02.3/500m, `projected finish
+  245` — **no session total anywhere on the end screen** (re-confirming
+  the protocol fact; the rest screen is the only live-total surface).
+  The phone's log screen reads "ALL 4 INTERVALS MEASURED" with actuals
+  2:11.0 / 2:10.1 / 2:08.7 / 2:02.4 — the per-interval ACTUALS path
+  (0x0037/38) was honest throughout; only TOTAL M carried the poison.
+  PM5 interval-5 245 m = register key 4's (60.0 s, 245.2 m) exactly.
+
+## Why the committed recordings' headers carry no program (close-out)
+
+The walk's downloads were invoked FROM THE DEVTOOLS CONSOLE —
+`window.__pm5Recording__.download()` with no argument, visible twice in
+the first-rest and finish photos (`Promise {pending}` results in frame).
+`download(program)` takes the program as its argument; a console call
+bypasses TypeScript, `program` arrived `undefined`, and
+`JSON.stringify` dropped the key. The button path (which supplies the
+surface's own program) is intact — no product bug. **Protocol for future
+walks: download recordings via the "Download recording" BUTTON in the
+log sheet, not the console.** Replay tests are robust either way (they
+hand-transcribe program literals and byte-verify them against the
+recorded programming frames). CI coverage note: `transports/index.test.ts`
+already pins `header.program` through the REAL gated arm (a wiring
+regression fails CI), and the sheet test pins the click forwarding its
+prop; only the combined real-arm-plus-real-click composite rests on the
+static chain, and the sheet cannot even mount after a session ends.
