@@ -1596,17 +1596,11 @@ export function createPm5Driver(
     // happened yet — always lands inside the hold. So: cancel the wait,
     // then let the reconcile answer with whatever evidence this run has
     // already earned — filled, split-won, or declined; a link death is not
-    // a reason to keep a resolvable verdict out of the trace.
-    if (pendingSummaryReconcile !== null) {
-      pendingSummaryReconcile();
-      pendingSummaryReconcile = null;
-      // `armSummaryReconcile` is armed from exactly one call site (the
-      // `finished` branch above, immediately after `activeRun!.closed =
-      // true`), and `program()`'s own replacement path cancels this same
-      // field before a new run ever opens — so a deadline still pending
-      // here can only name the CURRENT `activeRun`, closed and non-null.
-      if (activeRun !== null) reconcileSummary(activeRun);
-    }
+    // a reason to keep a resolvable verdict out of the trace. Extracted to
+    // `drainSummaryReconcile` (Task 7): `disconnect()` below now applies
+    // this identical rule for a caller-initiated hang-up, which used to
+    // discard the same verdict this comment refuses to.
+    drainSummaryReconcile();
     if (activeRun !== null && activeRun.closed) {
       // The old `terminalLatched` flag's SECOND consumer, re-scoped to the
       // run (Task 4, spec §4: replaced, never deleted). Appendix E (cited
@@ -2058,24 +2052,15 @@ export function createPm5Driver(
     // on-device; both walk rings end without one). The ring survives via the
     // sessionStorage stash, so writing the finals HERE means a re-walk needs
     // exactly one photograph (the PM5 summary) and zero phone timing.
-    {
-      const n = (v: number) => Number(v.toFixed(1));
-      const regs = [...session.seen.entries()]
-        .sort(([a], [b]) => a - b)
-        .map(
-          ([k, r]) => `${k}:(${n(r.elapsedSeconds)}s,${n(r.distanceMeters)}m)`,
-        )
-        .join(" ");
-      const programmed = activeRun!.program.intervals.length;
-      log.record(
-        "final-totals",
-        `accumulator=${n(lastEmittedTotals.distanceMeters)}m ` +
-          `accumulatorElapsed=${n(lastEmittedTotals.elapsedSeconds)}s ` +
-          `machineTotal=${raw.totalWorkDistanceMeters ?? "?"}m ` +
-          `durationType=${raw.workoutDurationType ?? "?"} ` +
-          `registers=${session.seen.size} of ${programmed} programmed ${regs}`,
-      );
-    }
+    //
+    // ONE OF TWO CALL SITES (Task 7, "one terminal path" — `recordFinalTotals`'s
+    // own doc comment names the other, `terminate()`). This one fires on the
+    // machine's OWN terminal frame — the ordinary path, and the one a natural
+    // finish always takes. The END/cancel path takes the other: that frame
+    // routinely arrives after teardown has already stashed and hung up
+    // (spec 1's walk evidence), so it cannot be the only place these totals
+    // are written.
+    recordFinalTotals(activeRun!);
     // THE TERMINAL FRAME'S OWN BYTES (walk 2026-08-15, the mid-rest
     // finished frame — see `lastRaw0x0031`'s declaration comment). One
     // entry per session end, so the flood argument that keeps 0x0031 out
@@ -2368,6 +2353,43 @@ export function createPm5Driver(
     // evidence, verdicts on unsettled numbers are noise.
   }
 
+  /** THE `final-totals` ENTRY, ONE BUILDER FOR BOTH TRIGGERS (Task 7, "one
+   *  terminal path"). Two call sites need the identical shape and must
+   *  never drift apart:
+   *  - `maybeEmitFrame`'s own terminal branch, at the machine's OWN
+   *    finished/terminated status frame — the ordinary path (James's walk
+   *    protocol change, 2026-08-15, that entry's own doc comment carries
+   *    the full reasoning for writing these into the ring at all).
+   *  - `terminate()`, at TERMINATE-DISPATCH time. The END/cancel path's
+   *    own terminated status frame routinely arrives AFTER teardown has
+   *    already stashed and hung up the radio (spec 1's re-walk: "the ring
+   *    ended at the terminate write") — waiting for that frame here would
+   *    lose the entry the exact same way it did before this task, so the
+   *    caller-initiated ending writes it itself, from whatever this run
+   *    has accumulated so far.
+   *
+   *  Guarded at both call sites on the run being OPEN (`activeRun !==
+   *  null && !activeRun.closed`), never inside this function: a run the
+   *  machine's own frame already closed has already told its one story
+   *  through the first call site, and `terminate()`'s guard is what keeps
+   *  it from re-telling a shorter version of the same one. */
+  function recordFinalTotals(run: NonNullable<typeof activeRun>): void {
+    const n = (v: number): number => Number(v.toFixed(1));
+    const regs = [...session.seen.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([k, r]) => `${k}:(${n(r.elapsedSeconds)}s,${n(r.distanceMeters)}m)`)
+      .join(" ");
+    const programmed = run.program.intervals.length;
+    log.record(
+      "final-totals",
+      `accumulator=${n(lastEmittedTotals.distanceMeters)}m ` +
+        `accumulatorElapsed=${n(lastEmittedTotals.elapsedSeconds)}s ` +
+        `machineTotal=${raw.totalWorkDistanceMeters ?? "?"}m ` +
+        `durationType=${raw.workoutDurationType ?? "?"} ` +
+        `registers=${session.seen.size} of ${programmed} programmed ${regs}`,
+    );
+  }
+
   /** THE ACCUMULATOR-VS-MACHINE VERDICT (CR2 spec 1, Task 5; moved from
    *  `logSummaryTotals` after the re-walk caught it firing on a lagging
    *  TWD — see the comment at that call site). `lastEmittedTotals` is what
@@ -2464,6 +2486,44 @@ export function createPm5Driver(
       if (activeRun !== run) return;
       reconcileSummary(run);
     }, FINISH_GRACE_MS);
+  }
+
+  /** THE F7 RULE, AS ITS OWN FUNCTION (Task 7, "one terminal path" — this
+   *  used to be inline, only inside `t.onDisconnect`'s callback below,
+   *  whose own doc comment still carries the full reasoning for why a
+   *  still-pending deadline is DRAINED rather than merely cancelled: the
+   *  radio going away only costs the run its ability to WAIT for more wire
+   *  evidence, never a verdict already reachable from evidence already in
+   *  hand, and a synchronous reconcile always lands inside the hand-off
+   *  hold because that hold is strictly the longer of the two coupled
+   *  windows.
+   *
+   *  THE TWIN THIS TASK GIVES A SECOND CALL SITE TO FIX: `disconnect()`
+   *  below used to apply a DIFFERENT rule for the exact same situation —
+   *  a caller-initiated hang-up just cancelled the deadline and threw the
+   *  verdict away, because `Transport.onDisconnect`'s own contract
+   *  (`domain/monitor/types.ts`) is explicit that a caller-initiated
+   *  `disconnect()` never fires it (`webBluetooth.ts`'s own guard against
+   *  double-firing, M-2), so this callback was never going to run for
+   *  that path on its own. `disconnect()` and the hook's new `reconcile()`
+   *  method (`MonitorDriver.reconcile`) both call this function now, so a
+   *  reconcile-eligible verdict gets the SAME answer whichever way the
+   *  link ends. Idempotent by construction: a second call after
+   *  `pendingSummaryReconcile` is already `null` is a no-op, so calling it
+   *  from more than one of those three sites in the same teardown costs
+   *  nothing. */
+  function drainSummaryReconcile(): void {
+    if (pendingSummaryReconcile !== null) {
+      pendingSummaryReconcile();
+      pendingSummaryReconcile = null;
+      // `armSummaryReconcile` is armed from exactly one call site (the
+      // `finished` branch in `maybeEmitFrame`, immediately after
+      // `activeRun!.closed = true`), and `program()`'s own replacement
+      // path cancels this same field before a new run ever opens — so a
+      // deadline still pending here can only name the CURRENT `activeRun`,
+      // closed and non-null.
+      if (activeRun !== null) reconcileSummary(activeRun);
+    }
   }
 
   /**
@@ -4152,6 +4212,24 @@ export function createPm5Driver(
     // `buildGetErrorType` cites at its own definition (interface-notes.md
     // §17 item 14).
     async terminate(): Promise<void> {
+      // TERMINATE-DISPATCH FINALS (Task 7, "one terminal path" — spec 1's
+      // re-walk: "the ring ended at the terminate write"). The END/cancel
+      // path's own terminated status frame — the trigger `maybeEmitFrame`'s
+      // terminal branch waits for — routinely arrives AFTER the hook's
+      // teardown has already stashed and hung up the radio, so waiting for
+      // it here would lose the `final-totals` entry the same way it did
+      // before this task. Writing it from THIS call instead means the
+      // caller-initiated ending's own totals are in the ring before this
+      // promise even resolves, however long the machine's own frame takes.
+      //
+      // Guarded on an OPEN run (`recordFinalTotals`'s own doc comment):
+      // nothing to summarize before `program()` ever opened one, and a run
+      // the machine's own frame already closed already told its one story
+      // through that call site — this never re-tells a shorter version of
+      // it.
+      if (activeRun !== null && !activeRun.closed) {
+        recordFinalTotals(activeRun);
+      }
       await sendSequence(buildTerminate(), "terminate-sent");
       await settleAfterTerminate();
     },
@@ -4161,15 +4239,30 @@ export function createPm5Driver(
       return () => listeners.delete(cb);
     },
 
+    // Task 7: applies the F7 rule (`drainSummaryReconcile`'s own doc
+    // comment carries the full reasoning) rather than merely cancelling —
+    // the twin defect this task fixes was this method throwing away a
+    // reconcile-eligible verdict just because the caller hung up first,
+    // where a passive drop (`t.onDisconnect` above) already answered it.
+    // Idempotent with the hook's own `reconcile()` call, which normally
+    // runs first (`useMonitorSession.ts`'s `teardown`, while the listener
+    // is still live) and leaves nothing here to drain — this call is the
+    // belt to that braces for any OTHER caller of `disconnect()`.
+    reconcile(): void {
+      drainSummaryReconcile();
+    },
+
     async disconnect(): Promise<void> {
       log.record("disconnect-requested", "caller-initiated");
       // The caller is done with this driver, so its one timer goes with it
-      // (fast-follow Task 2). No summary can arrive after the radio is
-      // hung up, so a deadline still standing here could only ever fire
-      // into a torn-down session — and a driver that leaves live timers
-      // behind is a driver a test cannot finish cleanly.
-      pendingSummaryReconcile?.();
-      pendingSummaryReconcile = null;
+      // either way (fast-follow Task 2) — draining rather than merely
+      // cancelling (Task 7) answers it first, using whatever evidence this
+      // run has already earned, rather than discarding a verdict the radio
+      // going away could not actually invalidate. No summary can arrive
+      // after the radio really is hung up below, so nothing is deferred
+      // past this line — and a driver that leaves live timers behind is a
+      // driver a test cannot finish cleanly.
+      drainSummaryReconcile();
       await t.disconnect();
     },
   };

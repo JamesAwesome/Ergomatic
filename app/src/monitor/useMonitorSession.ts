@@ -1157,9 +1157,21 @@ export function useMonitorSession(
     [endByMachine, handleFrame, releaseHandoff, update],
   );
 
-  /** Drops the driver and the radio. Listener FIRST, so a disconnect
-   *  callback fired by our own `disconnect()` can never reach a component
-   *  that is on its way out.
+  /** Drops the driver and the radio. FOUR STEPS, IN THIS ORDER (Task 7,
+   *  "one terminal path"): **reconcile, then the hand-off release, then
+   *  stash, then unsubscribe, then disconnect** — the function body below
+   *  carries each step's own reasoning, but the shape is: reconcile is
+   *  first because it is the ONE step that needs the driver's listener
+   *  still subscribed (a still-pending summary-gate deadline drained here
+   *  emits synchronously, and a listener already gone never hears it —
+   *  the twin defect this task fixes, named at `driver.ts`'s
+   *  `drainSummaryReconcile`); stash is before unsubscribe because
+   *  `exportLog()` serializes a snapshot STRING at that call, and anything
+   *  written after it never reaches sessionStorage at all (§22's own
+   *  recorded trap); unsubscribe still runs before `disconnect()`, so a
+   *  disconnect callback fired by our own hang-up can never reach a
+   *  component that is on its way out (the ORIGINAL reason this ran
+   *  early, still true).
    *
    *  **Task 5 review fix round — terminates first when the erg is armed and
    *  nobody has terminated it yet.** `cancel()` below already does this
@@ -1189,21 +1201,60 @@ export function useMonitorSession(
    *  path always takes the `driverRef.current` branch. */
   const teardown = useCallback(
     (alreadyTerminated = false, claimed: MonitorDriver | null = null): void => {
-      // FIRST, above the stash below (review M-1): a teardown IS the hand-off
-      // completing, or the rower leaving — either way nothing is left to wait
-      // for. Releasing rather than silently cancelling buys two things: the
-      // exported trace shows a `handoff-hold` with a matching release instead
-      // of an open hold and no explanation (the one case the walk-day-2
-      // entries could not account for from a stash alone), and `handoffHeld`
-      // cannot be left `true` in a state a future "stay mounted past ended"
-      // change would then find stuck. A no-op when nothing is held, which is
-      // every teardown but one.
+      // Resolved FIRST — every step below needs the same driver, and
+      // clearing `driverRef` here (rather than after stash/unsubscribe, as
+      // this used to) is a pure reordering: a re-entrant teardown
+      // (unmount racing `cancel()`, this function's own `claimed` note)
+      // still finds nothing left to repeat either way.
+      const driver = claimed ?? driverRef.current;
+      driverRef.current = null;
+
+      // STEP 1: RECONCILE (Task 7). Before EVEN the hand-off release below
+      // — this is the one step that needs a LIVE listener still subscribed
+      // to the driver. `driver.reconcile()` drains whatever the summary
+      // gate's own deadline (`armSummaryReconcile`) is still holding and
+      // answers it synchronously with whatever evidence this run has
+      // already earned (`driver.ts`'s `drainSummaryReconcile`, the F7
+      // rule) — a no-op when nothing is pending, which is every teardown
+      // but a mid-grace unmount.
+      //
+      // THE TWIN THIS CLOSES: `driver.disconnect()` used to apply a
+      // DIFFERENT rule from a passive link drop — it just cancelled the
+      // deadline and threw the verdict away — and even after fixing
+      // `disconnect()` to drain it too, calling it there was still too
+      // late for THIS hook: `disconnect()` used to run after
+      // `unsubscribeRef.current?.()` below, so its drain would have emitted
+      // into a listener set with nothing left in it. Calling `reconcile()`
+      // here, before that unsubscribe, is what closes both halves at once
+      // — any reconcile-eligible verdict reaches `handleEvent` while it is
+      // still wired up, including its own `releaseHandoff("final-boundary")`
+      // call for a fill that lands on the way out.
+      driver?.reconcile();
+
+      // Above the stash below (review M-1, unchanged by this task): a
+      // teardown IS the hand-off completing, or the rower leaving — either
+      // way nothing is left to wait for. Releasing rather than silently
+      // cancelling buys two things: the exported trace shows a
+      // `handoff-hold` with a matching release instead of an open hold and
+      // no explanation (the one case the walk-day-2 entries could not
+      // account for from a stash alone), and `handoffHeld` cannot be left
+      // `true` in a state a future "stay mounted past ended" change would
+      // then find stuck. A no-op when nothing is held — including when the
+      // reconcile just above already released it with the more specific
+      // `"final-boundary"` reason, since `releaseHandoff` is itself
+      // idempotent (`handoffHoldRef.current === null` short-circuits it).
       releaseHandoff("teardown");
-      // THE LOG SURVIVES THE SESSION (2026-08-08, hardware walk 2): the
-      // ended hand-off frame navigates away on its first render, so the
-      // in-memory trace died exactly when the operator wanted to copy it.
-      // Teardown runs on EVERY exit path — ended, cancel, disconnect, a
-      // tab-bar escape — so one stash here covers them all.
+      // STEP 2: STASH. THE LOG SURVIVES THE SESSION (2026-08-08, hardware
+      // walk 2): the ended hand-off frame navigates away on its first
+      // render, so the in-memory trace died exactly when the operator
+      // wanted to copy it. Teardown runs on EVERY exit path — ended,
+      // cancel, disconnect, a tab-bar escape — so one stash here covers
+      // them all. Runs AFTER the reconcile above (Task 7) for the same
+      // reason it must run BEFORE the unsubscribe below: `exportLog()`
+      // serializes a snapshot STRING at THIS call, and an entry written
+      // to the ring after this line would never reach sessionStorage at
+      // all — it would die with the tab (§22's own recorded trap, and this
+      // task's own ordering-pin test).
       // sessionStorage, not localStorage: diagnostics for the tab's own
       // lifetime, not a record. Read it back from the console:
       //   copy(sessionStorage.getItem("ergomatic:last-monitor-log"))
@@ -1225,10 +1276,15 @@ export function useMonitorSession(
           // Quota or privacy mode: diagnostics never break a teardown.
         }
       }
+      // STEP 3: UNSUBSCRIBE. Listener goes now that the reconcile above has
+      // had its one chance to reach it — a disconnect callback fired by
+      // our own `disconnect()` below can still never reach a component
+      // that is on its way out (the original reason this ran early,
+      // unchanged).
       unsubscribeRef.current?.();
       unsubscribeRef.current = null;
-      const driver = claimed ?? driverRef.current;
-      driverRef.current = null;
+      // STEP 4: DISCONNECT (terminate-then-disconnect for the "armed,
+      // never pulled" case is unchanged by this task).
       if (driver === null) return;
       const phase = stateRef.current.phase;
       if (

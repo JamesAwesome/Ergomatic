@@ -8611,6 +8611,43 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     expect(verdict[0]!.detail).toContain("214");
   });
 
+  it("(b2) THE TWIN (Task 7): disconnect() drains a still-pending reconcile into a LIVE listener instead of discarding it, the same F7 rule onDisconnect already applies to a passive drop", async () => {
+    // `stubTransport().disconnect()` never fires the driver's own
+    // `onDisconnect` callback — exactly `Transport.onDisconnect`'s
+    // documented contract for a caller-initiated hang-up
+    // (`domain/monitor/types.ts`, `webBluetooth.ts`'s own M-2 guard) — so
+    // this exercises `disconnect()`'s OWN drain, not the passive-drop path
+    // test "A LINK DROP BEFORE ANY SUMMARY ARRIVES" above already covers.
+    const g = primedGate();
+    await rowToFinish(g);
+    g.clock.advance(400);
+    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(62.5, 214));
+
+    // NOT YET — same as (b): the deadline has not fired, so nothing is
+    // filed and the summary is only held.
+    expect(boundaries(g.events)).toHaveLength(0);
+    expect(g.timer.pending()?.ms).toBe(3000);
+
+    // The caller hangs up before the deadline — before this task this
+    // discarded the held summary outright (`disconnect()` used to just
+    // cancel `pendingSummaryReconcile`, never call `reconcileSummary`).
+    await g.driver.disconnect();
+
+    // The verdict reached the STILL-SUBSCRIBED listener.
+    expect(boundaries(g.events)).toHaveLength(1);
+    expect(boundaries(g.events)[0]).toMatchObject({
+      kind: "intervalComplete",
+      actual: { index: 0, elapsedSeconds: 62.5, distanceMeters: 214 },
+      finalBoundary: true,
+    });
+    // The timer is consumed, not left dangling — `disconnect()` still
+    // clears `pendingSummaryReconcile` the way it always did.
+    expect(g.timer.pending()).toBeNull();
+    const verdict = verdicts(g.log);
+    expect(verdict).toHaveLength(1);
+    expect(verdict[0]!.detail).toContain("filled-from-summary");
+  });
+
   /** Sea Fret rowed with its first two intervals recorded the ordinary way
    *  and the FINAL split dropped — the shape every multi-interval arm
    *  below needs, with the two priors' own measured values as the

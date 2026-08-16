@@ -297,6 +297,22 @@ export interface MonitorDriver {
   program(p: WorkoutProgram): Promise<void>;
   terminate(): Promise<void>; // the documented terminate command — no start() exists
   events: (cb: (e: MonitorEvent) => void) => () => void;
+  /**
+   * Drains a still-pending summary-gate deadline SYNCHRONOUSLY, answering
+   * with whatever evidence this run has already earned rather than
+   * leaving it to a timer that may never get the chance to fire (CR2
+   * spec 2a, Task 7 — "one terminal path"). A no-op when nothing is
+   * pending, which is every call but a teardown that lands mid-grace.
+   *
+   * The caller (`useMonitorSession.ts`'s `teardown`) MUST call this
+   * before it unsubscribes its own listener: a verdict this drains emits
+   * `intervalComplete` synchronously, and a listener that is already gone
+   * never hears it — the exact defect this method exists to close.
+   * `disconnect()` applies the same rule as a second line of defence, but
+   * by the time it runs the caller's listener is typically already
+   * unsubscribed, so it cannot substitute for calling this first.
+   */
+  reconcile(): void;
   disconnect(): Promise<void>;
 }
 

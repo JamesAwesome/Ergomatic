@@ -1816,6 +1816,76 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
       entries.find((e) => e.kind === "handoff-released")?.detail,
     ).toContain("final-boundary");
   });
+
+  it("Task 7, THE ORDERING PIN: a reconcile that fires at TEARDOWN — before its own 3000ms deadline — lands in the STASH SNAPSHOT itself, not merely the in-memory ring (§22's own recorded trap: an entry written after the stash is taken dies with the tab)", async () => {
+    // Same shape as "THE DROPPED SPLIT, END TO END" above, but the rower
+    // leaves BEFORE the driver's own deadline ever fires — the exact window
+    // the twin defect lost: `disconnect()` used to just cancel the pending
+    // reconcile, and even after draining it, the hook's OLD order
+    // (unsubscribe, then disconnect) would have emitted the drain into an
+    // empty listener set.
+    const timer = manualSchedule();
+    const driverTimer = manualSchedule();
+    let driverMs = 0;
+    const { result, fake, unmount } = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [
+          status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+          finishedAt(200),
+        ],
+      },
+      {
+        schedule: timer.schedule,
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          now: () => driverMs,
+          schedule: driverTimer.schedule,
+        },
+      },
+    );
+
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    tick(fake, 100);
+    tick(fake, 100);
+
+    expect(result.current.phase).toBe("ended");
+    expect(result.current.handoffHeld).toBe(true);
+
+    // 0x0039 arrives inside the grace and is HELD — nothing is filed yet,
+    // and the deadline that would normally file it is still pending.
+    driverMs = 400;
+    act(() => {
+      fake.deliverSummary({ elapsedSeconds: 62.5, meters: 214 });
+    });
+    expect(driverTimer.pending()?.ms).toBe(3000);
+    expect(result.current.actuals).toHaveLength(0);
+
+    // The rower leaves. Teardown must reconcile BEFORE it stashes: if it
+    // stashed first, this snapshot would be serialized before the fill
+    // ever reached the ring, and every assertion below would fail even
+    // though the in-memory ring (unreachable from this test, and unread by
+    // design — the RING is not the artifact that survives the tab) had
+    // gone on to record it a line later.
+    unmount();
+
+    const stashed = sessionStorage.getItem("ergomatic:last-monitor-log");
+    expect(stashed).not.toBeNull();
+    const entries = JSON.parse(stashed!) as { kind: string; detail: string }[];
+    const verdict = entries.find((e) => e.kind === "summary-reconciled");
+    expect(verdict?.detail).toContain("filled-from-summary");
+    const filed = entries.find((e) => e.kind === "record-actual");
+    expect(filed?.detail).toContain("accepted");
+    expect(filed?.detail).toContain("finalBoundary=true");
+    expect(
+      entries.find((e) => e.kind === "handoff-released")?.detail,
+    ).toContain("final-boundary");
+    // The deadline was CONSUMED at teardown, not left dangling — the same
+    // timer-hygiene bar every other test in this file holds `teardown` to.
+    expect(driverTimer.pending()).toBeNull();
+  });
 });
 
 describe("useMonitorSession: ending", () => {
@@ -1876,6 +1946,55 @@ describe("useMonitorSession: ending", () => {
     // the one a later never-rowed attempt (a failed pairing, a
     // connect-then-cancel) cannot clobber.
     expect(sessionStorage.getItem("ergomatic:last-rowed-log")).toBe(stashed);
+  });
+
+  it("Task 7: END mid-session writes final-totals at TERMINATE-DISPATCH time — the machine's own terminated frame need not arrive at all (spec 1's own walk evidence: 'the ring ended at the terminate write'; a real library workout, Filling Low)", async () => {
+    sessionStorage.removeItem("ergomatic:last-monitor-log");
+    const { result, fake, unmount } = harness({
+      program: LIBRARY.program,
+      events: [status(100, { elapsedSeconds: 60, distanceMeters: 300 })],
+    });
+    await connect(result);
+    await programAndArm(result, fake, LIBRARY.program, LIBRARY_IDENTITY);
+    tick(fake, 100);
+    expect(result.current.phase).toBe("live");
+
+    // The monitor goes silent (fix-round HIGH-2's `injectTimeout`): no ack
+    // for the terminate ever comes back, so the fake's own synthetic
+    // terminated-status echo (`onArmedFrameComplete`, `fake.ts`) — the
+    // trigger the ORDINARY `final-totals` write (`maybeEmitFrame`'s
+    // terminal branch) waits for — never fires either. This is the walk's
+    // own shape, not a fake-only artifact: on real hardware the machine's
+    // GENERAL_STATUS report of its own "terminated" state is a separate,
+    // independently-timed notification that spec 1's re-walk found arrived
+    // AFTER teardown had already stashed and hung up.
+    fake.injectTimeout();
+    await act(async () => {
+      void result.current.endSession();
+      await flush();
+    });
+    expect(result.current.phase).toBe("ended");
+    expect(result.current.endedBy).toBe("user");
+
+    unmount();
+
+    const stashed = sessionStorage.getItem("ergomatic:last-monitor-log");
+    expect(stashed).not.toBeNull();
+    const entries = JSON.parse(stashed!) as { kind: string; detail: string }[];
+    const finalTotals = entries.filter((e) => e.kind === "final-totals");
+    // Exactly one: the machine's own terminal-frame path never fired at
+    // all (proof the entry below came from `terminate()`'s own dispatch,
+    // not a second source racing it), and the guard on BOTH call sites
+    // (`recordFinalTotals`'s own doc comment) means a run that already
+    // has one never gets a second.
+    expect(finalTotals).toHaveLength(1);
+    expect(finalTotals[0]!.detail).toContain("accumulator=");
+    expect(finalTotals[0]!.detail).toContain("accumulatorElapsed=");
+    expect(finalTotals[0]!.detail).toContain("machineTotal=");
+    // The real program this run was armed with, not a placeholder count.
+    expect(finalTotals[0]!.detail).toContain(
+      `of ${LIBRARY.program.intervals.length} programmed`,
+    );
   });
 
   it("a session that never rowed does NOT touch the rowed-only stash", async () => {
