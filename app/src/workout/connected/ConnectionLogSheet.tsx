@@ -20,6 +20,7 @@
 
 import { useState, type RefObject } from "react";
 import { SheetShell } from "../../components/SheetShell";
+import type { WorkoutProgram } from "../../../domain/monitor/program.js";
 import type { MonitorLogEntry } from "../../monitor/eventLog";
 
 const TITLE_ID = "connection-log-sheet-title";
@@ -76,6 +77,7 @@ export default function ConnectionLogSheet({
   deviceCaption,
   elapsedDisplay,
   readLog,
+  program,
   opener,
   onClose,
 }: {
@@ -85,6 +87,11 @@ export default function ConnectionLogSheet({
   elapsedDisplay: string;
   /** `MonitorSession.exportLog` — called exactly once, on open. */
   readLog: () => string;
+  /** What was actually programmed, for `Download recording`'s header
+   *  (B4) — the surface's own `program`, threaded straight through. Never
+   *  read unless the download fires: this sheet's usual path (the log
+   *  list, COPY LOG) has no use for it. */
+  program: WorkoutProgram;
   opener: RefObject<HTMLElement | null>;
   onClose: () => void;
 }) {
@@ -160,6 +167,32 @@ export default function ConnectionLogSheet({
       >
         {COPY_LABEL[copy]}
       </button>
+      {/* DEV-ONLY: gated on presence, not a build flag, so it renders in a
+          dev session and in an e2e run that opts into the real-transport
+          recording arm — and renders in NEITHER a production build nor the
+          e2e fake arm, since only that one gate ever sets the global
+          (`transports/index.ts`). This component knows NOTHING about
+          `recording.ts` — no import of it anywhere, static or dynamic
+          (fix round: a dynamic `import()` gated only on this runtime
+          presence check still ships `recording.ts`'s whole module graph,
+          `pm5-recording/v1` included, as its own chunk on disk — Rollup can
+          only drop an `import()` call site behind a condition it can fold
+          at BUILD time, and `window.__pm5Recording__` is a runtime value.
+          `download` lives entirely inside `transports/index.ts`'s own
+          `fakeMonitorEnabled`-gated dynamic import — the same
+          build-time-foldable seam Task 5's dist-grep already proves never
+          reaches production — so this handler is just a call through the
+          seam). `.button-l3` again: another in-sheet action, same 48px hit
+          target. */}
+      {window.__pm5Recording__ && (
+        <button
+          type="button"
+          className="button-l3"
+          onClick={() => void window.__pm5Recording__?.download(program)}
+        >
+          Download recording
+        </button>
+      )}
       <button type="button" className="button-l2" onClick={onClose}>
         Close
       </button>

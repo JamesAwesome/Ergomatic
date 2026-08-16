@@ -390,6 +390,7 @@ export default function ConnectedSurface({
           deviceCaption={model.deviceCaption}
           elapsedDisplay={model.elapsedDisplay}
           readLog={session.exportLog}
+          program={program}
           opener={logOpener}
           onClose={() => setLogOpen(false)}
         />

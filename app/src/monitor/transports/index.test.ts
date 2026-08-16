@@ -7,6 +7,54 @@ import {
 import type { WorkoutProgram } from "../../../domain/monitor/program.js";
 import type { Transport } from "../../../domain/monitor/types.js";
 import { autoTicking, resolveDefaultTransport } from "./index";
+import { createWebBluetoothTransport } from "./webBluetooth";
+
+// `createWebBluetoothTransport` is mocked for the whole file (hoisted, per
+// vi.mock's own contract) — every OTHER test in this file still returns
+// `null` off this arm because jsdom's `navigator.bluetooth` is `undefined`
+// by default and the `navigator.bluetooth ? ... : null` ternary short-
+// circuits before ever calling the mock; only the tests below stub
+// `navigator.bluetooth` truthy to actually reach it.
+vi.mock("./webBluetooth", () => ({
+  createWebBluetoothTransport: vi.fn(),
+}));
+
+/** Installs (or removes) a `navigator.bluetooth` stub for exactly one test —
+ *  same idiom as `WorkoutDetail.test.tsx`'s own `stubBluetooth` (jsdom has
+ *  no Web Bluetooth of its own; `navigator.bluetooth` is `undefined` by
+ *  default). */
+function stubBluetooth(bt: object): () => void {
+  const original = Object.getOwnPropertyDescriptor(
+    Navigator.prototype,
+    "bluetooth",
+  );
+  Object.defineProperty(navigator, "bluetooth", {
+    value: bt,
+    configurable: true,
+  });
+  return () => {
+    delete (navigator as { bluetooth?: unknown }).bluetooth;
+    if (original) {
+      Object.defineProperty(Navigator.prototype, "bluetooth", original);
+    }
+  };
+}
+
+/** A minimal `Transport` stub standing in for the real web transport
+ *  `createWebBluetoothTransport()` would otherwise build — this file's
+ *  tests are about transport SELECTION and the recording-tap wiring, never
+ *  about `webBluetooth.ts`'s own GATT behaviour (that module is excluded
+ *  from the coverage gate for exactly that reason, see its own header). */
+function stubWebTransport(): Transport {
+  return {
+    scan: () => Promise.resolve([]),
+    connect: () => Promise.resolve(),
+    write: () => Promise.resolve(),
+    subscribe: () => () => undefined,
+    disconnect: () => Promise.resolve(),
+    onDisconnect: () => () => undefined,
+  };
+}
 
 // A minimal one-interval program — this file's own tests are about
 // TRANSPORT SELECTION and the auto-tick wrapper, never about the fake's
@@ -29,6 +77,9 @@ describe("resolveDefaultTransport", () => {
   afterEach(() => {
     delete window.__pm5FakeScript__;
     delete window.__pm5FakeControls__;
+    delete window.__pm5Recording__;
+    delete (navigator as { bluetooth?: unknown }).bluetooth;
+    vi.mocked(createWebBluetoothTransport).mockReset();
   });
 
   it("returns null when there is no fake script and no navigator.bluetooth (jsdom's own baseline — no Web Bluetooth API exists here)", async () => {
@@ -176,6 +227,103 @@ describe("resolveDefaultTransport", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("wraps the REAL web transport in a recording tap and sets window.__pm5Recording__ — the seam this task exists for", async () => {
+    const restore = stubBluetooth({});
+    vi.mocked(createWebBluetoothTransport).mockReturnValue(stubWebTransport());
+
+    expect(window.__pm5Recording__).toBeUndefined();
+    const transport = await resolveDefaultTransport();
+    expect(transport).not.toBeNull();
+
+    expect(window.__pm5Recording__).toBeDefined();
+    expect(window.__pm5Recording__!.eventCount()).toBe(0);
+    await transport!.write(SAMPLE_RATE_UUID, new Uint8Array(1));
+    expect(window.__pm5Recording__!.eventCount()).toBe(1);
+    expect(window.__pm5Recording__!.lines()).toHaveLength(1);
+
+    restore();
+  });
+
+  it("wires a working download() through the seam — not merely present, invoked (fix round, Task 6)", async () => {
+    // Rule #4 (this repo's own recurring-failure list): a thing existing is
+    // not a thing working — invoke it and assert the consequence, the same
+    // way `ConnectionLogSheet.test.tsx`'s B4 test does for the sheet side
+    // of this seam.
+    const restore = stubBluetooth({});
+    vi.mocked(createWebBluetoothTransport).mockReturnValue(stubWebTransport());
+    const { parseRecording } = await import("./recording");
+
+    const transport = await resolveDefaultTransport();
+    await transport!.write(SAMPLE_RATE_UUID, new Uint8Array(1));
+
+    const createObjectURL = vi
+      .spyOn(URL, "createObjectURL")
+      .mockReturnValue("blob:mock-index-seam");
+    const revokeObjectURL = vi
+      .spyOn(URL, "revokeObjectURL")
+      .mockImplementation(() => undefined);
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => undefined);
+
+    await window.__pm5Recording__!.download(PROGRAM);
+
+    expect(click).toHaveBeenCalledTimes(1);
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
+    const blob = createObjectURL.mock.calls[0]![0] as Blob;
+    const parsed = parseRecording(await blob.text());
+    expect(parsed.header.app).toBe("dev");
+    expect(parsed.header.transport).toBe("web");
+    expect(parsed.header.program).toStrictEqual(PROGRAM);
+    // The one write above, recorded by the SAME tap `download()` closes
+    // over — not a fresh/empty one.
+    expect(parsed.events).toHaveLength(1);
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:mock-index-seam");
+
+    restore();
+  });
+
+  it("the FAKE arm never sets window.__pm5Recording__ — recording only wraps the real radio", async () => {
+    window.__pm5FakeScript__ = { program: PROGRAM };
+    const transport = await resolveDefaultTransport();
+    expect(transport).not.toBeNull();
+    expect(window.__pm5Recording__).toBeUndefined();
+  });
+
+  it("a second resolveDefaultTransport() call REPLACES the global — a reconnect's tap fully supersedes the earlier session's, review finding", async () => {
+    const restore = stubBluetooth({});
+    vi.mocked(createWebBluetoothTransport).mockReturnValue(stubWebTransport());
+
+    // First session: one write, one recorded event.
+    const first = await resolveDefaultTransport();
+    await first!.write(SAMPLE_RATE_UUID, new Uint8Array(1));
+    const firstSeam = window.__pm5Recording__!;
+    expect(firstSeam.eventCount()).toBe(1);
+
+    // Second session (a reconnect): a fresh call, a fresh tap.
+    vi.mocked(createWebBluetoothTransport).mockReturnValue(stubWebTransport());
+    const second = await resolveDefaultTransport();
+    const secondSeam = window.__pm5Recording__!;
+
+    // The global now points at the SECOND tap, not the first — a distinct
+    // object, starting from zero, unaffected by the first session's write.
+    expect(secondSeam).not.toBe(firstSeam);
+    expect(secondSeam.eventCount()).toBe(0);
+
+    await second!.write(SAMPLE_RATE_UUID, new Uint8Array(1));
+
+    // The seam reflects only the SECOND tap's events — the first session's
+    // recorded write is no longer reachable through window.__pm5Recording__
+    // at all; only a reference the caller separately held onto (`firstSeam`
+    // here) still sees it, which is the whole point of the finding: nothing
+    // product code held that reference, so a rower who reconnects before
+    // downloading loses it.
+    expect(window.__pm5Recording__!.eventCount()).toBe(1);
+    expect(firstSeam.eventCount()).toBe(1);
+
+    restore();
   });
 });
 

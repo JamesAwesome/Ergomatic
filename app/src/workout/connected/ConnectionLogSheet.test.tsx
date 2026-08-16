@@ -9,7 +9,13 @@
 //   `createPm5Driver` has written into, so the lines on screen are lines
 //   the driver actually records — not three tidy strings this file made up.
 
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -22,6 +28,11 @@ import { LIBRARY_WORKOUTS } from "../../../server/seed/library/index";
 import { createEventLog } from "../../monitor/eventLog";
 import { createPm5Driver } from "../../monitor/driver";
 import { createFakeTransport } from "../../monitor/transports/fake";
+import {
+  createRecordingTransport,
+  downloadRecording,
+  parseRecording,
+} from "../../monitor/transports/recording";
 import type {
   MonitorSession,
   ConnectedPhase,
@@ -463,5 +474,148 @@ describe("COPY LOG (handoff §5: level 3, it acts inside the sheet)", () => {
     expect(
       screen.getByRole("button", { name: "COPY FAILED" }),
     ).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Download recording (Task 6, fix round): dev-only, gated on
+// window.__pm5Recording__. The sheet itself imports NOTHING from
+// `recording.ts` (fix round — a dynamic import gated only on this runtime
+// global still shipped `recording.ts`'s module graph as its own chunk in
+// `dist/`, breaking Task 5's dist-grep proof; the composition now lives
+// entirely behind `transports/index.ts`'s build-time-foldable gate). These
+// tests build `window.__pm5Recording__` from the REAL
+// `createRecordingTransport` + the REAL `downloadRecording`, the same two
+// functions `transports/index.ts` wires together in production — never a
+// hand-rolled stub — so the round trip through `parseRecording` exercises
+// the actual composition, not a test's idea of it.
+// ---------------------------------------------------------------------------
+
+describe("Download recording (dev-only capture control)", () => {
+  /** Builds the SAME shape `transports/index.ts`'s gated arm assigns to
+   *  `window.__pm5Recording__`, off a real `createRecordingTransport`
+   *  wrapping a real fake `Transport` — so `lines()`/`eventCount()`/
+   *  `download()` all do exactly what production's do. Connects once
+   *  through the tap (not a hand-built line string) so there is a genuine
+   *  recorded `connect` event to round-trip. */
+  async function realRecordingGlobal(): Promise<
+    NonNullable<Window["__pm5Recording__"]>
+  > {
+    const inner = createFakeTransport({
+      program: FIXTURE.program,
+      deviceName: DEVICE,
+      events: [],
+    });
+    const recordingTap = createRecordingTransport(inner);
+    await recordingTap.transport.connect(DEVICE);
+    return {
+      lines: recordingTap.lines,
+      eventCount: recordingTap.eventCount,
+      download: (program) => downloadRecording(recordingTap, program),
+    };
+  }
+
+  afterEach(() => {
+    delete (window as { __pm5Recording__?: unknown }).__pm5Recording__;
+  });
+
+  it("is absent when no recording tap is active — production and the e2e fake arm both leave the global unset", async () => {
+    renderSurface({ exportLog: () => "[]" });
+    await tap("Grid", 3);
+    expect(
+      screen.queryByRole("button", { name: "Download recording" }),
+    ).toBeNull();
+  });
+
+  it("downloads the composed recording — header carries the program prop, byte for byte via parseRecording (B4)", async () => {
+    const rec = await realRecordingGlobal();
+    window.__pm5Recording__ = rec;
+    // `eventCount()`/`lines()` come off the real tap, not a hand count —
+    // pin what the recorded connect actually produced.
+    expect(rec.eventCount()).toBeGreaterThan(0);
+
+    const createObjectURL = vi
+      .spyOn(URL, "createObjectURL")
+      .mockReturnValue("blob:mock-recording");
+    const revokeObjectURL = vi
+      .spyOn(URL, "revokeObjectURL")
+      .mockImplementation(() => undefined);
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => undefined);
+
+    renderSurface({ exportLog: () => "[]" });
+    await tap("Grid", 3);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Download recording" }),
+    );
+
+    // The handler is `void window.__pm5Recording__?.download(program)` —
+    // an async function userEvent.click does not await — so the assertions
+    // wait for the anchor's own click, the last thing `downloadRecording`
+    // does.
+    await waitFor(() => expect(click).toHaveBeenCalledTimes(1));
+
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
+    const blob = createObjectURL.mock.calls[0]![0] as Blob;
+    const text = await blob.text();
+    const parsed = parseRecording(text);
+    expect(parsed.header.app).toBe("dev");
+    expect(parsed.header.transport).toBe("web");
+    // B4: the header carries the SAME program object the surface compiled,
+    // not a re-derived or partial one.
+    expect(parsed.header.program).toStrictEqual(FIXTURE.program);
+    expect(parsed.events).toHaveLength(rec.eventCount());
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:mock-recording");
+  });
+
+  it("is a 44px hit target sharing the sheet's existing button class", async () => {
+    window.__pm5Recording__ = await realRecordingGlobal();
+    renderSurface({ exportLog: () => "[]" });
+    await tap("Grid", 3);
+    expect(
+      screen.getByRole("button", { name: "Download recording" }),
+    ).toHaveClass("button-l3");
+  });
+
+  it("guards against the global disappearing between render and click — a stale click neither calls download() nor throws", async () => {
+    const download = vi.fn().mockResolvedValue(undefined);
+    window.__pm5Recording__ = {
+      lines: () => [],
+      eventCount: () => 0,
+      download,
+    };
+    renderSurface({ exportLog: () => "[]" });
+    await tap("Grid", 3);
+    const button = screen.getByRole("button", { name: "Download recording" });
+    // The button stays mounted (this sheet never re-renders after open —
+    // "a window, not a source") even if the global it was gated on at
+    // render time is gone by click time; the handler's own `?.` is what
+    // must catch that, not React.
+    delete (window as { __pm5Recording__?: unknown }).__pm5Recording__;
+
+    // React 19's discrete-event dispatch does not deliver a dropped `?.`
+    // guard's exception synchronously to either `fireEvent.click`'s or
+    // `userEvent.click`'s own return — verified empirically (self-mutation,
+    // task-6 fix-round report) — so this test listens for the DOM's own
+    // "report the exception" `error` event, the mechanism jsdom's
+    // `dispatchEvent` uses for a listener that throws, rather than
+    // wrapping the click call itself.
+    let caught: unknown;
+    const onWindowError = (event: ErrorEvent): void => {
+      caught = event.error;
+      event.preventDefault();
+    };
+    window.addEventListener("error", onWindowError);
+    try {
+      fireEvent.click(button);
+      // A macrotask tick: enough for jsdom's own exception-reporting path
+      // to fire `window`'s `error` event before the assertions below run.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    } finally {
+      window.removeEventListener("error", onWindowError);
+    }
+    expect(caught).toBeUndefined();
+    expect(download).not.toHaveBeenCalled();
   });
 });

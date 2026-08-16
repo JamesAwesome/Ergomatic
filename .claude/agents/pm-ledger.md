@@ -154,3 +154,110 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   the redesign specs that follow it. Releasing spec 1 by itself is the canary the
   3.9x defect never got; if a later build still disagrees with the erg, a solo
   release is the only thing that says which change owns it.
+
+## Design-gate rulings, 2026-08-15 (PM5 record-and-replay harness)
+
+- **"It's a dev capability" is a claim about INTENT; ask where the code
+  RUNS.** The record-and-replay design opened with "tester impact: none (dev
+  capability)" and its part 1 put an always-on wrapper in the phone's
+  notification path during live sessions. `transports/index.ts:39-54` documents
+  a dead-code-elimination contract gated at `:208-209` on
+  `import.meta.env.DEV || VITE_ENABLE_FAKE_MONITOR`: inside it, code never
+  enters the production bundle; outside it, it ships. **For any capability
+  claiming to be dev-only, name which side of that gate it lands on.** The safe
+  seams already exist and need no product change at all —
+  `MonitorSessionDeps.createTransport`/`createLog`
+  (`useMonitorSession.ts:339`,`:343`), with `autoTicking`
+  (`transports/index.ts:155-182`) as a written `Transport` decorator template.
+
+- **The definitive hardware walk was a WEB walk.** The 2026-08-15 re-walk that
+  gated PR #99's merge ran "Chrome/Web Bluetooth from the worktree dev server"
+  (`docs/monitor/sessions/walk-2026-08-15/README.md:82`). A dev/web-gated
+  instrument covers the walks that actually settle questions, at zero tester
+  exposure. Before accepting "it must ship to the phone", check which surface
+  the last conclusive measurement was taken on.
+
+- **A phase whose later parts need a capture its earlier parts produce is TWO
+  phases with a hardware walk between them.** The harness presented six parts as
+  one scope while conceding its CI rung needed a recording no walk had yet made.
+  Split at the walk and make the recorder ride a walk that was already
+  scheduled — the live verification then costs one photograph instead of a trip.
+  Same shape as the "spec 2 owes it" deferral, one level up.
+
+- **Exit criteria for a VALIDATION capability must include "the gate can go
+  red".** "Recorder verified live at the next walk" is passed by a non-empty
+  file. The falsifiable set is: (1) a named prior measurement reproduces from
+  the recording with no hardware — here the re-walk's 2x250m r0 keystone,
+  accumulator 499.5 m vs machine TWD 500 (walk README:99-103); (2) recording ON
+  does not change the session's agreement with the machine; (3) a deliberate
+  mutation of the code under test turns the rung red. Building a second gate
+  that agrees with us is recurring failure #4 at phase scale.
+
+- **An unreleased canary is a live constraint on the NEXT merge, not just on
+  its own PR.** PR #99 merged 2026-08-15 (`7c2be9f`) with the newest tag still
+  v0.9.0 and no notes PR. This ledger had already ruled spec 1 releases PATCH
+  and alone. Anything merged before that tag bundles into it — and the harness
+  as designed would have bundled always-on notification-path code into the very
+  build meant to isolate a numbers fix. **When a solo release is owed, say so at
+  the top of the next design gate, before scope.** (James subsequently ruled,
+  same day: hold TestFlight until further UI fixes land — the canary is
+  knowingly forfeited; record the override, not just the rule.)
+
+- **We had already built this capability three times in instalments.**
+  `structure` raw-on-change (`driver.ts:3053-3066`), `twd-sample` on a 25 m
+  bucket (`:3078-3093`), `terminal-raw` from a one-frame buffer (`:2082-2087`).
+  Each was a walk paying for a general instrument in narrow patches, and >99% of
+  inbound traffic is still discarded (`driver.ts:1661-1666`). **Three special
+  cases for the same missing general mechanism is a build signal**, and it is
+  the honest cost argument — stronger than any single defect.
+
+## Final-PR gate, 2026-08-15 (record-and-replay Stage A, PR #100)
+
+- **"Zero tester surface" has a mechanical form — demand it, don't accept the
+  adjective.** For a dev-gated capability the check is a build and two greps,
+  not a code read: `pnpm build`, then confirm the gated module's string literal
+  is absent from `dist/client`, then grep the bundle for the seam's global and
+  confirm **only READ sites survive and no WRITE site exists anywhere**. #100
+  passes that: `__pm5Recording__` appears twice in the production chunk, both
+  reads in the component, with nothing shipped that can ever set it — so the
+  control is unreachable, not merely hidden. Note the honest residual: the
+  control's own JSX and its label string DO ship. "Zero production footprint"
+  is true of the recorder, not of the button; say which.
+
+- **A claim about build output is settled only by build output.** #100's
+  planned download path — a dynamic `import()` gated on a runtime global —
+  read correctly and still emitted the whole module graph as its own chunk;
+  Rollup can only drop an `import()` behind a condition it folds at BUILD
+  time. Caught by building, not reviewing. Second occurrence of this class
+  (`scripts/dist-grep.sh`'s header records the first: an identifier needle
+  came back clean against a build that genuinely included the file).
+
+- **Freezing the exit criteria before the plan is what makes them worth
+  quoting.** #100's spec's last edit precedes its plan and every
+  implementation commit (`git log -- <spec>`), so "criterion met" could not be
+  met by moving the criterion. Run that one-command check at every final-PR
+  gate; it costs nothing and it is the only defence against a criterion that
+  drifted to fit the code.
+
+- **Check the DELIVERY path, not just the mechanism.** #100's round trip,
+  replay barrier and tap are covered to the last branch — while the file the
+  whole phase exists to produce is written by `downloadRecording`'s gzip arm,
+  which no test can reach under jsdom. The mechanism was proven and the
+  artefact was not. Whenever a phase's output is a FILE a human will collect,
+  ask which gate covers the collection, and if none does, book a dry run
+  before the session that depends on it.
+
+- **An instrument's merge is time-critical against the next walk, and this one
+  already missed once.** #100 landed hours after the 2026-08-15 re-walk that
+  gated #99 — a Chrome/Web-Bluetooth dev-server walk, exactly the medium the
+  tap covers — which surfaced a `workoutState 8` shape the lab record had
+  never contained. All that survives is the ring's curated JSON exports; the
+  raw bytes are gone. **When an instrument and a scheduled walk are in the
+  same week, the instrument's PR outranks everything else in the queue.**
+
+- **Once an instrument sits in the walk's own path, it becomes a suspect in
+  the walk's numbers.** Dev/web sessions now flow through the recording tap,
+  and spec 2's walk measures through it. Criterion 2 (recorded 0x0031
+  inter-arrival distribution vs the committed ~2.2/s, modal 0.50 s baseline)
+  must be evaluated BEFORE the walk's numbers are trusted, not after — it is
+  the cheap discriminator if the app and the erg disagree again.

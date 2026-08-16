@@ -76,6 +76,7 @@
 // specific moments, immune to a backgrounded tab's timer throttling — see
 // that property's own doc comment.
 
+import type { WorkoutProgram } from "../../../domain/monitor/program.js";
 import type { Transport } from "../../../domain/monitor/types.js";
 import { createWebBluetoothTransport } from "./webBluetooth";
 
@@ -126,6 +127,39 @@ declare global {
      *  screenshot script or a human just watching, where a several-times
      *  slower real clock costs nothing), the two are not exclusive. */
     __pm5FakeControls__?: FakeControls;
+    /** Set by THIS file, the instant it wraps the REAL web transport (never
+     *  the injected fake) in a `recording.ts` tap — never by product code.
+     *  `undefined` on every path except this same `fakeMonitorEnabled` gate
+     *  the fake arm above lives behind, so a real deploy's build — where
+     *  both halves of that gate are statically `false` — never sets it
+     *  either; `scripts/dist-grep.sh`'s `pm5-recording` needle is that
+     *  file's own proof that `recording.ts` never ships in a production
+     *  chunk. `ConnectionLogSheet.tsx`'s "Download recording" control reads
+     *  this to decide whether to render at all, and calls `download()` to
+     *  hand the rower the file — see `recording.ts`'s own `RecordingTap`
+     *  for what `lines()`/`eventCount()` return, and its `downloadRecording`
+     *  for what `download()` closes over. **`download` deliberately lives
+     *  entirely inside `recording.ts`, never in the sheet component: a
+     *  fix-round finding (record/replay stage A, Task 6) — a dynamic
+     *  `import()` in `ConnectionLogSheet.tsx` gated only on THIS global's
+     *  runtime presence still shipped `recording.ts`'s module graph as its
+     *  own chunk in a production `dist/`, because Rollup can only drop an
+     *  `import()` call site behind a condition it can fold at BUILD time,
+     *  and a runtime presence check never is. `download` is set here,
+     *  behind the SAME `fakeMonitorEnabled`-gated dynamic
+     *  `import("./recording")` as the tap itself, one line below — the
+     *  seam Task 5's dist-grep already proves never reaches production.**
+     *  Overwrite-on-reconnect: each qualifying `resolveDefaultTransport()`
+     *  call REPLACES this global with a brand-new tap — latest session
+     *  wins, unconditionally. A rower who reconnects (a fresh call
+     *  resolves) before downloading an earlier session's recording loses
+     *  that earlier recording the instant the new tap is assigned here;
+     *  nothing preserves it. */
+    __pm5Recording__?: {
+      lines(): string[];
+      eventCount(): number;
+      download(program: WorkoutProgram): Promise<void>;
+    };
   }
 }
 
@@ -183,10 +217,14 @@ export function autoTicking(
 
 /**
  * The one place production code decides which `Transport` to build. Returns
- * synchronously (`Transport | null`) on every path except the DEV-injected
- * fake, which is behind a dynamic `import()` and therefore a `Promise` —
- * `useMonitorSession.ts`'s `connect()` awaits whatever this returns either
- * way, so the two shapes are indistinguishable to every caller.
+ * synchronously (`Transport | null`) only when the fake-injection gate
+ * (`fakeMonitorEnabled` below) is closed — the real path a production
+ * deploy always takes. When the gate is open (DEV, or an e2e build's
+ * `VITE_ENABLE_FAKE_MONITOR`), EVERY path is a `Promise`: the DEV-injected
+ * fake and the recording-wrapped real transport are both behind a dynamic
+ * `import()`. `useMonitorSession.ts`'s `connect()` awaits whatever this
+ * returns either way, so the sync/async shapes are indistinguishable to
+ * every caller.
  *
  * **Web-only, on purpose.** This function never chooses Capacitor BLE —
  * that choice is a PLATFORM conditional, and platform conditionals are
@@ -219,6 +257,33 @@ export function resolveDefaultTransport():
         return autoTicking(fake);
       });
     }
+    // No injected fake script, but the gate is open (DEV, or an e2e build's
+    // VITE_ENABLE_FAKE_MONITOR): wrap the REAL web transport in a recording
+    // tap so a dev session or an e2e walk can capture one. Dynamic
+    // `import("./recording")`, same as the fake arm above, for the same
+    // reason — this whole block, `recording.ts`'s module graph included,
+    // folds away with the gate in a real deploy's build.
+    const real = navigator.bluetooth ? createWebBluetoothTransport() : null;
+    if (real) {
+      return import("./recording").then(
+        ({ createRecordingTransport, downloadRecording }) => {
+          const tap = createRecordingTransport(real);
+          window.__pm5Recording__ = {
+            lines: tap.lines,
+            eventCount: tap.eventCount,
+            // Closes over THIS tap and the real `downloadRecording` — both
+            // stay inside `recording.ts`'s module graph, reached only
+            // through this same gated `import()`, never through
+            // `ConnectionLogSheet.tsx` (fix round: see the `declare
+            // global` comment above for why the sheet may not import
+            // `recording.ts` itself, dynamically or otherwise).
+            download: (program) => downloadRecording(tap, program),
+          };
+          return tap.transport;
+        },
+      );
+    }
+    return null;
   }
   return navigator.bluetooth ? createWebBluetoothTransport() : null;
 }
