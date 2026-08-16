@@ -465,3 +465,32 @@ toolkit, not a history.
   frame; rests map from workoutStates 3/6/7). Caveat kept: the guarantee
   belongs to the freeze predicate; re-deriving `activity` from anything else
   silently removes it.
+
+## Task-brief pass, 2026-08-15 (CR2 spec 2a, Tasks 1-9)
+
+- **"interface-notes §17 items 17 and 24" name the checkpoint content Task 9
+  corrects.** False on the section: §17 has its own independently-numbered
+  list stopping at item 22; the actual prose lives in **§20** items 17/24.
+  **Technique: this doc renumbers from 1 at every `##` heading — grep the
+  phrase, not the number; a bare "item N" finds the wrong section as readily
+  as the right one.**
+
+- **"recorded-actuals count, programmed count, 0x0039-seen (all in hand at
+  the terminal tick)."** Two of three are; 0x0039-seen is NOT — `noteSummary`
+  only persists inside an open grace (`run.closed === true`), so a 0x0039
+  arriving before the terminal frame (walk-documented, real) is logged
+  out-of-window and discarded with nothing stored. **Technique: "in hand" is
+  a control-flow claim — trace whether the code path that would have stored
+  the fact runs BEFORE the point that wants to read it, not whether the
+  event happened.**
+
+- **"67 test call sites" for buildSurfaceModel: counted 63** (54 via the
+  `model()` wrapper + 9 direct). **Technique: when a brief says count,
+  count with grep on distinct lines, not by eye.**
+
+- **Task 5 filed `.connected-paused` under PaneLive.tsx; it lives in
+  ConnectedSurface.tsx:436-447 (CSS index.css:6973+).** PaneLive owns the
+  adjacent TOTAL LEFT bar, which is how two claims merged into one path.
+  **Technique: when a brief bundles two "same area" claims into one file
+  path, verify each claim's OWN grep hit — UI proximity is not tree
+  proximity.**
