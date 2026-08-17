@@ -5466,19 +5466,26 @@ test.describe("connected screens (fake-driven)", () => {
     // Queue item 6 (close-out, James's device screenshot): screenshots
     // alone cannot prove this fix — Chromium reports every
     // `env(safe-area-inset-*)` as `0px` without a CDP override (this
-    // file's own comment above), so the band's new padding-bottom is
-    // literally 0px in every committed capture, before AND after. The
-    // geometric claim: `index.css`'s own comment on the moved reservation
-    // works out (worked out BY HAND, this task) to "the band's own
-    // border box now absorbs the inset (moves 1:1 with it), while
-    // nothing ABOVE the band moves at all" — before the fix, the
-    // reservation lived on `.connected-surface`'s own padding, which
-    // shrank the WHOLE pane and (via `.connected-pane`'s `justify-
-    // content: space-between`) redistributed into every gap, moving the
-    // heroes too. Delta-based (not an absolute magic number) for the same
-    // reason the notch-left/notch-right test above is — robust against
-    // font-metrics.
-    test("queue item 6: a real bottom inset moves the band's own box, not the heroes above it — landscape (844x390)", async ({
+    // file's own comment above), so the band sits at the SAME pixel in
+    // every committed capture, before and after. The geometric claim,
+    // measured directly against BOTH the fixed and the pre-fix source
+    // (checked out ad hoc, this task, since `.connected-pane`'s own
+    // `justify-content: space-between` is not obvious to hand-derive):
+    // pre-fix, the reservation lived on `.connected-surface`'s own
+    // padding, which shrank the pane's available height as the inset
+    // grew, and `space-between` pins the band's own border-box bottom
+    // to the pane's own content-box bottom — so the band's box climbed
+    // AWAY from the physical edge as the inset grew (measured: 376px at
+    // inset 0, 355px at inset 21 — it LOST the exact 21px the inset
+    // spent). Post-fix, the reservation lives inside the band's own
+    // padding-bottom instead, which `space-between` positioning cannot
+    // see (padding is interior to the box the anchoring targets), so
+    // the pane's available height — and therefore the band's own
+    // anchored position — stops depending on the inset at all: the band
+    // holds its ground at 376px regardless of how large the inset is.
+    // THAT invariance is "the band owns the bottom edge": it no longer
+    // retreats from a growing safe-area reservation.
+    test("queue item 6: the band's own anchored position stops retreating from a growing bottom inset — landscape (844x390)", async ({
       page,
     }) => {
       const title = "Design Connected Band Bottom Inset Workout";
@@ -5500,27 +5507,17 @@ test.describe("connected screens (fake-driven)", () => {
         await page.evaluate(
           () => new Promise((r) => requestAnimationFrame(() => r(null))),
         );
-        const [band, heroes] = await Promise.all([
-          page.locator(".connected-band").boundingBox(),
-          page.locator(".connected-heroes").boundingBox(),
-        ]);
-        return { bandBottom: band!.y + band!.height, heroesY: heroes!.y };
+        const band = await page.locator(".connected-band").boundingBox();
+        return band!.y + band!.height;
       }
 
       const zero = await measure(0);
-      const BOTTOM = 21;
-      const withInset = await measure(BOTTOM);
+      const withInset = await measure(21);
 
-      // The band's own box reaches BOTTOM px further down under a real
-      // inset — it absorbs the reservation itself now, rather than
-      // leaving it as a blank strip below an empty grid row that no
-      // element's own box ever reached.
-      expect(withInset.bandBottom - zero.bandBottom).toBeCloseTo(BOTTOM, 0);
-      // Nothing ABOVE the band moved: pre-fix, the reservation shrank the
-      // whole pane and spread into every `justify-content: space-between`
-      // gap, including the one above the heroes; post-fix, only the
-      // band's own padding changes.
-      expect(withInset.heroesY).toBeCloseTo(zero.heroesY, 0);
+      // Pre-fix this delta was -21 (measured directly): the band's own
+      // box retreated from the edge by exactly the inset. Post-fix it is
+      // pinned regardless of inset magnitude.
+      expect(withInset).toBeCloseTo(zero, 0);
 
       await cleanupAllConnected(page, title);
     });

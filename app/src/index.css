@@ -6767,6 +6767,12 @@ section:not(.news-pinned) .news-row:last-of-type {
      headline outright rather than relocating its device row —
      `.connected-grid-head`'s own comment has the full arithmetic); the row
      count stays 8 either way (256 fits both 276 and 286, 288 fits neither).
+     CR2 close-out queue item 5 moves it a THIRD time, DOWN this time, to
+     266 (`.connected-surface`'s own new `max(20px, …)` top-padding floor
+     shrinks the whole surface's available body height by 20px, landscape
+     header height unchanged) — 256 still fits (10px margin, not 30), row
+     count still 8 (`LANDSCAPE_GRID_SCROLLER_PX`'s own comment in
+     `e2e/screenshots.spec.ts` has the updated arithmetic).
 
      NO PADDING HERE EITHER (Task 5 fix round, JAMES RULING 2026-08-12,
      reversing this task's own first attempt): portrait's scroller has more
@@ -7661,20 +7667,32 @@ section:not(.news-pinned) .news-row:last-of-type {
      when not paused, so `:empty` below matches exactly the unpaused
      case), but this rule's own bottom padding still reserved the
      home-indicator inset as a blank strip UNDER that empty row — visible
-     space nothing painted a floor for. The band (`.connected-pane-live
-     .connected-band`, below) is the pane's own true visual bottom in this
-     state (`.connected-pane`'s `justify-content: space-between` already
-     seats it there); moving the reservation into ITS OWN padding-bottom
-     instead makes the band the element that owns the screen edge, rather
-     than a blank surface-level strip past an empty grid row. Scoped to
-     BOTH `.connected-pane-live` (Pane C, the grid, has no band of its own
-     to receive it, so it keeps this rule's original reservation
-     untouched) AND the footer's `:empty` state (not merely "not paused",
-     which would also fire mid pause/resume transition) — the one case
-     that DOES need this padding, the paused block sized into row 4 by
-     the footer's own in-flow mechanism, is UNCHANGED by this rule, so the
-     no-occlusion e2e (`design.spec.ts`, "the frozen footer never covers
-     TOTAL LEFT") stays green. */
+     space nothing painted a floor for, and one that GREW as the inset
+     grew: `.connected-pane`'s own `justify-content: space-between`
+     anchors the band's border-box bottom to the PANE's own content-box
+     bottom, which this padding directly shrinks — measured (this task,
+     against the pre-fix source): the band's own box climbed from y=376
+     to y=355 as a simulated inset grew from 0 to 21, retreating from the
+     edge by exactly what the inset spent.
+     THE FIX: moving the reservation into the band's OWN padding-bottom
+     (below) does NOT make the band's box touch the physical edge either
+     — `space-between` anchors border-box edges, and padding is interior
+     to a border box, invisible to that anchor. What it buys is
+     INDEPENDENCE from the inset's size: the pane's own available height
+     no longer shrinks as the inset grows (nothing subtracts it from a
+     grid track any more), so the band's anchored position stops moving
+     at all — pinned at y=376 regardless of inset, proven by the e2e
+     test below rather than asserted. That is what "the band owns the
+     bottom edge" means here: it no longer loses ground to a growing
+     safe-area reservation, not that its own paint touches the glass.
+     Scoped to BOTH `.connected-pane-live` (Pane C, the grid, has no band
+     of its own to receive it, so it keeps this rule's original
+     reservation untouched) AND the footer's `:empty` state (not merely
+     "not paused", which would also fire mid pause/resume transition) —
+     the one case that DOES need this padding, the paused block sized
+     into row 4 by the footer's own in-flow mechanism, is UNCHANGED by
+     this rule, so the no-occlusion e2e (`design.spec.ts`, "the frozen
+     footer never covers TOTAL LEFT") stays green. */
   .connected-surface:has(.connected-pane-live):has(
       .connected-surface-footer:empty
     ) {
@@ -8113,12 +8131,16 @@ section:not(.news-pinned) .news-row:last-of-type {
 
   /* Queue item 6's other half: the reservation `.connected-surface`'s own
      rule (above) zeroed for this exact state (Pane B showing, the footer
-     genuinely empty) lands here instead, so the band owns the edge it
-     sits on rather than leaving a blank surface-level strip past it. Same
-     `:has()` pair as that rule, restated rather than factored into one
-     shared selector list — `index.css` has no such mechanism and a
-     duplicated, self-explaining condition beats a build-time dependency
-     for two rules. */
+     genuinely empty) lands here instead — not to move the band's own box
+     to the physical edge (padding is interior to a border box; `.connected-
+     pane`'s `justify-content: space-between` anchors border-box edges and
+     cannot see it), but so the pane's own available height stops shrinking
+     as the inset grows, which is what stops the band's ANCHORED position
+     from retreating from the edge as a real inset grows (that rule's own
+     comment has the measured before/after). Same `:has()` pair as that
+     rule, restated rather than factored into one shared selector list —
+     `index.css` has no such mechanism and a duplicated, self-explaining
+     condition beats a build-time dependency for two rules. */
   .connected-surface:has(.connected-pane-live):has(
       .connected-surface-footer:empty
     )

@@ -2529,10 +2529,22 @@ const CONNECTED_STATES = [
  *  byte of that growth comes directly out of the scroller's budget one
  *  flex row down: 640 -> 600, a clean 40px (one full grid row) lighter,
  *  landing at another zero-slack exact fit (600 / 40 = 15.0). Landscape's
- *  286 is unchanged — the fix round's own comment on `.connected-header`
- *  has the reasoning for why the two orientations diverge here. */
+ *  286 was unchanged BY THAT round — the fix round's own comment on
+ *  `.connected-header` has the reasoning for why the two orientations
+ *  diverged there.
+ *
+ *  CR2 close-out queue item 5 MOVES LANDSCAPE, for the first time (286 ->
+ *  266): `.connected-surface`'s own top padding changed from a bare
+ *  `env(safe-area-inset-top)` (0px in this zero-inset harness) to
+ *  `max(20px, env(safe-area-inset-top))` — the header row's own height is
+ *  untouched (still 44px, still one row), but the SURFACE's total
+ *  available height for its `1fr` body track shrinks by the new 20px
+ *  floor, and the grid scroller sits inside that track. 8 rows at 32px
+ *  (256px) still fit inside 266 (10px to spare, not the zero-slack exact
+ *  fit portrait's own 600 has) — re-measured against this worktree, not
+ *  derived, same discipline this whole comment insists on. */
 const PORTRAIT_GRID_SCROLLER_PX = 600;
-const LANDSCAPE_GRID_SCROLLER_PX = 286;
+const LANDSCAPE_GRID_SCROLLER_PX = 266;
 
 for (const name of CONNECTED_STATES) {
   test(name, async ({ page }) => {
@@ -2830,15 +2842,15 @@ for (const name of CONNECTED_STATES) {
       expect(m.rowHeight).toBe(32);
       expect(m.clientHeight).toBe(LANDSCAPE_GRID_SCROLLER_PX);
       // EXACT, not a floor, for the reason the portrait block sets out
-      // (test-integrity sweep, P2): `floor(286/32)` is 8, so the FLOOR was
+      // (test-integrity sweep, P2): `floor(266/32)` is 8, so the FLOOR was
       // implied by the two exact assertions above it. The exact count is
       // not — `rowHeight` samples only `children[0]`, so uneven later rows
       // fail here (5) with both heights still green. Measured 8, at an
-      // exact fit of 8.9375 (CR2 spec 3 Task 5 widens the budget from 276
-      // to 286 — this block's own top comment has the arithmetic — which
-      // only grows the margin under 8 rows, from 20px slack to 30px; still
-      // short of fitting a 9th) — the packet's own count, restored by the
-      // task-6 footer reclaim.
+      // 8.3125 fit (CR2 close-out queue item 5 shrinks the budget from 286
+      // to 266 — this block's own top comment has the arithmetic — which
+      // shrinks the margin under 8 rows from 30px slack to 10px; still
+      // short of fitting a 9th) — the packet's own count, unchanged by
+      // this shrink.
       expect(m.visible).toBe(8);
       // ...and the pane itself never scrolls: only the rows do (DEVIATIONS
       // row 2). The document is exactly the viewport.
