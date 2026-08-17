@@ -134,19 +134,25 @@ export default function StepRow({
       )}
       {baselines && !isEffortRef(step.ref) && (
         <div className="step-row-nudges">
+          {/* The arrows follow the NUMBER, not the effort (James,
+              2026-08-16): ▲ raises the split (2:09 -> 2:10, slower), ▼
+              lowers it (2:09 -> 2:08, faster). The previous mapping read
+              "up = harder" and tested as reversed at the erg. The
+              aria-labels stay effort-worded — a screen reader hears
+              faster/slower either way. */}
           <button
             type="button"
             className="nudge-btn"
-            aria-label="Nudge faster"
-            onClick={() => onNudge(-1)}
+            aria-label="Nudge slower"
+            onClick={() => onNudge(1)}
           >
             ▲
           </button>
           <button
             type="button"
             className="nudge-btn"
-            aria-label="Nudge slower"
-            onClick={() => onNudge(1)}
+            aria-label="Nudge faster"
+            onClick={() => onNudge(-1)}
           >
             ▼
           </button>
