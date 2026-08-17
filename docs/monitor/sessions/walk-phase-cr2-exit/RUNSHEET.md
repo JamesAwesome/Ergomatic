@@ -28,12 +28,13 @@ Bluetooth from the worktree dev server, recording tab foregrounded, display
 awake — the phone's native adapter routes past the tap and records nothing.
 Sessions 0-4 below are Pass A.
 
-**PASS B — SCREENS (phone, native app or Safari-on-device, UNRECORDED):**
+**PASS B — SCREENS (phone, NATIVE dev build, really paired, UNRECORDED):**
 the on-erg items that need a mounted phone in a hand — geometry under REAL
 safe-area insets, which desktop Chrome reports as identically 0 and no
 committed capture or e2e assertion can observe (spec §1's own concession).
-Photographs only; costs no erg wire time and can run against the FAKE
-monitor (no pairing needed). Items marked [B] below.
+Photographs only; the native adapter records nothing, which is fine — Pass
+A owns the wire. See the corrected medium note under the 8-item list:
+there is NO fake-monitor route on a phone. Items marked [B] below.
 
 **Two evidence streams, label which is which everywhere:** the WIRE
 (recording: every 0x0031 tick, 0x0033 counts in true arrival order,
@@ -197,9 +198,27 @@ there:
   surface's height model was rebuilt by this PR).
 - Item **8** — [A and B]: the gesture must work on both mediums.
 
-Pass B needs no erg, no pairing, no TestFlight build: the FAKE monitor from
-`pnpm ios:open` (Xcode to the device) or Safari-on-device against the dev
-server. Roughly ten minutes.
+**Pass B's medium, corrected against what is actually possible** (the
+first draft said "the FAKE monitor from Xcode or Safari-on-device" —
+checked and FALSE on both routes: the fake transport only exists when a
+test harness injects `window.__pm5FakeScript__` before connect
+(`transports/index.ts` — a human cannot open it by hand), iOS Safari has
+no Web Bluetooth so the web arm resolves to no transport at all on a
+phone, and the native arm goes straight to real Capacitor BLE):
+
+- Pass B runs on the NATIVE dev build at the erg, genuinely paired — the
+  shipping path (`pnpm ios:build` needs `GOOGLE_IOS_CLIENT_ID`; then
+  `pnpm ios:open`, run to the device from Xcode). Build AFTER the merge so
+  the phone runs exactly what ships.
+- The PM5 is single-central: the phone and the laptop cannot both be
+  connected at once, so Pass B is its own few minutes at the erg, not
+  concurrent with Pass A's sessions.
+- Most items need NO rowing: arm a program and the 2D frame is up — do the
+  rotations/occlusion check (item 6), the mis-hit attempt (item 5), the
+  triple-tap (item 8), and "first frame looks deliberate" (item 7) against
+  the armed screen. Items 1 and 3 (readability mid-pull) need one short
+  unrecorded piece on the phone connection — a few strokes is enough.
+- Roughly ten minutes total, appended to either erg visit.
 
 ## Session-meters — where each number lives now (corrected)
 
