@@ -360,11 +360,10 @@ describe("armed (design spec §2D): ghost split, plain 0 rate, nothing judged", 
     expect(split.className).toContain("timer-card-actual-within");
     expect(split.className).not.toContain("connected-value-absent");
     expect(split.textContent).not.toBe("—");
-    // The value previewed IS the phase's own target (Filling Low's
-    // warm-up carries no split target, so the model previews the house
-    // dash for THIS phase specifically — proven against the model's own
-    // value rather than a literal, so a fixture change cannot silently
-    // make this pass for the wrong reason).
+    // Display consistency only: the composed display equals its own
+    // whole+tenths split (a render-seam identity, NOT proof the preview
+    // matches the phase target — that proof lives in surfaceModel.test.ts'
+    // armed-mirror cases, which assert against the fixture's target).
     expect(model.pace.display).toBe(model.paceWhole + model.paceTenths);
   });
 
@@ -423,7 +422,7 @@ describe("index.css: the landscape two-column split (design spec §2A)", () => {
 // ---------------------------------------------------------------------------
 
 describe("index.css: the disconnected step-down splits into two rules (design spec §2)", () => {
-  it("portrait: split 112->76 er… 100->76, rate 84->64, tenths 52->40", () => {
+  it("portrait: split 100->76, rate 84->64, tenths 52->40", () => {
     const splitRule = rulesFor(
       ".connected-surface:has(.connected-lost) .connected-hero-split .connected-hero-value",
     );

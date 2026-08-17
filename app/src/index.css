@@ -6626,9 +6626,10 @@ section:not(.news-pinned) .news-row:last-of-type {
 /* --- Pane C, the grid (Task 7, handoff §3; rebuilt connected-revamp
    Task 5, design spec §6/revision §4) ---------------------------------- */
 
-/* EVERY RULE IN THIS BLOCK IS SCOPED TO A `.connected-grid-*` CLASS (plus
-   the two `.connected-line*` overrides this task adds, both scoped under
-   `.connected-pane-grid`). The task-6 review's L5 finding is that the
+/* EVERY RULE IN THIS BLOCK IS SCOPED TO A `.connected-grid-*` CLASS
+   (the `.connected-line*` overrides that once lived here left with the
+   headline — ConnectionLine renders in the shell header now, CR2 spec 3).
+   The task-6 review's L5 finding is that the
    phone timer's landscape query carries unscoped `.timer-*` declarations
    which arrive uninvited on any pane reusing those components; pane C
    reuses none of those components (its only borrowed class is
@@ -7597,8 +7598,9 @@ section:not(.news-pinned) .news-row:last-of-type {
        padding still left the grid pane 12px short of Task 5's own 7-row
        ruling (measured directly, this task's own report has the numbers)
        — the remaining px came from trimming that pane's OWN internal gaps
-       (`.connected-pane-grid`, `.connected-grid-headline`,
-       `.connected-grid-head`, all below), not from this rule. */
+       (`.connected-pane-grid` and `.connected-grid-head` below; the
+       `.connected-grid-headline` that once contributed was deleted
+       outright by CR2 spec 3), not from this rule. */
     row-gap: 0;
     max-width: none;
     margin: 0;
