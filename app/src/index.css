@@ -6586,20 +6586,11 @@ section:not(.news-pinned) .news-row:last-of-type {
   text-overflow: ellipsis;
 }
 
-/* Hidden by default — portrait's own then-less form (§2C: "the existing
-   `.timer-upnext-then { display: none }` mechanism dies with UpNextStrip,
-   so the band reproduces the drop itself"). The landscape override below
-   turns it back on, inheriting the value's own font/colour so the word
-   reads as part of the same sentence, not a second style. */
-.connected-band-upnext-then {
-  display: none;
-}
-
-/* Hidden by default, same idiom as `-then` above (queue item 7): portrait
-   keeps its own stacked `UP NEXT` label (`.connected-band-upnext-label`)
-   ahead of the value, so a second "NEXT" INSIDE the value would double up
-   the same word — the landscape override below is the only place this
-   ever shows, exactly where the stacked label is itself hidden. */
+/* Hidden by default (queue item 7): portrait keeps its own stacked
+   `UP NEXT` label (`.connected-band-upnext-label`) ahead of the value, so
+   a second "NEXT" INSIDE the value would double up the same word — the
+   landscape override below is the only place this ever shows, exactly
+   where the stacked label is itself hidden. */
 .connected-band-upnext-next {
   display: none;
 }
@@ -8127,16 +8118,6 @@ section:not(.news-pinned) .news-row:last-of-type {
      — §2A draws both on one baseline at the same visual weight. */
   .connected-pane-live .connected-band-upnext-value {
     font-size: var(--c-size-band);
-  }
-
-  /* The word "then" RENDERS here (§2A's own full form, "REST 2:00 · then
-     WORK 2:09.0") — inherited size/colour, not a dimmer treatment: the
-     design draws the whole combined string at ONE weight. */
-  .connected-pane-live .connected-band-upnext-then {
-    display: inline;
-    font: inherit;
-    letter-spacing: inherit;
-    color: inherit;
   }
 
   /* The container's own rule/padding above replaces this cell's portrait

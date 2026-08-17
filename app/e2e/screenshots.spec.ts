@@ -2552,30 +2552,26 @@ for (const name of CONNECTED_STATES) {
     if (name === "connected-pane-live") {
       // UP NEXT'S PORTRAIT STRING (connected-revamp Task 6, design spec §6/
       // revision §3; RE-ANCHORED CR2 spec 3 Task 4 — the band renders this
-      // line directly now, `.connected-band-upnext-value`/`-then`, not
-      // `UpNextStrip`'s own classes): "REST 2:00 · WORK 2:09.0" — the SAME
-      // value landscape shows, minus the word "then" (`index.css`'s base
-      // rule for `.connected-band-upnext-then` is `display: none`,
-      // unscoped by any media query, so this is the default at any
-      // viewport that isn't landscape). This fixture's own program has a
-      // real rest next (`connected-pane-live.html`, "Filling Low"'s rest
-      // between work intervals), so there is something real to resolve to.
-      // Real CSS, real cascade — jsdom cannot prove this, only the string-
-      // building half (`PaneLive.test.tsx`). `innerText`, NOT
-      // `textContent`: `textContent` reads the raw DOM and includes the
-      // hidden "then " span's own text regardless of its `display: none` —
-      // caught directly running this file, first pass (pre-redesign):
-      // `display` genuinely computed `none` on that span, yet `textContent`
-      // still read "then" anyway, because `textContent` is not CSS-aware.
-      // `innerText` IS (it approximates rendered text), which is what "the
-      // word is gone in portrait" actually means.
+      // line directly now, `.connected-band-upnext-value`, not
+      // `UpNextStrip`'s own classes; PHASE CS Item B, task 2: the
+      // then-clause and its `.connected-band-upnext-then` span are retired
+      // outright — one richer phase, not two). "REST 3:00" — the SAME
+      // value landscape shows, minus the "NEXT · " prefix, which is
+      // landscape-only (queue item 7: portrait's own stacked `UP NEXT`
+      // label above already names the line). This fixture's own program
+      // has a real rest next (`connected-pane-live.html`, "Filling Low"'s
+      // rest between work intervals), so there is something real to
+      // resolve to. `innerText`, NOT `textContent`: `textContent` reads
+      // the raw DOM regardless of CSS, `innerText` approximates rendered
+      // text — the same reasoning that used to matter for the retired
+      // "then" span still applies to the "NEXT · " prefix span, which
+      // stays hidden in portrait (the landscape block below proves it
+      // shown).
       const value = await page
         .locator(".connected-band-upnext-value")
         .innerText();
-      expect(value?.replace(/\s+/g, " ").trim()).toBe(
-        "REST 3:00 · WORK 2:06.0",
-      );
-      await expect(page.locator(".connected-band-upnext-then")).toBeHidden();
+      expect(value?.replace(/\s+/g, " ").trim()).toBe("REST 3:00");
+      await expect(page.locator(".connected-band-upnext-then")).toHaveCount(0);
 
       // THE SAFETY FIX, MEASURED (James 2026-08-12): End's hit box is a
       // small fraction of the surface's width, not the full-width bar this
@@ -2682,28 +2678,21 @@ for (const name of CONNECTED_STATES) {
     await page.setViewportSize({ width: 844, height: 390 });
     await showConnectedFixture(page, name);
     if (name === "connected-pane-live") {
-      // UP NEXT'S LANDSCAPE STRING: "REST 2:00 · then WORK 2:09.0" —
-      // revision §3's own example, and the SHAPE is now literally that (the
-      // fixture's own numbers differ). RE-ANCHORED (CR2 spec 3 Task 4): the
+      // UP NEXT'S LANDSCAPE STRING. RE-ANCHORED (CR2 spec 3 Task 4): the
       // band renders this line directly now, `.connected-band-upnext-
-      // value`/`-then`, not `UpNextStrip`'s own classes — same value as the
-      // portrait case above, plus the word "then" — proving it is one
-      // builder, not two, the same way `PaneLive.test.tsx` proves it
-      // structurally. `innerText` for the same reason the portrait block
-      // above uses it (rendering-aware, not raw-DOM) — nothing is hidden
-      // here, so it reads the same as `textContent` would, but consistency
-      // beats relying on that. PLUS "NEXT · " ahead of it (close-out queue
-      // item 7, James's ruling: the prefix prepends always, landscape
-      // only — portrait's own stacked `UP NEXT` label already names this
-      // line, so it stays then-less AND prefix-less there, proved by the
-      // portrait block above).
+      // value`, not `UpNextStrip`'s own classes — PHASE CS Item B, task 2:
+      // the then-clause is retired outright, so landscape's own value is
+      // now IDENTICAL to portrait's, just with "NEXT · " ahead of it
+      // (close-out queue item 7, James's ruling: the prefix prepends
+      // always, landscape only — portrait's own stacked `UP NEXT` label
+      // already names this line, so the prefix stays hidden there, proved
+      // by the portrait block above). `innerText` for the same reason the
+      // portrait block above uses it.
       const value = await page
         .locator(".connected-band-upnext-value")
         .innerText();
-      expect(value?.replace(/\s+/g, " ").trim()).toBe(
-        "NEXT · REST 3:00 · then WORK 2:06.0",
-      );
-      await expect(page.locator(".connected-band-upnext-then")).toBeVisible();
+      expect(value?.replace(/\s+/g, " ").trim()).toBe("NEXT · REST 3:00");
+      await expect(page.locator(".connected-band-upnext-then")).toHaveCount(0);
       // NOT VISUALLY CLIPPED — the bug `innerText` above cannot catch
       // (found by eye in the pre-redesign task's own first landscape
       // screenshot: the old `.timer-upnext-value`'s `text-overflow:

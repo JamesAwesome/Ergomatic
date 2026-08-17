@@ -5101,7 +5101,7 @@ test.describe("connected screens (fake-driven)", () => {
       expect(band.borderColor).toBe(INK_RGB);
 
       // Always in the DOM (one markup, both orientations — the same
-      // toggle idiom `.connected-band-upnext-then` uses); landscape hides
+      // toggle idiom the "NEXT · " prefix span uses); landscape hides
       // it via CSS (§2A: "NO label"), it is never absent from the tree.
       await expect(page.locator(".connected-band-upnext-label")).toBeHidden();
       const upnext = await page
@@ -5118,9 +5118,10 @@ test.describe("connected screens (fake-driven)", () => {
       expect(upnext.fontSize).toBe("30px");
       expect(upnext.color).toBe(INK_RGB);
       expect(upnext.whiteSpace).toBe("nowrap");
-      expect(upnext.text.replace(/\s+/g, " ").trim()).toBe(
-        "NEXT · REST 3:00 · then WORK 2:06.0",
-      );
+      // PHASE CS Item B (task 2): the then-clause is retired outright — one
+      // richer phase, not two — so landscape's own value is "NEXT · " plus
+      // exactly the same string portrait shows, nothing appended.
+      expect(upnext.text.replace(/\s+/g, " ").trim()).toBe("NEXT · REST 3:00");
 
       const label = await page
         .locator(".connected-band-cell-label")
@@ -6174,8 +6175,12 @@ test.describe("connected screens (fake-driven)", () => {
       );
       expect(fontSize).toBe("23px");
       const text = await value.innerText();
-      expect(text.replace(/\s+/g, " ").trim()).toBe("WORK 2:06.0 · REST 3:00");
-      await expect(page.locator(".connected-band-upnext-then")).toBeHidden();
+      // PHASE CS Item B (task 2): the then-clause is retired outright, so
+      // this reads only the coming WORK phase's own composition-table
+      // string (distance, split, rate) — nothing appended for the rest
+      // that follows it.
+      expect(text.replace(/\s+/g, " ").trim()).toBe("WORK 2000m · 2:06.0 @22");
+      await expect(page.locator(".connected-band-upnext-then")).toHaveCount(0);
       // Queue item 7: portrait keeps its own stacked UP NEXT label above,
       // so the landscape-only "NEXT · " prefix stays hidden here too — no
       // double-labeling.
@@ -6322,8 +6327,11 @@ test.describe("connected screens (fake-driven)", () => {
       const value = await page
         .locator(".connected-band-upnext-value")
         .innerText();
+      // PHASE CS Item B (task 2): the then-clause is retired, so armed's
+      // own value is just the coming WORK phase's composition-table
+      // string, nothing appended for the rest after it.
       expect(value.replace(/\s+/g, " ").trim()).toBe(
-        "NEXT · WORK 2:06.0 · then REST 3:00",
+        "NEXT · WORK 2000m · 2:06.0 @22",
       );
       const total = await page
         .locator(".connected-band-cell-value")

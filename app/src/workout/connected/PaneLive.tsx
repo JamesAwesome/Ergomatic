@@ -189,12 +189,11 @@ export default function PaneLive({ model }: { model: SurfaceModel }) {
             <span className="connected-band-upnext-next">NEXT · </span>
             {/* Phase CS Item B (connected-polish design spec): the
                 then-clause dies everywhere — one richer phase, not two.
-                `SurfaceModel.thenNext` is gone from the interface entirely
-                (task 1), so there is no second value left to append here.
-                MINIMAL FOLD ONLY (task 1's typecheck escape): the
-                `.connected-band-upnext-then` CSS rule and the six frozen
-                `connected-*.html` fixtures that still carry then-markup are
-                task 2's own wave, named in the spec's blast radius. */}
+                `SurfaceModel.thenNext` is gone from the interface entirely,
+                so there is no second value left to append here; the CSS
+                rule that used to render the word and the frozen
+                `connected-*.html` fixtures that carried it are gone too
+                (task 2, named in the spec's blast radius). */}
             {model.upNext}
           </span>
         </div>
