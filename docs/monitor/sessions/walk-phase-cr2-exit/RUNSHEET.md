@@ -150,6 +150,13 @@ paired.
   crash-equivalent F6 exists for).
 - Open Today: confirm the quiet interrupted-session row appears
   (`"{title}: interrupted connected session."`, **Log it** + a two-tap ✕).
+- **BEFORE pressing Log it: open the console and copy
+  `localStorage.getItem("ergomatic.monitorRun")`, save it alongside this
+  session's other files.** F-1 (walk-2026-08-17/README.md) lost exactly
+  this record to the step-4 reconnect and could not discriminate its own
+  remaining theories for the 6-MIN-where-5-computed reading without it —
+  it is the one artifact that settles a duration discrepancy between what
+  the header showed and what the wire computes.
 - Press **Log it**: the duration shown = the COMPLETED intervals' measured
   work + their programmed rests. **The in-flight interval contributes
   NOTHING by design** (`buildMonitorLogSteps` keys off completed actuals) —

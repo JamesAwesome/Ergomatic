@@ -1024,4 +1024,39 @@ describe("interruptedTotalSeconds: work + programmed rest for completed interval
   it("no actuals means zero", () => {
     expect(interruptedTotalSeconds(freshMonitorRun())).toBe(0);
   });
+
+  // Queue item 8 (F-1's instrumentation): the walk's exact shape
+  // (walk-2026-08-17/README.md's F-1) — rests [0,30,30,30,0], completed
+  // actuals for intervals 0/1/2 with work 60/60/120, interval 3
+  // UNCOMPLETED but its own restSeconds is 30, not 0. Task 1's own fixture
+  // above (`programWithRest([30, 45, 0])`) could not discriminate the
+  // all-rests misread from the correct per-completed-actual reading
+  // because ITS uncompleted interval carried `restSeconds: 0`, so the two
+  // formulas happened to agree (the bisect's own step 2). This one does
+  // not agree: the correct reading is 240 (work) + 60 (completed
+  // intervals 0/1/2's own rest: 0+30+30) = 300s, matching the wire's own
+  // 5-MIN computation from the walk's completed intervals. An all-rests
+  // misread (summing EVERY interval's restSeconds, including the
+  // uncompleted interval 3's own 30, and interval 4's 0 which never
+  // completed either: 240 + 90 = 330) would round to 6 MIN
+  // (`Math.round(330 / 60)` = `Math.round(5.5)` = 6) — the exact wrong
+  // header the F6 walk showed. Self-mutation proof (report has the
+  // before/after): temporarily summing ALL intervals' restSeconds here
+  // instead of only completed ones turns this assertion red at 330, not
+  // 300 — confirming this fixture actually discriminates the two
+  // formulas, which Task 1's fixture could not.
+  it("discriminates the walk's 6-MIN misread (F-1) from the correct 5-MIN reading: an UNCOMPLETED interval's own rest must not be summed", () => {
+    const run: MonitorRun = {
+      ...freshMonitorRun(),
+      program: programWithRest([0, 30, 30, 30, 0]),
+      actuals: [
+        { ...actual1, index: 0, elapsedSeconds: 60 },
+        { ...actual1, index: 1, elapsedSeconds: 60 },
+        { ...actual1, index: 2, elapsedSeconds: 120 },
+        // interval 3 never completed: no actual names it, and its
+        // restSeconds (30, deliberately NOT 0) must not be summed.
+      ],
+    };
+    expect(interruptedTotalSeconds(run)).toBe(300);
+  });
 });
