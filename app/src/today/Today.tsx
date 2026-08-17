@@ -1461,8 +1461,16 @@ function TodayView({
                 <TypeBadge type={log.workoutType} />
                 <span className="today-log-title">{log.workoutTitle}</span>
                 <span className="today-log-meta">
-                  {formatLogDate(log.loggedAt)} · {log.held.toUpperCase()} ·{" "}
-                  {log.pain}/5
+                  {/* R-A: held/pain are nullable ahead of the write side that
+                      can produce a null row - each segment renders only when
+                      present (the F1 no-dash rule), joined by " · ". */}
+                  {[
+                    formatLogDate(log.loggedAt),
+                    log.held === null ? null : log.held.toUpperCase(),
+                    log.pain === null ? null : `${log.pain}/5`,
+                  ]
+                    .filter((segment) => segment !== null)
+                    .join(" · ")}
                 </span>
               </li>
             ))}

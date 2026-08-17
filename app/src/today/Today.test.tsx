@@ -1623,6 +1623,66 @@ describe("Today (LAST THREE)", () => {
     await renderToday();
     expect(screen.getByText("No sessions logged yet.")).toBeVisible();
   });
+
+  // R-A (docs/superpowers/specs/2026-08-17-post-workout-summary-design.md):
+  // the null-tolerant read that must ship before any code can write a null
+  // held/pain. Today.tsx used to do `log.held.toUpperCase()` unconditionally
+  // with no error boundary in the app - a null `held` white-screened this
+  // whole route. Locks in the exact byte-identical string for a full row
+  // (not just per-segment regexes, which would pass even if the joiner or
+  // segment order changed) so a future edit can't silently reorder the
+  // meta line.
+  it("renders the exact meta string for a full (non-null) row", async () => {
+    mockReady();
+    await renderToday();
+
+    const section = screen.getByText("LAST THREE").closest("section")!;
+    const row = within(section).getByText("Occluded Front").closest("li")!;
+    expect(within(row).getByText("JUL 25 · HELD · 2/5")).toBeVisible();
+  });
+
+  it("renders without throwing and reads the date alone when held and pain are both null", async () => {
+    mockReady({
+      logs: [
+        {
+          id: "log-null",
+          workoutId: "w-isobar",
+          workoutTitle: "Occluded Front",
+          workoutType: "AT",
+          loggedAt: "2026-07-25T12:00:00.000Z",
+          held: null,
+          pain: null,
+        },
+      ],
+    });
+    await renderToday();
+
+    const section = screen.getByText("LAST THREE").closest("section")!;
+    const row = within(section).getByText("Occluded Front").closest("li")!;
+    expect(within(row).getByText("JUL 25")).toBeVisible();
+    expect(within(row).queryByText(/·/)).not.toBeInTheDocument();
+  });
+
+  it("omits only the missing segment when held is null but pain is present", async () => {
+    mockReady({
+      logs: [
+        {
+          id: "log-partial",
+          workoutId: "w-isobar",
+          workoutTitle: "Occluded Front",
+          workoutType: "AT",
+          loggedAt: "2026-07-25T12:00:00.000Z",
+          held: null,
+          pain: 2,
+        },
+      ],
+    });
+    await renderToday();
+
+    const section = screen.getByText("LAST THREE").closest("section")!;
+    const row = within(section).getByText("Occluded Front").closest("li")!;
+    expect(within(row).getByText("JUL 25 · 2/5")).toBeVisible();
+  });
 });
 
 describe("Today (empty library)", () => {

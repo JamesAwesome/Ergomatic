@@ -15,8 +15,11 @@ export interface RecentLog {
   workoutTitle: string;
   workoutType: WorkoutType;
   loggedAt: string;
-  held: HeldResult;
-  pain: number;
+  // Nullable ahead of the write side (post-workout-summary spec, ruling
+  // R-A): this read has to tolerate a null row before any code can write
+  // one, so an already-installed client never white-screens on it.
+  held: HeldResult | null;
+  pain: number | null;
 }
 
 export type RecentLogsState =
