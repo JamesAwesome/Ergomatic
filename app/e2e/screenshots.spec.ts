@@ -2089,6 +2089,80 @@ test("connected-interstitial-ready-landscape", async ({ page }) => {
   await cleanupByTitle(page, title);
 });
 
+// --- CR2 spec 3 Task 6: the armed GRID pane — no visual record until now ---
+//
+// Design spec §2D describes the armed frame for LIVE only (`connected-
+// armed.html`'s own committed capture); GRID's armed branch (Task 5,
+// `ConnectedSurface.tsx`'s `headerTrailing`, "armed is checked FIRST, ahead
+// of the ordinal check, so GRID never reaches the countdown composition
+// while armed") had NO screenshot at all — the exact defect class
+// `.claude/agent-briefing.md` names by name (a RUNNING gold countdown at a
+// rower who has taken no stroke) has a regression test in
+// `ConnectedSurface.tsx` but no photograph proving it. This walks the same
+// real fake-driven path `openConnectedInterstitial`'s ready captures use,
+// one step further: past "Show me the numbers" (which mounts the real
+// surface at `status: "armed"`, `axes.session === "none"` — nothing has
+// been rowed) and one click onto the GRID pane, with NO story events pumped
+// at all, so nothing here can accidentally advance past armed.
+test("connected-armed-grid", async ({ page }) => {
+  const title = "Screenshot Connected Armed Grid Workout";
+  await openConnectedInterstitial(
+    page,
+    title,
+    "screenshots-connected-armed-grid@e2e.test",
+    "PM5 918273645",
+  );
+  await expect(
+    page.locator(".connected-serif-line", { hasText: "Ready when you pull" }),
+  ).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("button", { name: "Show me the numbers" }).click();
+  await expect(
+    page.getByRole("navigation", { name: "Connected panes" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Grid pane" }).click();
+  await expect(page.getByRole("button", { name: "Grid pane" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  // The header's own armed branch, not the countdown composition — the
+  // one line this capture exists to put a picture behind.
+  await expect(page.getByText("1 OF 5 · READY")).toBeVisible();
+  await expect(page.locator(".connected-header-countdown")).toHaveCount(0);
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "connected-armed-grid.png"),
+  });
+  await cleanupByTitle(page, title);
+});
+
+test("connected-armed-grid-landscape", async ({ page }) => {
+  const title = "Screenshot Connected Armed Grid Landscape Workout";
+  await openConnectedInterstitial(
+    page,
+    title,
+    "screenshots-connected-armed-grid-landscape@e2e.test",
+    "PM5 837465921",
+  );
+  await expect(
+    page.locator(".connected-serif-line", { hasText: "Ready when you pull" }),
+  ).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("button", { name: "Show me the numbers" }).click();
+  await expect(
+    page.getByRole("navigation", { name: "Connected panes" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Grid pane" }).click();
+  await expect(page.getByRole("button", { name: "Grid pane" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  await expect(page.getByText("1 OF 5 · READY")).toBeVisible();
+  await expect(page.locator(".connected-header-countdown")).toHaveCount(0);
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "connected-armed-grid-landscape.png"),
+  });
+  await cleanupByTitle(page, title);
+});
+
 // --- Phase 7C Task 6: the monitor mode's Log screen form --------------------
 //
 // The monitor mode (spec §4) only ever engages once a REAL connected session

@@ -282,19 +282,19 @@ describe("the size-token scale (tokens.css portrait + index.css landscape)", () 
 // reaches the phone timer too; a connected-only family declared on `:root`
 // would have been invisible to nobody).
 //
-// NINE OF TEN NOW WIRED (CR2 spec 3 Tasks 1, 4 and 5): `--c-size-control`
+// TEN OF TEN NOW WIRED (CR2 spec 3 Tasks 1, 4, 5 and 6): `--c-size-control`
 // (Task 1, `SegmentedControl`), `--c-size-hero`/`-hero-2`/`-tenths`/
-// `-target`/`-band` (Task 4, the heroes and the band) and, this task,
-// `--c-size-row`/`-thead` (the grid's own row values and table head,
-// `.connected-grid-row > span`/`.connected-grid-head > span`). ONE holdout:
-// `--c-size-status` belongs to `.connected-line-trailing`, a rule shared by
-// EVERY pane's header status, not a grid rule — Task 5's own brief scopes
-// its migration to "grid rules", and resizing a rule every pane's header
-// reads is a bigger, cross-pane change than that scope covers
-// (`ConnectedSurface.tsx`'s own `headerTrailing` comment has the fuller
-// reasoning). The test below names the holdout explicitly rather than
-// either skipping the "every token is consumed" check entirely or letting
-// it fail on a token nobody has claimed yet.
+// `-target`/`-band` (Task 4, the heroes and the band), `--c-size-row`/
+// `-thead` (Task 5, the grid's own row values and table head,
+// `.connected-grid-row > span`/`.connected-grid-head > span`) and, closing
+// the one holdout Task 5 left named, `--c-size-status` (Task 6,
+// `.connected-line-trailing` — the header status caption every pane
+// shares, `ConnectionLine.tsx`'s own comment has the wiring). The test
+// below used to name the holdout explicitly rather than skip the "every
+// token is consumed" check entirely; now every token has a real consumer,
+// so the exception is gone rather than left beside a token that no longer
+// needs it (this block's own prior comment named that as the trigger to
+// drop it, not to add a second one).
 // ---------------------------------------------------------------------------
 
 const C_SIZE_SCALE = [
@@ -352,19 +352,17 @@ describe("the --c-size-* connected-only scale (index.css, on .connected-surface)
     },
   );
 
-  // CR2 spec 3 Task 5: nine of the ten now have a real consumer in
-  // `index.css` — counted off the comment-stripped source, so a prose
-  // mention cannot satisfy it, the same idiom the `--size-*` version of
-  // this test above uses. `--c-size-status` is the one deliberate
-  // exception (this block's own header comment has the reason); if a
-  // later task wires it, this test's own failure is the prompt to drop
-  // the exception, not to add a second one beside it.
-  it("nine of the ten tokens are CONSUMED by index.css — --c-size-status is the one still-unwired holdout", () => {
+  // CR2 spec 3 Task 6: all ten now have a real consumer in `index.css` —
+  // counted off the comment-stripped source, so a prose mention cannot
+  // satisfy it, the same idiom the `--size-*` version of this test above
+  // uses. `--c-size-status` was the one deliberate exception through Task
+  // 5; this task's own wiring (`ConnectionLine.tsx`'s comment) is what
+  // closes it.
+  it("all ten tokens are CONSUMED by index.css", () => {
     const consumers = (name: string) =>
       indexCss.split(`var(${name})`).length - 1;
     for (const { name } of C_SIZE_SCALE) {
-      const expectWired = name !== "--c-size-status";
-      expect([name, consumers(name) > 0]).toStrictEqual([name, expectWired]);
+      expect([name, consumers(name) > 0]).toStrictEqual([name, true]);
     }
   });
 

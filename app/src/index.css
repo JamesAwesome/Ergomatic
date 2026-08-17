@@ -6190,15 +6190,31 @@ section:not(.news-pinned) .news-row:last-of-type {
    clips, and the fix that actually belongs here is shortening or resizing
    the string itself (Task 2's model differentiation, `--c-size-status`),
    not a CSS truncation on this element. */
+/* `--c-size-control` (13px both orientations, design spec §1's role
+   mapping and its own type-scale note: "13 control & id" is ONE role, not
+   two) — CR2 spec 3 Task 6 wires this off the stale literal 11px/ink-3 the
+   pre-redesign `ConnectionLine` shipped with (this rule's own top-of-file
+   comment used to say so verbatim). Task 5's own `--c-size-status`
+   migration deliberately scoped itself to "grid rules" and left this
+   sibling span alone (`tokens.test.ts`'s own holdout comment); closing the
+   device-caption half of the same gap was folded into the SAME task rather
+   than opened as a second holdout, since §2A's header-row assertion cannot
+   pass with either span at its old size. */
 .connected-line-device {
   flex: 1;
   min-width: 0;
   font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.12em;
-  color: var(--ink-3);
+  font-size: var(--c-size-control);
+  letter-spacing: 0.1em;
+  color: var(--ink-2);
 }
 
+/* `--c-size-status` (22/21 landscape/portrait) — CR2 spec 3 Task 6 closes
+   the holdout `tokens.test.ts` named explicitly (Task 5's own comment
+   there: "if a later task wires it, this test's own failure is the prompt
+   to drop the exception"). §2A: "status `3 OF 12 · WORK` (mono 22, 0.04em,
+   ink)" — ink, not ink-3: the status is the one line on this header a
+   rower reads mid-pull, not a decoration. */
 .connected-line-trailing {
   flex: none;
   /* Never wraps either (the sibling rule's own comment has the trap this
@@ -6207,9 +6223,9 @@ section:not(.news-pinned) .news-row:last-of-type {
      chance to be pushed out by the device span's own truncation. */
   white-space: nowrap;
   font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.12em;
-  color: var(--ink-3);
+  font-size: var(--c-size-status);
+  letter-spacing: 0.04em;
+  color: var(--ink);
 }
 
 /* GRID's own countdown half of the composed header trailing (CR2 spec 3
@@ -6805,6 +6821,12 @@ section:not(.news-pinned) .news-row:last-of-type {
 .connected-grid-row > span {
   font-family: var(--font-mono);
   font-size: var(--c-size-row);
+  /* −0.01em (CR2 spec 3 Task 6, design spec §2B: "values mono 19px
+     tracking −0.01em") — the property-table sweep's own new letter-
+     spacing assertion found this declaration missing outright; every
+     other role on this surface already carries its own table-given
+     tracking figure, this one had simply never been added. */
+  letter-spacing: -0.01em;
 }
 
 .connected-grid-num {
@@ -6875,16 +6897,17 @@ section:not(.news-pinned) .news-row:last-of-type {
   display: none;
 }
 
-/* THE ONE SANCTIONED ACCENT ON THE WHOLE CONNECTED SURFACE (handoff §3:
-   the active interval's countdown "is accent (a duration — legal)").
-   Accent's four meanings include a duration the app is counting, and this
-   cell is exactly that. It is the ONLY `var(--accent)` declaration inside a
-   PANE. The surface's other three all belong to the shell, not to a pane:
-   `.connected-end` (the header control, connected-revamp Task 6),
+/* NOT ACCENT (CR2 spec 3, Ruling 1 — corrects this comment's own former
+   framing, which quoted the handoff's "is accent (a duration — legal)"
+   line as if it still held; it does not, and hadn't since 2026-08-13). The
+   countdown mark is GOLD, `--marker` — the ONLY colour this cell wears.
+   Accent is a CONTROL colour now, nowhere else: `PaneGrid.test.tsx`'s
+   whole-file "ACCENT CENSUS" reads every `var(--accent)` consumer straight
+   out of this stylesheet and pins the set at exactly three, none of them a
+   pane — `.connected-end` (the header control, connected-revamp Task 6),
    `.connected-paused-end` and `.connected-paused-end-armed` (the frozen
-   block's own `END`, handoff §4 — IN FLOW since connected-axes 2a task 5,
-   no longer an overlay). `PaneGrid.test.tsx`'s census derives
-   that set from THIS FILE rather than trusting this comment.
+   block's own `END`, handoff §4) — and asserts `connected-grid-countdown`
+   is NOT among them, by name.
 
    Task 5 dropped the old enlarged size (22px/26px): the revision's
    own mockup draws the countdown at the SAME `--c-size-row` as every other
@@ -7268,12 +7291,31 @@ section:not(.news-pinned) .news-row:last-of-type {
    390 and still correct on any other width), matching the rail's own
    "Portrait keeps a 54px two-tab bar" (revision §2) geometry — only the
    target's own content changed, from a stacked mark+label to a single mono
-   word. */
+   word.
+
+   FULL-BLEED, NOT JUST FULL-WIDTH OF THE CONTENT COLUMN (CR2 spec 3 Task
+   6, found by this task's own new width assertion — the comment above
+   asserted 390 and nothing had ever measured it): `.connected-control` is
+   a direct child of `.connected-surface`, which IS `.screen`
+   (`ConnectedSurface.tsx`'s own class list) and therefore carries
+   `.screen`'s own `calc(20px + env(safe-area-inset-*))` side padding
+   (`:402-408`) — every direct child inherits that inset, including this
+   one, so the control rendered at 350px on a 390px frame instead of edge
+   to edge. Negative margins exactly cancelling that padding formula pull
+   it back out to the surface's true physical edge, matching design spec
+   §2C ("54px full-width segmented bar") and the rail's own precedent this
+   comment already claimed. LANDSCAPE zeroes both (below): landscape's own
+   `.connected-surface` override replaces `.screen`'s padding entirely with
+   `--edge-inset` rather than stacking on top of it, so cancelling it a
+   second time here would undo the real notch protection the top-inset
+   test guards. */
 .connected-control {
   flex: none;
   display: flex;
   height: 54px;
   border-top: 1px solid var(--rule);
+  margin-left: calc(-20px - env(safe-area-inset-left, 0px));
+  margin-right: calc(-20px - env(safe-area-inset-right, 0px));
 }
 
 .connected-control-half {
@@ -7705,6 +7747,13 @@ section:not(.news-pinned) .news-row:last-of-type {
     grid-column: 1;
     grid-row: 1;
     align-self: center;
+    /* The portrait rule's own negative margins (base rule, above) must not
+       leak into the landscape pill: landscape's `.connected-surface`
+       override replaces `.screen`'s padding entirely with `--edge-inset`
+       rather than stacking on top of it, so cancelling a padding that no
+       longer applies would instead cancel the REAL notch-protecting inset
+       and put the control back under the housing (CR2 spec 3 Task 6). */
+    margin: 0;
     /* The portrait rule's bottom-bar `border-top` must not leak into the
        landscape pill (re-review Minor: it painted a stray --rule hairline
        atop the pill and, via border-box, shaved the 44px content box to
@@ -8034,12 +8083,24 @@ section:not(.news-pinned) .news-row:last-of-type {
     height: 32px;
   }
 
-  /* `#` 26px, not portrait's 22 (revision §4's own table). Every OTHER
-     column's flex weight is already the table's number in the base rule
-     above — TIME/METERS/PACE/SPM/HR do not change between orientations,
-     only `#`'s width and REST's visibility do. */
+  /* `#` 30px (design spec §2B's literal figure — CR2 spec 3 Task 6 closes
+     the gap a Task 5-review finding left open: this rule shipped 26px,
+     measured against nothing in particular, against a table row that
+     names 30 explicitly). Portrait keeps its OWN 22px unchanged (base rule
+     above) — §2B's own "GRID portrait" row is explicit that portrait's
+     geometry stays "today's" (the pre-redesign scroller's row height and
+     column widths), only its skin (tokens, table-head treatment) is new;
+     the literal 30px is a LANDSCAPE-table figure. Every OTHER column's
+     flex weight is already the table's number in the base rule above —
+     TIME/METERS/PACE/SPM/HR do not change between orientations, only `#`'s
+     width and REST's visibility do. Widening this fixed column costs the
+     row's own flexible siblings a few px each (`min-width: 0` on every one
+     of them, this file's own comment on the width-invariant test), not
+     vertical fit — row HEIGHT is unrelated to this column's WIDTH, and the
+     landscape grid-no-clip test (a 3-digit interval number, `128`) still
+     measures zero overflow at 30px, with MORE headroom than 26px gave it. */
   .connected-pane-grid .connected-grid-num {
-    width: 26px;
+    width: 30px;
   }
 
   /* REST reappears here (portrait hides it, base rule above), at the

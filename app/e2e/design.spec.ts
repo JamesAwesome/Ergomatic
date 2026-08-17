@@ -4174,6 +4174,30 @@ const CONNECTED_BULK_TEXT = (title: string): string =>
     "\n",
   );
 
+/** 18 intervals — one past `ConnectedProgressBar.tsx`'s own
+ *  `MAX_NOTCH_BOUNDARIES = 16` threshold (17 interior boundaries), the
+ *  §2A property-table row's fallback-mode trigger. Same shape as
+ *  `CONNECTED_PROGRAM` (`createFakeTransport` asserts programming bytes
+ *  against its own `script.program`, so this and `LONG_BULK_TEXT` below
+ *  agree BY CONSTRUCTION), used only by the fallback test — the armed
+ *  frame alone is enough to prove which mode the bar renders in, no
+ *  rowing story needed. */
+const LONG_PROGRAM = {
+  intervals: Array.from({ length: 18 }, () => ({
+    type: "work" as const,
+    kind: "distance" as const,
+    value: 100,
+    targetSplit: null,
+    displaySpm: null,
+    restSeconds: 0,
+  })),
+};
+
+const LONG_BULK_TEXT = (title: string): string =>
+  [`${title} | AN | easy | 1`, ...Array<string>(18).fill("w 100m max")].join(
+    "\n",
+  );
+
 /** `pm5/parse.ts`'s `WORKOUTSTATE_INTERVALWORKTIME`, copied as a plain
  *  number — this file drives the app from outside and never imports its
  *  modules (`connected.spec.ts` makes the same copy for the same reason). */
@@ -4333,17 +4357,18 @@ async function injectConnectedFake(
   page: Page,
   events: unknown[],
   delayWritesMs = CONNECTED_DELAY_WRITES_MS,
+  program: unknown = CONNECTED_PROGRAM,
 ): Promise<void> {
   await page.addInitScript(
-    ({ program, events: e, delayWritesMs: delay }) => {
+    ({ program: p, events: e, delayWritesMs: delay }) => {
       window.__pm5FakeScript__ = {
-        program,
+        program: p,
         events: e,
         deviceName: "PM5 918273645",
         delayWritesMs: delay,
       } as typeof window.__pm5FakeScript__;
     },
-    { program: CONNECTED_PROGRAM, events, delayWritesMs },
+    { program, events, delayWritesMs },
   );
 }
 
@@ -4363,11 +4388,12 @@ async function openConnected(
   page: Page,
   title: string,
   email: string,
+  bulkText: string = CONNECTED_BULK_TEXT(title),
 ): Promise<void> {
   await signInViaBackdoor(page, { email, name: "Connected Design Tester" });
   await setBaselines(page);
   await cleanupAllConnected(page, title);
-  await importBulk(page, CONNECTED_BULK_TEXT(title));
+  await importBulk(page, bulkText);
   await page.locator(".workout-row").filter({ hasText: title }).click();
   await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
   await page.getByRole("button", { name: "Connect" }).click();
@@ -4526,593 +4552,45 @@ test.describe("connected screens (fake-driven)", () => {
     await cleanupAllConnected(page, title);
   });
 
-  test("the surface's two panes and the diagnostics sheet — portrait", async ({
-    page,
-  }) => {
-    const title = "Design Connected Surface Workout";
-    await injectConnectedFake(page, ROWING_STORY);
-    await openConnected(page, title, "design-connected-surface@e2e.test");
-    await walkToSurface(page);
-    // Real numbers, not the pre-first-stroke placeholders: pumped until
-    // interval 0's boundary has landed, so pane C paints a completed row
-    // and pane B paints live readings.
-    await pumpUntilText(page, "2 OF 5");
-
-    // Pane B (`DEFAULT_PANE`, the first-connected-session landing pane).
-    await expect(
-      page.getByRole("button", { name: "Live pane" }),
-    ).toHaveAttribute("aria-current", "page");
-    await sweep(page);
-
-    await page.getByRole("button", { name: "Grid pane" }).click();
-    await expect(
-      page.getByRole("button", { name: "Grid pane" }),
-    ).toHaveAttribute("aria-current", "page");
-    await expect(page.locator(".connected-grid-row")).toHaveCount(5);
-    await expect(page.locator(".connected-grid-completed")).toHaveCount(1);
-    await expect(page.locator(".connected-grid-active")).toHaveCount(1);
-    await sweep(page);
-
-    // The diagnostics sheet: three deliberate presses on the ACTIVE pane's
-    // own rail target (`ConnectedSurface.tsx`'s `useTripleTap`), inside its
-    // 600ms window. Pressed in a loop that stops as soon as the sheet is up
-    // rather than a fixed three: the pane switch above already counts as
-    // this target's first tap whenever it lands inside the window, and a
-    // third press then hits the sheet's own backdrop instead.
-    const gridTarget = page.getByRole("button", { name: "Grid pane" });
-    const sheetTitle = page.getByRole("heading", { name: "Connection log" });
-    for (let i = 0; i < 6 && !(await sheetTitle.isVisible()); i += 1) {
-      await gridTarget.click();
-    }
-    await expect(sheetTitle).toBeVisible();
-    await sweep(page);
-
-    await cleanupAllConnected(page, title);
-  });
-
-  test("the surface's two panes and the diagnostics sheet — landscape (844x390)", async ({
-    page,
-  }) => {
-    const title = "Design Connected Surface Landscape Workout";
-    await page.setViewportSize({ width: 844, height: 390 });
-    await injectConnectedFake(page, ROWING_STORY);
-    await openConnected(
-      page,
-      title,
-      "design-connected-surface-landscape@e2e.test",
-    );
-    await walkToSurface(page);
-    await pumpUntilText(page, "2 OF 5");
-
-    await sweep(page);
-
-    await page.getByRole("button", { name: "Grid pane" }).click();
-    await expect(
-      page.getByRole("button", { name: "Grid pane" }),
-    ).toHaveAttribute("aria-current", "page");
-    await sweep(page);
-
-    const gridTarget = page.getByRole("button", { name: "Grid pane" });
-    const sheetTitle = page.getByRole("heading", { name: "Connection log" });
-    for (let i = 0; i < 6 && !(await sheetTitle.isVisible()); i += 1) {
-      await gridTarget.click();
-    }
-    await expect(sheetTitle).toBeVisible();
-    await sweep(page);
-
-    await cleanupAllConnected(page, title);
-  });
-
-  // NO-OVERLAP, TASK 5 (connected-axes 2a): the geometry half of the fix —
-  // the `design.spec's own idiom (`design-connected-live-nooverlap-*`
-  // above): read the two real boxes and assert neither intersects, rather
-  // than trusting jsdom's structural CSS proof (`ConnectedSurface.test
-  // .tsx`'s own "IN FLOW, not overlaid" pin) to stand in for real layout.
-  // TOTAL LEFT's own cell (`.connected-band-cell` — RE-ANCHORED, CR2 spec 3
-  // Task 4: `TimerRuler`/`.timer-total` is cut outright, spec §3 fate
-  // table) is the element the old overlay covered — spec 2a's own trigger
-  // line names it by number ("the block we drew covers the one number that
-  // would have told the rower so"), so THAT box, not just the frozen
-  // block's presence, is what this pin reads.
-  for (const viewport of [
-    { width: 390, height: 844, label: "portrait" },
-    { width: 844, height: 390, label: "landscape" },
-  ] as const) {
-    test(`the frozen footer never covers TOTAL LEFT — ${viewport.label} (${viewport.width}x${viewport.height})`, async ({
-      page,
-    }) => {
-      const title = `Design Connected Frozen No-Overlap ${viewport.label}`;
-      await page.setViewportSize({
-        width: viewport.width,
-        height: viewport.height,
-      });
-      await injectConnectedFake(page, FREEZING_STORY);
-      await openConnected(
-        page,
-        title,
-        `design-connected-frozen-nooverlap-${viewport.label}@e2e.test`,
-      );
-      await walkToSurface(page);
-      // `FREEZING_STORY` never resumes, so once the hold trips the footer
-      // stays swapped for as long as the sweep needs.
-      await pumpUntil(page, ".connected-paused");
-      // THE NOUN IS GONE (task 5 step 1): an instruction, never a status
-      // word claiming a mode the PM5 does not have.
-      await expect(page.getByText("PULL TO RESUME")).toBeVisible();
-      await expect(page.getByText(/PAUSED/)).toHaveCount(0);
-
-      const totalLeft = page.locator(".connected-band-cell");
-      const frozenBlock = page.locator(".connected-paused");
-      const [ruler, block] = await Promise.all([
-        totalLeft.boundingBox(),
-        frozenBlock.boundingBox(),
-      ]);
-      expect(ruler, ".connected-band-cell").not.toBeNull();
-      expect(block, ".connected-paused").not.toBeNull();
-      // Same idiom as the live pane's own no-overlap pin above: the block
-      // sits ENTIRELY below the cell's own bottom edge, never intersecting
-      // it — the structural guarantee (no `position: absolute` left on
-      // `.connected-paused`) made real on an actual rendered frame.
-      expect(
-        block!.y,
-        `.connected-paused (top ${block!.y}) overlaps .connected-band-cell (bottom ${ruler!.y + ruler!.height})`,
-      ).toBeGreaterThanOrEqual(ruler!.y + ruler!.height);
-      // And the cell itself is fully inside the viewport, not clipped off
-      // by the pane's own `overflow: clip` squeezing it out to make room —
-      // the OTHER way this fix could have failed (shrinking the pane could
-      // clip TOTAL LEFT instead of the block covering it, which reads
-      // identically to a rower — the number is gone either way).
-      expect(ruler!.y + ruler!.height).toBeLessThanOrEqual(viewport.height);
-
-      await sweep(page);
-      await cleanupAllConnected(page, title);
-    });
-  }
-
-  // --- Task 1 (design spec §4): the content column's width invariant -------
+  // ---------------------------------------------------------------------
+  // CR2 spec 3 Task 6: the §2 property-table sweep. Every test below names
+  // a row (or a tight cluster of the same row's sub-properties) from
+  // docs/superpowers/specs/2026-08-16-connected-redesign-design.md §2's six
+  // tables — the tables ARE the checklist (§6 criterion 1). Grouped per
+  // frame (2A/2B/2C/2D/Stale/Disconnected), matching the spec's own section
+  // order.
   //
-  // James's report: the landscape content column changed width view to
-  // view. Only ONE pane is mounted at a time
-  // (`ConnectedSurface.tsx:324-325`), so `.connected-surface-body` — a grid
-  // item in landscape's `1fr` track — measured its
-  // automatic minimum against whichever pane happened to be showing, and
-  // within the grid pane, against its own content. The pin: a tap on "Grid
-  // pane" (the segmented control's own click, `handleControlPress`) between
-  // LIVE and GRID and the content column must not move a pixel, in BOTH
-  // orientations.
+  // TWO SOURCES OF TRUTH, DELIBERATELY MIXED. The frame-specific rows below
+  // (sizes, colours, presence/absence, text) read the COMMITTED FIXTURES
+  // (`e2e/fixtures/connected-*.html`) through the real app shell — same
+  // `page.goto("/")` + body-swap idiom the up-next-reflow test above uses:
+  // real CSS cascade, real self-hosted fonts, a real "Filling Low" library
+  // workout (`ConnectedSurface.screens.test.tsx`'s own fixture), and no
+  // live-driver flakiness. This is also strictly MORE deterministic than
+  // driving `ROWING_STORY` through the fake for judged-colour assertions:
+  // `CONNECTED_PROGRAM`'s five untargeted "max"-effort distance intervals
+  // give no fixed judgement direction, where the fixtures' own actuals
+  // (verified by grepping each committed file below) are fixed facts. The
+  // NAVIGATION-dependent rows (pane switching, the triple-tap sheet, tab
+  // order, safe-area rotation) stay on the live fake driver below this
+  // section, unchanged — a fixture cannot prove a click routes anywhere.
   //
-  // FINDING, evidence-backed (measured against this worktree, pre-fix): the
-  // fixture this describe block already uses (`CONNECTED_PROGRAM`, five
-  // 100m distance steps) does NOT reproduce a measurable drift in
-  // Chromium at 844x390 — `.connected-surface-body` reports 800px on BOTH
-  // panes either way (fix round, review Minor-4: 692px pre-dates Task 2's
-  // full-bleed gutter; the landscape body is `844 - 44` now, the gutter
-  // column, not the old cap-minus-padding-minus-rail arithmetic this
-  // number used to come from — re-measured directly against this worktree
-  // this round), because the grid row's own natural content (a handful of
-  // narrow cells) never approaches
-  // the 800px fair share the `1fr` track already gets. Confirmed by direct
-  // measurement: even a realistic worst case (a 3-digit interval number, a
-  // 5-digit meters value — the same content the no-clip pin below uses)
-  // still measures 800px unchanged. Only genuinely oversized synthetic
-  // content (150 characters in the meters cell) reproduces the ballooning
-  // (692px -> 1779px, the ORIGINAL pre-fix repro below — still accurate as
-  // history, not re-measured against the current 800px baseline), which is
-  // what the assertion below drives off of —
-  // matching ruling 2's own framing ("pinned by a test that outlives the
-  // cause"): a pin keyed to today's narrow fixture would stop catching a
-  // regression the moment real content changed shape, so this measures
-  // the CSS CONTRACT directly rather than hoping today's five-row program
-  // happens to be wide enough. The plain real-content measurement stays
-  // too, as normal-usage regression coverage — it already passes today and
-  // must keep passing.
-  //
-  // HONEST SCOPE (task-1 review, minor 1): only the LANDSCAPE case can go
-  // red today. `.connected-surface` is a flex column in portrait and only
-  // becomes a CSS grid under `@media (orientation: landscape)`, so the
-  // `minmax(auto, 1fr)` track this guards does not exist in portrait — the
-  // portrait run is defense in depth against a future portrait grid, not a
-  // live regression guard. Kept deliberately, and said out loud so nobody
-  // reads a passing portrait as proof the mechanism is covered there.
-  //
-  // Measured, and worse than the disclosure said (test-integrity sweep,
-  // P1): in portrait the body's width is set entirely by the container
-  // (390 - 40 = 350) and the forced-wide mutation leaves it at 350 even
-  // with the `min-width: 0` this test exists to guard DELETED. Landscape
-  // goes 800 -> 1292 with the same deletion, so that instance is a real
-  // pin. Rather than cheapen the parameterisation, the portrait run now
-  // asserts the GUARD ITSELF as well as its consequence: `min-width: 0` is
-  // a computed fact in both orientations even where only one of them can
-  // demonstrate what it buys.
-  for (const viewport of [
-    { width: 390, height: 844, label: "portrait" },
-    { width: 844, height: 390, label: "landscape" },
-  ] as const) {
-    test(`the content column doesn't drift between panes — ${viewport.label} (${viewport.width}x${viewport.height})`, async ({
-      page,
-    }) => {
-      const title = `Design Connected Width Invariant ${viewport.label}`;
-      await page.setViewportSize({
-        width: viewport.width,
-        height: viewport.height,
-      });
-      await injectConnectedFake(page, ROWING_STORY);
-      await openConnected(
-        page,
-        title,
-        `design-connected-width-${viewport.label}@e2e.test`,
-      );
-      await walkToSurface(page);
-      // Real numbers, not the pre-first-stroke placeholders — same reason
-      // the three-panes sweep above pumps to this point before measuring.
-      await pumpUntilText(page, "2 OF 5");
+  // Every judged-colour assertion reads the ACTUAL judgement class off the
+  // DOM rather than asserting a hardcoded direction, then checks the
+  // resolved colour against the correct token for whatever class is
+  // present — robust to which class a given fixture happens to carry,
+  // while still proving "colour via token resolution" for real.
 
-      const box = async () =>
-        page.locator(".connected-surface-body").evaluate((el) => {
-          const r = el.getBoundingClientRect();
-          return { width: r.width, left: r.left };
-        });
-      const onLive = await box();
-      await page.getByRole("button", { name: "Grid pane" }).click();
-      await expect(page.locator(".connected-pane-grid")).toBeVisible();
-      const onGrid = await box();
-      expect(onGrid).toStrictEqual(onLive);
+  const CONNECTED_FIXTURES_DIR = path.join(process.cwd(), "e2e/fixtures");
 
-      // The adversarial half: force the grid pane's own content past the
-      // fair share (`.connected-grid-meters` is the exact channel — it is
-      // the one grid-row cell with no `min-width: 0` in the landscape
-      // media query, `index.css:6486-6491`) and prove the content column
-      // STILL does not move. This is the assertion that actually fails
-      // pre-fix (692px -> 1262px, measured against this exact test on this
-      // worktree before `min-width: 0` landed on `.connected-surface-
-      // body`; a standalone repro with even wider synthetic content
-      // measured 692px -> 1779px, both far past the pixel-exact tolerance
-      // `toStrictEqual` demands).
-      await page.evaluate(() => {
-        const meters = document.querySelector<HTMLElement>(
-          ".connected-grid-meters",
-        )!;
-        meters.textContent = "M".repeat(150);
-      });
-      const onGridForcedWide = await box();
-      expect(onGridForcedWide).toStrictEqual(onLive);
-
-      // The guard itself, directly — the assertion that can fail in
-      // PORTRAIT too (see this block's HONEST SCOPE note above).
-      const minWidth = await page
-        .locator(".connected-surface-body")
-        .evaluate((el) => getComputedStyle(el).minWidth);
-      expect(minWidth).toBe("0px");
-
-      await cleanupAllConnected(page, title);
-    });
-  }
-
-  // --- Task 1 (design spec §4): the grid's clip consequence -----------------
-  //
-  // Pinning the content column's width fixes it AT the width whichever pane
-  // measured first — which means content wider than that fixed track now
-  // CLIPS instead of widening it (spec §4, "Two consequences this wave
-  // owns"). This is the grid's own half of that consequence: the widest
-  // realistic row has to survive without truncating any column.
-  //
-  // "Realistic" is generous on purpose. The interval count can never reach
-  // three digits through the app's own programming path — `compileProgram`
-  // hard-caps at 50 intervals (`domain/monitor/program.test.ts`'s 50/51
-  // boundary) and the largest SEEDED workout is Sea Smoke at 24
-  // (`program.sweep.test.ts`'s pinned `maxIntervals` of 24) — so this pin
-  // defends the CSS CONTRACT itself against a future that raises that cap,
-  // not a session anyone can actually row today. Five-digit meters is
-  // already real: a half marathon piece is 21097m.
-  test("the grid pane doesn't clip a three-digit interval number or a five-digit meters value — landscape (844x390)", async ({
-    page,
-  }) => {
-    const title = "Design Connected Grid No-Clip Workout";
-    await page.setViewportSize({ width: 844, height: 390 });
-    await injectConnectedFake(page, ROWING_STORY);
-    await openConnected(page, title, "design-connected-grid-noclip@e2e.test");
-    await walkToSurface(page);
-    await pumpUntilText(page, "2 OF 5");
-    await page.getByRole("button", { name: "Grid pane" }).click();
-    await expect(page.locator(".connected-pane-grid")).toBeVisible();
-
-    const measured = await page.evaluate(() => {
-      // Row 1 (interval index 0) is COMPLETED at this point in the story —
-      // no active-row marker span inside `.connected-grid-num`, so its only
-      // child is the number's own text node and a plain `textContent`
-      // assignment is safe.
-      const row = document.querySelector(".connected-grid-row")!;
-      const num = row.querySelector<HTMLElement>(".connected-grid-num")!;
-      const meters = row.querySelector<HTMLElement>(".connected-grid-meters")!;
-      num.textContent = "128";
-      meters.textContent = "21097";
-      const doc = document.documentElement;
-      return {
-        docScrollWidth: doc.scrollWidth,
-        docClientWidth: doc.clientWidth,
-        // `scrollWidth > clientWidth` ON THE CELL ITSELF is the actual
-        // truncation signal — a bounding-box position check (does the cell
-        // stay inside the row) cannot see this: a cell that's been
-        // narrowed with its own `overflow: hidden` sits happily inside the
-        // row while quietly cutting its own text. A mutation test (task
-        // report) confirmed a box-position-only check misses that case
-        // entirely and this scrollWidth/clientWidth pair catches it.
-        numScrollWidth: num.scrollWidth,
-        numClientWidth: num.clientWidth,
-        metersScrollWidth: meters.scrollWidth,
-        metersClientWidth: meters.clientWidth,
-        metersText: meters.textContent,
-      };
-    });
-    // Page-level: the fixed-width column (post-fix) must not force the
-    // whole document wider than the viewport either.
-    expect(measured.docScrollWidth).toBeLessThanOrEqual(
-      measured.docClientWidth,
-    );
-    // Cell-level: neither the three-digit interval number nor the
-    // five-digit meters value is cut off inside its own box.
-    expect(measured.numScrollWidth).toBeLessThanOrEqual(
-      measured.numClientWidth,
-    );
-    expect(measured.metersScrollWidth).toBeLessThanOrEqual(
-      measured.metersClientWidth,
-    );
-    expect(measured.metersText).toBe("21097");
-
-    await cleanupAllConnected(page, title);
-  });
-
-  // --- Task 2 (design spec §6/ruling 10): full-bleed; CR2 spec 3 task 1
-  // retired the sensor gutter this test used to pin alongside it ----------
-  //
-  // Load-bearing geometry only (ruling 4): the surface reaches the true
-  // physical edge in landscape — load-bearing per the original brief ("the
-  // landscape surface's left edge is 0 (full-bleed)"). The 44px-wide
-  // full-height gutter that also sat at that edge is GONE (design spec §3
-  // "Structure" — its replacement, the segmented control, is a small
-  // header-row pill now, pinned separately below alongside the header it
-  // shares a row with). Portrait is checked separately: it keeps its
-  // narrower 54px two-tab bar, unaffected by the landscape-only full-bleed
-  // rule.
-  test("the surface is full-bleed — landscape (844x390)", async ({ page }) => {
-    const title = "Design Connected Gutter Workout";
-    await page.setViewportSize({ width: 844, height: 390 });
-    await injectConnectedFake(page, ROWING_STORY);
-    await openConnected(page, title, "design-connected-gutter@e2e.test");
-    await walkToSurface(page);
-    await pumpUntilText(page, "2 OF 5");
-
-    const surfaceBox = await page.locator(".connected-surface").boundingBox();
-    expect(surfaceBox).not.toBeNull();
-    // Full-bleed: the surface itself starts at the viewport's true left
-    // edge, not `.screen`'s usual 20px-plus-max-width inset — and it runs
-    // all the way to the RIGHT edge too (fix round, review Minor-11): a
-    // left-only check couldn't tell "full-bleed" from "just moved left",
-    // and the right edge is the half `max-width: none` is actually doing.
-    expect(surfaceBox!.x).toBeCloseTo(0, 0);
-    expect(surfaceBox!.x + surfaceBox!.width).toBeCloseTo(844, 0);
-    // The segmented control is the surface's own first grid column now
-    // (row 1 only, `.connected-surface`'s own comment), so it starts at
-    // the physical edge too — "reaches the housing", not floating inboard
-    // of it, the same claim the gutter used to carry.
-    const controlBox = await page.locator(".connected-control").boundingBox();
-    expect(controlBox).not.toBeNull();
-    expect(controlBox!.x).toBeCloseTo(0, 0);
-
-    await cleanupAllConnected(page, title);
-  });
-
-  // Fix round (review Important-1): Chromium reports every
-  // `env(safe-area-inset-*)` as `0px` on a normal run — which is exactly why
-  // the test above cannot tell "the surface reaches x=0 because there is no
-  // inset" from "the surface reaches x=0 because insets are silently
-  // dropped". The two are different claims, and the second one is a broken
-  // promise: "never override an inset" means a REAL inset must still push
-  // something, just not the surface's own physical position. This test
-  // proves the distinction with a SIMULATED inset via Chrome DevTools
-  // Protocol's `Emulation.setSafeAreaInsetsOverride` — verified empirically
-  // this fix round to actually move `env(safe-area-inset-left)` in this
-  // repo's bundled Chromium (a throwaway probe spec, not committed: BEFORE
-  // the CDP call `getComputedStyle(...).paddingLeft` read `0px`, AFTER it
-  // read the injected value exactly). No Playwright-level API wraps this —
-  // it goes through `page.context().newCDPSession(page)` directly.
-  // ROTATION-STABILITY UNDER AN ASYMMETRIC INSET — which is ANDROID's case,
-  // not iOS's. Read the correction before trusting this test's premise.
-  //
-  // REWRITTEN (CR2 spec 3 task 1, design spec §3 "Safe-area relocation"):
-  // the gutter this test used to measure (`.connected-pager`, a fixed
-  // 44px-plus-inset column absorbing the inset on its own `padding-left`)
-  // is gone. The mechanism this test actually protects — `max()` of both
-  // horizontal insets, spent identically regardless of which physical side
-  // reports it — is UNCHANGED; only WHERE it lands changed, from the
-  // gutter's own box to `.connected-surface`'s own `padding-left`/
-  // `padding-right`. So the content column (`.connected-pane`) and the
-  // segmented control (`.connected-control`, now sharing the header row
-  // rather than running the surface's full height) both start at the
-  // SAME x now — `edge-inset` in from the surface's own left edge, not the
-  // old "44px gutter, then content" relationship — and that shared
-  // starting point is what must survive a rotation unmoved.
-  //
-  // Green then, and green for the wrong reason. What this test asserts now
-  // is the rule rather than one side of it: the two rotations must agree,
-  // on every term, and the way to falsify that is to measure BOTH and
-  // compare them to each other rather than to a literal.
-  test("the segmented control and the content column are IDENTICAL in both landscape rotations, notch left or notch right (844x390)", async ({
-    page,
-  }) => {
-    const title = "Design Connected Gutter Inset Workout";
-    await page.setViewportSize({ width: 844, height: 390 });
-    await injectConnectedFake(page, ROWING_STORY);
-    await openConnected(page, title, "design-connected-gutter-inset@e2e.test");
-    await walkToSurface(page);
-    await pumpUntilText(page, "2 OF 5");
-
-    // 59px: a real measured iOS landscape-notch inset (the figure the
-    // spec's own "42px inboard" framing is in the same ballpark of), not a
-    // round number chosen to make the arithmetic easy.
-    const INSET = 59;
-    const client = await page.context().newCDPSession(page);
-
-    /** Every term the rower can see, at one inset condition. */
-    async function measure(left: number, right: number) {
-      await client.send("Emulation.setSafeAreaInsetsOverride", {
-        insets: { top: 0, left, bottom: 0, right },
-      });
-      // The override is applied out-of-band; give the style/layout pass a
-      // frame to land before reading boxes back.
-      await page.evaluate(
-        () => new Promise((r) => requestAnimationFrame(() => r(null))),
-      );
-      const [surface, control, pane, live] = await Promise.all([
-        page.locator(".connected-surface").boundingBox(),
-        page.locator(".connected-control").boundingBox(),
-        page.locator(".connected-pane").boundingBox(),
-        page.getByRole("button", { name: "Live pane" }).boundingBox(),
-      ]);
-      const round = (n: number) => Math.round(n * 100) / 100;
-      return {
-        surfaceX: round(surface!.x),
-        controlX: round(control!.x),
-        contentX: round(pane!.x),
-        contentWidth: round(pane!.width),
-        liveX: round(live!.x),
-      };
-    }
-
-    const notchLeft = await measure(INSET, 0);
-    const notchRight = await measure(0, INSET);
-
-    // THE ACCEPTANCE CRITERION, in James's own words: the content column
-    // must not change width or position when the phone is rotated the other
-    // way. Asserted as one whole-object comparison so a failure's diff names
-    // every term that moved, not just the first one — and so a future change
-    // that fixes the width while leaving the position asymmetric (the exact
-    // half-fix this file previously shipped) cannot pass.
-    expect(notchRight).toStrictEqual(notchLeft);
-
-    // …and the shape they agree ON is the right one, or "identical" could be
-    // satisfied by discarding the inset in both rotations — which would put
-    // the tappable targets back under the notch, the defect the task-2 fix
-    // round existed to kill.
-    //
-    // The surface still starts at the true physical edge: the inset is the
-    // surface's OWN padding now, not a term stacked in front of it.
-    expect(notchLeft.surfaceX).toBeCloseTo(0, 0);
-    // The control and the content column share the same starting point —
-    // both are grid items inside the same padded box, and neither has a
-    // fixed-width column ahead of it any more.
-    expect(notchLeft.controlX).toBeCloseTo(INSET, 0);
-    expect(notchLeft.contentX).toBeCloseTo(INSET, 0);
-    // And the actual tappable content (LIVE) sits CLEAR of the notch: its
-    // own left edge lands close to the inset (a hair past it — the
-    // control's own 1px border sits between the two), not at the physical
-    // edge. ±1px, not `toBeCloseTo`'s usual 0.5px: measured sub-pixel
-    // rendering lands this one at exactly 58.5 against an integer 59px
-    // inset in the pre-task-1 version of this pin, half a pixel outside
-    // `toBeCloseTo(INSET, 0)`'s own tolerance.
-    expect(Math.abs(notchLeft.liveX - INSET)).toBeLessThanOrEqual(2);
-
-    await cleanupAllConnected(page, title);
-  });
-
-  // THE TOP AXIS (fix round, review Important-1) — the rotation test above
-  // only ever drives LEFT/RIGHT insets; nothing in this file's own gates
-  // exercised the TOP one until this round's own hardware-adjacent review
-  // measured it directly and found the control sitting 11px under a
-  // notch's own vertical band. A version of `.connected-header`'s own
-  // `padding-top: env(safe-area-inset-top)` protected End (a DOM child of
-  // that element) but not `.connected-control` (a SIBLING grid item in
-  // the SAME row, `.connected-surface`'s own two-track comment) — the
-  // control just centred itself (`align-self: center`) across whatever
-  // taller row the header's own padding produced, landing its own top
-  // edge inside the inset instead of clear of it. The fix moves the term
-  // back to `.connected-surface`'s own padding, which protects every grid
-  // item in the row uniformly (that rule's own comment has the measured
-  // before/after). This test is what proves it, and what would have
-  // caught the regression: it failed red against the `padding-top` on
-  // `.connected-header` version (measured directly against this
-  // worktree: control y=9 h=46, 11px of a 44px target under a 20px
-  // inset) before this fix round moved the term back.
-  test("the segmented control clears a real TOP inset — landscape (844x390)", async ({
-    page,
-  }) => {
-    const title = "Design Connected Top Inset Workout";
-    await page.setViewportSize({ width: 844, height: 390 });
-    await injectConnectedFake(page, ROWING_STORY);
-    await openConnected(page, title, "design-connected-top-inset@e2e.test");
-    await walkToSurface(page);
-    await pumpUntilText(page, "2 OF 5");
-
-    // 20px: a real measured iOS landscape-TOP inset order of magnitude
-    // (the status-bar-free notch band a mounted phone's rotation still
-    // reports on the short physical edge), not a round number chosen to
-    // make the arithmetic easy.
-    const TOP = 20;
-    const client = await page.context().newCDPSession(page);
-    await client.send("Emulation.setSafeAreaInsetsOverride", {
-      insets: { top: TOP, left: 0, bottom: 0, right: 0 },
-    });
-    await page.evaluate(
-      () => new Promise((r) => requestAnimationFrame(() => r(null))),
-    );
-
-    const [controlBox, endBox] = await Promise.all([
-      page.locator(".connected-control").boundingBox(),
-      page.getByRole("button", { name: "End session" }).boundingBox(),
-    ]);
-    expect(controlBox).not.toBeNull();
-    expect(endBox).not.toBeNull();
-
-    // BOTH grid items in row 1 clear the inset — not just End, which a
-    // header-scoped fix could protect on its own while leaving the
-    // control (a sibling, not a child) exposed.
-    expect(controlBox!.y).toBeGreaterThanOrEqual(TOP);
-    expect(endBox!.y).toBeGreaterThanOrEqual(TOP);
-    // And the control's own tap target survives whole under the inset —
-    // not just its top edge clearing the line, but the full 44px height
-    // the spec requires for each half still landing entirely below it.
-    expect(controlBox!.height).toBeGreaterThanOrEqual(44);
-
-    await cleanupAllConnected(page, title);
-  });
-
-  // THE NOTCHED WIDTH IS A WIDTH NO OTHER GATE RENDERS. Headless Chromium
-  // reports all four safe-area insets as 0, so every one of the other e2e
-  // tests and all 62 committed captures draw the landscape content column at
-  // 800px — while a real notched iPhone draws it at 682, because the
-  // rotation fix above takes `max(left, right)` on both sides. Four of the
-  // five defects James found at the erg were invisible for exactly this
-  // reason, and the close-out review then found a fifth: at 682 the UP NEXT
-  // label broke between its two words, 12px of label becoming 24.
-  //
-  // So this measures the SAME element at both widths and requires them to
-  // agree. It is deliberately not a pin on 12px: the point is not the
-  // number, it is that the notched width must not reflow anything the
-  // un-notched width fits. A future strip that grows a third word fails here
-  // rather than on James's phone.
-  //
-  // RE-ANCHORED (CR2 spec 3 Task 4): `UpNextStrip`'s own label-breaking-in-
-  // two defect cannot recur in landscape any more — the band's own up-next
-  // label is cut outright there (design spec §2A: "NO label"), so there is
-  // no two-word label left to wrap. The band's own VALUE (the `then` form,
-  // `REST 2:00 · then WORK 2:09.0`) is the element that now carries this
-  // frame's own squeeze risk, so this measures IT the same "must not
-  // reflow" way the label used to be measured.
-  test("nothing in the band's own up-next value reflows at the notched content width", async ({
-    page,
-  }) => {
-    // Loads the committed WARM-UP fixture rather than driving the fake to a
-    // rowing state, because the wrap is CONTENT-dependent: the strip is a
-    // flex row of label + value, and only the warm-up's longer value
-    // ("WORK 2:06.0 · then REST 3:00") squeezes the row enough to risk
-    // reflow. A first attempt at this test used the rowing story and passed
-    // with and without the fix — recorded here because that is the third
-    // time this branch has written an assertion that could not fail.
+  /** Loads a committed connected fixture's real markup into the real app
+   *  shell (the SAME pattern the up-next-reflow test above uses). Real CSS,
+   *  real fonts, zero live-driver flakiness. */
+  async function loadConnectedFixture(page: Page, name: string): Promise<void> {
     const markup = readFileSync(
-      path.join(process.cwd(), "e2e/fixtures/connected-pane-live-warmup.html"),
+      path.join(CONNECTED_FIXTURES_DIR, `${name}.html`),
       { encoding: "utf-8" },
     );
-    await page.setViewportSize({ width: 844, height: 390 });
     await page.goto("/", { waitUntil: "load" });
     await page.waitForFunction(
       () =>
@@ -5124,400 +4602,1885 @@ test.describe("connected screens (fake-driven)", () => {
       document.body.innerHTML = `<div class="app-shell">${html}</div>`;
     }, markup);
     await expect(page.locator(".connected-surface")).toBeVisible();
+  }
 
-    const client = await page.context().newCDPSession(page);
-    async function stripAt(left: number) {
-      await client.send("Emulation.setSafeAreaInsetsOverride", {
-        insets: { top: 0, left, bottom: 0, right: 0 },
-      });
-      await page.evaluate(
-        () => new Promise((r) => requestAnimationFrame(() => r(null))),
+  // Resolved token RGBs (tokens.css), computed once — `INK_4_RGB` above is
+  // this file's own existing constant, reused rather than redeclared.
+  const INK_RGB = "rgb(27, 26, 23)";
+  const INK_2_RGB = "rgb(63, 60, 53)";
+  const INK_3_RGB = "rgb(87, 84, 76)";
+  const RULE_2_RGB = "rgb(222, 216, 201)";
+  const RULE_3_RGB = "rgb(201, 195, 178)";
+  const JUDGE_FASTER_RGB = "rgb(29, 78, 137)";
+  const JUDGE_SLOWER_RGB = "rgb(150, 39, 24)";
+  const MARKER_RGB = "rgb(125, 85, 16)";
+  const PROGRESS_ACTIVE_RGB = "rgb(138, 132, 120)";
+  const SURFACE_RGB = "rgb(255, 253, 247)";
+
+  /** The colour a judged element SHOULD resolve to, read off whichever
+   *  `timer-card-actual-{judgement}` class is actually present — the same
+   *  mapping `index.css`'s own judgement-keyed rules encode. `"within"`
+   *  declares no colour of its own (plain ink by inheritance). */
+  function expectedJudgedRgb(judgement: string): string {
+    if (judgement === "faster") return JUDGE_FASTER_RGB;
+    if (judgement === "slower") return JUDGE_SLOWER_RGB;
+    if (judgement === "stale") return INK_3_RGB;
+    return INK_RGB; // "within"
+  }
+
+  /** Reads a judged element's own `timer-card-actual-*` class and its
+   *  resolved `color`, in one round trip. */
+  async function judgedColor(
+    page: Page,
+    selector: string,
+  ): Promise<{ judgement: string; color: string }> {
+    return page.locator(selector).evaluate((el) => {
+      const cls = Array.from(el.classList).find((c) =>
+        c.startsWith("timer-card-actual-"),
       );
-      const [value, pane] = await Promise.all([
-        page.locator(".connected-band-upnext-value").boundingBox(),
-        page.locator(".connected-pane").boundingBox(),
-      ]);
       return {
-        valueHeight: Math.round(value!.height),
-        contentWidth: Math.round(pane!.width),
+        judgement: cls ? cls.replace("timer-card-actual-", "") : "(none)",
+        color: getComputedStyle(el).color,
       };
-    }
-
-    const unnotched = await stripAt(0);
-    const notched = await stripAt(59);
-
-    // The premise: the two conditions really are different widths. Without
-    // this the test passes trivially the day the inset override stops
-    // working — which is the failure mode that hid the original defect,
-    // since headless Chromium reports every inset as 0 and no other gate in
-    // this repo ever renders the 682px column a notched iPhone draws.
-    expect(notched.contentWidth).toBeLessThan(unnotched.contentWidth);
-
-    // Not a pin on a specific height. The claim is that the notched width
-    // must not reflow anything the un-notched width fits, so the two
-    // conditions are compared to EACH OTHER — a value that grows a second
-    // line later fails here rather than on James's phone.
-    expect(notched.valueHeight).toBe(unnotched.valueHeight);
-  });
-
-  test("portrait keeps its narrower 54px two-tab bar, unaffected by the landscape full-bleed rule", async ({
-    page,
-  }) => {
-    const title = "Design Connected Portrait Tab Bar Workout";
-    await injectConnectedFake(page, ROWING_STORY);
-    await openConnected(
-      page,
-      title,
-      "design-connected-portrait-tabbar@e2e.test",
-    );
-    await walkToSurface(page);
-    await pumpUntilText(page, "2 OF 5");
-
-    const controlBox = await page.locator(".connected-control").boundingBox();
-    expect(controlBox).not.toBeNull();
-    expect(controlBox!.height).toBeCloseTo(54, 0);
-    // Still labelled, still exactly two halves — the retired rail's third
-    // target (Timer) went with connected-revamp Task 2, and the label
-    // itself survived `SegmentedControl`'s own rebuild (handoff §3,
-    // DEVIATIONS row 4).
-    expect(
-      await page
-        .getByRole("navigation", { name: "Connected panes" })
-        .locator("button")
-        .count(),
-    ).toBe(2);
-
-    await cleanupAllConnected(page, title);
-  });
-
-  // --- Task 3 (design spec §6/revision §3): the live pane's two heroes ---
-
-  // NO-SCROLL: `.connected-pane` already declares `overflow: clip`
-  // (index.css), so a genuine layout overflow reads as CLIPPED content, not
-  // a visible scrollbar — this is the rendered-geometry proof that
-  // rebuilding the pane onto two heroes plus the metric row still fits the
-  // fixed 390px/844px frames in both orientations, the same
-  // scrollHeight-vs-clientHeight idiom the rest of this file uses.
-  for (const viewport of [
-    { width: 390, height: 844, label: "portrait" },
-    { width: 844, height: 390, label: "landscape" },
-  ] as const) {
-    test(`the live pane does not scroll — ${viewport.label} (${viewport.width}x${viewport.height})`, async ({
-      page,
-    }) => {
-      const title = `Design Connected Live No-Scroll ${viewport.label}`;
-      await page.setViewportSize({
-        width: viewport.width,
-        height: viewport.height,
-      });
-      await injectConnectedFake(page, ROWING_STORY);
-      await openConnected(
-        page,
-        title,
-        `design-connected-live-noscroll-${viewport.label}@e2e.test`,
-      );
-      await walkToSurface(page);
-      await pumpUntilText(page, "2 OF 5");
-
-      const overflow = await page
-        .locator(".connected-pane-live")
-        .evaluate((el) => ({
-          scrollHeight: el.scrollHeight,
-          clientHeight: el.clientHeight,
-        }));
-      expect(overflow.scrollHeight).toBeLessThanOrEqual(overflow.clientHeight);
-
-      await cleanupAllConnected(page, title);
     });
   }
 
-  // NO-CLIP: the split hero's own cap (design spec §6: "anything slower
-  // than 9:59.9 -> —") through the REAL driver, not a typed-in fixture —
-  // `EXTREME_SPLIT_STORY`'s currentSplit (650s, its own doc comment above
-  // explains why not further past the wire's U16LE ceiling) is well past
-  // the 599.9s cap and any real erg reading. Landscape is the tighter
-  // frame (112px hero in a 390px-tall viewport), so it is the one this
-  // test measures.
-  test("the split hero caps an extreme live split at the dash rather than clipping — landscape (844x390)", async ({
-    page,
-  }) => {
-    const title = "Design Connected Live No-Clip Workout";
-    await page.setViewportSize({ width: 844, height: 390 });
-    await injectConnectedFake(page, EXTREME_SPLIT_STORY);
-    await openConnected(page, title, "design-connected-live-noclip@e2e.test");
-    await walkToSurface(page);
-    await pumpUntilText(page, "2 OF 5");
-
-    const hero = page.locator(".connected-hero-split .connected-hero-value");
-    await expect(hero).toHaveText("—");
-
-    const measured = await Promise.all([
-      page.locator(".connected-pane-live").evaluate((el) => ({
-        scrollWidth: el.scrollWidth,
-        clientWidth: el.clientWidth,
-        scrollHeight: el.scrollHeight,
-        clientHeight: el.clientHeight,
-      })),
-      page.evaluate(() => ({
-        docScrollWidth: document.documentElement.scrollWidth,
-        docClientWidth: document.documentElement.clientWidth,
-      })),
-    ]);
-    expect(measured[0].scrollWidth).toBeLessThanOrEqual(
-      measured[0].clientWidth,
-    );
-    expect(measured[0].scrollHeight).toBeLessThanOrEqual(
-      measured[0].clientHeight,
-    );
-    expect(measured[1].docScrollWidth).toBeLessThanOrEqual(
-      measured[1].docClientWidth,
-    );
-
-    await cleanupAllConnected(page, title);
-  });
-
-  // --- Task 3 fix round 1 (task-3-review.md Scrutiny 1 / Important-1) ---
-
-  // THE DEAD 26px, RECLAIMED. `.connected-surface`'s landscape `height`
-  // used to subtract a flat 26px matching `.screen`'s own vertical padding
-  // — real in portrait (that padding still applies there), stale in
-  // landscape once the full-bleed rule zeroed it (index.css's own comment
-  // at that rule has the archaeology). This is the geometry half of the
-  // fix: the surface's own border box now reaches the viewport's height
-  // (minus real safe-area insets, `0px` in Chromium — the same fact every
-  // other inset-aware test in this file relies on), not 26px short of it.
-  test("the landscape surface reclaims the dead 26px: its height equals the viewport's (844x390)", async ({
-    page,
-  }) => {
-    const title = "Design Connected Surface Height Workout";
-    await page.setViewportSize({ width: 844, height: 390 });
-    await injectConnectedFake(page, ROWING_STORY);
-    await openConnected(
+  test.describe("navigation and diagnostics (design spec §3 structure)", () => {
+    test("the surface's two panes and the diagnostics sheet — portrait", async ({
       page,
-      title,
-      "design-connected-surface-height@e2e.test",
-    );
-    await walkToSurface(page);
-    await pumpUntilText(page, "2 OF 5");
+    }) => {
+      const title = "Design Connected Surface Workout";
+      await injectConnectedFake(page, ROWING_STORY);
+      await openConnected(page, title, "design-connected-surface@e2e.test");
+      await walkToSurface(page);
+      // Real numbers, not the pre-first-stroke placeholders: pumped until
+      // interval 0's boundary has landed, so pane C paints a completed row
+      // and pane B paints live readings.
+      await pumpUntilText(page, "2 OF 5");
 
-    const surfaceBox = await page.locator(".connected-surface").boundingBox();
-    expect(surfaceBox).not.toBeNull();
-    // Insets are 0px in Chromium (confirmed empirically elsewhere in this
-    // file via CDP's `setSafeAreaInsetsOverride`), so the surface's own
-    // height should equal the viewport's exactly — not 26px short of it,
-    // which is what this test would have caught before the fix.
-    // Two assertions, not three (test-integrity sweep, S2): `toBeCloseTo(_,
-    // 0)` is a +/-0.5 window, so the `y + height` line that used to follow
-    // admitted a +/-1.0 error these two individually forbid. It added no
-    // coverage and read as a third check. Measured exactly: {y: 0, h: 390}.
-    expect(surfaceBox!.height).toBeCloseTo(390, 0);
-    expect(surfaceBox!.y).toBeCloseTo(0, 0);
+      // Pane B (`DEFAULT_PANE`, the first-connected-session landing pane).
+      await expect(
+        page.getByRole("button", { name: "Live pane" }),
+      ).toHaveAttribute("aria-current", "page");
+      await sweep(page);
 
-    await cleanupAllConnected(page, title);
-  });
+      await page.getByRole("button", { name: "Grid pane" }).click();
+      await expect(
+        page.getByRole("button", { name: "Grid pane" }),
+      ).toHaveAttribute("aria-current", "page");
+      await expect(page.locator(".connected-grid-row")).toHaveCount(5);
+      await expect(page.locator(".connected-grid-completed")).toHaveCount(1);
+      await expect(page.locator(".connected-grid-active")).toHaveCount(1);
+      await sweep(page);
 
-  // --- Close-out round (James's erg walk, 2026-08-13, defect 4) ---
+      // The diagnostics sheet: three deliberate presses on the ACTIVE pane's
+      // own control target (§3: "the triple-tap diagnostics gesture ports
+      // onto the control's halves"), inside its 600ms window. Pressed in a
+      // loop that stops as soon as the sheet is up rather than a fixed
+      // three: the pane switch above already counts as this target's first
+      // tap whenever it lands inside the window, and a third press then
+      // hits the sheet's own backdrop instead.
+      const gridTarget = page.getByRole("button", { name: "Grid pane" });
+      const sheetTitle = page.getByRole("heading", { name: "Connection log" });
+      for (let i = 0; i < 6 && !(await sheetTitle.isVisible()); i += 1) {
+        await gridTarget.click();
+      }
+      await expect(sheetTitle).toBeVisible();
+      await sweep(page);
 
-  // THE VERTICAL AXIS, MEASURED UNDER A REAL INSET. The test directly above
-  // pins the surface's height at zero insets and its own comment CITES the
-  // CDP inset tool before declining to use it — which is why the ledge
-  // survived a task review, a fix round, a whole-branch review, a 997-line
-  // test-integrity sweep and a re-review. The branch had the instrument, the
-  // measurement and the frame in one file and never crossed them vertically.
-  // This is that crossing.
-  //
-  // TRIMMED (CR2 spec 3 task 1): the gutter this test used to measure —
-  // `#efeade`, `grid-row: 1 / -1`, the only fill on this surface that ran
-  // its full height — is gone, and GRID (the control's own half) no longer
-  // sits anywhere near the bottom edge to have "breathing room above the
-  // home indicator" from (it lives in the 44px header row now). What
-  // survives is the surface's own bottom-edge claim, which never depended
-  // on the gutter.
-  test("under a real bottom inset the surface still reaches the physical bottom edge — landscape (844x390)", async ({
-    page,
-  }) => {
-    const title = "Design Connected Bottom Inset Workout";
-    await page.setViewportSize({ width: 844, height: 390 });
-    await injectConnectedFake(page, ROWING_STORY);
-    await openConnected(page, title, "design-connected-bottom-inset@e2e.test");
-    await walkToSurface(page);
-    await pumpUntilText(page, "2 OF 5");
+      // Focus restores to the pressed half on close (§3: "the `logOpener`
+      // focus-restore ref intact").
+      await page.getByRole("button", { name: "Close" }).click();
+      await expect(sheetTitle).toBeHidden();
+      await expect(gridTarget).toBeFocused();
 
-    // 21px: the iPhone home-indicator inset in landscape, the condition
-    // James was actually looking at.
-    const BOTTOM = 21;
-    const client = await page.context().newCDPSession(page);
-    await client.send("Emulation.setSafeAreaInsetsOverride", {
-      insets: { top: 0, left: 0, bottom: BOTTOM, right: 0 },
+      await cleanupAllConnected(page, title);
     });
-    await page.evaluate(
-      () => new Promise((r) => requestAnimationFrame(() => r(null))),
-    );
 
-    const surfaceBox = await page.locator(".connected-surface").boundingBox();
+    test("the surface's two panes and the diagnostics sheet — landscape (844x390)", async ({
+      page,
+    }) => {
+      const title = "Design Connected Surface Landscape Workout";
+      await page.setViewportSize({ width: 844, height: 390 });
+      await injectConnectedFake(page, ROWING_STORY);
+      await openConnected(
+        page,
+        title,
+        "design-connected-surface-landscape@e2e.test",
+      );
+      await walkToSurface(page);
+      await pumpUntilText(page, "2 OF 5");
 
-    // The surface's border box reaches the foot of the viewport. Before the
-    // fix its height was `calc(100dvh - top - bottom)` while the element is
-    // anchored at y=0 AND spends the same insets as padding — each one
-    // charged twice — so this measured [0, 369] in a 390px frame.
-    expect(surfaceBox!.y + surfaceBox!.height).toBeCloseTo(390, 0);
+      await sweep(page);
 
-    await cleanupAllConnected(page, title);
+      await page.getByRole("button", { name: "Grid pane" }).click();
+      await expect(
+        page.getByRole("button", { name: "Grid pane" }),
+      ).toHaveAttribute("aria-current", "page");
+      await sweep(page);
+
+      const gridTarget = page.getByRole("button", { name: "Grid pane" });
+      const sheetTitle = page.getByRole("heading", { name: "Connection log" });
+      for (let i = 0; i < 6 && !(await sheetTitle.isVisible()); i += 1) {
+        await gridTarget.click();
+      }
+      await expect(sheetTitle).toBeVisible();
+      await sweep(page);
+
+      await page.getByRole("button", { name: "Close" }).click();
+      await expect(sheetTitle).toBeHidden();
+      await expect(gridTarget).toBeFocused();
+
+      await cleanupAllConnected(page, title);
+    });
+
+    // §3: "armed is checked FIRST, ahead of the ordinal check, so GRID
+    // never reaches the countdown composition while armed" — the exact
+    // defect class the briefing names (a RUNNING gold countdown at a rower
+    // who has taken no stroke), driven for real: `walkToSurface` alone
+    // (no pump) lands on `status: "armed"`, and a click straight onto GRID
+    // with zero story events pumped proves nothing can advance it.
+    test("GRID's armed branch reads READY, never the countdown composition", async ({
+      page,
+    }) => {
+      const title = "Design Connected Armed Grid Workout";
+      await injectConnectedFake(page, []);
+      await openConnected(page, title, "design-connected-armed-grid@e2e.test");
+      await walkToSurface(page);
+      await page.getByRole("button", { name: "Grid pane" }).click();
+      await expect(
+        page.getByRole("button", { name: "Grid pane" }),
+      ).toHaveAttribute("aria-current", "page");
+      await expect(page.getByText("1 OF 5 · READY")).toBeVisible();
+      await expect(page.locator(".connected-header-countdown")).toHaveCount(0);
+      await sweep(page);
+      await cleanupAllConnected(page, title);
+    });
   });
 
-  // --- Close-out round (James's erg walk, 2026-08-13, defect 3) ---
+  test.describe("2A — LIVE, landscape (design spec §2A)", () => {
+    test.use({ viewport: { width: 844, height: 390 } });
 
-  // PORTRAIT, UNDER A REAL INSET. Same blind spot, other orientation: at
-  // zero insets this pane measures `scrollHeight` 682 = `clientHeight` 682
-  // with 103px of slack absorbed, so every gate and every capture called it
-  // clean. Give it a notch and TOTAL LEFT falls off the bottom — the row is
-  // the last thing in the pane and `.connected-pane` is `overflow: clip`,
-  // so it does not scroll into reach, it simply is not there.
-  test("under real portrait insets the live pane does not clip, and TOTAL LEFT is still inside it (390x844)", async ({
-    page,
-  }) => {
-    const title = "Design Connected Portrait Inset Workout";
-    await page.setViewportSize({ width: 390, height: 844 });
-    await injectConnectedFake(page, ROWING_STORY);
-    await openConnected(
+    test("header row: 44px, control far left / END far right, never adjacent", async ({
       page,
-      title,
-      "design-connected-portrait-inset@e2e.test",
-    );
-    await walkToSurface(page);
-    await pumpUntilText(page, "2 OF 5");
+    }) => {
+      await loadConnectedFixture(page, "connected-pane-live");
+      const header = await page.locator(".connected-header").boundingBox();
+      expect(header).not.toBeNull();
+      expect(header!.height).toBeCloseTo(44, 0);
+      // The header itself spans the surface's full physical width — its
+      // own 12px right padding (`.connected-header`'s own rule) is what
+      // insets END from the raw edge, not a gap this test should assume
+      // away.
+      expect(header!.x + header!.width).toBeCloseTo(844, 0);
 
-    const client = await page.context().newCDPSession(page);
-    // Both phones this app ships to, because they differ by 12px at the top
-    // and the pre-fix margin was 25px — a test that only tried the smaller
-    // notch would have called a 12px-worse device fixed.
-    for (const [device, top] of [
-      ["iPhone 14", 47],
-      ["iPhone 14 Pro", 59],
+      const [control, line, end] = await Promise.all([
+        page.locator(".connected-control").boundingBox(),
+        page.locator(".connected-line").boundingBox(),
+        page.getByRole("button", { name: "End session" }).boundingBox(),
+      ]);
+      expect(control).not.toBeNull();
+      expect(end).not.toBeNull();
+      expect(line).not.toBeNull();
+      // Far left / far right, and never adjacent: `.connected-line` (the
+      // device caption + status, `flex: 1`) fills the whole gap between
+      // them — its own box has real, positive width. END sits at the
+      // header's own right edge, inset only by the header's own padding.
+      expect(control!.x).toBeCloseTo(0, 0);
+      expect(end!.x + end!.width).toBeCloseTo(
+        header!.x + header!.width - 12,
+        0,
+      );
+      expect(line!.width).toBeGreaterThan(0);
+      expect(control!.x + control!.width).toBeLessThanOrEqual(line!.x + 0.5);
+      expect(line!.x + line!.width).toBeLessThanOrEqual(end!.x + 0.5);
+    });
+
+    test("header row: device caption mono 13/0.10em/ink-2, status mono 22/0.04em/ink", async ({
+      page,
+    }) => {
+      await loadConnectedFixture(page, "connected-pane-live");
+      const device = await page
+        .locator(".connected-line-device")
+        .evaluate((el) => {
+          const cs = getComputedStyle(el);
+          return {
+            fontSize: cs.fontSize,
+            letterSpacing: parseFloat(cs.letterSpacing),
+            color: cs.color,
+            text: el.textContent,
+          };
+        });
+      expect(device.fontSize).toBe("13px");
+      expect(device.letterSpacing).toBeCloseTo(13 * 0.1, 1);
+      expect(device.color).toBe(INK_2_RGB);
+      expect(device.text).toBe("PM5 432331249");
+
+      const status = await page
+        .locator(".connected-line-trailing")
+        .evaluate((el) => {
+          const cs = getComputedStyle(el);
+          return {
+            fontSize: cs.fontSize,
+            letterSpacing: parseFloat(cs.letterSpacing),
+            color: cs.color,
+            text: el.textContent,
+          };
+        });
+      expect(status.fontSize).toBe("22px");
+      expect(status.letterSpacing).toBeCloseTo(22 * 0.04, 1);
+      expect(status.color).toBe(INK_RGB);
+      expect(status.text).toBe("1 OF 4 · WORK");
+    });
+
+    test("progress bar: 6px track, 3px gaps, done/active/upcoming colours (contrast logged)", async ({
+      page,
+    }) => {
+      await loadConnectedFixture(page, "connected-pane-live");
+      const track = await page
+        .locator(".connected-progress-track")
+        .evaluate((el) => {
+          const cs = getComputedStyle(el);
+          return { height: cs.height, gap: cs.gap, bg: cs.backgroundColor };
+        });
+      expect(track.height).toBe("6px");
+      expect(track.gap).toBe("3px");
+      expect(track.bg).toBe(RULE_2_RGB);
+
+      const segs = await page
+        .locator(".connected-progress-seg")
+        .evaluateAll((els) =>
+          els.map((el) => ({
+            state: Array.from(el.classList)
+              .find((c) => c.startsWith("connected-progress-seg-"))
+              ?.replace("connected-progress-seg-", ""),
+            bg: getComputedStyle(el).backgroundColor,
+          })),
+        );
+      expect(segs.length).toBeGreaterThan(0);
+      for (const seg of segs) {
+        const expected =
+          seg.state === "done"
+            ? INK_RGB
+            : seg.state === "active"
+              ? PROGRESS_ACTIVE_RGB
+              : RULE_2_RGB;
+        expect([seg.state, seg.bg]).toStrictEqual([seg.state, expected]);
+      }
+      // Exactly one active segment (the interval being rowed) — the same
+      // "one you are on" invariant the grid's own active row carries.
+      expect(segs.filter((s) => s.state === "active")).toHaveLength(1);
+
+      // THE DISCLOSED RESIDUAL (§2A): active-vs-upcoming contrast, computed
+      // rather than trusted — `--progress-active` on `--rule-2`.
+      const ratio = await page.evaluate(
+        ({ fg, bg }) => {
+          function channel(c: number) {
+            const s = c / 255;
+            return s <= 0.03928
+              ? s / 12.92
+              : Math.pow((s + 0.055) / 1.055, 2.4);
+          }
+          function luminance(rgb: string) {
+            const m = rgb.match(/(\d+),\s*(\d+),\s*(\d+)/);
+            if (!m) throw new Error(`unparseable colour: ${rgb}`);
+            const [r, g, b] = [Number(m[1]), Number(m[2]), Number(m[3])];
+            return (
+              0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+            );
+          }
+          const la = luminance(fg);
+          const lb = luminance(bg);
+          const lighter = Math.max(la, lb);
+          const darker = Math.min(la, lb);
+          return (lighter + 0.05) / (darker + 0.05);
+        },
+        { fg: PROGRESS_ACTIVE_RGB, bg: RULE_2_RGB },
+      );
+      // Logged via the assertion message: 2.61:1, under WCAG 1.4.11's 3:1 —
+      // accepted per §2A because the status text carries the same state
+      // redundantly (`assertNoFailingInk4Labels`'s own numbered-disclosure
+      // idiom, "recurring failure #6": compute it, don't judge by eye).
+      expect(
+        ratio,
+        `active-vs-upcoming contrast ${ratio.toFixed(2)}:1`,
+      ).toBeCloseTo(2.61, 1);
+    });
+
+    test("progress bar fallback (>16 boundaries): proportional fill + quarter-tick row", async ({
+      page,
+    }) => {
+      // None of the committed fixtures carry more than 16 boundaries
+      // (`FIXTURE`/`LONG_FIXTURE` top out at 4 and 24 intervals but the
+      // grid pane — the only one `LONG_FIXTURE` photographs — never mounts
+      // `ConnectedProgressBar` at all, §2B: "No progress bar"). Driven live
+      // instead, off `LONG_PROGRAM` (18 intervals, one past
+      // `MAX_NOTCH_BOUNDARIES = 16`) — `walkToSurface` alone (armed, no
+      // pump) is enough: the fallback's own trigger is
+      // `boundaries.seconds.length`, a property of the PROGRAM, not of
+      // anything rowed yet.
+      const title = "Design Connected Progress Fallback Workout";
+      await injectConnectedFake(
+        page,
+        [],
+        CONNECTED_DELAY_WRITES_MS,
+        LONG_PROGRAM,
+      );
+      await openConnected(
+        page,
+        title,
+        "design-connected-progress-fallback@e2e.test",
+        LONG_BULK_TEXT(title),
+      );
+      await walkToSurface(page);
+
+      await expect(page.locator(".connected-progress-seg")).toHaveCount(0);
+      const fill = page.locator(".connected-progress-fill");
+      await expect(fill).toHaveCount(1);
+      const bg = await fill.evaluate(
+        (el) => getComputedStyle(el).backgroundColor,
+      );
+      expect(bg).toBe(INK_RGB);
+      const ticks = await page
+        .locator(".connected-progress-tick-label")
+        .allTextContents();
+      expect(ticks).toStrictEqual(["¼", "½", "¾", ticks[3]]);
+      expect(ticks[3]).toMatch(/^\d+′$/);
+
+      await cleanupAllConnected(page, title);
+    });
+
+    test("heroes: split 112px mono 500 -0.05em judged nowrap, tenths 58px span, target 40px ink + source tag 15px ink-3", async ({
+      page,
+    }) => {
+      await loadConnectedFixture(page, "connected-pane-live");
+      const value = await page
+        .locator(".connected-hero-split .connected-hero-value")
+        .evaluate((el) => {
+          const cs = getComputedStyle(el);
+          return {
+            fontSize: cs.fontSize,
+            fontWeight: cs.fontWeight,
+            letterSpacing: parseFloat(cs.letterSpacing),
+            whiteSpace: cs.whiteSpace,
+          };
+        });
+      expect(value.fontSize).toBe("112px");
+      expect(value.fontWeight).toBe("500");
+      expect(value.letterSpacing).toBeCloseTo(112 * -0.05, 0);
+      expect(value.whiteSpace).toBe("nowrap");
+
+      const tenths = await page
+        .locator(".connected-hero-split .connected-hero-tenths")
+        .evaluate((el) => getComputedStyle(el).fontSize);
+      expect(tenths).toBe("58px");
+
+      // Split's own actual reads FASTER in this fixture (verified against
+      // the committed file: `grep timer-card-actual- connected-pane-
+      // live.html` — 1 faster, 1 within) — read dynamically anyway so the
+      // assertion states the mechanism, not a fact this fixture happens to
+      // hold today.
+      const split = await judgedColor(
+        page,
+        ".connected-hero-split .connected-hero-value",
+      );
+      expect(split.color).toBe(expectedJudgedRgb(split.judgement));
+
+      const target = await page
+        .locator(".connected-hero-split .connected-hero-target-value")
+        .evaluate((el) => ({
+          fontSize: getComputedStyle(el).fontSize,
+          color: getComputedStyle(el).color,
+          text: el.textContent,
+        }));
+      expect(target.fontSize).toBe("40px");
+      expect(target.color).toBe(INK_RGB);
+      expect(target.text).toBe("2:06.0");
+
+      const tag = await page
+        .locator(".connected-hero-split .connected-hero-target-ref")
+        .evaluate((el) => ({
+          fontSize: getComputedStyle(el).fontSize,
+          color: getComputedStyle(el).color,
+          text: el.textContent,
+        }));
+      expect(tag.fontSize).toBe("15px");
+      expect(tag.color).toBe(INK_3_RGB);
+      expect(tag.text).toBe("6K +4");
+    });
+
+    test("heroes: rate 92px same treatment judged, target 40px + SPM 19px ink-3", async ({
+      page,
+    }) => {
+      await loadConnectedFixture(page, "connected-pane-live");
+      const value = await page
+        .locator(".connected-hero-rate .connected-hero-value")
+        .evaluate((el) => {
+          const cs = getComputedStyle(el);
+          return {
+            fontSize: cs.fontSize,
+            fontWeight: cs.fontWeight,
+            letterSpacing: parseFloat(cs.letterSpacing),
+          };
+        });
+      expect(value.fontSize).toBe("92px");
+      expect(value.fontWeight).toBe("500");
+      expect(value.letterSpacing).toBeCloseTo(92 * -0.05, 0);
+
+      const rate = await judgedColor(
+        page,
+        ".connected-hero-rate .connected-hero-value",
+      );
+      expect(rate.color).toBe(expectedJudgedRgb(rate.judgement));
+
+      const target = await page
+        .locator(".connected-hero-rate .connected-hero-target-value")
+        .evaluate((el) => ({
+          fontSize: getComputedStyle(el).fontSize,
+          color: getComputedStyle(el).color,
+        }));
+      expect(target.fontSize).toBe("40px");
+      expect(target.color).toBe(INK_RGB);
+
+      const unit = await page
+        .locator(".connected-hero-rate-unit")
+        .evaluate((el) => ({
+          fontSize: getComputedStyle(el).fontSize,
+          color: getComputedStyle(el).color,
+          text: el.textContent,
+        }));
+      expect(unit.fontSize).toBe("19px");
+      expect(unit.color).toBe(INK_3_RGB);
+      expect(unit.text).toBe("SPM");
+    });
+
+    test("cut from LIVE: no NOW/TARGET labels, no /500m unit, no LEFT IN INTERVAL/TOTAL M/HR cells, no TimerRuler block", async ({
+      page,
+    }) => {
+      await loadConnectedFixture(page, "connected-pane-live");
+      const pane = page.locator(".connected-pane-live");
+      await expect(pane.getByText("NOW", { exact: true })).toHaveCount(0);
+      await expect(pane.getByText("TARGET", { exact: true })).toHaveCount(0);
+      const paneText = (await pane.textContent()) ?? "";
+      expect(paneText).not.toContain("/500m");
+      expect(paneText).not.toContain("LEFT IN INTERVAL");
+      expect(paneText).not.toContain("TOTAL M");
+      await expect(page.locator(".connected-metric-row")).toHaveCount(0);
+      await expect(page.locator(".timer-total")).toHaveCount(0);
+      await expect(page.locator(".timer-ruler")).toHaveCount(0);
+      await expect(page.locator(".connected-hero-unit")).toHaveCount(0);
+      // The HR reading itself: this fixture has one (`heartRateBpm: 164`
+      // baked into `liveFrame`'s own default), so its absence from the
+      // pane is a real assertion about the redesign, not the fixture's
+      // own missing data — `-nohr` covers the null case separately.
+      expect(paneText).not.toMatch(/\bHR\b/);
+    });
+
+    test("bottom band: rule above, up-next mono 30 ink flex1 nowrap no label, TOTAL LEFT labelled cell (label 15/0.10em/ink-3 over value 30/ink)", async ({
+      page,
+    }) => {
+      await loadConnectedFixture(page, "connected-pane-live");
+      const band = await page.locator(".connected-band").evaluate((el) => {
+        const cs = getComputedStyle(el);
+        return { borderTop: cs.borderTopWidth, borderColor: cs.borderTopColor };
+      });
+      expect(band.borderTop).toBe("1px");
+      expect(band.borderColor).toBe(INK_RGB);
+
+      // Always in the DOM (one markup, both orientations — the same
+      // toggle idiom `.connected-band-upnext-then` uses); landscape hides
+      // it via CSS (§2A: "NO label"), it is never absent from the tree.
+      await expect(page.locator(".connected-band-upnext-label")).toBeHidden();
+      const upnext = await page
+        .locator(".connected-band-upnext-value")
+        .evaluate((el) => {
+          const cs = getComputedStyle(el);
+          return {
+            fontSize: cs.fontSize,
+            color: cs.color,
+            whiteSpace: cs.whiteSpace,
+            text: (el as HTMLElement).innerText,
+          };
+        });
+      expect(upnext.fontSize).toBe("30px");
+      expect(upnext.color).toBe(INK_RGB);
+      expect(upnext.whiteSpace).toBe("nowrap");
+      expect(upnext.text.replace(/\s+/g, " ").trim()).toBe(
+        "REST 3:00 · then WORK 2:06.0",
+      );
+
+      const label = await page
+        .locator(".connected-band-cell-label")
+        .evaluate((el) => {
+          const cs = getComputedStyle(el);
+          return {
+            fontSize: cs.fontSize,
+            letterSpacing: parseFloat(cs.letterSpacing),
+            color: cs.color,
+            text: el.textContent,
+          };
+        });
+      expect(label.fontSize).toBe("15px");
+      expect(label.letterSpacing).toBeCloseTo(15 * 0.1, 1);
+      expect(label.color).toBe(INK_3_RGB);
+      expect(label.text).toBe("TOTAL LEFT");
+
+      const value = await page
+        .locator(".connected-band-cell-value")
+        .evaluate((el) => ({
+          fontSize: getComputedStyle(el).fontSize,
+          color: getComputedStyle(el).color,
+          text: el.textContent,
+        }));
+      expect(value.fontSize).toBe("30px");
+      expect(value.color).toBe(INK_RGB);
+      expect(value.text).toBe("39:48");
+    });
+
+    test("split cap: 4 chars + tenths; slower than 9:59.9 shows —", async ({
+      page,
+    }) => {
+      const title = "Design Connected Live No-Clip Workout";
+      await injectConnectedFake(page, EXTREME_SPLIT_STORY);
+      await openConnected(page, title, "design-connected-live-noclip@e2e.test");
+      await walkToSurface(page);
+      await pumpUntilText(page, "2 OF 5");
+
+      const hero = page.locator(".connected-hero-split .connected-hero-value");
+      await expect(hero).toHaveText("—");
+
+      const measured = await Promise.all([
+        page.locator(".connected-pane-live").evaluate((el) => ({
+          scrollWidth: el.scrollWidth,
+          clientWidth: el.clientWidth,
+          scrollHeight: el.scrollHeight,
+          clientHeight: el.clientHeight,
+        })),
+        page.evaluate(() => ({
+          docScrollWidth: document.documentElement.scrollWidth,
+          docClientWidth: document.documentElement.clientWidth,
+        })),
+      ]);
+      expect(measured[0].scrollWidth).toBeLessThanOrEqual(
+        measured[0].clientWidth,
+      );
+      expect(measured[0].scrollHeight).toBeLessThanOrEqual(
+        measured[0].clientHeight,
+      );
+      expect(measured[1].docScrollWidth).toBeLessThanOrEqual(
+        measured[1].docClientWidth,
+      );
+
+      await cleanupAllConnected(page, title);
+    });
+  });
+
+  test.describe("2A — insets (safe-area, side/top insets, rotation)", () => {
+    // --- Task 1 (design spec §4): the content column's width invariant ---
+    //
+    // James's report: the landscape content column changed width view to
+    // view. Only ONE pane is mounted at a time
+    // (`ConnectedSurface.tsx:324-325`), so `.connected-surface-body` — a
+    // grid item in landscape's `1fr` track — measured its automatic
+    // minimum against whichever pane happened to be showing. The pin: a
+    // tap on "Grid pane" between LIVE and GRID and the content column must
+    // not move a pixel, in BOTH orientations. Portrait's own run is
+    // defense in depth (`.connected-surface` is a flex column there, so
+    // the `minmax(auto, 1fr)` track this guards does not exist), kept
+    // deliberately and said out loud.
+    for (const viewport of [
+      { width: 390, height: 844, label: "portrait" },
+      { width: 844, height: 390, label: "landscape" },
     ] as const) {
+      test(`the content column doesn't drift between panes — ${viewport.label} (${viewport.width}x${viewport.height})`, async ({
+        page,
+      }) => {
+        const title = `Design Connected Width Invariant ${viewport.label}`;
+        await page.setViewportSize({
+          width: viewport.width,
+          height: viewport.height,
+        });
+        await injectConnectedFake(page, ROWING_STORY);
+        await openConnected(
+          page,
+          title,
+          `design-connected-width-${viewport.label}@e2e.test`,
+        );
+        await walkToSurface(page);
+        await pumpUntilText(page, "2 OF 5");
+
+        const box = async () =>
+          page.locator(".connected-surface-body").evaluate((el) => {
+            const r = el.getBoundingClientRect();
+            return { width: r.width, left: r.left };
+          });
+        const onLive = await box();
+        await page.getByRole("button", { name: "Grid pane" }).click();
+        await expect(page.locator(".connected-pane-grid")).toBeVisible();
+        const onGrid = await box();
+        expect(onGrid).toStrictEqual(onLive);
+
+        // The adversarial half: force the grid pane's own content past the
+        // fair share and prove the content column STILL does not move.
+        await page.evaluate(() => {
+          const meters = document.querySelector<HTMLElement>(
+            ".connected-grid-meters",
+          )!;
+          meters.textContent = "M".repeat(150);
+        });
+        const onGridForcedWide = await box();
+        expect(onGridForcedWide).toStrictEqual(onLive);
+
+        const minWidth = await page
+          .locator(".connected-surface-body")
+          .evaluate((el) => getComputedStyle(el).minWidth);
+        expect(minWidth).toBe("0px");
+
+        await cleanupAllConnected(page, title);
+      });
+    }
+
+    // --- Task 1 (design spec §4): the grid's clip consequence ---
+    test("the grid pane doesn't clip a three-digit interval number or a five-digit meters value — landscape (844x390)", async ({
+      page,
+    }) => {
+      const title = "Design Connected Grid No-Clip Workout";
+      await page.setViewportSize({ width: 844, height: 390 });
+      await injectConnectedFake(page, ROWING_STORY);
+      await openConnected(page, title, "design-connected-grid-noclip@e2e.test");
+      await walkToSurface(page);
+      await pumpUntilText(page, "2 OF 5");
+      await page.getByRole("button", { name: "Grid pane" }).click();
+      await expect(page.locator(".connected-pane-grid")).toBeVisible();
+
+      const measured = await page.evaluate(() => {
+        const row = document.querySelector(".connected-grid-row")!;
+        const num = row.querySelector<HTMLElement>(".connected-grid-num")!;
+        const meters = row.querySelector<HTMLElement>(
+          ".connected-grid-meters",
+        )!;
+        num.textContent = "128";
+        meters.textContent = "21097";
+        const doc = document.documentElement;
+        return {
+          docScrollWidth: doc.scrollWidth,
+          docClientWidth: doc.clientWidth,
+          numScrollWidth: num.scrollWidth,
+          numClientWidth: num.clientWidth,
+          metersScrollWidth: meters.scrollWidth,
+          metersClientWidth: meters.clientWidth,
+          metersText: meters.textContent,
+        };
+      });
+      expect(measured.docScrollWidth).toBeLessThanOrEqual(
+        measured.docClientWidth,
+      );
+      expect(measured.numScrollWidth).toBeLessThanOrEqual(
+        measured.numClientWidth,
+      );
+      expect(measured.metersScrollWidth).toBeLessThanOrEqual(
+        measured.metersClientWidth,
+      );
+      expect(measured.metersText).toBe("21097");
+
+      await cleanupAllConnected(page, title);
+    });
+
+    // --- Task 2 (design spec §6/ruling 10): full-bleed ---
+    test("the surface is full-bleed — landscape (844x390)", async ({
+      page,
+    }) => {
+      const title = "Design Connected Gutter Workout";
+      await page.setViewportSize({ width: 844, height: 390 });
+      await injectConnectedFake(page, ROWING_STORY);
+      await openConnected(page, title, "design-connected-gutter@e2e.test");
+      await walkToSurface(page);
+      await pumpUntilText(page, "2 OF 5");
+
+      const surfaceBox = await page.locator(".connected-surface").boundingBox();
+      expect(surfaceBox).not.toBeNull();
+      expect(surfaceBox!.x).toBeCloseTo(0, 0);
+      expect(surfaceBox!.x + surfaceBox!.width).toBeCloseTo(844, 0);
+      const controlBox = await page.locator(".connected-control").boundingBox();
+      expect(controlBox).not.toBeNull();
+      expect(controlBox!.x).toBeCloseTo(0, 0);
+
+      await cleanupAllConnected(page, title);
+    });
+
+    // Chromium reports every `env(safe-area-inset-*)` as `0px` on a normal
+    // run — a real inset is SIMULATED via CDP's
+    // `Emulation.setSafeAreaInsetsOverride`, verified empirically to move
+    // `env(safe-area-inset-left)` in this repo's bundled Chromium.
+    // ROTATION-STABILITY UNDER AN ASYMMETRIC INSET, which is ANDROID's
+    // case.
+    test("the segmented control and the content column are IDENTICAL in both landscape rotations, notch left or notch right (844x390)", async ({
+      page,
+    }) => {
+      const title = "Design Connected Gutter Inset Workout";
+      await page.setViewportSize({ width: 844, height: 390 });
+      await injectConnectedFake(page, ROWING_STORY);
+      await openConnected(
+        page,
+        title,
+        "design-connected-gutter-inset@e2e.test",
+      );
+      await walkToSurface(page);
+      await pumpUntilText(page, "2 OF 5");
+
+      const INSET = 59;
+      const client = await page.context().newCDPSession(page);
+
+      async function measure(left: number, right: number) {
+        await client.send("Emulation.setSafeAreaInsetsOverride", {
+          insets: { top: 0, left, bottom: 0, right },
+        });
+        await page.evaluate(
+          () => new Promise((r) => requestAnimationFrame(() => r(null))),
+        );
+        const [surface, control, pane, live] = await Promise.all([
+          page.locator(".connected-surface").boundingBox(),
+          page.locator(".connected-control").boundingBox(),
+          page.locator(".connected-pane").boundingBox(),
+          page.getByRole("button", { name: "Live pane" }).boundingBox(),
+        ]);
+        const round = (n: number) => Math.round(n * 100) / 100;
+        return {
+          surfaceX: round(surface!.x),
+          controlX: round(control!.x),
+          contentX: round(pane!.x),
+          contentWidth: round(pane!.width),
+          liveX: round(live!.x),
+        };
+      }
+
+      const notchLeft = await measure(INSET, 0);
+      const notchRight = await measure(0, INSET);
+
+      expect(notchRight).toStrictEqual(notchLeft);
+      expect(notchLeft.surfaceX).toBeCloseTo(0, 0);
+      expect(notchLeft.controlX).toBeCloseTo(INSET, 0);
+      expect(notchLeft.contentX).toBeCloseTo(INSET, 0);
+      expect(Math.abs(notchLeft.liveX - INSET)).toBeLessThanOrEqual(2);
+
+      await cleanupAllConnected(page, title);
+    });
+
+    // THE TOP AXIS — a real measured iOS landscape-TOP inset order of
+    // magnitude, the status-bar-free notch band a mounted phone's rotation
+    // still reports on the short physical edge (§1's deviation row: "the
+    // header also honours `env(safe-area-inset-top)` in landscape").
+    test("the segmented control clears a real TOP inset — landscape (844x390)", async ({
+      page,
+    }) => {
+      const title = "Design Connected Top Inset Workout";
+      await page.setViewportSize({ width: 844, height: 390 });
+      await injectConnectedFake(page, ROWING_STORY);
+      await openConnected(page, title, "design-connected-top-inset@e2e.test");
+      await walkToSurface(page);
+      await pumpUntilText(page, "2 OF 5");
+
+      const TOP = 20;
+      const client = await page.context().newCDPSession(page);
       await client.send("Emulation.setSafeAreaInsetsOverride", {
-        insets: { top, left: 0, bottom: 34, right: 0 },
+        insets: { top: TOP, left: 0, bottom: 0, right: 0 },
       });
       await page.evaluate(
         () => new Promise((r) => requestAnimationFrame(() => r(null))),
       );
 
-      const measured = await page.evaluate(() => {
-        const pane = document.querySelector(".connected-pane-live")!;
-        // RE-ANCHORED (CR2 spec 3 Task 4): `.timer-total` died with
-        // `TimerRuler` (spec §3 fate table) — `.connected-band` is now the
-        // pane's own last child, the same "row James lost" this measures.
-        const total = document.querySelector(".connected-band")!;
-        return {
-          scrollHeight: pane.scrollHeight,
-          clientHeight: pane.clientHeight,
-          paneBottom: pane.getBoundingClientRect().bottom,
-          totalBottom: total.getBoundingClientRect().bottom,
-        };
-      });
+      const [controlBox, endBox] = await Promise.all([
+        page.locator(".connected-control").boundingBox(),
+        page.getByRole("button", { name: "End session" }).boundingBox(),
+      ]);
+      expect(controlBox).not.toBeNull();
+      expect(endBox).not.toBeNull();
+      expect(controlBox!.y).toBeGreaterThanOrEqual(TOP);
+      expect(endBox!.y).toBeGreaterThanOrEqual(TOP);
+      expect(controlBox!.height).toBeGreaterThanOrEqual(44);
 
-      // No clip. Pre-fix: 579 vs 554 on the 14, 579 vs 530 on the 14 Pro.
-      // The device name rides along so a failure says WHICH phone broke.
-      expect([
-        device,
-        measured.scrollHeight <= measured.clientHeight,
-      ]).toStrictEqual([device, true]);
-      // …and specifically the row James lost. `scrollHeight` alone would go
-      // green if TOTAL LEFT were deleted rather than fitted, so the row's
-      // own bottom edge is checked against the pane that clips it.
-      expect([
-        device,
-        measured.totalBottom <= measured.paneBottom + 0.5,
-      ]).toStrictEqual([device, true]);
-    }
+      await cleanupAllConnected(page, title);
+    });
 
-    await cleanupAllConnected(page, title);
-  });
-
-  // NO-OVERLAP: the pin Important-1 says would have caught the 0.4px
-  // literal overlap a tight landscape budget once produced. The no-scroll
-  // pin above only measures the PANE's own outer box, which an inner flex
-  // item's content overflowing past its own allotted space does not grow
-  // (`.connected-pane`'s `overflow: clip` hides it from scrollHeight, not
-  // from the neighbour it spills into) — this measures the boxes that
-  // actually sit next to each other in the DOM's visual order and asserts
-  // none of their rects intersect, in both orientations.
-  for (const viewport of [
-    { width: 390, height: 844, label: "portrait" },
-    { width: 844, height: 390, label: "landscape" },
-  ] as const) {
-    test(`the live pane's rows never overlap their neighbours — ${viewport.label} (${viewport.width}x${viewport.height})`, async ({
+    test("under a real bottom inset the surface still reaches the physical bottom edge — landscape (844x390)", async ({
       page,
     }) => {
-      const title = `Design Connected Live No-Overlap ${viewport.label}`;
-      await page.setViewportSize({
-        width: viewport.width,
-        height: viewport.height,
-      });
+      const title = "Design Connected Bottom Inset Workout";
+      await page.setViewportSize({ width: 844, height: 390 });
       await injectConnectedFake(page, ROWING_STORY);
       await openConnected(
         page,
         title,
-        `design-connected-live-nooverlap-${viewport.label}@e2e.test`,
+        "design-connected-bottom-inset@e2e.test",
       );
       await walkToSurface(page);
       await pumpUntilText(page, "2 OF 5");
 
-      // Visual top-to-bottom order of the live pane's own rows (portrait:
-      // `.connected-heroes` is `display: contents`, so its two children are
-      // consecutive top-level rows in their own right; landscape: the same
-      // wrapper becomes one row beside the divider).
-      //
-      // Important-1's actual defect was CONTENT (the hero's own label/
-      // target spans) reading into a NEIGHBOUR's outer box, not two outer
-      // boxes overlapping each other — flexbox siblings never do that by
-      // construction, so a box-vs-box check one level up would have passed
-      // right through the 0.4px this pin exists to catch. Each pair below
-      // is deliberately the INNERMOST element on the risk side (a hero's
-      // own topmost content above, its own target row below) against the
-      // ADJACENT row's outer box, for both heroes in both orientations.
-      //
-      // CR2 spec 3 Task 2: `.connected-hero-label` (`NOW`) no longer
-      // renders on a LIVE surface at all (design spec §2A, "Cut from LIVE:
-      // NO NOW/TARGET/UP NEXT labels" — `nowLabel` collapses to
-      // `stale ? "LAST" : ""`). CR2 spec 3 Task 4 rebuilt the pane's own
-      // structure further: `.connected-hero-reading` (the old value+unit
-      // wrapper) is gone — there is no unit beside the numeral any more, so
-      // the hero's own topmost element is `.connected-hero-value` directly
-      // — and `ConnectedProgressBar` now mounts BEFORE the heroes (design
-      // spec §2A/§2C's own row order), a new neighbour pair the old list
-      // never had to check. The old metric row/`TimerRuler` pairs are
-      // replaced by the band, the element that actually sits where they
-      // used to (`.connected-band` — RE-ANCHORED, spec §3 fate table cut
-      // both `.connected-metric-row` and `.timer-total`). Full
-      // connected-block rewrite against the redesign's new structure is a
-      // later task's (spec §5: "design.spec.ts's connected blocks,
-      // rewritten, not patched") — this is the minimal selector fix that
-      // keeps the invariant this pin checks (nothing spills into its
-      // neighbour) alive in the meantime.
-      const pairs: [string, string][] = [
-        [".connected-line", ".connected-progress"],
-        [".connected-progress", ".connected-hero-split .connected-hero-value"],
-        [".connected-progress", ".connected-hero-rate .connected-hero-value"],
-        [".connected-hero-split .connected-hero-target", ".connected-band"],
-        [".connected-hero-rate .connected-hero-target", ".connected-band"],
-      ];
-      for (const [aboveSel, belowSel] of pairs) {
-        const [above, below] = await Promise.all([
-          page.locator(aboveSel).boundingBox(),
-          page.locator(belowSel).boundingBox(),
-        ]);
-        expect(above, aboveSel).not.toBeNull();
-        expect(below, belowSel).not.toBeNull();
-        expect(
-          below!.y,
-          `${belowSel} (top ${below!.y}) overlaps ${aboveSel} (bottom ${above!.y + above!.height})`,
-        ).toBeGreaterThanOrEqual(above!.y + above!.height);
+      const BOTTOM = 21;
+      const client = await page.context().newCDPSession(page);
+      await client.send("Emulation.setSafeAreaInsetsOverride", {
+        insets: { top: 0, left: 0, bottom: BOTTOM, right: 0 },
+      });
+      await page.evaluate(
+        () => new Promise((r) => requestAnimationFrame(() => r(null))),
+      );
+
+      const surfaceBox = await page.locator(".connected-surface").boundingBox();
+      expect(surfaceBox!.y + surfaceBox!.height).toBeCloseTo(390, 0);
+
+      await cleanupAllConnected(page, title);
+    });
+
+    test("under real portrait insets the live pane does not clip, and TOTAL LEFT is still inside it (390x844)", async ({
+      page,
+    }) => {
+      const title = "Design Connected Portrait Inset Workout";
+      await page.setViewportSize({ width: 390, height: 844 });
+      await injectConnectedFake(page, ROWING_STORY);
+      await openConnected(
+        page,
+        title,
+        "design-connected-portrait-inset@e2e.test",
+      );
+      await walkToSurface(page);
+      await pumpUntilText(page, "2 OF 5");
+
+      const client = await page.context().newCDPSession(page);
+      for (const [device, top] of [
+        ["iPhone 14", 47],
+        ["iPhone 14 Pro", 59],
+      ] as const) {
+        await client.send("Emulation.setSafeAreaInsetsOverride", {
+          insets: { top, left: 0, bottom: 34, right: 0 },
+        });
+        await page.evaluate(
+          () => new Promise((r) => requestAnimationFrame(() => r(null))),
+        );
+
+        const measured = await page.evaluate(() => {
+          const pane = document.querySelector(".connected-pane-live")!;
+          const total = document.querySelector(".connected-band")!;
+          return {
+            scrollHeight: pane.scrollHeight,
+            clientHeight: pane.clientHeight,
+            paneBottom: pane.getBoundingClientRect().bottom,
+            totalBottom: total.getBoundingClientRect().bottom,
+          };
+        });
+
+        expect([
+          device,
+          measured.scrollHeight <= measured.clientHeight,
+        ]).toStrictEqual([device, true]);
+        expect([
+          device,
+          measured.totalBottom <= measured.paneBottom + 0.5,
+        ]).toStrictEqual([device, true]);
       }
 
       await cleanupAllConnected(page, title);
     });
-  }
+
+    // NO-SCROLL / NO-OVERLAP: `.connected-pane` declares `overflow: clip`,
+    // so a genuine layout overflow reads as CLIPPED content, not a visible
+    // scrollbar.
+    for (const viewport of [
+      { width: 390, height: 844, label: "portrait" },
+      { width: 844, height: 390, label: "landscape" },
+    ] as const) {
+      test(`the live pane does not scroll — ${viewport.label} (${viewport.width}x${viewport.height})`, async ({
+        page,
+      }) => {
+        const title = `Design Connected Live No-Scroll ${viewport.label}`;
+        await page.setViewportSize({
+          width: viewport.width,
+          height: viewport.height,
+        });
+        await injectConnectedFake(page, ROWING_STORY);
+        await openConnected(
+          page,
+          title,
+          `design-connected-live-noscroll-${viewport.label}@e2e.test`,
+        );
+        await walkToSurface(page);
+        await pumpUntilText(page, "2 OF 5");
+
+        const overflow = await page
+          .locator(".connected-pane-live")
+          .evaluate((el) => ({
+            scrollHeight: el.scrollHeight,
+            clientHeight: el.clientHeight,
+          }));
+        expect(overflow.scrollHeight).toBeLessThanOrEqual(
+          overflow.clientHeight,
+        );
+
+        await cleanupAllConnected(page, title);
+      });
+    }
+
+    test("the landscape surface reclaims the dead 26px: its height equals the viewport's (844x390)", async ({
+      page,
+    }) => {
+      const title = "Design Connected Surface Height Workout";
+      await page.setViewportSize({ width: 844, height: 390 });
+      await injectConnectedFake(page, ROWING_STORY);
+      await openConnected(
+        page,
+        title,
+        "design-connected-surface-height@e2e.test",
+      );
+      await walkToSurface(page);
+      await pumpUntilText(page, "2 OF 5");
+
+      const surfaceBox = await page.locator(".connected-surface").boundingBox();
+      expect(surfaceBox).not.toBeNull();
+      expect(surfaceBox!.height).toBeCloseTo(390, 0);
+      expect(surfaceBox!.y).toBeCloseTo(0, 0);
+
+      await cleanupAllConnected(page, title);
+    });
+
+    for (const viewport of [
+      { width: 390, height: 844, label: "portrait" },
+      { width: 844, height: 390, label: "landscape" },
+    ] as const) {
+      test(`the live pane's rows never overlap their neighbours — ${viewport.label} (${viewport.width}x${viewport.height})`, async ({
+        page,
+      }) => {
+        const title = `Design Connected Live No-Overlap ${viewport.label}`;
+        await page.setViewportSize({
+          width: viewport.width,
+          height: viewport.height,
+        });
+        await injectConnectedFake(page, ROWING_STORY);
+        await openConnected(
+          page,
+          title,
+          `design-connected-live-nooverlap-${viewport.label}@e2e.test`,
+        );
+        await walkToSurface(page);
+        await pumpUntilText(page, "2 OF 5");
+
+        const pairs: [string, string][] = [
+          [".connected-line", ".connected-progress"],
+          [
+            ".connected-progress",
+            ".connected-hero-split .connected-hero-value",
+          ],
+          [".connected-progress", ".connected-hero-rate .connected-hero-value"],
+          [".connected-hero-split .connected-hero-target", ".connected-band"],
+          [".connected-hero-rate .connected-hero-target", ".connected-band"],
+        ];
+        for (const [aboveSel, belowSel] of pairs) {
+          const [above, below] = await Promise.all([
+            page.locator(aboveSel).boundingBox(),
+            page.locator(belowSel).boundingBox(),
+          ]);
+          expect(above, aboveSel).not.toBeNull();
+          expect(below, belowSel).not.toBeNull();
+          expect(
+            below!.y,
+            `${belowSel} (top ${below!.y}) overlaps ${aboveSel} (bottom ${above!.y + above!.height})`,
+          ).toBeGreaterThanOrEqual(above!.y + above!.height);
+        }
+
+        await cleanupAllConnected(page, title);
+      });
+    }
+
+    // NO-OVERLAP, the frozen footer's own geometry check (connected-axes
+    // 2a task 5) — `.connected-band-cell` (TOTAL LEFT) is the element the
+    // old overlay covered.
+    for (const viewport of [
+      { width: 390, height: 844, label: "portrait" },
+      { width: 844, height: 390, label: "landscape" },
+    ] as const) {
+      test(`the frozen footer never covers TOTAL LEFT — ${viewport.label} (${viewport.width}x${viewport.height})`, async ({
+        page,
+      }) => {
+        const title = `Design Connected Frozen No-Overlap ${viewport.label}`;
+        await page.setViewportSize({
+          width: viewport.width,
+          height: viewport.height,
+        });
+        await injectConnectedFake(page, FREEZING_STORY);
+        await openConnected(
+          page,
+          title,
+          `design-connected-frozen-nooverlap-${viewport.label}@e2e.test`,
+        );
+        await walkToSurface(page);
+        await pumpUntil(page, ".connected-paused");
+        await expect(page.getByText("PULL TO RESUME")).toBeVisible();
+        await expect(page.getByText(/PAUSED/)).toHaveCount(0);
+
+        const totalLeft = page.locator(".connected-band-cell");
+        const frozenBlock = page.locator(".connected-paused");
+        const [ruler, block] = await Promise.all([
+          totalLeft.boundingBox(),
+          frozenBlock.boundingBox(),
+        ]);
+        expect(ruler, ".connected-band-cell").not.toBeNull();
+        expect(block, ".connected-paused").not.toBeNull();
+        expect(
+          block!.y,
+          `.connected-paused (top ${block!.y}) overlaps .connected-band-cell (bottom ${ruler!.y + ruler!.height})`,
+        ).toBeGreaterThanOrEqual(ruler!.y + ruler!.height);
+        expect(ruler!.y + ruler!.height).toBeLessThanOrEqual(viewport.height);
+
+        await sweep(page);
+        await cleanupAllConnected(page, title);
+      });
+    }
+
+    test("nothing in the band's own up-next value reflows at the notched content width", async ({
+      page,
+    }) => {
+      await loadConnectedFixture(page, "connected-pane-live-warmup");
+      await page.setViewportSize({ width: 844, height: 390 });
+
+      const client = await page.context().newCDPSession(page);
+      async function stripAt(left: number) {
+        await client.send("Emulation.setSafeAreaInsetsOverride", {
+          insets: { top: 0, left, bottom: 0, right: 0 },
+        });
+        await page.evaluate(
+          () => new Promise((r) => requestAnimationFrame(() => r(null))),
+        );
+        const [value, pane] = await Promise.all([
+          page.locator(".connected-band-upnext-value").boundingBox(),
+          page.locator(".connected-pane").boundingBox(),
+        ]);
+        return {
+          valueHeight: Math.round(value!.height),
+          contentWidth: Math.round(pane!.width),
+        };
+      }
+
+      const unnotched = await stripAt(0);
+      const notched = await stripAt(59);
+
+      expect(notched.contentWidth).toBeLessThan(unnotched.contentWidth);
+      expect(notched.valueHeight).toBe(unnotched.valueHeight);
+    });
+  });
+
+  test.describe("2B — GRID, landscape (design spec §2B)", () => {
+    test.use({ viewport: { width: 844, height: 390 } });
+
+    test("header: GRID active, status composed ordinal + TOTAL LEFT in marker gold, no progress bar", async ({
+      page,
+    }) => {
+      await loadConnectedFixture(page, "connected-pane-grid");
+      await expect(
+        page.getByRole("button", { name: "Grid pane" }),
+      ).toHaveAttribute("aria-current", "page");
+      const trailing = page.locator(".connected-line-trailing");
+      await expect(trailing).toContainText("1 OF 4");
+      await expect(trailing).toContainText("39:48 LEFT");
+      const countdown = await page
+        .locator(".connected-header-countdown")
+        .evaluate((el) => ({
+          color: getComputedStyle(el).color,
+          text: el.textContent,
+        }));
+      expect(countdown.color).toBe(MARKER_RGB);
+      expect(countdown.text).toBe("39:48 LEFT");
+      await expect(page.locator(".connected-progress")).toHaveCount(0);
+    });
+
+    test("table head: mono 12/0.12em/ink-3, 2px ink rule below, columns # 30 · TIME · METERS · /500M · SPM · HR · REST", async ({
+      page,
+    }) => {
+      await loadConnectedFixture(page, "connected-pane-grid");
+      const head = await page.locator(".connected-grid-head").evaluate((el) => {
+        const cs = getComputedStyle(el);
+        return {
+          borderBottom: cs.borderBottomWidth,
+          borderColor: cs.borderBottomColor,
+        };
+      });
+      expect(head.borderBottom).toBe("2px");
+      expect(head.borderColor).toBe(INK_RGB);
+
+      const cells = await page
+        .locator(".connected-grid-head > span")
+        .evaluateAll((els) =>
+          els.map((el) => {
+            const cs = getComputedStyle(el);
+            return {
+              text: el.textContent,
+              fontSize: cs.fontSize,
+              letterSpacing: parseFloat(cs.letterSpacing),
+              color: cs.color,
+            };
+          }),
+        );
+      expect(cells.map((c) => c.text)).toStrictEqual([
+        "#",
+        "TIME",
+        "METERS",
+        "/500M",
+        "SPM",
+        "HR",
+        "REST",
+      ]);
+      for (const cell of cells) {
+        expect([cell.text, cell.fontSize]).toStrictEqual([cell.text, "12px"]);
+        expect([cell.text, cell.color]).toStrictEqual([cell.text, INK_3_RGB]);
+        expect(cell.letterSpacing).toBeCloseTo(12 * 0.12, 1);
+      }
+
+      const numWidth = await page
+        .locator(".connected-grid-head .connected-grid-num")
+        .evaluate((el) => el.getBoundingClientRect().width);
+      expect(numWidth).toBeCloseTo(30, 0);
+    });
+
+    test("rows: 32px, mono 19 -0.01em; completed ink+rule-2 bottom; active surface-fill + ink rules + marker bar + weight600 + marker countdown + judged split/rate; upcoming ink-3 dashed rule-3, — for unknowables", async ({
+      page,
+    }) => {
+      await loadConnectedFixture(page, "connected-pane-grid");
+
+      const rowHeights = await page
+        .locator(".connected-grid-row")
+        .evaluateAll((els) =>
+          els.map((el) => el.getBoundingClientRect().height),
+        );
+      for (const h of rowHeights) expect(h).toBeCloseTo(32, 0);
+
+      const valueStyle = await page
+        .locator(".connected-grid-row .connected-grid-pace")
+        .first()
+        .evaluate((el) => {
+          const cs = getComputedStyle(el);
+          return {
+            fontSize: cs.fontSize,
+            letterSpacing: parseFloat(cs.letterSpacing),
+          };
+        });
+      expect(valueStyle.fontSize).toBe("19px");
+      expect(valueStyle.letterSpacing).toBeCloseTo(19 * -0.01, 1);
+
+      // Completed: the WU row (`ordinal === null` → "WU"), ink values, a
+      // solid `--rule-2` bottom border.
+      const completed = page.locator(".connected-grid-completed");
+      await expect(completed).toHaveCount(1);
+      await expect(completed.locator(".connected-grid-num")).toHaveText("WU");
+      const completedStyle = await completed.evaluate((el) => {
+        const cs = getComputedStyle(el);
+        return {
+          borderBottomStyle: cs.borderBottomStyle,
+          borderBottomColor: cs.borderBottomColor,
+        };
+      });
+      expect(completedStyle.borderBottomStyle).toBe("solid");
+      expect(completedStyle.borderBottomColor).toBe(RULE_2_RGB);
+
+      // Active: surface fill, ink rules top+bottom, 4px marker bar, weight
+      // 600 number, marker-gold countdown cell, judged split/rate.
+      const active = page.locator(".connected-grid-active");
+      await expect(active).toHaveCount(1);
+      const activeStyle = await active.evaluate((el) => {
+        const cs = getComputedStyle(el);
+        return {
+          background: cs.backgroundColor,
+          borderTopStyle: cs.borderTopStyle,
+          borderTopColor: cs.borderTopColor,
+          borderBottomStyle: cs.borderBottomStyle,
+          borderBottomColor: cs.borderBottomColor,
+        };
+      });
+      expect(activeStyle.background).toBe(SURFACE_RGB);
+      expect(activeStyle.borderTopStyle).toBe("solid");
+      expect(activeStyle.borderTopColor).toBe(INK_RGB);
+      expect(activeStyle.borderBottomStyle).toBe("solid");
+      expect(activeStyle.borderBottomColor).toBe(INK_RGB);
+      const numWeight = await active
+        .locator(".connected-grid-num")
+        .evaluate((el) => getComputedStyle(el).fontWeight);
+      expect(numWeight).toBe("600");
+      await expect(active.locator(".connected-grid-marker")).toHaveCount(1);
+      const marker = await active
+        .locator(".connected-grid-marker")
+        .evaluate((el) => {
+          const cs = getComputedStyle(el);
+          return { width: cs.width, height: cs.height, bg: cs.backgroundColor };
+        });
+      expect(marker.width).toBe("4px");
+      expect(marker.height).toBe("20px");
+      expect(marker.bg).toBe(INK_RGB);
+      const countdown = await active
+        .locator(".connected-grid-countdown")
+        .evaluate((el) => ({
+          color: getComputedStyle(el).color,
+          text: el.textContent,
+        }));
+      expect(countdown.color).toBe(MARKER_RGB);
+      expect(countdown.text).toBe("1200");
+      const pace = await judgedColor(
+        page,
+        ".connected-grid-active .connected-grid-pace",
+      );
+      expect(pace.color).toBe(expectedJudgedRgb(pace.judgement));
+      const spm = await judgedColor(
+        page,
+        ".connected-grid-active .connected-grid-spm",
+      );
+      expect(spm.color).toBe(expectedJudgedRgb(spm.judgement));
+
+      // Upcoming: ink-3 values, programmed targets, 1px dashed rule-3
+      // bottom, `—` for the unknowable cells (HR, TIME on a distance row).
+      const upcomingAll = page.locator(".connected-grid-upcoming");
+      await expect(upcomingAll).toHaveCount(3);
+      const upcoming = upcomingAll.first();
+      const upcomingStyle = await upcoming.evaluate((el) => {
+        const cs = getComputedStyle(el);
+        return {
+          color: cs.color,
+          borderBottomStyle: cs.borderBottomStyle,
+          borderBottomColor: cs.borderBottomColor,
+        };
+      });
+      expect(upcomingStyle.color).toBe(INK_3_RGB);
+      expect(upcomingStyle.borderBottomStyle).toBe("dashed");
+      expect(upcomingStyle.borderBottomColor).toBe(RULE_3_RGB);
+      await expect(upcoming.locator(".connected-grid-time")).toHaveText("—");
+      await expect(upcoming.locator(".connected-grid-hr")).toHaveText("—");
+    });
+
+    test("footer caption: mono 12 ink-3, merges distance-caption content", async ({
+      page,
+    }) => {
+      await loadConnectedFixture(page, "connected-pane-grid");
+      const caption = await page
+        .locator(".connected-grid-caption")
+        .evaluate((el) => {
+          const cs = getComputedStyle(el);
+          return {
+            fontSize: cs.fontSize,
+            color: cs.color,
+            text: el.textContent,
+          };
+        });
+      expect(caption.fontSize).toBe("12px");
+      expect(caption.color).toBe(INK_3_RGB);
+      expect(caption.text).toBe(
+        "3 MORE BELOW · ROWS 1, 2, 3, 4 ARE 2000 M PIECES · METERS COUNT DOWN",
+      );
+    });
+
+    test("scroll/focus: row list is the only scrolling region, keyboard-focusable, named", async ({
+      page,
+    }) => {
+      await loadConnectedFixture(page, "connected-pane-grid-long");
+      const rows = page.locator(".connected-grid-rows");
+      await expect(rows).toHaveAttribute("tabindex", "0");
+      await expect(rows).toHaveAttribute("role", "group");
+      await expect(rows).toHaveAccessibleName("Interval grid");
+      const overflow = await rows.evaluate(
+        (el) => getComputedStyle(el).overflowY,
+      );
+      expect(overflow).toBe("auto");
+    });
+
+    // Auto-scroll on mount is a REACT EFFECT (`PaneGrid.tsx`'s own
+    // `useEffect` calling `scrollIntoView`), not a CSS fact — a static
+    // fixture loaded by innerHTML injection (this describe's usual route)
+    // never mounts React, so it cannot exercise it. Driven live instead,
+    // through the real fake, the same way `PaneGrid.tsx`'s own comment
+    // says it is proven ("asserted by a spy in `PaneGrid.test.tsx`, and by
+    // the landscape screenshot") — this is the real-browser geometry half
+    // of that same claim, in a real Chromium scroller.
+    test("the active row scrolls into view on mount, in a real browser", async ({
+      page,
+    }) => {
+      // `LONG_PROGRAM` (18 intervals, past landscape's own 8-visible
+      // budget) with the active row jumped straight to index 10 — a
+      // SINGLE status frame, no boundary events needed: `activeIndex`
+      // reads off the latest frame's own `programIntervalIndex` directly
+      // (the same single-jump shape `ROWING_STORY`'s own one status frame
+      // already relies on), and this test only needs the row to be
+      // genuinely off-screen without the scroll effect, not a "completed"
+      // trail of actuals behind it.
+      const title = "Design Connected Grid Autoscroll Workout";
+      await page.setViewportSize({ width: 844, height: 390 });
+      await injectConnectedFake(
+        page,
+        [
+          {
+            atMs: CONNECTED_STORY_START_MS,
+            kind: "status" as const,
+            workoutState: WORKOUTSTATE_ROWING,
+            elapsedSeconds: 10,
+            distanceMeters: 70,
+            spm: 24,
+            currentSplit: 108,
+            heartRateBpm: 142,
+            programIntervalIndex: 10,
+          },
+        ],
+        CONNECTED_DELAY_WRITES_MS,
+        LONG_PROGRAM,
+      );
+      await openConnected(
+        page,
+        title,
+        "design-connected-grid-autoscroll@e2e.test",
+        LONG_BULK_TEXT(title),
+      );
+      await walkToSurface(page);
+      await pumpUntilText(page, "11 OF 18");
+      await page.getByRole("button", { name: "Grid pane" }).click();
+      await expect(page.locator(".connected-grid-active")).toHaveCount(1);
+
+      const inView = await page.evaluate(() => {
+        const scroller = document.querySelector(".connected-grid-rows")!;
+        const active = document.querySelector(".connected-grid-active")!;
+        const box = scroller.getBoundingClientRect();
+        const r = active.getBoundingClientRect();
+        return r.top >= box.top - 0.5 && r.bottom <= box.bottom + 0.5;
+      });
+      expect(inView).toBe(true);
+
+      await cleanupAllConnected(page, title);
+    });
+
+    test("interval countdown's home: only in the grid's active-row cell, never in the header composition twice", async ({
+      page,
+    }) => {
+      await loadConnectedFixture(page, "connected-pane-grid");
+      // One countdown cell inside the active row (§2B), and the header's
+      // OWN countdown span (`.connected-header-countdown`) is a SEPARATE
+      // element carrying `totalLeftDisplay`, not a second copy of the same
+      // per-interval clock — the grid headline that used to duplicate it
+      // is gone outright (§2B composition note).
+      await expect(page.locator(".connected-grid-countdown")).toHaveCount(1);
+      await expect(page.locator(".connected-grid-headline")).toHaveCount(0);
+    });
+  });
+
+  test.describe('2B — GRID, portrait (design spec §2B, "today\'s geometry, new skin")', () => {
+    test.use({ viewport: { width: 390, height: 844 } });
+
+    test("40px rows, current scroller, restyled with the new tokens", async ({
+      page,
+    }) => {
+      await loadConnectedFixture(page, "connected-pane-grid-long");
+      const rowHeights = await page
+        .locator(".connected-grid-row")
+        .evaluateAll((els) =>
+          els.map((el) => el.getBoundingClientRect().height),
+        );
+      for (const h of rowHeights) expect(h).toBeCloseTo(40, 0);
+
+      // REST hidden in portrait (§2B: "portrait drops it").
+      await expect(page.locator(".connected-grid-rest").first()).toBeHidden();
+
+      const numWidth = await page
+        .locator(".connected-grid-head .connected-grid-num")
+        .evaluate((el) => el.getBoundingClientRect().width);
+      expect(numWidth).toBeCloseTo(22, 0);
+
+      const head = await page
+        .locator(".connected-grid-head > span")
+        .first()
+        .evaluate((el) => getComputedStyle(el).fontSize);
+      expect(head).toBe("12px");
+
+      const caption = await page
+        .locator(".connected-grid-caption")
+        .evaluate((el) => getComputedStyle(el).fontSize);
+      expect(caption).toBe("12px");
+    });
+
+    test("the 54px bottom bar stands in for the rail", async ({ page }) => {
+      await loadConnectedFixture(page, "connected-pane-grid");
+      const controlBox = await page.locator(".connected-control").boundingBox();
+      expect(controlBox).not.toBeNull();
+      expect(controlBox!.height).toBeCloseTo(54, 0);
+    });
+  });
+
+  test.describe("2C — LIVE, portrait (design spec §2C)", () => {
+    test.use({ viewport: { width: 390, height: 844 } });
+
+    test("layout: header PM5 id + END (44px, no segmented control), status mono 21, same 6px progress bar", async ({
+      page,
+    }) => {
+      await loadConnectedFixture(page, "connected-pane-live");
+      const [header, control] = await Promise.all([
+        page.locator(".connected-header").boundingBox(),
+        page.locator(".connected-control").boundingBox(),
+      ]);
+      expect(header).not.toBeNull();
+      expect(header!.height).toBeCloseTo(48, 1);
+      // No segmented control up top: it sits at the BOTTOM of the frame in
+      // portrait (§3: "into the last row as the 54px bottom bar"), well
+      // below the header's own bottom edge — not merely absent from the
+      // header's DOM subtree, which is true in every orientation.
+      expect(control).not.toBeNull();
+      expect(control!.y).toBeGreaterThan(header!.y + header!.height);
+
+      const status = await page
+        .locator(".connected-line-trailing")
+        .evaluate((el) => getComputedStyle(el).fontSize);
+      expect(status).toBe("21px");
+
+      const track = await page
+        .locator(".connected-progress-track")
+        .evaluate((el) => getComputedStyle(el).height);
+      expect(track).toBe("6px");
+    });
+
+    test("heroes stacked: split 100 (tenths 52) over target 36 + tag 14; rate 84 over target 36 + SPM 18; rule weights + 16px padding-top", async ({
+      page,
+    }) => {
+      await loadConnectedFixture(page, "connected-pane-live");
+      const split = await page
+        .locator(".connected-hero-split .connected-hero-value")
+        .evaluate((el) => getComputedStyle(el).fontSize);
+      expect(split).toBe("100px");
+      const tenths = await page
+        .locator(".connected-hero-split .connected-hero-tenths")
+        .evaluate((el) => getComputedStyle(el).fontSize);
+      expect(tenths).toBe("52px");
+      const splitTarget = await page
+        .locator(".connected-hero-split .connected-hero-target-value")
+        .evaluate((el) => getComputedStyle(el).fontSize);
+      expect(splitTarget).toBe("36px");
+      const tag = await page
+        .locator(".connected-hero-split .connected-hero-target-ref")
+        .evaluate((el) => getComputedStyle(el).fontSize);
+      expect(tag).toBe("14px");
+
+      const rate = await page
+        .locator(".connected-hero-rate .connected-hero-value")
+        .evaluate((el) => getComputedStyle(el).fontSize);
+      expect(rate).toBe("84px");
+      const rateTarget = await page
+        .locator(".connected-hero-rate .connected-hero-target-value")
+        .evaluate((el) => getComputedStyle(el).fontSize);
+      expect(rateTarget).toBe("36px");
+      const unit = await page
+        .locator(".connected-hero-rate-unit")
+        .evaluate((el) => getComputedStyle(el).fontSize);
+      expect(unit).toBe("18px");
+
+      const split2px = await page
+        .locator(".connected-hero-split")
+        .evaluate((el) => {
+          const cs = getComputedStyle(el);
+          return {
+            width: cs.borderTopWidth,
+            color: cs.borderTopColor,
+            padTop: cs.paddingTop,
+          };
+        });
+      expect(split2px.width).toBe("2px");
+      expect(split2px.color).toBe(INK_RGB);
+      expect(split2px.padTop).toBe("16px");
+
+      const rate1px = await page
+        .locator(".connected-hero-rate")
+        .evaluate((el) => {
+          const cs = getComputedStyle(el);
+          return { width: cs.borderTopWidth, padTop: cs.paddingTop };
+        });
+      expect(rate1px.width).toBe("1px");
+      expect(rate1px.padTop).toBe("16px");
+    });
+
+    test("up-next: UP NEXT label mono 14 ink-3 over value mono 23 nowrap, then-less form, never wraps or overflows", async ({
+      page,
+    }) => {
+      await loadConnectedFixture(page, "connected-pane-live-warmup");
+      const label = await page
+        .locator(".connected-band-upnext-label")
+        .evaluate((el) => {
+          const cs = getComputedStyle(el);
+          return {
+            fontSize: cs.fontSize,
+            color: cs.color,
+            text: el.textContent,
+          };
+        });
+      expect(label.fontSize).toBe("14px");
+      expect(label.color).toBe(INK_3_RGB);
+      expect(label.text).toBe("UP NEXT");
+
+      const value = page.locator(".connected-band-upnext-value");
+      const fontSize = await value.evaluate(
+        (el) => getComputedStyle(el).fontSize,
+      );
+      expect(fontSize).toBe("23px");
+      const text = await value.innerText();
+      expect(text.replace(/\s+/g, " ").trim()).toBe("WORK 2:06.0 · REST 3:00");
+      await expect(page.locator(".connected-band-upnext-then")).toBeHidden();
+
+      const overflow = await value.evaluate((el) => ({
+        scrollWidth: el.scrollWidth,
+        clientWidth: el.clientWidth,
+      }));
+      expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth);
+    });
+
+    test("TOTAL LEFT: label + value mono 28 on a rule, above the bottom bar", async ({
+      page,
+    }) => {
+      await loadConnectedFixture(page, "connected-pane-live");
+      const cell = await page.locator(".connected-band-cell").evaluate((el) => {
+        const cs = getComputedStyle(el);
+        return { borderTop: cs.borderTopWidth, color: cs.borderTopColor };
+      });
+      expect(cell.borderTop).toBe("1px");
+      expect(cell.color).toBe(INK_RGB);
+      const value = await page
+        .locator(".connected-band-cell-value")
+        .evaluate((el) => ({
+          fontSize: getComputedStyle(el).fontSize,
+          text: el.textContent,
+        }));
+      expect(value.fontSize).toBe("28px");
+      expect(value.text).toBe("39:48");
+    });
+
+    test("bottom bar: 54px full-width segmented bar, two equal halves, active fill ink/surface text mono 13 600, above home indicator", async ({
+      page,
+    }) => {
+      const title = "Design Connected Portrait Tab Bar Workout";
+      await injectConnectedFake(page, ROWING_STORY);
+      await openConnected(
+        page,
+        title,
+        "design-connected-portrait-tabbar@e2e.test",
+      );
+      await walkToSurface(page);
+      await pumpUntilText(page, "2 OF 5");
+
+      const controlBox = await page.locator(".connected-control").boundingBox();
+      expect(controlBox).not.toBeNull();
+      expect(controlBox!.height).toBeCloseTo(54, 0);
+      expect(controlBox!.width).toBeCloseTo(390, 0);
+      expect(
+        await page
+          .getByRole("navigation", { name: "Connected panes" })
+          .locator("button")
+          .count(),
+      ).toBe(2);
+
+      const active = page.locator(".connected-control-half-active");
+      const activeStyle = await active.evaluate((el) => {
+        const cs = getComputedStyle(el);
+        return {
+          background: cs.backgroundColor,
+          color: cs.color,
+          fontSize: cs.fontSize,
+          fontWeight: cs.fontWeight,
+        };
+      });
+      expect(activeStyle.background).toBe(INK_RGB);
+      expect(activeStyle.color).toBe(SURFACE_RGB);
+      expect(activeStyle.fontSize).toBe("13px");
+      expect(activeStyle.fontWeight).toBe("600");
+
+      await cleanupAllConnected(page, title);
+    });
+  });
+
+  test.describe("2D — First frame (armed), landscape (design spec §2D)", () => {
+    test.use({ viewport: { width: 844, height: 390 } });
+
+    test("status: 1 OF 4 · READY (portrait status likewise)", async ({
+      page,
+    }) => {
+      await loadConnectedFixture(page, "connected-armed");
+      const status = await page
+        .locator(".connected-line-trailing")
+        .textContent();
+      expect(status).toBe("1 OF 4 · READY");
+    });
+
+    test("status reads READY in portrait too (390x844)", async ({ page }) => {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await loadConnectedFixture(page, "connected-armed");
+      const status = await page
+        .locator(".connected-line-trailing")
+        .textContent();
+      expect(status).toBe("1 OF 4 · READY");
+    });
+
+    test("mirror: split ghost ink-4 (never ink-5), rate 0 plain ink, nothing judged, no dash-bars", async ({
+      page,
+    }) => {
+      await loadConnectedFixture(page, "connected-armed");
+      const split = await judgedColor(
+        page,
+        ".connected-hero-split .connected-hero-value",
+      );
+      // Forced "within" by the model (armedMirror), so ink-4 must come
+      // from the `.connected-hero-ghost` class layered on top, not from a
+      // real judgement colour.
+      expect(split.judgement).toBe("within");
+      const ghostColor = await page
+        .locator(".connected-hero-split .connected-hero-value")
+        .evaluate((el) => getComputedStyle(el).color);
+      expect(ghostColor).toBe(INK_4_RGB);
+      const splitText = await page
+        .locator(".connected-hero-split .connected-hero-value")
+        .evaluate((el) => (el as HTMLElement).innerText);
+      expect(splitText.replace(/\s+/g, "")).toBe("2:06.0");
+
+      const rate = await judgedColor(
+        page,
+        ".connected-hero-rate .connected-hero-value",
+      );
+      expect(rate.judgement).toBe("within");
+      expect(rate.color).toBe(INK_RGB);
+      await expect(
+        page.locator(".connected-hero-rate .connected-hero-value"),
+      ).toHaveText("0");
+      // No ghost class on the rate hero (§2D: "the rate hero does NOT
+      // ghost").
+      const rateGhost = await page
+        .locator(".connected-hero-rate .connected-hero-value")
+        .evaluate((el) => el.classList.contains("connected-hero-ghost"));
+      expect(rateGhost).toBe(false);
+
+      // No dash-bars: neither hero shows the "no target" dash treatment —
+      // armed always substitutes a real preview value.
+      expect(await page.locator(".connected-value-absent").count()).toBe(0);
+    });
+
+    test("up-next (armed branch): reads the FIRST interval forward, TOTAL LEFT full session", async ({
+      page,
+    }) => {
+      await loadConnectedFixture(page, "connected-armed");
+      const value = await page
+        .locator(".connected-band-upnext-value")
+        .innerText();
+      expect(value.replace(/\s+/g, " ").trim()).toBe(
+        "WORK 2:06.0 · then REST 3:00",
+      );
+      const total = await page
+        .locator(".connected-band-cell-value")
+        .textContent();
+      expect(total).toBe("45:36");
+    });
+  });
+
+  test.describe("Stale — link lost, values held (design spec Stale table)", () => {
+    test.use({ viewport: { width: 844, height: 390 } });
+
+    test("values: heroes grey (stale), LAST caption above each hero — the only post-redesign hero label", async ({
+      page,
+    }) => {
+      await loadConnectedFixture(page, "connected-disconnected");
+      const labels = await page
+        .locator(".connected-hero-label")
+        .evaluateAll((els) =>
+          els.map((el) => ({
+            text: el.textContent,
+            fontSize: getComputedStyle(el).fontSize,
+            letterSpacing: parseFloat(getComputedStyle(el).letterSpacing),
+            color: getComputedStyle(el).color,
+          })),
+        );
+      expect(labels).toHaveLength(2);
+      for (const label of labels) {
+        expect(label.text).toBe("LAST");
+        expect(label.fontSize).toBe("15px");
+        expect(label.letterSpacing).toBeCloseTo(15 * 0.1, 1);
+        expect(label.color).toBe(INK_3_RGB);
+      }
+
+      const split = await judgedColor(
+        page,
+        ".connected-hero-split .connected-hero-value",
+      );
+      expect(split.judgement).toBe("stale");
+      expect(split.color).toBe(INK_3_RGB);
+      const rate = await judgedColor(
+        page,
+        ".connected-hero-rate .connected-hero-value",
+      );
+      expect(rate.judgement).toBe("stale");
+      expect(rate.color).toBe(INK_3_RGB);
+    });
+
+    test("banner: LostBanner (landscape one-line variant), device caption PM5…LOST, hollow mark", async ({
+      page,
+    }) => {
+      await loadConnectedFixture(page, "connected-disconnected");
+      const banner = page.locator(".connected-lost");
+      await expect(banner).toHaveAttribute("role", "status");
+      await expect(page.locator(".connected-lost-title")).toHaveText(
+        "LOST THE MONITOR",
+      );
+      await expect(page.locator(".connected-lost-body")).toHaveText(
+        "Row on. The erg is still counting and End keeps what we saw.",
+      );
+      const device = await page.locator(".connected-line-device").textContent();
+      expect(device).toBe("PM5 432331249 · LOST");
+      const hollow = await page
+        .locator(".connected-line-mark-hollow")
+        .evaluate((el) => {
+          const cs = getComputedStyle(el);
+          return {
+            bg: cs.backgroundColor,
+            borderStyle: cs.borderStyle,
+            borderColor: cs.borderColor,
+          };
+        });
+      expect(hollow.bg).toBe("rgba(0, 0, 0, 0)");
+      expect(hollow.borderStyle).toBe("solid");
+      expect(hollow.borderColor).toBe(INK_RGB);
+    });
+
+    test("layout: survives the banner's height without overflow, both orientations", async ({
+      page,
+    }) => {
+      for (const viewport of [
+        { width: 844, height: 390, label: "landscape" },
+        { width: 390, height: 844, label: "portrait" },
+      ] as const) {
+        await page.setViewportSize(viewport);
+        await loadConnectedFixture(page, "connected-disconnected");
+        const overflow = await page.evaluate(() => ({
+          scrollHeight: document.documentElement.scrollHeight,
+          clientHeight: document.documentElement.clientHeight,
+        }));
+        expect([
+          viewport.label,
+          overflow.scrollHeight <= overflow.clientHeight,
+        ]).toStrictEqual([viewport.label, true]);
+        // The band's TOTAL LEFT stays fully inside the pane even with the
+        // banner's own height taken out of the track.
+        const paneBox = await page
+          .locator(".connected-pane-live")
+          .boundingBox();
+        const bandBox = await page
+          .locator(".connected-band-cell")
+          .boundingBox();
+        expect(bandBox!.y + bandBox!.height).toBeLessThanOrEqual(
+          paneBox!.y + paneBox!.height + 0.5,
+        );
+      }
+    });
+  });
+
+  test.describe("Disconnected step-down (design spec Disconnected table)", () => {
+    test("heroes step down 112→86 / 92→70 landscape, tenths 58→44", async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 844, height: 390 });
+      await loadConnectedFixture(page, "connected-disconnected");
+      const split = await page
+        .locator(".connected-hero-split .connected-hero-value")
+        .evaluate((el) => getComputedStyle(el).fontSize);
+      expect(split).toBe("86px");
+      const rate = await page
+        .locator(".connected-hero-rate .connected-hero-value")
+        .evaluate((el) => getComputedStyle(el).fontSize);
+      expect(rate).toBe("70px");
+      const tenths = await page
+        .locator(".connected-hero-split .connected-hero-tenths")
+        .evaluate((el) => getComputedStyle(el).fontSize);
+      expect(tenths).toBe("44px");
+    });
+
+    test("heroes step down 100→76 / 84→64 portrait, tenths 52→40", async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await loadConnectedFixture(page, "connected-disconnected");
+      const split = await page
+        .locator(".connected-hero-split .connected-hero-value")
+        .evaluate((el) => getComputedStyle(el).fontSize);
+      expect(split).toBe("76px");
+      const rate = await page
+        .locator(".connected-hero-rate .connected-hero-value")
+        .evaluate((el) => getComputedStyle(el).fontSize);
+      expect(rate).toBe("64px");
+      const tenths = await page
+        .locator(".connected-hero-split .connected-hero-tenths")
+        .evaluate((el) => getComputedStyle(el).fontSize);
+      expect(tenths).toBe("40px");
+    });
+
+    // "Today's step-down is ONE shared rule for both heroes … it splits
+    // into two" (§1 deviation table's own words) — the two heroes no
+    // longer share a base size, so this proves the split is REAL, not a
+    // coincidence of both landing on the same number.
+    test("the split and rate step-downs are genuinely two rules, not one shared value", async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 844, height: 390 });
+      await loadConnectedFixture(page, "connected-disconnected");
+      const [split, rate] = await Promise.all([
+        page
+          .locator(".connected-hero-split .connected-hero-value")
+          .evaluate((el) => getComputedStyle(el).fontSize),
+        page
+          .locator(".connected-hero-rate .connected-hero-value")
+          .evaluate((el) => getComputedStyle(el).fontSize),
+      ]);
+      expect(split).not.toBe(rate);
+    });
+  });
+
+  // --progress-active is decoration-only (tokens.css's own comment,
+  // reproduced at its one consumer, `.connected-progress-seg-active`):
+  // never a TEXT colour, where its 2.61:1 residual would fail WCAG 1.4.3's
+  // 4.5:1 floor outright with no redundant carrier. Walked the same
+  // leaf-node way `assertNoFailingInk4Labels` walks the ink-4 ban, across
+  // every committed connected fixture, so a future consumer of the token
+  // on a text node fails here regardless of which fixture exercises it.
+  test("--progress-active is never used as a text colour, on any connected fixture", async ({
+    page,
+  }) => {
+    const PROGRESS_ACTIVE_RGB_LOCAL = "rgb(138, 132, 120)";
+    const fixtures = [
+      "connected-pane-live",
+      "connected-pane-live-warmup",
+      "connected-pane-grid",
+      "connected-pane-grid-long",
+      "connected-armed",
+      "connected-disconnected",
+      "connected-paused",
+    ];
+    for (const name of fixtures) {
+      await loadConnectedFixture(page, name);
+      const offenders = await page.evaluate((tint) => {
+        const bad: string[] = [];
+        document.querySelectorAll("body *").forEach((node) => {
+          const el = node as HTMLElement;
+          if (el.children.length > 0) return;
+          if ((el.textContent ?? "").trim() === "") return;
+          const style = getComputedStyle(el);
+          if (style.color === tint) {
+            bad.push(`${el.tagName}.${el.className || "(no class)"}`);
+          }
+        });
+        return bad;
+      }, PROGRESS_ACTIVE_RGB_LOCAL);
+      expect([name, offenders]).toStrictEqual([name, []]);
+    }
+  });
+
+  // The ink-4 ban, unchanged by this task's rewrite (design spec §1: "no
+  // ink-4 mono <=11px" — the house ban this file's own
+  // `assertNoFailingInk4Labels` sweep already enforces everywhere `sweep`
+  // runs). Kept as its own named assertion against the frame with the most
+  // ink-4 usage (the armed ghost) so the ban has a connected-scoped
+  // witness independent of the live-driven `sweep()` calls above.
+  test("the ink-4 ban holds on the armed frame's own ghost value", async ({
+    page,
+  }) => {
+    await loadConnectedFixture(page, "connected-armed");
+    await assertNoFailingInk4Labels(page);
+  });
 });
 
 // Phase 6I Task 8: the three new/changed screens the onboarding phase adds —

@@ -17,6 +17,15 @@ CSAFE writes/acks, 0x0039 IF it beats teardown) versus the SCREENS
 totals no longer depend on the screen — TWD is in every tick. Photographs
 cover only what the wire cannot.
 
+**HISTORICAL NOTE (CR2 spec 3 Task 6, 2026-08-16):** this runsheet's own
+`TOTAL M` rows (session 2 item 3, "photograph it beside the phone's
+TOTAL M") describe the PRE-REDESIGN surface. `TOTAL M` no longer exists on
+the live connected pane — the connected redesign cut it outright, and the
+session-meters comparison moved to the log sheet's `SESSION` line
+(`docs/monitor/sessions/walk-phase-cr2-exit/RUNSHEET.md`). This note is the
+only edit this task makes to this file; everything below is the unedited
+record of the walk that actually happened.
+
 ---
 
 ## Session 0 — the download dry run (Chrome only, NO erg, ~2 min)

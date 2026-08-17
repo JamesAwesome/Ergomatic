@@ -1448,7 +1448,7 @@ describe("row height and column weights, both orientations (revision §4)", () =
     }
   });
 
-  it("widens `#` to 26px in landscape, 22px in portrait", () => {
+  it("widens `#` to 30px in landscape (design spec §2B's literal figure), 22px in portrait (today's geometry, unchanged)", () => {
     expect(
       declaredValuesOf([baseRule(".connected-grid-num")], "width"),
     ).toStrictEqual(["22px"]);
@@ -1457,7 +1457,7 @@ describe("row height and column weights, both orientations (revision §4)", () =
         [landscapeRule(".connected-pane-grid .connected-grid-num")],
         "width",
       ),
-    ).toStrictEqual(["26px"]);
+    ).toStrictEqual(["30px"]);
   });
 
   it("drops REST in portrait and brings it back at 0.8 in landscape", () => {
