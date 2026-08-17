@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import { fmtDuration } from "../../domain/duration.js";
 import { fmtSplit } from "../../domain/format.js";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
@@ -20,6 +21,7 @@ import {
   buildLogSteps,
   buildManualLogSteps,
   formatLogDate,
+  MonitorLogSeedError,
   type LogStep,
 } from "./logDraft";
 import type { SessionRun } from "./run";
@@ -132,6 +134,99 @@ function interval(
     ...over,
   };
 }
+
+/** Repo-level captures, resolved relative to THIS file so the test works
+ *  regardless of the process's cwd — the SAME technique
+ *  `captureReplay.test.ts` already established (`monitor/
+ *  captureReplay.test.ts`'s own `SESSIONS_DIR` comment: plain string
+ *  surgery on `import.meta.url`, not the global `URL` constructor, since
+ *  this project's jsdom environment resolves `new URL(...)` against
+ *  `http://localhost:3000/` instead of the given `file://` base).
+ *  `src/session/` sits at the same depth under `app/` as `src/monitor/`,
+ *  so the identical `../docs/monitor/sessions/` climb applies. */
+const SESSIONS_DIR = import.meta.url
+  .replace(/^file:\/\//, "")
+  .replace(
+    /src\/session\/summaryModel\.test\.ts$/,
+    "../docs/monitor/sessions/",
+  );
+
+function readSessionFile(relativePath: string): string {
+  return readFileSync(`${SESSIONS_DIR}${relativePath}`, "utf-8");
+}
+
+// ---------------------------------------------------------------------
+// Review finding 6: the oracle bytes above/below are hand-transcribed
+// literals. This ties them to the committed recordings they claim to be
+// — reading each file at test time and asserting the transcribed frame
+// appears in it verbatim — so a future transcription slip (or a
+// recording that gets re-captured under the same filename) fails loudly
+// here rather than silently validating against itself.
+// ---------------------------------------------------------------------
+describe("buildSummaryModel — oracle bytes are tied to the committed recordings, not hand-transcribed (review finding 6)", () => {
+  it("keystone (step-2): both boundary pairs appear verbatim in the committed .jsonl", () => {
+    const text = readSessionFile(
+      "walk-2026-08-17/step-2-pm5-recording-1786973078979.jsonl",
+    );
+    expect(text).toContain(
+      "00 00 00 00 00 00 83 02 00 fa 00 00 00 00 00 00 01 01",
+    );
+    expect(text).toContain(
+      "00 00 00 1a 59 00 06 05 0f 00 62 03 30 0f a5 00 67 01 00",
+    );
+    expect(text).toContain(
+      "2f 1d 00 c4 09 00 eb 02 00 fa 00 00 00 00 00 00 01 02",
+    );
+    expect(text).toContain(
+      "2f 1d 00 18 59 00 d6 05 0f 00 95 02 12 0d 69 00 67 02 00",
+    );
+  });
+
+  it("rest-bearing session (walk-2026-08-16/session-2): all 5 boundary pairs appear verbatim", () => {
+    const text = readSessionFile("walk-2026-08-16/session-2-wu-4unequal.jsonl");
+    for (const hex of [
+      "00 00 00 00 00 00 29 01 00 64 00 00 00 00 00 00 01 01",
+      "00 00 00 18 71 00 cd 05 05 00 9b 02 27 0d 6b 00 67 01 00",
+      "03 00 00 04 00 00 58 02 00 e5 00 00 1e 00 1e 00 00 02",
+      "03 00 00 1b 88 84 1e 05 0e 00 43 03 e8 0e 9c 00 68 02 00",
+      "00 00 00 09 00 00 b0 04 00 cd 01 00 1e 00 16 00 00 03",
+      "00 00 00 1a 95 91 15 05 1c 00 4e 03 01 0f 9f 00 67 03 00",
+      "0c 00 00 00 00 00 07 05 00 f4 01 00 1e 00 0c 00 01 04",
+      "0c 00 00 18 96 91 07 05 1f 00 61 03 2d 0f a4 00 68 04 00",
+      "70 17 00 94 09 00 58 02 00 f5 00 00 00 00 00 00 00 05",
+      "70 17 00 1d 98 00 c8 04 10 00 bc 03 f3 0f bf 00 68 05 00",
+    ]) {
+      expect(text).toContain(hex);
+    }
+  });
+
+  it("walk-3 (step-3): the 2 boundaries in the .jsonl, and the 3rd — byte-identical in the walk's own diagnostics ring, not re-derived — including the ring's own final-totals machineTotal line the free third oracle cites", () => {
+    const jsonl = readSessionFile(
+      "walk-2026-08-17/step-3-pm5-recording-second-rest-1786973713929.jsonl",
+    );
+    expect(jsonl).toContain(
+      "00 00 00 00 00 00 58 02 00 a0 00 00 00 00 00 00 00 01",
+    );
+    expect(jsonl).toContain(
+      "00 00 00 1a 6b 00 53 07 08 00 e2 01 6a 0a 35 00 63 01 00",
+    );
+    expect(jsonl).toContain(
+      "06 00 00 00 00 00 58 02 00 d6 00 00 1e 00 00 00 00 02",
+    );
+    expect(jsonl).toContain(
+      "06 00 00 17 86 6d 79 05 0d 00 e1 02 ee 0d 7f 00 65 02 00",
+    );
+
+    const ring = readSessionFile("walk-2026-08-17/step-3-ring.json");
+    expect(ring).toContain(
+      "06 00 00 00 00 00 b0 04 00 ad 01 00 1e 00 05 00 00 03",
+    );
+    expect(ring).toContain(
+      "06 00 00 1c 86 78 76 05 18 00 e4 02 f7 0d 80 00 65 03 00",
+    );
+    expect(ring).toContain("machineTotal=808m");
+  });
+});
 
 describe("buildSummaryModel — DISTANCE (R-B), the machine's own number, external oracles", () => {
   // walk-2026-08-17/step-2-pm5-recording-1786973078979.jsonl, seq 736/737
@@ -267,6 +362,89 @@ describe("buildSummaryModel — DISTANCE (R-B), the machine's own number, extern
     const model = buildSummaryModel({ door: "monitor", run });
     expect(model.heroes.distanceMeters).toBe(250); // 250 + (undefined ?? 0)
     expect(Number.isNaN(model.heroes.distanceMeters)).toBe(false);
+  });
+
+  it("review finding 2: a null-index actual (boundary-out-of-run/divergence — 'A CONSUMER MUST NOT TREAT null AS INTERVAL 0') is EXCLUDED from AVG SPLIT (no program identity to judge against) but INCLUDED in DISTANCE/TIME (machine semantics — the meters/seconds genuinely happened)", () => {
+    // work2 arrives with no program identity (a divergent/out-of-run
+    // boundary) — its own real distance/time still count toward the
+    // machine totals, but it has nothing to be numbered or judged as.
+    const nullIndexed: IntervalActual = { ...work2, index: null };
+    const run = monitorRun({
+      program: {
+        intervals: [
+          interval({ kind: "distance", value: 250 }),
+          interval({ kind: "distance", value: 250 }),
+        ],
+      },
+      actuals: [work1, nullIndexed],
+    });
+    const model = buildSummaryModel({ door: "monitor", run });
+
+    // DISTANCE/TIME: both actuals counted (the OLD bug's mirror image
+    // would have been dropping this leg — it never was, but the review
+    // asked for the leg to be tested explicitly, not just AVG SPLIT's).
+    expect(model.heroes.distanceMeters).toBe(500); // 250 + 250, same as the keystone
+    expect(model.heroes.time).toBe(
+      fmtDuration((work1.elapsedSeconds + work2.elapsedSeconds) / 60),
+    );
+
+    // AVG SPLIT: work1 ALONE — 500×64.3/250 = 128.6s = "2:08.6", not the
+    // two-row 139.0s = "2:19.0" the old (buggy) condition would have
+    // produced by letting a null-index actual fall through.
+    expect(model.heroes.avgSplit).toBe("2:08.6");
+    expect(model.heroes.avgSplit).not.toBe("2:19.0");
+
+    // The row list: `buildMonitorLogSteps` (`logDraft.ts`) already filters
+    // null-index actuals out of its own matching map (pre-existing, not
+    // this task's code), so the second program interval renders as an
+    // ordinary unmatched/prescribed row — pinning that the row list and
+    // the hero AGREE on which readings count, not just that each is
+    // separately "correct".
+    expect(model.rows).toHaveLength(2);
+    expect(model.rows[0]!.measured).toBe(true);
+    expect(model.rows[1]!.measured).toBe(false);
+  });
+
+  it("the free third oracle (review finding 6): step-3's own 3 completed boundaries sum to 808m, matching the machine's OWN TWD reading captured at teardown (step-3-ring.json's final-totals line: 'machineTotal=808m')", () => {
+    // work 160+214+429 (warmup + work1 + work2's own splitIntervalDistanceMeters)
+    // + rest 0+0+5 (their own intervalRestDistanceMeters) = 808. Reuses the
+    // exact decoded boundaries from the TIME/AVG SPLIT describe block below
+    // (re-decoded here rather than imported across describe blocks, same
+    // real hex, cited identically).
+    const wu = decodeActual(
+      "00 00 00 00 00 00 58 02 00 a0 00 00 00 00 00 00 00 01",
+      "00 00 00 1a 6b 00 53 07 08 00 e2 01 6a 0a 35 00 63 01 00",
+      0,
+    );
+    const w1 = decodeActual(
+      "06 00 00 00 00 00 58 02 00 d6 00 00 1e 00 00 00 00 02",
+      "06 00 00 17 86 6d 79 05 0d 00 e1 02 ee 0d 7f 00 65 02 00",
+      1,
+    );
+    const w2 = decodeActual(
+      "06 00 00 00 00 00 b0 04 00 ad 01 00 1e 00 05 00 00 03",
+      "06 00 00 1c 86 78 76 05 18 00 e4 02 f7 0d 80 00 65 03 00",
+      2,
+    );
+    expect(wu.distanceMeters + w1.distanceMeters + w2.distanceMeters).toBe(803);
+    expect(
+      (wu.restDistanceMeters ?? 0) +
+        (w1.restDistanceMeters ?? 0) +
+        (w2.restDistanceMeters ?? 0),
+    ).toBe(5);
+
+    const run = monitorRun({
+      program: {
+        intervals: [
+          interval({ type: "warmup", kind: "time", value: 60 }),
+          interval({ kind: "time", value: 60, restSeconds: 30 }),
+          interval({ kind: "time", value: 120, restSeconds: 30 }),
+        ],
+      },
+      actuals: [wu, w1, w2],
+    });
+    const model = buildSummaryModel({ door: "monitor", run });
+    expect(model.heroes.distanceMeters).toBe(808);
   });
 });
 
@@ -450,17 +628,18 @@ describe("buildSummaryModel — deviation signs and clamp, in a real monitor row
     expect(row2.judged?.barWidthPercent).toBe(50);
   });
 
-  it("a single measured work row ties its own average exactly (deviation 0) — reads as SLOWER (no third 'even' bucket) and floors the bar at 1.2%", () => {
+  it("a single measured work row is UNJUDGED (review finding 5, RULED: a row's deviation against its own lone average is always exactly zero — judging it would paint the commonest session shape, one measured interval, with an invented full-width red/blue bar for a comparison that was never really made against anything but itself)", () => {
     const run = monitorRun({
       program: { intervals: [interval({ kind: "distance", value: 250 })] },
       actuals: [work1],
     });
     const model = buildSummaryModel({ door: "monitor", run });
     const row = asMeasured(model.rows[0]);
-    expect(row.judged?.deviationSeconds).toBe(0);
-    expect(row.judged?.direction).toBe("slower");
-    expect(row.judged?.deviationLabel).toBe("+0.0");
-    expect(row.judged?.barWidthPercent).toBe(1.2);
+    // The hero itself still shows — R-C's formula is well-defined over a
+    // single row (it IS that row's own pace) — only per-row JUDGING is
+    // suppressed.
+    expect(model.heroes.avgSplit).toBe(row.paceLabel);
+    expect(row.judged).toBeUndefined();
   });
 });
 
@@ -561,6 +740,25 @@ describe("buildSummaryModel — edge cases: absence, per-cell rules, captions", 
     expect(model.meta.dateLabel).not.toBe("AUG 13");
   });
 
+  it("review finding 4: a legacy (v1, no logSeed) MonitorRun throws MonitorLogSeedError — the documented, uncaught contract stated on buildSummaryModel's own doc comment and this module's header", () => {
+    const legacy: MonitorRun = {
+      v: 1,
+      workoutId: null,
+      title: "Legacy run",
+      program: { intervals: [interval({ kind: "distance", value: 250 })] },
+      // No `logSeed` at all — exactly what a v1 record (predating the
+      // field) loads back as (`MonitorRun.logSeed`'s own doc comment).
+      actuals: [],
+      deviceName: "PM5 432331249",
+      startedAt: "2026-08-17T10:00:00.000Z",
+      completedAt: "2026-08-17T10:30:00.000Z",
+      terminated: false,
+    };
+    expect(() => buildSummaryModel({ door: "monitor", run: legacy })).toThrow(
+      MonitorLogSeedError,
+    );
+  });
+
   it("meta.sourceLabel per door: monitor carries the device name, timer is 'TIMER', manual is 'LOGGED BY HAND'", () => {
     const monitorModel = buildSummaryModel({
       door: "monitor",
@@ -582,6 +780,22 @@ describe("buildSummaryModel — edge cases: absence, per-cell rules, captions", 
     });
     expect(manualModel.meta.sourceLabel).toBe("LOGGED BY HAND");
     expect(manualModel.meta.timeLabel).toBeUndefined(); // date-only (§2B)
+  });
+
+  it("review: meta.timeLabel at local midnight reads '00:05', never '24:05' — hourCycle 'h23' pinned explicitly, not left to hour12: false's ICU ambiguity (h23 vs h24)", () => {
+    // Constructed in LOCAL time directly (not a fixed UTC ISO literal) so
+    // this passes under whatever timezone the test runner itself is in —
+    // `toLocaleTimeString` with no explicit timeZone override always
+    // renders in that same local zone, so round-tripping through it is
+    // safe regardless of which one that is.
+    const localMidnight = new Date(2026, 7, 17, 0, 5); // Aug 17 2026, 00:05 local
+    const run = monitorRun({
+      program: { intervals: [] },
+      completedAt: localMidnight.toISOString(),
+    });
+    const model = buildSummaryModel({ door: "monitor", run });
+    expect(model.meta.timeLabel).toBe("00:05");
+    expect(model.meta.timeLabel).not.toMatch(/^24/);
   });
 });
 
@@ -736,25 +950,55 @@ describe("buildSummaryModel — timer door, a real mixed measured/prescribed lis
     expect(row.durationLabel).toBe(fmtDuration(720 / 60));
   });
 
-  it("a measured row whose reconstructed elapsed time is exactly 0 (a degenerate stopwatch reading): timeLabel is absent, never '0:00'", () => {
+  it("review finding 1's own worked example: a mis-tapped 0.2s phase never renders '0:00'/'0:00.1', is excluded from the row's measured status, and does NOT drag AVG SPLIT from 2:00.0 toward 1:00.0", () => {
     const run: SessionRun = {
       ...sessionRunFixture("Filling Low"),
       completedAt: new Date(NOW.getTime() + 60_000).toISOString(),
     };
-    const steps: LogStep[] = [
-      {
-        label: "2000 m @ 6k +4",
-        actualSplit: 0,
-        actualSource: "stopwatch",
-        meters: 2000,
-      },
-    ];
+    // A genuine reading: 2000m at a 2:00.0/500m pace -> 480s elapsed.
+    const legitimate: LogStep = {
+      label: "2000 m @ 6k +4",
+      actualSplit: 120.0,
+      actualSource: "stopwatch",
+      meters: 2000,
+    };
+    // The mis-tap: "Next" pressed 0.2s after starting a real 2000m phase —
+    // `nextDistance`'s own formula (`splitSeconds = elapsed/meters*500`)
+    // produces an absurd near-zero pace from a real button-press artifact,
+    // not a discarded/absent reading. Included naively, this drags the
+    // two-row average from 2:00.0 to roughly 1:00.0 (the review's own
+    // figure) — 500*(480+0.2)/(2000+2000) = 60.025s ≈ "1:00.0".
+    const misTap: LogStep = {
+      label: "2000 m @ 6k +4",
+      actualSplit: (500 * 0.2) / 2000,
+      actualSource: "stopwatch",
+      meters: 2000,
+    };
+    const steps: LogStep[] = [legitimate, misTap];
     const model = buildSummaryModel({ door: "timer", run, steps });
-    const row = asMeasured(model.rows[0]);
-    expect(row.timeLabel).toBeUndefined();
+
+    // Excluded from AVG SPLIT entirely: the hero reads the LEGITIMATE
+    // row's own pace, not the naive two-row average.
+    expect(model.heroes.avgSplit).toBe("2:00.0");
+    expect(model.heroes.avgSplit).not.toBe("1:00.0");
+
+    const [row1, row2] = model.rows;
+    expect(row1!.measured).toBe(true);
+    expect(row2!.measured).toBe(false); // renders in its PRESCRIBED shape
+    if (row2!.measured) throw new Error("unreachable");
+    expect(row2!.durationLabel).toBe("2000 m");
+    expect(row2!.targetPaceLabel).toBeUndefined();
+    // No cell on the mis-tapped row ever reads "0:00" or "0:00.1" — it has
+    // no timeLabel/paceLabel fields at all (the PrescribedRow shape simply
+    // doesn't carry them).
+    expect(JSON.stringify(row2)).not.toMatch(/0:00/);
+
+    // With only one row surviving the floor, finding 5's ruling also
+    // applies: that lone row is unjudged.
+    expect(asMeasured(row1!).judged).toBeUndefined();
   });
 
-  it("a bare-label test-step row (IMP-1: no meters, no seconds) has no durationLabel; a Σd=0 measured row (degenerate) is unjudged because there is no working average at all", () => {
+  it("a bare-label test-step row (IMP-1: no meters, no seconds) has no durationLabel; a Σd=0 measured row (degenerate — 0 meters means 0 reconstructed elapsed seconds too, below the floor) renders prescribed rather than staying measured with nothing to judge against", () => {
     const run: SessionRun = {
       ...sessionRunFixture("Filling Low"),
       completedAt: new Date(NOW.getTime() + 60_000).toISOString(),
@@ -766,15 +1010,17 @@ describe("buildSummaryModel — timer door, a real mixed measured/prescribed lis
         actualSplit: 100,
         actualSource: "stopwatch",
         meters: 0,
-      }, // Σd=0 across every measured row
+      }, // Σd=0 -> reconstructed elapsed = 100*0/500 = 0s, below the floor
     ];
     const model = buildSummaryModel({ door: "timer", run, steps });
     const testRow = model.rows[0]!;
     if (testRow.measured) throw new Error("expected a prescribed row");
     expect(testRow.durationLabel).toBeUndefined();
 
-    const measuredRow = asMeasured(model.rows[1]);
-    expect(measuredRow.judged).toBeUndefined(); // no working average exists to compare against
+    // The Σd=0 row itself: excluded by the SAME floor as any other
+    // below-threshold reading, not a special case — renders prescribed.
+    expect(model.rows[1]!.measured).toBe(false);
+    expect(model.heroes.avgSplit).toBeUndefined(); // no row survived to average
   });
 
   it("a still-live run (completedAt null, defensive — shouldn't reach a finished summary): TIME is absent and meta falls back to startedAt", () => {

@@ -4,6 +4,18 @@
 // consumes `SummaryModel` to render the screen; nothing here touches the
 // DOM, a clock, or storage.
 //
+// CAN THROW (review finding 4, stated where a caller will actually see it —
+// also on `buildSummaryModel`'s own doc comment below): the monitor door
+// calls `buildMonitorLogSteps` (`logDraft.ts`) internally, which throws
+// `MonitorLogSeedError` for a legacy `MonitorRun` with no `logSeed` at all
+// (a v1 record, predating the field — `MonitorRun.logSeed`'s own doc
+// comment) or one whose `logSeed.steps.length` doesn't match
+// `program.intervals.length`. This module does not catch it — Task 5's
+// screen must, the same way `LogSession.tsx`'s own monitor-mode gate
+// already does (catches the error, falls through to the manual door
+// rather than crashing the Log screen on a record this shape was never
+// supposed to reach).
+//
 // INPUT SHAPE — why a discriminated union, not the task brief's suggested
 // `{ steps, run?, sessionRun?, workout? }` bag:
 //
@@ -85,7 +97,10 @@
 import { fmtDuration } from "../../domain/duration.js";
 import { fmtSplit } from "../../domain/format.js";
 import type { IntervalActual } from "../../domain/monitor/types.js";
-import type { MonitorRun } from "../monitor/monitorRun.js";
+import {
+  measuredSessionSeconds,
+  type MonitorRun,
+} from "../monitor/monitorRun.js";
 import {
   buildMonitorLogSteps,
   formatLogDate,
@@ -211,20 +226,71 @@ function judge(
   };
 }
 
+/** A working average plus how many rows built it — the `count` half exists
+ *  for review finding 5 (RULED, controller, flagged for James at PR): when
+ *  exactly ONE measured row fed the average, that row's own deviation
+ *  against it is always exactly zero (it IS the average) — judging it
+ *  anyway would paint the commonest session shape (one measured interval)
+ *  with an invented full-width bar and a color, for a "deviation" that was
+ *  never really measured against anything but itself. Callers gate
+ *  `judge()` on `count >= 2`, never on `seconds !== undefined` alone. */
+interface WorkingAverage {
+  seconds: number | undefined;
+  count: number;
+}
+
 /** `500 × Σt/Σd`, absent when `Σd` is not `> 0` (R-C's own formula; the
  *  "no `0:00`, no `0 m`" per-cell absence rule extended to a division that
- *  would otherwise produce `NaN`/`Infinity`). */
-function weightedAvgSplitSeconds(
+ *  would otherwise produce `NaN`/`Infinity`). `count` is `rows.length`
+ *  unconditionally — every row a caller pushes here already passed that
+ *  caller's own floor/exclusion checks (review findings 1/2), so array
+ *  length IS the count of genuinely judgeable readings. */
+function weightedAverage(
   rows: { seconds: number; meters: number }[],
-): number | undefined {
+): WorkingAverage {
   let t = 0;
   let d = 0;
   for (const r of rows) {
     t += r.seconds;
     d += r.meters;
   }
-  return d > 0 ? (500 * t) / d : undefined;
+  return { seconds: d > 0 ? (500 * t) / d : undefined, count: rows.length };
 }
+
+/**
+ * Review finding 1: a rowed interval takes real strokes — nobody covers
+ * meaningful ground in under a second. An elapsed-time reading below this
+ * floor (reported directly by the PM5 on the monitor door, or
+ * reconstructed from `actualSplit × meters ÷ 500` on the timer door — see
+ * `timerAvgSplitSeconds`'s own doc comment for why that reconstruction is
+ * exact) is measurement noise, not a real reading — a mis-tapped
+ * stopwatch button, a boundary read before the erg settled. Every site
+ * below treats a sub-floor reading as though NOTHING was measured at
+ * all: no time/pace string is ever rendered (never a fabricated
+ * `"0:00"`/`"0:00.1"` — the OLD `> 0` guard let a 0.2s reading straight
+ * through, since 0.2 rounds to "0:00" but is still `> 0`), and the row is
+ * excluded from whatever working average it would otherwise distort — a
+ * single 0.2s mis-tap can drag a multi-interval AVG SPLIT hero to roughly
+ * half its honest value (the review's own worked example: 2:00.0 →
+ * 1:00.0). A sub-floor row renders in its PRESCRIBED shape (§2E's
+ * unmeasured-row geometry), not a measured row with blank cells — "stay
+ * out of the average" and "render as unmeasured" are the same rule
+ * applied to the hero and to the row respectively.
+ *
+ * Picked, not derived: comfortably below the shortest interval this app
+ * lets anyone program at all (`compileProgram`'s own documented minimum —
+ * interface-notes.md §8 — 20s time / 100m distance) and comfortably above
+ * what a button-press artifact reads.
+ *
+ * Applied uniformly across BOTH doors' warm-up and work rows, and both
+ * AVG SPLIT computations — the review's own citation (`timerWarmupRow`/
+ * `timerWorkRows`) named only the timer door, where the defect was found,
+ * but the identical unguarded shape existed on the monitor door's own
+ * `paceLabel`/`timeLabel` emission (gated only by `MONITOR_SPLIT_MAX`'s
+ * upper band, never a lower one) — closed here too rather than left as a
+ * known-analogous hole next to the one just fixed.
+ */
+export const MIN_MEASURABLE_ELAPSED_SECONDS = 1;
 
 // ---------------------------------------------------------------------
 // Monitor door
@@ -276,50 +342,67 @@ function monitorDistanceMeters(run: MonitorRun): number | undefined {
 }
 
 /** R-D: TIME = Σ work seconds + programmed rest for completed intervals,
- *  warm-up included — the SAME formula `monitorRun.ts`'s own
- *  `interruptedTotalSeconds` already implements for the interrupted-close
- *  door, generalized here to every monitor run per R-D's own text
- *  ("James's recorded rule, generalized from the interrupted branch"). Not
- *  imported from there directly: that function is named for its one
- *  specific caller (`monitorLogTotals`'s interrupted branch) and this is a
- *  different, more general call site; the four-line body is short enough
- *  that duplicating it here (identical logic, cited) is clearer than
- *  reaching across modules for a function whose name no longer describes
- *  this use. Absent when the sum is not `> 0` (no `0:00`). */
+ *  warm-up included — `monitorRun.ts`'s `measuredSessionSeconds` (review
+ *  finding 3: this used to be a byte-for-byte duplicate of that module's
+ *  `interruptedTotalSeconds`, a formula with its own OPEN hardware finding
+ *  — F-1, the walk sheet's unreproduced "6 MIN where the wire computes 5"
+ *  reading. Importing the shared function means F-1's eventual fix lands
+ *  in both callers at once, not just the one this duplicate happened to
+ *  live next to). Generalized here to every monitor run per R-D's own text
+ *  ("James's recorded rule, generalized from the interrupted branch") —
+ *  this call site is not itself about an interrupted run, which is why it
+ *  reaches for the neutral name rather than the original. Absent when the
+ *  sum is not `> 0` (no `0:00`). */
 function monitorTimeSeconds(run: MonitorRun): number | undefined {
-  let total = 0;
-  for (const actual of run.actuals) {
-    total += actual.elapsedSeconds;
-    if (actual.index !== null) {
-      const interval = run.program.intervals[actual.index];
-      if (interval !== undefined) total += interval.restSeconds;
-    }
-  }
+  const total = measuredSessionSeconds(run);
   return total > 0 ? total : undefined;
 }
 
 /** R-C: AVG SPLIT = `500 × Σt/Σd` over measured WORK rows — warm-up
  *  EXCLUDED (R-C, verified against the committed walk-3 wire: including it
- *  moves the hero — see the test file's own oracle). */
-function monitorAvgSplitSeconds(run: MonitorRun): number | undefined {
+ *  moves the hero — see the test file's own oracle). Two further
+ *  exclusions (review finding 1/2, neither present in the original cut):
+ *
+ *  - `actual.index === null` — an unattributable boundary
+ *    (`IntervalActual.index`'s own doc comment: "must not be treated as
+ *    interval 0") has no program identity to judge against at all; the
+ *    OLD condition (`actual.index !== null && actual.index === wuIndex`)
+ *    only ever fired when an index WAS present, so a null-index actual
+ *    fell straight through into the average instead of being excluded —
+ *    contaminating the exact hero R-C exists to protect. DISTANCE/TIME
+ *    still include it (machine semantics — the meters/seconds genuinely
+ *    happened, `monitorDistanceMeters`/`monitorTimeSeconds` above, both
+ *    unconditional on `index`); only JUDGING it is what has no honest
+ *    basis.
+ *  - `actual.elapsedSeconds < MIN_MEASURABLE_ELAPSED_SECONDS` — see that
+ *    constant's own doc comment.
+ *
+ *  Returns the `{seconds, count}` pair (`WorkingAverage`'s own doc
+ *  comment) — `count` is what lets `monitorWorkRows` apply finding 5's
+ *  RULING (a lone measured row is never judged). */
+function monitorAvgSplit(run: MonitorRun): WorkingAverage {
   const wuIndex = warmupIndex(run);
   const rows: { seconds: number; meters: number }[] = [];
   for (const actual of run.actuals) {
-    if (actual.index !== null && actual.index === wuIndex) continue;
+    if (actual.index === null) continue;
+    if (actual.index === wuIndex) continue;
+    if (actual.elapsedSeconds < MIN_MEASURABLE_ELAPSED_SECONDS) continue;
     rows.push({
       seconds: actual.elapsedSeconds,
       meters: actual.distanceMeters,
     });
   }
-  return weightedAvgSplitSeconds(rows);
+  return weightedAverage(rows);
 }
 
-function monitorHeroes(run: MonitorRun): SummaryHeroes {
-  const avgSplitSeconds = monitorAvgSplitSeconds(run);
+function monitorHeroes(
+  run: MonitorRun,
+  avgSplit: WorkingAverage,
+): SummaryHeroes {
   const timeSeconds = monitorTimeSeconds(run);
   return {
     avgSplit:
-      avgSplitSeconds !== undefined ? fmtSplit(avgSplitSeconds) : undefined,
+      avgSplit.seconds !== undefined ? fmtSplit(avgSplit.seconds) : undefined,
     time: timeSeconds !== undefined ? fmtDuration(timeSeconds / 60) : undefined,
     distanceMeters: monitorDistanceMeters(run),
   };
@@ -330,14 +413,19 @@ function monitorHeroes(run: MonitorRun): SummaryHeroes {
  *  all. When the warm-up's own boundary never arrived (the piece was
  *  skipped, or its actual was lost the same way any boundary can be — the
  *  run contract's `boundary-out-of-run`/divergence cases,
- *  `domain/monitor/types.ts`), the row still renders (the label alone is
- *  honest — "there was a warm-up interval") with every measured field
- *  absent, never a fabricated `0:00`. */
+ *  `domain/monitor/types.ts`) OR its own elapsed reading is below
+ *  `MIN_MEASURABLE_ELAPSED_SECONDS` (review finding 1 — a boundary this
+ *  degenerate is not a real reading either), the row still renders (the
+ *  label alone is honest — "there was a warm-up interval") with every
+ *  measured field absent, never a fabricated `0:00`. */
 function monitorWarmupRow(run: MonitorRun): MeasuredRow | null {
   const wuIndex = warmupIndex(run);
   if (wuIndex === -1) return null;
   const actual = actualByIndex(run).get(wuIndex);
-  if (actual === undefined) {
+  if (
+    actual === undefined ||
+    actual.elapsedSeconds < MIN_MEASURABLE_ELAPSED_SECONDS
+  ) {
     return { measured: true, isWarmup: true, label: "WARM-UP" };
   }
   const paceSeconds =
@@ -350,24 +438,35 @@ function monitorWarmupRow(run: MonitorRun): MeasuredRow | null {
     measured: true,
     isWarmup: true,
     label: "WARM-UP",
-    timeLabel:
-      actual.elapsedSeconds > 0
-        ? fmtDuration(actual.elapsedSeconds / 60)
-        : undefined,
+    timeLabel: fmtDuration(actual.elapsedSeconds / 60),
     paceLabel: paceSeconds !== undefined ? fmtSplit(paceSeconds) : undefined,
     // UNJUDGED by construction: R-C excludes the warm-up from the working
     // average, so there is nothing honest to compare it against.
   };
 }
 
+/** Review finding 1: a `pm5`-sourced row whose own elapsed reading is
+ *  below `MIN_MEASURABLE_ELAPSED_SECONDS` renders in its PRESCRIBED shape
+ *  (§2E's unmeasured-row geometry) — not a measured row with blank
+ *  cells — and is excluded from `monitorAvgSplitSeconds`'s average by
+ *  that same function's own floor check, so the row list and the hero
+ *  agree on which readings count. */
+function isMonitorRowMeasurable(step: LogStep): boolean {
+  return (
+    step.actualSource === "pm5" &&
+    step.actualSeconds !== undefined &&
+    step.actualSeconds >= MIN_MEASURABLE_ELAPSED_SECONDS
+  );
+}
+
 function monitorWorkRows(
   run: MonitorRun,
-  workingAverageSeconds: number | undefined,
+  avgSplit: WorkingAverage,
 ): SummaryRow[] {
   const steps = buildMonitorLogSteps(run);
   return steps.map((step, i) => {
     const index = i + 1;
-    if (step.actualSource !== "pm5") {
+    if (!isMonitorRowMeasurable(step)) {
       return {
         measured: false,
         isWarmup: false,
@@ -385,15 +484,20 @@ function monitorWorkRows(
             : undefined,
       };
     }
-    const timeLabel =
-      step.actualSeconds !== undefined && step.actualSeconds > 0
-        ? fmtDuration(step.actualSeconds / 60)
-        : undefined;
+    // isMonitorRowMeasurable already proved actualSeconds is defined and
+    // >= the floor — the `!` documents that, matching this file's own `!`
+    // convention for a fact a preceding check already established.
+    const timeLabel = fmtDuration(step.actualSeconds! / 60);
     const paceLabel =
       step.actualSplit !== undefined ? fmtSplit(step.actualSplit) : undefined;
+    // Finding 5 (RULED): a lone measured row is never judged — `count`
+    // must be at least 2 (`WorkingAverage`'s own doc comment), not merely
+    // `seconds !== undefined`.
     const judged =
-      step.actualSplit !== undefined && workingAverageSeconds !== undefined
-        ? judge(step.actualSplit, workingAverageSeconds)
+      step.actualSplit !== undefined &&
+      avgSplit.seconds !== undefined &&
+      avgSplit.count >= 2
+        ? judge(step.actualSplit, avgSplit.seconds)
         : undefined;
     return {
       measured: true,
@@ -408,10 +512,10 @@ function monitorWorkRows(
 }
 
 function buildMonitorModel(run: MonitorRun): SummaryModel {
-  const heroes = monitorHeroes(run);
-  const avgSplitSeconds = monitorAvgSplitSeconds(run);
+  const avgSplit = monitorAvgSplit(run);
+  const heroes = monitorHeroes(run, avgSplit);
   const warmupRow = monitorWarmupRow(run);
-  const workRows = monitorWorkRows(run, avgSplitSeconds);
+  const workRows = monitorWorkRows(run, avgSplit);
   const rows = warmupRow !== null ? [warmupRow, ...workRows] : workRows;
 
   const iso =
@@ -446,17 +550,24 @@ function timerWarmupRow(run: SessionRun): MeasuredRow | null {
   const index = run.phases.findIndex((p) => p.type === "warmup");
   if (index === -1) return null;
   const actual = run.actuals[index];
-  if (actual === undefined) {
+  // Review finding 1: a below-floor elapsed reading (a mis-tapped
+  // stopwatch button on this door's own genuinely-measurable distance
+  // warm-up) is treated identically to "no actual at all" — see
+  // `MIN_MEASURABLE_ELAPSED_SECONDS`'s own doc comment. This is also what
+  // closes the ORIGINAL unguarded `paceLabel: fmtSplit(actual.splitSeconds)`
+  // below: that line used to run unconditionally, with no lower bound at
+  // all.
+  if (
+    actual === undefined ||
+    actual.elapsedSeconds < MIN_MEASURABLE_ELAPSED_SECONDS
+  ) {
     return { measured: true, isWarmup: true, label: "WARM-UP" };
   }
   return {
     measured: true,
     isWarmup: true,
     label: "WARM-UP",
-    timeLabel:
-      actual.elapsedSeconds > 0
-        ? fmtDuration(actual.elapsedSeconds / 60)
-        : undefined,
+    timeLabel: fmtDuration(actual.elapsedSeconds / 60),
     paceLabel: fmtSplit(actual.splitSeconds),
   };
 }
@@ -476,46 +587,58 @@ function timerTimeSeconds(run: SessionRun): number | undefined {
   return seconds > 0 ? seconds : undefined;
 }
 
+/** A stopwatch-measured row's reconstructed elapsed seconds
+ *  (`actualSplit × meters ÷ 500`, the exact inverse of `session/engine.ts`'s
+ *  `nextDistance`), or `undefined` for a non-stopwatch row — `undefined`
+ *  when either the row isn't a stopwatch reading at all, or its
+ *  reconstructed elapsed time is below `MIN_MEASURABLE_ELAPSED_SECONDS`
+ *  (review finding 1: treated as though nothing was measured, never a
+ *  fabricated small pace/time). Every stopwatch-measured `LogStep` carries
+ *  `actualSplit`/`meters` TOGETHER by construction (`nextDistance` is the
+ *  only actuals writer and only ever runs on a phase with `meters` set) —
+ *  the `!`s document that guarantee, matching `logDraft.ts`'s own
+ *  convention for the identical fact. Shared by `timerAvgSplit` (the hero)
+ *  and `timerWorkRows` (the row list) so the two can never disagree on
+ *  which readings count. */
+function timerMeasurableElapsedSeconds(step: LogStep): number | undefined {
+  if (step.actualSource !== "stopwatch") return undefined;
+  const elapsedSeconds = (step.actualSplit! * step.meters!) / 500;
+  return elapsedSeconds >= MIN_MEASURABLE_ELAPSED_SECONDS
+    ? elapsedSeconds
+    : undefined;
+}
+
 /** Measured (stopwatch) rows only, weighted by distance — `LogStep.
  *  actualSeconds` doesn't exist on the phone-timer door (that field is
- *  pm5-only, `LogStep`'s own doc comment), so this reconstructs elapsed
- *  seconds from `actualSplit`/`meters` via the SAME identity
- *  `session/engine.ts`'s `nextDistance` used to compute `splitSeconds` in
- *  the first place (`splitSeconds = (elapsed / meters) * 500`, exactly —
- *  solving for `elapsed` is lossless). Every stopwatch-measured `LogStep`
- *  carries `meters` by construction (`nextDistance` is the only actuals
- *  writer and only ever runs on a phase with `meters` set), so this never
- *  divides by an absent value. The warm-up phase's own `LogStep` never
- *  reaches this function at all (`buildLogSteps` never emits one), so it
- *  is excluded from the average the same way R-C excludes it for the
- *  monitor door — a generalization of that rule's reasoning, not its
- *  letter (this module's own header). */
-function timerAvgSplitSeconds(steps: LogStep[]): number | undefined {
+ *  pm5-only, `LogStep`'s own doc comment), which is why
+ *  `timerMeasurableElapsedSeconds` reconstructs it rather than reading it
+ *  straight off the step. The warm-up phase's own `LogStep` never reaches
+ *  this function at all (`buildLogSteps` never emits one), so it is
+ *  excluded from the average the same way R-C excludes it for the monitor
+ *  door — a generalization of that rule's reasoning, not its letter (this
+ *  module's own header). Returns `{seconds, count}` (`WorkingAverage`'s
+ *  own doc comment) — `count` is what lets `timerWorkRows` apply finding
+ *  5's RULING (a lone measured row is never judged). */
+function timerAvgSplit(steps: LogStep[]): WorkingAverage {
   const rows: { seconds: number; meters: number }[] = [];
   for (const step of steps) {
-    if (step.actualSource !== "stopwatch") continue;
-    // Every stopwatch-measured LogStep carries actualSplit + meters
-    // TOGETHER (nextDistance's own single write site, this function's own
-    // doc comment) — the `!`s document that construction guarantee, the
-    // same convention `timerWorkRows` below and `logDraft.ts` itself use
-    // for the identical fact, rather than a second, unreachable defensive
-    // branch.
-    rows.push({
-      seconds: (step.actualSplit! * step.meters!) / 500,
-      meters: step.meters!,
-    });
+    const seconds = timerMeasurableElapsedSeconds(step);
+    if (seconds === undefined) continue;
+    // meters is defined here by the same construction guarantee
+    // `timerMeasurableElapsedSeconds` already relies on.
+    rows.push({ seconds, meters: step.meters! });
   }
-  return weightedAvgSplitSeconds(rows);
+  return weightedAverage(rows);
 }
 
 function timerWorkRows(
   steps: LogStep[],
-  workingAverageSeconds: number | undefined,
+  avgSplit: WorkingAverage,
 ): SummaryRow[] {
   return steps.map((step, i) => {
     const index = i + 1;
-    const isMeasured = step.actualSource === "stopwatch";
-    if (!isMeasured) {
+    const elapsedSeconds = timerMeasurableElapsedSeconds(step);
+    if (elapsedSeconds === undefined) {
       return {
         measured: false,
         isWarmup: false,
@@ -533,22 +656,20 @@ function timerWorkRows(
             : undefined,
       };
     }
-    // A measured (stopwatch) row always carries actualSplit + meters
-    // together (nextDistance's own single write site) — the `!`s below
-    // document that construction guarantee, matching logDraft.ts's own
-    // convention for the same fact.
-    const elapsedSeconds = (step.actualSplit! * step.meters!) / 500;
+    // timerMeasurableElapsedSeconds already proved this is a stopwatch
+    // row with actualSplit defined — the `!` documents that.
+    // Finding 5 (RULED): a lone measured row is never judged — `count`
+    // must be at least 2, not merely `seconds !== undefined`.
     const judged =
-      workingAverageSeconds !== undefined
-        ? judge(step.actualSplit!, workingAverageSeconds)
+      avgSplit.seconds !== undefined && avgSplit.count >= 2
+        ? judge(step.actualSplit!, avgSplit.seconds)
         : undefined;
     return {
       measured: true,
       isWarmup: false,
       index,
       label: step.label,
-      timeLabel:
-        elapsedSeconds > 0 ? fmtDuration(elapsedSeconds / 60) : undefined,
+      timeLabel: fmtDuration(elapsedSeconds / 60),
       paceLabel: fmtSplit(step.actualSplit!),
       judged,
     };
@@ -556,16 +677,16 @@ function timerWorkRows(
 }
 
 function buildTimerModel(run: SessionRun, steps: LogStep[]): SummaryModel {
-  const avgSplitSeconds = timerAvgSplitSeconds(steps);
+  const avgSplit = timerAvgSplit(steps);
   const timeSeconds = timerTimeSeconds(run);
   const heroes: SummaryHeroes = {
     avgSplit:
-      avgSplitSeconds !== undefined ? fmtSplit(avgSplitSeconds) : undefined,
+      avgSplit.seconds !== undefined ? fmtSplit(avgSplit.seconds) : undefined,
     time: timeSeconds !== undefined ? fmtDuration(timeSeconds / 60) : undefined,
     // DISTANCE: this module's header — timer door has no machine total.
   };
   const warmupRow = timerWarmupRow(run);
-  const workRows = timerWorkRows(steps, avgSplitSeconds);
+  const workRows = timerWorkRows(steps, avgSplit);
   const rows = warmupRow !== null ? [warmupRow, ...workRows] : workRows;
 
   const iso = run.completedAt ?? run.startedAt;
@@ -630,18 +751,27 @@ function targetsOnlyCaption(rows: SummaryRow[]): string | undefined {
 }
 
 /** §2A: "Local time via the device locale, minutes precision" —
- *  `18:57`-style (24-hour, no seconds). `toLocaleTimeString` with
- *  `hour12: false` gives the 24-hour form the spec's own literal example
- *  shows; the empty locales array defers to the device's own locale
- *  exactly as the requirement asks. */
+ *  `18:57`-style (24-hour, no seconds). `hourCycle: "h23"` (review: pin
+ *  this explicitly, never `hour12: false`) is the fix, not a style choice:
+ *  `hour12: false` only says "not 12-hour" — ICU is free to satisfy that
+ *  with EITHER `h23` (0-23, midnight is `"00"`) or `h24` (1-24, midnight
+ *  is `"24"`), and which one a given build/locale picks is exactly the
+ *  ambiguity that produced a `"24:05"` reading on some builds. `h23` is
+ *  named explicitly so midnight can never print as `"24:XX"`. The empty
+ *  locales array defers to the device's own locale exactly as the
+ *  requirement asks. */
 function formatTimeOfDay(iso: string): string {
   return new Date(iso).toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit",
-    hour12: false,
+    hourCycle: "h23",
   });
 }
 
+/** @throws {MonitorLogSeedError} for the monitor door only, when `input.run`
+ *  is a legacy (`v1`, no `logSeed`) `MonitorRun` or one whose `logSeed`
+ *  doesn't line up with its own `program` — see this module's own header,
+ *  "CAN THROW", for the full contract and what a caller owes it. */
 export function buildSummaryModel(input: SummaryInput): SummaryModel {
   switch (input.door) {
     case "monitor":

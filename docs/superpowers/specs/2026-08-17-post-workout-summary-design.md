@@ -45,9 +45,11 @@ Spec rulings from the gates (each traceable to a finding):
 - **R-C (the heroes answer different questions, stated separately):**
   DISTANCE and TIME are machine-total semantics (warm-up INCLUDED);
   AVG SPLIT is the working average (warm-up EXCLUDED — including it moved
-  the hero 20s/500m on the committed walk-3 wire). The interval list
-  renders the warm-up as its own labeled, unjudged row so the totals
-  reconcile with the visible rows by eye.
+  the hero 9.4s/500m on the committed walk-3 wire's full 3-boundary set —
+  CORRECTED, Task 4 review: "20s/500m" was a 2-boundary figure, from
+  before the third boundary was decoded; the walk-3 recording has three).
+  The interval list renders the warm-up as its own labeled, unjudged row
+  so the totals reconcile with the visible rows by eye.
 - **R-D (TIME is a number-semantics change, named):** every monitor
   session's TIME = Σ work seconds + programmed rests for completed
   intervals (James's recorded rule, generalized from the interrupted
