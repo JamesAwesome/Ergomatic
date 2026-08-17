@@ -1846,7 +1846,22 @@ the exit criterion's own words are "cleared or explicitly re-parked with a
 reason" and the eleven-bullet block below has zero dispositions; the
 close-out PR writes one per bullet, with the iOS 26 `100dvh` bullet
 getting a real answer (this PR rebuilt the surface height model that
-construction underpins). Originally scoped by James 2026-08-13 immediately
+construction underpins). **(5)-(7), James's walk-day flags (2026-08-17,
+from the mobile-view screenshot):** (5) the landscape header sits flush
+with the top edge where the safe-area inset is 0 — §2A's own 20px top
+padding was dropped in favor of the bare inset; fix is
+`max(20px, env(safe-area-inset-top))`; (6) dead space below the band —
+the empty footer track plus the home-indicator inset reserve height under
+FINISH; the band should own the bottom edge (its padding absorbs the
+inset); (7) the landscape up-next line prepends `NEXT · ` ALWAYS
+(`NEXT · REST 3:00 · then WORK 2:09.0`, `NEXT · FINISH`) — James's
+ruling direction: a bare `FINISH` floats without the label layer, and
+uniform beats special-casing; portrait keeps its stacked `UP NEXT` label,
+no double-labeling. **(8) the walk's 6-MIN question:** the F6 log header
+showed `AUG 17 · 6 MIN` where the wire's completed intervals compute 5
+(60+60+120 work + 0+30+30 rest = 300s); a NUMBER discrepancy → triad →
+full treatment; reproduction assigned offline against the committed
+session-2 wire + ring. Originally scoped by James 2026-08-13 immediately
 after v0.9.0 shipped: "I want to work next on cleanup for this phase" —
 three items, below. **AMENDED the same evening**, after he rowed "Sun
 fret" on v0.9.0 and photographed the PM5 beside the phone: two more items,
