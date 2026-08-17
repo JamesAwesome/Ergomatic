@@ -15,9 +15,9 @@ import Releases from "../news/Releases";
 import Plan from "../plan/Plan";
 import Countdown from "../session/Countdown";
 import { loadDraft } from "../session/draft";
+import { isComplete } from "../session/engine";
 import { loadRun } from "../session/run";
 import LogSession from "../session/LogSession";
-import SessionComplete from "../session/SessionComplete";
 import Timer from "../session/Timer";
 import Today from "../today/Today";
 import WorkoutDetail from "../workout/WorkoutDetail";
@@ -77,6 +77,26 @@ function ConfirmRedirect() {
   return <Navigate to="/session/countdown" replace />;
 }
 
+/** `/session/complete`'s replacement (post-workout-summary spec §3, Task 5
+ *  — the SAME `/session/confirm` -> `ConfirmRedirect` precedent immediately
+ *  above): `SessionComplete` is deleted, the finish stage now navigates
+ *  Timer.tsx straight to `/session/log` (the summary), but the OLD URL
+ *  survives as a stale deep link, a browser back-swipe target, and an old
+ *  bookmark — this element renders no UI, only a redirect to wherever the
+ *  rower's actual session state now lives: a completed `SessionRun` on
+ *  record means there is a real summary to show -> `/session/log` (the
+ *  session door); anything else (no run, or a run that somehow isn't
+ *  complete — the same guard `LogSession.tsx`'s own session door applies) ->
+ *  `/today`, the same fallback every other dead deep link in this file's
+ *  own catch-all uses. */
+function CompleteRedirect() {
+  const run = loadRun();
+  if (run !== null && isComplete(run)) {
+    return <Navigate to="/session/log" replace />;
+  }
+  return <Navigate to="/today" replace />;
+}
+
 // `user`/`onSignedOut` are optional so tests can render <AppRoutes /> without
 // a signed-in user. /you composes the account block with the staged baseline
 // editor (You.tsx). App.tsx supplies both once useMe() resolves to "in".
@@ -134,7 +154,7 @@ export default function AppRoutes({
         <Route path="/session/confirm" element={<ConfirmRedirect />} />
         <Route path="/session/countdown" element={<Countdown />} />
         <Route path="/session/run" element={<Timer />} />
-        <Route path="/session/complete" element={<SessionComplete />} />
+        <Route path="/session/complete" element={<CompleteRedirect />} />
         <Route path="/session/log" element={<LogSession />} />
         {user && onSignedOut && (
           <>

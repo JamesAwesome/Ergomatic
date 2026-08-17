@@ -338,6 +338,73 @@ describe("/session/confirm redirect shim", () => {
   });
 });
 
+// Post-workout-summary spec §3 (Task 5): `/session/complete` is a redirect
+// shim now — SessionComplete is deleted, but stale deep links and browser
+// back-swipes to this URL are real (the `/session/confirm` -> ConfirmRedirect
+// precedent this mirrors). Two arms, keyed on what's actually sitting in
+// storage — never on the URL itself, since Timer.tsx's finish stage no
+// longer navigates here on purpose.
+describe("/session/complete redirect shim", () => {
+  it("a completed SessionRun on record redirects to /session/log (the summary)", async () => {
+    const draft = startDraft(
+      buildDraft({
+        id: "w1",
+        title: "Complete Shim Test Workout",
+        type: "AN",
+        steps: [{ k: "r", minutes: 5 }],
+      }),
+    );
+    saveDraft(draft);
+    const built = buildRun(draft, null, new Date("2026-08-17T12:00:00.000Z"));
+    saveRun({
+      ...built,
+      index: built.phases.length,
+      completedAt: new Date("2026-08-17T12:05:00.000Z").toISOString(),
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/session/complete"]}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Log Session" }),
+    ).toBeVisible();
+  });
+
+  it("no run, or a run that isn't actually complete, redirects to /today", async () => {
+    render(
+      <MemoryRouter initialEntries={["/session/complete"]}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("heading", { name: "Today" })).toBeVisible();
+  });
+
+  it("an incomplete SessionRun (mid-session deep link) also redirects to /today, not the summary", async () => {
+    const draft = startDraft(
+      buildDraft({
+        id: "w1",
+        title: "Complete Shim Incomplete Workout",
+        type: "AN",
+        steps: [{ k: "r", minutes: 5 }],
+      }),
+    );
+    saveDraft(draft);
+    saveRun(buildRun(draft, null, new Date("2026-08-17T12:00:00.000Z")));
+
+    render(
+      <MemoryRouter initialEntries={["/session/complete"]}>
+        <AppRoutes />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("heading", { name: "Today" })).toBeVisible();
+  });
+});
+
 describe("hidesTabBar", () => {
   it.each([
     "/session/countdown",

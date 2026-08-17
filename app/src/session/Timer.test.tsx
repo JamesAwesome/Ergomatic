@@ -207,7 +207,7 @@ async function renderTimer(initialPath = "/session/run") {
       <Routes>
         <Route path="/session/run" element={<Timer />} />
         <Route path="/today" element={<p>TODAY SCREEN</p>} />
-        <Route path="/session/complete" element={<p>COMPLETE SCREEN</p>} />
+        <Route path="/session/log" element={<p>SUMMARY SCREEN</p>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -863,13 +863,13 @@ describe("Timer — controls", () => {
     // Not complete yet — still on the last phase, still shows the run.
     expect(screen.getByText(/Finish this session\?/)).toBeInTheDocument();
     expect(screen.getByText("STEP 1 OF 1 · WORK")).toBeInTheDocument();
-    expect(screen.queryByText("COMPLETE SCREEN")).not.toBeInTheDocument();
+    expect(screen.queryByText("SUMMARY SCREEN")).not.toBeInTheDocument();
 
     await userEvent.click(
       screen.getByRole("button", { name: "Finish session" }),
     );
 
-    expect(screen.getByText("COMPLETE SCREEN")).toBeInTheDocument();
+    expect(screen.getByText("SUMMARY SCREEN")).toBeInTheDocument();
   });
 
   it("▶ on the last phase: Keep going cancels the staged finish, no completion", async () => {
@@ -899,7 +899,7 @@ describe("Timer — controls", () => {
     await userEvent.click(screen.getByRole("button", { name: "Keep going" }));
 
     expect(screen.queryByText(/Finish this session\?/)).not.toBeInTheDocument();
-    expect(screen.queryByText("COMPLETE SCREEN")).not.toBeInTheDocument();
+    expect(screen.queryByText("SUMMARY SCREEN")).not.toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Next phase" }),
     ).toBeInTheDocument();
@@ -942,7 +942,7 @@ describe("Timer — controls", () => {
     // and definitely not completed.
     expect(screen.getByText(/Abandon this session\?/)).toBeInTheDocument();
     expect(screen.queryByText(/Finish this session\?/)).not.toBeInTheDocument();
-    expect(screen.queryByText("COMPLETE SCREEN")).not.toBeInTheDocument();
+    expect(screen.queryByText("SUMMARY SCREEN")).not.toBeInTheDocument();
   });
 
   // Fix round (spec review F1): `handleEndTap`/`handleKeepGoing` must be
@@ -1225,7 +1225,7 @@ describe("Timer — distance mode: NEXT on the last phase (F6)", () => {
     expect(screen.getByText(/Finish this session\?/)).toBeInTheDocument();
     expect(screen.queryByText(/looks off/)).not.toBeInTheDocument();
     expect(screen.getByText("STEP 2 OF 2 · WORK · 500M")).toBeInTheDocument();
-    expect(screen.queryByText("COMPLETE SCREEN")).not.toBeInTheDocument();
+    expect(screen.queryByText("SUMMARY SCREEN")).not.toBeInTheDocument();
 
     // Deliberation passes before confirming — the frozen elapsed (80s) must
     // still be what's recorded, not 80 + 30 = 110 (the same F3 reasoning,
@@ -1236,7 +1236,7 @@ describe("Timer — distance mode: NEXT on the last phase (F6)", () => {
       screen.getByRole("button", { name: "Finish session" }),
     );
 
-    expect(screen.getByText("COMPLETE SCREEN")).toBeInTheDocument();
+    expect(screen.getByText("SUMMARY SCREEN")).toBeInTheDocument();
     const saved = loadRun()!;
     expect(saved.actuals[1]!.elapsedSeconds).toBe(80);
     expect(saved.actuals[1]!.splitSeconds).toBe(80); // (80/500)*500
@@ -1255,7 +1255,7 @@ describe("Timer — distance mode: NEXT on the last phase (F6)", () => {
     await userEvent.click(screen.getByRole("button", { name: "Keep going" }));
 
     expect(screen.queryByText(/Finish this session\?/)).not.toBeInTheDocument();
-    expect(screen.queryByText("COMPLETE SCREEN")).not.toBeInTheDocument();
+    expect(screen.queryByText("SUMMARY SCREEN")).not.toBeInTheDocument();
     expect(loadRun()!.actuals[1]).toBeUndefined();
     expect(screen.getByRole("button", { name: "NEXT →" })).toBeInTheDocument();
   });
@@ -1280,7 +1280,7 @@ describe("Timer — distance mode: NEXT on the last phase (F6)", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Keep split" }));
 
-    expect(screen.getByText("COMPLETE SCREEN")).toBeInTheDocument();
+    expect(screen.getByText("SUMMARY SCREEN")).toBeInTheDocument();
     const saved = loadRun()!;
     expect(saved.actuals[1]!.elapsedSeconds).toBe(250);
     expect(saved.completedAt).not.toBeNull();
@@ -1299,7 +1299,7 @@ describe("Timer — distance mode: NEXT on the last phase (F6)", () => {
       screen.getByRole("button", { name: "Discard split" }),
     );
 
-    expect(screen.getByText("COMPLETE SCREEN")).toBeInTheDocument();
+    expect(screen.getByText("SUMMARY SCREEN")).toBeInTheDocument();
     const saved = loadRun()!;
     expect(saved.actuals[1]).toBeUndefined();
     expect(saved.completedAt).not.toBeNull();

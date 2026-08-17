@@ -418,28 +418,32 @@ export default function Timer() {
     };
   }, [hasRun]);
 
-  // Past the last phase: hand off to SessionComplete (AppRoutes.tsx,
-  // Phase 6B Task 4) — this component's own run-guard clause below renders
-  // one harmless "Finishing…" frame between this effect committing and the
-  // navigate actually landing. `replace`, not push (whole-branch review,
-  // F1): a plain push left THIS Timer mount (already showing a completed
-  // run) reachable via browser BACK from Session Complete — landing back
-  // here re-triggers this exact effect, which used to push ANOTHER
-  // /session/complete entry, and a second BACK from there could reach
-  // Countdown, whose own unconditional rebuild (fixed separately, see
-  // Countdown.tsx's `hasRunProgress`) would then overwrite the completed
-  // record with a fresh `completedAt: null` one. Replacing here means BACK
-  // from Session Complete lands one level further out — the workout's own
-  // detail page (fast-follow Task 4 shortened the stack: Start now pushes
-  // straight from there to `/session/countdown`, no ConfirmTargets hop in
-  // between, so there is no intermediate screen left to bounce through) —
-  // instead of resurrecting a stale live-timer frame. A Start press from
-  // there is still safe: `useStartWorkout`'s own guard reads the completed
-  // run's `completedAt !== null` and stages the "unlogged" replace-confirm
+  // Past the last phase: hand off to the post-workout summary
+  // (post-workout-summary spec §3, Task 5 — supersedes the SessionComplete
+  // hand-off this comment used to describe: "the finish stage navigates to
+  // the summary," and `/session/complete` now only survives as a redirect,
+  // AppRoutes.tsx's own `CompleteRedirect`) — this component's own
+  // run-guard clause below renders one harmless "Finishing…" frame between
+  // this effect committing and the navigate actually landing. `replace`,
+  // not push (whole-branch review, F1, still load-bearing under the new
+  // destination): a plain push left THIS Timer mount (already showing a
+  // completed run) reachable via browser BACK from the summary — landing
+  // back here re-triggers this exact effect, which used to push ANOTHER
+  // history entry, and a second BACK from there could reach Countdown,
+  // whose own unconditional rebuild (fixed separately, see Countdown.tsx's
+  // `hasRunProgress`) would then overwrite the completed record with a
+  // fresh `completedAt: null` one. Replacing here means BACK from the
+  // summary lands one level further out — the workout's own detail page
+  // (fast-follow Task 4 shortened the stack: Start now pushes straight
+  // from there to `/session/countdown`, no ConfirmTargets hop in between,
+  // so there is no intermediate screen left to bounce through) — instead
+  // of resurrecting a stale live-timer frame. A Start press from there is
+  // still safe: `useStartWorkout`'s own guard reads the completed run's
+  // `completedAt !== null` and stages the "unlogged" replace-confirm
   // rather than silently overwriting it.
   useEffect(() => {
     if (run !== null && isComplete(run)) {
-      navigate("/session/complete", { replace: true });
+      navigate("/session/log", { replace: true });
     }
   }, [run, navigate]);
 

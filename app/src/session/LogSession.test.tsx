@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
@@ -53,14 +53,16 @@ function library(title: string) {
  *  workouts' own step OBJECTS rather than a hand-built minimum (the same
  *  "no single library workout has this shape" idiom Task 1's own F1b test
  *  used). The reps marker Hoarfrost is normally authored with is
- *  deliberately dropped — SessionComplete.test.tsx's own
- *  `completeDraftAndRun` does the same for the identical reason: a live
- *  reps marker would repeat the APPENDED distance step too, which isn't the
- *  shape this fixture wants. Phases: 0 work (time, 6k+12), 1
+ *  deliberately dropped. Phases: 0 work (time, 6k+12), 1
  *  rest (5'), 2 work (distance, 6k+12) — the LAST phase gets a real
  *  recorded (stopwatch) actual; the time phase never does (the engine only
  *  ever records one for a distance phase), so this fixture covers BOTH of
- *  `buildLogSteps`' actual rules in one run. */
+ *  `buildLogSteps`' actual rules in one run. Under the post-workout-summary
+ *  model (Task 4/5): the time phase's "assumed" actual is NOT a stopwatch
+ *  reading, so it renders as a PRESCRIBED (unmeasured) row; the distance
+ *  phase's real stopwatch reading renders MEASURED — but since it's the
+ *  ONLY measured row, `avgSplit.count === 1` and review finding 5 (a lone
+ *  measured row is never judged) means it carries no deviation bar either. */
 // IMP-3 (whole-branch review): `type` defaults to Hoarfrost's own real type
 // ("O2") for every caller that doesn't care about workoutType resolution
 // specifically — but that default is ALSO `resolveWorkoutType`'s
@@ -132,9 +134,7 @@ function buildSessionFixture(overrides: { type?: WorkoutType } = {}): {
 // onboarding.ts) — effort ref, no baselines needed (domain/needsBaselines.ts)
 // — driven through the same buildDraft/startDraft/buildRun/saveRun pipeline
 // as `buildSessionFixture` above, `null` baselines rather than a real pair
-// since this workout needs none. Proves the session door's own outside-plan
-// DEFAULT, not the manual door's (see `useLogForm`'s own header comment on
-// why only the session door's title is known synchronously at hook-init).
+// since this workout needs none.
 function buildOnboardingSessionFixture(): {
   run: SessionRun;
   workout: LibraryWorkout;
@@ -192,17 +192,9 @@ const NO_PLAN: PlanData = { planKey: null, doneN: 0, sequence: [] };
 
 // Task 3 (outside-plan logging): unlike `mockWorkouts`/`mockBaselines`
 // (each called at most once per test), `mockPlan` needs to run TWICE in
-// tests that override the plan state — once implicitly via `beforeEach`'s
-// default, once explicitly in the test body — since most tests in this
-// file never touch the plan at all and should keep seeing the pre-Task-3
-// "no active plan" shape unmodified. Registering `vi.doMock` itself twice
-// per test (the naive version of this helper) proved unreliable under a
-// full, heavily parallel coverage run (flaky in a way a single-file run
-// never reproduced) — this registers the mock factory exactly ONCE, at
-// this module's own load time, closing over a mutable ref instead;
-// `mockPlan(state)` just reassigns the ref, and `beforeEach` below resets
-// it to the default before every test. One registration, many reads —
-// structurally immune to whatever race repeated `vi.doMock` calls hit.
+// tests that override the plan state — registered ONCE at module load time,
+// closing over a mutable ref, rather than re-registered per test (proved
+// flaky under a heavily parallel coverage run).
 let planStateRef: PlanState = readyPlanState(NO_PLAN);
 vi.doMock("../api/usePlan", () => ({ usePlan: () => planStateRef }));
 
@@ -210,19 +202,18 @@ function mockPlan(state: PlanState = readyPlanState(NO_PLAN)) {
   planStateRef = state;
 }
 
-// `choose`/`reset` are never exercised by anything in this file (the Log
-// screen only ever READS `usePlan()`'s data, per LogSession.tsx's own
-// comment on why its error state must not block Save) — `vi.fn()` stubs
-// satisfy `PlanState`'s own ready-state shape (usePlan.ts) without
-// implying either function is under test here.
+// `choose`/`reset` are never exercised by anything in this file (the summary
+// only ever READS `usePlan()`'s data) — `vi.fn()` stubs satisfy `PlanState`'s
+// own ready-state shape (usePlan.ts) without implying either function is
+// under test here.
 function readyPlanState(plan: PlanData): PlanState {
   return { state: "ready", plan, choose: vi.fn(), reset: vi.fn() };
 }
 
 // A minimal but real-shaped active plan — `sequence` entries mirror the
 // server's own `planResponse` shape (routes/data.ts), not a hand-built
-// minimum missing fields the toggle's copy actually reads (`doneN`,
-// `sequence.length`).
+// minimum missing fields the save button's own position text actually
+// reads (`doneN`, `sequence.length`).
 function activePlan(overrides: Partial<PlanData> = {}): PlanData {
   const planKey: PlanKey = "sprint";
   const doneN = 3;
@@ -237,8 +228,7 @@ function activePlan(overrides: Partial<PlanData> = {}): PlanData {
 // A real, mixed-kind fixture for the manual door — the SAME two library
 // workouts' own work steps `buildSessionFixture` above assembles (Hoarfrost's
 // time/split step, restMinutes 5; Calm Sea's distance/split step), reused
-// here rather than a hand-built minimum (this file's own established "no
-// single library workout has this shape" idiom). Unlike `buildSessionFixture`,
+// here rather than a hand-built minimum. Unlike `buildSessionFixture`,
 // this never touches the draft/run stores at all — the manual door has no
 // draft or run to build, just a `LibraryWorkout` fetched by id.
 function manualWorkoutFixture(id = "id-manual-fixture"): LibraryWorkout {
@@ -287,19 +277,10 @@ const MONITOR_WORKOUT_ID = "id-monitor-fixture";
 // The 7C monitor-mode fixture — the SAME two real library steps
 // (`buildSessionFixture`/`manualWorkoutFixture`'s own Hoarfrost time-work +
 // Calm Sea distance-work) run through the REAL `buildDraft -> buildRun ->
-// compileProgram -> buildLogSeed` pipeline (this file's own "realistic
-// fixture" idiom, matching `logDraft.test.ts`'s `WALK4_RUN` for the
-// identical reason: the alignment contract between `logSeed.steps` and
-// `program.intervals` is proven, not hand-typed past). Program intervals:
-// [0] warmup, [1] work (time, Hoarfrost), [2] work (distance, Calm Sea) —
+// compileProgram -> buildLogSeed` pipeline. Program intervals: [0] warmup,
+// [1] work (time, Hoarfrost), [2] work (distance, Calm Sea) —
 // `IntervalActual.index` below is a position in THAT array, so a "both
-// measured" actuals list uses index 1 and 2, never 0 (the warmup interval,
-// which `buildMonitorLogSteps` never surfaces a step for at all). Since
-// 2026-08-09's warmup setting that leading warm-up comes from the rower's
-// PREFERENCE (`buildRun`'s fourth argument — its one producer), not from a
-// `wu` step; keeping it here is deliberate, since the alignment contract
-// this fixture exists to prove is exactly the one a non-logging interval
-// can break.
+// measured" actuals list uses index 1 and 2, never 0.
 function buildMonitorFixture(
   overrides: { actuals?: IntervalActual[]; deviceName?: string } = {},
 ): { run: MonitorRun; workout: LibraryWorkout } {
@@ -330,9 +311,8 @@ function buildMonitorFixture(
     FIXED_NOW.getTime() + 20 * 60 * 1000,
   ).toISOString();
   // Both intervals measured by default (the "ALL 2" case) — deliberately
-  // NOT equal to their own targets (132s both, same as
-  // buildSessionFixture's own choice) so an ACTUAL line is genuinely new
-  // information, not a repeat of the target above it.
+  // NOT equal to their own targets (132s both) so a measured pace is
+  // genuinely new information, not a repeat of the target.
   const defaultActuals: IntervalActual[] = [
     {
       index: 1,
@@ -361,14 +341,7 @@ function buildMonitorFixture(
     logSeed,
     actuals: overrides.actuals ?? defaultActuals,
     // Real hardware's own BLE advertising name, "Row" suffix and all
-    // (Concept2's own naming, verbatim — pm5-interface-notes.md's hardware
-    // sessions throughout; Task 3's own server fixtures already use this
-    // exact string: server/routes/data.test.ts, stores.integration.test.ts).
-    // Fix round 1 (review finding #2): an earlier version of this fixture
-    // dropped the suffix, believing it a brief typo — it is real, and
-    // `deviceName` is never parsed/trimmed anywhere in the client or
-    // server, so it must round-trip through this screen exactly as
-    // hardware would actually report it.
+    // (Concept2's own naming, verbatim).
     deviceName: overrides.deviceName ?? "PM5 432331249 Row",
     startedAt: FIXED_NOW.toISOString(),
     completedAt,
@@ -387,12 +360,9 @@ function buildMonitorFixture(
   return { run, workout };
 }
 
-// Phase 6I close-out fold (Task 2's deferred ledger item): the real
-// "First 6k" seed workout (server/seed/library/onboarding.ts) — an
+// Phase 6I close-out fold: the real "First 6k" seed workout — an
 // effort-only workout (`needsBaselines()` reads false), unlike
-// `manualWorkoutFixture()`'s split-ref mix above. Proves the manual door
-// opens for it even with both baselines null, instead of the unconditional
-// `baselines === null` block that used to gate every workout alike.
+// `manualWorkoutFixture()`'s split-ref mix above.
 function onboardingManualWorkoutFixture(
   id = "id-first6k-manual",
 ): LibraryWorkout {
@@ -506,9 +476,21 @@ beforeEach(() => {
   vi.resetModules();
   localStorage.clear();
   // Default: no active plan — see `mockPlan`'s own comment on why this
-  // keeps every pre-Task-3 test in this file passing unmodified.
+  // keeps every plan-agnostic test in this file passing unmodified.
   mockPlan();
 });
+
+async function chooseHeldAndPain() {
+  await userEvent.click(screen.getByRole("button", { name: "HELD" }));
+  await userEvent.click(screen.getByRole("button", { name: "Pain 2" }));
+}
+
+// The default (no active plan) save button — §2F: "No plan: Log against
+// plan hidden (not disabled); Save without logging leads." Every save/
+// discard-mechanics test in this file runs under the default `mockPlan()`
+// (no active plan) unless it explicitly calls `mockPlan(readyPlanState(...))`
+// itself, so this is the button those tests click.
+const SAVE_BUTTON = "Save without logging";
 
 describe("LogSession: deep-link/reload guards", () => {
   it("redirects to /today when there is no run record at all", async () => {
@@ -527,42 +509,43 @@ describe("LogSession: deep-link/reload guards", () => {
 });
 
 describe("LogSession: prefill from a real completed run", () => {
-  it("shows the title, type badge, date+duration, the PACES LOCKED panel, the per-step list, and EXPECTED N/5", async () => {
+  it("shows the title (no 'Log' prefix), the date · time · TIMER meta, the PACES OFF caption, the row list, and EXPECTED N/5", async () => {
     const { workout } = buildSessionFixture();
     mockWorkouts([workout]);
     await renderLog();
 
     expect(
-      await screen.findByRole("heading", { name: "Log Hoarfrost" }),
+      await screen.findByRole("heading", { name: "Hoarfrost" }),
     ).toBeInTheDocument();
-    expect(document.querySelector(".type-badge")?.textContent).toBe("O2");
-    // completedAt = FIXED_NOW + 30 minutes -> "AUG 1"; totalMinutes = 30.
-    expect(screen.getByText("AUG 1 · 30 MIN")).toBeInTheDocument();
+    // dateLabel from completedAt (FIXED_NOW + 30 min -> "AUG 1"); timeLabel
+    // is device-locale-dependent (§2A), so only its SHAPE is pinned here —
+    // the exact clock reading is Task 4's own `summaryModel.test.ts` concern.
+    expect(
+      screen.getByText(/^AUG 1 · \d{1,2}:\d{2} · TIMER$/),
+    ).toBeInTheDocument();
 
-    // PACES LOCKED (F1: only the bases actually referenced render — no
-    // step in this fixture references "2k" at all, both work steps are
-    // 6k-based, so the panel shows 6K alone, never "2K —"). The 6k value
-    // is recovered EXACTLY from the time phase's own frozen targetSplit
-    // (132 - 12 - 0 = 120, BASELINES.k6Seconds itself) -> fmtSplit(120) =
-    // "2:00.0".
-    expect(document.querySelector(".log-paces-value")?.textContent).toBe(
-      "6K 2:00.0",
+    // PACES OFF (F1: only the bases actually referenced render — no step in
+    // this fixture references "2k" at all, both work steps are 6k-based).
+    // The 6k value is recovered EXACTLY from the time phase's own frozen
+    // targetSplit (132 - 12 - 0 = 120, BASELINES.k6Seconds itself).
+    expect(screen.getByText("PACES OFF 6K 2:00.0")).toBeInTheDocument();
+
+    const rows = Array.from(
+      document.querySelectorAll<HTMLElement>(".summary-row"),
     );
-
-    const rows = Array.from(document.querySelectorAll(".log-step-row"));
     expect(rows).toHaveLength(2);
-    // Row 1: the time/split step — label composes from the DRAFT's real ref
-    // (matchedDraft present), target is the frozen split; a completed time
-    // phase's actual is "assumed" (identical to target), which this screen
-    // deliberately does NOT print a second time.
-    expect(rows[0]).toHaveTextContent("12:00 @ 6k +12");
-    expect(rows[0]).toHaveTextContent("2:12.0");
-    expect(rows[0]).not.toHaveTextContent("ACTUAL");
-    // Row 2: the distance/split step — a REAL stopwatch actual (125.0s)
-    // that differs from the 132.0s target earns its own ACTUAL line.
-    expect(rows[1]).toHaveTextContent("10000 m @ 6k +12");
-    expect(rows[1]).toHaveTextContent("2:12.0");
-    expect(rows[1]).toHaveTextContent("ACTUAL 2:05.0");
+    // Row 1: the time/split step never records an actual (the engine only
+    // ever records one for a DISTANCE phase) — renders PRESCRIBED: duration,
+    // target split, and the ref chip in the offset slot.
+    expect(within(rows[0]!).getByText("12:00")).toBeInTheDocument();
+    expect(within(rows[0]!).getByText("2:12.0")).toBeInTheDocument();
+    expect(within(rows[0]!).getByText("6k +12")).toBeInTheDocument();
+    // Row 2: the distance/split step's real stopwatch actual (125.0s/500m)
+    // renders MEASURED — elapsed 2500s -> "41:40", pace "2:05.0". It is the
+    // ONLY measured row, so review finding 5 (a lone measured row is never
+    // judged) means no deviation bar/number renders for it either.
+    expect(within(rows[1]!).getByText("41:40")).toBeInTheDocument();
+    expect(within(rows[1]!).getByText("2:05.0")).toBeInTheDocument();
 
     // EXPECTED N/5 — Hoarfrost's own `pain` (2), sourced via useWorkouts by
     // run.workoutId, not the rower's own (still-unset) selection.
@@ -576,38 +559,51 @@ describe("LogSession: prefill from a real completed run", () => {
       "false",
     );
     expect(
-      screen.getByRole("button", { name: "Save session" }),
+      screen.getByRole("button", { name: SAVE_BUTTON }),
     ).not.toBeDisabled();
   });
 
   // Post-workout-summary spec (2026-08-17), §3 ruling: Save is never
-  // disabled by an empty reflection — this test's own premise inverted
-  // (it used to prove the OPPOSITE, that Save stayed disabled until both
-  // were chosen). Choosing HELD/PAIN is still fully possible; it just no
-  // longer gates Save.
-  it("Save stays enabled throughout, whether or not Held and Pain are chosen (spec: reflection is optional)", async () => {
+  // disabled by an empty reflection. Choosing HELD/PAIN is still fully
+  // possible; it just no longer gates Save. Clicking the SELECTED option a
+  // second time now CLEARS it (§2D: every reflection control clearable).
+  it("Save stays enabled throughout, whether or not Held and Pain are chosen, and each is independently clearable", async () => {
     const { workout } = buildSessionFixture();
     mockWorkouts([workout]);
     await renderLog();
-    await screen.findByText("AUG 1 · 30 MIN");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
 
-    const save = screen.getByRole("button", { name: "Save session" });
+    const save = screen.getByRole("button", { name: SAVE_BUTTON });
     expect(save).not.toBeDisabled();
-    await userEvent.click(screen.getByRole("button", { name: "UNDER" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "UNDER · FASTER" }),
+    );
     expect(save).not.toBeDisabled();
     await userEvent.click(screen.getByRole("button", { name: "Pain 3" }));
     expect(save).not.toBeDisabled();
-    expect(screen.getByRole("button", { name: "UNDER" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    expect(
+      screen.getByRole("button", { name: "UNDER · FASTER" }),
+    ).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "Pain 3" })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
+
+    // Clearable: tapping the SAME selected option again returns to null.
+    await userEvent.click(
+      screen.getByRole("button", { name: "UNDER · FASTER" }),
+    );
+    expect(
+      screen.getByRole("button", { name: "UNDER · FASTER" }),
+    ).toHaveAttribute("aria-pressed", "false");
+    await userEvent.click(screen.getByRole("button", { name: "Pain 3" }));
+    expect(screen.getByRole("button", { name: "Pain 3" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
   });
 
-  it("shows both PACES LOCKED bases when both are derivable (a 2k off=0 and a 6k off=0 step)", async () => {
+  it("shows both bases in the PACES OFF caption when both are derivable (a 2k off=0 and a 6k off=0 step)", async () => {
     const draft = buildDraft({
       id: "id-both-bases",
       title: "Both Bases",
@@ -638,15 +634,15 @@ describe("LogSession: prefill from a real completed run", () => {
     mockWorkouts([]);
     await renderLog();
 
-    await screen.findByRole("heading", { name: "Log Both Bases" });
+    await screen.findByRole("heading", { name: "Both Bases" });
     // BASELINES.k2Seconds (100) -> "1:40.0"; BASELINES.k6Seconds (120) ->
     // "2:00.0" — both recovered exactly, off=0 on each.
-    expect(document.querySelector(".log-paces-value")?.textContent).toBe(
-      "2K 1:40.0 · 6K 2:00.0",
-    );
+    expect(
+      screen.getByText("PACES OFF 2K 1:40.0 · 6K 2:00.0"),
+    ).toBeInTheDocument();
   });
 
-  it("recovers the exact baseline even when the step carries a nudge — the nudge is folded into the per-step target, not into the recovered baseline", async () => {
+  it("recovers the exact baseline even when the step carries a nudge — the nudge is folded into the per-step target/label, not into the recovered baseline", async () => {
     const base = buildDraft({
       id: "id-nudged",
       title: "Nudged",
@@ -659,8 +655,7 @@ describe("LogSession: prefill from a real completed run", () => {
         },
       ],
     });
-    // +5s nudge on the work step (index 0) — the same shape a WorkoutDetail
-    // preview nudge bakes in via `buildNudgedDraft` (fast-follow Task 4).
+    // +5s nudge on the work step (index 0).
     const nudged = withNudge(base, 0, 5);
     const started = startDraft(nudged);
     saveDraft(started);
@@ -675,28 +670,19 @@ describe("LogSession: prefill from a real completed run", () => {
     mockWorkouts([]);
     await renderLog();
 
-    await screen.findByRole("heading", { name: "Log Nudged" });
+    await screen.findByRole("heading", { name: "Nudged" });
+    const row = document.querySelector(".summary-row")!;
     // targetSplit = 120 (baseline) + 0 (off) + 5 (nudge) = 125 -> the
-    // per-step row shows the NUDGED number.
-    expect(document.querySelector(".log-step-target")?.textContent).toBe(
-      "2:05.0",
-    );
+    // prescribed row's own target column shows the NUDGED number.
+    expect(within(row as HTMLElement).getByText("2:05.0")).toBeInTheDocument();
     // F2: the label folds the nudge into its own offset ("6k +5", not the
-    // raw authored "6k") — 120 (baseline) + 5 (folded offset) = 125,
-    // reconciling with the target split above.
-    expect(document.querySelector(".log-step-label")?.textContent).toBe(
-      "3:00 @ 6k +5",
-    );
-    // PACES LOCKED recovers the TRUE baseline (120), not the nudged split
-    // (F1: only 6K renders at all — this fixture's only step is 6k-based) —
-    // proves the reconstruction subtracts BOTH the off and the nudge, not
-    // just one of them.
-    expect(document.querySelector(".log-paces-value")?.textContent).toBe(
-      "6K 2:00.0",
-    );
+    // raw authored "6k") — shown in the row's offset slot.
+    expect(within(row as HTMLElement).getByText("6k +5")).toBeInTheDocument();
+    // PACES OFF recovers the TRUE baseline (120), not the nudged split.
+    expect(screen.getByText("PACES OFF 6K 2:00.0")).toBeInTheDocument();
   });
 
-  it("renders '—' for an effort step's target split (5G rule: an effort phase's frozen number is an estimate, never a real target)", async () => {
+  it("renders an empty target cell for an effort step (5G rule: an effort phase's frozen number is an estimate, never a real target) — the trailing dash still shows", async () => {
     const forkLightning = library("Fork Lightning");
     const effortWork = forkLightning.steps.find((s) => s.k === "w") as Extract<
       Step,
@@ -721,15 +707,17 @@ describe("LogSession: prefill from a real completed run", () => {
     mockWorkouts([]);
     await renderLog();
 
-    await screen.findByRole("heading", { name: "Log Fork Lightning" });
-    const rows = Array.from(document.querySelectorAll(".log-step-row"));
+    await screen.findByRole("heading", { name: "Fork Lightning" });
+    const rows = Array.from(
+      document.querySelectorAll<HTMLElement>(".summary-row"),
+    );
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toHaveTextContent("0:30 @ MAX");
-    expect(document.querySelector(".log-step-target")?.textContent).toBe("—");
-    expect(rows[0]).not.toHaveTextContent("ACTUAL");
+    expect(within(rows[0]!).getByText("MAX")).toBeInTheDocument();
+    expect(rows[0]!.querySelector(".summary-row-target")?.textContent).toBe("");
+    expect(rows[0]!.querySelector(".summary-row-dash")?.textContent).toBe("—");
     // F1: an all-effort workout references neither base at all — the whole
-    // PACES LOCKED panel is omitted, not a doubly-dashed one.
-    expect(document.querySelector(".log-paces-panel")).not.toBeInTheDocument();
+    // PACES OFF caption is omitted, not a doubly-dashed one.
+    expect(screen.queryByText(/PACES OFF/)).not.toBeInTheDocument();
   });
 
   it("a null run.workoutId (a malformed/legacy record) skips the library lookup and falls back honestly, with no EXPECTED line", async () => {
@@ -739,19 +727,11 @@ describe("LogSession: prefill from a real completed run", () => {
     mockWorkouts([]);
     await renderLog();
 
-    await screen.findByRole("heading", { name: "Log Hoarfrost" });
-    expect(document.querySelector(".type-badge")?.textContent).toBe("O2");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
     expect(screen.queryByText(/EXPECTED/)).not.toBeInTheDocument();
   });
 
-  // Must-fix minor (whole-branch review): this used to render the full form
-  // immediately, using the "O2" fallback default because `library` reads as
-  // `[]` while `useWorkouts()` is loading — a fast Save in that window
-  // would have POSTed "O2" as the session's real type even though the
-  // library lookup (once it resolved) would have found something else. The
-  // fixture's own real type ("AT") is deliberately not "O2" for the same
-  // IMP-3 reason as the "workoutType sourcing" block above.
-  it("shows LOADING… (not the O2 fallback) when there is no matched draft and workouts are still resolving", async () => {
+  it("shows LOADING… when there is no matched draft and workouts are still resolving", async () => {
     buildSessionFixture({ type: "AT" });
     clearDraft();
     vi.doMock("../api/useWorkouts", () => ({
@@ -761,9 +741,8 @@ describe("LogSession: prefill from a real completed run", () => {
 
     expect(await screen.findByText("LOADING…")).toBeInTheDocument();
     expect(
-      screen.queryByRole("heading", { name: "Log Hoarfrost" }),
+      screen.queryByRole("heading", { name: "Hoarfrost" }),
     ).not.toBeInTheDocument();
-    expect(document.querySelector(".type-badge")).not.toBeInTheDocument();
   });
 
   it("does not gate on a still-loading workouts hook when a matched draft already supplies the type", async () => {
@@ -776,23 +755,67 @@ describe("LogSession: prefill from a real completed run", () => {
     }));
     await renderLog();
 
-    await screen.findByRole("heading", { name: "Log Hoarfrost" });
-    expect(document.querySelector(".type-badge")?.textContent).toBe("AT");
+    expect(
+      await screen.findByRole("heading", { name: "Hoarfrost" }),
+    ).toBeInTheDocument();
   });
 });
 
 // The ledger residual routed to this task (Task 1's progress.md): a
 // same-shaped but FOREIGN draft (a real SessionDraft, just for a different
-// workoutId) must not be trusted for step labels, the PACES LOCKED
+// workoutId) must not be trusted for step labels, the PACES OFF
 // reconstruction, or the workoutType fallback — all three read `run` and
 // `draft`'s matching `workoutId` as one gate (`matchedDraft`).
+describe("LogSession: the ledger residual (workoutId mismatch)", () => {
+  it("ignores a foreign draft — fallback labels render and the PACES OFF caption is omitted entirely (F1: no bare dash)", async () => {
+    const { workout } = buildSessionFixture();
+    // A real, validly-shaped draft — just for a DIFFERENT workout than the
+    // one this run was built from.
+    const foreign = buildDraft({
+      id: "a-completely-different-workout",
+      title: "Foreign Workout",
+      type: "AN",
+      steps: [
+        {
+          k: "w",
+          duration: { kind: "time", minutes: 5 },
+          ref: { effort: "max" },
+        },
+      ],
+    });
+    saveDraft(startDraft(foreign));
+    mockWorkouts([workout]);
+    await renderLog();
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    // Neither base is recoverable without a matching draft — F1: the whole
+    // caption is omitted, not a dashed "PACES OFF 2K — · 6K —".
+    expect(screen.queryByText(/PACES OFF/)).not.toBeInTheDocument();
+
+    const rows = Array.from(
+      document.querySelectorAll<HTMLElement>(".summary-row"),
+    );
+    expect(rows).toHaveLength(2);
+    // Fallback label: `matchedDraft` gates on `workoutId`, so `draftStep`
+    // resolves to `undefined` for this mismatched draft — but `phase.ref`
+    // is still present on a run built through the normal `buildRun` path,
+    // so the fallback reconstructs the SAME chip the preferred path would
+    // have: "6k +12" for both rows. Row 0 (prescribed) shows it as visible
+    // text in its own offset cell; row 1 (measured — Calm Sea's real
+    // stopwatch actual) has no offset cell at all (§2E's measured-row
+    // geometry), so its own accessible name is what carries the label.
+    expect(within(rows[0]!).getByText("6k +12")).toBeInTheDocument();
+    expect(rows[1]!.getAttribute("aria-label")).toContain("6k +12");
+  });
+});
+
 describe("LogSession: the monitor log's quiet door (7B iteration)", () => {
   it("absent entirely when no rowed stash exists — the manual path never sees it", async () => {
     sessionStorage.removeItem("ergomatic:last-rowed-log");
     const { workout } = buildSessionFixture();
     mockWorkouts([workout]);
     await renderLog();
-    await screen.findByRole("heading", { name: "Log Hoarfrost" });
+    await screen.findByRole("heading", { name: "Hoarfrost" });
 
     expect(document.querySelector(".log-monitor-diag")).toBeNull();
   });
@@ -808,7 +831,7 @@ describe("LogSession: the monitor log's quiet door (7B iteration)", () => {
     const { workout } = buildSessionFixture();
     mockWorkouts([workout]);
     await renderLog();
-    await screen.findByRole("heading", { name: "Log Hoarfrost" });
+    await screen.findByRole("heading", { name: "Hoarfrost" });
 
     const row = screen.getByRole("button", { name: "MONITOR LOG · COPY" });
     await userEvent.click(row);
@@ -823,11 +846,12 @@ describe("LogSession: the monitor log's quiet door (7B iteration)", () => {
 
 // The recording's quiet door (walk-2026-08-16 close-out). The walk proved
 // the in-session sheet's Download button is UNREACHABLE at the moment a
-// rower actually wants it: the finish auto-navigates here, the sheet dies
-// with the session, and James fell back to a console call that silently
-// dropped the header's program. The seam itself survives navigation
-// (latest-session-wins), so THIS screen — where the operator already lands
-// — gets a sibling of the monitor log's own quiet door.
+// rower actually wants it: the finish auto-navigates here (now the summary,
+// not SessionComplete), the sheet dies with the session, and James fell
+// back to a console call that silently dropped the header's program. The
+// seam itself survives navigation (latest-session-wins), so THIS screen —
+// where the operator already lands — gets a sibling of the monitor log's
+// own quiet door.
 describe("LogSession: the recording's quiet door (walk-2026-08-16 close-out)", () => {
   afterEach(() => {
     delete (window as { __pm5Recording__?: unknown }).__pm5Recording__;
@@ -837,7 +861,7 @@ describe("LogSession: the recording's quiet door (walk-2026-08-16 close-out)", (
     const { workout } = buildSessionFixture();
     mockWorkouts([workout]);
     await renderLog();
-    await screen.findByRole("heading", { name: "Log Hoarfrost" });
+    await screen.findByRole("heading", { name: "Hoarfrost" });
 
     expect(
       screen.queryByRole("button", { name: "RECORDING · DOWNLOAD" }),
@@ -862,7 +886,7 @@ describe("LogSession: the recording's quiet door (walk-2026-08-16 close-out)", (
     const { workout } = buildSessionFixture();
     mockWorkouts([workout]);
     await renderLog();
-    await screen.findByRole("heading", { name: "Log Hoarfrost" });
+    await screen.findByRole("heading", { name: "Hoarfrost" });
 
     const row = screen.getByRole("button", { name: "RECORDING · DOWNLOAD" });
     await userEvent.click(row);
@@ -874,81 +898,34 @@ describe("LogSession: the recording's quiet door (walk-2026-08-16 close-out)", (
   });
 });
 
-describe("LogSession: the ledger residual (workoutId mismatch)", () => {
-  it("ignores a foreign draft — fallback labels render and the PACES LOCKED panel is omitted entirely (F1: no bare dash)", async () => {
-    const { workout } = buildSessionFixture();
-    // A real, validly-shaped draft — just for a DIFFERENT workout than the
-    // one this run was built from.
-    const foreign = buildDraft({
-      id: "a-completely-different-workout",
-      title: "Foreign Workout",
-      type: "AN",
-      steps: [
-        {
-          k: "w",
-          duration: { kind: "time", minutes: 5 },
-          ref: { effort: "max" },
-        },
-      ],
-    });
-    saveDraft(startDraft(foreign));
-    mockWorkouts([workout]);
-    await renderLog();
-    await screen.findByRole("heading", { name: "Log Hoarfrost" });
-
-    // Neither base is recoverable without a matching draft — F1: the whole
-    // panel is omitted, not a dashed "2K — · 6K —".
-    expect(document.querySelector(".log-paces-panel")).not.toBeInTheDocument();
-
-    const rows = Array.from(document.querySelectorAll(".log-step-row"));
-    expect(rows).toHaveLength(2);
-    // Fallback label: `matchedDraft` gates on `workoutId`, so `draftStep`
-    // resolves to `undefined` for this mismatched draft — proving the
-    // mismatch guard actually changed behavior rather than passing
-    // vacuously — but `phase.ref` (ui-fix round Task 2 fix round, F1b) is
-    // still present on a run built through the normal `buildRun` path, so
-    // the fallback reconstructs the SAME chip the preferred (matched-draft)
-    // path would have: "6k +12" for both rows (Hoarfrost and Calm Sea share
-    // the same offset), not the phase's frozen label (which, for a run this
-    // fresh, would already be the exact split anyway — the chip and the
-    // exact split only diverge for a LEGACY pre-ref run, see Timer.test.tsx's
-    // own dedicated test for that case).
-    expect(rows[0]).toHaveTextContent("12:00 @ 6k +12");
-    expect(rows[1]).toHaveTextContent("10000 m @ 6k +12");
-  });
-});
-
 // IMP-2 (whole-branch review): before this fix, the session door had NO
-// non-destructive way to leave this screen at all (tab bar hidden, no back
-// link — only Save or a destructive staged Discard); the manual door's
-// OTHER states (workout-not-found, baselines-unset) already had a BackLink,
-// but its own main, ready-to-save state didn't (a Must-fix minor from Task
-// 3's own deferred review list: "BackLink on the manual door's main state =
-// strictly-better exit"). Both now render one via `LogScreen`'s shared
-// `backFallback` prop.
-describe("LogSession: BackLink exit (IMP-2)", () => {
-  it("the session door's main state renders a BackLink falling back to /today (neither of its two real entry points carries a `from` today)", async () => {
+// non-destructive way to leave this screen at all. Post-workout-summary
+// spec §2A: the label changes from `← BACK` to `← DONE`, and every door's
+// fallback is now uniformly `/today` (a spec-driven change from the old
+// per-door fallback — the manual door used to fall back to `/library`).
+describe("LogSession: BackLink exit (IMP-2, relabeled ← DONE by §2A)", () => {
+  it("the session door falls back to /today", async () => {
     buildSessionFixture();
     mockWorkouts([]);
     await renderLog();
-    await screen.findByText("AUG 1 · 30 MIN");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
 
-    expect(screen.getByRole("link", { name: "← BACK" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "← DONE" })).toHaveAttribute(
       "href",
       "/today",
     );
   });
 
-  it("the manual door's main, ready-to-save state renders a BackLink falling back to /library", async () => {
+  it("the manual door's main, ready-to-save state also falls back to /today (§2A's uniform fallback)", async () => {
     const workout = manualWorkoutFixture();
     mockWorkouts([workout]);
     mockBaselines();
     await renderManualLog(workout.id);
-    await screen.findByText(MANUAL_TOTAL_LABEL);
+    await screen.findByRole("heading", { name: "Hoarfrost" });
 
-    expect(screen.getByRole("link", { name: "← BACK" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "← DONE" })).toHaveAttribute(
       "href",
-      "/library",
+      "/today",
     );
   });
 });
@@ -956,46 +933,59 @@ describe("LogSession: BackLink exit (IMP-2)", () => {
 describe("LogSession: workoutType sourcing", () => {
   // IMP-3 (whole-branch review): every fixture below overrides `type` away
   // from Hoarfrost's real "O2" — the SAME value `resolveWorkoutType`'s own
-  // last-resort fallback returns. Before this fix all three tests expected
-  // "O2" throughout, so a `resolveWorkoutType` regressed to a bare
-  // `() => "O2"` (ignoring the draft AND the library entirely) would have
-  // passed every one of them.
+  // last-resort fallback returns. The summary no longer renders a visible
+  // type badge (dropped per the post-workout-summary spec's §2A table,
+  // which names no such element) — the only observable surface left is the
+  // POSTed wire body, so these tests save and inspect it.
   it("sources workoutType from the library when there is no usable draft, not the last-resort default", async () => {
     const { workout } = buildSessionFixture({ type: "AT" });
     clearDraft(); // simulate a missing draft — the run alone survives.
     mockWorkouts([workout]);
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-1" }), { status: 201 }),
+      ),
+    );
     await renderLog();
-    await screen.findByRole("heading", { name: "Log Hoarfrost" });
-    expect(document.querySelector(".type-badge")?.textContent).toBe("AT");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+    await screen.findByText("TODAY SCREEN");
+    expect(parsedBodies(apiFn)[0]!.workoutType).toBe("AT");
   });
 
   it("falls back to O2 only when both the draft AND the library lookup fail", async () => {
-    // The fixture's own real type is "AT", not "O2" — proves the fallback
-    // is genuinely engaged (an "O2" result can't be coming from anywhere
-    // else on this path) rather than happening to match a real value.
     buildSessionFixture({ type: "AT" });
     clearDraft();
     mockWorkouts([]); // the workout is gone from the library too.
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-1" }), { status: 201 }),
+      ),
+    );
     await renderLog();
-    await screen.findByRole("heading", { name: "Log Hoarfrost" });
-    expect(document.querySelector(".type-badge")?.textContent).toBe("O2");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+    await screen.findByText("TODAY SCREEN");
+    expect(parsedBodies(apiFn)[0]!.workoutType).toBe("O2");
   });
 
   it("prefers matchedDraft.type over the library lookup when both exist but disagree", async () => {
     const { workout } = buildSessionFixture({ type: "AT" }); // draft.type is "AT"
     mockWorkouts([{ ...workout, type: "AN" }]); // the library disagrees
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-1" }), { status: 201 }),
+      ),
+    );
     await renderLog();
-    await screen.findByRole("heading", { name: "Log Hoarfrost" });
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+    await screen.findByText("TODAY SCREEN");
     // Neither "AN" (the library's disagreeing value) nor "O2" (the
     // fallback default) — only a real draft-preference read produces "AT".
-    expect(document.querySelector(".type-badge")?.textContent).toBe("AT");
+    expect(parsedBodies(apiFn)[0]!.workoutType).toBe("AT");
   });
 });
-
-async function chooseHeldAndPain() {
-  await userEvent.click(screen.getByRole("button", { name: "HELD" }));
-  await userEvent.click(screen.getByRole("button", { name: "Pain 2" }));
-}
 
 describe("LogSession: save", () => {
   it("POSTs the built steps plus held/pain/notes, clears the draft and run, and navigates to /today", async () => {
@@ -1007,11 +997,11 @@ describe("LogSession: save", () => {
       ),
     );
     await renderLog();
-    await screen.findByText("AUG 1 · 30 MIN");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
 
     await chooseHeldAndPain();
     await userEvent.type(screen.getByLabelText("NOTES"), "Felt strong.");
-    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
     expect(apiFn).toHaveBeenCalledTimes(1);
@@ -1036,11 +1026,6 @@ describe("LogSession: save", () => {
     expect(loadRun()).toBeNull();
   });
 
-  // Post-workout-summary spec (2026-08-17), §3: Save with NOTHING chosen —
-  // no HELD, no PAIN, no THUMBS (the last has no UI control yet, this
-  // task's own scope: Task 5 builds the reflection card) — still saves,
-  // and the wire body carries explicit nulls rather than omitting the
-  // keys, matching the server's own null-tolerant POST contract.
   it("POSTs held/pain/thumbs as null when nothing is chosen (spec: reflection is optional)", async () => {
     const { run, workout } = buildSessionFixture();
     mockWorkouts([workout]);
@@ -1050,9 +1035,9 @@ describe("LogSession: save", () => {
       ),
     );
     await renderLog();
-    await screen.findByText("AUG 1 · 30 MIN");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
 
-    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
     expect(apiFn).toHaveBeenCalledTimes(1);
@@ -1070,17 +1055,42 @@ describe("LogSession: save", () => {
     });
   });
 
+  // §2D: HOW DID IT FEEL (thumbs up/down) is now a real control — its own
+  // wire shape, alongside held/pain/notes.
+  it("POSTs thumbs:'up'/'down' when chosen, clearable the same way as held/pain", async () => {
+    const { workout } = buildSessionFixture();
+    mockWorkouts([workout]);
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-thumbs" }), { status: 201 }),
+      ),
+    );
+    await renderLog();
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "↑ MORE LIKE THIS" }),
+    );
+    expect(
+      screen.getByRole("button", { name: "↑ MORE LIKE THIS" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    // Clear it, then pick the opposite.
+    await userEvent.click(
+      screen.getByRole("button", { name: "↑ MORE LIKE THIS" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Less like this" }),
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+    await screen.findByText("TODAY SCREEN");
+    expect(parsedBodies(apiFn)[0]!.thumbs).toBe("down");
+  });
+
   // IMP-5 (whole-branch review): a wire-shape test, through an actual Save
   // click and the real posted JSON — not just `buildLogSteps`'s own return
   // value (already unit-pinned in logDraft.test.ts) — proving the 5G
-  // omission rules survive all the way to the bytes on the wire, not just
-  // to an in-memory object a later step might still widen. Real library
-  // workouts' own step OBJECTS (Fork Lightning's effort step, Calm Sea's
-  // distance step), assembled directly (no reps marker, no wu) — same "real
-  // step objects, synthetic combination" idiom `buildSessionFixture`'s own
-  // doc comment establishes — with `actuals: {}` so the distance phase reads
-  // as a DISCARDED suspect split (no stopwatch reading was ever recorded for
-  // it), not a kept one.
+  // omission rules survive all the way to the bytes on the wire.
   it("posts an effort step with no targetSplit and a discarded distance step with no actualSplit/actualSource — the exact keys, not just their values", async () => {
     const forkLightning = library("Fork Lightning");
     const effortWork = forkLightning.steps.find((s) => s.k === "w") as Extract<
@@ -1117,18 +1127,15 @@ describe("LogSession: save", () => {
       ),
     );
     await renderLog();
-    await screen.findByRole("heading", { name: "Log Wire Shape Fixture" });
+    await screen.findByRole("heading", { name: "Wire Shape Fixture" });
     await chooseHeldAndPain();
-    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
     await screen.findByText("TODAY SCREEN");
 
     const body = parsedBodies(apiFn)[0]!;
     const steps = body.steps as Record<string, unknown>[];
     expect(steps).toHaveLength(2);
 
-    // Effort step (5G rule): label/spm/seconds only. `targetSplit` would be
-    // `estimationSplit`'s internal guess, never a real prescription, and
-    // there is no actual to attribute to a target that was never set.
     expect(Object.keys(steps[0]!).sort()).toStrictEqual(
       ["label", "seconds", "spm"].sort(),
     );
@@ -1136,10 +1143,6 @@ describe("LogSession: save", () => {
     expect(steps[0]).not.toHaveProperty("actualSplit");
     expect(steps[0]).not.toHaveProperty("actualSource");
 
-    // Discarded distance step: `targetSplit`/`spm`/`meters` (the
-    // prescription) but neither `actualSplit` nor `actualSource` — absence
-    // here is deliberate (a suspect split the rower discarded), not a
-    // logged zero.
     expect(steps[1]).not.toHaveProperty("actualSplit");
     expect(steps[1]).not.toHaveProperty("actualSource");
     expect(Object.keys(steps[1]!).sort()).toStrictEqual(
@@ -1147,13 +1150,6 @@ describe("LogSession: save", () => {
     );
   });
 
-  // IMP-1 (whole-branch review): the dead end this fixes is WORST on the
-  // session door specifically — before the fix, a completed run whose only
-  // qualifying step was a test piece built `steps: []`, Save would have
-  // hard-400ed at the server, and the ONLY other control on this screen was
-  // the destructive staged Discard (no BackLink existed yet either, see
-  // IMP-2). Proves the real fix end to end: a non-empty steps array, and a
-  // genuine successful save that clears the records like any other.
   it("IMP-1: a completed run whose only qualifying step is a test piece still saves — no dead end, no empty steps array", async () => {
     const draft = buildDraft({
       id: "id-test-only-session",
@@ -1180,13 +1176,15 @@ describe("LogSession: save", () => {
       ),
     );
     await renderLog();
-    await screen.findByRole("heading", { name: "Log 2k Test Day" });
-    const rows = Array.from(document.querySelectorAll(".log-step-row"));
+    await screen.findByRole("heading", { name: "2k Test Day" });
+    const rows = Array.from(
+      document.querySelectorAll<HTMLElement>(".summary-row"),
+    );
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toHaveTextContent("2k test");
+    expect(within(rows[0]!).getByText("2k test")).toBeInTheDocument();
 
     await chooseHeldAndPain();
-    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
     expect(apiFn).toHaveBeenCalledTimes(1);
@@ -1205,9 +1203,9 @@ describe("LogSession: save", () => {
       ),
     );
     await renderLog();
-    await screen.findByText("AUG 1 · 30 MIN");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
     await chooseHeldAndPain();
-    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
     await screen.findByText("TODAY SCREEN");
 
     expect(parsedBodies(apiFn)[0]!.notes).toBeNull();
@@ -1222,9 +1220,9 @@ describe("LogSession: save", () => {
       ),
     );
     await renderLog();
-    await screen.findByText("AUG 1 · 30 MIN");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
     await chooseHeldAndPain();
-    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(
       await screen.findByText("Couldn't save this session. Try again."),
@@ -1233,23 +1231,20 @@ describe("LogSession: save", () => {
     expect(loadDraft()).not.toBeNull();
     expect(loadRun()).not.toBeNull();
     expect(
-      screen.getByRole("button", { name: "Save session" }),
+      screen.getByRole("button", { name: SAVE_BUTTON }),
     ).not.toBeDisabled();
   });
 
   it("treats an unparseable 400 body as 'no field named' — no retry, a genuine failure surfaces", async () => {
     buildSessionFixture();
     mockWorkouts([]);
-    // A 400 whose body isn't valid JSON at all — `res.json()` itself
-    // rejects, exercising the inner catch that falls back to `field:
-    // undefined` (never "workoutId", so no retry fires).
     const apiFn = mockApi(() =>
       Promise.resolve(new Response("not json", { status: 400 })),
     );
     await renderLog();
-    await screen.findByText("AUG 1 · 30 MIN");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
     await chooseHeldAndPain();
-    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(
       await screen.findByText("Couldn't save this session. Try again."),
@@ -1266,9 +1261,9 @@ describe("LogSession: save", () => {
       throw new Error("network down");
     });
     await renderLog();
-    await screen.findByText("AUG 1 · 30 MIN");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
     await chooseHeldAndPain();
-    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(
       await screen.findByText("Couldn't save this session. Try again."),
@@ -1300,33 +1295,21 @@ describe("LogSession: save", () => {
       );
     });
     await renderLog();
-    await screen.findByText("AUG 1 · 30 MIN");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
     await chooseHeldAndPain();
-    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
     expect(apiFn).toHaveBeenCalledTimes(2);
     const bodies = parsedBodies(apiFn);
     expect(bodies[0]!.workoutId).toBe(run.workoutId);
     expect(bodies[1]!.workoutId).toBeNull();
-    // IMP-4 (whole-branch review): the retry must be the SAME body with
-    // ONLY `workoutId` swapped to `null` — not, say, a body missing
-    // `steps`/`held`/`pain`/`notes` because the retry accidentally
-    // reconstructed a fresh (and incomplete) payload instead of spreading
-    // the original one. `bodies[0]!.workoutId` is real (not null), so this
-    // also proves the two bodies genuinely differ on that one field, not
-    // that the equality check is vacuous.
     expect(bodies[0]!.workoutId).not.toBeNull();
     expect(bodies[1]).toStrictEqual({ ...bodies[0], workoutId: null });
     expect(loadDraft()).toBeNull();
     expect(loadRun()).toBeNull();
   });
 
-  // IMP-4 (whole-branch review): the sibling test above only proves the
-  // retry-then-SUCCEED path; this proves retry-then-FAIL still surfaces a
-  // genuine error (not a silent swallow) and leaves the draft/run records
-  // untouched, the same guarantee every other failure test in this
-  // describe block already pins for a first-attempt failure.
   it("surfaces a genuine failure when the workoutId retry ALSO fails, records intact", async () => {
     buildSessionFixture();
     mockWorkouts([]);
@@ -1349,9 +1332,9 @@ describe("LogSession: save", () => {
       );
     });
     await renderLog();
-    await screen.findByText("AUG 1 · 30 MIN");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
     await chooseHeldAndPain();
-    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(
       await screen.findByText("Couldn't save this session. Try again."),
@@ -1362,7 +1345,7 @@ describe("LogSession: save", () => {
     expect(loadDraft()).not.toBeNull();
     expect(loadRun()).not.toBeNull();
     expect(
-      screen.getByRole("button", { name: "Save session" }),
+      screen.getByRole("button", { name: SAVE_BUTTON }),
     ).not.toBeDisabled();
   });
 
@@ -1381,9 +1364,9 @@ describe("LogSession: save", () => {
       ),
     );
     await renderLog();
-    await screen.findByText("AUG 1 · 30 MIN");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
     await chooseHeldAndPain();
-    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(
       await screen.findByText("Couldn't save this session. Try again."),
@@ -1394,30 +1377,22 @@ describe("LogSession: save", () => {
   });
 });
 
-// Task 3 (ui-fix round): the old two-button `.baseline-confirm` side panel
-// (a separate "Discard session"/"Cancel" pair) is gone — Discard now arms
-// IN PLACE, the level system's own L4/L4-armed idiom (`useStagedDiscard`),
-// same shape WorkoutDetail.tsx's own Delete workout and SessionComplete.tsx's
-// new Discard both use. The two-tap safety itself, and the clear-both-
-// records-then-navigate behaviour, are unchanged.
-// Fix round 1 (reviewer, smaller item): these three used to spy the `api`
-// module wrapper (`mockApi`/`apiFn`) — a WEAKER proof than the other two
-// surfaces' own discard tests (SessionComplete.test.tsx/Today.test.tsx),
-// which both spy `globalThis.fetch` directly and would catch a stray call
-// that bypassed `api()` entirely. `usePlan`/`useWorkouts`/`useBaselines`
-// are all mocked away elsewhere in this file (module-level `vi.doMock`,
-// `mockWorkouts`), so nothing else in this render path ever reaches the
-// real `fetch` either — aligning to the same spy the other two surfaces use.
+// Task 3 (ui-fix round): staged discard, in-place L4/L4-armed idiom. §2F
+// (post-workout-summary spec): the RESTING label reads `DISCARD WITHOUT
+// SAVING` now (the mock's own literal copy, borderless mono) — the armed
+// copy keeps the house `Tap again to discard` (the mock never designed its
+// own armed state, PROVENANCE item 4). The two-tap safety itself, and the
+// clear-both-records-then-navigate behaviour, are unchanged.
 describe("LogSession: staged discard", () => {
   it("arms on the first press without clearing anything or firing a network request", async () => {
     buildSessionFixture();
     mockWorkouts([]);
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     await renderLog();
-    await screen.findByText("AUG 1 · 30 MIN");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Discard without logging" }),
+      screen.getByRole("button", { name: "DISCARD WITHOUT SAVING" }),
     );
     expect(
       screen.getByRole("button", { name: "Tap again to discard" }),
@@ -1432,10 +1407,10 @@ describe("LogSession: staged discard", () => {
     mockWorkouts([]);
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     await renderLog();
-    await screen.findByText("AUG 1 · 30 MIN");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
 
     const discardBtn = screen.getByRole("button", {
-      name: "Discard without logging",
+      name: "DISCARD WITHOUT SAVING",
     });
     await userEvent.click(discardBtn);
     expect(
@@ -1446,11 +1421,11 @@ describe("LogSession: staged discard", () => {
       screen.getByRole("button", { name: "Tap again to discard" }),
     );
     expect(
-      screen.getByRole("button", { name: "Discard without logging" }),
+      screen.getByRole("button", { name: "DISCARD WITHOUT SAVING" }),
     ).toBeInTheDocument();
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Discard without logging" }),
+      screen.getByRole("button", { name: "DISCARD WITHOUT SAVING" }),
     );
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(loadRun()).not.toBeNull();
@@ -1461,10 +1436,10 @@ describe("LogSession: staged discard", () => {
     mockWorkouts([]);
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     await renderLog();
-    await screen.findByText("AUG 1 · 30 MIN");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Discard without logging" }),
+      screen.getByRole("button", { name: "DISCARD WITHOUT SAVING" }),
     );
     await userEvent.click(
       screen.getByRole("button", { name: "Tap again to discard" }),
@@ -1477,82 +1452,69 @@ describe("LogSession: staged discard", () => {
   });
 });
 
-// Task 3: the manual door (`/library/:id/log`) — logging an off-app row
-// straight from a workout's own detail screen ("Log it after"). Its header
-// date is real "today" (`new Date()`, computed at render — there's no
-// `now` param to inject, unlike the session door's pure `logTotals`), so
-// `MANUAL_TOTAL_LABEL` composes the expected header text from the SAME
-// `formatLogDate` LogSession.tsx itself calls, applied to the real clock at
-// module-load time, rather than a hardcoded date string that would go
-// stale (and silently pass for the wrong reason) the next time this suite
-// runs. `vi.useFakeTimers()` was tried and reverted: it hangs every
-// `userEvent` interaction in this describe block (RTL's async `findBy*`/
-// user-event's own internal delays both need real timers to resolve) — not
-// worth it for a header line whose wall-clock risk (a run straddling
-// midnight) is negligible for a test suite that completes in well under a
-// second.
-// Hoarfrost's time work (12' = 720s) + its own restMinutes (5' = 300s) +
-// Calm Sea's distance work (10,000m @ 6k+12 = 132 s/500m -> 20*132 =
-// 2640s) = 3660s -> 61 MIN exactly. (It was 65 while the fixture also
-// carried a 4' `wu` row; workouts carry no warm-up since 2026-08-09.)
-const MANUAL_TOTAL_LABEL = `${formatLogDate(new Date().toISOString())} · 61 MIN`;
-
 describe("LogSession: the manual door (Task 3)", () => {
-  it("shows the title, type badge, TODAY's date + the estimated total, the PACES LOCKED panel (referenced bases only), the per-step list with every actual 'assumed', and EXPECTED N/5 — with no Discard button at all", async () => {
+  it("shows the title, the PACES OFF caption (referenced bases only), the row list with every actual 'assumed' (rendered as PRESCRIBED — the manual door never sets actualSource: stopwatch), and EXPECTED N/5 — with no Discard button at all", async () => {
     const workout = manualWorkoutFixture();
     mockWorkouts([workout]);
     mockBaselines();
     await renderManualLog(workout.id);
 
     expect(
-      await screen.findByRole("heading", { name: "Log Hoarfrost" }),
+      await screen.findByRole("heading", { name: "Hoarfrost" }),
     ).toBeInTheDocument();
-    expect(document.querySelector(".type-badge")?.textContent).toBe("O2");
-    // estimateMinutes over wu(4') + work(12') + auto rest(5') +
-    // distance(10000m @ 132s/500m = 2640s) = 3900s -> 65 exactly
-    // (verified independently against domain/expand.ts's own
-    // estimateMinutes before writing this number in).
-    expect(screen.getByText(MANUAL_TOTAL_LABEL)).toBeInTheDocument();
+    // Only "6k" renders — neither step references "2k" at all.
+    expect(screen.getByText("PACES OFF 6K 2:00.0")).toBeInTheDocument();
 
-    // Only "6k" renders — neither step references "2k" at all (F1's own
-    // "never a bare dash" rule, shared with the session door via the same
-    // `pacesLockedText` join).
-    expect(document.querySelector(".log-paces-value")?.textContent).toBe(
-      "6K 2:00.0",
+    const rows = Array.from(
+      document.querySelectorAll<HTMLElement>(".summary-row"),
     );
-
-    const rows = Array.from(document.querySelectorAll(".log-step-row"));
     expect(rows).toHaveLength(2);
     // Row 1: Hoarfrost's own time/split step — current baselines resolve
-    // the target directly (120 + 12 = 132 -> "2:12.0"), same label idiom
-    // the session door's draft-based branch produces for the identical
-    // step.
-    expect(rows[0]).toHaveTextContent("12:00 @ 6k +12");
-    expect(rows[0]).toHaveTextContent("2:12.0");
-    // Manual-door actuals are ALWAYS "assumed" (buildManualLogSteps' own
-    // rule) — never a second ACTUAL line, unlike a real stopwatch reading.
-    expect(rows[0]).not.toHaveTextContent("ACTUAL");
+    // the target directly (120 + 12 = 132 -> "2:12.0").
+    expect(within(rows[0]!).getByText("12:00")).toBeInTheDocument();
+    expect(within(rows[0]!).getByText("2:12.0")).toBeInTheDocument();
+    expect(within(rows[0]!).getByText("6k +12")).toBeInTheDocument();
     // Row 2: Calm Sea's own distance/split step (120 + 12 = 132 ->
-    // "2:12.0") — also "assumed", also no ACTUAL line.
-    expect(rows[1]).toHaveTextContent("10000 m @ 6k +12");
-    expect(rows[1]).toHaveTextContent("2:12.0");
-    expect(rows[1]).not.toHaveTextContent("ACTUAL");
+    // "2:12.0").
+    expect(within(rows[1]!).getByText("10000 m")).toBeInTheDocument();
+    expect(within(rows[1]!).getByText("2:12.0")).toBeInTheDocument();
 
-    // EXPECTED N/5 — Hoarfrost's own `pain` (2), read straight off the
-    // fetched `LibraryWorkout`, no fallback chain needed (unlike the
-    // session door's `resolveWorkoutType`/`expectedPain`).
     expect(screen.getByText("EXPECTED 2/5")).toBeInTheDocument();
-
-    // Post-workout-summary spec (2026-08-17), §3: Save is never disabled by
-    // an empty reflection (nothing pre-selected here) — same ruling as the
-    // session door's own equivalent test above.
     expect(
-      screen.getByRole("button", { name: "Save session" }),
+      screen.getByRole("button", { name: SAVE_BUTTON }),
     ).not.toBeDisabled();
     // The brief's own words: "no Discard button (nothing to discard)."
     expect(
       screen.queryByRole("button", { name: /discard/i }),
     ).not.toBeInTheDocument();
+  });
+
+  it("has no hero block at all — the manual door has no run and no measurement of any kind (§2B's own date-only fallback)", async () => {
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    await renderManualLog(workout.id);
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    expect(screen.queryByText("AVG SPLIT")).not.toBeInTheDocument();
+    expect(screen.queryByText("TIME")).not.toBeInTheDocument();
+    expect(screen.queryByText("DISTANCE")).not.toBeInTheDocument();
+    // Meta reads date + LOGGED BY HAND, no time-of-day segment.
+    expect(
+      screen.getByText(
+        `${formatLogDate(new Date().toISOString())} · LOGGED BY HAND`,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the BY FEEL hint unconditionally (§2D: by-hand manual door never uses the single-target rule)", async () => {
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    await renderManualLog(workout.id);
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    expect(screen.getByText("BY FEEL")).toBeInTheDocument();
   });
 
   it("shows LOADING… while workouts or baselines are still resolving", async () => {
@@ -1565,15 +1527,6 @@ describe("LogSession: the manual door (Task 3)", () => {
     expect(screen.getByText("LOADING…")).toBeInTheDocument();
   });
 
-  // 7C Task 4: this door's own gate split the old combined "workouts OR
-  // baselines loading" check in two (`monitorRun`'s own branch has no use
-  // for baselines at all — see LogSession.tsx's own comment on why) —
-  // proving baselines-loading ALONE, with the library already resolved,
-  // reaches LOADING… the same as the combined test above already proves
-  // for workouts alone. Uses a REAL matching workout (this file's own
-  // realistic-fixture convention) so the library lookup that runs before
-  // this gate actually succeeds, rather than short-circuiting on an empty
-  // list first.
   it("shows LOADING… when baselines alone are still resolving (workouts already ready)", async () => {
     mockWorkouts([manualWorkoutFixture()]);
     vi.doMock("../api/useBaselines", () => ({
@@ -1625,6 +1578,10 @@ describe("LogSession: the manual door (Task 3)", () => {
     mockBaselines({ k2Seconds: null, k6Seconds: null });
     await renderManualLog(workout.id);
 
+    // This early-return degraded state is its own small screen, never the
+    // summary (PostWorkoutSummary never mounts here — there is nothing to
+    // log yet) — Task 5 left it untouched, so it keeps the pre-existing
+    // "Log {title}" heading and the bare BackLink's own default fallback.
     expect(
       await screen.findByRole("heading", { name: "Log Hoarfrost" }),
     ).toBeInTheDocument();
@@ -1634,40 +1591,34 @@ describe("LogSession: the manual door (Task 3)", () => {
     ).toHaveAttribute("href", "/you");
     // Nothing to save against — no form at all in this degraded state.
     expect(
-      screen.queryByRole("button", { name: "Save session" }),
+      screen.queryByRole("button", { name: SAVE_BUTTON }),
     ).not.toBeInTheDocument();
   });
 
-  it("Phase 6I: an effort-only workout (needsBaselines() false) opens the form with null baselines instead of the no-target block — the ManualDoorLog fix folded from Task 2's deferred ledger item", async () => {
+  it("Phase 6I: an effort-only workout (needsBaselines() false) opens the form with null baselines instead of the no-target block", async () => {
     const workout = onboardingManualWorkoutFixture();
     mockWorkouts([workout]);
     mockBaselines({ k2Seconds: null, k6Seconds: null });
     await renderManualLog(workout.id);
 
     expect(
-      await screen.findByRole("heading", { name: "Log First 6k" }),
+      await screen.findByRole("heading", { name: "First 6k" }),
     ).toBeInTheDocument();
-    // No "no target"/"Set baselines" block — the form itself renders.
     expect(screen.queryByText("no target")).not.toBeInTheDocument();
-    // No duration segment — estimateMinutes returns null for an
-    // effort-only workout with no baselines (never a fabricated total);
-    // the header shows just the date, no dangling " · N MIN" or a
-    // "· null MIN" string.
-    expect(document.querySelector(".log-meta .mono-status")?.textContent).toBe(
-      formatLogDate(new Date().toISOString()),
+    // The effort step's target renders empty (5G rule), the trailing dash
+    // still shows.
+    const rows = Array.from(
+      document.querySelectorAll<HTMLElement>(".summary-row"),
     );
-    // The effort step's target renders as the 5G-rule dash, same as every
-    // other effort step in this file — never a crash, never a fabricated
-    // split resolved against baselines that don't exist.
-    const rows = Array.from(document.querySelectorAll(".log-step-row"));
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toHaveTextContent("6000 m @ MIN");
-    expect(rows[0].querySelector(".log-step-target")?.textContent).toBe("—");
-    // No PACES LOCKED panel — an effort-only workout references neither
-    // base (F1's "referenced bases only" rule, shared via pacesLockedText).
-    expect(document.querySelector(".log-paces-panel")).not.toBeInTheDocument();
+    expect(within(rows[0]!).getByText("MIN")).toBeInTheDocument();
+    expect(rows[0]!.querySelector(".summary-row-target")?.textContent).toBe("");
+    expect(rows[0]!.querySelector(".summary-row-dash")?.textContent).toBe("—");
+    // No PACES OFF caption — an effort-only workout references neither
+    // base.
+    expect(screen.queryByText(/PACES OFF/)).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Save session" }),
+      screen.getByRole("button", { name: SAVE_BUTTON }),
     ).toBeInTheDocument();
   });
 
@@ -1681,14 +1632,14 @@ describe("LogSession: the manual door (Task 3)", () => {
       ),
     );
     await renderManualLog(workout.id);
-    await screen.findByText(MANUAL_TOTAL_LABEL);
+    await screen.findByRole("heading", { name: "Hoarfrost" });
 
     await chooseHeldAndPain();
     await userEvent.type(
       screen.getByLabelText("NOTES"),
       "Rowed it on the erg at home.",
     );
-    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
     expect(apiFn).toHaveBeenCalledTimes(1);
@@ -1705,14 +1656,6 @@ describe("LogSession: the manual door (Task 3)", () => {
     expect((body.steps as unknown[]).length).toBe(2);
   });
 
-  // Must-fix minor (whole-branch review): a browser BACK press after a
-  // successful save used to re-mount this exact route with a fresh, still-
-  // fillable form (this door touches no draft/run records to clear, unlike
-  // the session door) — a second Save click would post a genuine duplicate
-  // log and advance `doneN` a second time for the same real session. The
-  // fix (`navigate("/today", { replace: true })`) swaps this history entry
-  // out instead of pushing a new one, so BACK from `/today` lands on
-  // whatever came before this screen instead of remounting it.
   it("a browser BACK press after a successful save lands on the prior screen, not a re-submittable form (replace-navigation)", async () => {
     const workout = manualWorkoutFixture();
     mockWorkouts([workout]);
@@ -1725,9 +1668,9 @@ describe("LogSession: the manual door (Task 3)", () => {
       ),
     );
     await renderManualLogWithHistory(workout.id);
-    await screen.findByText(MANUAL_TOTAL_LABEL);
+    await screen.findByRole("heading", { name: "Hoarfrost" });
     await chooseHeldAndPain();
-    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
     expect(apiFn).toHaveBeenCalledTimes(1);
@@ -1736,31 +1679,18 @@ describe("LogSession: the manual door (Task 3)", () => {
       screen.getByRole("button", { name: "SIMULATE BROWSER BACK" }),
     );
 
-    // Lands on the workout's own detail screen (what was ACTUALLY beneath
-    // the log route in history) — not the log form again. Without
-    // `replace: true`, this would instead re-show "Log Hoarfrost" with an
-    // empty, clickable "Save session" button.
     expect(
       await screen.findByText("WORKOUT DETAIL SCREEN"),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("heading", { name: "Log Hoarfrost" }),
+      screen.queryByRole("heading", { name: "Hoarfrost" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Save session" }),
+      screen.queryByRole("button", { name: SAVE_BUTTON }),
     ).not.toBeInTheDocument();
-    // Still exactly one POST — a second Save was never even reachable.
     expect(apiFn).toHaveBeenCalledTimes(1);
   });
 
-  // THE hard constraint (task brief's own words): "must NOT touch the
-  // draft/run records — an in-progress session elsewhere survives logging
-  // an off-app row." Seeds a REAL completed-but-unlogged run (the same
-  // fixture the session-door describe block above uses) for a DIFFERENT
-  // workout than the one this test logs manually, then proves both storage
-  // keys come out BYTE-IDENTICAL (raw string equality, not just deep-equal)
-  // — not merely "still present," which a buggy re-serialize-and-rewrite
-  // could satisfy while still being a real (silent) mutation.
   it("leaves an unrelated live run/draft byte-identical in storage after a manual log saves", async () => {
     buildSessionFixture();
     const draftBefore = localStorage.getItem(DRAFT_KEY);
@@ -1777,9 +1707,9 @@ describe("LogSession: the manual door (Task 3)", () => {
       ),
     );
     await renderManualLog(workout.id);
-    await screen.findByText(MANUAL_TOTAL_LABEL);
+    await screen.findByRole("heading", { name: "Hoarfrost" });
     await chooseHeldAndPain();
-    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
     expect(apiFn).toHaveBeenCalledTimes(1);
@@ -1797,27 +1727,19 @@ describe("LogSession: the manual door (Task 3)", () => {
       ),
     );
     await renderManualLog(workout.id);
-    await screen.findByText(MANUAL_TOTAL_LABEL);
+    await screen.findByRole("heading", { name: "Hoarfrost" });
     await chooseHeldAndPain();
-    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(
       await screen.findByText("Couldn't save this session. Try again."),
     ).toBeInTheDocument();
     expect(apiFn).toHaveBeenCalledTimes(1);
     expect(
-      screen.getByRole("button", { name: "Save session" }),
+      screen.getByRole("button", { name: SAVE_BUTTON }),
     ).not.toBeDisabled();
   });
 
-  // IMP-1 (whole-branch review): the dead end this fixes, proved at the full
-  // component level (not just `buildManualLogSteps`' own unit tests in
-  // logDraft.test.ts) — before the fix, a workout authored with a test step
-  // as its ONLY qualifying step built `steps: []` here, and Save would have
-  // hard-400ed at the server ("steps must be a non-empty array") with
-  // nothing on this door to recover with (the manual door has no Discard at
-  // all, per the brief). Proves both the non-empty step list AND a genuine
-  // successful save.
   it("IMP-1: a workout whose only qualifying step is a test piece still saves — no dead end, no empty steps array", async () => {
     const workout: LibraryWorkout = {
       id: "id-test-only-manual",
@@ -1839,19 +1761,19 @@ describe("LogSession: the manual door (Task 3)", () => {
       ),
     );
     await renderManualLog(workout.id);
-    await screen.findByRole("heading", { name: "Log 2k Test Day" });
-    // The test step becomes exactly one row, as a bare label.
-    const rows = Array.from(document.querySelectorAll(".log-step-row"));
+    await screen.findByRole("heading", { name: "2k Test Day" });
+    const rows = Array.from(
+      document.querySelectorAll<HTMLElement>(".summary-row"),
+    );
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toHaveTextContent("2k test");
+    expect(within(rows[0]!).getByText("2k test")).toBeInTheDocument();
 
     await chooseHeldAndPain();
-    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
     expect(apiFn).toHaveBeenCalledTimes(1);
     const body = parsedBodies(apiFn)[0]!;
-    // The exact shape that used to hard-400: now a real, non-empty array.
     expect(body.steps).toStrictEqual([{ label: "2k test" }]);
   });
 
@@ -1878,19 +1800,15 @@ describe("LogSession: the manual door (Task 3)", () => {
       );
     });
     await renderManualLog(workout.id);
-    await screen.findByText(MANUAL_TOTAL_LABEL);
+    await screen.findByRole("heading", { name: "Hoarfrost" });
     await chooseHeldAndPain();
-    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
     expect(apiFn).toHaveBeenCalledTimes(2);
     const bodies = parsedBodies(apiFn);
     expect(bodies[0]!.workoutId).toBe(workout.id);
     expect(bodies[1]!.workoutId).toBeNull();
-    // IMP-4 (whole-branch review): the SAME full-body-minus-workoutId
-    // assertion the session door's own retry test now carries — the shared
-    // `useLogForm` retry policy (`LogSession.tsx`) must behave identically
-    // on both doors.
     expect(bodies[1]).toStrictEqual({ ...bodies[0], workoutId: null });
   });
 
@@ -1910,9 +1828,9 @@ describe("LogSession: the manual door (Task 3)", () => {
       ),
     );
     await renderManualLog(workout.id);
-    await screen.findByText(MANUAL_TOTAL_LABEL);
+    await screen.findByRole("heading", { name: "Hoarfrost" });
     await chooseHeldAndPain();
-    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(
       await screen.findByText("Couldn't save this session. Try again."),
@@ -1924,17 +1842,13 @@ describe("LogSession: the manual door (Task 3)", () => {
     const workout = manualWorkoutFixture();
     mockWorkouts([workout]);
     mockBaselines();
-    // A 400 whose body isn't valid JSON at all — `res.json()` itself
-    // rejects, exercising the inner catch that falls back to `field:
-    // undefined` (never "workoutId", so no retry fires) — same edge case
-    // the session door's own identical test covers.
     const apiFn = mockApi(() =>
       Promise.resolve(new Response("not json", { status: 400 })),
     );
     await renderManualLog(workout.id);
-    await screen.findByText(MANUAL_TOTAL_LABEL);
+    await screen.findByRole("heading", { name: "Hoarfrost" });
     await chooseHeldAndPain();
-    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(
       await screen.findByText("Couldn't save this session. Try again."),
@@ -1950,9 +1864,9 @@ describe("LogSession: the manual door (Task 3)", () => {
       throw new Error("network down");
     });
     await renderManualLog(workout.id);
-    await screen.findByText(MANUAL_TOTAL_LABEL);
+    await screen.findByRole("heading", { name: "Hoarfrost" });
     await chooseHeldAndPain();
-    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(
       await screen.findByText("Couldn't save this session. Try again."),
@@ -1960,14 +1874,7 @@ describe("LogSession: the manual door (Task 3)", () => {
     expect(apiFn).toHaveBeenCalledTimes(1);
   });
 
-  // Boundary case for `manualLockedBaseline`'s own `base === "2k"` branch:
-  // every other manual-door test's fixture references "6k" only, which
-  // would pass vacuously even if that branch silently returned k6Seconds
-  // for BOTH bases (a real bug the ternary's structure makes easy to get
-  // wrong). A workout referencing both bases at once, each off=0, is the
-  // same shape the session door's own "shows both PACES LOCKED bases" test
-  // uses, adapted to a `LibraryWorkout` (no draft/run needed here at all).
-  it("resolves each PACES LOCKED base from its OWN matching baseline when a workout references both", async () => {
+  it("resolves each PACES OFF base from its OWN matching baseline when a workout references both", async () => {
     const workout: LibraryWorkout = {
       id: "id-manual-both-bases",
       title: "Manual Both Bases",
@@ -1993,19 +1900,18 @@ describe("LogSession: the manual door (Task 3)", () => {
     mockBaselines();
     await renderManualLog(workout.id);
 
-    await screen.findByRole("heading", { name: "Log Manual Both Bases" });
-    // BASELINES.k2Seconds (100) -> "1:40.0"; BASELINES.k6Seconds (120) ->
-    // "2:00.0" — each read straight off its OWN base, off=0 on each.
-    expect(document.querySelector(".log-paces-value")?.textContent).toBe(
-      "2K 1:40.0 · 6K 2:00.0",
-    );
+    await screen.findByRole("heading", { name: "Manual Both Bases" });
+    expect(
+      screen.getByText("PACES OFF 2K 1:40.0 · 6K 2:00.0"),
+    ).toBeInTheDocument();
   });
 });
 
 // 7C Task 4: `monitorModeRun`'s own four-condition gate (spec §4), tested
 // directly against the pure function first — cheaper than driving the
-// whole screen four times over (task brief's own words) — with the full
-// screen describe block below proving the wiring on top of it.
+// whole screen four times over — with the full screen describe block below
+// proving the wiring on top of it. UNAFFECTED by Task 5: `monitorModeRun`
+// is a pure function this task's own screen rewrite never touched.
 describe("LogSession: monitorModeRun (7C spec §4's four-condition gate)", () => {
   it("engages when all four conditions hold", () => {
     const { run } = buildMonitorFixture();
@@ -2069,18 +1975,6 @@ describe("LogSession: monitorModeRun (7C spec §4's four-condition gate)", () =>
     expect(monitorModeRun(search, MONITOR_WORKOUT_ID)).toBeNull();
   });
 
-  // Fix round 1 (review finding #1): `isMonitorRun` (monitorRun.ts) is
-  // DELIBERATELY SHALLOW — it proves `Array.isArray(value.actuals)`, never
-  // that each ITEM in that array is shaped right — so a record with a
-  // malformed actuals entry (a tampered/corrupted localStorage write, the
-  // exact class of resilience scenario `loadMonitorRun`'s own "Resilience
-  // #5" already guards against one layer down) passes straight through
-  // `loadMonitorRun()` and into `buildMonitorLogSteps`, where
-  // `actual.index` on a `null` throws a plain `TypeError` — NOT a
-  // `MonitorLogSeedError`. Spec §4's own rule ("any miss falls through to
-  // today's manual form untouched") governs here too: this must disqualify
-  // the record exactly like every other condition-4 case, not crash the
-  // `useState` lazy initializer that calls this function during render.
   it("condition 4 (seed alignment) removed: a malformed actuals ITEM (not caught by isMonitorRun's own shallow validator) disqualifies the record instead of throwing", () => {
     const { run } = buildMonitorFixture();
     saveMonitorRun({
@@ -2117,8 +2011,89 @@ function mockMonitorRunClearSpy() {
   return spy;
 }
 
+// Task 5's own defensive catch (LogSession.tsx's monitor branch, wrapping
+// `buildSummaryModel`): documented as unreachable in practice — the SAME
+// deterministic `buildMonitorLogSteps` call `monitorModeRun` already made
+// once, against the SAME immutable record, cannot fail the second time —
+// but `summaryModel.ts`'s own header requires every consumer to handle its
+// throw contract explicitly, and an unexercised catch block is exactly the
+// shape this repo's own "definition of done" rule (self-mutation) exists to
+// catch. `buildSummaryModel` is mocked directly (the only way to reach this
+// branch at all) rather than driven end to end.
+describe("LogSession: the manual door's monitor mode — buildSummaryModel's own throw contract (defensive coverage)", () => {
+  // `vi.doMock` registrations are NOT cleared by `beforeEach`'s own
+  // `vi.resetModules()` (that only drops the module CACHE, not pending
+  // mock factories) — left unmocked, this file's own module id would keep
+  // intercepting every later test's `import("./summaryModel")` in this
+  // same file, silently breaking unrelated tests below. `vi.doUnmock`
+  // undoes exactly that registration once each test here is done.
+  afterEach(() => {
+    vi.doUnmock("./summaryModel");
+  });
+
+  it("a MonitorLogSeedError from buildSummaryModel falls through to /today rather than crashing", async () => {
+    const { run, workout } = buildMonitorFixture();
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    vi.doMock("./summaryModel", async () => {
+      const actual =
+        await vi.importActual<typeof import("./summaryModel")>(
+          "./summaryModel",
+        );
+      // The class reference matters here, not just the shape: LogSession.tsx
+      // checks `err instanceof MonitorLogSeedError`, and this file's own
+      // TOP-LEVEL static import of that class was resolved BEFORE
+      // `beforeEach`'s `vi.resetModules()` ran for this test — a fresh
+      // dynamic re-import (matching whatever generation `./LogSession`
+      // itself sees below) is what makes `instanceof` actually true.
+      const { MonitorLogSeedError: FreshMonitorLogSeedError } =
+        await import("./logDraft");
+      return {
+        ...actual,
+        buildSummaryModel: () => {
+          throw new FreshMonitorLogSeedError("forced for coverage");
+        },
+      };
+    });
+
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+  });
+
+  it("a non-MonitorLogSeedError from buildSummaryModel is rethrown, never silently swallowed", async () => {
+    const { run, workout } = buildMonitorFixture();
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    vi.doMock("./summaryModel", async () => {
+      const actual =
+        await vi.importActual<typeof import("./summaryModel")>(
+          "./summaryModel",
+        );
+      return {
+        ...actual,
+        buildSummaryModel: () => {
+          throw new Error("an unrelated, genuinely unexpected failure");
+        },
+      };
+    });
+    // React logs the uncaught render error to console.error; expected here,
+    // not a real assertion target.
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+
+    await expect(
+      renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor"),
+    ).rejects.toThrow("an unrelated, genuinely unexpected failure");
+
+    consoleError.mockRestore();
+  });
+});
+
 describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
-  it("shows the title/type/EXPECTED, the caption, PACES LOCKED from the frozen seed, date+duration from the run's own stamps, and the widened render gate showing every pm5 split", async () => {
+  it("shows the title/EXPECTED, PACES OFF from the frozen seed, and every row MEASURED with a real pm5 pace — the widened render gate", async () => {
     const { run, workout } = buildMonitorFixture();
     saveMonitorRun(run);
     mockWorkouts([workout]);
@@ -2126,44 +2101,35 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
 
     expect(
-      await screen.findByRole("heading", { name: "Log Hoarfrost" }),
+      await screen.findByRole("heading", { name: "Hoarfrost" }),
     ).toBeInTheDocument();
-    expect(document.querySelector(".type-badge")?.textContent).toBe("O2");
     expect(screen.getByText("EXPECTED 2/5")).toBeInTheDocument();
+    expect(screen.getByText("PACES OFF 6K 2:00.0")).toBeInTheDocument();
 
-    // Date/duration from startedAt/completedAt (FIXED_NOW + 20 minutes),
-    // NOT `estimateMinutes` — the manual door's own header formula never
-    // runs in this branch.
-    expect(screen.getByText("AUG 1 · 20 MIN")).toBeInTheDocument();
-
-    // The caption: middle dot, never an em-dash, both intervals measured.
-    expect(
-      screen.getByText("FROM PM5 432331249 Row · ALL 2 INTERVALS MEASURED"),
-    ).toBeInTheDocument();
-    expect(document.querySelector(".log-from-monitor")).not.toBeNull();
-
-    // PACES LOCKED from logSeed.paces — same "6k only" shape as the
-    // fixture's own steps (neither references "2k").
-    expect(document.querySelector(".log-paces-value")?.textContent).toBe(
-      "6K 2:00.0",
+    // Row 0 is the fixture's own warm-up row (`buildRun`'s 4-minute warm-up
+    // setting) — measured-shaped but never judged (R-C). Rows 1/2 are the
+    // two work intervals: both carry a real avgSplit reading -> both
+    // MEASURED, each showing its own elapsed time and pace (fmtDuration/
+    // fmtSplit of the actual reading — the deviation NUMBERS/colors are
+    // `summaryModel.test.ts`'s own concern, this screen only proves the
+    // pace/time text renders).
+    const rows = Array.from(
+      document.querySelectorAll<HTMLElement>(".summary-row"),
     );
-
-    // The widened render gate: BOTH rows show a real ACTUAL line (pm5),
-    // distinct from their targets (140/125 vs 132 for both).
-    const rows = Array.from(document.querySelectorAll(".log-step-row"));
-    expect(rows).toHaveLength(2);
-    expect(rows[0]).toHaveTextContent("2:12.0"); // target
-    expect(rows[0]).toHaveTextContent("ACTUAL 2:20.0");
-    expect(rows[1]).toHaveTextContent("2:12.0"); // target
-    expect(rows[1]).toHaveTextContent("ACTUAL 2:05.0");
+    expect(rows).toHaveLength(3);
+    expect(rows[0]!.className).toContain("summary-row-warmup");
+    expect(within(rows[1]!).getByText("11:45")).toBeInTheDocument(); // 705s
+    expect(within(rows[1]!).getByText("2:20.0")).toBeInTheDocument(); // avgSplit 140
+    expect(within(rows[2]!).getByText("41:40")).toBeInTheDocument(); // 2500s
+    expect(within(rows[2]!).getByText("2:05.0")).toBeInTheDocument(); // avgSplit 125
 
     // Unlike the ordinary manual door, this mode DOES have a Discard.
     expect(
-      screen.getByRole("button", { name: "Discard without logging" }),
+      screen.getByRole("button", { name: "DISCARD WITHOUT SAVING" }),
     ).toBeInTheDocument();
   });
 
-  it("partial: one interval measured, one not — caption reads '1 OF 2', the unmeasured row shows no ACTUAL line", async () => {
+  it("partial: one interval measured, one not — the unmeasured interval renders PRESCRIBED (no ACTUAL reading, target/offset only)", async () => {
     const { run, workout } = buildMonitorFixture({
       actuals: [
         {
@@ -2182,17 +2148,22 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     mockWorkouts([workout]);
     mockBaselines();
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
-    await screen.findByRole("heading", { name: "Log Hoarfrost" });
+    await screen.findByRole("heading", { name: "Hoarfrost" });
 
-    expect(
-      screen.getByText("FROM PM5 432331249 Row · 1 OF 2 INTERVALS MEASURED"),
-    ).toBeInTheDocument();
-    const rows = Array.from(document.querySelectorAll(".log-step-row"));
-    expect(rows[0]).toHaveTextContent("ACTUAL 2:20.0");
-    expect(rows[1]).not.toHaveTextContent("ACTUAL");
+    const rows = Array.from(
+      document.querySelectorAll<HTMLElement>(".summary-row"),
+    );
+    expect(rows).toHaveLength(3); // warm-up + 2 work intervals
+    expect(within(rows[1]!).getByText("11:45")).toBeInTheDocument();
+    // Row 2 (Calm Sea) has no matched actual at all -> PRESCRIBED: target
+    // split shown, never an assumed/measured reading (unlike the
+    // phone-timer door, a monitor interval with no boundary gets no "held
+    // the target" guess).
+    expect(within(rows[2]!).getByText("2:12.0")).toBeInTheDocument();
+    expect(rows[2]!.querySelector(".summary-row-dash")?.textContent).toBe("—");
   });
 
-  it("an unusable avgSplit (0 — 'the wire had no reading') still counts as measured for the caption, with no ACTUAL line of its own", async () => {
+  it("an unusable avgSplit (0 — 'the wire had no reading') still renders the row MEASURED (actualSource: pm5), just with no pace text", async () => {
     const { run, workout } = buildMonitorFixture({
       actuals: [
         {
@@ -2219,26 +2190,25 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     mockWorkouts([workout]);
     mockBaselines();
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
-    await screen.findByRole("heading", { name: "Log Hoarfrost" });
+    await screen.findByRole("heading", { name: "Hoarfrost" });
 
-    // Both intervals carry actualSource: "pm5" (the pairing exception), so
-    // the caption still reads "ALL 2" even though row 1 has no ACTUAL line.
-    expect(
-      screen.getByText("FROM PM5 432331249 Row · ALL 2 INTERVALS MEASURED"),
-    ).toBeInTheDocument();
-    const rows = Array.from(document.querySelectorAll(".log-step-row"));
-    expect(rows[0]).not.toHaveTextContent("ACTUAL");
-    expect(rows[1]).toHaveTextContent("ACTUAL 2:05.0");
+    const rows = Array.from(
+      document.querySelectorAll<HTMLElement>(".summary-row"),
+    );
+    // Row 1 (Hoarfrost, after the warm-up row) carries no `actualSplit`
+    // (avgSplit 0 -> dropped, `logDraft.ts`'s own rule) but IS still
+    // `measured: true` in the model's own row shape — `.summary-row-time`
+    // still shows the elapsed reading.
+    expect(within(rows[1]!).getByText("11:45")).toBeInTheDocument();
+    expect(rows[1]!.querySelector(".summary-row-pace")?.textContent).toBe("");
+    expect(within(rows[2]!).getByText("2:05.0")).toBeInTheDocument();
   });
 
   // THE HIJACK PIN, at the screen level (unit-level coverage lives in the
   // `monitorModeRun` describe block above): a stale completed MonitorRun
-  // for the SAME workout, reached with NO `from=monitor` flag (a reload, a
-  // bookmark, or simply Log it after clicked normally) must render the
-  // manual form BYTE-FOR-BYTE — the caption is absent, and a manual-only
-  // element (the estimated-total header, computed from `estimateMinutes`,
-  // which the monitor branch never calls) is present.
-  it("THE HIJACK PIN: no from=monitor flag + a stale completed MonitorRun for the SAME workout renders the manual form byte-for-byte", async () => {
+  // for the SAME workout, reached with NO `from=monitor` flag, must render
+  // the manual form.
+  it("THE HIJACK PIN: no from=monitor flag + a stale completed MonitorRun for the SAME workout renders the manual form", async () => {
     const { run } = buildMonitorFixture();
     saveMonitorRun(run);
     const workout = manualWorkoutFixture(MONITOR_WORKOUT_ID);
@@ -2246,23 +2216,15 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     mockBaselines();
     await renderManualLog(MONITOR_WORKOUT_ID); // no search string at all
 
-    await screen.findByRole("heading", { name: "Log Hoarfrost" });
-    expect(screen.queryByText(/FROM PM5/)).not.toBeInTheDocument();
-    expect(document.querySelector(".log-from-monitor")).toBeNull();
-    // The manual door's own estimated-total header — proves the ordinary
-    // `buildManualLogSteps`/`estimateMinutes` path ran, not the monitor one.
-    expect(screen.getByText(MANUAL_TOTAL_LABEL)).toBeInTheDocument();
-    // No Discard at all — the plain manual door's own signature (Task 3's
-    // "no Discard button" test, pinned again here for this exact scenario).
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    // The manual door's own hero-less, BY FEEL-hinted shape — proves the
+    // ordinary `buildManualLogSteps` path ran, not the monitor one.
+    expect(screen.getByText("BY FEEL")).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /discard/i }),
     ).not.toBeInTheDocument();
   });
 
-  // Fix round 1 (review finding #1), screen-level companion to the
-  // `monitorModeRun` unit test above: proves the door itself never
-  // crashes on a shallowly-valid-but-malformed record — it renders the
-  // ordinary manual form, same as any other condition-4 miss.
   it("a shallowly-valid MonitorRun with a malformed actuals entry never crashes the log door — it falls through to the manual form", async () => {
     const { run } = buildMonitorFixture();
     saveMonitorRun({ ...run, actuals: [null as unknown as IntervalActual] });
@@ -2272,27 +2234,11 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
 
     expect(
-      await screen.findByRole("heading", { name: "Log Hoarfrost" }),
+      await screen.findByRole("heading", { name: "Hoarfrost" }),
     ).toBeInTheDocument();
-    expect(screen.queryByText(/FROM PM5/)).not.toBeInTheDocument();
-    expect(document.querySelector(".log-from-monitor")).toBeNull();
-    expect(screen.getByText(MANUAL_TOTAL_LABEL)).toBeInTheDocument();
+    expect(screen.getByText("BY FEEL")).toBeInTheDocument();
   });
 
-  // Queue item 2 (PR #105's final-review Minor 3), test half ONLY: a
-  // legacy v1 (logSeed-less) MonitorRun that the rower closed through
-  // Today's interrupted-row door (F6, `endedBy: "interrupted"`) also
-  // stamps `completedAt` — condition 2 of `monitorModeRun`'s own gate
-  // passes (a finished record for this workout), but condition 4 fails
-  // exactly like the malformed-actuals case above: `buildMonitorLogSteps`
-  // throws (no `logSeed` to build steps from), so the record falls
-  // through to the SAME manual door. Named here as INTENDED, not a
-  // defect: a v1 record predates `logSeed` entirely and there is no
-  // program-derived content this door could show beyond the plain manual
-  // form. Whether the manual door's own Save should ALSO clear this now-
-  // unreachable stale MonitorRun record is an open product question,
-  // explicitly reserved for James (PR #105 review Minor 3) — this test
-  // deliberately implements and asserts NO clearing behavior either way.
   it("a legacy v1 interrupted MonitorRun falls through gate 4 to the manual door, intended (queue item 2)", async () => {
     const { run } = buildMonitorFixture();
     const { logSeed: _drop, ...v1Shaped } = run;
@@ -2307,11 +2253,9 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
 
     expect(
-      await screen.findByRole("heading", { name: "Log Hoarfrost" }),
+      await screen.findByRole("heading", { name: "Hoarfrost" }),
     ).toBeInTheDocument();
-    expect(screen.queryByText(/FROM PM5/)).not.toBeInTheDocument();
-    expect(document.querySelector(".log-from-monitor")).toBeNull();
-    expect(screen.getByText(MANUAL_TOTAL_LABEL)).toBeInTheDocument();
+    expect(screen.getByText("BY FEEL")).toBeInTheDocument();
   });
 
   it("POSTs the pm5 steps verbatim (actualSource, avgHr, actualSeconds, actualMeters) plus deviceName, and clears MonitorRun exactly once on success", async () => {
@@ -2328,10 +2272,10 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
       ),
     );
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
-    await screen.findByRole("heading", { name: "Log Hoarfrost" });
+    await screen.findByRole("heading", { name: "Hoarfrost" });
 
     await chooseHeldAndPain();
-    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
     expect(apiFn).toHaveBeenCalledTimes(1);
@@ -2347,22 +2291,10 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
       expect(typeof step.actualMeters).toBe("number");
     }
 
-    // Cleared exactly once: the record is gone, and the clearing FUNCTION
-    // itself (not just its effect) was invoked exactly once.
     expect(loadMonitorRun()).toBeNull();
     expect(clearSpy).toHaveBeenCalledTimes(1);
   });
 
-  // Branch review Minor: `webBluetooth.ts`/`capacitorBle.ts` both use
-  // `device.name ?? "PM5"` — nullish, not `||` — so an empty advertised GATT
-  // name reaches `MonitorRun.deviceName` verbatim, and a >64-char one is
-  // equally possible. The server's own band is 1..64 chars
-  // (`data.ts`), and without a client-side guard either would 400 the
-  // WHOLE save with no recoverable retry (this hook's 400-retry only ever
-  // strips `workoutId`) — the rower's only exit would be losing the
-  // session to Discard. `useLogForm`'s `submit` now drops the key rather
-  // than blocking the save, same "own field, never the log" rule the
-  // branch already applies to avgHr/actualSplit/spm.
   it("an empty or >64-char deviceName is omitted from the POST body — the save still succeeds (branch review Minor)", async () => {
     const { run: emptyRun, workout } = buildMonitorFixture({ deviceName: "" });
     saveMonitorRun(emptyRun);
@@ -2376,10 +2308,10 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
       ),
     );
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
-    await screen.findByRole("heading", { name: "Log Hoarfrost" });
+    await screen.findByRole("heading", { name: "Hoarfrost" });
 
     await chooseHeldAndPain();
-    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
     const body = parsedBodies(apiFn)[0]!;
@@ -2394,10 +2326,10 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     const clearSpy = mockMonitorRunClearSpy();
     mockApi(() => Promise.resolve(new Response(null, { status: 500 })));
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
-    await screen.findByRole("heading", { name: "Log Hoarfrost" });
+    await screen.findByRole("heading", { name: "Hoarfrost" });
 
     await chooseHeldAndPain();
-    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
 
     expect(
       await screen.findByText("Couldn't save this session. Try again."),
@@ -2413,10 +2345,10 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     mockBaselines();
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
-    await screen.findByRole("heading", { name: "Log Hoarfrost" });
+    await screen.findByRole("heading", { name: "Hoarfrost" });
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Discard without logging" }),
+      screen.getByRole("button", { name: "DISCARD WITHOUT SAVING" }),
     );
     await userEvent.click(
       screen.getByRole("button", { name: "Tap again to discard" }),
@@ -2429,14 +2361,6 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  // Task 5: the staged half of the same control, isolated from its own
-  // fire — the session door's own idiom (`useStagedDiscard`'s `armed`
-  // state machine) means the FIRST press only arms; the record must
-  // survive that press untouched, and only the SECOND (only reachable
-  // while armed) actually fires. The test above already exercises both
-  // presses together; this one pins the first press in isolation so a
-  // regression that fires on one press (skipping the arm) still fails
-  // something.
   it("Discard is staged: the first press only arms (button text flips, no clear, no navigation) — the record survives untouched", async () => {
     const { run, workout } = buildMonitorFixture();
     saveMonitorRun(run);
@@ -2444,10 +2368,10 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     mockBaselines();
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
-    await screen.findByRole("heading", { name: "Log Hoarfrost" });
+    await screen.findByRole("heading", { name: "Hoarfrost" });
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Discard without logging" }),
+      screen.getByRole("button", { name: "DISCARD WITHOUT SAVING" }),
     );
 
     expect(
@@ -2458,32 +2382,18 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  // Task 5 (spec §4's own words: "the manual door has none (`discardSlot`
-  // is null there)"): the PLAIN manual door (no `?from=monitor`, no
-  // MonitorRun at all) is where that null lives — pinned again here,
-  // alongside the rest of this task's discard/lifecycle tests, rather
-  // than only in Task 3's original describe block, since this IS the
-  // property Task 5's own discard work must never regress.
   it("the plain manual door (no monitor run at all) still has no Discard slot — discardSlot stays null outside monitor mode", async () => {
     const workout = manualWorkoutFixture();
     mockWorkouts([workout]);
     mockBaselines();
     await renderManualLog(workout.id);
-    await screen.findByText(MANUAL_TOTAL_LABEL);
+    await screen.findByRole("heading", { name: "Hoarfrost" });
 
     expect(
       screen.queryByRole("button", { name: /discard/i }),
     ).not.toBeInTheDocument();
   });
 
-  // Task 5, spec §5's "no new destruction paths": leaving the screen any
-  // way OTHER than the discard firing or a successful save (BackLink, tab
-  // bar, reload) must leave the record standing — `LogScreen`'s `BackLink`
-  // is a plain router `Link`, not a handler this test can "click through"
-  // to a real history pop in a meaningful way, so the faithful way to prove
-  // no hidden cleanup runs on the way out is to unmount the component
-  // outright (the same effect a real navigation away has on this tree) and
-  // check the record is still exactly where it was.
   it("leaving via BackLink (unmount) leaves the MonitorRun standing — loadMonitorRun() is still non-null after unmount", async () => {
     const { run, workout } = buildMonitorFixture();
     saveMonitorRun(run);
@@ -2493,18 +2403,14 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
       MONITOR_WORKOUT_ID,
       "?from=monitor",
     );
-    await screen.findByRole("heading", { name: "Log Hoarfrost" });
-    expect(screen.getByRole("link", { name: "← BACK" })).toBeInTheDocument();
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    expect(screen.getByRole("link", { name: "← DONE" })).toBeInTheDocument();
 
     unmount();
 
     expect(loadMonitorRun()).not.toBeNull();
   });
 
-  // The M-2 coexistence contract (spec §5): a phone `SessionRun`/`SessionDraft`
-  // sitting around for a DIFFERENT workout must survive both a monitor-mode
-  // save and a monitor-mode discard byte-for-byte — this door reads/writes
-  // `MONITOR_RUN_KEY` only.
   it("leaves an unrelated live run/draft byte-identical in storage after a monitor-mode save", async () => {
     buildSessionFixture();
     const draftBefore = localStorage.getItem(DRAFT_KEY);
@@ -2524,9 +2430,9 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
       ),
     );
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
-    await screen.findByRole("heading", { name: "Log Hoarfrost" });
+    await screen.findByRole("heading", { name: "Hoarfrost" });
     await chooseHeldAndPain();
-    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
     await screen.findByText("TODAY SCREEN");
 
     expect(localStorage.getItem(DRAFT_KEY)).toBe(draftBefore);
@@ -2543,10 +2449,10 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     mockWorkouts([workout]);
     mockBaselines();
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
-    await screen.findByRole("heading", { name: "Log Hoarfrost" });
+    await screen.findByRole("heading", { name: "Hoarfrost" });
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Discard without logging" }),
+      screen.getByRole("button", { name: "DISCARD WITHOUT SAVING" }),
     );
     await userEvent.click(
       screen.getByRole("button", { name: "Tap again to discard" }),
@@ -2565,22 +2471,15 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
 
     expect(
-      await screen.findByRole("heading", { name: "Log Hoarfrost" }),
+      await screen.findByRole("heading", { name: "Hoarfrost" }),
     ).toBeInTheDocument();
-    // The ordinary manual door's "no target / Set baselines" degradation
-    // never appears — this branch reads `logSeed.paces`, never baselines.
     expect(screen.queryByText("no target")).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Save session" }),
+      screen.getByRole("button", { name: SAVE_BUTTON }),
     ).toBeInTheDocument();
   });
 
-  // Same "both bases at once" shape as the plain manual door's own
-  // "resolves each PACES LOCKED base from its OWN matching baseline" test
-  // above — `buildMonitorFixture`'s own two real library steps are both
-  // 6k-based, so this exercises the OTHER half of `logSeed.paces`' own
-  // `k2`/`k6` optional pair (`?? null`) that fixture never reaches.
-  it("shows both PACES LOCKED bases when the frozen seed carries both (a 2k off=0 and a 6k off=0 step)", async () => {
+  it("shows both bases in the PACES OFF caption when the frozen seed carries both (a 2k off=0 and a 6k off=0 step)", async () => {
     const draft = buildDraft({
       id: "id-monitor-both-bases",
       title: "Monitor Both Bases",
@@ -2627,22 +2526,13 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     mockBaselines();
     await renderManualLog("id-monitor-both-bases", "?from=monitor");
 
-    await screen.findByRole("heading", { name: "Log Monitor Both Bases" });
-    // BASELINES.k2Seconds (100) -> "1:40.0"; BASELINES.k6Seconds (120) ->
-    // "2:00.0" — same values `buildLogSeed` froze at "connect" time.
-    expect(document.querySelector(".log-paces-value")?.textContent).toBe(
-      "2K 1:40.0 · 6K 2:00.0",
-    );
+    await screen.findByRole("heading", { name: "Monitor Both Bases" });
+    expect(
+      screen.getByText("PACES OFF 2K 1:40.0 · 6K 2:00.0"),
+    ).toBeInTheDocument();
   });
 
-  // The `k6` half of `logSeed.paces`' own optional pair (`?? null`) never
-  // falls to its null branch anywhere else in this describe block
-  // (`buildMonitorFixture`'s two real steps are both 6k-based, and the
-  // "both bases" test just above always supplies one too) — a 2k-only seed
-  // is what actually exercises "6k was never referenced" for the monitor
-  // door, the mirror of the plain manual door's own established "6k only"
-  // fixtures.
-  it("shows only 2K when the frozen seed never references 6k at all", async () => {
+  it("shows only 2K in the PACES OFF caption when the frozen seed never references 6k at all", async () => {
     const draft = buildDraft({
       id: "id-monitor-2k-only",
       title: "Monitor 2K Only",
@@ -2684,13 +2574,11 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     mockBaselines();
     await renderManualLog("id-monitor-2k-only", "?from=monitor");
 
-    await screen.findByRole("heading", { name: "Log Monitor 2K Only" });
-    expect(document.querySelector(".log-paces-value")?.textContent).toBe(
-      "2K 1:40.0",
-    );
+    await screen.findByRole("heading", { name: "Monitor 2K Only" });
+    expect(screen.getByText("PACES OFF 2K 1:40.0")).toBeInTheDocument();
   });
 
-  it("the outside-plan toggle works identically in monitor mode: renders, flips, and Save posts advancesPlan:false when toggled", async () => {
+  it("with an active plan, Log against plan posts advancesPlan absent (default true) — Save without logging posts advancesPlan:false", async () => {
     mockPlan(readyPlanState(activePlan()));
     const { run, workout } = buildMonitorFixture();
     saveMonitorRun(run);
@@ -2704,41 +2592,34 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
       ),
     );
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
-    await screen.findByRole("heading", { name: "Log Hoarfrost" });
+    await screen.findByRole("heading", { name: "Hoarfrost" });
 
-    const toggle = screen.getByRole("button", {
-      name: "COUNTS TOWARD PLAN · SESSION 4 OF 84",
+    const lead = screen.getByRole("button", {
+      name: "Log against plan · SESSION 4 OF 84",
     });
-    await userEvent.click(toggle);
-    expect(
-      screen.getByRole("button", { name: /OUTSIDE THE PLAN/ }),
-    ).toHaveAttribute("aria-pressed", "true");
-
     await chooseHeldAndPain();
-    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+    await userEvent.click(lead);
     await screen.findByText("TODAY SCREEN");
 
     const body = parsedBodies(apiFn)[0]!;
-    expect(body.advancesPlan).toBe(false);
+    expect(body).not.toHaveProperty("advancesPlan");
   });
 });
 
-// F6 Task 3 (spec 2b): `monitorLogTotals`'s interrupted branch stops
-// reading wall-clock (`completedAt - startedAt`) entirely for a run the
-// rower ended through Today's row (`endedBy: "interrupted"`) — that gap can
-// span days between the row and the moment "Log it" was pressed, and none
-// of it happened. Duration comes from `interruptedTotalSeconds` (Task 1:
-// measured work plus each completed interval's own programmed rest) and
-// the date comes from the run's OWN `startedAt` (the plan's ruling, not a
-// spec quote — see `monitorLogTotals`'s own doc comment).
-describe("LogSession: the interrupted header stops reading wall-clock (F6 Task 3)", () => {
-  it("an interrupted record shows measured minutes (work + completed rest), not the day-long wall-clock gap, and dateLabel from startedAt", async () => {
+// F6 Task 3 (spec 2b): the monitor door's own TIME hero stops reading
+// wall-clock (`completedAt - startedAt`) entirely for a run the rower ended
+// through Today's row (`endedBy: "interrupted"`) — that gap can span days
+// between the row and the moment "Log it" was pressed, and none of it
+// happened. `measuredSessionSeconds` (Task 4's `buildSummaryModel`, R-D)
+// computes work + programmed rest for completed intervals instead, and the
+// date comes from the run's OWN `startedAt`.
+describe("LogSession: the interrupted header stops reading wall-clock (F6/R-D)", () => {
+  it("an interrupted record shows measured minutes (work + completed rest) as the TIME hero, not the day-long wall-clock gap, dated from startedAt", async () => {
     const { run, workout } = buildMonitorFixture({
-      // Only interval 1 (Hoarfrost's time work, restSeconds 300 per its
-      // own auto-inserted rest phase) measured — interval 2 never reached.
-      // work 360s + rest 300s = 660s = 11 min exactly: nowhere near the
-      // day-long wall-clock gap below, so a regression back to wall-clock
-      // cannot pass this assertion by accident.
+      // Only interval 1 (Hoarfrost's time work, restSeconds 300 per its own
+      // auto-inserted rest phase) measured — interval 2 never reached.
+      // work 360s + rest 300s = 660s = 11:00 exactly: nowhere near the
+      // day-long wall-clock gap below.
       actuals: [
         {
           index: 1,
@@ -2753,9 +2634,6 @@ describe("LogSession: the interrupted header stops reading wall-clock (F6 Task 3
     });
     const interrupted: MonitorRun = {
       ...run,
-      // startedAt Aug 1, completedAt a full day later (Aug 2) — "Log it"
-      // pressed the next day, the exact gap `endedBy: "interrupted"`
-      // exists to stop this header from reading as duration.
       startedAt: "2026-08-01T12:00:00.000Z",
       completedAt: "2026-08-02T12:05:00.000Z",
       endedBy: "interrupted",
@@ -2764,77 +2642,59 @@ describe("LogSession: the interrupted header stops reading wall-clock (F6 Task 3
     mockWorkouts([workout]);
     mockBaselines();
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
-    await screen.findByRole("heading", { name: "Log Hoarfrost" });
+    await screen.findByRole("heading", { name: "Hoarfrost" });
 
-    // 11 MIN (measured), dated AUG 1 (startedAt) — never AUG 2 (completedAt)
-    // and never the ~1440 MIN wall-clock gap.
-    expect(screen.getByText("AUG 1 · 11 MIN")).toBeInTheDocument();
-    expect(screen.queryByText(/AUG 2/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/1440 MIN/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/1445 MIN/)).not.toBeInTheDocument();
+    expect(screen.getByText("TIME")).toBeInTheDocument();
+    expect(screen.getByText("11:00")).toBeInTheDocument();
+    expect(screen.queryByText(/1440:00/)).not.toBeInTheDocument();
+    expect(screen.getByText(/^AUG 1 ·/)).toBeInTheDocument();
+    expect(screen.queryByText(/^AUG 2/)).not.toBeInTheDocument();
   });
 
   it("inverse pin: a normal-completion record (no endedBy) still shows wall-clock minutes and dateLabel from completedAt", async () => {
     const { run, workout } = buildMonitorFixture();
-    // buildMonitorFixture's own default: startedAt FIXED_NOW (Aug 1),
-    // completedAt FIXED_NOW + 20 min, no endedBy — the normal-completion
-    // branch this change must leave byte-identical in behaviour.
     saveMonitorRun(run);
     mockWorkouts([workout]);
     mockBaselines();
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
-    await screen.findByRole("heading", { name: "Log Hoarfrost" });
+    await screen.findByRole("heading", { name: "Hoarfrost" });
 
-    expect(screen.getByText("AUG 1 · 20 MIN")).toBeInTheDocument();
+    // work 705+2500=3205s + restSeconds (300 for interval1, 0 for
+    // interval2) = 3505s -> "58:25".
+    expect(screen.getByText("58:25")).toBeInTheDocument();
   });
 });
 
-// Task 3 (outside-plan logging): both doors share `useLogForm`'s
-// `outsidePlan` state and `LogScreen`'s own toggle markup verbatim (see
-// LogSession.tsx's own header comments on why the toggle lives in the
-// shared hook rather than per-door) — this describe block proves the
-// SAME battery of cases against both, rather than duplicating each case
-// twice with only the render helper swapped.
-describe("LogSession: outside-plan toggle (Task 3)", () => {
-  it("renders no toggle at all when there's no active plan (this file's own default mockPlan())", async () => {
+// Post-workout-summary spec §2F: the old separate toggle ("COUNTS TOWARD
+// PLAN"/"OUTSIDE THE PLAN") is gone — the choice between advancing and not
+// advancing the plan is now made by WHICH save button the rower taps.
+describe("LogSession: the save stack's plan position (§2F, replaces the outside-plan toggle)", () => {
+  it("renders only Save without logging (as the lead) when there's no active plan", async () => {
     const { workout } = buildSessionFixture();
     mockWorkouts([workout]);
     await renderLog();
-    await screen.findByText("AUG 1 · 30 MIN");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
 
     expect(
-      screen.queryByRole("button", { name: /COUNTS TOWARD PLAN/ }),
+      screen.queryByRole("button", { name: /Log against plan/ }),
     ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /OUTSIDE THE PLAN/ }),
-    ).not.toBeInTheDocument();
+    const lead = screen.getByRole("button", { name: "Save without logging" });
+    expect(lead.className).toContain("summary-save-lead");
   });
 
-  it("manual door: renders no toggle at all when there's no active plan", async () => {
+  it("manual door: renders only Save without logging when there's no active plan", async () => {
     const workout = manualWorkoutFixture();
     mockWorkouts([workout]);
     mockBaselines();
     await renderManualLog(workout.id);
-    await screen.findByText(MANUAL_TOTAL_LABEL);
+    await screen.findByRole("heading", { name: "Hoarfrost" });
 
     expect(
-      screen.queryByRole("button", { name: /COUNTS TOWARD PLAN/ }),
+      screen.queryByRole("button", { name: /Log against plan/ }),
     ).not.toBeInTheDocument();
   });
 
-  // Fix round 2 (whole-branch review, M1/M2): both doors used to OR
-  // `planState.state === "loading"` into their pre-existing loading gate,
-  // which parked the whole form at LOADING… — with no Retry and no
-  // BackLink — for as long as (or forever, if `/api/plan` stalled) the
-  // plan fetch took. The fix removes `planState` from the gate entirely:
-  // the form renders regardless of plan state, and the toggle itself
-  // appears only once the plan resolves with an active plan. These two
-  // tests replace the old "holds at LOADING…" pair, pinning the NEW
-  // behaviour instead: a still-loading plan renders the form immediately,
-  // with no toggle, and Save posts with no `advancesPlan` key — the same
-  // observable shape as "no active plan" or "plan hook errored" (see the
-  // plan-hook-error tests below, unchanged).
-  it("session door: renders the form immediately while the plan is still loading, with no toggle, and Save posts no advancesPlan key", async () => {
+  it("session door: renders the form immediately while the plan is still loading, with no Log against plan button, and Save posts no advancesPlan key", async () => {
     const { workout } = buildSessionFixture();
     mockWorkouts([workout]);
     mockPlan({ state: "loading" });
@@ -2847,132 +2707,72 @@ describe("LogSession: outside-plan toggle (Task 3)", () => {
     );
     await renderLog();
 
-    await screen.findByText("AUG 1 · 30 MIN");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
     expect(
-      screen.queryByRole("button", { name: /COUNTS TOWARD PLAN/ }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /OUTSIDE THE PLAN/ }),
+      screen.queryByRole("button", { name: /Log against plan/ }),
     ).not.toBeInTheDocument();
 
     await chooseHeldAndPain();
-    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
     await screen.findByText("TODAY SCREEN");
 
     const body = parsedBodies(apiFn)[0]!;
-    expect(body).not.toHaveProperty("advancesPlan");
+    // §2F's "Save without logging" ALWAYS sends advancesPlan:false, even
+    // with no plan resolved yet — harmless (the server's own plan_state
+    // upsert is a no-op with no plan to advance), and simpler than the old
+    // toggle's tri-state ("no plan" / "counts" / "outside").
+    expect(body.advancesPlan).toBe(false);
   });
 
-  it("manual door: renders the form immediately while the plan is still loading, with no toggle, and Save posts no advancesPlan key", async () => {
-    const workout = manualWorkoutFixture();
-    mockWorkouts([workout]);
-    mockBaselines();
-    mockPlan({ state: "loading" });
-    const apiFn = mockApi(() =>
-      Promise.resolve(
-        new Response(JSON.stringify({ id: "log-manual-plan-still-loading" }), {
-          status: 201,
-        }),
-      ),
-    );
-    await renderManualLog(workout.id);
-
-    await screen.findByText(MANUAL_TOTAL_LABEL);
-    expect(
-      screen.queryByRole("button", { name: /COUNTS TOWARD PLAN/ }),
-    ).not.toBeInTheDocument();
-
-    await chooseHeldAndPain();
-    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
-    await screen.findByText("TODAY SCREEN");
-
-    const body = parsedBodies(apiFn)[0]!;
-    expect(body).not.toHaveProperty("advancesPlan");
-  });
-
-  it("renders the default COUNTS TOWARD PLAN copy, sourced from doneN/sequence.length, when a plan is active", async () => {
+  it("renders the plan position on Log against plan, sourced from doneN/sequence.length, when a plan is active", async () => {
     mockPlan(readyPlanState(activePlan()));
     const { workout } = buildSessionFixture();
     mockWorkouts([workout]);
     await renderLog();
-    await screen.findByText("AUG 1 · 30 MIN");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
 
-    const toggle = screen.getByRole("button", {
-      name: "COUNTS TOWARD PLAN · SESSION 4 OF 84",
+    const lead = screen.getByRole("button", {
+      name: "Log against plan · SESSION 4 OF 84",
     });
-    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    expect(lead.className).toContain("summary-save-lead");
+    expect(
+      screen.getByRole("button", { name: "Save without logging" }).className,
+    ).toContain("summary-save-secondary");
   });
 
-  // Phase 6I: the designated onboarding workout's own Log screen pre-sets
-  // the toggle to OUTSIDE THE PLAN by default (spec: "a baseline test must
-  // not silently consume plan session 1") — still visible, still
-  // changeable, never forced.
-  it("Phase 6I: a designated onboarding workout's log defaults the toggle to OUTSIDE THE PLAN", async () => {
+  // Phase 6I: the designated onboarding workout's own summary swaps which
+  // button leads — Save without logging leads, Log against plan demotes —
+  // rather than pre-toggling a state (spec: "a baseline test must not
+  // silently consume plan session 1").
+  it("Phase 6I: a designated onboarding workout's summary leads with Save without logging", async () => {
     mockPlan(readyPlanState(activePlan()));
     const { workout } = buildOnboardingSessionFixture();
     mockWorkouts([workout]);
     await renderLog();
-    await screen.findByText("AUG 1 · 25 MIN");
+    await screen.findByRole("heading", { name: "First 6k" });
 
-    const toggle = screen.getByRole("button", {
-      name: "OUTSIDE THE PLAN · won't advance",
+    const lead = screen.getByRole("button", { name: "Save without logging" });
+    expect(lead.className).toContain("summary-save-lead");
+    const secondary = screen.getByRole("button", {
+      name: /Log against plan/,
     });
-    expect(toggle).toHaveAttribute("aria-pressed", "true");
-
-    // Still changeable — tapping it once opts BACK into the plan, the same
-    // toggle every other workout's log uses.
-    await userEvent.click(toggle);
-    expect(
-      screen.getByRole("button", {
-        name: "COUNTS TOWARD PLAN · SESSION 4 OF 84",
-      }),
-    ).toHaveAttribute("aria-pressed", "false");
+    expect(secondary.className).toContain("summary-save-secondary");
   });
 
-  it("Phase 6I: an ordinary (non-onboarding) workout's log still defaults to COUNTS TOWARD PLAN", async () => {
-    // Regression guard for the default itself: proves the new default
-    // branch only fires for a REAL onboarding title, not every workout.
+  it("Phase 6I: an ordinary (non-onboarding) workout's summary still leads with Log against plan", async () => {
     mockPlan(readyPlanState(activePlan()));
     const { workout } = buildSessionFixture();
     mockWorkouts([workout]);
     await renderLog();
-    await screen.findByText("AUG 1 · 30 MIN");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
 
     expect(
-      screen.getByRole("button", {
-        name: "COUNTS TOWARD PLAN · SESSION 4 OF 84",
-      }),
-    ).toHaveAttribute("aria-pressed", "false");
+      screen.getByRole("button", { name: "Log against plan · SESSION 4 OF 84" })
+        .className,
+    ).toContain("summary-save-lead");
   });
 
-  it("tapping the toggle flips it to OUTSIDE THE PLAN · won't advance, and back again", async () => {
-    mockPlan(readyPlanState(activePlan()));
-    const { workout } = buildSessionFixture();
-    mockWorkouts([workout]);
-    await renderLog();
-    await screen.findByText("AUG 1 · 30 MIN");
-
-    const toggle = screen.getByRole("button", {
-      name: "COUNTS TOWARD PLAN · SESSION 4 OF 84",
-    });
-    await userEvent.click(toggle);
-    const toggled = screen.getByRole("button", {
-      name: "OUTSIDE THE PLAN · won't advance",
-    });
-    expect(toggled).toHaveAttribute("aria-pressed", "true");
-
-    await userEvent.click(toggled);
-    expect(
-      screen.getByRole("button", {
-        name: "COUNTS TOWARD PLAN · SESSION 4 OF 84",
-      }),
-    ).toHaveAttribute("aria-pressed", "false");
-  });
-
-  // Wire-shape: proves the ABSENT key on the default/counting path, not
-  // merely `advancesPlan: true` — the 6C wire-shape idiom this file's own
-  // "posts an effort step..." test established, applied to the new field.
-  it("wire shape: leaving the toggle untouched posts NO advancesPlan key at all", async () => {
+  it("wire shape: Log against plan posts NO advancesPlan key at all (the server's own ?? true default)", async () => {
     mockPlan(readyPlanState(activePlan()));
     const { workout } = buildSessionFixture();
     mockWorkouts([workout]);
@@ -2984,16 +2784,20 @@ describe("LogSession: outside-plan toggle (Task 3)", () => {
       ),
     );
     await renderLog();
-    await screen.findByText("AUG 1 · 30 MIN");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
     await chooseHeldAndPain();
-    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+    await userEvent.click(
+      screen.getByRole("button", {
+        name: "Log against plan · SESSION 4 OF 84",
+      }),
+    );
     await screen.findByText("TODAY SCREEN");
 
     const body = parsedBodies(apiFn)[0]!;
     expect(body).not.toHaveProperty("advancesPlan");
   });
 
-  it("wire shape: toggling OFF posts advancesPlan: false", async () => {
+  it("wire shape: Save without logging posts advancesPlan: false", async () => {
     mockPlan(readyPlanState(activePlan()));
     const { workout } = buildSessionFixture();
     mockWorkouts([workout]);
@@ -3005,29 +2809,23 @@ describe("LogSession: outside-plan toggle (Task 3)", () => {
       ),
     );
     await renderLog();
-    await screen.findByText("AUG 1 · 30 MIN");
-    await userEvent.click(
-      screen.getByRole("button", { name: /COUNTS TOWARD PLAN/ }),
-    );
+    await screen.findByRole("heading", { name: "Hoarfrost" });
     await chooseHeldAndPain();
-    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save without logging" }),
+    );
     await screen.findByText("TODAY SCREEN");
 
     const body = parsedBodies(apiFn)[0]!;
     expect(body.advancesPlan).toBe(false);
   });
 
-  // Fix round 2 (whole-branch review, L3): the workoutId-retry policy
-  // (`useLogForm`'s `submit`, `LogSession.tsx`) rebuilds the retry body by
-  // SPREADING the original body with only `workoutId` overridden — this
-  // pins that `advancesPlan: false` survives that spread untouched, the
-  // same way the sibling "retries once with workoutId:null" test above
-  // pins `steps`/`held`/`pain`/`notes` surviving it. Nothing before this
-  // test exercised the retry path with the toggle on: a future refactor
-  // that rebuilt the retry body from `fields` instead of spreading `body`
-  // would silently convert an outside-plan retry into a plan-advancing
-  // log, and this is the only test that would catch it.
-  it("outside-plan toggle survives the workoutId retry: the retry body still carries advancesPlan: false", async () => {
+  // Fix round 2 (whole-branch review, L3, retained under the new button
+  // model): the workoutId-retry policy (`useLogForm`'s `submit`,
+  // `LogSession.tsx`) rebuilds the retry body by SPREADING the original
+  // body with only `workoutId` overridden — this pins that
+  // `advancesPlan: false` survives that spread untouched.
+  it("Save without logging survives the workoutId retry: the retry body still carries advancesPlan: false", async () => {
     mockPlan(readyPlanState(activePlan()));
     const { run, workout } = buildSessionFixture();
     mockWorkouts([workout]);
@@ -3052,12 +2850,11 @@ describe("LogSession: outside-plan toggle (Task 3)", () => {
       );
     });
     await renderLog();
-    await screen.findByText("AUG 1 · 30 MIN");
-    await userEvent.click(
-      screen.getByRole("button", { name: /COUNTS TOWARD PLAN/ }),
-    );
+    await screen.findByRole("heading", { name: "Hoarfrost" });
     await chooseHeldAndPain();
-    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save without logging" }),
+    );
 
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
     expect(apiFn).toHaveBeenCalledTimes(2);
@@ -3069,18 +2866,7 @@ describe("LogSession: outside-plan toggle (Task 3)", () => {
     expect(bodies[1]).toStrictEqual({ ...bodies[0], workoutId: null });
   });
 
-  // Fix round 1 (M1): this used to be ONE test titled "untouched posts no
-  // key, toggled posts advancesPlan: false" whose body only ever clicked
-  // the toggle and exercised the toggled-off arm — the "untouched posts no
-  // key" half of the title was never actually asserted. Split into the
-  // same two-test shape as the session door's own pair above, each test
-  // now asserting exactly what its own title promises. The absent-key
-  // assertion uses the same `.not.toHaveProperty` idiom the session door's
-  // "leaving the toggle untouched" test already uses above — a real
-  // property-existence check on the parsed wire body, not a truthiness
-  // check on `body.advancesPlan` (which would also pass for an explicit
-  // `false`).
-  it("manual door wire shape: leaving the toggle untouched posts NO advancesPlan key at all", async () => {
+  it("manual door wire shape: Log against plan posts NO advancesPlan key at all", async () => {
     mockPlan(readyPlanState(activePlan()));
     const workout = manualWorkoutFixture();
     mockWorkouts([workout]);
@@ -3093,16 +2879,20 @@ describe("LogSession: outside-plan toggle (Task 3)", () => {
       ),
     );
     await renderManualLog(workout.id);
-    await screen.findByText(MANUAL_TOTAL_LABEL);
+    await screen.findByRole("heading", { name: "Hoarfrost" });
     await chooseHeldAndPain();
-    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+    await userEvent.click(
+      screen.getByRole("button", {
+        name: "Log against plan · SESSION 4 OF 84",
+      }),
+    );
     await screen.findByText("TODAY SCREEN");
 
     const body = parsedBodies(apiFn)[0]!;
     expect(body).not.toHaveProperty("advancesPlan");
   });
 
-  it("manual door wire shape: toggling OFF posts advancesPlan: false", async () => {
+  it("manual door wire shape: Save without logging posts advancesPlan: false", async () => {
     mockPlan(readyPlanState(activePlan()));
     const workout = manualWorkoutFixture();
     mockWorkouts([workout]);
@@ -3115,23 +2905,21 @@ describe("LogSession: outside-plan toggle (Task 3)", () => {
       ),
     );
     await renderManualLog(workout.id);
-    await screen.findByText(MANUAL_TOTAL_LABEL);
-    await userEvent.click(
-      screen.getByRole("button", { name: /COUNTS TOWARD PLAN/ }),
-    );
+    await screen.findByRole("heading", { name: "Hoarfrost" });
     await chooseHeldAndPain();
-    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save without logging" }),
+    );
     await screen.findByText("TODAY SCREEN");
 
     const body = parsedBodies(apiFn)[0]!;
     expect(body.advancesPlan).toBe(false);
   });
 
-  // Logging must never be hostage to the plan fetch (LogSession.tsx's own
-  // comment on this): an errored plan hook degrades to "no toggle, no key"
-  // — the SAME observable shape as "no active plan" — rather than blocking
-  // Save or crashing on an undefined `plan`.
-  it("plan-hook error: no toggle renders, and Save still succeeds with no advancesPlan key", async () => {
+  // Logging must never be hostage to the plan fetch: an errored plan hook
+  // degrades to "no Log against plan button" — the SAME observable shape
+  // as "no active plan" — rather than blocking Save or crashing.
+  it("plan-hook error: no Log against plan button renders, and Save still succeeds", async () => {
     mockPlan({ state: "error", retry: vi.fn() });
     const { workout } = buildSessionFixture();
     mockWorkouts([workout]);
@@ -3143,40 +2931,38 @@ describe("LogSession: outside-plan toggle (Task 3)", () => {
       ),
     );
     await renderLog();
-    await screen.findByText("AUG 1 · 30 MIN");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
 
     expect(
-      screen.queryByRole("button", { name: /COUNTS TOWARD PLAN/ }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /OUTSIDE THE PLAN/ }),
+      screen.queryByRole("button", { name: /Log against plan/ }),
     ).not.toBeInTheDocument();
 
     await chooseHeldAndPain();
-    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
     await screen.findByText("TODAY SCREEN");
 
-    const body = parsedBodies(apiFn)[0]!;
-    expect(body).not.toHaveProperty("advancesPlan");
+    expect(apiFn).toHaveBeenCalledTimes(1);
   });
 
-  it("manual door: plan-hook error renders no toggle either", async () => {
+  it("manual door: plan-hook error renders no Log against plan button either", async () => {
     mockPlan({ state: "error", retry: vi.fn() });
     const workout = manualWorkoutFixture();
     mockWorkouts([workout]);
     mockBaselines();
     await renderManualLog(workout.id);
-    await screen.findByText(MANUAL_TOTAL_LABEL);
+    await screen.findByRole("heading", { name: "Hoarfrost" });
 
     expect(
-      screen.queryByRole("button", { name: /COUNTS TOWARD PLAN/ }),
+      screen.queryByRole("button", { name: /Log against plan/ }),
     ).not.toBeInTheDocument();
   });
 
-  // The toggle is part of `useLogForm`'s own state quintet lifecycle (see
-  // its header comment) — a failed save must not silently reset it, the
-  // same guarantee held/pain/notes already had before this task.
-  it("a failed save keeps the toggle in its OUTSIDE THE PLAN state", async () => {
+  // The reflection quintet (held/pain/thumbs/notes) survives a failed save
+  // unchanged — proved elsewhere; here the concern is narrower: a failed
+  // save must not reset which button LEADS (there is no state to reset —
+  // button order is a pure render-time computation from plan/isOnboarding,
+  // neither of which a failed save touches).
+  it("a failed save leaves the save stack's button order unchanged", async () => {
     mockPlan(readyPlanState(activePlan()));
     const { workout } = buildSessionFixture();
     mockWorkouts([workout]);
@@ -3188,46 +2974,18 @@ describe("LogSession: outside-plan toggle (Task 3)", () => {
       ),
     );
     await renderLog();
-    await screen.findByText("AUG 1 · 30 MIN");
-    await userEvent.click(
-      screen.getByRole("button", { name: /COUNTS TOWARD PLAN/ }),
-    );
+    await screen.findByRole("heading", { name: "Hoarfrost" });
     await chooseHeldAndPain();
-    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save without logging" }),
+    );
 
     expect(
       await screen.findByText("Couldn't save this session. Try again."),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "OUTSIDE THE PLAN · won't advance" }),
-    ).toHaveAttribute("aria-pressed", "true");
-  });
-
-  it("manual door: a failed save keeps the toggle in its OUTSIDE THE PLAN state", async () => {
-    mockPlan(readyPlanState(activePlan()));
-    const workout = manualWorkoutFixture();
-    mockWorkouts([workout]);
-    mockBaselines();
-    mockApi(() =>
-      Promise.resolve(
-        new Response(JSON.stringify({ error: "server exploded" }), {
-          status: 500,
-        }),
-      ),
-    );
-    await renderManualLog(workout.id);
-    await screen.findByText(MANUAL_TOTAL_LABEL);
-    await userEvent.click(
-      screen.getByRole("button", { name: /COUNTS TOWARD PLAN/ }),
-    );
-    await chooseHeldAndPain();
-    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
-
-    expect(
-      await screen.findByText("Couldn't save this session. Try again."),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "OUTSIDE THE PLAN · won't advance" }),
-    ).toHaveAttribute("aria-pressed", "true");
+      screen.getByRole("button", { name: "Log against plan · SESSION 4 OF 84" })
+        .className,
+    ).toContain("summary-save-lead");
   });
 });

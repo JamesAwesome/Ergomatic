@@ -41,17 +41,25 @@ export function resolveBackTarget(state: unknown, fallback: string): string {
  * Falls back to `fallback` (default `/library`) when there's no `from` in
  * state at all (a deep link or a cold load never had one to carry) or the
  * value isn't a safe in-app path (see `isSafeInAppPath`).
+ *
+ * `label` (post-workout-summary spec §2A, Task 5): the summary screen's own
+ * back control reads `← DONE`, not `← BACK` — the house word for a
+ * non-destructive exit from a screen the rower is DONE with, not merely
+ * backing out of. Defaults to the original `← BACK` copy so every existing
+ * call site is unaffected.
  */
 export default function BackLink({
   fallback = DEFAULT_FALLBACK,
+  label = "← BACK",
 }: {
   fallback?: string;
+  label?: string;
 } = {}) {
   const location = useLocation();
   const target = resolveBackTarget(location.state, fallback);
   return (
     <Link to={target} className="back-link">
-      ← BACK
+      {label}
     </Link>
   );
 }

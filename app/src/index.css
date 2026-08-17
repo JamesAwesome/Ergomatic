@@ -4798,485 +4798,6 @@ button:disabled {
   }
 }
 
-/* -- Session complete (Phase 6B Task 4) ------------------------------------
-   Not a handoff-specified screen (README §7 "Log session" is 6C's own, much
-   richer post-workout review — HELD/UNDER/OVER, pain, notes; this is 6B's
-   interim hand-off between the live timer and it) — so no mock to match
-   pixel-for-pixel. Reuses `.screen`/`.screen-title` verbatim (already
-   AA-verified elsewhere in this file; the action pair below is now the
-   ui-fix round's own `.button-l1`/`.button-l2`, Task 1) and every new color
-   pairing below is one of THIS file's own already-computed combinations,
-   not a new one: complete-total-value (--ink/--page) far exceeds AA,
-   matching the 96/128px numeral; complete-actual-label (--ink-4/--surface)
-   5.29:1 and complete-actual-value (--accent/--surface) 5.94:1, both
-   matching what the phone timer's own TARGET cards measured at the time
-   (`timer-card-label`/`-value-accent`; the accent half of that pair went
-   ink in connected-revamp Task 7, which changes nothing about the ratios
-   computed here — this screen keeps its own accent actual). complete-total-label
-   moved from --ink-4 to --ink-3 in Task 1's own small-mono-label sweep
-   (below). */
-.session-complete-screen {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  /* Full-bleed sizing (this route is in AppRoutes.tsx's
-     HIDDEN_TABBAR_PREFIXES, so no tab bar renders over it) — pins
-     `.complete-back`'s `margin-top: auto` to the bottom of the viewport
-     rather than right under the actuals list.
-
-     The same formula as `.timer-screen` above, again — and for the same
-     reason it changed there. Task 7's fix round swapped that rule's
-     `- 26px` for `- var(--tap)` after measuring 18px of dead portrait
-     scroll; this screen and `.countdown-screen` were measured live at
-     390×844 in the same session and carried the identical 18px
-     (`scrollHeight` 862 vs `clientHeight` 844 on both, each screen's own
-     `main` box 818px), left on the pre-fix formula only because Task 8
-     owns `countdown.png`/`session-complete*.png`. Task 8 took the same
-     swap: `.app-shell` reserves `var(--tap)` for a tab bar this route
-     never renders (index.css:398), and `box-sizing: border-box` already
-     counts the 26px of `.screen` padding INSIDE the min-height, so the
-     26px was a double count and the reserved strip is the real term.
-     Re-measured after: `scrollHeight` 844 = `clientHeight` 844. */
-  min-height: calc(
-    100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) -
-      var(--tap)
-  );
-}
-
-/* Task 5: the identical fix as `.countdown-screen`'s own landscape rule
-   above, for the identical reason — same missing `.app-shell` tab-bar
-   padding, same 844×420 measurement (438 vs 420 before, 414 vs 420
-   after). See that rule's comment for the full derivation; not repeated
-   verbatim here. (Task 8 later swapped the `- 26px` out of BOTH screens'
-   PORTRAIT base rules; these landscape halves keep the appended shape
-   they were measured on, exactly as `.timer-screen`'s own landscape half
-   does.)
-
-   Task 1 (ui-fix round) re-measurement: the two-button half-width row
-   (`.complete-actions`, pre-Task-1) became a full-width L1/L2 stack — 56 +
-   12 (gap) + 52 = 120px tall, ~68px more than the single-row pair it
-   replaced. That alone pushed this screen's landscape content past even
-   this rule's own tightened floor (measured 464 vs the 420 frame). Tightens
-   the screen's own gap and the TOTAL block's padding, landscape-only — the
-   only two numbers on this screen with slack to give back — rather than
-   touching `.action-stack`'s shared 12px gap (a cross-screen constant every
-   later task also relies on) or shrinking the buttons themselves (the
-   level system's own fixed heights).
-
-   Task 3 (ui-fix round) re-measurement: the new Discard block (a rule plus
-   an L4 button, joining the stack under two more of that same shared 12px
-   gap — 1 + 12 + 12 + 52 = 77px) pushed this screen's landscape content
-   past even the Task 1 floor above (measured 493 vs the 420 frame — the
-   reviewer's own F8 note, confirmed).
-
-   Fix round 1 (reviewer M2): the first pass at this capped the screen's
-   own box with `max-height`+`overflow-y:auto` — which made the DOCUMENT-
-   level zero-scroll guard structurally unfalsifiable (it can never fail
-   once the element that would overflow is the one clipping itself) AND
-   left Discard genuinely clipped below the fold with no visible scroll
-   affordance (measured: 399px of real content against the 350px frame,
-   Back to Today cut mid-button in the committed capture). Recovering the
-   ~50px shortfall instead — the option the brief's own words led with
-   ("tighter landscape-only spacing is allowed") — keeps every level-system
-   button at its real, unshrunk height and makes the WHOLE stack visible
-   with no scrolling at all: this rule's own gap trim (4px → 0) is one
-   part of that; `.complete-total`/`.complete-actual-row`/`.complete-actions`
-   carry the rest, in their OWN landscape block further down this file
-   (right after their plain counterparts, not here) — deliberately NOT
-   grouped into this one media query the way the first pass had them:
-   a media-wrapped rule earlier in the file than its own plain,
-   unconditional counterpart of equal specificity LOSES the cascade tie to
-   that later plain rule regardless of the media condition, so those three
-   overrides have to physically sit after their own base rules to take
-   effect at all (see that block's own comment). Re-measured after: the
-   stack's own last child (Discard) sits fully inside the 420px frame with
-   zero px to spare either direction — `design.spec.ts`'s own guard now
-   checks BOTH the document's scrollHeight (still legitimately zero, since
-   nothing overflows to hide behind an inner scroll container) AND
-   Discard's own bounding rect against the viewport, so a future
-   regression that silently reintroduces clipping — document-level scroll
-   or not — fails loudly. */
-@media (orientation: landscape) {
-  .session-complete-screen {
-    gap: 0;
-    min-height: calc(
-      100dvh - env(safe-area-inset-top, 0px) -
-        env(safe-area-inset-bottom, 0px) - 26px - var(--tap)
-    );
-  }
-}
-
-.complete-total {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  border-top: 1px solid var(--ink);
-  border-bottom: 1px solid var(--rule);
-  padding: 14px 0;
-}
-
-/* Task 1 (ui-fix round) contrast sweep: --ink-3, not --ink-4 — same blanket
-   small-mono-label rule as `.today-log-meta` above. */
-.complete-total-label {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  color: var(--ink-3);
-}
-
-.complete-total-value {
-  font-family: var(--font-mono);
-  font-size: 48px;
-  font-weight: 500;
-  color: var(--ink);
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-}
-
-.complete-actuals {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.complete-actual-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  background: var(--surface);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius);
-  padding: 12px 14px;
-}
-
-.complete-actual-label {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--ink-4);
-}
-
-.complete-actual-value {
-  font-family: var(--font-mono);
-  font-size: 16px;
-  color: var(--accent);
-}
-
-/* Task 1 (ui-fix round): "Log this session"/"Back to Today" move off the
-   Phase 6C 1:2 half-width flex split (a demoted .button-outline beside a
-   .button-primary) onto the level system's own full-width stack — L1 then
-   L2, `.action-stack`'s 12px gap. `.complete-actions` itself keeps carrying
-   `margin-top: auto` (its pre-existing job: pin the pair to the bottom of
-   `.session-complete-screen`'s flex column) alongside the shared
-   `.action-stack` class, same two-class pattern as WorkoutDetail's own
-   `.action-stack.workout-detail-actions`. */
-.complete-actions {
-  margin-top: auto;
-}
-
-/* Fix round 1 (reviewer M2): these three overrides MUST come after their
-   own plain counterparts above (`.complete-total`, `.complete-actual-row`,
-   `.complete-actions` itself) in source order — a media-query-wrapped rule
-   is not magically prioritized over an unconditional rule of the same
-   specificity; cascade ties still resolve by which one appears LATER in
-   the file. The first pass at this fix round placed an equivalent block
-   BEFORE these plain rules (in the same spot `.session-complete-screen`'s
-   own landscape override correctly sits, since ITS plain rule is earlier
-   still) — a real bug that would have silently no-opped every one of these
-   three overrides. Verified empirically post-fix via computed
-   `getComputedStyle` reads in the e2e sweep, not just this comment's own
-   reasoning. Together with the `.session-complete-screen` gap trim above,
-   this recovers the ~50px this screen's landscape frame was short by
-   after Task 3's own Discard block landed (reviewer's measured 399px vs a
-   350px frame) — enough for the WHOLE stack, Discard included, to render
-   with zero clipping and zero scroll, at the level system's own real,
-   unshrunk button heights. */
-@media (orientation: landscape) {
-  .complete-total {
-    padding: 2px 0;
-  }
-
-  .complete-actual-row {
-    padding: 4px 14px;
-  }
-
-  .complete-actions {
-    gap: 4px;
-  }
-}
-
-/* Log session screen (Phase 6C Task 2, /session/log — the session door).
-   Badge + date/duration row reuses the generic `.mono-status` text style; a
-   dedicated class only for the flex layout around it. */
-.log-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 4px 0 16px;
-}
-
-/* The dashed "PACES LOCKED AT 2K … · 6K …" panel (README.md §7). Dashed
-   border matches the app's other "informational, not a real control" boxes
-   (.bulk-import-textarea, .builder-add-step) rather than the solid-bordered
-   `.workout-detail-note` callout, since this is read-only reference text,
-   not an instruction. */
-.log-paces-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  background: var(--surface);
-  border: 1px dashed var(--rule-3);
-  border-radius: var(--radius);
-  padding: 12px 14px;
-  margin: 0 0 16px;
-}
-
-/* Fix round 2 (whole-branch review, L1): moved off --ink-4 to --ink-3 — same
-   guard-gap reasoning as .workout-row-meta above (WorkoutRow.tsx): AA was
-   never actually failing (5.29:1 on --surface), but the Log screen's own
-   describe never ran assertNoFailingInk4Labels either. Log now carries it. */
-.log-paces-label {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  color: var(--ink-3);
-}
-
-.log-paces-value {
-  font-family: var(--font-mono);
-  font-size: 14px;
-  color: var(--ink-2);
-}
-
-/* The per-step list — its own class family (not `.step-list`/`.step-row`,
-   WorkoutDetail's own preview-and-nudge rows, nor `.complete-actual-row`,
-   SessionComplete's own actuals-only list): this list's job — every work
-   step's FROZEN split plus its actual where one exists — is read-only
-   history, distinct enough from either existing list that this repo's own
-   convention (small per-screen duplication over cross-screen coupling —
-   see ClassificationCard.tsx's/TypeBadge.tsx's own comments on this) says
-   keep it separate rather than repurpose one of them. */
-.log-step-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  list-style: none;
-  margin: 0 0 20px;
-  padding: 0;
-}
-
-.log-step-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 12px;
-  background: var(--surface);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius);
-  padding: 12px 14px;
-}
-
-.log-step-label {
-  font-size: 14px;
-  color: var(--ink);
-}
-
-.log-step-values {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 2px;
-}
-
-.log-step-target {
-  font-family: var(--font-mono);
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--ink-2);
-  white-space: nowrap;
-}
-
-.log-step-actual {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--ink-3);
-  white-space: nowrap;
-}
-
-/* DID YOU HOLD THE TARGETS? — Held/Under/Over, 46px per the task brief
-   (distinct from `.classification-chip`'s 44px `--tap`, a different
-   control this task brief specs independently; the two are kept as
-   separate classes rather than unified so a future change to one's height
-   can't silently retune the other). Selected fill mirrors
-   `.classification-chip-difficulty[aria-pressed="true"]`'s ink treatment
-   (a plain judgment call, not a per-instance color the way TYPE/PAIN need) —
-   this control and the pain picker below both sit inside a reused
-   `.classification-group`/`.classification-group-label`/
-   `.classification-chip-row` wrapper (ClassificationCard.tsx), per the task
-   brief's own instruction to follow that numeral-cell/segmented pattern
-   rather than invent a new one. */
-.log-held-chip {
-  flex: 1;
-  height: 46px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius);
-  background: var(--surface);
-  border: 1px solid var(--rule);
-  color: var(--ink-2);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  cursor: pointer;
-}
-
-.log-held-chip[aria-pressed="true"] {
-  background: var(--ink);
-  border-color: var(--ink);
-  color: var(--on-color);
-}
-
-/* NOTES — 88px, dashed like `.bulk-import-textarea` (the app's other free-
-   text box); textareas are exempt from the button/chip callout-suppression
-   rule at the top of this file (typed text stays selectable), so no extra
-   rule is needed here for that. */
-.log-notes-textarea {
-  display: block;
-  width: 100%;
-  min-height: 88px;
-  padding: 10px 12px;
-  background: var(--surface);
-  border: 1px dashed var(--rule-3);
-  border-radius: var(--radius);
-  color: var(--ink);
-  font-family: var(--font-mono);
-  font-size: 16px; /* iOS zoom guard, see body rule */
-  resize: vertical;
-}
-
-/* Task 3 (outside-plan logging): a single full-width toggle row, above
-   Save, rendered only when the rower has an active plan (`plan.planKey !==
-   null` — LogSession.tsx's own gate; a freestyle session or a plan-fetch
-   error, or a plan fetch still in flight, has nothing to advance or opt out
-   of, so nothing renders at all).
-   Fix round 2 (whole-branch review, M3): this used to copy
-   `.log-paces-panel`'s dashed-border "this is just context" treatment
-   deliberately — found, in review, to make the screen's ONE interactive
-   control visually indistinguishable from the screen's ONE purely-
-   informational panel directly above it, with nothing signalling that one
-   is tappable and the other isn't. Now follows the `.button-outline`
-   treatment family instead — a SOLID `--ink` border, same as every other
-   real control in the app (Discard/Retry/Cancel all use `.button-outline`
-   verbatim) — so this row reads as a control on sight, not as a second
-   PACES LOCKED-style caption. Toggled ("OUTSIDE THE PLAN — won't advance")
-   used to switch to a solid `--accent` border/text — found in the
-   whole-branch review (Md1) to be the round's own last surviving "accent
-   means selected" use, since `.chip[aria-pressed="true"]`'s own accent fill
-   (the precedent this rule's comment used to cite) is deleted. Fix round 2:
-   moved to the same plain ink fill every other selected state on this
-   round's screens already uses (`.filter-sheet-cell`/`.classification-
-   chip-difficulty`/`.classification-chip-pain[aria-pressed="true"]`) —
-   nothing about this toggle is destructive or a resolved target, so it gets
-   no more claim on accent than DIFFICULTY or PAIN do. Contrast: ink on
-   surface 17.1:1 (default), on-color on ink 17.1:1 (toggled) — both
-   comfortably > 4.5:1. --tap (44px) satisfies the house hit-target floor;
-   `aria-pressed` is unchanged. */
-.log-plan-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  min-height: var(--tap);
-  padding: 8px 14px;
-  margin-bottom: 12px;
-  border-radius: var(--radius);
-  background: var(--surface);
-  border: 1px solid var(--ink);
-  color: var(--ink);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  text-align: center;
-  cursor: pointer;
-}
-
-.log-plan-toggle[aria-pressed="true"] {
-  background: var(--ink);
-  border-color: var(--ink);
-  color: var(--on-color);
-}
-
-.log-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: 20px;
-}
-
-/* The wire log's quiet door (7B iteration) — diagnostics vocabulary, not a
-   product control: one muted mono caption line below the actions, absent
-   entirely for the manual path. 44px tap height without LOOKING like a
-   44px control; the text is the whole affordance. */
-.log-monitor-diag {
-  display: block;
-  width: 100%;
-  min-height: 44px;
-  margin-top: 4px;
-  padding: 0;
-  border: none;
-  background: none;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.12em;
-  color: var(--ink-3);
-  text-align: center;
-  cursor: pointer;
-}
-
-/* 7C monitor mode's one caption line (spec §4): "FROM <deviceName> · N OF M
-   INTERVALS MEASURED" — the SAME small-mono `--ink-3` pairing as this file's
-   own `.log-paces-label`/`.log-step-actual` (the house rule cited at both:
-   never `--ink-4` for an 11px-or-smaller mono label). Sits directly on the
-   screen's `--page` background (#f4f1e8), same as `.log-monitor-diag`
-   immediately above — not inside a panel — measuring 6.69:1 for `--ink-3`
-   (#57544c) there (computed via the WCAG relative-luminance formula, well
-   past the 4.5:1 AA floor; 7.43:1 against `--surface` if it were ever moved
-   onto one). Non-interactive (a `<p>`, not a button) — unlike
-   `.log-monitor-diag`'s copy-to-clipboard affordance, this is read-only
-   context, the same register as `.log-paces-panel`'s own caption text. */
-.log-from-monitor {
-  display: block;
-  margin: 0 0 12px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  color: var(--ink-3);
-}
-
-/* Save session — 54px per the task brief (`.button-primary`'s own default
-   is 52px, e.g. `.today-resume-button`'s comment on that shared value).
-   `border: none; padding: 0;` are load-bearing, not decorative: neither
-   `button` (index.css's own reset, near the top of this file) nor
-   `.button-primary` resets the browser's OWN default `<button>` chrome
-   (Chromium's UA stylesheet: a ~2px outset border plus ~1px vertical
-   padding), so `min-height`/`line-height` alone rendered this control at
-   60px, not 54 (measured via a live computed-style check, fix round F4) —
-   the SAME latent gap every `.button-primary` `<button>` in the app has
-   (confirmed on WorkoutDetail's own "Start": speced 52px, renders 58px),
-   recorded in docs/design/DEVIATIONS.md (whole-branch review, IMP-6) as a
-   pre-existing, wider issue rather than silently fixed here for every
-   button at once. */
-.log-save {
-  min-height: 54px;
-  line-height: 54px;
-  border: none;
-  padding: 0;
-}
-
 /* News (Phase 6H Task 5) — no `.button-l1` anywhere on this screen (design
    §8, "News owns the reading and never shows a START"): accent is reserved
    for the unread square and the two text links (`.news-text-link`,
@@ -8409,4 +7930,538 @@ section:not(.news-pinned) .news-row:last-of-type {
   font-size: 10px;
   letter-spacing: 0.08em;
   color: var(--ink-3);
+}
+
+/* -- Post-workout summary (Phase PW Task 5) --------------------------------
+   docs/superpowers/specs/2026-08-17-post-workout-summary-design.md §2.
+   Replaces SessionComplete's own `.session-complete-screen`/`.complete-*`
+   family and the old Log screen's `.log-meta`/`.log-step-*`/`.log-held-
+   chip`/`.log-plan-toggle`/`.log-actions`/`.log-save` family wholesale (both
+   deleted above) — every door (monitor/timer/manual) now converges on this
+   one `.summary-*` class family via `PostWorkoutSummary.tsx`. `.log-monitor-
+   diag` survives verbatim (MonitorLogRow/RecordingDownloadRow are unchanged,
+   only their container changed). Contrast, computed via the WCAG relative-
+   luminance formula (never eyeballed, house rule):
+     ink-3 on page (eyebrow/meta/hero labels/hint) 6.69:1
+     accent on page (the AVG SPLIT lead hero value, "rust" per the mock) 5.35:1
+     ink on page (the title, non-lead hero values) 15.41:1
+     ink-2 on surface-sunken (unselected reflection chips) 9.16:1
+     on-color on ink (a selected HELD chip, ↑ MORE LIKE THIS selected) 17.11:1
+     on-color on accent (a selected PAIN chip, ↓ selected, the lead save
+       button, a selected DISCARD-armed button) 5.94:1
+     judge-faster on page (a faster row's pace/deviation/bar) 7.43:1
+     judge-slower on page (a slower row's pace/deviation/bar) 7.15:1
+     ink on surface (the secondary save button) 17.11:1
+   All comfortably clear the 4.5:1 AA floor. */
+.summary-eyebrow {
+  margin: 0 0 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: var(--ink-3);
+}
+
+.summary-title {
+  margin: 4px 0 0;
+}
+
+.summary-meta {
+  margin: 6px 0 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+}
+
+.summary-rule {
+  border: none;
+  border-top: 2px solid var(--ink);
+  margin: 14px 0 20px;
+}
+
+.summary-heroes {
+  display: flex;
+  align-items: flex-end;
+  gap: 20px;
+  margin: 0 0 24px;
+}
+
+.summary-hero {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.summary-hero-lead {
+  flex: 1.6;
+}
+
+.summary-hero-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--ink-3);
+}
+
+.summary-hero-value {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.summary-hero-lead .summary-hero-value {
+  font-size: 36px;
+  color: var(--accent);
+}
+
+.summary-hero:not(.summary-hero-lead) .summary-hero-value {
+  font-size: 20px;
+}
+
+.summary-reflection-card {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  background: var(--surface);
+  border: 1px solid var(--ink);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin: 0 0 24px;
+}
+
+.summary-reflection-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.summary-reflection-label {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--ink-3);
+}
+
+.summary-reflection-label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.summary-hint {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--ink-3);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.summary-feel-row {
+  display: flex;
+  gap: 8px;
+}
+
+.summary-feel-up,
+.summary-feel-down {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 46px;
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+  border: 1px solid var(--rule-3);
+  color: var(--ink-2);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.summary-feel-up {
+  flex: 1;
+}
+
+.summary-feel-down {
+  width: 64px;
+  flex: 0 0 auto;
+  font-size: 18px;
+}
+
+.summary-feel-up[aria-pressed="true"] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--on-color);
+}
+
+.summary-feel-down[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-color);
+}
+
+.summary-held-row {
+  display: flex;
+  gap: 8px;
+}
+
+.summary-held-chip {
+  flex: 1;
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+  border: 1px solid var(--rule-3);
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  padding: 4px 6px;
+  text-align: center;
+  cursor: pointer;
+}
+
+.summary-held-chip[aria-pressed="true"] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--on-color);
+}
+
+.summary-pain-row {
+  display: flex;
+  gap: 8px;
+}
+
+.summary-pain-chip {
+  flex: 1;
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+  border: 1px solid var(--rule-3);
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.summary-pain-chip[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-color);
+}
+
+.summary-pain-caption {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--ink-3);
+}
+
+.summary-notes-textarea {
+  display: block;
+  width: 100%;
+  min-height: 74px;
+  padding: 10px 12px;
+  background: var(--page);
+  border: 1px dashed var(--rule-3);
+  border-radius: var(--radius);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 16px; /* iOS zoom guard, see body rule */
+  resize: none;
+}
+
+.summary-intervals {
+  margin: 0 0 24px;
+}
+
+.summary-intervals-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 4px;
+}
+
+.summary-intervals-title {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--ink);
+}
+
+.summary-intervals-caption {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+}
+
+.summary-row-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* README §8's shared row geometry: 9px 0 padding, 10px gap, 1px bottom
+   rule — the interval list, the prescribed-interval list and (a future
+   spec's) HR zone list all share this one skeleton. `:not(:last-child)`
+   rather than a rule on every row: the list's own bottom edge needs no
+   trailing hairline. */
+.summary-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+}
+
+.summary-row:not(:last-child) {
+  border-bottom: 1px solid var(--rule-2);
+}
+
+.summary-row-index {
+  flex: 0 0 20px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+.summary-row-warmup-label {
+  flex: 0 0 auto;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--ink-3);
+}
+
+.summary-row-time,
+.summary-row-duration {
+  flex: 0 0 64px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.summary-row-pace,
+.summary-row-target {
+  flex: 0 0 52px;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.summary-row-faster {
+  color: var(--judge-faster);
+}
+
+.summary-row-slower {
+  color: var(--judge-slower);
+}
+
+.summary-row-bar-track {
+  position: relative;
+  flex: 1;
+  height: 14px;
+  min-width: 0;
+}
+
+.summary-row-bar-tick {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--rule-3);
+}
+
+.summary-row-bar {
+  position: absolute;
+  top: 3px;
+  height: 8px;
+  border-radius: 1px;
+  background: currentColor;
+}
+
+.summary-row-offset {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.summary-row-dev {
+  flex: 0 0 44px;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.summary-row-dash {
+  flex: 0 0 20px;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--ink-4);
+}
+
+.summary-legend {
+  margin: 10px 0 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+  text-align: center;
+}
+
+.summary-targets-only-caption {
+  margin: 10px 0 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--ink-3);
+  text-align: center;
+}
+
+/* §2F save stack — `.action-stack`'s own 12px gap, three levels of its
+   own (not the numbered `.button-l1`-`.button-l4-armed` system: this
+   stack's own two save buttons swap which slot leads at runtime, so the
+   CLASS names key the SLOT, not a fixed level number). `border: none;
+   padding: 0;` on both, same load-bearing reason `.log-save` (deleted,
+   this comment's own predecessor) documented: neither `button` nor a
+   bare `min-height` clears the browser's own UA button chrome. */
+.summary-save-lead,
+.summary-save-secondary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  border: none;
+  padding: 0;
+  border-radius: var(--radius);
+  text-align: center;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.summary-save-lead {
+  min-height: 54px;
+  background: var(--accent);
+  color: var(--on-color);
+}
+
+.summary-save-lead:hover {
+  background: var(--accent-hover);
+}
+
+.summary-save-lead:disabled,
+.summary-save-lead:disabled:hover {
+  background: var(--rule);
+  cursor: not-allowed;
+}
+
+.summary-save-secondary {
+  min-height: 48px;
+  background: var(--surface);
+  border: 1px solid var(--ink);
+  color: var(--ink);
+}
+
+.summary-save-secondary:hover {
+  background: var(--surface-sunken);
+}
+
+.summary-save-secondary:disabled {
+  border-color: var(--rule-3);
+  color: var(--ink-5);
+  cursor: not-allowed;
+}
+
+/* DISCARD WITHOUT SAVING — 48px borderless mono (README §5's own literal
+   spec: "no border/fill, mono 12px #8a8478, hover rust"), never the house
+   L4/L4-armed's accent-outlined shape (PROVENANCE.md item 4: the STAGED
+   two-tap MECHANISM survives, `useStagedDiscard`, but this screen's own
+   visual treatment is the mock's, not the level system's). Armed keeps the
+   house's own solid-accent "Tap again to discard" fill — the one place
+   this control DOES borrow the level system's language, since the mock
+   never designed its own armed state at all (PROVENANCE item 4: "dialog
+   not designed"; the house two-tap idiom, including its armed look, is
+   what fills that gap). */
+.summary-discard {
+  display: block;
+  width: 100%;
+  min-height: 48px;
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  color: var(--ink-3);
+  text-align: center;
+  cursor: pointer;
+}
+
+.summary-discard:hover {
+  color: var(--accent);
+}
+
+.summary-discard-armed {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 48px;
+  padding: 0;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--on-color);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.summary-discard-armed:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.summary-save-stack {
+  margin-top: 4px;
+}
+
+.summary-diagnostics {
+  display: flex;
+  flex-direction: column;
 }
