@@ -2370,9 +2370,9 @@ process.
 
 **Status:** ABSORBED INTO PHASE PW (2026-08-17, James's brainstorm). The
 direction precondition is DISCHARGED there (UNDER = FASTER than target,
-ruled and documented at the type/enum/options sites); whether the LABELS
-change (LG piece 1 — the fix that actually removes the rower-facing
-collision) is James's open decision at PW spec 1 §2D. Pieces 2 (value
+ruled and documented at the type/enum/options sites); the LABELS change is RULED
+(option B, James 2026-08-17: `HELD / UNDER · FASTER / OVER · SLOWER` —
+LG piece 1 ships in PW spec 1, and this section closes when it merges). Pieces 2 (value
 migration) and 3 (the question itself) remain out by ruling. This section
 stays until PW ships the label decision, then closes with a pointer.
 **Goal:** the post-row self-report stops using two words that mean the

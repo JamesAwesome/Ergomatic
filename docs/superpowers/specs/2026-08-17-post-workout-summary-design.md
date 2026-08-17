@@ -109,7 +109,7 @@ Spec rulings from the gates (each traceable to a finding):
 | Property | Requirement |
 | --- | --- |
 | HOW DID IT FEEL? | `↑ MORE LIKE THIS` (flex) + `↓` (64px); up = ink fill, down = accent fill; tap-active-to-clear |
-| DID YOU HOLD THE TARGETS? | Three equal thirds, ink-fill selected, clearable. **Labels: JAMES'S OPEN DECISION** — option A keeps `HELD/UNDER/OVER` + hint; option B (the PM's recommendation, free while the control is rebuilt): direction in the label, e.g. `HELD` / `UNDER · FASTER` / `OVER · SLOWER`. Stored values unchanged either way. Direction comment (UNDER = faster, James 2026-08-17) at the options array, both HeldResult copies, and the pgEnum. Historical rows predate the ruling — displayed under it, noted in code, never re-interpreted as intent. |
+| DID YOU HOLD THE TARGETS? | Three equal thirds, ink-fill selected, clearable. **Labels: RULED, option B (James 2026-08-17):** `HELD` / `UNDER · FASTER` / `OVER · SLOWER` — the direction lives in the label, closing Phase LG's piece 1 (the words can no longer be read backwards). Stored values unchanged. Direction comment (UNDER = faster) at the options array, both HeldResult copies, and the pgEnum. Historical rows predate the ruling — displayed under it, noted in code, never re-interpreted as intent. Today's LAST THREE keeps rendering the stored word (`UNDER`), which now agrees with the button that wrote it. |
 | The hint | Right-aligned: `TARGET m:ss` only when the session has EXACTLY ONE distinct target split (167 of 300 workouts); multi-target (101) and effort-only (32): no hint; by-hand manual door: `BY FEEL`. Timer door follows the same single-target rule (it has real targets — `BY FEEL` would lie there). |
 | ACTUAL PAIN | 1-5, accent-fill selected, clearable; `EXPECTED n/5` hint when present; caption `TAP TO RATE` → `EASIER THAN PLANNED`/`AS PLANNED`/`HARDER THAN PLANNED` (1 / 2 / 3-5) |
 | NOTES | Dashed textarea on `--page`, placeholder `What happened out there?`, min-height 74, no resize |
@@ -214,8 +214,8 @@ optional now; the generation phase is told at ITS open, not surprised).
    v0.11.0 notes PR.
 6. All-null reflection saves; existing rows render unchanged; the
    migration is additive against live data.
-7. UNDER=faster greppable at every §3-named site; James's label
-   decision (§2D) implemented as ruled.
+7. UNDER=faster greppable at every §3-named site; the option-B labels
+   shipped; ROADMAP's LG section closes with a pointer to PW.
 
 ## §7 Vetted ground (the anchor pass's attacked-and-held claims)
 
