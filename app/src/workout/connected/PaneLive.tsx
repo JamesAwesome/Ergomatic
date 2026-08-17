@@ -180,30 +180,22 @@ export default function PaneLive({ model }: { model: SurfaceModel }) {
           <span className="connected-band-upnext-value">
             {/* LANDSCAPE-ONLY "NEXT · " PREFIX (queue item 7, James's
                 ruling: uniform beats special-casing, so the prefix is
-                unconditional — "NEXT · FINISH" as much as "NEXT · REST
-                3:00 · then WORK 2:09.0"). Same toggle idiom as `-then`
-                below: always in the DOM (one builder for both
-                orientations), hidden by `index.css`'s base rule, shown
-                only under the landscape query — portrait's OWN stacked
-                `UP NEXT` label above already names this line, so showing
-                this prefix there too would double-label it. */}
+                unconditional — "NEXT · FINISH" as much as "NEXT · WORK
+                1500m · 2:13.0 @24"). Always in the DOM, hidden by
+                `index.css`'s base rule, shown only under the landscape
+                query — portrait's OWN stacked `UP NEXT` label above
+                already names this line, so showing this prefix there too
+                would double-label it. */}
             <span className="connected-band-upnext-next">NEXT · </span>
+            {/* Phase CS Item B (connected-polish design spec): the
+                then-clause dies everywhere — one richer phase, not two.
+                `SurfaceModel.thenNext` is gone from the interface entirely
+                (task 1), so there is no second value left to append here.
+                MINIMAL FOLD ONLY (task 1's typecheck escape): the
+                `.connected-band-upnext-then` CSS rule and the six frozen
+                `connected-*.html` fixtures that still carry then-markup are
+                task 2's own wave, named in the spec's blast radius. */}
             {model.upNext}
-            {/* The `then` word is the ONLY thing landscape adds over
-                portrait's string (§2C: "the existing `.timer-upnext-then
-                { display: none }` mechanism dies with UpNextStrip, so the
-                band reproduces the drop itself") — reproduced verbatim
-                here as `connected-band-upnext-then`, toggled by
-                `index.css`'s own landscape query. `thenNext === null`
-                renders no separator at all, matching `UpNextStrip`'s own
-                "null past the last phase" contract. */}
-            {model.thenNext !== null && (
-              <>
-                {" · "}
-                <span className="connected-band-upnext-then">then </span>
-                {model.thenNext}
-              </>
-            )}
           </span>
         </div>
         <div className="connected-band-cell">

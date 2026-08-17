@@ -14,22 +14,24 @@
 import { describe, expect, it } from "vitest";
 import { compileProgram } from "../../../domain/monitor/program.js";
 import { fmtDuration } from "../../../domain/duration.js";
-import { phaseSeconds } from "../../../domain/expand.js";
 import { fmtSplit } from "../../../domain/format.js";
 import { PACE_TOLERANCE_SECONDS } from "../../../domain/judge.js";
 import type {
   IntervalActual,
   MonitorFrame,
 } from "../../../domain/monitor/types.js";
-import type { Baselines, WorkoutType } from "../../../domain/types.js";
+import type { Baselines, Step, WorkoutType } from "../../../domain/types.js";
+import { ONBOARDING_TITLES } from "../../../domain/onboarding.js";
 import type { WarmupSetting } from "../../api/usePreferences";
 import { LIBRARY_WORKOUTS } from "../../../server/seed/library/index";
+import { ONBOARDING_LIBRARY_WORKOUTS } from "../../../server/seed/library/onboarding";
 import { buildDraft } from "../../session/draft";
 import { buildRun, type EnginePhase } from "../../session/engine";
 import { totalSessionSecondsOf } from "../../session/Timer";
 import { targetSplitDisplay } from "../../session/TimerTargets";
 import {
   buildSurfaceModel,
+  connectedNextText,
   intervalNumbering,
   judgedValue,
   phaseIndexForInterval,
@@ -95,6 +97,71 @@ const NO_WARMUP = libraryFixture("Filling Low", null);
  *    ALL OUT, the shape where the caps question is unavoidable. */
 const EFFORT_MIN = libraryFixture("Fog Bow", null);
 const EFFORT_MAX = libraryFixture("Rear Flank", null);
+
+/** `connectedNextText`'s own fixtures (Item B composition table, task-1
+ *  brief). `phasesFrom` skips `compileProgram` entirely — the builder under
+ *  test reads `EnginePhase[]` directly and never sees a `ProgramInterval`,
+ *  and one of its rows (a bare "test" step) is a shape `compileProgram`
+ *  REJECTS outright (`unrepresentable-value`: a test phase has neither
+ *  `seconds` nor `meters` to program), so routing it through the compiler
+ *  the other fixtures use would fail for a reason this file has nothing to
+ *  do with. */
+function phasesFrom(
+  w: { title: string; type: WorkoutType; steps: Step[] },
+  warmup: WarmupSetting | null,
+): EnginePhase[] {
+  const draft = buildDraft({
+    id: w.title.toLowerCase().replace(/\s+/g, "-"),
+    title: w.title,
+    type: w.type,
+    steps: w.steps,
+  });
+  return buildRun(draft, baselines, t0, warmup).phases;
+}
+
+/** A single continuous time work phase, split-target, no rest and no
+ *  reps block — the "work+seconds+split target+spm" table row needs a work
+ *  phase whose EXTENT comes from `seconds`, and every time-based work step
+ *  in the library that also carries `restMinutes` would give the row a
+ *  trailing rest phase this test does not want to have to skip past.
+ *  "Occluded Front" (AT, 10' at 6k+4, spm 22, no rest) is the one single-step
+ *  time workout in the library. */
+const OCCLUDED = libraryFixture("Occluded Front", null);
+
+/** The warm-up SETTING at `kind: "distance"` — every other fixture in this
+ *  file only ever exercises the `kind: "time"` branch of `warmupPhases`
+ *  (`engine.ts:82-97`); the "warmup+meters" table row needs the other one. */
+const WARMUP_METERS = libraryFixture("Filling Low", {
+  kind: "distance",
+  meters: 2000,
+});
+
+/** The ONE real production shape with a distance work step at an EFFORT ref
+ *  and no `spm` — `library.test.ts`'s own "spm-present-and-even on every
+ *  work step" rule (see `onboarding.ts`'s header comment) means no fixture
+ *  in `LIBRARY_WORKOUTS` itself can ever reach this branch; the two
+ *  designated onboarding workouts are the sole documented exception, kept
+ *  OUT of `LIBRARY_WORKOUTS` for exactly that reason. "First 2k" (AN, 2000m
+ *  at MAX, no spm) is the "work+meters+effort target" table row. */
+const ONBOARD_K2 = ONBOARDING_LIBRARY_WORKOUTS.find(
+  (w) => w.title === ONBOARDING_TITLES.k2,
+);
+if (!ONBOARD_K2) throw new Error("missing onboarding fixture: First 2k");
+const EFFORT_METERS_NO_SPM = phasesFrom(ONBOARD_K2, null);
+
+/** A bare "test" step (open-ended all-out — `k2Test`/`k6Test`'s own shape,
+ *  `domain/expand.ts`'s `case "test"`) — no real library or onboarding
+ *  workout carries one (the domain header comment on `Phase.type` notes a
+ *  test phase is unrepresentable to `compileProgram`, so the connected
+ *  surface's own program-driven fixtures never reach it either), but
+ *  `connectedNextText` reads `EnginePhase[]` directly and a rower CAN author
+ *  one (the builder's own "test" step) — real production code
+ *  (`buildDraft` -> `buildRun` -> `domain/expand.ts`'s `phases()`), a real
+ *  step shape, just not a shape any SEEDED workout happens to use. */
+const TEST_PHASES = phasesFrom(
+  { title: "Test Piece", type: "AN", steps: [{ k: "test", label: "2k Test" }] },
+  null,
+);
 
 /** The session pair MIRRORS the raw pair unless a case overrides it
  *  outright. 0x0031's `elapsedSeconds`/`distanceMeters` are PER-INTERVAL
@@ -617,73 +684,116 @@ describe("intervalOrdinalLabel: the ordinal without the phase word (design spec 
   });
 });
 
-// CR2 spec 3 Task 2 (design spec §2D, antagonist corrections 2 and 3): at
-// armed, up-next reads the FIRST interval forward — `phases[phaseIndex]` /
-// `[phaseIndex + 1]` — not `phases[phaseIndex + 1]` / `[phaseIndex + 2]`,
-// which is what the ordinary (non-armed) formula reads and what the
-// committed `connected-armed-landscape.png` shows as the pre-task defect
-// (the coming REST at armed instead of the coming WORK).
-describe("armed's up-next (design spec §2D): the FIRST interval forward", () => {
-  it("armed names the CURRENT phase as up-next and the phase after it as then-next — the exact strings, not the mechanism", () => {
+// Phase CS Item B (connected-polish design spec, "The NEXT line says
+// more"): `connectedNextText` is the ONE builder for `SurfaceModel.upNext`
+// now — exhaustive over `EnginePhase["type"]`, built from `label` (the
+// domain's already-resolved display value) plus extent and `@spm`, never
+// re-derived from `targetSplit`. `thenNext` is gone from the model
+// entirely (the then-clause dies everywhere, James's ruling) — the old
+// "armed's up-next" describe block above tested both fields through
+// `buildSurfaceModel`; this one tests the builder directly, one `it` per
+// composition-table row, plus the armed-shift integration case the old
+// block's first test covered.
+//
+// EVERY EXPECTED STRING BELOW IS HARDCODED, not recomputed with
+// `fmtSplit`/`fmtDuration` inside the assertion (the anti-tautology idiom,
+// task-1 brief) — `phase.label` for a split-target work phase already IS
+// `fmtSplit(targetSplit)` (`domain/expand.ts`'s own `phases()`), so calling
+// `fmtSplit` again in the test would only prove the two call sites agree
+// with EACH OTHER, not that either is right. The literals were read off
+// each fixture's own known inputs (`server/seed/library/at.ts`'s "Filling
+// Low"/"Occluded Front", `k6Seconds: 122`/`off: 4` -> 126s -> `2:06.0`) at
+// test-writing time.
+describe('connectedNextText: exhaustive over Phase["type"] (Item B composition table)', () => {
+  it("work, distance, split target, spm set -> WORK {meters}m · {label} @{spm}", () => {
+    // FIXTURE (Filling Low, 8' time warm-up): phases[0] warm-up, phases[1]
+    // the first work phase (2000m, 6k+4 -> 126s -> `2:06.0`, spm 22).
+    // `connectedNextText(phases, 0)` names `phases[1]` — the SAME +1 offset
+    // `upNextTextAt` always had (see the armed-shift test below).
+    expect(connectedNextText(FIXTURE.phases, 0)).toBe(
+      "WORK 2000m · 2:06.0 @22",
+    );
+  });
+
+  it("work, time, split target, spm set -> WORK {duration} · {label} @{spm}", () => {
+    // Occluded Front: one continuous 10' work phase at 6k+4 (same 126s ->
+    // `2:06.0`), spm 22, no reps/rest — phases[0] is the only phase, so
+    // `connectedNextText(phases, -1)` (index + 1 === 0) names it.
+    expect(connectedNextText(OCCLUDED.phases, -1)).toBe(
+      "WORK 10:00 · 2:06.0 @22",
+    );
+  });
+
+  it("work, distance, effort target, no spm -> WORK {meters}m · {label word}, no rate", () => {
+    // "First 2k" (onboarding): 2000m at MAX effort, no spm at all — the one
+    // real production shape with an effort target AND no spm (see
+    // `EFFORT_METERS_NO_SPM`'s own comment). `effortWord("max")` is
+    // `"ALL OUT"`.
+    expect(connectedNextText(EFFORT_METERS_NO_SPM, -1)).toBe(
+      "WORK 2000m · ALL OUT",
+    );
+  });
+
+  it("warm-up, distance -> WARM-UP {meters}m · Easy", () => {
+    // WARMUP_METERS: Filling Low with the warm-up preference at
+    // `kind: "distance", meters: 2000` — phases[0] is the warm-up.
+    expect(connectedNextText(WARMUP_METERS.phases, -1)).toBe(
+      "WARM-UP 2000m · Easy",
+    );
+  });
+
+  it("warm-up, time -> WARM-UP {duration} · Easy", () => {
+    // FIXTURE's own 8' time warm-up — phases[0].
+    expect(connectedNextText(FIXTURE.phases, -1)).toBe("WARM-UP 8:00 · Easy");
+  });
+
+  it("test -> TEST · All out (no extent fields exist on a test phase)", () => {
+    expect(connectedNextText(TEST_PHASES, -1)).toBe("TEST · All out");
+  });
+
+  it("rest -> REST {duration}", () => {
+    // FIXTURE.phases[2] is the rest folded after the first work phase
+    // (Filling Low's own `restMinutes: 3`) — `connectedNextText(phases, 1)`
+    // names it.
+    expect(connectedNextText(FIXTURE.phases, 1)).toBe("REST 3:00");
+  });
+
+  it("past the last phase -> FINISH", () => {
+    expect(connectedNextText(FIXTURE.phases, FIXTURE.phases.length - 1)).toBe(
+      "FINISH",
+    );
+  });
+
+  it("work, split target, spm UNSET -> no @ anywhere in the string", () => {
+    // Derived from the real Filling Low work phase (which DOES carry spm)
+    // by stripping the one field under test — `library.test.ts`'s own
+    // "spm-present-and-even on every work step" rule means no REAL fixture
+    // in the seeded 300 reaches a split-target work phase with no spm at
+    // all (see `EFFORT_METERS_NO_SPM`'s comment for the analogous effort
+    // case), so this is real-shape-minus-one-field, not a hand-minimal stub.
+    const work = firstWorkPhase();
+    const { spm: _spm, ...withoutSpm } = work;
+    const text = connectedNextText([withoutSpm], -1);
+    expect(text).not.toContain("@");
+    expect(text).toBe(`WORK ${work.meters}m · ${work.label}`);
+  });
+
+  // CR2 spec 3 Task 2 (design spec §2D, antagonist corrections 2 and 3): at
+  // armed, up-next reads the FIRST interval forward — `phases[phaseIndex]`
+  // — not `phases[phaseIndex + 1]`, which is what the ordinary (non-armed)
+  // formula reads and what the committed `connected-armed-landscape.png`
+  // shows as the pre-task defect (the coming REST at armed instead of the
+  // coming WORK). This is `SurfaceModel.upNext` end to end (not
+  // `connectedNextText` called directly), because the shift itself lives
+  // in `buildSurfaceModel`, at the call site, not in the builder.
+  it("armed shift: at armedMirror the value names phases[phaseIndex], not phases[phaseIndex + 1]", () => {
     // NO_WARMUP: interval 0 IS the first work phase (phases[0] work,
     // phases[1] its folded rest) — the realistic no-warm-up fixture most
     // sessions actually have, armed at its only possible index, 0.
     const work = NO_WARMUP.phases[0]!;
-    const rest = NO_WARMUP.phases[1]!;
     if (work.type !== "work" || work.targetSplit === undefined) {
       throw new Error("fixture assumption broke: phase 0 is not split work");
     }
-    if (rest.type !== "rest") {
-      throw new Error("fixture assumption broke: phase 1 is not a rest");
-    }
-    const restSeconds = phaseSeconds(rest);
-    if (restSeconds === null) {
-      throw new Error("fixture assumption broke: rest has no duration");
-    }
-
-    const m = buildSurfaceModel({
-      phases: NO_WARMUP.phases,
-      program: NO_WARMUP.program,
-      status: "armed",
-      frame: frame({
-        state: "armed",
-        intervalIndex: 0,
-        rowingActive: false,
-        distanceMeters: 0,
-      }),
-      deviceName: DEVICE,
-      actuals: [],
-    });
-
-    // Derived independently of `upNextTextAt`/`thenNextTextAt` (the
-    // functions under test) via `fmtSplit`/`fmtDuration` straight off the
-    // fixture's own phases — a real check on the STRING, not a re-run of
-    // the same mechanism against itself.
-    expect(m.upNext).toBe(`WORK ${fmtSplit(work.targetSplit)}`);
-    expect(m.thenNext).toBe(`REST ${fmtDuration(restSeconds / 60)}`);
-  });
-
-  it("non-armed at the SAME index still reads phases[index+1]/[index+2] — the ordinary formula is untouched", () => {
-    const liveModel = buildSurfaceModel({
-      phases: NO_WARMUP.phases,
-      program: NO_WARMUP.program,
-      status: "live",
-      frame: frame({ intervalIndex: 0 }),
-      deviceName: DEVICE,
-      actuals: [],
-    });
-    // The ordinary (non-armed) formula at interval 0 names the REST that
-    // follows the first work phase, not the work phase itself — the exact
-    // shift the armed branch above proves it does NOT take.
-    const rest = NO_WARMUP.phases[1]!;
-    if (rest.type !== "rest") {
-      throw new Error("fixture assumption broke: phase 1 is not a rest");
-    }
-    const restSeconds = phaseSeconds(rest);
-    if (restSeconds === null) {
-      throw new Error("fixture assumption broke: rest has no duration");
-    }
-    expect(liveModel.upNext).toBe(`REST ${fmtDuration(restSeconds / 60)}`);
 
     const armedModel = buildSurfaceModel({
       phases: NO_WARMUP.phases,
@@ -698,8 +808,27 @@ describe("armed's up-next (design spec §2D): the FIRST interval forward", () =>
       deviceName: DEVICE,
       actuals: [],
     });
+    // Hardcoded, not `WORK ${fmtSplit(work.targetSplit)}` — same
+    // anti-tautology reasoning as the property rows above.
+    expect(armedModel.upNext).toBe("WORK 2000m · 2:06.0 @22");
+
+    const liveModel = buildSurfaceModel({
+      phases: NO_WARMUP.phases,
+      program: NO_WARMUP.program,
+      status: "live",
+      frame: frame({ intervalIndex: 0 }),
+      deviceName: DEVICE,
+      actuals: [],
+    });
+    // The ordinary (non-armed) formula at interval 0 names the REST that
+    // follows the first work phase, not the work phase itself — the exact
+    // shift the armed case above proves it does NOT take.
+    expect(liveModel.upNext).toBe("REST 3:00");
     expect(armedModel.upNext).not.toBe(liveModel.upNext);
-    expect(armedModel.thenNext).not.toBe(liveModel.thenNext);
+  });
+
+  it('`thenNext` is gone from the model — "thenNext" in model === false', () => {
+    expect("thenNext" in model()).toBe(false);
   });
 });
 

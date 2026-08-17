@@ -37,12 +37,7 @@ import {
   intervalBoundaries,
   type IntervalBoundaries,
 } from "../../session/intervalBoundaries";
-import {
-  phaseKindWord,
-  thenNextTextAt,
-  totalSessionSecondsOf,
-  upNextTextAt,
-} from "../../session/Timer";
+import { phaseKindWord, totalSessionSecondsOf } from "../../session/Timer";
 import { FREE, targetSplitDisplay } from "../../session/TimerTargets";
 
 /** What the surface itself renders differently — NOT a narrowed
@@ -105,6 +100,82 @@ export function judgedValue(args: {
  *  and greyed by their own treatment, not judged `"stale"`. */
 export function staleFor(status: SurfaceStatus): boolean {
   return status === "stale";
+}
+
+/** The NEXT line's own extent phrase (design spec §"Composition", Item B):
+ *  `1500m` for a distance phase, the house duration format for a time one.
+ *  A `rest`/`work`/`warmup` phase always has exactly one of the two set
+ *  (`domain/expand.ts`'s producers never emit both); `test` phases have
+ *  neither and never reach this helper (see `connectedNextText`'s own
+ *  `test` branch, which composes no extent at all). */
+function nextLineExtent(
+  phase: Pick<EnginePhase, "meters" | "seconds">,
+): string {
+  return phase.meters !== undefined
+    ? `${phase.meters}m`
+    : fmtDuration((phase.seconds ?? 0) / 60);
+}
+
+/**
+ * THE NEXT LINE, EXHAUSTIVELY (connected-polish design spec, Item B —
+ * "the NEXT line says more"). Replaces `upNextTextAt`/`thenNextTextAt`
+ * (`session/Timer.tsx`, still used unchanged by the phone timer's own UP
+ * NEXT strip) as the connected surface's ONE builder for `SurfaceModel.
+ * upNext`; `thenNext` is retired outright (the then-clause dies
+ * everywhere, James's ruling — one richer phase, not two).
+ *
+ * BUILT FROM `label`, NEVER RE-DERIVED (PM C5): `EnginePhase.label` is the
+ * domain's already-resolved display value — the exact split
+ * (`fmtSplit(targetSplit)`), `"Easy"`, `"Rest"`, `"All out"`, or an effort
+ * word (`"ALL OUT"`/`"EASY"`) — for every phase kind that carries one
+ * (`domain/expand.ts`'s `phases()`, `session/engine.ts`'s `warmupPhases`).
+ * This function composes that label with the phase's own extent and rate;
+ * it never calls `fmtSplit`/`resolveSplit` itself, so a future change to
+ * how a target is resolved cannot silently drift the two apart the way a
+ * second copy of that arithmetic could.
+ *
+ * `index` carries the SAME +1 offset `upNextTextAt` always had —
+ * `phases[index + 1]` is the phase this function describes, `undefined`
+ * past the end reads `"FINISH"` (`upNextTextAt`'s own contract, preserved
+ * verbatim) — so every existing call site (including the armed shift,
+ * `phaseIndex - 1` at this file's `buildSurfaceModel`) wires in unchanged;
+ * only the FUNCTION changed, not the index arithmetic around it.
+ *
+ * EXHAUSTIVE OVER `Phase["type"]` (antagonist B2, the axes lesson): a
+ * `switch` with a `never` default, not an `if`/`else` chain a fifth phase
+ * kind could silently fall through.
+ */
+export function connectedNextText(
+  phases: EnginePhase[],
+  index: number,
+): string {
+  const phase = phases[index + 1];
+  if (phase === undefined) return "FINISH";
+  const kind = phaseKindWord(phase.type);
+  switch (phase.type) {
+    case "work":
+    case "warmup":
+      // `@spm` only when spm is SET (design spec table) — `!== undefined`,
+      // not truthiness, so a phase could never suppress its own rate by
+      // resolving to a falsy-but-real spm (unreachable today, since a real
+      // spm is never 0, but the honest check costs nothing).
+      return `${kind} ${nextLineExtent(phase)} · ${phase.label}${
+        phase.spm !== undefined ? ` @${phase.spm}` : ""
+      }`;
+    case "test":
+      // No extent fields exist on a test phase (`domain/expand.ts`'s
+      // `case "test"` sets neither `seconds` nor `meters`) — the table's
+      // own `TEST · All out` row has none to show.
+      return `${kind} · ${phase.label}`;
+    case "rest":
+      return `${kind} ${nextLineExtent(phase)}`;
+    default: {
+      // The axes lesson: a phase kind added to the union without a branch
+      // here fails `pnpm typecheck`, not silently at runtime.
+      const exhaustive: never = phase.type;
+      return exhaustive;
+    }
+  }
 }
 
 /**
@@ -320,19 +391,17 @@ export interface SurfaceModel {
    *  instead (James, 2026-08-13), and `PaneLive.tsx` renders it there now —
    *  carrying it in both places would say `/500m` twice inside one hero. */
   nowLabel: string;
-  /** CR2 spec 3 Task 2 (design spec §2D): gains an ARMED branch — at armed
-   *  this reads the FIRST interval forward (`phases[phaseIndex]`) rather
-   *  than `phases[phaseIndex + 1]`, because there is no "current" phase yet
-   *  to be up-next FROM; the non-armed formula (today's `upNextTextAt`) is
-   *  unchanged. */
+  /** THE NEXT LINE (connected-polish design spec, Item B): built by
+   *  `connectedNextText` from the coming phase's own `label` plus its
+   *  extent and `@spm` — `WORK 1500m · 2:13.0 @24`, `WARM-UP 2000m · Easy`,
+   *  `TEST · All out`, `REST 1:00`, or `FINISH` past the last phase. One
+   *  richer phase, not two: `thenNext` is gone from this interface outright
+   *  (the then-clause dies everywhere, James's ruling). CR2 spec 3 Task 2
+   *  (design spec §2D) gains an ARMED branch — at armed this reads the
+   *  FIRST interval forward (`phases[phaseIndex]`) rather than
+   *  `phases[phaseIndex + 1]`, because there is no "current" phase yet to
+   *  be up-next FROM; the non-armed formula is unchanged. */
   upNext: string;
-  /** Armed branch mirrors `upNext`'s own shift, one phase further out
-   *  (`phases[phaseIndex + 1]`, not `[phaseIndex + 2]`) — §2D's own example
-   *  (`WORK 10:00 · then REST 1:00`) is only honest if `thenNext` names the
-   *  phase the shifted `upNext` is itself followed by; shifting only
-   *  `upNext` would skip a phase and show what comes AFTER the coming
-   *  rest. */
-  thenNext: string | null;
   totalSeconds: number;
   /** `44:12` — CR2 spec 3 Task 4 deleted the sibling `totalLeftSeconds`
    *  field (spec §3 fate table): `PaneLive`'s own `TimerRuler` cell was its
@@ -751,30 +820,21 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
     // caption beside it already uses.
     nowLabel: stale ? "LAST" : "",
     // ARMED'S UP-NEXT IS THE FIRST INTERVAL FORWARD (design spec §2D,
-    // antagonist correction 2): today's `upNextTextAt(phases, phaseIndex)`
-    // names `phases[phaseIndex + 1]` — the coming REST at armed, per the
-    // committed `connected-armed-landscape.png` — because at every OTHER
-    // status `phaseIndex` names the phase already IN PROGRESS, so "next"
-    // correctly starts one further out. At armed nothing is in progress
-    // yet, so `phaseIndex` itself is the first thing coming — one index
-    // short of where the ordinary formula looks. `upNextTextAt(phases, i)`
-    // is `phaseAnnouncement(phases[i + 1])` by construction, so calling it
-    // one index EARLIER (`phaseIndex - 1`) reads `phases[phaseIndex]`
-    // exactly, reusing the existing FINISH-at-the-end handling rather than
-    // duplicating it. `thenNextTextAt` shifts the identical one index for
-    // the identical reason (antagonist correction 3): `thenNextTextAt(
-    // phases, i)` is `phaseAnnouncement(phases[i + 2])`, so the same
-    // `phaseIndex - 1` reads `phases[phaseIndex + 1]` — the phase
-    // `upNext`'s own armed value is itself followed by, never the one
-    // after THAT (§2D's own example, `WORK 10:00 · then REST 1:00`, is
-    // only true if `thenNext` names the REST and not whatever comes after
-    // it).
+    // antagonist correction 2): today's `connectedNextText(phases,
+    // phaseIndex)` names `phases[phaseIndex + 1]` — the coming REST at
+    // armed, per the committed `connected-armed-landscape.png` — because at
+    // every OTHER status `phaseIndex` names the phase already IN PROGRESS,
+    // so "next" correctly starts one further out. At armed nothing is in
+    // progress yet, so `phaseIndex` itself is the first thing coming — one
+    // index short of where the ordinary formula looks.
+    // `connectedNextText(phases, i)` names `phases[i + 1]` by construction
+    // (the same offset `upNextTextAt` always had, preserved verbatim), so
+    // calling it one index EARLIER (`phaseIndex - 1`) reads
+    // `phases[phaseIndex]` exactly, reusing the existing FINISH-at-the-end
+    // handling rather than duplicating it.
     upNext: armedMirror
-      ? upNextTextAt(phases, phaseIndex - 1)
-      : upNextTextAt(phases, phaseIndex),
-    thenNext: armedMirror
-      ? thenNextTextAt(phases, phaseIndex - 1)
-      : thenNextTextAt(phases, phaseIndex),
+      ? connectedNextText(phases, phaseIndex - 1)
+      : connectedNextText(phases, phaseIndex),
     totalSeconds,
     // `totalLeftSeconds` stays a LOCAL value only (CR2 spec 3 Task 4): the
     // returned `SurfaceModel` no longer exposes it — see this field's own
