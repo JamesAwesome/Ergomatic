@@ -155,8 +155,8 @@ function formatLogDate(loggedAt: string): string {
 
 /** Wall-clock time since a LIVE run started (F2, whole-branch review: the
  *  resume card's own elapsed-so-far reading) — `now - startedAt`, the same
- *  "real time, including any pauses" convention SessionComplete.tsx's own
- *  `totalElapsedSeconds` documents for a FINISHED run's `completedAt -
+ *  "real time, including any pauses" convention `summaryModel.ts`'s own
+ *  TIMER-door TIME hero documents for a FINISHED run's `completedAt -
  *  startedAt`. That one can't be reused here: `completedAt` is null by
  *  construction of every caller (this only ever runs against a run
  *  `TodayView` already confirmed is still live, never a completed one).
@@ -311,7 +311,7 @@ export default function Today() {
   // value), which this guard still discards correctly once it's 24h stale.
   //
   // Phase 6B Task 4 amendment: a completed-but-unlogged run record (`run.ts`
-  // — Timer/SessionComplete both deliberately keep it, for 6C's still-
+  // — Timer/LogSession both deliberately keep it, for 6C's still-
   // unbuilt "log this session" screen) protects its draft from this discard
   // regardless of age, one further exception layered onto the same rule.
   // Doubly inert since fast-follow Task 4 (see above): the edge case it
@@ -489,8 +489,8 @@ function ErrorScreen({
  *  wrapper, same border-box sizing, so the row's height and position never
  *  move (the mockup's own DEFAULT/ARMED pair, implemented as one row).
  *  Firing removes the row in place (`dismissed`) with no navigation — unlike
- *  SessionComplete's/the Log screen's own Discard, which both leave this
- *  screen entirely. */
+ *  the post-workout summary's own Discard (`PostWorkoutSummary`'s
+ *  `discardSlot`), which leaves this screen entirely. */
 function UnloggedRow({ run }: { run: SessionRun }) {
   const discard = useStagedDiscard();
   const [dismissed, setDismissed] = useState(false);
@@ -498,15 +498,17 @@ function UnloggedRow({ run }: { run: SessionRun }) {
 
   // Fix round 1 (reviewer M1): arming swaps in a STRUCTURALLY DIFFERENT
   // element (a bare `<button>` replacing a `<div><Link/><button/></div>`),
-  // unlike SessionComplete's own single button whose class/copy just
-  // changes in place — React unmounts the pressed ✕ and mounts a brand-new
-  // "Tap again" node at the same tree position, which does NOT inherit
-  // focus (measured: the real activeElement fell back to `<body>`).
+  // unlike the summary's own discard button (`PostWorkoutSummary`'s
+  // `discardSlot`, `LogSession.tsx`'s `handleDiscardClick`) whose class/copy
+  // just changes in place — React unmounts the pressed ✕ and mounts a
+  // brand-new "Tap again" node at the same tree position, which does NOT
+  // inherit focus (measured: the real activeElement fell back to `<body>`).
   // Without an explicit re-focus here, `onBlur` below can never fire from
   // a real tap-away — nothing is focused for a later blur to leave.
   // Focusing the new node the instant it mounts restores the same "focus
-  // follows the armed control" behavior SessionComplete/WorkoutDetail get
-  // for free from keeping one DOM node armed in place.
+  // follows the armed control" behavior the summary's own discard
+  // button/WorkoutDetail get for free from keeping one DOM node armed in
+  // place.
   useEffect(() => {
     if (discard.armed) armedButtonRef.current?.focus();
   }, [discard.armed]);

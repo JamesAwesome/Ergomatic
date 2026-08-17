@@ -834,6 +834,12 @@ describe("LogSession: the monitor log's quiet door (7B iteration)", () => {
     await screen.findByRole("heading", { name: "Hoarfrost" });
 
     const row = screen.getByRole("button", { name: "MONITOR LOG · COPY" });
+    // Review finding C1: the className this row renders must actually
+    // resolve to styled rules (index.css's own `.log-monitor-diag`), not
+    // just exist as a string — `e2e/design.spec.ts`'s own "quiet diagnostics
+    // doors" block proves the resolved live styles; this pins the class
+    // name itself at the component layer (jsdom never applies index.css).
+    expect(row.className).toContain("log-monitor-diag");
     await userEvent.click(row);
 
     expect(writeText).toHaveBeenCalledWith(stash);
@@ -889,6 +895,9 @@ describe("LogSession: the recording's quiet door (walk-2026-08-16 close-out)", (
     await screen.findByRole("heading", { name: "Hoarfrost" });
 
     const row = screen.getByRole("button", { name: "RECORDING · DOWNLOAD" });
+    // Review finding C1: same pin as the monitor log row above — the class
+    // name that resolves the restored `.log-monitor-diag` styling.
+    expect(row.className).toContain("log-monitor-diag");
     await userEvent.click(row);
 
     expect(download).toHaveBeenCalledTimes(1);
@@ -2694,7 +2703,7 @@ describe("LogSession: the save stack's plan position (§2F, replaces the outside
     ).not.toBeInTheDocument();
   });
 
-  it("session door: renders the form immediately while the plan is still loading, with no Log against plan button, and Save posts no advancesPlan key", async () => {
+  it("session door: renders the form immediately while the plan is still loading, with no Log against plan button, and Save OMITS the advancesPlan key (review finding C2)", async () => {
     const { workout } = buildSessionFixture();
     mockWorkouts([workout]);
     mockPlan({ state: "loading" });
@@ -2717,11 +2726,41 @@ describe("LogSession: the save stack's plan position (§2F, replaces the outside
     await screen.findByText("TODAY SCREEN");
 
     const body = parsedBodies(apiFn)[0]!;
-    // §2F's "Save without logging" ALWAYS sends advancesPlan:false, even
-    // with no plan resolved yet — harmless (the server's own plan_state
-    // upsert is a no-op with no plan to advance), and simpler than the old
-    // toggle's tri-state ("no plan" / "counts" / "outside").
-    expect(body.advancesPlan).toBe(false);
+    // Fix round (review finding C2): the plan fetch never resolved by the
+    // time Save was tapped, so this button's own click cannot know whether
+    // an active plan exists to opt out of — sending `advancesPlan:false`
+    // here would silently drop `doneN` advancement for a plan the UI simply
+    // hadn't learned about yet. Omitting the key lets the server's own
+    // `?? true` default (`data.ts`) run, the same behavior the old,
+    // now-retired toggle had (its key was never sent until the plan
+    // resolved either).
+    expect(body).not.toHaveProperty("advancesPlan");
+  });
+
+  it("session door: plan-hook error also OMITS the advancesPlan key on Save (review finding C2's second case)", async () => {
+    const { workout } = buildSessionFixture();
+    mockWorkouts([workout]);
+    mockPlan({ state: "error", retry: vi.fn() });
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-plan-errored" }), {
+          status: 201,
+        }),
+      ),
+    );
+    await renderLog();
+
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    expect(
+      screen.queryByRole("button", { name: /Log against plan/ }),
+    ).not.toBeInTheDocument();
+
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+    await screen.findByText("TODAY SCREEN");
+
+    const body = parsedBodies(apiFn)[0]!;
+    expect(body).not.toHaveProperty("advancesPlan");
   });
 
   it("renders the plan position on Log against plan, sourced from doneN/sequence.length, when a plan is active", async () => {
@@ -2914,6 +2953,36 @@ describe("LogSession: the save stack's plan position (§2F, replaces the outside
 
     const body = parsedBodies(apiFn)[0]!;
     expect(body.advancesPlan).toBe(false);
+  });
+
+  // Review finding C2, manual door: the same fix applies at this door's own
+  // (separately closed-over) `saveWithoutLoggingOpts` — a plan fetch still
+  // in flight must not assert `advancesPlan:false` here either.
+  it("manual door wire shape: while the plan is still loading, Save OMITS the advancesPlan key", async () => {
+    mockPlan({ state: "loading" });
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-manual-plan-loading" }), {
+          status: 201,
+        }),
+      ),
+    );
+    await renderManualLog(workout.id);
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    expect(
+      screen.queryByRole("button", { name: /Log against plan/ }),
+    ).not.toBeInTheDocument();
+    await chooseHeldAndPain();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save without logging" }),
+    );
+    await screen.findByText("TODAY SCREEN");
+
+    const body = parsedBodies(apiFn)[0]!;
+    expect(body).not.toHaveProperty("advancesPlan");
   });
 
   // Logging must never be hostage to the plan fetch: an errored plan hook

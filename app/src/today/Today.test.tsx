@@ -2218,8 +2218,8 @@ describe("Today (Task 3: unlogged row's staged Discard)", () => {
     await userEvent.click(screen.getByRole("button", { name: "Tap again" }));
 
     // Gone in place — no "unlogged session" line, no armed controls, and
-    // still on Today (no navigation at all, unlike SessionComplete's/the Log
-    // screen's own Discard, which both leave the screen).
+    // still on Today (no navigation at all, unlike the post-workout
+    // summary's own Discard, which leaves the screen).
     expect(screen.queryByText(/unlogged session/i)).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /discard/i }),

@@ -677,6 +677,20 @@ function SessionDoorLog() {
       ? planState.plan
       : null;
 
+  // Fix round (C2): `plan` above conflates "no plan", "still loading" and
+  // "hook errored" into the same `null` — correct for what button renders,
+  // wrong for what `Save without logging` sends on the wire. Only a
+  // RESOLVED plan fetch (`state === "ready"`) can tell the wire body
+  // "genuinely omit this session from plan progress"; while the fetch is
+  // loading or has errored, the server's own `?? true` default (`data.ts`)
+  // must run unchanged — the same behavior the old, now-retired toggle had
+  // (its key was simply never sent until the plan resolved). Sending an
+  // explicit `false` during that window silently dropped `doneN` advancement
+  // for a session that may have had an active plan the UI just hadn't
+  // learned about yet.
+  const saveWithoutLoggingOpts: { advancesPlan?: boolean } =
+    planState.state === "ready" ? { advancesPlan: false } : {};
+
   const library = workoutsState.state === "ready" ? workoutsState.workouts : [];
   const libraryWorkout =
     run.workoutId !== null
@@ -755,7 +769,7 @@ function SessionDoorLog() {
       saving={saving}
       saveError={saveError}
       onLogAgainstPlan={() => void handleSave()}
-      onSaveWithoutLogging={() => void handleSave({ advancesPlan: false })}
+      onSaveWithoutLogging={() => void handleSave(saveWithoutLoggingOpts)}
       backFallback="/today"
       discardSlot={
         <button
@@ -916,6 +930,15 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
       ? planState.plan
       : null;
 
+  // Fix round (C2): same reasoning as `SessionDoorLog`'s own copy of this
+  // constant — `plan` above conflates "no plan"/"loading"/"errored", but
+  // the wire body must only assert `advancesPlan:false` once the plan fetch
+  // has genuinely resolved. Shared by both branches below (monitor and
+  // plain manual), since `planState` is a single hook call at this
+  // component's top.
+  const saveWithoutLoggingOpts: { advancesPlan?: boolean } =
+    planState.state === "ready" ? { advancesPlan: false } : {};
+
   const workout = workoutsState.workouts.find((w) => w.id === workoutId);
   if (!workout) {
     return (
@@ -1021,7 +1044,7 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
         saveError={saveError}
         onLogAgainstPlan={() => void handleMonitorSave()}
         onSaveWithoutLogging={() =>
-          void handleMonitorSave({ advancesPlan: false })
+          void handleMonitorSave(saveWithoutLoggingOpts)
         }
         discardSlot={
           <button
@@ -1172,7 +1195,7 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
       saving={saving}
       saveError={saveError}
       onLogAgainstPlan={() => void handleSave()}
-      onSaveWithoutLogging={() => void handleSave({ advancesPlan: false })}
+      onSaveWithoutLogging={() => void handleSave(saveWithoutLoggingOpts)}
       // Nothing to discard (the brief's own words) — there's no staged
       // Discard slot at all for this door, unlike the other two.
       discardSlot={null}

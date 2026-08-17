@@ -344,6 +344,82 @@ describe("PostWorkoutSummary — intervals (§2E)", () => {
     ).toBeInTheDocument();
   });
 
+  // Review finding C3: nothing previously asserted `barWidthPercent` -> the
+  // bar's own `width` style, the `right:50%`/`left:50%` anchoring, or that
+  // `summary-row-faster`/`-slower` actually lands on the pace text — a
+  // faster/slower color or width swap would have passed the whole suite.
+  // Two distinct `barWidthPercent` values (32 vs 47) prove the width is
+  // READ from the model, not a hardcoded per-direction constant.
+  it("a faster row's pace and bar carry summary-row-faster, the bar anchored from the right at the model's own width (C3)", () => {
+    renderSummary({
+      model: monitorModel({
+        rows: [
+          {
+            measured: true,
+            isWarmup: false,
+            index: 1,
+            label: "6:00 @ 6k",
+            timeLabel: "6:00",
+            paceLabel: "2:05.0",
+            judged: {
+              direction: "faster",
+              deviationSeconds: -4.2,
+              deviationLabel: "−4.2",
+              barWidthPercent: 32,
+            },
+          },
+        ],
+      }),
+    });
+    const row = screen.getByRole("listitem");
+    const pace = row.querySelector(".summary-row-pace");
+    expect(pace?.className).toContain("summary-row-faster");
+    expect(pace?.className).not.toContain("summary-row-slower");
+    const dev = row.querySelector(".summary-row-dev");
+    expect(dev?.className).toContain("summary-row-faster");
+    const bar = row.querySelector(".summary-row-bar");
+    expect(bar).not.toBeNull();
+    expect(bar!.className).toContain("summary-row-faster");
+    expect((bar as HTMLElement).style.width).toBe("32%");
+    expect((bar as HTMLElement).style.right).toBe("50%");
+    expect((bar as HTMLElement).style.left).toBe("");
+  });
+
+  it("a slower row's pace and bar carry summary-row-slower, the bar anchored from the left at the model's own width (C3)", () => {
+    renderSummary({
+      model: monitorModel({
+        rows: [
+          {
+            measured: true,
+            isWarmup: false,
+            index: 1,
+            label: "6:00 @ 6k",
+            timeLabel: "6:20",
+            paceLabel: "2:13.4",
+            judged: {
+              direction: "slower",
+              deviationSeconds: 4.2,
+              deviationLabel: "+4.2",
+              barWidthPercent: 47,
+            },
+          },
+        ],
+      }),
+    });
+    const row = screen.getByRole("listitem");
+    const pace = row.querySelector(".summary-row-pace");
+    expect(pace?.className).toContain("summary-row-slower");
+    expect(pace?.className).not.toContain("summary-row-faster");
+    const dev = row.querySelector(".summary-row-dev");
+    expect(dev?.className).toContain("summary-row-slower");
+    const bar = row.querySelector(".summary-row-bar");
+    expect(bar).not.toBeNull();
+    expect(bar!.className).toContain("summary-row-slower");
+    expect((bar as HTMLElement).style.width).toBe("47%");
+    expect((bar as HTMLElement).style.left).toBe("50%");
+    expect((bar as HTMLElement).style.right).toBe("");
+  });
+
   // A real, if unusual, monitor-door shape (LogSession.test.tsx's own
   // "unusable avgSplit" fixture, R-B/monitorWorkRows): a real elapsed
   // reading with no usable pace (avgSplit 0, "the wire had no reading" —

@@ -3311,6 +3311,106 @@ test.describe("post-workout summary (manual door)", () => {
   });
 });
 
+// Review finding C1 (fix round): the summary's Task 5 CSS sweep deleted
+// `.log-monitor-diag` from index.css while `MonitorLogRow`/
+// `RecordingDownloadRow` (LogSession.tsx) kept rendering
+// `className="log-monitor-diag"` — no design/e2e sweep ever exercised these
+// rows (both are gated behind a sessionStorage stash / a dev-only recording
+// seam that no other spec in this file sets up), so the regression shipped
+// with a fully green suite. This block seeds BOTH seams before the summary
+// ever mounts (each row's own `useState` lazy initializer reads its seam
+// exactly once, on mount — seeding after render would not retroactively
+// show it) and proves the RESTORED rule actually resolves on the live DOM,
+// not merely that the button exists.
+test.describe("post-workout summary — quiet diagnostics doors (review finding C1)", () => {
+  const title = "Design Diagnostics Sweep";
+
+  test.beforeEach(async ({ page }, testInfo) => {
+    await signInViaBackdoor(page, {
+      email: `design-diagnostics-${testInfo.parallelIndex}@e2e.test`,
+      name: "Design Diagnostics Tester",
+    });
+    await setBaselines(page);
+    // `importBulk` itself does a real `page.goto` (a fresh document load,
+    // wiping any plain `window.*` property a previous `page.evaluate` set —
+    // `sessionStorage` alone survives a same-origin reload). Seeding the
+    // seams AFTER it, and after the workout-row/"Log it after" clicks below
+    // (both client-side React Router transitions, no document reload), is
+    // what makes BOTH seams actually reach the summary's mount.
+    await importBulk(
+      page,
+      [`${title} | AT | medium | 3`, "w 1:00 6k-2"].join("\n"),
+    );
+    await page.locator(".workout-row").filter({ hasText: title }).click();
+    await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
+    await page.evaluate(() => {
+      sessionStorage.setItem(
+        "ergomatic:last-rowed-log",
+        JSON.stringify([{ seq: 0, kind: "write", detail: "design-sweep" }]),
+      );
+      (
+        window as unknown as {
+          __pm5Recording__: {
+            lines(): string[];
+            eventCount(): number;
+            download(): Promise<void>;
+          };
+        }
+      ).__pm5Recording__ = {
+        lines: () => [],
+        eventCount: () => 0,
+        download: () => Promise.resolve(),
+      };
+    });
+    await page.getByRole("link", { name: "Log it after" }).click();
+    await expect(page).toHaveURL(/\/library\/[^/]+\/log$/);
+    await expect(page.getByRole("heading", { name: title })).toBeVisible();
+  });
+
+  test.afterEach(async ({ page }) => {
+    await page.evaluate(() => {
+      sessionStorage.removeItem("ergomatic:last-rowed-log");
+    });
+    await cleanupByTitle(page, title);
+  });
+
+  test("both rows render (the seams engaged) and the restored .log-monitor-diag rule resolves live — not UA-default buttons", async ({
+    page,
+  }) => {
+    const monitorRow = page.getByRole("button", {
+      name: "MONITOR LOG · COPY",
+    });
+    const recordingRow = page.getByRole("button", {
+      name: "RECORDING · DOWNLOAD",
+    });
+    await expect(monitorRow).toBeVisible();
+    await expect(recordingRow).toBeVisible();
+
+    for (const row of [monitorRow, recordingRow]) {
+      const className = await row.evaluate(
+        (el) => (el as HTMLElement).className,
+      );
+      expect(className).toContain("log-monitor-diag");
+      const style = await row.evaluate((el) => {
+        const cs = getComputedStyle(el);
+        return {
+          minHeight: cs.minHeight,
+          borderStyle: cs.borderStyle,
+          background: cs.backgroundColor,
+          color: cs.color,
+        };
+      });
+      // A UA-default `<button>` never lands on exactly these four values
+      // together — this is the "the class name resolves to real rules"
+      // witness the review demanded, not just "the button exists".
+      expect(style.minHeight).toBe("44px");
+      expect(style.borderStyle).toBe("none");
+      expect(style.background).toBe("rgba(0, 0, 0, 0)");
+      expect(style.color).toBe("rgb(87, 84, 76)"); // --ink-3, 6.69:1 on --page
+    }
+  });
+});
+
 // Today enhancements (Task 4): the Log screen's plan toggle, with a plan
 // actually active — no other design sweep in this file ever chooses a plan
 // before reaching either Log door, so the toggle has never been rendered

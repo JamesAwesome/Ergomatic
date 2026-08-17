@@ -22,7 +22,7 @@ export interface StagedDiscard {
   /** Second tap (only meaningful while `armed`): clears the session's draft
    *  and run records — the shared, no-POST discard the whole app performs
    *  identically at every surface — and disarms. Callers still own whatever
-   *  happens AFTER the discard (SessionComplete/LogSession navigate to
+   *  happens AFTER the discard (LogSession's doors navigate to
    *  `/today`; Today's own row instead just stops rendering itself, no
    *  navigation) — that's surface-specific, not this hook's concern. */
   fire: () => void;
@@ -36,8 +36,10 @@ export interface StagedDiscard {
 /** The shared staged-discard state machine (Task 3, ui-fix round):
  *  `{armed, arm, fire, disarm}`, auto-disarming on blur or a 4s timeout
  *  (whichever comes first), extracted from WorkoutDetail.tsx's own Delete
- *  flow so SessionComplete/Today/LogSession share one implementation of the
- *  timing instead of three near-identical copies. The timer is cleared on
+ *  flow so Today/LogSession share one implementation of the
+ *  timing instead of separate near-identical copies (originally three,
+ *  before SessionComplete's own copy died with the post-workout-summary
+ *  redesign — Phase PW). The timer is cleared on
  *  unmount so a pending auto-disarm can never call `setState` on an
  *  already-unmounted component (e.g. the armed control's surface navigated
  *  away before the 4s elapsed). */

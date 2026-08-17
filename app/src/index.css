@@ -7939,9 +7939,14 @@ section:not(.news-pinned) .news-row:last-of-type {
    chip`/`.log-plan-toggle`/`.log-actions`/`.log-save` family wholesale (both
    deleted above) — every door (monitor/timer/manual) now converges on this
    one `.summary-*` class family via `PostWorkoutSummary.tsx`. `.log-monitor-
-   diag` survives verbatim (MonitorLogRow/RecordingDownloadRow are unchanged,
-   only their container changed). Contrast, computed via the WCAG relative-
-   luminance formula (never eyeballed, house rule):
+   diag` (below, nested under `.summary-diagnostics`) is byte-identical to
+   the rule this same sweep deleted from 3140b53:index.css:5224 — the task
+   deleted it along with the rest of the old Log-screen family while missing
+   that `MonitorLogRow`/`RecordingDownloadRow` (LogSession.tsx) still render
+   `className="log-monitor-diag"`, leaving both rows as unstyled UA-default
+   buttons; restored in the fix round (review finding C1). Contrast,
+   computed via the WCAG relative-luminance formula (never eyeballed, house
+   rule):
      ink-3 on page (eyebrow/meta/hero labels/hint) 6.69:1
      accent on page (the AVG SPLIT lead hero value, "rust" per the mock) 5.35:1
      ink on page (the title, non-lead hero values) 15.41:1
@@ -8464,4 +8469,29 @@ section:not(.news-pinned) .news-row:last-of-type {
 .summary-diagnostics {
   display: flex;
   flex-direction: column;
+}
+
+/* Restored (fix round, review finding C1) — byte-identical to the rule this
+   file's own Task 5 sweep deleted from 3140b53:index.css:5224, just nested
+   under `.summary-diagnostics` now instead of the old `.log-actions` block.
+   The wire log's/recording's quiet doors (7B iteration/PR #106) —
+   diagnostics vocabulary, not a product control: one muted mono caption
+   line per row, 44px tap height without LOOKING like a 44px control (the
+   text is the whole affordance). `MonitorLogRow`/`RecordingDownloadRow`
+   (LogSession.tsx) both still render `className="log-monitor-diag"` — this
+   rule is what makes that className resolve to anything. */
+.log-monitor-diag {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--ink-3);
+  text-align: center;
+  cursor: pointer;
 }
