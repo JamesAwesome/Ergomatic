@@ -1830,9 +1830,17 @@ frame — the 2×250 r0 keystone contains no resting frames and cannot
 exercise the clamp on hardware.** The reducer this spec
 once proposed is DEFERRED to its own spec. Spec 3 "redesign" (items 2 + 4,
 design handoff committed at `docs/design/handoffs/2026-08-15-connected-v2/`)
-is IN FLIGHT as PR #109 (branch `cr2-redesign` — the status paragraph above
-carries the current state; this line once said "is not started" and
-contradicted it thirty lines apart, caught at the phase-close gate).
+is MERGED (PR #109, 2026-08-17, `3dc3b06`) — ALL FIVE CR2 code cycles are
+in main, and the exit walk's WIRE PASS ran the same day and PASSED
+(`docs/monitor/sessions/walk-2026-08-17/`): the keystone re-run within
+0.2m, PR #104's clamp fired twice live and keyed correctly, F6's row and
+Log it landed, END finals written, the READY frame photographed, and
+James's real-device screenshot banked the landscape-notch check. One
+finding, F-1 (the 6-MIN reading), is UNREPRODUCED after a full bisect —
+see the walk README; instrumented for re-observation. Remaining before
+the v0.10.0 tag: the close-out PR (in flight, branch `cr2-closeout`),
+the notes PR, and the phone pass's three remaining items (portrait
+rotation, the mis-hit test, triple-tap on device).
 **Close-out queue after #109 merges, before the tag (PM phase-close gate +
 antagonist exit pass, 2026-08-16):** (1) the STALE-WHILE-ARMED ruling —
 stale beats armed in `connectedAxes`' precedence, so a link lost before
@@ -2263,38 +2271,54 @@ measure.
 
 ---
 
-### Carried debt — smaller, all disclosed, none blocking
+### Carried debt — DISPOSITIONED at phase close (2026-08-17, the exit's own "cleared or explicitly re-parked with a reason" clause)
 
-- **Correct the record first, it is cheap and it is wrong today.** Comments
-  and a `DEVIATIONS` row claim the rotation fix cured a device defect. It
-  cured an artefact of our own harness: we injected a one-sided inset via
-  CDP that iOS never produces. `max(left, right)` is INERT on iOS — keep it,
-  Android's `DisplayCutout` really is asymmetric.
-- **`MONITOR_SPM_MIN = 0`** (`logDraft.ts:773-777`) persists a zero average
-  rate as a real logged value, while the sibling `avgSplit` check is `> 0`
-  with the comment "0 means the wire had no reading". PERSISTED DATA.
-- **The phone timer's landscape gutter absorbs no left inset at all**, so
-  END sits under a left notch. Mirror of the defect CR fixed on the
-  connected surface; fix already known.
-- **Portrait's own dead 26px** on the connected surface — pre-existing, and
-  NOT inert: closing it re-shoots every portrait capture.
-- **`LEFT IN INTERVAL` wraps to two lines** in the pre-rowing state. This
-  wave's (main has no `.connected-metric-cell`), but it no longer clips
-  anything and the only fixes are copy calls.
-- **iPhone 17 / iPhone Air report a landscape TOP inset of 20pt** where
-  every prior generation reported 0. The 8-row grid count was measured
-  against 0.
-- **`height: 100dvh` under `viewport-fit=cover` is broken on iOS 26**
-  (WebKit bug 315945) — the exact construction the connected surface height
-  uses.
-- **`e2e/helpers.ts`'s `stableBoundingBox`** loops 20 rAF then returns an
-  UNSETTLED box instead of deferring to Playwright's retry budget. That is
-  the `design.spec.ts:1697` flake that failed at gates three tasks running.
-- **`scripts/stack-env.sh` port collision** — `cksum % 400` for ports
-  against `% 100000` for project names; ~25% birthday odds at 17 live
-  stacks.
-- **The ordinal-guard substitute** — the wave ended with slightly less
-  integration coverage of `frame.state` reaching the surface than it began.
+- **Correct the record first (the rotation-fix artefact).** CLEARED —
+  `DEVIATIONS.md`'s safe-area row was amended 2026-08-13 with exactly this
+  truth (the `max()` is INERT on iOS, KEPT for Android's `DisplayCutout`),
+  and spec 3's safe-area relocation carried the corrected story into the
+  moved declaration's own comment.
+- **`MONITOR_SPM_MIN = 0`** persists a zero average rate as real. RE-PARKED
+  — still true at `logDraft.ts:677`; changing the floor changes what gets
+  PERSISTED (a dropped-vs-kept reading), which is triad territory, not a
+  close-out one-liner. Owner: Phase LG (the log screen's own phase), where
+  the field's consumers live.
+- **The phone timer's landscape gutter absorbs no left inset.** RE-PARKED —
+  untouched by CR2 BY RULING (spec 3's fork condition: the redesign must
+  not reach the phone timer). Fix known and cheap; owner: the next phase
+  that touches the timer surface.
+- **Portrait's dead 26px on the connected surface.** CLEARED by
+  supersession — spec 3 rebuilt the portrait frame outright (54px control
+  bar as the last row, full-height column) and re-shot every portrait
+  capture; the live pane's no-dead-scroll assertions pin the new frame.
+- **`LEFT IN INTERVAL` wraps to two lines.** CLEARED by deletion — the cell
+  no longer exists (spec 3 cut it from LIVE; the countdown lives in the
+  grid's active row).
+- **iPhone 17 / Air 20pt landscape top inset.** CLEARED by ruling — spec 3
+  §1: no device constant assumed anywhere; the header honours
+  `env(safe-area-inset-top)`, the close-out added the `max(20px, …)` floor,
+  and the grid's visible-row count is pinned at zero inset with scrolling
+  under any nonzero one.
+- **`height: 100dvh` under `viewport-fit=cover` broken on iOS 26 (WebKit
+  315945).** RE-PARKED WITH EVIDENCE — the construction survived spec 3's
+  rebuild unchanged, and James's real-device landscape screenshot
+  (2026-08-17) renders the full frame correctly; the phone pass's portrait
+  check is the remaining eye. The WebKit bug stays open upstream; if the
+  phone pass shows a broken height, it becomes a pre-tag fix.
+- **`stableBoundingBox` returns an unsettled box after 20 rAF.** RE-PARKED
+  — still true (`e2e/helpers.ts:59`); no gate has flaked on it since the
+  design-assertion rewrite (the §2 sweep reads computed style far more than
+  boxes now). Infra hygiene; owner: next e2e-touching round.
+- **`stack-env.sh` port collision odds (`% 400` vs `% 100000`).** RE-PARKED
+  — still true (`stack-env.sh:29-34`); with per-worktree stacks torn down
+  at merge per the standing teardown rule, live-stack counts stay low
+  single digits and the birthday odds are negligible in practice. Infra;
+  fold into the next scripts change.
+- **The ordinal-guard substitute (less `frame.state`-to-surface integration
+  coverage).** CLEARED by supersession — 2a's exhaustive axes table plus
+  spec 3's per-frame property sweep (armed/live/stale/finished each with
+  named e2e witnesses against real fixtures) now cover the state-to-surface
+  path more heavily than the pre-CR wave did.
 
 **Exit:** items 0-4 shipped and walked on a real PM5, R0 and F7 (spec 1) and
 F6 (spec 2) delivered, and the carried debt either cleared or explicitly
