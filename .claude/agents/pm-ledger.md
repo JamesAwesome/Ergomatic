@@ -631,3 +631,59 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
 - **Backlog count at this gate: 24 unchecked items** — identical to the
   2026-08-13 audit. CS is executed, not filed, so this is not filing-as-deferral;
   but nothing has come off the pile in four days either.
+## Phase-open gate, 2026-08-17 (Phase PW, post-workout summary — spec 1)
+
+- **A nullable-ing migration is a CROSS-VERSION break, and this repo has no
+  error boundary to soften it.** `grep -rn "ErrorBoundary|componentDidCatch|
+  getDerivedStateFromError" src/` returns zero. `Today.tsx:1464` renders
+  `{log.held.toUpperCase()}`, so the first null-`held` row white-screens the
+  app's home screen on every installed build. The web deploys on merge and iOS
+  ships on tags, so the exposure window is "until the next tag", not "until the
+  tester updates". `docs/RELEASING.md`'s additive-only rule is exactly this.
+  **Ruling: the null-TOLERANT READ ships and TAGS before the writer merges** —
+  a separate PATCH release, ~10 lines. Generalises: when a spec relaxes a
+  NOT NULL, ask which SHIPPED build reads that column and whether it survives
+  the value the new build can write.
+- **A "shows in two places" claim is settled by counting consumers.**
+  Spec 1 asserted the open F-1 defect stays observable in two places.
+  `interruptedTotalSeconds` has exactly ONE consumer, and spec 1 replaces
+  that meta line. One grep. Third occurrence of "a redesign removes the
+  readout an open finding is observed through". **When a spec claims an
+  instrument survives its own redesign, grep the instrument's consumers.**
+- **An exit criterion that restates the definition cannot fail.** Spec 1's
+  criterion 4 read "the DISTANCE cell equals the actuals' sum… proven against
+  the wire" — while §2B DEFINED the cell as that sum. Recurring failure #11
+  inside the sentence disclaiming it. The honest oracle already existed
+  (the keystone's a-priori 500 + the machine's TWD in the recordings).
+  **Read every criterion back against the property table it claims to
+  verify; if the table defines the value, the criterion is a tautology.**
+- **A UI spec can carry a number change in a table cell.** Spec 1's §2B TIME
+  generalized the actuals-derived duration from the interrupted branch to
+  every monitor session — testers' times read lower — stated nowhere but a
+  table row, beside a §3 "rides along" paragraph folding in a persistence
+  change the ROADMAP had already ruled triad. **Grep a design spec for
+  number semantics before judging it a UI spec.**
+- **A form's DEFAULT can be a safety rule, and a redesign that promotes it
+  to a button loses it silently.** `useLogForm` seeds `outsidePlan` from
+  `isOnboardingTitle` on 6I's "a baseline test must not silently consume
+  plan session 1"; two buttons with an accent primary had no onboarding
+  branch. **When a spec retires a control, read the control's DEFAULT and
+  its initialiser, not just its two states.**
+- **"Absorbs Phase X" is a claim to check against X's own text.** PW
+  discharged LG's precondition (the direction ruling, now in source) while
+  doing none of LG's three named pieces; the rower-facing collision
+  survives unless the labels change — which is nearly free exactly now,
+  while the control is rebuilt. Put to James as his §2D decision.
+- **Reflection data has no consumer today — counted, not assumed.** held
+  and pain are each read at exactly one site (Today's LAST THREE meta);
+  nothing in plan/generation/trends touches them. Optional reflection
+  degrades nothing live; the cost is thumbs arriving sparse for the phase
+  that eventually reads it — told at that phase's open.
+- **A phase can open with no roadmap section.** PW's opening commit added a
+  spec and a handoff; grep "Phase PW" ROADMAP.md returned zero, LG still
+  said "needs a brainstorm", and CR2 still listed merged PRs as "remaining
+  before the tag". **At every phase-open gate, grep the ROADMAP for the
+  phase's own name.** (Fixed in the same revision that landed this entry.)
+- **The phone pass now carries four owed items against a SHIPPED tag**,
+  plus F-1's re-observation. An obligation deferred to "the phone pass"
+  survived the release it was meant to gate. Count it at the next gate.

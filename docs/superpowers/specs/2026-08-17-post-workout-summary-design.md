@@ -1,184 +1,229 @@
 # Post-workout summary — Phase PW, spec 1 of 3
 
-**Status:** design approved by James 2026-08-17 ("Sounds right");
-phase-open gates (PM slate + antagonist anchor) run against this document.
-**Branch:** `pw-summary`, worktree `.claude/worktrees/pw-summary`, base
-`ac86b20` (v0.10.0). **Phase PW absorbs Phase LG** — the held-question
-ruling ships here.
+**Status:** design approved by James 2026-08-17; REVISED after the
+phase-open gates (PM GO-WITH-CONDITIONS, antagonist anchor pass — every
+condition and finding folded in below; the anchor's attacked-and-held
+claims are the phase's VETTED GROUND, §7).
+**Branch:** `pw-summary`, base `ac86b20` (v0.10.0). **Phase PW absorbs
+Phase LG's precondition** (the direction ruling) — whether it closes LG
+itself is James's open label decision (§2D).
 **Value authority:** `docs/design/handoffs/2026-08-12-post-workout/`
-(README + mock), as corrected by its PROVENANCE.md. This spec's §2 tables
-carry the checkable values; on any mismatch with prose, the tables govern.
+(README + mock) as corrected by PROVENANCE.md and §1. This spec's tables
+govern on any mismatch.
 
 ## What and why
 
-After a row, the app measures six fields per interval and shows one. The
-only total anywhere is `N MIN`, the held question uses two words with no
-written direction, and the screen asks before it tells. This spec replaces
-the whole post-row flow with the handoff's summary: what you did first
+After a row, the app measures six fields per interval and shows one; the
+only total anywhere is `N MIN`; the held question uses words with no
+written direction; and the screen asks before it tells. This spec replaces
+the post-row flow with the handoff's summary: what you did first
 (avg-split hero, time, distance, per-interval deviation bars), a light
-reflection second (thumbs, held, pain, notes — all optional), and the save
-choices last. Everything renders from data already recorded; traces and
-HR wait for spec 3's series capture. It also restores the session-distance
-check route the CR2 redesign removed (the phase-close gate's named hole):
-total meters, from the actuals, on the screen every session ends on.
+reflection second (thumbs, held, pain, notes — all optional), the save
+choices last. It restores a rower-visible session distance that MATCHES
+THE ERG (the CR2 phase-close gate's named hole), by capturing the one
+wire field the record was missing.
 
-## Rulings (James, 2026-08-17)
+## Rulings
 
-1. Summary-first decomposition (spec 2 = from-the-log; spec 3 = traces/HR,
-   gated on series-capture research).
-2. **UNDER = FASTER than target** — under the target NUMBER. Documented at
-   the type, the enum, and on screen via the `TARGET m:ss` hint. The
-   stored words stay; no value migration.
-3. Replace wholesale: SessionComplete and every log door converge on the
-   summary.
-4. Thumbs ships in spec 1, stored now, consumed by generation later.
-5. All reflection answers OPTIONAL — nothing blocks saving (the handoff's
-   own rule; today held+pain are required).
+James (2026-08-17, brainstorm): summary-first decomposition; UNDER =
+FASTER than target (under the target NUMBER); replace the flow wholesale;
+thumbs stored now; all reflection optional.
+
+Spec rulings from the gates (each traceable to a finding):
+
+- **R-A (sequencing, BLOCKING):** the null-TOLERANT READ ships as its own
+  PATCH PR and TAGS (v0.10.1) BEFORE any code that can write a null
+  `held`/`pain` merges. `Today.tsx` renders `log.held.toUpperCase()`, the
+  app has NO error boundary, the web deploys on merge — an empty
+  reflection saved anywhere blank-screens every installed build's home
+  screen otherwise (RELEASING.md's additive-only rule).
+- **R-B (DISTANCE means the machine's number):** `IntervalActual` gains
+  `restDistanceMeters` (additive; 0x0037 already carries
+  Interval Rest Distance — the anchor pass decoded it: work 1535 + rest
+  64 = the machine's own 1599 exactly). DISTANCE = Σ(work + rest
+  distance) over all actuals incl. warm-up — the erg-checkable total.
+- **R-C (the heroes answer different questions, stated separately):**
+  DISTANCE and TIME are machine-total semantics (warm-up INCLUDED);
+  AVG SPLIT is the working average (warm-up EXCLUDED — including it moved
+  the hero 20s/500m on the committed walk-3 wire). The interval list
+  renders the warm-up as its own labeled, unjudged row so the totals
+  reconcile with the visible rows by eye.
+- **R-D (TIME is a number-semantics change, named):** every monitor
+  session's TIME = Σ work seconds + programmed rests for completed
+  intervals (James's recorded rule, generalized from the interrupted
+  branch) — never wall-clock. Testers' connected times will read LOWER
+  than today's wall-clock minutes; the notes PR must say so. VETTED: the
+  formula double-counts nothing — 0x0037 reports splitTime (60.0) beside
+  restTime (30) as separate fields on all committed recordings, retiring
+  `logDraft.ts`'s open work-vs-work-plus-rest caveat with a citation.
+- **R-E (measured-ness is per-row, not per-door):** the variant axis is
+  `ActualSource` per step, not connected-vs-not. A timer-door session
+  with stopwatch readings renders them as measured rows with computable
+  heroes; `TARGETS ONLY · NOTHING MEASURED` appears only when NO row
+  carries a measurement.
+- **R-F (SPM_MIN is CUT from this spec):** it is its own small triad PR
+  (the ROADMAP already ruled it triad); that PR also tags the
+  "wire 0 = no reading for spm" premise INFERENCE (zero avgSpm=0 samples
+  exist in any committed capture).
 
 ## §1 Deviation table (handoff → ships)
 
-| README says | Ships as | Why |
+| README/mock says | Ships as | Why |
 | --- | --- | --- |
-| Blue `#1f4a5c` faster / rust `#b5341f` slower | `--judge-faster` `#1d4e89` / `--judge-slower` `#962718` | Tester ruling governs (PROVENANCE item 2); rust stays the CTA accent only |
-| HR block, CAL EST., traces, drawer's watts/drag/rest-distance | Absent entirely (not empty variants) | Not recorded today; spec 3's subject (PROVENANCE items 1, 3) |
-| Discard confirm "dialog not designed" | House two-tap staged discard | PROVENANCE item 4 |
-| "From the log" state, footer plan-linkage, edit affordance | Spec 2 | Phase decomposition |
-| Reflection writes `hold: HELD/UNDER/OVER/null` | Same values, `held` column goes NULLABLE | Ruling 5; additive migration, no value rename |
-| Zone ramp tokens | Not introduced | No HR in spec 1 |
-| Newsreader 32px title | Newsreader 500 (already loaded), 32px | Matches; no new font |
+| Blue `#1f4a5c` faster / rust slower | `--judge-faster` / `--judge-slower` | Tester ruling (PROVENANCE 2) |
+| HR block, CAL EST., traces, drawer | Absent entirely | Not recorded; spec 3 (PROVENANCE 1, 3) |
+| Hero `2:09.1` (mock) | The Σ-weighted value (`2:09.2` on the mock's own data) | The mock averaged the row paces unweighted; the PM5's own per-interval arithmetic is `500 × Σt/Σd` exactly (verified on all nine committed boundaries) — the deviation column re-derives from the weighted average |
+| Deviation bar unbounded (mock: `max(|dev|/1.6×50, 1.2)`) | Capped at 50% (`min(50, …)`) | Spec's own addition; a 4s outlier must not paint past the track |
+| Discard dialog "not designed" | House two-tap staged discard | PROVENANCE 4 |
+| "From the log" state | Spec 2 (history surface + the API's first UPDATE — acknowledged bigger than one line; may split) | Decomposition. Accepted gap: until spec 2, a skipped reflection is unrecoverable — stated, not hidden |
+| Reflection writes `hold …/null` | Same values; `held`+`pain` go NULLABLE | Ruling; R-A orders the rollout |
+| Back label `← DONE` | `BackLink` gains an optional label prop (house semantics, new word) | The component hardcodes `← BACK` today |
+| DISTANCE 6000 (machine total) | Machine-matching via R-B | The actuals-only sum is 4% short on rest-bearing sessions — the walk photograph would read a gap with no explanation |
+| Tab bar | Today's per-route behavior kept (hidden on `/session/log`, visible on `/library/:id/log`) — recorded asymmetry, revisit at spec 2 | Inherited; not this spec's fight |
 
 ## §2 Property tables — the exit criteria
 
-### 2A Title block (both variants)
+### 2A Title block
 
 | Property | Requirement |
 | --- | --- |
-| Back link | `← DONE` (just-finished); house BackLink semantics (non-destructive, fallback `/today`) |
-| Eyebrow | `WORKOUT COMPLETE` mono label style |
-| Title | Workout title, Newsreader 500 32px |
-| Meta line | PM5 variant: `AUG 10 · 18:57 · PM5 <id>` (date · local time · device). By-hand/timer variant: `AUG 10 · 18:57 · LOGGED BY HAND` or `· TIMER` per door. Mono, ink-3 family. 2px ink rule below the block. |
+| Back | `← DONE` via the labeled BackLink; non-destructive; fallback `/today` |
+| Eyebrow | `WORKOUT COMPLETE` label style |
+| Title | Newsreader 500 32px (font already loaded — vetted) |
+| Meta | `AUG 10 · 18:57 · PM5 <id>` (connected) / `· TIMER` / `· LOGGED BY HAND`. Date+time from `completedAt` — EXCEPT interrupted runs, which use `startedAt` (the F6 rule: completedAt is the Log-it moment, possibly days later). Local time via the device locale, minutes precision. 2px ink rule below. |
 
-### 2B Hero (PM5-connected)
-
-| Property | Requirement |
-| --- | --- |
-| Layout | 3-up: AVG SPLIT (lead cell, judged-neutral ink, 30px+ mono per mock) · TIME · DISTANCE |
-| AVG SPLIT | `500 × Σ actual.elapsedSeconds / Σ actual.distanceMeters` over measured actuals, `fmtSplit`; cell ABSENT (siblings close up) when Σ meters = 0 |
-| TIME | Measured span: Σ actual.elapsedSeconds + programmed rests for completed intervals (the F6/`interruptedTotalSeconds` rule generalized — never wall-clock on the monitor path), `m:ss` |
-| DISTANCE | `Σ actual.distanceMeters`, whole meters, `m` unit — **the restored session-distance route**; walk sheets point here from now on |
-
-### 2C Hero (time-only)
+### 2B Heroes (any door with ≥1 measured row)
 
 | Property | Requirement |
 | --- | --- |
-| Layout | Single time hero (`45:00`), no distance, no split — no empty measurement affordances (README §9's own rule) |
-| Source | Timer door: wall-clock `completedAt − startedAt` (today's `logTotals`). Manual door: the estimate line as today (`estimateMinutes`), or date-only when null |
+| Layout | 3-up: AVG SPLIT lead · TIME · DISTANCE; any cell whose inputs are absent is ABSENT (siblings close up) — no `0:00`, no `0 m` (the no-empty-affordances rule applies per cell) |
+| AVG SPLIT | `500 × Σt/Σd` over measured WORK rows (warm-up excluded, R-C); absent when Σd = 0 |
+| TIME | R-D's formula (work + completed rests, warm-up included), `m:ss` — this cell is ALSO F-1's re-observation surface: `m:ss` exposes what `Math.round` hid, and the walk sheet's F-1 row is rewritten IN THIS PR to name it and its expected value |
+| DISTANCE | R-B's machine-matching sum, whole meters |
+| Time-only fallback | No measured rows anywhere: single time hero (timer: wall-clock `logTotals`; manual: the estimate or date-only) |
 
-### 2D Reflection card (both variants; every answer optional)
+### 2C (folded into 2B's per-cell absence rules — the door variants follow measured-ness, R-E)
+
+### 2D Reflection card (every answer optional; every control ≥46px)
 
 | Property | Requirement |
 | --- | --- |
-| Card | Ink-bordered on `--surface`; four controls in README §4's order; every control ≥46px |
-| HOW DID IT FEEL? | `↑ MORE LIKE THIS` (flex) + `↓` (64px). Selected up = ink fill; selected down = accent fill. Tapping the active one clears to null. |
-| DID YOU HOLD THE TARGETS? | `HELD / UNDER / OVER` equal thirds, selected ink fill; right hint `TARGET m:ss` (connected, the session's target split) or `BY FEEL` (time-only). Direction comment at the options array: UNDER = faster (James 2026-08-17). Tapping active clears. |
-| ACTUAL PAIN | 1-5 chips, selected accent fill (the existing pain ramp); right hint `EXPECTED n/5` when the workout carries one; caption `TAP TO RATE` → `EASIER THAN PLANNED` (1) / `AS PLANNED` (2) / `HARDER THAN PLANNED` (3-5). Clearable. |
-| NOTES | Dashed textarea on `--page`, placeholder `What happened out there?`, min-height 74px, no resize |
+| HOW DID IT FEEL? | `↑ MORE LIKE THIS` (flex) + `↓` (64px); up = ink fill, down = accent fill; tap-active-to-clear |
+| DID YOU HOLD THE TARGETS? | Three equal thirds, ink-fill selected, clearable. **Labels: JAMES'S OPEN DECISION** — option A keeps `HELD/UNDER/OVER` + hint; option B (the PM's recommendation, free while the control is rebuilt): direction in the label, e.g. `HELD` / `UNDER · FASTER` / `OVER · SLOWER`. Stored values unchanged either way. Direction comment (UNDER = faster, James 2026-08-17) at the options array, both HeldResult copies, and the pgEnum. Historical rows predate the ruling — displayed under it, noted in code, never re-interpreted as intent. |
+| The hint | Right-aligned: `TARGET m:ss` only when the session has EXACTLY ONE distinct target split (167 of 300 workouts); multi-target (101) and effort-only (32): no hint; by-hand manual door: `BY FEEL`. Timer door follows the same single-target rule (it has real targets — `BY FEEL` would lie there). |
+| ACTUAL PAIN | 1-5, accent-fill selected, clearable; `EXPECTED n/5` hint when present; caption `TAP TO RATE` → `EASIER THAN PLANNED`/`AS PLANNED`/`HARDER THAN PLANNED` (1 / 2 / 3-5) |
+| NOTES | Dashed textarea on `--page`, placeholder `What happened out there?`, min-height 74, no resize |
 
 ### 2E Intervals list
 
 | Property | Requirement |
 | --- | --- |
-| Header | `INTERVALS` + right caption `PACES OFF 6K m:ss` (the locked base, from the existing paces-locked sources) |
-| Measured row (PM5) | Per README §8: index (14px) · split time (76px) · pace in judged color (52px) · deviation bar (flex, 14px track, 1px center tick, 8px bar, width `min(50%, max(1.2%, |dev|/1.6 × 50%))`) · numeric deviation right (`+n.n` = slower, `−n.n` = faster, signed seconds vs the session average) |
-| Judged colors | Faster than session average = `--judge-faster`, slower = `--judge-slower` (bar and pace text) |
-| Legend | `← FASTER (BLUE) · SLOWER (RED) →` under the list, label style |
-| Prescribed row (time-only) | index · distance · target pace · offset (`6K +8`) · `—` right; section captioned `TARGETS ONLY · NOTHING MEASURED` |
-| Unmeasured interval on the PM5 variant | Renders as a prescribed row (the actuals array can be shorter than the program — never invent a measurement) |
+| Header | `INTERVALS` + paces caption per the existing sources: `PACES OFF 6K m:ss` / two-slot `2K … · 6K …` / omitted when null (the F1 rule) |
+| Warm-up row | Rendered, labeled `WARM-UP`, measured values shown, UNJUDGED (no deviation bar, excluded from the average) — R-C's reconciliation row |
+| Measured row | README §8 geometry: index 14px · time 76px · pace 52px judged · deviation bar (14px track, center tick, 8px bar, width `min(50%, max(1.2%, |dev|/1.6 × 50%))`) · `+n.n`(slower)/`−n.n`(faster) vs the 2B working average |
+| Judged colors | `--judge-faster` / `--judge-slower`, bar and pace text; legend `← FASTER (BLUE) · SLOWER (RED) →` |
+| Unmeasured row | Prescribed form: index · distance/duration · target pace · offset (`6K +8`) · `—`; mixed lists per row (R-E) |
+| All-prescribed list | Captioned `TARGETS ONLY · NOTHING MEASURED` — only when literally nothing was measured |
 
 ### 2F Save options (just-finished only)
 
 | Property | Requirement |
 | --- | --- |
-| Stack | 8px gap: `Log against plan` (54px, accent fill, white text) · `Save without logging` (48px, surface + 1px `--rule-3` border) · `DISCARD WITHOUT SAVING` (48px, borderless, mono 12 muted, two-tap staged) |
-| Log against plan | Saves with `advancesPlan: true` (today's default path). Hidden (not disabled) when no plan exists; `Save without logging` then leads. |
-| Save without logging | Saves with `advancesPlan: false` — the existing OUTSIDE THE PLAN semantics promoted from a toggle to a button. The toggle dies. |
-| Discard | The existing staged-discard semantics per door (records cleared per the 2b rules; monitor discard keeps the diagnostics stash) |
+| Stack | `Log against plan` (54px accent) · `Save without logging` (48px outline) · `DISCARD WITHOUT SAVING` (48px borderless mono, two-tap staged, per-door record semantics incl. the monitor stash rule) |
+| Plan position | `Log against plan` carries the position: `Log against plan · SESSION n OF N` (the toggle's information, kept at the decision point) |
+| Onboarding | On `isOnboardingTitle` workouts, `Save without logging` LEADS and `Log against plan` demotes to the outline slot — 6I's "a baseline test must not silently consume plan session 1" survives the toggle's death |
+| No plan | `Log against plan` hidden (not disabled); `Save without logging` leads |
+| Diagnostics rows | `MONITOR LOG · COPY` and `RECORDING · DOWNLOAD` SURVIVE below the stack (dev-gated as today) — the walk's recorder door; PR #106 exists because this button was unreachable elsewhere |
 
 ## §3 Structure
 
-**Routes and doors converge; the gates survive.** The summary mounts at
-the existing routes (`/session/log`, `/library/:id/log` incl.
-`?from=monitor` with `monitorModeRun`'s four conditions untouched).
-`SessionComplete` DIES — the timer's finish stage navigates straight to
-the summary (its TOTAL and actual-rows content is subsumed by 2B/2E).
-F6's Today row keeps stamping then navigating exactly as today. The
-`LogScreen` chrome is replaced by the summary composition; `useLogForm`
-grows thumbs and loses the required-fields gate.
+**Rollout order (R-A):** PR 0 = null-tolerant reads (`RecentLog` nullable,
+LAST THREE omits absent segments per the F1 rule: `AUG 17 · HELD · 2/5` →
+`AUG 17 · 2/5` → `AUG 17`), tagged v0.10.1. PR 1 = everything else.
 
-**A pure summary model** (`buildSummaryModel`) computes 2B/2E from the
-door's own inputs (MonitorRun actuals+program / SessionRun+draft steps /
-workout steps) — client-side at render, no new totals columns; the meters
-already cross the wire in the steps jsonb today.
+**Routes converge; gates survive.** Summary mounts at the existing routes;
+`monitorModeRun`'s four conditions untouched. `SessionComplete` dies — the
+finish stage navigates to the summary; `/session/complete` keeps a
+redirect (the `/session/confirm` → `ConfirmRedirect` precedent); its
+stopwatch actual-rows content survives via R-E's measured rows.
+`useLogForm` grows thumbs, loses the required gate, keeps the onboarding
+`outsidePlan` seed (now expressed through 2F's button order).
 
-**Stored shapes (the triad's subject):**
-- NEW `thumbs` pgEnum (`up`,`down`) column on `session_logs`, NULLABLE;
-  client type + POST field optional; validation accepts absent/null/member.
-- `held` and `pain` columns go NULLABLE (additive `ALTER ... DROP NOT
-  NULL` migration; existing rows untouched; no value rename).
-- POST/validator: held/pain/notes/thumbs all optional; server rejects
-  invalid members as today.
-- Reads: `RecentLog` types held/pain as nullable; Today's LAST THREE
-  meta line omits absent segments (the F1 no-dash rule): `AUG 17 · HELD ·
-  2/5` → `AUG 17 · 2/5` → `AUG 17`.
-- The UNDER=faster ruling is written at: the `HeldResult` type (both
-  copies), the pgEnum, the options array, and rendered as the `TARGET`
-  hint.
+**The wire addition (R-B):** `parseSplitIntervalData` surfaces Interval
+Rest Distance (already in the bytes); `IntervalActual.restDistanceMeters`
+(additive, number, 0 default at the fake); `recordActual` passes it
+through; the fake learns a nonzero ramp (an honest fake — a constant 0
+converts the suite into agreement with itself).
 
-**`MONITOR_SPM_MIN` fix rides along:** `avgSpm` 0 is dropped like
-`avgSplit` 0 (`> 0` bound; the wire's 0 = no reading); the server's
-liar-rejection band stays 0-admitting (its role is different); the
-logDraft pin tests flip deliberately.
+**Stored shapes:** `thumbs` pgEnum (`up`,`down`) nullable column;
+`held`/`pain` `DROP NOT NULL` (additive; the `pain between 1 and 5`
+CHECK passes NULL by Postgres rule — LEAVE IT ALONE); migration index:
+next free is `0009` — check open PRs for a competing index first. POST:
+all reflection fields optional; invalid members still 400.
 
-**F-1 re-observation instrumentation is unchanged** (the walk sheet's
-record-dump step); the summary's TIME cell uses the same
-completed-intervals rule, so a recurrence shows in two places.
+**`buildSummaryModel`** (pure): heroes + interval rows from the door's
+inputs per R-B/R-C/R-E; unit-testable against the committed recordings.
 
 ## §4 Out
 
-Traces, HR (zones/avg/max/CAL EST.), the EVERY OTHER NUMBER drawer,
-the from-the-log state + history surface + edit path (spec 2), series
-capture (spec 3 + research), manual distance entry for time-only
-(handoff open question 2, deferred), thumbs-consuming generation
-changes, any enum value rename.
+Traces, HR anything, the drawer, from-the-log + history + edit (spec 2),
+series capture (spec 3), manual distance for time-only (handoff Q2,
+open), enum value renames, `MONITOR_SPM_MIN` (own PR, R-F), generation's
+thumbs consumption (noted: the signal will be sparse — reflection is
+optional now; the generation phase is told at ITS open, not surprised).
 
 ## §5 Testing
 
-- Property-table assertions per §2 in the design suite (the spec-3
-  discipline: every row a named witness; contrast computed for any new
-  pairing; fixtures from the seeded library incl. a PARTIAL-actuals run
-  and a Σmeters=0 run).
-- `buildSummaryModel` unit tests: the avg-split formula, the
-  absent-cell rules, deviation signs (+ = slower), the bar-width clamp
-  edges (min 1.2%, cap 50%), unmeasured-interval fallback rows.
-- Stored-shape tests: null round-trips for thumbs/held/pain; the
-  LAST THREE omission rendering; server validation of absent vs invalid.
-- e2e: all three door flows land on the summary and save each of the
-  three options; the monitor flow asserts DISTANCE equals the seeded
-  actuals' sum (the restored route, by NUMBER); screenshots of both
-  variants + the reflection filled.
-- Every e2e/screenshot the log-flow rewrite breaks is updated in the
-  same task that breaks it; suite green per task.
+- §2 rows each get a named witness (design suite; contrast computed on
+  new pairings; realistic fixtures incl. partial-actuals, Σd=0,
+  warm-up-bearing, multi-target, onboarding-title).
+- `buildSummaryModel`: formula edges (warm-up in/out per cell, absent
+  cells, deviation signs and clamp, mixed measured/prescribed rows).
+- **The external oracles (the anchor pass's own):** DISTANCE vs the
+  MACHINE's totalWorkDistance on replayed committed recordings — the
+  keystone (a-priori 500) AND `walk-2026-08-16/session-2` (1599, the
+  rest-bearing case that catches a work-only regression); TIME vs the
+  recordings' summed splitTime+rests. AVG SPLIT has NO machine-side
+  oracle (0x0032's Average Pace matches no candidate formula — stated,
+  not hidden): its witness is the per-interval identity the anchor
+  verified (`avgPace = 500×t/d` exactly) plus unit arithmetic.
+- Stored-shape: null round-trips; old-shape POST (held+pain present)
+  still accepted — v0.10.0 clients keep working; LAST THREE omission
+  rendering; the v0.10.1 read-tolerance PR has its own red-provable test
+  (a null-held row renders Today without throwing).
+- e2e: three door flows through save (each button), the onboarding
+  ordering, the interrupted date rule; screenshots both variants +
+  filled reflection; DEVIATIONS row 40 (PACES LOCKED) reconciled;
+  ROADMAP gains the Phase PW section and LG's status line is amended
+  (the PM's grep-the-phase-name rule).
 
 ## §6 Exit criteria
 
 1. Every §2 row has a named passing witness.
-2. `SessionComplete` and the plan toggle are GONE (grep-clean); all
-   three doors render the summary; `monitorModeRun`'s gate tests intact.
-3. A saved row can carry all-null reflection; existing rows render
-   unchanged; the migration is additive-only against live tester data.
-4. The DISTANCE cell's number equals the actuals' sum on a replayed
-   committed recording (the walk-route restoration, proven against the
-   wire, not a fixture).
-5. Scoped gates green; per-file coverage on every touched file; captures
-   opened and described.
-6. The UNDER=faster ruling is greppable at every §3-named site.
+2. v0.10.1 (null-tolerant reads) TAGGED before the writer PR merges —
+   the criterion is phrased against CLIENTS: a v0.10.0-shaped client
+   reading a null-reflection row must not crash (proven by the
+   tolerance test predating the writer).
+3. `SessionComplete` and the plan toggle GONE (grep-clean, redirect in
+   place); the two diagnostics rows SURVIVE (witnessed).
+4. DISTANCE equals the MACHINE's total on both replayed recordings
+   (500 and 1599) — the external number, not the sum's own inputs.
+5. TIME reads measured-not-wall-clock on the monitor doors; the walk
+   sheet's F-1 row names the TIME cell + expected `m:ss`; the notes
+   obligation ("connected times read lower") is recorded for the
+   v0.11.0 notes PR.
+6. All-null reflection saves; existing rows render unchanged; the
+   migration is additive against live data.
+7. UNDER=faster greppable at every §3-named site; James's label
+   decision (§2D) implemented as ruled.
+
+## §7 Vetted ground (the anchor pass's attacked-and-held claims)
+
+`IntervalActual.elapsedSeconds` is work-only (0x0037 splitTime beside
+restTime, all recordings — `logDraft.ts`'s caveat retired with citation);
+the PM5's per-interval avgPace = `500×t/d` exactly (nine boundaries);
+Newsreader 500 loaded; meters already cross the wire in steps jsonb;
+`useLogForm`'s gate and `monitorModeRun`'s conditions as described;
+`DROP NOT NULL` DB-safe incl. the CHECK; killing `/session/complete`
+orphans nothing; the 2026-08-17 recordings carry `header.program`
+(replay tasks need no hand transcription).
