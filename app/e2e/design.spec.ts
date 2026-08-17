@@ -3535,6 +3535,31 @@ test.describe("post-workout summary (manual door)", () => {
     await expect(page.getByText("BY FEEL")).toBeVisible();
     await expect(page.getByText("EXPECTED 3/5")).toBeVisible();
   });
+
+  // §2D NOTES row (review fix round: this row had zero design-suite
+  // witness — `PostWorkoutSummary.test.tsx`'s own NOTES test only fires
+  // `onNotes` and checks the placeholder string via RTL, never a computed
+  // style). The four literal properties the row names: "Dashed textarea
+  // on `--page`... min-height 74, no resize".
+  test("§2D NOTES: dashed textarea on --page, min-height >= 74px, never resizable", async ({
+    page,
+  }) => {
+    const notes = page.locator(".summary-notes-textarea");
+    await expect(notes).toBeVisible();
+    const styles = await notes.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return {
+        borderStyle: s.borderStyle,
+        background: s.backgroundColor,
+        minHeight: s.minHeight,
+        resize: s.resize,
+      };
+    });
+    expect(styles.borderStyle).toBe("dashed");
+    expect(styles.background).toBe("rgb(244, 241, 232)"); // --page
+    expect(parseFloat(styles.minHeight)).toBeGreaterThanOrEqual(74);
+    expect(styles.resize).toBe("none");
+  });
 });
 
 // Review finding C1 (fix round): the summary's Task 5 CSS sweep deleted
