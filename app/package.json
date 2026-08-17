@@ -26,7 +26,8 @@
     "screenshots": "bash scripts/screenshots.sh",
     "dist:grep": "bash scripts/dist-grep.sh",
     "ios:build": "VITE_API_BASE=${ERGOMATIC_API_BASE:-https://ergomatic.waffle.haus} VITE_GOOGLE_IOS_CLIENT_ID=${GOOGLE_IOS_CLIENT_ID:-} vite build && npx cap sync ios && bash scripts/ios-version.sh",
-    "ios:open": "npx cap open ios"
+    "ios:open": "npx cap open ios",
+    "ios:release": "bash scripts/ios-release.sh"
   },
   "dependencies": {
     "@aparajita/capacitor-secure-storage": "^8.0.0",

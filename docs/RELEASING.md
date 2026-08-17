@@ -38,15 +38,30 @@ needed: <reason>" — based on the PR contents.
 - API changes must be **additive-only between tags**: old TestFlight builds
   talk to the newest server. A breaking change forces a coordinated tag.
 
-## Cutting a release (~15 min, on the build Mac)
+## Cutting a release (~10 min, on the build Mac, fully CLI)
 
 1. `git checkout main && git pull`
 2. `git tag -a vX.Y.Z -m "<one-line summary>" && git push origin vX.Y.Z`
-3. `cd app && GOOGLE_IOS_CLIENT_ID=<id> pnpm ios:build`
-4. `pnpm ios:open` → Xcode: Product → Archive → Distribute App →
-   TestFlight (internal). No Beta App Review for internal testers.
-5. Confirm the build appears in App Store Connect → TestFlight; internal
-   testers update automatically.
+3. `cd app && pnpm ios:release`
+
+That's the whole thing (first proven on v0.10.0, 2026-08-17). The script
+(`scripts/ios-release.sh`) refuses to run unless HEAD is exactly the
+latest `vX.Y.Z` tag, derives `GOOGLE_IOS_CLIENT_ID` from Info.plist's
+committed reversed URL scheme (export it to override), builds + syncs,
+archives via `xcodebuild -project` (the iOS app is SPM-based — there is
+no `.xcworkspace`; `-workspace` fails), and uploads with
+`-exportArchive` (`method: app-store-connect`, `destination: upload`,
+internal-only). Signing and upload auth ride the Apple ID already logged
+into Xcode via `-allowProvisioningUpdates` — no App Store Connect API
+key on this machine.
+
+Then confirm the build appears in App Store Connect → TestFlight;
+internal testers update automatically after Apple's few minutes of
+processing. No Beta App Review for internal.
+
+Fallback (GUI, if the CLI upload ever breaks): `pnpm ios:build` then
+`pnpm ios:open` → Xcode: Product → Archive → Distribute App →
+TestFlight (internal).
 
 Notes: internal builds expire after 90 days — re-upload (no new tag needed;
 BUILD increments with any new commit). First-time setup lives in

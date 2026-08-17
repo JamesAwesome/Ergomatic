@@ -303,4 +303,7 @@ often they recur.
 
 ## Commands
 
-- iOS: `pnpm ios:build` (tag-derived version; needs `GOOGLE_IOS_CLIENT_ID` env), `pnpm ios:open` (Xcode).
+- iOS: `pnpm ios:release` (full CLI TestFlight release from the current tag;
+  derives `GOOGLE_IOS_CLIENT_ID` from Info.plist — docs/RELEASING.md),
+  `pnpm ios:build` (bundle+sync only; needs `GOOGLE_IOS_CLIENT_ID` env),
+  `pnpm ios:open` (Xcode, GUI fallback).
