@@ -680,7 +680,8 @@ async function walkSurfaceToLog(
   // `/library/:id/log`, not `/session/log`, and the monitor mode (7C spec
   // §4) is what engages on this exact URL shape.
   await expect(page).toHaveURL(/\/library\/[^/]+\/log\?from=monitor$/);
-  await expect(page.locator("h1.screen-title")).toHaveText(`Log ${title}`);
+  // §2A: the summary's title renders bare, no "Log" prefix.
+  await expect(page.locator("h1.screen-title")).toHaveText(title);
 
   // THE STASH (hardware walk 2's loss, pinned in a real browser): the
   // surface is gone, the session is over, and the wire log is still
@@ -695,27 +696,21 @@ async function walkSurfaceToLog(
   const entries = JSON.parse(stash!) as { kind: string }[];
   expect(entries.some((e) => e.kind === "write")).toBe(true);
 
-  // THE MONITOR MODE FORM (7C spec §4/§7, Task 6): the caption line, a
-  // rendered pm5 split, then Save — proving the mode engaged for real,
-  // not just that the route matched. `buildStoryEvents()` above lands
-  // exactly ONE boundary (interval 0) before End is pressed, so the
-  // caption reads "1 OF 5" (the fixture program's five work intervals,
-  // `monitorCaption`'s own `total` — warmups are never in this array to
-  // begin with) and only interval 0's row grows an ACTUAL line.
-  await expect(page.locator(".log-from-monitor")).toHaveText(
-    `FROM ${deviceName} · 1 OF 5 INTERVALS MEASURED`,
-  );
-  // avgSplit 112 (`buildStoryEvents()`'s own boundary actual) -> fmtSplit
-  // "1:52.0" — a real, plausible split, not a placeholder value.
-  await expect(page.locator(".log-step-actual").first()).toHaveText(
-    "ACTUAL 1:52.0",
-  );
+  // THE MONITOR MODE SUMMARY (7C spec §4/§7, Task 6, rebuilt on
+  // PostWorkoutSummary by post-workout-summary spec Task 5): a rendered
+  // pm5 split proves the mode engaged for real, not just that the route
+  // matched. `buildStoryEvents()` above lands exactly ONE boundary
+  // (interval 0) before End is pressed — avgSplit 112 (its own boundary
+  // actual) -> fmtSplit "1:52.0", a real, plausible split, not a
+  // placeholder value, rendered in that one interval's own measured row.
+  await expect(page.getByText("1:52.0")).toBeVisible();
 
   // Fill idiom from `session.spec.ts`'s own manual door coverage: HELD,
-  // then a mid-scale pain rating (deliberately not the extremes).
+  // then a mid-scale pain rating (deliberately not the extremes). No plan
+  // is active in this walk, so Save without logging is the lead button.
   await page.getByRole("button", { name: "HELD" }).click();
   await page.getByRole("button", { name: "Pain 3" }).click();
-  await page.getByRole("button", { name: "Save session" }).click();
+  await page.getByRole("button", { name: "Save without logging" }).click();
   await expect(page).toHaveURL(/\/today$/);
 
   // THE STORED LOG — the save posted for real; read it back off the same

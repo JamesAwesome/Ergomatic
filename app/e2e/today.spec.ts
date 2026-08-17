@@ -496,7 +496,7 @@ test.describe("Today enhancements: the type-swap loop", () => {
     await cleanupByTitle(page, title);
   });
 
-  test("swap to a different type -> plan line shows the arrow -> Start/SKIP/complete/Log/Save -> counter +1, LAST THREE shows the swapped type, and the swap resets", async ({
+  test("swap to a different type -> plan line shows the arrow -> Start/SKIP/summary/Log against plan -> counter +1, LAST THREE shows the swapped type, and the swap resets", async ({
     page,
   }) => {
     await signInViaBackdoor(page, {
@@ -512,7 +512,7 @@ test.describe("Today enhancements: the type-swap loop", () => {
     // A single 3s time step referencing "6k" — the 6B bulk-import tiny-
     // session idiom every completion-driving e2e test in this repo uses
     // (session.spec.ts's own comment on this): the last (and only) phase
-    // auto-advances straight to /session/complete with no further click.
+    // auto-advances straight to the summary (/session/log) with no further click.
     await importBulk(
       page,
       [`${title} | AN | medium | 1`, "w 0:03 6k"].join("\n"),
@@ -548,17 +548,19 @@ test.describe("Today enhancements: the type-swap loop", () => {
     await expect(page).toHaveURL(/\/session\/countdown$/);
     await startAndSkipCountdown(page);
     await expect(page.getByText(/^STEP 1 OF 1/)).toBeVisible();
-    await expect(page).toHaveURL(/\/session\/complete$/, { timeout: 6000 });
-
-    await page.getByRole("link", { name: "Log this session" }).click();
-    await expect(page).toHaveURL(/\/session\/log$/);
-    // Default toggle state — this session still counts toward the plan.
+    // Post-workout-summary spec §3: the finish stage navigates straight to
+    // the summary — no intermediate SessionComplete/"Log this session" hop.
+    await expect(page).toHaveURL(/\/session\/log$/, { timeout: 6000 });
+    // Default: Log against plan leads and carries the position — this
+    // session still counts toward the plan.
     await expect(
-      page.getByRole("button", { name: /COUNTS TOWARD PLAN/ }),
-    ).toContainText("SESSION 1 OF 84");
+      page.getByRole("button", { name: "Log against plan · SESSION 1 OF 84" }),
+    ).toBeVisible();
     await page.getByRole("button", { name: "HELD" }).click();
     await page.getByRole("button", { name: "Pain 2" }).click();
-    await page.getByRole("button", { name: "Save session" }).click();
+    await page
+      .getByRole("button", { name: "Log against plan · SESSION 1 OF 84" })
+      .click();
 
     await expect(page).toHaveURL(/\/today$/);
     // Counter advanced by exactly one.
@@ -603,7 +605,7 @@ test.describe("Today enhancements: the swap x outside-plan composition seam", ()
     await cleanupByTitle(page, title);
   });
 
-  test("swap type -> run the swapped session -> Log OUTSIDE THE PLAN -> Save -> Today: counter unchanged, the swap survives, LAST THREE shows the row", async ({
+  test("swap type -> run the swapped session -> Save without logging -> Today: counter unchanged, the swap survives, LAST THREE shows the row", async ({
     page,
   }) => {
     await signInViaBackdoor(page, {
@@ -640,20 +642,19 @@ test.describe("Today enhancements: the swap x outside-plan composition seam", ()
     await expect(page).toHaveURL(/\/session\/countdown$/);
     await startAndSkipCountdown(page);
     await expect(page.getByText(/^STEP 1 OF 1/)).toBeVisible();
-    await expect(page).toHaveURL(/\/session\/complete$/, { timeout: 6000 });
-
-    await page.getByRole("link", { name: "Log this session" }).click();
-    await expect(page).toHaveURL(/\/session\/log$/);
-    const toggle = page.getByRole("button", { name: /COUNTS TOWARD PLAN/ });
-    await expect(toggle).toContainText("SESSION 1 OF 84");
-    await toggle.click();
+    // Post-workout-summary spec §3: straight to the summary, no
+    // intermediate SessionComplete/"Log this session" hop.
+    await expect(page).toHaveURL(/\/session\/log$/, { timeout: 6000 });
+    // §2F: the old toggle is gone — "outside the plan" is now which SAVE
+    // BUTTON the rower taps. Log against plan still leads (carries the
+    // position); Save without logging is the one that skips the advance.
     await expect(
-      page.getByRole("button", { name: "OUTSIDE THE PLAN · won't advance" }),
-    ).toHaveAttribute("aria-pressed", "true");
+      page.getByRole("button", { name: "Log against plan · SESSION 1 OF 84" }),
+    ).toBeVisible();
 
     await page.getByRole("button", { name: "HELD" }).click();
     await page.getByRole("button", { name: "Pain 2" }).click();
-    await page.getByRole("button", { name: "Save session" }).click();
+    await page.getByRole("button", { name: "Save without logging" }).click();
 
     await expect(page).toHaveURL(/\/today$/);
     // The seam itself: unlike the type-swap loop test's ADVANCING log

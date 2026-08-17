@@ -440,13 +440,13 @@ test("today-onboarding", async ({ page }) => {
 });
 
 // Task 3 (ui-fix round): the unlogged row's own staged Discard — a real
-// timer run driven to /session/complete, then a bare `/today` nav WITHOUT
-// logging it, is the only way to land a completed-but-unlogged run record
-// (same "drive the real flow" idiom the "session-complete"/"log-session"
-// captures above already use). Two captures, DEFAULT and ARMED, matching
-// the design mockup's own labelled pair — `today-unlogged` doubles as the
-// pair's shared setup since Playwright screenshots are just PNG writes, not
-// a separate render each time.
+// timer run driven to the summary (/session/log), then a non-destructive
+// `/today` exit WITHOUT logging it, is the only way to land a
+// completed-but-unlogged run record (same "drive the real flow" idiom the
+// "post-workout-summary" captures above already use). Two captures,
+// DEFAULT and ARMED, matching the design mockup's own labelled pair —
+// `today-unlogged` doubles as the pair's shared setup since Playwright
+// screenshots are just PNG writes, not a separate render each time.
 test("today-unlogged", async ({ page }) => {
   const title = "Screenshot Unlogged Row Workout";
   await signInViaBackdoor(page, {
@@ -458,9 +458,9 @@ test("today-unlogged", async ({ page }) => {
   await startFromLibrary(page, title);
   await page.getByRole("button", { name: "SKIP ›" }).click();
   await expect(page).toHaveURL(/\/session\/run$/);
-  await expect(page).toHaveURL(/\/session\/complete$/, { timeout: 6000 });
+  await expect(page).toHaveURL(/\/session\/log$/, { timeout: 6000 });
   await expect(page.getByRole("heading", { name: title })).toBeVisible();
-  await page.getByRole("button", { name: "Back to Today" }).click();
+  await page.getByRole("link", { name: "← DONE" }).click();
   await expect(page).toHaveURL(/\/today$/);
   await expect(page.getByText(/unlogged session/i)).toBeVisible();
 
@@ -1271,7 +1271,8 @@ test("you-learning", async ({ page }) => {
 });
 
 // Phase 6B (Task 5): the pre-workout countdown, live timer (portrait +
-// 844×420 landscape), and session-complete screens. Every capture drives a
+// 844×420 landscape), and the post-workout summary (Phase PW Task 5's own
+// screen, which replaced SessionComplete). Every capture drives a
 // bulk-imported, non-empty workout through the real START -> countdown ->
 // timer flow (never a hand-built minimum) — same three-step idiom as e2e/
 // design.spec.ts's/e2e/session.spec.ts's own identical helpers, duplicated
@@ -1466,17 +1467,24 @@ test("timer-warmup-landscape", async ({ page }) => {
   await cleanupByTitle(page, title);
 });
 
-test("session-complete", async ({ page }) => {
-  const title = "Screenshot Session Complete Workout";
+// Phase PW Task 5: the post-workout summary replaces SessionComplete AND
+// the old Log screen ("log-session") captures wholesale — one screen now,
+// reached directly off the finish stage (no intermediate hop). This one
+// capture does both of its predecessors' jobs at once: a real recorded
+// measured row (session-complete's own job) AND a filled-in reflection
+// card (log-session's own job) — the two things a rower actually sees on
+// the SAME screen now, never two different ones.
+test("post-workout-summary", async ({ page }) => {
+  const title = "Screenshot Post Workout Summary Workout";
   await signInViaBackdoor(page, {
-    email: "screenshots-session-complete@e2e.test",
+    email: "screenshots-post-workout-summary@e2e.test",
     name: "Screenshot Tester",
   });
   await setBaselines(page);
   // Same tiny time-phase-then-distance-phase shape as e2e/session.spec.ts's
   // own completion test: the time phase auto-advances in ~3s, then the
   // distance phase's actual gets recorded on NEXT, producing the committed
-  // capture's one real, non-dash split.
+  // capture's one real, non-dash measured row.
   await importBulk(
     page,
     [`${title} | AN | easy | 1`, "w 0:03 6k", "w 100m max"].join("\n"),
@@ -1499,25 +1507,35 @@ test("session-complete", async ({ page }) => {
   await page.getByRole("button", { name: "NEXT →" }).click();
   await expect(page.getByText("Finish this session?")).toBeVisible();
   await page.getByRole("button", { name: "Finish session" }).click();
-  await expect(page).toHaveURL(/\/session\/complete$/);
+  // Post-workout-summary spec §3: the finish stage navigates straight to
+  // the summary — no intermediate SessionComplete/"Log this session" hop.
+  await expect(page).toHaveURL(/\/session\/log$/);
   await expect(page.getByRole("heading", { name: title })).toBeVisible();
-  await expect(page.locator(".complete-actual-row")).toHaveCount(1);
+  const rows = page.locator(".summary-row");
+  await expect(rows).toHaveCount(2);
+  await expect(rows.last().locator(".summary-row-pace")).not.toBeEmpty();
+
+  // Realistic, non-empty state (CLAUDE.md's own "screenshots that capture
+  // empty states" rule): a real Held answer, pain level, and note, not the
+  // screen's own just-opened blank form.
+  await page.getByRole("button", { name: "HELD" }).click();
+  await page.getByRole("button", { name: "Pain 2" }).click();
+  await page.getByLabel("NOTES").fill("Felt strong.");
+
   await page.screenshot({
-    path: path.join(SCREENSHOTS_DIR, "session-complete.png"),
+    path: path.join(SCREENSHOTS_DIR, "post-workout-summary.png"),
   });
   await cleanupByTitle(page, title);
 });
 
-// Task 3 (ui-fix round): the new Discard without logging block (rule + L4)
-// pushed this screen's landscape content past its own tight budget (the
-// reviewer's own F8 note) — index.css's landscape media query for
-// `.session-complete-screen`/`.complete-actions` was retuned to fit it; this
-// capture is the visual record of that fit, same idiom as "timer-landscape"
-// above.
-test("session-complete-landscape", async ({ page }) => {
-  const title = "Screenshot Session Complete Landscape Workout";
+// Task 3 (ui-fix round): the Discard block (rule + button) pushed this
+// screen's landscape content past its own tight budget — index.css's
+// landscape media query was retuned to fit it; this capture is the visual
+// record of that fit, same idiom as "timer-landscape" above.
+test("post-workout-summary-landscape", async ({ page }) => {
+  const title = "Screenshot Post Workout Summary Landscape Workout";
   await signInViaBackdoor(page, {
-    email: "screenshots-session-complete-landscape@e2e.test",
+    email: "screenshots-post-workout-summary-landscape@e2e.test",
     name: "Screenshot Tester",
   });
   await setBaselines(page);
@@ -1536,102 +1554,42 @@ test("session-complete-landscape", async ({ page }) => {
   await page.getByRole("button", { name: "NEXT →" }).click();
   await expect(page.getByText("Finish this session?")).toBeVisible();
   await page.getByRole("button", { name: "Finish session" }).click();
-  await expect(page).toHaveURL(/\/session\/complete$/);
+  await expect(page).toHaveURL(/\/session\/log$/);
   await expect(page.getByRole("heading", { name: title })).toBeVisible();
-  await expect(page.locator(".complete-actual-row")).toHaveCount(1);
   // The handoff's own landscape reference frame.
   await page.setViewportSize({ width: 844, height: 420 });
   await expect(
-    page.getByRole("button", { name: "Discard without logging" }),
+    page.getByRole("button", { name: "DISCARD WITHOUT SAVING" }),
   ).toBeVisible();
   await page.screenshot({
-    path: path.join(SCREENSHOTS_DIR, "session-complete-landscape.png"),
+    path: path.join(SCREENSHOTS_DIR, "post-workout-summary-landscape.png"),
   });
   await cleanupByTitle(page, title);
 });
 
-test("log-session", async ({ page }) => {
-  test.setTimeout(90_000); // a real 60s step, not this file's usual ~3s ones
-  const title = "Screenshot Log Session Workout";
-  await signInViaBackdoor(page, {
-    email: "screenshots-log-session@e2e.test",
-    name: "Screenshot Tester",
-  });
-  await setBaselines(page);
-  // F1 (whole-branch review): the FIRST capture used two split-ref steps
-  // (one "2k", one "6k") to show the PACES LOCKED panel's own two-slot
-  // form — but ZERO of the library's 300 generated workouts reference both
-  // bases in one workout (LogSession.tsx's own reconciled comment, Task
-  // 11/12; the taste pass, 9b9fde5, converted AT's last remaining 2k-base
-  // refs to 6k — 3 workouts mixed both before that pass), so that shape
-  // never occurs in production and the panel showing both is a
-  // synthetic-fixture-only case, not something a real session hits. This
-  // capture uses a REAL single-base shape instead — one 60-SECOND (not an
-  // artificially tiny 3s) split-ref
-  // TIME step at "6k" (off 0) — so the TOTAL reads as a genuine non-zero
-  // "1 MIN" rather than the earlier capture's misleading "0 MIN", and the
-  // PACES LOCKED panel shows only the 6K half, matching what an actual
-  // rower would see. SCREENSHOT_BASELINES' own k6Seconds (122.0) is the
-  // design handoff's own literal reference split (README.md §7: "…6K
-  // 2:02.0"). A single TIME phase completes the run automatically once
-  // it's the last one — no NEXT/finish-stage click needed (the same fact
-  // e2e/session.spec.ts's own "two browser BACKs…" test relies on).
-  await importBulk(
-    page,
-    [`${title} | AT | medium | 3`, "w 1:00 6k"].join("\n"),
-  );
-  await startFromLibrary(page, title);
-  await page.getByRole("button", { name: "SKIP ›" }).click();
-  await expect(page).toHaveURL(/\/session\/run$/);
-  await expect(page.getByText(/^STEP 1 OF 1/)).toBeVisible();
-  await expect(page).toHaveURL(/\/session\/complete$/, { timeout: 70_000 });
-  await expect(page.getByRole("heading", { name: title })).toBeVisible();
-
-  await page.getByRole("link", { name: "Log this session" }).click();
-  await expect(page).toHaveURL(/\/session\/log$/);
-  await expect(
-    page.getByRole("heading", { name: `Log ${title}` }),
-  ).toBeVisible();
-  // Only 6K renders (F1) — this workout's one step never references "2k".
-  await expect(page.locator(".log-paces-value")).toHaveText("6K 2:02.0");
-  // A real, non-zero total — the exact defect F1 found in the prior capture.
-  await expect(page.locator(".log-meta")).not.toContainText("0 MIN");
-
-  // Realistic, non-empty state (CLAUDE.md's own "screenshots that capture
-  // empty states" rule): a real Held answer, pain level, and note, not the
-  // screen's own just-opened blank form.
-  await page.getByRole("button", { name: "HELD" }).click();
-  await page.getByRole("button", { name: "Pain 2" }).click();
-  await page.getByLabel("NOTES").fill("Felt strong for the full minute.");
-
-  await page.screenshot({
-    path: path.join(SCREENSHOTS_DIR, "log-session.png"),
-  });
-  await cleanupByTitle(page, title);
-});
-
-// Phase 6C Task 4: the Log screen's OTHER door (Task 3, `/library/:id/log`)
-// — visibly distinct from the session door above (no tab-bar hiding, no
-// Discard button at all, reached straight from a workout's detail screen
-// rather than the timer's own hand-off), so per the plan's own "both doors
-// if visibly distinct" clause this gets its own capture too. Same single-
-// base "6k" shape and SCREENSHOT_BASELINES pairing as the session door's
-// capture, so the two images read as the same product's two doors, not two
-// different products — and no real timer run is needed at all here, so this
-// test needs none of that one's extended timeout.
+// Phase 6C Task 4, rebuilt on PostWorkoutSummary by Phase PW Task 5: the
+// summary's OTHER door (Task 3, `/library/:id/log`) — visibly distinct from
+// the session door above (no tab-bar hiding, no Discard button at all, no
+// hero block, reached straight from a workout's detail screen rather than
+// the timer's own hand-off), so per the plan's own "both doors if visibly
+// distinct" clause this gets its own capture too. Same single-base "6k"
+// shape and SCREENSHOT_BASELINES pairing as the session door's capture, so
+// the two images read as the same product's two doors, not two different
+// products — and no real timer run is needed at all here, so this test
+// needs none of that one's extended timeout.
 //
-// Today enhancements (Task 4): a plan is chosen here too, specifically so
-// this capture also shows the plan toggle (`.log-plan-toggle`) — no
-// screenshot fixture ever activated a plan on the Log screen before this,
-// so the toggle had never appeared in a committed capture at all. Left in
-// its default ("COUNTS TOWARD PLAN …") state rather than toggled, since
-// that's what a rower logging a genuine plan session actually sees; the
-// toggled ("OUTSIDE THE PLAN") state is covered instead by design.spec.ts's
-// own dedicated sweep, which measures and axes BOTH states.
-test("log-session-manual", async ({ page }) => {
-  const title = "Screenshot Log Session Manual Workout";
+// Today enhancements (Task 4), rewired by post-workout-summary spec §2F: a
+// plan is chosen here too, specifically so this capture also shows the
+// save stack's plan position (Log against plan · SESSION N OF N) — no
+// screenshot fixture ever activated a plan on this screen before this, so
+// the position had never appeared in a committed capture at all. Left in
+// its default (Log against plan LEADS) state rather than the onboarding
+// swap; that state is covered instead by design.spec.ts's own dedicated
+// sweep.
+test("post-workout-summary-manual", async ({ page }) => {
+  const title = "Screenshot Post Workout Summary Manual Workout";
   await signInViaBackdoor(page, {
-    email: "screenshots-log-session-manual@e2e.test",
+    email: "screenshots-post-workout-summary-manual@e2e.test",
     name: "Screenshot Tester",
   });
   await setBaselines(page);
@@ -1645,22 +1603,19 @@ test("log-session-manual", async ({ page }) => {
   await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
   await page.getByRole("link", { name: "Log it after" }).click();
   await expect(page).toHaveURL(/\/library\/[^/]+\/log$/);
-  await expect(
-    page.getByRole("heading", { name: `Log ${title}` }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: title })).toBeVisible();
   // Same 6K value as the session door's own capture (SCREENSHOT_BASELINES'
   // k6Seconds, 122.0 -> "2:02.0") — the manual door reads CURRENT baselines
-  // directly (the lock moment IS save time, Task 3's brief), which happen
-  // to be identical to what the session door's run locked here since
-  // neither test ever changes a baseline mid-flow.
-  await expect(page.locator(".log-paces-value")).toHaveText("6K 2:02.0");
+  // directly (the lock moment IS save time, Task 3's brief).
+  await expect(page.getByText("PACES OFF 6K 2:02.0")).toBeVisible();
   // No Discard button at all on this door — the visible difference the
   // screenshot pair exists to show.
   await expect(page.getByRole("button", { name: /discard/i })).toHaveCount(0);
-  // The plan toggle, default state — a plan is active for this fixture now.
+  // The save stack's plan position, default state — a plan is active for
+  // this fixture now.
   await expect(
-    page.getByRole("button", { name: /COUNTS TOWARD PLAN/ }),
-  ).toContainText("SESSION 1 OF 84");
+    page.getByRole("button", { name: "Log against plan · SESSION 1 OF 84" }),
+  ).toBeVisible();
 
   // Realistic, non-empty state (CLAUDE.md's own "no empty-state screenshots"
   // rule), same values as the session door's own capture for a fair visual
@@ -1672,7 +1627,7 @@ test("log-session-manual", async ({ page }) => {
     .fill("Rowed at the gym, logging it after the fact.");
 
   await page.screenshot({
-    path: path.join(SCREENSHOTS_DIR, "log-session-manual.png"),
+    path: path.join(SCREENSHOTS_DIR, "post-workout-summary-manual.png"),
   });
   await cleanupByTitle(page, title);
 });
@@ -2337,13 +2292,11 @@ async function openLogMonitorForm(
   await page.getByRole("button", { name: "Tap again to end" }).click();
 
   await expect(page).toHaveURL(/\/library\/[^/]+\/log\?from=monitor$/);
-  await expect(
-    page.getByRole("heading", { name: `Log ${title}` }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: title })).toBeVisible();
 
   // Realistic, non-empty state (CLAUDE.md's own "no empty-state
-  // screenshots" rule), same fill idiom as `log-session`/`log-session-
-  // manual` above.
+  // screenshots" rule), same fill idiom as `post-workout-summary`/
+  // `post-workout-summary-manual` above.
   await page.getByRole("button", { name: "HELD" }).click();
   await page.getByRole("button", { name: "Pain 2" }).click();
   await page
@@ -2359,11 +2312,12 @@ test("log-monitor", async ({ page }) => {
     "screenshots-log-monitor@e2e.test",
     "PM5 918273645",
   );
-  // The caption line is the visible difference from the manual door's own
-  // `log-session-manual` capture — the whole reason this gets its own shot.
-  await expect(page.locator(".log-from-monitor")).toHaveText(
-    "FROM PM5 918273645 · 1 OF 5 INTERVALS MEASURED",
-  );
+  // A real pm5 pace on at least one row is the visible difference from the
+  // manual door's own `post-workout-summary-manual` capture — the whole
+  // reason this gets its own shot (post-workout-summary spec: the old
+  // "FROM <device> · N OF M MEASURED" caption is retired, superseded by
+  // the meta line's own device name and each row's own measured-ness).
+  await expect(page.getByText(/PM5 918273645/)).toBeVisible();
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "log-monitor.png"),
   });
@@ -2378,9 +2332,7 @@ test("log-monitor-landscape", async ({ page }) => {
     "screenshots-log-monitor-landscape@e2e.test",
     "PM5 837465921",
   );
-  await expect(page.locator(".log-from-monitor")).toHaveText(
-    "FROM PM5 837465921 · 1 OF 5 INTERVALS MEASURED",
-  );
+  await expect(page.getByText(/PM5 837465921/)).toBeVisible();
   await page.setViewportSize({ width: 844, height: 390 });
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "log-monitor-landscape.png"),

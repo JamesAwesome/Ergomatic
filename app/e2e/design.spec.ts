@@ -1381,10 +1381,14 @@ test.describe("today screen (plan active, logs present)", () => {
 });
 
 // Task 3 (ui-fix round): Today's unlogged row gains a 44×44 accent-outlined
-// ✕ that arms IN PLACE — a real timer run driven all the way to
-// /session/complete, then a bare `/today` nav WITHOUT ever logging it, is
+// ✕ that arms IN PLACE — a real timer run driven all the way to the summary
+// (`/session/log`), then a non-destructive exit WITHOUT ever logging it, is
 // the only way to land a completed-but-unlogged run record here (same
 // "drive the real flow" idiom as e2e/session.spec.ts's own discard test).
+// Post-workout-summary spec §3/§2A: the finish stage now lands on the
+// summary directly (no SessionComplete hop), and its own non-destructive
+// exit is the ← DONE BackLink (SessionComplete's old "Back to Today" is
+// gone with it).
 test.describe("today screen (unlogged session row)", () => {
   const title = "Design Unlogged Row Sweep";
 
@@ -1400,8 +1404,8 @@ test.describe("today screen (unlogged session row)", () => {
     );
     await startFromLibrary(page, title);
     await startAndSkipCountdown(page);
-    await expect(page).toHaveURL(/\/session\/complete$/, { timeout: 6000 });
-    await page.getByRole("button", { name: "Back to Today" }).click();
+    await expect(page).toHaveURL(/\/session\/log$/, { timeout: 6000 });
+    await page.getByRole("link", { name: "← DONE" }).click();
     await expect(page).toHaveURL(/\/today$/);
     await expect(page.getByText(/unlogged session/i)).toBeVisible();
   });
@@ -1726,16 +1730,20 @@ test.describe("today screen (interrupted connected session row)", () => {
 
     await expect(page).toHaveURL(/\/library\/[^/]+\/log\?from=monitor$/);
     await expect(
-      page.getByRole("heading", { name: "Log Hoarfrost" }),
+      page.getByRole("heading", { name: "Hoarfrost" }),
     ).toBeVisible();
 
-    // The monitor-mode header's own minutes NUMBER: 360s measured + 300s
-    // Hoarfrost's own programmed rest = 660s = 11 MIN
-    // (`interruptedTotalSeconds`) — nowhere near the wall-clock gap between
-    // `startedAt` (seeded Aug 1) and `completedAt` (stamped just now by
-    // this very click), which a regression back to wall-clock reading
-    // would show instead.
-    await expect(page.getByText("AUG 1 · 11 MIN")).toBeVisible();
+    // The monitor-mode summary's own TIME hero: 360s measured + 300s
+    // Hoarfrost's own programmed rest = 660s = 11:00
+    // (`measuredSessionSeconds`/R-D) — nowhere near the wall-clock gap
+    // between `startedAt` (seeded Aug 1) and `completedAt` (stamped just
+    // now by this very click), which a regression back to wall-clock
+    // reading would show instead. dateLabel reads from `startedAt`, not
+    // `completedAt` (the "Log it" moment, possibly days later).
+    await expect(page.getByText(/^AUG 1 ·/)).toBeVisible();
+    await expect(
+      page.locator(".summary-hero-value", { hasText: "11:00" }),
+    ).toBeVisible();
 
     const stamped = await page.evaluate(() => {
       const raw = localStorage.getItem("ergomatic.monitorRun");
@@ -3038,20 +3046,20 @@ test.describe("timer screen (landscape, 844x420)", () => {
   });
 });
 
-// Phase 6B (Task 5): SessionComplete with a recorded actual — the "never a
-// bare dash" case, not the empty-actuals early return. Same tiny two-step
-// fixture, k2Seconds floor, and non-suspect timing window as
-// e2e/session.spec.ts's own completion test — see that file's comment for
-// why k2Seconds is 60 (the server's own PUT /api/baselines floor) and why
-// the wait lands at ~10.5s (safely inside the 6s/24s non-suspect window on
-// a 12s estimate).
-test.describe("session complete screen (with a recorded actual)", () => {
-  const title = "Design Session Complete Sweep";
+// Phase PW Task 5: the post-workout summary (PostWorkoutSummary.tsx)
+// replaces SessionComplete AND the old Log screen chrome wholesale — the
+// session door's own "just finished" render, reached through the real
+// completion hand-off (no intermediate SessionComplete screen any more:
+// Timer.tsx's finish stage navigates straight to `/session/log`). Same
+// tiny two-step fixture, k2Seconds floor, and non-suspect timing window as
+// e2e/session.spec.ts's own completion test.
+test.describe("post-workout summary (session door, just finished)", () => {
+  const title = "Design Summary Sweep";
 
   test.beforeEach(async ({ page }, testInfo) => {
     await signInViaBackdoor(page, {
-      email: `design-complete-${testInfo.parallelIndex}@e2e.test`,
-      name: "Design Complete Tester",
+      email: `design-summary-${testInfo.parallelIndex}@e2e.test`,
+      name: "Design Summary Tester",
     });
     await setCustomBaselines(page, { k2Seconds: 60, k6Seconds: 120 });
     await importBulk(
@@ -3069,7 +3077,8 @@ test.describe("session complete screen (with a recorded actual)", () => {
     await page.getByRole("button", { name: "NEXT →" }).click();
     await expect(page.getByText("Finish this session?")).toBeVisible();
     await page.getByRole("button", { name: "Finish session" }).click();
-    await expect(page).toHaveURL(/\/session\/complete$/);
+    await expect(page).toHaveURL(/\/session\/log$/);
+    // §2A: the title renders bare, no "Log" prefix.
     await expect(page.getByRole("heading", { name: title })).toBeVisible();
   });
 
@@ -3091,257 +3100,100 @@ test.describe("session complete screen (with a recorded actual)", () => {
     await expect(page.locator(".tabbar")).toHaveCount(0);
   });
 
-  test("TOTAL and the recorded actual split match the token palette", async ({
-    page,
-  }) => {
-    // Task 1 (ui-fix round): moved off --ink-4 onto --ink-3, same blanket
-    // small-mono-label sweep as Today's `.today-log-meta` above.
-    const totalLabelColor = await page
-      .locator(".complete-total-label")
-      .evaluate((el) => getComputedStyle(el).color);
-    expect(totalLabelColor).toBe("rgb(87, 84, 76)"); // --ink-3
-
-    await expect(page.locator(".complete-actual-row")).toHaveCount(1);
-    const actualColor = await page
-      .locator(".complete-actual-value")
-      .evaluate((el) => getComputedStyle(el).color);
-    expect(actualColor).toBe("rgb(181, 52, 31)"); // --accent
-  });
-
   test("no small mono label uses the failing --ink-4 color", async ({
     page,
   }) => {
     await assertNoFailingInk4Labels(page);
   });
 
-  // Final-review triage item (see the countdown describe's identical test
-  // above for the full derivation): `.session-complete-screen` shared
-  // `.countdown-screen`'s own pre-fix landscape min-height formula.
-  //
-  // Fix round 1 (reviewer M2): the bare document-level check below is
-  // structurally UNFALSIFIABLE the instant `.session-complete-screen`
-  // itself gets an inner `overflow-y: auto` (exactly what this fix round's
-  // first pass shipped, to make the OUTER document's own scrollHeight
-  // artificially always equal its clientHeight) — it would keep passing
-  // even while Discard sits entirely below the fold inside that inner
-  // scroll container, which is exactly what happened. Two more checks make
-  // this test actually bite: the screen element's OWN scrollHeight vs its
-  // own clientHeight (catches an inner scroll container directly, not just
-  // the document that wraps it), and a bounding-rect check on the stack's
-  // own LAST child (Discard) — the control most likely to clip first —
-  // confirming it renders fully inside the 420px frame with nothing to
-  // scroll to reach it.
-  test("no dead vertical scroll at 844x420, and Discard (the stack's last child) renders fully in-frame with nothing to scroll", async ({
+  // Contrast, computed via the WCAG relative-luminance formula (index.css's
+  // own comment on this new class family carries the full worked numbers;
+  // this test proves the LIVE computed styles, not just the arithmetic).
+  test("the eyebrow/hint labels and the lead hero value match the token palette", async ({
+    page,
+  }) => {
+    const eyebrowColor = await page
+      .locator(".summary-eyebrow")
+      .evaluate((el) => getComputedStyle(el).color);
+    expect(eyebrowColor).toBe("rgb(87, 84, 76)"); // --ink-3, 6.69:1 on --page
+
+    const leadValueColor = await page
+      .locator(".summary-hero-lead .summary-hero-value")
+      .evaluate((el) => getComputedStyle(el).color);
+    expect(leadValueColor).toBe("rgb(181, 52, 31)"); // --accent, 5.35:1 on --page
+  });
+
+  // The interval list renders real content, never a bare dash: this
+  // fixture's distance/effort step earns a real stopwatch reading (the
+  // measured row), the time step has no actual at all (prescribed).
+  test("the interval list renders both a prescribed and a measured row", async ({
+    page,
+  }) => {
+    const rows = page.locator(".summary-row");
+    await expect(rows).toHaveCount(2);
+    await expect(rows.last().locator(".summary-row-pace")).not.toBeEmpty();
+  });
+
+  // Discovered contradiction (reported, not silently worked around — the
+  // brief's own "if the brief contradicts what you observe, say so" rule):
+  // this test originally copied SessionComplete's own "no dead vertical
+  // scroll" requirement verbatim. That rule fits a glanceable, single-
+  // purpose screen (a title, a total, a short actuals list, three
+  // buttons); the summary carries a title block, three heroes, a full
+  // reflection card, an interval list AND the save stack — and the design
+  // handoff's own §"Frame" line states this screen is "Single scroll, no
+  // tabs" even in its PORTRAIT reference frame (`docs/design/handoffs/
+  // 2026-08-12-post-workout/README.md`), never "fits without scrolling."
+  // A live measurement at 844×420 (this fixture) reads `scrollHeight` 972
+  // against a 420 `clientHeight` — the screen is genuinely, by design, a
+  // scrolling one in landscape too, not a layout regression. What DOES
+  // still matter, and is what this test checks instead: no HORIZONTAL
+  // overflow (the one axis a mobile frame can never recover from), and
+  // Discard — the stack's own last, most consequential control — is
+  // present, enabled, and reachable by scrolling to it, not clipped away
+  // by `overflow: hidden` or a fixed-height ancestor.
+  test("no horizontal overflow at 844x420, and Discard (the stack's last child) is reachable by scrolling, not clipped", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 844, height: 420 });
 
-    const overflow = await page.evaluate(() => ({
-      scrollHeight: document.documentElement.scrollHeight,
-      clientHeight: document.documentElement.clientHeight,
-    }));
-    expect(overflow.scrollHeight).toBeLessThanOrEqual(overflow.clientHeight);
-
-    const screenOverflow = await page
-      .locator(".session-complete-screen")
-      .evaluate((el) => ({
-        scrollHeight: el.scrollHeight,
-        clientHeight: el.clientHeight,
-      }));
-    expect(screenOverflow.scrollHeight).toBeLessThanOrEqual(
-      screenOverflow.clientHeight,
+    const horizontalOverflow = await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth >
+        document.documentElement.clientWidth,
     );
+    expect(horizontalOverflow).toBe(false);
 
     const discard = page.getByRole("button", {
-      name: "Discard without logging",
+      name: "DISCARD WITHOUT SAVING",
     });
-    const box = (await discard.boundingBox())!;
-    expect(box.y + box.height).toBeLessThanOrEqual(420);
+    await discard.scrollIntoViewIfNeeded();
+    await expect(discard).toBeVisible();
+    await expect(discard).toBeEnabled();
   });
 
-  // Task 1 (ui-fix round): the two half-width side-by-side buttons become
-  // full-width L1/L2 blocks in one `.action-stack` — one L1 ("Log this
-  // session") per screen, "Back to Today" at L2's own 52px.
-  test("Log this session (L1, 56px) stacks above Back to Today (L2, 52px) in one action stack", async ({
+  // §2F: no active plan in this fixture — Save without logging leads alone
+  // at its own 54px (the accent slot), Discard sits last.
+  test("Save without logging renders at the specced 54px height, not the browser's default button chrome", async ({
     page,
   }) => {
-    const l1 = page.locator(".button-l1");
-    await expect(l1).toHaveCount(1);
-    await expect(l1).toHaveText("Log this session");
-    const l1Height = await l1.evaluate(
-      (el) => el.getBoundingClientRect().height,
-    );
-    expect(l1Height).toBe(56);
-
-    const l2 = page.getByRole("button", { name: "Back to Today" });
-    const l2Height = await l2.evaluate(
-      (el) => el.getBoundingClientRect().height,
-    );
-    expect(l2Height).toBe(52);
-
-    const l1Box = (await l1.boundingBox())!;
-    const l2Box = (await l2.boundingBox())!;
-    expect(l2Box.y).toBeGreaterThan(l1Box.y);
-
-    // Fix round 1 (F2, reviewer finding): see WorkoutDetail's identical
-    // assertion — the one-L1 count alone doesn't rule out a legacy
-    // `.button-primary` block surviving elsewhere on the same screen.
-    await expect(page.locator(".button-primary")).toHaveCount(0);
-  });
-
-  // Task 3 (ui-fix round): a third action, Discard without logging
-  // (L4/L4-armed), joins the stack under a rule below Back to Today — same
-  // in-place two-tap idiom as WorkoutDetail's own Delete workout above.
-  test("Discard without logging sits under a rule below Back to Today, and arms in place (solid accent, 'Tap again to discard')", async ({
-    page,
-  }) => {
-    const stack = page.locator(".action-stack.complete-actions");
-    const discard = page.getByRole("button", {
-      name: "Discard without logging",
-    });
-    await expect(discard).toHaveClass("button-l4");
-
-    const rule = stack.locator(".action-stack-rule");
-    await expect(rule).toHaveCount(1);
-    const backToToday = page.getByRole("button", { name: "Back to Today" });
-    const backBox = (await backToToday.boundingBox())!;
-    const ruleBox = (await rule.boundingBox())!;
-    const discardBoxBefore = (await discard.boundingBox())!;
-    expect(Math.round(ruleBox.y - (backBox.y + backBox.height))).toBe(12);
-    expect(Math.round(discardBoxBefore.y - (ruleBox.y + ruleBox.height))).toBe(
-      12,
-    );
-
-    await discard.click();
-    // Same reasoning as WorkoutDetail's identical assertion: move the
-    // pointer off the button first so `:hover`'s own `--accent-hover` fill
-    // doesn't mask the armed state's resting `--accent` one.
-    await page.mouse.move(0, 0);
-    const armed = page.getByRole("button", { name: "Tap again to discard" });
-    await expect(armed).toHaveClass("button-l4-armed");
-    const armedStyles = await armed.evaluate((el) => {
-      const s = getComputedStyle(el);
-      return { background: s.backgroundColor, color: s.color };
-    });
-    expect(armedStyles.background).toBe("rgb(181, 52, 31)"); // --accent
-    expect(armedStyles.color).toBe("rgb(255, 253, 247)"); // --on-color
-
-    await armed.evaluate((el) => (el as HTMLElement).blur());
-    await expect(
-      page.getByRole("button", { name: "Discard without logging" }),
-    ).toBeVisible();
-  });
-});
-
-// Phase 6C (Task 2): the Log screen (session door). Reaches it through the
-// real complete -> "Log this session" hand-off, same as e2e/session.spec.ts's
-// own full-loop test, rather than navigating to /session/log directly — a
-// direct nav with no run record would just redirect to /today, the exact
-// deep-link guard this screen has.
-test.describe("log session screen (session door)", () => {
-  const title = "Design Log Session Sweep";
-
-  test.beforeEach(async ({ page }, testInfo) => {
-    await signInViaBackdoor(page, {
-      email: `design-log-${testInfo.parallelIndex}@e2e.test`,
-      name: "Design Log Tester",
-    });
-    await setBaselines(page);
-    // A single short 6k-based split step: the time phase auto-advances
-    // straight to /session/complete with no NEXT/finish-stage click needed,
-    // and its "6k" reference is exactly what the PACES LOCKED panel's own
-    // baseline-reconstruction reads (Task 2's own `lockedBaseline`).
-    await importBulk(
-      page,
-      [`${title} | AT | medium | 3`, "w 0:03 6k-2"].join("\n"),
-    );
-    await startFromLibrary(page, title);
-    await startAndSkipCountdown(page);
-    await expect(page).toHaveURL(/\/session\/complete$/, { timeout: 6000 });
-    await page.getByRole("link", { name: "Log this session" }).click();
-    await expect(page).toHaveURL(/\/session\/log$/);
-    await expect(
-      page.getByRole("heading", { name: `Log ${title}` }),
-    ).toBeVisible();
-  });
-
-  test.afterEach(async ({ page }) => {
-    await cleanupByTitle(page, title);
-  });
-
-  test("every visible interactive element has a >=44x44 tap target", async ({
-    page,
-  }) => {
-    await assertTapTargets(page);
-  });
-
-  test("zero WCAG 2A/2AA violations", async ({ page }) => {
-    await assertNoA11yViolations(page);
-  });
-
-  // L1 (whole-branch review): this describe renders `.log-paces-label`
-  // (10px mono), a guard-gap the ink-4 sweep never covered on this screen.
-  test("no mono label ≤11px still paints at --ink-4", async ({ page }) => {
-    await assertNoFailingInk4Labels(page);
-  });
-
-  test("no tab bar on this session route", async ({ page }) => {
-    await expect(page.locator(".tabbar")).toHaveCount(0);
-  });
-
-  test("renders real content, never a bare dash: the PACES LOCKED 6K value, the per-step list, and EXPECTED N/5", async ({
-    page,
-  }) => {
-    // DESIGN_BASELINES' k6Seconds (120.0) -> "2:00.0", recovered exactly
-    // regardless of this step's own -2 offset — the baseline, not the
-    // per-step split. F1 (whole-branch review): no step here references
-    // "2k" at all, so that half is OMITTED entirely (not a "2K —" dash).
-    // This fixture is a bulk-imported synthetic (single 6k-only step) that
-    // deliberately doesn't mix bases, to prove the OMIT branch directly —
-    // none of the library's workouts do either (zero of the 300 generated
-    // workouts reference both bases post the taste pass, 9b9fde5 — 3 did
-    // before it — per Task 11/12's LogSession.tsx and DEVIATIONS.md
-    // reconciliation), but this test never depends on a real seeded
-    // workout's shape.
-    await expect(page.locator(".log-paces-value")).toHaveText("6K 2:00.0");
-    await expect(page.locator(".log-step-row")).toHaveCount(1);
-    // 118.0s target (120 - 2), shown as the frozen split this step was
-    // logged at.
-    await expect(page.locator(".log-step-target")).toHaveText("1:58.0");
-    // The bulk-import header's own pain field ("| AT | medium | 3").
-    await expect(page.locator(".classification-pain-word")).toHaveText(
-      "EXPECTED 3/5",
-    );
-  });
-
-  // Phase 6C Task 2's own F4 fix round found `.log-save` rendering at 60px
-  // against a 54px spec — neither `button` nor `.button-primary` resets the
-  // browser's UA button chrome (a ~2px outset border plus ~1px vertical
-  // padding), which `min-height`/`line-height` alone can't clamp below. The
-  // fix (`border: none; padding: 0;`, scoped to `.log-save` only — see
-  // index.css's own comment on this, and the app-wide `.button-primary` gap
-  // now recorded in docs/design/DEVIATIONS.md, whole-branch review IMP-6)
-  // was never pinned by a computed-style assertion — a deferred obligation
-  // from that round's review, closed here (Phase 6C Task 4) so a future
-  // edit to `.log-save`/`.button-primary` can't silently regress the height
-  // back to the UA default.
-  test("Save session renders at the specced 54px height, not the browser's default button chrome", async ({
-    page,
-  }) => {
-    const height = await page
-      .locator(".log-save")
-      .evaluate((el) => getComputedStyle(el).height);
+    const lead = page.getByRole("button", { name: "Save without logging" });
+    await expect(lead).toHaveClass(/summary-save-lead/);
+    const height = await lead.evaluate((el) => getComputedStyle(el).height);
     expect(height).toBe("54px");
+    await expect(
+      page.getByRole("button", { name: /Log against plan/ }),
+    ).toHaveCount(0);
   });
 
-  // Task 3 (ui-fix round): the old `.baseline-confirm` side panel is gone —
-  // Discard now arms in place, the level system's own L4/L4-armed idiom
-  // (same shape WorkoutDetail's own Delete workout and SessionComplete's own
-  // Discard both use) — this sweep runs with the button already armed.
+  // §2F: DISCARD WITHOUT SAVING is borderless mono at rest (the mock's own
+  // literal spec), and arms in place to the house's solid-accent "Tap again
+  // to discard" look (PROVENANCE item 4: the mock never designed its own
+  // armed state).
   test.describe("Discard staged", () => {
     test.beforeEach(async ({ page }) => {
       await page
-        .getByRole("button", { name: "Discard without logging" })
+        .getByRole("button", { name: "DISCARD WITHOUT SAVING" })
         .click();
       await expect(
         page.getByRole("button", { name: "Tap again to discard" }),
@@ -3358,11 +3210,9 @@ test.describe("log session screen (session door)", () => {
       await assertNoA11yViolations(page);
     });
 
-    test("armed fills solid accent, cream label — the same L4-armed look as WorkoutDetail's Delete and SessionComplete's Discard", async ({
-      page,
-    }) => {
+    test("armed fills solid accent, cream label", async ({ page }) => {
       const armed = page.getByRole("button", { name: "Tap again to discard" });
-      await expect(armed).toHaveClass("button-l4-armed");
+      await expect(armed).toHaveClass(/summary-discard-armed/);
       await page.mouse.move(0, 0);
       const styles = await armed.evaluate((el) => {
         const s = getComputedStyle(el);
@@ -3374,20 +3224,20 @@ test.describe("log session screen (session door)", () => {
   });
 });
 
-// Phase 6C (Task 3): the Log screen's manual door — the same LogSession
-// component and CSS classes as the session door above, reached instead via
-// a workout's own detail screen ("Log it after"), not a completed timer
-// run. Deliberately does NOT re-sweep every assertion the session-door
-// block above already covers on the shared `LogScreen` markup — only what
-// actually differs for this door: no tab-bar hiding, no Discard button, and
-// a workout-detail entry point instead of the complete-screen hand-off.
-test.describe("log session screen (manual door)", () => {
-  const title = "Design Manual Log Sweep";
+// Phase PW Task 5: the manual door's own summary render — the same
+// PostWorkoutSummary component, reached via a workout's own detail screen
+// ("Log it after"), not a completed timer run. Deliberately does NOT
+// re-sweep every assertion the session-door block above already covers on
+// the shared component — only what actually differs for this door: no
+// tab-bar hiding, no Discard button, no hero block, and a workout-detail
+// entry point instead of the finish hand-off.
+test.describe("post-workout summary (manual door)", () => {
+  const title = "Design Manual Summary Sweep";
 
   test.beforeEach(async ({ page }, testInfo) => {
     await signInViaBackdoor(page, {
-      email: `design-manual-log-${testInfo.parallelIndex}@e2e.test`,
-      name: "Design Manual Log Tester",
+      email: `design-manual-summary-${testInfo.parallelIndex}@e2e.test`,
+      name: "Design Manual Summary Tester",
     });
     await setBaselines(page);
     await importBulk(
@@ -3398,9 +3248,7 @@ test.describe("log session screen (manual door)", () => {
     await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
     await page.getByRole("link", { name: "Log it after" }).click();
     await expect(page).toHaveURL(/\/library\/[^/]+\/log$/);
-    await expect(
-      page.getByRole("heading", { name: `Log ${title}` }),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: title })).toBeVisible();
   });
 
   test.afterEach(async ({ page }) => {
@@ -3417,22 +3265,15 @@ test.describe("log session screen (manual door)", () => {
     await assertNoA11yViolations(page);
   });
 
-  // L1 (whole-branch review): this describe renders `.log-paces-label`
-  // (10px mono), a guard-gap the ink-4 sweep never covered on this screen.
   test("no mono label ≤11px still paints at --ink-4", async ({ page }) => {
     await assertNoFailingInk4Labels(page);
   });
 
   // Unlike the session door (which hides the tab bar as the same full-bleed
-  // holder family as /session/complete), this route keeps its tab bar
-  // visible — corrected by the whole-branch review (IMP-2): this comment
-  // used to say that was because the manual door "has no Discard/Back
-  // button to leave with," which stopped being true once that same review
-  // added a `BackLink` to this door's main state too (it just never needed
-  // the tab bar hidden to have a non-destructive exit). The real reason
-  // (still valid, AppRoutes.tsx's own comment on this route registration):
-  // this door touches no storage at all, so there's nothing an early exit
-  // could leave dangling, and showing the tab bar costs it nothing.
+  // holder family as the countdown/timer), this route keeps its tab bar
+  // visible: this door touches no storage at all, so there's nothing an
+  // early exit could leave dangling, and showing the tab bar costs it
+  // nothing (AppRoutes.tsx's own comment on this route registration).
   test("the tab bar stays visible on this route, unlike the session door", async ({
     page,
   }) => {
@@ -3445,22 +3286,28 @@ test.describe("log session screen (manual door)", () => {
     await expect(page.getByRole("button", { name: /discard/i })).toHaveCount(0);
   });
 
-  test("renders real content, never a bare dash: the PACES LOCKED 6K value, the per-step list, and EXPECTED N/5", async ({
+  test("no hero block — the manual door has no measurement of any kind (§2B's date-only fallback)", async ({
     page,
   }) => {
-    // The manual door's lock moment IS save time (task brief) — PACES
-    // LOCKED shows the CURRENT baseline directly (DESIGN_BASELINES'
-    // k6Seconds, 120.0 -> "2:00.0"), while the step row shows the
-    // RESOLVED split this step's own -2 offset produces (120 - 2 = 118.0
-    // -> "1:58.0") — two different, both-honest numbers, not a
-    // discrepancy. Only "6K" renders (no step here references "2k" at
-    // all).
-    await expect(page.locator(".log-paces-value")).toHaveText("6K 2:00.0");
-    await expect(page.locator(".log-step-row")).toHaveCount(1);
-    await expect(page.locator(".log-step-target")).toHaveText("1:58.0");
-    await expect(page.locator(".classification-pain-word")).toHaveText(
-      "EXPECTED 3/5",
-    );
+    await expect(page.getByText("AVG SPLIT")).toHaveCount(0);
+    await expect(page.getByText("TIME", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("DISTANCE")).toHaveCount(0);
+  });
+
+  test("renders real content, never a bare dash: the PACES OFF caption, the row list, BY FEEL, and EXPECTED N/5", async ({
+    page,
+  }) => {
+    // The manual door's lock moment IS save time (task brief) — PACES OFF
+    // shows the CURRENT baseline directly (DESIGN_BASELINES' k6Seconds,
+    // 120.0 -> "2:00.0"), while the row's own target shows the RESOLVED
+    // split this step's own -2 offset produces (120 - 2 = 118.0 -> "1:58.0")
+    // — two different, both-honest numbers, not a discrepancy. Only "6K"
+    // renders (no step here references "2k" at all).
+    await expect(page.getByText("PACES OFF 6K 2:00.0")).toBeVisible();
+    await expect(page.locator(".summary-row")).toHaveCount(1);
+    await expect(page.locator(".summary-row-target")).toHaveText("1:58.0");
+    await expect(page.getByText("BY FEEL")).toBeVisible();
+    await expect(page.getByText("EXPECTED 3/5")).toBeVisible();
   });
 });
 
@@ -3470,13 +3317,17 @@ test.describe("log session screen (manual door)", () => {
 // under this file's own axe/tap-target sweeps at all. Reuses the manual
 // door (no timer run needed to reach it, unlike the session door) plus this
 // file's own top-level `choosePlan`/`resetPlanProgress` helpers.
-test.describe("log session screen (manual door, plan active — the plan toggle)", () => {
-  const title = "Design Log Plan Toggle Sweep";
+// §2F: the old separate toggle is gone — the save stack's own two buttons
+// carry the plan choice now, swapping which one leads based on
+// plan/isOnboarding. This block replaces the toggle sweep with the save
+// stack's own geometry/contrast under an active plan.
+test.describe("post-workout summary (manual door, plan active — the save stack)", () => {
+  const title = "Design Summary Save Stack Sweep";
 
   test.beforeEach(async ({ page }, testInfo) => {
     await signInViaBackdoor(page, {
-      email: `design-log-toggle-${testInfo.parallelIndex}@e2e.test`,
-      name: "Design Log Toggle Tester",
+      email: `design-summary-savestack-${testInfo.parallelIndex}@e2e.test`,
+      name: "Design Summary Save Stack Tester",
     });
     await setBaselines(page);
     await choosePlan(page, "sprint");
@@ -3489,78 +3340,64 @@ test.describe("log session screen (manual door, plan active — the plan toggle)
     await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
     await page.getByRole("link", { name: "Log it after" }).click();
     await expect(page).toHaveURL(/\/library\/[^/]+\/log$/);
-    await expect(
-      page.getByRole("heading", { name: `Log ${title}` }),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: title })).toBeVisible();
   });
 
   test.afterEach(async ({ page }) => {
     await cleanupByTitle(page, title);
   });
 
-  test("every visible interactive element has a >=44x44 tap target, including the plan toggle in its default state", async ({
+  test("every visible interactive element has a >=44x44 tap target, including both save buttons", async ({
     page,
   }) => {
     await assertTapTargets(page);
-    const toggle = page.getByRole("button", { name: /COUNTS TOWARD PLAN/ });
-    const box = await toggle.boundingBox();
-    expect(box).not.toBeNull();
-    expect(box!.height).toBeGreaterThanOrEqual(44);
-    expect(box!.width).toBeGreaterThanOrEqual(44);
-    await expect(toggle).toHaveAttribute("aria-pressed", "false");
-    await expect(toggle).toContainText("SESSION 1 OF 84");
+    const lead = page.getByRole("button", {
+      name: "Log against plan · SESSION 1 OF 84",
+    });
+    const leadBox = await lead.boundingBox();
+    expect(leadBox).not.toBeNull();
+    expect(leadBox!.height).toBeGreaterThanOrEqual(44);
+    expect(leadBox!.width).toBeGreaterThanOrEqual(44);
+
+    const secondary = page.getByRole("button", {
+      name: "Save without logging",
+    });
+    const secondaryBox = await secondary.boundingBox();
+    expect(secondaryBox).not.toBeNull();
+    expect(secondaryBox!.height).toBeGreaterThanOrEqual(44);
   });
 
-  test("zero WCAG 2A/2AA violations with the plan toggle rendered in its default state", async ({
+  test("zero WCAG 2A/2AA violations with an active plan's save stack rendered", async ({
     page,
   }) => {
     await assertNoA11yViolations(page);
   });
 
-  test.describe("toggled to OUTSIDE THE PLAN", () => {
-    test.beforeEach(async ({ page }) => {
-      await page.getByRole("button", { name: /COUNTS TOWARD PLAN/ }).click();
-      await expect(
-        page.getByRole("button", { name: "OUTSIDE THE PLAN · won't advance" }),
-      ).toBeVisible();
+  // Log against plan leads (accent fill, 54px); Save without logging is
+  // the outline secondary (48px) — the geometry index.css's own comment
+  // names for `.summary-save-lead`/`.summary-save-secondary`.
+  test("Log against plan fills accent at 54px; Save without logging is the outline secondary at 48px", async ({
+    page,
+  }) => {
+    const lead = page.getByRole("button", {
+      name: "Log against plan · SESSION 1 OF 84",
     });
+    await expect(lead).toHaveClass(/summary-save-lead/);
+    const leadStyles = await lead.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { height: s.height, background: s.backgroundColor };
+    });
+    expect(leadStyles.height).toBe("54px");
+    expect(leadStyles.background).toBe("rgb(181, 52, 31)"); // --accent
 
-    test("every visible interactive element has a >=44x44 tap target, including the toggled plan toggle", async ({
-      page,
-    }) => {
-      await assertTapTargets(page);
-      const toggle = page.getByRole("button", {
-        name: "OUTSIDE THE PLAN · won't advance",
-      });
-      const box = await toggle.boundingBox();
-      expect(box).not.toBeNull();
-      expect(box!.height).toBeGreaterThanOrEqual(44);
-      expect(box!.width).toBeGreaterThanOrEqual(44);
-      await expect(toggle).toHaveAttribute("aria-pressed", "true");
+    const secondary = page.getByRole("button", {
+      name: "Save without logging",
     });
-
-    test("zero WCAG 2A/2AA violations with the plan toggle in its toggled state", async ({
-      page,
-    }) => {
-      await assertNoA11yViolations(page);
-    });
-
-    // Fix round 2 (whole-branch review, Md1): OUTSIDE THE PLAN's own
-    // selected fill used to switch to an accent border/text — the round's
-    // last surviving "accent means selected" use. Now the same plain ink
-    // fill every other selected state uses, never pinned by a computed-style
-    // assertion before this one.
-    test("the toggled state fills ink, not accent", async ({ page }) => {
-      const toggle = page.getByRole("button", {
-        name: "OUTSIDE THE PLAN · won't advance",
-      });
-      const styles = await toggle.evaluate((el) => {
-        const s = getComputedStyle(el);
-        return { background: s.backgroundColor, color: s.color };
-      });
-      expect(styles.background).toBe("rgb(27, 26, 23)"); // --ink
-      expect(styles.color).toBe("rgb(255, 253, 247)"); // --on-color
-    });
+    await expect(secondary).toHaveClass(/summary-save-secondary/);
+    const secondaryHeight = await secondary.evaluate(
+      (el) => getComputedStyle(el).height,
+    );
+    expect(secondaryHeight).toBe("48px");
   });
 });
 
