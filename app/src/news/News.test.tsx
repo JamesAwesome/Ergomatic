@@ -153,7 +153,10 @@ describe("News", () => {
     ).toBeVisible();
     expect(container.querySelectorAll(".news-square")).toHaveLength(0);
     expect(screen.queryByText(/UNREAD/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/READ/)).not.toBeInTheDocument();
+    // Word-bounded on purpose: the count label is the target ("3 READ"),
+    // not any copy that happens to contain the letters — the v0.10.0
+    // release note's "screen says READY" item matched the old bare /READ/.
+    expect(screen.queryByText(/\bREAD\b/)).not.toBeInTheDocument();
   });
 
   it("loading state: rows render with no squares and no count either", () => {

@@ -5,6 +5,30 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // Phase CR2 in one build: the totals corrections (#99, #104), the
+    // state-honesty wave (#102, #105, #111), the redesign (#109), and the
+    // builder nudge fix (#108). Item order is rower-priority. The totals
+    // item leads and names WHERE to check, because the same build removes
+    // the live TOTAL M readout the old number lived in — a tester told
+    // "lower and correct" with nowhere to look would file it as a
+    // regression (phase-close gate, 2026-08-16). Wire-walk-confirmed on a
+    // real PM5 (2026-08-17): keystone totals within 0.2m, the rest fix
+    // firing live, the interrupted-session row landing after a real
+    // mid-piece reload.
+    version: "v0.10.0",
+    date: "2026-08-17",
+    items: [
+      "Connected session totals are correct now, and lower. Two counting bugs each inflated the total meters on interval workouts with rests; both are fixed, so the number you see should finally match the erg's own. Check it on the log screen after a session, or in the diagnostics sheet's SESSION line mid-row.",
+      "The connected screen is rebuilt around two big judged numbers. Everything the PM5 already shows in the same glance left the phone: the interval countdown, running meters, and raw heart rate now live on the GRID view, one tap away on the new LIVE and GRID switch at the top (bottom bar in portrait).",
+      "Before your first stroke the screen says READY, shows your target as a ghost, and a session bar draws every interval to scale so you can see the whole piece at a glance.",
+      "The bottom line always tells you what is next: NEXT, then the piece or the rest, and NEXT FINISH when it is the last one.",
+      "Stopping mid-piece reads honestly. The screen says PULL TO RESUME, nothing more: the erg has no pause and its clock keeps running, and the app stopped pretending otherwise.",
+      "A reload or crash mid-session no longer strands your row. Today shows the interrupted session with Log it and Discard, and Log it records the time you actually rowed, never the time the app was closed.",
+      "Connect and Start stopped warning that a session is in progress when what you have is an unlogged one. The buttons now say what will actually happen.",
+      "In the builder, the pace nudge arrows follow the number: up makes the number bigger, down smaller, whichever field you are in.",
+    ],
+  },
+  {
     // The connected-mode revamp (#89) plus the two that landed beside it,
     // the Library's filter unification (#87) and the article-state fix
     // (#88). Item order is rower-priority, not merge order. Every
