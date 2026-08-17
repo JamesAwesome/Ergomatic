@@ -6173,23 +6173,18 @@ section:not(.news-pinned) .news-row:last-of-type {
   border: 1px solid var(--ink);
 }
 
-/* KNOWN INTERIM GAP, NOT SILENTLY PAPERED OVER (found in this task's own
-   screenshot sweep, `connected-disconnected.html`'s portrait capture — CR2
-   spec 3 task 1): now that this line shares the header row with End
-   (`ConnectedSurface.tsx`'s own header comment), its available width is the
-   header's narrower remainder, not the pane's full content column the line
-   used to render in. `deviceCaption` grows from `PM5 <id>` to
-   `PM5 <id> · LOST` at the one status that actually reaches this width
-   (`surfaceModel.ts`), and at that length it wraps this row onto a second
-   line in portrait rather than overflowing.
-   A `text-overflow: ellipsis` version was tried and reverted: it hid the
-   word "LOST" itself behind the ellipsis, which is strictly worse than a
-   wrap — the ONE word on this whole surface that has to stay legible when
-   the link is down must never be the one a layout fix truncates away. So
-   this stays a wrap: the header's `auto` row height absorbs it, nothing
-   clips, and the fix that actually belongs here is shortening or resizing
-   the string itself (Task 2's model differentiation, `--c-size-status`),
-   not a CSS truncation on this element. */
+/* HISTORY, RESOLVED (Task 6 fix round): this comment once recorded a
+   "known interim gap" — the device caption sharing the header row with the
+   status and End, wrapping (and, measured later, PAINTING PAST its shrunk
+   box) at `PM5 <id> · LOST` width. The structural fix was §2C's own
+   layout: in portrait the STATUS caption moved onto its own line below the
+   header (`.connected-line-trailing`'s `order: 2; flex-basis: 100%`), so
+   this line shares its row only with End and fits at every shipped string,
+   `· LOST` included. The painted-glyph collision witness in
+   `design.spec.ts` (Range.getClientRects, both worst-string fixtures)
+   guards the axis; an earlier `text-overflow: ellipsis` attempt stays
+   rejected — it hid the word "LOST", the one word that must survive a
+   layout fix. */
 /* `--c-size-control` (13px both orientations, design spec §1's role
    mapping and its own type-scale note: "13 control & id" is ONE role, not
    two) — CR2 spec 3 Task 6 wires this off the stale literal 11px/ink-3 the
