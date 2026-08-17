@@ -2225,6 +2225,41 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     expect(screen.getByText(MANUAL_TOTAL_LABEL)).toBeInTheDocument();
   });
 
+  // Queue item 2 (PR #105's final-review Minor 3), test half ONLY: a
+  // legacy v1 (logSeed-less) MonitorRun that the rower closed through
+  // Today's interrupted-row door (F6, `endedBy: "interrupted"`) also
+  // stamps `completedAt` — condition 2 of `monitorModeRun`'s own gate
+  // passes (a finished record for this workout), but condition 4 fails
+  // exactly like the malformed-actuals case above: `buildMonitorLogSteps`
+  // throws (no `logSeed` to build steps from), so the record falls
+  // through to the SAME manual door. Named here as INTENDED, not a
+  // defect: a v1 record predates `logSeed` entirely and there is no
+  // program-derived content this door could show beyond the plain manual
+  // form. Whether the manual door's own Save should ALSO clear this now-
+  // unreachable stale MonitorRun record is an open product question,
+  // explicitly reserved for James (PR #105 review Minor 3) — this test
+  // deliberately implements and asserts NO clearing behavior either way.
+  it("a legacy v1 interrupted MonitorRun falls through gate 4 to the manual door, intended (queue item 2)", async () => {
+    const { run } = buildMonitorFixture();
+    const { logSeed: _drop, ...v1Shaped } = run;
+    saveMonitorRun({
+      ...v1Shaped,
+      v: 1,
+      endedBy: "interrupted",
+    });
+    const workout = manualWorkoutFixture(MONITOR_WORKOUT_ID);
+    mockWorkouts([workout]);
+    mockBaselines();
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+
+    expect(
+      await screen.findByRole("heading", { name: "Log Hoarfrost" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/FROM PM5/)).not.toBeInTheDocument();
+    expect(document.querySelector(".log-from-monitor")).toBeNull();
+    expect(screen.getByText(MANUAL_TOTAL_LABEL)).toBeInTheDocument();
+  });
+
   it("POSTs the pm5 steps verbatim (actualSource, avgHr, actualSeconds, actualMeters) plus deviceName, and clears MonitorRun exactly once on success", async () => {
     const { run, workout } = buildMonitorFixture();
     saveMonitorRun(run);
