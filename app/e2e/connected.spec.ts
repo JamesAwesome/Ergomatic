@@ -801,10 +801,10 @@ test.describe("Phase 7B Task 8: the connected walk, fake-driven — landscape (8
     // `max(20px, env(safe-area-inset-top))`, not a bare `env()` that
     // resolved to 0 in this zero-inset harness — the control's own y is
     // now EXACTLY 20 here (the floor), not "well under 20" the way the
-    // bare-`env()` version measured. `toBeLessThanOrEqual`, not a tighter
-    // equality, so a genuine future inset (which only grows the term)
-    // still satisfies "at the very top of the frame."
-    expect(controlBox!.y).toBeLessThanOrEqual(20);
+    // bare-`env()` version measured. Exact, not a `<=` loosening (review
+    // finding: a `<=` bound is satisfied by a flush-top 0 too, which is
+    // the exact regression this rule exists to catch).
+    expect(controlBox!.y).toBeCloseTo(20, 0);
 
     await walkSurfaceToLog(page, title, deviceName);
     await cleanupByTitle(page, title);

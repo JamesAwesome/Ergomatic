@@ -5463,65 +5463,6 @@ test.describe("connected screens (fake-driven)", () => {
       await cleanupAllConnected(page, title);
     });
 
-    // Queue item 6 (close-out, James's device screenshot): screenshots
-    // alone cannot prove this fix — Chromium reports every
-    // `env(safe-area-inset-*)` as `0px` without a CDP override (this
-    // file's own comment above), so the band sits at the SAME pixel in
-    // every committed capture, before and after. The geometric claim,
-    // measured directly against BOTH the fixed and the pre-fix source
-    // (checked out ad hoc, this task, since `.connected-pane`'s own
-    // `justify-content: space-between` is not obvious to hand-derive):
-    // pre-fix, the reservation lived on `.connected-surface`'s own
-    // padding, which shrank the pane's available height as the inset
-    // grew, and `space-between` pins the band's own border-box bottom
-    // to the pane's own content-box bottom — so the band's box climbed
-    // AWAY from the physical edge as the inset grew (measured: 376px at
-    // inset 0, 355px at inset 21 — it LOST the exact 21px the inset
-    // spent). Post-fix, the reservation lives inside the band's own
-    // padding-bottom instead, which `space-between` positioning cannot
-    // see (padding is interior to the box the anchoring targets), so
-    // the pane's available height — and therefore the band's own
-    // anchored position — stops depending on the inset at all: the band
-    // holds its ground at 376px regardless of how large the inset is.
-    // THAT invariance is "the band owns the bottom edge": it no longer
-    // retreats from a growing safe-area reservation.
-    test("queue item 6: the band's own anchored position stops retreating from a growing bottom inset — landscape (844x390)", async ({
-      page,
-    }) => {
-      const title = "Design Connected Band Bottom Inset Workout";
-      await page.setViewportSize({ width: 844, height: 390 });
-      await injectConnectedFake(page, ROWING_STORY);
-      await openConnected(
-        page,
-        title,
-        "design-connected-band-bottom-inset@e2e.test",
-      );
-      await walkToSurface(page);
-      await pumpUntilText(page, "2 OF 5");
-
-      const client = await page.context().newCDPSession(page);
-      async function measure(bottom: number) {
-        await client.send("Emulation.setSafeAreaInsetsOverride", {
-          insets: { top: 0, left: 0, bottom, right: 0 },
-        });
-        await page.evaluate(
-          () => new Promise((r) => requestAnimationFrame(() => r(null))),
-        );
-        const band = await page.locator(".connected-band").boundingBox();
-        return band!.y + band!.height;
-      }
-
-      const zero = await measure(0);
-      const withInset = await measure(21);
-
-      // Pre-fix this delta was -21 (measured directly): the band's own
-      // box retreated from the edge by exactly the inset. Post-fix it is
-      // pinned regardless of inset magnitude.
-      expect(withInset).toBeCloseTo(zero, 0);
-
-      await cleanupAllConnected(page, title);
-    });
-
     test("under real portrait insets the live pane does not clip, and TOTAL LEFT is still inside it (390x844)", async ({
       page,
     }) => {
@@ -6235,6 +6176,10 @@ test.describe("connected screens (fake-driven)", () => {
       const text = await value.innerText();
       expect(text.replace(/\s+/g, " ").trim()).toBe("WORK 2:06.0 · REST 3:00");
       await expect(page.locator(".connected-band-upnext-then")).toBeHidden();
+      // Queue item 7: portrait keeps its own stacked UP NEXT label above,
+      // so the landscape-only "NEXT · " prefix stays hidden here too — no
+      // double-labeling.
+      await expect(page.locator(".connected-band-upnext-next")).toBeHidden();
 
       const overflow = await value.evaluate((el) => ({
         scrollWidth: el.scrollWidth,

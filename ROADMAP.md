@@ -1850,10 +1850,15 @@ construction underpins). **(5)-(7), James's walk-day flags (2026-08-17,
 from the mobile-view screenshot):** (5) the landscape header sits flush
 with the top edge where the safe-area inset is 0 — §2A's own 20px top
 padding was dropped in favor of the bare inset; fix is
-`max(20px, env(safe-area-inset-top))`; (6) dead space below the band —
-the empty footer track plus the home-indicator inset reserve height under
-FINISH; the band should own the bottom edge (its padding absorbs the
-inset); (7) the landscape up-next line prepends `NEXT · ` ALWAYS
+`max(20px, env(safe-area-inset-top))`; (6) dead space below the band,
+MEASURED (close-out fix round, 2026-08-17): the visible gap under the
+band = the pane's own 12px design padding (§2A's stated bottom padding)
++ the device's home-indicator inset; shrinking it means overriding the
+handoff's own 12px in landscape and/or letting content approach the
+indicator zone — James rules ON DEVICE at the phone pass; the
+2026-08-17 close-out's first attempt moved the inset into the band's
+unpainted box and changed nothing, reverted; (7) the landscape up-next
+line prepends `NEXT · ` ALWAYS
 (`NEXT · REST 3:00 · then WORK 2:09.0`, `NEXT · FINISH`) — James's
 ruling direction: a bare `FINISH` floats without the label layer, and
 uniform beats special-casing; portrait keeps its stacked `UP NEXT` label,
