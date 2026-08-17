@@ -335,7 +335,25 @@ describe("WorkoutDetail", () => {
     expect(screen.getByText("2:00.0")).toBeInTheDocument();
   });
 
-  it("shifts the resolved split one second faster after a single ▲ (faster) nudge", async () => {
+  it("the arrows follow the number (James, 2026-08-16): ▲ is the slower/+1s button, ▼ the faster/−1s one", async () => {
+    mockHooks(BASELINES);
+    await renderDetail();
+
+    const slower = screen.getAllByRole("button", { name: "Nudge slower" })[0]!;
+    const faster = screen.getAllByRole("button", { name: "Nudge faster" })[0]!;
+    // The glyph-to-direction pairing is the whole ruling: up reads as "the
+    // number goes up" (2:09 -> 2:10, slower), down as "it goes down"
+    // (2:09 -> 2:08, faster) — NOT up-equals-harder.
+    expect(slower).toHaveTextContent("▲");
+    expect(faster).toHaveTextContent("▼");
+
+    await userEvent.click(slower);
+    // Baseline-resolved 2:00.0 + 1s. Hardcoded, not recomputed via
+    // resolveSplit/fmtSplit (that would be tautological).
+    expect(screen.getByText("2:01.0")).toBeInTheDocument();
+  });
+
+  it("shifts the resolved split one second faster after a single ▼ (faster) nudge", async () => {
     mockHooks(BASELINES);
     await renderDetail();
 
@@ -347,7 +365,7 @@ describe("WorkoutDetail", () => {
     expect(screen.getByText(/nudged −1s/)).toBeInTheDocument();
   });
 
-  it("labels a single ▼ (slower) press from neutral as a +1s nudge", async () => {
+  it("labels a single ▲ (slower) press from neutral as a +1s nudge", async () => {
     mockHooks(BASELINES);
     await renderDetail();
 
