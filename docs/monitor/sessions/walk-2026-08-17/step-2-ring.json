@@ -1,0 +1,207 @@
+[
+{
+"seq": 0,
+"kind": "write",
+"detail": "f1 76 04 13 02 01 02 60 f2"
+},
+{
+"seq": 1,
+"kind": "ack",
+"detail": "f1 81 76 01 13 e5 f2 slaveState=ready"
+},
+{
+"seq": 2,
+"kind": "prepare-sent",
+"detail": "1 frame(s) acked"
+},
+{
+"seq": 3,
+"kind": "write",
+"detail": "f1 76 3b 18 01 00 01 01 08 17 01 01 03 05 80 00 00 00 fa 04"
+},
+{
+"seq": 4,
+"kind": "write",
+"detail": "02 00 00 06 04 00 00 32 64 14 01 01 18 01 01 17 01 01 03 05"
+},
+{
+"seq": 5,
+"kind": "write",
+"detail": "80 00 00 00 fa 04 02 00 00 06 04 00 00 32 64 14 01 01 13 02"
+},
+{
+"seq": 6,
+"kind": "write",
+"detail": "01 01 55 f2"
+},
+{
+"seq": 7,
+"kind": "ack",
+"detail": "f1 01 76 0e 18 01 17 03 04 06 14 18 17 03 04 06 14 13 6b f2 slaveState=ready"
+},
+{
+"seq": 8,
+"kind": "programmed",
+"detail": "1 frame(s) acked"
+},
+{
+"seq": 9,
+"kind": "notify-first",
+"detail": "0x0031 (19B)"
+},
+{
+"seq": 10,
+"kind": "structure",
+"detail": "workoutType=8 durationRaw=250 durationType=128 raw=00 00 00 00 00 00 08 01 00 00 00 00 00 00 fa 00 00 80 00"
+},
+{
+"seq": 11,
+"kind": "twd-sample",
+"detail": "machineTotal=0m at elapsed=0s distance=0m workoutState=0 durationRaw=250 durationType=128"
+},
+{
+"seq": 12,
+"kind": "armed",
+"detail": "programmed 2 interval(s)"
+},
+{
+"seq": 13,
+"kind": "notify-first",
+"detail": "0x0032 (17B)"
+},
+{
+"seq": 14,
+"kind": "notify-first",
+"detail": "0x0033 (20B)"
+},
+{
+"seq": 15,
+"kind": "twd-sample",
+"detail": "machineTotal=0m at elapsed=0s distance=0m workoutState=0 durationRaw=250 durationType=128"
+},
+{
+"seq": 16,
+"kind": "frame",
+"detail": "state=armed elapsed=0 distance=0 rowingActive=false spm=0"
+},
+{
+"seq": 17,
+"kind": "frame",
+"detail": "state=rowing elapsed=1.1 distance=3.9 rowingActive=true spm=0"
+},
+{
+"seq": 18,
+"kind": "notify-first",
+"detail": "0x0037 (18B)"
+},
+{
+"seq": 19,
+"kind": "split-half",
+"detail": "0x0037 for Split/Interval Number 1 received (run open, state=rowing)"
+},
+{
+"seq": 20,
+"kind": "notify-first",
+"detail": "0x0038 (19B)"
+},
+{
+"seq": 21,
+"kind": "split-half",
+"detail": "0x0038 for Split/Interval Number 1 received (run open, state=rowing)"
+},
+{
+"seq": 22,
+"kind": "interval-complete",
+"detail": "index=0 (machine reported 1)"
+},
+{
+"seq": 23,
+"kind": "record-actual",
+"detail": "index=0 finalBoundary=false recordClosed=false -> accepted (actuals 0 -> 1)"
+},
+{
+"seq": 24,
+"kind": "divergence",
+"detail": "intervalIndex=0 (0x0033) vs actual.index=1 (0x0037/38)"
+},
+{
+"seq": 25,
+"kind": "twd-sample",
+"detail": "machineTotal=250m at elapsed=0s distance=0m workoutState=5 durationRaw=250 durationType=128"
+},
+{
+"seq": 26,
+"kind": "twd-sample",
+"detail": "machineTotal=500m at elapsed=12.32s distance=9.7m workoutState=5 durationRaw=250 durationType=128"
+},
+{
+"seq": 27,
+"kind": "twd-sample",
+"detail": "machineTotal=250m at elapsed=13.93s distance=13.7m workoutState=5 durationRaw=250 durationType=128"
+},
+{
+"seq": 28,
+"kind": "notify",
+"detail": "0x0037 2f 1d 00 c4 09 00 eb 02 00 fa 00 00 00 00 00 00 01 02"
+},
+{
+"seq": 29,
+"kind": "split-half",
+"detail": "0x0037 for Split/Interval Number 2 received (run open, state=rowing)"
+},
+{
+"seq": 30,
+"kind": "notify",
+"detail": "0x0038 2f 1d 00 18 59 00 d6 05 0f 00 95 02 12 0d 69 00 67 02 00"
+},
+{
+"seq": 31,
+"kind": "split-half",
+"detail": "0x0038 for Split/Interval Number 2 received (run open, state=rowing)"
+},
+{
+"seq": 32,
+"kind": "interval-complete",
+"detail": "index=1 (machine reported 2)"
+},
+{
+"seq": 33,
+"kind": "record-actual",
+"detail": "index=1 finalBoundary=false recordClosed=false -> accepted (actuals 1 -> 2)"
+},
+{
+"seq": 34,
+"kind": "divergence",
+"detail": "intervalIndex=1 (0x0033) vs actual.index=2 (0x0037/38)"
+},
+{
+"seq": 35,
+"kind": "twd-sample",
+"detail": "machineTotal=500m at elapsed=74.71s distance=250m workoutState=10 durationRaw=250 durationType=128"
+},
+{
+"seq": 36,
+"kind": "frame",
+"detail": "state=finished elapsed=74.71 distance=250 rowingActive=true spm=27"
+},
+{
+"seq": 37,
+"kind": "final-totals",
+"detail": "accumulator=499.8m accumulatorElapsed=138.9s machineTotal=500m durationType=128 registers=2 of 2 programmed 0:(64.2s,249.8m) 1:(74.7s,250m)"
+},
+{
+"seq": 38,
+"kind": "terminal-raw",
+"detail": "state=finished 0x0031=2f 1d 00 c4 09 00 08 01 0a 01 04 f4 01 00 fa 00 00 80 66"
+},
+{
+"seq": 39,
+"kind": "terminal",
+"detail": "finished"
+},
+{
+"seq": 40,
+"kind": "summary-reconciled",
+"detail": "split-won \u2014 interval 1 was already recorded when the 3000ms finish grace closed (no 0x0039 was being held \u2014 one may still have ARRIVED and been refused storage; check for an out-of-window entry above before reading this as \"the summary never came\")"
+}
+]
