@@ -862,7 +862,7 @@ describe("WorkoutDetail", () => {
       expect(draft!.workoutId).toBe("w1");
     });
 
-    it("LIVE: Start stages the 'in progress' sentence — the erg is mid-piece, not finished", async () => {
+    it("LIVE-looking MonitorRun: Start stages the unlogged sentence, not 'in progress' — any MonitorRun at this door is dead (queue item 3, F6 spec 2b, exit criterion 5)", async () => {
       mockHooks(BASELINES);
       const live = monitorRunFor(null);
       saveMonitorRun(live);
@@ -873,12 +873,12 @@ describe("WorkoutDetail", () => {
       );
 
       expect(
-        screen.getByText("A session is in progress. Replace it?"),
-      ).toBeInTheDocument();
-      expect(
-        screen.queryByText(
+        screen.getByText(
           "You have an unlogged session. Starting a new one discards it.",
         ),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText("A session is in progress. Replace it?"),
       ).not.toBeInTheDocument();
       expect(loadMonitorRun()).toStrictEqual(live);
     });

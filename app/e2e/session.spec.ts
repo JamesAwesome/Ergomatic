@@ -1292,7 +1292,7 @@ test.describe("Phase 7B Task 2: Start over a connected session's record (the F5 
     expect(await monitorRunRaw(page)).toBeNull();
   });
 
-  test("a LIVE monitor run (the erg is mid-piece) stages the 'in progress' sentence instead", async ({
+  test("a LIVE-looking monitor run stages the unlogged sentence, not 'in progress': any MonitorRun at this door is dead (queue item 3, F6 spec 2b, exit criterion 5)", async ({
     page,
   }) => {
     await signInViaBackdoor(page, {
@@ -1307,12 +1307,12 @@ test.describe("Phase 7B Task 2: Start over a connected session's record (the F5 
     await page.getByRole("button", { name: "Start" }).click();
 
     await expect(
-      page.getByText("A session is in progress. Replace it?"),
-    ).toBeVisible();
-    await expect(
       page.getByText(
         "You have an unlogged session. Starting a new one discards it.",
       ),
+    ).toBeVisible();
+    await expect(
+      page.getByText("A session is in progress. Replace it?"),
     ).toHaveCount(0);
     expect(await monitorRunRaw(page)).toBe(before);
   });

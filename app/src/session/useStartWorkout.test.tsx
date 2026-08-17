@@ -191,7 +191,7 @@ describe("useStartWorkout", () => {
     expect(result.current.replaceStage).toBe("unlogged");
   });
 
-  it("stages 'in-progress' for a LIVE MonitorRun (completedAt null)", () => {
+  it("stages 'unlogged' for a LIVE-looking MonitorRun (completedAt null): any MonitorRun at this door is dead (queue item 3, F6 spec 2b, exit criterion 5)", () => {
     saveMonitorRun(monitorRunFor(null));
     const { result } = renderHook(() => useStartWorkout(WORKOUT, {}), {
       wrapper,
@@ -199,7 +199,7 @@ describe("useStartWorkout", () => {
 
     act(() => result.current.handleStart());
 
-    expect(result.current.replaceStage).toBe("in-progress");
+    expect(result.current.replaceStage).toBe("unlogged");
   });
 
   it("cancelReplace clears the staged panel and touches no storage", () => {
@@ -209,7 +209,7 @@ describe("useStartWorkout", () => {
       wrapper,
     });
     act(() => result.current.handleStart());
-    expect(result.current.replaceStage).toBe("in-progress");
+    expect(result.current.replaceStage).toBe("unlogged");
 
     act(() => result.current.cancelReplace());
 
