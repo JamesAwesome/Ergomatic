@@ -314,7 +314,21 @@ function makeFakeLogsStore(planState: FakePlanStateStore): LogsStore {
       // whole `input` here used to leak it into this fake's `list` (and thus
       // `GET /api/logs`) — a shape production can never produce.
       const { advancesPlan, ...stored } = input;
-      const row = { ...stored, id: crypto.randomUUID(), loggedAt: new Date() };
+      // Post-workout-summary spec (2026-08-17), §3: mirrors the real
+      // store's `thumbs: input.thumbs ?? null` (stores/logs.ts's own
+      // `create`) — `thumbs` is OPTIONAL on `LogInput` (absent means
+      // "not provided", same as `deviceName`), but the real column always
+      // reads back either a real value or null, never an absent key.
+      // Spreading `stored` as-is would leave the key off the row entirely
+      // when the caller omitted it, a shape the real store can never
+      // produce — the exact class of fake/real drift this contract suite
+      // exists to catch.
+      const row = {
+        ...stored,
+        thumbs: stored.thumbs ?? null,
+        id: crypto.randomUUID(),
+        loggedAt: new Date(),
+      };
       rows.unshift(row);
       byUser.set(userId, rows);
       // Task 3: mirrors the real store's `if (input.advancesPlan)` guard

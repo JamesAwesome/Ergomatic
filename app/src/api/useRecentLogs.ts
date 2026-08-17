@@ -7,7 +7,14 @@ import type { WorkoutType } from "../../domain/types.js";
 // (useWorkouts.ts's LibraryWorkout, usePreferences.ts's PreferencesData)
 // rather than importing the server's row type, keeping src/ independent of
 // server/'s module graph (drizzle-orm, the db schema) entirely.
+// UNDER = FASTER than target (under the target NUMBER), OVER = SLOWER
+// (post-workout-summary spec, ruling option B, James 2026-08-17): stored
+// members unchanged, only the button labels/direction reading changed.
+// Mirrored at the options array (LogSession.tsx's HELD_OPTIONS), the
+// server's own copy (server/stores/logs.ts), and the pgEnum
+// (server/db/schema.ts's `heldResultEnum`).
 export type HeldResult = "held" | "under" | "over";
+export type Thumbs = "up" | "down";
 
 export interface RecentLog {
   id: string;
@@ -20,6 +27,11 @@ export interface RecentLog {
   // one, so an already-installed client never white-screens on it.
   held: HeldResult | null;
   pain: number | null;
+  // Post-workout-summary spec (2026-08-17), §3: nullable from day one —
+  // this column never had non-null historical data to be backward
+  // compatible with (thumbs is new, not loosened), so there is no
+  // sequencing concern like `held`/`pain`'s R-A.
+  thumbs: Thumbs | null;
 }
 
 export type RecentLogsState =

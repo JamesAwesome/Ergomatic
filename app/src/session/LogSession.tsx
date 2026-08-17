@@ -11,7 +11,7 @@ import { useWorkouts, type LibraryWorkout } from "../api/useWorkouts";
 import { useBaselines } from "../api/useBaselines";
 import { usePlan } from "../api/usePlan";
 import type { PlanData } from "../api/usePlan";
-import type { HeldResult } from "../api/useRecentLogs";
+import type { HeldResult, Thumbs } from "../api/useRecentLogs";
 import { fmtSplit } from "../../domain/format.js";
 import { estimateMinutes } from "../../domain/expand.js";
 import { isEffortRef } from "../../domain/pace.js";
@@ -44,6 +44,14 @@ import { useStagedDiscard } from "./useStagedDiscard";
 import BackLink from "../shell/BackLink";
 import TypeBadge from "../components/TypeBadge";
 
+// UNDER = FASTER than target (under the target NUMBER), OVER = SLOWER
+// (post-workout-summary spec, ruling option B, James 2026-08-17): stored
+// values unchanged, only the button labels/direction reading changed.
+// Mirrored at both HeldResult copies (server/stores/logs.ts,
+// src/api/useRecentLogs.ts) and the pgEnum (server/db/schema.ts's
+// `heldResultEnum`). Task 5 (this spec's screen rebuild) owns the actual
+// label text change (`HELD` / `UNDER · FASTER` / `OVER · SLOWER`) — this
+// task only touches form state, not rendering.
 const HELD_OPTIONS: { value: HeldResult; label: string }[] = [
   { value: "held", label: "HELD" },
   { value: "under", label: "UNDER" },
@@ -500,6 +508,11 @@ interface LogFormFields {
 function useLogForm(onSaved: () => void, workoutTitle: string = "") {
   const [held, setHeld] = useState<HeldResult | null>(null);
   const [pain, setPain] = useState<number | null>(null);
+  // Post-workout-summary spec (2026-08-17), §3: `thumbs` joins the
+  // held/pain/notes quintet — clearable the same way (tap the selected
+  // option again to return to null), same reason as its siblings: it must
+  // survive a failed save without forcing the rower to re-pick it.
+  const [thumbs, setThumbs] = useState<Thumbs | null>(null);
   const [notes, setNotes] = useState("");
   const [outsidePlan, setOutsidePlan] = useState(() =>
     isOnboardingTitle(workoutTitle),
@@ -508,17 +521,19 @@ function useLogForm(onSaved: () => void, workoutTitle: string = "") {
   const [saveError, setSaveError] = useState<string | null>(null);
 
   async function submit(fields: LogFormFields) {
-    // Defensive, not reachable via the UI: the Save button's own
-    // `disabled={... || held === null || pain === null}` already keeps a
-    // click from firing this at all (same convention as Today.tsx's own
-    // `handleShuffle` guard comment).
-    if (held === null || pain === null) return;
+    // Post-workout-summary spec (2026-08-17), §3: the reflection card is
+    // now entirely optional (James's ruling) — Save is never gated on
+    // held/pain/thumbs being chosen (the Save button's own `disabled` prop
+    // now reads only `saving`). held/pain go on the wire as their raw
+    // state, null included; the server stores null the same way it already
+    // does for `notes`/`deviceName`.
     setSaving(true);
     setSaveError(null);
     const body: Record<string, unknown> = {
       ...fields,
       held,
       pain,
+      thumbs,
       notes: notes.trim().length > 0 ? notes : null,
     };
     if (outsidePlan) body.advancesPlan = false;
@@ -579,6 +594,8 @@ function useLogForm(onSaved: () => void, workoutTitle: string = "") {
     setHeld,
     pain,
     setPain,
+    thumbs,
+    setThumbs,
     notes,
     setNotes,
     outsidePlan,
@@ -846,7 +863,11 @@ function LogScreen({
           type="button"
           className="button-primary log-save"
           onClick={() => void onSave()}
-          disabled={saving || held === null || pain === null}
+          // Post-workout-summary spec (2026-08-17), §3: Save is never
+          // disabled by an empty reflection (James's ruling — the redesigned
+          // card makes HELD/PAIN/THUMBS all optional). The only remaining
+          // gate is the in-flight request itself.
+          disabled={saving}
         >
           Save session
         </button>

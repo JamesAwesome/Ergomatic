@@ -568,23 +568,33 @@ describe("LogSession: prefill from a real completed run", () => {
     // run.workoutId, not the rower's own (still-unset) selection.
     expect(screen.getByText("EXPECTED 2/5")).toBeInTheDocument();
 
-    // Nothing pre-selected; Save is disabled until both are chosen.
+    // Nothing pre-selected; Save is enabled anyway — post-workout-summary
+    // spec (2026-08-17), §3: the redesigned reflection card makes every
+    // answer optional, so Save is never gated on HELD/PAIN being chosen.
     expect(screen.getByRole("button", { name: "HELD" })).toHaveAttribute(
       "aria-pressed",
       "false",
     );
-    expect(screen.getByRole("button", { name: "Save session" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Save session" }),
+    ).not.toBeDisabled();
   });
 
-  it("Save enables once both Held and Pain are chosen", async () => {
+  // Post-workout-summary spec (2026-08-17), §3 ruling: Save is never
+  // disabled by an empty reflection — this test's own premise inverted
+  // (it used to prove the OPPOSITE, that Save stayed disabled until both
+  // were chosen). Choosing HELD/PAIN is still fully possible; it just no
+  // longer gates Save.
+  it("Save stays enabled throughout, whether or not Held and Pain are chosen (spec: reflection is optional)", async () => {
     const { workout } = buildSessionFixture();
     mockWorkouts([workout]);
     await renderLog();
     await screen.findByText("AUG 1 · 30 MIN");
 
     const save = screen.getByRole("button", { name: "Save session" });
+    expect(save).not.toBeDisabled();
     await userEvent.click(screen.getByRole("button", { name: "UNDER" }));
-    expect(save).toBeDisabled();
+    expect(save).not.toBeDisabled();
     await userEvent.click(screen.getByRole("button", { name: "Pain 3" }));
     expect(save).not.toBeDisabled();
     expect(screen.getByRole("button", { name: "UNDER" })).toHaveAttribute(
@@ -1024,6 +1034,40 @@ describe("LogSession: save", () => {
 
     expect(loadDraft()).toBeNull();
     expect(loadRun()).toBeNull();
+  });
+
+  // Post-workout-summary spec (2026-08-17), §3: Save with NOTHING chosen —
+  // no HELD, no PAIN, no THUMBS (the last has no UI control yet, this
+  // task's own scope: Task 5 builds the reflection card) — still saves,
+  // and the wire body carries explicit nulls rather than omitting the
+  // keys, matching the server's own null-tolerant POST contract.
+  it("POSTs held/pain/thumbs as null when nothing is chosen (spec: reflection is optional)", async () => {
+    const { run, workout } = buildSessionFixture();
+    mockWorkouts([workout]);
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-1" }), { status: 201 }),
+      ),
+    );
+    await renderLog();
+    await screen.findByText("AUG 1 · 30 MIN");
+
+    await userEvent.click(screen.getByRole("button", { name: "Save session" }));
+
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+    expect(apiFn).toHaveBeenCalledTimes(1);
+    const [, init] = apiFn.mock.calls[0]!;
+    const body = JSON.parse((init as RequestInit).body as string) as Record<
+      string,
+      unknown
+    >;
+    expect(body).toMatchObject({
+      workoutId: run.workoutId,
+      held: null,
+      pain: null,
+      thumbs: null,
+      notes: null,
+    });
   });
 
   // IMP-5 (whole-branch review): a wire-shape test, through an actual Save
@@ -1499,7 +1543,12 @@ describe("LogSession: the manual door (Task 3)", () => {
     // session door's `resolveWorkoutType`/`expectedPain`).
     expect(screen.getByText("EXPECTED 2/5")).toBeInTheDocument();
 
-    expect(screen.getByRole("button", { name: "Save session" })).toBeDisabled();
+    // Post-workout-summary spec (2026-08-17), §3: Save is never disabled by
+    // an empty reflection (nothing pre-selected here) — same ruling as the
+    // session door's own equivalent test above.
+    expect(
+      screen.getByRole("button", { name: "Save session" }),
+    ).not.toBeDisabled();
     // The brief's own words: "no Discard button (nothing to discard)."
     expect(
       screen.queryByRole("button", { name: /discard/i }),

@@ -14,6 +14,7 @@ import type {
   HeldResult,
   LogsStore,
   LogStep,
+  Thumbs,
 } from "../stores/logs.js";
 import type { PlanKey, PlanStateStore } from "../stores/planState.js";
 import type {
@@ -42,6 +43,7 @@ export interface DataRouterDeps {
 const DIFFICULTIES: Difficulty[] = ["easy", "medium", "hard"];
 const ACTUAL_SOURCES: ActualSource[] = ["assumed", "stopwatch", "pm5"];
 const HELD_RESULTS: HeldResult[] = ["held", "under", "over"];
+const THUMBS_VALUES: Thumbs[] = ["up", "down"];
 const PLAN_KEYS: PlanKey[] = ["sprint", "head"];
 const ACCENT_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 // The warm-up setting's bounds (2026-08-09 design §2). NOTE: these are NOT
@@ -599,17 +601,38 @@ export function createDataRouter({
       }
       workoutId = body.workoutId;
     }
-    if (!HELD_RESULTS.includes(body.held as HeldResult)) {
-      badRequest(res, "held must be one of held|under|over", "held");
+    // Post-workout-summary spec (2026-08-17), §3: every reflection field is
+    // now optional — the redesigned card never forces a HELD/PAIN/THUMBS
+    // choice (James's ruling). Absent (undefined) OR explicit null both
+    // store null; anything else must be a genuine member of the enum, still
+    // 400 with the field named on a bad value. This is additive-compatible:
+    // the old shape (held+pain always present) still validates identically,
+    // so a v0.10.0/v0.10.1 client keeps working unchanged.
+    if (
+      body.held !== undefined &&
+      body.held !== null &&
+      !HELD_RESULTS.includes(body.held as HeldResult)
+    ) {
+      badRequest(res, "held must be one of held|under|over or null", "held");
       return;
     }
     if (
-      typeof body.pain !== "number" ||
-      !Number.isInteger(body.pain) ||
-      body.pain < 1 ||
-      body.pain > 5
+      body.pain !== undefined &&
+      body.pain !== null &&
+      (typeof body.pain !== "number" ||
+        !Number.isInteger(body.pain) ||
+        body.pain < 1 ||
+        body.pain > 5)
     ) {
-      badRequest(res, "pain must be an integer 1..5", "pain");
+      badRequest(res, "pain must be an integer 1..5 or null", "pain");
+      return;
+    }
+    if (
+      body.thumbs !== undefined &&
+      body.thumbs !== null &&
+      !THUMBS_VALUES.includes(body.thumbs as Thumbs)
+    ) {
+      badRequest(res, "thumbs must be one of up|down or null", "thumbs");
       return;
     }
     if (
@@ -673,12 +696,13 @@ export function createDataRouter({
       workoutType: body.workoutType,
       baselineK2: baselines?.k2Seconds ?? null,
       baselineK6: baselines?.k6Seconds ?? null,
-      held: body.held as HeldResult,
-      pain: body.pain,
+      held: (body.held as HeldResult | null | undefined) ?? null,
+      pain: (body.pain as number | null | undefined) ?? null,
       notes: (body.notes as string | null | undefined) ?? null,
       steps,
       advancesPlan: (body.advancesPlan as boolean | undefined) ?? true,
       deviceName: (body.deviceName as string | undefined) ?? null,
+      thumbs: (body.thumbs as Thumbs | null | undefined) ?? null,
     });
     res.status(201).json({ id });
   });

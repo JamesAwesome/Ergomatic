@@ -64,6 +64,13 @@
       "when": 1786298242144,
       "tag": "0008_strip_wu_steps",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1786992057047,
+      "tag": "0009_brief_kingpin",
+      "breakpoints": true
     }
   ]
 }

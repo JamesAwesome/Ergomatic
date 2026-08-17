@@ -3,7 +3,18 @@ import type { Db } from "../db/index.js";
 import { planState, sessionLogs } from "../db/schema.js";
 
 export type ActualSource = "assumed" | "stopwatch" | "pm5";
+// UNDER = FASTER than target (under the target NUMBER), OVER = SLOWER
+// (post-workout-summary spec, ruling option B, James 2026-08-17): stored
+// members unchanged, only the button labels/direction reading changed.
+// Mirrored at the options array (LogSession.tsx's HELD_OPTIONS), the
+// client's own copy (src/api/useRecentLogs.ts), and the pgEnum
+// (server/db/schema.ts's `heldResultEnum`).
 export type HeldResult = "held" | "under" | "over";
+// Post-workout-summary spec (2026-08-17), §3: the reflection card's
+// thumbs-up/down question. Stored now even though nothing reads it yet
+// (generation's own thumbs consumption is explicitly OUT this phase —
+// spec §4).
+export type Thumbs = "up" | "down";
 
 // Amendment (2026-08-02, Phase 6C Task 1.5): targetSplit is now OPTIONAL (an
 // effort step's frozen split is an estimate, never a prescription — the 5G
@@ -41,10 +52,18 @@ export interface LogInput {
   workoutType: string;
   baselineK2: number | null;
   baselineK6: number | null;
-  held: HeldResult;
-  pain: number;
+  // Post-workout-summary spec (2026-08-17), §3: nullable now (R-A ordered
+  // this after the null-tolerant READ side shipped and tagged v0.10.1) —
+  // the redesigned reflection card makes every answer optional, so a saved
+  // session with no HELD/PAIN chosen is now a real, storable shape, not a
+  // client-side bug.
+  held: HeldResult | null;
+  pain: number | null;
   notes: string | null;
   steps: LogStep[];
+  // Post-workout-summary spec (2026-08-17), §3: optional/nullable, same
+  // shape as `deviceName` below — absent or explicit null both store null.
+  thumbs?: Thumbs | null;
   // Task 3 (outside-plan logging): true (the default the route falls back
   // to when the client omits the field — routes/data.ts) means this log
   // counts toward the active plan's progress, exactly like every log
@@ -106,6 +125,7 @@ export function createLogsStore(db: Db) {
             notes: input.notes,
             steps: input.steps,
             deviceName: input.deviceName ?? null,
+            thumbs: input.thumbs ?? null,
           })
           .returning({ id: sessionLogs.id });
 
