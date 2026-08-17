@@ -51,14 +51,12 @@ import { totalSessionSecondsOf } from "../session/Timer";
 import { ARM_TIMEOUT_MS } from "../session/useStagedDiscard";
 import { commentStrippedSource, type CssRule, cssRules } from "../test/cssView";
 import { buildSurfaceModel } from "./connected/surfaceModel";
-import { PANES } from "./connected/PagerRail";
+import { PANES } from "./connected/SegmentedControl";
 import ConnectedInterstitial from "./ConnectedInterstitial";
 import ConnectedSurface, {
   DEFAULT_PANE,
   LAST_PANE_KEY,
-  SWIPE_THRESHOLD_PX,
   loadLastPane,
-  paneAfterSwipe,
 } from "./ConnectedSurface";
 
 // A spy over the REAL implementation, not a stub (the same
@@ -255,17 +253,12 @@ function renderSurface(
   return { ...view, session: current, onEnded };
 }
 
-/** The rail is the fallback; these are its two targets by accessible name
- *  (the visible long/short label pair is `aria-hidden` — both ship in
- *  every orientation, so neither can be the name). */
-function railButton(pane: "Live" | "Grid") {
+/** The segmented control's two halves, by accessible name (the visible
+ *  `LIVE`/`GRID` word is `aria-hidden` — RULING, antagonist correction 2:
+ *  the names carry over from the retired `PagerRail` unchanged, since ~27
+ *  selectors across unit/e2e/fixtures already anchor on them). */
+function controlHalf(pane: "Live" | "Grid") {
   return screen.getByRole("button", { name: `${pane} pane` });
-}
-
-function swipe(deltaX: number): void {
-  const surface = document.querySelector(".connected-surface")!;
-  fireEvent.touchStart(surface, { touches: [{ clientX: 200 }] });
-  fireEvent.touchEnd(surface, { changedTouches: [{ clientX: 200 + deltaX }] });
 }
 
 beforeEach(() => {
@@ -344,11 +337,12 @@ describe("armed's first frame, in the DOM (I-1)", () => {
       // armed suppression were removed.
       frame: frame({ state: "armed" }),
     });
-    // Pane defaults to "live" (`DEFAULT_PANE`): read pane B's own TOTAL
-    // LEFT bar value directly.
-    expect(document.querySelector(".timer-total-value")!.textContent).toBe(
-      fmtDuration(totalSessionSecondsOf(FIXTURE.phases) / 60),
-    );
+    // Pane defaults to "live" (`DEFAULT_PANE`): read the band's own TOTAL
+    // LEFT cell directly (`.timer-total-value` died with `TimerRuler`,
+    // CR2 spec 3 Task 4 — `.connected-band-cell-value` is its replacement).
+    expect(
+      document.querySelector(".connected-band-cell-value")!.textContent,
+    ).toBe(fmtDuration(totalSessionSecondsOf(FIXTURE.phases) / 60));
   });
 });
 
@@ -359,18 +353,18 @@ describe("armed's first frame, in the DOM (I-1)", () => {
 describe("landing and persistence (handoff §3: per ROWER, first-ever lands B)", () => {
   it("lands on pane B the first time this rower ever connects", () => {
     renderSurface();
-    expect(railButton("Live")).toHaveAttribute("aria-current", "page");
+    expect(controlHalf("Live")).toHaveAttribute("aria-current", "page");
     expect(DEFAULT_PANE).toBe("live");
   });
 
   it("lands on whichever pane the rower last used, not on the workout's", async () => {
     const first = renderSurface();
-    await userEvent.click(railButton("Grid"));
+    await userEvent.click(controlHalf("Grid"));
     expect(localStorage.getItem(LAST_PANE_KEY)).toBe("grid");
     first.unmount();
 
     renderSurface();
-    expect(railButton("Grid")).toHaveAttribute("aria-current", "page");
+    expect(controlHalf("Grid")).toHaveAttribute("aria-current", "page");
   });
 
   it("ignores a garbage stored value rather than rendering nothing", () => {
@@ -396,7 +390,7 @@ describe("landing and persistence (handoff §3: per ROWER, first-ever lands B)",
     expect(loadLastPane()).toBe(DEFAULT_PANE);
     // And the real surface renders it, not just the loader function.
     renderSurface();
-    expect(railButton("Live")).toHaveAttribute("aria-current", "page");
+    expect(controlHalf("Live")).toHaveAttribute("aria-current", "page");
   });
 
   it("survives storage throwing outright", () => {
@@ -407,139 +401,40 @@ describe("landing and persistence (handoff §3: per ROWER, first-ever lands B)",
   });
 });
 
-describe("swipe is the real navigation, 60px (handoff §3)", () => {
-  // The constant itself, not just behaviour relative to it: every other
-  // test in this block reads `SWIPE_THRESHOLD_PX`, so a changed threshold
-  // would move them all in lockstep and none of them would notice.
-  it("is 60px, the handoff's own number", () => {
-    expect(SWIPE_THRESHOLD_PX).toBe(60);
-  });
+// The swipe handler is GONE (CR2 spec 3 task 1, design spec Ruling 4: "not
+// riding the phase's only canary build. It can return later behind a device
+// verification"). `SegmentedControl` is the only way to change panes now —
+// its own `SegmentedControl.test.tsx` covers the control in isolation; the
+// describe block below covers it wired into the real shell (triple-tap,
+// focus restore, landmark structure).
 
-  it("moves the pane at a literal 60px drag and not at 59", () => {
+describe("the control is LABELLED (handoff §3, DEVIATIONS row 4)", () => {
+  it("carries exactly two labelled halves, never bare dots", () => {
+    // `SegmentedControl` (CR2 spec 3 task 1) drops `PagerRail`'s decorative
+    // mark and its long/short label pair entirely — a single visible word
+    // per half, `--c-size-control` the same size in every orientation
+    // (design spec §1), so unlike the retired rail there is no second class
+    // pair for a media query to toggle.
     renderSurface();
-    swipe(59);
-    expect(railButton("Live")).toHaveAttribute("aria-current", "page");
-    swipe(-60);
-    expect(railButton("Grid")).toHaveAttribute("aria-current", "page");
-  });
-
-  it("does nothing below the threshold", () => {
-    expect(paneAfterSwipe("live", -(SWIPE_THRESHOLD_PX - 1))).toBe("live");
-    expect(paneAfterSwipe("live", SWIPE_THRESHOLD_PX - 1)).toBe("live");
-  });
-
-  it("moves at exactly the threshold", () => {
-    expect(paneAfterSwipe("live", -SWIPE_THRESHOLD_PX)).toBe("grid");
-    expect(paneAfterSwipe("grid", SWIPE_THRESHOLD_PX)).toBe("live");
-  });
-
-  it("clamps at both ends rather than wrapping", () => {
-    expect(paneAfterSwipe("live", SWIPE_THRESHOLD_PX * 2)).toBe("live");
-    expect(paneAfterSwipe("grid", -SWIPE_THRESHOLD_PX * 2)).toBe("grid");
-  });
-
-  it("drives the real surface, and persists what it lands on", () => {
-    renderSurface();
-    expect(railButton("Live")).toHaveAttribute("aria-current", "page");
-
-    swipe(-(SWIPE_THRESHOLD_PX + 10));
-    expect(railButton("Grid")).toHaveAttribute("aria-current", "page");
-    expect(localStorage.getItem(LAST_PANE_KEY)).toBe("grid");
-
-    swipe(SWIPE_THRESHOLD_PX + 10);
-    expect(railButton("Live")).toHaveAttribute("aria-current", "page");
-    expect(localStorage.getItem(LAST_PANE_KEY)).toBe("live");
-  });
-
-  it("ignores a touch end with no touch start behind it", () => {
-    renderSurface();
-    const surface = document.querySelector(".connected-surface")!;
-    // A gesture that began somewhere else entirely (a scroll handed off, a
-    // synthetic event): there is no origin to measure against.
-    fireEvent.touchEnd(surface, { changedTouches: [{ clientX: 500 }] });
-    expect(railButton("Live")).toHaveAttribute("aria-current", "page");
-  });
-
-  it("ignores a touch start that carries no touch, and its end", () => {
-    renderSurface();
-    const surface = document.querySelector(".connected-surface")!;
-    fireEvent.touchStart(surface, { touches: [] });
-    fireEvent.touchEnd(surface, { changedTouches: [{ clientX: 500 }] });
-    expect(railButton("Live")).toHaveAttribute("aria-current", "page");
-
-    fireEvent.touchStart(surface, { touches: [{ clientX: 200 }] });
-    fireEvent.touchEnd(surface, { changedTouches: [] });
-    expect(railButton("Live")).toHaveAttribute("aria-current", "page");
-  });
-
-  it("a short drag leaves the pane alone", () => {
-    renderSurface();
-    swipe(SWIPE_THRESHOLD_PX - 1);
-    expect(railButton("Live")).toHaveAttribute("aria-current", "page");
-  });
-});
-
-describe("the pager is LABELLED (handoff §3, DEVIATIONS row 4)", () => {
-  it("carries both label sets in both orientations, never bare dots", () => {
-    // LIVE and GRID's own long and short forms are IDENTICAL text (unlike
-    // the retired TIMER/TMR pair), so a `textContent` check can no longer
-    // prove both label spans exist — this checks the DOM shape instead:
-    // every target renders both classes, whichever the orientation query
-    // then shows or hides.
-    renderSurface();
-    const pager = screen.getByRole("navigation", { name: "Connected panes" });
-    const buttons = within(pager).getAllByRole("button");
-    // Two targets, and every one of them names what is behind it.
+    const nav = screen.getByRole("navigation", { name: "Connected panes" });
+    const buttons = within(nav).getAllByRole("button");
     expect(buttons).toHaveLength(2);
-    // …and the rail holds NOTHING BUT those two (James's erg walk,
-    // 2026-08-13): the decorative 11x104 camera-housing spacer that used to
-    // interleave between them is deleted — `PagerRail.tsx`'s own header
-    // says why. A child census rather than a `querySelector` null check
-    // because landscape divides this column with `justify-content:
-    // space-between`, which places its children by COUNT: a third child
-    // reappearing would push LIVE and GRID off the ends it puts them on,
-    // and only counting catches that.
-    expect(Array.from(pager.children).map((el) => el.tagName)).toStrictEqual([
+    // …and the control holds NOTHING BUT those two (carried over from the
+    // rail's own child census, James's erg walk 2026-08-13): a child census
+    // rather than a `querySelector` null check because landscape divides
+    // this column with CSS that places children by COUNT, so a third child
+    // reappearing would push LIVE and GRID off the ends it puts them on.
+    expect(Array.from(nav.children).map((el) => el.tagName)).toStrictEqual([
       "BUTTON",
       "BUTTON",
     ]);
-    for (const button of buttons) {
-      expect(
-        button.querySelector(".connected-pager-label-long"),
-      ).not.toBeNull();
-      expect(
-        button.querySelector(".connected-pager-label-short"),
-      ).not.toBeNull();
-    }
-
-    // "IN BOTH ORIENTATIONS" — the half of this title that had no assertion
-    // under it at all (test-integrity sweep, S0f). jsdom cannot compute
-    // which set is drawn, and since Task 2 made the long and short forms
-    // IDENTICAL text (`LIVE`/`LIVE`), a screenshot cannot distinguish them
-    // either. The rules can be read, and now are: the short form is hidden
-    // at the top level and flips in landscape, the long form is the other
-    // way round, so exactly one set paints per orientation.
-    expect(
-      rulesFor(".connected-pager-label-short").map((rule) => [
-        rule.at,
-        /display:\s*([a-z]+)/.exec(rule.body)?.[1],
-      ]),
-    ).toStrictEqual([
-      [[], "none"],
-      [["@media (orientation: landscape)"], "block"],
-    ]);
-    expect(
-      rulesFor(".connected-pager-label-long").map((rule) => [
-        rule.at,
-        /display:\s*([a-z]+)/.exec(rule.body)?.[1],
-      ]),
-    ).toStrictEqual([[["@media (orientation: landscape)"], "none"]]);
+    expect(buttons.map((b) => b.textContent)).toStrictEqual(["LIVE", "GRID"]);
   });
 
   it("reaches pane C, the grid (Task 7 filled the slot)", async () => {
     renderSurface();
-    await userEvent.click(railButton("Grid"));
-    expect(railButton("Grid")).toHaveAttribute("aria-current", "page");
+    await userEvent.click(controlHalf("Grid"));
+    expect(controlHalf("Grid")).toHaveAttribute("aria-current", "page");
     expect(document.querySelector(".connected-pane-grid")).not.toBeNull();
     // The placeholder this replaced is gone for good — a stale rule left
     // behind is what makes a dead class look load-bearing.
@@ -566,7 +461,7 @@ function judgedCells(): { text: string; judgement: string }[] {
   }));
 }
 
-describe("pane B — live (connected-revamp Task 3: two heroes)", () => {
+describe("pane B — live (connected-revamp Task 3: two heroes; CR2 spec 3 Task 4 rebuilt the pane — see PaneLive.test.tsx for the tables' own checklist)", () => {
   it("leads with the split, cut so the eye lands on the seconds", () => {
     renderSurface({ frame: frame({ currentSplit: 117.8 }) });
     const hero = document.querySelector(
@@ -578,44 +473,32 @@ describe("pane B — live (connected-revamp Task 3: two heroes)", () => {
     );
   });
 
-  it("shows METERS LEFT on a distance interval and time left on a time one, in the metric row", () => {
-    const distance = renderSurface();
-    const row = document.querySelector(".connected-metric-row")!;
-    expect(
-      within(row as HTMLElement).getByText("METERS LEFT"),
-    ).toBeInTheDocument();
-    distance.unmount();
-
-    renderSurface({
-      frame: frame({
-        intervalIndex: 0,
-        intervalRemaining: { kind: "time", value: 41 },
-      }),
-    });
-    expect(screen.getByText("LEFT IN INTERVAL")).toBeInTheDocument();
-    expect(screen.getByText("0:41")).toBeInTheDocument();
-  });
+  // The metric row (LEFT IN INTERVAL/METERS LEFT, TOTAL M, HR) is CUT
+  // outright (CR2 spec 3 Task 4, spec §3 fate table) — its old test lived
+  // here; `PaneLive.test.tsx`'s "cut from LIVE" describe block is where
+  // that absence is proven now.
 
   // Cards are gone (revision §3: "the old three metric cards are gone").
-  // RATE is a second hero, at the same scale as the split; METERS and HR
-  // sit alongside the interval countdown in the metric row.
-  it("promotes RATE to a second hero, and carries METERS/HR in the metric row — no cards anywhere", () => {
+  // RATE is a second hero, at the same scale as the split — METERS and HR
+  // have no slot on this pane any more at all (Task 4 cut the metric row
+  // that used to carry them; `PaneLive.test.tsx` covers the target/unit
+  // detail this test used to check).
+  it("promotes RATE to a second hero — no cards anywhere", () => {
     renderSurface();
     const rateHero = document.querySelector(".connected-hero-rate")!;
-    expect(
-      within(rateHero as HTMLElement).getByText("NOW"),
-    ).toBeInTheDocument();
+    // No NOW label above the hero (CR2 spec 3 Task 2, design spec §2A's
+    // own "Cut from LIVE: NO NOW/TARGET/UP NEXT labels"): `nowLabel`
+    // collapses to `stale ? "LAST" : ""`, so PaneLive's existing `!== ""`
+    // guard renders no `.connected-hero-label` at all for a live status.
+    expect(rateHero.querySelector(".connected-hero-label")).toBeNull();
     expect(rateHero.querySelector(".connected-hero-value")).not.toBeNull();
     expect(
       rateHero.querySelector(".connected-hero-target-value"),
     ).not.toBeNull();
 
-    const row = document.querySelector(".connected-metric-row")!;
-    expect(within(row as HTMLElement).getByText("TOTAL M")).toBeInTheDocument();
-    expect(within(row as HTMLElement).getByText("HR")).toBeInTheDocument();
-
     expect(document.querySelector(".timer-card")).toBeNull();
     expect(document.querySelector(".connected-cards-triple")).toBeNull();
+    expect(document.querySelector(".connected-metric-row")).toBeNull();
   });
 
   it("renders the split target's ref line only when there IS one — no empty span on a no-target phase", () => {
@@ -641,11 +524,12 @@ describe("pane B — live (connected-revamp Task 3: two heroes)", () => {
     // about, so a `textContent === ""` assertion would pass against the
     // defect it is meant to catch.
     expect(document.querySelector(".connected-hero-target-ref")).toBeNull();
-    // …and the slot it used to sit in still holds the two things that are
-    // really there, so this is a deletion and not a collapse.
+    // …and the slot it used to sit in still holds what's really there —
+    // just the value now (CR2 spec 3 Task 4 cut the TARGET label word
+    // outright, spec §2A: "no NOW/TARGET/UP NEXT labels"), so this is a
+    // deletion and not a collapse.
     const box = document.querySelector(".connected-hero-target")!;
     expect(Array.from(box.children).map((c) => c.className)).toStrictEqual([
-      "connected-hero-target-label",
       "connected-hero-target-value connected-value-absent",
     ]);
   });
@@ -735,36 +619,11 @@ describe("pane B — live (connected-revamp Task 3: two heroes)", () => {
     expect(rateValue.className).not.toContain("connected-value-absent");
   });
 
-  it("the metric row's three values sit on one baseline: left-in-interval, meters, HR", () => {
-    renderSurface();
-    const row = document.querySelector(".connected-metric-row")!;
-    const cells = row.querySelectorAll(".connected-metric-cell");
-    expect(cells).toHaveLength(3);
-    const labels = Array.from(cells).map(
-      (cell) => cell.querySelector(".connected-metric-label")!.textContent,
-    );
-    // `TOTAL M`, not `METERS` (James, 2026-08-13): this cell is the whole
-    // session's distance and it sits beside the INTERVAL counting down, so
-    // the bare word made two scopes look like one. The exact-array
-    // assertion is what makes the pair legible here too.
-    expect(labels).toStrictEqual(["METERS LEFT", "TOTAL M", "HR"]);
-    for (const cell of cells) {
-      expect(cell.querySelector(".connected-metric-value")).not.toBeNull();
-    }
-  });
-
-  it("index.css: both heroes are --size-hero over --size-target, tenths at --size-hero-tenths, nowrap", () => {
-    const heroValue = ruleBody(".connected-hero-value");
-    expect(heroValue).toContain("var(--size-hero)");
-    expect(heroValue).toContain("white-space: nowrap");
-    expect(ruleBody(".connected-hero-tenths")).toContain(
-      "var(--size-hero-tenths)",
-    );
-    expect(ruleBody(".connected-hero-target-value")).toContain(
-      "var(--size-target)",
-    );
-    expect(ruleBody(".connected-metric-value")).toContain("var(--size-metric)");
-  });
+  // The metric row (three values on one baseline) and its own CSS rule
+  // (`--size-hero`/`--size-target`/`--size-metric`) both died with CR2
+  // spec 3 Task 4 — the pane's own hero/target/band CSS is now on the
+  // `--c-size-*` family, checked by `PaneLive.test.tsx`'s own token tests
+  // rather than duplicated here.
 });
 
 // ---------------------------------------------------------------------------
@@ -804,8 +663,10 @@ describe("judgement: one helper, every pane (handoff §3)", () => {
   it("EVERY judged cell on pane B goes through the helper — none opts out", () => {
     renderSurface({ frame: frame({ currentSplit: target + 10, spm: 99 }) });
     const cells = judgedCells();
-    // hero + rate + HR + meters
-    expect(cells).toHaveLength(4);
+    // hero + rate — HR and meters DIED off `PaneLive` (CR2 spec 3 Task 4,
+    // spec §3 fate table): they had no other judged-cell renderer on this
+    // pane, so "every" now means these two.
+    expect(cells).toHaveLength(2);
     for (const cell of cells) {
       expect(["slower", "within", "faster", "stale"]).toContain(cell.judgement);
     }
@@ -975,12 +836,15 @@ describe("frozen (handoff §4, restyled by connected-axes 2a task 5)", () => {
 
   it("THE FOOTER GROWS INTO THE PANE, NOT OVER IT: the header and the pane's own top row never move", () => {
     // The header (End's own home) is a THIRD invariant alongside the
-    // footer: it renders the same single child regardless of state, so its
-    // own fixed height can never be what moves the pane body underneath
-    // it.
+    // footer: it renders the same three children regardless of state
+    // (`ConnectionLine` + the status span + End — three since Task 6's fix
+    // round split the status out to its own direct child, CRITICAL 1; was
+    // two before that, one before CR2 spec 3 task 1 moved `ConnectionLine`
+    // here from the panes), so its own fixed height can never be what
+    // moves the pane body underneath it.
     const live = renderSurface();
     const liveHeader = document.querySelector(".connected-header")!;
-    expect(liveHeader.children).toHaveLength(1);
+    expect(liveHeader.children).toHaveLength(3);
     const liveFooter = document.querySelector(".connected-surface-footer")!;
     // Empty while rowing — End no longer lives here, and the task-6 ruling's
     // zero-cost-while-rowing property survives task 5's own rework of the
@@ -990,23 +854,24 @@ describe("frozen (handoff §4, restyled by connected-axes 2a task 5)", () => {
 
     renderSurface({ frozen: true });
     const frozenHeader = document.querySelector(".connected-header")!;
-    expect(frozenHeader.children).toHaveLength(1);
+    expect(frozenHeader.children).toHaveLength(3);
     const frozenFooter = document.querySelector(".connected-surface-footer")!;
     // One child now — the frozen block alone in the slot End vacated, IN
     // FLOW (task 5) rather than overlaid — the mechanism behind the
     // no-occlusion fix the CSS test below pins directly.
     expect(frozenFooter.children).toHaveLength(1);
     // The footer sits in the SAME place in the tree either way — directly
-    // after the pane body, directly before the pager — so the only thing
-    // that differs between the two states is whether it has a child; task 5
-    // deliberately spends the footer's own HEIGHT to buy that (it used to
-    // cost nothing at all, via the overlay this task retires — see the CSS
-    // test's own comment for why that overlay was the occlusion bug).
+    // after the pane body, directly before the segmented control — so the
+    // only thing that differs between the two states is whether it has a
+    // child; task 5 deliberately spends the footer's own HEIGHT to buy
+    // that (it used to cost nothing at all, via the overlay this task
+    // retires — see the CSS test's own comment for why that overlay was
+    // the occlusion bug).
     expect(frozenFooter.previousElementSibling!.className).toContain(
       "connected-surface-body",
     );
     expect(frozenFooter.nextElementSibling!.className).toContain(
-      "connected-pager",
+      "connected-control",
     );
   });
 
@@ -1058,22 +923,15 @@ describe("frozen (handoff §4, restyled by connected-axes 2a task 5)", () => {
   // renderer was that pane's `JudgedCard`, so "NOT ROWING" has no surviving
   // renderer anywhere and the caption half of that coverage genuinely
   // lapses (the field itself stays computed and model-tested,
-  // `surfaceModel.test.ts`'s own paused describe). The dash and the
-  // held-clock grey DO still render, on pane B, so those two get pane B's
-  // own version here rather than being dropped along with pane A.
-  // Connected-revamp Task 3 moved the interval clock's own cell from a
-  // semi-hero (`.connected-second-value`) into the metric row
-  // (`.connected-metric-value`) — the grey-but-holds behaviour, and the
-  // reused `connected-clock-value-held` class, are unchanged.
-  it("the metric row's interval-clock cell greys but holds its last value", () => {
-    renderSurface({
-      frozen: true,
-      frame: frame({ intervalRemaining: { kind: "time", value: 41 } }),
-    });
-    const clock = document.querySelector(".connected-metric-value")!;
-    expect(clock.textContent).toBe("0:41");
-    expect(clock.className).toContain("connected-clock-value-held");
-  });
+  // `surfaceModel.test.ts`'s own paused describe). The dash DOES still
+  // render, on pane B, so that gets pane B's own version below.
+  //
+  // THE METRIC ROW'S OWN INTERVAL-CLOCK CELL (and `.connected-clock-value-
+  // held`, its own grey-but-holds class) DIED HERE (CR2 spec 3 Task 4):
+  // `intervalClockLabel` off `SurfaceModel`, spec §3 fate table — the cell
+  // it captioned is cut outright, so nothing on this pane holds a
+  // frozen-but-visible value through a freeze any more. Its own test used
+  // to live here.
 
   it("pane B's split hero reads `—`, because nobody is pulling", () => {
     renderSurface({ frozen: true });
@@ -1146,7 +1004,9 @@ describe("disconnected: lose and degrade (spec C5)", () => {
 
     renderSurface({ phase: "disconnected", frame: wild });
     const cells = judgedCells();
-    expect(cells).toHaveLength(4);
+    // hero + rate only (CR2 spec 3 Task 4 cut HR/meters off this pane —
+    // see the "EVERY judged cell on pane B" test above for the same count).
+    expect(cells).toHaveLength(2);
     for (const cell of cells) expect(cell.judgement).toBe("stale");
   });
 
@@ -1156,12 +1016,12 @@ describe("disconnected: lose and degrade (spec C5)", () => {
   // retired, and this pane now has no `.timer-card` at all. The stale
   // treatment survives entirely through the tint class every judged cell
   // still wears (the previous it, "THE STALE OVERRIDE BEATS EVERY
-  // JUDGEMENT" — `judgedCells()` finds all 4 and confirms `"stale"`).
+  // JUDGEMENT" — `judgedCells()` finds both and confirms `"stale"`).
   it("carries no cards at all, stale or otherwise — the tint IS the stale treatment now", () => {
     renderSurface({ phase: "disconnected" });
     expect(document.querySelector(".timer-card")).toBeNull();
     expect(document.querySelectorAll(".timer-card-actual-stale").length).toBe(
-      4,
+      2,
     );
   });
 
@@ -1177,36 +1037,15 @@ describe("disconnected: lose and degrade (spec C5)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// No HR monitor
+// No HR monitor — RETIRED (CR2 spec 3 Task 4)
 // ---------------------------------------------------------------------------
 
-// Connected-revamp Task 3 rewrites this idiom entirely for pane B (revision
-// §3: "Missing HR renders `—` in place. No dashed card, no explanatory
-// copy."). The dashed-border/"NO HR MONITOR" caption idiom was
-// `JudgedCard`'s alone and had no other consumer; HR is now a plain metric-
-// row cell like METERS, distinguished from a real reading only by the
-// shared `connected-value-absent` grey every dash on this pane wears.
-describe("no HR monitor: no dashed card, no explanatory copy (revision §3)", () => {
-  it("reads `—`, greyed, with no card and no caption", () => {
-    renderSurface({ frame: frame({ heartRateBpm: null }) });
-    const cell = screen.getByText("HR").parentElement!;
-    expect(cell.className).toBe("connected-metric-cell");
-    const value = cell.querySelector(".connected-metric-value")!;
-    expect(value.textContent).toBe("—");
-    expect(value.className).toContain("connected-value-absent");
-    expect(document.querySelector(".timer-card")).toBeNull();
-    expect(screen.queryByText("NO HR MONITOR")).not.toBeInTheDocument();
-  });
-
-  it("becomes a number with no announcement when a belt appears", () => {
-    renderSurface({ frame: frame({ heartRateBpm: 151 }) });
-    const cell = screen.getByText("HR").parentElement!;
-    const value = cell.querySelector(".connected-metric-value")!;
-    expect(value.textContent).toBe("151");
-    expect(value.className).not.toContain("connected-value-absent");
-    expect(screen.queryByText("NO HR MONITOR")).not.toBeInTheDocument();
-  });
-});
+// This describe block used to test pane B's own HR cell (a plain metric-row
+// numeral, revision §3's "no dashed card, no explanatory copy" idiom). HR
+// has no slot on `PaneLive` at all any more (`SurfaceModel.hr` off the
+// model, spec §3 fate table) — the redesign's own pane has nowhere for a
+// belt reading to render. HR survives only as the grid's own column, with
+// its own coverage in `PaneGrid.test.tsx`.
 
 // ---------------------------------------------------------------------------
 // End, staged
@@ -1382,55 +1221,11 @@ describe("End's hit box is small and out of the swipe corridor (safety fix, Jame
     expect(headerRules[1]!.body).not.toMatch(/justify-content\s*:/);
   });
 
-  // THE MECHANISM (mutation-tested below in the report, not just asserted
-  // here): `handleTouchStart`/`handleTouchEnd` live on `<main>`, the
-  // surface's OWN element — a touch that starts on a descendant (End) still
-  // bubbles to them exactly as one starting anywhere else on the surface
-  // does, because nothing on End's own button stops that propagation. A
-  // full 60px+ swipe whose pointerdown happens to land on End must
-  // therefore still read as pane navigation, never as an arm.
-  it("a swipe that starts ON End still changes pane — it never arms the confirm", () => {
-    renderSurface();
-    const endButton = screen.getByRole("button", { name: "End session" });
-    fireEvent.touchStart(endButton, { touches: [{ clientX: 200 }] });
-    fireEvent.touchEnd(document.querySelector(".connected-surface")!, {
-      changedTouches: [{ clientX: 200 - (SWIPE_THRESHOLD_PX + 10) }],
-    });
-    expect(railButton("Grid")).toHaveAttribute("aria-current", "page");
-    // Still "End session", never staged — the swipe did not touch it.
-    expect(
-      screen.getByRole("button", { name: "End session" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Tap again to end" }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("the SAME swipe, originating on End, works in the other direction too", () => {
-    // REWRITTEN (task-6 review, I3): the first version of this started on
-    // the DEFAULT pane and swiped the way `paneAfterSwipe` clamps, so both
-    // of its assertions — Live is current, End is unarmed — were already
-    // true of the very first render. The reviewer deleted the whole gesture
-    // and it still passed. It has a real discriminator now: the surface
-    // starts on GRID, and only the swipe can put it back on Live.
-    renderSurface();
-    fireEvent.click(railButton("Grid"));
-    expect(railButton("Grid")).toHaveAttribute("aria-current", "page");
-
-    const endButton = screen.getByRole("button", { name: "End session" });
-    fireEvent.touchStart(endButton, { touches: [{ clientX: 200 }] });
-    fireEvent.touchEnd(document.querySelector(".connected-surface")!, {
-      changedTouches: [{ clientX: 200 + (SWIPE_THRESHOLD_PX + 10) }],
-    });
-    // A POSITIVE delta walks backward through `PANES` (["live","grid"]), so
-    // this is grid → live: the mirror of the leftward case above, still
-    // starting its touch on End itself.
-    expect(railButton("Live")).toHaveAttribute("aria-current", "page");
-    expect(railButton("Grid")).not.toHaveAttribute("aria-current");
-    expect(
-      screen.queryByRole("button", { name: "Tap again to end" }),
-    ).not.toBeInTheDocument();
-  });
+  // The swipe-originates-on-End tests retired with the swipe handler
+  // itself (CR2 spec 3 task 1, design spec Ruling 4) — End's hit box no
+  // longer shares a gesture surface with pane navigation at all; the
+  // remaining safety-fix invariant (small, out of the footer, never
+  // full-width) is covered by the two tests above.
 });
 
 // ---------------------------------------------------------------------------

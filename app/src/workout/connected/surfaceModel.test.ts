@@ -14,6 +14,7 @@
 import { describe, expect, it } from "vitest";
 import { compileProgram } from "../../../domain/monitor/program.js";
 import { fmtDuration } from "../../../domain/duration.js";
+import { phaseSeconds } from "../../../domain/expand.js";
 import { fmtSplit } from "../../../domain/format.js";
 import { PACE_TOLERANCE_SECONDS } from "../../../domain/judge.js";
 import type {
@@ -34,6 +35,7 @@ import {
   phaseIndexForInterval,
   splitHero,
   staleFor,
+  type SurfaceModel,
   type SurfaceModelInput,
 } from "./surfaceModel";
 
@@ -457,11 +459,14 @@ describe("armed's first frame (I-1): the three properties 2D asks for beyond the
   it('carries no "NOW" over either hero — 2D shows no label at all above the heroes, unlike live/paused', () => {
     const m = model({ status: "armed", frame: frame({ state: "armed" }) });
     expect(m.nowLabel).toBe("");
-    // The stale case is untouched by this change — still LAST, never armed's
-    // empty string leaking into a different status.
+    // CR2 spec 3 Task 2 (design spec §3 fate table): the `NOW` branch DIES
+    // outright, not just at armed — 2A's own property table cuts the label
+    // from LIVE entirely ("Cut from LIVE: NO NOW/TARGET/UP NEXT labels"),
+    // so live and paused now read the SAME empty string armed always did.
+    // `stale` is the only status this field still has a word for.
     expect(model({ status: "stale" }).nowLabel).toBe("LAST");
-    expect(model({ status: "live" }).nowLabel).toBe("NOW");
-    expect(model({ status: "paused" }).nowLabel).toBe("NOW");
+    expect(model({ status: "live" }).nowLabel).toBe("");
+    expect(model({ status: "paused" }).nowLabel).toBe("");
   });
 
   it("the grid's active row carries no gold counting mark — nothing is counting down before the first stroke", () => {
@@ -522,7 +527,9 @@ describe("armed's first frame (I-1): the three properties 2D asks for beyond the
       deviceName: DEVICE,
       actuals: [],
     });
-    expect(m.totalLeftSeconds).toBe(totalSeconds);
+    // `totalLeftSeconds` died off `SurfaceModel` (CR2 spec 3 Task 4, spec
+    // §3 fate table) — `totalLeftDisplay` is the only surviving carrier of
+    // this fact, so that is what this test reads.
     expect(m.totalLeftDisplay).toBe(fmtDuration(totalSeconds / 60));
     // Not armed: the ordinary subtraction still applies, so this is a
     // suppression scoped to armed, not a change to the live formula.
@@ -530,9 +537,214 @@ describe("armed's first frame (I-1): the three properties 2D asks for beyond the
       status: "live",
       frame: frame({ sessionElapsedSeconds: 900, elapsedSeconds: 900 }),
     });
-    expect(liveModel.totalLeftSeconds).not.toBe(
-      totalSessionSecondsOf(FIXTURE.phases),
+    expect(liveModel.totalLeftDisplay).not.toBe(
+      fmtDuration(totalSessionSecondsOf(FIXTURE.phases) / 60),
     );
+  });
+});
+
+// CR2 spec 3 Task 2 (design spec §2D — "the READY word ships HERE",
+// PROVENANCE item 3): the armed branch of `intervalLabelShort`.
+describe("READY (design spec §2D): the armed branch of intervalLabelShort", () => {
+  it("armed on a numbered interval reads the ordinal plus READY, never WORK", () => {
+    const m = model({
+      status: "armed",
+      frame: frame({ state: "armed", intervalIndex: 1 }),
+    });
+    expect(m.intervalLabelShort).toBe("1 OF 4 · READY");
+    // Non-armed, the SAME interval: entirely unaffected by this task — the
+    // ordinary `N OF M · WORK` formula, still exercised at this exact
+    // index by the "live" describe block below, pinned again here so the
+    // two branches sit side by side.
+    const live = model({ frame: frame({ intervalIndex: 1 }) });
+    expect(live.intervalLabelShort).toBe("1 OF 4 · WORK");
+  });
+
+  it("armed on the WARM-UP (a realistic warm-up-bearing fixture) reads bare READY — no ordinal prefix", () => {
+    // FIXTURE (not NO_WARMUP): a real warm-up-bearing library program,
+    // armed at interval 0 — the only realistic armed case, since nothing
+    // has happened yet and the machine always starts at interval 0.
+    expect(FIXTURE.program.intervals[0]!.type).toBe("warmup");
+    const m = buildSurfaceModel({
+      phases: FIXTURE.phases,
+      program: FIXTURE.program,
+      status: "armed",
+      frame: frame({
+        state: "armed",
+        intervalIndex: 0,
+        rowingActive: false,
+        distanceMeters: 0,
+      }),
+      deviceName: DEVICE,
+      actuals: [],
+    });
+    expect(m.intervalLabelShort).toBe("READY");
+    expect(m.intervalLabelShort).not.toMatch(/OF/);
+  });
+});
+
+// CR2 spec 3 Task 2 (design spec §3, composition note under §2B): the
+// ordinal-only sibling `intervalLabelShort` bakes its phase word out of —
+// Task 5's grid header (`ConnectedSurface.tsx`'s `headerTrailing`) joins
+// this with `totalLeftDisplay` instead.
+describe("intervalOrdinalLabel: the ordinal without the phase word (design spec §3)", () => {
+  it("is the ordinal plus the work count when the interval is numbered", () => {
+    const m = model({ frame: frame({ intervalIndex: 1 }) });
+    expect(m.intervalOrdinalLabel).toBe("1 OF 4");
+  });
+
+  it("is null on the warm-up — the same null rule intervalLabelShort applies", () => {
+    const m = model({ frame: frame({ intervalIndex: 0 }) });
+    expect(FIXTURE.phases[0]!.type).toBe("warmup");
+    expect(m.intervalOrdinalLabel).toBeNull();
+  });
+
+  it("never disagrees with the caption's own ordinal, on the same call", () => {
+    // One `ordinal`, read once (this file's own header rule) — the grid `#`
+    // column and the header caption already share it; this pins the new
+    // field into the same invariant rather than trusting it by inspection.
+    // The boolean is computed OUTSIDE `expect` (vitest/no-conditional-expect
+    // bans branching around the assertion itself), so every iteration still
+    // makes exactly one unconditional call.
+    for (let i = 0; i < FIXTURE.program.intervals.length; i += 1) {
+      const m = model({ frame: frame({ intervalIndex: i }) });
+      const agrees =
+        m.intervalOrdinalLabel === null
+          ? !/OF/.test(m.intervalLabelShort)
+          : m.intervalLabelShort.startsWith(m.intervalOrdinalLabel);
+      expect(agrees).toBe(true);
+    }
+  });
+});
+
+// CR2 spec 3 Task 2 (design spec §2D, antagonist corrections 2 and 3): at
+// armed, up-next reads the FIRST interval forward — `phases[phaseIndex]` /
+// `[phaseIndex + 1]` — not `phases[phaseIndex + 1]` / `[phaseIndex + 2]`,
+// which is what the ordinary (non-armed) formula reads and what the
+// committed `connected-armed-landscape.png` shows as the pre-task defect
+// (the coming REST at armed instead of the coming WORK).
+describe("armed's up-next (design spec §2D): the FIRST interval forward", () => {
+  it("armed names the CURRENT phase as up-next and the phase after it as then-next — the exact strings, not the mechanism", () => {
+    // NO_WARMUP: interval 0 IS the first work phase (phases[0] work,
+    // phases[1] its folded rest) — the realistic no-warm-up fixture most
+    // sessions actually have, armed at its only possible index, 0.
+    const work = NO_WARMUP.phases[0]!;
+    const rest = NO_WARMUP.phases[1]!;
+    if (work.type !== "work" || work.targetSplit === undefined) {
+      throw new Error("fixture assumption broke: phase 0 is not split work");
+    }
+    if (rest.type !== "rest") {
+      throw new Error("fixture assumption broke: phase 1 is not a rest");
+    }
+    const restSeconds = phaseSeconds(rest);
+    if (restSeconds === null) {
+      throw new Error("fixture assumption broke: rest has no duration");
+    }
+
+    const m = buildSurfaceModel({
+      phases: NO_WARMUP.phases,
+      program: NO_WARMUP.program,
+      status: "armed",
+      frame: frame({
+        state: "armed",
+        intervalIndex: 0,
+        rowingActive: false,
+        distanceMeters: 0,
+      }),
+      deviceName: DEVICE,
+      actuals: [],
+    });
+
+    // Derived independently of `upNextTextAt`/`thenNextTextAt` (the
+    // functions under test) via `fmtSplit`/`fmtDuration` straight off the
+    // fixture's own phases — a real check on the STRING, not a re-run of
+    // the same mechanism against itself.
+    expect(m.upNext).toBe(`WORK ${fmtSplit(work.targetSplit)}`);
+    expect(m.thenNext).toBe(`REST ${fmtDuration(restSeconds / 60)}`);
+  });
+
+  it("non-armed at the SAME index still reads phases[index+1]/[index+2] — the ordinary formula is untouched", () => {
+    const liveModel = buildSurfaceModel({
+      phases: NO_WARMUP.phases,
+      program: NO_WARMUP.program,
+      status: "live",
+      frame: frame({ intervalIndex: 0 }),
+      deviceName: DEVICE,
+      actuals: [],
+    });
+    // The ordinary (non-armed) formula at interval 0 names the REST that
+    // follows the first work phase, not the work phase itself — the exact
+    // shift the armed branch above proves it does NOT take.
+    const rest = NO_WARMUP.phases[1]!;
+    if (rest.type !== "rest") {
+      throw new Error("fixture assumption broke: phase 1 is not a rest");
+    }
+    const restSeconds = phaseSeconds(rest);
+    if (restSeconds === null) {
+      throw new Error("fixture assumption broke: rest has no duration");
+    }
+    expect(liveModel.upNext).toBe(`REST ${fmtDuration(restSeconds / 60)}`);
+
+    const armedModel = buildSurfaceModel({
+      phases: NO_WARMUP.phases,
+      program: NO_WARMUP.program,
+      status: "armed",
+      frame: frame({
+        state: "armed",
+        intervalIndex: 0,
+        rowingActive: false,
+        distanceMeters: 0,
+      }),
+      deviceName: DEVICE,
+      actuals: [],
+    });
+    expect(armedModel.upNext).not.toBe(liveModel.upNext);
+    expect(armedModel.thenNext).not.toBe(liveModel.thenNext);
+  });
+});
+
+// CR2 spec 3 Task 2 (antagonist correction 1): the model's own numeric
+// elapsed, Task 3's progress bar needs it since `totalLeftSeconds` (the
+// subtraction route) dies in Task 4/5.
+describe("elapsedSeconds: the model's own numeric elapsed (Task 3's progress bar)", () => {
+  it("mirrors sessionElapsedSeconds directly, off armed", () => {
+    const m = model({ frame: frame({ elapsedSeconds: 600 }) });
+    expect(m.elapsedSeconds).toBe(600);
+  });
+
+  it("never exceeds totalSeconds — the same overrun cap totalLeftSeconds already enforces from the other direction", () => {
+    const m = model({ frame: frame({ elapsedSeconds: 999_999 }) });
+    expect(m.elapsedSeconds).toBe(m.totalSeconds);
+    expect(m.elapsedSeconds).not.toBe(999_999);
+  });
+
+  it("reads 0 on the armedMirror branch, regardless of what the wire carries over — mirrors totalLeftSeconds's own armed stance", () => {
+    const m = buildSurfaceModel({
+      phases: NO_WARMUP.phases,
+      program: NO_WARMUP.program,
+      status: "armed",
+      // A non-zero carried-over pair, the same shape `totalLeftSeconds`'s
+      // own armed test uses, to prove the suppression does not merely
+      // coincide with an honestly-zero wire value.
+      frame: frame({
+        state: "armed",
+        intervalIndex: 0,
+        rowingActive: false,
+        distanceMeters: 0,
+        elapsedSeconds: 900,
+        sessionElapsedSeconds: 900,
+      }),
+      deviceName: DEVICE,
+      actuals: [],
+    });
+    expect(m.elapsedSeconds).toBe(0);
+    // Not armed: the ordinary mirror still applies — a suppression scoped
+    // to armed, not a change to the live formula.
+    const liveModel = model({
+      status: "live",
+      frame: frame({ sessionElapsedSeconds: 900, elapsedSeconds: 900 }),
+    });
+    expect(liveModel.elapsedSeconds).toBe(900);
   });
 });
 
@@ -583,24 +795,18 @@ describe("live", () => {
     expect(m.paceTenths).toBe(".8");
   });
 
-  it("labels the second slot METERS LEFT on a distance interval", () => {
-    const m = model({
-      frame: frame({ intervalRemaining: { kind: "distance", value: 1200 } }),
-    });
-    expect(m.intervalClockLabel).toBe("METERS LEFT");
-    expect(m.intervalClockValue).toBe("1200");
-  });
-
-  it("counts time down on a time interval", () => {
-    const m = model({
-      frame: frame({
-        intervalIndex: 0,
-        intervalRemaining: { kind: "time", value: 41 },
-      }),
-    });
-    expect(m.intervalClockLabel).toBe("LEFT IN INTERVAL");
-    expect(m.intervalClockValue).toBe("0:41");
-  });
+  // `intervalClockLabel` (`METERS LEFT`/`LEFT IN INTERVAL`) died off
+  // `SurfaceModel` at CR2 spec 3 Task 4 (spec §3 fate table) — `PaneLive`'s
+  // own metric-row cell was its only render site, and the redesign cuts
+  // that cell outright. `intervalClockValue` — the sibling this describe
+  // block's own two tests used to pin — dies HERE, at Task 5 (antagonist
+  // correction 1): the grid headline that read it is deleted outright
+  // (`PaneGrid.tsx`'s own header comment), and the grid's active-row
+  // countdown cell was never actually fed by this field — it has its own
+  // independent computation, `countdownDisplayFor` below, which
+  // `buildGridModel`'s own describe blocks pin directly. Both tests are
+  // gone with the field; "the four fields die" describe block further down
+  // this file (now five) pins the deletion structurally.
 
   // `intervalProgressPct`'s own two its (the fill-direction pin and the
   // 0-100 clamp) retired with the field itself (connected-revamp Task 3,
@@ -764,14 +970,17 @@ describe("live", () => {
     // an 8:00 warm-up (480) + 4 x 2000 m at the resolved 2:06.0 target
     // split, i.e. 4 x 4 x 126 = 2016 s of work, + 4 x 3:00 rest (720).
     // 480 + 2016 + 720 = 3216.
+    //
+    // `totalLeftSeconds` died off `SurfaceModel` (CR2 spec 3 Task 4) —
+    // `totalLeftDisplay` is the field this proof reads now.
     const m = model({ frame: frame({ elapsedSeconds: 600 }) });
     expect(m.totalSeconds).toBe(3216);
-    expect(m.totalLeftSeconds).toBe(3216 - 600);
+    expect(m.totalLeftDisplay).toBe(fmtDuration((3216 - 600) / 60));
   });
 
   it("never reports a negative total left when the machine overruns", () => {
     const m = model({ frame: frame({ elapsedSeconds: 999_999 }) });
-    expect(m.totalLeftSeconds).toBe(0);
+    expect(m.totalLeftDisplay).toBe(fmtDuration(0));
   });
 
   // `SurfaceModel.segments` retired (connected-revamp Task 3 fix round,
@@ -821,37 +1030,32 @@ describe("the session pair across a work-interval reset (walk 4)", () => {
     }),
   ];
 
-  it("TOTAL LEFT never rises across the reset (the recorded 1:11 -> 1:38 bug)", () => {
-    const lefts = ACROSS_THE_RESET.map(
-      (f) => model({ frame: f }).totalLeftSeconds,
+  // `totalLeftSeconds` died off `SurfaceModel` (CR2 spec 3 Task 4) — this
+  // test now proves the identical session-pair fact from the complementary
+  // field, `elapsedSeconds` (Task 2's own field, kept: `totalLeftDisplay`
+  // is `fmtDuration((totalSeconds - elapsedSeconds-derived value)/60)`
+  // internally, so an `elapsedSeconds` that never FALLS across the reset is
+  // exactly what makes TOTAL LEFT never RISE — the same bug, read from the
+  // other direction).
+  it("elapsedSeconds never falls across the reset (the recorded 1:11 -> 1:38 TOTAL LEFT bug, same session pair)", () => {
+    const elapsed = ACROSS_THE_RESET.map(
+      (f) => model({ frame: f }).elapsedSeconds,
     );
-    const total = model({ frame: ACROSS_THE_RESET[0]! }).totalSeconds;
 
     // Exact, not merely monotone: the middle frame is the one the recording
-    // caught jumping BACKWARDS to a nearly-full countdown, because the raw
-    // clock it used to read had just returned to 0. `total` is pinned to
-    // its own known value first, so these three are measured against a
-    // number rather than against another field of the same call — and the
-    // `lefts[1] < total` trailer that used to sit here is gone: it could
-    // not fail once the line above passed (test-integrity sweep, S0g).
-    expect(total).toBe(3216);
-    expect(lefts).toStrictEqual([total - 37.81, total - 37.81, total - 39.01]);
+    // caught jumping BACKWARDS on the raw clock — `elapsedSeconds` reads
+    // `sessionElapsedSeconds` (the driver's accumulated pair), which climbs
+    // straight through that reset rather than repeating it.
+    expect(elapsed).toStrictEqual([37.81, 37.81, 39.01]);
   });
 
-  it("the METERS card shows the accumulated total, not the reset interval's 1 m", () => {
-    const displays = ACROSS_THE_RESET.map(
-      (f) => model({ frame: f }).meters.display,
-    );
-
-    // 102.5 is deliberately a half-way value: `Math.round` gives 103 where a
-    // floor would give 102, so this pins the rounding as well as the source.
-    // What the bug looked like on the erg: the raw field would have
-    // rendered `Math.round(0.7)` as `"1"` in the middle slot and the card
-    // fell 109 -> 50 for real. The exact triple below already forbids that;
-    // the separate `not.toBe("1")` trailer that used to follow it could not
-    // fail once this line passed (test-integrity sweep, S0g).
-    expect(displays).toStrictEqual(["102", "103", "105"]);
-  });
+  // `SurfaceModel.meters` died with it (CR2 spec 3 Task 4, spec §3 fate
+  // table) — `PaneLive`'s own `TOTAL M` cell was its only render site, and
+  // the redesign cuts it outright. `GridRow.meters` is a DIFFERENT field
+  // (per-interval, not session-wide) with its own tests in
+  // `PaneGrid.test.tsx`; this walk-4 regression has no remaining surface on
+  // `SurfaceModel` to prove it against beyond `elapsedSeconds` (above) and
+  // `elapsedDisplay` (below).
 
   it("the SESSION caption's clock keeps running through the reset too", () => {
     const shown = ACROSS_THE_RESET.map(
@@ -865,28 +1069,40 @@ describe("the session pair across a work-interval reset (walk 4)", () => {
       model({ frame: frame({ elapsedSeconds: 0 }) }).elapsedDisplay,
     );
   });
+
+  // THE DISCRIMINATOR (antagonist phase-exit pass, §2B witness gap): every
+  // frame factory in this repo defaults `sessionElapsedSeconds ??
+  // f.elapsedSeconds`, so a suite full of mirrored pairs cannot tell WHICH
+  // elapsed `totalLeftDisplay` subtracts — mutating the model to read the
+  // interval-resetting `frame.elapsedSeconds` left everything green while
+  // reintroducing the recorded 1:11 -> 1:38 TOTAL LEFT bug. This test is
+  // the one place the pair DIVERGES under a `totalLeftDisplay` assertion:
+  // the reset frame's raw clock is 0, its session clock is 37.81, and the
+  // remaining time must move with the session clock.
+  it("TOTAL LEFT subtracts the SESSION clock, never the interval's own resetting one", () => {
+    const [before, atReset] = ACROSS_THE_RESET;
+    const shownBefore = model({ frame: before }).totalLeftDisplay;
+    const shownAtReset = model({ frame: atReset }).totalLeftDisplay;
+
+    // Same session elapsed (37.81) on both sides of the raw-clock reset,
+    // so the remaining clock must not move...
+    expect(shownAtReset).toBe(shownBefore);
+    // ...and must differ from what a zeroed elapsed would show — which is
+    // exactly what the wrong-field mutation renders at the reset frame.
+    expect(shownAtReset).not.toBe(
+      model({
+        frame: frame({ elapsedSeconds: 0, sessionElapsedSeconds: 0 }),
+      }).totalLeftDisplay,
+    );
+  });
 });
 
-describe("no HR monitor", () => {
-  // `hrAbsent`/`hrCaption` retired alongside `JudgedCard.tsx`
-  // (connected-revamp Task 3): both were convenience fields for a card
-  // caption ("NO HR MONITOR"/"BPM") that no longer renders anywhere —
-  // revision §3 is explicit that the metric row's HR cell gets "no dashed
-  // card, no explanatory copy". `hr.absent` (on the `JudgedValue` itself)
-  // is the field that survives and still drives the pane's own
-  // `connected-value-absent` grey.
-  it("reads `—` when no monitor is connected", () => {
-    const m = model({ frame: frame({ heartRateBpm: null }) });
-    expect(m.hr.display).toBe("—");
-    expect(m.hr.absent).toBe(true);
-  });
-
-  it("becomes a number with no announcement when a belt appears", () => {
-    const m = model({ frame: frame({ heartRateBpm: 151 }) });
-    expect(m.hr.display).toBe("151");
-    expect(m.hr.absent).toBe(false);
-  });
-});
+// `SurfaceModel.hr` died (CR2 spec 3 Task 4, spec §3 fate table):
+// `PaneLive`'s own HR cell was its only render site, and the redesign cuts
+// it outright — HR survives only as the grid's own COLUMN, off `GridRow`,
+// with its own coverage in `PaneGrid.test.tsx`. The describe block that
+// used to live here tested `hr.absent`/`hr.display` directly off
+// `SurfaceModel`, which no longer exposes either.
 
 describe("a zero split is not a reading (7B iteration: the pre-pull tinted 0:00.0)", () => {
   it("live with currentSplit 0 renders the dash, unjudged — never 0:00.0 painted against the target", () => {
@@ -924,16 +1140,15 @@ describe("paused", () => {
     const m = model({ status: "paused" });
     expect(m.stale).toBe(false);
     expect(m.linked).toBe(true);
-    expect(m.nowLabel).toBe("NOW");
+    // CR2 spec 3 Task 2: `nowLabel` no longer carries a word for `paused`
+    // either — see the "carries no NOW" test above for the full rule.
+    expect(m.nowLabel).toBe("");
   });
 
-  it("holds the interval clock's last value rather than blanking it", () => {
-    const m = model({
-      status: "paused",
-      frame: frame({ intervalRemaining: { kind: "time", value: 41 } }),
-    });
-    expect(m.intervalClockValue).toBe("0:41");
-  });
+  // `intervalClockValue`'s own "holds the last value rather than blanking
+  // it" pin retired with the field itself (CR2 spec 3 Task 5) — its own
+  // describe block, above, has the full account of where its coverage
+  // went.
 
   // connected-axes 2a, task 5: the split hero already suppressed to `—`
   // above (`livePace`'s own doc comment); the rate hero never did — a
@@ -949,6 +1164,9 @@ describe("paused", () => {
 });
 
 describe("disconnected: lose and degrade (spec C5)", () => {
+  // `meters`/`hr` no longer appear on `SurfaceModel` (CR2 spec 3 Task 4) —
+  // pace/rate are the only judged actuals left exposed, so "EVERY" now
+  // means those two.
   it("greys EVERY actual, whatever it would otherwise have judged", () => {
     const target = firstWorkPhase().targetSplit!;
     const m = model({
@@ -958,8 +1176,6 @@ describe("disconnected: lose and degrade (spec C5)", () => {
     expect(m.stale).toBe(true);
     expect(m.pace.judgement).toBe("stale");
     expect(m.rate.judgement).toBe("stale");
-    expect(m.meters.judgement).toBe("stale");
-    expect(m.hr.judgement).toBe("stale");
   });
 
   it("relabels NOW as LAST and hollows the indicator", () => {
@@ -991,7 +1207,6 @@ describe("degenerate inputs", () => {
     // it too, not to special-case it away.)
     expect(m.pace.display).toBe("0:00.0");
     expect(m.pace.judgement).toBe("within");
-    expect(m.intervalClockValue).toBe("—");
     expect(m.intervalLabel).toBe("WARM-UP");
   });
 
@@ -1421,4 +1636,61 @@ describe("Task 6: the active row's accrued cell at interval index 2 (the checkpo
   // still produces the clamped kind). The 45 -> "0:45" test above is the
   // real discriminating coverage: it fails if the display math regresses in
   // either direction.
+});
+
+// ---------------------------------------------------------------------------
+// CR2 spec 3 Tasks 4 and 5: the five dying fields, actually gone (task
+// briefs' own "deletion pins" — `PaneLive.tsx`'s TOTAL M/HR/LEFT IN
+// INTERVAL cells and `TimerRuler`'s TOTAL LEFT row are cut outright, spec
+// §3 fate table). Task 4 shipped this block naming `intervalClockValue` as
+// explicitly NOT one of the four, reserved for Task 5's own deletion
+// (antagonist correction 1) — Task 5 is that task, so the fifth key joins
+// the other four here rather than opening a second, near-identical block.
+// ---------------------------------------------------------------------------
+
+/** COMPILE-TIME PIN, checked by `tsc`, not by a runtime assertion: if any of
+ *  the five dying keys reappears on `SurfaceModel`, `Extract<keyof
+ *  SurfaceModel, DeadKeys>` stops being `never` and this file fails to
+ *  typecheck — `const _pin: DeadKeysGone = true` no longer accepts `true`.
+ *  A naive `DeadKeys extends keyof SurfaceModel ? never : true` version
+ *  (tried first) is UNSOUND for this purpose: TypeScript distributes a
+ *  conditional over a union type parameter, so ONE surviving key produces
+ *  `never` for that member alone, and `never` vanishes silently inside the
+ *  resulting union (`never | true` collapses to `true`) — a regression on
+ *  any four of the five keys would still pass. `Extract` has no such
+ *  collapse: it is non-empty the instant ANY dead key overlaps
+ *  `keyof SurfaceModel`, so the whole pin depends on ALL FIVE being gone. */
+type DeadKeys =
+  | "meters"
+  | "hr"
+  | "intervalClockLabel"
+  | "totalLeftSeconds"
+  | "intervalClockValue";
+type DeadKeysGone =
+  Extract<keyof SurfaceModel, DeadKeys> extends never ? true : false;
+
+describe("the five fields die (CR2 spec 3 Tasks 4 and 5, spec §3 fate table)", () => {
+  it("meters, hr, intervalClockLabel, totalLeftSeconds and intervalClockValue are gone from the TYPE", () => {
+    // `deadKeysGone` is `true` at compile time only if `DeadKeysGone`
+    // resolved to the literal type `true` — if any of the five keys
+    // reappeared on `SurfaceModel`, `DeadKeysGone` would be `false` and this
+    // assignment would fail to typecheck (`tsc -b`, this repo's own
+    // `pnpm typecheck`), not merely fail at runtime.
+    const deadKeysGone: DeadKeysGone = true;
+    expect(deadKeysGone).toBe(true);
+  });
+
+  it("…and gone from a REAL model, not just from the type", () => {
+    // The test above proves the TYPE; this proves the runtime shape
+    // actually matches it — a `Partial`/spread anywhere inside
+    // `buildSurfaceModel` could satisfy the type while still leaving a
+    // stray key on the real returned object, which `Object.keys` catches
+    // and the type-level check alone would not.
+    const keys = Object.keys(model());
+    expect(keys).not.toContain("meters");
+    expect(keys).not.toContain("hr");
+    expect(keys).not.toContain("intervalClockLabel");
+    expect(keys).not.toContain("totalLeftSeconds");
+    expect(keys).not.toContain("intervalClockValue");
+  });
 });

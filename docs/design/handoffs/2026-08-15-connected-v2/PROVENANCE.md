@@ -61,6 +61,20 @@ guessing is how a wrong number ships.
    there is no word. The block reads `PULL TO RESUME` alone, occludes
    nothing, and `paused` left `ConnectedPhase`. Spec 3 restyles the footer
    it lives in; the state work is done.
+5. **The §"HR zone + calories" section's premise is FALSIFIED — do not
+   implement it as written** (PM design gate, 2026-08-16). "Calories are
+   derived from HR; both cells appear and disappear together" is wrong on
+   this wire: the PM5 reports calories itself on 0x0033 bytes 6-7, strap or
+   no strap — and that value is INTERVAL-scoped, resetting to 0 at every
+   boundary (decoded from both committed walk-2026-08-16 recordings: the
+   2×250 keystone ends reading 15 for a ~30-cal session; the 4-interval
+   session resets four times). The 0x0039 summary carries no calorie field,
+   so no machine-authoritative session calorie exists anywhere we decode.
+   An honest CAL cell therefore needs the same register-fold discipline
+   spec 1 built for distance. James's ruling (2026-08-16): CAL and ZONE
+   are both out of spec 3; the band ships as up-next + TOTAL LEFT; "session
+   calories, folded" is a filed follow-up. ZONE additionally needs a
+   max-HR source the app does not have.
 
 ## Not part of the design
 

@@ -1,14 +1,23 @@
 // The connected surface (7B Task 6, handoff §§3-4): the pane shell, the
-// swipe, the labelled pager, End, and the two mid-session states. It
+// header segmented control, End, and the two mid-session states. It
 // replaces Task 5's one-line phase gate — the interstitial still owns the
 // `useMonitorSession` instance and hands its value down, so the radio is
 // never torn down and rebuilt at the handoff (this file calls no driver, no
 // transport and no `monitorRun` function; the plan's layering rule).
 //
 // Task 7 filled pane C's slot (`connected/PaneGrid.tsx`) and hung the
-// diagnostics sheet off the pager (handoff §5) — the two things this file
+// diagnostics sheet off the rail (handoff §5) — the two things this file
 // gained are the grid's entry in the render switch and `useTripleTap`
 // below. Everything else here is Task 6's and unchanged.
+//
+// CR2 SPEC 3, TASK 1 (2026-08-16): `PagerRail` and the swipe handler
+// (`handleTouchStart`/`handleTouchEnd`, `paneAfterSwipe`,
+// `SWIPE_THRESHOLD_PX`) are GONE — design spec Ruling 3/4, the pane slide
+// and the swipe were both cut at the design gate. `SegmentedControl`
+// (`connected/SegmentedControl.tsx`) is the only way to change panes now,
+// and `ConnectionLine` (the mark + device caption + status) moved out of
+// the panes into this component's own header row — see the header's own
+// comment below for the shape.
 //
 // THE MOUNT QUESTION (inherited from Task 4, decided here): **the surface
 // UNMOUNTS at `ended`, and the hook's existing unmount teardown owns the
@@ -42,20 +51,85 @@
 // ever wants the surface to persist past `ended`, THAT change is what has
 // to add the explicit hang-up — the offer stands, unexercised.
 
+import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
 import { deriveAxes } from "../monitor/connectedAxes";
 import type { MonitorSession } from "../monitor/useMonitorSession";
 import { ARM_TIMEOUT_MS } from "../session/useStagedDiscard";
 import type { EnginePhase } from "../session/engine";
+import ConnectionLine from "./connected/ConnectionLine";
 import ConnectionLogSheet from "./connected/ConnectionLogSheet";
-import PagerRail, { PANES, type PaneId } from "./connected/PagerRail";
 import PaneGrid from "./connected/PaneGrid";
 import PaneLive from "./connected/PaneLive";
+import SegmentedControl, {
+  PANES,
+  type PaneId,
+} from "./connected/SegmentedControl";
 import {
   buildSurfaceModel,
+  type SurfaceModel,
   type SurfaceStatus,
 } from "./connected/surfaceModel";
+
+/** CR2 spec 3 Task 5 (design spec §2B's composition note, and the known
+ *  interim defect Task 5 closes: on GRID the header used to read
+ *  `3 OF 12 · WORK` while the pane's OWN headline directly below it read
+ *  `3 OF 12 · WORK · 0:47 LEFT` — the same fact, twice, one row apart).
+ *  GRID's own header trailing is DIFFERENT from every other pane's: it
+ *  joins `intervalOrdinalLabel` with `totalLeftDisplay`
+ *  (`3 OF 12 · 38:20 LEFT`) instead of `intervalLabelShort`, which bakes
+ *  the phase word in (`3 OF 12 · WORK`) — `intervalOrdinalLabel`'s own doc
+ *  comment names the reason the two cannot be the same field. The
+ *  countdown half wears `--marker` gold (Ruling 1's own deviation from the
+ *  README's accent), which is presentation, not a value — `surfaceModel.ts`
+ *  is pure (no React, its own header comment) and cannot hand back a
+ *  coloured span itself, so this composition lives at the CALLER, one
+ *  level above the pane that used to own it. The return value renders
+ *  directly into the header's own `.connected-line-trailing` span (Task 6
+ *  fix round: this used to thread through `ConnectionLine`'s own
+ *  `trailing` prop; that prop is gone — `ConnectionLine.tsx`'s own comment
+ *  has the reason the status caption moved out to a header-level sibling)
+ *  rather than the surface passing a second, pane-specific prop through a
+ *  component that would then have to reconcile two "what goes here"
+ *  inputs — one composed node at the one call site that already knows
+ *  which pane is active.
+ *
+ *  TWO SEPARATE FALLBACKS to `intervalLabelShort`, not one (task-5-review
+ *  fix round — the first version of this function conflated them and
+ *  shipped a regression). The unnumbered warm-up
+ *  (`intervalOrdinalLabel === null`) is one: there is no ordinal to join
+ *  `totalLeftDisplay` onto, so GRID shows the same `WARM-UP` word every
+ *  other pane does. `model.status === "armed"` is the OTHER, and it is not
+ *  implied by the first: with the warm-up preference off (a real, shipped
+ *  default — `usePreferences`'s own null column), the FIRST interval at
+ *  armed is already numbered (`intervalOrdinalLabel` is `"1 OF 4"`, not
+ *  `null`), so the ordinal-null guard alone does not stop the countdown
+ *  composition from firing before the erg has moved — the same shape of
+ *  mistake `.claude/agent-briefing.md` names by name for a DIFFERENT
+ *  invented state, one axis over: a RUNNING gold countdown at a rower who
+ *  has taken no stroke. `intervalLabelShort` already has its own armed branch
+ *  (`surfaceModel.ts`'s `readyLabel`) that reads `1 OF 4 · READY` for
+ *  exactly this case — armed is checked FIRST, ahead of the ordinal
+ *  check, so GRID never reaches the countdown composition while armed,
+ *  numbered interval or not. */
+function headerTrailing(model: SurfaceModel, pane: PaneId): ReactNode {
+  if (
+    pane !== "grid" ||
+    model.status === "armed" ||
+    model.intervalOrdinalLabel === null
+  ) {
+    return model.intervalLabelShort;
+  }
+  return (
+    <>
+      {model.intervalOrdinalLabel} ·{" "}
+      <span className="connected-header-countdown">
+        {model.totalLeftDisplay} LEFT
+      </span>
+    </>
+  );
+}
 
 /** Which pane the rower was last on, PER ROWER — not per workout (handoff
  *  §3: "whichever pane the rower last used (per rower, not per workout)…
@@ -86,25 +160,6 @@ export function saveLastPane(pane: PaneId): void {
   } catch {
     // best-effort: a failed persist never interrupts a rowing session
   }
-}
-
-/** Handoff §3: "Swipe anywhere on the surface, 60px threshold, is the real
- *  navigation; the rail is confirmation and a fallback." */
-export const SWIPE_THRESHOLD_PX = 60;
-
-/** Clamped step through `PANES`: the ends do not wrap. A wrap would send a
- *  rower who swiped past the grid back to the timer, which reads as the
- *  surface having lost its place. */
-// eslint-disable-next-line react-refresh/only-export-components
-export function paneAfterSwipe(current: PaneId, deltaX: number): PaneId {
-  if (Math.abs(deltaX) < SWIPE_THRESHOLD_PX) return current;
-  const index = PANES.indexOf(current);
-  // Swiping LEFT (negative delta) moves forward through the panes, the way
-  // a horizontal pager always has.
-  const next = deltaX < 0 ? index + 1 : index - 1;
-  // `!`, not `?? current`: the index is clamped into range on the line
-  // above, so the fallback was a branch no test could ever reach.
-  return PANES[Math.min(Math.max(next, 0), PANES.length - 1)]!;
 }
 
 /** End's two-tap staging (handoff §3: "staged: `Tap again to end` for 4 s").
@@ -158,7 +213,7 @@ function useStagedEnd(): {
  *  through panes. */
 export const TRIPLE_TAP_WINDOW_MS = 600;
 
-/** Handoff §5's diagnostics gesture: three taps on the SAME pager target,
+/** Handoff §5's diagnostics gesture: three taps on the SAME control half,
  *  each within `TRIPLE_TAP_WINDOW_MS` of the last. Two taps do nothing (the
  *  pin the mutation round exists for) — and tapping a DIFFERENT target
  *  restarts the count at one, because that is a rower navigating, not a
@@ -216,12 +271,11 @@ export default function ConnectedSurface({
   onEnded,
 }: ConnectedSurfaceProps) {
   const [pane, setPane] = useState<PaneId>(() => loadLastPane());
-  const touchStartX = useRef<number | null>(null);
   const end = useStagedEnd();
   const [logOpen, setLogOpen] = useState(false);
-  /** The pager target the third tap landed on — SheetShell restores focus
-   *  to whatever opened it, and for this sheet that is a button the rail
-   *  owns, not one this component renders. */
+  /** The control half the third tap landed on — SheetShell restores focus
+   *  to whatever opened it, and for this sheet that is a button
+   *  `SegmentedControl` owns, not one this component renders. */
   const logOpener = useRef<HTMLElement | null>(null);
   const registerTap = useTripleTap(() => setLogOpen(true));
 
@@ -255,32 +309,17 @@ export default function ConnectedSurface({
     saveLastPane(next);
   }
 
-  /** A rail press does BOTH things, always: it selects the pane (the rail
-   *  is "confirmation and a fallback" for the swipe) and it counts towards
-   *  the diagnostics gesture. Three presses on the grid target therefore
-   *  land on the grid AND open the log — the sheet is a modal over
-   *  whichever pane the rower was heading for. */
-  function handleRailPress(next: PaneId, target: HTMLElement): void {
+  /** A control press does BOTH things, always: it selects the pane and it
+   *  counts towards the diagnostics gesture. Three presses on the grid
+   *  target therefore land on the grid AND open the log — the sheet is a
+   *  modal over whichever pane the rower was heading for. (Swipe used to be
+   *  the primary navigation and this the fallback; the swipe handler is
+   *  gone — design spec 2026-08-16 Ruling 4 — so this is now the only way
+   *  to change panes.) */
+  function handleControlPress(next: PaneId, target: HTMLElement): void {
     logOpener.current = target;
     choosePane(next);
     registerTap(next);
-  }
-
-  function handleTouchStart(event: React.TouchEvent<HTMLElement>): void {
-    touchStartX.current = event.touches[0]?.clientX ?? null;
-  }
-
-  function handleTouchEnd(event: React.TouchEvent<HTMLElement>): void {
-    const start = touchStartX.current;
-    touchStartX.current = null;
-    if (start === null) return;
-    const endX = event.changedTouches[0]?.clientX;
-    if (endX === undefined) return;
-    const next = paneAfterSwipe(pane, endX - start);
-    // A swipe is NOT a tap: the gesture that opens diagnostics is three
-    // deliberate presses on one 56px target, and a rower flicking between
-    // panes must never fall into it.
-    if (next !== pane) choosePane(next);
   }
 
   function handleEnd(): void {
@@ -357,38 +396,84 @@ export default function ConnectedSurface({
   });
 
   return (
-    <main
-      className="screen connected-surface"
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
-    >
-      {/* THE SAFETY FIX (connected-revamp Task 6, James 2026-08-12 reading
-          the captures): the old full-width footer button "could easily be
+    <main className="screen connected-surface">
+      {/* THE HEADER (connected-revamp Task 6's safety fix, restructured by
+          CR2 spec 3 task 1 — design spec §3 "Structure"; the status caption
+          split out to its own child by Task 6's FIX ROUND, CRITICAL 1 —
+          see below). THREE children now: `ConnectionLine` (the mark and
+          device caption only, since the fix round), the composed status
+          span, and End. The status is `headerTrailing(model, pane)` (above,
+          CR2 spec 3 Task 5) — GRID gets its own composed `N OF M ·
+          <countdown> LEFT` node, every other pane keeps
+          `model.intervalLabelShort` exactly as `PaneLive` used to thread
+          it. `ConnectionLine` carries `flex: 1` (index.css) so it fills
+          whatever width End does not need, which is what keeps End pinned
+          to the row's own right edge without the two ever sitting adjacent
+          — spec §2A: "Control and END never adjacent."
+
+          THE FIX ROUND'S OWN RESTRUCTURE (CRITICAL 1: three committed
+          portrait captures — `connected-pane-grid.png`,
+          `connected-pane-grid-long.png`, `connected-disconnected.png` —
+          showed this status text overprinting the device id and/or END).
+          §2C's own table draws the status on ITS OWN LINE below the header
+          row ("Header: PM5 id + END … Status line mono 21"), not sharing
+          it — the status span used to render nested INSIDE
+          `ConnectionLine`'s own `.connected-line` box (a second, separate
+          flex context from this header's), so no amount of CSS on
+          `.connected-header` alone could ever push it onto a new LINE of
+          THIS row; a nested flex item cannot escape its own container's
+          box by any `flex-wrap`/`order` declared on an ancestor two levels
+          up. Promoting the status to a direct sibling here — of
+          `ConnectionLine` and End both — is what makes it a real flex ITEM
+          of `.connected-header` itself, which is the only way `index.css`
+          can wrap JUST this child onto its own line in portrait
+          (`.connected-line-trailing`'s own `order: 2; flex-basis: 100%`
+          rule, landscape resets both) while leaving every other child, and
+          landscape's single-row layout, untouched. Chosen over the other
+          candidate mechanism (a CSS-only reflow via `display: contents` on
+          `.connected-line` to unwrap its children into this row) because
+          that path would have also unwrapped `.connected-line`'s own 8px
+          mark-device gap into the header's 12px gap — a real, if small,
+          unrequested visual change to the landscape row this fix must
+          leave alone — where moving three lines of JSX changes nothing
+          about what paints in landscape at all (same three items, same
+          order, same computed layout, `design.spec.ts`'s own 2A header-row
+          test is unchanged and still green). Triple-tap and focus order
+          are untouched by this move: the gesture lives on
+          `SegmentedControl`'s own halves (spec §3), never on the header.
+
+          `SegmentedControl` is NOT rendered inside this `<div>` (spec §3:
+          "own grid item of `.connected-surface`... NOT a DOM child of
+          `.connected-header`" — a header child cannot become a portrait
+          bottom bar by CSS alone). It renders after the footer, below,
+          positioned into this same visual row by landscape's own grid
+          placement.
+
+          THE SAFETY FIX ITSELF (James 2026-08-12, unchanged by this
+          restructure): the old full-width footer button "could easily be
           touched accidentally if somebody tries to change views mid-row" —
-          every point along the bottom edge WAS End's hit box, so a short
-          stumble that never travels the 60px swipe threshold landed as a
-          tap on it. End now lives in this small header instead: a 44pt
-          outlined control (revision §2) that does not span the surface's
-          width and sits at the TOP edge, clear of the vertical middle a
-          real swipe gesture crosses. Rendered UNCONDITIONALLY — paused or
-          not — so its own row never changes height and nothing below it
-          (the pane body) ever shifts; the paused block gets its own,
-          additional END/AGAIN affordance in the slot End vacated (below),
-          off the SAME armed state, but this header control keeps working
-          too. Staging is unchanged: first tap arms `TAP AGAIN` for
-          `ARM_TIMEOUT_MS`, exactly as before — the size and position
-          changed, not the confirm.
+          every point along the bottom edge was End's hit box. End lives in
+          this small header instead: a 44pt outlined control (revision §2)
+          that does not span the surface's width. Rendered
+          UNCONDITIONALLY — paused or not — so its own row never changes
+          height and nothing below it (the pane body) ever shifts; the
+          paused block gets its own, additional END/AGAIN affordance in the
+          slot End vacated (below), off the SAME armed state, but this
+          header control keeps working too. Staging is unchanged: first tap
+          arms `TAP AGAIN` for `ARM_TIMEOUT_MS`.
 
           THE LABEL IS THE MOCKUP'S (`Ergomatic connected mode.dc.html`
           :297/:379/:510/:559 — `END`, and `TAP AGAIN` armed, revision §2's
-          own staging wording), not the old bar's sentence. It is why the
-          box measures ~50px instead of the 109px the sentence cost, on the
-          one control this task exists to shrink. The ACCESSIBLE name keeps
-          the sentence (`aria-label`): a dozen selectors across unit and e2e
-          key on "End session", the visible word alone would collide with
-          the paused block's own `END`, and "END" is a prefix of "End
-          session" so WCAG 2.5.3's label-in-name still holds. */}
+          own staging wording), not the old bar's sentence. The ACCESSIBLE
+          name keeps the sentence (`aria-label`): a dozen selectors across
+          unit and e2e key on "End session", the visible word alone would
+          collide with the paused block's own `END`, and "END" is a prefix
+          of "End session" so WCAG 2.5.3's label-in-name still holds. */}
       <div className="connected-header">
+        <ConnectionLine model={model} />
+        <span className="connected-line-trailing">
+          {headerTrailing(model, pane)}
+        </span>
         <button
           type="button"
           className={
@@ -427,7 +512,15 @@ export default function ConnectedSurface({
           <PausedBlock armed={end.armed} onEnd={handleEnd} />
         )}
       </div>
-      <PagerRail active={pane} onSelect={handleRailPress} />
+      {/* Last in DOM on purpose (matches where `PagerRail` used to sit): in
+          portrait (a flex column) that makes it the bottom bar for free,
+          with no CSS placement needed. Landscape's own grid moves it into
+          row 1 beside the header instead (`index.css`'s own
+          `.connected-control` comment) — CSS Grid placement is independent
+          of DOM/paint order, so this does not disturb the tab order below
+          (`ConnectedSurface.test.tsx`/`e2e/screenshots.spec.ts` pin
+          `End → scroller → control halves` in both orientations). */}
+      <SegmentedControl active={pane} onSelect={handleControlPress} />
       {logOpen && (
         <ConnectionLogSheet
           deviceCaption={model.deviceCaption}

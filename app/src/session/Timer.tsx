@@ -680,16 +680,21 @@ export default function Timer() {
             turns `.timer-header` ITSELF into `display: contents` too, so
             `.timer-gutter` is promoted a second level up to become a
             direct grid child of `.timer-screen`, where it becomes the real
-            44px column (mirroring `.connected-pager`'s own back/target
-            column, index.css). `←` is decorative (`aria-hidden`) — this
-            surface has nothing behind it to navigate back TO mid-session;
-            the mockup itself draws it as a bare glyph, no button chrome,
-            unlike END beside it.
+            44px column — this surface's own gutter, unrelated to and
+            unaffected by the connected surface's own shell (CR2 spec 3
+            task 1 retired that surface's gutter and `PagerRail.tsx`
+            entirely; this timer screen is a separate product surface the
+            PM gate's "forks, not shared-component edits" condition keeps
+            that spec from reaching). `←` is decorative (`aria-hidden`) —
+            this surface has nothing behind it to navigate back TO
+            mid-session; the mockup itself draws it as a bare glyph, no
+            button chrome, unlike END beside it.
 
             The decorative camera-housing spacer that used to sit between
-            them is GONE (James's erg walk, 2026-08-13) — see
-            `PagerRail.tsx`'s own header for the reasoning; this was its
-            twin and goes with it. `space-between` on the landscape gutter
+            them is GONE (James's erg walk, 2026-08-13) — the connected
+            surface's own now-retired pager carried the identical spacer
+            and the identical reasoning; this was its twin and went with
+            it in the same round. `space-between` on the landscape gutter
             is what puts back at the top and END at the bottom, so removing
             the middle child changes no position. */}
         <div className="timer-gutter">

@@ -265,7 +265,10 @@ export interface GridModel {
   activeIndex: number;
   /** The handoff's own words-not-glyphs caption naming which rows count
    *  METERS down, or `null` when the session has no distance interval and
-   *  therefore nothing to explain. */
+   *  therefore nothing to explain. CR2 spec 3 Task 5 (design spec §2B):
+   *  merged with the README's own scroll hint — `N MORE BELOW` prefixed
+   *  ahead of the distance sentence, e.g. `5 MORE BELOW · ROW 5 IS A
+   *  500 M PIECE` — built by `footerCaptionFor` below. */
   caption: string | null;
 }
 
@@ -281,29 +284,72 @@ export interface SurfaceModel {
    *  (design spec §5b — the ordinal belongs to the interval and a warm-up
    *  has none, so there is no `INTERVAL` prefix left to hang on it). No
    *  current renderer: its only one, `PaneTimer.tsx`'s pane A, retired with
-   *  connected-revamp Task 2. Casualty list (design spec §3) rehomes it to
-   *  the grid header (revision §4's `3 OF 12 · WORK · 0:47 LEFT`) — a later
-   *  task's job, not this field's; the value stays computed and correct in
-   *  the meantime. */
+   *  connected-revamp Task 2. CR2 spec 3 Task 5 CORRECTS an earlier plan
+   *  assumption carried in this comment: the grid header does NOT rehome
+   *  THIS field — it composes `intervalOrdinalLabel` (below) with
+   *  `totalLeftDisplay` instead, because this field bakes the phase word
+   *  in and the grid header never wants it (`ConnectedSurface.tsx`'s own
+   *  header comment). So this field stays computed, correct and genuinely
+   *  unrendered — kept for the same reason `intervalLabelShort` is kept
+   *  alongside it, not because a future task still owes it a home. */
   intervalLabel: string;
   /** `3 OF 24 · WORK`, or `WARM-UP` (pane B's header line, where the device
    *  name already occupies the left of the row). The denominator counts
-   *  WORKING intervals only — see `intervalNumbering`. */
+   *  WORKING intervals only — see `intervalNumbering`. CR2 spec 3 Task 2
+   *  (design spec §2D): gains an ARMED branch — `${ordinal} OF ${count} ·
+   *  READY`, bare `READY` when the armed interval is the unnumbered
+   *  warm-up — closing PROVENANCE item 3. */
   intervalLabelShort: string;
-  /** `NOW` live; `LAST` once the link is gone (handoff §4). The unit used
-   *  to ride in this label (`NOW · /500M`); testers asked for it beside the
-   *  NUMERAL instead (James, 2026-08-13), and `PaneLive.tsx` renders it
-   *  there now — carrying it in both places would say `/500m` twice inside
-   *  one hero. */
+  /** CR2 spec 3 Task 2 (design spec §3, composition note under §2B):
+   *  ordinal-only sibling of `intervalLabelShort` — `3 OF 24`, or `null` on
+   *  the unnumbered warm-up, the same `null` rule `intervalLabelShort`
+   *  itself already applies. `intervalLabelShort` bakes the phase word in
+   *  (`· WORK`/`· READY`), which the grid header (§2B) does not want — it
+   *  joins THIS field with `totalLeftDisplay` instead
+   *  (`3 OF 12 · 38:20 LEFT`), so a later task reads the ordinal without
+   *  re-parsing the phase word back out of the combined caption. */
+  intervalOrdinalLabel: string | null;
+  /** `LAST` once the link is gone (handoff §4); `""` every other status.
+   *  CR2 spec 3 Task 2 (design spec §3 fate table, "Stale" table): the
+   *  `NOW` branch DIES with the hero labels themselves — 2A's own table
+   *  cuts `NOW`/`TARGET`/`UP NEXT` labels from LIVE outright, so `LAST` is
+   *  now the only word this field ever produces, and `PaneLive.tsx`'s
+   *  existing `!== ""` guard already renders nothing for every other
+   *  status with no pane-file change required. The unit used to ride in
+   *  this label (`NOW · /500M`); testers asked for it beside the NUMERAL
+   *  instead (James, 2026-08-13), and `PaneLive.tsx` renders it there now —
+   *  carrying it in both places would say `/500m` twice inside one hero. */
   nowLabel: string;
+  /** CR2 spec 3 Task 2 (design spec §2D): gains an ARMED branch — at armed
+   *  this reads the FIRST interval forward (`phases[phaseIndex]`) rather
+   *  than `phases[phaseIndex + 1]`, because there is no "current" phase yet
+   *  to be up-next FROM; the non-armed formula (today's `upNextTextAt`) is
+   *  unchanged. */
   upNext: string;
+  /** Armed branch mirrors `upNext`'s own shift, one phase further out
+   *  (`phases[phaseIndex + 1]`, not `[phaseIndex + 2]`) — §2D's own example
+   *  (`WORK 10:00 · then REST 1:00`) is only honest if `thenNext` names the
+   *  phase the shifted `upNext` is itself followed by; shifting only
+   *  `upNext` would skip a phase and show what comes AFTER the coming
+   *  rest. */
   thenNext: string | null;
   totalSeconds: number;
-  totalLeftSeconds: number;
-  /** `44:12`, the same figure `TimerRuler` prints — pane C has no room for
-   *  the ruler and carries it as the header line's trailing caption
-   *  instead. */
+  /** `44:12` — CR2 spec 3 Task 4 deleted the sibling `totalLeftSeconds`
+   *  field (spec §3 fate table): `PaneLive`'s own `TimerRuler` cell was its
+   *  only render site, and the band cell that replaces it renders THIS
+   *  field directly; `ConnectedProgressBar` takes elapsed/`totalSeconds`
+   *  itself rather than a pre-subtracted figure. Pane C's grid header reads
+   *  it too — there is no room for a second ruler there either. */
   totalLeftDisplay: string;
+  /** CR2 spec 3 Task 2 (antagonist correction 1): the model's own numeric
+   *  elapsed — `min(frame.sessionElapsedSeconds, totalSeconds)`, `0` on the
+   *  `armedMirror` branch (mirrors `totalLeftSeconds`'s own "armed reads
+   *  un-started, always" stance one line above it). `elapsedDisplay` below
+   *  is the same fact as a STRING for the log sheet; this is the NUMBER
+   *  Task 3's `ConnectedProgressBar` needs to place its fill, since
+   *  `totalLeftSeconds` (the subtraction route) dies in Task 4/5 and
+   *  nothing else on the model carries elapsed as a number today. */
+  elapsedSeconds: number;
   /** Where the intervals actually are, for the live pane's notched TOTAL
    *  LEFT bar (design spec §5). One entry per INTERIOR interval boundary —
    *  the bar's spans are the intervals the program has, never
@@ -314,11 +360,6 @@ export interface SurfaceModel {
    *  own actuals; see `session/intervalBoundaries.ts`. */
   boundaries: IntervalBoundaries;
   elapsedDisplay: string;
-  /** `LEFT IN INTERVAL` on a time interval, `METERS LEFT` on a distance one
-   *  (handoff §3: "On a distance interval the second slot becomes METERS
-   *  LEFT"). */
-  intervalClockLabel: string;
-  intervalClockValue: string;
   pace: JudgedValue;
   /** The hero split, cut so the tenths can be set smaller (handoff §3: "the
    *  eye should land on the seconds, not the decimal"). `paceTenths` is `""`
@@ -339,8 +380,12 @@ export interface SurfaceModel {
    *  presentation-string coupling. Mirrors `targetSplit` below; no `sub`
    *  because a rate target carries no ref to show underneath it. */
   targetRate: { main: string; absent: boolean };
-  meters: JudgedValue;
-  hr: JudgedValue;
+  // `meters` and `hr` (session-wide judged distance and heart rate) DIED
+  // here (CR2 spec 3 Task 4, spec §3 fate table): `PaneLive`'s `TOTAL M`
+  // and `HR` cells were their only render sites, and both cells are cut
+  // outright — `GridRow.meters` (the grid's METERS column) is a different
+  // field and SURVIVES; HR stays as a grid COLUMN, off `GridRow`, computed
+  // locally in `buildGridModel` below rather than exposed here.
   /** The TARGET SPLIT card: resolved value + the ref it came from. */
   targetSplit: { main: string; sub: string | null; absent: boolean };
   /** That card's third line — the ref when there is one, and EMPTY when
@@ -561,23 +606,18 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
     stale,
     format: (v) => String(Math.round(v)),
   });
-  // The whole-SESSION distance — `sessionDistanceMeters`, the driver's
-  // accumulated total, NOT 0x0031's own `distanceMeters`. This comment used
-  // to call the raw field "the machine's own whole-workout distance"; walk 4
-  // (interface-notes.md §18, 2026-08-08) showed that premise is false —
-  // 0x0031's Distance RESETS at every work interval, and this card was seen
-  // falling 109 -> 50 at the 2x100m's second interval because of it.
-  // Still not per-interval meters (the mockup's `THIS INTERVAL` caption
-  // remains a claim the seam cannot back — see the task-6 report's deviation
-  // note); the `TOTAL` caption below is now literally true rather than
-  // accidentally so.
-  const meters = judgedValue({
-    kind: "meters",
-    actual: frame.sessionDistanceMeters,
-    target: null,
-    stale,
-    format: (v) => String(Math.round(v)),
-  });
+  // THE SESSION-WIDE `meters` JUDGED VALUE DIED HERE (CR2 spec 3 Task 4):
+  // it fed only `PaneLive`'s own `TOTAL M` cell, which the redesign cuts
+  // outright (spec §3 fate table) — `frame.sessionDistanceMeters` has no
+  // remaining consumer in this module. `GridRow.meters` (the grid's own
+  // METERS column, a different fact — per-interval, not session-wide) is
+  // computed separately, in `buildGridModel` below.
+  //
+  // `hr` SURVIVES as a LOCAL value only — its own `PaneLive` HR cell is cut
+  // the same way, but the grid's active row still needs a live HR reading
+  // for its own HR column (`buildGridModel`'s `liveHr` param, just below),
+  // so the computation stays; only the field's exposure on the returned
+  // `SurfaceModel` is gone.
   const hr = judgedValue({
     kind: "hr",
     actual: frame.heartRateBpm,
@@ -643,9 +683,20 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
   const totalLeftSeconds = armedMirror
     ? totalSeconds
     : Math.max(0, totalSeconds - frame.sessionElapsedSeconds);
+  // THE SAME "armed reads un-started" STANCE, as a NUMBER (CR2 spec 3 Task
+  // 2, antagonist correction 1) — `0`, never `frame.sessionElapsedSeconds`
+  // read straight through, for the identical reason `totalLeftSeconds`
+  // above gives: an armed frame's own carried-over pair is not to be
+  // trusted even where it happens to already read zero. Off-armed, this is
+  // simply the session clock capped at the session's own length (the same
+  // cap `totalLeftSeconds`'s `Math.max(0, …)` enforces from the other
+  // direction), so a machine that overran never hands Task 3's progress
+  // bar an elapsed figure past 100%.
+  const elapsedSeconds = armedMirror
+    ? 0
+    : Math.min(frame.sessionElapsedSeconds, totalSeconds);
 
   const remaining = frame.intervalRemaining;
-  const distanceInterval = remaining?.kind === "distance";
   const kindWord = phase ? phaseKindWord(phase.type) : "WORK";
 
   // THE ORDINAL BELONGS TO THE INTERVAL, THE WORD TO THE PHASE (§5b). An
@@ -655,6 +706,20 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
   // interval is unchanged: `2 OF 4 · WORK`, `2 OF 4 · REST` in its rest.
   const ordinal = numbering.ordinals[intervalIndex] ?? null;
   const counted = `${ordinal} OF ${numbering.workCount} · ${kindWord}`;
+  // THE ORDINAL, ALONE (CR2 spec 3 Task 2, design spec §3): the grid header
+  // (§2B) wants `3 OF 12` joined with `totalLeftDisplay`, never the phase
+  // word `counted` already bakes in — see `intervalOrdinalLabel`'s own doc
+  // comment on the interface above.
+  const intervalOrdinalLabel =
+    ordinal === null ? null : `${ordinal} OF ${numbering.workCount}`;
+  // READY (design spec §2D — "the READY word ships HERE", closing
+  // PROVENANCE item 3): the armed caption keeps the same "no ordinal on the
+  // warm-up" rule `counted`/`kindWord` already enforce, substituting the
+  // WORD only — `intervalOrdinalLabel` above is exactly the prefix this
+  // needs, so the two cannot drift apart the same way the grid `#` column
+  // and this caption already cannot (`ordinal`, read once, both places).
+  const readyLabel =
+    intervalOrdinalLabel === null ? "READY" : `${intervalOrdinalLabel} · READY`;
 
   return {
     status,
@@ -662,30 +727,69 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
     linked: status !== "stale",
     deviceCaption: deviceCaptionFor(deviceName, status),
     intervalLabel: ordinal === null ? kindWord : `INTERVAL ${counted}`,
-    intervalLabelShort: ordinal === null ? kindWord : counted,
+    // ARMED READS READY (CR2 spec 3 Task 2, design spec §2D — the READY
+    // word ships HERE). Not-armed is entirely unchanged from before this
+    // task: `ordinal === null ? kindWord : counted`.
+    intervalLabelShort: armedMirror
+      ? readyLabel
+      : ordinal === null
+        ? kindWord
+        : counted,
+    intervalOrdinalLabel,
     // ARMED CARRIES NO LABEL AT ALL (I-1, final whole-branch review — the
     // task seam that dropped this: `ConnectedSurface.test.tsx`'s own "Task
     // 3 owns the armed pane"). Frame 2D draws the heroes with no `NOW`
     // above them — the rower has taken no stroke yet, so there is nothing
-    // "now" to caption — and `stale` still wins outright over `armed`
-    // (never reachable: `armedMirror` only fires when `status === "armed"`,
-    // and `stale` is a different status entirely, but the precedence is
-    // written explicitly rather than assumed). `PaneLive.tsx` renders
-    // nothing for the empty string, the same "absent, not blank" idiom the
-    // target-ref caption beside it already uses.
-    nowLabel: stale ? "LAST" : armedMirror ? "" : "NOW",
-    upNext: upNextTextAt(phases, phaseIndex),
-    thenNext: thenNextTextAt(phases, phaseIndex),
+    // "now" to caption. CR2 spec 3 Task 2 (design spec §3 fate table)
+    // widens this to EVERY status but `stale`: 2A's own property table cuts
+    // the `NOW` label from LIVE outright ("Cut from LIVE: NO NOW/TARGET/UP
+    // NEXT labels"), so the word this field used to carry live/paused
+    // never had anywhere left to be read once the labels themselves are
+    // gone — `stale` still wins outright over every other status, unchanged
+    // precedence, one fewer case. `PaneLive.tsx` renders nothing for the
+    // empty string, the same "absent, not blank" idiom the target-ref
+    // caption beside it already uses.
+    nowLabel: stale ? "LAST" : "",
+    // ARMED'S UP-NEXT IS THE FIRST INTERVAL FORWARD (design spec §2D,
+    // antagonist correction 2): today's `upNextTextAt(phases, phaseIndex)`
+    // names `phases[phaseIndex + 1]` — the coming REST at armed, per the
+    // committed `connected-armed-landscape.png` — because at every OTHER
+    // status `phaseIndex` names the phase already IN PROGRESS, so "next"
+    // correctly starts one further out. At armed nothing is in progress
+    // yet, so `phaseIndex` itself is the first thing coming — one index
+    // short of where the ordinary formula looks. `upNextTextAt(phases, i)`
+    // is `phaseAnnouncement(phases[i + 1])` by construction, so calling it
+    // one index EARLIER (`phaseIndex - 1`) reads `phases[phaseIndex]`
+    // exactly, reusing the existing FINISH-at-the-end handling rather than
+    // duplicating it. `thenNextTextAt` shifts the identical one index for
+    // the identical reason (antagonist correction 3): `thenNextTextAt(
+    // phases, i)` is `phaseAnnouncement(phases[i + 2])`, so the same
+    // `phaseIndex - 1` reads `phases[phaseIndex + 1]` — the phase
+    // `upNext`'s own armed value is itself followed by, never the one
+    // after THAT (§2D's own example, `WORK 10:00 · then REST 1:00`, is
+    // only true if `thenNext` names the REST and not whatever comes after
+    // it).
+    upNext: armedMirror
+      ? upNextTextAt(phases, phaseIndex - 1)
+      : upNextTextAt(phases, phaseIndex),
+    thenNext: armedMirror
+      ? thenNextTextAt(phases, phaseIndex - 1)
+      : thenNextTextAt(phases, phaseIndex),
     totalSeconds,
-    totalLeftSeconds,
+    // `totalLeftSeconds` stays a LOCAL value only (CR2 spec 3 Task 4): the
+    // returned `SurfaceModel` no longer exposes it — see this field's own
+    // doc comment above.
     totalLeftDisplay: fmtDuration(totalLeftSeconds / 60),
+    elapsedSeconds,
     boundaries: intervalBoundaries(phases, measuredWorkSeconds(input.actuals)),
-    // The log sheet captions this `SESSION m:ss` and PaneLive shows it as
-    // the piece's running clock — both mean the whole session, so it reads
-    // the accumulated pair for the same walk-4 reason TOTAL LEFT does.
+    // The log sheet captions this `SESSION m:ss` — its ONLY render site
+    // since the redesign (PaneLive's running clock retired with the label
+    // layer; ConnectedSurface threads it to ConnectionLogSheet). It reads
+    // the accumulated pair for the same walk-4 reason TOTAL LEFT does, and
+    // the phase-exit walk leans on exactly that: it is the register map's
+    // elapsed axis, rower-visible, so a mis-keyed register write shows
+    // here as well as in distance.
     elapsedDisplay: fmtDuration(frame.sessionElapsedSeconds / 60),
-    intervalClockLabel: distanceInterval ? "METERS LEFT" : "LEFT IN INTERVAL",
-    intervalClockValue: intervalClockValueFor(remaining),
     pace,
     paceWhole,
     paceTenths,
@@ -709,8 +813,9 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
             : String(targetSpm),
       absent: targetSpm === null,
     },
-    meters,
-    hr,
+    // `meters`/`hr` do NOT appear here (CR2 spec 3 Task 4) — see the doc
+    // comment above `targetSplit` for what died and why; `hr` still feeds
+    // the grid's `liveHr` param a few lines below, as a local value only.
     targetSplit,
     targetSplitCaption: targetSplit.sub ?? "",
     grid: buildGridModel({
@@ -942,7 +1047,7 @@ export function buildGridModel(args: {
   return {
     rows,
     activeIndex,
-    caption: distanceCaptionFor(intervals, numbering),
+    caption: footerCaptionFor(intervals, numbering, activeIndex),
   };
 }
 
@@ -984,6 +1089,35 @@ function accruedDisplayFor(
   return otherKind === "distance"
     ? String(Math.round(accrued.value))
     : fmtDuration(accrued.value / 60);
+}
+
+/** CR2 spec 3 Task 5 (design spec §2B): the footer caption merges the
+ *  README's own scroll hint ahead of the distance sentence —
+ *  `5 MORE BELOW · ROW 5 IS A 500 M PIECE`. "N MORE BELOW" is the count of
+ *  program rows strictly after the ACTIVE one (every row past `activeIndex`
+ *  is `"upcoming"` by construction — `buildGridModel`'s own three-state
+ *  rule above is positional, not actual-backed), never a count of rows
+ *  scrolled off the visible viewport: this module is pure (no React, no
+ *  DOM — this file's own header comment) and has no way to ask the
+ *  scroller what is actually on screen, so "below" reads the list's own
+ *  order, the same "below" the active row's auto-scroll
+ *  (`PaneGrid.tsx`'s `scrollIntoView`) keeps in view.
+ *
+ *  TWO SUPPRESSIONS, both deliberate: `below === 0` (the active row is the
+ *  last one — nothing left to hint at) omits the prefix rather than
+ *  printing `0 MORE BELOW`, and a `null` distance caption (no distance
+ *  interval in the program at all) stays `null` outright — the hint's only
+ *  job is to point at the sentence beneath it, and pointing at nothing
+ *  would be its own false claim. */
+function footerCaptionFor(
+  intervals: ProgramInterval[],
+  numbering: IntervalNumbering,
+  activeIndex: number,
+): string | null {
+  const distance = distanceCaptionFor(intervals, numbering);
+  if (distance === null) return null;
+  const below = intervals.length - 1 - activeIndex;
+  return below > 0 ? `${below} MORE BELOW · ${distance}` : distance;
 }
 
 /** Handoff §3: "A mono caption under the grid names it in words — `ROW 5 IS
@@ -1080,13 +1214,4 @@ function deviceCaptionFor(
 ): string {
   const name = deviceName ?? "PM5";
   return status === "stale" ? `${name} · LOST` : name;
-}
-
-function intervalClockValueFor(
-  remaining: MonitorFrame["intervalRemaining"],
-): string {
-  if (remaining === null) return DASH;
-  return remaining.kind === "distance"
-    ? String(Math.round(remaining.value))
-    : fmtDuration(remaining.value / 60);
 }

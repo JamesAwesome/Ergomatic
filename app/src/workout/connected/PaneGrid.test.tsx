@@ -23,7 +23,7 @@
 // through).
 
 import { readFileSync } from "node:fs";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -248,9 +248,43 @@ function distanceWarmupFixture(title: string, meters: number): Fixture {
   };
 }
 
+/** THE NO-WARM-UP SHAPE (task-5-review finding, coordinator-flagged): the
+ *  warm-up preference is OFF by default (`usePreferences`'s own null
+ *  column) — Filling Low's own four 2000 m reps with NO warm-up phase at
+ *  all, so program index 0 is a real WORK interval (ordinal 1), not an
+ *  unnumbered one. Built directly through `buildRun`'s `null` warm-up arg
+ *  (`libraryFixture` above always passes a real one) rather than adding a
+ *  `warmupMinutes: 0` case to that helper, since `0` and `null` are
+ *  different inputs on the real form (`WarmupSetting | null`) and this
+ *  fixture's whole point is to be the `null` one. */
+function noWarmupFixture(title: string): Fixture {
+  const w = LIBRARY_WORKOUTS.find((s) => s.title === title);
+  if (!w) throw new Error(`missing library fixture: ${title}`);
+  const id = `${title.toLowerCase().replace(/ /g, "-")}-no-warmup`;
+  const draft = buildDraft({
+    id,
+    title: w.title,
+    type: w.type as WorkoutType,
+    steps: w.steps,
+  });
+  const phases = buildRun(draft, baselines, t0, null).phases;
+  const program = compileProgram(phases);
+  if ("code" in program) {
+    throw new Error(`fixture failed to compile: ${program.code}`);
+  }
+  return {
+    program,
+    phases,
+    identity: { workoutId: id, title: w.title, ...TEST_SEED },
+  };
+}
+
 /** 5 intervals: `time 480` warm-up, then 4 x `distance 2000` with 180 s of
  *  rest. Mixed, and short enough to assert every row of. */
 const FILLING_LOW = libraryFixture("Filling Low", 8);
+/** The no-warm-up mirror of `FILLING_LOW`: 4 x `distance 2000`, program
+ *  index 0 already a numbered work interval. */
+const FILLING_LOW_NO_WARMUP = noWarmupFixture("Filling Low");
 /** 6 intervals: `time 600`, ONE `distance 8000`, then 4 x `time 180` — the
  *  handoff's own single-distance-row caption case, and the mirror of
  *  Filling Low's shape. */
@@ -479,6 +513,85 @@ describe("the fixtures are what this file says they are", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// The shell header's composed GRID trailing (CR2 spec 3 Task 5, design spec
+// §2B's composition note): `PaneGrid.tsx`'s own headline dies this task, and
+// the header's status caption — `.connected-line-trailing`, a header-level
+// sibling of `ConnectionLine` since Task 6's fix round,
+// `ConnectedSurface.tsx`'s `headerTrailing` — grows a GRID-only branch.
+// Exercised here (not `ConnectedSurface.test.tsx`) because `renderGrid`
+// already mounts the full surface with the GRID pane active, the same
+// helper the row-state tests below share.
+// ---------------------------------------------------------------------------
+
+describe("the shell header's composed GRID trailing (design spec §2B)", () => {
+  it("joins the ordinal with the session countdown, the countdown half in --marker gold", () => {
+    // Default `frame()` (intervalIndex 1) is Filling Low's first work
+    // piece — ordinal `1 OF 4` — with a real `totalLeftDisplay` behind it.
+    renderGrid();
+    const trailing = document.querySelector(".connected-line-trailing")!;
+    const countdown = trailing.querySelector(".connected-header-countdown")!;
+    expect(countdown).not.toBeNull();
+    expect(countdown.textContent).toBe("39:48 LEFT");
+    // The ordinal half sits OUTSIDE the marker span, in the trailing's own
+    // inherited ink-3 — only the countdown wears the mark, never the whole
+    // caption (spec §2B: "the countdown portion in --marker gold").
+    expect(trailing.textContent).toBe("1 OF 4 · 39:48 LEFT");
+  });
+
+  it("falls back to the plain WARM-UP caption on the unnumbered warm-up — no ordinal to join TOTAL LEFT onto", () => {
+    // intervalIndex 0 is Filling Low's own warm-up (`intervalOrdinalLabel`
+    // is `null` there — `surfaceModel.test.ts`'s own pin on the field).
+    renderGrid({ frame: frame({ intervalIndex: 0 }) });
+    const trailing = document.querySelector(".connected-line-trailing")!;
+    expect(trailing.textContent).toBe("WARM-UP");
+    expect(trailing.querySelector(".connected-header-countdown")).toBeNull();
+  });
+
+  it("shows READY, not a running countdown, at armed — even with warm-up disabled and a non-null ordinal (task-5-review finding)", () => {
+    // THE REGRESSION THIS PINS. Warm-up is OFF by default
+    // (`usePreferences`'s own null column) — `FILLING_LOW_NO_WARMUP` means
+    // program index 0 is a NUMBERED work interval (ordinal 1, not null),
+    // so `headerTrailing`'s OTHER guard (`intervalOrdinalLabel === null`)
+    // does not fire here. Only an explicit `status === "armed"` check can
+    // stop the header composing a running countdown before the erg has
+    // moved. Every other armed test in this file (and
+    // `ConnectedSurface.test.tsx`'s own "armed's first frame" block) uses
+    // a warm-up-bearing fixture, where the ordinal-null guard already
+    // masked a missing status guard — this fixture is the one shape that
+    // exposes it. `phase: "ready"` is what `deriveProgram`/`deriveSession`
+    // turn into `status: "armed"` (`ConnectedSurface.test.tsx`'s own
+    // "status precedence" describe block proves that mapping).
+    renderGrid(
+      {
+        phase: "ready",
+        frame: frame({
+          state: "armed",
+          intervalIndex: 0,
+          elapsedSeconds: 0,
+          distanceMeters: 0,
+          rowingActive: false,
+        }),
+      },
+      FILLING_LOW_NO_WARMUP,
+    );
+    const trailing = document.querySelector(".connected-line-trailing")!;
+    expect(trailing.textContent).toBe("1 OF 4 · READY");
+    expect(trailing.querySelector(".connected-header-countdown")).toBeNull();
+  });
+
+  it("index.css paints the composed countdown span in --marker gold, never accent or a verdict", () => {
+    // The same negatives `.connected-grid-countdown`'s own census enforces,
+    // pinned separately for this SEPARATE class (`index.css`'s own comment
+    // on why the two rules stay apart) — a rule added to one must not be
+    // assumed to cover the other.
+    const rule = baseRule(".connected-header-countdown");
+    expect(rule).toContain("color: var(--marker)");
+    expect(rule).not.toContain("--accent");
+    expect(rule).not.toContain("--judge-");
+  });
+});
+
 describe("row states (handoff §3's three treatments)", () => {
   it("draws completed actuals, the active card and upcoming programmed values", () => {
     renderGrid({ actuals: [actualFor(0, FILLING_LOW.program)] });
@@ -677,9 +790,18 @@ describe("distance intervals (handoff §3's distance rules)", () => {
     // indices — Filling Low's four 2000 m reps are program indices 1-4
     // (the warm-up occupies index 0), but the caption names them 1-4, the
     // same numbers their own `#` cells show, never 2-5.
+    //
+    // Every expected string below is prefixed `N MORE BELOW ·` (CR2 spec 3
+    // Task 5, design spec §2B): the default `frame()` fixture's own
+    // `intervalIndex: 1` puts the active row one past the warm-up, so `N`
+    // is the program's own row count minus 2 (the warm-up plus the active
+    // row itself) — `footerCaptionFor`'s own doc comment has the exact
+    // formula (`surfaceModel.ts`).
     const many = renderGrid();
     expect(
-      screen.getByText("ROWS 1, 2, 3, 4 ARE 2000 M PIECES · METERS COUNT DOWN"),
+      screen.getByText(
+        "3 MORE BELOW · ROWS 1, 2, 3, 4 ARE 2000 M PIECES · METERS COUNT DOWN",
+      ),
     ).toBeInTheDocument();
     many.unmount();
 
@@ -688,14 +810,18 @@ describe("distance intervals (handoff §3's distance rules)", () => {
     // warm-up) but WORK ordinal 1 — the caption and the row's `#` agree.
     const one = renderGrid({}, SPLIT_FRONT);
     expect(
-      screen.getByText("ROW 1 IS AN 8000 M PIECE · METERS COUNT DOWN"),
+      screen.getByText(
+        "4 MORE BELOW · ROW 1 IS AN 8000 M PIECE · METERS COUNT DOWN",
+      ),
     ).toBeInTheDocument();
     one.unmount();
 
     // Twenty-four row numbers is not a caption. It counts instead.
     renderGrid({}, SEA_SMOKE);
     expect(
-      screen.getByText("24 ROWS ARE DISTANCE PIECES · METERS COUNT DOWN"),
+      screen.getByText(
+        "23 MORE BELOW · 24 ROWS ARE DISTANCE PIECES · METERS COUNT DOWN",
+      ),
     ).toBeInTheDocument();
   });
 
@@ -731,9 +857,12 @@ describe("distance intervals (handoff §3's distance rules)", () => {
     // `#` cell reads `GridRow.ordinal`, not "is this row 0".
     expect(bare.num).toBe("WU");
     // ...and the one distance row now reads with the indefinite article the
-    // handoff's own sentence uses.
+    // handoff's own sentence uses. `reordered` has 3 intervals total and
+    // the active row is index 1, so exactly one row sits below it.
     expect(
-      screen.getByText("ROW 1 IS A 500 M PIECE · METERS COUNT DOWN"),
+      screen.getByText(
+        "1 MORE BELOW · ROW 1 IS A 500 M PIECE · METERS COUNT DOWN",
+      ),
     ).toBeInTheDocument();
   });
 
@@ -792,9 +921,13 @@ describe("distance intervals (handoff §3's distance rules)", () => {
     // 2000 m pieces plus one non-matching 1000 m warm-up would break
     // uniformity and fall to the OTHER branch entirely — "5 ROWS ARE
     // DISTANCE PIECES", not the four-item list. The exact list proves both
-    // the count (4, not 5) and the numbers (1-4, not 2-5 or 1-5).
+    // the count (4, not 5) and the numbers (1-4, not 2-5 or 1-5). Same
+    // 5-interval shape as Filling Low itself, active row 1 by default: 3
+    // rows sit below it.
     expect(
-      screen.getByText("ROWS 1, 2, 3, 4 ARE 2000 M PIECES · METERS COUNT DOWN"),
+      screen.getByText(
+        "3 MORE BELOW · ROWS 1, 2, 3, 4 ARE 2000 M PIECES · METERS COUNT DOWN",
+      ),
     ).toBeInTheDocument();
   });
 
@@ -813,6 +946,41 @@ describe("distance intervals (handoff §3's distance rules)", () => {
     renderGrid({}, timeOnly);
     expect(document.querySelector(".connected-grid-caption")).toBeNull();
     expect(document.body.textContent).not.toContain("COUNT DOWN");
+  });
+
+  // CR2 spec 3 Task 5 (design spec §2B): the README's own "N MORE BELOW"
+  // scroll hint, merged ahead of the distance sentence. The positive case
+  // is already pinned above (Sea Smoke, a real seeded 25-row program, at
+  // its default active row 1: "23 MORE BELOW"). These two pin the model's
+  // own two deliberate suppressions (`footerCaptionFor`'s doc comment,
+  // `surfaceModel.ts`).
+  it("omits the prefix when the active row is the LAST one — never '0 MORE BELOW'", () => {
+    // Sea Smoke: 25 intervals, so program index 24 is the very last row.
+    // Nothing sits below it.
+    renderGrid({ frame: frame({ intervalIndex: 24 }) }, SEA_SMOKE);
+    expect(
+      screen.getByText("24 ROWS ARE DISTANCE PIECES · METERS COUNT DOWN"),
+    ).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("MORE BELOW");
+  });
+
+  it("omits the prefix on a time-only program too, even with real rows below the active one", () => {
+    // `below` would be positive here (Split Front's own warm-up plus its
+    // four time reps, five rows total, active row 0 of 5 — four genuinely
+    // sit below it) — but there is no distance caption for the hint to
+    // merge into, and the hint's own job is to point at that sentence, not
+    // to exist alone.
+    const timeOnly: Fixture = {
+      ...SPLIT_FRONT,
+      program: {
+        intervals: SPLIT_FRONT.program.intervals.filter(
+          (i) => i.kind === "time",
+        ),
+      },
+    };
+    renderGrid({ frame: frame({ intervalIndex: 0 }) }, timeOnly);
+    expect(document.querySelector(".connected-grid-caption")).toBeNull();
+    expect(document.body.textContent).not.toContain("MORE BELOW");
   });
 });
 
@@ -941,38 +1109,31 @@ describe("THE ACCENT CENSUS: accent is a CONTROL colour, and nothing else", () =
     expect(row(3).querySelector(".connected-grid-countdown")).not.toBeNull();
   });
 
-  it("the reused phone-timer ruler is still repainted ink here", () => {
-    // The census above only looks at `.connected-*` classes, which is only
-    // honest while the ruler's fill stays overridden inside
-    // `.connected-pane` (task 6's own rule). Without this, deleting that
-    // rule would put accent back on the total-left bar and the census
-    // would not notice.
-    //
-    // `.timer-dot-past`/`.timer-dot-current`'s own override rules retired
-    // in connected-revamp Task 3's fix round (task-3-review.md
-    // Important-2): `IntervalSegments` is no longer reused on ANY
-    // connected pane — pane A's usage went with `PaneTimer.tsx` (Task 2),
-    // pane B's went with the equal-width segment bar Task 3 dropped — so
-    // no `.timer-dot*` element can render inside `.connected-pane` any
-    // more, and a test pinning those two rules' existence would have been
-    // pinning a vacuous invariant.
-    const rule =
-      /\.connected-pane\s+\.timer-total-bar\s+span\s*\{([^}]*)\}/.exec(
-        DECLARATIONS,
-      );
-    expect(rule).not.toBeNull();
-    expect(rule![1]).not.toContain("--accent");
-    // The SCOPED overrides, not the bare phone-timer classes: `.timer-dot-
-    // past`/`-current` themselves are still real (`Timer.tsx`'s own
-    // `IntervalSegments` usage), only `.connected-pane`'s repaint of them
-    // is dead.
+  // CR2 spec 3 Task 4 RETIRES THE OVERRIDE THIS TEST USED TO PIN, not just
+  // the risk it guarded: `.connected-pane .timer-total-bar span` (the rule
+  // that used to repaint `TimerRuler`'s own accent fill ink inside a
+  // connected pane) is gone along with `TimerRuler` itself — `PaneLive`
+  // forks its own `ConnectedProgressBar` now (Task 3/4), which paints ink
+  // directly, never accent, with no override needed to correct it. Same
+  // story `.timer-dot-past`/`-current`'s own retired overrides already
+  // told (this test's own history, kept below): a component that is never
+  // reused inside `.connected-pane` needs no neutralising rule, and a test
+  // that pinned one would be pinning a vacuous invariant. This test now
+  // proves the STRONGER fact directly — no reused phone-timer component
+  // renders inside a connected pane at all, so there is no accent surface
+  // left for a missing override to expose.
+  it("no phone-timer component (TimerRuler, UpNextStrip, IntervalSegments) can render inside a connected pane any more", () => {
+    expect(DECLARATIONS).not.toContain(".connected-pane .timer-total-bar");
+    expect(DECLARATIONS).not.toContain(".connected-pane .timer-total-warmup");
     expect(DECLARATIONS).not.toContain(".connected-pane .timer-dot-past");
     expect(DECLARATIONS).not.toContain(".connected-pane .timer-dot-current");
+    expect(DECLARATIONS).not.toMatch(/\.connected-pane[^{]*\.timer-upnext/);
+    expect(DECLARATIONS).not.toMatch(/\.connected-pane[^{]*\.timer-total\b/);
   });
 
   it("the countdown's mark is a COLOUR, never an enlarged size — and gold, never accent or a verdict", () => {
     // Connected-revamp Task 5 dropped the old 22px/26px special case: the
-    // revision's own mockup draws the countdown at the SAME `--size-row`
+    // revision's own mockup draws the countdown at the SAME `--c-size-row`
     // as every other value in the row, tinted, not enlarged — the density
     // this task exists for has no room for a bigger digit.
     const rule = baseRule(".connected-grid-countdown");
@@ -1046,14 +1207,15 @@ describe("judged cells: pane C goes through the ONE helper", () => {
   });
 
   it("the WHOLE SURFACE's judged-cell count, pane by pane", () => {
-    // The number the mutation round moves: pane B 4 (hero/rate/HR/meters),
-    // pane C 4 on this frame (one completed row's two cells plus the active
-    // row's two) — EIGHT in total. Break `judgeActual` and every one of
-    // them lands on the same wrong verdict at once, which is the property
-    // this file is here to keep. Pane A (3: NOW/RATE/METERS) retired with
-    // `PaneTimer.tsx` (connected-revamp Task 2); a stored `"timer"` now
-    // aliases to live via `PANES.includes`, so it is no longer a distinct
-    // pane to count.
+    // The number the mutation round moves: pane B 2 (hero/rate — CR2 spec 3
+    // Task 4 cut HR and session METERS off `PaneLive` outright, spec §3
+    // fate table), pane C 4 on this frame (one completed row's two cells
+    // plus the active row's two) — SIX in total. Break `judgeActual` and
+    // every one of them lands on the same wrong verdict at once, which is
+    // the property this file is here to keep. Pane A (3: NOW/RATE/METERS)
+    // retired with `PaneTimer.tsx` (connected-revamp Task 2); a stored
+    // `"timer"` now aliases to live via `PANES.includes`, so it is no
+    // longer a distinct pane to count.
     const counts: Record<string, number> = {};
     for (const pane of ["live", "grid"] as const) {
       localStorage.setItem(LAST_PANE_KEY, pane);
@@ -1068,7 +1230,7 @@ describe("judged cells: pane C goes through the ONE helper", () => {
       counts[pane] = judgedCells().length;
       cleanupRender();
     }
-    expect(counts).toStrictEqual({ live: 4, grid: 4 });
+    expect(counts).toStrictEqual({ live: 2, grid: 4 });
   });
 
   // THE STALE OVERRIDE, SCOPED (task-7 review, M2). Staleness is a property
@@ -1171,6 +1333,19 @@ describe("contained scroll: only the rows move", () => {
     expect(baseRule(".connected-grid-caption")).toContain("flex: none");
   });
 
+  it("truncates the caption to ONE line rather than letting a long 'N MORE BELOW' merge wrap into the control bar below it", () => {
+    // Found in this task's own screenshot sweep (recurring failure #7): the
+    // 25-interval fixture's caption wraps to a second line in portrait at
+    // the old rule's own fixed single-line height, and that second line
+    // paints straight through the box into `SegmentedControl`'s bottom bar
+    // — jsdom cannot see the collision (no real layout), so this pins the
+    // THREE declarations that prevent it from a real browser instead.
+    const rule = baseRule(".connected-grid-caption");
+    expect(rule).toContain("white-space: nowrap");
+    expect(rule).toContain("overflow: hidden");
+    expect(rule).toContain("text-overflow: ellipsis");
+  });
+
   it("SCROLLS THE ACTIVE ROW INTO VIEW, and again when the machine moves on", () => {
     const spy = vi.spyOn(Element.prototype, "scrollIntoView");
     const view = renderGrid({ frame: frame({ intervalIndex: 8 }) }, SEA_SMOKE);
@@ -1210,12 +1385,10 @@ describe("contained scroll: only the rows move", () => {
     expect(spy).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps the surface's own vertical panning available to the browser", () => {
-    // `touch-action: pan-y` on the surface is what lets the rows scroll at
-    // all while the horizontal swipe stays ours (handoff §3's 60px pager
-    // gesture).
-    expect(baseRule(".connected-surface")).toContain("touch-action: pan-y");
-  });
+  // `touch-action: pan-y` retired with the swipe handler (CR2 spec 3 task
+  // 1, design spec Ruling 4, antagonist correction 3): the grid scroller
+  // manages its own overflow with nothing left to coordinate with, so
+  // there is no rule left to pin here.
 });
 
 // ---------------------------------------------------------------------------
@@ -1276,7 +1449,7 @@ describe("row height and column weights, both orientations (revision §4)", () =
     }
   });
 
-  it("widens `#` to 26px in landscape, 22px in portrait", () => {
+  it("widens `#` to 30px in landscape (design spec §2B's literal figure), 22px in portrait (today's geometry, unchanged)", () => {
     expect(
       declaredValuesOf([baseRule(".connected-grid-num")], "width"),
     ).toStrictEqual(["22px"]);
@@ -1285,7 +1458,7 @@ describe("row height and column weights, both orientations (revision §4)", () =
         [landscapeRule(".connected-pane-grid .connected-grid-num")],
         "width",
       ),
-    ).toStrictEqual(["26px"]);
+    ).toStrictEqual(["30px"]);
   });
 
   it("drops REST in portrait and brings it back at 0.8 in landscape", () => {
@@ -1501,25 +1674,37 @@ describe("tab order through pane C", () => {
     ]) {
       expect([selector, scanned.has(selector)]).toStrictEqual([selector, true]);
     }
-    expect(paneCRules.length).toBeGreaterThanOrEqual(30); // measured: 32
+    // CR2 spec 3 task 1 dropped three rules the census used to count: the
+    // `.connected-pane-grid .connected-line`/`.connected-line-device`
+    // landscape overrides and `.connected-grid-headline`'s own landscape
+    // fold, all retired when `ConnectionLine` moved out of this pane into
+    // the shell's header (32 -> 29, measured against this worktree). CR2
+    // spec 3 Task 5 drops four more: `.connected-grid-headline` itself,
+    // `.connected-grid-totals`, `.connected-grid-interval` and
+    // `.connected-grid-total` — the whole headline this pane used to draw
+    // is gone (29 -> 25, measured against this worktree).
+    expect(paneCRules.length).toBeGreaterThanOrEqual(25); // measured: 25
     expect(
       paneCRules
         .filter((rule) => /\border\s*:/.test(rule.body))
         .map((rule) => rule.selectors.join(", ")),
     ).toStrictEqual([]);
 
-    // P11: `slice(indexOf(portrait), lastIndexOf(landscape))` yielded `""`
-    // — trivially satisfying both assertions below — the moment the portrait
-    // query moved after the last landscape one, or was deleted. Proven: the
-    // portrait query moved to EOF with `.connected-grid-row { order: 3 }`
-    // added inside it passed 46/46. This reads the query's real body.
-    const portraitQueries = atRuleBodies(DECLARATIONS, PORTRAIT_QUERY);
-    expect(portraitQueries).toHaveLength(1);
-    // Two independent claims, not one: `"connected-pane-grid"` is NOT a
-    // superstring of `"connected-grid"` (the shared prefix stops at
-    // `connected-`), so neither `toContain` implies the other.
-    expect(portraitQueries[0]).not.toContain("connected-grid");
-    expect(portraitQueries[0]).not.toContain("connected-pane-grid");
+    // P11's own portrait-specific check retired ITS OWN TARGET (CR2 spec 3
+    // Task 4): the ONE `@media (orientation: portrait)` block index.css
+    // ever had was the connected-pane-live hero/metric-row/ruler `order`
+    // block this task deletes outright (natural DOM order already matches
+    // §2C's own sequence once the metric row and `TimerRuler` are gone —
+    // that deletion's own comment has the reasoning) — index.css is
+    // mobile-first, so nothing else in the file ever needed a portrait
+    // query of its own. `atRuleBodies` now finds ZERO, not one; the
+    // `paneCRules` census above (whole-file, every nesting depth, no
+    // slicing) is what still catches an `order` declaration wherever a
+    // future rule might add one, portrait query or not — this assertion
+    // is the current STRUCTURAL fact, not a re-run of P11's own slicing
+    // bug proof (nothing here can regress into that bug: `atRuleBodies`
+    // reads real brace nesting, never an `indexOf`/`slice` window).
+    expect(atRuleBodies(DECLARATIONS, PORTRAIT_QUERY)).toStrictEqual([]);
   });
 
   it("has EXACTLY ONE focusable thing of its own: the named scroller", () => {
@@ -1546,7 +1731,7 @@ describe("tab order through pane C", () => {
     }
   });
 
-  it("tabs End, then the grid, then the two pager targets", async () => {
+  it("tabs End, then the grid, then the two control halves", async () => {
     // THE REAL BROWSER ORDER, REWRITTEN A SECOND TIME (design spec §9:
     // "Tab order changes twice" — Task 2 dropped Timer from the rail
     // (`scroller → End → Timer → Live → Grid` became `scroller → End →
@@ -1577,7 +1762,7 @@ describe("tab order through pane C", () => {
 });
 
 describe("the grid never grows a control of its own", () => {
-  it("keeps End as the surface's only button outside the pager", () => {
+  it("keeps End as the surface's only button outside the segmented control", () => {
     renderGrid();
     const buttons = screen
       .getAllByRole("button")
@@ -1586,14 +1771,9 @@ describe("the grid never grows a control of its own", () => {
     expect(document.querySelector(".button-l1")).toBeNull();
   });
 
-  it("does not swallow the swipe: the pager still reaches pane B", () => {
-    renderGrid();
-    const surface = document.querySelector(".connected-surface")!;
-    fireEvent.touchStart(surface, { touches: [{ clientX: 300 }] });
-    fireEvent.touchEnd(surface, { changedTouches: [{ clientX: 400 }] });
-    expect(screen.getByRole("button", { name: "Live pane" })).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
-  });
+  // The swipe-reaches-pane-B pin retired with the swipe handler itself
+  // (CR2 spec 3 task 1, design spec Ruling 4, antagonist correction 3):
+  // `SegmentedControl` is the only navigation left, and its own click
+  // tests (`SegmentedControl.test.tsx`, `ConnectedSurface.test.tsx`) cover
+  // it reaching every pane.
 });

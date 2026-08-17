@@ -1801,7 +1801,23 @@ design spec §4): **spec 2a** — axes, mirror surface, pause state, driver
 lifecycle, the interval clock fix, the terminal path, the suspicion verdict
 — MERGED (PR #102, 2026-08-16, `d7271a3`); **spec 2b** — F6
 alone, the one piece carrying a stored-shape field (`endedBy`) and a
-destructive action — is next, sequenced after 2a. **A fourth SDD cycle
+destructive action — MERGED (PR #105, 2026-08-16, `beaef4f`). **Spec 3
+"redesign" is IN FLIGHT** (branch `cr2-redesign`; spec
+`docs/superpowers/specs/2026-08-16-connected-redesign-design.md`,
+approved 2026-08-16 with the design-gate rulings: tester colors and the
+32px row ruling govern over the handoff's stale values; CAL/ZONE, the
+pane slide, and the swipe handler are all OUT). **Queued follow-up, no
+phase owner yet — "session calories, folded":** the PM design gate
+falsified the handoff's calorie premise by decoding both walk-2026-08-16
+recordings — 0x0033's `totalCalories` is INTERVAL-scoped (resets to 0 at
+every boundary; keystone ends reading 15 for a ~30-cal session) and the
+0x0039 summary carries no calorie field, so an honest session CAL needs
+the same register-fold discipline spec 1 built for distance, plus an
+honest ramping fake (today's emits a constant 0 — nothing can go red) and
+a walk row photographing the PM5's calorie display beside the phone. ZONE
+rides behind it, needing a strap plus a max-HR source the app does not
+have. Neither is CR2's; schedule when a phase wants them.
+**A fourth SDD cycle
 rode the 2026-08-16 walk's own finding: the rest-keying fix (PR #104,
 spec `docs/superpowers/specs/2026-08-16-rest-keying-fix-design.md`) —
 the stale-count rest clamp plus both walk recordings as permanent CI
@@ -1814,7 +1830,38 @@ frame — the 2×250 r0 keystone contains no resting frames and cannot
 exercise the clamp on hardware.** The reducer this spec
 once proposed is DEFERRED to its own spec. Spec 3 "redesign" (items 2 + 4,
 design handoff committed at `docs/design/handoffs/2026-08-15-connected-v2/`)
-is not started. Originally scoped by James 2026-08-13 immediately
+is IN FLIGHT as PR #109 (branch `cr2-redesign` — the status paragraph above
+carries the current state; this line once said "is not started" and
+contradicted it thirty lines apart, caught at the phase-close gate).
+**Close-out queue after #109 merges, before the tag (PM phase-close gate +
+antagonist exit pass, 2026-08-16):** (1) the STALE-WHILE-ARMED ruling —
+stale beats armed in `connectedAxes`' precedence, so a link lost before
+stroke one drops every armed protection at once (READY becomes a gold
+session-left on GRID, up-next shifts, the bar fills); the exit walk's
+Session 4 observation row records what it actually shows, then James rules;
+(2) spec 2b's v1 fall-through test + the manual-door-save record decision
+(PR #105 final review Minor 3); (3) the Start door's "in progress" copy for
+a dead MonitorRun (2b plan Decision 5); (4) the CARRIED-DEBT DISPOSITION —
+the exit criterion's own words are "cleared or explicitly re-parked with a
+reason" and the eleven-bullet block below has zero dispositions; the
+close-out PR writes one per bullet, with the iOS 26 `100dvh` bullet
+getting a real answer (this PR rebuilt the surface height model that
+construction underpins). **(5)-(7), James's walk-day flags (2026-08-17,
+from the mobile-view screenshot):** (5) the landscape header sits flush
+with the top edge where the safe-area inset is 0 — §2A's own 20px top
+padding was dropped in favor of the bare inset; fix is
+`max(20px, env(safe-area-inset-top))`; (6) dead space below the band —
+the empty footer track plus the home-indicator inset reserve height under
+FINISH; the band should own the bottom edge (its padding absorbs the
+inset); (7) the landscape up-next line prepends `NEXT · ` ALWAYS
+(`NEXT · REST 3:00 · then WORK 2:09.0`, `NEXT · FINISH`) — James's
+ruling direction: a bare `FINISH` floats without the label layer, and
+uniform beats special-casing; portrait keeps its stacked `UP NEXT` label,
+no double-labeling. **(8) the walk's 6-MIN question:** the F6 log header
+showed `AUG 17 · 6 MIN` where the wire's completed intervals compute 5
+(60+60+120 work + 0+30+30 rest = 300s); a NUMBER discrepancy → triad →
+full treatment; reproduction assigned offline against the committed
+session-2 wire + ring. Originally scoped by James 2026-08-13 immediately
 after v0.9.0 shipped: "I want to work next on cleanup for this phase" —
 three items, below. **AMENDED the same evening**, after he rowed "Sun
 fret" on v0.9.0 and photographed the PM5 beside the phone: two more items,

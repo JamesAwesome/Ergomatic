@@ -2089,6 +2089,80 @@ test("connected-interstitial-ready-landscape", async ({ page }) => {
   await cleanupByTitle(page, title);
 });
 
+// --- CR2 spec 3 Task 6: the armed GRID pane — no visual record until now ---
+//
+// Design spec §2D describes the armed frame for LIVE only (`connected-
+// armed.html`'s own committed capture); GRID's armed branch (Task 5,
+// `ConnectedSurface.tsx`'s `headerTrailing`, "armed is checked FIRST, ahead
+// of the ordinal check, so GRID never reaches the countdown composition
+// while armed") had NO screenshot at all — the exact defect class
+// `.claude/agent-briefing.md` names by name (a RUNNING gold countdown at a
+// rower who has taken no stroke) has a regression test in
+// `ConnectedSurface.tsx` but no photograph proving it. This walks the same
+// real fake-driven path `openConnectedInterstitial`'s ready captures use,
+// one step further: past "Show me the numbers" (which mounts the real
+// surface at `status: "armed"`, `axes.session === "none"` — nothing has
+// been rowed) and one click onto the GRID pane, with NO story events pumped
+// at all, so nothing here can accidentally advance past armed.
+test("connected-armed-grid", async ({ page }) => {
+  const title = "Screenshot Connected Armed Grid Workout";
+  await openConnectedInterstitial(
+    page,
+    title,
+    "screenshots-connected-armed-grid@e2e.test",
+    "PM5 918273645",
+  );
+  await expect(
+    page.locator(".connected-serif-line", { hasText: "Ready when you pull" }),
+  ).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("button", { name: "Show me the numbers" }).click();
+  await expect(
+    page.getByRole("navigation", { name: "Connected panes" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Grid pane" }).click();
+  await expect(page.getByRole("button", { name: "Grid pane" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  // The header's own armed branch, not the countdown composition — the
+  // one line this capture exists to put a picture behind.
+  await expect(page.getByText("1 OF 5 · READY")).toBeVisible();
+  await expect(page.locator(".connected-header-countdown")).toHaveCount(0);
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "connected-armed-grid.png"),
+  });
+  await cleanupByTitle(page, title);
+});
+
+test("connected-armed-grid-landscape", async ({ page }) => {
+  const title = "Screenshot Connected Armed Grid Landscape Workout";
+  await openConnectedInterstitial(
+    page,
+    title,
+    "screenshots-connected-armed-grid-landscape@e2e.test",
+    "PM5 837465921",
+  );
+  await expect(
+    page.locator(".connected-serif-line", { hasText: "Ready when you pull" }),
+  ).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("button", { name: "Show me the numbers" }).click();
+  await expect(
+    page.getByRole("navigation", { name: "Connected panes" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Grid pane" }).click();
+  await expect(page.getByRole("button", { name: "Grid pane" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  await expect(page.getByText("1 OF 5 · READY")).toBeVisible();
+  await expect(page.locator(".connected-header-countdown")).toHaveCount(0);
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "connected-armed-grid-landscape.png"),
+  });
+  await cleanupByTitle(page, title);
+});
+
 // --- Phase 7C Task 6: the monitor mode's Log screen form --------------------
 //
 // The monitor mode (spec §4) only ever engages once a REAL connected session
@@ -2436,39 +2510,60 @@ const CONNECTED_STATES = [
  *  (`showConnectedFixture` waits on `document.fonts.ready`; the review
  *  reproduced a 3px swing by skipping that wait, which is what the original
  *  "13 one run, 14 the next" report actually was). Both are `clientHeight`
- *  of `.connected-grid-rows` on the 25-interval fixture. The three
- *  flex-none siblings above and below it carry explicit heights in
- *  `index.css` for exactly this reason, so these are arithmetic, not
- *  typography. */
-const PORTRAIT_GRID_SCROLLER_PX = 612;
-const LANDSCAPE_GRID_SCROLLER_PX = 276;
+ *  of `.connected-grid-rows` on the 25-interval fixture. The TWO flex-none
+ *  siblings above and below it (`.connected-grid-head` and
+ *  `.connected-grid-caption`) carry explicit heights in `index.css` for
+ *  exactly this reason, so these are arithmetic, not typography.
+ *
+ *  CR2 spec 3 task 1 moved `ConnectionLine` out of `.connected-grid-headline`
+ *  into the shell's own header, which moved PORTRAIT's own figure once
+ *  already (612 -> 626). CR2 spec 3 Task 5 moved both again (626 -> 640
+ *  portrait, 276 -> 286 landscape, deleting the pane's own headline
+ *  outright). CR2 spec 3 TASK 6's OWN FIX ROUND MOVES PORTRAIT A THIRD
+ *  TIME, LANDSCAPE NOT AT ALL (re-measured against this worktree, not
+ *  derived): CRITICAL 1's header restructure gives the status caption its
+ *  own line below the header row in portrait ONLY (§2C; landscape keeps
+ *  the single 44px row the whole surface has always used, so its own
+ *  scroller budget is untouched) — the header's own portrait height grows
+ *  by the status line's own height plus the header's `gap`, and every
+ *  byte of that growth comes directly out of the scroller's budget one
+ *  flex row down: 640 -> 600, a clean 40px (one full grid row) lighter,
+ *  landing at another zero-slack exact fit (600 / 40 = 15.0). Landscape's
+ *  286 is unchanged — the fix round's own comment on `.connected-header`
+ *  has the reasoning for why the two orientations diverge here. */
+const PORTRAIT_GRID_SCROLLER_PX = 600;
+const LANDSCAPE_GRID_SCROLLER_PX = 286;
 
 for (const name of CONNECTED_STATES) {
   test(name, async ({ page }) => {
     await showConnectedFixture(page, name);
     if (name === "connected-pane-live") {
       // UP NEXT'S PORTRAIT STRING (connected-revamp Task 6, design spec §6/
-      // revision §3): "REST 2:00 · WORK 2:09.0" — the SAME value landscape
-      // shows, minus the word "then" (`index.css`'s base rule for
-      // `.timer-upnext-then` is `display: none`, unscoped by any media
-      // query, so this is the default at any viewport that isn't
-      // landscape). This fixture's own program has a real rest next
-      // (`connected-pane-live.html`, "Filling Low"'s rest between work
-      // intervals), so there is something real to resolve to. Real CSS,
-      // real cascade — jsdom cannot prove this, only the string-building
-      // half (`UpNextStrip.test.tsx`). `innerText`, NOT `textContent`:
-      // `textContent` reads the raw DOM and includes the hidden "then "
-      // span's own text regardless of its `display: none` — caught
-      // directly running this file, first pass: `display` genuinely
-      // computed `none` on that span, yet `textContent` still read "then"
-      // anyway, because `textContent` is not CSS-aware. `innerText` IS
-      // (it approximates rendered text), which is what "the word is gone
-      // in portrait" actually means.
-      const value = await page.locator(".timer-upnext-value").innerText();
+      // revision §3; RE-ANCHORED CR2 spec 3 Task 4 — the band renders this
+      // line directly now, `.connected-band-upnext-value`/`-then`, not
+      // `UpNextStrip`'s own classes): "REST 2:00 · WORK 2:09.0" — the SAME
+      // value landscape shows, minus the word "then" (`index.css`'s base
+      // rule for `.connected-band-upnext-then` is `display: none`,
+      // unscoped by any media query, so this is the default at any
+      // viewport that isn't landscape). This fixture's own program has a
+      // real rest next (`connected-pane-live.html`, "Filling Low"'s rest
+      // between work intervals), so there is something real to resolve to.
+      // Real CSS, real cascade — jsdom cannot prove this, only the string-
+      // building half (`PaneLive.test.tsx`). `innerText`, NOT
+      // `textContent`: `textContent` reads the raw DOM and includes the
+      // hidden "then " span's own text regardless of its `display: none` —
+      // caught directly running this file, first pass (pre-redesign):
+      // `display` genuinely computed `none` on that span, yet `textContent`
+      // still read "then" anyway, because `textContent` is not CSS-aware.
+      // `innerText` IS (it approximates rendered text), which is what "the
+      // word is gone in portrait" actually means.
+      const value = await page
+        .locator(".connected-band-upnext-value")
+        .innerText();
       expect(value?.replace(/\s+/g, " ").trim()).toBe(
         "REST 3:00 · WORK 2:06.0",
       );
-      await expect(page.locator(".timer-upnext-then")).toBeHidden();
+      await expect(page.locator(".connected-band-upnext-then")).toBeHidden();
 
       // THE SAFETY FIX, MEASURED (James 2026-08-12): End's hit box is a
       // small fraction of the surface's width, not the full-width bar this
@@ -2519,18 +2614,26 @@ for (const name of CONNECTED_STATES) {
       // delta in the message rather than on a bare integer.
       //
       // The count was a floor until the test-integrity sweep (P2): given
-      // the two exact assertions above it, `floor(612/40)` is 15 and the
-      // floor could not fail unless one of them had already failed and
-      // aborted the test. James's ruling is a number, so the number is what
-      // is pinned. Measured, not derived: 15, at an exact fit of 15.3.
+      // the two exact assertions above it, `floor(clientHeight/40)` could
+      // not fail unless one of them had already failed and aborted the
+      // test. James's ruling is a number, so the number is what is pinned.
+      // Measured, not derived: 15 (Task 6's own FIX ROUND moved this from
+      // 16 — CRITICAL 1's header restructure costs the scroller one row's
+      // worth of height, `PORTRAIT_GRID_SCROLLER_PX`'s own top comment has
+      // the arithmetic), at another zero-slack EXACT fit — 600/40 is 15.0
+      // precisely. A zero-slack fit is still an EXACT number, not a
+      // fragile one: `clientHeight` is pinned above this assertion, so any
+      // future px drift fails there FIRST, by its own delta, before this
+      // line could ever see a fractional row.
       //
       // And the count is NOT merely implied by the two heights above, as
-      // the fix round's own note claimed (the re-review corrected it):
+      // an earlier round's own note claimed (a re-review corrected it):
       // `rowHeight` samples `children[0]` alone while `visible` walks every
       // child, so later rows can diverge from the first. Proven — giving
       // `.connected-grid-row:not(:first-child)` a 50px height leaves
-      // `rowHeight` 40 and `clientHeight` 612 both green and fails here on
-      // 12 (5 in landscape). This line detects on its own.
+      // `rowHeight` 40 and `clientHeight` unchanged both green and fails
+      // here on a wrong count (5 in landscape, at its own budget). This
+      // line detects on its own.
       const m = await page.evaluate(() => {
         const scroller = document.querySelector(".connected-grid-rows")!;
         const box = scroller.getBoundingClientRect();
@@ -2569,34 +2672,34 @@ for (const name of CONNECTED_STATES) {
     if (name === "connected-pane-live") {
       // UP NEXT'S LANDSCAPE STRING: "REST 2:00 · then WORK 2:09.0" —
       // revision §3's own example, and the SHAPE is now literally that (the
-      // fixture's own numbers differ). It was not, until the task-6 fix
-      // round: `phaseAnnouncement` used to emit "WORK · 2:06.0", putting a
-      // second "·" inside a phrase the outer "·" already separates, and
-      // this comment claimed byte-for-byte fidelity it did not have (task-6
-      // review, M2). The builder was corrected to the design, not the
-      // comment to the build. Same value as the portrait case above,
-      // plus the word "then" — proving it is one builder, not two, the
-      // same way `UpNextStrip.test.tsx` proves it structurally. `innerText`
-      // for the same reason the portrait block above uses it (rendering-
-      // aware, not raw-DOM) — nothing is hidden here, so it reads the same
-      // as `textContent` would, but consistency beats relying on that.
-      const value = await page.locator(".timer-upnext-value").innerText();
+      // fixture's own numbers differ). RE-ANCHORED (CR2 spec 3 Task 4): the
+      // band renders this line directly now, `.connected-band-upnext-
+      // value`/`-then`, not `UpNextStrip`'s own classes — same value as the
+      // portrait case above, plus the word "then" — proving it is one
+      // builder, not two, the same way `PaneLive.test.tsx` proves it
+      // structurally. `innerText` for the same reason the portrait block
+      // above uses it (rendering-aware, not raw-DOM) — nothing is hidden
+      // here, so it reads the same as `textContent` would, but consistency
+      // beats relying on that.
+      const value = await page
+        .locator(".connected-band-upnext-value")
+        .innerText();
       expect(value?.replace(/\s+/g, " ").trim()).toBe(
         "REST 3:00 · then WORK 2:06.0",
       );
-      await expect(page.locator(".timer-upnext-then")).toBeVisible();
+      await expect(page.locator(".connected-band-upnext-then")).toBeVisible();
       // NOT VISUALLY CLIPPED — the bug `innerText` above cannot catch
-      // (found by eye in this task's own first landscape screenshot:
-      // `.timer-upnext-value`'s `text-overflow: ellipsis` silently
-      // truncated this exact string to "REST 3:00 …", and `innerText`
+      // (found by eye in the pre-redesign task's own first landscape
+      // screenshot: the old `.timer-upnext-value`'s `text-overflow:
+      // ellipsis` silently truncated this exact string, and `innerText`
       // still read the full un-clipped string throughout, because
-      // ellipsis clips PAINT, not the DOM `innerText` walks). `scrollWidth
-      // > clientWidth` is what visual truncation actually looks like from
-      // script; real root cause was `.connected-metric-cell`'s own
-      // `flex: 1` claiming the same share of the row as this value
-      // (index.css's own comment on the fix has the measurement).
+      // ellipsis clips PAINT, not the DOM `innerText` walks — the same
+      // risk applies to the band's own value, which keeps the identical
+      // `text-overflow: ellipsis` safety net). `scrollWidth >
+      // clientWidth` is what visual truncation actually looks like from
+      // script.
       const overflow = await page
-        .locator(".timer-upnext-value")
+        .locator(".connected-band-upnext-value")
         .evaluate((el) => ({
           scrollWidth: el.scrollWidth,
           clientWidth: el.clientWidth,
@@ -2723,11 +2826,14 @@ for (const name of CONNECTED_STATES) {
       expect(m.rowHeight).toBe(32);
       expect(m.clientHeight).toBe(LANDSCAPE_GRID_SCROLLER_PX);
       // EXACT, not a floor, for the reason the portrait block sets out
-      // (test-integrity sweep, P2): `floor(276/32)` is 8, so the FLOOR was
+      // (test-integrity sweep, P2): `floor(286/32)` is 8, so the FLOOR was
       // implied by the two exact assertions above it. The exact count is
       // not — `rowHeight` samples only `children[0]`, so uneven later rows
       // fail here (5) with both heights still green. Measured 8, at an
-      // exact fit of 8.625 — the packet's own count, restored by the
+      // exact fit of 8.9375 (CR2 spec 3 Task 5 widens the budget from 276
+      // to 286 — this block's own top comment has the arithmetic — which
+      // only grows the margin under 8 rows, from 20px slack to 30px; still
+      // short of fitting a 9th) — the packet's own count, restored by the
       // task-6 footer reclaim.
       expect(m.visible).toBe(8);
       // ...and the pane itself never scrolls: only the rows do (DEVIATIONS

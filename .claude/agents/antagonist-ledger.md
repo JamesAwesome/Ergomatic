@@ -635,3 +635,278 @@ toolkit, not a history.
   `monitorRun.ts:519-521`'s "both doors speak the same two sentences"
   comment dies with the change and the brief's doc sweep stops one
   comment short of it).
+
+## Spec-stage pass, 2026-08-16 (Phase CR2 spec 3, "the redesign")
+
+- **"2a's mirror model feeds frame 2D; only the ghost COLOUR and the READY
+  caption are new."** False — the up-next line is a third new thing, and
+  the spec's own 2D table demands it. `upNextTextAt` is `phases[index + 1]`
+  by construction (`Timer.tsx:272`) and `surfaceModel.ts:677` calls it with
+  no armed branch, so armed shows the coming REST, never "the first interval
+  forward". The committed capture says so outright:
+  `docs/screenshots/connected-armed-landscape.png` reads
+  `UP NEXT REST 3:00 · then WORK 2:06.0`. **Technique: when a spec says "only
+  X is new", enumerate every field the target frame renders and trace each
+  backward to its producer — and prefer the COMMITTED SCREENSHOT over the
+  code for the fields you can see. A frame's picture is a per-field
+  falsification oracle nobody has to run.**
+
+- **"The type scale ships as written" is not a value change, it is a
+  cross-surface change.** The eight `--size-*` roles are one global `:root`
+  pair (`tokens.css:173-180`, `index.css:7163-7177`) shared with the
+  unconnected phone timer — `--size-label` reaches `.timer-card-label` and
+  the timer's own END, `--size-total` reaches `.timer-total-value`,
+  `--size-subhero` is the timer's ALONE. So a spec that says "fork, do not
+  reach the phone timer" and "ship the new scale" is asking for two
+  incompatible things, and `tokens.test.ts:248` bans the obvious escape
+  (`--size-*-landscape`/`-portrait`) by name while `:180` whitelists the
+  exact token set. **Technique: before accepting a redesign's type scale,
+  grep `var(--token)` for every role it moves and list the consumers OUTSIDE
+  the surface being redesigned. A design token is a coupling; a scale table
+  hides it behind a row of pixels.**
+
+- **A high-fidelity handoff can re-propose a number the project already
+  measured and rejected.** The packet's "grid rows 36px" is the same 36px
+  `index.css:7858` records James ruling down to 32 on 2026-08-12 ("8 rows at
+  36px is 288px, more than any measured build of this frame has ever
+  offered"), documented in `DEVIATIONS.md:101` and pinned in
+  `screenshots.spec.ts` (276px scroller, rowHeight 32, visible 8).
+  **Technique: for every geometric constant a new design packet asserts,
+  grep DEVIATIONS.md and the CSS comments for that same number before
+  transcribing it. This repo writes its reversals down; a packet delivered by
+  someone who has not read them will re-propose the original.**
+
+- **"The gutter absorbs `env(safe-area-inset-left)`."** False and load-
+  bearing: it is `max(left, right)` (`index.css:7281`), spent on BOTH sides
+  (`:7321` padding-right, `:7457`/`:7475` gutter width + padding-left), and
+  the `max()` exists for Android's asymmetric `DisplayCutout` with a
+  shouting comment at `:7206` telling the next reader to keep it. A
+  relocation instruction phrased with the single-sided `env()` deletes the
+  Android fix in passing. **Technique: when a spec proposes to RELOCATE a
+  computed value, quote the declaration, not the concept — a `max()` of two
+  insets and one inset relocate differently.**
+
+- **An exit criterion can name an artifact that does not exist.** "The walk
+  sheet carries the re-pointed session-meters row" — `grep -rn "walk sheet"`
+  over `docs/`, `ROADMAP.md` and both ledgers returns only the spec itself.
+  The nearest real file is a PAST walk's `RUNSHEET.md`, whose two `TOTAL M`
+  rows the redesign invalidates; editing it to describe a future walk
+  corrupts a record. **Technique: for every exit criterion naming a document,
+  `ls` its path. A criterion whose artifact has no path cannot be checked,
+  and the file someone will edit instead is usually a record, not a plan.**
+
+- **A "carried debt" tag is not a citation.** The iPhone 17 / Air "20pt
+  landscape TOP inset" appears three times, all inside the spec, and nowhere
+  else in the repo — while `index.css:7197` records that Chromium reports
+  every `env(safe-area-inset-*)` as `0px`, so no gate here can observe it and
+  the only source of a non-zero one is our own CDP override (the harness this
+  ledger already caught inventing a rotation asymmetry). **Technique: grep
+  the whole repo for a device constant a spec attributes to "carried debt"
+  before letting a row COUNT be derived from it. Debt has a creditor; if the
+  grep finds only the spec, the number was carried in conversation.**
+
+- **The consumer inventory, done backward, found four dead fields where the
+  spec named one.** `hr`, `intervalClockLabel` and `intervalClockValue` also
+  lose their only render sites, `totalLeftSeconds` loses its (it was
+  TimerRuler's prop) while the spec lists it as SURVIVING, and
+  `elapsedDisplay` — the field that actually feeds the log sheet's SESSION
+  line — is never named at all. **Technique: for a spec that deletes a pane,
+  build the table before believing the prose — `grep "model\.<field>"` across
+  the non-test tree for EVERY field, and mark each survives/dies. Prose
+  inventories name the field the author was thinking about.**
+
+- **Attacked and not broken:** every number in §2 against the handoff README
+  (header, heroes, band, all seven grid columns, both type-scale lists,
+  `--rule` = `#d8d3c4`, `--progress-active` = `#8a8478`) — no transcription
+  error; the triple-tap port and its `logOpener` focus restore; `meters`'s
+  single render site; the TimerRuler/UpNextStrip consumer set; the
+  `.connected-paused` description; the armed TOTAL LEFT; and the
+  decoration-only ruling on `--progress-active`, whose 3.29:1 on page is
+  literally the ratio CLAUDE.md's recurring-failure #6 was written about.
+  One residual disclosed rather than fixed: the bar's active-vs-upcoming
+  segment contrast is 2.61:1, under WCAG 1.4.11's 3:1, defensible only
+  because the same state is in the status text.
+
+## Task-brief pass, 2026-08-16 (Phase CR2 spec 3, six briefs)
+
+- **"Consumes X, Y, Z — the same values `TimerRuler` receives today from the
+  model."** Three claims, three wrong: `boundaries` is `IntervalBoundaries`
+  (an object, `surfaceModel.ts:315` / `intervalBoundaries.ts:47-49`), not
+  `number[]`; TimerRuler receives no elapsed at all (`PaneLive.tsx:234-238`
+  passes `totalLeftSeconds`/`totalSeconds`/`boundaries`); and `SurfaceModel`
+  has no numeric elapsed field anywhere — only `elapsedDisplay: string`. The
+  bar's only route to elapsed was `totalSeconds - totalLeftSeconds`, and
+  `totalLeftSeconds` is the field the same spec's fate table deletes.
+  **Technique: a props claim is settled by reading the CALL SITE's prop list
+  and the interface's field types, never by the sentence "the same values X
+  gets today" — that sentence is a memory of a concept, and a component that
+  takes `remaining` does not take `elapsed`.**
+
+- **A brief said "rewrite `PaneLive.test.tsx`" and "delete `PagerRail.tsx`
+  (+ its test file)". Neither test file exists.** PaneLive's assertions live
+  in a 1619-line `ConnectedSurface.test.tsx` and a 5593-line
+  `design.spec.ts`, neither in the brief's Files list — so "rewrite one
+  colocated file" was really "create one, then do surgery on two big ones".
+  **Technique: `ls` every test path a brief names before believing its
+  SCALE. A colocated `.test.tsx` is a convention here, not a guarantee, and
+  the brief's estimate of a task's size is carried entirely by that
+  assumption.**
+
+- **"Copy the existing rail triple-tap tests — they exist."** They did — in
+  `connected/ConnectionLogSheet.test.tsx:207-300`, eight of them through a
+  `pagerTarget()` helper, in a file the brief never listed. The named file
+  had zero (its one `triple` hit was an unrelated CSS class).
+  **Technique: locate existing tests by grepping their ASSERTION HELPER or
+  the selector string, not the feature word — behaviour tests in this repo
+  routinely live in the file that owns the CONSEQUENCE (the sheet), not the
+  one that owns the GESTURE (the surface).**
+
+- **The fate table that calls itself "THE inventory" omitted the field that
+  breaks.** `thenNext` appears in no row, while `upNext` gets an armed
+  branch — but `thenNextTextAt` is `phases[index + 2]` (`Timer.tsx:290-298`),
+  so shifting only `upNext` makes the armed band read
+  `WORK 10:00 · then <the interval after the rest>`, skipping the REST the
+  spec's own example names. The exit criterion greps the table, so the gap
+  is self-concealing. **Technique: for a paired field (`upNext`/`thenNext`,
+  `label`/`value`, `start`/`end`), check the SIBLING's producer whenever one
+  of the pair changes index arithmetic. Inventories are written from the
+  field the author was thinking about; pairs are where the other one hides.**
+
+- **A deletion assigned to "the task that removes its render site" is wrong
+  when the field has TWO render sites in two tasks.** `intervalClockValue`
+  dies in Task 4 by the brief, but `PaneGrid.tsx:126` still reads it and
+  `PaneGrid.tsx` is not in Task 4's files — the spec's own table said "PaneLive
+  cell + PaneGrid headline" and the brief compressed it to one.
+  **Technique: for every field a wave deletes, grep `model.<field>` across
+  the non-test tree and check the SITE COUNT against the task that owns the
+  deletion. One field, two tasks, is a typecheck failure the plan cannot see.**
+
+- **A "regenerate the fixtures at the end" step can be a gate at the
+  BEGINNING.** The ten frozen `e2e/fixtures/connected-*.html` are written by
+  `ConnectedSurface.screens.test.tsx` via `toMatchFileSnapshot`, in the
+  CLIENT project — so the first task that changes the DOM fails that test,
+  not the last one. **Technique: before believing a plan's ordering for a
+  captured artifact, find the writer. `toMatchFileSnapshot` turns a
+  documentation step into a per-task green-suite obligation.**
+
+- **"DEVIATIONS row N" is a LINE NUMBER, and the citations have already
+  rotted.** The file says so itself (`DEVIATIONS.md:112-115`: add rows only at
+  the bottom, citations rot on any insertion above) — and `index.css:7042`
+  and `ConnectedSurface.test.tsx:482` both cite "row 4", which is prose, not
+  a row. **Technique: when a brief says "reconcile the DEVIATIONS row",
+  check the file's own citation convention first and find the row by
+  CONTENT. Reconciling by deleting a row silently rots every citation below
+  it, in CSS comments and test names where no compiler looks.**
+
+- **A brief file is not the plan.** All six briefs were verbatim slices of
+  the plan's task sections and carried none of its header — so the VALUE
+  AUTHORITY ruling ("the spec's tables outrank any number this plan states")
+  and the Global Constraints reached nobody who would implement against
+  them. **Technique: when a wave's briefs are generated by slicing a plan,
+  diff a brief against the plan and ask what the SLICE DROPPED. The header
+  is where the rulings live and the slice never includes it.**
+
+- **Attacked and not broken:** every line anchor in Task 1 (`PANES`/`PaneId`
+  `PagerRail.tsx:28,30`; `useTripleTap` `:166`; `logOpener` `:225`;
+  `handleRailPress` `:263-267`; `SWIPE_THRESHOLD_PX` `:93`; `paneAfterSwipe`
+  `:99`); Task 5's "both row-height pins intact" (`index.css:6607`/`:7864`,
+  `screenshots.spec.ts:2550`/`:2723`); Task 6's "regenerate by the existing
+  route" (the route is real); and — the one I most expected to break —
+  "extend `tokens.test.ts`" for a family scoped to `.connected-surface`.
+  That file reads BOTH stylesheets as source text and locates blocks with a
+  selector-agnostic scanner (`:66,69` + `scopedRuleBodies`), and
+  `.connected-surface` has exactly one base and one landscape block, so the
+  `:root` framing is convention, not capability, and the `toHaveLength(1)`
+  idiom transfers unchanged. **Technique for the near-miss: before calling a
+  pin file "structurally unable to see X", read its HELPER's signature — a
+  test named for `:root` may be a general CSS-source scanner wearing one
+  selector.**
+
+## Phase-exit pass, 2026-08-16 (Phase CR2, the exit walk sheet)
+
+- **"TOTAL LEFT is the distance verification route now that TOTAL M is cut."**
+  False, and it wrote three rows of a release-gating walk sheet. `TOTAL LEFT` is
+  `fmtDuration(totalLeftSeconds / 60)` (`surfaceModel.ts`) — a `m:ss` clock,
+  as it has been since walk 4 (`ROADMAP.md` records the bug as "TOTAL LEFT
+  rising at interval 2, METERS falling 109 -> 50"). The sheet asked the walker to
+  photograph it beside the PM5's distance and expect agreement "within ~1 m".
+  **Technique: for any walk row that says "these two numbers must agree", read
+  the FORMATTER of each side, not its label.** A cell's caption is the last thing
+  to change in a redesign and the first thing a protocol author trusts; `m:ss`
+  versus metres is invisible in prose and fatal in execution. The committed
+  design fixture settled it in one grep (`connected-pane-live.html` renders
+  `39:48`), cheaper than reading the model.
+
+- **"The rest-bearing session checks the clamp; the keystone re-run checks the
+  screens."** Structurally inverted. The only comparison that reaches the
+  register accumulator (the log sheet's `SESSION` line) was written into Session
+  1 ONLY — and Session 1 is the 2×250 r0 keystone, whose committed capture
+  contains workout states {0, 5, 10}: **zero resting frames, zero work→rest
+  boundaries**, provably incapable of exercising the clamp. The row that checks
+  could not exercise; the row that exercised could not check. **Technique: for
+  every walk session, decode the committed capture of that same program and count
+  the transitions the new code keys on. A program's ability to exercise a fix is
+  a countable property of its own recording, not a matter of judgement** — three
+  lines of state-byte decoding placed both rows correctly.
+
+- **"An accumulator bug on the distance axis is only visible in distance."**
+  False, and this is what rescued the sheet. Simulating the poison over
+  `session-2-wu-4unequal.jsonl` reproduced the published 1819.7 m to the digit
+  (which validated the simulation) and showed the SAME poison moves the elapsed
+  axis by **+52.0 s** — 419.8 s honest vs 471.8 s poisoned, i.e. `SESSION` reads
+  `7:51` where the erg reads `6:59`. One photograph. **Technique: a max-merge
+  register holds a PAIR; a mis-keyed write poisons every dimension the register
+  carries. Before declaring an oracle lost because its dimension left the screen,
+  compute the bug's magnitude in the dimensions that remain.**
+
+- **A release gate can contain a physically impossible step.** The sheet's item 4
+  ("confirm the F6 reload session's logged minutes against the recording's own
+  elapsed-seconds") gates the v0.10.0 tag, and the recording cannot exist: the
+  recorder is `window.__pm5Recording__`, an in-memory global with no
+  `localStorage`/`indexedDB` anywhere in `recording.ts` or `transports/index.ts`
+  — and the same session's own instruction is "reload the browser tab". The act
+  under test destroys its own evidence. **Technique: for every "compare X against
+  the recording" step, ask what the step BEFORE it does to the recorder's
+  storage. Persistence is a one-grep question and protocol authors never ask it.**
+  (Fix was one line: download before the reload — the actuals are all pre-reload.)
+
+- **A binding medium and a borrowed checklist can be mutually exclusive.** The
+  sheet bound the walk to laptop Chrome + Web Bluetooth (`webBluetooth.ts:1-7`:
+  "Chromium-only… a laptop has no Capacitor native shell") and then reproduced,
+  verbatim, an 8-item list requiring a mounted phone — including a touch
+  mis-hit test and a both-rotations occlusion check, the latter testing safe-area
+  insets that are identically ZERO in desktop Chrome. Only one item was flagged
+  moot. **Technique: when a protocol imports a checklist verbatim from a design
+  handoff, re-ask each item against the EXECUTION MEDIUM the protocol just
+  declared, not against the product.** Ledger technique 8 (check the harness's
+  input capability) applies to human walks, not only to test suites.
+
+- **Attacked and NOT broken:** the §2 property-table witness mechanism — my
+  hypothesis that the design assertions read hand-written fixtures that could
+  drift is false; `ConnectedSurface.screens.test.tsx:344-348` writes every
+  fixture from the real component tree via `toMatchFileSnapshot`, and the one
+  historical exception (`connected-armed.html`, documented as having gone stale
+  twice) was closed by this PR. Also verified rather than trusted: criterion 5's
+  gates (unit 1163, client 2814, **e2e 331 passed**). One row remains witnessless
+  and is untestable as phrased — 2B's "TOTAL LEFT source … never plan+elapsed",
+  which no assertion names and which the implementation contradicts literally
+  (it IS `totalSeconds − elapsed`); a source claim cannot be witnessed from DOM.
+
+- **Addendum (same pass, deeper evidence sweep): a `a ?? b` factory default
+  makes every test blind to which field is wired.** Spec §2B's "TOTAL LEFT
+  source" row was both false as written (the code IS plan minus elapsed; the
+  invariant is WHICH elapsed) and unwitnessed: every frame factory in the
+  repo defaults `sessionElapsedSeconds ?? f.elapsedSeconds`, so all five
+  test files mirror the pair and mutating the model to read the
+  interval-resetting `frame.elapsedSeconds` left the ENTIRE suite green —
+  reintroducing the exact recorded hardware bug ("TOTAL LEFT … falling 1:30
+  -> 1:11 and then RISING to 1:38") the line's own comment documents.
+  Closed same-day: a diverging-fixture test now discriminates (mutation
+  executed, went red, restored). Also closed: the progress bar's
+  duration-proportional widths had no COMPUTED-style witness (the unit test
+  reads the inline style; a CSS `flex-grow: 1 !important` would equalize
+  the bar green) — design.spec now asserts computed flex-grow ratios.
+  **Technique: when two fields of a fixture are related by `a ?? b`, every
+  test that reads either one is blind to which is wired. Grep the FACTORY
+  DEFAULT before believing any assertion that names one of them — the
+  default is the assertion's real subject.**

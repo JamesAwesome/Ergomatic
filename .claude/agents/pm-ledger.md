@@ -433,3 +433,122 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   2b makes seven. Spec 3 is the last gate before the phase build that carries
   all of it — its walk list is now the phase's entire canary and already owes
   four items (keystone, END finals, F6 reload check, plus its own).
+
+## Design-gate rulings, 2026-08-16 (Phase CR2 spec 3, "redesign")
+
+- **A wire field whose name says "total" is a claim, not a measurement — decode it
+  out of a committed recording before shipping it to a rower.** Spec 3 arrived with
+  a James ruling that CAL "ships real from the wire" because
+  `AdditionalStatus2.totalCalories` (`app/domain/monitor/pm5/parse.ts:199`, 0x0033
+  bytes 6-7) was already parsed. Decoding bytes 6-7 out of both walk-2026-08-16
+  recordings took ten minutes and falsified it: the value **resets to 0 at every
+  interval boundary**, coincident with `intervalCount` incrementing and with
+  0x0033's own `elapsedSeconds` returning to 0. `session-1-keystone-2x250r0.jsonl`
+  ends reading 15 for a session that burned ~30; `session-2-wu-4unequal.jsonl`
+  resets four times and ends at 16 with a peak of 31. `parseEndOfWorkoutSummary`
+  (`:347-364`) carries no calorie field, so there is **no machine-authoritative
+  session calorie anywhere we decode** — an honest CAL needs the same register fold
+  spec 1 built for distance. That parser's own header already states the rule the
+  field name violates: this codebase reserves "total"/"session" for a CONFIRMED
+  accumulated reading. **Concept2's field names are Concept2's claims; ours are
+  earned.** This is item 0's exact shape, in item 0's own phase. James re-ruled on
+  the corrected fact: CAL cut from spec 3.
+
+- **A never-surfaced wire value that the fake hard-codes to 0 cannot be caught by
+  any gate we own.** `transports/fake.ts:657` emits `totalCalories: 0`
+  unconditionally, so every unit test, e2e and committed screenshot of a new CAL
+  cell would read `CAL 0` and pass. Before endorsing "surface a value we already
+  parse", grep the fake for it — a constant there converts the whole suite into
+  agreement with itself (recurring failure #11 at the fixture layer).
+
+- **Ask which SHARED component a "visual" spec is about to change.** Spec 3's 6px
+  three-state progress bar and cut `UP NEXT` label live in `session/TimerRuler.tsx`
+  and `components/UpNextStrip.tsx`, both consumed by the phone timer
+  (`Timer.tsx:803,825`) as well as the connected pane (`PaneLive.tsx:232,234`). The
+  handoff, PROVENANCE and the dispatch brief all describe the work as
+  connected-only. A redesign scoped to one screen reaches a second product surface
+  through any component the two share — enumerate the importers at the gate, and
+  make fork-or-change an explicit spec decision. (Spec 3 ruled: fork.)
+
+- **Cutting a display CAN retire a verification route even when it does not retire
+  the number** (sharpening the 2026-08-15 ruling). `TOTAL M` leaves LIVE, GRID's
+  headline has no session-metres cell, so session metres leaves the connected
+  screen entirely — in the same build whose release-note obligation tells testers
+  that totals "now read LOWER and correct", and against a phase exit that
+  instructs the walker to photograph "session metres" beside the monitor. The
+  value survives (the log sheet's SESSION line); the ROUTE a walker and a tester
+  use does not. **When a redesign removes a readout, check the walk sheet and the
+  release notes for instructions that name it.** (Spec 3 re-points both.)
+
+- **A design that introduces a NEW CAPABILITY CLASS states which house rule it is
+  overriding.** Spec 3's ~200ms pane slide would have been the first motion in the
+  app — `@keyframes`/`transition`/`animation`/`prefers-reduced-motion` return
+  **zero** matches across both CSS files — against `docs/design/README.md`'s "No
+  animations… keep it calm" and the briefing's "no animation". An override is
+  James's to make; a silent divergence in a spec is how a design system stops
+  being one, and the override belongs in the design doc, not the spec. (James
+  ruled: cut.)
+
+- **Un-released stack at this gate: SEVEN merges behind v0.9.0** (#99, #100, #101,
+  #103, #102, #104, #105); spec 3 makes eight. Version is **MINOR (v0.10.0)**, not
+  patch — F6 adds a user-facing transaction and spec 3 rebuilds a primary screen.
+  Notes PR before the tag, per the v0.8.0/v0.9.0 precedent. The phase walk is the
+  entire canary and now owes six things: keystone re-run, a REST-BEARING row, END
+  finals, the F6 reload check, the handoff's 8-item on-erg list, and a re-pointed
+  session-metres comparison.
+
+- **Measured blast radius of spec 3, for whoever estimates the next redesign:**
+  ~3.3k lines of render/model code, ~1.4k lines of CSS (`index.css:5715-7908`; all
+  49 selectors past the landscape query at `:7150` are `.connected-*`), ~10k lines
+  of tests, and 10 byte-level frozen HTML fixtures (`app/e2e/fixtures/connected-*.html`)
+  that all regenerate. One PR is still right — the segmented control is the shared
+  spine of both panes and a split re-shoots every capture twice — but the exit
+  criteria have to be a per-frame PROPERTY TABLE (2A/2B/2C/2D + stale +
+  disconnected), not "implements 2A-2D". Frame 2D's `READY` word was lost exactly
+  that way at spec 2a's gate.
+
+## Phase-close gate, 2026-08-16 (Phase CR2, spec 3 / PR #109)
+
+- **A walk sheet states its binding MEDIUM and its test list separately, and
+  nobody checks that the medium can execute the list.** The CR2 exit runsheet
+  bound the walk to Chrome + Web Bluetooth (correctly, for wire evidence) and
+  reproduced the design handoff's 8-item on-erg list verbatim — five of the
+  eight (mount both rotations, mis-hit the switcher, first frame deliberate,
+  92px hero and 22px status at full pull) need a phone in a hand. The sheet
+  flagged the one item Ruling 2 made moot and was silent on the other five.
+  **At a phase close, read the walk's protocol against its own medium, item by
+  item.** Sharpens the 2026-08-15 "the definitive hardware walk was a WEB walk"
+  ruling: that transfers for NUMBER questions, where the wire is identical on
+  both mediums. It does not transfer for a LAYOUT redesign — spec 3's own §1
+  concedes "Chromium reports every `env()` as 0 so no gate can observe one",
+  which means the e2e assertions, the 67 captures and the web walk are one
+  oracle, not three. Device pass on the FAKE monitor from Xcode costs ten
+  minutes, no erg time, and no build number.
+- **A phase exit clause with no owner in the close-out queue is a dropped
+  criterion, however well the code went.** CR2's exit says the carried debt is
+  "either cleared or explicitly re-parked with a reason"; the block is eleven
+  bullets with zero dispositions and the branch's ROADMAP diff never touched
+  it. **Diff the phase's own exit sentence against the close-out queue, clause
+  by clause** — the items that get dropped are always the ones no spec owns.
+- **`.superpowers/` is git-excluded — anything filed only in an SDD progress
+  ledger does not exist.** #109's one PARKED final-review finding
+  (stale-while-armed on GRID) was in the PR body and that excluded file, and
+  `git grep` found it in zero tracked files. Third occurrence of "a PR body is
+  not a record" in three CR2 gates (the READY word at 2a, the lower-totals
+  sentence at #104). **At every gate, `git grep` each parked item's own noun
+  and confirm it lands in a tracked file before the worktree is torn down.**
+- **A phase status paragraph can contradict itself inside thirty lines.**
+  ROADMAP's CR2 section said spec 3 was IN FLIGHT at the top and "is not
+  started" at line 1833 on the same branch. When a phase runs as multiple spec
+  cycles, each cycle amends the top paragraph and nobody re-reads the body.
+- **Zero-behavioural-line tails are now twice achieved** (#104, #109). #109's
+  tail was comments, a test title and a DEVIATIONS row — the useful check is
+  still `git show <tail> | grep '^+' | grep -v '^+\s*//'`, which took one
+  command and settled it. Worth holding as the standard for a final PR.
+- **Un-released stack at the phase's last gate: ELEVEN merges behind v0.9.0**
+  (#99-#108 + #109), canary thrice forfeited by recorded override, v0.10.0
+  MINOR. When a redesign REMOVES a readout in the same build whose notes
+  correct that readout's number, the notes must carry the replacement route or
+  the cohort reads the correction as a regression. (Here: totals read lower and
+  correct, `TOTAL M` is gone from LIVE, look at the post-session summary and
+  the log sheet's SESSION line.)

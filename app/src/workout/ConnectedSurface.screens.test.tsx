@@ -48,7 +48,7 @@ import type {
 import { buildDraft } from "../session/draft";
 import { buildRun, type EnginePhase } from "../session/engine";
 import ConnectedSurface, { LAST_PANE_KEY } from "./ConnectedSurface";
-import type { PaneId } from "./connected/PagerRail";
+import type { PaneId } from "./connected/SegmentedControl";
 
 const baselines: Baselines = { k2Seconds: 112, k6Seconds: 122 };
 const t0 = new Date("2026-08-07T09:00:00.000Z");
@@ -89,6 +89,38 @@ function libraryFixture(
 }
 
 const FIXTURE = libraryFixture("Filling Low", 8);
+
+/** No warm-up phase at all (`buildRun`'s fourth argument `null`, the
+ *  warm-up preference's own real off-default — `PaneGrid.test.tsx`'s own
+ *  `noWarmupFixture`, same construction, kept here rather than imported
+ *  since that file's version also carries a `workoutId`/`identity` this
+ *  one has no use for). The armed capture below needs this, not `FIXTURE`:
+ *  index 0 on `FIXTURE` is the warm-up (`intervalOrdinalLabel` null,
+ *  `readyLabel` collapses to bare `READY`), but the committed
+ *  `connected-armed.png`/`.html` and `design.spec.ts`'s own 2D pin both
+ *  show `1 OF 4 · READY` — a NUMBERED first interval, the state a rower
+ *  with the warm-up preference off actually arms into. */
+function noWarmupFixture(title: string): {
+  program: WorkoutProgram;
+  phases: EnginePhase[];
+} {
+  const w = LIBRARY_WORKOUTS.find((s) => s.title === title);
+  if (!w) throw new Error(`missing library fixture: ${title}`);
+  const draft = buildDraft({
+    id: `${title.toLowerCase().replace(/ /g, "-")}-no-warmup`,
+    title: w.title,
+    type: w.type as WorkoutType,
+    steps: w.steps,
+  });
+  const phases = buildRun(draft, baselines, t0, null).phases;
+  const program = compileProgram(phases);
+  if ("code" in program) {
+    throw new Error(`fixture failed to compile: ${program.code}`);
+  }
+  return { program, phases };
+}
+
+const NO_WARMUP_FIXTURE = noWarmupFixture("Filling Low");
 
 /** Pane C's own second fixture: 25 intervals (6:00 warm-up then 24 x 500 m),
  *  the handoff's own worked example of the case that forces the scroll —
@@ -263,7 +295,7 @@ function capture(pane: PaneId, options: CaptureOptions = {}): string {
 }
 
 /** The rower's own gesture, not a prop: three deliberate presses on one
- *  pager target (handoff §5). */
+ *  control half (handoff §5). */
 function tripleTapGrid(): void {
   const target = screen.getByRole("button", { name: "Grid pane" });
   fireEvent.click(target);
@@ -314,6 +346,42 @@ describe("screen fixtures for pnpm screenshots", () => {
     await expect(capture("live")).toMatchFileSnapshot(
       "../../e2e/fixtures/connected-pane-live.html",
     );
+  });
+
+  /** THE FIX ROUND'S OWN CLOSED GAP (Task 6 fix round, CRITICAL 1). Every
+   *  other committed connected fixture is written by THIS file's own
+   *  `toMatchFileSnapshot` calls — this top-of-file comment's own claim,
+   *  "the fixtures CANNOT go stale," depends on that. `connected-armed.html`
+   *  was the one exception: no case here ever wrote it (an earlier commit's
+   *  own log message names finding it stale as a real defect —
+   *  `git log`'s "a stale static connected-armed.html fixture" — and it went
+   *  stale AGAIN, silently, the moment this task moved the header's status
+   *  span, because nothing here would have failed to catch it). Closing it
+   *  properly rather than hand-patching the HTML once: `phase: "ready"` maps
+   *  to `status: "armed"` (`ConnectedSurface.tsx`'s own status ternary,
+   *  `ConnectedSurface.test.tsx`'s "status precedence" describe proves the
+   *  mapping); `spm: 46`/`currentSplit: 251` are the fake's own taught
+   *  re-arm ghost (`surfaceModel.test.ts`'s "armed: rate mirrors to 0
+   *  plain…" test, `fake.test.ts`'s own comment on why a re-armed machine
+   *  carries the PREVIOUS piece's numbers rather than zero) — chosen far
+   *  from both 0 and the target so a leak of either failure mode is
+   *  unmistakable in the capture, same reasoning as that unit test's own
+   *  comment. */
+  it("pane B, armed (before the first stroke — I-1)", async () => {
+    await expect(
+      capture("live", {
+        phase: "ready",
+        fixture: NO_WARMUP_FIXTURE,
+        frame: {
+          state: "armed",
+          intervalIndex: 0,
+          rowingActive: false,
+          distanceMeters: 0,
+          spm: 46,
+          currentSplit: 251,
+        },
+      }),
+    ).toMatchFileSnapshot("../../e2e/fixtures/connected-armed.html");
   });
 
   /** THE WARM-UP, mid-way through Filling Low's 8:00 easy start (design spec

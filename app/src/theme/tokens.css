@@ -99,6 +99,17 @@
      row 0's "accent appears nowhere" is now literally true there, where it
      previously carried a documented single exception. */
   --marker: #7d5510;
+  /* CR2 spec 3 (2026-08-16), design spec §1: the new progress bar's
+     upcoming-vs-active distinction on the connected surfaces (task 3
+     builds `ConnectedProgressBar`; this task only reserves the name and
+     the value). DECORATION-ONLY, NEVER TEXT — the spec's own disclosed
+     residual is that `#8a8478` on `#ded8c9` measures 2.61:1, under WCAG
+     1.4.11's 3:1 floor for meaningful graphics; accepted there because the
+     same state is redundantly carried in the status text beside the bar
+     (`3 OF 12 · WORK`), which is why this token must never be reused as a
+     text colour — nothing redundantly restates a value that fails 4.5:1
+     on its own. */
+  --progress-active: #8a8478;
   /* Fix round 1 (James's ruling): was #b5341f, IDENTICAL to --accent — every
      TR chip/badge filled with what was structurally "accent", quietly
      breaking the ui-fix round's own "accent means exactly four things,
@@ -162,31 +173,44 @@
      spec §8 / revision's own §3/§5/§6 tables). Before this, `tokens.css`
      carried colours, `--radius` and `--tap` and nothing else — `index.css`
      has 254 literal font-sizes of its own, and this beachhead does NOT
-     sweep them; it names only the eight roles the connected panes and the
+     sweep them; it names only the roles the connected panes and the
      unconnected phone timer share, for Task 2 and the tasks after it
      (3/5/7) to consume as they rebuild those two surfaces. Named by ROLE,
      not by pixel value, because the same role takes a different pixel
      value in each orientation — one name, two values, never two names: the
      value below is PORTRAIT; the landscape half of each pair is redefined
      under `@media (orientation: landscape)` inside `index.css`'s own
-     connected-surface query, not duplicated here under a second name. */
-  --size-hero: 104px;
-  --size-hero-tenths: 54px;
+     connected-surface query, not duplicated here under a second name.
+
+     FIVE OF THE ORIGINAL EIGHT RETIRED (CR2 spec 3 Tasks 4 and 5):
+     `--size-hero`, `--size-hero-tenths`, `--size-target` and `--size-metric`
+     were, in practice, connected-only despite living in this "shared"
+     family — the redesign forks the connected surface onto its own
+     `--c-size-*` family entirely (`.connected-surface`'s own scale,
+     index.css), which left these four with ZERO consumers anywhere in
+     `index.css` (the phone timer never read them; `tokens.test.ts`'s own
+     "no more dead names" rule is exactly the guard that caught it).
+     `--size-row` joins them at Task 5: the connected grid was its last
+     real consumer (`.connected-grid-row > span`, `index.css`), migrated
+     onto `--c-size-row` in the same task that finished the family's own
+     migration off `--size-*` entirely. Deleted rather than left as dead
+     weight — the three surviving roles below (`--size-subhero`,
+     `--size-total`, `--size-label`) are the ones the phone timer alone
+     still reads; nothing connected-scoped consumes `--size-*` any more. */
   --size-subhero: 52px;
-  --size-target: 44px;
-  --size-metric: 30px;
   --size-total: 22px;
-  --size-row: 19px;
   --size-label: 10px;
 
   /* connected-revamp Task 7 (revision §5): the phone timer's own countdown
-     is a bigger step than any of the eight roles above — 118/128px against
-     hero's own 104/112 — so it earns a ninth name rather than overloading
-     `--size-hero` with a second, surface-specific value (Task 2's own "one
-     name, two values, never two names" rule is about ORIENTATION, not
-     about forcing every big numeral on every surface into the same role).
-     The landscape half is redefined in `index.css`'s own landscape `:root`
-     block, alongside the original eight — see that block's own comment for
+     is a bigger step than any of the phone-timer roles above — 118/128px,
+     bigger than the connected surface's own retired hero step ever was
+     (104/112, before CR2 spec 3 Task 4 retired that role from this family
+     entirely) — so it earned its own name rather than overloading a hero
+     role with a second, surface-specific value (Task 2's own "one name,
+     two values, never two names" rule is about ORIENTATION, not about
+     forcing every big numeral on every surface into the same role). The
+     landscape half is redefined in `index.css`'s own landscape `:root`
+     block, alongside the roles above — see that block's own comment for
      why a SECOND `:root { --size-*: … }` block must never be added
      elsewhere. `--size-elapsed` carries only one value: revision §5's own
      table gives ELAPSED a single 26px figure in both orientations (unlike

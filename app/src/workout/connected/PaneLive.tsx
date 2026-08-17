@@ -1,61 +1,72 @@
-// Pane B — the live view (design spec §6, revision §3's "Live · the pane you
-// row on"). Pure machine data; the only control anywhere near it is the
-// shell's End.
+// Pane B — the live view (CR2 spec 3, connected redesign, design spec §2A/
+// §2C/§2D/Stale/Disconnected). REBUILT this task (Task 4): every label the
+// erg already shows four inches up the same sightline is gone — NOW,
+// TARGET, LEFT IN INTERVAL/METERS LEFT, TOTAL M, HR. What is left is what
+// the phone knows and the erg cannot: the two judged heroes, TOTAL LEFT,
+// and what is coming.
 //
-// TWO HEROES, LOUDLY (connected-revamp Task 3). The pane says two things:
-// the actual split and the actual rate, each `--size-hero` (112px landscape
-// / 104px portrait) with its target directly beneath at `--size-target`
-// (46/44px), in ink. Everything else on the pane tops out at `--size-metric`
-// (30px) — the metric row, three values on one baseline under a 1px ink
-// rule — then UP NEXT, then the TOTAL LEFT bar, which Task 4 notched by
-// INTERVAL (design spec §5): this file hands `TimerRuler` one more prop,
-// `model.boundaries`, and the phone timer hands it the same shape, so the
-// two surfaces cannot grow different bars.
+// TWO HEROES, split left/right in landscape (flex 1.25/0.75, a 1px --rule
+// divider) and stacked in portrait (2px ink rule above split, 1px --rule
+// above rate) — the CSS decides which, one markup for both (design spec
+// §2A/§2C). Each hero is: the actual reading at `--c-size-hero`/
+// `--c-size-hero-2`, then its target row directly beneath at
+// `--c-size-target` — split's target keeps a source tag (`6K`) at
+// `--c-size-label`, rate's target keeps the word `SPM`. NEITHER TARGET
+// CARRIES THE WORD "TARGET" ANY MORE (§2A: "Cut from LIVE: NO NOW/TARGET/
+// UP NEXT labels") — the value and its tag/unit are what is left once the
+// label is cut.
 //
-// THE RATE HERO IS A PROMOTION, NOT NEW PLUMBING. `model.rate` is the same
-// `JudgedValue` `judgedValue` has always produced (`surfaceModel.ts`'s one
-// judgement path — `judgeActual`'s single call site is unmoved by this
-// file); `model.targetRate.main` is read straight off the model (fix round
-// 1, task-3-review.md Minor-3 — an earlier version of this file parsed a
-// caption STRING for this value instead; `targetRate` replaced it at the
-// model layer, see that file's own comment).
+// THE PROGRESS BAR IS 3-STATE, NOT WARM-UP-AWARE (design spec §2A/§3):
+// `ConnectedProgressBar` (Task 3) draws done/active/upcoming segments and
+// nothing else — there is no fourth "warm-up" tone on this bar the way the
+// old notched `TimerRuler` painted one. A warm-up interval is simply the
+// FIRST segment, active like any other while it runs; the fact that it is
+// a warm-up and not a working interval lives in the status caption above
+// this pane (`WARM-UP`/`READY`, the shell header's own composed status
+// span — `ConnectedSurface.tsx`'s `headerTrailing`, a header-level sibling
+// of `ConnectionLine` since Task 6's fix round) — the bar's job is "where
+// in the session am I", not "which segment is optional".
 //
-// THE NO-TARGET STATE (design spec §6, adversarial finding): every REST
-// phase — and any work phase without a numeric target — has nothing to
-// judge. `judgeActual` already reads a `null` target as `"within"` (rule
-// 2: "nothing to judge is not a deviation"), so the actual above renders
-// unjudged in plain ink with zero code here. The target VALUE says which
-// KIND of piece this is — `Easy`, `Rest`, `All out`, `Free` — and this pane
-// greys it via `connected-value-absent` (`--ink-3`) on the model's own
-// `absent` flag, so the slot holds its space and names the phase without
-// the word passing for a programmed number. (It was a bare dash until
-// James's 2026-08-12 ruling on #89's warm-up captures; see
-// `surfaceModel.ts`'s own comment for what that reversed and why.)
+// THE BAND (design spec §3: "The up-next line is rendered by the band
+// directly") replaces `TimerRuler`'s own TOTAL LEFT row AND the old metric
+// row's UP NEXT strip in one element: up-next on the left (landscape: no
+// label, the full `then` form, `REST 2:00 · then WORK 2:09.0`; portrait: a
+// `UP NEXT` label over the `then`-less form, the shorter string this
+// content width can hold without wrapping or clipping — the `.timer-
+// upnext-then`-toggle idiom `UpNextStrip.tsx` used, reproduced here rather
+// than imported per this task's own forked-component rule), and the
+// `TOTAL LEFT` labelled cell on the right, reading `model.totalLeftDisplay`
+// directly — the bar above takes elapsed/totalSeconds itself now, so
+// nothing here subtracts a pre-computed remainder any more.
 //
-// CARDS ARE GONE (revision §3: "The old three metric cards are gone; the
-// metric row costs 44px, not 120." / "Missing HR renders — in place. No
-// dashed card, no explanatory copy."). RATE promoted to a hero; METERS and
-// HR moved into the metric row alongside the interval countdown, all three
-// plain judged numerals with no card, no border, no absent idiom beyond the
-// shared `connected-value-absent` grey every dash on this pane already
-// wears. `JudgedCard.tsx` had no other consumer and retired with them.
+// CUT OUTRIGHT (design spec §2A's own casualty line, §3's fate table):
+// `TimerRuler` and `UpNextStrip` (never imported — the connected surface
+// forks its own bar and its own up-next line now); the metric row and its
+// three cells (LEFT IN INTERVAL/METERS LEFT, TOTAL M, HR — `intervalClock
+// Label`, `meters` and `hr` die off `SurfaceModel` itself, this task's own
+// deletions); the `/500m` unit beside the split numeral; the word TARGET.
 //
-// REMOVED per spec §3 (retirement inventory §4/§5, Task 3's own): the
-// ELAPSED strip (replaced by this metric row) and the equal-width
-// `IntervalSegments` bar (the notched TOTAL LEFT bar says the same thing
-// proportionally, Task 4's rebuild) — neither renders here any more.
+// STALE: `model.nowLabel` is the ONLY hero label left post-redesign — it
+// collapses to `stale ? "LAST" : ""` (`surfaceModel.ts`'s own comment), so
+// the existing `!== ""` guard below renders nothing at every other status.
+//
+// ARMED (design spec §2D): the split hero's ACTUAL reading previews the
+// target value (`surfaceModel.ts`'s `armedMirror`) with its judgement
+// forced to `"within"` — plain ink, indistinguishable from an ordinary
+// unjudged reading. §2D wants MORE than that: a GHOST, ink-4, never ink-5.
+// `connected-hero-ghost` is the one bit of pane-local styling this file
+// adds on top of the model's own judgement class, keyed on `model.status`
+// directly (armed is the only status where the split hero previews a
+// number nobody has actually rowed yet). The rate hero does NOT ghost —
+// §2D: "rate shows 0 plain ink" — so no equivalent class there.
 
 import type { Judgement } from "../../../domain/judge.js";
-import UpNextStrip from "../../components/UpNextStrip";
-import TimerRuler from "../../session/TimerRuler";
-import ConnectionLine from "./ConnectionLine";
+import ConnectedProgressBar from "./ConnectedProgressBar";
 import { type SurfaceModel } from "./surfaceModel";
 
-// `Judgement`, not `string` (tail review M-7): the class suffix IS the union
-// member, so this parameter is the render boundary the 2026-08-13 rename
-// crossed — and with `string` here the type system sat the rename out
-// entirely. Typed, a member that is renamed again without its CSS rule
-// following stops compiling at the one place that builds the hook.
+// `Judgement`, not `string` (tail review M-7, carried forward): the class
+// suffix IS the union member, so a member renamed without its CSS rule
+// following stops compiling here rather than sitting silent.
 function judgedClass(
   base: string,
   value: { judgement: Judgement; absent: boolean },
@@ -67,57 +78,44 @@ function judgedClass(
 
 export default function PaneLive({ model }: { model: SurfaceModel }) {
   // Both heroes signal "no target" the same way: the model's own `absent`
-  // flag. This used to sniff for DASH in the value, which stopped working
-  // when James ruled the WORD into that slot (`Easy`/`Rest`/`All out`/
-  // `Free`, 2026-08-12) — a sentinel in the display string only ever held
-  // while the display string had nothing else to say.
+  // flag (I-1, carried forward — the target VALUE names the phase kind,
+  // `Easy`/`Rest`/`All out`/`Free`, greyed by `connected-value-absent`).
   const rateAbsent = model.targetRate.absent;
   const paceTargetAbsent = model.targetSplit.absent;
-  // BOTH heroes wear the SAME label — `model.nowLabel` used to be read only
-  // by the split hero, with the rate hero re-deriving an identical string
-  // locally (`model.stale ? "LAST" : "NOW"`, "mirrored here rather than a
-  // second label field for one string"). I-1 (final whole-branch review)
-  // added a THIRD case — armed's empty string — and a re-derivation that
-  // only checked `stale` silently went stale itself: it would have kept
-  // printing `NOW` at armed while the split hero correctly went blank. One
-  // field, read twice, cannot disagree with itself the way two
-  // computations of "the same" rule can.
-  const rateLabel = model.nowLabel;
+  // BOTH heroes wear the SAME label (carried forward, I-1): one field, read
+  // twice, cannot disagree with itself the way two re-derivations could.
+  const heroLabel = model.nowLabel;
+  const paceValueClass = `${judgedClass("connected-hero-value", model.pace)}${
+    model.status === "armed" ? " connected-hero-ghost" : ""
+  }`;
 
   return (
     <div className="connected-pane connected-pane-live">
-      <ConnectionLine model={model} trailing={model.intervalLabelShort} />
+      {/* `ConnectionLine` (the mark, device caption and status) and the
+          progress bar's own row order match design spec §2A/§2C exactly:
+          the bar sits between the header and the heroes in BOTH
+          orientations, so it renders FIRST here, ahead of the heroes. */}
+      <ConnectedProgressBar
+        boundaries={model.boundaries}
+        totalSeconds={model.totalSeconds}
+        elapsedSeconds={model.elapsedSeconds}
+      />
       <div className="connected-heroes">
         <div className="connected-hero connected-hero-split">
-          {/* NOTHING AT ALL when armed (I-1: `model.nowLabel` is `""` there,
-              never a bare span) — the same "absent, not blank" idiom the
-              target-ref caption below already uses, for the same measured
-              reason: an empty node still occupies a flex slot and the
-              accessibility tree. Frame 2D draws no label over the heroes at
-              all before the first stroke. */}
-          {model.nowLabel !== "" && (
-            <span className="connected-hero-label">{model.nowLabel}</span>
+          {/* NOTHING AT ALL when there is no label (I-1, carried forward):
+              an empty node still occupies a flex slot and the
+              accessibility tree, which is exactly the "absent, not blank"
+              idiom the target-ref caption below already uses. */}
+          {heroLabel !== "" && (
+            <span className="connected-hero-label">{heroLabel}</span>
           )}
-          {/* The unit sits BESIDE the numeral, on its baseline (testers via
-              James, 2026-08-13) — hence the row wrapper: `.connected-hero`
-              is a flex COLUMN, so an unwrapped unit span becomes its own
-              line under the value instead of sitting next to it. OUTSIDE
-              the judged span on purpose: `/500m` is a fact about the
-              metric, not about how the rower is doing, so it must not turn
-              blue or red with the reading it annotates. */}
-          <span className="connected-hero-reading">
-            <span className={judgedClass("connected-hero-value", model.pace)}>
-              {model.paceWhole}
-              {model.paceTenths !== "" && (
-                <span className="connected-hero-tenths">
-                  {model.paceTenths}
-                </span>
-              )}
-            </span>
-            <span className="connected-hero-unit">/500m</span>
+          <span className={paceValueClass}>
+            {model.paceWhole}
+            {model.paceTenths !== "" && (
+              <span className="connected-hero-tenths">{model.paceTenths}</span>
+            )}
           </span>
           <div className="connected-hero-target">
-            <span className="connected-hero-target-label">TARGET</span>
             <span
               className={
                 paceTargetAbsent
@@ -127,24 +125,11 @@ export default function PaneLive({ model }: { model: SurfaceModel }) {
             >
               {model.targetSplit.main}
             </span>
-            {/* NOTHING AT ALL when there is no caption, rather than an
-                empty span (tail review M-5), matching how
-                `TimerTargets.tsx` guards its own `sub`. `targetSplitCaption`
-                was documented as "never blank" and is in fact blank on
-                every no-target phase — Easy, Rest, All out, and both effort
-                words — so this slot was empty more often than not.
-
-                MEASURED before removing it, because "keep the slot for
-                layout stability" is the obvious counter-argument and it
-                turns out to be false here: `.connected-hero-target` is a
-                left-aligned `display: flex` row with `gap: 10px`, so the
-                empty span sat at x=259.97 with width 0 and consumed a 10px
-                gap AFTER the last painted thing. Removing it moved every
-                other box by exactly 0.00px (TARGET label x=20 w=44.41, the
-                value x=74.41 w=175.56, both identical with and without),
-                because nothing follows it and the row does not stretch. So
-                the slot buys no stability; it only puts an empty node in
-                the DOM and the accessibility tree. */}
+            {/* NOTHING AT ALL when there is no caption (tail review M-5,
+                carried forward — measured, not guessed: an empty span here
+                buys no layout stability, it only puts an empty node in the
+                DOM). `targetSplitCaption` is the source TAG the redesign
+                keeps (`6K`) now that the word TARGET is gone. */}
             {model.targetSplitCaption !== "" && (
               <span className="connected-hero-target-ref">
                 {model.targetSplitCaption}
@@ -154,17 +139,13 @@ export default function PaneLive({ model }: { model: SurfaceModel }) {
         </div>
         <span className="connected-hero-divider" aria-hidden="true" />
         <div className="connected-hero connected-hero-rate">
-          {rateLabel !== "" && (
-            <span className="connected-hero-label">{rateLabel}</span>
+          {heroLabel !== "" && (
+            <span className="connected-hero-label">{heroLabel}</span>
           )}
-          <span className="connected-hero-reading">
-            <span className={judgedClass("connected-hero-value", model.rate)}>
-              {model.rate.display}
-            </span>
-            <span className="connected-hero-unit">SPM</span>
+          <span className={judgedClass("connected-hero-value", model.rate)}>
+            {model.rate.display}
           </span>
           <div className="connected-hero-target">
-            <span className="connected-hero-target-label">TARGET</span>
             <span
               className={
                 rateAbsent
@@ -174,68 +155,54 @@ export default function PaneLive({ model }: { model: SurfaceModel }) {
             >
               {model.targetRate.main}
             </span>
+            {/* `SPM` sits beside the TARGET now, not beside the actual
+                numeral (design spec §2A/§2C: "beneath target ... + SPM ...
+                ink-3") — the old `.connected-hero-unit` beside the reading
+                is gone along with the split's own `/500m`. Unconditional,
+                the same "a unit annotates whatever number is there" stance
+                the retired unit spans took. */}
+            <span className="connected-hero-rate-unit">SPM</span>
           </div>
         </div>
       </div>
-      <div className="connected-metric-row">
-        <div className="connected-metric-cell">
-          <span className="connected-metric-label">
-            {model.intervalClockLabel}
-          </span>
-          <span
-            className={
-              model.status === "paused" || model.stale
-                ? "connected-metric-value connected-clock-value-held"
-                : "connected-metric-value"
-            }
-          >
-            {model.intervalClockValue}
-          </span>
-        </div>
-        <div className="connected-metric-cell">
-          {/* `TOTAL M`, not `METERS` (James, 2026-08-13). This cell is
-              `frame.sessionDistanceMeters` — the WHOLE session — and it sat
-              beside `METERS LEFT`, which is this INTERVAL counting down.
-              Two scopes, one word, no way to tell them apart; the bare
-              label invited exactly the misreading that found it. `TOTAL`
-              is the word this surface already uses for session scope
-              (`TOTAL LEFT`, and pane C's own `39:48 TOTAL`), so the pair
-              now reads TOTAL LEFT / TOTAL M rather than METERS / METERS
-              LEFT. Abbreviated because the landscape metric row puts three
-              labels on one line. */}
-          <span className="connected-metric-label">TOTAL M</span>
-          <span className={judgedClass("connected-metric-value", model.meters)}>
-            {model.meters.display}
-          </span>
-        </div>
-        <div className="connected-metric-cell">
-          {/* The HR card never left its own slot (handoff §4); revision §3
-              drops the CARD, not the treatment — a missing reading still
-              reads `—`, now via the shared `connected-value-absent` grey
-              rather than a dashed border, and with no caption to explain
-              it (`hrCaption`'s "NO HR MONITOR" string has no renderer left
-              on this pane). */}
-          <span className="connected-metric-label">HR</span>
-          <span className={judgedClass("connected-metric-value", model.hr)}>
-            {model.hr.display}
+      {/* THE BAND (design spec §2A/§2C/§3): up-next + TOTAL LEFT, replacing
+          the metric row's own UP NEXT cell and `TimerRuler`'s TOTAL LEFT
+          row in one element. Class names are e2e-load-bearing (task
+          brief): `connected-band`, `connected-band-upnext`,
+          `connected-band-cell`. */}
+      <div className="connected-band">
+        <div className="connected-band-upnext">
+          {/* Portrait-only label (§2C); landscape hides it (§2A: "NO
+              label") — CSS toggle, not a second markup, the same
+              orientation-blind-component rule `UpNextStrip.tsx` already
+              established for this exact string. */}
+          <span className="connected-band-upnext-label">UP NEXT</span>
+          <span className="connected-band-upnext-value">
+            {model.upNext}
+            {/* The `then` word is the ONLY thing landscape adds over
+                portrait's string (§2C: "the existing `.timer-upnext-then
+                { display: none }` mechanism dies with UpNextStrip, so the
+                band reproduces the drop itself") — reproduced verbatim
+                here as `connected-band-upnext-then`, toggled by
+                `index.css`'s own landscape query. `thenNext === null`
+                renders no separator at all, matching `UpNextStrip`'s own
+                "null past the last phase" contract. */}
+            {model.thenNext !== null && (
+              <>
+                {" · "}
+                <span className="connected-band-upnext-then">then </span>
+                {model.thenNext}
+              </>
+            )}
           </span>
         </div>
-        {/* UP NEXT NESTS INSIDE the metric row rather than following it as
-            its own sibling (index.css's own comment on `.connected-metric-
-            row` has the full reasoning): landscape's 296px budget cannot
-            fit two 112px heroes AND a full second row for UP NEXT AND the
-            ruler. `flex-wrap` is what makes one DOM serve both layouts —
-            portrait wraps it onto its own line (`flex-basis: 100%`,
-            keeping its established pill), landscape keeps it on the metric
-            row's own baseline, right-aligned, exactly where revision §3
-            draws it. */}
-        <UpNextStrip upNext={model.upNext} thenNext={model.thenNext} />
+        <div className="connected-band-cell">
+          <span className="connected-band-cell-label">TOTAL LEFT</span>
+          <span className="connected-band-cell-value">
+            {model.totalLeftDisplay}
+          </span>
+        </div>
       </div>
-      <TimerRuler
-        totalLeftSeconds={model.totalLeftSeconds}
-        totalSeconds={model.totalSeconds}
-        boundaries={model.boundaries}
-      />
     </div>
   );
 }
