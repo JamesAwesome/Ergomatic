@@ -616,13 +616,25 @@ export function anyLiveSession(): "none" | "phone" | "monitor" {
 
 /** What a Connect press has to warn about before it is allowed through, or
  *  `null` when nothing is at risk. Shares its shape with `WorkoutDetail`'s
- *  own `replaceStage` union, but the two doors no longer agree on when
- *  `"in-progress"` applies: Start's door can genuinely have a live
- *  `SessionRun` (a phone timer running in the background), while any
- *  MonitorRun the Connect door can see is always dead (F6 spec 2b, exit
- *  criterion 5 — see `connectGuardStage`'s own doc comment below). The
- *  `SessionRun` case here still uses `"in-progress"`; only the `MonitorRun`
- *  case never does. */
+ *  own `replaceStage` union (`session/useStartWorkout.ts`'s
+ *  `StartReplaceStage`), and — as of the close-out's queue item 3 — the two
+ *  doors now fully AGREE on when `"in-progress"` applies: a `SessionRun`
+ *  (a phone timer genuinely running in the background) stages it while
+ *  live, on both doors; a `MonitorRun` never does, on either door, because
+ *  any `MonitorRun` either door can see is always dead (F6 spec 2b, exit
+ *  criterion 5 — see `connectGuardStage`'s own doc comment below). HISTORY:
+ *  Start's door used to branch its `MonitorRun` case on `completedAt` too,
+ *  staging `"in-progress"` for a live-looking record — the close-out's
+ *  queue item 3 shed that, on the identical reasoning this function's own
+ *  comment already gives for the Connect door. NOT the same way its
+ *  `SessionRun` case still does, though: at the Start door, the
+ *  `SessionRun` branch only ever distinguishes completed ("unlogged") from
+ *  everything else, never `"in-progress"` — that door's own
+ *  `"in-progress"` for a genuinely live phone-timer session is produced by
+ *  a DIFFERENT branch entirely, the started-but-unfinished `SessionDraft`
+ *  check (`session/useStartWorkout.ts`'s `handleStart`, `startedAt !==
+ *  null`). Only THIS function's own `SessionRun` check (below) branches on
+ *  live-vs-finished to produce `"in-progress"` directly. */
 export type ConnectGuardStage = "unlogged" | "in-progress" | null;
 
 /**

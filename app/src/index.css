@@ -6595,6 +6595,15 @@ section:not(.news-pinned) .news-row:last-of-type {
   display: none;
 }
 
+/* Hidden by default, same idiom as `-then` above (queue item 7): portrait
+   keeps its own stacked `UP NEXT` label (`.connected-band-upnext-label`)
+   ahead of the value, so a second "NEXT" INSIDE the value would double up
+   the same word — the landscape override below is the only place this
+   ever shows, exactly where the stacked label is itself hidden. */
+.connected-band-upnext-next {
+  display: none;
+}
+
 /* `TOTAL LEFT`'s own rule (portrait): the ONE thing in the band that gets
    a `border-top` outside landscape's shared band rule — §2C draws this
    cell "on a rule", up-next above it carries none. */
@@ -6758,6 +6767,12 @@ section:not(.news-pinned) .news-row:last-of-type {
      headline outright rather than relocating its device row —
      `.connected-grid-head`'s own comment has the full arithmetic); the row
      count stays 8 either way (256 fits both 276 and 286, 288 fits neither).
+     CR2 close-out queue item 5 moves it a THIRD time, DOWN this time, to
+     266 (`.connected-surface`'s own new `max(20px, …)` top-padding floor
+     shrinks the whole surface's available body height by 20px, landscape
+     header height unchanged) — 256 still fits (10px margin, not 30), row
+     count still 8 (`LANDSCAPE_GRID_SCROLLER_PX`'s own comment in
+     `e2e/screenshots.spec.ts` has the updated arithmetic).
 
      NO PADDING HERE EITHER (Task 5 fix round, JAMES RULING 2026-08-12,
      reversing this task's own first attempt): portrait's scroller has more
@@ -7628,8 +7643,19 @@ section:not(.news-pinned) .news-row:last-of-type {
        down. Padding HERE protects every grid item the row contains,
        uniformly, the same way it always did before this task's own
        restructure — the fix is where the term lived pre-task-1, not a new
-       mechanism. */
-    padding: env(safe-area-inset-top, 0px) var(--edge-inset)
+       mechanism.
+
+       `max(20px, …)`, NOT bare `env()` (close-out queue item 5, James's
+       own device screenshot 2026-08-17): on a shape with NO landscape top
+       inset (`env(safe-area-inset-top)` resolves to `0px`), the bare
+       `env()` term left the control/END row flush with the physical top
+       edge — this rule's OWN handoff cites a 20px figure (§2A) that a
+       zero inset was silently discarding. `max()` restores that 20px
+       floor while still growing past it the moment a real inset (a
+       notch, Android's `DisplayCutout`) exceeds it — the identical
+       "floor, not a fixed number" idiom `--edge-inset` already uses on
+       the left/right axis, just applied to one side instead of two. */
+    padding: max(20px, env(safe-area-inset-top, 0px)) var(--edge-inset)
       env(safe-area-inset-bottom, 0px) var(--edge-inset);
     height: 100dvh;
   }
@@ -8072,6 +8098,28 @@ section:not(.news-pinned) .news-row:last-of-type {
   /* NO LABEL IN LANDSCAPE (design spec §2A: "flex 1, nowrap, NO label"). */
   .connected-pane-live .connected-band-upnext-label {
     display: none;
+  }
+
+  /* THE "NEXT · " PREFIX (queue item 7, James's ruling: prepend it always
+     — "NEXT · REST 3:00 · then WORK 2:09.0", "NEXT · FINISH" — uniform
+     beats special-casing the phase-less FINISH case). Judgment call on
+     size/colour, since no §2A table row prices this element (it did not
+     exist at spec time): `font: inherit` keeps it at the SAME 30px
+     `--c-size-band` the value/`-then` word already read at just above —
+     "NEXT" reads as part of the one inline sentence, not a smaller
+     caption bolted onto a bigger word. `color: var(--ink-3)`, NOT
+     inherited ink, is the one deliberate departure from that "one
+     sentence" treatment: `-label`'s hidden stacked form was ink-3 too
+     (the rule directly above retires it in landscape, not its colour
+     role), and keeping that same ink-3 on the prefix is what marks it as
+     the LABEL half of the line — distinguishing "NEXT" the caption from
+     "REST 3:00 … " the value — the same distinction portrait draws with
+     a whole separate line instead of a colour. */
+  .connected-pane-live .connected-band-upnext-next {
+    display: inline;
+    font: inherit;
+    letter-spacing: inherit;
+    color: var(--ink-3);
   }
 
   /* Up-next's value shares the TOTAL LEFT cell's own `--c-size-band`

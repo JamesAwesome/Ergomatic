@@ -120,9 +120,14 @@ export function useStartWorkout(
     }
     const existingMonitorRun = loadMonitorRun();
     if (existingMonitorRun !== null) {
-      setReplaceStage(
-        existingMonitorRun.completedAt !== null ? "unlogged" : "in-progress",
-      );
+      // Always "unlogged", never "in-progress" (queue item 3, mirroring
+      // `connectGuardStage`'s own F6 spec 2b fix): a MonitorRun visible at
+      // THIS door is dead the same way it is at Connect's — the connected
+      // session lives on WorkoutDetail's own surface, and a reload or a
+      // navigation away tears `useMonitorSession` down without ever
+      // touching the record. There is no honest "in progress" left to
+      // assert about it, live-looking `completedAt` or not.
+      setReplaceStage("unlogged");
       return;
     }
     const existingDraft = loadDraft();

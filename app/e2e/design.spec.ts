@@ -5119,7 +5119,7 @@ test.describe("connected screens (fake-driven)", () => {
       expect(upnext.color).toBe(INK_RGB);
       expect(upnext.whiteSpace).toBe("nowrap");
       expect(upnext.text.replace(/\s+/g, " ").trim()).toBe(
-        "REST 3:00 · then WORK 2:06.0",
+        "NEXT · REST 3:00 · then WORK 2:06.0",
       );
 
       const label = await page
@@ -5394,6 +5394,25 @@ test.describe("connected screens (fake-driven)", () => {
       await pumpUntilText(page, "2 OF 5");
 
       const TOP = 20;
+
+      // Queue item 5 (close-out, James's device screenshot): the ZERO-
+      // inset case, no CDP override at all — the exact shape a non-notch
+      // device (or this suite's own default Chromium, which reports
+      // every `env(safe-area-inset-*)` as `0px`) reports. Before the
+      // fix, bare `env(safe-area-inset-top)` resolved to `0px` here and
+      // the control/END row sat flush with the physical top edge — this
+      // is the case the `max(20px, …)` floor exists for; the real-inset
+      // block below (unchanged) proves the floor still yields to a
+      // genuinely larger inset.
+      const [zeroControlBox, zeroEndBox] = await Promise.all([
+        page.locator(".connected-control").boundingBox(),
+        page.getByRole("button", { name: "End session" }).boundingBox(),
+      ]);
+      expect(zeroControlBox).not.toBeNull();
+      expect(zeroEndBox).not.toBeNull();
+      expect(zeroControlBox!.y).toBeGreaterThanOrEqual(TOP);
+      expect(zeroEndBox!.y).toBeGreaterThanOrEqual(TOP);
+
       const client = await page.context().newCDPSession(page);
       await client.send("Emulation.setSafeAreaInsetsOverride", {
         insets: { top: TOP, left: 0, bottom: 0, right: 0 },
@@ -6157,6 +6176,10 @@ test.describe("connected screens (fake-driven)", () => {
       const text = await value.innerText();
       expect(text.replace(/\s+/g, " ").trim()).toBe("WORK 2:06.0 · REST 3:00");
       await expect(page.locator(".connected-band-upnext-then")).toBeHidden();
+      // Queue item 7: portrait keeps its own stacked UP NEXT label above,
+      // so the landscape-only "NEXT · " prefix stays hidden here too — no
+      // double-labeling.
+      await expect(page.locator(".connected-band-upnext-next")).toBeHidden();
 
       const overflow = await value.evaluate((el) => ({
         scrollWidth: el.scrollWidth,
@@ -6300,7 +6323,7 @@ test.describe("connected screens (fake-driven)", () => {
         .locator(".connected-band-upnext-value")
         .innerText();
       expect(value.replace(/\s+/g, " ").trim()).toBe(
-        "WORK 2:06.0 · then REST 3:00",
+        "NEXT · WORK 2:06.0 · then REST 3:00",
       );
       const total = await page
         .locator(".connected-band-cell-value")
