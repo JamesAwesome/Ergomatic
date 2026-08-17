@@ -70,6 +70,7 @@ describe("MonitorEvent", () => {
       avgSplit: 100,
       avgSpm: 24,
       avgHeartRateBpm: 150,
+      restDistanceMeters: 20,
     };
     const events: MonitorEvent[] = [
       {

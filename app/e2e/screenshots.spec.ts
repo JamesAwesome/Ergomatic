@@ -572,6 +572,7 @@ function buildInterruptedMonitorRun(workoutId: string): MonitorRun {
       avgSplit: 150,
       avgSpm: 22,
       avgHeartRateBpm: 130,
+      restDistanceMeters: 0,
     },
   ];
   return {
@@ -2242,6 +2243,7 @@ async function openLogMonitorForm(
             avgSplit: 112,
             avgSpm: 24,
             avgHeartRateBpm: 141,
+            restDistanceMeters: 0,
           },
           cumulativeElapsedSeconds: 15,
           cumulativeDistanceMeters: 100,

@@ -162,6 +162,22 @@ export interface IntervalActual {
   avgSplit: number | null;
   avgSpm: number | null;
   avgHeartRateBpm: number | null;
+  // ADDITIVE (post-workout-summary design spec R-B): 0x0037's own Interval
+  // Rest Distance (`pm5/parse.ts`'s `SplitIntervalData.intervalRestDistanceMeters`,
+  // whole meters), the trailing rest that follows this interval's work bout
+  // — DISTANCE means the machine's own number (work + rest), and this field
+  // is what makes that sum reachable (walk-2026-08-16 session 2: work 1535m
+  // + rest 64m = the machine's own TWD 1599m exactly, interface-notes.md's
+  // own decode). `number`, never optional, the same "the type can be newer
+  // than the record" choice this file already makes for `ProgramInterval`'s
+  // required fields (see the `isMonitorRun`/`v` comment block above) — a
+  // `MonitorRun.actuals` entry `saveMonitorRun` persisted BEFORE this field
+  // existed loads back at runtime with it `undefined` despite the type
+  // saying `number`. This is deliberately NOT a migration (nothing to
+  // derive it from after the fact — the wire bytes are long gone); every
+  // reader of a possibly-old `IntervalActual` reads it `?? 0`, never
+  // trusts the type alone.
+  restDistanceMeters: number;
 }
 
 /**

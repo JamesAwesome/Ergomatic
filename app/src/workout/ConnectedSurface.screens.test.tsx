@@ -161,6 +161,7 @@ function actualFor(index: number, program: WorkoutProgram): IntervalActual {
     avgSplit,
     avgSpm: (interval.displaySpm ?? 20) - 4,
     avgHeartRateBpm: 158 + index,
+    restDistanceMeters: 0,
   };
 }
 

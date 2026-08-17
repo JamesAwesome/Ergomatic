@@ -83,6 +83,7 @@ const actual1: IntervalActual = {
   avgSplit: 113,
   avgSpm: 24,
   avgHeartRateBpm: 150,
+  restDistanceMeters: 0,
 };
 
 function viaJson<T>(value: T): T {
@@ -489,6 +490,7 @@ describe("recordActual: actuals accumulate only while the run is open (Phase 7A-
     avgSplit: 112,
     avgSpm: 25,
     avgHeartRateBpm: 158,
+    restDistanceMeters: 0,
   };
 
   it("appends to a LIVE run, in arrival order, and persists the result", () => {

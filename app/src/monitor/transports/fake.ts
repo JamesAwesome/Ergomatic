@@ -759,7 +759,12 @@ function boundaryBundle(
       splitIntervalTimeSeconds: actual.elapsedSeconds,
       splitIntervalDistanceMeters: actual.distanceMeters,
       intervalRestTimeSeconds: 0,
-      intervalRestDistanceMeters: 0,
+      // R-B: the fake models this honestly off the script's own
+      // `actual.restDistanceMeters` — a constant here (0 or otherwise)
+      // would make every consuming test agree with itself regardless of
+      // whether the driver actually carries the field through
+      // (`domain/monitor/pm5/parse.ts`'s `toIntervalActual`).
+      intervalRestDistanceMeters: actual.restDistanceMeters,
       splitIntervalType: 0,
       splitIntervalNumber: wireIndex,
     },

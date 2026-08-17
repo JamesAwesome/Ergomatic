@@ -366,6 +366,7 @@ function actualFor(index: number, program: WorkoutProgram): IntervalActual {
     avgSplit,
     avgSpm: (interval.displaySpm ?? 20) - 4,
     avgHeartRateBpm: 158 + index,
+    restDistanceMeters: 0,
   };
 }
 
@@ -1540,6 +1541,7 @@ describe("the grid, fake-driven", () => {
             avgSplit: 125.8,
             avgSpm: 18,
             avgHeartRateBpm: 142,
+            restDistanceMeters: 0,
           },
           cumulativeElapsedSeconds: warmup.value,
           cumulativeDistanceMeters: 1908,

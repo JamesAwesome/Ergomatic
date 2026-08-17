@@ -113,6 +113,7 @@ interface FakeBoundaryEventLike {
     avgSplit: number;
     avgSpm: number;
     avgHeartRateBpm: number;
+    restDistanceMeters: number;
   };
   cumulativeElapsedSeconds: number;
   cumulativeDistanceMeters: number;
@@ -196,6 +197,7 @@ function buildStoryEvents(): (FakeStatusEventLike | FakeBoundaryEventLike)[] {
         avgSplit: 112,
         avgSpm: 24,
         avgHeartRateBpm: 141,
+        restDistanceMeters: 0,
       },
       cumulativeElapsedSeconds: 15,
       cumulativeDistanceMeters: 100,

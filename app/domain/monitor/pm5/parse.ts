@@ -546,5 +546,9 @@ export function toIntervalActual(raw: RawPm5Status): IntervalActual {
     avgSplit: raw.splitIntervalAvgPace,
     avgSpm: raw.splitIntervalAvgStrokeRate,
     avgHeartRateBpm: raw.splitIntervalWorkHeartRateBpm,
+    // R-B: 0x0037's own Interval Rest Distance, already decoded by
+    // `parseSplitIntervalData` above — see `IntervalActual.restDistanceMeters`'s
+    // own doc comment (`domain/monitor/types.ts`).
+    restDistanceMeters: raw.intervalRestDistanceMeters,
   };
 }

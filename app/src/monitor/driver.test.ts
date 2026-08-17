@@ -410,14 +410,22 @@ function generalStatusIn(
  *  assertion. Built through the pm5 encoders, so these are the real bytes
  *  the driver's own decoders read. (Module-scoped since Task 4 — the
  *  run-scoping tests need the same two halves the D4 block does.) */
-function splitHalf(boundary: number, seconds: number, meters: number) {
+function splitHalf(
+  boundary: number,
+  seconds: number,
+  meters: number,
+  // R-B: defaults to 0 so every existing caller (none of which cares about
+  // rest distance) is unaffected; the ramp test below is the one caller
+  // that passes something else.
+  restDistanceMeters = 0,
+) {
   return buildSplitIntervalDataBytes({
     elapsedSeconds: seconds,
     distanceMeters: meters,
     splitIntervalTimeSeconds: seconds,
     splitIntervalDistanceMeters: meters,
     intervalRestTimeSeconds: 0,
-    intervalRestDistanceMeters: 0,
+    intervalRestDistanceMeters: restDistanceMeters,
     splitIntervalType: 0,
     splitIntervalNumber: boundary,
   });
@@ -958,6 +966,7 @@ describe("createPm5Driver: HIGH-1 fix — intervalRemaining is correct on the FI
           avgSplit: 110,
           avgSpm: 22,
           avgHeartRateBpm: 140,
+          restDistanceMeters: 0,
         },
         cumulativeElapsedSeconds: 100,
         cumulativeDistanceMeters: 500,
@@ -1086,6 +1095,7 @@ describe("createPm5Driver: Task 6 — the interval clock stops subtracting a che
           avgSplit: 120,
           avgSpm: 24,
           avgHeartRateBpm: 140,
+          restDistanceMeters: 0,
         },
         cumulativeElapsedSeconds: 58,
         cumulativeDistanceMeters: 181,
@@ -1114,6 +1124,7 @@ describe("createPm5Driver: Task 6 — the interval clock stops subtracting a che
           avgSplit: 121,
           avgSpm: 24,
           avgHeartRateBpm: 141,
+          restDistanceMeters: 0,
         },
         cumulativeElapsedSeconds: 113,
         cumulativeDistanceMeters: 331,
@@ -1208,6 +1219,7 @@ describe("createPm5Driver: Task 6 — the interval clock stops subtracting a che
           avgSplit: 130,
           avgSpm: 22,
           avgHeartRateBpm: 138,
+          restDistanceMeters: 0,
         },
         cumulativeElapsedSeconds: 60,
         cumulativeDistanceMeters: 45,
@@ -1233,6 +1245,7 @@ describe("createPm5Driver: Task 6 — the interval clock stops subtracting a che
           avgSplit: 129,
           avgSpm: 22,
           avgHeartRateBpm: 139,
+          restDistanceMeters: 0,
         },
         cumulativeElapsedSeconds: 120,
         cumulativeDistanceMeters: 91,
@@ -1329,6 +1342,7 @@ describe("createPm5Driver: Task 6 — the interval clock stops subtracting a che
           avgSplit: 130,
           avgSpm: 22,
           avgHeartRateBpm: 138,
+          restDistanceMeters: 0,
         },
         cumulativeElapsedSeconds: 60,
         cumulativeDistanceMeters: 200,
@@ -1418,6 +1432,7 @@ describe("createPm5Driver: the full happy path over a real compiled workout (Sea
           avgSplit: 130,
           avgSpm: 20,
           avgHeartRateBpm: 135,
+          restDistanceMeters: 0,
         },
         // The session's first interval starts at cumulative 0, so its
         // boundary's cumulative totals equal its own per-interval ones.
@@ -1483,6 +1498,7 @@ describe("createPm5Driver: the full happy path over a real compiled workout (Sea
           avgSplit: 132,
           avgSpm: 22,
           avgHeartRateBpm: 155,
+          restDistanceMeters: 0,
         },
         // Fake-internal bookkeeping only (see interval 0's boundary above) —
         // checkpoint(300) + this interval's 240s work + its 60s rest —
@@ -1529,6 +1545,7 @@ describe("createPm5Driver: the full happy path over a real compiled workout (Sea
           avgSplit: 132,
           avgSpm: 22,
           avgHeartRateBpm: 158,
+          restDistanceMeters: 0,
         },
         cumulativeElapsedSeconds: 900,
         cumulativeDistanceMeters: 3000,
@@ -1782,6 +1799,7 @@ describe("createPm5Driver: terminate + Appendix-E — the RUN closes, the driver
           avgSplit: null,
           avgSpm: null,
           avgHeartRateBpm: null,
+          restDistanceMeters: 0,
         },
         cumulativeElapsedSeconds: 1,
         cumulativeDistanceMeters: 1,
@@ -1853,6 +1871,7 @@ describe("createPm5Driver: terminate + Appendix-E — the RUN closes, the driver
         avgSplit: 0,
         avgSpm: 0,
         avgHeartRateBpm: null,
+        restDistanceMeters: 0,
       },
     });
     const outOfRun = log
@@ -2181,6 +2200,7 @@ describe("createPm5Driver: Phase 7A-fix-2 Task 4 — a finished piece stops the 
           avgSplit: 118,
           avgSpm: 24,
           avgHeartRateBpm: 142,
+          restDistanceMeters: 0,
         },
         cumulativeElapsedSeconds: 40,
         cumulativeDistanceMeters: 160,
@@ -4111,6 +4131,7 @@ describe("createPm5Driver: MED-2 — divergence logging", () => {
           avgSplit: 120,
           avgSpm: 22,
           avgHeartRateBpm: 140,
+          restDistanceMeters: 0,
         },
         cumulativeElapsedSeconds: 60,
         cumulativeDistanceMeters: 200,
@@ -4158,6 +4179,7 @@ describe("createPm5Driver: MED-2 — divergence logging", () => {
           avgSplit: 120,
           avgSpm: 22,
           avgHeartRateBpm: 140,
+          restDistanceMeters: 0,
         },
         cumulativeElapsedSeconds: 60,
         cumulativeDistanceMeters: 200,
@@ -4176,6 +4198,194 @@ describe("createPm5Driver: MED-2 — divergence logging", () => {
     expect(log.entries().some((e) => e.kind === "interval-complete")).toBe(
       true,
     );
+  });
+});
+
+describe("createPm5Driver: R-B — Interval Rest Distance (0x0037 offset 14-15) rides intervalComplete's actual", () => {
+  it("three sequential boundaries with an honest, unequal ramp (8m/12m/6m) each carry their OWN restDistanceMeters through to actual — never a shared constant", async () => {
+    // Raw bytes via stubTransport, not the fake's scripted timeline: this
+    // is the parse-through-driver path in isolation (`splitHalf`'s own
+    // `intervalRestDistanceMeters` param, `pm5/parse.ts`'s
+    // `parseSplitIntervalData` -> `toIntervalActual`), independent of
+    // `transports/fake.ts`'s own honest ramp (`fake.test.ts` covers that
+    // door separately). Nonzero AND unequal on purpose (briefing: a
+    // constant makes a suite agree with itself regardless of whether the
+    // field is really wired through boundary-to-boundary).
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+    const events: MonitorEvent[] = [];
+    driver.events((e) => events.push(e));
+    transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));
+    transport.notify(ADDITIONAL_STATUS_1_UUID, new Uint8Array(17));
+
+    await programViaStub(driver, transport, THREE_INTERVAL_PROGRAM);
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 30, 100),
+    );
+    // Raw machine numbers, not our program indices: `toActualIndex`
+    // subtracts one UNCONDITIONALLY for the actuals characteristic
+    // (`domain/monitor/pm5/intervalIndex.ts`'s own doc comment — the offset
+    // is a property of 0x0037/38 itself, not of resting state), so machine
+    // 1/2/3 normalize to our 0/1/2.
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 60, 200, 8));
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 22));
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(2, 60, 200, 12));
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(2, 22));
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(3, 60, 200, 6));
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(3, 22));
+
+    const boundaries = events.filter((e) => e.kind === "intervalComplete");
+    expect(boundaries).toHaveLength(3);
+    expect(boundaries[0]).toMatchObject({
+      kind: "intervalComplete",
+      actual: { index: 0, restDistanceMeters: 8 },
+    });
+    expect(boundaries[1]).toMatchObject({
+      kind: "intervalComplete",
+      actual: { index: 1, restDistanceMeters: 12 },
+    });
+    expect(boundaries[2]).toMatchObject({
+      kind: "intervalComplete",
+      actual: { index: 2, restDistanceMeters: 6 },
+    });
+  });
+
+  it("the fake's OWN encode path (transports/fake.ts's boundaryBundle, real 0x0037 bytes via buildSplitIntervalDataBytes) carries the SAME honest, unequal ramp end to end — not a constant, and not only reachable through the stub", async () => {
+    // THREE_INTERVAL_PROGRAM's own restSeconds (30) means each boundary
+    // below is legitimately preceded by a RESTING status tick
+    // (`boundaryBundle`'s own enforced rule, `transports/fake.ts`) — this
+    // is what the sibling test above (raw stubTransport bytes) does not
+    // exercise: the fake's own `intervalRestDistanceMeters:
+    // actual.restDistanceMeters` wiring.
+    const timeline: FakeTimelineEvent[] = [
+      {
+        atMs: 100,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        elapsedSeconds: 30,
+        distanceMeters: 100,
+        spm: 20,
+        currentSplit: 130,
+        heartRateBpm: 130,
+        programIntervalIndex: 0,
+      },
+      {
+        atMs: 200,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALREST,
+        elapsedSeconds: 70,
+        distanceMeters: 200,
+        spm: 0,
+        currentSplit: 0,
+        heartRateBpm: 128,
+        programIntervalIndex: 0,
+      },
+      {
+        atMs: 300,
+        kind: "boundary",
+        actual: {
+          index: 0,
+          elapsedSeconds: 60,
+          distanceMeters: 200,
+          avgSplit: 130,
+          avgSpm: 20,
+          avgHeartRateBpm: 130,
+          restDistanceMeters: 8,
+        },
+        cumulativeElapsedSeconds: 90,
+        cumulativeDistanceMeters: 200,
+      },
+      {
+        atMs: 400,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        elapsedSeconds: 120,
+        distanceMeters: 320,
+        spm: 30,
+        currentSplit: 100,
+        heartRateBpm: 170,
+        programIntervalIndex: 1,
+      },
+      {
+        atMs: 500,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALREST,
+        elapsedSeconds: 160,
+        distanceMeters: 420,
+        spm: 0,
+        currentSplit: 0,
+        heartRateBpm: 165,
+        programIntervalIndex: 1,
+      },
+      {
+        atMs: 600,
+        kind: "boundary",
+        actual: {
+          index: 1,
+          elapsedSeconds: 60,
+          distanceMeters: 220,
+          avgSplit: 100,
+          avgSpm: 30,
+          avgHeartRateBpm: 170,
+          restDistanceMeters: 12,
+        },
+        cumulativeElapsedSeconds: 180,
+        cumulativeDistanceMeters: 420,
+      },
+      {
+        atMs: 700,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        elapsedSeconds: 220,
+        distanceMeters: 540,
+        spm: 24,
+        currentSplit: 110,
+        heartRateBpm: 150,
+        programIntervalIndex: 2,
+      },
+      {
+        atMs: 800,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALREST,
+        elapsedSeconds: 260,
+        distanceMeters: 640,
+        spm: 0,
+        currentSplit: 0,
+        heartRateBpm: 145,
+        programIntervalIndex: 2,
+      },
+      {
+        atMs: 900,
+        kind: "boundary",
+        actual: {
+          index: 2,
+          elapsedSeconds: 60,
+          distanceMeters: 200,
+          avgSplit: 120,
+          avgSpm: 24,
+          avgHeartRateBpm: 150,
+          restDistanceMeters: 6,
+        },
+        cumulativeElapsedSeconds: 280,
+        cumulativeDistanceMeters: 640,
+      },
+    ];
+    const { fake, driver, events } = harness({
+      program: THREE_INTERVAL_PROGRAM,
+      events: timeline,
+    });
+    await programAndArm(driver, fake, THREE_INTERVAL_PROGRAM);
+    for (let i = 0; i < 9; i += 1) fake.tick(100);
+
+    const boundaries = events.filter((e) => e.kind === "intervalComplete");
+    expect(boundaries).toHaveLength(3);
+    expect(
+      boundaries.map((e) =>
+        e.kind === "intervalComplete" ? e.actual.restDistanceMeters : -1,
+      ),
+    ).toStrictEqual([8, 12, 6]);
   });
 });
 
@@ -4263,6 +4473,7 @@ describe("createPm5Driver: D3 — a machine index the armed program's length can
           avgSplit: 120,
           avgSpm: 22,
           avgHeartRateBpm: 140,
+          restDistanceMeters: 0,
         },
         cumulativeElapsedSeconds: 60,
         cumulativeDistanceMeters: 200,
@@ -4325,6 +4536,7 @@ describe("createPm5Driver: D3 — a machine index the armed program's length can
           avgSplit: 120,
           avgSpm: 22,
           avgHeartRateBpm: 140,
+          restDistanceMeters: 0,
         },
         cumulativeElapsedSeconds: 60,
         cumulativeDistanceMeters: 200,
@@ -4526,6 +4738,7 @@ describe("createPm5Driver: Task 5 — actuals normalize via toActualIndex (minus
           avgSplit: 120,
           avgSpm: 22,
           avgHeartRateBpm: 140,
+          restDistanceMeters: 0,
         },
         cumulativeElapsedSeconds: 60,
         cumulativeDistanceMeters: 200,
@@ -4597,6 +4810,7 @@ describe("createPm5Driver: Task 5 — actuals normalize via toActualIndex (minus
           avgSplit: 120,
           avgSpm: 22,
           avgHeartRateBpm: 140,
+          restDistanceMeters: 0,
         },
         cumulativeElapsedSeconds: 60,
         cumulativeDistanceMeters: 200,
@@ -5050,6 +5264,7 @@ describe("createPm5Driver: D4 — a boundary's two halves, in the order the mach
           avgSplit: 130,
           avgSpm: 20,
           avgHeartRateBpm: 130,
+          restDistanceMeters: 0,
         },
         cumulativeElapsedSeconds: 90,
         cumulativeDistanceMeters: 200,
@@ -5088,6 +5303,7 @@ describe("createPm5Driver: D4 — a boundary's two halves, in the order the mach
           avgSplit: 100,
           avgSpm: 30,
           avgHeartRateBpm: 170,
+          restDistanceMeters: 0,
         },
         cumulativeElapsedSeconds: 180,
         cumulativeDistanceMeters: 420,
@@ -5358,6 +5574,7 @@ describe("createPm5Driver: a SECOND workout over the same fake, no reconnect (in
         avgSplit: 125,
         avgSpm: 22,
         avgHeartRateBpm: null,
+        restDistanceMeters: 0,
       },
       cumulativeElapsedSeconds: 300,
       cumulativeDistanceMeters: 1200,
@@ -5502,6 +5719,7 @@ describe("createPm5Driver: a SECOND workout over the same fake, no reconnect (in
             avgSplit: 125,
             avgSpm: 22,
             avgHeartRateBpm: null,
+            restDistanceMeters: 0,
           },
           cumulativeElapsedSeconds: 300,
           cumulativeDistanceMeters: 1200,
@@ -6427,6 +6645,7 @@ describe("createPm5Driver: fix-3 Task 3 — the settle and the empty arm, end to
         avgSplit: 136,
         avgSpm: 22,
         avgHeartRateBpm: 140,
+        restDistanceMeters: 0,
       },
       cumulativeElapsedSeconds: 300,
       cumulativeDistanceMeters: 1100,
@@ -6690,6 +6909,7 @@ describe("createPm5Driver: D5 — the beltless heart rate never reaches a consum
           avgSpm: 22,
           // The exact field the machine sent `0` on (§18's new-defect note).
           avgHeartRateBpm: null,
+          restDistanceMeters: 0,
         },
         cumulativeElapsedSeconds: 90,
         cumulativeDistanceMeters: 200,

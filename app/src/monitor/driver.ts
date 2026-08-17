@@ -2876,6 +2876,15 @@ export function createPm5Driver(
       avgSplit: null,
       avgSpm: null,
       avgHeartRateBpm: null,
+      // 0x0039 (the summary this fallback derives from) carries no
+      // PER-INTERVAL rest distance field of its own — that number only ever
+      // arrives on the 0x0037 this branch exists BECAUSE it was lost. `0`
+      // here is not a wire reading, it is "unrecoverable by this path": if
+      // the final interval had a trailing rest, the summary-reconciled
+      // DISTANCE hero undercounts it by exactly that many metres, same as
+      // this function's own documented elapsed-time gap two lines up (§23
+      // walk item 4) — a real gap, not a migration this field could close.
+      restDistanceMeters: 0,
     };
     run.actuals += 1;
     run.recordedActuals.set(lastIndex, {

@@ -341,6 +341,7 @@ function buildMonitorFixture(
       avgSplit: 140,
       avgSpm: 24,
       avgHeartRateBpm: 138,
+      restDistanceMeters: 0,
     },
     {
       index: 2,
@@ -349,6 +350,7 @@ function buildMonitorFixture(
       avgSplit: 125,
       avgSpm: 26,
       avgHeartRateBpm: 150,
+      restDistanceMeters: 0,
     },
   ];
   const run: MonitorRun = {
@@ -2122,6 +2124,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
           avgSplit: 140,
           avgSpm: 24,
           avgHeartRateBpm: 138,
+          restDistanceMeters: 0,
         },
         // index 2 (Calm Sea's distance work) never reached.
       ],
@@ -2150,6 +2153,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
           avgSplit: 0,
           avgSpm: 24,
           avgHeartRateBpm: 138,
+          restDistanceMeters: 0,
         },
         {
           index: 2,
@@ -2158,6 +2162,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
           avgSplit: 125,
           avgSpm: 26,
           avgHeartRateBpm: 150,
+          restDistanceMeters: 0,
         },
       ],
     });
@@ -2693,6 +2698,7 @@ describe("LogSession: the interrupted header stops reading wall-clock (F6 Task 3
           avgSplit: 150,
           avgSpm: 22,
           avgHeartRateBpm: 130,
+          restDistanceMeters: 0,
         },
       ],
     });
