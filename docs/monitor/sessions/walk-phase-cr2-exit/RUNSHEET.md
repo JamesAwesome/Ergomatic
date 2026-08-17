@@ -9,11 +9,31 @@ is internally consistent, never that the redesigned surface reads true
 against the erg (`.claude/agent-briefing.md`'s "verifying the app only
 against itself" recurring failure).
 
-**Walk medium is BINDING**, the same convention `walk-2026-08-16/RUNSHEET.md`
-established: Chrome + Web Bluetooth from the worktree dev server, recording
-tab foregrounded, display awake. The phone's native adapter routes past the
-tap and records nothing — this walk needs the recorder live for the same
-reason the previous one did (photographs cover only what the wire cannot).
+**REVISED at the antagonist phase-exit pass (2026-08-16)** — the first
+draft carried four blocking defects, all recorded here so the walk record
+shows what was wrong: (1) it asked for `TOTAL LEFT`-vs-PM5-distance
+agreement, but `TOTAL LEFT` is a `m:ss` CLOCK (`fmtDuration`,
+`surfaceModel.ts`), not a distance — a clock and a metre count cannot
+agree; (2) the SESSION-line comparison sat on the keystone session, whose
+committed capture contains ZERO resting frames and cannot exercise #104's
+clamp; (3) the F6 gate demanded a recording the reload itself destroys
+(the recorder is an in-memory `window` global — download BEFORE reloading);
+(4) the binding laptop medium cannot execute five of the handoff's eight
+on-erg items. All four are corrected below.
+
+## TWO PASSES, two mediums — label everything with its pass
+
+**PASS A — WIRE (laptop, BINDING for every number):** Chrome + Web
+Bluetooth from the worktree dev server, recording tab foregrounded, display
+awake — the phone's native adapter routes past the tap and records nothing.
+Sessions 0-4 below are Pass A.
+
+**PASS B — SCREENS (phone, native app or Safari-on-device, UNRECORDED):**
+the on-erg items that need a mounted phone in a hand — geometry under REAL
+safe-area insets, which desktop Chrome reports as identically 0 and no
+committed capture or e2e assertion can observe (spec §1's own concession).
+Photographs only; costs no erg wire time and can run against the FAKE
+monitor (no pairing needed). Items marked [B] below.
 
 **Two evidence streams, label which is which everywhere:** the WIRE
 (recording: every 0x0031 tick, 0x0033 counts in true arrival order,
@@ -23,67 +43,88 @@ SCREENS (photographs: what the rower-facing displays showed, and when).
 **What changed since the last walk (2026-08-16):** the connected surface's
 whole visual vocabulary — header segmented control, cut labels, two judged
 heroes, the up-next + TOTAL LEFT band, the GRID table. `TOTAL M` does not
-exist on the live surface any more (§ below has the replacement route).
-Every number this walk checks is the SAME wire-derived value the redesign
-carries forward (`totalLeftDisplay`, `elapsedDisplay`, the accumulator) —
-only where it is drawn, and what it is called, changed.
+exist on the live surface any more, and **the register accumulator's
+DISTANCE has no rower-visible home at all now** — its walk oracle is the
+diagnostics `final-totals` line (Session 2). Session elapsed (the SAME
+register map, elapsed axis) is rower-visible as the log sheet's `SESSION`
+line, `TOTAL LEFT`, and the progress bar's fill — a mis-keyed register
+write poisons BOTH axes of the pair it holds, so an elapsed comparison
+bites on the same defect class (measured: the walk-2 poison that added
++220 m also added +52 s — `7:51` where the erg reads `6:59`).
 
 ---
 
-## Session 1 — the keystone re-run (Stage B's own committed fixture, re-shot on the new surface)
+## Session 0 — the download dry run (Chrome only, NO erg, ~2 min)
 
-**Program: 2×250 m, r0, NO warm-up.** A-priori truth 500 m; no rest means no
-coast-metres to argue about — the same program `walk-2026-08-16` session 1
-rowed, re-run here because that walk's own screens (TOTAL M, the old
-metric-row labels) no longer exist to re-photograph. The WIRE side of that
-walk is not repeated — PR #104's clamp already has two permanent CI
-replay tests against those exact recordings (`registerReplay.test.ts`); this
-session is the SCREENS half, on the redesigned surface, for the first time.
+Carried from `walk-2026-08-16`'s own Session 0, whose reasoning is
+unchanged and medium-independent: the gzip arm of `downloadRecording` is
+untestable under jsdom, every session below depends on the download, and
+the opener that reaches it changed IN THIS PR (`PagerRail` deleted, the
+segmented control is new — exit criterion 3's own subject).
+
+1. Open the connected screen → triple-tap the control → **Download
+   recording**.
+2. `gunzip` the file; confirm it parses (`pm5-recording/v1` header).
+3. A failure here costs two minutes; found later it costs a re-walk. STOP
+   and fix before any rowing.
+
+## Session 1 — the keystone re-run (SCREENS half; the wire half is already CI)
+
+**Program: 2×250 m, r0, NO warm-up.** A-priori truth 500 m — the same
+program `walk-2026-08-16` session 1 rowed. The WIRE side is not repeated
+(PR #104's clamp has two permanent CI replay tests against those exact
+recordings), and this program's committed capture contains ZERO resting
+frames (workout states {0, 5, 10}) — **it cannot exercise the clamp; that
+is Session 2's job.** This session is the SCREENS half on the redesigned
+surface: does the new layout read true through a real piece.
 
 - Connect, arm the program, confirm the FIRST FRAME (2D: `1 OF 2 · READY`,
   ghost split in ink-4, rate `0` plain ink, no dash-bars) before pulling.
-- During piece 2: read the band's `TOTAL LEFT` cell (not a session-total
-  cell any more — there is no session-total cell on LIVE). Compare it by
-  head-math against the a-priori 500 m total and the elapsed shown on the
-  PM5's own screen.
+- During piece 2: glance the band's `TOTAL LEFT` clock and the progress
+  bar — the bar must not be further along than the piece actually is.
 - **At the finish: LINGER before touching anything** — give the handoff-hold
-  time to collect the final split and, ideally, 0x0039 into both the ring
-  and the recording.
+  time to collect the final split and, ideally, 0x0039.
 - Photograph the PM5's own memory/summary per-interval detail screens (the
-  backstop for per-interval actuals).
+  backstop for per-interval actuals — read them against the GRID's own
+  TIME/METERS columns, which is where per-interval actuals live on the
+  phone now).
 - **Download the recording and save the file BEFORE navigating or
-  reconnecting** — latest-session-wins; a reconnect silently discards it.
-- Read `final-totals` from diagnostics after (existing protocol).
-- Open the diagnostics log sheet (triple-tap the control) and read the
-  `SESSION` line against the PM5's own elapsed at the same instant — see
-  the session-meters row below for why this is now the comparison route.
+  reconnecting** — latest-session-wins.
+- `final-totals` from diagnostics after: **check
+  `|accumulator − machineTotal| ≤ 1.5 m`** (the same tolerance
+  `registerReplay.test.ts` uses) — this line is the phase's ONLY remaining
+  distance oracle; "read it" without a criterion is not a check.
 
-## Session 2 — the REST-BEARING row (PR #104's clamp, first hardware look)
+## Session 2 — the REST-BEARING row (PR #104's clamp, first hardware look — THE PRIMARY SESSION)
 
-**Program: at least one WORK → REST → WORK sequence** (the 4-unequal-
-interval shape `walk-2026-08-16` session 2 used is fine, or the keystone's
-own 2×250 with r30 substituted for r0). PR #104 fixed a +221 m overcount
-that only a rest-bearing session can exhibit (a finished interval's meters
-filed one register low the instant the PM5 announces "resting"); the fix
-shipped behind two replay tests against RECORDED captures, never against a
-live erg mid-rest. This is that check.
+**Program: ≥3 work→rest boundaries required** — the 4-unequal-interval
+shape `walk-2026-08-16` session 2 used (wu + 1:00/2:00/500m/1:00 r30).
+NOT the keystone-with-r30 substitute: a single-boundary program gives the
+clamp one chance to fire, and on the only measured evidence (3 boundaries,
+2 clamps in the committed capture) roughly a third of single-boundary runs
+would exercise nothing and read "agree" for reasons unrelated to the fix.
 
 - **The primary row: both screens, one frame, during an actual REST.**
-  Photograph the phone's `TOTAL LEFT` reading and the PM5's own displayed
-  session/total distance in the SAME frame, mid-rest — not at a boundary,
-  not after the rest ends. Before the clamp this is exactly the moment the
-  finished interval's meters could double-count into the wrong register;
-  the numbers must agree (allow the same ~1 m / one truncation-step
-  tolerance the interval-clock rows use).
-- Repeat once more at the SECOND rest (if the program has one) — the clamp
-  logs one divergence per key per run, so a second rest is a second chance
-  to see it fire (or not).
-- Natural finish: linger, PM5 memory screens, download + save, diagnostics
-  `final-totals`.
-- After the walk: check the downloaded recording's own clamp log (if any
-  entries exist, they are diagnostic, not necessarily a failure — read
-  them against `driver.ts`'s own clamp comment before calling anything
-  wrong).
+  Triple-tap → the log sheet's live `SESSION m:ss` caption beside the PM5's
+  own session ELAPSED display — they must agree within a second or two.
+  (Time against time; `SESSION` is `elapsedDisplay`, the register map's own
+  elapsed sum — the same accumulator #104 fixed, on the axis that is still
+  rower-visible. The poison this checks for measured +52 s on the recorded
+  walk-2 session.) **First confirm the PM5's rest screen actually shows a
+  session-elapsed field** — the previous walk confirmed a live session
+  DISTANCE there (184=184) but no record exists for elapsed; if the PM5
+  offers no elapsed field, fall back to the `final-totals` criterion below
+  as the sole accumulator oracle and say so in the record.
+- Second check in the same frame, no head-math: the progress bar's fill
+  position against where the session actually is.
+- Repeat at the SECOND rest — a second chance to see the clamp fire (or
+  not).
+- Natural finish: linger, PM5 memory screens, download + save.
+- `final-totals`: **`|accumulator − machineTotal| ≤ 1.5 m`**, plus: did the
+  clamp log any divergence entries at all? **Record the answer either
+  way** — a run where it never fired did not exercise the fix, and the
+  session only counts if at least one boundary engaged it (read entries
+  against `driver.ts`'s clamp comment before calling anything wrong).
 
 ## Session 3 — END finals (cheap, from the 2026-08-16 runsheet)
 
@@ -93,26 +134,41 @@ recording too if convenient.
 
 ## Session 4 — the F6 reload-mid-piece check (PR #105, first hardware look)
 
-PR #105 gave an interrupted connected session a way home instead of the app
-asserting anything on the machine's behalf; it shipped against the fake
-transport (e2e) and jsdom (unit), never against a real reload while genuinely
-paired to hardware.
+PR #105 gave an interrupted connected session a way home; it shipped against
+the fake transport and jsdom, never against a real reload while genuinely
+paired.
 
 - Connect to the erg for real, row past at least one interval boundary.
-- **Reload the browser tab mid-piece** (not End, not disconnect — a real
-  page reload, the crash-equivalent F6 exists for).
+- **BEFORE the reload: triple-tap → Download recording → save the file.**
+  The recorder is an in-memory window global — the reload destroys it, and
+  After-the-walk item 4 needs these bytes. The actuals the log screen will
+  show are all recorded pre-reload, so this capture carries exactly the
+  evidence needed.
+- **Write down which interval is IN FLIGHT, then reload the browser tab
+  mid-piece** (not End, not disconnect — a real reload, the
+  crash-equivalent F6 exists for).
 - Open Today: confirm the quiet interrupted-session row appears
   (`"{title}: interrupted connected session."`, **Log it** + a two-tap ✕).
-- Press **Log it**: confirm the log screen opens with a duration built from
-  what the monitor actually measured (recorded work + programmed rest for
-  completed intervals) — read the minutes shown and sanity-check them
-  against how long the piece actually ran, not wall-clock time since the
-  reload (a session logged minutes after a reload must not read as hours).
-- Optional: repeat once choosing **Discard** instead, and confirm the next
-  Connect attempt no longer claims "a session is in progress" about the
-  discarded run.
+- Press **Log it**: the duration shown = the COMPLETED intervals' measured
+  work + their programmed rests. **The in-flight interval contributes
+  NOTHING by design** (`buildMonitorLogSteps` keys off completed actuals) —
+  rowing 2:00 + 1:30-in-flight then reloading shows ~2:00 and that is
+  correct, not a dropped interval; and it must never read as wall-clock
+  time since the reload.
+- Optional: repeat once choosing **Discard**, and confirm the next Connect
+  attempt no longer claims "a session is in progress" about the discarded
+  run.
+- **Observation row (parked finding, stale-while-armed): arm a program,
+  kill the link BEFORE stroke one** (walk out of BLE range or power the
+  PM5's display off), **switch to GRID.** Record what the header, the
+  up-next line, and the progress bar show. Stale beats armed in the axes'
+  precedence, so the armed protections drop: the header may read a gold
+  session-left instead of `READY`, up-next may name the wrong phase, and
+  the bar may show fill — all before a single pull. This row OBSERVES (it
+  is a filed close-out finding, not a pass/fail gate); what it shows
+  decides the close-out ruling.
 
-## The handoff's on-erg test list, VERBATIM (`docs/design/handoffs/2026-08-15-connected-v2/README.md`, "On-erg test list")
+## The handoff's on-erg test list — each item tagged with its PASS
 
 > 1. Rate hero at 92px readable mid-pull? 2. Any cut label missed?
 > 3. Status at 22px readable at full pull? 4. Zone/cal legible through screen
@@ -120,35 +176,50 @@ paired to hardware.
 > 6. Mount the phone both rotations; nothing moves or is occluded.
 > 7. First frame looks deliberate. 8. Triple-tap still opens diagnostics.
 
-Reproduced exactly as the handoff wrote it, per this task's own brief — item
-4 is MOOT (Ruling 2 cut ZONE and CAL outright; there is nothing left at that
-slot to read through glare) but the list is not edited to remove it, so the
-walk record shows what was asked for, not a silently trimmed version of it.
-Item 3's own number changed under this same PR (the status caption now
-renders at its intended `--c-size-status` — 22px landscape, 21px portrait —
-closing a gap Task 5's review left open); item 3 as printed above still
-names the number that matters.
+Reproduced verbatim per the brief, then TAGGED — the first draft printed
+this against a laptop-only medium and five of the eight cannot execute
+there:
 
-## Session-meters comparison — RE-POINTED at the log sheet's SESSION line
+- Items **1, 3, 7** — [B, at the erg if the phone can be mounted beside the
+  laptop; otherwise Pass B at home + deferred to the cohort in the notes]:
+  readability judgments at rowing distance need the device, not a laptop
+  screen.
+- Item **2** — [A]: a label audit works on any screen.
+- Item **4** — MOOT (Ruling 2 cut ZONE and CAL outright); kept unedited so
+  the record shows what was asked.
+- Items **5, 6** — [B, REQUIRED]: a touch mis-hit test needs a finger (a
+  trackpad cannot near-miss), and the both-rotations occlusion check tests
+  REAL safe-area insets — identically 0 in desktop Chrome, unobservable by
+  any committed gate (spec §1), and the phase's largest new risk class (the
+  control moved under the notch band; `--edge-inset` relocated;
+  `env(safe-area-inset-top)` added). Pass B also checks the `100dvh`
+  construction on the real device (the carried-debt iOS 26 bullet — the
+  surface's height model was rebuilt by this PR).
+- Item **8** — [A and B]: the gesture must work on both mediums.
 
-**`TOTAL M` no longer exists on the live surface.** The redesign cut it
-outright (design spec §3's fate table: `meters` off `SurfaceModel`, its only
-render site was `PaneLive`) — there is no cell on LIVE or GRID that shows a
-running session-distance total any more. The walk's old "same-frame totals
-photo" protocol (`walk-2026-08-16` session 2, item 3: "the PM5 rest screen
-shows a live session total … photograph it beside the phone's TOTAL M") has
-no phone-side target left to photograph.
+Pass B needs no erg, no pairing, no TestFlight build: the FAKE monitor from
+`pnpm ios:open` (Xcode to the device) or Safari-on-device against the dev
+server. Roughly ten minutes.
 
-The replacement route: **triple-tap the segmented control** (either half,
-the same gesture that always opened diagnostics) to open the Connection log
-sheet, and read its own `SESSION {elapsedDisplay}` caption line — session
-TIME, not session distance; `elapsedDisplay` is `SurfaceModel`'s own
-untouched field (design spec §3's fate table: "survives untouched"). This
-is a genuinely different comparison than the old one (elapsed time against
-the PM5's own elapsed, not distance against distance) — recorded as a
-deliberate narrowing, not an oversight: distance verification now happens
-through TOTAL LEFT (which the keystone and rest-bearing sessions above both
-check) and the post-session log summary, not through a live running total.
+## Session-meters — where each number lives now (corrected)
+
+**`TOTAL M` no longer exists on the live surface, and no rower-visible
+surface shows the accumulator's DISTANCE at all** (design spec §3's fate
+table; the saved log carries per-interval meters, not the session sum).
+The first draft of this sheet claimed "distance verification now happens
+through TOTAL LEFT" — **false; `TOTAL LEFT` is a clock** (`fmtDuration`).
+The corrected inventory:
+
+| Number (all from the same register map) | Rower-visible home | Walk oracle |
+| --- | --- | --- |
+| Session elapsed (register sum) | log sheet `SESSION` line, `TOTAL LEFT` (as remaining), progress-bar fill | Session 2's same-frame photo |
+| Session distance (register sum) | **none** | `final-totals`: `\|accumulator − machineTotal\| ≤ 1.5 m` (Sessions 1 + 2) |
+| Per-interval actuals | GRID's TIME/METERS columns | PM5 memory screens vs GRID (Session 1) |
+| Interval countdown (2a's clock fix) | GRID active-row cell only | Session 2: glance the active-row countdown against the PM5's own mid-piece |
+
+The release notes must tell testers the same thing: totals read lower and
+correct, and the place to CHECK is the post-session summary and the log
+sheet — not the live pane, which no longer carries a distance.
 
 ## After the walk (Claude)
 
@@ -157,15 +228,13 @@ check) and the post-session log summary, not through a live running total.
    distribution against the committed baseline).
 2. Commit the gunzipped recordings to `docs/monitor/sessions/` with a README
    row each: date, program, photo transcriptions labelled by evidence stream
-   (screen vs wire).
-3. Compare the rest-bearing session's same-frame photo against the
-   recording's own clamp-log entries (if any) — this is the first LIVE
-   evidence for PR #104's fix; the replay tests prove the mechanism against
-   RECORDED bytes, this proves the mechanism against a machine that hasn't
-   already been decoded.
-4. Confirm the F6 reload session's logged minutes against the recording's
-   own elapsed-seconds — the number the log screen showed must agree with
-   what the wire actually carries, not merely "look plausible."
-5. Only once 1-4 pass: v0.10.0 tags (notes PR first, per the spec's own
-   header line: "Release after merge: v0.10.0 (MINOR) with a notes PR before
-   the tag").
+   (screen vs wire), and each session's PASS (A/B).
+3. Compare Session 2's same-frame photo against the recording's own
+   clamp-log entries — the first LIVE evidence for PR #104's fix. Record
+   whether the clamp fired at all (Session 2's own counting rule).
+4. Confirm the F6 session's logged minutes against the PRE-RELOAD
+   recording's own elapsed-seconds for the completed intervals (the
+   download step Session 4 now front-loads — the number the log screen
+   showed must agree with what the wire actually carries).
+5. Only once 1-4 pass AND Pass B's required items (5, 6, 8) are clean:
+   v0.10.0 tags (notes PR first, per the spec's own header line).

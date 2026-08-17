@@ -821,3 +821,92 @@ toolkit, not a history.
   pin file "structurally unable to see X", read its HELPER's signature — a
   test named for `:root` may be a general CSS-source scanner wearing one
   selector.**
+
+## Phase-exit pass, 2026-08-16 (Phase CR2, the exit walk sheet)
+
+- **"TOTAL LEFT is the distance verification route now that TOTAL M is cut."**
+  False, and it wrote three rows of a release-gating walk sheet. `TOTAL LEFT` is
+  `fmtDuration(totalLeftSeconds / 60)` (`surfaceModel.ts`) — a `m:ss` clock,
+  as it has been since walk 4 (`ROADMAP.md` records the bug as "TOTAL LEFT
+  rising at interval 2, METERS falling 109 -> 50"). The sheet asked the walker to
+  photograph it beside the PM5's distance and expect agreement "within ~1 m".
+  **Technique: for any walk row that says "these two numbers must agree", read
+  the FORMATTER of each side, not its label.** A cell's caption is the last thing
+  to change in a redesign and the first thing a protocol author trusts; `m:ss`
+  versus metres is invisible in prose and fatal in execution. The committed
+  design fixture settled it in one grep (`connected-pane-live.html` renders
+  `39:48`), cheaper than reading the model.
+
+- **"The rest-bearing session checks the clamp; the keystone re-run checks the
+  screens."** Structurally inverted. The only comparison that reaches the
+  register accumulator (the log sheet's `SESSION` line) was written into Session
+  1 ONLY — and Session 1 is the 2×250 r0 keystone, whose committed capture
+  contains workout states {0, 5, 10}: **zero resting frames, zero work→rest
+  boundaries**, provably incapable of exercising the clamp. The row that checks
+  could not exercise; the row that exercised could not check. **Technique: for
+  every walk session, decode the committed capture of that same program and count
+  the transitions the new code keys on. A program's ability to exercise a fix is
+  a countable property of its own recording, not a matter of judgement** — three
+  lines of state-byte decoding placed both rows correctly.
+
+- **"An accumulator bug on the distance axis is only visible in distance."**
+  False, and this is what rescued the sheet. Simulating the poison over
+  `session-2-wu-4unequal.jsonl` reproduced the published 1819.7 m to the digit
+  (which validated the simulation) and showed the SAME poison moves the elapsed
+  axis by **+52.0 s** — 419.8 s honest vs 471.8 s poisoned, i.e. `SESSION` reads
+  `7:51` where the erg reads `6:59`. One photograph. **Technique: a max-merge
+  register holds a PAIR; a mis-keyed write poisons every dimension the register
+  carries. Before declaring an oracle lost because its dimension left the screen,
+  compute the bug's magnitude in the dimensions that remain.**
+
+- **A release gate can contain a physically impossible step.** The sheet's item 4
+  ("confirm the F6 reload session's logged minutes against the recording's own
+  elapsed-seconds") gates the v0.10.0 tag, and the recording cannot exist: the
+  recorder is `window.__pm5Recording__`, an in-memory global with no
+  `localStorage`/`indexedDB` anywhere in `recording.ts` or `transports/index.ts`
+  — and the same session's own instruction is "reload the browser tab". The act
+  under test destroys its own evidence. **Technique: for every "compare X against
+  the recording" step, ask what the step BEFORE it does to the recorder's
+  storage. Persistence is a one-grep question and protocol authors never ask it.**
+  (Fix was one line: download before the reload — the actuals are all pre-reload.)
+
+- **A binding medium and a borrowed checklist can be mutually exclusive.** The
+  sheet bound the walk to laptop Chrome + Web Bluetooth (`webBluetooth.ts:1-7`:
+  "Chromium-only… a laptop has no Capacitor native shell") and then reproduced,
+  verbatim, an 8-item list requiring a mounted phone — including a touch
+  mis-hit test and a both-rotations occlusion check, the latter testing safe-area
+  insets that are identically ZERO in desktop Chrome. Only one item was flagged
+  moot. **Technique: when a protocol imports a checklist verbatim from a design
+  handoff, re-ask each item against the EXECUTION MEDIUM the protocol just
+  declared, not against the product.** Ledger technique 8 (check the harness's
+  input capability) applies to human walks, not only to test suites.
+
+- **Attacked and NOT broken:** the §2 property-table witness mechanism — my
+  hypothesis that the design assertions read hand-written fixtures that could
+  drift is false; `ConnectedSurface.screens.test.tsx:344-348` writes every
+  fixture from the real component tree via `toMatchFileSnapshot`, and the one
+  historical exception (`connected-armed.html`, documented as having gone stale
+  twice) was closed by this PR. Also verified rather than trusted: criterion 5's
+  gates (unit 1163, client 2814, **e2e 331 passed**). One row remains witnessless
+  and is untestable as phrased — 2B's "TOTAL LEFT source … never plan+elapsed",
+  which no assertion names and which the implementation contradicts literally
+  (it IS `totalSeconds − elapsed`); a source claim cannot be witnessed from DOM.
+
+- **Addendum (same pass, deeper evidence sweep): a `a ?? b` factory default
+  makes every test blind to which field is wired.** Spec §2B's "TOTAL LEFT
+  source" row was both false as written (the code IS plan minus elapsed; the
+  invariant is WHICH elapsed) and unwitnessed: every frame factory in the
+  repo defaults `sessionElapsedSeconds ?? f.elapsedSeconds`, so all five
+  test files mirror the pair and mutating the model to read the
+  interval-resetting `frame.elapsedSeconds` left the ENTIRE suite green —
+  reintroducing the exact recorded hardware bug ("TOTAL LEFT … falling 1:30
+  -> 1:11 and then RISING to 1:38") the line's own comment documents.
+  Closed same-day: a diverging-fixture test now discriminates (mutation
+  executed, went red, restored). Also closed: the progress bar's
+  duration-proportional widths had no COMPUTED-style witness (the unit test
+  reads the inline style; a CSS `flex-grow: 1 !important` would equalize
+  the bar green) — design.spec now asserts computed flex-grow ratios.
+  **Technique: when two fields of a fixture are related by `a ?? b`, every
+  test that reads either one is blind to which is wired. Grep the FACTORY
+  DEFAULT before believing any assertion that names one of them — the
+  default is the assertion's real subject.**

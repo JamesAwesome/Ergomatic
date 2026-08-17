@@ -1069,6 +1069,32 @@ describe("the session pair across a work-interval reset (walk 4)", () => {
       model({ frame: frame({ elapsedSeconds: 0 }) }).elapsedDisplay,
     );
   });
+
+  // THE DISCRIMINATOR (antagonist phase-exit pass, §2B witness gap): every
+  // frame factory in this repo defaults `sessionElapsedSeconds ??
+  // f.elapsedSeconds`, so a suite full of mirrored pairs cannot tell WHICH
+  // elapsed `totalLeftDisplay` subtracts — mutating the model to read the
+  // interval-resetting `frame.elapsedSeconds` left everything green while
+  // reintroducing the recorded 1:11 -> 1:38 TOTAL LEFT bug. This test is
+  // the one place the pair DIVERGES under a `totalLeftDisplay` assertion:
+  // the reset frame's raw clock is 0, its session clock is 37.81, and the
+  // remaining time must move with the session clock.
+  it("TOTAL LEFT subtracts the SESSION clock, never the interval's own resetting one", () => {
+    const [before, atReset] = ACROSS_THE_RESET;
+    const shownBefore = model({ frame: before }).totalLeftDisplay;
+    const shownAtReset = model({ frame: atReset }).totalLeftDisplay;
+
+    // Same session elapsed (37.81) on both sides of the raw-clock reset,
+    // so the remaining clock must not move...
+    expect(shownAtReset).toBe(shownBefore);
+    // ...and must differ from what a zeroed elapsed would show — which is
+    // exactly what the wrong-field mutation renders at the reset frame.
+    expect(shownAtReset).not.toBe(
+      model({
+        frame: frame({ elapsedSeconds: 0, sessionElapsedSeconds: 0 }),
+      }).totalLeftDisplay,
+    );
+  });
 });
 
 // `SurfaceModel.hr` died (CR2 spec 3 Task 4, spec §3 fate table):

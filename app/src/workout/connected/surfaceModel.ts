@@ -782,9 +782,13 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
     totalLeftDisplay: fmtDuration(totalLeftSeconds / 60),
     elapsedSeconds,
     boundaries: intervalBoundaries(phases, measuredWorkSeconds(input.actuals)),
-    // The log sheet captions this `SESSION m:ss` and PaneLive shows it as
-    // the piece's running clock — both mean the whole session, so it reads
-    // the accumulated pair for the same walk-4 reason TOTAL LEFT does.
+    // The log sheet captions this `SESSION m:ss` — its ONLY render site
+    // since the redesign (PaneLive's running clock retired with the label
+    // layer; ConnectedSurface threads it to ConnectionLogSheet). It reads
+    // the accumulated pair for the same walk-4 reason TOTAL LEFT does, and
+    // the phase-exit walk leans on exactly that: it is the register map's
+    // elapsed axis, rower-visible, so a mis-keyed register write shows
+    // here as well as in distance.
     elapsedDisplay: fmtDuration(frame.sessionElapsedSeconds / 60),
     pace,
     paceWhole,

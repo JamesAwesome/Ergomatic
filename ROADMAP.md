@@ -1830,7 +1830,23 @@ frame — the 2×250 r0 keystone contains no resting frames and cannot
 exercise the clamp on hardware.** The reducer this spec
 once proposed is DEFERRED to its own spec. Spec 3 "redesign" (items 2 + 4,
 design handoff committed at `docs/design/handoffs/2026-08-15-connected-v2/`)
-is not started. Originally scoped by James 2026-08-13 immediately
+is IN FLIGHT as PR #109 (branch `cr2-redesign` — the status paragraph above
+carries the current state; this line once said "is not started" and
+contradicted it thirty lines apart, caught at the phase-close gate).
+**Close-out queue after #109 merges, before the tag (PM phase-close gate +
+antagonist exit pass, 2026-08-16):** (1) the STALE-WHILE-ARMED ruling —
+stale beats armed in `connectedAxes`' precedence, so a link lost before
+stroke one drops every armed protection at once (READY becomes a gold
+session-left on GRID, up-next shifts, the bar fills); the exit walk's
+Session 4 observation row records what it actually shows, then James rules;
+(2) spec 2b's v1 fall-through test + the manual-door-save record decision
+(PR #105 final review Minor 3); (3) the Start door's "in progress" copy for
+a dead MonitorRun (2b plan Decision 5); (4) the CARRIED-DEBT DISPOSITION —
+the exit criterion's own words are "cleared or explicitly re-parked with a
+reason" and the eleven-bullet block below has zero dispositions; the
+close-out PR writes one per bullet, with the iOS 26 `100dvh` bullet
+getting a real answer (this PR rebuilt the surface height model that
+construction underpins). Originally scoped by James 2026-08-13 immediately
 after v0.9.0 shipped: "I want to work next on cleanup for this phase" —
 three items, below. **AMENDED the same evening**, after he rowed "Sun
 fret" on v0.9.0 and photographed the PM5 beside the phone: two more items,

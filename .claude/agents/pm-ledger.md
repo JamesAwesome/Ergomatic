@@ -506,3 +506,49 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   criteria have to be a per-frame PROPERTY TABLE (2A/2B/2C/2D + stale +
   disconnected), not "implements 2A-2D". Frame 2D's `READY` word was lost exactly
   that way at spec 2a's gate.
+
+## Phase-close gate, 2026-08-16 (Phase CR2, spec 3 / PR #109)
+
+- **A walk sheet states its binding MEDIUM and its test list separately, and
+  nobody checks that the medium can execute the list.** The CR2 exit runsheet
+  bound the walk to Chrome + Web Bluetooth (correctly, for wire evidence) and
+  reproduced the design handoff's 8-item on-erg list verbatim — five of the
+  eight (mount both rotations, mis-hit the switcher, first frame deliberate,
+  92px hero and 22px status at full pull) need a phone in a hand. The sheet
+  flagged the one item Ruling 2 made moot and was silent on the other five.
+  **At a phase close, read the walk's protocol against its own medium, item by
+  item.** Sharpens the 2026-08-15 "the definitive hardware walk was a WEB walk"
+  ruling: that transfers for NUMBER questions, where the wire is identical on
+  both mediums. It does not transfer for a LAYOUT redesign — spec 3's own §1
+  concedes "Chromium reports every `env()` as 0 so no gate can observe one",
+  which means the e2e assertions, the 67 captures and the web walk are one
+  oracle, not three. Device pass on the FAKE monitor from Xcode costs ten
+  minutes, no erg time, and no build number.
+- **A phase exit clause with no owner in the close-out queue is a dropped
+  criterion, however well the code went.** CR2's exit says the carried debt is
+  "either cleared or explicitly re-parked with a reason"; the block is eleven
+  bullets with zero dispositions and the branch's ROADMAP diff never touched
+  it. **Diff the phase's own exit sentence against the close-out queue, clause
+  by clause** — the items that get dropped are always the ones no spec owns.
+- **`.superpowers/` is git-excluded — anything filed only in an SDD progress
+  ledger does not exist.** #109's one PARKED final-review finding
+  (stale-while-armed on GRID) was in the PR body and that excluded file, and
+  `git grep` found it in zero tracked files. Third occurrence of "a PR body is
+  not a record" in three CR2 gates (the READY word at 2a, the lower-totals
+  sentence at #104). **At every gate, `git grep` each parked item's own noun
+  and confirm it lands in a tracked file before the worktree is torn down.**
+- **A phase status paragraph can contradict itself inside thirty lines.**
+  ROADMAP's CR2 section said spec 3 was IN FLIGHT at the top and "is not
+  started" at line 1833 on the same branch. When a phase runs as multiple spec
+  cycles, each cycle amends the top paragraph and nobody re-reads the body.
+- **Zero-behavioural-line tails are now twice achieved** (#104, #109). #109's
+  tail was comments, a test title and a DEVIATIONS row — the useful check is
+  still `git show <tail> | grep '^+' | grep -v '^+\s*//'`, which took one
+  command and settled it. Worth holding as the standard for a final PR.
+- **Un-released stack at the phase's last gate: ELEVEN merges behind v0.9.0**
+  (#99-#108 + #109), canary thrice forfeited by recorded override, v0.10.0
+  MINOR. When a redesign REMOVES a readout in the same build whose notes
+  correct that readout's number, the notes must carry the replacement route or
+  the cohort reads the correction as a regression. (Here: totals read lower and
+  correct, `TOTAL M` is gone from LIVE, look at the post-session summary and
+  the log sheet's SESSION line.)

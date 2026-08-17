@@ -4871,6 +4871,19 @@ test.describe("connected screens (fake-driven)", () => {
       // "one you are on" invariant the grid's own active row carries.
       expect(segs.filter((s) => s.state === "active")).toHaveLength(1);
 
+      // Duration-proportional widths, read from COMPUTED style (antagonist
+      // phase-exit pass: the unit test reads the inline style, so a CSS
+      // `flex-grow: 1 !important` would equalize the bar while every test
+      // stayed green — the computed value is what the browser actually
+      // lays out). The fixture's program is wu 480s + 4×684s; the computed
+      // flex-grow ratios must match those durations, not each other.
+      const grows = await page
+        .locator(".connected-progress-seg")
+        .evaluateAll((els) =>
+          els.map((el) => parseFloat(getComputedStyle(el).flexGrow)),
+        );
+      expect(grows).toStrictEqual([480, 684, 684, 684, 684]);
+
       // THE DISCLOSED RESIDUAL (§2A): active-vs-upcoming contrast, computed
       // rather than trusted — `--progress-active` on `--rule-2`.
       const ratio = await page.evaluate(
