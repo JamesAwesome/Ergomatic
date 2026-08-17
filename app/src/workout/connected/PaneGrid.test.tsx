@@ -516,7 +516,8 @@ describe("the fixtures are what this file says they are", () => {
 // ---------------------------------------------------------------------------
 // The shell header's composed GRID trailing (CR2 spec 3 Task 5, design spec
 // §2B's composition note): `PaneGrid.tsx`'s own headline dies this task, and
-// the header's status caption — `ConnectionLine`'s `trailing` slot,
+// the header's status caption — `.connected-line-trailing`, a header-level
+// sibling of `ConnectionLine` since Task 6's fix round,
 // `ConnectedSurface.tsx`'s `headerTrailing` — grows a GRID-only branch.
 // Exercised here (not `ConnectedSurface.test.tsx`) because `renderGrid`
 // already mounts the full surface with the GRID pane active, the same

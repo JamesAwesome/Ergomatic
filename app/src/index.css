@@ -6214,13 +6214,31 @@ section:not(.news-pinned) .news-row:last-of-type {
    there: "if a later task wires it, this test's own failure is the prompt
    to drop the exception"). §2A: "status `3 OF 12 · WORK` (mono 22, 0.04em,
    ink)" — ink, not ink-3: the status is the one line on this header a
-   rower reads mid-pull, not a decoration. */
+   rower reads mid-pull, not a decoration.
+
+   `order: 2; flex-basis: 100%` (Task 6 FIX ROUND, CRITICAL 1 — PORTRAIT
+   ONLY, the landscape query below resets both): the standard flex trick
+   for "force ONE child onto its own new line of a wrapped container
+   without touching the others." `.connected-header` (base rule, above) is
+   `flex-wrap: wrap` in portrait; this element's `order: 2` sorts it after
+   `.connected-line` and `.connected-end` (both left at the default `order:
+   0`, so document order settles their own relative position — `.connected
+   -line` first), and `flex-basis: 100%` makes its hypothetical size the
+   FULL row width, which cannot fit on line 1 once `.connected-line` and
+   End are already there, so it wraps alone onto line 2 and, being the
+   line's only occupant, fills it — `text-align: left` keeps the text
+   itself flush with the mark/device above rather than centering in that
+   now-full-width box. §2C: "Status line mono 21," its own line below the
+   header row, never inside it. */
 .connected-line-trailing {
   flex: none;
-  /* Never wraps either (the sibling rule's own comment has the trap this
-     guards, same header-row width squeeze): a status string that ran out
-     of room would otherwise wrap onto its own line before it ever got a
-     chance to be pushed out by the device span's own truncation. */
+  order: 2;
+  flex-basis: 100%;
+  text-align: left;
+  /* Never wraps INTERNALLY (distinct from the row-level wrap above): a
+     status string that ran out of room on its own full-width line would
+     otherwise break mid-phrase rather than simply running to whatever
+     width it needs. */
   white-space: nowrap;
   font-family: var(--font-mono);
   font-size: var(--c-size-status);
@@ -6754,11 +6772,17 @@ section:not(.news-pinned) .news-row:last-of-type {
      names — nothing may exist whose only job is to hide capacity. Portrait
      now takes every row its own 40px-fixed-height budget actually holds:
      was 612px of scroller (15 rows at 40 = 600, 12px of margin), CR2 spec 3
-     Task 5 moves it to 640 (the same headline deletion, plus portrait's own
+     Task 5 moved it to 640 (the same headline deletion, plus portrait's own
      4px inter-child `gap` losing one boundary — `.connected-grid-head`'s
-     own comment has the arithmetic) — an EXACT fit for 16 rows, zero px of
-     margin left. `e2e/screenshots.spec.ts` measures and pins both the
-     budget and the count. */
+     own comment has the arithmetic), an EXACT fit for 16 rows, zero px of
+     margin left. CR2 spec 3 TASK 6's OWN FIX ROUND (CRITICAL 1) moves it
+     AGAIN, to 600: the header restructure that puts the status caption on
+     its own line costs the scroller one full row's worth of height (`.
+     connected-header`'s own comment has the mechanism; `e2e/screenshots
+     .spec.ts`'s `PORTRAIT_GRID_SCROLLER_PX` comment has the arithmetic) —
+     back to another EXACT fit, this time for 15 rows, still zero px of
+     margin. `e2e/screenshots.spec.ts` measures and pins both the budget
+     and the count. */
   gap: 0;
 }
 
@@ -7102,24 +7126,41 @@ section:not(.news-pinned) .news-row:last-of-type {
   gap: 10px;
 }
 
-/* --- The header: ConnectionLine + End (connected-revamp Task 6, revision
-   §2; restructured by CR2 spec 3 task 1, design spec §3) --------------- */
+/* --- The header: ConnectionLine + status + End (connected-revamp Task 6,
+   revision §2; restructured by CR2 spec 3 task 1, design spec §3; status
+   split to its own child by Task 6's FIX ROUND, CRITICAL 1) ------------- */
 
 /* A thin, ALWAYS-PRESENT strip above the pane body — constant height
    whichever of End's two labels is showing (the button's own `min-height`
    is what's fixed; the text only changes its WIDTH) — so the pane body's
-   top edge never moves. Two children now: `.connected-line` (the mark,
-   device caption and status — moved here from inside the panes this task)
-   and End. `.connected-line` carries its own `flex: 1` (that rule's own
-   comment), which is what actually keeps End pinned to the row's right
-   edge; `justify-content: flex-end` stays declared too — inert once the
-   flexed child already consumes the remaining width, but harmless, and it
-   is what the single-child header still relied on before this task (a
-   future child order change gets the same right-alignment for free either
-   way). */
+   top edge never moves. THREE children now (fix round — was two,
+   `.connected-line` bundling the status inside it): `.connected-line` (the
+   mark and device caption only), `.connected-line-trailing` (the status,
+   promoted to a direct child of THIS element so portrait can wrap just it
+   onto a new line, below), and End. `.connected-line` carries its own
+   `flex: 1` (that rule's own comment), which is what actually keeps End
+   pinned to the row's right edge in landscape; `justify-content: flex-end`
+   stays declared too — inert once the flexed child already consumes the
+   remaining width, but harmless, and it is what the single-child header
+   still relied on before Task 1 (a future child order change gets the
+   same right-alignment for free either way).
+
+   `flex-wrap: wrap` (fix round, PORTRAIT ONLY — the landscape query below
+   resets it to `nowrap`): §2C draws the status caption on its OWN LINE
+   below this row ("Header: PM5 id + END … Status line mono 21"), not
+   inside it. Wrapping alone would not target the RIGHT child by itself —
+   `.connected-line-trailing`'s own `order: 2; flex-basis: 100%` (that
+   rule's comment has the mechanism) is what forces JUST the status onto
+   line 2 while `.connected-line` and End stay together on line 1. `gap:
+   12px` is reused, not a new number invented for this: it already governed
+   the header's own horizontal child spacing, and nothing in §2C prices the
+   header-row-to-status-line distance independently, so the existing value
+   is what now also becomes the vertical gap between the two lines a
+   wrapped flex container's `gap` applies to both axes. */
 .connected-header {
   flex: none;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: 12px;
@@ -7654,6 +7695,25 @@ section:not(.news-pinned) .news-row:last-of-type {
     padding-right: 12px;
     padding-left: 12px;
     margin-bottom: 0;
+    /* EXPLICIT reset (Task 6 fix round, CRITICAL 1): the base rule's own
+       `flex-wrap: wrap` exists ONLY to let the status caption drop to its
+       own line in portrait (`.connected-line-trailing`'s own comment has
+       the mechanism) — §2A's landscape row is untouched, one 44px row,
+       same as always. Declaring it here rather than relying on landscape
+       simply "not needing" wrap: the base rule's `flex-wrap` is not
+       scoped to portrait by a media query of its own, so without this
+       reset the wrap value would still cascade into this orientation too,
+       matching the file's own convention elsewhere in this block
+       (`padding-top: 0` above resets the same way, for the same reason). */
+    flex-wrap: nowrap;
+  }
+
+  /* Reset the portrait-only forced-new-line trick (this element's own base
+     rule has the mechanism): landscape keeps the status caption on the
+     single 44px row, its ordinary content width, not the full row. */
+  .connected-line-trailing {
+    order: 0;
+    flex-basis: auto;
   }
 
   /* The ended hand-off frame is NOT full-bleed (it is not a pane and has no

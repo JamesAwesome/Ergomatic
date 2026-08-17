@@ -6006,16 +6006,42 @@ test.describe("connected screens (fake-driven)", () => {
   test.describe("2C — LIVE, portrait (design spec §2C)", () => {
     test.use({ viewport: { width: 390, height: 844 } });
 
-    test("layout: header PM5 id + END (44px, no segmented control), status mono 21, same 6px progress bar", async ({
+    test("layout: header row is 44px (PM5 id + END, no segmented control), status on its OWN LINE below it, mono 21, same 6px progress bar", async ({
       page,
     }) => {
+      // FIX ROUND (CRITICAL 1): this used to measure the WHOLE
+      // `.connected-header` box at ~48px, with the status caption composed
+      // INSIDE that same row — the shape that let it overprint the device
+      // id / END on long fixtures (three committed captures, see
+      // `index.css`'s own header comment). §2C: "Header: PM5 id + END
+      // (44px, no segmented control up top). Status line mono 21." — two
+      // separate rows now, so this test measures the ROW, not the header
+      // element's own (now taller, two-line) bounding box.
       await loadConnectedFixture(page, "connected-pane-live");
-      const [header, control] = await Promise.all([
+      const [header, end, control, status] = await Promise.all([
         page.locator(".connected-header").boundingBox(),
+        page.getByRole("button", { name: "End session" }).boundingBox(),
         page.locator(".connected-control").boundingBox(),
+        page.locator(".connected-line-trailing").boundingBox(),
       ]);
       expect(header).not.toBeNull();
-      expect(header!.height).toBeCloseTo(48, 1);
+      expect(end).not.toBeNull();
+      expect(status).not.toBeNull();
+      // End is `flex: none; min-height: 44px` and the tallest item on the
+      // header's own first flex line (`.connected-line`, mark + device
+      // caption, is shorter and vertically centered beside it) — a
+      // wrapped flex container's line height is set by its tallest member,
+      // so End's own box IS the row: measuring it directly is the row's
+      // 44px, not an inference from the header's own (now two-line) total.
+      expect(end!.height).toBeCloseTo(44, 0);
+      // The status caption sits AT OR BELOW End's own bottom edge — a
+      // different line entirely, never sharing End's row.
+      expect(status!.y).toBeGreaterThanOrEqual(end!.y + end!.height - 0.5);
+      // The header's OWN total height is genuinely taller than the single
+      // row now (both lines plus the gap between them) — the positive
+      // half of the same fact the assertion above proves negatively.
+      expect(header!.height).toBeGreaterThan(end!.height + 10);
+
       // No segmented control up top: it sits at the BOTTOM of the frame in
       // portrait (§3: "into the last row as the 54px bottom bar"), well
       // below the header's own bottom edge — not merely absent from the
@@ -6023,10 +6049,10 @@ test.describe("connected screens (fake-driven)", () => {
       expect(control).not.toBeNull();
       expect(control!.y).toBeGreaterThan(header!.y + header!.height);
 
-      const status = await page
+      const statusFontSize = await page
         .locator(".connected-line-trailing")
         .evaluate((el) => getComputedStyle(el).fontSize);
-      expect(status).toBe("21px");
+      expect(statusFontSize).toBe("21px");
 
       const track = await page
         .locator(".connected-progress-track")
@@ -6428,6 +6454,119 @@ test.describe("connected screens (fake-driven)", () => {
       ]);
       expect(split).not.toBe(rate);
     });
+  });
+
+  // FIX ROUND (Task 6 review, CRITICAL 1): three committed captures
+  // (`connected-pane-grid.png`, `connected-pane-grid-long.png`,
+  // `connected-disconnected.png`) showed the header's composed status text
+  // overprinting the device id and/or END in portrait — §2C's own table
+  // draws the status on ITS OWN LINE below the header row ("Header: PM5 id
+  // + END (44px, no segmented control up top). Status line mono 21."), not
+  // inside it. This mirrors 2A's own landscape header-row idiom
+  // (~4789-4796, `control!.x + control!.width <= line!.x`-style pairwise
+  // geometry) but as a general AABB overlap test rather than an x-only
+  // left-to-right chain: post-fix, status sits on a DIFFERENT row than
+  // device/End, so the three boxes no longer share one axis to compare the
+  // simpler way — a real 2D intersection test is what actually proves "no
+  // collision" regardless of which axis a future regression moves on.
+  // Both fixtures below are worst cases for a different reason: the GRID
+  // fixture has GRID's own composed `N OF M · <countdown> LEFT` (the
+  // longest status string any pane produces); the disconnected fixture has
+  // BOTH a long device id (`PM5 432331249 · LOST`) and a status string in
+  // the same header, the other half of the collision risk. PROVEN RED
+  // against this task's own starting point (bda0a95, before the header
+  // restructure below), TWO DIFFERENT WAYS on the two fixtures — plain
+  // `element.boundingBox()` alone was NOT enough to catch both. On
+  // `connected-pane-grid-long`, status/End genuinely intersect (a measured
+  // 12.6px, task-6-report.md's own "New finding" section) — an element-box
+  // overlap check goes red on its own there. On `connected-disconnected`,
+  // opening a zoomed capture (not just measuring boxes) showed the real
+  // defect a box comparison MISSES entirely: `.connected-line-device`
+  // shrinks to a 69.5px LAYOUT box under the header's width squeeze, but
+  // its own content ("432331249", one unbreakable word with no `word-
+  // break`) is wider than that box and PAINTS past it — `getBoundingClient
+  // Rect()` on the element reports the narrow 69.5px box (a real 8px gap
+  // to `.connected-line-trailing`'s box by that measure), while the actual
+  // GLYPHS overflow into trailing's own territory with zero space, reading
+  // as "4323312491 OF 4" in the capture. Comparing ELEMENT boxes cannot
+  // see this — CSS overflow is a paint-time fact a layout box does not
+  // carry — so `textRect` below measures via `Range.getClientRects()`
+  // instead (the DOM API for "what glyphs actually painted where," the
+  // same mechanism a browser's own text-selection highlight uses), unioned
+  // across every rect the range covers so a composed, multi-span trailing
+  // (GRID's ordinal + `--marker` countdown) measures as one shape too.
+  test.describe("portrait header: device id / status / End never collide (fix round, CRITICAL 1)", () => {
+    test.use({ viewport: { width: 390, height: 844 } });
+
+    function overlaps(
+      a: { x: number; y: number; width: number; height: number },
+      b: { x: number; y: number; width: number; height: number },
+    ): boolean {
+      return (
+        a.x < b.x + b.width &&
+        a.x + a.width > b.x &&
+        a.y < b.y + b.height &&
+        a.y + a.height > b.y
+      );
+    }
+
+    for (const fixture of [
+      "connected-pane-grid-long",
+      "connected-disconnected",
+    ] as const) {
+      test(`${fixture}: device / status / End painted extents never overlap`, async ({
+        page,
+      }) => {
+        await loadConnectedFixture(page, fixture);
+        const [device, status, end] = await Promise.all([
+          page.evaluate(() => {
+            const el = document.querySelector(".connected-line-device")!;
+            const range = document.createRange();
+            range.selectNodeContents(el);
+            const rects = Array.from(range.getClientRects());
+            const x = Math.min(...rects.map((r) => r.x));
+            const y = Math.min(...rects.map((r) => r.y));
+            return {
+              x,
+              y,
+              width: Math.max(...rects.map((r) => r.x + r.width)) - x,
+              height: Math.max(...rects.map((r) => r.y + r.height)) - y,
+            };
+          }),
+          page.evaluate(() => {
+            const el = document.querySelector(".connected-line-trailing")!;
+            const range = document.createRange();
+            range.selectNodeContents(el);
+            const rects = Array.from(range.getClientRects());
+            const x = Math.min(...rects.map((r) => r.x));
+            const y = Math.min(...rects.map((r) => r.y));
+            return {
+              x,
+              y,
+              width: Math.max(...rects.map((r) => r.x + r.width)) - x,
+              height: Math.max(...rects.map((r) => r.y + r.height)) - y,
+            };
+          }),
+          page.getByRole("button", { name: "End session" }).boundingBox(),
+        ]);
+        expect(end).not.toBeNull();
+        expect([
+          fixture,
+          "device/status",
+          overlaps(device, status),
+        ]).toStrictEqual([fixture, "device/status", false]);
+        expect([fixture, "status/end", overlaps(status, end!)]).toStrictEqual([
+          fixture,
+          "status/end",
+          false,
+        ]);
+        expect([fixture, "device/end", overlaps(device, end!)]).toStrictEqual([
+          fixture,
+          "device/end",
+          false,
+        ]);
+      });
+    }
   });
 
   // --progress-active is decoration-only (tokens.css's own comment,

@@ -836,13 +836,15 @@ describe("frozen (handoff §4, restyled by connected-axes 2a task 5)", () => {
 
   it("THE FOOTER GROWS INTO THE PANE, NOT OVER IT: the header and the pane's own top row never move", () => {
     // The header (End's own home) is a THIRD invariant alongside the
-    // footer: it renders the same two children regardless of state
-    // (`ConnectionLine` + End, CR2 spec 3 task 1 — was End alone before
-    // `ConnectionLine` moved here from the panes), so its own fixed height
-    // can never be what moves the pane body underneath it.
+    // footer: it renders the same three children regardless of state
+    // (`ConnectionLine` + the status span + End — three since Task 6's fix
+    // round split the status out to its own direct child, CRITICAL 1; was
+    // two before that, one before CR2 spec 3 task 1 moved `ConnectionLine`
+    // here from the panes), so its own fixed height can never be what
+    // moves the pane body underneath it.
     const live = renderSurface();
     const liveHeader = document.querySelector(".connected-header")!;
-    expect(liveHeader.children).toHaveLength(2);
+    expect(liveHeader.children).toHaveLength(3);
     const liveFooter = document.querySelector(".connected-surface-footer")!;
     // Empty while rowing — End no longer lives here, and the task-6 ruling's
     // zero-cost-while-rowing property survives task 5's own rework of the
@@ -852,7 +854,7 @@ describe("frozen (handoff §4, restyled by connected-axes 2a task 5)", () => {
 
     renderSurface({ frozen: true });
     const frozenHeader = document.querySelector(".connected-header")!;
-    expect(frozenHeader.children).toHaveLength(2);
+    expect(frozenHeader.children).toHaveLength(3);
     const frozenFooter = document.querySelector(".connected-surface-footer")!;
     // One child now — the frozen block alone in the slot End vacated, IN
     // FLOW (task 5) rather than overlaid — the mechanism behind the

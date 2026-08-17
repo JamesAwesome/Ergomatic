@@ -22,9 +22,10 @@
 // old notched `TimerRuler` painted one. A warm-up interval is simply the
 // FIRST segment, active like any other while it runs; the fact that it is
 // a warm-up and not a working interval lives in the status caption above
-// this pane (`WARM-UP`/`READY`, `ConnectionLine`'s own trailing slot in the
-// shell header) — the bar's job is "where in the session am I", not "which
-// segment is optional".
+// this pane (`WARM-UP`/`READY`, the shell header's own composed status
+// span — `ConnectedSurface.tsx`'s `headerTrailing`, a header-level sibling
+// of `ConnectionLine` since Task 6's fix round) — the bar's job is "where
+// in the session am I", not "which segment is optional".
 //
 // THE BAND (design spec §3: "The up-next line is rendered by the band
 // directly") replaces `TimerRuler`'s own TOTAL LEFT row AND the old metric

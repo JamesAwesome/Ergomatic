@@ -85,13 +85,15 @@ import {
  *  README's accent), which is presentation, not a value — `surfaceModel.ts`
  *  is pure (no React, its own header comment) and cannot hand back a
  *  coloured span itself, so this composition lives at the CALLER, one
- *  level above the pane that used to own it, and `ConnectionLine`'s own
- *  `trailing` prop takes a full `ReactNode` for exactly this reason
- *  (`ConnectionLine.tsx`'s own comment) rather than the surface passing a
- *  second, pane-specific trailing prop through `ConnectionLine` itself —
- *  one composed node at the one call site that already knows which pane is
- *  active, versus a second optional prop on a component that would then
- *  have to reconcile two "what goes here" inputs.
+ *  level above the pane that used to own it. The return value renders
+ *  directly into the header's own `.connected-line-trailing` span (Task 6
+ *  fix round: this used to thread through `ConnectionLine`'s own
+ *  `trailing` prop; that prop is gone — `ConnectionLine.tsx`'s own comment
+ *  has the reason the status caption moved out to a header-level sibling)
+ *  rather than the surface passing a second, pane-specific prop through a
+ *  component that would then have to reconcile two "what goes here"
+ *  inputs — one composed node at the one call site that already knows
+ *  which pane is active.
  *
  *  TWO SEPARATE FALLBACKS to `intervalLabelShort`, not one (task-5-review
  *  fix round — the first version of this function conflated them and
@@ -396,16 +398,49 @@ export default function ConnectedSurface({
   return (
     <main className="screen connected-surface">
       {/* THE HEADER (connected-revamp Task 6's safety fix, restructured by
-          CR2 spec 3 task 1 — design spec §3 "Structure"). Two children now,
-          not one: `ConnectionLine` (the mark, device caption and status —
-          moved here from inside the panes) and End. The trailing status is
-          `headerTrailing(model, pane)` (above, CR2 spec 3 Task 5) — GRID
-          gets its own composed `N OF M · <countdown> LEFT` node, every
-          other pane keeps `model.intervalLabelShort` exactly as `PaneLive`
-          used to thread it. `ConnectionLine` carries `flex: 1` (index.css)
-          so it fills whatever width End does not need, which is what keeps
-          End pinned to the row's own right edge without the two ever
-          sitting adjacent — spec §2A: "Control and END never adjacent."
+          CR2 spec 3 task 1 — design spec §3 "Structure"; the status caption
+          split out to its own child by Task 6's FIX ROUND, CRITICAL 1 —
+          see below). THREE children now: `ConnectionLine` (the mark and
+          device caption only, since the fix round), the composed status
+          span, and End. The status is `headerTrailing(model, pane)` (above,
+          CR2 spec 3 Task 5) — GRID gets its own composed `N OF M ·
+          <countdown> LEFT` node, every other pane keeps
+          `model.intervalLabelShort` exactly as `PaneLive` used to thread
+          it. `ConnectionLine` carries `flex: 1` (index.css) so it fills
+          whatever width End does not need, which is what keeps End pinned
+          to the row's own right edge without the two ever sitting adjacent
+          — spec §2A: "Control and END never adjacent."
+
+          THE FIX ROUND'S OWN RESTRUCTURE (CRITICAL 1: three committed
+          portrait captures — `connected-pane-grid.png`,
+          `connected-pane-grid-long.png`, `connected-disconnected.png` —
+          showed this status text overprinting the device id and/or END).
+          §2C's own table draws the status on ITS OWN LINE below the header
+          row ("Header: PM5 id + END … Status line mono 21"), not sharing
+          it — the status span used to render nested INSIDE
+          `ConnectionLine`'s own `.connected-line` box (a second, separate
+          flex context from this header's), so no amount of CSS on
+          `.connected-header` alone could ever push it onto a new LINE of
+          THIS row; a nested flex item cannot escape its own container's
+          box by any `flex-wrap`/`order` declared on an ancestor two levels
+          up. Promoting the status to a direct sibling here — of
+          `ConnectionLine` and End both — is what makes it a real flex ITEM
+          of `.connected-header` itself, which is the only way `index.css`
+          can wrap JUST this child onto its own line in portrait
+          (`.connected-line-trailing`'s own `order: 2; flex-basis: 100%`
+          rule, landscape resets both) while leaving every other child, and
+          landscape's single-row layout, untouched. Chosen over the other
+          candidate mechanism (a CSS-only reflow via `display: contents` on
+          `.connected-line` to unwrap its children into this row) because
+          that path would have also unwrapped `.connected-line`'s own 8px
+          mark-device gap into the header's 12px gap — a real, if small,
+          unrequested visual change to the landscape row this fix must
+          leave alone — where moving three lines of JSX changes nothing
+          about what paints in landscape at all (same three items, same
+          order, same computed layout, `design.spec.ts`'s own 2A header-row
+          test is unchanged and still green). Triple-tap and focus order
+          are untouched by this move: the gesture lives on
+          `SegmentedControl`'s own halves (spec §3), never on the header.
 
           `SegmentedControl` is NOT rendered inside this `<div>` (spec §3:
           "own grid item of `.connected-surface`... NOT a DOM child of
@@ -435,7 +470,10 @@ export default function ConnectedSurface({
           collide with the paused block's own `END`, and "END" is a prefix
           of "End session" so WCAG 2.5.3's label-in-name still holds. */}
       <div className="connected-header">
-        <ConnectionLine model={model} trailing={headerTrailing(model, pane)} />
+        <ConnectionLine model={model} />
+        <span className="connected-line-trailing">
+          {headerTrailing(model, pane)}
+        </span>
         <button
           type="button"
           className={
