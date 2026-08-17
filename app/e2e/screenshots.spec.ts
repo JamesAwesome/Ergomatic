@@ -2680,12 +2680,16 @@ for (const name of CONNECTED_STATES) {
       // structurally. `innerText` for the same reason the portrait block
       // above uses it (rendering-aware, not raw-DOM) — nothing is hidden
       // here, so it reads the same as `textContent` would, but consistency
-      // beats relying on that.
+      // beats relying on that. PLUS "NEXT · " ahead of it (close-out queue
+      // item 7, James's ruling: the prefix prepends always, landscape
+      // only — portrait's own stacked `UP NEXT` label already names this
+      // line, so it stays then-less AND prefix-less there, proved by the
+      // portrait block above).
       const value = await page
         .locator(".connected-band-upnext-value")
         .innerText();
       expect(value?.replace(/\s+/g, " ").trim()).toBe(
-        "REST 3:00 · then WORK 2:06.0",
+        "NEXT · REST 3:00 · then WORK 2:06.0",
       );
       await expect(page.locator(".connected-band-upnext-then")).toBeVisible();
       // NOT VISUALLY CLIPPED — the bug `innerText` above cannot catch

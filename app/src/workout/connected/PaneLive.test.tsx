@@ -11,8 +11,9 @@
 //
 // jsdom loads no stylesheet for this project (every prior connected test
 // file's own comment on this): the landscape/portrait CSS toggle on the
-// band's own `then` word and `UP NEXT` label is proved in the browser
-// (`e2e/screenshots.spec.ts`'s own `innerText` reads, real CSS applied).
+// band's own `then` word, `UP NEXT` label, and (queue item 7) `NEXT · `
+// prefix is proved in the browser (`e2e/screenshots.spec.ts`'s own
+// `innerText` reads, real CSS applied).
 // This file proves the STRING and the DOM SHAPE are built correctly — both
 // forms coexist in one markup, exactly `UpNextStrip.test.tsx`'s own
 // precedent for the identical mechanism.
@@ -248,17 +249,26 @@ describe("the band: up-next + TOTAL LEFT (design spec §2A/§2C/§3)", () => {
     const label = upnext.querySelector(".connected-band-upnext-label")!;
     expect(label.textContent).toBe("UP NEXT");
     const value = upnext.querySelector(".connected-band-upnext-value")!;
-    // Landscape's full string (CSS shows the then span there) — mirrors
-    // `UpNextStrip.test.tsx`'s own node-walk proof rather than a
-    // subtraction (test-integrity sweep, P13's own reasoning: a
-    // subtraction cannot tell "hides the word" from "hides a differently
-    // worded span").
-    expect(value.textContent).toBe(`${model.upNext} · then ${model.thenNext}`);
+    // Landscape's full string (CSS shows the then span AND the NEXT ·
+    // prefix span there) — mirrors `UpNextStrip.test.tsx`'s own node-walk
+    // proof rather than a subtraction (test-integrity sweep, P13's own
+    // reasoning: a subtraction cannot tell "hides the word" from "hides a
+    // differently worded span"). jsdom loads no stylesheet (this file's
+    // own header comment), so `textContent` reads BOTH orientations'
+    // spans regardless of which CSS query would hide them in a real
+    // browser — the queue item 7 prefix is proved the identical way the
+    // `-then` word already is.
+    expect(value.textContent).toBe(
+      `NEXT · ${model.upNext} · then ${model.thenNext}`,
+    );
+    const next = value.querySelector(".connected-band-upnext-next")!;
+    expect(next.textContent).toBe("NEXT · ");
     const then = value.querySelector(".connected-band-upnext-then")!;
     expect(then.textContent).toBe("then ");
     expect(
       [...value.childNodes].map((n) => [n.nodeName, n.textContent]),
     ).toStrictEqual([
+      ["SPAN", "NEXT · "],
       ["#text", model.upNext],
       ["#text", " · "],
       ["SPAN", "then "],
@@ -266,7 +276,7 @@ describe("the band: up-next + TOTAL LEFT (design spec §2A/§2C/§3)", () => {
     ]);
   });
 
-  it("past the last phase: no then span, no separator — the portrait AND landscape strings are identical", () => {
+  it("past the last phase: no then span, no separator (queue item 7: the NEXT · prefix span is still there — jsdom cannot tell it apart from landscape's shown/portrait's hidden CSS, e2e proves the visible difference)", () => {
     // Filling Low's own trailing rest (after the 4th and final 2000 m rep)
     // IS the last `EnginePhase` in the array — `phaseIndexForInterval`
     // resolves the machine's own `resting: true` there to exactly that
@@ -276,13 +286,26 @@ describe("the band: up-next + TOTAL LEFT (design spec §2A/§2C/§3)", () => {
     // timer. (Interval 4 while ROWING still has this trailing rest AHEAD
     // of it, so `thenNext` there is `"FINISH"`, not `null` — the rest
     // phase itself is what has nothing after it.)
+    //
+    // Queue item 7 note: pre-item-7, this test's own title claimed the
+    // portrait and landscape STRINGS were identical here — true then (the
+    // `-then` word was the only orientation-differing content, and it is
+    // absent whenever `thenNext` is null). It is no longer true of the
+    // real, CSS-applied browser: landscape now ALSO shows "NEXT · " ahead
+    // of this value, so "NEXT · FINISH" (landscape) and "FINISH"
+    // (portrait) differ. This file cannot prove that difference at all
+    // (jsdom loads no stylesheet, this file's own header comment) — it
+    // only proves the DOM shape carries exactly one `-next` span
+    // regardless of `thenNext`; `e2e/screenshots.spec.ts`'s own
+    // `innerText` reads are what prove the two orientations actually
+    // differ.
     const { model } = renderPane("live", {
       intervalIndex: 4,
       state: "resting",
     });
     expect(model.thenNext).toBeNull();
     const value = document.querySelector(".connected-band-upnext-value")!;
-    expect(value.textContent).toBe(model.upNext);
+    expect(value.textContent).toBe(`NEXT · ${model.upNext}`);
     expect(value.querySelector(".connected-band-upnext-then")).toBeNull();
   });
 

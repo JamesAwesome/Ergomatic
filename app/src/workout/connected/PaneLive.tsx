@@ -178,6 +178,16 @@ export default function PaneLive({ model }: { model: SurfaceModel }) {
               established for this exact string. */}
           <span className="connected-band-upnext-label">UP NEXT</span>
           <span className="connected-band-upnext-value">
+            {/* LANDSCAPE-ONLY "NEXT · " PREFIX (queue item 7, James's
+                ruling: uniform beats special-casing, so the prefix is
+                unconditional — "NEXT · FINISH" as much as "NEXT · REST
+                3:00 · then WORK 2:09.0"). Same toggle idiom as `-then`
+                below: always in the DOM (one builder for both
+                orientations), hidden by `index.css`'s base rule, shown
+                only under the landscape query — portrait's OWN stacked
+                `UP NEXT` label above already names this line, so showing
+                this prefix there too would double-label it. */}
+            <span className="connected-band-upnext-next">NEXT · </span>
             {model.upNext}
             {/* The `then` word is the ONLY thing landscape adds over
                 portrait's string (§2C: "the existing `.timer-upnext-then

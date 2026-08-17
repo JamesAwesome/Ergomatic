@@ -6595,6 +6595,15 @@ section:not(.news-pinned) .news-row:last-of-type {
   display: none;
 }
 
+/* Hidden by default, same idiom as `-then` above (queue item 7): portrait
+   keeps its own stacked `UP NEXT` label (`.connected-band-upnext-label`)
+   ahead of the value, so a second "NEXT" INSIDE the value would double up
+   the same word — the landscape override below is the only place this
+   ever shows, exactly where the stacked label is itself hidden. */
+.connected-band-upnext-next {
+  display: none;
+}
+
 /* `TOTAL LEFT`'s own rule (portrait): the ONE thing in the band that gets
    a `border-top` outside landscape's shared band rule — §2C draws this
    cell "on a rule", up-next above it carries none. */
@@ -7628,10 +7637,48 @@ section:not(.news-pinned) .news-row:last-of-type {
        down. Padding HERE protects every grid item the row contains,
        uniformly, the same way it always did before this task's own
        restructure — the fix is where the term lived pre-task-1, not a new
-       mechanism. */
-    padding: env(safe-area-inset-top, 0px) var(--edge-inset)
+       mechanism.
+
+       `max(20px, …)`, NOT bare `env()` (close-out queue item 5, James's
+       own device screenshot 2026-08-17): on a shape with NO landscape top
+       inset (`env(safe-area-inset-top)` resolves to `0px`), the bare
+       `env()` term left the control/END row flush with the physical top
+       edge — this rule's OWN handoff cites a 20px figure (§2A) that a
+       zero inset was silently discarding. `max()` restores that 20px
+       floor while still growing past it the moment a real inset (a
+       notch, Android's `DisplayCutout`) exceeds it — the identical
+       "floor, not a fixed number" idiom `--edge-inset` already uses on
+       the left/right axis, just applied to one side instead of two. */
+    padding: max(20px, env(safe-area-inset-top, 0px)) var(--edge-inset)
       env(safe-area-inset-bottom, 0px) var(--edge-inset);
     height: 100dvh;
+  }
+
+  /* Queue item 6 (close-out, James's device screenshot): dead space below
+     the band — the footer track already costs nothing when it is
+     genuinely empty (`ConnectedSurface.tsx`'s own comment: the paused
+     block's slot always renders the wrapper div, but with no children
+     when not paused, so `:empty` below matches exactly the unpaused
+     case), but this rule's own bottom padding still reserved the
+     home-indicator inset as a blank strip UNDER that empty row — visible
+     space nothing painted a floor for. The band (`.connected-pane-live
+     .connected-band`, below) is the pane's own true visual bottom in this
+     state (`.connected-pane`'s `justify-content: space-between` already
+     seats it there); moving the reservation into ITS OWN padding-bottom
+     instead makes the band the element that owns the screen edge, rather
+     than a blank surface-level strip past an empty grid row. Scoped to
+     BOTH `.connected-pane-live` (Pane C, the grid, has no band of its own
+     to receive it, so it keeps this rule's original reservation
+     untouched) AND the footer's `:empty` state (not merely "not paused",
+     which would also fire mid pause/resume transition) — the one case
+     that DOES need this padding, the paused block sized into row 4 by
+     the footer's own in-flow mechanism, is UNCHANGED by this rule, so the
+     no-occlusion e2e (`design.spec.ts`, "the frozen footer never covers
+     TOTAL LEFT") stays green. */
+  .connected-surface:has(.connected-pane-live):has(
+      .connected-surface-footer:empty
+    ) {
+    padding-bottom: 0;
   }
 
   /* One line in landscape: 390px of height cannot spare the two-line
@@ -8064,6 +8111,22 @@ section:not(.news-pinned) .news-row:last-of-type {
     padding-top: 9px;
   }
 
+  /* Queue item 6's other half: the reservation `.connected-surface`'s own
+     rule (above) zeroed for this exact state (Pane B showing, the footer
+     genuinely empty) lands here instead, so the band owns the edge it
+     sits on rather than leaving a blank surface-level strip past it. Same
+     `:has()` pair as that rule, restated rather than factored into one
+     shared selector list — `index.css` has no such mechanism and a
+     duplicated, self-explaining condition beats a build-time dependency
+     for two rules. */
+  .connected-surface:has(.connected-pane-live):has(
+      .connected-surface-footer:empty
+    )
+    .connected-pane-live
+    .connected-band {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
   .connected-pane-live .connected-band-upnext {
     flex: 1;
     min-width: 0;
@@ -8072,6 +8135,28 @@ section:not(.news-pinned) .news-row:last-of-type {
   /* NO LABEL IN LANDSCAPE (design spec §2A: "flex 1, nowrap, NO label"). */
   .connected-pane-live .connected-band-upnext-label {
     display: none;
+  }
+
+  /* THE "NEXT · " PREFIX (queue item 7, James's ruling: prepend it always
+     — "NEXT · REST 3:00 · then WORK 2:09.0", "NEXT · FINISH" — uniform
+     beats special-casing the phase-less FINISH case). Judgment call on
+     size/colour, since no §2A table row prices this element (it did not
+     exist at spec time): `font: inherit` keeps it at the SAME 30px
+     `--c-size-band` the value/`-then` word already read at just above —
+     "NEXT" reads as part of the one inline sentence, not a smaller
+     caption bolted onto a bigger word. `color: var(--ink-3)`, NOT
+     inherited ink, is the one deliberate departure from that "one
+     sentence" treatment: `-label`'s hidden stacked form was ink-3 too
+     (the rule directly above retires it in landscape, not its colour
+     role), and keeping that same ink-3 on the prefix is what marks it as
+     the LABEL half of the line — distinguishing "NEXT" the caption from
+     "REST 3:00 … " the value — the same distinction portrait draws with
+     a whole separate line instead of a colour. */
+  .connected-pane-live .connected-band-upnext-next {
+    display: inline;
+    font: inherit;
+    letter-spacing: inherit;
+    color: var(--ink-3);
   }
 
   /* Up-next's value shares the TOTAL LEFT cell's own `--c-size-band`

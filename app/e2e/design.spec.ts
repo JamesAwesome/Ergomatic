@@ -5119,7 +5119,7 @@ test.describe("connected screens (fake-driven)", () => {
       expect(upnext.color).toBe(INK_RGB);
       expect(upnext.whiteSpace).toBe("nowrap");
       expect(upnext.text.replace(/\s+/g, " ").trim()).toBe(
-        "REST 3:00 · then WORK 2:06.0",
+        "NEXT · REST 3:00 · then WORK 2:06.0",
       );
 
       const label = await page
@@ -5394,6 +5394,25 @@ test.describe("connected screens (fake-driven)", () => {
       await pumpUntilText(page, "2 OF 5");
 
       const TOP = 20;
+
+      // Queue item 5 (close-out, James's device screenshot): the ZERO-
+      // inset case, no CDP override at all — the exact shape a non-notch
+      // device (or this suite's own default Chromium, which reports
+      // every `env(safe-area-inset-*)` as `0px`) reports. Before the
+      // fix, bare `env(safe-area-inset-top)` resolved to `0px` here and
+      // the control/END row sat flush with the physical top edge — this
+      // is the case the `max(20px, …)` floor exists for; the real-inset
+      // block below (unchanged) proves the floor still yields to a
+      // genuinely larger inset.
+      const [zeroControlBox, zeroEndBox] = await Promise.all([
+        page.locator(".connected-control").boundingBox(),
+        page.getByRole("button", { name: "End session" }).boundingBox(),
+      ]);
+      expect(zeroControlBox).not.toBeNull();
+      expect(zeroEndBox).not.toBeNull();
+      expect(zeroControlBox!.y).toBeGreaterThanOrEqual(TOP);
+      expect(zeroEndBox!.y).toBeGreaterThanOrEqual(TOP);
+
       const client = await page.context().newCDPSession(page);
       await client.send("Emulation.setSafeAreaInsetsOverride", {
         insets: { top: TOP, left: 0, bottom: 0, right: 0 },
@@ -5440,6 +5459,68 @@ test.describe("connected screens (fake-driven)", () => {
 
       const surfaceBox = await page.locator(".connected-surface").boundingBox();
       expect(surfaceBox!.y + surfaceBox!.height).toBeCloseTo(390, 0);
+
+      await cleanupAllConnected(page, title);
+    });
+
+    // Queue item 6 (close-out, James's device screenshot): screenshots
+    // alone cannot prove this fix — Chromium reports every
+    // `env(safe-area-inset-*)` as `0px` without a CDP override (this
+    // file's own comment above), so the band's new padding-bottom is
+    // literally 0px in every committed capture, before AND after. The
+    // geometric claim: `index.css`'s own comment on the moved reservation
+    // works out (worked out BY HAND, this task) to "the band's own
+    // border box now absorbs the inset (moves 1:1 with it), while
+    // nothing ABOVE the band moves at all" — before the fix, the
+    // reservation lived on `.connected-surface`'s own padding, which
+    // shrank the WHOLE pane and (via `.connected-pane`'s `justify-
+    // content: space-between`) redistributed into every gap, moving the
+    // heroes too. Delta-based (not an absolute magic number) for the same
+    // reason the notch-left/notch-right test above is — robust against
+    // font-metrics.
+    test("queue item 6: a real bottom inset moves the band's own box, not the heroes above it — landscape (844x390)", async ({
+      page,
+    }) => {
+      const title = "Design Connected Band Bottom Inset Workout";
+      await page.setViewportSize({ width: 844, height: 390 });
+      await injectConnectedFake(page, ROWING_STORY);
+      await openConnected(
+        page,
+        title,
+        "design-connected-band-bottom-inset@e2e.test",
+      );
+      await walkToSurface(page);
+      await pumpUntilText(page, "2 OF 5");
+
+      const client = await page.context().newCDPSession(page);
+      async function measure(bottom: number) {
+        await client.send("Emulation.setSafeAreaInsetsOverride", {
+          insets: { top: 0, left: 0, bottom, right: 0 },
+        });
+        await page.evaluate(
+          () => new Promise((r) => requestAnimationFrame(() => r(null))),
+        );
+        const [band, heroes] = await Promise.all([
+          page.locator(".connected-band").boundingBox(),
+          page.locator(".connected-heroes").boundingBox(),
+        ]);
+        return { bandBottom: band!.y + band!.height, heroesY: heroes!.y };
+      }
+
+      const zero = await measure(0);
+      const BOTTOM = 21;
+      const withInset = await measure(BOTTOM);
+
+      // The band's own box reaches BOTTOM px further down under a real
+      // inset — it absorbs the reservation itself now, rather than
+      // leaving it as a blank strip below an empty grid row that no
+      // element's own box ever reached.
+      expect(withInset.bandBottom - zero.bandBottom).toBeCloseTo(BOTTOM, 0);
+      // Nothing ABOVE the band moved: pre-fix, the reservation shrank the
+      // whole pane and spread into every `justify-content: space-between`
+      // gap, including the one above the heroes; post-fix, only the
+      // band's own padding changes.
+      expect(withInset.heroesY).toBeCloseTo(zero.heroesY, 0);
 
       await cleanupAllConnected(page, title);
     });
@@ -6300,7 +6381,7 @@ test.describe("connected screens (fake-driven)", () => {
         .locator(".connected-band-upnext-value")
         .innerText();
       expect(value.replace(/\s+/g, " ").trim()).toBe(
-        "WORK 2:06.0 · then REST 3:00",
+        "NEXT · WORK 2:06.0 · then REST 3:00",
       );
       const total = await page
         .locator(".connected-band-cell-value")
