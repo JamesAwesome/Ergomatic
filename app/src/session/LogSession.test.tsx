@@ -1373,7 +1373,7 @@ describe("LogSession: save", () => {
       Promise.resolve(
         new Response(
           JSON.stringify({
-            error: "pain must be an integer 1..5",
+            error: "pain must be an integer 1..5 or null",
             field: "pain",
           }),
           { status: 400 },
@@ -1902,7 +1902,7 @@ describe("LogSession: the manual door (Task 3)", () => {
       Promise.resolve(
         new Response(
           JSON.stringify({
-            error: "pain must be an integer 1..5",
+            error: "pain must be an integer 1..5 or null",
             field: "pain",
           }),
           { status: 400 },

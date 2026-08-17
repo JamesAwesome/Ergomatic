@@ -796,6 +796,19 @@ describe("GET/POST /api/logs", () => {
     expect(res.status).toBe(201);
   });
 
+  it("accepts an EXPLICIT thumbs: null (the reflection card's cleared state sends it, not just an absent key)", async () => {
+    // Task-3 review M1: the guard's false arm was untested — an inversion
+    // to `body.thumbs === null` would 400 exactly the body the summary's
+    // cleared reflection posts, while every absent-key test stayed green.
+    const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
+      {
+        ...validLogBody(),
+        thumbs: null,
+      },
+    );
+    expect(res.status).toBe(201);
+  });
+
   it("rejects an invalid thumbs value with 400, field named", async () => {
     const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
       {
