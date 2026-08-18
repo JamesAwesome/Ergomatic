@@ -126,10 +126,23 @@ export interface SummaryMeta {
  *  field is absent, never a fabricated zero (§2B's own "no `0:00`, no
  *  `0 m`" rule) — see this module's own per-hero comments for the exact
  *  "present only when its underlying sum is greater than zero" rule each
- *  one applies. */
+ *  one applies.
+ *
+ *  Phase PW spec 2 §2: `avgSplitSeconds`/`timeSeconds` are the NUMBERS the
+ *  strings above were formatted FROM, exported so the from-the-log POST
+ *  site (`LogSession.tsx`'s shared body assembly) never re-derives one —
+ *  this module is the ONE place the number-string pairing is decided.
+ *  Each numeric field is present EXACTLY when its string sibling is:
+ *  `avgSplit = fmtSplit(avgSplitSeconds)`, `time = fmtDuration(timeSeconds
+ *  / 60)` (the formatter takes MINUTES — spec §2's documented trap, easy
+ *  to get backwards at a call site that already has raw seconds in
+ *  hand). `distanceMeters` already doubles as its own number (no separate
+ *  string sibling to pair with). */
 export interface SummaryHeroes {
   avgSplit?: string;
+  avgSplitSeconds?: number;
   time?: string;
+  timeSeconds?: number;
   distanceMeters?: number;
 }
 
@@ -403,7 +416,9 @@ function monitorHeroes(
   return {
     avgSplit:
       avgSplit.seconds !== undefined ? fmtSplit(avgSplit.seconds) : undefined,
+    avgSplitSeconds: avgSplit.seconds,
     time: timeSeconds !== undefined ? fmtDuration(timeSeconds / 60) : undefined,
+    timeSeconds,
     distanceMeters: monitorDistanceMeters(run),
   };
 }
@@ -682,7 +697,9 @@ function buildTimerModel(run: SessionRun, steps: LogStep[]): SummaryModel {
   const heroes: SummaryHeroes = {
     avgSplit:
       avgSplit.seconds !== undefined ? fmtSplit(avgSplit.seconds) : undefined,
+    avgSplitSeconds: avgSplit.seconds,
     time: timeSeconds !== undefined ? fmtDuration(timeSeconds / 60) : undefined,
+    timeSeconds,
     // DISTANCE: this module's header — timer door has no machine total.
   };
   const warmupRow = timerWarmupRow(run);

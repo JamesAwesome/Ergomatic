@@ -1133,3 +1133,119 @@ describe("buildSummaryModel — manual door, a real library workout (Calm Sea, a
     expect(row.targetPaceLabel).toBeUndefined();
   });
 });
+
+describe("buildSummaryModel — Phase PW spec 2 §2: the model exports the numbers its strings were formatted from, per door", () => {
+  // Pins the string-number pairing INSIDE the model — the one place spec
+  // §2 says that derivation lives (`SummaryHeroes`'s own doc comment).
+  // The storage round-trip through the real POST/GET wire is Task 1's own
+  // contract test, not this one's job (brief §"Failing tests" bullet 1).
+
+  it("monitor door (the walk-3 real-wire fixture): avgSplitSeconds/timeSeconds are present, and re-applying the documented formatters to them reproduces the display strings exactly", () => {
+    const program: WorkoutProgram = {
+      intervals: [
+        interval({ type: "warmup", kind: "time", value: 60, restSeconds: 0 }),
+        interval({
+          kind: "time",
+          value: 60,
+          targetSplit: 129,
+          restSeconds: 30,
+        }),
+        interval({
+          kind: "time",
+          value: 120,
+          targetSplit: 129,
+          restSeconds: 30,
+        }),
+      ],
+    };
+    const wu = decodeActual(
+      "00 00 00 00 00 00 58 02 00 a0 00 00 00 00 00 00 00 01",
+      "00 00 00 1a 6b 00 53 07 08 00 e2 01 6a 0a 35 00 63 01 00",
+      0,
+    );
+    const w1 = decodeActual(
+      "06 00 00 00 00 00 58 02 00 d6 00 00 1e 00 00 00 00 02",
+      "06 00 00 17 86 6d 79 05 0d 00 e1 02 ee 0d 7f 00 65 02 00",
+      1,
+    );
+    const w2 = decodeActual(
+      "06 00 00 00 00 00 b0 04 00 ad 01 00 1e 00 05 00 00 03",
+      "06 00 00 1c 86 78 76 05 18 00 e4 02 f7 0d 80 00 65 03 00",
+      2,
+    );
+    const run = monitorRun({ program, actuals: [wu, w1, w2] });
+    const model = buildSummaryModel({ door: "monitor", run });
+
+    expect(model.heroes.avgSplit).toBeDefined();
+    expect(model.heroes.avgSplitSeconds).toBeDefined();
+    expect(typeof model.heroes.avgSplitSeconds).toBe("number");
+    expect(model.heroes.avgSplit).toBe(fmtSplit(model.heroes.avgSplitSeconds!));
+
+    expect(model.heroes.time).toBeDefined();
+    expect(model.heroes.timeSeconds).toBeDefined();
+    expect(typeof model.heroes.timeSeconds).toBe("number");
+    // §2's documented trap: the formatter takes MINUTES, not seconds.
+    expect(model.heroes.time).toBe(fmtDuration(model.heroes.timeSeconds! / 60));
+    // Proves the trap is real (§2's own documented gotcha): `fmtDuration`
+    // takes MINUTES, so feeding it the raw SECONDS value unconverted reads
+    // the number 60× too large (`fmtDuration` splits its argument into
+    // h/m/s as minutes) and can only coincidentally match the correctly
+    // divided string at `timeSeconds === 0`, which this fixture's own real
+    // wire boundaries never produce. A mutation that drops the `/ 60` at
+    // the read-back call site is exactly what this line catches.
+    expect(model.heroes.timeSeconds).toBeGreaterThan(0);
+    expect(fmtDuration(model.heroes.timeSeconds!)).not.toBe(model.heroes.time);
+  });
+
+  it("timer door (Filling Low, one real stopwatch reading): avgSplitSeconds/timeSeconds are present and agree with their strings; distanceMeters stays absent (no machine total on this door)", () => {
+    const draft = draftFor("Filling Low");
+    const run = sessionRunFixture("Filling Low");
+    const distanceIndex = run.phases.findIndex(
+      (p) => p.type === "work" && p.meters !== undefined,
+    );
+    expect(distanceIndex).toBeGreaterThanOrEqual(0);
+    const meters = run.phases[distanceIndex]!.meters!;
+    const elapsed = meters * 0.5;
+    const measuredRun: SessionRun = {
+      ...run,
+      actuals: {
+        [distanceIndex]: {
+          elapsedSeconds: elapsed,
+          splitSeconds: (elapsed / meters) * 500,
+          actualSource: "stopwatch",
+        },
+      },
+    };
+    const steps: LogStep[] = buildLogSteps(measuredRun, draft);
+    const model = buildSummaryModel({
+      door: "timer",
+      run: measuredRun,
+      steps,
+    });
+
+    expect(model.heroes.avgSplit).toBeDefined();
+    expect(typeof model.heroes.avgSplitSeconds).toBe("number");
+    expect(model.heroes.avgSplit).toBe(fmtSplit(model.heroes.avgSplitSeconds!));
+
+    expect(model.heroes.time).toBeDefined();
+    expect(typeof model.heroes.timeSeconds).toBe("number");
+    expect(model.heroes.time).toBe(fmtDuration(model.heroes.timeSeconds! / 60));
+
+    expect(model.heroes.distanceMeters).toBeUndefined();
+  });
+
+  it("manual door (Calm Sea): no hero string means no hero number — heroes is `{}`, avgSplitSeconds/timeSeconds/distanceMeters all absent", () => {
+    const w = library("Calm Sea");
+    const steps = buildManualLogSteps({ steps: w.steps }, BASELINES);
+    const model = buildSummaryModel({
+      door: "manual",
+      steps,
+      dateIso: "2026-08-17T09:00:00.000Z",
+    });
+    expect(model.heroes.avgSplit).toBeUndefined();
+    expect(model.heroes.avgSplitSeconds).toBeUndefined();
+    expect(model.heroes.time).toBeUndefined();
+    expect(model.heroes.timeSeconds).toBeUndefined();
+    expect(model.heroes).toStrictEqual({});
+  });
+});

@@ -24,8 +24,9 @@ import {
   type SessionDraft,
 } from "./draft";
 import { buildRun } from "./engine";
-import { buildLogSeed, formatLogDate } from "./logDraft";
+import { buildLogSeed, buildLogSteps, formatLogDate } from "./logDraft";
 import { loadRun, RUN_KEY, saveRun, type SessionRun } from "./run";
+import { buildSummaryModel } from "./summaryModel";
 import {
   loadMonitorRun,
   saveMonitorRun,
@@ -1036,6 +1037,47 @@ describe("LogSession: save", () => {
     expect(loadRun()).toBeNull();
   });
 
+  // From-the-log spec (2026-08-18), §2: "the client posts the model's
+  // NUMBERS, not its strings" — proven here through a real Save click,
+  // against the SAME `buildSummaryModel` call this door's own render path
+  // makes (summaryModel.ts is the one place the number-string pairing is
+  // decided; this test only proves the POST site never re-derives one).
+  // The `typeof` assertions are the mutation guard: a body that posted the
+  // pre-formatted STRING instead of the number goes red here first.
+  it("posts avgSplitSeconds/timeSeconds as the model's own NUMBERS (not its display strings); distanceMeters stays absent (timer door: no machine total)", async () => {
+    const { draft, run, workout } = buildSessionFixture();
+    mockWorkouts([workout]);
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-heroes-timer" }), {
+          status: 201,
+        }),
+      ),
+    );
+    const model = buildSummaryModel({
+      door: "timer",
+      run,
+      steps: buildLogSteps(run, draft),
+    });
+    expect(model.heroes.avgSplitSeconds).toBeDefined();
+    expect(model.heroes.timeSeconds).toBeDefined();
+
+    await renderLog();
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+
+    const body = parsedBodies(apiFn)[0]!;
+    expect(typeof body.avgSplitSeconds).toBe("number");
+    expect(body.avgSplitSeconds).toBe(model.heroes.avgSplitSeconds);
+    expect(typeof body.timeSeconds).toBe("number");
+    expect(body.timeSeconds).toBe(model.heroes.timeSeconds);
+    // Never the pre-formatted strings on these keys.
+    expect(body.avgSplitSeconds).not.toBe(model.heroes.avgSplit);
+    expect(body.timeSeconds).not.toBe(model.heroes.time);
+    expect("distanceMeters" in body).toBe(false);
+  });
+
   it("POSTs held/pain/thumbs as null when nothing is chosen (spec: reflection is optional)", async () => {
     const { run, workout } = buildSessionFixture();
     mockWorkouts([workout]);
@@ -1681,6 +1723,34 @@ describe("LogSession: the manual door (Task 3)", () => {
     expect((body.steps as unknown[]).length).toBe(2);
   });
 
+  // From-the-log spec §2: the by-hand door has no run record and no
+  // measurement of any kind — `summaryModel.ts`'s manual door always
+  // returns `heroes: {}` — so its own `SummaryHeroes` carries no numbers
+  // to post in the first place. The wire keys are simply ABSENT (the
+  // `deviceName` optional-key pattern), never `null`.
+  it("posts no hero keys at all (avgSplitSeconds/timeSeconds/distanceMeters) — the manual door's model shows no heroes", async () => {
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-manual-no-heroes" }), {
+          status: 201,
+        }),
+      ),
+    );
+    await renderManualLog(workout.id);
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+
+    const body = parsedBodies(apiFn)[0]!;
+    expect("avgSplitSeconds" in body).toBe(false);
+    expect("timeSeconds" in body).toBe(false);
+    expect("distanceMeters" in body).toBe(false);
+  });
+
   it("a browser BACK press after a successful save lands on the prior screen, not a re-submittable form (replace-navigation)", async () => {
     const workout = manualWorkoutFixture();
     mockWorkouts([workout]);
@@ -2318,6 +2388,46 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
 
     expect(loadMonitorRun()).toBeNull();
     expect(clearSpy).toHaveBeenCalledTimes(1);
+  });
+
+  // From-the-log spec §2: the monitor door is the one door with all THREE
+  // heroes (avgSplit/time/distance — the machine's own total). Posted
+  // straight from the same `buildSummaryModel` call this door's own
+  // render path makes; `typeof` guards are the mutation catch (a body that
+  // posted the pre-formatted STRING instead of the number goes red here).
+  it("posts avgSplitSeconds/timeSeconds/distanceMeters as the model's own NUMBERS (not its display strings) — the monitor door's own three heroes", async () => {
+    const { run, workout } = buildMonitorFixture();
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-heroes-monitor" }), {
+          status: 201,
+        }),
+      ),
+    );
+    const model = buildSummaryModel({ door: "monitor", run });
+    expect(model.heroes.avgSplitSeconds).toBeDefined();
+    expect(model.heroes.timeSeconds).toBeDefined();
+    expect(model.heroes.distanceMeters).toBeDefined();
+
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+
+    const body = parsedBodies(apiFn)[0]!;
+    expect(typeof body.avgSplitSeconds).toBe("number");
+    expect(body.avgSplitSeconds).toBe(model.heroes.avgSplitSeconds);
+    expect(typeof body.timeSeconds).toBe("number");
+    expect(body.timeSeconds).toBe(model.heroes.timeSeconds);
+    expect(typeof body.distanceMeters).toBe("number");
+    expect(body.distanceMeters).toBe(model.heroes.distanceMeters);
+    // Never the pre-formatted strings on these keys.
+    expect(body.avgSplitSeconds).not.toBe(model.heroes.avgSplit);
+    expect(body.timeSeconds).not.toBe(model.heroes.time);
   });
 
   it("an empty or >64-char deviceName is omitted from the POST body — the save still succeeds (branch review Minor)", async () => {
