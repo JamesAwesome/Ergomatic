@@ -8,6 +8,7 @@ import {
 import Builder from "../builder/Builder";
 import BulkImport from "../builder/BulkImport";
 import EditWorkout from "../builder/EditWorkout";
+import HistoryList from "../log/HistoryList";
 import Library from "../library/Library";
 import News from "../news/News";
 import Reader from "../news/Reader";
@@ -113,6 +114,15 @@ export default function AppRoutes({
       <Routes>
         <Route path="/" element={<Navigate to="/today" replace />} />
         <Route path="/today" element={<Today />} />
+        {/* From-the-log spec (2026-08-18), §4 N7: under the TODAY tab's own
+            URL prefix (not a bare /log — the tab convention is
+            prefix-based, and a route no tab's prefix matches would be the
+            app's first "no tab lit" screen) so TODAY stays lit for free.
+            /today/log/:id (Task 5's overlay detail view) isn't registered
+            yet — a link there falls through to the catch-all below, per
+            this task's own brief ("keep the route link correct and test
+            the LINK, not the destination"). */}
+        <Route path="/today/log" element={<HistoryList />} />
         <Route path="/library" element={<Library />} />
         <Route path="/library/new" element={<Builder />} />
         {/* React Router ranks a static segment ("new") over a dynamic one

@@ -2245,6 +2245,29 @@ button:disabled {
   margin-top: 24px;
 }
 
+/* From-the-log spec (2026-08-18), §1: the heading is now the ALL SESSIONS
+   link to /today/log (44px target, via `--tap`) — layout only here
+   (flex + min-height); the link's own typography lives on
+   `.today-last-three-heading-link` below so it doesn't collide with
+   `.section-heading`'s own font rules on the shared `<h2>`. */
+.today-last-three-heading {
+  display: flex;
+  align-items: center;
+  min-height: var(--tap);
+}
+
+.today-last-three-heading-link {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
+}
+
 .today-log-list {
   list-style: none;
   margin: 8px 0 0;
@@ -2254,12 +2277,20 @@ button:disabled {
   gap: 2px;
 }
 
+/* `flex-wrap: wrap` added for the history list's own optional 4th child
+   (`.today-log-hero`, below) — Today's own 3-child rows never fill a
+   row's full width (the title's `overflow: hidden` gives it an automatic
+   flex minimum of 0, so it always shrinks to fit rather than forcing a
+   wrap), so this is inert for every row Today itself renders. */
 .today-log-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   min-height: 46px;
   border-top: 1px solid var(--rule-2);
+  text-decoration: none;
+  color: var(--ink);
 }
 
 .today-log-title {
@@ -2281,6 +2312,32 @@ button:disabled {
   letter-spacing: 0.04em;
   color: var(--ink-3);
   white-space: nowrap;
+}
+
+/* From-the-log spec (2026-08-18), §5G: the history list's own hero
+   snippet line (`AVG 2:04.5 · 5,000 m`) — `flex: 1 0 100%` is what drops
+   this 4th child to its own line under `.today-log-row`'s
+   `flex-wrap: wrap` (see that rule's own comment). Today's rows never
+   set the `hero` prop (`LogRow.tsx`), so this rule is inert there. */
+.today-log-hero {
+  flex: 1 0 100%;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+}
+
+/* -- History list (from-the-log spec, 2026-08-18, /today/log) ----------
+   Row idiom is `.today-log-row`/`.today-log-list`, reused verbatim (§1:
+   "one row component, not two") — only the screen's own header/list
+   spacing is new here. */
+
+.history-screen .screen-title {
+  margin: 4px 0 0;
+}
+
+.history-log-list {
+  margin: 16px 0 0;
 }
 
 /* -- Plan (Phase 6A Task 3) ---------------------------------------------

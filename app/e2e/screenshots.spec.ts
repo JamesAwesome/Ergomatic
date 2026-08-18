@@ -1567,6 +1567,121 @@ test("post-workout-summary-landscape", async ({ page }) => {
   await cleanupByTitle(page, title);
 });
 
+// From-the-log spec (2026-08-18), Task 4: the history list (`/today/log`).
+// POSTs session logs directly (a real in-page fetch, same idiom as the
+// `neutralizeGlobalRecency`/`logOnce` helpers `today.spec.ts` uses) rather
+// than running real timer sessions — this screen renders server rows, not
+// live session state, so seeding it directly is both faster and closer to
+// what the screen actually reads.
+async function postLog(
+  page: Page,
+  body: {
+    workoutTitle: string;
+    workoutType: string;
+    held?: "held" | "under" | "over" | null;
+    pain?: number | null;
+    avgSplitSeconds?: number | null;
+    distanceMeters?: number | null;
+  },
+): Promise<void> {
+  const result = await page.evaluate(async (b) => {
+    const res = await fetch("/api/logs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workoutId: null,
+        held: null,
+        pain: null,
+        notes: null,
+        steps: [{ label: "Work" }],
+        advancesPlan: false,
+        ...b,
+      }),
+    });
+    return { ok: res.ok, status: res.status, body: await res.text() };
+  }, body);
+  if (!result.ok) {
+    throw new Error(`postLog failed: ${result.status} ${result.body}`);
+  }
+}
+
+// Exit criterion 2's own fixture, verbatim: the frozen v0.11.0 body shape
+// (no hero keys at all — server/routes/data.test.ts's own
+// `V0_11_0_LOG_BODY`) — the capture's null-hero row is the SAME shape a
+// pre-spec-2 client actually sent, not a hand-simulated null.
+async function postV0110Log(page: Page, title: string): Promise<void> {
+  const result = await page.evaluate(async (t) => {
+    const res = await fetch("/api/logs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workoutId: null,
+        workoutTitle: t,
+        workoutType: "AT",
+        held: "held",
+        pain: 2,
+        notes: null,
+        steps: [
+          {
+            label: "Work",
+            targetSplit: 120,
+            actualSplit: 121,
+            actualSource: "stopwatch",
+          },
+        ],
+        advancesPlan: false,
+      }),
+    });
+    return { ok: res.ok, status: res.status, body: await res.text() };
+  }, title);
+  if (!result.ok) {
+    throw new Error(`postV0110Log failed: ${result.status} ${result.body}`);
+  }
+}
+
+// §5G: the row idiom plus the hero snippet, four real sessions (recurring
+// failure #7's own floor) including one null-hero old row (exit criterion
+// 2's own v0.11.0 shape) — the screen's whole point is showing a rower
+// their real history, so an empty or single-row capture would show
+// nothing this task actually built.
+test("log-history", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-log-history@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await postV0110Log(page, "Steady State");
+  await postLog(page, {
+    workoutTitle: "Sea Fret",
+    workoutType: "O2",
+    held: "held",
+    pain: 2,
+    avgSplitSeconds: 124.5,
+    distanceMeters: 5000,
+  });
+  await postLog(page, {
+    workoutTitle: "Occluded Front",
+    workoutType: "AT",
+    held: "under",
+    pain: 1,
+    avgSplitSeconds: 118.2,
+    distanceMeters: 6200,
+  });
+  await postLog(page, {
+    workoutTitle: "Pressure Ridge",
+    workoutType: "TR",
+    held: "over",
+    pain: 3,
+    avgSplitSeconds: 132.7,
+    distanceMeters: 4500,
+  });
+
+  await page.goto("/today/log");
+  await expect(page.locator(".today-log-row")).toHaveCount(4);
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "log-history.png"),
+  });
+});
+
 // Phase 6C Task 4, rebuilt on PostWorkoutSummary by Phase PW Task 5: the
 // summary's OTHER door (Task 3, `/library/:id/log`) — visibly distinct from
 // the session door above (no tab-bar hiding, no Discard button at all, no
