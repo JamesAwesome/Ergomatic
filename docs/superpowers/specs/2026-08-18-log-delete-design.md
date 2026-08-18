@@ -15,8 +15,13 @@ that should never have existed can stop existing, and stop counting.
 1. **Remove only.** The measured record stays immutable; a wrong number's
    remedy is deleting the session. Re-association (fixing the workout a
    session was logged against) and measured-number editing both declined.
-2. **Deletion un-counts the plan** when the deleted log is what a current
-   checkmark actually points at; old-cycle logs never touch the counter.
+2. **Deletion un-counts the plan, TERMINAL ONLY** (narrowed 2026-08-18
+   after the antagonist proved the counter is positional while a log's
+   index is immutable history — un-counting a middle session strands the
+   sessions above it): deleting your LATEST plan session un-ticks it;
+   deleting an earlier plan session removes the row and keeps the tick —
+   the plan counts sessions done, and deleting old history does not
+   renumber your plan. Old-cycle logs never touch the counter.
 3. **Hard delete.** Two-tap staged confirm, no trash, no undo machinery,
    no new stored state. The confirm copy carries the weight.
 
@@ -27,10 +32,10 @@ that should never have existed can stop existing, and stop counting.
 | Where | The from-the-log view (`/today/log/:id`) ONLY — never on list rows, never on the live post-workout summary (a just-rowed session's remedy is Discard, which already exists there) |
 | Placement | Bottom of the view, below the plan footer — last, quiet, away from Edit |
 | Idiom | The house staged destructive confirm (`WorkoutDetail.tsx`'s delete is the pattern: first tap stages, copy names the exact consequence, Cancel + confirm pair, 44px targets) |
-| Copy, plan-linked (the log currently resolves as a current checkmark's link) | `This removes the session. It stops counting toward your plan.` confirm button `Delete session` |
-| Copy, not plan-linked | `This removes the session and its reflection.` confirm button `Delete session` |
-| Which copy renders | Decided by the same §2 predicate the server applies, evaluated client-side from the fetched row + current plan state — the two must use the same rule so the warning never promises an un-count the server declines (or vice versa) |
-| In-flight | Confirm disabled while the DELETE is in flight; failure re-enables with the server's message; success navigates |
+| Copy, row carries plan linkage (`plan_key` non-null on the fetched row — client-decidable from the one fetch it already makes) | `This removes the session. If it is your latest plan session, the checkmark un-ticks.` confirm button `Delete session` |
+| Copy, no linkage | `This removes the session and its reflection.` confirm button `Delete session` |
+| Who decides the un-count | THE SERVER, at delete time (antagonist B3: the client cannot evaluate the newest-wins condition from the fetches it has, and cross-device staleness makes advance agreement impossible by construction). The conditional copy promises nothing the server may decline; `DELETE` responds `200 {unCounted: boolean}` and the client's post-delete state reflects what actually happened |
+| In-flight | Confirm disabled while the DELETE is in flight; failure re-enables with the server's message — EXCEPT a 404, which means another tab already deleted it: treat as success-and-navigate (antagonist minor: an error toast for an operation that succeeded) |
 | After success | Navigate to the origin (`resolveLogBack`'s target — the same origin-faithful rule the back affordance uses); the list/plan refetch shows the row gone |
 | Stale deep link after deletion | The existing 5F not-found state (`This session is gone.` with `← LOG`) — already shipped, no new work |
 
@@ -38,35 +43,49 @@ that should never have existed can stop existing, and stop counting.
 
 `DELETE /api/logs/:id` — owner-checked, 404 on absence or another user's
 row (the GET/PATCH precedent, no existence leak). A second delete of the
-same id 404s (the row is gone; idempotent in effect, honest in status).
+same id 404s; the CLIENT treats a confirm-time 404 as success (§1).
 
-**The un-count rule.** In the same transaction as the row deletion,
-`plan_state.doneN` decrements by exactly one iff ALL THREE hold:
+**The un-count rule (TERMINAL ONLY — James's narrowed ruling, after
+antagonist B1 proved the positional-count orphan).** In the same
+transaction as the row deletion, `plan_state.doneN` decrements by exactly
+one iff ALL THREE hold:
 
 1. the log's `plan_key` equals the CURRENT `plan_state.planKey` (a
    Switch means old-plan logs never touch the new plan's counter);
-2. the log's `plan_index` is strictly below the current `doneN` (a stale
-   future index from a longer pre-Reset cycle cannot decrement);
+2. the log's `plan_index` equals `doneN - 1` EXACTLY — the terminal
+   (latest done) session. A middle index never decrements: the counter is
+   positional, indexes are immutable history, and un-counting the middle
+   would strand every session above it (antagonist B1, proven live).
 3. the log is the NEWEST-WINS holder of its `(plan_key, plan_index)` —
-   the same resolution rule spec 2 shipped for links — i.e. it is the log
-   a current done checkmark actually points at. Deleting an OLDER
-   same-index log (a pre-Reset duplicate) removes the row only.
+   spec 2's own resolution rule. Deleting an OLDER same-index duplicate
+   removes the row only.
 
-Consequences, stated: the checkmark un-ticks because the counter shrank,
-and that slot becomes the next session to row. `doneN` never goes below
-zero (condition 2 guarantees a decrement only when `doneN >= 1`). The
-deleted log's own `plan_key`/`plan_index` need no tombstone — the row is
-gone, and the next-newest same-index log (if any) becomes the checkmark's
-link by the existing newest-wins read, which is correct: that older log
-really was that plan session's record before the duplicate.
-
-- The decrement is `GREATEST(done_n - 1, 0)`-shaped in SQL only as
-  belt-and-braces; condition 2 makes the floor unreachable, and the
-  contract test asserts the unreachability rather than relying on the
-  clamp.
+Consequences, all stated:
+- Terminal delete: the checkmark un-ticks, that slot becomes the next
+  session to row. An older duplicate at that index (if any) stays plain
+  history, reachable from `/today/log` — a today-slot row consults no
+  link.
+- Non-terminal plan-linked delete: the row goes, the TICK STAYS (the plan
+  counts sessions done; deleting old history does not renumber the plan —
+  the ruling's own words). The checkmark's link re-points to the
+  next-newest same-index log if one exists, else the done row renders
+  UNLINKED plain text (spec 2's pre-linkage precedent, already shipped).
 - No other write: `plan_key`/`plan_index` on OTHER logs are never
-  rewritten (they are records of what happened, spec 2's rule).
-- API stays additive-only otherwise; no request body; response 204.
+  rewritten (linkage is history, spec 2's rule — upheld, not retracted).
+
+**Transaction shape (antagonist B4 — read-committed makes a split
+read-decide-write guard no guard at all; a concurrent Reset/Switch could
+drive `done_n` to -1, and -1 reaches user-facing copy as the word
+"undefined"):** the transaction takes `SELECT … FROM plan_state WHERE
+user_id = $1 FOR UPDATE` first (serializing against `create()`'s upsert,
+which already row-locks), and the decrement carries conditions 1+2 in the
+UPDATE's own WHERE (`… AND plan_key = $key AND done_n = $index + 1`). The
+`GREATEST(done_n - 1, 0)` clamp stays as depth; with the lock and the
+WHERE, the floor is unreachable BY CONSTRUCTION and the contract test
+asserting unreachability is sound.
+
+- API stays additive-only otherwise; no request body; response
+  `200 {unCounted: boolean}` (§1 — the server reports what it did).
 
 ## §3 Blast radius, honest
 
@@ -80,39 +99,61 @@ is the live session's, not the log's).
 
 ## §4 Research note (house rule)
 
-- **Mechanism:** REST DELETE with 204/404 — standard, nothing invented.
+- **Mechanism:** REST DELETE with 200-and-report/404 — standard, nothing invented (the 200 body over a bare 204 is B3's server-authoritative report, precedented by the repo's own PATCH returning the row).
   The ONE invented mechanism is the un-count rule (§2), built entirely
   from parts spec 2 already vetted (newest-wins, the linkage-as-history
   rule, the atomic plan_state write pattern); the antagonist pass anchors
   here.
 - **Does the system have the concept?** Row deletion: yes, ordinary. The
   plan counter's decrement is OUR assertion on the plan's behalf — the
-  plan never had "un-complete a session"; we assert it means "the newest
-  record of that slot stopped existing", and when it matters (a rower who
-  wanted the checkmark kept), the answer is that the checkmark was
-  counting a session they chose to delete.
+  plan never had "un-complete a session"; we assert it means "the LATEST
+  done slot reopens when its newest record stops existing", terminal only.
+- **The accepted remedy gap, named (antagonist B6):** a session with a
+  WRONG NUMBER (the Sun-fret class) or logged against the wrong workout
+  has exactly one remedy — delete it and re-log by hand — and the re-log
+  stamps today's date (`logged_at` is a DB default, not settable), so a
+  mistake discovered the next day cannot be re-recorded on its own date,
+  and re-logging a non-terminal plan session appends at the top of the
+  plan rather than refilling its old slot. For the LATEST session this
+  self-heals (delete un-ticks the slot, re-log refills it). ACCEPTED as
+  the cost of remove-only; recorded here so the next spec that touches
+  log lifecycle starts from it.
 - Nothing OS-owned, no wire semantics. Nothing found contradicting;
   recorded per the nothing-found rule.
 
 ## §5 Exit criteria
 
-1. Every §1 property has a named passing witness; the confirm copy
-   matches the server's actual un-count decision in both directions
-   (a client/server predicate-agreement test).
+1. Every §1 property has a named passing witness; the copy/decision
+   honesty test is a TABLE of server decisions vs rendered outcomes
+   (antagonist B5 — a shared imported predicate would be true by
+   construction), INCLUDING a state where plan state changed between the
+   fetch and the confirm: the copy's conditional wording stays true and
+   `unCounted` reports what actually happened.
 2. The un-count rule's three conditions each have a red-provable witness:
-   current-plan newest link decrements; wrong plan key does not; stale
-   future index does not; older same-index duplicate does not (and the
-   checkmark re-points to it after the newest is deleted — the §2
-   consequence proven end to end).
-3. The criterion-2 duplicate case runs as an e2e: save twice into the
-   same plan slot (Reset between), delete the newest, the checkmark
-   stays ticked and now opens the older log.
+   terminal newest link decrements; wrong plan key does not; NON-TERMINAL
+   index does not (the B1 orphan fixture: two advancing saves, delete the
+   first — tick stays, counter unchanged, index-1 session still linked
+   and reachable); older same-index duplicate does not.
+3. Two e2e legs replace the broken original (antagonist B2 proved its
+   fixture drives `doneN` to 0 and the tick vanishes): (a) terminal
+   delete — save, delete from the detail view, the checkmark un-ticks and
+   the slot reads as today's session; (b) the re-point case — three saves
+   (one pre-Reset at index 0, one post-Reset at index 0, one at index 1),
+   delete the MIDDLE one (newest holder of index 0, non-terminal): tick
+   stays, counter unchanged, the index-0 checkmark now opens the
+   pre-Reset log.
 4. Deleting a log never mutates any other log's row (contract-suite
    byte-comparison on a bystander row).
 5. The §3 suggestion consequence has its test: delete the only log of a
    workout, LAST DONE exclusion releases it.
 6. The notes PR line for the next release: you can delete a session from
-   its own page; deleting one that counted toward your plan un-ticks it.
+   its own page; deleting your LATEST plan session un-ticks its checkmark;
+   deleting older history never renumbers your plan.
+8. Implementation note with teeth (the antagonist's operational catch):
+   the worktree's compose stack can serve many-commits-stale code — its
+   probe found a session_logs with NO plan_key column. Before any e2e of
+   this feature, verify the stack serves a schema with the newest columns
+   or rebuild; the plan's Task briefs carry this.
 7. v0.12.0 clients against this server: unaffected (new route only) —
    stated, no witness needed beyond the additive-API rule.
 
