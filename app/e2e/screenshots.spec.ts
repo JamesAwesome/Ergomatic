@@ -2317,7 +2317,15 @@ test("log-monitor", async ({ page }) => {
   // reason this gets its own shot (post-workout-summary spec: the old
   // "FROM <device> · N OF M MEASURED" caption is retired, superseded by
   // the meta line's own device name and each row's own measured-ness).
+  // Review FIX-5: the device-name check alone passes whether or not any
+  // interval was actually measured (the meta line's device name is
+  // unconditional). Assert the thing the comment promises — a genuine
+  // `m:ss.t` pace label (`fmtSplit`'s own format) on a `.summary-row-pace`
+  // cell.
   await expect(page.getByText(/PM5 918273645/)).toBeVisible();
+  await expect(
+    page.locator(".summary-row-pace", { hasText: /^\d+:\d{2}\.\d$/ }).first(),
+  ).toBeVisible();
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "log-monitor.png"),
   });
@@ -2333,6 +2341,10 @@ test("log-monitor-landscape", async ({ page }) => {
     "PM5 837465921",
   );
   await expect(page.getByText(/PM5 837465921/)).toBeVisible();
+  // Review FIX-5, same reasoning as `log-monitor` above.
+  await expect(
+    page.locator(".summary-row-pace", { hasText: /^\d+:\d{2}\.\d$/ }).first(),
+  ).toBeVisible();
   await page.setViewportSize({ width: 844, height: 390 });
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "log-monitor-landscape.png"),

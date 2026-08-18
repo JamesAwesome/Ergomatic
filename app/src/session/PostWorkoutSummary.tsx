@@ -280,7 +280,7 @@ export default function PostWorkoutSummary({
         : [logAgainstPlanButton, saveWithoutLoggingButton];
 
   return (
-    <main className="screen summary-screen">
+    <main className="screen">
       <p className="summary-eyebrow">WORKOUT COMPLETE</p>
       <BackLink fallback={backFallback} label="← DONE" />
       <h1 className="screen-title summary-title">{title}</h1>

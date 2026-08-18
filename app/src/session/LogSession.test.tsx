@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import { ONBOARDING_LIBRARY_WORKOUTS } from "../../server/seed/library/onboarding";
 import type { Step, WorkoutType } from "../../domain/types.js";
+import { fmtDuration } from "../../domain/duration.js";
 import { compileProgram } from "../../domain/monitor/program.js";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
 import type { IntervalActual } from "../../domain/monitor/types.js";
@@ -1483,10 +1484,25 @@ describe("LogSession: the manual door (Task 3)", () => {
     expect(within(rows[0]!).getByText("12:00")).toBeInTheDocument();
     expect(within(rows[0]!).getByText("2:12.0")).toBeInTheDocument();
     expect(within(rows[0]!).getByText("6k +12")).toBeInTheDocument();
+    // Review FIX-7: the test's own title claims "every actual 'assumed'
+    // (rendered as PRESCRIBED)" but the old `not.toHaveTextContent("ACTUAL")`
+    // pair was dropped in the Task 5 rewrite — and restoring that literal
+    // text is now a vacuous check: the pre-Task-5 UI had a literal "ACTUAL
+    // n:nn.n" line (deleted with SessionComplete/`.log-step-*`, see the
+    // Task 5 commit), but PostWorkoutSummary.tsx never renders the word
+    // "ACTUAL" anywhere, measured or prescribed. `.summary-row-dash` (the
+    // "—" cell) and the absence of `.summary-row-pace` ARE the current
+    // component's own PRESCRIBED-row markers (module header: "§2E's own
+    // unmeasured-row geometry") — assert those instead, so this actually
+    // fails if a row were ever wrongly rendered MEASURED-shaped.
+    expect(rows[0]!.querySelector(".summary-row-dash")).toBeInTheDocument();
+    expect(rows[0]!.querySelector(".summary-row-pace")).not.toBeInTheDocument();
     // Row 2: Calm Sea's own distance/split step (120 + 12 = 132 ->
     // "2:12.0").
     expect(within(rows[1]!).getByText("10000 m")).toBeInTheDocument();
     expect(within(rows[1]!).getByText("2:12.0")).toBeInTheDocument();
+    expect(rows[1]!.querySelector(".summary-row-dash")).toBeInTheDocument();
+    expect(rows[1]!.querySelector(".summary-row-pace")).not.toBeInTheDocument();
 
     expect(screen.getByText("EXPECTED 2/5")).toBeInTheDocument();
     expect(
@@ -2613,6 +2629,38 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     const body = parsedBodies(apiFn)[0]!;
     expect(body).not.toHaveProperty("advancesPlan");
   });
+
+  // Final-review FIX-3: the session and manual doors each have a real
+  // "Save without logging posts advancesPlan:false" witness; the monitor
+  // door only had one for the LEAD button ("Log against plan" ->
+  // advancesPlan absent, above). This is the monitor door's own missing
+  // half — clicking the demoted "Save without logging" button and reading
+  // the posted body, not just trusting the test title above it.
+  it("monitor door wire shape: with an active plan, Save without logging posts advancesPlan: false", async () => {
+    mockPlan(readyPlanState(activePlan()));
+    const { run, workout } = buildMonitorFixture();
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-monitor-plan-outside" }), {
+          status: 201,
+        }),
+      ),
+    );
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    await chooseHeldAndPain();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save without logging" }),
+    );
+    await screen.findByText("TODAY SCREEN");
+
+    const body = parsedBodies(apiFn)[0]!;
+    expect(body.advancesPlan).toBe(false);
+  });
 });
 
 // F6 Task 3 (spec 2b): the monitor door's own TIME hero stops reading
@@ -2660,7 +2708,15 @@ describe("LogSession: the interrupted header stops reading wall-clock (F6/R-D)",
     expect(screen.queryByText(/^AUG 2/)).not.toBeInTheDocument();
   });
 
-  it("inverse pin: a normal-completion record (no endedBy) still shows wall-clock minutes and dateLabel from completedAt", async () => {
+  // Final-review FIX-4: this test used to claim "wall-clock minutes" but
+  // the value it asserts ("58:25") is R-D's MEASURED formula (work +
+  // completed rest) — the same one the interrupted case above uses. The
+  // monitor door's TIME hero is never wall-clock (this module's own
+  // header: "R-D is monitor-only" applies unconditionally, not just when
+  // `endedBy === "interrupted"`); the "inverse pin" this test actually
+  // performs is that dateLabel switches source (completedAt here vs.
+  // startedAt above) while TIME stays on the measured formula either way.
+  it("inverse pin: a normal-completion record (no endedBy) shows the same MEASURED time as the interrupted case, never wall-clock, dated from completedAt", async () => {
     const { run, workout } = buildMonitorFixture();
     saveMonitorRun(run);
     mockWorkouts([workout]);
@@ -2671,6 +2727,25 @@ describe("LogSession: the interrupted header stops reading wall-clock (F6/R-D)",
     // work 705+2500=3205s + restSeconds (300 for interval1, 0 for
     // interval2) = 3505s -> "58:25".
     expect(screen.getByText("58:25")).toBeInTheDocument();
+
+    // Negative guard computed from the fixture's OWN timestamps (not a
+    // hand-typed literal) so a regression that swaps the measured formula
+    // back for `completedAt - startedAt` is actually caught: this fixture's
+    // wall-clock span is a real, different number ("20:00"), unlike the
+    // interrupted test above where the wall-clock gap ("1440:00") could
+    // never collide with the measured value by coincidence.
+    const wallClockSeconds =
+      (new Date(run.completedAt!).getTime() -
+        new Date(run.startedAt).getTime()) /
+      1000;
+    const wallClockLabel = fmtDuration(wallClockSeconds / 60);
+    expect(wallClockLabel).toBe("20:00"); // sanity: distinct from "58:25"
+    expect(screen.queryByText(wallClockLabel)).not.toBeInTheDocument();
+
+    // dateLabel from completedAt (restored — the review found this
+    // assertion had been dropped).
+    const dateLabel = formatLogDate(run.completedAt!);
+    expect(screen.getByText(new RegExp(`^${dateLabel} ·`))).toBeInTheDocument();
   });
 });
 

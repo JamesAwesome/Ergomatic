@@ -743,9 +743,18 @@ function buildManualModel(steps: LogStep[], dateIso: string): SummaryModel {
 // ---------------------------------------------------------------------
 
 /** R-E, verbatim: "TARGETS ONLY · NOTHING MEASURED appears only when NO
- *  row carries a measurement" — every row, warm-up included. */
+ *  row carries a measurement" — every row, warm-up included. Final-review
+ *  FIX-2: `measured: true` alone is not a real reading — both
+ *  `monitorWarmupRow` and `timerWarmupRow` return `{measured: true,
+ *  isWarmup: true, label: "WARM-UP"}` with no `timeLabel`/`paceLabel` when
+ *  the warm-up carries no reading (a lost boundary, or a TIME-kind warm-up
+ *  that can never be measured at all). A row like that "carries" nothing;
+ *  gate on an actual label, not the discriminant alone. */
 function targetsOnlyCaption(rows: SummaryRow[]): string | undefined {
-  return rows.some((r) => r.measured)
+  return rows.some(
+    (r) =>
+      r.measured && (r.timeLabel !== undefined || r.paceLabel !== undefined),
+  )
     ? undefined
     : "TARGETS ONLY · NOTHING MEASURED";
 }

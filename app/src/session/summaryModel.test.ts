@@ -934,6 +934,11 @@ describe("buildSummaryModel — timer door, a real mixed measured/prescribed lis
     expect(warmupRow.isWarmup).toBe(true);
     expect(warmupRow.timeLabel).toBeUndefined();
     expect(warmupRow.paceLabel).toBeUndefined();
+    // Review FIX-2: `measured: true` alone is not a real reading — this
+    // blank warm-up row is the exact shape that silently ate the caption.
+    // Every remaining row is prescribed (no stopwatch actuals recorded at
+    // all), so R-E's caption must still fire.
+    expect(model.caption).toBe("TARGETS ONLY · NOTHING MEASURED");
   });
 
   it("a prescribed TIME-kind row (no `meters`) shows its duration as m:ss, not a meters suffix — hand-built steps, the caller-supplied shape this door's own interface declares", () => {
