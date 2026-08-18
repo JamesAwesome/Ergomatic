@@ -8,6 +8,7 @@ import {
 import Builder from "../builder/Builder";
 import BulkImport from "../builder/BulkImport";
 import EditWorkout from "../builder/EditWorkout";
+import FromTheLog from "../log/FromTheLog";
 import HistoryList from "../log/HistoryList";
 import Library from "../library/Library";
 import News from "../news/News";
@@ -118,11 +119,15 @@ export default function AppRoutes({
             URL prefix (not a bare /log — the tab convention is
             prefix-based, and a route no tab's prefix matches would be the
             app's first "no tab lit" screen) so TODAY stays lit for free.
-            /today/log/:id (Task 5's overlay detail view) isn't registered
-            yet — a link there falls through to the catch-all below, per
-            this task's own brief ("keep the route link correct and test
-            the LINK, not the destination"). */}
+            /today/log/:id (Task 5) is the overlay detail view — registered
+            below the list route (React Router doesn't require this
+            ordering since one segment is static and the other dynamic,
+            same note as /library/import below, but declared list-then-
+            detail to match this file's own convention). Neither route is
+            in HIDDEN_TABBAR_PREFIXES above: §4 N7 keeps the tab bar
+            visible (TODAY lit) on both — LOG is not a fifth tab. */}
         <Route path="/today/log" element={<HistoryList />} />
+        <Route path="/today/log/:id" element={<FromTheLog />} />
         <Route path="/library" element={<Library />} />
         <Route path="/library/new" element={<Builder />} />
         {/* React Router ranks a static segment ("new") over a dynamic one

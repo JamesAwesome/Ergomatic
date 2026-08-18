@@ -216,7 +216,13 @@ export function deviationBarWidthPercent(deviationSeconds: number): number {
   return Math.min(50, Math.max(1.2, raw));
 }
 
-function judge(
+/** Exported (from-the-log spec, 2026-08-18, Task 5): the from-the-log
+ *  view's own row builder (`src/log/storedSummary.ts`) judges a stored
+ *  row's `actualSplit` against the STORED `avg_split_seconds` — the exact
+ *  same formula this module's own doors use to judge a row against their
+ *  freshly-computed working average, never re-derived a second time. Pure
+ *  visibility change only: the function itself is unmodified. */
+export function judge(
   rowSplitSeconds: number,
   workingAverageSeconds: number,
 ): RowJudgment {
@@ -767,7 +773,10 @@ function buildManualModel(steps: LogStep[], dateIso: string): SummaryModel {
  *  the warm-up carries no reading (a lost boundary, or a TIME-kind warm-up
  *  that can never be measured at all). A row like that "carries" nothing;
  *  gate on an actual label, not the discriminant alone. */
-function targetsOnlyCaption(rows: SummaryRow[]): string | undefined {
+// Exported (from-the-log spec, Task 5): `storedSummary.ts`'s own caption
+// reuses this exact rule rather than a second copy — visibility change
+// only.
+export function targetsOnlyCaption(rows: SummaryRow[]): string | undefined {
   return rows.some(
     (r) =>
       r.measured && (r.timeLabel !== undefined || r.paceLabel !== undefined),
@@ -786,7 +795,10 @@ function targetsOnlyCaption(rows: SummaryRow[]): string | undefined {
  *  named explicitly so midnight can never print as `"24:XX"`. The empty
  *  locales array defers to the device's own locale exactly as the
  *  requirement asks. */
-function formatTimeOfDay(iso: string): string {
+// Exported (from-the-log spec, Task 5): `storedSummary.ts`'s own meta
+// builder reuses this exact formatter (same h23-pinned reasoning) rather
+// than a second copy — visibility change only.
+export function formatTimeOfDay(iso: string): string {
   return new Date(iso).toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit",

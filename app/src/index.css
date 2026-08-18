@@ -2340,6 +2340,59 @@ button:disabled {
   margin: 16px 0 0;
 }
 
+/* -- From-the-log detail view (from-the-log spec, 2026-08-18,
+   /today/log/:id) — reuses PostWorkoutSummary's own extracted
+   meta/heroes/intervals/reflection-card pieces byte-for-byte (§1: "reuses
+   PostWorkoutSummary's rendering"; `.summary-eyebrow`/`.back-link`/
+   `.summary-title`/`.summary-heroes`/`.summary-intervals`/
+   `.summary-reflection-card`/`.summary-save-lead`/`.button-outline`/
+   `.field-error`/`.mono-status` all already styled there) — only the
+   read-back block and plan footer below are genuinely new rules.
+   `.overlay-screen` (Reader/Releases' own idiom, §4 N3) supplies the
+   own-scroller mechanism; no page-specific override needed on top of it. */
+
+.log-readback {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border: 1px dashed var(--rule-3);
+  border-radius: var(--radius);
+  margin: 0 0 16px;
+}
+
+.log-readback-segments {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+}
+
+.log-readback-note {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--ink-2);
+  white-space: pre-wrap;
+  margin: 0;
+}
+
+.log-edit-button {
+  margin: 0 0 24px;
+}
+
+.log-edit-stack {
+  margin: 20px 0 0;
+}
+
+.log-plan-footer {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+  margin: 20px 0 0;
+}
+
 /* -- Plan (Phase 6A Task 3) ---------------------------------------------
    Tokens only — reuses --ink/--ink-3/--accent/--surface/--rule and the
    BaselineEditor confirm classes (.baseline-confirm/.baseline-actions/

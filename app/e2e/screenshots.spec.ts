@@ -1580,8 +1580,24 @@ async function postLog(
     workoutType: string;
     held?: "held" | "under" | "over" | null;
     pain?: number | null;
+    thumbs?: "up" | "down" | null;
+    notes?: string | null;
     avgSplitSeconds?: number | null;
     distanceMeters?: number | null;
+    timeSeconds?: number | null;
+    // Task 5's own "log-detail" capture: real measured/judged rows and,
+    // via `advancesPlan` below, genuine plan linkage — both need fields
+    // this helper's original narrower signature (§5G's own hero-snippet
+    // capture, Task 4) never had to pass.
+    advancesPlan?: boolean;
+    steps?: {
+      label: string;
+      targetSplit?: number;
+      actualSplit?: number;
+      actualSource?: "assumed" | "stopwatch" | "pm5";
+      meters?: number;
+      seconds?: number;
+    }[];
   },
 ): Promise<void> {
   const result = await page.evaluate(async (b) => {
@@ -1679,6 +1695,75 @@ test("log-history", async ({ page }) => {
   await expect(page.locator(".today-log-row")).toHaveCount(4);
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "log-history.png"),
+  });
+});
+
+// Task 5: the from-the-log detail view (/today/log/:id) — a real saved
+// row (via the real POST route, `advancesPlan: true` over a chosen+reset
+// plan so linkage is genuinely stamped by the server's own atomic upsert,
+// not faked client-side) reopened through the real UI: heroes, two
+// measured/judged rows, all four reflection fields answered (the
+// read-back, not the just-opened blank form), and the plan footer all on
+// one screen. Recurring failure #7, sharpened: the numbers below are
+// hand-checkable on the committed capture — AVG SPLIT 2:10.0 is exactly
+// `500 × (360+420) / (1500+1500)` (500 × (6:00+7:00) / (1500m+1500m)),
+// the same two rows' own time/meters shown below it, and DISTANCE 3,000 m
+// is exactly those two rows' meters summed — never a number the capture
+// itself can't be checked against.
+test("log-detail", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-log-detail@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await choosePlan(page, "sprint");
+  await resetPlanProgress(page);
+  await postLog(page, {
+    workoutTitle: "Sea Fret",
+    workoutType: "O2",
+    held: "under",
+    pain: 3,
+    thumbs: "up",
+    notes: "Held on through the back half.",
+    avgSplitSeconds: 130,
+    timeSeconds: 780,
+    distanceMeters: 3000,
+    advancesPlan: true,
+    steps: [
+      {
+        label: "6:00 @ 6k",
+        targetSplit: 130,
+        actualSplit: 120,
+        actualSource: "stopwatch",
+        meters: 1500,
+      },
+      {
+        label: "6:00 @ 6k",
+        targetSplit: 130,
+        actualSplit: 140,
+        actualSource: "stopwatch",
+        meters: 1500,
+      },
+    ],
+  });
+
+  await page.goto("/today/log");
+  const row = page.locator(".today-log-row").filter({ hasText: "Sea Fret" });
+  await expect(row).toBeVisible();
+  await row.click();
+  await expect(page).toHaveURL(/\/today\/log\/[^/]+$/);
+  await expect(page.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
+  await expect(page.getByText("AVG SPLIT")).toBeVisible();
+  await expect(page.getByText("2:10.0")).toBeVisible();
+  await expect(
+    page.getByText("UNDER · FASTER · PAIN 3/5 · LIKED"),
+  ).toBeVisible();
+  await expect(page.getByText("Held on through the back half.")).toBeVisible();
+  await expect(
+    page.getByText("Logged to Sprint (2k) Prep · SESSION 1 OF 84"),
+  ).toBeVisible();
+
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "log-detail.png"),
   });
 });
 

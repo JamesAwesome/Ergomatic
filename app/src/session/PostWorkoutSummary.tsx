@@ -3,7 +3,12 @@ import { fmtSplit } from "../../domain/format.js";
 import type { HeldResult, Thumbs } from "../api/useRecentLogs";
 import type { PlanData } from "../api/usePlan";
 import BackLink from "../shell/BackLink";
-import type { SummaryModel, SummaryRow } from "./summaryModel";
+import type {
+  SummaryHeroes,
+  SummaryMeta,
+  SummaryModel,
+  SummaryRow,
+} from "./summaryModel";
 
 // Post-workout-summary spec (2026-08-17), §2D — RULED, option B (James
 // 2026-08-17): the direction lives in the label now, not just in a
@@ -158,6 +163,225 @@ function IntervalRow({ row }: { row: SummaryRow }) {
   );
 }
 
+/** §2A's title block (from-the-log spec, 2026-08-18, Task 5: extracted so
+ *  `FromTheLog.tsx` can re-render the exact same title/meta/rule markup
+ *  the live door renders, fed by a stored row's own `SummaryMeta` instead
+ *  of a live door's — see that file's `storedSummary.ts` for how the
+ *  latter is derived). No behavior change to the live door below, which
+ *  now renders this component in place of the identical inline JSX it
+ *  used to carry directly. */
+export function SummaryMetaBlock({
+  title,
+  meta,
+}: {
+  title: string;
+  meta: SummaryMeta;
+}) {
+  return (
+    <>
+      <h1 className="screen-title summary-title">{title}</h1>
+      <p className="summary-meta">
+        {meta.dateLabel}
+        {meta.timeLabel !== undefined ? ` · ${meta.timeLabel}` : ""} ·{" "}
+        {meta.sourceLabel}
+      </p>
+      <hr className="summary-rule" />
+    </>
+  );
+}
+
+/** §2B's hero block (from-the-log spec, Task 5: extracted, same reuse
+ *  reason as `SummaryMetaBlock` above). Owns its own "whole block absent
+ *  when every hero is absent" check — a caller never needs to repeat that
+ *  gate, it can render this unconditionally and get nothing back when
+ *  there's nothing to show (old rows, spec §5B). */
+export function SummaryHeroesBlock({ heroes }: { heroes: SummaryHeroes }) {
+  const hasHero =
+    heroes.avgSplit !== undefined ||
+    heroes.time !== undefined ||
+    heroes.distanceMeters !== undefined;
+  if (!hasHero) return null;
+  return (
+    <div className="summary-heroes">
+      {heroes.avgSplit !== undefined && (
+        <div className="summary-hero summary-hero-lead">
+          <span className="summary-hero-label">AVG SPLIT</span>
+          <span className="summary-hero-value">{heroes.avgSplit}</span>
+        </div>
+      )}
+      {heroes.time !== undefined && (
+        <div className="summary-hero">
+          <span className="summary-hero-label">TIME</span>
+          <span className="summary-hero-value">{heroes.time}</span>
+        </div>
+      )}
+      {heroes.distanceMeters !== undefined && (
+        <div className="summary-hero">
+          <span className="summary-hero-label">DISTANCE</span>
+          <span className="summary-hero-value">{heroes.distanceMeters}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** §2E's interval list (from-the-log spec, Task 5: extracted, same reuse
+ *  reason as the two blocks above). `pacesOffCaption` defaults to `null`
+ *  (omitted) — the from-the-log view has no live baseline-lock context to
+ *  caption with; the live door below still passes its own real value
+ *  explicitly. Owns its own "nothing to render" gate (`rows.length ===
+ *  0`), same reasoning as `SummaryHeroesBlock`. */
+export function SummaryIntervalsBlock({
+  rows,
+  pacesOffCaption = null,
+  caption,
+}: {
+  rows: SummaryRow[];
+  pacesOffCaption?: string | null;
+  caption?: string;
+}) {
+  if (rows.length === 0) return null;
+  const hasJudgedRow = rows.some((r) => r.measured && r.judged !== undefined);
+  return (
+    <div className="summary-intervals">
+      <div className="summary-intervals-header">
+        <p className="summary-intervals-title">INTERVALS</p>
+        {pacesOffCaption !== null && (
+          <p className="summary-intervals-caption">{pacesOffCaption}</p>
+        )}
+      </div>
+      <ul className="summary-row-list">
+        {rows.map((row, i) => (
+          <IntervalRow key={i} row={row} />
+        ))}
+      </ul>
+      {hasJudgedRow && (
+        <p className="summary-legend">← FASTER (BLUE) · SLOWER (RED) →</p>
+      )}
+      {caption !== undefined && (
+        <p className="summary-targets-only-caption">{caption}</p>
+      )}
+    </div>
+  );
+}
+
+/** The reflection card (§2D) — extracted (from-the-log spec, Task 5) so
+ *  `FromTheLog.tsx`'s Edit affordance can swap in the exact SAME four
+ *  clearable controls the live door uses (this spec's own binding
+ *  preamble: "Edit swaps in spec 1's reflection card"), rather than a
+ *  second hand-rolled copy of the HELD/pain roving-button groups
+ *  (CLAUDE.md's own recurring-failure #8). No behavior change to the live
+ *  door below, which now renders this component in place of the
+ *  identical inline JSX it used to carry directly. */
+export function SummaryReflectionCard({
+  hint,
+  expectedPain,
+  held,
+  onHeld,
+  pain,
+  onPain,
+  thumbs,
+  onThumbs,
+  notes,
+  onNotes,
+}: {
+  hint: string | undefined;
+  expectedPain: number | null;
+  held: HeldResult | null;
+  onHeld: (value: HeldResult | null) => void;
+  pain: number | null;
+  onPain: (value: number | null) => void;
+  thumbs: Thumbs | null;
+  onThumbs: (value: Thumbs | null) => void;
+  notes: string;
+  onNotes: (value: string) => void;
+}) {
+  const painWord = painCaption(pain);
+  return (
+    <div className="summary-reflection-card">
+      <div className="summary-reflection-group">
+        <p className="summary-reflection-label">HOW DID IT FEEL?</p>
+        <div className="summary-feel-row">
+          <button
+            type="button"
+            className="summary-feel-up"
+            aria-pressed={thumbs === "up"}
+            onClick={() => onThumbs(thumbs === "up" ? null : "up")}
+          >
+            ↑ MORE LIKE THIS
+          </button>
+          <button
+            type="button"
+            className="summary-feel-down"
+            aria-pressed={thumbs === "down"}
+            aria-label="Less like this"
+            onClick={() => onThumbs(thumbs === "down" ? null : "down")}
+          >
+            ↓
+          </button>
+        </div>
+      </div>
+
+      <div className="summary-reflection-group">
+        <div className="summary-reflection-label-row">
+          <p className="summary-reflection-label">DID YOU HOLD THE TARGETS?</p>
+          {hint !== undefined && <p className="summary-hint">{hint}</p>}
+        </div>
+        <div className="summary-held-row">
+          {HELD_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              className="summary-held-chip"
+              aria-pressed={held === opt.value}
+              onClick={() => onHeld(held === opt.value ? null : opt.value)}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="summary-reflection-group">
+        <div className="summary-reflection-label-row">
+          <p className="summary-reflection-label">ACTUAL PAIN</p>
+          {expectedPain !== null && (
+            <p className="summary-hint">EXPECTED {expectedPain}/5</p>
+          )}
+        </div>
+        <div className="summary-pain-row">
+          {PAIN_LEVELS.map((level) => (
+            <button
+              key={level}
+              type="button"
+              className="summary-pain-chip"
+              aria-pressed={pain === level}
+              aria-label={`Pain ${level}`}
+              onClick={() => onPain(pain === level ? null : level)}
+            >
+              {level}
+            </button>
+          ))}
+        </div>
+        <p className="summary-pain-caption">{painWord}</p>
+      </div>
+
+      <div className="summary-reflection-group">
+        <label className="summary-reflection-label" htmlFor="summary-notes">
+          NOTES
+        </label>
+        <textarea
+          id="summary-notes"
+          className="summary-notes-textarea"
+          placeholder="What happened out there?"
+          value={notes}
+          onChange={(e) => onNotes(e.target.value)}
+        />
+      </div>
+    </div>
+  );
+}
+
 export interface PostWorkoutSummaryProps {
   title: string;
   model: SummaryModel;
@@ -231,12 +455,6 @@ export default function PostWorkoutSummary({
   children,
 }: PostWorkoutSummaryProps) {
   const { meta, heroes, rows, caption } = model;
-  const hasHero =
-    heroes.avgSplit !== undefined ||
-    heroes.time !== undefined ||
-    heroes.distanceMeters !== undefined;
-  const hasJudgedRow = rows.some((r) => r.measured && r.judged !== undefined);
-  const painWord = painCaption(pain);
 
   // §2F: `Log against plan` carries the plan's own position information
   // (`Log against plan · SESSION n OF N`) whether it's leading or demoted —
@@ -293,144 +511,28 @@ export default function PostWorkoutSummary({
     <main className="screen">
       <p className="summary-eyebrow">WORKOUT COMPLETE</p>
       <BackLink fallback={backFallback} label="← DONE" />
-      <h1 className="screen-title summary-title">{title}</h1>
-      <p className="summary-meta">
-        {meta.dateLabel}
-        {meta.timeLabel !== undefined ? ` · ${meta.timeLabel}` : ""} ·{" "}
-        {meta.sourceLabel}
-      </p>
-      <hr className="summary-rule" />
+      <SummaryMetaBlock title={title} meta={meta} />
 
-      {hasHero && (
-        <div className="summary-heroes">
-          {heroes.avgSplit !== undefined && (
-            <div className="summary-hero summary-hero-lead">
-              <span className="summary-hero-label">AVG SPLIT</span>
-              <span className="summary-hero-value">{heroes.avgSplit}</span>
-            </div>
-          )}
-          {heroes.time !== undefined && (
-            <div className="summary-hero">
-              <span className="summary-hero-label">TIME</span>
-              <span className="summary-hero-value">{heroes.time}</span>
-            </div>
-          )}
-          {heroes.distanceMeters !== undefined && (
-            <div className="summary-hero">
-              <span className="summary-hero-label">DISTANCE</span>
-              <span className="summary-hero-value">
-                {heroes.distanceMeters}
-              </span>
-            </div>
-          )}
-        </div>
-      )}
+      <SummaryHeroesBlock heroes={heroes} />
 
-      <div className="summary-reflection-card">
-        <div className="summary-reflection-group">
-          <p className="summary-reflection-label">HOW DID IT FEEL?</p>
-          <div className="summary-feel-row">
-            <button
-              type="button"
-              className="summary-feel-up"
-              aria-pressed={thumbs === "up"}
-              onClick={() => onThumbs(thumbs === "up" ? null : "up")}
-            >
-              ↑ MORE LIKE THIS
-            </button>
-            <button
-              type="button"
-              className="summary-feel-down"
-              aria-pressed={thumbs === "down"}
-              aria-label="Less like this"
-              onClick={() => onThumbs(thumbs === "down" ? null : "down")}
-            >
-              ↓
-            </button>
-          </div>
-        </div>
+      <SummaryReflectionCard
+        hint={hint}
+        expectedPain={expectedPain}
+        held={held}
+        onHeld={onHeld}
+        pain={pain}
+        onPain={onPain}
+        thumbs={thumbs}
+        onThumbs={onThumbs}
+        notes={notes}
+        onNotes={onNotes}
+      />
 
-        <div className="summary-reflection-group">
-          <div className="summary-reflection-label-row">
-            <p className="summary-reflection-label">
-              DID YOU HOLD THE TARGETS?
-            </p>
-            {hint !== undefined && <p className="summary-hint">{hint}</p>}
-          </div>
-          <div className="summary-held-row">
-            {HELD_OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                className="summary-held-chip"
-                aria-pressed={held === opt.value}
-                onClick={() => onHeld(held === opt.value ? null : opt.value)}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="summary-reflection-group">
-          <div className="summary-reflection-label-row">
-            <p className="summary-reflection-label">ACTUAL PAIN</p>
-            {expectedPain !== null && (
-              <p className="summary-hint">EXPECTED {expectedPain}/5</p>
-            )}
-          </div>
-          <div className="summary-pain-row">
-            {PAIN_LEVELS.map((level) => (
-              <button
-                key={level}
-                type="button"
-                className="summary-pain-chip"
-                aria-pressed={pain === level}
-                aria-label={`Pain ${level}`}
-                onClick={() => onPain(pain === level ? null : level)}
-              >
-                {level}
-              </button>
-            ))}
-          </div>
-          <p className="summary-pain-caption">{painWord}</p>
-        </div>
-
-        <div className="summary-reflection-group">
-          <label className="summary-reflection-label" htmlFor="summary-notes">
-            NOTES
-          </label>
-          <textarea
-            id="summary-notes"
-            className="summary-notes-textarea"
-            placeholder="What happened out there?"
-            value={notes}
-            onChange={(e) => onNotes(e.target.value)}
-          />
-        </div>
-      </div>
-
-      {rows.length > 0 && (
-        <div className="summary-intervals">
-          <div className="summary-intervals-header">
-            <p className="summary-intervals-title">INTERVALS</p>
-            {pacesOffCaption !== null && (
-              <p className="summary-intervals-caption">{pacesOffCaption}</p>
-            )}
-          </div>
-          <ul className="summary-row-list">
-            {rows.map((row, i) => (
-              <IntervalRow key={i} row={row} />
-            ))}
-          </ul>
-          {hasJudgedRow && (
-            <p className="summary-legend">← FASTER (BLUE) · SLOWER (RED) →</p>
-          )}
-          {caption !== undefined && (
-            <p className="summary-targets-only-caption">{caption}</p>
-          )}
-        </div>
-      )}
+      <SummaryIntervalsBlock
+        rows={rows}
+        pacesOffCaption={pacesOffCaption}
+        caption={caption}
+      />
 
       <div className="action-stack summary-save-stack">
         {saveError !== null && <p className="field-error">{saveError}</p>}

@@ -1,10 +1,57 @@
 import { test, expect, type Page } from "@playwright/test";
 import { RUN_ID, signInViaBackdoor } from "./helpers";
 
-// From-the-log spec (2026-08-18), Task 4: the history list (`/today/log`).
-// Every test signs in as its own unique, session-free email (session.spec.ts's
-// own convention) so a re-run against a persisted database never inherits
-// another test's rows.
+// From-the-log spec (2026-08-18), Task 4 (history list) + Task 5 (the
+// from-the-log detail view, /today/log/:id). Every test signs in as its
+// own unique, session-free email (session.spec.ts's own convention) so a
+// re-run against a persisted database never inherits another test's rows.
+
+/** Same in-page-`fetch` idiom as session.spec.ts's own `setBaselines`
+ *  (duplicated per that file's own stated precedent: e2e helpers are
+ *  copied across files here, not shared). */
+async function setBaselines(
+  page: Page,
+  baselines: { k2Seconds: number; k6Seconds: number },
+): Promise<void> {
+  const result = await page.evaluate(async (patch) => {
+    const res = await fetch("/api/baselines", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    });
+    return { ok: res.ok, status: res.status, body: await res.text() };
+  }, baselines);
+  if (!result.ok) {
+    throw new Error(`baseline setup failed: ${result.status} ${result.body}`);
+  }
+}
+
+/** Bulk-imports `text` and waits for the clean-import redirect — copied
+ *  from session.spec.ts's own `importBulk` verbatim. */
+async function importBulk(page: Page, text: string): Promise<void> {
+  await page.goto("/library/import");
+  await page.getByLabel("Bulk import text").fill(text);
+  await page.getByRole("button", { name: "Import", exact: true }).click();
+  await expect(page).toHaveURL(/\/library$/);
+}
+
+/** Opens `title`'s detail page from the library list and presses Start,
+ *  landing on the countdown — copied from session.spec.ts's own
+ *  `startFromLibrary` verbatim. */
+async function startFromLibrary(page: Page, title: string): Promise<void> {
+  await page.locator(".workout-row").filter({ hasText: title }).click();
+  await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
+  await page.getByRole("button", { name: "Start" }).click();
+  await expect(page).toHaveURL(/\/session\/countdown$/);
+}
+
+/** SKIP the countdown — copied from session.spec.ts's own
+ *  `startAndSkipCountdown` verbatim. */
+async function startAndSkipCountdown(page: Page): Promise<void> {
+  await expect(page.getByText("GET ON THE HANDLE")).toBeVisible();
+  await page.getByRole("button", { name: "SKIP ›" }).click();
+  await expect(page).toHaveURL(/\/session\/run$/);
+}
 
 /** POSTs one session log via a real in-page fetch (`page.evaluate`, same
  *  idiom as `today.spec.ts`'s own `neutralizeGlobalRecency`/`logOnce`) —
@@ -193,14 +240,14 @@ test("scroll deep into the history list, TODAY tap clears it, but a BACK return 
 
   // Leaves via the LIBRARY tab, not a row and not ← BACK. Two reasons,
   // both real:
-  // (1) Task 5 hasn't shipped /today/log/:id yet, so a row click 404s
-  //     (falls through to the catch-all's `Navigate replace`), which
-  //     REPLACES rather than PUSHES the history entry and would prove
-  //     nothing about this task's own scroll mechanism — Task 6's sweep
-  //     re-proves the same witness through the real row-open path once
-  //     Task 5's detail route lands (per this task's own brief: "your
-  //     links may 404 until then; keep the route link correct and test
-  //     the LINK, not the destination").
+  // (1) /today/log/:id (Task 5) is registered now, so a row click no
+  //     longer 404s — but this test still deliberately doesn't open one:
+  //     proving THIS scroll mechanism only needs SOME real navigation
+  //     away and back, and Task 6's own sweep is where the row-open path
+  //     itself gets exercised as part of the full N1-N7 witness set (this
+  //     test predates that route and was written to prove the list's own
+  //     save/restore pair before it existed; reason 2 below is the one
+  //     that would still rule out a row click even now).
   // (2) ← BACK sits at the TOP of the screen — Playwright's `.click()`
   //     auto-scrolls its target into view first, which would scroll the
   //     page back to ~0 BEFORE the click even registers, legitimately
@@ -249,4 +296,142 @@ test("scroll deep into the history list, TODAY tap clears it, but a BACK return 
   await page.getByRole("link", { name: "ALL SESSIONS" }).click();
   await expect(page).toHaveURL(/\/today\/log$/);
   await expect(page.locator(".today-log-row").first()).toBeVisible();
+});
+
+// Spec §4 N1's own witness (Task 5 in-task requirement, the
+// `e2e/session.spec.ts:900` "hard constraint" idiom replayed here): a REAL
+// live (not completed) session for one workout sits in storage while BOTH
+// `/today/log` and `/today/log/:id` are visited for a completely different
+// row — both localStorage records come out byte-identical (raw string
+// equality), not merely "still present." Neither route may fetch-and-
+// render with any side effect on session state.
+test("N1: a live in-progress session is byte-identical in storage after visiting both /today/log and /today/log/:id", async ({
+  page,
+}) => {
+  const liveTitle = `Log N1 Live Sibling ${RUN_ID}`;
+  await signInViaBackdoor(page, {
+    email: `log-n1-${RUN_ID}@e2e.test`,
+    name: "Log N1",
+  });
+
+  // A separate, already-saved row so /today/log/:id has something real to
+  // open.
+  await postLog(page, {
+    workoutTitle: "N1 History Sibling",
+    workoutType: "AT",
+    held: "held",
+    pain: 2,
+  });
+
+  // A real live session for a DIFFERENT workout, deliberately never
+  // finished — two 30s time phases so the first is still running for the
+  // rest of this test.
+  await setBaselines(page, { k2Seconds: 100, k6Seconds: 120 });
+  await importBulk(
+    page,
+    [`${liveTitle} | AN | easy | 1`, "w 0:30 6k", "w 0:30 6k"].join("\n"),
+  );
+  await startFromLibrary(page, liveTitle);
+  await startAndSkipCountdown(page);
+  await expect(page.getByText(/^STEP 1 OF 2/)).toBeVisible();
+
+  const draftBefore = await page.evaluate(() =>
+    localStorage.getItem("ergomatic.sessionDraft"),
+  );
+  const runBefore = await page.evaluate(() =>
+    localStorage.getItem("ergomatic.sessionRun"),
+  );
+  expect(draftBefore).not.toBeNull();
+  expect(runBefore).not.toBeNull();
+
+  // Visit BOTH routes — the list, then the detail view — without ever
+  // touching the live session above.
+  await page.goto("/today/log");
+  await expect(page.getByRole("heading", { name: "History" })).toBeVisible();
+  const row = page
+    .locator(".today-log-row")
+    .filter({ hasText: "N1 History Sibling" });
+  await expect(row).toBeVisible();
+  await row.click();
+  await expect(page).toHaveURL(/\/today\/log\/[^/]+$/);
+  await expect(
+    page.getByRole("heading", { name: "N1 History Sibling" }),
+  ).toBeVisible();
+
+  const draftAfter = await page.evaluate(() =>
+    localStorage.getItem("ergomatic.sessionDraft"),
+  );
+  const runAfter = await page.evaluate(() =>
+    localStorage.getItem("ergomatic.sessionRun"),
+  );
+  expect(draftAfter).toBe(draftBefore);
+  expect(runAfter).toBe(runBefore);
+});
+
+// Spec §7 criterion 3, verbatim: "skip everything at save, open from
+// history, answer all four, reload cold, the answers persist; clear one
+// via PATCH null, it reads back cleared." Driven through the manual door
+// (no timer to run, no baselines needed for an effort-only step) so the
+// test stays fast while still exercising a real save → real fetch → real
+// PATCH → real cold reload round trip against the compose stack.
+test("criterion 3: the PATCH round trip — skip everything at save, open from history, answer all four, reload cold (persists), clear one via the UI (reads back cleared)", async ({
+  page,
+}) => {
+  const title = `Round Trip ${RUN_ID}`;
+  await signInViaBackdoor(page, {
+    email: `log-roundtrip-${RUN_ID}@e2e.test`,
+    name: "Log Round Trip",
+  });
+  await importBulk(page, [`${title} | AN | easy | 1`, "w 100m max"].join("\n"));
+
+  await page.locator(".workout-row").filter({ hasText: title }).click();
+  await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
+  await page.getByRole("link", { name: "Log it after" }).click();
+  await expect(page).toHaveURL(/\/library\/[^/]+\/log$/);
+  await expect(page.getByRole("heading", { name: title })).toBeVisible();
+
+  // Save with everything skipped — no HELD/PAIN/THUMBS/NOTES chosen.
+  await page.getByRole("button", { name: "Save without logging" }).click();
+  await expect(page).toHaveURL(/\/today$/);
+
+  await page.getByRole("link", { name: "ALL SESSIONS" }).click();
+  await expect(page).toHaveURL(/\/today\/log$/);
+  const row = page.locator(".today-log-row").filter({ hasText: title });
+  await expect(row).toBeVisible();
+  await row.click();
+  await expect(page).toHaveURL(/\/today\/log\/[^/]+$/);
+  await expect(page.getByRole("heading", { name: title })).toBeVisible();
+
+  // Nothing answered yet — the empty-state affordance, not a read-back
+  // block, is what's on screen.
+  const addButton = page.getByRole("button", { name: "Add how it felt" });
+  await expect(addButton).toBeVisible();
+  await addButton.click();
+
+  await page.getByRole("button", { name: "HELD" }).click();
+  await page.getByRole("button", { name: "Pain 3" }).click();
+  await page.getByRole("button", { name: "↑ MORE LIKE THIS" }).click();
+  await page.getByLabel("NOTES").fill("Answered after the fact.");
+  await page.getByRole("button", { name: "Save" }).click();
+
+  await expect(page.getByText("HELD · PAIN 3/5 · LIKED")).toBeVisible();
+  await expect(page.getByText("Answered after the fact.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Edit" })).toBeVisible();
+
+  // Cold reload — a real navigation, not client state — the answers must
+  // come back from the server, not merely survive in memory.
+  await page.reload();
+  await expect(page.getByRole("heading", { name: title })).toBeVisible();
+  await expect(page.getByText("HELD · PAIN 3/5 · LIKED")).toBeVisible();
+  await expect(page.getByText("Answered after the fact.")).toBeVisible();
+
+  // Clear ONE field via the UI (HELD, tapping the same selected chip a
+  // second time — the clearable-control idiom every reflection control
+  // shares) and confirm it reads back cleared while the rest survive.
+  await page.getByRole("button", { name: "Edit" }).click();
+  await page.getByRole("button", { name: "HELD" }).click();
+  await page.getByRole("button", { name: "Save" }).click();
+
+  await expect(page.getByText("PAIN 3/5 · LIKED")).toBeVisible();
+  await expect(page.getByText("HELD · PAIN 3/5 · LIKED")).not.toBeVisible();
 });
