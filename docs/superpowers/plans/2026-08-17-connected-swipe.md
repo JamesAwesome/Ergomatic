@@ -269,7 +269,22 @@ falsified for the horizontal case; a *scrollable* row list is untested.
   reproduces the probe and proves nothing new: load one with **≥9
   intervals** and walk it in **landscape** (the scroller fits 8 —
   `screenshots.spec.ts:2547`). Confirm `.connected-grid-rows` actually
-  overflows before the drags begin.
+  overflows before the drags begin. **No rowing is required for this leg
+  at all** — it runs against the fake monitor, exactly as the probe did,
+  so the program only has to exist. The canned hardware-walk set has
+  nothing long enough; paste this at `/library/import` (same grammar,
+  verified against the skill's own blocks):
+
+  ```
+  93 | Swipe Long Grid | AT | medium | 2
+  x10
+  w 250m 6k @24 r0
+  ```
+
+  Ten rows (eleven with the warm-up preference on) against a scroller
+  that fits eight. If this piece proves generally useful, promoting it
+  into `.claude/skills/hardware-walk/SKILL.md`'s canned set is a
+  phase-close question, not this task's.
 - [ ] **Step 3:** One instruction at a time, hardware-walk pacing: (a)
   swipe LIVE→GRID from the hero; (b) swipe GRID→LIVE starting **on a grid
   row**; (c) **a deliberately DIAGONAL drag starting inside the scrolling
