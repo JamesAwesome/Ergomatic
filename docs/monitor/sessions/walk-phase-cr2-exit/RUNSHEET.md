@@ -180,6 +180,16 @@ paired.
   real reload, or a genuine input difference the ring could not show) is
   live, the first time this reading recurs with the dumped record in
   hand.
+- **DISTANCE hero vs the machine, one frame (PM final-PR gate C3,
+  post-workout-summary PR #117):** after **Log it**, with the summary on
+  screen, photograph the PM5's own total distance (Memory screen or the
+  final pre-reset reading) and the summary's **DISTANCE hero in the SAME
+  FRAME** — the Sun-fret technique, now aimed at the restored
+  rower-visible session distance. Expected: DISTANCE = the machine's
+  total to the meter (R-B — Σ work + rest distance including warm-up;
+  the same wire bytes, so any gap is a parse or membership defect, not
+  rounding). This is the walk oracle CR2's close-out said the surface
+  lost when `TOTAL M` left LIVE; it lives again here.
 - Optional: repeat once choosing **Discard**, and confirm the next Connect
   attempt no longer claims "a session is in progress" about the discarded
   run.
@@ -256,7 +266,7 @@ The corrected inventory:
 | Number (all from the same register map) | Rower-visible home | Walk oracle |
 | --- | --- | --- |
 | Session elapsed (register sum) | log sheet `SESSION` line, `TOTAL LEFT` (as remaining), progress-bar fill | Session 2's same-frame photo |
-| Session distance (register sum) | **none** on the LIVE surface (unchanged — CR2's own scope). Staled note (Task 6, post-workout-summary spec, 2026-08-17): the **post-workout summary's own DISTANCE hero** now gives session distance a rower-visible home AFTER the row (R-B — Σ `IntervalActual` work+rest distance, a DIFFERENT code path from this register sum, not the same number under test here) | `final-totals`: `\|accumulator − machineTotal\| ≤ 1.5 m` (Sessions 1 + 2, THIS register sum only). The summary's own DISTANCE has its own oracle (post-workout-summary spec §5: Σ actuals vs the machine's total on replayed recordings) — not yet exercised by this walk sheet |
+| Session distance (register sum) | **none** on the LIVE surface (unchanged — CR2's own scope). Staled note (Task 6, post-workout-summary spec, 2026-08-17): the **post-workout summary's own DISTANCE hero** now gives session distance a rower-visible home AFTER the row (R-B — Σ `IntervalActual` work+rest distance, a DIFFERENT code path from this register sum, not the same number under test here) | `final-totals`: `\|accumulator − machineTotal\| ≤ 1.5 m` (Sessions 1 + 2, THIS register sum only). The summary's own DISTANCE has its own oracle (post-workout-summary spec §5: Σ actuals vs the machine's total on replayed recordings) — AND a same-frame hardware row on this sheet now (the DISTANCE-hero-vs-machine photograph step above, PM gate C3) |
 | Per-interval actuals | GRID's TIME/METERS columns | PM5 memory screens vs GRID (Session 1) |
 | Interval countdown (2a's clock fix) | GRID active-row cell only | Session 2: glance the active-row countdown against the PM5's own mid-piece |
 

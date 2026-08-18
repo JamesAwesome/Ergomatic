@@ -687,3 +687,47 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
 - **The phone pass now carries four owed items against a SHIPPED tag**,
   plus F-1's re-observation. An obligation deferred to "the phone pass"
   survived the release it was meant to gate. Count it at the next gate.
+
+## Final-PR gate, 2026-08-17 (Phase PW spec 1, PR #117)
+
+- **Open the committed capture and do the arithmetic on it.** #117's flagship
+  `log-monitor.png` shows AVG SPLIT `1:15.0` above its only interval reading
+  `1:52.0` — 37s/500m apart. The hero derives `500×Σt/Σd` (correct); the row
+  prints the wire's `actual.avgSplit`, which `transports/fake.ts:747` echoes
+  from scenario data unrelated to its own distance and time. Six task reviews,
+  a whole-branch review and a re-review all passed. Recurring failure #7 says
+  "look at the image"; sharpen it to **recompute the headline from the rows in
+  the same frame** — a capture of a screen whose whole job is deriving numbers
+  is checkable by eye in ten seconds, and nobody did it.
+- **When a headline is OURS and the rows are the MACHINE's, that split is a
+  product fact James must be told.** PW's summary derives the hero and prints
+  the wire per row; the spec's vetted `avgPace = 500×t/d` identity is the only
+  thing keeping them equal. Whenever a screen mixes derived and reported
+  values, name the seam in the PR body — the fixture that violates the
+  identity is exactly what a hardware disagreement will look like.
+- **A judged colour language must not reuse the accent.** `--judge-slower` is
+  the rust accent, so a faster-than-target hero renders in the same red as
+  "SLOWER" and as a selected pain button, on the screen that introduces the
+  legend. Check a new semantic colour against every existing use of its token
+  before shipping the legend that defines it.
+- **An abstention needs an ABSENCE, not an empty widget.** The lone-measured-
+  row-unjudged ruling was right (one row = the average = a fabricated zero bar)
+  and shipped as an empty track with a centre tick, on BOTH connected captures.
+  The spec's own §2B ("inputs absent → cell ABSENT, siblings close up") and its
+  §2E warm-up row already had the idiom. **When a ruling says "we cannot judge
+  this", check that the render says nothing rather than showing an empty
+  version of the thing it refused to compute** — otherwise the ruling reaches
+  the rower as a bug report.
+- **The #105 empty-check-rollup trap recurred exactly as predicted**, from the
+  predicted cause: both agent ledgers conflicted (propose-don't-write across
+  concurrent PRs) alongside ten regenerated captures, and the branch reached
+  its PM gate with `CONFLICTING`/`DIRTY` and zero CI. Second occurrence in two
+  weeks. `gh pr view --json mergeable,statusCheckRollup` stays the first
+  command at every gate — and note that PNG/ledger conflicts can mask a
+  SEMANTIC overlap (#116 touched two files this branch also touched) that no
+  textual merge will ever surface.
+- **Good practice worth copying from this PR:** the "times read lower"
+  obligation landed in ROADMAP.md and the walk RUNSHEET, not just the PR body —
+  the first CR2-lesson application that stuck. And the DISTANCE oracle is three
+  external machine totals (500/1599/808) with the work-only regression named in
+  a test title. That is the standard for a triad number change.
