@@ -731,3 +731,101 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   the first CR2-lesson application that stuck. And the DISTANCE oracle is three
   external machine totals (500/1599/808) with the work-only regression named in
   a test title. That is the standard for a triad number change.
+
+## Phase-close gate, 2026-08-18 (Phase CS: swipe returns, NEXT says more)
+
+- **A phase can run two PRs, a probe, a hardware walk and a release and still
+  not exist in the ROADMAP.** `grep "Phase CS" ROADMAP.md` on main returns
+  ZERO at the phase's close gate. Second occurrence in two phases — the PW
+  open gate caught the identical thing and its ledger entry says to grep for
+  the phase's name at every OPEN. **Extend it to CLOSE**: the open-gate grep
+  only catches phases whose open ran a gate, and CS's did. The cost is not
+  bookkeeping: the phase's documented limit, its "the fake cannot drive a
+  native build" fact, and both its follow-ups had no section to be re-read
+  from.
+
+- **Split a paired feature request before judging it; the pair is usually the
+  disguise.** Testers asked for live TOTAL METERS and AVG SPLIT together.
+  They differ on every axis: total metres is OUR accumulator (`types.ts`
+  calls `sessionDistanceMeters` "A DISPLAY ESTIMATE, never a record",
+  zero-frame intervals lost silently — the Sun-fret instrument), while avg
+  split is the MACHINE's, already decoded from the wire at ~2Hz. One is
+  derived and has been wrong by 3.9x; the other has the monitor beside it as
+  its own oracle. One is retrospective and duplicated by TOTAL LEFT; the
+  other is decisional. **Ruling: build the avg split as one small
+  connected-polish cycle; live total metres does not get built.**
+
+- **Before designing against a tester request, check whether the answer
+  shipped yesterday.** The v2 recommendation's own disposition for TOTAL M
+  was "Restore it on the summary screen, where it's actually read" — and
+  v0.11.0's notes (merged 2026-08-17) say "Total meters is back... Check them
+  side by side after any session." The requests predate the build. **A
+  request answered by a release nobody has installed is not evidence of a
+  gap.**
+
+- **An unanswered question in a design handoff outranks a later argument
+  about the same object.** The v2 recommendation asked: "Does the erg's own
+  PM5 screen stay visible behind the phone on your mount? If it does, TOTAL M
+  and possibly rate are duplicated hardware." Nobody answered it in three
+  phases. One photograph on the next walk settles the whole item, cheaper
+  than any design round. **At a gate, grep the governing handoff for its own
+  open questions before re-litigating what it decided.**
+
+- **Same-named wire fields at different scales are a shipped-wrong-number
+  waiting to happen.** `0x0038`'s `splitIntervalAvgPace` is 0.1 sec/lsb;
+  `0x0033`'s is 0.01 — "printed identically in both copies of this
+  characteristic's table" (`parse.ts`). Plus a Last Split checkpoint measured
+  to read zero through interval indices 0-1 (`pm5-interface-notes.md`). Any
+  spec that surfaces one of these split fields gets a full antagonist pass on
+  WIRE SEMANTICS even though it is not triad, and must prove the field is
+  scoped to OUR interval, not the PM's split, against a committed capture.
+
+- **Phase LG should have closed and did not.** ROADMAP says "ABSORBED INTO
+  PHASE PW... This section stays until PW ships the label decision, then
+  closes with a pointer." PW spec 1 merged (#117) and v0.11.0's notes carry
+  the labels. **A section with a written self-closing condition needs someone
+  to check the condition** — nobody owns "close when X happens". LG is now a
+  MAGNET for misrouted work (this gate was asked to fold connected-screen
+  metres into it); its only survivor is the triad-gated `MONITOR_SPM_MIN`.
+
+- **A gesture with no affordance is a release-notes feature, and that inverts
+  batching.** Swipe is invisible until named. Batching it into a larger
+  release makes it LESS discoverable (item 8 of 8), not more — the argument
+  for cutting an attributable PATCH for one merge. Ruling: no in-app
+  affordance (the rail is the discoverable path; the v2 redesign cut six
+  objects off this screen and the house bars animation), and **the notes ASK
+  the cohort whether they found it unaided** — one sentence turns the release
+  into the discoverability experiment.
+
+- **A platform limit belongs in the notes when a tester will hit it AND
+  misread it.** Superseded in part by the same day's antagonist exit pass,
+  which found the "platform limit" framing unproven — but the TEST stands and
+  is the durable part: does a tester hit it, and will they misread it? Where
+  the cause is unsettled, say what the rower should DO, never why.
+
+- **"A PR body is not a record", fourth occurrence in five gates.** #116's
+  Record block filed the e2e stack-reap race as "a phase-close follow-up";
+  grepping ROADMAP.md, CLAUDE.md, .claude/ and app/scripts/ returns ZERO
+  tracked files.
+
+- **A defect found ON DEVICE and fixed OFF it is the release's one unverified
+  change.** The `user-select`/`-webkit-touch-callout` fix came out of the
+  phone walk and shipped verified by a Chromium computed-style pin.
+  **Generalise: when a walk finds a defect, the fix's verification medium
+  must be the walk's medium, not the suite's.** Also note `user-select: none`
+  inherits into the connection log sheet — `COPY LOG` is now the only way to
+  get that text out.
+
+- **When a phase's release guidance is written at OPEN and a parallel session
+  cuts a tag mid-phase, the guidance is stale by default — re-derive it at
+  close, never quote it.** CS's spec said "v0.10.2 PATCH at phase close";
+  by close, main was at v0.11.0 with half of CS already released in it.
+  Un-released stack at this gate: ONE merge (#119). Recommendation: v0.11.1
+  PATCH.
+
+- **Backlog count at this gate: 24 unchecked ROADMAP items** — identical at
+  CS open and at the 2026-08-13 audit. Three audits, five days, zero net
+  movement. CS was executed rather than filed, so this is still not
+  filing-as-deferral; but the pile has been provably static across two
+  executed phases, and the next new-phase proposal should be answered with
+  this number.

@@ -103,11 +103,20 @@ first 10 seconds already prove the frames; stop whenever.
 
     91 | Walk Keystone | AT | medium | 2
     x2
-    w 250m 6k @24 r0
+    w 250m 6k @24
 
-The totals oracle: 2×250 r0, a-priori truth 500 m, no coast metres to
-argue about. Row both to completion (that IS the point of this one) —
-~2 min total.
+The totals oracle: 2×250 back to back, a-priori truth 500 m, no coast
+metres to argue about. Row both to completion (that IS the point of this
+one) — ~2 min total.
+
+**No `r0` token, and this matters — the block above USED to carry one and
+could not import at all** (found 2026-08-18, when James pasted it and got
+`Step 1: rest 0.01..60:00`). The grammar cannot express a zero rest:
+`validate.ts` rejects any `restMinutes` outside 0:01..60:00, so "no rest"
+is expressed by OMITTING the token, which compiles to `restSeconds: 0`
+(the same shape `e2e/connected.spec.ts`'s own `w 100m max` fixture
+asserts). Every canned block here should be pasted at least once before
+it is trusted; these had never been.
 
     92 | Walk Rests | AT | medium | 2
     w 1' 6k @22 r1
@@ -119,8 +128,16 @@ clamp; r60 rests give unhurried capture windows). ~4 min of work,
 two 60 s rests, each rest = one capture window.
 
 Scale or swap pieces per the walk's purpose, but keep the properties:
-smoke stays abandon-safe, keystone stays r0, the rest-bearer keeps
-rests ≥ 60 s. State each piece's minimum-rowing truth in the plan.
+smoke stays abandon-safe, keystone stays rest-free (no `r` token at all),
+the rest-bearer keeps rests ≥ 60 s. State each piece's minimum-rowing
+truth in the plan.
+
+**A walk that only needs the SCREEN needs no rowing at all** — connect,
+let the program arm, tap "Show me the numbers", and the surface renders
+with its full grid. Gesture, layout and legibility walks should say so
+explicitly rather than budgeting strokes they do not need. For anything
+that must exercise a long grid, use a piece with enough intervals to
+overflow the scroller (≥9 landscape, ≥16 portrait).
 
 ## Phase 3 — the session
 

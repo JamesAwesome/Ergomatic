@@ -838,18 +838,22 @@ test.describe("Phase 7B Task 8: the connected walk, fake-driven — landscape (8
 // change input semantics for every other spec in this suite.
 //
 // LABEL, READ BEFORE TRUSTING A GREEN RUN HERE (settled ruling, spec + PM
-// C2): this is Chromium evidence only, and specifically the engine on the
-// OTHER side of a documented Safari/Chromium interop gap — W3C Pointer
-// Events issue #303, filed by a WebKit engineer, describing exactly the
-// probe's own open item: on iOS, a page that scrolls vertically can
-// deliver `pointercancel` during a horizontal pan "unless the user is
-// careful not to stray from a very straight horizontal panning gesture,"
-// precisely because Safari and Chrome disagree — which is also why no
-// Chromium run, however faithful, can ever see that side of the gap. This
-// block proves the swipe reaches the handler through a genuine touch input
-// path in Chromium, and that the narrowed guard (`isSwipeBlocked`, no
-// `[role]` wildcard) no longer swallows a grid-origin drag in this engine.
-// It is not, and cannot be, a substitute for the phone leg.
+// C2): this is Chromium evidence only, and Chromium cannot speak for
+// WebKit's gesture arbitration in either direction. This block proves the
+// swipe reaches the handler through a genuine touch input path in
+// Chromium, and that the narrowed guard (`isSwipeBlocked`, no `[role]`
+// wildcard) no longer swallows a grid-origin drag in this engine. It is
+// not, and cannot be, a substitute for the phone leg.
+//
+// An earlier version of this comment cited W3C Pointer Events issue #303
+// as a live, documented Safari/Chromium interop gap. That was wrong and is
+// corrected here: #303 is CLOSED, resolved by PR #351, which added a
+// normative SHOULD saying a UA should IGNORE a direction change once it has
+// decided at the start of a gesture — the opposite of what the citation was
+// used to justify. See the walk record's own correction
+// (`docs/monitor/sessions/walk-2026-08-18-swipe/README.md`) for the three
+// mechanisms that actually fit the observed behaviour, the first of which
+// is this repo's own dominant-axis rule.
 
 /** A real, multi-frame touch drag over CDP — `Input.dispatchTouchEvent`
  *  start/move.../end, never a synthetic mouse event. `steps` intermediate
@@ -1068,9 +1072,11 @@ test.describe("Phase CS Item A Task 3: the real-touch pin — hero, grid row, ra
 // the probe's own blind spot exactly: five rows into fifteen never
 // overflows, so nothing built on it could ever exercise what a SCROLLED
 // list changes about touch arbitration (the probe README's own "Open, not
-// settled by this probe" section — a WebKit directional-lock slop on
-// long, near-vertical drags, W3C Pointer Events issue #303, is real and
-// visible only on the engine no Chromium run can reach).
+// settled by this probe" section). What a scrolling list does to a
+// steep-ish drag remains unsettled on WebKit and unreachable from here —
+// see this file's own header for the corrected reading of #303, and the
+// walk record for why our own dominant-axis rule is the leading
+// explanation of the one case the phone leg saw.
 //
 // Twenty work intervals — four past the sixteen the portrait scroller
 // genuinely needs to overflow (`clientHeight` 600px / `rowHeight` 40px =

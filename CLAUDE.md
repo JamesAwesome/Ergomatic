@@ -304,6 +304,27 @@ often they recur.
     claim of the form "X is not in the production bundle" is settled by
     `pnpm build` plus a string-literal grep over `dist/`, in both
     directions — prove the probe can go red before trusting its green.**
+13. **Handing James an operator instruction nobody checked against the
+    code.** Item 10 covers plans that contain factual errors; this is its
+    operator-facing sibling, and it burns HIS time rather than an agent's.
+    Phase CS's spec said `VITE_ENABLE_FAKE_MONITOR=1 pnpm ios:build` puts
+    a fake PM5 on the phone so a walk needs no erg; the plan and two walk
+    cards inherited it verbatim, and it is impossible —
+    `adapters/monitorTransport.ts` takes the Capacitor BLE arm whenever
+    `isNative()`, and ONLY the web arm reaches the fake seam. He built,
+    tapped Connect, and found nothing. The same day, the canned keystone
+    block in `/hardware-walk` failed to import at all (`r0` is not a rest
+    the grammar accepts) — also never once pasted before being shipped as
+    an instruction. **Before an instruction reaches him, run it or read
+    the code that serves it: paste the block, follow the flag to the
+    branch that consumes it. An instruction is a claim about the system,
+    and it gets the same evidence bar as any other.** Corollary, from the
+    fix that followed: **a diagnostic hidden behind a build flag is
+    disarmed by anyone who edits the build command for unrelated
+    reasons** — correcting that same walk card silently removed the
+    `pointercancel` readout, so the one case that needed instrumenting was
+    walked without it. If a flag carries a diagnostic, say so where the
+    flag is written down.
 
 ## Commands
 

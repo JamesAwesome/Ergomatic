@@ -1179,3 +1179,82 @@ toolkit, not a history.
   excludes the other. Hit testing against a `fixed; inset: 0` overlay excludes
   more than any log line.** And: quote elision is a defect in a record that
   will outlive the trace — commit the raw artifact or mark the elision.
+
+## Phase-exit pass, 2026-08-18 (Phase CS, the swipe + NEXT)
+
+- **"The diagonal drag fails because of a documented WebKit limit — W3C
+  pointerevents#303."** Cited in three artifacts (probe README, walk README,
+  `connected.spec.ts`'s pin header) as a live interop gap. The issue is
+  CLOSED, resolved by w3c/pointerevents **PR #351 (merged 2021-02-19)**,
+  which added a normative SHOULD saying close to the opposite: with
+  `touch-action: pan-y`, once the UA has decided at the START of a gesture,
+  "a subsequent change in the direction of the same gesture SHOULD be ignored
+  ... if a touch gesture starts off horizontally, no vertical scrolling should
+  occur." The report is also about **iOS 13, 2019**. So the observation may be
+  real but it is a CONFORMANCE question, not a limit the platform documents —
+  and the iOS version that would settle it is the field the walk record
+  omitted. **Technique: when a spec cites a bug tracker issue as its
+  authority, read the issue's RESOLUTION, not its opening comment. A closed
+  issue's fix is often a normative clause pointing the other way, and "filed
+  by a vendor engineer" is provenance for the report, never for the verdict.**
+  (Controller's note: verified independently against the tracker before
+  landing this entry — the correction itself got the treatment it prescribes.)
+
+- **"The rows scrolled up and down, so the UA claimed the gesture."** Does not
+  follow. `swipe.ts` refuses any drag with `|dy| >= |dx|` — so a
+  *deliberately diagonal* drag is refused by OUR OWN rule with the UA doing
+  nothing, and the probe had already recorded this device delivering
+  `pointerup` (never `pointercancel`) on a -178px vertical drag. A third
+  mechanism fits too: a `pointerup` at coordinates frozen where scrolling took
+  over yields a sub-threshold `dx`. Three producers, one observation, and the
+  one instrument that discriminates was inert. **Technique: when a walk
+  instruction asks for the EXTREME version of an input ("a deliberately
+  diagonal drag"), check whether the app's own guard rejects that extreme by
+  construction. The gesture the source describes (a near-horizontal that
+  strays) and the gesture the walker was told to make are different
+  populations, and only the second was tested.**
+
+- **A build-flag instrument can be untestable by the suite that pins it.**
+  The `pointercancel` readout is gated on `import.meta.env.DEV ||
+  import.meta.env.VITE_ENABLE_FAKE_MONITOR === "1"`; `ios:build` is
+  `vite build` (DEV false), so ON THE PHONE only the flag arm can fire — and
+  the pin runs under vitest, where DEV is true. Measured: `CI=true
+  VITE_ENABLE_FAKE_MONITOR= pnpm test --project client` -> 115 files / 2928
+  tests, all green. Deleting the flag arm keeps every gate green and disarms
+  the phone's only instrument for the phase's one open risk — the exact
+  disarming that had already cost this walk once. **Technique: for any code
+  behind `A || B`, run the suite with B forced off. If it stays green, B is
+  untested — and if B is the only arm true in the PRODUCTION build, the test
+  proves nothing about the artifact anyone ships.**
+
+- **"Two identical CI failures falsify the theory."** They falsified ONE
+  theory (Chromium tap heuristics) and a second was adopted without a
+  control: no run was ever made without the swipe handler, and `grep -rn
+  "\.tap(" app/e2e/` shows no green `locator.tap()` anywhere in this repo, so
+  "headless Chromium can't tap this" has no precedent either. The downgrade
+  to `.click()` also deleted the only automated touch coverage of the rail —
+  the fallback path the phase's own platform-limit acceptance rests on.
+  **Technique: a repeated failure is evidence about the mechanism, not about
+  the harness, until you run the SAME assertion against a build without your
+  change. "It failed twice the same way" is equally consistent with a real
+  regression.**
+
+- **An exit criterion's field list can be silently shortened in the report
+  that claims it.** Criterion 2 demanded "medium/BUILD/iOS recorded", written
+  precisely because the original device report lacked those fields; the walk
+  record has medium only, and the PR body reads "medium/**program**
+  recorded." **Technique: at a phase exit, diff the criterion's own noun list
+  against the artifact's, word for word. A criterion written to fix an
+  omission is the one most likely to repeat it, and the substitution happens
+  in the summary, not in the evidence.**
+
+- **Attacked and NOT broken:** the disposition rule itself — pre-registered
+  before the walk, applied literally, and no fourth outcome class it fails to
+  sort; the narrowed `isSwipeBlocked` predicate (pinned in jsdom AND e2e
+  against the REAL `PaneGrid`, since a hand-built row has no `role="group"`
+  ancestor and would pass against the broken predicate); the scrollable-grid
+  e2e, which opens on `scrollHeight > clientHeight` and asserts `scrollTop`
+  actually moved; the `touch-action`/`user-select` pins, which read COMPUTED
+  style in a real browser on both the surface and the scroller — the thing
+  that makes the probe's conditional falsification transfer at all; and
+  criterion 3, verified by opening `connected-armed-landscape.png`.
