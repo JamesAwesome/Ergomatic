@@ -2510,6 +2510,27 @@ next phase. One line per round, newest first.
   regen diff showed an onboarding read-marker difference** unrelated to
   the branch that surfaced it — reverted there, unexplained. Owner: the
   next Today-capture pass; explain or fix before committing that capture.
+- **QUEUED (James's ruling, 2026-08-18, the tule-fog photos): the
+  INTERVALS section judges each interval against ITS OWN TARGET.** He beat
+  every target in a three-interval session (2:14.9/2:13.4/2:11.5 vs
+  2:17/2:16/2:15) and the screen painted two rows RED (+2.0/+0.5 vs the
+  session average) with no target visible anywhere (multi-target sessions
+  render no hint by the single-target rule) — the first real tester
+  misread the baseline on his first real workout. His words: "that
+  section needs to be about performance against target per int." Scope:
+  per-row deviation/bars re-baseline from session-working-average to the
+  row's own target (supersedes spec 1's R-C/R-E ROW semantics; the AVG
+  SPLIT hero keeps the session average, neutral ink); the target renders
+  INLINE per row (reverses #117's column removal, device evidence);
+  no-target rows abstain (absence idiom); CAPTURE measured SPM per
+  interval (wire delivers it, nothing stores it) and fold the parked
+  `MONITOR_SPM_MIN = 0` floor item in the same round. Stored
+  `LogStep.targetSplit` already exists, so history re-judges without new
+  split storage; from-the-log's §5C updates in the same round. **TRIAD
+  WEIGHT** (number meaning + stored shape): full antagonist on the spec,
+  PM final-PR gate, despite the bugfix framing. Photos:
+  `~/Desktop/tule-fog` at ruling time; the reconciled arithmetic is in
+  the session record.
 - **QUEUED (James, 2026-08-18, from the erg): discard missing on an
   early-ended workout's summary.** He ended a workout early and the
   post-workout summary offered no "Discard without logging" — only save
