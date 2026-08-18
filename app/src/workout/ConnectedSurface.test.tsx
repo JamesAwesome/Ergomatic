@@ -1357,6 +1357,29 @@ describe("the finger moves the panes again (Phase CS Item A, task-2 brief)", () 
     expect(controlHalf("Grid")).toHaveAttribute("aria-current", "page");
   });
 
+  it("pointercancel leaves evidence with the travelled deltas — the phone leg's only instrument for the WebKit-only cancel", () => {
+    // The spec's Design bullet 1 ("logged … so a field failure finally
+    // leaves evidence"). The one risk the device probe could not close is a
+    // WebKit directional-lock `pointercancel` that no Chromium run can
+    // observe (W3C pointerevents#303), so the walk is the only instrument —
+    // and a walker with nothing to read can only report a subjective "it
+    // didn't take". Asserting the DELTAS, not merely that something was
+    // logged: a readout that omits how far the finger travelled cannot
+    // distinguish "WebKit cancelled a real swipe" from "a stray tap".
+    const debug = vi.spyOn(console, "debug").mockImplementation(() => {});
+    try {
+      renderSurface();
+      const hero = document.querySelector(".connected-hero")!;
+      fireEvent(hero, surfacePointerEvent("pointerdown", DRAG_START_X));
+      fireEvent(hero, surfacePointerEvent("pointercancel", DRAG_START_X - 137));
+      expect(debug).toHaveBeenCalledWith(
+        expect.stringContaining("[swipe] pointercancel dx=-137"),
+      );
+    } finally {
+      debug.mockRestore();
+    }
+  });
+
   it("a completed drag under the threshold reaches pointerup but never calls onChange (coverage: the no-op half of the commit branch)", () => {
     renderSurface();
     const hero = document.querySelector(".connected-hero")!;
@@ -1460,7 +1483,7 @@ describe("onClick/onPointerDown structural sweep (task-2 brief Step 5)", () => {
       "ConnectedSurface.tsx",
       commentStrippedSource(CONNECTED_SURFACE_SOURCE),
     ]);
-    expect(files.length).toBeGreaterThanOrEqual(6); // 5 connected/*.tsx + this file, today
+    expect(files.length).toBeGreaterThanOrEqual(7); // 6 connected/*.tsx + this file, today
 
     const attrRegex = /\b(onClick|onPointerDown)=/g;
     const violations: string[] = [];

@@ -143,7 +143,32 @@ export function useSurfaceSwipe(
       if (current === null || current.pointerId !== event.pointerId) return;
       gesture.current = null;
       el.releasePointerCapture?.(event.pointerId);
-      if (!commit) return;
+      if (!commit) {
+        // The spec's Design bullet 1 asks that a cancelled gesture "leave
+        // evidence", and it is not decoration: the ONE risk the device
+        // probe could not close is a WebKit-only directional-lock
+        // `pointercancel` on a near-horizontal drag over a scrollable
+        // `pan-y` region (W3C pointerevents#303) — a thing no Chromium run
+        // can ever observe, so the phone leg is the only instrument, and
+        // an instrument needs a readout. This is NOT the monitor's wire
+        // ring: that log belongs to the driver and records what the PM5
+        // said, and a UI gesture is a different category of fact (ruling,
+        // Phase CS Item A). It is gated on the same build-time expression
+        // as the fake-monitor seam, so it folds out of a production bundle
+        // exactly the way the fake does, and it is present in the walk
+        // build James runs from Xcode.
+        if (
+          import.meta.env.DEV ||
+          import.meta.env.VITE_ENABLE_FAKE_MONITOR === "1"
+        ) {
+          console.debug(
+            `[swipe] pointercancel dx=${event.clientX - current.startX} dy=${
+              event.clientY - current.startY
+            }`,
+          );
+        }
+        return;
+      }
       const dx = event.clientX - current.startX;
       const dy = event.clientY - current.startY;
       const next = paneAfterSwipe(paneRef.current, dx, dy);

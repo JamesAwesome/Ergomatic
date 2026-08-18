@@ -1386,10 +1386,16 @@ describe("contained scroll: only the rows move", () => {
     expect(spy).toHaveBeenCalledTimes(1);
   });
 
-  // `touch-action: pan-y` retired with the swipe handler (CR2 spec 3 task
-  // 1, design spec Ruling 4, antagonist correction 3): the grid scroller
-  // manages its own overflow with nothing left to coordinate with, so
-  // there is no rule left to pin here.
+  // `touch-action: pan-y` is BACK on this scroller (Phase CS Item A) and
+  // is load-bearing, not decoration: `touch-action` intersection stops at
+  // the first scroll container, so a declaration on `.connected-surface`
+  // never reaches a finger that lands inside these rows. Deleting the rule
+  // reddens both grid-origin swipe drags in a real browser, not just a
+  // style assertion — measured, twice, by mutation probe.
+  //
+  // It is pinned in `e2e/design.spec.ts` by COMPUTED style rather than
+  // here: jsdom does not resolve the `touch-action` cascade at all, so a
+  // pin in this file could not tell the shipped rule from a deleted one.
 });
 
 // ---------------------------------------------------------------------------
