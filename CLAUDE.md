@@ -261,7 +261,11 @@ often they recur.
    ratio; put the number in your report.**
 7. **Screenshots that capture empty states.** Committed screenshots are the
    PR's visual record and have twice shown fallback dashes or scrolled past
-   the feature. **Seed real data, then open the image and look at it.**
+   the feature. **Seed real data, then open the image and look at it — and when the
+   screen derives a number from other numbers in the same frame, recompute
+   the headline from the rows by eye** (PR #117's flagship capture showed a
+   hero contradicting its only row by 37s/500m through seven reviews; the
+   PM caught it with ten seconds of arithmetic).
 8. **Hand-rolling the same ARIA pattern again.** There are already three
    roving-tabindex radiogroups; each shipped untested and needed a follow-up.
    **Reuse `PaceRefInput`/`ClassificationCard`'s pattern and copy its keyboard
