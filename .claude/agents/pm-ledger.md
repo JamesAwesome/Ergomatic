@@ -829,3 +829,36 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   filing-as-deferral; but the pile has been provably static across two
   executed phases, and the next new-phase proposal should be answered with
   this number.
+
+## Final-PR gate, 2026-08-18 (PR #121, PW spec 2 "from the log" — triad)
+
+- **An additive-only migration means the tester's ENTIRE existing corpus
+  renders in the degraded branch on install day.** Heroes and plan linkage
+  are written only by new saves, so James's whole history opens number-less,
+  with untappable checkmarks, and the headline feature is invisible until he
+  rows again. The PR framed each absence as a virtue mid-bullet ("rather than
+  invented stand-ins") and captured only the best case. **Rule for any
+  write-forward-only feature: the notes say it in one plain sentence, and one
+  capture shows the OLD-row state, not the seeded ideal.**
+- **Browsable + immutable + no DELETE = permanent.** This PR made every log
+  reachable and stored three client-supplied numbers that the server bounds-
+  checks but cannot truth-check; the measured record is immutable by design
+  and `data.ts` has no delete route. A Sun-fret-class wrong number is now
+  permanent and visible forever. Filed as a ROADMAP item at this gate; the
+  next spec that adds stored numbers should answer "how does a rower correct
+  or remove this?" before it ships, not after.
+- **Recompute-the-headline paid again, this time GREEN:** `log-detail.png`
+  reconciles exactly (1500+1500 m, 780 s, 500×780/3000 = 2:10.0, deviations
+  ±10.0). The technique is cheap enough to run on every capture, pass or fail.
+- **A phase-close release recommendation that nobody cuts orphans that gate's
+  other rulings.** CS's gate said v0.11.1 PATCH and asked that the notes probe
+  swipe discoverability; no tag was cut, so the ask now has to ride v0.12.0 or
+  die. **At every gate, diff the last tag against main and check whether a
+  prior gate's notes-ask is still unshipped.**
+- **"A PR body is not a record", FIFTH occurrence in six gates** — #121's
+  Record block carried an unexplained `today.png` onboarding read-marker diff
+  and the no-delete gap, neither tracked anywhere. This one is now frequent
+  enough to belong in CLAUDE.md's recurring-failures list, not here.
+- **Good practice worth copying:** criterion 4's e2e takes the log id from the
+  real anchor's `href` after a save through the shipped button, then reopens by
+  id after Reset — an oracle that cannot pass by agreeing with client state.

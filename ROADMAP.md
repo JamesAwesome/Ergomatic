@@ -2425,6 +2425,17 @@ Ad hoc fix rounds outside the phase sequence — small bundles of device
 reports and quick fixes shipped as their own PR rather than waiting on the
 next phase. One line per round, newest first.
 
+- **QUEUED (PM final-PR gate, 2026-08-18, PR #121): a logged session can
+  be browsed forever but never corrected or removed.** Spec 2 made every
+  log reachable and stored three client-supplied hero numbers the server
+  bounds-checks but cannot truth-check; the measured record is immutable
+  by design and `data.ts` has no DELETE route. A Sun-fret-class wrong
+  number is now permanent and visible. The next spec that touches stored
+  numbers answers "how does a rower correct or remove this?" first.
+- **QUEUED (final-review fix round observation, 2026-08-18): `today.png`'s
+  regen diff showed an onboarding read-marker difference** unrelated to
+  the branch that surfaced it — reverted there, unexplained. Owner: the
+  next Today-capture pass; explain or fix before committing that capture.
 - **QUEUED (James, 2026-08-18, from the erg): discard missing on an
   early-ended workout's summary.** He ended a workout early and the
   post-workout summary offered no "Discard without logging" — only save
