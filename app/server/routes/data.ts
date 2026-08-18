@@ -766,6 +766,28 @@ export function createDataRouter({
     res.json(row);
   });
 
+  // Log-delete spec (2026-08-18), §2: the API's first DELETE. Owner-
+  // checked exactly like GET/PATCH above (404 on absence OR another
+  // user's row — `stores.logs.delete`'s `deleted: false` is structurally
+  // the same "no existence leak" signal `get`/`update` already give via
+  // a null return). A second delete of the same id 404s the same way —
+  // there's no soft-delete state to distinguish "already gone" from
+  // "never existed" (spec's own ruling: hard delete, no trash). Response
+  // is `200 {unCounted}` per §2 — the server reporting what it actually
+  // did, never a bare 204 (the client's post-delete UI depends on this).
+  router.delete("/api/logs/:id", async (req, res) => {
+    if (!UUID_RE.test(req.params.id)) {
+      notFound(res);
+      return;
+    }
+    const result = await stores.logs.delete(req.user!.id, req.params.id);
+    if (!result.deleted) {
+      notFound(res);
+      return;
+    }
+    res.json({ unCounted: result.unCounted });
+  });
+
   router.post("/api/logs", async (req, res) => {
     const body = isRec(req.body) ? req.body : {};
 

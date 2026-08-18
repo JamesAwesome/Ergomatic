@@ -1,6 +1,7 @@
 import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
 import type { Db } from "../db/index.js";
 import { planState, sessionLogs } from "../db/schema.js";
+import type { PlanKey } from "./planState.js";
 
 // From-the-log spec (2026-08-18), §3: thrown by `list()` when a caller
 // supplies a well-formed `before` id that does not resolve to one of THIS
@@ -155,6 +156,59 @@ const LOG_LIST_COLUMNS = {
   planIndex: sessionLogs.planIndex,
 };
 
+// Log-delete spec (2026-08-18), §2: the newest-wins resolution rule,
+// factored out so `listPlanLinks` (below) and `delete` (below) share
+// EXACTLY one definition of "newest" — the brief's own requirement, after
+// spec 2 already established this as the read-side rule and the antagonist
+// proved a second, independently-derived copy is exactly the kind of drift
+// this codebase has shipped before (see this file's own `list()` cursor
+// comment on the microsecond-truncation class of bug). `executor` accepts
+// either `db` (an ordinary read, `listPlanLinks`) or an open `tx` (`delete`
+// needs this resolved INSIDE its transaction, before the row it might be
+// about to remove stops being a candidate) — both expose the same
+// `selectDistinctOn`/`from`/`where`/`orderBy` builder chain.
+// `planIndex`, when given, scopes to that one index only (delete's own
+// use: it only ever needs to ask "who wins index N", never the whole map).
+// Typed structurally (`Pick<Db, "selectDistinctOn">`) rather than `Db`
+// itself: an open `tx` inside `db.transaction` is a `PgTransaction`, not a
+// `Db` (it lacks `Db`'s own `$client` handle) — both expose the identical
+// `selectDistinctOn` builder chain this function actually calls.
+async function resolveNewestPlanLink(
+  executor: Pick<Db, "selectDistinctOn">,
+  userId: string,
+  planKey: string,
+  planIndex?: number,
+): Promise<{ planIndex: number; id: string }[]> {
+  const conditions = [
+    eq(sessionLogs.userId, userId),
+    eq(sessionLogs.planKey, planKey),
+  ];
+  if (planIndex !== undefined) {
+    conditions.push(eq(sessionLogs.planIndex, planIndex));
+  }
+  const rows = await executor
+    .selectDistinctOn([sessionLogs.planIndex], {
+      planIndex: sessionLogs.planIndex,
+      id: sessionLogs.id,
+    })
+    .from(sessionLogs)
+    .where(and(...conditions))
+    .orderBy(
+      sessionLogs.planIndex,
+      desc(sessionLogs.loggedAt),
+      desc(sessionLogs.id),
+    );
+  // planIndex is only ever null on a row whose planKey is also null
+  // (create()'s "both linkage fields stay null together" invariant), and
+  // the WHERE clause above already excludes those — the cast just works
+  // around Drizzle's grouped-select typing still marking the column
+  // nullable (same cast `listPlanLinks` itself used to do inline here).
+  return rows.map((row) => ({
+    planIndex: row.planIndex as number,
+    id: row.id,
+  }));
+}
+
 export function createLogsStore(db: Db) {
   return {
     // From-the-log spec (2026-08-18), §3: two changes from the pre-spec
@@ -288,29 +342,109 @@ export function createLogsStore(db: Db) {
       userId: string,
       planKey: string,
     ): Promise<{ planIndex: number; id: string }[]> {
-      const rows = await db
-        .selectDistinctOn([sessionLogs.planIndex], {
-          planIndex: sessionLogs.planIndex,
-          id: sessionLogs.id,
-        })
-        .from(sessionLogs)
-        .where(
-          and(eq(sessionLogs.userId, userId), eq(sessionLogs.planKey, planKey)),
-        )
-        .orderBy(
-          sessionLogs.planIndex,
-          desc(sessionLogs.loggedAt),
-          desc(sessionLogs.id),
-        );
-      // planIndex is only ever null on a row whose planKey is also null
-      // (create()'s "both linkage fields stay null together" invariant),
-      // and the WHERE clause above already excludes those — the cast just
-      // works around Drizzle's grouped-select typing still marking the
-      // column nullable.
-      return rows.map((row) => ({
-        planIndex: row.planIndex as number,
-        id: row.id,
-      }));
+      return resolveNewestPlanLink(db, userId, planKey);
+    },
+
+    // Log-delete spec (2026-08-18), §2: one `db.transaction` — the un-
+    // count rule fires iff ALL THREE hold: (1) the deleted row's
+    // `plan_key` equals plan_state's CURRENT `plan_key` (a Switch means
+    // an old plan's logs never touch the new plan's counter); (2) the
+    // deleted row's `plan_index` was the TERMINAL one (`done_n - 1`
+    // exactly — a middle index never decrements, antagonist B1: the
+    // counter is positional, indexes are immutable history, and un-
+    // counting the middle strands every session above it); (3) the
+    // deleted row was the NEWEST-WINS holder of its `(plan_key,
+    // plan_index)` (spec 2's own resolution, shared via
+    // `resolveNewestPlanLink` above — deleting an OLDER duplicate at a
+    // linked index is a row-only delete).
+    //
+    // Transaction shape (antagonist B4 — read-committed makes a split
+    // read-decide-write guard no guard at all): `SELECT … FOR UPDATE` on
+    // plan_state runs FIRST, serializing against `create()`'s upsert
+    // (which already row-locks) — this closes the window a concurrent
+    // Reset/Switch could otherwise use to drive `done_n` to -1 between a
+    // read and a later write. Condition (3) is resolved BEFORE the row
+    // is removed (it stops being a candidate for its own index the
+    // moment it's gone), via a narrow, non-locking two-column read —
+    // `plan_key`/`plan_index` are immutable once a log is created (never
+    // rewritten; spec 2's "linkage is history" rule), so reading them
+    // ahead of the delete carries no race. Conditions (1) and (2) are
+    // NOT pre-checked in JS: they live entirely in the conditional
+    // UPDATE's own WHERE (`plan_key = $key AND done_n = $index + 1`), so
+    // `unCounted` is exactly "that UPDATE's row count === 1" — the
+    // update's own outcome, not a JS-computed guess about it. The
+    // `GREATEST(done_n - 1, 0)` clamp stays as depth only: with the lock
+    // and the WHERE, the floor is unreachable BY CONSTRUCTION.
+    async delete(
+      userId: string,
+      id: string,
+    ): Promise<{ deleted: boolean; unCounted: boolean }> {
+      return db.transaction(async (tx) => {
+        // Lock plan_state first (see comment above) — zero matching rows
+        // (a user who never touched a plan) is a legitimate no-op lock,
+        // nothing to serialize against.
+        await tx
+          .select()
+          .from(planState)
+          .where(eq(planState.userId, userId))
+          .for("update");
+
+        // Condition 3, resolved before the row can be removed.
+        const [target] = await tx
+          .select({
+            planKey: sessionLogs.planKey,
+            planIndex: sessionLogs.planIndex,
+          })
+          .from(sessionLogs)
+          .where(and(eq(sessionLogs.userId, userId), eq(sessionLogs.id, id)));
+
+        let isNewestWinsHolder = false;
+        if (target && target.planKey !== null && target.planIndex !== null) {
+          const [newest] = await resolveNewestPlanLink(
+            tx,
+            userId,
+            target.planKey,
+            target.planIndex,
+          );
+          isNewestWinsHolder = newest?.id === id;
+        }
+
+        const [deletedRow] = await tx
+          .delete(sessionLogs)
+          .where(and(eq(sessionLogs.userId, userId), eq(sessionLogs.id, id)))
+          .returning();
+
+        if (!deletedRow) {
+          return { deleted: false, unCounted: false };
+        }
+
+        if (
+          deletedRow.planKey === null ||
+          deletedRow.planIndex === null ||
+          !isNewestWinsHolder
+        ) {
+          return { deleted: true, unCounted: false };
+        }
+
+        // `plan_state.planKey` is enum-typed ("sprint"|"head"); the
+        // deleted row's own `plan_key` column is plain text but is only
+        // ever server-derived from that same enum column at create()
+        // time (never client input — see LogInput's own comment), so
+        // this narrowing cast reflects a real invariant, not a hope.
+        const conditionalUpdate = await tx
+          .update(planState)
+          .set({ doneN: sql`GREATEST(${planState.doneN} - 1, 0)` })
+          .where(
+            and(
+              eq(planState.userId, userId),
+              eq(planState.planKey, deletedRow.planKey as PlanKey),
+              eq(planState.doneN, deletedRow.planIndex + 1),
+            ),
+          )
+          .returning({ userId: planState.userId });
+
+        return { deleted: true, unCounted: conditionalUpdate.length === 1 };
+      });
     },
 
     async count(userId: string): Promise<number> {

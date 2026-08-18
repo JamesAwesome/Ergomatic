@@ -2139,6 +2139,141 @@ describe("GET/POST /api/logs", () => {
     });
   });
 
+  // Log-delete spec (2026-08-18), §2: the API's first DELETE. Owner-
+  // checked exactly like GET/PATCH (404 on absence OR another user's
+  // row, no existence leak); `200 {unCounted}` otherwise.
+  describe("DELETE /api/logs/:id", () => {
+    it("deletes a non-plan-linked log: 200 {unCounted: false}, then 404s on refetch", async () => {
+      const app = appFor(makeStores());
+      const created = await asA(request(app).post("/api/logs")).send(
+        validLogBody(),
+      );
+
+      const res = await asA(
+        request(app).delete(`/api/logs/${created.body.id}`),
+      );
+      expect(res.status).toBe(200);
+      expect(res.body).toStrictEqual({ unCounted: false });
+
+      const fetched = await getLogById(app, created.body.id);
+      expect(fetched.status).toBe(404);
+    });
+
+    it("deleting the terminal plan-linked log un-counts: 200 {unCounted: true}", async () => {
+      const app = appFor(makeStores());
+      await asA(request(app).put("/api/plan")).send({ planKey: "sprint" });
+      const created = await asA(request(app).post("/api/logs")).send(
+        validLogBody(),
+      );
+
+      const res = await asA(
+        request(app).delete(`/api/logs/${created.body.id}`),
+      );
+      expect(res.status).toBe(200);
+      expect(res.body).toStrictEqual({ unCounted: true });
+
+      const plan = await asA(request(app).get("/api/plan"));
+      expect(plan.body.doneN).toBe(0);
+    });
+
+    it("deleting a NON-TERMINAL plan-linked log does not un-count: 200 {unCounted: false}", async () => {
+      const app = appFor(makeStores());
+      await asA(request(app).put("/api/plan")).send({ planKey: "sprint" });
+      const first = await asA(request(app).post("/api/logs")).send(
+        validLogBody(),
+      );
+      await asA(request(app).post("/api/logs")).send(validLogBody());
+
+      const res = await asA(request(app).delete(`/api/logs/${first.body.id}`));
+      expect(res.status).toBe(200);
+      expect(res.body).toStrictEqual({ unCounted: false });
+
+      const plan = await asA(request(app).get("/api/plan"));
+      expect(plan.body.doneN).toBe(2);
+    });
+
+    it("404s on a malformed (non-uuid) id", async () => {
+      const res = await asA(
+        request(appFor(makeStores())).delete("/api/logs/not-a-uuid"),
+      );
+      expect(res.status).toBe(404);
+    });
+
+    it("404s on a well-formed but absent id (does not leak existence)", async () => {
+      const res = await asA(
+        request(appFor(makeStores())).delete(`/api/logs/${NON_EXISTENT_UUID}`),
+      );
+      expect(res.status).toBe(404);
+    });
+
+    it("404s on another user's id, and never deletes that row", async () => {
+      const app = appFor(makeStores());
+      const created = await asA(request(app).post("/api/logs")).send(
+        validLogBody(),
+      );
+
+      const res = await asB(
+        request(app).delete(`/api/logs/${created.body.id}`),
+      );
+      expect(res.status).toBe(404);
+
+      const fetched = await getLogById(app, created.body.id);
+      expect(fetched.status).toBe(200);
+    });
+
+    // §2: "A second delete of the same id 404s" — the CLIENT treats this
+    // as success (§1), but the API itself must not pretend the row is
+    // still there.
+    it("a second delete of the same id 404s", async () => {
+      const app = appFor(makeStores());
+      const created = await asA(request(app).post("/api/logs")).send(
+        validLogBody(),
+      );
+      const first = await asA(
+        request(app).delete(`/api/logs/${created.body.id}`),
+      );
+      expect(first.status).toBe(200);
+
+      const second = await asA(
+        request(app).delete(`/api/logs/${created.body.id}`),
+      );
+      expect(second.status).toBe(404);
+    });
+
+    // §5.4 bystander byte-comparison, at the route: another user's row,
+    // and this user's OTHER logs, read back byte-identical after a
+    // delete — the route composes the store correctly, no route-level
+    // side channel touches an unrelated row.
+    it("never mutates a bystander row — another user's, or this user's other logs (§5.4)", async () => {
+      const app = appFor(makeStores());
+      const doomed = await asA(request(app).post("/api/logs")).send({
+        ...validLogBody(),
+        notes: "doomed",
+      });
+      const sibling = await asA(request(app).post("/api/logs")).send({
+        ...validLogBody(),
+        notes: "sibling",
+      });
+      const stranger = await asB(request(app).post("/api/logs")).send({
+        ...validLogBody(),
+        notes: "stranger",
+      });
+      const siblingBefore = await getLogById(app, sibling.body.id);
+      const strangerBefore = await asB(
+        request(app).get(`/api/logs/${stranger.body.id}`),
+      );
+
+      await asA(request(app).delete(`/api/logs/${doomed.body.id}`));
+
+      const siblingAfter = await getLogById(app, sibling.body.id);
+      const strangerAfter = await asB(
+        request(app).get(`/api/logs/${stranger.body.id}`),
+      );
+      expect(siblingAfter.body).toStrictEqual(siblingBefore.body);
+      expect(strangerAfter.body).toStrictEqual(strangerBefore.body);
+    });
+  });
+
   // From-the-log spec (2026-08-18), §2/§3: Plan's done-row link.
   describe("GET /api/logs?plan=", () => {
     it("returns the linked log id per plan index", async () => {
