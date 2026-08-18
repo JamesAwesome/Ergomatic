@@ -1818,6 +1818,73 @@ test("log-detail", async ({ page }) => {
   });
 });
 
+// Log-delete spec (2026-08-18) Task 2's own capture: the staged confirm
+// panel, seeded with a genuine plan-linked session (same real-POST,
+// `advancesPlan: true` recipe as "log-detail" above — linkage stamped by
+// the server's own atomic upsert, not faked client-side), so the LINKED
+// copy (the hedge, "if it is your latest plan session, the checkmark
+// un-ticks.") is the one actually on screen, not the no-linkage string.
+test("log-delete-confirm", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-log-delete-confirm@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await choosePlan(page, "sprint");
+  await resetPlanProgress(page);
+  await postLog(page, {
+    workoutTitle: "Sea Fret",
+    workoutType: "O2",
+    held: "under",
+    pain: 3,
+    thumbs: "up",
+    notes: "Held on through the back half.",
+    avgSplitSeconds: 130,
+    timeSeconds: 780,
+    distanceMeters: 3000,
+    advancesPlan: true,
+    steps: [
+      {
+        label: "6:00 @ 6k",
+        targetSplit: 130,
+        actualSplit: 120,
+        actualSource: "stopwatch",
+        meters: 1500,
+      },
+      {
+        label: "6:00 @ 6k",
+        targetSplit: 130,
+        actualSplit: 140,
+        actualSource: "stopwatch",
+        meters: 1500,
+      },
+    ],
+  });
+
+  await page.goto("/today/log");
+  const row = page.locator(".today-log-row").filter({ hasText: "Sea Fret" });
+  await expect(row).toBeVisible();
+  await row.click();
+  await expect(page).toHaveURL(/\/today\/log\/[^/]+$/);
+  await expect(page.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
+  await expect(
+    page.getByText("Logged to Sprint (2k) Prep · SESSION 1 OF 84"),
+  ).toBeVisible();
+
+  // First tap stages — the trigger is replaced by the consequence copy
+  // and the Cancel/Delete session pair, still on the detail view.
+  await page.getByRole("button", { name: "Delete session" }).click();
+  await expect(
+    page.getByText(
+      "This removes the session. If it is your latest plan session, the checkmark un-ticks.",
+    ),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Cancel" })).toBeVisible();
+
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "log-delete-confirm.png"),
+  });
+});
+
 // PM final-PR gate, condition 3: the detail screen's OTHER install-day
 // reality — a row saved in the frozen pre-update body shape
 // (`postV0110Log`, byte-identical to server/routes/data.test.ts's own
