@@ -5,6 +5,26 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // Phase PW spec 2 (#121, the history + first edit) plus Phase CS's
+    // swipe (#119) — CS's own gate asked for a v0.11.1 that was never cut,
+    // so its notes ride here, including the gate's explicit ask that the
+    // notes probe whether swipe was found unaided. #120 (walk tooling) is
+    // not rower-visible and is skipped per the internal-only rule. The
+    // old-corpus item is the PM final-PR gate's condition: an
+    // additive-only migration means every pre-update session renders
+    // hero-less, and the notes say so in one plain sentence rather than
+    // letting a tester file it as a bug.
+    version: "v0.12.0",
+    date: "2026-08-18",
+    items: [
+      "Your history is open. Today's LAST THREE heading now leads to every session you have ever logged, newest first, and tapping any session shows what you saw when you finished it: the same top numbers, the same interval list, the same colors.",
+      "The reflection you skipped can finally be answered. Open any past session and tap Edit: thumbs, the hold question, pain, and notes are all editable, and clearing an answer works the same way it does when logging.",
+      "Plan checkmarks open their sessions. A completed plan session links to the exact log it recorded, and resetting your plan never rewrites what a checkmark already says.",
+      "One honest note about your existing sessions: anything logged before this update keeps its rows and reflection but shows no top-line numbers, and its plan checkmark stays plain. The first session you row after updating is the first with the full record.",
+      "You can swipe between LIVE and GRID on the connected screen now, including drags that start on the interval rows. If you already found the swipe before reading this, tell us: whether it was discoverable unaided is exactly what we want to know.",
+    ],
+  },
+  {
     // Phase PW spec 1 (#117): the post-workout summary replaces the whole
     // post-row flow, plus the connected footer's richer NEXT line (#116,
     // Phase CS task 1-3 — its phase continues, but the change ships in
