@@ -883,21 +883,9 @@ async function touchDrag(
   });
 }
 
-/** A real touch TAP over CDP — start then end, no move in between. Used
- *  for the rail-button scenario's own "the click still works" half. */
-async function touchTap(
-  client: CDPSession,
-  at: { x: number; y: number },
-): Promise<void> {
-  await client.send("Input.dispatchTouchEvent", {
-    type: "touchStart",
-    touchPoints: [{ x: at.x, y: at.y }],
-  });
-  await client.send("Input.dispatchTouchEvent", {
-    type: "touchEnd",
-    touchPoints: [],
-  });
-}
+// (A hand-rolled CDP `touchTap` lived here and was deleted with its only
+// caller — see the rail-button scenario's own comment on why
+// `locator.tap()` replaced it.)
 
 /** Attaches a capture-phase `pointerdown` listener that records every
  *  `pointerType` seen — independent of the app's own handlers entirely, so
@@ -996,12 +984,16 @@ test.describe("Phase CS Item A Task 3: the real-touch pin — hero, grid row, ra
     //
     // First half — a real TAP (no movement) on the button works exactly
     // like a click: it is one.
-    const gridButtonBox = (await gridPaneButton.boundingBox())!;
-    const gridButtonCenter = {
-      x: gridButtonBox.x + gridButtonBox.width / 2,
-      y: gridButtonBox.y + gridButtonBox.height / 2,
-    };
-    await touchTap(client, gridButtonCenter);
+    //
+    // `locator.tap()`, NOT a hand-rolled `Input.dispatchTouchEvent`
+    // start/end pair: Chromium synthesizes a click from a touch sequence
+    // only when that sequence satisfies its own tap heuristics, and a
+    // zero-duration start/end sometimes does not qualify. The hand-rolled
+    // version passed locally and FAILED IN CI on the first run of this
+    // pin (PR #119) — a timing-dependent oracle, which is worse than no
+    // oracle. Playwright's own touch API sequences the tap properly and is
+    // still genuine touch (`hasTouch` is on for this describe).
+    await gridPaneButton.tap();
     await expect(gridPaneButton).toHaveAttribute("aria-current", "page");
 
     // Second half — a drag that STARTS on the rail button and travels
