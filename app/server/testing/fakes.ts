@@ -262,7 +262,7 @@ function makeFakeWorkoutsStore(): WorkoutsStore & {
 }
 
 type FakePlanStateStore = PlanStateStore & {
-  _advance: (userId: string, by?: number) => void;
+  _advance: (userId: string, by?: number) => PlanStateRow;
 };
 
 // set/reset are plain (not vi.fn-wrapped) here: consumers that need to
@@ -285,9 +285,17 @@ function makeFakePlanStateStore(): FakePlanStateStore {
     },
     // test-only helper mimicking the real store's transactional done_n bump
     // from inside logs.create — not part of the real store's interface.
-    _advance(userId: string, by = 1) {
+    // From-the-log spec (2026-08-18): now RETURNS the post-bump row,
+    // mirroring the real store's `.returning({doneN, planKey})` on the
+    // same atomic upsert (stores/planState.ts has no such method — this
+    // stays a logs.create()-only concern in both the real and fake
+    // stores) — the fake logs store needs the same post-update values the
+    // real transaction gets, not a separate re-read that could race.
+    _advance(userId: string, by = 1): PlanStateRow {
       const current = rows.get(userId) ?? { planKey: null, doneN: 0 };
-      rows.set(userId, { ...current, doneN: current.doneN + by });
+      const next = { ...current, doneN: current.doneN + by };
+      rows.set(userId, next);
+      return next;
     },
   } as unknown as FakePlanStateStore;
 }
@@ -295,7 +303,14 @@ function makeFakePlanStateStore(): FakePlanStateStore {
 function makeFakeLogsStore(planState: FakePlanStateStore): LogsStore {
   const byUser = new Map<
     string,
-    Array<Omit<LogInput, "advancesPlan"> & { id: string; loggedAt: Date }>
+    Array<
+      Omit<LogInput, "advancesPlan"> & {
+        id: string;
+        loggedAt: Date;
+        planKey: string | null;
+        planIndex: number | null;
+      }
+    >
   >();
   return {
     async list(userId: string, limit: number) {
@@ -314,6 +329,25 @@ function makeFakeLogsStore(planState: FakePlanStateStore): LogsStore {
       // whole `input` here used to leak it into this fake's `list` (and thus
       // `GET /api/logs`) — a shape production can never produce.
       const { advancesPlan, ...stored } = input;
+
+      // From-the-log spec (2026-08-18), §2: mirrors the real store's
+      // reordered create() — the plan_state bump runs FIRST (still gated
+      // by `advancesPlan`, exactly like the guard below used to run
+      // AFTER) so its returned {doneN, planKey} can be stamped onto the
+      // row this call stores, exactly like the real transaction's
+      // `.returning()`. Both fields stay null when this save doesn't
+      // advance the plan, or when it does but the counter moved with no
+      // plan chosen (returned planKey null).
+      let planKey: string | null = null;
+      let planIndex: number | null = null;
+      if (advancesPlan) {
+        const advanced = planState._advance(userId);
+        if (advanced.planKey !== null) {
+          planKey = advanced.planKey;
+          planIndex = advanced.doneN - 1;
+        }
+      }
+
       // Post-workout-summary spec (2026-08-17), §3: mirrors the real
       // store's `thumbs: input.thumbs ?? null` (stores/logs.ts's own
       // `create`) — `thumbs` is OPTIONAL on `LogInput` (absent means
@@ -322,20 +356,21 @@ function makeFakeLogsStore(planState: FakePlanStateStore): LogsStore {
       // Spreading `stored` as-is would leave the key off the row entirely
       // when the caller omitted it, a shape the real store can never
       // produce — the exact class of fake/real drift this contract suite
-      // exists to catch.
+      // exists to catch. The three hero fields (2026-08-18) get the same
+      // treatment.
       const row = {
         ...stored,
         thumbs: stored.thumbs ?? null,
+        avgSplitSeconds: stored.avgSplitSeconds ?? null,
+        timeSeconds: stored.timeSeconds ?? null,
+        distanceMeters: stored.distanceMeters ?? null,
+        planKey,
+        planIndex,
         id: crypto.randomUUID(),
         loggedAt: new Date(),
       };
       rows.unshift(row);
       byUser.set(userId, rows);
-      // Task 3: mirrors the real store's `if (input.advancesPlan)` guard
-      // around the plan_state upsert (see stores/logs.ts's own `create`) —
-      // a false row never touches plan_state at all, including never
-      // creating a row for a user who had none yet.
-      if (advancesPlan) planState._advance(userId);
       return { id: row.id };
     },
     async lastDonePerWorkout(userId: string) {

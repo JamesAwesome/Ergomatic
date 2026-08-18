@@ -1,6 +1,7 @@
 import {
   boolean,
   check,
+  doublePrecision,
   index,
   integer,
   jsonb,
@@ -147,6 +148,34 @@ export const sessionLogs = pgTable(
     // Absent/skipped reflection stores null; nothing consumes this yet
     // (generation's own thumbs consumption is explicitly OUT this phase).
     thumbs: thumbsEnum("thumbs"),
+    // From-the-log spec (2026-08-18), §2 "Stored shapes" — migration 0010,
+    // five additive/nullable columns, no defaults, no backfill: every
+    // existing row reads every one of these back as null (spec exit
+    // criterion 6). The three hero numbers below are written at save time,
+    // only when the summary showed that hero — history renders the EXACT
+    // numbers the rower saw, never a recomputed near-number (ruling 2).
+    //
+    // `double precision`, never `real` (float4): a probe run against real
+    // Postgres shows `'2.7182818284'::real` truncating to `2.7182817`
+    // while `::double precision` round-trips exactly (verified directly,
+    // 2026-08-18 — the antagonist's own B8 finding on the spec) — a
+    // triad-governed stored number does not get to lose precision the
+    // summary itself never lost.
+    avgSplitSeconds: doublePrecision("avg_split_seconds"),
+    // The R-B number: a plain integer, the machine's whole-meter total
+    // (work + rest + warm-up).
+    distanceMeters: integer("distance_meters"),
+    timeSeconds: doublePrecision("time_seconds"),
+    // Plan linkage pair, written ONLY on an advancing save whose
+    // plan_state upsert returns a non-null planKey — server-derived from
+    // that row in the same transaction, never posted by the client (see
+    // stores/logs.ts's create()). Reset and Switch never rewrite these:
+    // they are a record of what happened, not a foreign key into current
+    // plan state (spec §2), so (plan_key, plan_index) is deliberately
+    // NON-UNIQUE after a Reset — the newest row per index wins at read
+    // time (§2), not enforced here.
+    planKey: text("plan_key"),
+    planIndex: integer("plan_index"),
   },
   (t) => [
     index("session_logs_user_id_idx").on(t.userId),

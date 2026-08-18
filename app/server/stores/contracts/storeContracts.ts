@@ -568,6 +568,135 @@ export function describeStoreContracts(
           thumbs: "down",
         });
       });
+
+      // From-the-log spec (2026-08-18), §2: the three hero numbers must
+      // round-trip through the REAL column type (double precision), not
+      // just through a JS object — this is the B8 probe. Verified
+      // independently against real Postgres (2026-08-18, docker
+      // postgres:18.4) that the probe CAN go red: `SELECT
+      // '2.7182818284'::real` returns `2.7182817` (float4 truncation),
+      // while `SELECT '2.7182818284'::double precision` returns the value
+      // unchanged — confirming a `real` column would fail this exact
+      // assertion and proving `double precision` is required, not
+      // decorative. That scratch verification is not committed as
+      // product code; this assertion against the schema's actual double
+      // precision columns is the permanent regression guard.
+      it("create round-trips the three hero numbers exactly, including a value that would truncate under real (B8 probe)", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        const { id } = await stores.logs.create(
+          userId,
+          logInput({
+            avgSplitSeconds: 2.7182818284,
+            timeSeconds: 3600.1234567891,
+            distanceMeters: 5000,
+          }),
+        );
+        const list = await stores.logs.list(userId, 10);
+        const row = list.find((r) => r.id === id);
+        expect(row).toMatchObject({
+          avgSplitSeconds: 2.7182818284,
+          timeSeconds: 3600.1234567891,
+          distanceMeters: 5000,
+        });
+      });
+
+      it("create with no hero numbers posted stores all three null (v0.11.0 body shape)", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        const overrides = logInput();
+        delete (
+          overrides as {
+            avgSplitSeconds?: unknown;
+            timeSeconds?: unknown;
+            distanceMeters?: unknown;
+          }
+        ).avgSplitSeconds;
+        delete (
+          overrides as {
+            avgSplitSeconds?: unknown;
+            timeSeconds?: unknown;
+            distanceMeters?: unknown;
+          }
+        ).timeSeconds;
+        delete (
+          overrides as {
+            avgSplitSeconds?: unknown;
+            timeSeconds?: unknown;
+            distanceMeters?: unknown;
+          }
+        ).distanceMeters;
+        const { id } = await stores.logs.create(userId, overrides);
+        const list = await stores.logs.list(userId, 10);
+        const row = list.find((r) => r.id === id);
+        expect(row).toMatchObject({
+          avgSplitSeconds: null,
+          timeSeconds: null,
+          distanceMeters: null,
+        });
+      });
+
+      // From-the-log spec (2026-08-18), §2 "the linkage mechanism": the
+      // four cases the plan carries by name.
+      describe("plan linkage", () => {
+        it("an advancing save with a plan chosen stamps (planKey, planIndex)", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          await stores.planState.set(userId, "sprint");
+
+          const { id } = await stores.logs.create(userId, logInput());
+
+          const list = await stores.logs.list(userId, 10);
+          const row = list.find((r) => r.id === id);
+          expect(row).toMatchObject({ planKey: "sprint", planIndex: 0 });
+        });
+
+        it("a non-advancing save stores planKey/planIndex null, even with a plan chosen", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          await stores.planState.set(userId, "sprint");
+
+          const { id } = await stores.logs.create(
+            userId,
+            logInput({ advancesPlan: false }),
+          );
+
+          const list = await stores.logs.list(userId, 10);
+          const row = list.find((r) => r.id === id);
+          expect(row).toMatchObject({ planKey: null, planIndex: null });
+        });
+
+        it("an advancing save with NO plan chosen stores planKey/planIndex null (counter moved, nothing named)", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          expect(await stores.planState.get(userId)).toBeNull();
+
+          const { id } = await stores.logs.create(userId, logInput());
+
+          const list = await stores.logs.list(userId, 10);
+          const row = list.find((r) => r.id === id);
+          expect(row).toMatchObject({ planKey: null, planIndex: null });
+        });
+
+        it("two sequential advancing saves stamp consecutive indexes", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          await stores.planState.set(userId, "head");
+
+          const first = await stores.logs.create(userId, logInput());
+          const second = await stores.logs.create(userId, logInput());
+
+          const list = await stores.logs.list(userId, 10);
+          expect(list.find((r) => r.id === first.id)).toMatchObject({
+            planKey: "head",
+            planIndex: 0,
+          });
+          expect(list.find((r) => r.id === second.id)).toMatchObject({
+            planKey: "head",
+            planIndex: 1,
+          });
+        });
+      });
     });
 
     describe("plan state", () => {

@@ -462,3 +462,156 @@ describe("migration 0009: reflection fields go nullable, thumbs added", () => {
     expect(after.thumbs).toBeNull();
   });
 });
+
+// From-the-log spec (2026-08-18), §2 "Stored shapes" / exit criterion 6:
+// migration 0010 must apply against a database holding v0.11.0 rows
+// (session_logs with none of the five new columns) and change none of
+// their existing reads — the five new columns read back null, nothing
+// else moves. Same "seed pre-migration, migrate, assert nothing moved"
+// shape as migration 0009's own describe block above.
+describe("migration 0010: hero numbers and plan linkage", () => {
+  let container: StartedPostgreSqlContainer;
+  let pool: pg.Pool;
+  let db: Db;
+  let tempDir: string;
+
+  const PRE_0010_TAGS = [
+    "0000_skinny_silver_fox",
+    "0001_tan_thunderball",
+    "0002_rare_khan",
+    "0003_spicy_firedrake",
+    "0004_slippery_starjammers",
+    "0005_fine_radioactive_man",
+    "0006_windy_wendell_vaughn",
+    "0007_shallow_kang",
+    "0008_strip_wu_steps",
+    "0009_brief_kingpin",
+  ];
+
+  beforeAll(async () => {
+    container = await new PostgreSqlContainer("postgres:18.4").start();
+    ({ pool, db } = createDb(container.getConnectionUri()));
+
+    // A migrations folder containing only 0000-0009, so migrate() below
+    // cannot possibly apply 0010 — the legacy row (no avg_split_seconds /
+    // distance_meters / time_seconds / plan_key / plan_index columns at
+    // all) gets seeded against exactly the schema a real v0.11.0 deploy
+    // would have.
+    tempDir = await mkdtemp(path.join(tmpdir(), "drizzle-pre-0010-"));
+    await mkdir(path.join(tempDir, "meta"));
+    for (const [i, tag] of PRE_0010_TAGS.entries()) {
+      const idx = String(i).padStart(4, "0");
+      await copyFile(
+        path.join("drizzle", `${tag}.sql`),
+        path.join(tempDir, `${tag}.sql`),
+      );
+      await copyFile(
+        path.join("drizzle", "meta", `${idx}_snapshot.json`),
+        path.join(tempDir, "meta", `${idx}_snapshot.json`),
+      );
+    }
+    const journal = JSON.parse(
+      await readFile(path.join("drizzle", "meta", "_journal.json"), "utf-8"),
+    ) as { entries: { idx: number }[] };
+    await writeFile(
+      path.join(tempDir, "meta", "_journal.json"),
+      JSON.stringify({
+        ...journal,
+        entries: journal.entries.filter((e) => e.idx <= 9),
+      }),
+    );
+    await migrate(db, { migrationsFolder: tempDir });
+  });
+
+  afterAll(async () => {
+    await pool.end().catch(() => {});
+    await container.stop().catch(() => {});
+  });
+
+  it("reads a pre-0010 (v0.11.0) row's existing fields unchanged, and all five new columns as null, after 0010 applies", async () => {
+    const [u] = await db
+      .insert(users)
+      .values({
+        googleSub: "pre-0010-user",
+        email: "pre-0010@migrate.test",
+        name: "Pre 0010",
+      })
+      .returning();
+
+    // Seeded against the PRE-0010 schema (none of the five new columns
+    // exist yet) — raw SQL, not the typed `sessionLogs` insert helper, for
+    // the same reason 0009's own test above uses raw SQL: drizzle's
+    // insert builder lists every column the TS schema declares, and the
+    // TS schema here already declares all five new columns — against the
+    // real pre-0010 table, that statement 500s with "column ... does not
+    // exist" before this insert even reaches the assertion this test
+    // exists to make.
+    const inserted = await db.execute<{ id: string }>(
+      sql`insert into "session_logs"
+          ("user_id", "workout_title", "workout_type", "held", "pain", "thumbs", "steps")
+          values (${u.id}, 'Pre-migration session', 'AT', 'held', 2, null, '[]'::jsonb)
+          returning "id"`,
+    );
+    const row = inserted.rows[0]!;
+
+    // The real, full folder — the boot-time migrate() call that ships
+    // 0010. Only 0010 is new (0000-0009's hashes already match what ran
+    // against tempDir above), so this is the moment the five ADD COLUMN
+    // statements fire.
+    await migrate(db, { migrationsFolder: "drizzle" });
+
+    const [after] = await db
+      .select()
+      .from(sessionLogs)
+      .where(eq(sessionLogs.id, row.id));
+    expect(after.held).toBe("held");
+    expect(after.pain).toBe(2);
+    expect(after.avgSplitSeconds).toBeNull();
+    expect(after.distanceMeters).toBeNull();
+    expect(after.timeSeconds).toBeNull();
+    expect(after.planKey).toBeNull();
+    expect(after.planIndex).toBeNull();
+  });
+
+  it("accepts a NEW row with all five columns populated, the double-precision hero values surviving exactly, once 0010 has applied", async () => {
+    const [u] = await db
+      .insert(users)
+      .values({
+        googleSub: "post-0010-user",
+        email: "post-0010@migrate.test",
+        name: "Post 0010",
+      })
+      .returning();
+
+    // migrate() above (previous test, same shared container) already
+    // applied 0010 — this insert exercises the new columns directly
+    // against the real table, not just through the API layer.
+    const [row] = await db
+      .insert(sessionLogs)
+      .values({
+        userId: u.id,
+        workoutTitle: "Full hero row",
+        workoutType: "AT",
+        held: null,
+        pain: null,
+        thumbs: null,
+        steps: [],
+        avgSplitSeconds: 2.7182818284,
+        distanceMeters: 5000,
+        timeSeconds: 1234.5678,
+        planKey: "sprint",
+        planIndex: 3,
+      })
+      .returning();
+
+    const [after] = await db
+      .select()
+      .from(sessionLogs)
+      .where(eq(sessionLogs.id, row.id));
+    expect(after.avgSplitSeconds).toBe(2.7182818284);
+    expect(after.distanceMeters).toBe(5000);
+    expect(after.timeSeconds).toBe(1234.5678);
+    expect(after.planKey).toBe("sprint");
+    expect(after.planIndex).toBe(3);
+  });
+});

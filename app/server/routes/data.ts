@@ -668,6 +668,59 @@ export function createDataRouter({
       badRequest(res, "deviceName must be a string, 1..64 chars", "deviceName");
       return;
     }
+    // From-the-log spec (2026-08-18), §2/§3: the three hero numbers,
+    // optional/nullable exactly like held/pain/thumbs above — a v0.11.0
+    // client sends none of these and still 201s, storing null for all
+    // three (additive-only between tags). Bounds-checked here like every
+    // other numeric field on this route: this is sanity, not truth — an
+    // authenticated client can still post a wrong number about its own
+    // rowing, accepted and recorded as the trust boundary (the server
+    // cannot re-derive what only the device saw, spec §2).
+    if (
+      body.avgSplitSeconds !== undefined &&
+      body.avgSplitSeconds !== null &&
+      (typeof body.avgSplitSeconds !== "number" ||
+        !Number.isFinite(body.avgSplitSeconds) ||
+        body.avgSplitSeconds <= 0 ||
+        body.avgSplitSeconds > 3600)
+    ) {
+      badRequest(
+        res,
+        "avgSplitSeconds must be a finite number > 0 and <= 3600, or null",
+        "avgSplitSeconds",
+      );
+      return;
+    }
+    if (
+      body.distanceMeters !== undefined &&
+      body.distanceMeters !== null &&
+      (typeof body.distanceMeters !== "number" ||
+        !Number.isInteger(body.distanceMeters) ||
+        body.distanceMeters <= 0 ||
+        body.distanceMeters > 1_000_000)
+    ) {
+      badRequest(
+        res,
+        "distanceMeters must be a whole number > 0 and <= 1000000, or null",
+        "distanceMeters",
+      );
+      return;
+    }
+    if (
+      body.timeSeconds !== undefined &&
+      body.timeSeconds !== null &&
+      (typeof body.timeSeconds !== "number" ||
+        !Number.isFinite(body.timeSeconds) ||
+        body.timeSeconds <= 0 ||
+        body.timeSeconds > 604800)
+    ) {
+      badRequest(
+        res,
+        "timeSeconds must be a finite number > 0 and <= 604800, or null",
+        "timeSeconds",
+      );
+      return;
+    }
     if (!Array.isArray(body.steps) || body.steps.length === 0) {
       badRequest(res, "steps must be a non-empty array", "steps");
       return;
@@ -703,6 +756,11 @@ export function createDataRouter({
       advancesPlan: (body.advancesPlan as boolean | undefined) ?? true,
       deviceName: (body.deviceName as string | undefined) ?? null,
       thumbs: (body.thumbs as Thumbs | null | undefined) ?? null,
+      avgSplitSeconds:
+        (body.avgSplitSeconds as number | null | undefined) ?? null,
+      timeSeconds: (body.timeSeconds as number | null | undefined) ?? null,
+      distanceMeters:
+        (body.distanceMeters as number | null | undefined) ?? null,
     });
     res.status(201).json({ id });
   });

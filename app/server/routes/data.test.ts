@@ -869,6 +869,141 @@ describe("GET/POST /api/logs", () => {
     expect(row).toMatchObject({ held: "held", pain: 2, thumbs: null });
   });
 
+  // From-the-log spec (2026-08-18), §2/§7 exit criterion 2: the v0.11.0
+  // body shape (no avgSplitSeconds/timeSeconds/distanceMeters keys at
+  // all, exactly `validLogBody()` as it stood before this task) must
+  // still 201 and store all three heroes as null, not fabricated
+  // defaults — additive-only between tags.
+  it("POST in the exact v0.11.0 body shape (no hero keys) still 201s and stores null-null-null (exit criterion 2)", async () => {
+    const app = appFor(makeStores());
+    const res = await asA(request(app).post("/api/logs")).send(validLogBody());
+    expect(res.status).toBe(201);
+
+    const list = await asA(request(app).get("/api/logs"));
+    const row = list.body.find((r: { id: string }) => r.id === res.body.id);
+    expect(row).toMatchObject({
+      avgSplitSeconds: null,
+      timeSeconds: null,
+      distanceMeters: null,
+    });
+  });
+
+  // From-the-log spec (2026-08-18), §2: the model's numbers round-trip
+  // through the API exactly, including a value that would truncate under
+  // a `real` column (the B8 probe value) — the API-level companion to
+  // storeContracts.ts's store-level B8 assertion.
+  it("accepts the three hero numbers and reads them back exactly, including the B8 probe value", async () => {
+    const app = appFor(makeStores());
+    const res = await asA(request(app).post("/api/logs")).send({
+      ...validLogBody(),
+      avgSplitSeconds: 2.7182818284,
+      timeSeconds: 3599,
+      distanceMeters: 5000,
+    });
+    expect(res.status).toBe(201);
+
+    const list = await asA(request(app).get("/api/logs"));
+    const row = list.body.find((r: { id: string }) => r.id === res.body.id);
+    expect(row).toMatchObject({
+      avgSplitSeconds: 2.7182818284,
+      timeSeconds: 3599,
+      distanceMeters: 5000,
+    });
+  });
+
+  it.each([
+    [
+      "avgSplitSeconds",
+      "not a number",
+      "must be a finite number > 0 and <= 3600, or null",
+    ],
+    ["avgSplitSeconds", 0, "must be a finite number > 0 and <= 3600, or null"],
+    ["avgSplitSeconds", -1, "must be a finite number > 0 and <= 3600, or null"],
+    [
+      "avgSplitSeconds",
+      3601,
+      "must be a finite number > 0 and <= 3600, or null",
+    ],
+    // Infinity/NaN are deliberately absent from this table: both serialize
+    // to JSON `null` (`JSON.stringify(Infinity) === "null"`, same for
+    // `NaN`), so a real HTTP client can never put either value on the
+    // wire through `express.json()` — the route's `Number.isFinite` guard
+    // is defense-in-depth with no reachable-over-HTTP witness, not an
+    // untested branch this table skipped.
+    [
+      "distanceMeters",
+      "not a number",
+      "must be a whole number > 0 and <= 1000000, or null",
+    ],
+    ["distanceMeters", 0, "must be a whole number > 0 and <= 1000000, or null"],
+    [
+      "distanceMeters",
+      -5,
+      "must be a whole number > 0 and <= 1000000, or null",
+    ],
+    [
+      "distanceMeters",
+      1_000_001,
+      "must be a whole number > 0 and <= 1000000, or null",
+    ],
+    [
+      "distanceMeters",
+      5000.5,
+      "must be a whole number > 0 and <= 1000000, or null",
+    ],
+    [
+      "timeSeconds",
+      "not a number",
+      "must be a finite number > 0 and <= 604800, or null",
+    ],
+    ["timeSeconds", 0, "must be a finite number > 0 and <= 604800, or null"],
+    ["timeSeconds", -1, "must be a finite number > 0 and <= 604800, or null"],
+    [
+      "timeSeconds",
+      604801,
+      "must be a finite number > 0 and <= 604800, or null",
+    ],
+  ])(
+    "rejects %s: %p with 400, field named, exact message",
+    async (field, value, messageSuffix) => {
+      const res = await asA(
+        request(appFor(makeStores())).post("/api/logs"),
+      ).send({
+        ...validLogBody(),
+        [field]: value,
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe(field);
+      expect(res.body.error).toBe(`${field} ${messageSuffix}`);
+    },
+  );
+
+  it.each([
+    ["avgSplitSeconds", 3600],
+    ["distanceMeters", 1_000_000],
+    ["timeSeconds", 604800],
+  ])("accepts %s at its exact upper bound (%p)", async (field, value) => {
+    const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
+      {
+        ...validLogBody(),
+        [field]: value,
+      },
+    );
+    expect(res.status).toBe(201);
+  });
+
+  it("accepts explicit null for all three hero fields", async () => {
+    const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
+      {
+        ...validLogBody(),
+        avgSplitSeconds: null,
+        timeSeconds: null,
+        distanceMeters: null,
+      },
+    );
+    expect(res.status).toBe(201);
+  });
+
   it("rejects an invalid pain value with 400, still naming the field, when pain is present", async () => {
     const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
       {
@@ -1221,6 +1356,79 @@ describe("GET/POST /api/logs", () => {
     expect(created.status).toBe(201);
     const plan = await asA(request(app).get("/api/plan"));
     expect(plan.body).toStrictEqual({ planKey: null, doneN: 0, sequence: [] });
+  });
+
+  // From-the-log spec (2026-08-18), §2 "the linkage mechanism" — the same
+  // four cases as storeContracts.ts's "plan linkage" describe block,
+  // exercised at the API level (through PUT /api/plan + POST /api/logs +
+  // GET /api/logs) against the fake store.
+  describe("plan linkage (from-the-log spec, 2026-08-18)", () => {
+    it("an advancing save with a plan chosen stamps planKey/planIndex on the row", async () => {
+      const app = appFor(makeStores());
+      await asA(request(app).put("/api/plan")).send({ planKey: "sprint" });
+
+      const created = await asA(request(app).post("/api/logs")).send(
+        validLogBody(),
+      );
+      expect(created.status).toBe(201);
+
+      const list = await asA(request(app).get("/api/logs"));
+      const row = list.body.find(
+        (r: { id: string }) => r.id === created.body.id,
+      );
+      expect(row).toMatchObject({ planKey: "sprint", planIndex: 0 });
+    });
+
+    it("a non-advancing save stores planKey/planIndex null, even with a plan chosen", async () => {
+      const app = appFor(makeStores());
+      await asA(request(app).put("/api/plan")).send({ planKey: "sprint" });
+
+      const created = await asA(request(app).post("/api/logs")).send({
+        ...validLogBody(),
+        advancesPlan: false,
+      });
+      expect(created.status).toBe(201);
+
+      const list = await asA(request(app).get("/api/logs"));
+      const row = list.body.find(
+        (r: { id: string }) => r.id === created.body.id,
+      );
+      expect(row).toMatchObject({ planKey: null, planIndex: null });
+    });
+
+    it("an advancing save with NO plan chosen stores planKey/planIndex null", async () => {
+      const app = appFor(makeStores());
+      const created = await asA(request(app).post("/api/logs")).send(
+        validLogBody(),
+      );
+      expect(created.status).toBe(201);
+
+      const list = await asA(request(app).get("/api/logs"));
+      const row = list.body.find(
+        (r: { id: string }) => r.id === created.body.id,
+      );
+      expect(row).toMatchObject({ planKey: null, planIndex: null });
+    });
+
+    it("two sequential advancing saves stamp consecutive indexes", async () => {
+      const app = appFor(makeStores());
+      await asA(request(app).put("/api/plan")).send({ planKey: "head" });
+
+      const first = await asA(request(app).post("/api/logs")).send(
+        validLogBody(),
+      );
+      const second = await asA(request(app).post("/api/logs")).send(
+        validLogBody(),
+      );
+
+      const list = await asA(request(app).get("/api/logs"));
+      expect(
+        list.body.find((r: { id: string }) => r.id === first.body.id),
+      ).toMatchObject({ planKey: "head", planIndex: 0 });
+      expect(
+        list.body.find((r: { id: string }) => r.id === second.body.id),
+      ).toMatchObject({ planKey: "head", planIndex: 1 });
+    });
   });
 
   // Phase 7C Task 3 (spec §6): the server admits what a PM5 actually

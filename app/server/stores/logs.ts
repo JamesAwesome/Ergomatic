@@ -78,6 +78,24 @@ export interface LogInput {
   // of `steps`: see `db/schema.ts`'s `sessionLogs.deviceName` doc comment
   // for why this is its own column, not a `steps` jsonb field.
   deviceName?: string | null;
+  // From-the-log spec (2026-08-18), §2/§3: the three hero numbers the
+  // summary showed at save time — the MODEL's numbers, not its
+  // pre-formatted display strings (SummaryHeroes deliberately carries
+  // both; the POST site posts the numbers the strings were formatted
+  // from, never re-derives one). Optional/nullable, same convention as
+  // `deviceName`/`thumbs` above: absent or explicit null both store null
+  // (a hero the summary didn't show posts nothing). Bounds-checked at the
+  // route (routes/data.ts), same as every other numeric field — this is
+  // sanity, not truth: an authenticated client can still post a wrong
+  // number about its own rowing, accepted and recorded here as the
+  // trust-boundary the server cannot close (spec §2).
+  avgSplitSeconds?: number | null;
+  timeSeconds?: number | null;
+  distanceMeters?: number | null;
+  // Deliberately absent from this interface: `plan_key`/`plan_index` are
+  // NEVER client input. `create()` below derives them itself, inside the
+  // same transaction as the log insert, from the plan_state upsert's own
+  // `.returning()` — see that function's doc comment.
 }
 
 export function createLogsStore(db: Db) {
@@ -104,13 +122,46 @@ export function createLogsStore(db: Db) {
     // before progress advances).
     //
     // Task 3: `input.advancesPlan` wraps ONLY the plan_state upsert below —
-    // the log insert above is unchanged and still happens unconditionally,
-    // inside the same transaction, regardless of the flag. A `false` row
-    // still logs (the rower did the work; they just don't want it counted
-    // toward the plan), it simply leaves plan_state untouched — including
-    // never creating a plan_state row at all for a user who had none yet.
+    // the log insert is unchanged and still happens unconditionally, inside
+    // the same transaction, regardless of the flag. A `false` row still
+    // logs (the rower did the work; they just don't want it counted toward
+    // the plan), it simply leaves plan_state untouched — including never
+    // creating a plan_state row at all for a user who had none yet.
+    //
+    // From-the-log spec (2026-08-18), §2 "the linkage mechanism": the
+    // plan_state upsert now runs FIRST, still inside this same transaction,
+    // and gains `.returning({doneN, planKey})` on the SAME atomic
+    // statement — post-update values, so two concurrent advancing saves
+    // cannot stamp the same index (the read-then-increment race is
+    // designed out, not tested out). `plan_index` is the returned
+    // `doneN - 1`; both linkage fields stay null when this save doesn't
+    // advance the plan at all, OR when it does but the returned `planKey`
+    // is null (the counter moved with no plan chosen — possible today):
+    // "advanced the counter" without a named plan records no linkage. The
+    // key is server-derived from the plan_state row, never posted by the
+    // client (LogInput carries no plan_key/plan_index field at all — see
+    // that interface's own comment).
     async create(userId: string, input: LogInput): Promise<{ id: string }> {
       return db.transaction(async (tx) => {
+        let planKey: string | null = null;
+        let planIndex: number | null = null;
+
+        if (input.advancesPlan) {
+          const [advanced] = await tx
+            .insert(planState)
+            .values({ userId, doneN: 1 })
+            .onConflictDoUpdate({
+              target: planState.userId,
+              set: { doneN: sql`${planState.doneN} + 1` },
+            })
+            .returning({ doneN: planState.doneN, planKey: planState.planKey });
+
+          if (advanced.planKey !== null) {
+            planKey = advanced.planKey;
+            planIndex = advanced.doneN - 1;
+          }
+        }
+
         const [row] = await tx
           .insert(sessionLogs)
           .values({
@@ -126,18 +177,13 @@ export function createLogsStore(db: Db) {
             steps: input.steps,
             deviceName: input.deviceName ?? null,
             thumbs: input.thumbs ?? null,
+            avgSplitSeconds: input.avgSplitSeconds ?? null,
+            timeSeconds: input.timeSeconds ?? null,
+            distanceMeters: input.distanceMeters ?? null,
+            planKey,
+            planIndex,
           })
           .returning({ id: sessionLogs.id });
-
-        if (input.advancesPlan) {
-          await tx
-            .insert(planState)
-            .values({ userId, doneN: 1 })
-            .onConflictDoUpdate({
-              target: planState.userId,
-              set: { doneN: sql`${planState.doneN} + 1` },
-            });
-        }
 
         return row;
       });
