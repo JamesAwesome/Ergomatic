@@ -779,6 +779,115 @@ describe("GET/POST /api/logs", () => {
     );
     expect(res.status).toBe(400);
     expect(res.body.field).toBe("held");
+    expect(res.body.error).toBe("held must be one of held|under|over or null");
+  });
+
+  // Post-workout-summary spec (2026-08-17), §3: "invalid members still
+  // 400" applies to a NULL-tolerant field too — `null` is now valid, but a
+  // string that isn't a real HeldResult member (and isn't null) is still
+  // rejected the same way it always was.
+  it("accepts held: null (the redesigned reflection card's optional question)", async () => {
+    const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
+      {
+        ...validLogBody(),
+        held: null,
+      },
+    );
+    expect(res.status).toBe(201);
+  });
+
+  it("accepts an EXPLICIT thumbs: null (the reflection card's cleared state sends it, not just an absent key)", async () => {
+    // Task-3 review M1: the guard's false arm was untested — an inversion
+    // to `body.thumbs === null` would 400 exactly the body the summary's
+    // cleared reflection posts, while every absent-key test stayed green.
+    const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
+      {
+        ...validLogBody(),
+        thumbs: null,
+      },
+    );
+    expect(res.status).toBe(201);
+  });
+
+  it("rejects an invalid thumbs value with 400, field named", async () => {
+    const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
+      {
+        ...validLogBody(),
+        thumbs: "left",
+      },
+    );
+    expect(res.status).toBe(400);
+    expect(res.body.field).toBe("thumbs");
+    expect(res.body.error).toBe("thumbs must be one of up|down or null");
+  });
+
+  it("accepts thumbs: 'up' and 'down'", async () => {
+    const app = appFor(makeStores());
+    const up = await asA(request(app).post("/api/logs")).send({
+      ...validLogBody(),
+      thumbs: "up",
+    });
+    expect(up.status).toBe(201);
+    const down = await asA(request(app).post("/api/logs")).send({
+      ...validLogBody(),
+      thumbs: "down",
+    });
+    expect(down.status).toBe(201);
+  });
+
+  // Post-workout-summary spec (2026-08-17), §3: the redesigned reflection
+  // card makes every answer optional — a POST with NO held/pain/thumbs at
+  // all (not even present as null) must still 201, and the stored row
+  // reads back null for all three, not a fabricated default.
+  it("POST with no held/pain/thumbs at all → 201, and the row reads back all null", async () => {
+    const app = appFor(makeStores());
+    const res = await asA(request(app).post("/api/logs")).send({
+      workoutId: null,
+      workoutTitle: "Off the cuff",
+      workoutType: "AT",
+      notes: null,
+      steps: [{ label: "Work" }],
+    });
+    expect(res.status).toBe(201);
+
+    const list = await asA(request(app).get("/api/logs"));
+    const row = list.body.find((r: { id: string }) => r.id === res.body.id);
+    expect(row).toMatchObject({ held: null, pain: null, thumbs: null });
+  });
+
+  // The v0.10.0/v0.10.1 client shape (held+pain always present, no thumbs
+  // key at all on the wire) must keep working byte-identically — this is
+  // additive-compatible, per the spec's own "between-tags API discipline"
+  // rule (docs/RELEASING.md).
+  it("POST in the old shape (held+pain present, no thumbs key) still 201s and stores the values, thumbs null", async () => {
+    const app = appFor(makeStores());
+    const res = await asA(request(app).post("/api/logs")).send(validLogBody());
+    expect(res.status).toBe(201);
+
+    const list = await asA(request(app).get("/api/logs"));
+    const row = list.body.find((r: { id: string }) => r.id === res.body.id);
+    expect(row).toMatchObject({ held: "held", pain: 2, thumbs: null });
+  });
+
+  it("rejects an invalid pain value with 400, still naming the field, when pain is present", async () => {
+    const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
+      {
+        ...validLogBody(),
+        pain: 99,
+      },
+    );
+    expect(res.status).toBe(400);
+    expect(res.body.field).toBe("pain");
+  });
+
+  it("accepts pain: null", async () => {
+    const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
+      {
+        ...validLogBody(),
+        pain: null,
+      },
+    );
+    expect(res.status).toBe(201);
   });
 
   it("rejects a malformed (non-uuid) workoutId with 400 + field, without touching the store", async () => {

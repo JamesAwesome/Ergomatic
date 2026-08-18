@@ -525,6 +525,22 @@ export function interruptedTotalSeconds(run: MonitorRun): number {
   return total;
 }
 
+/**
+ * Neutral alias for the formula above (Phase PW Task 4 review, finding 3):
+ * R-D's own text generalizes this exact "work + programmed rest for
+ * completed intervals" rule from "the interrupted branch" to "every
+ * monitor session's TIME" — `summaryModel.ts`'s `buildMonitorModel` needed
+ * the identical formula for a run that finished normally, not just one
+ * closed through the interrupted door, and a second hand-copy would have
+ * meant this formula's own OPEN hardware finding (F-1, the walk sheet's
+ * unreproduced "6 MIN where the wire computes 5" reading —
+ * `docs/monitor/sessions/walk-2026-08-17/README.md`) landing its eventual
+ * fix in only one of the two places that need it. `interruptedTotalSeconds`
+ * stays the primary export (every existing caller/test keeps its name);
+ * this is the same function object under the name a caller with no
+ * "interrupted" run in hand should reach for instead. */
+export const measuredSessionSeconds = interruptedTotalSeconds;
+
 type RecordState = "absent" | "live" | "unlogged";
 
 function sessionRunState(): RecordState {

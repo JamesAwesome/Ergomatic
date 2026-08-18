@@ -220,7 +220,21 @@ export interface FakeBoundaryEvent {
   // Split/Interval Number of `2`). Authoring OUR index here also means a
   // script typo can't silently author `null` and have it misread as "this
   // is what the machine sent."
-  actual: Omit<IntervalActual, "index"> & { index: number };
+  //
+  // `avgSplit` is OMITTED from what a script authors (PM final-PR gate,
+  // condition round, 2026-08-17): a real PM5 computes 0x0037's own Average
+  // Pace FROM the same interval's own elapsed/distance
+  // (avgPace = 500 * splitIntervalTimeSeconds / splitIntervalDistanceMeters
+  // -- spec section 7 vetted ground); it never carries an independent
+  // reading a script could set to something else. A prior version let a
+  // script author an unrelated `avgSplit` number here, which produced
+  // boundaries no real PM5 could send -- caught when `log-monitor.png`'s
+  // row (1:52.0, the scripted value) contradicted its own hero (1:15.0,
+  // correctly derived by `summaryModel.ts` from the SAME elapsed/distance
+  // this boundary carries). `boundaryBundle` now derives the wire byte
+  // itself; see its own comment for the identity and the zero-distance
+  // guard.
+  actual: Omit<IntervalActual, "index" | "avgSplit"> & { index: number };
   cumulativeElapsedSeconds: number;
   cumulativeDistanceMeters: number;
 }
@@ -701,6 +715,29 @@ function statusBundle(
   };
 }
 
+/** 0x0037's own Average Pace field (`splitIntervalAvgPace`, seconds per
+ *  500 m), derived from the SAME boundary's own `elapsedSeconds`/
+ *  `distanceMeters` pair rather than an independently-scripted number (PM
+ *  final-PR gate, condition round, 2026-08-17). A real PM5 has no other
+ *  source for this field — it is the interval's own average, computed by
+ *  the machine from the same two numbers 0x0037/0x0038 report alongside it
+ *  — so a fake that let a script set a different value could describe a
+ *  boundary no hardware would ever send, and did: `log-monitor.png`'s row
+ *  read `1:52.0` (a scripted `avgSplit: 112`) while its own hero read
+ *  `1:15.0`, correctly computed by `summaryModel.ts` from the identical
+ *  15 s / 100 m pair. `500 * t / d`, `0` when `distanceMeters` is `0`
+ *  (nothing rowed, nothing to average — the same "no reading" case the
+ *  wire's own zero represents, `MONITOR_SPLIT_MAX`'s own doc comment,
+ *  `logDraft.ts`). Not pre-rounded: `buildAdditionalSplitIntervalDataBytes`
+ *  already rounds to the wire's 0.1 s resolution
+ *  (`Math.round(s.splitIntervalAvgPace * 10)`, `pm5/statusFrames.ts`). */
+function derivedAvgSplit(
+  elapsedSeconds: number,
+  distanceMeters: number,
+): number {
+  return distanceMeters > 0 ? (500 * elapsedSeconds) / distanceMeters : 0;
+}
+
 /** `machineState` is the state the PM is in AT THE MOMENT OF DELIVERY (the
  *  last status tick it sent), which is what decides the forward attribution
  *  of the Split/Interval Number this boundary carries — see
@@ -744,7 +781,10 @@ function boundaryBundle(
       splitIntervalWorkHeartRateBpm:
         actual.avgHeartRateBpm ?? HEARTRATE_NO_BELT,
       splitIntervalRestHeartRateBpm: HEARTRATE_NO_BELT,
-      splitIntervalAvgPace: actual.avgSplit ?? 0,
+      splitIntervalAvgPace: derivedAvgSplit(
+        actual.elapsedSeconds,
+        actual.distanceMeters,
+      ),
       splitIntervalTotalCalories: 0,
       splitIntervalAvgCalories: 0,
       splitIntervalSpeedMetersPerSecond: 0,
@@ -759,7 +799,12 @@ function boundaryBundle(
       splitIntervalTimeSeconds: actual.elapsedSeconds,
       splitIntervalDistanceMeters: actual.distanceMeters,
       intervalRestTimeSeconds: 0,
-      intervalRestDistanceMeters: 0,
+      // R-B: the fake models this honestly off the script's own
+      // `actual.restDistanceMeters` — a constant here (0 or otherwise)
+      // would make every consuming test agree with itself regardless of
+      // whether the driver actually carries the field through
+      // (`domain/monitor/pm5/parse.ts`'s `toIntervalActual`).
+      intervalRestDistanceMeters: actual.restDistanceMeters,
       splitIntervalType: 0,
       splitIntervalNumber: wireIndex,
     },

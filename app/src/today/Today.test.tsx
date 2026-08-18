@@ -172,6 +172,7 @@ const LOGS: RecentLog[] = [
     loggedAt: "2026-07-25T12:00:00.000Z",
     held: "held",
     pain: 2,
+    thumbs: null,
   },
   {
     id: "log-2",
@@ -181,6 +182,7 @@ const LOGS: RecentLog[] = [
     loggedAt: "2026-07-20T12:00:00.000Z",
     held: "under",
     pain: 1,
+    thumbs: "up",
   },
   {
     id: "log-3",
@@ -190,6 +192,7 @@ const LOGS: RecentLog[] = [
     loggedAt: "2026-07-10T12:00:00.000Z",
     held: "over",
     pain: 4,
+    thumbs: null,
   },
 ];
 
@@ -1652,6 +1655,7 @@ describe("Today (LAST THREE)", () => {
           loggedAt: "2026-07-25T12:00:00.000Z",
           held: null,
           pain: null,
+          thumbs: null,
         },
       ],
     });
@@ -1674,6 +1678,7 @@ describe("Today (LAST THREE)", () => {
           loggedAt: "2026-07-25T12:00:00.000Z",
           held: null,
           pain: 2,
+          thumbs: null,
         },
       ],
     });
@@ -2213,8 +2218,8 @@ describe("Today (Task 3: unlogged row's staged Discard)", () => {
     await userEvent.click(screen.getByRole("button", { name: "Tap again" }));
 
     // Gone in place — no "unlogged session" line, no armed controls, and
-    // still on Today (no navigation at all, unlike SessionComplete's/the Log
-    // screen's own Discard, which both leave the screen).
+    // still on Today (no navigation at all, unlike the post-workout
+    // summary's own Discard, which leaves the screen).
     expect(screen.queryByText(/unlogged session/i)).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /discard/i }),

@@ -157,12 +157,39 @@ paired.
   remaining theories for the 6-MIN-where-5-computed reading without it —
   it is the one artifact that settles a duration discrepancy between what
   the header showed and what the wire computes.
-- Press **Log it**: the duration shown = the COMPLETED intervals' measured
-  work + their programmed rests. **The in-flight interval contributes
-  NOTHING by design** (`buildMonitorLogSteps` keys off completed actuals) —
-  rowing 2:00 + 1:30-in-flight then reloading shows ~2:00 and that is
-  correct, not a dropped interval; and it must never read as wall-clock
-  time since the reload.
+- **F-1's re-observation surface, RE-POINTED (post-workout-summary spec,
+  2026-08-17):** the OLD `N MIN`-rounded header F-1 was filed against
+  (`AUG 17 · 6 MIN`) is gone. Press **Log it** and read the post-workout
+  summary's own **TIME hero** instead (§2B, the `.summary-hero-value` next
+  to the `TIME` label) — it renders `m:ss`, straight off the SAME formula
+  the old header used (`measuredSessionSeconds`/`interruptedTotalSeconds`,
+  R-D: the COMPLETED intervals' own measured work seconds + their
+  PROGRAMMED rest seconds, warm-up included as its own completed
+  interval). **The in-flight interval contributes NOTHING by design**
+  (`buildMonitorLogSteps` keys off completed actuals) — rowing 2:00 +
+  1:30-in-flight then reloading shows `2:00` and that is correct, not a
+  dropped interval; it must never read as wall-clock time since the
+  reload. **Before pressing Log it**, compute the EXPECTED `m:ss` by hand
+  from this session's own completed intervals' wire bytes (0x0037 split
+  time + the programmed rest — the same arithmetic F-1's own bisect above
+  used to get 300s/5 MIN) and write it down next to the recording. `m:ss`
+  no longer rounds to the nearest minute the way the old header did, so a
+  repeat mismatch now reads as an exact SECOND gap against the hand
+  computation, not a single ambiguous minute — settling which of F-1's own
+  two unreproduced theories (a phantom fourth actual written only by a
+  real reload, or a genuine input difference the ring could not show) is
+  live, the first time this reading recurs with the dumped record in
+  hand.
+- **DISTANCE hero vs the machine, one frame (PM final-PR gate C3,
+  post-workout-summary PR #117):** after **Log it**, with the summary on
+  screen, photograph the PM5's own total distance (Memory screen or the
+  final pre-reset reading) and the summary's **DISTANCE hero in the SAME
+  FRAME** — the Sun-fret technique, now aimed at the restored
+  rower-visible session distance. Expected: DISTANCE = the machine's
+  total to the meter (R-B — Σ work + rest distance including warm-up;
+  the same wire bytes, so any gap is a parse or membership defect, not
+  rounding). This is the walk oracle CR2's close-out said the surface
+  lost when `TOTAL M` left LIVE; it lives again here.
 - Optional: repeat once choosing **Discard**, and confirm the next Connect
   attempt no longer claims "a session is in progress" about the discarded
   run.
@@ -239,7 +266,7 @@ The corrected inventory:
 | Number (all from the same register map) | Rower-visible home | Walk oracle |
 | --- | --- | --- |
 | Session elapsed (register sum) | log sheet `SESSION` line, `TOTAL LEFT` (as remaining), progress-bar fill | Session 2's same-frame photo |
-| Session distance (register sum) | **none** | `final-totals`: `\|accumulator − machineTotal\| ≤ 1.5 m` (Sessions 1 + 2) |
+| Session distance (register sum) | **none** on the LIVE surface (unchanged — CR2's own scope). Staled note (Task 6, post-workout-summary spec, 2026-08-17): the **post-workout summary's own DISTANCE hero** now gives session distance a rower-visible home AFTER the row (R-B — Σ `IntervalActual` work+rest distance, a DIFFERENT code path from this register sum, not the same number under test here) | `final-totals`: `\|accumulator − machineTotal\| ≤ 1.5 m` (Sessions 1 + 2, THIS register sum only). The summary's own DISTANCE has its own oracle (post-workout-summary spec §5: Σ actuals vs the machine's total on replayed recordings) — AND a same-frame hardware row on this sheet now (the DISTANCE-hero-vs-machine photograph step above, PM gate C3) |
 | Per-interval actuals | GRID's TIME/METERS columns | PM5 memory screens vs GRID (Session 1) |
 | Interval countdown (2a's clock fix) | GRID active-row cell only | Session 2: glance the active-row countdown against the PM5's own mid-piece |
 

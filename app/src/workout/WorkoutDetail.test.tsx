@@ -137,8 +137,10 @@ const NO_BASELINES = { k2Seconds: null, k6Seconds: null };
 const BASELINES = { k2Seconds: 112, k6Seconds: 122 };
 
 // A completed-but-unlogged run record for `draft` — the exact shape
-// SessionComplete.tsx's own fixture builds (Phase 6B Task 4), constructed
-// directly rather than driven through tick/advance (engine.test.ts and
+// LogSession.test.tsx's own `buildSessionFixture` builds (Phase 6B Task 4,
+// the fixture's home since SessionComplete.tsx died with the post-workout-
+// summary redesign, Phase PW), constructed directly rather than driven
+// through tick/advance (engine.test.ts and
 // Timer.test.tsx already own proving that walk); this file's own job is
 // WorkoutDetail's reaction to finding one sitting in storage, not deriving
 // one. `startDraft`'s own timestamp doubles as the run's startedAt so the
@@ -667,7 +669,7 @@ describe("WorkoutDetail", () => {
   });
 
   // Fix round (whole-branch review, F5) — the actual finding: a rower
-  // finishes session A (SessionComplete.tsx deliberately KEEPS its draft
+  // finishes session A (LogSession.tsx's doors deliberately KEEP its draft
   // and run record for 6C), doesn't log it, then opens a different
   // workout and taps Start. `handleStart`'s original F4 fix only ever
   // gated on the DRAFT's own `startedAt` — a completed draft still has

@@ -45,7 +45,18 @@ export const sessions = pgTable(
 export const workoutTypeEnum = pgEnum("workout_type", ["AN", "O2", "AT", "TR"]);
 export const difficultyEnum = pgEnum("difficulty", ["easy", "medium", "hard"]);
 export const workoutSourceEnum = pgEnum("workout_source", ["starter", "user"]);
+// UNDER = FASTER than target (under the target NUMBER), OVER = SLOWER
+// (post-workout-summary spec, ruling option B, James 2026-08-17): stored
+// members are unchanged from the pre-existing enum, this only documents the
+// direction the button labels now read for a reader landing on this file
+// cold. Mirrored at the options array (LogSession.tsx's HELD_OPTIONS) and
+// both HeldResult copies (server/stores/logs.ts, src/api/useRecentLogs.ts).
 export const heldResultEnum = pgEnum("held_result", ["held", "under", "over"]);
+// Post-workout-summary spec (2026-08-17), §3 "Stored shapes": the reflection
+// card's thumbs-up/down question, stored now even though nothing reads it
+// yet (generation's own thumbs consumption is explicitly OUT for this
+// phase — spec §4).
+export const thumbsEnum = pgEnum("thumbs", ["up", "down"]);
 export const testDistanceEnum = pgEnum("test_distance", ["2k", "6k"]);
 
 export const baselines = pgTable("baselines", {
@@ -104,8 +115,23 @@ export const sessionLogs = pgTable(
       .defaultNow(),
     baselineK2: real("baseline_k2"),
     baselineK6: real("baseline_k6"),
-    held: heldResultEnum("held").notNull(),
-    pain: integer("pain").notNull(),
+    // Post-workout-summary spec (2026-08-17), §3 "Stored shapes": nullable
+    // now (`DROP NOT NULL`, migration 0009) — the redesigned reflection card
+    // makes every answer optional (James's ruling), so a rower who skips the
+    // HELD question entirely must be storable, not just one who skips PAIN
+    // (which was already impossible before this migration: both were
+    // required together). R-A ordered this: the null-tolerant READ side
+    // (`RecentLog.held`, src/api/useRecentLogs.ts) shipped and tagged
+    // (v0.10.1) before this column could ever hold a null, so no installed
+    // client white-screens on one.
+    held: heldResultEnum("held"),
+    // Same ruling as `held` above — nullable, `DROP NOT NULL`. The
+    // `session_logs_pain_check` CHECK below is left untouched: Postgres
+    // passes a CHECK constraint on NULL by definition (NULL is neither TRUE
+    // nor FALSE, and a CHECK only ever REJECTS an explicit FALSE), so an
+    // absent pain value satisfies `pain between 1 and 5` unchanged — no
+    // migration edit needed for the constraint itself.
+    pain: integer("pain"),
     notes: text("notes"),
     steps: jsonb("steps").notNull(),
     // Phase 7C Task 3 (spec §5/§6): session-scoped provenance for a
@@ -117,9 +143,17 @@ export const sessionLogs = pgTable(
     // level string has nowhere to live inside a per-step array, so a real
     // migration is unavoidable.
     deviceName: text("device_name"),
+    // Post-workout-summary spec (2026-08-17), §3: nullable column, additive.
+    // Absent/skipped reflection stores null; nothing consumes this yet
+    // (generation's own thumbs consumption is explicitly OUT this phase).
+    thumbs: thumbsEnum("thumbs"),
   },
   (t) => [
     index("session_logs_user_id_idx").on(t.userId),
+    // LEFT ALONE by the post-workout-summary migration (0009): NULL passes
+    // a Postgres CHECK constraint by rule (see the `pain` column's own
+    // comment above) — the constraint doesn't need to change for `pain` to
+    // become nullable, only the column's `NOT NULL` does.
     check("session_logs_pain_check", sql`${t.pain} between 1 and 5`),
   ],
 );

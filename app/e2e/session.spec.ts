@@ -244,33 +244,24 @@ test.describe("Phase 6B Task 4: session completion + resilience", () => {
     await expect(page.getByText("Finish this session?")).toBeVisible();
     await page.getByRole("button", { name: "Finish session" }).click();
 
-    await expect(page).toHaveURL(/\/session\/complete$/);
+    // Post-workout-summary spec §3: the finish stage now navigates STRAIGHT
+    // to the summary (`/session/log`) — `SessionComplete`/`/session/complete`
+    // are gone (a redirect-only route survives for stale deep links).
+    await expect(page).toHaveURL(/\/session\/log$/);
     await expect(page.getByRole("heading", { name: title })).toBeVisible();
-    await expect(page.locator(".complete-total-label")).toHaveText("TOTAL");
-    await expect(page.locator(".complete-total-value")).toBeVisible();
-    // A real recorded split (SessionComplete's own `fmtSplit` format,
-    // m:ss.t), not a placeholder — the "never a bare dash" house rule.
-    const split = await page.locator(".complete-actual-value").textContent();
-    expect(split).toMatch(/^\d+:\d{2}\.\d$/);
-
-    // Connected-revamp Task 8: `.session-complete-screen` carried the same
-    // 18px of dead portrait scroll `.timer-screen` did (measured live in
-    // Task 7's fix round at 390×844 — `scrollHeight` 862 vs `clientHeight`
-    // 844, this screen's own box 818px): `.app-shell` reserves
-    // `var(--tap)` for a tab bar this route never renders, while the rule
-    // subtracted only its own 26px of `.screen` padding, which
-    // `box-sizing: border-box` already counts inside the min-height.
-    // Pinned here rather than in a test of its own — this test already
-    // stands on the completed screen at the default 390×844 viewport, and
-    // the assertion is the same document-level one the phone timer's own
-    // portrait pin uses.
-    const completeOverflow = await page.evaluate(() => ({
-      scrollHeight: document.documentElement.scrollHeight,
-      clientHeight: document.documentElement.clientHeight,
-    }));
-    expect(completeOverflow.scrollHeight).toBeLessThanOrEqual(
-      completeOverflow.clientHeight,
-    );
+    // exact: true — the meta line ("… · TIMER") also contains the substring
+    // "TIME", so a loose match is ambiguous (strict-mode violation).
+    await expect(page.getByText("TIME", { exact: true })).toBeVisible();
+    // A real recorded pace (the distance phase's own stopwatch actual,
+    // `fmtSplit` format m:ss.t), not a placeholder — the "never a bare
+    // dash" house rule. It is the summary's only measured row, so it
+    // renders unjudged (review finding 5) but its pace text still shows.
+    const pace = await page
+      .locator(".summary-row-pace")
+      .filter({ hasText: /\d/ })
+      .first()
+      .textContent();
+    expect(pace).toMatch(/^\d+:\d{2}\.\d$/);
 
     // Completed-run protection (Today.tsx's amended stale-discard rule):
     // backdate the draft's own `createdAt` so it LOOKS stale by the
@@ -291,7 +282,11 @@ test.describe("Phase 6B Task 4: session completion + resilience", () => {
       localStorage.setItem("ergomatic.sessionDraft", JSON.stringify(draft));
     });
 
-    await page.getByRole("button", { name: "Back to Today" }).click();
+    // "Back to Today" is gone with SessionComplete — the summary's own
+    // non-destructive exit is the ← DONE BackLink (§2A): navigates away
+    // without touching the draft/run records, same as SessionComplete's
+    // old button did.
+    await page.getByRole("link", { name: "← DONE" }).click();
     await expect(page).toHaveURL(/\/today$/);
     await expect(page.getByRole("heading", { name: "Today" })).toBeVisible();
     const draftAfterToday = await page.evaluate(() =>
@@ -594,12 +589,12 @@ test.describe("Phase 6B Task 4: session completion + resilience", () => {
     await cleanupByTitle(page, title);
   });
 
-  // Task 3 (ui-fix round): SessionComplete's own new Discard without
-  // logging — clears the run/draft records with no POST, lands on Today
-  // with neither an unlogged line NOR an advanced plan counter (only a
-  // real logged session advances `doneN`, via POST /api/logs — this never
-  // fires one).
-  test("SessionComplete's Discard without logging clears the records and never posts a log — Today shows no unlogged line and the plan counter is unchanged", async ({
+  // Task 3 (ui-fix round), relabeled by post-workout-summary spec §2F: the
+  // summary's own DISCARD WITHOUT SAVING — clears the run/draft records
+  // with no POST, lands on Today with neither an unlogged line NOR an
+  // advanced plan counter (only a real logged session advances `doneN`, via
+  // POST /api/logs — this never fires one).
+  test("the summary's Discard without saving clears the records and never posts a log — Today shows no unlogged line and the plan counter is unchanged", async ({
     page,
   }) => {
     const title = "Tiny E2E Complete Discard";
@@ -617,10 +612,12 @@ test.describe("Phase 6B Task 4: session completion + resilience", () => {
 
     await startFromLibrary(page, title);
     await startAndSkipCountdown(page);
-    await expect(page).toHaveURL(/\/session\/complete$/, { timeout: 6000 });
+    // Post-workout-summary spec §3: the finish stage now navigates straight
+    // to the summary, `/session/log` — SessionComplete is gone.
+    await expect(page).toHaveURL(/\/session\/log$/, { timeout: 6000 });
 
-    // Staged — the first press only arms the L4 button, nothing clears yet.
-    await page.getByRole("button", { name: "Discard without logging" }).click();
+    // Staged — the first press only arms the button, nothing clears yet.
+    await page.getByRole("button", { name: "DISCARD WITHOUT SAVING" }).click();
     const runMidStage = await page.evaluate(() =>
       localStorage.getItem("ergomatic.sessionRun"),
     );
@@ -669,7 +666,7 @@ test.describe("Phase 6C Task 2: the Log screen — the session door", () => {
     await cleanupByTitle(page, title);
   });
 
-  test("the full loop: Today → detail → countdown → tiny timer session → complete → Log → Held + pain + notes → Save → Today shows it in LAST THREE and the plan's session counter advanced", async ({
+  test("the full loop: Today → detail → countdown → tiny timer session → summary → Held + pain + notes → Log against plan → Today shows it in LAST THREE and the plan's session counter advanced", async ({
     page,
   }) => {
     title = "Tiny E2E Log Session";
@@ -681,9 +678,9 @@ test.describe("Phase 6C Task 2: the Log screen — the session door", () => {
     await choosePlan(page, "sprint");
     await resetPlanProgress(page);
     // A single short time step — the last (and only) phase auto-advances
-    // straight to /session/complete with no NEXT/finish-stage click needed
-    // (same "single time phase auto-advances straight to completion" fact
-    // the whole-branch-review F1 describe block below relies on).
+    // straight to the summary with no NEXT/finish-stage click needed (same
+    // "single time phase auto-advances straight to completion" fact the
+    // whole-branch-review F1 describe block below relies on).
     await importBulk(
       page,
       [`${title} | AT | medium | 3`, "w 0:03 6k"].join("\n"),
@@ -699,19 +696,17 @@ test.describe("Phase 6C Task 2: the Log screen — the session door", () => {
     await startFromLibrary(page, title);
     await startAndSkipCountdown(page);
     await expect(page.getByText(/^STEP 1 OF 1/)).toBeVisible();
-    await expect(page).toHaveURL(/\/session\/complete$/, { timeout: 6000 });
+    // Post-workout-summary spec §3: the finish stage navigates straight to
+    // the summary — no intermediate SessionComplete screen, no "Log this
+    // session" link to click.
+    await expect(page).toHaveURL(/\/session\/log$/, { timeout: 6000 });
+    // The title renders bare (§2A: no "Log" prefix).
     await expect(page.getByRole("heading", { name: title })).toBeVisible();
-
-    await page.getByRole("link", { name: "Log this session" }).click();
-    await expect(page).toHaveURL(/\/session\/log$/);
-    await expect(
-      page.getByRole("heading", { name: `Log ${title}` }),
-    ).toBeVisible();
-    // The dashed PACES LOCKED panel and the per-step list both render real
-    // content (the "never a bare dash" house rule) — this workout's one
-    // step references "6k" plainly (off 0), so the 6K half resolves.
-    await expect(page.locator(".log-paces-value")).toContainText("6K 2:00.0");
-    await expect(page.locator(".log-step-row")).toHaveCount(1);
+    // The PACES OFF caption and the row list both render real content (the
+    // "never a bare dash" house rule) — this workout's one step references
+    // "6k" plainly (off 0), so the 6K half resolves.
+    await expect(page.getByText("PACES OFF 6K 2:00.0")).toBeVisible();
+    await expect(page.locator(".summary-row")).toHaveCount(1);
 
     await page.getByRole("button", { name: "HELD" }).click();
     // Pain 3, not 2 (Phase 6C Task 4's own brief) — deliberately mid-scale,
@@ -720,7 +715,10 @@ test.describe("Phase 6C Task 2: the Log screen — the session door", () => {
     // if the wrong picker cell were wired.
     await page.getByRole("button", { name: "Pain 3" }).click();
     await page.getByLabel("NOTES").fill("Felt strong.");
-    await page.getByRole("button", { name: "Save session" }).click();
+    // A plan is active — Log against plan leads and carries the position.
+    await page
+      .getByRole("button", { name: "Log against plan · SESSION 1 OF 84" })
+      .click();
 
     await expect(page).toHaveURL(/\/today$/);
     await expect(page.getByRole("heading", { name: "Today" })).toBeVisible();
@@ -778,13 +776,13 @@ test.describe("Phase 6C Task 2: the Log screen — the session door", () => {
 
     await startFromLibrary(page, title);
     await startAndSkipCountdown(page);
-    await expect(page).toHaveURL(/\/session\/complete$/, { timeout: 6000 });
-    await page.getByRole("link", { name: "Log this session" }).click();
-    await expect(page).toHaveURL(/\/session\/log$/);
+    // Post-workout-summary spec §3: straight to the summary, no
+    // intermediate SessionComplete/"Log this session" hop.
+    await expect(page).toHaveURL(/\/session\/log$/, { timeout: 6000 });
 
-    // Staged — the first press only arms the L4 button in place (same
-    // in-place idiom as WorkoutDetail's Delete workout), nothing clears yet.
-    await page.getByRole("button", { name: "Discard without logging" }).click();
+    // Staged — the first press only arms the button in place (same in-place
+    // idiom as WorkoutDetail's Delete workout), nothing clears yet.
+    await page.getByRole("button", { name: "DISCARD WITHOUT SAVING" }).click();
     const runMidStage = await page.evaluate(() =>
       localStorage.getItem("ergomatic.sessionRun"),
     );
@@ -847,23 +845,24 @@ test.describe("Phase 6C Task 3: the manual door", () => {
     await logItAfter.click();
 
     await expect(page).toHaveURL(/\/library\/[^/]+\/log$/);
-    await expect(
-      page.getByRole("heading", { name: `Log ${title}` }),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: title })).toBeVisible();
     // No Discard button on this door at all — nothing to discard (the task
     // brief's own words), unlike the session door's own staged confirm.
     await expect(page.getByRole("button", { name: /discard/i })).toHaveCount(0);
     // Real content, never a bare dash: this workout's one step references
-    // "6k" plainly (off 0), and it's the only step in the list.
-    await expect(page.locator(".log-paces-value")).toContainText("6K 2:00.0");
-    await expect(page.locator(".log-step-row")).toHaveCount(1);
+    // "6k" plainly (off 0), and it's the only step in the list. The manual
+    // door has no measurement of any kind — the BY FEEL hint (§2D)
+    // confirms the reflection card rendered, not a crash.
+    await expect(page.getByText("PACES OFF 6K 2:00.0")).toBeVisible();
+    await expect(page.getByText("BY FEEL")).toBeVisible();
+    await expect(page.locator(".summary-row")).toHaveCount(1);
 
     await page.getByRole("button", { name: "HELD" }).click();
     await page.getByRole("button", { name: "Pain 2" }).click();
     await page
       .getByLabel("NOTES")
       .fill("Rowed at the gym, logging it after the fact.");
-    await page.getByRole("button", { name: "Save session" }).click();
+    await page.getByRole("button", { name: "Save without logging" }).click();
 
     await expect(page).toHaveURL(/\/today$/);
     const row = page
@@ -944,7 +943,7 @@ test.describe("Phase 6C Task 3: the manual door", () => {
 
     await page.getByRole("button", { name: "HELD" }).click();
     await page.getByRole("button", { name: "Pain 3" }).click();
-    await page.getByRole("button", { name: "Save session" }).click();
+    await page.getByRole("button", { name: "Save without logging" }).click();
     await expect(page).toHaveURL(/\/today$/);
 
     const draftAfter = await page.evaluate(() =>
@@ -980,12 +979,11 @@ test.describe("Phase 6C Task 3: the manual door", () => {
     await expect(page.getByText("no target").last()).toBeVisible();
   });
 
-  // Today enhancements (Task 4): the outside-plan toggle's manual-door half
-  // — the session-door half of the SAME toggle already gets driven, in its
-  // default (untouched) state, by e2e/today.spec.ts's own type-swap loop
-  // test. This is the one e2e proof that actually TOGGLES it and confirms
-  // the plan's counter really does stay put.
-  test("the plan toggle: Log it after -> toggle OUTSIDE THE PLAN -> Save -> Today's counter is unchanged, LAST THREE shows the row", async ({
+  // Today enhancements (Task 4), rewired by post-workout-summary spec §2F:
+  // the old separate toggle is gone — "outside the plan" is now expressed
+  // by which SAVE BUTTON the rower taps (`Save without logging`), not a
+  // pre-tap then a separate Save press.
+  test("the manual door: Save without logging -> Today's counter is unchanged, LAST THREE shows the row", async ({
     page,
   }) => {
     const title = "Tiny E2E Outside Plan";
@@ -1011,19 +1009,18 @@ test.describe("Phase 6C Task 3: the manual door", () => {
     await page.getByRole("link", { name: "Log it after" }).click();
     await expect(page).toHaveURL(/\/library\/[^/]+\/log$/);
 
-    const toggle = page.getByRole("button", { name: /COUNTS TOWARD PLAN/ });
-    await expect(toggle).toBeVisible();
-    await expect(toggle).toContainText("SESSION 1 OF 84");
-    await expect(toggle).toHaveAttribute("aria-pressed", "false");
-    await toggle.click();
-    const toggledOff = page.getByRole("button", {
-      name: "OUTSIDE THE PLAN · won't advance",
-    });
-    await expect(toggledOff).toHaveAttribute("aria-pressed", "true");
+    // A plan is active — Log against plan leads (carrying the position);
+    // Save without logging is the secondary, is-what-used-to-be-outside
+    // action.
+    await expect(
+      page.getByRole("button", {
+        name: "Log against plan · SESSION 1 OF 84",
+      }),
+    ).toBeVisible();
 
     await page.getByRole("button", { name: "HELD" }).click();
     await page.getByRole("button", { name: "Pain 2" }).click();
-    await page.getByRole("button", { name: "Save session" }).click();
+    await page.getByRole("button", { name: "Save without logging" }).click();
 
     await expect(page).toHaveURL(/\/today$/);
     // Unchanged — exactly what advancesPlan:false is for.
@@ -1133,18 +1130,19 @@ test.describe("whole-branch review F1: browser BACK must never rebuild/wipe a pr
   // presses and check neither resurrected the countdown. Fast-follow Task 4
   // shortened the history stack (Start pushes straight from the workout's
   // own detail page to `/session/countdown`, no ConfirmTargets hop in
-  // between), so a real back-walk from Session Complete now reaches the
-  // detail page in ONE hop and never passes through Countdown at all — see
-  // the "BACK mid-session" test above for that proof. A `page.goBack()`
-  // repeat of the old shape would therefore assert something true but
-  // vacuous here (Countdown never mounts, so of course it never rebuilds
+  // between), so a real back-walk from the summary now reaches the detail
+  // page in ONE hop and never passes through Countdown at all — see the
+  // "BACK mid-session" test above for that proof. A `page.goBack()` repeat
+  // of the old shape would therefore assert something true but vacuous
+  // here (Countdown never mounts, so of course it never rebuilds
   // anything). The property this describe block actually exists to pin —
   // `hasRunProgress` never lets a completed run be silently rebuilt — still
   // has one real way in: a stale deep link or bookmark landing directly on
   // `/session/countdown`. Drives that instead: Countdown's own guard bounces
   // it to `/session/run`, and Timer's own already-complete check immediately
-  // bounces THAT to `/session/complete` — completedAt must survive both
-  // hops byte-identical, not get wiped by an accidental rebuild in between.
+  // bounces THAT to `/session/log` (the summary) — completedAt must survive
+  // both hops byte-identical, not get wiped by an accidental rebuild in
+  // between.
   test("a stale deep link to /session/countdown after completion never rebuilds or wipes the completed run", async ({
     page,
   }) => {
@@ -1164,8 +1162,8 @@ test.describe("whole-branch review F1: browser BACK must never rebuild/wipe a pr
     await expect(page.getByText(/^STEP 1 OF 1/)).toBeVisible({
       timeout: 6000,
     });
-    // The single time phase auto-advances straight to completion.
-    await expect(page).toHaveURL(/\/session\/complete$/, { timeout: 6000 });
+    // The single time phase auto-advances straight to the summary.
+    await expect(page).toHaveURL(/\/session\/log$/, { timeout: 6000 });
 
     const completedAtBefore = await page.evaluate(() => {
       const raw = localStorage.getItem("ergomatic.sessionRun");
@@ -1177,9 +1175,10 @@ test.describe("whole-branch review F1: browser BACK must never rebuild/wipe a pr
 
     await page.goto("/session/countdown");
 
-    // Both bounces land: Countdown -> /session/run -> /session/complete —
-    // never stalled mid-chain, never resurrecting "GET ON THE HANDLE".
-    await expect(page).toHaveURL(/\/session\/complete$/);
+    // Both bounces land: Countdown -> /session/run -> /session/log (the
+    // summary) — never stalled mid-chain, never resurrecting "GET ON THE
+    // HANDLE".
+    await expect(page).toHaveURL(/\/session\/log$/);
     await expect(page.getByText("GET ON THE HANDLE")).not.toBeVisible();
     const completedAtAfter = await page.evaluate(() => {
       const raw = localStorage.getItem("ergomatic.sessionRun");
@@ -1354,7 +1353,7 @@ test.describe("Phase 7B Task 5: Connect over a real (not seeded) unlogged sessio
     await page.getByRole("button", { name: "NEXT →" }).click();
     await expect(page.getByText("Finish this session?")).toBeVisible();
     await page.getByRole("button", { name: "Finish session" }).click();
-    await expect(page).toHaveURL(/\/session\/complete$/);
+    await expect(page).toHaveURL(/\/session\/log$/);
   }
 
   async function reopenDetail(page: Page, title: string): Promise<void> {

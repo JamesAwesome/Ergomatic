@@ -999,3 +999,87 @@ toolkit, not a history.
   on the SIBLING (`index.css:8093-8096`), not by anything on the cell itself;
   and PE/`setPointerCapture`/`touch-action` availability against the repo's
   iOS 15.0 deployment target (`project.pbxproj:239`).
+## Phase-open anchor pass, 2026-08-17 (Phase PW spec 1, the post-workout summary)
+
+- **"`Σ actual.distanceMeters` is the session distance — restore it as the walk's
+  check route."** Off by 64 m against the machine on the one committed
+  rest-bearing recording. Decoding every 0x0037 in `walk-2026-08-16/
+  session-2-wu-4unequal.jsonl`: Σ `splitIntervalDistanceMeters` = 1535, Σ
+  `intervalRestDistanceMeters` = 64, and the final 0x0031
+  `totalWorkDistanceMeters` = **1599** — exactly 1535 + 64. The PM5 counts the
+  rower's coasting during programmed rests; `IntervalActual` has no slot for it.
+  The r0 keystone agrees exactly (500 = 500), so the shape is invisible to the
+  regression that runs today. The spec's exit criterion ("DISTANCE equals the
+  actuals' sum on a replayed recording") compares the cell to the array it is
+  computed from and would have gone green. **Technique: a characteristic that
+  reports a WORK value beside a REST value reports two numbers, and the machine's
+  own total is their sum. Before adopting one field as a session total, decode
+  every field in the same record and check whether the machine's own total
+  equals your Σ — the difference is the field you dropped, and it names itself.**
+  Corollary: any exit criterion of the form "X equals the sum of the things X is
+  computed from" is tautological; name the EXTERNAL number instead.
+
+- **"Widening a stored column to NULL is additive."** At the DB layer yes
+  (`DROP NOT NULL` is safe, and a `between 1 and 5` CHECK is satisfied by NULL
+  per PostgreSQL's own rule). At the API layer no: `GET /api/logs` is an
+  unprojected `db.select()`, `Today.tsx:1464` does `log.held.toUpperCase()`, and
+  there is no `ErrorBoundary` anywhere in `src/` — so the first empty reflection
+  blank-screens the landing route of every v0.10.0 TestFlight build, against
+  `RELEASING.md:38`'s "old builds talk to the newest server". **Technique: for
+  any column going nullable, grep the field's consumers in the SHIPPED client,
+  not the branch's. The spec's read inventory is written for the code being
+  edited; the breaking read is in the binary already on someone's phone. Ask
+  which artifact the crash lives in, not which file.**
+
+- **A warm-up is an interval to the accumulator and not an interval to the
+  list.** `recordActual` files every boundary including the warm-up's, while
+  `buildMonitorLogSteps` drops warm-up steps by kind — so heroes computed from
+  `run.actuals` and rows rendered from `logSteps` disagree, on screen, by
+  arithmetic the rower can do. Measured on `walk-2026-08-17/step-3`: AVG SPLIT
+  2:40.4 with the warm-up vs 2:20.2 without; on `session-2` the shift is 1.3 s,
+  i.e. 81% of the deviation bar's entire ±1.6 s scale. **Technique: when a
+  design derives a TOTAL from one array and a LIST from another, diff the two
+  arrays' membership before believing either. Two producers of "the intervals"
+  is the default in this codebase, not the exception.**
+
+- **"Time-only means nothing was measured."** False for the phone timer:
+  `PhaseActual` is `{elapsedSeconds, splitSeconds, actualSource: "stopwatch"}` —
+  a real reading the rower takes at a distance mark, rendered by
+  `SessionComplete` today. A spec that maps doors to variants on a
+  connected/not-connected axis prints `TARGETS ONLY · NOTHING MEASURED` over it.
+  The data was already three-valued (`ActualSource`). **Technique: when a design
+  offers two variants and the code offers three states, the spec has collapsed an
+  axis. Find the existing union that models the distinction and count its members
+  before accepting the binary.**
+
+- **"The hint anchors the ruling on screen."** `TARGET m:ss` is undefined for
+  133 of the 300 seeded workouts — 101 carry two or more distinct split refs
+  and 32 are effort-only. **Technique: a spec phrase of the form "THE session's
+  X" is a uniqueness claim about the corpus. Run it over the real 300 and count
+  how many rows have exactly one — twelve lines of script, and it settles the
+  rulings that hang off the hint.**
+
+- **A chrome replacement deletes the tools bolted to the chrome.** `LogScreen`'s
+  last two children are `MonitorLogRow` and `RecordingDownloadRow` — the
+  latter shipped in PR #106 precisely because the walk operator could not reach
+  Download anywhere else, and the CR2 exit pass's own fix ("download before the
+  reload") depends on it being here. No spec section mentioned either.
+  **Technique: read the render function's LAST lines before accepting "the chrome
+  is replaced". Diagnostic affordances are appended, never designed in, so they
+  live below the part a spec author reads and above nothing at all.**
+
+- **Attacked and NOT broken (the phase's vetted ground):** that
+  `IntervalActual.elapsedSeconds` might be work-plus-rest — the open caveat at
+  `logDraft.ts:164-175` — is now settled on the wire (0x0037 reports
+  `splitTime 60.0` beside `restTime 30` for a 1:00 r30 interval, in all three
+  recordings), so the TIME formula double-counts nothing and the caveat can be
+  retired with a citation. Also held, each after a real attempt: "Newsreader 500
+  already loaded"; "meters already cross the wire in the steps jsonb"
+  (unprojected `db.select()`); the `useLogForm` gate and `monitorModeRun`'s four
+  conditions, quoted exactly; `DROP NOT NULL` at the DB layer including the pain
+  CHECK; and killing `/session/complete` orphaning nothing. One arithmetic
+  confirmation worth keeping: the PM5's own per-interval `avgPace` equals
+  `500 × splitTime / splitDist` **exactly** across all nine committed boundaries
+  — the spec's Σ-weighted average is the machine's own formula generalized, and
+  the mock's unweighted mean of row paces (2:09.1 vs the correct 2:09.2) is the
+  thing that is wrong.

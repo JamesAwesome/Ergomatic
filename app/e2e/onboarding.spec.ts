@@ -231,33 +231,33 @@ test.describe("Phase 6I: Today onboarding — the fresh-user arc", () => {
     await page.getByRole("button", { name: "NEXT →" }).click();
     await expect(page.getByText("Finish this session?")).toBeVisible();
     await page.getByRole("button", { name: "Finish session" }).click();
-    await expect(page).toHaveURL(/\/session\/complete$/);
-
-    // -- Log: a plan is active AND this is a designated onboarding
-    //    workout, so the toggle DEFAULTS to outside the plan (still
-    //    visible, still changeable) — "a baseline test must not silently
-    //    consume plan session 1."
-    await page.getByRole("link", { name: "Log this session" }).click();
+    // Post-workout-summary spec §3: the finish stage navigates straight to
+    // the summary — no intermediate SessionComplete/"Log this session" hop.
     await expect(page).toHaveURL(/\/session\/log$/);
-    await expect(
-      page.getByRole("button", { name: "OUTSIDE THE PLAN · won't advance" }),
-    ).toHaveAttribute("aria-pressed", "true");
 
-    // The measured split survives into the log: the ONLY step row (the
+    // -- Summary: a plan is active AND this is a designated onboarding
+    //    workout, so §2F's button-order rule makes Save without logging
+    //    LEAD (Log against plan demotes to the outline slot) — "a baseline
+    //    test must not silently consume plan session 1," now expressed as
+    //    which button is primary rather than a pre-toggled state.
+    const leadSave = page.getByRole("button", { name: "Save without logging" });
+    await expect(leadSave).toBeVisible();
+    await expect(leadSave).toHaveClass(/summary-save-lead/);
+    await expect(
+      page.getByRole("button", { name: /Log against plan/ }),
+    ).toHaveClass(/summary-save-secondary/);
+
+    // The measured split survives into the summary: the ONLY work row (the
     // distance phase — no warm-up is set for this walk, so there's nothing
-    // else to log) shows no target (5G rule, effort) but DOES show its
-    // real stopwatch ACTUAL — the 6I amendment to the drop rule, proven end
-    // to end.
-    const logRows = page.locator(".log-step-row");
-    await expect(logRows).toHaveCount(1);
-    await expect(logRows.first().locator(".log-step-target")).toHaveText("—");
-    await expect(logRows.first().locator(".log-step-actual")).toContainText(
-      "ACTUAL",
-    );
+    // else to log) is MEASURED — a real stopwatch pace, the 6I amendment to
+    // the drop rule, proven end to end — with no target (5G rule, effort).
+    const rows = page.locator(".summary-row");
+    await expect(rows).toHaveCount(1);
+    await expect(rows.first().locator(".summary-row-pace")).not.toBeEmpty();
 
     await page.getByRole("button", { name: "HELD" }).click();
     await page.getByRole("button", { name: "Pain 2" }).click();
-    await page.getByRole("button", { name: "Save session" }).click();
+    await leadSave.click();
     await expect(page).toHaveURL(/\/today$/);
 
     // -- either-null: baseline entry is manual (You), never auto-captured

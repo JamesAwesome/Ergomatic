@@ -1837,10 +1837,13 @@ in main, and the exit walk's WIRE PASS ran the same day and PASSED
 Log it landed, END finals written, the READY frame photographed, and
 James's real-device screenshot banked the landscape-notch check. One
 finding, F-1 (the 6-MIN reading), is UNREPRODUCED after a full bisect —
-see the walk README; instrumented for re-observation. Remaining before
-the v0.10.0 tag: the close-out PR (in flight, branch `cr2-closeout`),
-the notes PR, and the phone pass's three remaining items (portrait
-rotation, the mis-hit test, triple-tap on device).
+see the walk README; instrumented for re-observation. The close-out PR (#111)
+and notes PR (#112) MERGED and v0.10.0 TAGGED 2026-08-17; the phone
+pass's items (portrait rotation, mis-hit, triple-tap, the iOS-26 100dvh
+portrait eye, the on-device bottom-gap ruling) plus F-1's re-observation
+are OWED POST-TAG against the shipped build — counted at the next gate,
+per the PW phase-open PM's own finding that they outlived the tag they
+were meant to gate.
 **Close-out queue after #109 merges, before the tag (PM phase-close gate +
 antagonist exit pass, 2026-08-16):** (1) the STALE-WHILE-ARMED ruling —
 stale beats armed in `connectedAxes`' precedence, so a link lost before
@@ -2334,11 +2337,44 @@ against the monitor, and the app disagreeing with the erg by 3.9x survived
 a nine-task wave, three adversarial reviews and a five-item hardware walk
 because nobody had put the two displays side by side.
 
+## Phase PW — The post-workout summary
+
+**Status:** OPENED 2026-08-17 (absorbs Phase LG's precondition). Design
+handoff committed at `docs/design/handoffs/2026-08-12-post-workout/`
+(README + PROVENANCE with James's four brainstorm rulings and five
+corrections — the 2026-08-12 handoff predates the CR2 walks and is
+overruled where they falsified it). Spec 1 at
+`docs/superpowers/specs/2026-08-17-post-workout-summary-design.md`,
+phase-open gates run (PM GO-WITH-CONDITIONS + antagonist anchor, both
+folded in; the anchor's vetted ground is the spec's §7).
+**Goal:** the post-row flow tells the rower what they did before asking
+how it felt — avg-split/time/distance heroes, per-interval deviation
+bars, an optional reflection (thumbs feeds future generation), and save
+choices; restores an erg-checkable session distance.
+**Decomposition (James):** spec 1 = the summary replacing
+SessionComplete + all log doors, from data already recorded (plus the
+one wire addition: 0x0037's Interval Rest Distance, so DISTANCE matches
+the machine); spec 2 = from-the-log (history surface + the API's first
+UPDATE — may split); spec 3 = traces + HR, GATED on series-capture
+research (sampling rate, storage budget).
+**Standing rulings:** UNDER = FASTER than target; reflection optional
+(nothing blocks saving); the null-tolerant READ ships and tags
+(v0.10.1) BEFORE the nullable writer merges; TIME on monitor doors is
+measured (work + completed rests), never wall-clock — the notes PR says
+times read lower; `MONITOR_SPM_MIN` is its own triad PR, not spec 1's.
+**Exit:** spec 1's §6 criteria; spec 2 and 3 add theirs at their own
+opens; the v0.11.0 tag follows spec 1's notes PR per the release
+process.
+
 ## Phase LG — The log screen's own words
 
-**Status:** filed 2026-08-13 from James ("the log flow should also change to
-help people understand. I was confused by it"). Deliberately NOT folded into
-#89. Needs a brainstorm and his ruling.
+**Status:** ABSORBED INTO PHASE PW (2026-08-17, James's brainstorm). The
+direction precondition is DISCHARGED there (UNDER = FASTER than target,
+ruled and documented at the type/enum/options sites); the LABELS change is RULED
+(option B, James 2026-08-17: `HELD / UNDER · FASTER / OVER · SLOWER` —
+LG piece 1 ships in PW spec 1, and this section closes when it merges). Pieces 2 (value
+migration) and 3 (the question itself) remain out by ruling. This section
+stays until PW ships the label decision, then closes with a pointer.
 **Goal:** the post-row self-report stops using two words that mean the
 opposite thing one screen away.
 
@@ -2533,6 +2569,18 @@ program.ts` hardcodes PM5 Table 19 limits (`MIN_TIME_SECONDS = 20`,
   §19.2 has since WITHDRAWN, so the decision needs re-reasoning against the
   current record (re-reasoning draft in PR #70's body). **Trigger:** Capacitor
   BLE lands (PM5 reaches the phone), or a tester reports a mid-piece lost link.
+- **Remove the `PULL TO RESUME` block** (James, 2026-08-17: "we never got
+  rid of the pull to resume screen"): the stale-state band on
+  `ConnectedSurface.tsx` (~line 584) still renders its inverted ink field
+  when strokes stop mid-piece. CR2 2a task 5 only re-worded and un-occluded
+  it (PAUSED noun retired, in-flow, instruction not status); James's flag is
+  that the screen itself was supposed to go, not get politer. Work item:
+  decide what the stale frame state shows instead (nothing but the live
+  numbers? the END/AGAIN chip alone?), then remove the band, its CSS
+  (`connected-paused-*` family), the DEVIATIONS paused-treatment rows, and
+  the design/e2e witnesses that pin it. Owner: next connected-surface
+  phase — pairs naturally with James's stale-while-armed observation, still
+  owed from the CR2 phone pass.
 - **Anonymous-run logging (`workoutId: null`)** — every storage and server
   layer already accepts the record (nullable column, guards key on
   `completedAt` alone), but no product path can CREATE an anonymous run: the

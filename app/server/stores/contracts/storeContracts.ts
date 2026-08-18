@@ -515,6 +515,59 @@ export function describeStoreContracts(
         expect(Object.keys(map).sort()).toStrictEqual([wA.id, wB.id].sort());
         expect(await stores.logs.lastDonePerWorkout(userB)).toStrictEqual({});
       });
+
+      // Post-workout-summary spec (2026-08-17), §3: held/pain go nullable,
+      // thumbs is a brand-new nullable column — create() must round-trip
+      // null through to `list()` unchanged (not coerced to a default, not
+      // dropped from the row).
+      it("create round-trips held: null, pain: null, thumbs: null", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        const { id } = await stores.logs.create(
+          userId,
+          logInput({ held: null, pain: null, thumbs: null }),
+        );
+        const list = await stores.logs.list(userId, 10);
+        const row = list.find((r) => r.id === id);
+        expect(row).toMatchObject({ held: null, pain: null, thumbs: null });
+      });
+
+      // thumbs is optional on LogInput (undefined ≠ explicit null on the
+      // TYPE, but both must store identically) — an absent key must store
+      // null the same way an explicit null does, mirroring `deviceName`'s
+      // existing `?? null` convention in the real store's own `create`.
+      it("create with thumbs omitted round-trips to null, same as an explicit null", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        const overrides = logInput();
+        // logInput()'s own spread never sets `thumbs` — deleting it here is
+        // belt-and-braces against a future default creeping in.
+        delete (overrides as { thumbs?: unknown }).thumbs;
+        const { id } = await stores.logs.create(userId, overrides);
+        const list = await stores.logs.list(userId, 10);
+        const row = list.find((r) => r.id === id);
+        expect(row).toMatchObject({ thumbs: null });
+      });
+
+      it("create round-trips thumbs: 'up' and thumbs: 'down'", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        const { id: upId } = await stores.logs.create(
+          userId,
+          logInput({ thumbs: "up" }),
+        );
+        const { id: downId } = await stores.logs.create(
+          userId,
+          logInput({ thumbs: "down" }),
+        );
+        const list = await stores.logs.list(userId, 10);
+        expect(list.find((r) => r.id === upId)).toMatchObject({
+          thumbs: "up",
+        });
+        expect(list.find((r) => r.id === downId)).toMatchObject({
+          thumbs: "down",
+        });
+      });
     });
 
     describe("plan state", () => {

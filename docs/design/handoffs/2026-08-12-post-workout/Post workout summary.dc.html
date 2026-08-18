@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #ddd8cc; }
+  a { color: #1b1a17; text-decoration: none; }
+  a:hover { color: #b5341f; }
+  ::-webkit-scrollbar { width: 0; height: 0; }
+</style>
+</helmet>
+
+<section style="display:flex;flex-direction:column;align-items:center;gap:20px;padding:48px 40px 80px;font-family:Archivo,sans-serif">
+  <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.2em;color:#8a8478">ERG LOG · POST-WORKOUT</div>
+    <h1 style="margin:0;font-family:Newsreader,serif;font-size:34px;font-weight:500;letter-spacing:-0.01em;color:#1b1a17">What you just did</h1>
+    <div style="display:flex;gap:8px;margin-top:6px">
+      <div onClick="{{ setFinished }}" style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;padding:8px 12px;cursor:pointer;border:1px solid {{ tabAborder }};color:{{ tabAcolor }};background:{{ tabAbg }}">JUST FINISHED</div>
+      <div onClick="{{ setLog }}" style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;padding:8px 12px;cursor:pointer;border:1px solid {{ tabBborder }};color:{{ tabBcolor }};background:{{ tabBbg }}">FROM THE LOG</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <div onClick="{{ setPm5 }}" style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;padding:8px 12px;cursor:pointer;border:1px solid {{ tabCborder }};color:{{ tabCcolor }};background:{{ tabCbg }}">PM5 CONNECTED</div>
+      <div onClick="{{ setManual }}" style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;padding:8px 12px;cursor:pointer;border:1px solid {{ tabDborder }};color:{{ tabDcolor }};background:{{ tabDbg }}">TIME ONLY</div>
+    </div>
+  </div>
+
+  <div style="width:390px;height:844px;border-radius:44px;background:#f4f1e8;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 30px 60px -20px rgba(0,0,0,0.45);border:1px solid #d8d3c4">
+
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 26px 4px;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#8a8478;flex:none">
+      <span>6:41</span>
+      <span style="display:block;width:16px;height:8px;border:1px solid #b8b2a3;border-radius:2px"></span>
+    </div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 20px 10px;flex:none">
+      <div style="display:flex;align-items:center;gap:6px;min-height:36px;font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:0.1em;color:#57544c;cursor:pointer" style-hover="color:#b5341f">← {{ backLabel }}</div>
+    </div>
+
+    <div style="flex:1;overflow-y:auto;padding:0 20px 28px">
+
+      <div style="border-bottom:2px solid #1b1a17;padding-bottom:12px;display:flex;flex-direction:column;gap:4px">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.16em;color:#8a8478">{{ eyebrow }}</div>
+        <div style="font-family:Newsreader,serif;font-size:32px;font-weight:500;letter-spacing:-0.01em;color:#1b1a17">{{ title }}</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.1em;color:#8a8478">{{ metaLine }}</div>
+      </div>
+
+      <sc-if value="{{ noData }}" hint-placeholder-val="{{ false }}">
+        <div style="margin-top:18px;display:flex;flex-direction:column">
+          <div style="border:1px solid #1b1a17;background:#fffdf7;padding:16px 14px;display:flex;flex-direction:column;gap:2px">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.16em;color:#8a8478">TIME ON THE ERG</div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:46px;font-weight:500;color:#1b1a17;letter-spacing:-0.03em;line-height:1.05">45:00</div>
+          </div>
+
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ hasData }}" hint-placeholder-val="{{ true }}">
+      <div style="display:flex;gap:0;margin-top:18px;border:1px solid #1b1a17;background:#fffdf7">
+        <div style="flex:1.15;padding:14px 12px;display:flex;flex-direction:column;gap:3px">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.16em;color:#8a8478">AVG SPLIT</div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:30px;font-weight:500;color:#b5341f;letter-spacing:-0.02em">2:09.1</div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#8a8478">/500M</div>
+        </div>
+        <div style="flex:1;padding:14px 12px;display:flex;flex-direction:column;gap:3px;border-left:1px solid #ded8c9">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.16em;color:#8a8478">TIME</div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:26px;font-weight:500;color:#1b1a17;letter-spacing:-0.02em">25:50</div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#8a8478">.1</div>
+        </div>
+        <div style="flex:1;padding:14px 12px;display:flex;flex-direction:column;gap:3px;border-left:1px solid #ded8c9">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.16em;color:#8a8478">DISTANCE</div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:26px;font-weight:500;color:#1b1a17;letter-spacing:-0.02em">6000</div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#8a8478">METRES</div>
+        </div>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{ isLog }}" hint-placeholder-val="{{ false }}">
+        <div style="margin-top:12px;border:1px dashed #b8b2a3;padding:13px 14px;display:flex;flex-direction:column;gap:6px">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.16em;color:#8a8478">YOUR NOTES · HELD · PAIN 3/5 · LIKED</div>
+          <div style="font-size:15px;line-height:1.45;color:#1b1a17;text-wrap:pretty">Went out slow on purpose. Legs came back at 3k and the last 1200 felt free.</div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isFinished }}" hint-placeholder-val="{{ true }}">
+        <div style="margin-top:14px;display:flex;flex-direction:column;gap:14px;border:1px solid #1b1a17;background:#fffdf7;padding:14px">
+          <div style="display:flex;flex-direction:column;gap:7px">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.16em;color:#8a8478">HOW DID IT FEEL?</div>
+            <div style="display:flex;gap:8px">
+              <div onClick="{{ likeUp }}" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;min-height:48px;border:1px solid {{ upBorder }};background:{{ upBg }};color:{{ upColor }};font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:0.1em;cursor:pointer">↑ MORE LIKE THIS</div>
+              <div onClick="{{ likeDown }}" style="width:64px;display:flex;align-items:center;justify-content:center;min-height:48px;border:1px solid {{ downBorder }};background:{{ downBg }};color:{{ downColor }};font-family:'IBM Plex Mono',monospace;font-size:14px;cursor:pointer">↓</div>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:7px">
+            <div style="display:flex;justify-content:space-between;align-items:baseline">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.16em;color:#8a8478">DID YOU HOLD THE TARGETS?</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.16em;color:#8a8478">{{ holdHint }}</span>
+            </div>
+            <div style="display:flex;gap:6px">
+              <sc-for list="{{ holdOptions }}" as="h" hint-placeholder-count="3">
+                <div onClick="{{ h.onPick }}" style="flex:1;display:flex;align-items:center;justify-content:center;min-height:46px;border:1px solid {{ h.border }};background:{{ h.bg }};color:{{ h.color }};font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:0.1em;cursor:pointer">{{ h.label }}</div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:7px">
+            <div style="display:flex;justify-content:space-between;align-items:baseline">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.16em;color:#8a8478">ACTUAL PAIN</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.16em;color:#8a8478">EXPECTED 2/5</span>
+            </div>
+            <div style="display:flex;gap:6px">
+              <sc-for list="{{ painScale }}" as="p" hint-placeholder-count="5">
+                <div onClick="{{ p.onPick }}" style="flex:1;display:flex;align-items:center;justify-content:center;min-height:46px;border:1px solid {{ p.border }};background:{{ p.bg }};color:{{ p.color }};font-family:'IBM Plex Mono',monospace;font-size:15px;cursor:pointer">{{ p.n }}</div>
+              </sc-for>
+            </div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.1em;color:#8a8478">{{ painCaption }}</div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:7px">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.16em;color:#8a8478">NOTES</div>
+            <textarea placeholder="What happened out there?" style="width:100%;min-height:74px;resize:none;background:#f4f1e8;border:1px dashed #b8b2a3;padding:11px;font-family:Archivo,sans-serif;font-size:15px;line-height:1.45;color:#1b1a17;box-sizing:border-box;outline:none"></textarea>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ hasData }}" hint-placeholder-val="{{ true }}">
+      <div style="margin-top:22px;display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.16em;color:#8a8478">INTERVALS</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a8478">PACES OFF 6K 2:09.0</span>
+        </div>
+        <div style="display:flex;flex-direction:column">
+          <sc-for list="{{ splits }}" as="s" hint-placeholder-count="5">
+            <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #ded8c9">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a8478;width:14px">{{ s.n }}</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:15px;color:#1b1a17;width:76px">{{ s.time }}</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:15px;color:{{ s.paceColor }};width:52px">{{ s.pace }}</span>
+              <span style="position:relative;flex:1;height:14px">
+                <span style="position:absolute;left:50%;top:0;bottom:0;width:1px;background:#c9c3b2;display:block"></span>
+                <span style="position:absolute;top:3px;height:8px;left:{{ s.barLeft }};width:{{ s.barWidth }};background:{{ s.barColor }};display:block"></span>
+              </span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a8478;width:38px;text-align:right">{{ s.dev }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.1em;color:#8a8478">← FASTER (BLUE) · SLOWER (RED) →</div>
+      </div>
+
+      <div style="margin-top:22px;display:flex;flex-direction:column;gap:14px;background:#fffdf7;border:1px solid #ded8c9;padding:14px">
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.16em;color:#1b1a17">PACE /500M</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a8478">1:52 — 2:24</span>
+          </div>
+          <svg viewBox="0 0 320 90" preserveAspectRatio="none" style="width:100%;height:88px;display:block">
+            <line x1="0" y1="45" x2="320" y2="45" stroke="#c9c3b2" stroke-width="1" stroke-dasharray="3 4"></line>
+            <line x1="64" y1="0" x2="64" y2="90" stroke="#ebe6d9" stroke-width="1"></line>
+            <line x1="128" y1="0" x2="128" y2="90" stroke="#ebe6d9" stroke-width="1"></line>
+            <line x1="192" y1="0" x2="192" y2="90" stroke="#ebe6d9" stroke-width="1"></line>
+            <line x1="256" y1="0" x2="256" y2="90" stroke="#ebe6d9" stroke-width="1"></line>
+            <polyline fill="none" stroke="#b5341f" stroke-width="1.4" stroke-linejoin="round" points="0.0,47.5 2.9,54.1 5.9,50.8 8.8,52.0 11.7,49.7 14.7,55.4 17.6,49.5 20.6,48.9 23.5,48.1 26.4,51.9 29.4,53.6 32.3,48.0 35.2,50.9 38.2,50.6 41.1,46.5 44.0,54.4 47.0,51.1 49.9,51.4 52.8,48.9 55.8,48.4 58.7,48.3 61.7,46.1 64.6,47.3 67.5,52.9 70.5,44.4 73.4,47.2 76.3,44.5 79.3,51.4 82.2,45.6 85.1,48.3 88.1,48.3 91.0,41.8 93.9,43.6 96.9,44.2 99.8,40.1 102.8,41.8 105.7,40.5 108.6,46.0 111.6,41.5 114.5,41.5 117.4,39.9 120.4,44.6 123.3,41.6 126.2,41.1 129.2,39.2 132.1,39.9 135.0,41.5 138.0,39.6 140.9,38.8 143.9,43.6 146.8,37.6 149.7,37.1 152.7,41.2 155.6,34.8 158.5,42.0 161.5,35.7 164.4,35.7 167.3,38.0 170.3,37.5 173.2,38.0 176.1,40.1 179.1,37.2 182.0,36.5 185.0,39.5 187.9,36.1 190.8,37.1 193.8,36.8 196.7,42.0 199.6,40.3 202.6,39.1 205.5,39.6 208.4,40.1 211.4,39.7 214.3,40.4 217.2,41.8 220.2,45.4 223.1,44.6 226.1,42.3 229.0,45.3 231.9,41.3 234.9,44.5 237.8,39.8 240.7,47.9 243.7,40.3 246.6,39.7 249.5,41.1 252.5,41.1 255.4,42.1 258.3,43.0 261.3,43.9 264.2,45.4 267.2,46.1 270.1,44.8 273.0,41.2 276.0,41.8 278.9,46.0 281.8,44.0 284.8,47.8 287.7,46.3 290.6,39.4 293.6,43.2 296.5,37.3 299.4,40.2 302.4,36.6 305.3,33.4 308.3,31.5 311.2,33.9 314.1,32.7 317.1,23.1 320.0,23.1"></polyline>
+          </svg>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.16em;color:#1b1a17">RATE S/M</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a8478">AVG 26 · MAX 32</span>
+          </div>
+          <svg viewBox="0 0 320 90" preserveAspectRatio="none" style="width:100%;height:56px;display:block">
+            <line x1="64" y1="0" x2="64" y2="90" stroke="#ebe6d9" stroke-width="1"></line>
+            <line x1="128" y1="0" x2="128" y2="90" stroke="#ebe6d9" stroke-width="1"></line>
+            <line x1="192" y1="0" x2="192" y2="90" stroke="#ebe6d9" stroke-width="1"></line>
+            <line x1="256" y1="0" x2="256" y2="90" stroke="#ebe6d9" stroke-width="1"></line>
+            <polyline fill="none" stroke="#1f4a5c" stroke-width="1.2" stroke-linejoin="round" points="0.0,55.7 2.9,55.7 5.9,61.4 8.8,55.7 11.7,61.4 14.7,55.7 17.6,55.7 20.6,55.7 23.5,55.7 26.4,55.7 29.4,61.4 32.3,55.7 35.2,55.7 38.2,55.7 41.1,61.4 44.0,55.7 47.0,55.7 49.9,55.7 52.8,55.7 55.8,55.7 58.7,61.4 61.7,55.7 64.6,50.0 67.5,55.7 70.5,55.7 73.4,55.7 76.3,55.7 79.3,61.4 82.2,55.7 85.1,61.4 88.1,50.0 91.0,55.7 93.9,55.7 96.9,55.7 99.8,55.7 102.8,55.7 105.7,55.7 108.6,55.7 111.6,55.7 114.5,55.7 117.4,55.7 120.4,55.7 123.3,55.7 126.2,55.7 129.2,55.7 132.1,55.7 135.0,50.0 138.0,61.4 140.9,55.7 143.9,50.0 146.8,55.7 149.7,55.7 152.7,55.7 155.6,55.7 158.5,55.7 161.5,55.7 164.4,55.7 167.3,61.4 170.3,55.7 173.2,55.7 176.1,55.7 179.1,55.7 182.0,55.7 185.0,55.7 187.9,55.7 190.8,55.7 193.8,55.7 196.7,55.7 199.6,55.7 202.6,55.7 205.5,55.7 208.4,55.7 211.4,61.4 214.3,50.0 217.2,61.4 220.2,55.7 223.1,55.7 226.1,61.4 229.0,55.7 231.9,55.7 234.9,55.7 237.8,55.7 240.7,55.7 243.7,55.7 246.6,55.7 249.5,55.7 252.5,55.7 255.4,55.7 258.3,55.7 261.3,55.7 264.2,55.7 267.2,55.7 270.1,55.7 273.0,55.7 276.0,55.7 278.9,55.7 281.8,55.7 284.8,55.7 287.7,55.7 290.6,53.8 293.6,57.4 296.5,43.9 299.4,47.5 302.4,51.2 305.3,43.3 308.3,41.2 311.2,39.1 314.1,37.1 317.1,35.0 320.0,32.9"></polyline>
+          </svg>
+        </div>
+      </div>
+
+      <div style="margin-top:22px;display:flex;flex-direction:column;gap:10px">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.16em;color:#8a8478">HEART RATE</div>
+        <div style="display:flex;align-items:baseline;gap:22px">
+          <div style="display:flex;align-items:baseline;gap:6px">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:26px;color:#1b1a17">154</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a8478">AVG BPM</span>
+          </div>
+          <div style="display:flex;align-items:baseline;gap:6px">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:26px;color:#b5341f">170</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a8478">MAX</span>
+          </div>
+          <div style="display:flex;align-items:baseline;gap:6px">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:26px;color:#1b1a17">372</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a8478">CAL EST.</span>
+          </div>
+        </div>
+        <div style="display:flex;height:12px;width:100%;gap:1px">
+          <sc-for list="{{ zones }}" as="z" hint-placeholder-count="5">
+            <div style="width:{{ z.width }};background:{{ z.color }}"></div>
+          </sc-for>
+        </div>
+        <div style="display:flex;flex-direction:column;margin-top:2px">
+          <sc-for list="{{ zones }}" as="z" hint-placeholder-count="5">
+            <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #ded8c9">
+              <span style="width:10px;height:10px;background:{{ z.color }};display:block;flex:none"></span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:15px;color:#1b1a17;width:26px">{{ z.name }}</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a8478;width:78px">{{ z.range }}</span>
+              <span style="flex:1;height:6px;background:#ebe6d9;display:block;position:relative">
+                <span style="position:absolute;left:0;top:0;bottom:0;width:{{ z.width }};background:{{ z.color }};display:block"></span>
+              </span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:15px;color:{{ z.timeColor }};width:48px;text-align:right">{{ z.time }}</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a8478;width:32px;text-align:right">{{ z.width }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.1em;color:#8a8478">TARGET ZONE Z4 · 53% OF THE PIECE INSIDE IT</div>
+      </div>
+
+      <div style="margin-top:22px;border-top:1px solid #ded8c9">
+        <div onClick="{{ toggleMore }}" style="display:flex;justify-content:space-between;align-items:center;min-height:48px;cursor:pointer;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.16em;color:#57544c" style-hover="color:#b5341f">
+          <span>EVERY OTHER NUMBER</span><span>{{ moreChevron }}</span>
+        </div>
+        <sc-if value="{{ showMore }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;padding-bottom:8px">
+            <sc-for list="{{ details }}" as="d" hint-placeholder-count="7">
+              <div style="display:flex;justify-content:space-between;align-items:baseline;padding:9px 0;border-bottom:1px solid #ebe6d9">
+                <span style="font-size:14px;color:#57544c">{{ d.label }}</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:14px;color:#1b1a17">{{ d.value }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{ noData }}" hint-placeholder-val="{{ false }}">
+        <div style="margin-top:22px;display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;justify-content:space-between;align-items:baseline">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.16em;color:#8a8478">INTERVALS</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a8478">PACES OFF 6K 2:09.0</span>
+          </div>
+          <div style="display:flex;flex-direction:column">
+            <sc-for list="{{ prescribed }}" as="p" hint-placeholder-count="4">
+              <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #ded8c9">
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a8478;width:14px">{{ p.n }}</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:15px;color:#1b1a17;width:76px">{{ p.dist }}</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:15px;color:#1b1a17;width:52px">{{ p.pace }}</span>
+                <span style="flex:1;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a8478">{{ p.off }}</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a8478;width:38px;text-align:right">—</span>
+              </div>
+            </sc-for>
+          </div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.1em;color:#8a8478">TARGETS ONLY · NOTHING MEASURED</div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isFinished }}" hint-placeholder-val="{{ true }}">
+        <div style="margin-top:22px;display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;align-items:center;justify-content:center;min-height:54px;background:#b5341f;color:#fffdf7;font-size:16px;font-weight:600;cursor:pointer" style-hover="background:#9c2c19">Log against plan</div>
+          <div style="display:flex;align-items:center;justify-content:center;min-height:48px;border:1px solid #c9c3b2;background:#fffdf7;color:#1b1a17;font-size:15px;cursor:pointer" style-hover="border-color:#b8b2a3">Save without logging</div>
+          <div style="display:flex;align-items:center;justify-content:center;min-height:48px;font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:0.1em;color:#8a8478;cursor:pointer" style-hover="color:#b5341f">DISCARD WITHOUT SAVING</div>
+        </div>
+      </sc-if>
+      <sc-if value="{{ isLog }}" hint-placeholder-val="{{ false }}">
+        <div style="margin-top:22px;display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:13px 14px;background:#fffdf7;border:1px solid #1b1a17">
+            <span style="font-size:14px;color:#1b1a17">Logged to Silver Thaw</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8a8478">SESSION 1 OF 84</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:center;min-height:48px;border:1px solid #c9c3b2;background:#fffdf7;color:#1b1a17;font-size:15px;cursor:pointer" style-hover="border-color:#b8b2a3">Edit notes &amp; pain rating</div>
+        </div>
+      </sc-if>
+
+    </div>
+  </div>
+</section>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:480,&quot;height&quot;:1020}}">
+class Component extends DCLogic {
+  state = { mode: 'finished', source: 'pm5', showMore: false, pain: 0, liked: null, hold: null };
+
+  renderVals() {
+    const finished = this.state.mode === 'finished';
+    const on = { bg: '#1b1a17', color: '#f4f1e8', border: '#1b1a17' };
+    const off = { bg: 'transparent', color: '#8a8478', border: '#c9c3b2' };
+    const a = finished ? on : off, b = finished ? off : on;
+    const hasData = this.state.source !== 'manual';
+    const c = hasData ? on : off, d = hasData ? off : on;
+    const raw = [
+      { n: '1', time: '5:13.5', pace: '2:10.6', dev: 1.5 },
+      { n: '2', time: '5:09.0', pace: '2:08.7', dev: -0.4 },
+      { n: '3', time: '5:10.1', pace: '2:09.2', dev: 0.1 },
+      { n: '4', time: '5:10.1', pace: '2:09.2', dev: 0.1 },
+      { n: '5', time: '5:07.4', pace: '2:08.0', dev: -1.1 }
+    ];
+    const max = 1.6;
+    const splits = raw.map(s => {
+      const pct = Math.max(Math.abs(s.dev) / max * 50, 1.2);
+      const fast = s.dev < 0;
+      return {
+        ...s,
+        dev: (s.dev > 0 ? '+' : '') + s.dev.toFixed(1),
+        paceColor: fast ? '#1f4a5c' : '#b5341f',
+        barColor: fast ? '#1f4a5c' : '#b5341f',
+        barLeft: fast ? (50 - pct) + '%' : '50%',
+        barWidth: pct + '%'
+      };
+    });
+    return {
+      isFinished: finished,
+      isLog: !finished,
+      backLabel: finished ? 'DONE' : 'LOG',
+      eyebrow: finished ? 'WORKOUT COMPLETE' : 'FROM YOUR LOG',
+      setFinished: () => this.setState({ mode: 'finished' }),
+      setLog: () => this.setState({ mode: 'log' }),
+      tabAbg: a.bg, tabAcolor: a.color, tabAborder: a.border,
+      tabBbg: b.bg, tabBcolor: b.color, tabBborder: b.border,
+      setPm5: () => this.setState({ source: 'pm5' }),
+      setManual: () => this.setState({ source: 'manual' }),
+      tabCbg: c.bg, tabCcolor: c.color, tabCborder: c.border,
+      tabDbg: d.bg, tabDcolor: d.color, tabDborder: d.border,
+      hasData, noData: !hasData,
+      title: hasData ? 'Silver Thaw' : 'Silver Thaw',
+      metaLine: hasData ? 'AUG 10 · 18:57 · PM5 432331249' : 'AUG 10 · 18:57 · LOGGED BY HAND',
+      likeUp: () => this.setState(s => ({ liked: s.liked === 'up' ? null : 'up' })),
+      likeDown: () => this.setState(s => ({ liked: s.liked === 'down' ? null : 'down' })),
+      upBg: this.state.liked === 'up' ? '#1b1a17' : '#fffdf7',
+      upColor: this.state.liked === 'up' ? '#f4f1e8' : '#57544c',
+      upBorder: this.state.liked === 'up' ? '#1b1a17' : '#c9c3b2',
+      downBg: this.state.liked === 'down' ? '#b5341f' : '#fffdf7',
+      downColor: this.state.liked === 'down' ? '#fffdf7' : '#57544c',
+      downBorder: this.state.liked === 'down' ? '#b5341f' : '#c9c3b2',
+      zones: [
+        { name: 'Z5', range: '164–182', time: '8:12', width: '32%', color: '#b5341f', timeColor: '#1b1a17' },
+        { name: 'Z4', range: '146–163', time: '13:40', width: '53%', color: '#c9713f', timeColor: '#1b1a17' },
+        { name: 'Z3', range: '128–145', time: '3:18', width: '13%', color: '#1f4a5c', timeColor: '#1b1a17' },
+        { name: 'Z2', range: '110–127', time: '0:40', width: '2%', color: '#6f96a4', timeColor: '#8a8478' },
+        { name: 'Z1', range: '91–109', time: '0:00', width: '0%', color: '#c9d5da', timeColor: '#8a8478' }
+      ],
+      prescribed: [
+        { n: '1', dist: '2250 m', pace: '2:17.0', off: '6K +8' },
+        { n: '2', dist: '1700 m', pace: '2:15.0', off: '6K +6' },
+        { n: '3', dist: '1100 m', pace: '2:13.0', off: '6K +4' },
+        { n: '4', dist: '550 m', pace: '2:11.0', off: '6K +2' }
+      ],
+      holdHint: hasData ? 'TARGET 2:09' : 'BY FEEL',
+      holdOptions: ['HELD', 'UNDER', 'OVER'].map(label => {
+        const sel = this.state.hold === label;
+        return {
+          label, onPick: () => this.setState(s => ({ hold: s.hold === label ? null : label })),
+          bg: sel ? '#1b1a17' : '#fffdf7',
+          color: sel ? '#f4f1e8' : '#57544c',
+          border: sel ? '#1b1a17' : '#c9c3b2'
+        };
+      }),
+      painScale: [1, 2, 3, 4, 5].map(n => {
+        const sel = this.state.pain === n;
+        return {
+          n: String(n), onPick: () => this.setState({ pain: n }),
+          bg: sel ? '#b5341f' : '#fffdf7',
+          color: sel ? '#fffdf7' : '#57544c',
+          border: sel ? '#b5341f' : '#c9c3b2'
+        };
+      }),
+      painCaption: this.state.pain === 0 ? 'TAP TO RATE' : (this.state.pain > 2 ? 'HARDER THAN PLANNED' : this.state.pain < 2 ? 'EASIER THAN PLANNED' : 'AS PLANNED'),
+      splits,
+      showMore: this.state.showMore,
+      moreChevron: this.state.showMore ? '−' : '+',
+      toggleMore: () => this.setState(s => ({ showMore: !s.showMore })),
+      details: [
+        { label: 'Avg power', value: '162 W' },
+        { label: 'Avg stroke rate', value: '26 s/m' },
+        { label: 'Calories from HR', value: '372 cal · 863/hr' },
+        { label: 'Drag factor', value: '101' },
+        { label: 'Rest distance', value: '—' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

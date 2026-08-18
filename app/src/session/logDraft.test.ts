@@ -1122,6 +1122,7 @@ const WALK4_ACTUALS: IntervalActual[] = [
     avgSplit: 185.3,
     avgSpm: 25,
     avgHeartRateBpm: 132,
+    restDistanceMeters: 0,
   },
   // DECODED — see comment above; verbatim from §18's real 0x0037/0x0038
   // pair (b402faf) through parse.ts's own functions, index normalized via
@@ -1133,6 +1134,7 @@ const WALK4_ACTUALS: IntervalActual[] = [
     avgSplit: 145.5,
     avgSpm: 25,
     avgHeartRateBpm: 107,
+    restDistanceMeters: 0,
   },
 ];
 
@@ -1193,6 +1195,7 @@ const THREE_STEP_ACTUALS: IntervalActual[] = [
     avgSplit: 160.5,
     avgSpm: 22,
     avgHeartRateBpm: 118,
+    restDistanceMeters: 0,
   },
   {
     index: 1,
@@ -1201,6 +1204,7 @@ const THREE_STEP_ACTUALS: IntervalActual[] = [
     avgSplit: 167.0,
     avgSpm: 23,
     avgHeartRateBpm: 121,
+    restDistanceMeters: 0,
   },
   {
     index: 2,
@@ -1209,6 +1213,7 @@ const THREE_STEP_ACTUALS: IntervalActual[] = [
     avgSplit: 155.0,
     avgSpm: 24,
     avgHeartRateBpm: 125,
+    restDistanceMeters: 0,
   },
 ];
 const THREE_STEP_DRAFT = buildDraft({
@@ -1331,6 +1336,7 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
           avgSplit: null,
           avgSpm: null,
           avgHeartRateBpm: null,
+          restDistanceMeters: 0,
         },
         {
           index: 1,
@@ -1339,6 +1345,7 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
           avgSplit: 185.3,
           avgSpm: 25,
           avgHeartRateBpm: 132,
+          restDistanceMeters: 0,
         },
       ],
       deviceName: "PM5 432331249",
@@ -1422,6 +1429,7 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
             avgSplit: 185.3,
             avgSpm: 25,
             avgHeartRateBpm: 132,
+            restDistanceMeters: 0,
           },
         ],
         deviceName: "PM5 432331249",
@@ -1533,6 +1541,7 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
           avgSplit: 110,
           avgSpm: 32,
           avgHeartRateBpm: 150,
+          restDistanceMeters: 0,
         },
       ],
       deviceName: "PM5 432331249",
@@ -1741,6 +1750,7 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
           avgSplit: 160.5,
           avgSpm: 22,
           avgHeartRateBpm: 118,
+          restDistanceMeters: 0,
         },
         // A boundary landing on the mid-workout warmup's own position —
         // even if the machine reports one, it must never surface as a step.
@@ -1751,6 +1761,7 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
           avgSplit: null,
           avgSpm: null,
           avgHeartRateBpm: null,
+          restDistanceMeters: 0,
         },
         {
           index: 2,
@@ -1759,6 +1770,7 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
           avgSplit: 163.3,
           avgSpm: 23,
           avgHeartRateBpm: 130,
+          restDistanceMeters: 0,
         },
       ],
       deviceName: "PM5 432331249",
@@ -1824,6 +1836,7 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
           avgSplit: 145.5,
           avgSpm: 25,
           avgHeartRateBpm: 141,
+          restDistanceMeters: 0,
         },
       ],
       deviceName: "PM5 432331249",

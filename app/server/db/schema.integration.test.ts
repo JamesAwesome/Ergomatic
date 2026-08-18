@@ -15,7 +15,7 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createDb, type Db } from "./index.js";
-import { users, workouts } from "./schema.js";
+import { sessionLogs, users, workouts } from "./schema.js";
 import type pg from "pg";
 
 describe("migrations", () => {
@@ -317,5 +317,148 @@ describe("migration 0008: the workouts wu-strip", () => {
     // `run.index >= run.phases.length` (true at `index: 0` for a
     // zero-phase run), so a session built from this workout completes
     // immediately instead of throwing — degrades rather than crashes.
+  });
+});
+
+// Post-workout-summary spec (2026-08-17), §3: `held`/`pain` DROP NOT NULL
+// and `thumbs` is a new nullable column — both loosening/additive changes,
+// so unlike migration 0008's steps-rewrite, no existing row's DATA needs
+// to change at all. This suite proves that directly: a "legacy" row is
+// seeded (with real held/pain values, the only shape possible before this
+// migration existed) against a database migrated only through 0008, then
+// 0009 runs — same ordering proof as the 0008 suite above, but the
+// assertion is "nothing moved" rather than "the shape rewrote."
+describe("migration 0009: reflection fields go nullable, thumbs added", () => {
+  let container: StartedPostgreSqlContainer;
+  let pool: pg.Pool;
+  let db: Db;
+  let tempDir: string;
+
+  const PRE_0009_TAGS = [
+    "0000_skinny_silver_fox",
+    "0001_tan_thunderball",
+    "0002_rare_khan",
+    "0003_spicy_firedrake",
+    "0004_slippery_starjammers",
+    "0005_fine_radioactive_man",
+    "0006_windy_wendell_vaughn",
+    "0007_shallow_kang",
+    "0008_strip_wu_steps",
+  ];
+
+  beforeAll(async () => {
+    container = await new PostgreSqlContainer("postgres:18.4").start();
+    ({ pool, db } = createDb(container.getConnectionUri()));
+
+    // A migrations folder containing only 0000-0008, so migrate() below
+    // cannot possibly apply 0009 — the legacy row (held/pain both required,
+    // no thumbs column at all) gets seeded against exactly the schema a
+    // real pre-Task-3 deploy would have.
+    tempDir = await mkdtemp(path.join(tmpdir(), "drizzle-pre-0009-"));
+    await mkdir(path.join(tempDir, "meta"));
+    for (const [i, tag] of PRE_0009_TAGS.entries()) {
+      const idx = String(i).padStart(4, "0");
+      await copyFile(
+        path.join("drizzle", `${tag}.sql`),
+        path.join(tempDir, `${tag}.sql`),
+      );
+      await copyFile(
+        path.join("drizzle", "meta", `${idx}_snapshot.json`),
+        path.join(tempDir, "meta", `${idx}_snapshot.json`),
+      );
+    }
+    const journal = JSON.parse(
+      await readFile(path.join("drizzle", "meta", "_journal.json"), "utf-8"),
+    ) as { entries: { idx: number }[] };
+    await writeFile(
+      path.join(tempDir, "meta", "_journal.json"),
+      JSON.stringify({
+        ...journal,
+        entries: journal.entries.filter((e) => e.idx <= 8),
+      }),
+    );
+    await migrate(db, { migrationsFolder: tempDir });
+  });
+
+  afterAll(async () => {
+    await pool.end().catch(() => {});
+    await container.stop().catch(() => {});
+  });
+
+  it("keeps an existing row's held/pain values, and reads thumbs back as null, after 0009 applies", async () => {
+    const [u] = await db
+      .insert(users)
+      .values({
+        googleSub: "pre-0009-user",
+        email: "pre-0009@migrate.test",
+        name: "Pre 0009",
+      })
+      .returning();
+
+    // Seeded against the PRE-0009 schema (held/pain both NOT NULL, no
+    // thumbs column exists yet) — the only shape a real row could have had
+    // before this migration. Raw SQL, not the typed `sessionLogs` insert
+    // helper: drizzle's insert builder always lists EVERY column the TS
+    // schema declares (using `default` for ones the caller didn't set),
+    // and the TS schema here already declares `thumbs` — against the real
+    // pre-0009 table (which genuinely has no such column), that statement
+    // 500s with "column thumbs does not exist" before this insert even
+    // reaches the assertion this test exists to make.
+    const inserted = await db.execute<{ id: string }>(
+      sql`insert into "session_logs"
+          ("user_id", "workout_title", "workout_type", "held", "pain", "steps")
+          values (${u.id}, 'Legacy reflection row', 'AT', 'under', 3, '[]'::jsonb)
+          returning "id"`,
+    );
+    const row = inserted.rows[0]!;
+
+    // The real, full folder — the boot-time migrate() call that ships
+    // 0009. Only 0009 is new (0000-0008's hashes already match what ran
+    // against tempDir above), so this is the moment DROP NOT NULL / ADD
+    // COLUMN fire.
+    await migrate(db, { migrationsFolder: "drizzle" });
+
+    const [after] = await db
+      .select()
+      .from(sessionLogs)
+      .where(eq(sessionLogs.id, row.id));
+    expect(after.held).toBe("under");
+    expect(after.pain).toBe(3);
+    expect(after.thumbs).toBeNull();
+  });
+
+  it("accepts a NEW row with held/pain/thumbs all null once 0009 has applied", async () => {
+    const [u] = await db
+      .insert(users)
+      .values({
+        googleSub: "post-0009-user",
+        email: "post-0009@migrate.test",
+        name: "Post 0009",
+      })
+      .returning();
+
+    // migrate() above (previous test, same shared container) already
+    // applied 0009 — this insert exercises the loosened constraint
+    // directly against the real column, not just through the API layer.
+    const [row] = await db
+      .insert(sessionLogs)
+      .values({
+        userId: u.id,
+        workoutTitle: "Skipped reflection",
+        workoutType: "O2",
+        held: null,
+        pain: null,
+        thumbs: null,
+        steps: [],
+      })
+      .returning();
+
+    const [after] = await db
+      .select()
+      .from(sessionLogs)
+      .where(eq(sessionLogs.id, row.id));
+    expect(after.held).toBeNull();
+    expect(after.pain).toBeNull();
+    expect(after.thumbs).toBeNull();
   });
 });

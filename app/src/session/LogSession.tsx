@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import {
   Link,
   Navigate,
@@ -11,9 +11,8 @@ import { useWorkouts, type LibraryWorkout } from "../api/useWorkouts";
 import { useBaselines } from "../api/useBaselines";
 import { usePlan } from "../api/usePlan";
 import type { PlanData } from "../api/usePlan";
-import type { HeldResult } from "../api/useRecentLogs";
+import type { HeldResult, Thumbs } from "../api/useRecentLogs";
 import { fmtSplit } from "../../domain/format.js";
-import { estimateMinutes } from "../../domain/expand.js";
 import { isEffortRef } from "../../domain/pace.js";
 import { isOnboardingTitle } from "../../domain/onboarding.js";
 import { needsBaselines } from "../../domain/needsBaselines.js";
@@ -29,47 +28,19 @@ import {
   buildLogSteps,
   buildManualLogSteps,
   buildMonitorLogSteps,
-  formatLogDate,
-  logTotals,
+  MonitorLogSeedError,
   type LogStep,
 } from "./logDraft";
 import { clearRun, loadRun, type SessionRun } from "./run";
 import {
   clearMonitorRun,
-  interruptedTotalSeconds,
   loadMonitorRun,
   type MonitorRun,
 } from "../monitor/monitorRun";
 import { useStagedDiscard } from "./useStagedDiscard";
 import BackLink from "../shell/BackLink";
-import TypeBadge from "../components/TypeBadge";
-
-const HELD_OPTIONS: { value: HeldResult; label: string }[] = [
-  { value: "held", label: "HELD" },
-  { value: "under", label: "UNDER" },
-  { value: "over", label: "OVER" },
-];
-
-const PAIN_LEVELS = [1, 2, 3, 4, 5] as const;
-
-// Originally duplicated from ClassificationCard.tsx's own `PAIN_RAMP_VAR`,
-// matching this repo's established convention of keeping this tiny 5-entry
-// map local to each file that needs it rather than importing it. The
-// ui-fix round's Task 1 later moved ClassificationCard.tsx's own selected
-// PAIN chip off this ramp onto plain ink (DESIGN.md: "Builder's gold pain
-// selection goes" — this screen wasn't touched that round, so its own
-// per-level ramp fill is unchanged) — this map and the `.classification-*`
-// CSS classes it paints are still shared with (not owned by)
-// ClassificationCard.tsx's own `.classification-chip-pain[aria-pressed=
-// "true"]` rule, which this screen's inline style always overrides
-// regardless of which one is "true" today.
-const PAIN_RAMP_VAR: Record<(typeof PAIN_LEVELS)[number], string> = {
-  1: "--pain-ramp-1",
-  2: "--pain-ramp-2",
-  3: "--pain-ramp-3",
-  4: "--pain-ramp-4",
-  5: "--pain-ramp-5",
-};
+import PostWorkoutSummary, { singleTargetHint } from "./PostWorkoutSummary";
+import { buildSummaryModel, type SummaryModel } from "./summaryModel";
 
 /** PACES LOCKED panel (README.md §7's own literal example: "PACES LOCKED AT
  *  2K 1:52.0 · 6K 2:02.0"). UNVERIFIED judgment call (Task 2 brief flagged
@@ -291,73 +262,6 @@ export function monitorModeRun(
   return run;
 }
 
-/** Monitor mode's one caption line (7C spec §4): `FROM <deviceName> · N OF
- *  M INTERVALS MEASURED`, or `FROM <deviceName> · ALL M INTERVALS MEASURED`
- *  once every work interval carries a matched actual. `total` is
- *  `logSteps.length` (warmups are never in that array to begin with —
- *  `buildMonitorLogSteps`' own skip — so it already counts WORK intervals
- *  only, no separate filter needed here). Middle dot (`·`), matching this
- *  screen's own `.log-meta` idiom (`{dateLabel} · {totalMinutes} MIN`) —
- *  NEVER an em-dash (house rule). */
-function monitorCaption(
-  deviceName: string,
-  measured: number,
-  total: number,
-): string {
-  const measuredPart =
-    measured === total
-      ? `ALL ${total} INTERVALS MEASURED`
-      : `${measured} OF ${total} INTERVALS MEASURED`;
-  return `FROM ${deviceName} · ${measuredPart}`;
-}
-
-/** Monitor mode's header line — two branches now (F6 Task 3, spec 2b).
- *
- *  **Normal completion** (7C spec §4: "Date and duration from the run's
- *  `startedAt`/`completedAt` stamps") — the `MonitorRun` twin of `logTotals`
- *  above, same formula (wall-clock `completedAt - startedAt`, floored at 0,
- *  rounded to the nearest minute), recomputed independently rather than
- *  widening `logTotals`' own `SessionRun`-typed signature to accept either
- *  record (the two run types are deliberately NOT unified — `monitorRun.ts`'s
- *  own header comment on why — and this is six lines, not worth blurring
- *  that line for). `completedAt!`: this function's only caller only ever
- *  holds a `MonitorRun` that already passed `monitorModeRun`'s own
- *  condition 2 (`completedAt !== null`) — the same "guaranteed by the
- *  caller, not re-checked here" convention this file's `activeRun`/
- *  `activeWorkout` aliases already use for a narrowing that doesn't survive
- *  across a function boundary. This branch's behaviour is UNCHANGED by F6 —
- *  see `LogSession.test.tsx`'s own inverse pin.
- *
- *  **Interrupted** (`endedBy: "interrupted"`, F6 Task 3): wall-clock is
- *  forbidden here — `completedAt` is only the moment the rower chose "Log
- *  it" through Today's row, possibly days after the row itself
- *  (`monitorRun.ts`'s `completeInterruptedRun`), so `completedAt -
- *  startedAt` would show elapsed CALENDAR time, not session duration.
- *  Duration comes from `interruptedTotalSeconds` (Task 1: measured work
- *  plus each completed interval's own programmed rest) instead. The date is
- *  the plan's own ruling (plan "Decisions" #2, not a spec quote — the spec
- *  only orders the duration): the row's own `startedAt`, since `completedAt`
- *  is the "Log it" moment and not when the row happened. */
-function monitorLogTotals(run: MonitorRun): {
-  dateLabel: string;
-  totalMinutes: number;
-} {
-  if (run.endedBy === "interrupted") {
-    return {
-      dateLabel: formatLogDate(run.startedAt),
-      totalMinutes: Math.round(interruptedTotalSeconds(run) / 60),
-    };
-  }
-  const completedAt = run.completedAt!;
-  const totalMinutes = Math.round(
-    Math.max(
-      0,
-      new Date(completedAt).getTime() - new Date(run.startedAt).getTime(),
-    ) / 60000,
-  );
-  return { dateLabel: formatLogDate(completedAt), totalMinutes };
-}
-
 /** Resolves the POST body's `workoutType` — `SessionRun` itself doesn't
  *  carry one (confirmed against run.ts's own shape, per the task brief's
  *  "UNVERIFIED — check before use"). Priority order:
@@ -435,10 +339,9 @@ interface LogFormFields {
  *  ~45 lines of verbatim-duplicated behaviour (the held/pain/notes state
  *  quintet, body assembly, and — the part that actually carries the app's
  *  rules — the `field === "workoutId"` 400-retry policy and the error
- *  string). `LogScreen` already made the two doors' MARKUP structurally
- *  unable to diverge; this hook does the same for their BEHAVIOUR: there is
- *  now exactly one copy of the retry policy, not two that a future fix to
- *  one door could silently leave the other behind.
+ *  string). This hook makes it structurally impossible for the two doors'
+ *  BEHAVIOUR to diverge: there is exactly one copy of the retry policy, not
+ *  two that a future fix to one door could silently leave the other behind.
  *
  *  Each door supplies only what genuinely differs: `submit`'s own
  *  `LogFormFields` argument (workoutId/title/type/steps — where the
@@ -452,76 +355,57 @@ interface LogFormFields {
  *  save behaviour (a future third door could plausibly want to land
  *  somewhere else).
  *
- *  Task 3 (outside-plan logging): `outsidePlan`/`setOutsidePlan` join the
- *  quintet above rather than living per-door — the toggle is door-
- *  INDEPENDENT (its copy/behaviour never differs between the session and
- *  manual doors, unlike `LogFormFields`), so hoisting it here makes it
- *  structurally impossible for the two doors' toggle behaviour to drift,
- *  the same reasoning this hook's own header comment gives for the retry
- *  policy. It must survive a failed save (a rower who toggled OFF, hit
- *  Save, and got a network error shouldn't have to re-toggle) — living
- *  alongside `held`/`pain`/`notes` (none of which reset on error either)
- *  gets that for free, with no extra code. `submit` includes `advancesPlan:
- *  false` in the POST body ONLY when the toggle is on; the default
- *  (counting toward the plan) leaves the key OFF the wire entirely, proving
- *  the common path still exercises the server's own `?? true` default
- *  rather than the client silently re-asserting it.
- *
- *  Phase 6I: `workoutTitle` (default `""`, so the pre-existing manual-door
- *  call site below is untouched) seeds `outsidePlan`'s DEFAULT only — a
- *  designated onboarding workout's log pre-sets the toggle to outside the
- *  plan, still visible, still changeable (spec: "a baseline test must not
- *  silently consume plan session 1"). Reliable only where the title is
- *  known SYNCHRONOUSLY at this hook's own mount (the session door's
- *  `run.title`, read from localStorage, not fetched); the manual door's
- *  title comes from `useWorkouts()`, an async fetch that hasn't resolved
- *  on this hook's own first render, so its call site is left on the `""`
- *  default rather than reaching for a value that can't actually be known
- *  yet — a real but narrow gap, not a silent one: onboarding's own real
- *  path is exclusively the session door (`your-first-row`'s own copy:
- *  "Tap START on the suggested 6k... run the timer"), never "Log it after"
- *  on the designated workout's own detail screen.
- *
- *  Final-review fix round (2026-08-09): the sibling exclusion sites
- *  (Today.tsx, Library.tsx, server `/api/today`) all corrected `title`-only
- *  matching to also require `isGlobal`, so a rower's own CUSTOM workout
- *  sharing a designated title isn't hidden/misidentified. This call site
- *  is DELIBERATELY left on `isOnboardingTitle(workoutTitle)` alone —
- *  `SessionRun` (`session/run.ts`, what `loadRun()` returns) carries only
- *  `workoutId`/`title`, no `isGlobal`, and there is no synchronous way to
- *  learn it here (a lookup would mean fetching the workout list before
- *  this hook's first render, which the manual door already can't do for
- *  the same reason its own `workoutTitle` stays on the `""` default
- *  above). Accepted edge, not a silent one: a rower who names their own
- *  custom workout "First 6k" or "First 2k" and logs it through the SESSION
- *  door gets `outsidePlan` defaulted to true (same as the real designated
- *  workout would) — still visible, still changeable before Save, so the
- *  worst case is one extra tap, not a silently-consumed plan session. */
-function useLogForm(onSaved: () => void, workoutTitle: string = "") {
+ *  Post-workout-summary spec (2026-08-17), §2F/§3: the outside-plan TOGGLE
+ *  Task 3 shipped here (`outsidePlan`/`setOutsidePlan`, seeded from
+ *  `isOnboardingTitle(workoutTitle)`) is gone — "the toggle's death," per
+ *  the spec's own words. There is no longer a persistent form-state bit to
+ *  seed a default for at all: the choice between counting toward the plan
+ *  and not is now made by which of the SAVE STACK's two buttons the rower
+ *  taps (`PostWorkoutSummary`'s own `Log against plan`/`Save without
+ *  logging`), decided at the moment of the tap, not pre-set at mount. This
+ *  is a strict improvement over the old toggle's own known gap (its own
+ *  header comment, retired along with it): the toggle could only default
+ *  correctly for the session door, since the manual door's `workoutTitle`
+ *  wasn't known synchronously at THIS hook's mount. Button order has no
+ *  such constraint — `LogSession.tsx`'s door components compute
+ *  `isOnboardingTitle` at RENDER time, after the workout has already
+ *  resolved on every door, monitor branch included. `submit` now takes an
+ *  explicit `advancesPlan` option instead: omitted or `true` leaves the key
+ *  off the wire entirely (proving the server's own `?? true` default, same
+ *  as before); `{ advancesPlan: false }` is what `Save without logging`
+ *  passes. */
+function useLogForm(onSaved: () => void) {
   const [held, setHeld] = useState<HeldResult | null>(null);
   const [pain, setPain] = useState<number | null>(null);
+  // Post-workout-summary spec (2026-08-17), §3: `thumbs` joins the
+  // held/pain/notes quintet — clearable the same way (tap the selected
+  // option again to return to null), same reason as its siblings: it must
+  // survive a failed save without forcing the rower to re-pick it.
+  const [thumbs, setThumbs] = useState<Thumbs | null>(null);
   const [notes, setNotes] = useState("");
-  const [outsidePlan, setOutsidePlan] = useState(() =>
-    isOnboardingTitle(workoutTitle),
-  );
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  async function submit(fields: LogFormFields) {
-    // Defensive, not reachable via the UI: the Save button's own
-    // `disabled={... || held === null || pain === null}` already keeps a
-    // click from firing this at all (same convention as Today.tsx's own
-    // `handleShuffle` guard comment).
-    if (held === null || pain === null) return;
+  async function submit(
+    fields: LogFormFields,
+    opts: { advancesPlan?: boolean } = {},
+  ) {
+    // Post-workout-summary spec (2026-08-17), §3: the reflection card is
+    // now entirely optional (James's ruling) — Save is never gated on
+    // held/pain/thumbs being chosen (both save buttons' `disabled` prop
+    // now reads only `saving`). held/pain go on the wire as their raw
+    // state, null included; the server stores null the same way it already
+    // does for `notes`/`deviceName`.
     setSaving(true);
     setSaveError(null);
     const body: Record<string, unknown> = {
       ...fields,
       held,
       pain,
+      thumbs,
       notes: notes.trim().length > 0 ? notes : null,
     };
-    if (outsidePlan) body.advancesPlan = false;
+    if (opts.advancesPlan === false) body.advancesPlan = false;
     // Branch review Minor: the server's own `deviceName` band is 1..64
     // chars (`data.ts`), but `webBluetooth.ts`/`capacitorBle.ts` both use
     // `device.name ?? "PM5"` (nullish, not `||`) — an empty advertised GATT
@@ -579,10 +463,10 @@ function useLogForm(onSaved: () => void, workoutTitle: string = "") {
     setHeld,
     pain,
     setPain,
+    thumbs,
+    setThumbs,
     notes,
     setNotes,
-    outsidePlan,
-    setOutsidePlan,
     saving,
     saveError,
     submit,
@@ -608,253 +492,6 @@ export default function LogSession() {
     <ManualDoorLog workoutId={id} />
   ) : (
     <SessionDoorLog />
-  );
-}
-
-/** The session door's screen chrome, shared verbatim by both doors — the
- *  ONLY difference between them once their data is resolved is whether
- *  there's a Discard button at all (the manual door has nothing staged to
- *  discard — brief: "no Discard button (nothing to discard)"), passed in as
- *  `discardSlot` rather than branched on internally. Keeping this single
- *  copy is what makes it structurally impossible for the two doors to
- *  silently diverge on layout, the same reasoning `logDraft.ts`'s own
- *  `refPaceLabel` helper documents for why both doors' step labels share
- *  one function.
- *
- *  `backFallback` (whole-branch review, IMP-2 fix): a `BackLink`, the same
- *  idiom every other full-screen destination in the app uses
- *  (`WorkoutDetail.tsx`/`Builder.tsx`/`EditWorkout.tsx`), leading. Before
- *  this fix neither door had a non-destructive way to leave this screen at
- *  all whenever the tab bar is hidden (the session door: Save or a
- *  destructive staged Discard were the ONLY two exits; the manual door's
- *  other early-return states already had one, but not this — its main,
- *  ready-to-save state) — a rower who opened this screen and changed their
- *  mind about logging anything had no honest way back. `BackLink` costs
- *  nothing destructive: it navigates away without touching the draft/run
- *  records or posting anything, same as simply not pressing Save ever did,
- *  it just gives that inaction a real affordance. Each door passes its own
- *  fallback (`BackLink`'s own default, `/library`, makes no sense for the
- *  session door — nothing session-related lives there): the manual door
- *  passes none (its `from` state, now forwarded by `WorkoutDetail.tsx`'s
- *  "Log it after" link, resolves to the workout it came from; `/library` is
- *  still the right fallback for a from-less deep link); the session door
- *  passes `/today`, since neither of ITS own entry points
- *  (`SessionComplete.tsx`'s "Log this session", `Today.tsx`'s own "Log it"
- *  unlogged-session line) carries a `from` today, and `/today` is where a
- *  rower abandoning this screen without logging or discarding actually
- *  wants to land. */
-function LogScreen({
-  title,
-  workoutType,
-  dateLabel,
-  totalMinutes,
-  pacesText,
-  logSteps,
-  expectedPain,
-  held,
-  onHeld,
-  pain,
-  onPain,
-  notes,
-  onNotes,
-  plan,
-  outsidePlan,
-  onToggleOutsidePlan,
-  saving,
-  saveError,
-  onSave,
-  discardSlot,
-  backFallback,
-  monitorCaption,
-}: {
-  title: string;
-  workoutType: WorkoutType;
-  dateLabel: string;
-  // Phase 6I close-out fold: null for the manual door's own effort-only
-  // workout past the needsBaselines gate — `estimateMinutes` deliberately
-  // returns null rather than a partial/wrong sum (domain/expand.ts), so
-  // the header omits the duration segment entirely (never a fabricated
-  // number, the same "never a bare dash" idiom `pacesText` below already
-  // follows). The session door's own `logTotals` always supplies a real
-  // wall-clock number — this door alone can pass null.
-  totalMinutes: number | null;
-  pacesText: string | null;
-  logSteps: LogStep[];
-  expectedPain: number | null;
-  held: HeldResult | null;
-  onHeld: (value: HeldResult) => void;
-  pain: number | null;
-  onPain: (value: number) => void;
-  notes: string;
-  onNotes: (value: string) => void;
-  // Task 3: null means "nothing to render" — either there's no active plan
-  // (`plan.planKey === null`) or the plan hook itself errored (logging must
-  // never be hostage to the plan fetch — see each door's own comment on
-  // this). A non-null value means the toggle row renders.
-  plan: PlanData | null;
-  outsidePlan: boolean;
-  onToggleOutsidePlan: () => void;
-  saving: boolean;
-  saveError: string | null;
-  onSave: () => void;
-  discardSlot: ReactNode;
-  backFallback?: string;
-  // 7C spec §4: undefined for both the session door and the manual door's
-  // ordinary (non-monitor) render — only `ManualDoorLog`'s monitor-mode
-  // branch supplies a real string, built by this module's own
-  // `monitorCaption` function immediately above.
-  monitorCaption?: string;
-}) {
-  return (
-    <main className="screen">
-      <BackLink fallback={backFallback} />
-      <h1 className="screen-title">Log {title}</h1>
-      <div className="log-meta">
-        <TypeBadge type={workoutType} />
-        <span className="mono-status">
-          {totalMinutes !== null
-            ? `${dateLabel} · ${totalMinutes} MIN`
-            : dateLabel}
-        </span>
-      </div>
-
-      {monitorCaption !== undefined && (
-        <p className="log-from-monitor">{monitorCaption}</p>
-      )}
-
-      {pacesText !== null && (
-        <div className="log-paces-panel">
-          <span className="log-paces-label">PACES LOCKED AT</span>
-          <span className="log-paces-value">{pacesText}</span>
-        </div>
-      )}
-
-      <ul className="log-step-list">
-        {logSteps.map((step, i) => (
-          <li key={i} className="log-step-row">
-            <span className="log-step-label">{step.label}</span>
-            <span className="log-step-values">
-              <span className="log-step-target">
-                {step.targetSplit !== undefined
-                  ? fmtSplit(step.targetSplit)
-                  : "—"}
-              </span>
-              {/* An "assumed" actual is definitionally identical to the
-                  target (logDraft.ts's own rule: a completed time phase is
-                  read as "held the target") — showing it a second time here
-                  would just repeat the number above with no new
-                  information. Only a REAL stopwatch OR pm5 reading (either
-                  of which can genuinely differ from the target) earns its
-                  own line — 7C spec §4 widens this gate from
-                  `"stopwatch"`-only, since the monitor door's own rows are
-                  read-only text like every other row here, no new
-                  treatment needed. The manual door's actuals are ALWAYS
-                  "assumed" (buildManualLogSteps' own rule), so this line
-                  never renders there. */}
-              {(step.actualSource === "stopwatch" ||
-                step.actualSource === "pm5") &&
-                step.actualSplit !== undefined && (
-                  <span className="log-step-actual">
-                    ACTUAL {fmtSplit(step.actualSplit)}
-                  </span>
-                )}
-            </span>
-          </li>
-        ))}
-      </ul>
-
-      <div className="classification-group">
-        <p className="classification-group-label">DID YOU HOLD THE TARGETS?</p>
-        <div className="classification-chip-row">
-          {HELD_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              className="log-held-chip"
-              aria-pressed={held === opt.value}
-              onClick={() => onHeld(opt.value)}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="classification-group">
-        <div className="classification-pain-label-row">
-          <p className="classification-group-label">PAIN RATING</p>
-          {expectedPain !== null && (
-            <p className="classification-pain-word">
-              EXPECTED {expectedPain}/5
-            </p>
-          )}
-        </div>
-        <div className="classification-chip-row">
-          {PAIN_LEVELS.map((level) => {
-            const selected = pain === level;
-            return (
-              <button
-                key={level}
-                type="button"
-                aria-pressed={selected}
-                aria-label={`Pain ${level}`}
-                className="classification-chip classification-chip-pain"
-                style={
-                  selected
-                    ? {
-                        background: `var(${PAIN_RAMP_VAR[level]})`,
-                        borderColor: `var(${PAIN_RAMP_VAR[level]})`,
-                        color: "var(--on-color)",
-                      }
-                    : undefined
-                }
-                onClick={() => onPain(level)}
-              >
-                {level}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <label className="classification-group-label" htmlFor="log-notes">
-        NOTES
-      </label>
-      <textarea
-        id="log-notes"
-        className="log-notes-textarea"
-        value={notes}
-        onChange={(e) => onNotes(e.target.value)}
-      />
-
-      {plan !== null && (
-        <button
-          type="button"
-          className="log-plan-toggle"
-          aria-pressed={outsidePlan}
-          onClick={onToggleOutsidePlan}
-        >
-          {outsidePlan
-            ? "OUTSIDE THE PLAN · won't advance"
-            : `COUNTS TOWARD PLAN · SESSION ${plan.doneN + 1} OF ${plan.sequence.length}`}
-        </button>
-      )}
-
-      <div className="log-actions">
-        {saveError && <p className="field-error">{saveError}</p>}
-        <button
-          type="button"
-          className="button-primary log-save"
-          onClick={() => void onSave()}
-          disabled={saving || held === null || pain === null}
-        >
-          Save session
-        </button>
-        {discardSlot}
-      </div>
-      <MonitorLogRow />
-      <RecordingDownloadRow />
-    </main>
   );
 }
 
@@ -963,32 +600,24 @@ function SessionDoorLog() {
     setHeld,
     pain,
     setPain,
+    thumbs,
+    setThumbs,
     notes,
     setNotes,
-    outsidePlan,
-    setOutsidePlan,
     saving,
     saveError,
     submit,
-  } = useLogForm(
-    () => {
-      clearDraft();
-      clearRun();
-      navigate("/today");
-    },
-    // `run` was read synchronously above (`loadRun()`, not a fetch) — safe
-    // to pass its title here even though the `run === null` guard below
-    // hasn't run yet at this point in the component body (hooks can't be
-    // conditional); a null run means this door redirects away before the
-    // default ever matters.
-    run?.title ?? "",
-  );
+  } = useLogForm(() => {
+    clearDraft();
+    clearRun();
+    navigate("/today");
+  });
   // Task 3 (ui-fix round): the two-button `.baseline-confirm` side panel
   // this discard used to open is gone — replaced by the shared
   // `useStagedDiscard` machine and the level system's own in-place L4/
-  // L4-armed idiom (WorkoutDetail.tsx's Delete workout, SessionComplete.tsx's
-  // own new Discard), so all three of the app's staged-discard controls now
-  // share one look AND one implementation. Behaviour is unchanged: still a
+  // L4-armed idiom (WorkoutDetail.tsx's Delete workout, the post-workout-
+  // summary spec's own Discard), so every staged-discard control in the app
+  // shares one look AND one implementation. Behaviour is unchanged: still a
   // two-tap confirm, still clears both records with no POST, still lands on
   // /today.
   const discard = useStagedDiscard();
@@ -1048,6 +677,20 @@ function SessionDoorLog() {
       ? planState.plan
       : null;
 
+  // Fix round (C2): `plan` above conflates "no plan", "still loading" and
+  // "hook errored" into the same `null` — correct for what button renders,
+  // wrong for what `Save without logging` sends on the wire. Only a
+  // RESOLVED plan fetch (`state === "ready"`) can tell the wire body
+  // "genuinely omit this session from plan progress"; while the fetch is
+  // loading or has errored, the server's own `?? true` default (`data.ts`)
+  // must run unchanged — the same behavior the old, now-retired toggle had
+  // (its key was simply never sent until the plan resolved). Sending an
+  // explicit `false` during that window silently dropped `doneN` advancement
+  // for a session that may have had an active plan the UI just hadn't
+  // learned about yet.
+  const saveWithoutLoggingOpts: { advancesPlan?: boolean } =
+    planState.state === "ready" ? { advancesPlan: false } : {};
+
   const library = workoutsState.state === "ready" ? workoutsState.workouts : [];
   const libraryWorkout =
     run.workoutId !== null
@@ -1057,7 +700,6 @@ function SessionDoorLog() {
   const workoutType = resolveWorkoutType(run, matchedDraft, library);
   const expectedPain = libraryWorkout?.pain ?? null;
   const logSteps = buildLogSteps(run, matchedDraft);
-  const { dateLabel, totalMinutes } = logTotals(run);
   const k2 = lockedBaseline("2k", run, matchedDraft);
   const k6 = lockedBaseline("6k", run, matchedDraft);
   const pacesText = pacesLockedText(k2, k6);
@@ -1067,23 +709,37 @@ function SessionDoorLog() {
   // fix, not a non-null assertion at each use site.
   const activeRun: SessionRun = run;
 
+  // Post-workout-summary spec §2B: the summary's own heroes/rows/meta come
+  // straight from `buildSummaryModel` — this door never re-derives a
+  // number. The timer door never throws (`summaryModel.ts`'s own header:
+  // only the monitor door's internal `buildMonitorLogSteps` call can), so
+  // no try/catch is needed here the way the monitor branch below needs one.
+  const model = buildSummaryModel({
+    door: "timer",
+    run: activeRun,
+    steps: logSteps,
+  });
+  const isOnboarding = isOnboardingTitle(activeRun.title);
+
   // Fix round 1 (I1): the body-assembly and 400-retry logic that used to
   // live in this door's own `handleSave` now lives once, in `useLogForm`'s
   // `submit` above — this is only what genuinely differs for this door:
   // WHERE the workout identity/steps come from (the frozen `SessionRun`).
-  function handleSave() {
-    return submit({
-      workoutId: activeRun.workoutId,
-      workoutTitle: activeRun.title,
-      workoutType,
-      steps: logSteps,
-    });
+  function handleSave(opts: { advancesPlan?: boolean } = {}) {
+    return submit(
+      {
+        workoutId: activeRun.workoutId,
+        workoutTitle: activeRun.title,
+        workoutType,
+        steps: logSteps,
+      },
+      opts,
+    );
   }
 
-  // Same two-tap shape as WorkoutDetail.tsx's OwnerActions `handleClick` and
-  // SessionComplete.tsx's own new `handleDiscardClick`: the first press
-  // arms, the second (only reachable while `armed`) fires the shared
-  // discard and navigates.
+  // Same two-tap shape as WorkoutDetail.tsx's OwnerActions `handleClick`:
+  // the first press arms, the second (only reachable while `armed`) fires
+  // the shared discard and navigates.
   function handleDiscardClick() {
     if (discard.armed) {
       discard.fire();
@@ -1094,38 +750,43 @@ function SessionDoorLog() {
   }
 
   return (
-    <LogScreen
+    <PostWorkoutSummary
       title={run.title}
-      workoutType={workoutType}
-      dateLabel={dateLabel}
-      totalMinutes={totalMinutes}
-      pacesText={pacesText}
-      logSteps={logSteps}
+      model={model}
+      pacesOffCaption={pacesText !== null ? `PACES OFF ${pacesText}` : null}
+      hint={singleTargetHint(logSteps)}
       expectedPain={expectedPain}
       held={held}
       onHeld={setHeld}
       pain={pain}
       onPain={setPain}
+      thumbs={thumbs}
+      onThumbs={setThumbs}
       notes={notes}
       onNotes={setNotes}
       plan={plan}
-      outsidePlan={outsidePlan}
-      onToggleOutsidePlan={() => setOutsidePlan((v) => !v)}
+      isOnboarding={isOnboarding}
       saving={saving}
       saveError={saveError}
-      onSave={handleSave}
+      onLogAgainstPlan={() => void handleSave()}
+      onSaveWithoutLogging={() => void handleSave(saveWithoutLoggingOpts)}
       backFallback="/today"
       discardSlot={
         <button
           type="button"
-          className={discard.armed ? "button-l4-armed" : "button-l4"}
+          className={
+            discard.armed ? "summary-discard-armed" : "summary-discard"
+          }
           onClick={handleDiscardClick}
           onBlur={discard.disarm}
         >
-          {discard.armed ? "Tap again to discard" : "Discard without logging"}
+          {discard.armed ? "Tap again to discard" : "DISCARD WITHOUT SAVING"}
         </button>
       }
-    />
+    >
+      <MonitorLogRow />
+      <RecordingDownloadRow />
+    </PostWorkoutSummary>
   );
 }
 
@@ -1207,10 +868,10 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
     setHeld,
     pain,
     setPain,
+    thumbs,
+    setThumbs,
     notes,
     setNotes,
-    outsidePlan,
-    setOutsidePlan,
     saving,
     saveError,
     submit,
@@ -1269,6 +930,15 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
       ? planState.plan
       : null;
 
+  // Fix round (C2): same reasoning as `SessionDoorLog`'s own copy of this
+  // constant — `plan` above conflates "no plan"/"loading"/"errored", but
+  // the wire body must only assert `advancesPlan:false` once the plan fetch
+  // has genuinely resolved. Shared by both branches below (monitor and
+  // plain manual), since `planState` is a single hook call at this
+  // component's top.
+  const saveWithoutLoggingOpts: { advancesPlan?: boolean } =
+    planState.state === "ready" ? { advancesPlan: false } : {};
+
   const workout = workoutsState.workouts.find((w) => w.id === workoutId);
   if (!workout) {
     return (
@@ -1286,14 +956,6 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
     // SAME immutable record, so a second call is deterministic, not a
     // second chance to fail).
     const logSteps = buildMonitorLogSteps(monitorRun);
-    const measured = logSteps.filter(
-      (step) => step.actualSource !== undefined,
-    ).length;
-    const caption = monitorCaption(
-      monitorRun.deviceName,
-      measured,
-      logSteps.length,
-    );
     // PACES LOCKED renders from the frozen seed, never `manualLockedBaseline`
     // (spec §4: "the manual recovery path cannot run here") — `logSeed` is
     // optional only so a pre-7C `MonitorRun` still type-checks;
@@ -1302,20 +964,45 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
     const k2 = monitorRun.logSeed?.paces.k2 ?? null;
     const k6 = monitorRun.logSeed?.paces.k6 ?? null;
     const pacesText = pacesLockedText(k2, k6);
-    const { dateLabel, totalMinutes } = monitorLogTotals(monitorRun);
     // Same narrowing idiom as `activeWorkout`/`activeRun` below/above: TS
     // narrowing from the `!workout` guard doesn't survive into a closure
     // declared later in this component.
     const activeWorkout: LibraryWorkout = workout;
 
-    const handleMonitorSave = () =>
-      submit({
-        workoutId: activeWorkout.id,
-        workoutTitle: activeWorkout.title,
-        workoutType: activeWorkout.type,
-        steps: logSteps,
-        deviceName: monitorRun.deviceName,
-      });
+    // Post-workout-summary spec §2B/`summaryModel.ts`'s own header: this is
+    // the ONE call site that CAN throw (`MonitorLogSeedError`, when
+    // `logSeed` is missing or misaligned with `program.intervals`) — but
+    // `monitorModeRun` (computed at this component's own mount) already
+    // called the identical pure `buildMonitorLogSteps` against this exact
+    // immutable record and proved it wouldn't. This try/catch exists only
+    // because that module's own header requires every consumer to handle
+    // the error explicitly, not because it is reachable here in practice;
+    // on the (unreachable) catch, this door has nothing better to do than
+    // the same disqualification `monitorModeRun` itself performs — bounce
+    // to `/today` rather than render a screen built on a record neither
+    // gate trusts.
+    let model: SummaryModel;
+    try {
+      model = buildSummaryModel({ door: "monitor", run: monitorRun });
+    } catch (err) {
+      if (err instanceof MonitorLogSeedError) {
+        return <Navigate to="/today" replace />;
+      }
+      throw err;
+    }
+    const isOnboarding = isOnboardingTitle(activeWorkout.title);
+
+    const handleMonitorSave = (opts: { advancesPlan?: boolean } = {}) =>
+      submit(
+        {
+          workoutId: activeWorkout.id,
+          workoutTitle: activeWorkout.title,
+          workoutType: activeWorkout.type,
+          steps: logSteps,
+          deviceName: monitorRun.deviceName,
+        },
+        opts,
+      );
 
     // Same two-tap shape as `SessionDoorLog`'s own `handleDiscardClick`
     // (spec §4: "in the session door's idiom") — deliberately does NOT
@@ -1337,38 +1024,44 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
     }
 
     return (
-      <LogScreen
+      <PostWorkoutSummary
         title={workout.title}
-        workoutType={workout.type}
-        dateLabel={dateLabel}
-        totalMinutes={totalMinutes}
-        pacesText={pacesText}
-        logSteps={logSteps}
+        model={model}
+        pacesOffCaption={pacesText !== null ? `PACES OFF ${pacesText}` : null}
+        hint={singleTargetHint(logSteps)}
         expectedPain={workout.pain}
         held={held}
         onHeld={setHeld}
         pain={pain}
         onPain={setPain}
+        thumbs={thumbs}
+        onThumbs={setThumbs}
         notes={notes}
         onNotes={setNotes}
         plan={plan}
-        outsidePlan={outsidePlan}
-        onToggleOutsidePlan={() => setOutsidePlan((v) => !v)}
+        isOnboarding={isOnboarding}
         saving={saving}
         saveError={saveError}
-        onSave={() => void handleMonitorSave()}
-        monitorCaption={caption}
+        onLogAgainstPlan={() => void handleMonitorSave()}
+        onSaveWithoutLogging={() =>
+          void handleMonitorSave(saveWithoutLoggingOpts)
+        }
         discardSlot={
           <button
             type="button"
-            className={discard.armed ? "button-l4-armed" : "button-l4"}
+            className={
+              discard.armed ? "summary-discard-armed" : "summary-discard"
+            }
             onClick={handleMonitorDiscardClick}
             onBlur={discard.disarm}
           >
-            {discard.armed ? "Tap again to discard" : "Discard without logging"}
+            {discard.armed ? "Tap again to discard" : "DISCARD WITHOUT SAVING"}
           </button>
         }
-      />
+      >
+        <MonitorLogRow />
+        <RecordingDownloadRow />
+      </PostWorkoutSummary>
     );
   }
 
@@ -1441,24 +1134,21 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
   }
 
   const logSteps = buildManualLogSteps(workout, baselines);
-  // Header date = today (the brief's own words) — there's no `SessionRun.
-  // completedAt` to read it from, unlike the session door's `logTotals`;
-  // `estimateMinutes` (the same helper WorkoutDetail.tsx's own preview
-  // already calls) stands in for the session door's real wall-clock total,
-  // since an off-app row was never timed by this app at all.
-  //
-  // Phase 6I close-out fold: `baselines` can now be null here (an
-  // effort-only workout past the gate above) — `estimateMinutes` returns
-  // null rather than throwing for that case (domain/expand.ts's own
-  // deliberate "never a partial, possibly-wrong sum" rule) and
-  // `totalMinutes` follows it into null, which `LogScreen` renders as no
-  // duration segment at all rather than a fabricated number.
-  const dateLabel = formatLogDate(new Date().toISOString());
-  const totalMinutes =
-    estimateMinutes(workout.steps, baselines)?.minutes ?? null;
+  // Post-workout-summary spec: the manual door has no run record and no
+  // measured reading of any kind (`summaryModel.ts`'s own header — heroes
+  // are always `{}`, the "date-only" half of §2B's own stated fallback);
+  // `dateIso` is simply "now" (the brief's own words — the lock moment IS
+  // save time for an off-app row, same reasoning `manualLockedBaseline`
+  // already applies to PACES LOCKED).
+  const model = buildSummaryModel({
+    door: "manual",
+    steps: logSteps,
+    dateIso: new Date().toISOString(),
+  });
   const k2 = manualLockedBaseline("2k", workout.steps, baselines);
   const k6 = manualLockedBaseline("6k", workout.steps, baselines);
   const pacesText = pacesLockedText(k2, k6);
+  const isOnboarding = isOnboardingTitle(workout.title);
   // TS narrowing from the `!workout` guard above doesn't survive into a
   // function DECLARED later in this component (the arrow function passed
   // to `submit`, below) — the same separately-typed `const` alias fix the
@@ -1471,39 +1161,47 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
   // OWNED here (a real route param, not a possibly-stale run record), and
   // there is no `clearDraft`/`clearRun` in this door's own `onSaved` at all
   // (wired above), since this door never touched either to begin with.
-  function handleSave() {
-    return submit({
-      workoutId: activeWorkout.id,
-      workoutTitle: activeWorkout.title,
-      workoutType: activeWorkout.type,
-      steps: logSteps,
-    });
+  function handleSave(opts: { advancesPlan?: boolean } = {}) {
+    return submit(
+      {
+        workoutId: activeWorkout.id,
+        workoutTitle: activeWorkout.title,
+        workoutType: activeWorkout.type,
+        steps: logSteps,
+      },
+      opts,
+    );
   }
 
   return (
-    <LogScreen
+    <PostWorkoutSummary
       title={workout.title}
-      workoutType={workout.type}
-      dateLabel={dateLabel}
-      totalMinutes={totalMinutes}
-      pacesText={pacesText}
-      logSteps={logSteps}
+      model={model}
+      pacesOffCaption={pacesText !== null ? `PACES OFF ${pacesText}` : null}
+      // §2D: "by-hand manual door: BY FEEL" — an unconditional override,
+      // never the single-target rule (`singleTargetHint`'s own doc comment).
+      hint="BY FEEL"
       expectedPain={workout.pain}
       held={held}
       onHeld={setHeld}
       pain={pain}
       onPain={setPain}
+      thumbs={thumbs}
+      onThumbs={setThumbs}
       notes={notes}
       onNotes={setNotes}
       plan={plan}
-      outsidePlan={outsidePlan}
-      onToggleOutsidePlan={() => setOutsidePlan((v) => !v)}
+      isOnboarding={isOnboarding}
       saving={saving}
       saveError={saveError}
-      onSave={() => void handleSave()}
+      onLogAgainstPlan={() => void handleSave()}
+      onSaveWithoutLogging={() => void handleSave(saveWithoutLoggingOpts)}
       // Nothing to discard (the brief's own words) — there's no staged
-      // Discard slot at all for this door, unlike the session door's.
+      // Discard slot at all for this door, unlike the other two.
       discardSlot={null}
-    />
+    >
+      <MonitorLogRow />
+      <RecordingDownloadRow />
+    </PostWorkoutSummary>
   );
 }

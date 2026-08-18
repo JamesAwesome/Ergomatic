@@ -227,6 +227,24 @@ describe("parseSplitIntervalData (0x0037, 18 bytes, interface-notes.md §10)", (
     });
   });
 
+  it("decodes a REAL Interval Rest Distance off a committed capture — walk-2026-08-16 session 2 (wu+4unequal), interval 3's boundary, verbatim raw bytes (docs/monitor/sessions/walk-2026-08-16/session-2-wu-4unequal.jsonl seq 1666, char 0x0037): '00 00 00 09 00 00 b0 04 00 cd 01 00 1e 00 16 00 00 03' — the spec's R-B ruling table (0/30/22/12/0 across this session's five boundaries) names this one 22m", () => {
+    const bytes = Uint8Array.from([
+      0x00, 0x00, 0x00, 0x09, 0x00, 0x00, 0xb0, 0x04, 0x00, 0xcd, 0x01, 0x00,
+      0x1e, 0x00, 0x16, 0x00, 0x00, 0x03,
+    ]);
+    expect(bytes).toHaveLength(18);
+    expect(parseSplitIntervalData(bytes)).toStrictEqual({
+      elapsedSeconds: 0,
+      distanceMeters: 0.9,
+      splitIntervalTimeSeconds: 120,
+      splitIntervalDistanceMeters: 461,
+      intervalRestTimeSeconds: 30,
+      intervalRestDistanceMeters: 22,
+      splitIntervalType: 0,
+      splitIntervalNumber: 3,
+    });
+  });
+
   it("the SAME raw value at the cumulative-distance and split-distance offsets decodes to DIFFERENT meters (0.1m/lsb vs 1m/lsb, interface-notes.md §10's explicit trap)", () => {
     const bytes = Uint8Array.from([
       ...u24le(0), // Elapsed Time
@@ -751,5 +769,17 @@ describe("toIntervalActual: field mapping (interface-notes.md's own reasoning co
       baseRaw({ splitIntervalWorkHeartRateBpm: null }),
     );
     expect(actual.avgHeartRateBpm).toBeNull();
+  });
+
+  it("uses intervalRestDistanceMeters (0x0037) for restDistanceMeters (R-B)", () => {
+    const actual = toIntervalActual(
+      baseRaw({ intervalRestDistanceMeters: 22 }),
+    );
+    expect(actual.restDistanceMeters).toBe(22);
+  });
+
+  it("a rest-free interval's restDistanceMeters is 0, not null/undefined — the wire's own zero, not an absence", () => {
+    const actual = toIntervalActual(baseRaw({ intervalRestDistanceMeters: 0 }));
+    expect(actual.restDistanceMeters).toBe(0);
   });
 });

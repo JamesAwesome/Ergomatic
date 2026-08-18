@@ -1570,6 +1570,7 @@ function actualFor(index: number, elapsedSeconds: number): IntervalActual {
     avgSplit: 126,
     avgSpm: 21,
     avgHeartRateBpm: 158,
+    restDistanceMeters: 0,
   };
 }
 
