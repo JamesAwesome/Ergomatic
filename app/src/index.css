@@ -2513,7 +2513,23 @@ button:disabled {
   color: inherit;
 }
 
-.plan-row:last-of-type {
+/* Final whole-branch review (2026-08-18), finding IMPORTANT 1 — the SAME
+   trap `.baseline-row`'s own comment above documents (PR #66), tripped
+   again: `:last-of-type` matches by TAG among ALL sibling elements of that
+   tag, not by class. Before Task 6, every `.plan-row` sat directly in
+   `.plan-sequence` as a sibling `<div>`, so "last div among the divs" and
+   "last `.plan-row`" were the same element — by accident, the exact
+   accident the older comment warns about. Task 6 wrapped each row in its
+   own `<li><a|div class="plan-row">…</a|div></li>` (Plan.tsx) so a
+   linked, done row could be an `<a>` instead of a `<div>` — which means
+   EVERY `.plan-row` is now the ONLY element of its own tag inside its own
+   `<li>`, so `:last-of-type` matched ALL of them, not just the true last
+   row, and every row's divider vanished (confirmed: `plan.png` had rules
+   before Task 6, none after). Selecting on STRUCTURE (the last `<li>` in
+   the list) instead of TAG IDENTITY is the fix that can't repeat this
+   trap a third time — it doesn't care whether the row inside is an `<a>`
+   or a `<div>`. */
+.plan-sequence > li:last-child .plan-row {
   border-bottom: none;
 }
 

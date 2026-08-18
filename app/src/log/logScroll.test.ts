@@ -3,6 +3,7 @@ import {
   LOG_SCROLL_KEY,
   clearLogScroll,
   loadLogScroll,
+  resetLogScrollTombstone,
   saveLogScroll,
 } from "./logScroll";
 
@@ -74,6 +75,55 @@ describe("clearLogScroll", () => {
         throw new DOMException("storage disabled");
       });
     expect(() => clearLogScroll()).not.toThrow();
+    spy.mockRestore();
+  });
+});
+
+// Final whole-branch review (2026-08-18), finding IMPORTANT 2: the
+// tombstone that closes the race between the tab bar's synchronous
+// `clearLogScroll()` and `HistoryList`'s own deferred unmount-flush save
+// (`logScroll.ts`'s own `LOG_SCROLL_CLEARED_KEY` comment has the full
+// mechanism). This reproduces the race directly at the module level —
+// `saveLogScroll` called AFTER `clearLogScroll`, exactly the order React's
+// passive-effect scheduling produces — rather than through a live
+// component mount, since the ordering is the whole bug and this is the
+// smallest thing that can assert it deterministically.
+describe("clearLogScroll's tombstone (final-review fix round, 2026-08-18)", () => {
+  it("a save landing strictly after clearLogScroll — the unmount-flush race — is declined, not written", () => {
+    saveLogScroll(500);
+    clearLogScroll();
+    // Simulates HistoryList's own unmount-flush cleanup firing after the
+    // tab bar's synchronous clear (React defers a passive effect's
+    // cleanup until after paint) — the exact live-probe sequence the
+    // review reproduced: scrolled 623, TODAY tap, storage read "623" again.
+    saveLogScroll(623);
+    expect(loadLogScroll()).toBeNull();
+  });
+
+  it("resetLogScrollTombstone lets a later, genuine HistoryList mount save normally again", () => {
+    saveLogScroll(500);
+    clearLogScroll();
+    saveLogScroll(623); // the same defeated race as above
+    expect(loadLogScroll()).toBeNull();
+
+    resetLogScrollTombstone();
+    saveLogScroll(77);
+    expect(loadLogScroll()).toBe(77);
+  });
+
+  it("is a no-op when nothing was cleared, so an ordinary save is never blocked", () => {
+    resetLogScrollTombstone();
+    saveLogScroll(9);
+    expect(loadLogScroll()).toBe(9);
+  });
+
+  it("swallows a storage removal failure instead of throwing", () => {
+    const spy = vi
+      .spyOn(Storage.prototype, "removeItem")
+      .mockImplementation(() => {
+        throw new DOMException("storage disabled");
+      });
+    expect(() => resetLogScrollTombstone()).not.toThrow();
     spy.mockRestore();
   });
 });

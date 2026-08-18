@@ -2118,6 +2118,37 @@ test.describe("plan screen (a plan active)", () => {
     expect(styles.borderLeft).toBe("rgb(181, 52, 31)"); // --accent
   });
 
+  // Final whole-branch review (2026-08-18), finding IMPORTANT 1's own
+  // structural witness: `.plan-row:last-of-type` matched by TAG among ALL
+  // siblings of that tag, not by class — Task 6 wrapped every row in its
+  // own `<li><a|div class="plan-row">`, so each `.plan-row` became the
+  // ONLY element of its own tag inside its own `<li>`, and the old
+  // selector matched EVERY row rather than just the true last one (every
+  // divider vanished; `docs/screenshots/plan.png` shows rules before Task
+  // 6, none after). No prior sweep asserted the divider's PRESENCE, only
+  // its absence on the true last row (`.baseline-row`'s own PR #66 tests
+  // cover just that half) — asserting BOTH directions here is what keeps
+  // the fixed selector (`.plan-sequence > li:last-child .plan-row`) from
+  // silently inverting again: a selector that removes every divider, or
+  // one that never removes any, would each fail exactly one of these two
+  // checks.
+  test("a non-last plan row keeps its divider and the true last row still drops it", async ({
+    page,
+  }) => {
+    const rows = page.locator(".plan-sequence > li .plan-row");
+    await expect(rows).toHaveCount(84);
+
+    const firstBorder = await rows
+      .nth(0)
+      .evaluate((el) => getComputedStyle(el).borderBottomWidth);
+    expect(firstBorder).not.toBe("0px");
+
+    const lastBorder = await rows
+      .nth(83)
+      .evaluate((el) => getComputedStyle(el).borderBottomWidth);
+    expect(lastBorder).toBe("0px");
+  });
+
   // Reset/Switch: the staged-confirm idiom copied from BaselineEditor.tsx —
   // structurally proving the confirm panel itself (not just the header
   // buttons) clears the tap-target/axe bars, since it renders a different

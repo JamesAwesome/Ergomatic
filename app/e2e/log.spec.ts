@@ -339,15 +339,35 @@ test.describe("§4 N1-N7: the navigation-flow burn list's own witnesses", () => 
     // that it won't be reached by RESTORING the stale saved value (News's
     // own identical restore effect has no `else` branch either — "do
     // nothing" is the whole contract once nothing's saved).
+    //
+    // Final whole-branch review (2026-08-18), finding IMPORTANT 2: a
+    // single immediate read right after the click is racy-green.
+    // `HistoryList`'s own unmount-flush cleanup is a passive effect,
+    // which React defers until after paint — it can land LATER than this
+    // synchronous read, so a read taken BEFORE that flush has had a
+    // chance to fire would pass whether or not the flush went on to
+    // silently re-save the cleared value a moment later. `expect.poll`
+    // keeps re-reading past that window instead of sampling once inside
+    // it. Even that only proves the value SETTLES null; the check that
+    // actually forces the race to matter is the one below it — a
+    // genuinely fresh `HistoryList` mount (via the heading link, exactly
+    // like the rower would use it) must not restore the stale offset,
+    // which is the one thing a defeated clear can never fake regardless
+    // of when its own re-save happened to land.
     await page.getByRole("link", { name: "TODAY" }).click();
     await expect(page).toHaveURL(/\/today$/);
-    expect(
-      await page.evaluate(() => sessionStorage.getItem("ergomatic.logScroll")),
-    ).toBeNull();
+    await expect
+      .poll(() =>
+        page.evaluate(() => sessionStorage.getItem("ergomatic.logScroll")),
+      )
+      .toBeNull();
 
     await page.getByRole("link", { name: "ALL SESSIONS" }).click();
     await expect(page).toHaveURL(/\/today\/log$/);
     await expect(page.locator(".today-log-row").first()).toBeVisible();
+    await expect
+      .poll(() => page.evaluate(() => window.scrollY))
+      .toBeLessThan(scrolledY - 50);
   });
 
   // Spec §4 N1's own witness (Task 5 in-task requirement, the

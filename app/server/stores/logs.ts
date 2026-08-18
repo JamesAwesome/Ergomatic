@@ -265,6 +265,25 @@ export function createLogsStore(db: Db) {
     // named plan) can never match `eq(planKey, planKey)` — SQL `= NULL`
     // is never true — so only genuinely-linked rows are eligible,
     // structurally, with no extra `isNotNull` guard needed.
+    //
+    // Final whole-branch review (2026-08-18), MINOR finding: `loggedAt`
+    // alone has no tiebreak, so two advancing saves for the same index
+    // landing in the same microsecond (both real transactions calling
+    // `now()` — unlikely, not impossible) would pick a winner
+    // nondeterministically; `sessionLogs.id`'s own gen_random_uuid()
+    // default has no ordering relationship with insert order, so this
+    // adds `desc(id)` purely as a deterministic, arbitrary-but-stable
+    // final tiebreak (not a "pick the later insert" one — Postgres
+    // offers no cheap monotonic column here) so the query itself can
+    // never return a different answer for the same data twice. Mirrors
+    // `server/testing/fakes.ts`'s own `seq` tiebreak in spirit, though
+    // that one IS insertion-ordered (the fake's plain `Date` can tie in
+    // ways real Postgres timestamps practically don't); a genuine
+    // same-timestamp collision isn't cheaply reproducible against the
+    // real store through the public `LogsStore` interface (`loggedAt` is
+    // a DB-side default, not settable by `create()`'s input), so this
+    // stays an ORDER BY change plus this comment rather than a new
+    // test-only seam.
     async listPlanLinks(
       userId: string,
       planKey: string,
@@ -278,7 +297,11 @@ export function createLogsStore(db: Db) {
         .where(
           and(eq(sessionLogs.userId, userId), eq(sessionLogs.planKey, planKey)),
         )
-        .orderBy(sessionLogs.planIndex, desc(sessionLogs.loggedAt));
+        .orderBy(
+          sessionLogs.planIndex,
+          desc(sessionLogs.loggedAt),
+          desc(sessionLogs.id),
+        );
       // planIndex is only ever null on a row whose planKey is also null
       // (create()'s "both linkage fields stay null together" invariant),
       // and the WHERE clause above already excludes those — the cast just

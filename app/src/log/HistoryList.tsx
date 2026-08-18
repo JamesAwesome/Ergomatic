@@ -3,7 +3,11 @@ import { Link } from "react-router-dom";
 import BackLink from "../shell/BackLink";
 import { LogRow } from "./LogRow";
 import { useLogHistory } from "./useLogHistory";
-import { loadLogScroll, saveLogScroll } from "./logScroll";
+import {
+  loadLogScroll,
+  resetLogScrollTombstone,
+  saveLogScroll,
+} from "./logScroll";
 
 // News.tsx's own throttle value/idiom, copied verbatim (see that file's
 // own comment on `SCROLL_SAVE_THROTTLE_MS` for the reasoning) — this
@@ -25,6 +29,17 @@ export default function HistoryList() {
   // from a scroll event that fires after this screen's own DOM has
   // already been replaced (the disconnected-root echo, PR #84).
   const rootRef = useRef<HTMLElement>(null);
+
+  // Final whole-branch review (2026-08-18), finding IMPORTANT 2: resets
+  // `clearLogScroll`'s own tombstone (`logScroll.ts`'s own comment) once
+  // per genuine mount of THIS screen. Runs unconditionally (not gated on
+  // `state.state`, unlike the two effects below) because it has nothing
+  // to do with the fetch — it only needs to happen once, early, on a
+  // fresh visit, well before any real scrolling could trigger the save
+  // effect below.
+  useEffect(() => {
+    resetLogScrollTombstone();
+  }, []);
 
   // Save scroll position — News.tsx:200-220's isConnected-guarded
   // throttled pair, PLUS one addition News's own screen never needed:
