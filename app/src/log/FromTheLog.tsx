@@ -445,7 +445,7 @@ export default function FromTheLog() {
             <div className="baseline-confirm log-delete-confirm">
               <p className="baseline-confirm-line">
                 {row.planKey !== null
-                  ? "This removes the session. If it is your latest plan session, the checkmark un-ticks."
+                  ? "This removes the session and its reflection. If it is your latest plan session, the checkmark un-ticks."
                   : "This removes the session and its reflection."}
               </p>
               {deleteError !== null && (

@@ -1875,7 +1875,7 @@ test("log-delete-confirm", async ({ page }) => {
   await page.getByRole("button", { name: "Delete session" }).click();
   await expect(
     page.getByText(
-      "This removes the session. If it is your latest plan session, the checkmark un-ticks.",
+      "This removes the session and its reflection. If it is your latest plan session, the checkmark un-ticks.",
     ),
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "Cancel" })).toBeVisible();

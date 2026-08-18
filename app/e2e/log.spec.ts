@@ -961,7 +961,7 @@ test("§5.3 leg (a) terminal: deleting the log that advanced the plan un-ticks t
   const confirmPanel = page.locator(".log-delete-confirm");
   await expect(confirmPanel).toBeVisible();
   await expect(confirmPanel).toContainText(
-    "This removes the session. If it is your latest plan session, the checkmark un-ticks.",
+    "This removes the session and its reflection. If it is your latest plan session, the checkmark un-ticks.",
   );
   await confirmPanel.getByRole("button", { name: "Delete session" }).click();
 

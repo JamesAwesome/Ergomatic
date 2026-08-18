@@ -664,7 +664,7 @@ describe("FromTheLog — criterion 2 (a v0.11.0, all-null-hero row)", () => {
 // button label are quoted verbatim from the spec's own table; a self-
 // mutation swapping them is this task's own red-provable target.
 const LINKED_COPY =
-  "This removes the session. If it is your latest plan session, the checkmark un-ticks.";
+  "This removes the session and its reflection. If it is your latest plan session, the checkmark un-ticks.";
 const UNLINKED_COPY = "This removes the session and its reflection.";
 const DELETE_BUTTON_NAME = "Delete session";
 
