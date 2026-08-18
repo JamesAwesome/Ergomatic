@@ -78,6 +78,20 @@ function judgedClass(
   }`;
 }
 
+/** `3,842m` (connected-metrics design spec, "Total meters"). No house
+ *  helper for a thousands separator exists to reuse: a repo-wide grep for
+ *  `toLocaleString`/`Intl.NumberFormat` turns up nothing, and the summary
+ *  screen's own DISTANCE hero (`PostWorkoutSummary.tsx`'s
+ *  `heroes.distanceMeters`) renders the raw number with no separator at
+ *  all — this is the first consumer of one on this codebase, not a reuse,
+ *  contra the brief's own assumption that a pattern to follow already
+ *  exists (see this task's report). `Intl.NumberFormat`, not a hand-rolled
+ *  regex, for the same reason `fmtSplit`/`fmtDuration` are house functions
+ *  rather than ad hoc string surgery at each call site. */
+function fmtMeters(meters: number): string {
+  return `${new Intl.NumberFormat("en-US").format(meters)}m`;
+}
+
 export default function PaneLive({ model }: { model: SurfaceModel }) {
   // Both heroes signal "no target" the same way: the model's own `absent`
   // flag (I-1, carried forward — the target VALUE names the phase kind,
@@ -97,11 +111,32 @@ export default function PaneLive({ model }: { model: SurfaceModel }) {
           progress bar's own row order match design spec §2A/§2C exactly:
           the bar sits between the header and the heroes in BOTH
           orientations, so it renders FIRST here, ahead of the heroes. */}
-      <ConnectedProgressBar
-        boundaries={model.boundaries}
-        totalSeconds={model.totalSeconds}
-        elapsedSeconds={model.elapsedSeconds}
-      />
+      {/* THE METERS COUNTER (connected-metrics design spec, "Total meters
+          (whole session)"): restores a render site TOTAL M's own
+          retirement cut three days before this task
+          (`surfaceModel.ts`'s own comment on `sessionDistanceMeters`) —
+          right end of the progress-bar row, the bar flexing and the
+          counter `flex: none` (handoff §2, `index.css`). Wraps
+          `ConnectedProgressBar` rather than editing it: that component is
+          untouched, out of this task's scope, and ships complete on its
+          own (Task 3's own header comment). */}
+      <div className="connected-progress-row">
+        <ConnectedProgressBar
+          boundaries={model.boundaries}
+          totalSeconds={model.totalSeconds}
+          elapsedSeconds={model.elapsedSeconds}
+        />
+        {/* NOTHING AT ALL before the first frame (design spec: "Absent
+            until the first frame arrives; 0m thereafter") — the same
+            "absent, not blank" idiom this file already uses for
+            `heroLabel`/`targetSplitCaption`, never a dash: a session total
+            has no "no reading" phrase the way a judged cell does. */}
+        {model.sessionDistanceMeters !== null && (
+          <span className="connected-progress-meters">
+            {fmtMeters(model.sessionDistanceMeters)}
+          </span>
+        )}
+      </div>
       <div className="connected-heroes">
         <div className="connected-hero connected-hero-split">
           {/* NOTHING AT ALL when there is no label (I-1, carried forward):
@@ -136,6 +171,33 @@ export default function PaneLive({ model }: { model: SurfaceModel }) {
               <span className="connected-hero-target-ref">
                 {model.targetSplitCaption}
               </span>
+            )}
+            {/* THE AVG CELL (connected-metrics design spec, States table +
+                "The judgement"): a THIRD flex child of this same row, not a
+                sibling element — `TGT 2:13.0 · AVG 2:11.8` is one baseline
+                row, per the design's own placement, and `index.css`'s
+                margin corrections (`.connected-hero-avg-label`/`-value`)
+                net this row's shared 10px gap to the handoff's 8px/12px
+                figures either side of the label. NOTHING AT ALL when
+                absent (design spec: "nothing", never a dash) — the same
+                idiom `targetSplitCaption` above already uses; `model.avg`
+                is `SurfaceModel`'s own field (Task 3), never re-derived
+                here. Judged the same way pace/rate are (`judgedClass`,
+                this file's ONE helper) — `model.avg.judgement` is forced
+                `"within"` (plain ink) by `surfaceModel.ts` everywhere but
+                a rest that folded onto a completed work interval, which is
+                what makes "judged colour absent while rowing, present at
+                rest" fall out of the model rather than needing a branch
+                here. */}
+            {!model.avg.absent && (
+              <>
+                <span className="connected-hero-avg-label">AVG</span>
+                <span
+                  className={judgedClass("connected-hero-avg-value", model.avg)}
+                >
+                  {model.avg.display}
+                </span>
+              </>
             )}
           </div>
         </div>
