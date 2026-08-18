@@ -121,8 +121,16 @@ builds it.
   rest-bearing program.
 - **Zero is absent, never displayed** — the wire genuinely reads `0.00` at
   workout start and on each interval's first frame.
-- **Placement:** the target baseline row, `TGT 2:13.0 · AVG 2:11.8`
-  (handoff §1 geometry).
+- **Placement:** the target baseline row. **What the screen actually says
+  (corrected at the PM final gate, which checked the PNG against this line):**
+  `2:06.0  6K +4  AVG 2:08.4` — the target keeps its existing captioned form
+  with NO `TGT` label, because CR2 spec 3 deliberately cut the word TARGET
+  from this screen and this phase does not reintroduce it; only AVG carries
+  a label. The handoff's `TGT … · AVG …` shorthand (its §1) is therefore a
+  THIRD departure from the 4a mock, alongside the two in DEVIATIONS.md. The
+  handoff's geometry (label/value sizes, gaps) still binds; its label text
+  does not. The `TGT` column in the states table below is shorthand for
+  "the target value in its existing form", not a literal on-screen word.
 
 ## States
 

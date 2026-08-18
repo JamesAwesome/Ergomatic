@@ -2382,6 +2382,68 @@ footer unchanged). §7's nine exit criteria are evidenced in the task-6
 report; branch PENDING James's review before merge and the v0.12.0 tag
 (§7 criterion 7 names that version for the notes PR).
 
+## Phase CS — Connected polish: the swipe returns, NEXT says more
+
+**Status:** SHIPPED 2026-08-17/18 (#116 the enriched NEXT line, released in
+v0.11.0; #119 the swipe, released in v0.12.0; #120 the walk-skill and
+instruction-evidence fixes). Recorded here at the PM's third
+roadmap-absence finding — this section was written at CM's final gate, a
+phase late, which is itself the finding.
+**What shipped:** the footer names the next interval
+(`NEXT · WORK 2000m · 2:06.0 @22`); swipe LIVE↔GRID returned after a
+device probe convicted our own `[role]` guard wildcard (not WebKit) of
+refusing every grid-origin drag; `user-select` off the swipe surface.
+**Standing facts this phase established** (full record:
+`docs/monitor/sessions/probe-2026-08-17-swipe/README.md` and
+`walk-2026-08-18-swipe/README.md`):
+- The fake monitor CANNOT drive a native build — `monitorTransport.ts`
+  takes the Capacitor arm whenever `isNative()`; walks connect to a real
+  PM5, no rowing required for screen-only checks.
+- `touch-action` must sit on the grid scroller itself (intersection stops
+  at the first scroll container); deleting it reddens the gesture, not
+  just a style pin.
+- A drag steeper than 45° starting in the rows scrolls instead of paging.
+  Cause UNSETTLED (our own dominance rule is the leading candidate, not
+  WebKit — the #303 citation was corrected at the exit pass); the shallow
+  off-horizontal drag rides CM's walk.
+- [ ] Follow-up: the e2e stack-reap race (a sibling worktree boot once
+      produced 117 ECONNREFUSED; suspected `stack-reap` racing
+      `git worktree list`) — previously filed only in #116's PR body.
+- [ ] Follow-up: `connection log text is no longer hand-selectable`
+      (`user-select: none` inherits into the sheet); COPY LOG is the only
+      route out — fine while COPY LOG works, a trap if it ever breaks.
+
+## Phase CM — Connected metrics: the interval's average, the session's metres
+
+**Status:** PR #123 OPEN (branch `connected-metrics`), final review
+APPROVE, PM final gate GO-WITH-CHANGES (conditions folded), awaiting the
+hardware walk + James's word. TRIAD (number semantics). Spec at
+`docs/superpowers/specs/2026-08-18-connected-metrics-design.md` — blocked
+once in full by the antagonist and rewritten; every load-bearing claim
+decoded from committed captures.
+**Goal:** `3,842m` on the progress-bar row (the driver's reconciled
+accumulator — the machine's own TWD field is frozen during work and
+rest-inclusive, proven unusable live); the interval's average
+(`0x0033`'s own value) beside the target, judged only during rests.
+**Wire facts banked:** TWD = work + rest exactly (1599 = 1535 + 64);
+`0x0033` holds the finished interval's average through the whole rest
+(≤0.2 s vs the boundary record); the emitted interval referent lagged
+450-540 ms at boundaries and is now monotone (both driver clamps
+mirrored).
+- [ ] The walk (spec criterion 2): pyramid program with DISTINCT targets,
+      phone + monitor photographed mid-work AND mid-rest, the summary
+      screen photographed after (three totals, one record), the
+      final-interval-verdict question, the shallow drag.
+- [ ] Follow-up (PM final gate): cross-pin `sessionDistanceMeters`
+      against `monitorDistanceMeters` (the summary's Σ over
+      IntervalActual) over the same capture — two derivations of one
+      user-facing quantity currently ship on two screens with nothing
+      comparing them; the replay harness exists, it stubs `actuals: []`.
+- [ ] Follow-up: a `connected-pane-rest` fixture/screenshot — the one new
+      colour this phase adds has no committed picture of its judged state.
+- [ ] Follow-up: the fake's `restDistanceMeters` resets with no ~3-frame
+      lag (fine while nothing renders it directly).
+
 ## Phase LG — The log screen's own words
 
 **Status:** ABSORBED INTO PHASE PW (2026-08-17, James's brainstorm). The

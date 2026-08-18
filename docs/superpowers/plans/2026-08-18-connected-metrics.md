@@ -209,7 +209,18 @@ while rendering nothing.
   wrong; (c) read the AVG at the start of a rest and say whether it matches
   the interval just rowed; (d) does the verdict colour appear only at rest;
   (e) an interval longer than 500 m, to settle whether `splitAvgPace` is
-  still our interval's average when the PM5 might split it.
+  still our interval's average when the PM5 might split it;
+  (f) **photograph the SUMMARY screen right after the session** — zero
+  extra rowing, and it puts all three totals (monitor, live counter,
+  summary DISTANCE) on one record. Two independent derivations of the same
+  quantity ship on two screens with nothing comparing them (PM final gate),
+  and this is the cheapest possible answer;
+  (g) **does the FINAL interval get a verdict?** One glance at the end.
+  The spec's honest limit says it may not (one capture went
+  `rowing → finished` with no trailing rest), but
+  `intervalIndex.ts` documents a real PM5 emitting a phantom index for the
+  last interval's trailing rest — the two pieces of evidence disagree, and
+  if the last interval is NEVER judged, the release notes must say so.
 - [ ] **Step 4: Riding along, unrelated to this feature:** a *shallow*
   off-horizontal drag starting inside the grid rows, and report whether it
   pages. This settles whether Phase CS's diagonal case was WebKit or our own
