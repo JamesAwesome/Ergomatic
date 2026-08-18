@@ -115,6 +115,8 @@ builds it.
 | Rest, before any work interval completes | as today | nothing |
 | Warm-up | as today (`Easy`) | live average, plain ink — never judged, per the standing rule that a warm-up must not read as a working interval |
 | Free piece, no split target | nothing | live average, plain ink |
+| Rest onset, or work start, while the referent disagrees | that referent's target | **nothing** (see "Which interval do these numbers belong to?") |
+| Finished / terminated / idle | as today | nothing — `intervalIndex` is `null` here and today's `?? 0` would pair the WARM-UP's target with the last interval's average |
 | Stale / disconnected | as today | last value, under the pane's existing staleness treatment |
 
 ## The judgement — SETTLED: suppressed while rowing, shown at rest
@@ -148,6 +150,42 @@ Direction reuses the house rule (`summaryModel.ts:208-224`, unchanged and
 still two-bucket for finished rows); the on-target state is new and, by
 this ruling, only ever reached at rest.
 
+## Which interval do these numbers belong to?
+
+Added after the delta pass, which proved the first draft of the rest
+judgement would have shipped a wrong number in a verdict colour.
+
+**The defect.** `frame.intervalIndex` lags one interval behind for the first
+emitted frame of most rests — **450-540 ms**, measured on 4 of the 5 rest
+entries in the entire committed raw record. The cause is structural: a frame
+is emitted only from the `0x0031` handler (`driver.ts:3298`, deliberately),
+so a late `0x0033` never gets a frame of its own to correct itself. The
+driver's stale-count rest clamp (`driver.ts:1870-1887`) already exists for
+exactly this, and lifts `activeKey` only — the consumer-facing field is
+built six lines later from the **unclamped** value (`driver.ts:1989`).
+
+The same one-tick mechanism runs the other way at every work start: the
+first emitted frame carries the **previous** interval's `splitAvgPace` for
+450-540 ms before the wire reads 0. So the spec's own field table was wrong
+— that claim is about the first *value*, not the first *frame*.
+
+**The rule this spec adopts.** Both numbers resolve their interval through
+one monotone answer, never through `frame.intervalIndex` directly:
+
+- the referent is the highest interval index seen while `rowing`, which is
+  the same `max(seen)` reasoning the existing clamp already uses;
+- `AVG` renders **nothing** whenever the average's own interval does not
+  match that referent — which covers both the rest-onset lag and the
+  work-start carry-over with one rule rather than two patches;
+- the fix belongs in the driver, extending the existing clamp to the
+  emitted `intervalIndex`, so every consumer benefits and no screen
+  re-derives it. That is a change to what a shipped number means, so it
+  carries its own tests built from the captures that exhibit the lag.
+
+**What makes it verifiable:** `session-2-wu-4unequal.jsonl` contains the
+lagged frames at both boundaries. A test that replays it and asserts the
+referent never goes backwards fails today and passes after.
+
 ## Blast radius
 
 - `domain/monitor/` — no new parsing.
@@ -177,7 +215,10 @@ this ruling, only ever reached at rest.
 3. **The AVG shown during a rest equals the interval that just finished**,
    by value, against the replay's own boundary record (±0.2 s). Phrased as a
    value check because "the number holds constant" is true of the broken
-   implementation too.
+   implementation too. **The test must name which resting frame it samples
+   and must include the FIRST one** — 4 of the 5 committed rests begin with
+   the lagged frame, so a sampler that picks a settled frame can sample past
+   the defect and report agreement.
 4. **A zero average renders nothing** — provable today: `session-2` carries
    34 zero frames, the first twelve consecutive.
 5. **The fake emits both numbers plausibly**, so the visual gates can see
@@ -205,9 +246,20 @@ this ruling, only ever reached at rest.
 - We do not know what the monitor's own screen displays as total meters
   mid-interval; criterion 2's photograph is the only way to find out.
 - Nothing here changes the summary screen's accumulation.
-- **A rest-free program never shows a verdict.** Judgement lives in the
-  rest, so an `r0` interval program or a continuous piece gets the average
-  but never the colour. Accepted: the post-workout summary is where those
-  sessions read their verdict, and inventing a boundary-flash window to
-  cover them would put a judgement on screen at the one moment the rower is
-  starting the next effort.
+- **A rest-free program never shows a verdict, and that is 11% of the
+  library, not an edge case.** Judgement lives in the rest, so an `r0`
+  interval program or a continuous piece gets the average but never the
+  colour. Counted against the real seed: **33 of 300 shipped workouts** (20
+  all-rests-zero interval pieces plus 13 continuous), including 20-interval
+  pieces, the rate ladders, and every float workout where the "rest" is easy
+  WORK and the machine never enters `resting` at all. The set skews to O2
+  (29 of 33) and contains **zero AN** workouts. Accepted anyway: the
+  post-workout summary is where those sessions read their verdict, and a
+  boundary-flash window would put a judgement on screen at the one moment
+  the rower is starting the next effort. **Stated so the next reader can
+  reverse it knowingly**, and so nobody mistakes the walk's own r0 keystone
+  (0 resting frames in 286) for coverage of this feature.
+- **The last interval may get no verdict either.** In `session-2` the final
+  working interval went `rowing → finished` with no rest between, so the
+  interval a rower most wants judged showed nothing. Program-dependent, but
+  real in the one rest-bearing capture we own.

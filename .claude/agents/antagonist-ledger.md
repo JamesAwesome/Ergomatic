@@ -1406,3 +1406,45 @@ toolkit, not a history.
   frame), though the spec cites the Last Split CHECKPOINT pair for it, which
   is a different field. And the summary's DISTANCE now equals the machine's
   own total to the metre (1599 = 1599, 500 = 500).
+
+### Delta pass, 2026-08-18, Phase CM — the rest-phase referent switch
+
+- **"During a rest, `frame.intervalIndex` names the interval that just
+  finished, so the row can safely show its target."** FALSE for the first
+  emitted frame of most rests: 4 of 5 rest entries across every committed raw
+  capture (`walk-2026-08-16/session-2`, `walk-2026-08-17/step-3`) carry an
+  index one whole interval behind for **450-540 ms**. _Technique:_ decode the
+  raw jsonl and replay the DRIVER'S OWN emission rule, not the wire's. A frame
+  is emitted only from the 0x0031 handler (`driver.ts:3298`, deliberate —
+  comment at `:3182`), so a late 0x0033 never gets a frame to correct itself
+  and the documented 10-93 ms wire skew becomes a FULL STATUS TICK on screen.
+  Counting notify records misses this; counting emitted frames finds it.
+- **"The driver already clamps the stale rest count."** Half-true, and the
+  dangerous half is the other one: the stale-count rest clamp
+  (`driver.ts:1870-1887`) lifts `activeKey` (the register map) only, while the
+  consumer-facing field is built six lines later from the UNCLAMPED value
+  (`driver.ts:1989`, `{ ...base, intervalIndex }`). _Technique:_ read the line
+  that CONSUMES the clamped variable, never the clamp itself. Scar tissue can
+  be real and still not cover the seam you are standing on.
+- **"`splitAvgPace` reads 0 on the first frame of each interval"** (the spec's
+  own field table). FALSE: the first emitted frame of every work start in
+  every capture carries the PREVIOUS interval's average for 450-540 ms; 0
+  arrives on the second frame. Same one-tick mechanism. _Technique:_ a claim
+  about "the first frame" is about the EMISSION, not the field.
+- **An accepted limitation needs a number before it is accepted.** "An r0
+  program never shows a verdict" sounded like an edge case; against the real
+  seed it is **33 of 300 library workouts (11%)**, including 20-interval
+  pieces and every float workout, with zero AN coverage — and the walk's own
+  keystone (`session-1-keystone-2x250r0`) has **0 resting frames in 286**.
+  _Technique:_ quantify the accepted loss against production data
+  (`server/seed/library/`), and check whether the phase's own regression
+  capture can even reach the new code.
+- **Survived the attack:** the pane DOES disambiguate a phase-dependent
+  referent. `headerTrailing` renders `intervalLabelShort` in both orientations
+  (`ConnectedSurface.tsx:125-141`/`:498`; `index.css:7292` resets order only,
+  never display), reading `3 OF 4 · REST` off the SAME index the target would
+  use; and `upNext` during a rest names the FOLLOWING work phase with its
+  split and rate (`surfaceModel.ts:207` + `:837` + `:152`). _Attack used:_
+  traced both fields to their render sites AND their CSS, rather than trusting
+  the doc comments — which in this file have twice described renderers that
+  had already retired.
