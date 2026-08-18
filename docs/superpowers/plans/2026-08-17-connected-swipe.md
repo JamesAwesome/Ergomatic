@@ -290,8 +290,12 @@ falsified for the horizontal case; a *scrollable* row list is untested.
   intervals** and walk it in **landscape** (the scroller fits 8 —
   `screenshots.spec.ts:2547`). Confirm `.connected-grid-rows` actually
   overflows before the drags begin. **No rowing is required for this leg
-  at all** — it runs against the fake monitor, exactly as the probe did,
-  so the program only has to exist. The canned hardware-walk set has
+  at all** — connect to the real PM5, let it arm, tap "Show me the
+  numbers", and the grid renders without a stroke, so the program only has
+  to exist. (An earlier version of this line said "it runs against the fake
+  monitor, exactly as the probe did", contradicting Step 1's own correction
+  twenty lines above. The fake cannot reach a native build, and the probe's
+  session was a real PM5.) The canned hardware-walk set has
   nothing long enough; paste this at `/library/import` (same grammar,
   verified against the skill's own blocks):
 

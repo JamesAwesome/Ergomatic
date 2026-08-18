@@ -138,14 +138,18 @@ scroller could interfere. (Inference from one hit-test target, not proof.)
 
 **What a scrollable list changes.** `touch-action: pan-y` correctly forbids
 the UA from claiming a *horizontal* pan, and that reasoning holds. What a
-long program newly enables is **vertical** panning — and WebKit applies a
-directional-lock slop to it. W3C Pointer Events issue
-[#303](https://github.com/w3c/pointerevents/issues/303), filed by a WebKit
-engineer in 2019, describes exactly this: on iOS, a page that scrolls
-vertically delivers `pointercancel` during a horizontal pan "unless the user
-is careful not to stray from a very straight horizontal panning gesture."
-The issue exists *because Safari and Chrome disagree*, which is also why no
-Chromium test can ever see it.
+long program newly enables is **vertical** panning, and a directional-lock
+slop around it was the suspicion. **CORRECTED 2026-08-18 at the phase exit
+pass, after reading the source's resolution rather than its opening
+comment:** W3C Pointer Events issue
+[#303](https://github.com/w3c/pointerevents/issues/303) is **CLOSED**,
+resolved by [PR #351](https://github.com/w3c/pointerevents/pull/351), which
+added a normative **SHOULD** in the opposite direction — once the UA has
+decided at the START of a gesture, "a subsequent change in the direction of
+the same gesture SHOULD be ignored by the user agent for as long as that
+pointer is active." The report describes **iOS 13, 2019**. So this is a
+conformance question about a specific WebKit version, not a limit the
+platform documents, and it must not be cited as settled.
 
 **No declaration prevents it.** Only `touch-action: none` on the scroller
 would, and that kills grid scrolling outright. `pan-y` is already the
@@ -155,8 +159,8 @@ the segmented control still works — and it is bounded to diagonal drags on
 programs long enough to scroll.
 
 **Consequence for verification.** A phone leg on a short program is
-indistinguishable from this probe, and a Chromium pin is on the wrong side
-of a documented interop gap. The walk must therefore use a program whose
+indistinguishable from this probe, and a Chromium pin cannot speak for
+WebKit's arbitration either way. The walk must therefore use a program whose
 grid genuinely overflows (≥9 rows in landscape, ≥16 in portrait, against
 the committed scroller budgets in `screenshots.spec.ts:2546-2547`) and must
 include a deliberate **diagonal** drag starting inside the rows.
