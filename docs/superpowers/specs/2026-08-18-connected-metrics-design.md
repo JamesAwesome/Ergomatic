@@ -28,7 +28,9 @@ incident. Decoding 2,363 raw frames from our own committed captures:
   exactly. The draft's `TWD + restDistance` sum double-counts the current
   rest — measured overshoot **+30 m**.
 - **TWD is not a live counter.** It is a step function, frozen for the whole
-  work interval, advancing only at boundaries and during rests — 62 changes
+  work interval, advancing only at boundaries and during rests — 59 changes
+  (60 distinct values; the final review's independent decode corrected the
+  anchor pass's 62)
   across 983 frames. Mid-interval the draft's number would read **360 m
   where the machine has 809 m**; worst measured understatement **449 m**.
 
@@ -52,7 +54,7 @@ each departure is named.
 | --- | --- | --- | --- |
 | `totalWorkDistanceMeters` | `0x0031` b11-13 | whole m | **Includes rest meters. Frozen during work**, steps at boundaries and ticks during rests. Non-monotone once observed (250→500→250 in `step-2`). |
 | `restDistanceMeters` | `0x0032` b11-12 | whole m | Per-rest, resets at each work start; lags ~3 frames at the transition. |
-| `splitAvgPace` | `0x0033` b8-9 | 0.01 s/lsb | The programmed interval's own average, live. Resets at work-interval start; reads `0` at workout start and on the first frame of each interval. **Holds flat through the whole rest**, agreeing with the boundary record to ≤0.2 s across all five recorded rests. |
+| `splitAvgPace` | `0x0033` b8-9 | 0.01 s/lsb | The programmed interval's own average, live. Resets at work-interval start; the first fresh VALUE of each interval is `0` — but the first emitted FRAME of a work start carries the previous interval's average for one tick (see "Which interval do these numbers belong to?", which is why the driver stamps provenance). **Holds flat through the whole rest**, agreeing with the boundary record to ≤0.2 s across all five recorded rests. |
 | `splitIntervalAvgPace` | `0x0038` b6-7 | 0.1 s/lsb | The finished interval's average — but the record carries that interval's rest time and distance, so **it cannot arrive until the rest is over**. |
 
 PRIMARY for every offset and scale: C2 BLE spec via

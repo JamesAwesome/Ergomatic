@@ -6158,7 +6158,8 @@ section:not(.news-pinned) .news-row:last-of-type {
    pair-spacings on one row, so this rule corrects only the ONE boundary it
    sits on rather than un-sharing the gap for every pair: `margin-left:
    -2px` nets the parent's 10px down to 8px. `var(--c-size-label)` (15px
-   landscape / 14px portrait, `:5611`/`:7105`) — the SAME token every other
+   landscape / 14px portrait — grep `--c-size-label:`, line cites drift) —
+   the SAME token every other
    label role on these panes already reads
    (`.connected-hero-target-ref`/`.connected-band-cell-label`), not a new
    size — is exactly why the brief's own figure (15) needs no orientation
@@ -6173,7 +6174,8 @@ section:not(.news-pinned) .news-row:last-of-type {
 }
 
 /* THE AVG VALUE — 34px landscape (task-4 brief's own figure), derived from
-   `--c-size-target` (40px landscape / 36px portrait, `:5611`/`:7101`)
+   `--c-size-target` (40px landscape / 36px portrait — grep the token,
+   line cites drift)
    rather than a second hardcoded literal pair: AVG must always read
    smaller than TGT so both numbers share one row without crowding, and
    `calc(var(--c-size-target) - 6px)` keeps that 6px relationship in lockstep

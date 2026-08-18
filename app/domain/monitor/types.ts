@@ -93,8 +93,11 @@ export interface MonitorFrame {
   //   connected-metrics design spec's ruling: judged only at rest, when it
   //   is final — "The judgement" section). Passed through unconditionally
   //   at the parse level (`pm5/parse.ts`'s `toMonitorFrame`, same
-  //   unconditional-pass-through choice as `currentSplit` above), `null`
-  //   only for a caller with no 0x0033 sample yet. `src/monitor/driver.ts`
+  //   unconditional-pass-through choice as `currentSplit` above). A caller
+  //   with no 0x0033 sample yet would see `undefined` through
+  //   `toMonitorFrame` — a path the driver's own emission gate makes
+  //   unreachable (frames emit only once general/AS1/AS2 have all been
+  //   seen), so the absent-value story in practice is: `src/monitor/driver.ts`
   //   additionally NULLS this field whenever its own PROVENANCE interval
   //   (which interval the last 0x0033 sample was actually captured for —
   //   `splitAvgPaceProvenanceIndex`'s own doc comment has the full
