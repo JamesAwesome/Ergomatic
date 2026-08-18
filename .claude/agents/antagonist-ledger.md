@@ -1083,3 +1083,99 @@ toolkit, not a history.
   — the spec's Σ-weighted average is the machine's own formula generalized, and
   the mock's unweighted mean of row paces (2:09.1 vs the correct 2:09.2) is the
   thing that is wrong.
+
+## Delta pass, 2026-08-17 (Phase CS Item A, the device probe's verdict)
+
+- **"The probe falsified the scroller-intersection candidate."** True of the
+  horizontal case, and conditional in a way the README never said: the probe
+  build (`d1da5f7`) ADDED `touch-action: pan-y` at three places, and
+  `connected-polish` has none — `grep -n "touch-action" app/src/index.css`
+  returns nothing. The falsification transfers only if those three
+  declarations ship with the handler. **Technique: a probe's verdict is a
+  claim about the BUILD IT RAN. Diff the probe branch's non-handler files
+  against the branch that will ship, and re-read every "we falsified X" for
+  whether X was falsified by the fix or by the environment.** A CSS file is
+  where the environment hides.
+
+- **"Vertical scrolling survives (a −178px vertical drag committed
+  below-threshold)."** Unsupported by its own trace, and the README voided the
+  premise three paragraphs later ("the row list may never have needed to
+  scroll"). `.connected-grid-rows` is `flex: 0 1 auto` and hugs its content
+  (`index.css:6727-6733`); with a short program NOTHING on that surface can
+  pan, so the drag proves only that our handler declined to page. Settled by
+  the trace's own decisive quote: the SUCCESSFUL drag's pointerdown targets
+  bare `.connected-pane-grid` at y=230, which in a filled scroller would be
+  inside the row list. **Technique: a negative-result claim ("X survived the
+  gesture") needs proof that X was CAPABLE of happening. For scroll claims,
+  that is a two-line geometry check — box height vs content height — not an
+  event count.**
+
+- **"Every genuinely operable control in this surface is a native
+  `<button>`" — the premise a guard narrowing was justified with.** False:
+  `SheetShell.tsx:123` is `<div className="filter-sheet-backdrop"
+  onClick={onDismiss}>`, rendered inside `.connected-surface`. Consequence nil
+  (a separate `logSheetOpen` boolean covers it), but the narrowing takes the
+  sheet subtree from two independent guards to one, and the survivor is a
+  boolean the next overlay author must remember. The same pass found the
+  probe's role census undercounted: it named `status` + two `group`s and
+  missed `role="dialog"` (`SheetShell.tsx:127`). **Technique: when a guard is
+  narrowed on the strength of "everything operable is an X", grep for
+  `onClick` on NON-X elements across the whole subtree INCLUDING shared
+  shells — the exceptions live in the generic component nobody counts as part
+  of the screen.**
+
+- **The planned regression pin could not exercise the gap it existed to
+  close.** The real-touch e2e was to ride `connected.spec.ts`'s walk, whose
+  fixture is five work intervals (`:84-90`, asserted `:626`), in a portrait
+  390x844 project (`playwright.config.ts:22-24`) whose grid scroller holds
+  FIFTEEN rows (`screenshots.spec.ts:2546/:2662`). Five into fifteen never
+  scrolls — the pin would have reproduced the probe's blind spot exactly.
+  Landscape needs >=9 rows, portrait >=16. **Technique (third recurrence of
+  oracle blindness, after the 2x250 keystone and the a??b factory default):
+  for any pin whose subject is a CONTAINER STATE, compute the fixture's
+  content against the container's pinned budget. Both numbers are already
+  committed as constants in the screenshot spec; the comparison is
+  arithmetic, not judgement.**
+
+- **jsdom 30 has `PointerEvent` but NO pointer capture at all.** Verified by
+  running it: `PointerEvent: function`, `setPointerCapture: undefined`,
+  `hasPointerCapture: undefined`; `pointerType` defaults to `""` and
+  `isPrimary` to `false`. So an unguarded `el.setPointerCapture(id)` throws in
+  every unit test, a guarded one silently tests a no-capture machine, and any
+  handler branch on `pointerType`/`isPrimary` is dead-or-inverted unless every
+  fixture sets it. What jsdom CAN do is discriminate the guard predicate
+  exactly (`closest("…,[role]")` -> the `role="group"` scroller; the narrowed
+  selector -> null) PROVIDED the test renders the real `PaneGrid` rather than
+  a hand-built row. **Technique: before designing a jsdom oracle for a DOM
+  API, run six lines of node+jsdom to enumerate what that jsdom version
+  actually implements. It costs one tool call and it moved three "the unit
+  test covers it" claims in this pass.**
+
+- **A Chromium/CDP pin is on the WRONG SIDE of a documented interop gap, not
+  merely "a different engine".** WebKit fires `pointercancel` during a
+  horizontal pan on a `touch-action: pan-y` element inside a vertically
+  scrollable page "unless the user is careful not to stray from a very
+  straight horizontal panning gesture" — w3c/pointerevents#303, filed by
+  `graouts` (Antoine Quint, WebKit), 2019-08-30, closed via PR #351; the
+  issue's whole subject is that Safari and Chrome disagree. **Technique: when
+  arguing that harness engine A cannot prove behaviour on engine B, search the
+  standards body's ISSUE TRACKER for the interop gap by name. A WG issue filed
+  by a vendor engineer is the strongest possible statement that the two
+  engines differ, and it is far cheaper to find than a repro.**
+
+- **Attacked and NOT broken:** the guard conviction itself. `.connected-grid-row`
+  is a plain `<div>` with no handler (`PaneGrid.tsx:163-172`) whose only
+  `[role]` ancestor is the scroller (`:143-146`), so `interactive: true` is
+  entailed by the markup, not correlated with it. The one alternative the
+  published evidence left open is the OTHER disjunct of
+  `if (logSheetOpen || interactive) return;` — and the README's "verbatim"
+  quotes stripped `kind`, `t` and **`logSheetOpen`** from every pointerdown
+  entry, with the raw trace uncommitted. It dies on geometry instead:
+  `.filter-sheet-backdrop` is `position: fixed; inset: 0; z-index: 30`
+  (`index.css:663-672`), so while the sheet is open nothing can hit-test to a
+  grid row; the recorded target proves the sheet was closed. **Technique: when
+  a guard is a disjunction and the evidence records only one disjunct, do not
+  accept the conviction on the recorded one — find the physical fact that
+  excludes the other. Hit testing against a `fixed; inset: 0` overlay excludes
+  more than any log line.** And: quote elision is a defect in a record that
+  will outlive the trace — commit the raw artifact or mark the elision.

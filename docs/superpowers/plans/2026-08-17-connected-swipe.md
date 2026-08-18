@@ -140,7 +140,14 @@ falsified for the horizontal case; a *scrollable* row list is untested.
   stub `setPointerCapture` / `releasePointerCapture` /
   `hasPointerCapture` on `Element.prototype` in a `beforeEach`, and say in
   a comment that those stubs are exactly why this test cannot prove
-  capture retargeting (the device probe did; the e2e pin re-checks it):
+  capture retargeting (the device probe did; the e2e pin re-checks it).
+  **Two further verified jsdom traps** — `new PointerEvent(...)` defaults
+  `pointerType` to `""` and `isPrimary` to `false`, so every fixture event
+  must set both explicitly or a handler branch keyed on either is dead (or
+  inverted) and the test reads as passing while exercising the reject
+  path. And the grid case MUST render the real `PaneGrid` — a hand-built
+  `<div class="connected-grid-row">` has no `role="group"` ancestor, so it
+  passes against the broken predicate too (recurring failure #3):
   - down on the hero, move −80px, up → the GRID pane's content is on
     screen and the rail's Grid button is selected (assert the user-visible
     consequence, not a spy — docs/TESTING.md §3)
@@ -169,14 +176,26 @@ falsified for the horizontal case; a *scrollable* row list is untested.
   as they are), `blocked={logOpen}`. The triple-tap diagnostics gesture is
   untouched: a swipe must never count as a tap (the old handler's own
   note — keep the property and pin it if a cheap assertion exists).
-- [ ] **Step 5: CSS.** `touch-action: pan-y` on `.connected-surface` AND on
+- [ ] **Step 5: The sheet's second guard.** Put `data-swipe-ignore` on
+  `SheetShell`'s backdrop root (`src/components/SheetShell.tsx:123` — a
+  `<div onClick={onDismiss}>`, the one operable non-`<button>` in the
+  surface tree). The `logSheetOpen` boolean already covers the sheet; this
+  makes the coverage structural, so the NEXT overlay author does not have
+  to remember a boolean, and it gives the opt-out attribute a real first
+  consumer rather than shipping it untested (spec-blind-tests lesson).
+  Pin the house rule that justifies the whole predicate with a source
+  sweep in the existing idiom (`ConnectedSurface.test.tsx`'s caps sweep):
+  within `src/workout/connected/**` and `ConnectedSurface.tsx`, `onClick`
+  and `onPointerDown` appear only on `<button>` or on an element carrying
+  `data-swipe-ignore`.
+- [ ] **Step 6: CSS.** `touch-action: pan-y` on `.connected-surface` AND on
   `.connected-grid-rows` (the `overflow-y: auto` scroller — the
   intersection rule means a declaration above it never reaches a finger
   that lands inside it). Grep first: `touch-action` currently appears
   nowhere in `index.css`; it retired with the old handler.
-- [ ] **Step 6:** `pnpm test --project client` green (both lines); `pnpm
+- [ ] **Step 7:** `pnpm test --project client` green (both lines); `pnpm
   lint && pnpm typecheck`.
-- [ ] **Step 7: Commit** `git commit -m "feat: the surface feels the swipe again"`.
+- [ ] **Step 8: Commit** `git commit -m "feat: the surface feels the swipe again"`.
 
 ---
 
@@ -199,27 +218,46 @@ falsified for the horizontal case; a *scrollable* row list is untested.
   pin:
   - horizontal drag from the hero → pane changes
   - horizontal drag **starting on a grid row** → pane changes
-  - vertical drag on the grid → pane unchanged AND the row list scrolled
-    (the scrollable-grid case: use a program long enough that
-    `.connected-grid-rows` overflows; the walk's five-interval program in
-    landscape is the candidate — assert `scrollHeight > clientHeight`
-    first so the test fails loudly if the fixture stops overflowing)
   - a drag beginning on the rail button → pane changes only by the click,
     not the drag
   - a CPU-throttled variant (`Emulation.setCPUThrottlingRate`, the
     scroll-echo recipe) of the first case
-- [ ] **Step 2: The `touch-action` pin** in `design.spec.ts`: computed
+- [ ] **Step 2: The scrollable-grid case needs its OWN program — the
+  walk's does not scroll.** Arithmetic, done before this plan was
+  written: the walk's fixture is five work intervals
+  (`connected.spec.ts:84-90`, asserted `:626`), and the chromium project
+  is portrait 390×844 (`playwright.config.ts:22-24`) where
+  `.connected-grid-rows` is 600px and holds **15** rows
+  (`screenshots.spec.ts:2546`, `:2662-2663`). Five rows into a fifteen-row
+  box never overflows, so riding that walk would reproduce the probe's own
+  blind spot exactly. Give this case a program with **≥16 intervals**
+  (portrait) or run it landscape with **≥9** (`LANDSCAPE_GRID_SCROLLER_PX
+  = 266`, 8 fit — `screenshots.spec.ts:2547`, `:2843`), and open the test
+  by asserting `scrollHeight > clientHeight` on `.connected-grid-rows` so
+  it fails loudly the day the fixture stops overflowing. Then: a vertical
+  drag on the rows leaves the pane unchanged AND scrolls the list; a
+  horizontal drag starting inside the now-scrollable rows still pages.
+  **Label the whole pin in the file for what it is:** Chromium evidence
+  only, and specifically the engine on the *other* side of a documented
+  Safari/Chromium interop gap (W3C pointerevents#303) — a pin, never a
+  gate (spec, PM C2).
+- [ ] **Step 3: The `touch-action` pin** in `design.spec.ts`: computed
   style on `.connected-surface` and `.connected-grid-rows` is `pan-y`.
-  Computed style in a real browser, never a grep of the stylesheet.
-- [ ] **Step 3: Mutation-probe both pins** — restore the `[role]` wildcard
-  and confirm the grid-row test goes RED; delete the scroller's
-  `touch-action` and confirm the computed-style pin goes RED. A pin that
-  cannot go red proves nothing (mutation-probe-must-bite).
-- [ ] **Step 4: Gates.** `pnpm lint && pnpm typecheck && pnpm test` (all
+  Computed style in a real browser, never a grep of the stylesheet. This
+  pin is load-bearing beyond its size: the probe's falsification of the
+  scroller candidate holds only for a build that carries these
+  declarations, and the branch currently has none.
+- [ ] **Step 4: Mutation-probe every pin** — restore the `[role]` wildcard
+  and confirm the grid-row tests (jsdom AND e2e) go RED; delete the
+  scroller's `touch-action` and confirm the computed-style pin goes RED;
+  shrink the scrollable-grid program and confirm its
+  `scrollHeight > clientHeight` opener goes RED. A pin that cannot go red
+  proves nothing (mutation-probe-must-bite).
+- [ ] **Step 5: Gates.** `pnpm lint && pnpm typecheck && pnpm test` (all
   projects), `pnpm e2e`, `pnpm screenshots` if any captured surface
   changed (it should not — no visual change is intended; if screenshots
   move, say why). Per-file coverage for `swipe.ts` at the bar.
-- [ ] **Step 5: Commit** `git commit -m "test: a real finger drags the panes, and the pins bite"`.
+- [ ] **Step 6: Commit** `git commit -m "test: a real finger drags the panes, and the pins bite"`.
 
 ---
 
@@ -227,14 +265,28 @@ falsified for the horizontal case; a *scrollable* row list is untested.
 
 - [ ] **Step 1:** `VITE_ENABLE_FAKE_MONITOR=1 pnpm ios:build && pnpm
   ios:open`; run on James's phone from Xcode.
-- [ ] **Step 2:** One instruction at a time, hardware-walk pacing: (a)
+- [ ] **Step 2: The program must make the grid scroll.** A short program
+  reproduces the probe and proves nothing new: load one with **≥9
+  intervals** and walk it in **landscape** (the scroller fits 8 —
+  `screenshots.spec.ts:2547`). Confirm `.connected-grid-rows` actually
+  overflows before the drags begin.
+- [ ] **Step 3:** One instruction at a time, hardware-walk pacing: (a)
   swipe LIVE→GRID from the hero; (b) swipe GRID→LIVE starting **on a grid
-  row**; (c) scroll the grid vertically and confirm it still scrolls; (d)
-  the same swipes on a **long** program whose grid overflows; (e) tap a
+  row**; (c) **a deliberately DIAGONAL drag starting inside the scrolling
+  rows** — this is the one case the probe could not reach and the one
+  WebKit's directional lock is documented to cancel (probe README, "Open");
+  (d) scroll the grid vertically and confirm it still scrolls; (e) tap a
   rail button and confirm the segmented control still works.
-- [ ] **Step 3:** Record medium (WKWebView), build, iOS version in the
+- [ ] **Step 3a: Record what (c) does either way.** If diagonal drags on a
+  scrolling grid sometimes fail to take, that is an ACCEPTABLE, documented
+  limit — the list scrolls, the rail still works — not a walk failure. Write
+  it into the walk record and the PR body rather than silently shipping it
+  or silently failing the leg. A drag that fails to take is a limit; a drag
+  that changes the WRONG pane, or a grid that stops scrolling, is a
+  failure.
+- [ ] **Step 4:** Record medium (WKWebView), build, iOS version in the
   walk record — the original report's missing fields (spec).
-- [ ] **Step 4: Disposition (binding, spec A8).** If the phone leg fails,
+- [ ] **Step 5: Disposition (binding, spec A8).** If the phone leg fails,
   the handler DOES NOT SHIP: revert Item A from the branch, commit the
   walk evidence beside the probe trace, and refile. No shipping an
   unverified device interaction.
