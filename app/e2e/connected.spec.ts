@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { CDPSession, Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 import { RUN_ID, signInViaBackdoor } from "./helpers";
 
@@ -817,6 +817,419 @@ test.describe("Phase 7B Task 8: the connected walk, fake-driven — landscape (8
     expect(controlBox!.y).toBeCloseTo(20, 0);
 
     await walkSurfaceToLog(page, title, deviceName);
+    await cleanupByTitle(page, title);
+  });
+});
+
+// =========================================================================
+// Phase CS Item A, Task 3 — the real-touch pin (task-3-brief.md).
+//
+// docs/monitor/sessions/probe-2026-08-17-swipe/README.md is the device
+// probe's own verdict: the swipe works on a real iPhone once the
+// interactive guard stops matching a bare `[role]` (`.connected-grid-rows`
+// carries `role="group"` for keyboard operability, and every grid-origin
+// drag used to die there). Everything below reproduces a REAL TOUCH input
+// path in Chromium — never a synthetic mouse drag — because
+// `@playwright/test` 1.62.1's own `page.touchscreen` exposes only `tap()`
+// (no drag), and `locator.dragTo` is mouse-based (verified against the
+// installed package's own `.d.ts` before this was written, per the task
+// brief). `test.use({ hasTouch: true })` is scoped to each describe block
+// below, never the chromium project itself — widening it there would
+// change input semantics for every other spec in this suite.
+//
+// LABEL, READ BEFORE TRUSTING A GREEN RUN HERE (settled ruling, spec + PM
+// C2): this is Chromium evidence only, and specifically the engine on the
+// OTHER side of a documented Safari/Chromium interop gap — W3C Pointer
+// Events issue #303, filed by a WebKit engineer, describing exactly the
+// probe's own open item: on iOS, a page that scrolls vertically can
+// deliver `pointercancel` during a horizontal pan "unless the user is
+// careful not to stray from a very straight horizontal panning gesture,"
+// precisely because Safari and Chrome disagree — which is also why no
+// Chromium run, however faithful, can ever see that side of the gap. This
+// block proves the swipe reaches the handler through a genuine touch input
+// path in Chromium, and that the narrowed guard (`isSwipeBlocked`, no
+// `[role]` wildcard) no longer swallows a grid-origin drag in this engine.
+// It is not, and cannot be, a substitute for the phone leg.
+
+/** A real, multi-frame touch drag over CDP — `Input.dispatchTouchEvent`
+ *  start/move.../end, never a synthetic mouse event. `steps` intermediate
+ *  `touchMove`s make this a realistic touch stream (matching the shape of
+ *  the probe's own captured trace) even though `useSurfaceSwipe`
+ *  (`swipe.ts`) only reads the delta once, at `pointerup` — the path
+ *  in between does not change the outcome, only how honestly this
+ *  reproduces a finger. */
+async function touchDrag(
+  client: CDPSession,
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  steps = 8,
+): Promise<void> {
+  await client.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: [{ x: from.x, y: from.y }],
+  });
+  for (let i = 1; i <= steps; i += 1) {
+    const t = i / steps;
+    await client.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [
+        { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t },
+      ],
+    });
+  }
+  await client.send("Input.dispatchTouchEvent", {
+    type: "touchEnd",
+    touchPoints: [],
+  });
+}
+
+/** A real touch TAP over CDP — start then end, no move in between. Used
+ *  for the rail-button scenario's own "the click still works" half. */
+async function touchTap(
+  client: CDPSession,
+  at: { x: number; y: number },
+): Promise<void> {
+  await client.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: [{ x: at.x, y: at.y }],
+  });
+  await client.send("Input.dispatchTouchEvent", {
+    type: "touchEnd",
+    touchPoints: [],
+  });
+}
+
+/** Attaches a capture-phase `pointerdown` listener that records every
+ *  `pointerType` seen — independent of the app's own handlers entirely, so
+ *  this proves the INPUT ITSELF is real touch, not merely that our code
+ *  accepted whatever it was given. Without this, a pin driven by
+ *  `page.mouse` dressed up as a "touch" test could pass for the wrong
+ *  reason (task-3-brief.md Step 1's own requirement). */
+async function recordPointerTypes(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    (window as unknown as { __e2eTouchTypes: string[] }).__e2eTouchTypes = [];
+    document.addEventListener(
+      "pointerdown",
+      (e) => {
+        (
+          window as unknown as { __e2eTouchTypes: string[] }
+        ).__e2eTouchTypes.push(e.pointerType);
+      },
+      true,
+    );
+  });
+}
+
+async function recordedPointerTypes(page: Page): Promise<string[]> {
+  return page.evaluate(
+    () => (window as unknown as { __e2eTouchTypes: string[] }).__e2eTouchTypes,
+  );
+}
+
+test.describe("Phase CS Item A Task 3: the real-touch pin — hero, grid row, rail button, CPU-throttled (Chromium evidence only)", () => {
+  test.setTimeout(90_000);
+  test.use({ hasTouch: true });
+
+  test("a real touch stream drags the panes through CDP, and a button swallows the drag but not the tap", async ({
+    page,
+    context,
+  }) => {
+    const title = `Connected Touch Pin ${RUN_ID}`;
+    const deviceName = "PM5 192837645";
+    await walkToReady(
+      page,
+      title,
+      `connected-touch-pin-${RUN_ID}@e2e.test`,
+      deviceName,
+    );
+    await expect(
+      page.getByRole("navigation", { name: "Connected panes" }),
+    ).toBeVisible();
+
+    const client = await context.newCDPSession(page);
+    await recordPointerTypes(page);
+
+    const livePaneButton = page.getByRole("button", { name: "Live pane" });
+    const gridPaneButton = page.getByRole("button", { name: "Grid pane" });
+
+    // --- Scenario 1: a horizontal drag from the hero changes the pane.
+    await expect(livePaneButton).toHaveAttribute("aria-current", "page");
+    const heroBox = (await page
+      .locator(".connected-hero-split")
+      .boundingBox())!;
+    const heroCenter = {
+      x: heroBox.x + heroBox.width / 2,
+      y: heroBox.y + heroBox.height / 2,
+    };
+    // Leftward (dx < 0) steps FORWARD through PANES (`swipe.ts`'s own
+    // comment, `paneAfterSwipe`) — live -> grid.
+    await touchDrag(client, heroCenter, {
+      x: heroCenter.x - 150,
+      y: heroCenter.y,
+    });
+    await expect(gridPaneButton).toHaveAttribute("aria-current", "page");
+    await expect(page.locator(".connected-grid-row").first()).toBeVisible();
+
+    // --- Scenario 2: a horizontal drag STARTING ON A GRID ROW still
+    // changes the pane — the probe's own decisive case
+    // (docs/monitor/sessions/probe-2026-08-17-swipe/README.md): the
+    // pre-fix `[role]` wildcard matched `.connected-grid-rows`'s own
+    // `role="group"` and silently refused every grid-origin drag, on
+    // every row, regardless of distance travelled.
+    const rowBox = (await page
+      .locator(".connected-grid-row")
+      .first()
+      .boundingBox())!;
+    const rowStart = {
+      x: rowBox.x + rowBox.width / 2,
+      y: rowBox.y + rowBox.height / 2,
+    };
+    // Rightward (dx > 0) steps BACK through PANES — grid -> live.
+    await touchDrag(client, rowStart, {
+      x: rowStart.x + 150,
+      y: rowStart.y,
+    });
+    await expect(livePaneButton).toHaveAttribute("aria-current", "page");
+
+    // --- Scenario 3: a drag beginning on the rail button changes the
+    // pane only by the CLICK, never by the drag.
+    //
+    // First half — a real TAP (no movement) on the button works exactly
+    // like a click: it is one.
+    const gridButtonBox = (await gridPaneButton.boundingBox())!;
+    const gridButtonCenter = {
+      x: gridButtonBox.x + gridButtonBox.width / 2,
+      y: gridButtonBox.y + gridButtonBox.height / 2,
+    };
+    await touchTap(client, gridButtonCenter);
+    await expect(gridPaneButton).toHaveAttribute("aria-current", "page");
+
+    // Second half — a drag that STARTS on the rail button and travels
+    // well past `SWIPE_THRESHOLD_PX` (48px, `swipe.ts`) never commits a
+    // swipe: `isSwipeBlocked` refuses to start tracking gesture state at
+    // all the instant `pointerdown` lands on a `<button>`, regardless of
+    // where the pointer travels afterward. Ending far off the button, a
+    // real browser's own touch-to-click synthesis never fires either (the
+    // movement exceeds any browser's tap-cancel slop) — so the pane must
+    // not move AT ALL, from either mechanism.
+    const liveButtonBox = (await livePaneButton.boundingBox())!;
+    const liveButtonCenter = {
+      x: liveButtonBox.x + liveButtonBox.width / 2,
+      y: liveButtonBox.y + liveButtonBox.height / 2,
+    };
+    await touchDrag(client, liveButtonCenter, {
+      x: liveButtonCenter.x + 250,
+      y: liveButtonCenter.y + 100,
+    });
+    await expect(gridPaneButton).toHaveAttribute("aria-current", "page");
+
+    // Back to live via a real click (not a drag) before the throttled
+    // variant below, which repeats scenario 1's own direction.
+    await livePaneButton.click();
+    await expect(livePaneButton).toHaveAttribute("aria-current", "page");
+
+    // --- Scenario 4: the CPU-throttled variant of scenario 1
+    // (`Emulation.setCPUThrottlingRate` — the scroll-echo recipe: a
+    // slowed main thread is where a gesture handler's own timing
+    // assumptions break first, if it has any it shouldn't).
+    await client.send("Emulation.setCPUThrottlingRate", { rate: 6 });
+    try {
+      const heroBox2 = (await page
+        .locator(".connected-hero-split")
+        .boundingBox())!;
+      const heroCenter2 = {
+        x: heroBox2.x + heroBox2.width / 2,
+        y: heroBox2.y + heroBox2.height / 2,
+      };
+      await touchDrag(client, heroCenter2, {
+        x: heroCenter2.x - 150,
+        y: heroCenter2.y,
+      });
+      await expect(gridPaneButton).toHaveAttribute("aria-current", "page");
+    } finally {
+      await client.send("Emulation.setCPUThrottlingRate", { rate: 1 });
+    }
+
+    // The whole scenario ran through a REAL touch input path, not a mouse
+    // event dressed as one (task-3-brief.md Step 1's own requirement) — a
+    // silently-mouse pin cannot masquerade as this one.
+    expect(await recordedPointerTypes(page)).toContain("touch");
+
+    await cleanupByTitle(page, title);
+  });
+});
+
+// -------------------------------------------------------------------------
+// Task 3 Step 2: the scrollable-grid case gets ITS OWN PROGRAM. Riding the
+// walk above (`FIXTURE_PROGRAM`, five work intervals into a 15-row
+// portrait grid — this file's own header, `:84-90`/`:626`) would reproduce
+// the probe's own blind spot exactly: five rows into fifteen never
+// overflows, so nothing built on it could ever exercise what a SCROLLED
+// list changes about touch arbitration (the probe README's own "Open, not
+// settled by this probe" section — a WebKit directional-lock slop on
+// long, near-vertical drags, W3C Pointer Events issue #303, is real and
+// visible only on the engine no Chromium run can reach).
+//
+// Twenty work intervals — four past the sixteen the portrait scroller
+// genuinely needs to overflow (`clientHeight` 600px / `rowHeight` 40px =
+// 15 visible, `screenshots.spec.ts`'s own `PORTRAIT_GRID_SCROLLER_PX`
+// and its `expect(m.visible).toBe(15)` pin).
+const SCROLL_INTERVAL_COUNT = 20;
+
+const SCROLL_FIXTURE_PROGRAM = {
+  intervals: Array.from({ length: SCROLL_INTERVAL_COUNT }, () => ({
+    type: "work" as const,
+    kind: "distance" as const,
+    value: 100,
+    targetSplit: null,
+    displaySpm: null,
+    restSeconds: 0,
+  })),
+};
+
+const SCROLL_BULK_TEXT = (title: string): string =>
+  [
+    `${title} | AN | easy | 1`,
+    ...Array<string>(SCROLL_INTERVAL_COUNT).fill("w 100m max"),
+  ].join("\n");
+
+async function injectScrollFixture(
+  page: Page,
+  deviceName: string,
+): Promise<void> {
+  await page.addInitScript(
+    ({ program, deviceName: name, delayWritesMs }) => {
+      window.__pm5FakeScript__ = {
+        program,
+        events: [],
+        deviceName: name,
+        delayWritesMs,
+      };
+    },
+    {
+      program: SCROLL_FIXTURE_PROGRAM,
+      deviceName,
+      delayWritesMs: INTERSTITIAL_WRITE_DELAY_MS,
+    },
+  );
+}
+
+/** Reaches the surface with NO session events at all (`status: "armed"`)
+ *  — the row count and the scroller's own geometry are properties of the
+ *  PROGRAM, not of anything rowed yet (the same precedent
+ *  `design.spec.ts`'s own "progress bar fallback (>16 boundaries)" test
+ *  relies on: "`walkToSurface` alone (armed, no pump) is enough"). No
+ *  paused/resumed story is needed for a scroll-and-page pin. */
+async function reachScrollSurface(
+  page: Page,
+  title: string,
+  email: string,
+  deviceName: string,
+): Promise<void> {
+  await injectScrollFixture(page, deviceName);
+  await signInViaBackdoor(page, { email, name: "Connected Walk Tester" });
+  await setBaselines(page);
+  await importBulk(page, SCROLL_BULK_TEXT(title));
+  await page.locator(".workout-row").filter({ hasText: title }).click();
+  await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
+  await page.getByRole("button", { name: "Connect" }).click();
+  await expect(
+    page.locator(".connected-serif-line", { hasText: "Ready when you pull" }),
+  ).toBeVisible({ timeout: 15_000 });
+  const showNumbers = page.getByRole("button", {
+    name: "Show me the numbers",
+  });
+  await expect(showNumbers).toBeVisible();
+  await showNumbers.click();
+  await expect(
+    page.getByRole("navigation", { name: "Connected panes" }),
+  ).toBeVisible();
+}
+
+test.describe("Phase CS Item A Task 3: the scrollable grid gets its own program — portrait (390x844)", () => {
+  test.use({ hasTouch: true });
+
+  test("a vertical drag on the rows scrolls the list and never pages; a horizontal drag starting inside the now-scrollable rows still pages", async ({
+    page,
+    context,
+  }) => {
+    const title = `Connected Scroll Grid ${RUN_ID}`;
+    const deviceName = "PM5 564738291";
+    await reachScrollSurface(
+      page,
+      title,
+      `connected-scroll-grid-${RUN_ID}@e2e.test`,
+      deviceName,
+    );
+
+    await page.getByRole("button", { name: "Grid pane" }).click();
+    await expect(page.locator(".connected-grid-row")).toHaveCount(
+      SCROLL_INTERVAL_COUNT,
+    );
+
+    // OPENS by proving the fixture genuinely overflows — fails loudly the
+    // day it stops (task-3-brief.md Step 2's own instruction).
+    const scroller = page.locator(".connected-grid-rows");
+    const overflows = await scroller.evaluate(
+      (el) => el.scrollHeight > el.clientHeight,
+    );
+    expect(
+      overflows,
+      "the scrollable-grid fixture must actually overflow, or this pin proves nothing",
+    ).toBe(true);
+
+    const client = await context.newCDPSession(page);
+    const rowsBox = (await scroller.boundingBox())!;
+    const scrollTopBefore = await scroller.evaluate((el) => el.scrollTop);
+
+    // A vertical drag: leaves the pane unchanged AND scrolls the list.
+    await touchDrag(
+      client,
+      {
+        x: rowsBox.x + rowsBox.width / 2,
+        y: rowsBox.y + rowsBox.height * 0.75,
+      },
+      {
+        x: rowsBox.x + rowsBox.width / 2,
+        y: rowsBox.y + rowsBox.height * 0.1,
+      },
+      12,
+    );
+    await expect(
+      page.getByRole("button", { name: "Grid pane" }),
+    ).toHaveAttribute("aria-current", "page");
+    const scrollTopAfter = await scroller.evaluate((el) => el.scrollTop);
+    expect(
+      scrollTopAfter,
+      "a vertical drag over the scroller must actually scroll it",
+    ).toBeGreaterThan(scrollTopBefore);
+
+    // A horizontal drag starting inside the now-scrollable rows still
+    // pages — the probe's own decisive case, now against a list that
+    // genuinely scrolls rather than one that merely has rows in it.
+    //
+    // Deliberately a point inside `rowsBox` (the SCROLLER's own box, fixed
+    // regardless of its internal scroll position) rather than
+    // `.connected-grid-row:first()`'s own box: row 0 just scrolled off the
+    // TOP of the viewport by the drag above (caught for real running this
+    // test — the first version anchored on the first row and landed the
+    // touch off-screen, above `.connected-grid-rows` entirely, hitting
+    // nothing and silently proving nothing). Any point inside the
+    // scroller's own box is guaranteed to land on a rendered row, since
+    // twenty rows fill it edge to edge regardless of which nineteen are
+    // currently scrolled to.
+    const rowStart = {
+      x: rowsBox.x + rowsBox.width / 2,
+      y: rowsBox.y + rowsBox.height / 2,
+    };
+    await touchDrag(client, rowStart, {
+      x: rowStart.x + 150,
+      y: rowStart.y,
+    });
+    await expect(
+      page.getByRole("button", { name: "Live pane" }),
+    ).toHaveAttribute("aria-current", "page");
+
     await cleanupByTitle(page, title);
   });
 });
