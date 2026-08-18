@@ -34,6 +34,7 @@ import {
   connectedNextText,
   intervalNumbering,
   judgedValue,
+  ON_TARGET_BAND_SECONDS,
   phaseIndexForInterval,
   splitHero,
   staleFor,
@@ -78,6 +79,25 @@ const FIXTURE = libraryFixture("Filling Low", { kind: "time", minutes: 8 });
  *  untouched. Four intervals, no warm-up, and every caption the plain
  *  `N OF M` it has always been. */
 const NO_WARMUP = libraryFixture("Filling Low", null);
+
+/** THE WARM-UP'S OWN TRAILING REST (connected-metrics design spec, States
+ *  table row "Rest, before any work interval completes") — the ONE shape
+ *  in this file where `state: "resting"` lands on `intervalIndex: 0`
+ *  *with* a real REST phase behind it (`WarmupSetting.restSeconds`,
+ *  `usePreferences.ts`; `engine.ts`'s `warmupPhases` is its one producer).
+ *  Every other fixture's own warm-up (`FIXTURE` included) has no trailing
+ *  rest at all — `phaseIndexForInterval(FIXTURE.phases, 0, true)` lands
+ *  back on the warm-up phase ITSELF, never a rest one, because
+ *  `warmupPhases` only pushes a rest phase when `restSeconds` is truthy —
+ *  so this fixture is required, not a restyled duplicate of `FIXTURE`.
+ *  Already proven reachable in production by "drops the ordinal for the
+ *  warm-up's own trailing rest too" below, which builds the identical
+ *  `{ kind: "time", minutes: 8, restSeconds: 60 }` combination inline. */
+const WARMUP_WITH_REST = libraryFixture("Filling Low", {
+  kind: "time",
+  minutes: 8,
+  restSeconds: 60,
+});
 
 /** THE EFFORT CASE, which Filling Low does not have at all: every one of
  *  its work steps carries a split ref, so no fixture in this file reached
@@ -968,12 +988,17 @@ describe("live", () => {
     expect(wildlyOverCap.pace.display).toBe("—");
   });
 
-  // THE NO-TARGET STATE (design spec §6, adversarial finding): every REST
-  // phase has no target. `phaseIndexForInterval`'s own resting rule lands
-  // interval 1's REST phase when `state: "resting"` sits on `intervalIndex:
-  // 1` (the fixture's own first work rep — this file's header names the
-  // shape: warm-up, then 4 x 2000m with rest folded after each).
-  it("during REST both targets NAME the phase (Rest / Free), greyed, and the actual above stays unjudged", () => {
+  // THE NO-TARGET STATE, RATE HALF ONLY (design spec §6, adversarial
+  // finding) — SPLIT HALF OVERTURNED (connected-metrics design spec,
+  // States table, "Rest, after a completed work interval": TGT now names
+  // the FINISHED interval's own target, not the rest phase's word — see
+  // the `avg` describe block below, whose "rest after a completed
+  // interval" case is this exact frame). `phaseIndexForInterval`'s own
+  // resting rule lands interval 1's REST phase when `state: "resting"`
+  // sits on `intervalIndex: 1` (the fixture's own first work rep — this
+  // file's header names the shape: warm-up, then 4 x 2000m with rest
+  // folded after each).
+  it("during REST the split target now NAMES the finished interval, while the rate target still names the phase (Free), and the LIVE actuals above stay unjudged", () => {
     // Derived the same way `phaseIndexForInterval`'s own describe block
     // does above, rather than a hardcoded index: interval 1, resting.
     const restIndex = phaseIndexForInterval(FIXTURE.phases, 1, true);
@@ -985,20 +1010,30 @@ describe("live", () => {
         intervalIndex: 1,
         state: "resting",
         // A reading that would otherwise scream "faster" against ANY real
-        // target, to prove the no-target case is what suppresses the
-        // tint, not a coincidentally-within actual.
+        // target, to prove the LIVE split/rate stay unjudged through the
+        // rest — `pace`/`rate` are the erg's live-actual heroes, never the
+        // rest verdict (that is `avg`, tested below).
         currentSplit: 60,
         spm: 40,
       }),
     });
-    // The WORD, not a dash (James, 2026-08-12). `absent` is what keeps
-    // §6's original concern answered: greyed, so it cannot pass for a
-    // programmed number. Both are asserted — the word alone would let a
-    // regression render it in the target's own weight and stay green.
-    expect(m.targetSplit.main).toBe("Rest");
-    expect(m.targetSplit.absent).toBe(true);
+    // THE SPLIT TARGET NOW NAMES THE FINISHED INTERVAL — "2:06.0", the
+    // same resolved split `firstWorkPhase()` carries, not the rest
+    // phase's own "Rest" word (`targetSplitDisplay`'s `sub` is the ref
+    // tag, `6K +4`, the fixture's own authored `{ base: "6k", off: 4 }`).
+    expect(m.targetSplit.main).toBe("2:06.0");
+    expect(m.targetSplit.sub).toBe("6K +4");
+    expect(m.targetSplit.absent).toBe(false);
+    expect(m.targetSplitCaption).toBe("6K +4");
+    // The LIVE split hero itself is unaffected by the TGT-row override —
+    // its own judging target still comes from `phase` (the rest phase,
+    // unchanged), and its actual is null through every rest regardless
+    // (`livePace`'s own zero-split rule) — this assertion is the proof
+    // the override is scoped to the display row alone.
     expect(m.pace.judgement).toBe("within");
     expect(m.pace.absent).toBe(false);
+    // The rate half is untouched by this task (design spec's States table
+    // never mentions the rate target changing at rest) — still the WORD.
     expect(m.targetRate.main).toBe("Free");
     expect(m.targetRate.absent).toBe(true);
     expect(m.rate.judgement).toBe("within");
@@ -1122,6 +1157,267 @@ describe("live", () => {
   // read the same "for whichever pane asks" — died from both directions
   // once `PaneTimer.tsx` (Task 2) and this pane's own segment bar (Task 3)
   // left exactly one pane standing.
+});
+
+// ---------------------------------------------------------------------------
+// connected-metrics design spec (2026-08-18), Task 3 — `avg`: the interval
+// average and its rest verdict. One test per row of the design's States
+// table, built from real seeded programs (this file's own realistic-
+// fixture rule), hardcoded expected strings rather than round-tripping
+// through `fmtSplit` (anti-tautology). `firstWorkPhase().targetSplit` is
+// 126 ("2:06.0") throughout — every deviation below is arithmetic against
+// that one number, named at each call site.
+// ---------------------------------------------------------------------------
+
+describe("avg: the interval average and its rest verdict (connected-metrics design spec)", () => {
+  it("ON_TARGET_BAND_SECONDS is 0.5 — the constant every boundary assertion below assumes", () => {
+    expect(ON_TARGET_BAND_SECONDS).toBe(0.5);
+  });
+
+  // States table row 1: "Work, split target, average > 0" — plain ink,
+  // unjudged, even against a real numeric target far enough away that a
+  // judged cell would scream a verdict.
+  it("work with a split target: AVG is plain ink and unjudged, however far from target", () => {
+    expect(firstWorkPhase().targetSplit).toBe(126);
+    const m = model({
+      frame: frame({ intervalIndex: 1, state: "rowing", splitAvgPace: 140 }),
+    });
+    expect(m.avg.display).toBe("2:20.0");
+    expect(m.avg.judgement).toBe("within");
+    expect(m.avg.absent).toBe(false);
+    // TGT is unaffected — still THIS interval's own target (row 1's own
+    // TGT clause), not the rest-only override tested further down.
+    expect(m.targetSplit.main).toBe("2:06.0");
+    expect(m.targetSplit.absent).toBe(false);
+  });
+
+  // States table row 2: "Work, average absent or zero" — the wire's own
+  // "no sample yet" value (exit criterion 4: `session-2` carries 34 zero
+  // frames, the first twelve consecutive).
+  it("zero average renders nothing, while rowing — TGT stays this interval's own target", () => {
+    const m = model({
+      frame: frame({ intervalIndex: 1, state: "rowing", splitAvgPace: 0 }),
+    });
+    expect(m.avg.display).toBe("—");
+    expect(m.avg.judgement).toBe("within");
+    expect(m.avg.absent).toBe(true);
+    expect(m.targetSplit.main).toBe("2:06.0");
+    expect(m.targetSplit.absent).toBe(false);
+  });
+
+  // States table row 3: "Work, effort target (no split)" — Rear Flank (AN,
+  // 5 x (1'/2'/3' at MAX)), every work interval an effort target, no
+  // numeric split anywhere to judge against even if this state were judged
+  // (it never is).
+  it("work with an effort target: AVG still shows, plain ink, unjudged", () => {
+    expect(EFFORT_MAX.phases[0]!.targetKind).toBe("effort");
+    const m = buildSurfaceModel({
+      phases: EFFORT_MAX.phases,
+      program: EFFORT_MAX.program,
+      status: "live",
+      frame: frame({ intervalIndex: 0, state: "rowing", splitAvgPace: 95 }),
+      deviceName: DEVICE,
+      actuals: [],
+    });
+    expect(m.avg.display).toBe("1:35.0");
+    expect(m.avg.judgement).toBe("within");
+    expect(m.avg.absent).toBe(false);
+    expect(m.targetSplit.main).toBe("ALL OUT");
+  });
+
+  // Row 4's own effort-target corner (self-mutation finding, task-3
+  // report): an EFFORT phase's `targetSplit` is a real, defined number
+  // (`estimationSplit`'s own estimate, `domain/expand.ts`'s effort arm) —
+  // it is not `undefined` the way a warm-up's split can be, so a rest-
+  // verdict gate that checks only "is `targetSplit` defined" rather than
+  // "is `targetKind` `split`" would judge AVG against an estimate the
+  // machine was never given as a target. Rear Flank's first work interval
+  // carries `restMinutes: 1` (a real rest phase at `phases[1]`), so this is
+  // a real production shape, not a constructed one.
+  it("rest after a completed EFFORT-target interval: AVG stays unjudged even though the phase carries an estimated split", () => {
+    expect(EFFORT_MAX.phases[1]!.type).toBe("rest");
+    expect(EFFORT_MAX.phases[0]!.targetKind).toBe("effort");
+    expect(EFFORT_MAX.phases[0]!.targetSplit).not.toBeUndefined();
+    const m = buildSurfaceModel({
+      phases: EFFORT_MAX.phases,
+      program: EFFORT_MAX.program,
+      status: "live",
+      frame: frame({ intervalIndex: 0, state: "resting", splitAvgPace: 90 }),
+      deviceName: DEVICE,
+      actuals: [],
+    });
+    expect(m.avg.judgement).toBe("within");
+    expect(m.avg.absent).toBe(false);
+    expect(m.targetSplit.main).toBe("ALL OUT");
+    expect(m.targetSplit.absent).toBe(true);
+  });
+
+  // States table row 6: "Warm-up" — live average, plain ink, never judged
+  // (the standing rule: a warm-up must not read as a working interval).
+  it("warm-up: AVG shows live, plain ink, never judged", () => {
+    expect(FIXTURE.phases[0]!.type).toBe("warmup");
+    const m = model({
+      frame: frame({ intervalIndex: 0, state: "rowing", splitAvgPace: 200 }),
+    });
+    expect(m.avg.display).toBe("3:20.0");
+    expect(m.avg.judgement).toBe("within");
+    expect(m.avg.absent).toBe(false);
+    expect(m.targetSplit.main).toBe("Easy");
+    expect(m.targetSplit.absent).toBe(true);
+  });
+
+  // States table row 7: "Free piece, no split target" — TGT `nothing`
+  // (never a phase word), the one case `phase` is genuinely `undefined`
+  // (the same empty-program guard "degenerate inputs" above pins for TGT;
+  // unreachable in production today since `compileProgram` rejects a
+  // program with no work at all, but the guard needs its own exercise for
+  // AVG the same reason it already has one for `targetSplit`).
+  it("free piece (no phase at all): AVG still shows, plain ink; TGT is a bare dash, not a phase word", () => {
+    const m = buildSurfaceModel({
+      phases: [],
+      program: FIXTURE.program,
+      status: "live",
+      frame: frame({ intervalIndex: 0, state: "rowing", splitAvgPace: 150 }),
+      deviceName: DEVICE,
+      actuals: [],
+    });
+    expect(m.avg.display).toBe("2:30.0");
+    expect(m.avg.judgement).toBe("within");
+    expect(m.avg.absent).toBe(false);
+    expect(m.targetSplit.main).toBe("—");
+    expect(m.targetSplit.absent).toBe(true);
+  });
+
+  // States table row 4: "Rest, after a completed work interval" — TGT
+  // shows the FINISHED interval's own target, AVG is judged against it
+  // using ON_TARGET_BAND_SECONDS, both sides of the boundary asserted so a
+  // mutant swapping `<=`/`<` or flipping the sign is caught.
+  it("rest after a completed interval: AVG is judged against THAT interval's target, TGT names it too", () => {
+    const target = firstWorkPhase().targetSplit!; // 126
+    expect(target).toBe(126);
+    function avgAt(splitAvgPace: number) {
+      return model({
+        frame: frame({ intervalIndex: 1, state: "resting", splitAvgPace }),
+      }).avg;
+    }
+    // On the boundary itself (deviation exactly +0.5) — still "within".
+    expect(avgAt(126.5).judgement).toBe("within");
+    expect(avgAt(126.5).display).toBe("2:06.5");
+    // One tenth past it — "slower" ("+ = slower", summaryModel.ts:208-224).
+    expect(avgAt(126.6).judgement).toBe("slower");
+    // Symmetric on the fast side: -0.5 is still "within", -0.6 is "faster".
+    expect(avgAt(125.5).judgement).toBe("within");
+    expect(avgAt(125.4).judgement).toBe("faster");
+    // Comfortably slower/faster, for the display string too.
+    expect(avgAt(130).judgement).toBe("slower");
+    expect(avgAt(130).display).toBe("2:10.0");
+    expect(avgAt(120).judgement).toBe("faster");
+    expect(avgAt(120).display).toBe("2:00.0");
+    // TGT: the FINISHED interval's own resolved split, not the rest
+    // phase's "Rest" word — same fixture, same fact `firstWorkPhase()`
+    // names above.
+    const m = model({
+      frame: frame({ intervalIndex: 1, state: "resting", splitAvgPace: 130 }),
+    });
+    expect(m.targetSplit.main).toBe("2:06.0");
+    expect(m.targetSplit.sub).toBe("6K +4");
+    expect(m.targetSplit.absent).toBe(false);
+  });
+
+  // States table row 5: "Rest, before any work interval completes" — the
+  // warm-up's own trailing rest. `WARMUP_WITH_REST` is the one fixture in
+  // this file where `state: "resting"` at `intervalIndex: 0` lands on a
+  // REAL rest phase (see that fixture's own doc comment). A nonzero,
+  // non-null wire value proves the suppression is about the MISSING
+  // completed work interval, not a coincidentally-absent reading.
+  it("rest before any interval completes (the warm-up's own trailing rest): AVG is absent, TGT stays as today", () => {
+    expect(WARMUP_WITH_REST.phases[1]!.type).toBe("rest");
+    const m = buildSurfaceModel({
+      phases: WARMUP_WITH_REST.phases,
+      program: WARMUP_WITH_REST.program,
+      status: "live",
+      frame: frame({ intervalIndex: 0, state: "resting", splitAvgPace: 200 }),
+      deviceName: DEVICE,
+      actuals: [],
+    });
+    expect(m.avg.display).toBe("—");
+    expect(m.avg.judgement).toBe("within");
+    expect(m.avg.absent).toBe(true);
+    expect(m.targetSplit.main).toBe("Rest");
+    expect(m.targetSplit.absent).toBe(true);
+  });
+
+  // States table row 8: "Rest onset ... while the referent disagrees" —
+  // the driver already nulls `frame.splitAvgPace` for a lagged provenance
+  // (`domain/monitor/types.ts`'s own field comment); this file does not
+  // re-derive that, it only proves TGT still resolves off the (already
+  // monotone) referent independently of whatever AVG itself is doing.
+  it("referent mismatch: AVG is absent (the driver's own null), TGT still names the referent's target", () => {
+    const m = model({
+      frame: frame({ intervalIndex: 1, state: "resting", splitAvgPace: null }),
+    });
+    expect(m.avg.display).toBe("—");
+    expect(m.avg.judgement).toBe("within");
+    expect(m.avg.absent).toBe(true);
+    expect(m.targetSplit.main).toBe("2:06.0");
+    expect(m.targetSplit.absent).toBe(false);
+  });
+
+  // States table row 9: "Finished / terminated / idle" — `intervalIndex`
+  // is `null` here (business rule, `domain/monitor/types.ts`), and the
+  // existing `?? 0` laundering (`buildSurfaceModel`'s own `rawIndex`) would
+  // otherwise pair AVG with the warm-up's target. A nonzero `splitAvgPace`
+  // proves the suppression checks the RAW field, not the laundered one.
+  it("finished/idle: AVG is absent even with a real wire value, never laundered through intervalIndex ?? 0", () => {
+    const m = model({
+      frame: frame({
+        state: "finished",
+        intervalIndex: null,
+        splitAvgPace: 130,
+      }),
+    });
+    // The known laundering trap this test guards against: `intervalLabel`
+    // DOES read as the warm-up here (the `?? 0` this task must not reuse
+    // for AVG) — pinned so a reader sees the trap is real, not imagined.
+    expect(m.intervalLabel).toBe("WARM-UP");
+    expect(m.avg.display).toBe("—");
+    expect(m.avg.judgement).toBe("within");
+    expect(m.avg.absent).toBe(true);
+  });
+
+  // States table row 10: "Stale / disconnected" — the last value, under
+  // the pane's existing staleness treatment: shown (not absent), greyed by
+  // the `"stale"` judgement, beating whatever the comparison would
+  // otherwise have said (the same precedence `judgedValue`'s own stale
+  // test pins for `pace`/`rate`).
+  it("stale: the last AVG value is shown, greyed, never a fabricated verdict", () => {
+    const m = model({
+      status: "stale",
+      frame: frame({ intervalIndex: 1, state: "rowing", splitAvgPace: 130 }),
+    });
+    expect(m.avg.display).toBe("2:10.0");
+    expect(m.avg.judgement).toBe("stale");
+    expect(m.avg.absent).toBe(false);
+  });
+});
+
+// connected-metrics design spec, "Total meters (whole session)": Task 4
+// renders it, but `PaneLive` reads only `SurfaceModel` — never `frame`
+// directly (`ConnectedSurface.tsx`'s own `<PaneLive model={model} />`) —
+// so this task exposes the plumbing fact the render needs. `null`, not
+// `0`, before the machine's first frame: `NO_FRAME.sessionDistanceMeters`
+// is honestly `0`, which would otherwise be indistinguishable from a real
+// first frame reporting zero.
+describe("sessionDistanceMeters: plumbing for Task 4 (PaneLive reads only the model, never the frame)", () => {
+  it("carries the frame's own running total once a frame has arrived", () => {
+    const m = model({ frame: frame({ sessionDistanceMeters: 3842 }) });
+    expect(m.sessionDistanceMeters).toBe(3842);
+  });
+
+  it("is null before the first frame — distinct from a real 0m reading", () => {
+    const m = model({ frame: null });
+    expect(m.sessionDistanceMeters).toBeNull();
+  });
 });
 
 // ---------------------------------------------------------------------------
