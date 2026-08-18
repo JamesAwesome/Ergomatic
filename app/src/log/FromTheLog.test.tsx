@@ -271,6 +271,42 @@ describe("FromTheLog — ready state rendering", () => {
     await screen.findByRole("heading", { name: "Sea Fret" });
     expect(container.querySelector("main.overlay-screen")).not.toBeNull();
   });
+
+  // Fix round ❌1's own regression guard (review round 2): the JSX order
+  // fix is otherwise unwitnessed by anything but a PNG a human has to
+  // eyeball — a future edit could silently re-invert it. Asserts DOM
+  // ORDER directly (`compareDocumentPosition`), not merely that both
+  // blocks exist, against the handoff's own §3 "Section order" (reflection
+  // ABOVE intervals, "same minus the save options").
+  it("renders the read-back block BEFORE the intervals list in DOM order (regression guard for the handoff's §3 section order)", async () => {
+    mockApi(
+      () =>
+        new Response(JSON.stringify(storedRow({ held: "held" })), {
+          status: 200,
+        }),
+    );
+    const { container } = await renderFromTheLog();
+    await screen.findByRole("heading", { name: "Sea Fret" });
+
+    const readback = container.querySelector(".log-readback");
+    const intervals = container.querySelector(".summary-intervals");
+    expect(readback).not.toBeNull();
+    expect(intervals).not.toBeNull();
+
+    // DOCUMENT_POSITION_FOLLOWING set on the result of comparing FROM
+    // readback TO intervals means intervals comes AFTER readback in
+    // document order — i.e. readback precedes intervals, the property
+    // under test.
+    const position = readback!.compareDocumentPosition(intervals!);
+    expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The converse must also hold (intervals does NOT precede readback) —
+    // a single-bit assertion above could pass on garbage input; this
+    // pins the actual relative order both ways.
+    expect(
+      intervals!.compareDocumentPosition(readback!) &
+        Node.DOCUMENT_POSITION_PRECEDING,
+    ).toBeTruthy();
+  });
 });
 
 describe("FromTheLog — §4 N6 edit", () => {
