@@ -6320,23 +6320,41 @@ test.describe("connected screens (fake-driven)", () => {
       expect(await page.locator(".connected-value-absent").count()).toBe(0);
     });
 
-    test("up-next (armed branch): reads the FIRST interval forward, TOTAL LEFT full session", async ({
+    test("up-next (armed branch): reads the FIRST interval forward, TOTAL LEFT full session, and the rate survives at the corpus worst case", async ({
       page,
     }) => {
       await loadConnectedFixture(page, "connected-armed");
-      const value = await page
-        .locator(".connected-band-upnext-value")
-        .innerText();
+      const upnext = page.locator(".connected-band-upnext-value");
+      const value = await upnext.innerText();
       // PHASE CS Item B (task 2): the then-clause is retired, so armed's
       // own value is just the coming WORK phase's composition-table
       // string, nothing appended for the rest after it.
-      expect(value.replace(/\s+/g, " ").trim()).toBe(
-        "NEXT · WORK 2000m · 2:06.0 @22",
-      );
+      const normalized = value.replace(/\s+/g, " ").trim();
+      expect(normalized).toBe("NEXT · WORK 2000m · 2:06.0 @22");
       const total = await page
         .locator(".connected-band-cell-value")
         .textContent();
       expect(total).toBe("45:36");
+
+      // THE RATE SURVIVES (spec EC3, antagonist B1's own measured worst
+      // case): this fixture's 30-char string — "NEXT · WORK 2000m · 2:06.0
+      // @22" — is the seeded 300's longest NEXT line (antagonist B1:
+      // "new worst case 30 chars", measured across all 3,063 phases), on
+      // the phase's own reference landscape frame (844x390, this
+      // describe's `test.use`). The `toBe` above already proves the exact
+      // string, but this is the criterion's OWN assertion, independently
+      // falsifiable from the equality check above: the rendered text
+      // ENDS with its `@NN` rate token (never an ellipsis or a cut
+      // numeral) — the ellipsis on `.connected-band-upnext-value` and the
+      // `scrollWidth <= clientWidth` pins elsewhere in this file are the
+      // backstop that the path is never entered; this proves the token
+      // that backstop would have clipped is actually there, unclipped.
+      expect(normalized).toMatch(/@\d+$/);
+      const overflow = await upnext.evaluate((el) => ({
+        scrollWidth: el.scrollWidth,
+        clientWidth: el.clientWidth,
+      }));
+      expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth);
     });
   });
 
