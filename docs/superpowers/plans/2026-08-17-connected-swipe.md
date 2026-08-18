@@ -266,8 +266,13 @@ falsified for the horizontal case; a *scrollable* row list is untested.
 
 ### Task 4: The phone leg (James + device — NOT an implementation task)
 
-- [ ] **Step 1:** `pnpm ios:build && pnpm ios:open`; run on James's phone
-  from Xcode, and connect to the **real PM5**.
+- [ ] **Step 1:** `VITE_ENABLE_FAKE_MONITOR=1 pnpm ios:build && pnpm
+  ios:open`; run on James's phone from Xcode, and connect to the **real
+  PM5**. Keep the flag ON — not for the fake, which a native build cannot
+  reach (below), but because the `pointercancel` readout rides the same
+  build-time gate, and without it a cancelled swipe leaves no trace in the
+  Xcode console. Dropping the flag on 2026-08-18 silently disarmed that
+  instrument for the walk that actually needed it.
 
   **The fake cannot drive the native app — corrected 2026-08-18, after it
   wasted a walk attempt.** This plan and the spec both said
