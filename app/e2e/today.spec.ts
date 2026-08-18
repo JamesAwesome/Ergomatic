@@ -261,6 +261,65 @@ async function logOnce(page: Page, title: string): Promise<void> {
   }
 }
 
+// Log-delete spec (2026-08-18), §5.5's own witness needs a real log `id`
+// to `DELETE` afterward — `logOnce` above (same POST idiom, same
+// `advancesPlan: false`) never returns one, so this is a sibling rather
+// than a reuse.
+async function postLogForWorkout(
+  page: Page,
+  title: string,
+): Promise<{ id: string }> {
+  const result = await page.evaluate(async (t) => {
+    const listRes = await fetch("/api/workouts");
+    if (!listRes.ok) return { ok: false, status: listRes.status, id: "" };
+    const workouts = (await listRes.json()) as Array<{
+      id: string;
+      title: string;
+      type: string;
+      isGlobal: boolean;
+    }>;
+    const match = workouts.find((w) => !w.isGlobal && w.title === t);
+    if (!match) return { ok: false, status: 404, id: "" };
+    const res = await fetch("/api/logs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workoutId: match.id,
+        workoutTitle: t,
+        workoutType: match.type,
+        held: "held",
+        pain: 1,
+        notes: null,
+        steps: [{ label: "Work" }],
+        advancesPlan: false,
+      }),
+    });
+    if (!res.ok) return { ok: false, status: res.status, id: "" };
+    const body = (await res.json()) as { id: string };
+    return { ok: true, status: res.status, id: body.id };
+  }, title);
+  if (!result.ok) {
+    throw new Error(
+      `postLogForWorkout failed for "${title}": ${result.status}`,
+    );
+  }
+  return { id: result.id };
+}
+
+/** `DELETE /api/logs/:id` via a real in-page fetch — §5.5's own
+ *  consequence-producing call, the same in-page-`fetch` idiom every other
+ *  helper in this file uses for the loopback-cookie reason `log.spec.ts`'s
+ *  own header states. */
+async function deleteLog(page: Page, id: string): Promise<void> {
+  const result = await page.evaluate(async (logId) => {
+    const res = await fetch(`/api/logs/${logId}`, { method: "DELETE" });
+    return { ok: res.ok, status: res.status };
+  }, id);
+  if (!result.ok) {
+    throw new Error(`deleteLog failed for "${id}": ${result.status}`);
+  }
+}
+
 test.describe("Today enhancements: visible filter chips", () => {
   const highPainTitle = "Today Filters High Pain E2E";
   const lowPainTitle = "Today Filters Low Pain E2E";
@@ -486,6 +545,107 @@ test.describe("Today enhancements: SOURCE=CUSTOM and the keep-or-move guarantee"
     await expect(page.locator(".today-card-title")).toHaveText(
       naturalWinnerTitle,
     );
+  });
+});
+
+// Log-delete spec (2026-08-18), §5 criterion 5 (§3's own blast-radius
+// list): "delete the only log of a workout, LAST DONE exclusion releases
+// it" — the consequence lives here, alongside the LAST DONE=21D+ test
+// above, because that's the exact filter this witness rides: LAST
+// DONE=21D+ (`over21`) is the one dimension whose membership a delete can
+// flip back on its own (a workout's `lastDoneDaysAgo` reverts to null —
+// never-done — the instant its only log stops existing). Every assertion
+// below reads Today's own suggestion surface (the filter sheet's live
+// pool count, the recommendation card) — never the store or a raw
+// `/api/today` response — per §3's own "assert the consequence on Today,
+// not the store."
+test.describe("Today enhancements: §5.5 — deleting a log releases the LAST DONE exclusion", () => {
+  const controlTitle = "Today Suggestion Release Control E2E";
+  const releasedTitle = "Today Suggestion Release Target E2E";
+
+  test.afterEach(async ({ page }) => {
+    await cleanupByTitle(page, controlTitle);
+    await cleanupByTitle(page, releasedTitle);
+  });
+
+  test("LAST DONE=21D+ excludes a workout the moment it's logged, and deleting its only log immediately releases it back into the pool", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "today-suggestion-release@e2e.test",
+      name: "Today Suggestion Release Tester",
+    });
+    await setBaselines(page, { k2Seconds: 100, k6Seconds: 120 });
+    // Same neutralize idiom as the two describe blocks above: makes the
+    // two personal fixtures below the ONLY never-done O2 entries in the
+    // whole library, so the pool counts asserted throughout are honest,
+    // not coincidences of the seeded 90.
+    await neutralizeGlobalRecency(page, "O2");
+    await importBulk(
+      page,
+      [`${controlTitle} | O2 | medium | 2`, "w 1:00 6k"].join("\n"),
+    );
+    await importBulk(
+      page,
+      [`${releasedTitle} | O2 | medium | 2`, "w 1:00 6k"].join("\n"),
+    );
+    await choosePlan(page, "sprint");
+    await resetPlanProgress(page);
+
+    await page.goto("/today");
+    await expect(page.locator(".today-card")).toBeVisible();
+
+    // Both fixtures are never-done — LAST DONE=21D+ (over21) passes both
+    // (never-done counts as over21, the Library's own pinned rule).
+    await openFilterSheet(page);
+    const dialog = page.getByRole("dialog");
+    const lastDoneGroup = dialog.getByRole("group", { name: "LAST DONE" });
+    await lastDoneGroup
+      .getByRole("button", { name: "21D+", exact: true })
+      .click();
+    await expect(filterSheetCount(page)).toHaveText("2 OPTIONS");
+    await applyFilterSheet(page);
+
+    // Establish releasedTitle is genuinely IN the pool right now, not
+    // merely assumed — SHUFFLE cycles the two-member pool from whichever
+    // natively wins the tie onto the other member.
+    await page.getByRole("button", { name: "SHUFFLE ↻" }).click();
+    await expect(page.locator(".today-card-title")).toHaveText(releasedTitle);
+
+    // A genuine save — real POST, real id — gives releasedTitle a real,
+    // recent `lastDoneDaysAgo`.
+    const { id } = await postLogForWorkout(page, releasedTitle);
+
+    // A fresh load re-fetches the library's own recency — the only
+    // client-visible way this consequence can surface. releasedTitle now
+    // fails LAST DONE=21D+ (the filter is still applied, persisted in
+    // TODAY_OVERRIDES_KEY), excluding it from the pool.
+    await page.reload();
+    await expect(page.locator(".today-card")).toBeVisible();
+    await expect(page.locator(".today-card-title")).toHaveText(controlTitle);
+    await openFilterSheet(page);
+    await expect(filterSheetCount(page)).toHaveText("1 OPTION");
+    await applyFilterSheet(page);
+
+    // §5.5 itself: delete releasedTitle's only log.
+    await deleteLog(page, id);
+
+    // Reload again — releasedTitle's `lastDoneDaysAgo` is null (never-
+    // done) once more, so it passes LAST DONE=21D+ again: the pool count
+    // reads 2 OPTIONS, back where it started.
+    await page.reload();
+    await expect(page.locator(".today-card")).toBeVisible();
+    await openFilterSheet(page);
+    await expect(filterSheetCount(page)).toHaveText("2 OPTIONS");
+    await applyFilterSheet(page);
+
+    // The strongest form of the consequence: the SHUFFLE pick saved
+    // before the delete (`ergomatic.todayPick`, keyed by the same
+    // date/planKey/doneN this test never changes) is still releasedTitle's
+    // workout id — now that it's back in the filtered pool, that stored
+    // pick resolves again with no further tap, and the card shows it
+    // directly. This is the release itself, not a re-derivation of it.
+    await expect(page.locator(".today-card-title")).toHaveText(releasedTitle);
   });
 });
 

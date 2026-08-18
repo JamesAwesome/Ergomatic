@@ -2487,13 +2487,25 @@ Ad hoc fix rounds outside the phase sequence — small bundles of device
 reports and quick fixes shipped as their own PR rather than waiting on the
 next phase. One line per round, newest first.
 
-- **QUEUED (PM final-PR gate, 2026-08-18, PR #121): a logged session can
-  be browsed forever but never corrected or removed.** Spec 2 made every
-  log reachable and stored three client-supplied hero numbers the server
-  bounds-checks but cannot truth-check; the measured record is immutable
-  by design and `data.ts` has no DELETE route. A Sun-fret-class wrong
-  number is now permanent and visible. The next spec that touches stored
-  numbers answers "how does a rower correct or remove this?" first.
+- **ANSWERED (PM final-PR gate, 2026-08-18, PR #121 → `docs/superpowers/
+  specs/2026-08-18-log-delete-design.md`): a logged session can be
+  deleted, remove-only, from its own from-the-log view.** Spec 2 made
+  every log reachable and stored three client-supplied hero numbers the
+  server bounds-checks but cannot truth-check; the measured record was
+  immutable by design and `data.ts` had no DELETE route, so a Sun-fret-
+  class wrong number was permanent. `DELETE /api/logs/:id` now removes
+  the row; deleting your LATEST plan session un-ticks its checkmark
+  (terminal-only, §2's three-condition rule — a middle delete keeps the
+  tick, the plan counts sessions done and old history never renumbers
+  it). **NOT fully closed — the spec's own §4 accepted gap:** a session
+  with a WRONG NUMBER or logged against the wrong workout has exactly
+  one remedy — delete it and re-log by hand — and `logged_at` is a DB
+  default, not settable, so a mistake found the next day can't be
+  re-dated onto its own day, and re-logging a non-terminal plan session
+  appends at the top rather than refilling its old slot. Accepted as the
+  cost of remove-only (re-association and number-editing were both
+  DECLINED, James's ruling); the next spec that touches log lifecycle
+  starts from this gap, not from rediscovering it.
 - **QUEUED (final-review fix round observation, 2026-08-18): `today.png`'s
   regen diff showed an onboarding read-marker difference** unrelated to
   the branch that surfaced it — reverted there, unexplained. Owner: the

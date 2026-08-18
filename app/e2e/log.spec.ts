@@ -910,3 +910,179 @@ test("criterion 4: advance a plan by saving via Log against plan, the done row o
   await expect(page.getByRole("heading", { name: title })).toBeVisible();
   await expect(page.locator(".log-plan-footer")).toHaveText(expectedFooter);
 });
+
+// Log-delete spec (2026-08-18), §5 criterion 3, leg (a) verbatim: "save
+// through the shipped Log-against-plan button, open the log from Plan's
+// checkmark, delete via the staged confirm, assert the checkmark un-ticks
+// and the slot reads as today's session." Same id-from-href oracle as
+// criterion 4's own test above (capture whatever the server actually
+// resolved for index 0, never a client-guessed id).
+test("§5.3 leg (a) terminal: deleting the log that advanced the plan un-ticks the checkmark, and that slot reads as today's session", async ({
+  page,
+}) => {
+  const title = `Delete Leg A ${RUN_ID}`;
+  await signInViaBackdoor(page, {
+    email: `log-delete-leg-a-${RUN_ID}@e2e.test`,
+    name: "Delete Leg A",
+  });
+  await choosePlan(page, "sprint");
+  await resetPlanProgress(page);
+  await importBulk(page, [`${title} | AN | easy | 1`, "w 100m max"].join("\n"));
+
+  await page.locator(".workout-row").filter({ hasText: title }).click();
+  await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
+  await page.getByRole("link", { name: "Log it after" }).click();
+  await expect(page).toHaveURL(/\/library\/[^/]+\/log$/);
+  await expect(page.getByRole("heading", { name: title })).toBeVisible();
+
+  // "Log against plan" — the shipped save that DOES advance doneN.
+  await page.getByRole("button", { name: /Log against plan/ }).click();
+  await expect(page).toHaveURL(/\/today$/);
+
+  await page.goto("/plan");
+  await expect(page.locator(".plan-active-header .mono-status")).toHaveText(
+    "SESSION 2 OF 84",
+  );
+  const doneRow = page.locator(".plan-row-done").first();
+  await expect(doneRow).toHaveAttribute("href", /^\/today\/log\/[^/]+$/);
+  const href = await doneRow.getAttribute("href");
+  const id = href!.split("/").pop()!;
+
+  await doneRow.click();
+  await expect(page).toHaveURL(new RegExp(`/today/log/${id}$`));
+  await expect(page.getByRole("heading", { name: title })).toBeVisible();
+  await expect(page.locator(".log-plan-footer")).toHaveText(
+    "Logged to Sprint (2k) Prep · SESSION 1 OF 84",
+  );
+
+  // Delete via the staged confirm — §1's LINKED copy fires (this row's
+  // own plan_key is non-null).
+  await page.getByRole("button", { name: "Delete session" }).click();
+  const confirmPanel = page.locator(".log-delete-confirm");
+  await expect(confirmPanel).toBeVisible();
+  await expect(confirmPanel).toContainText(
+    "This removes the session. If it is your latest plan session, the checkmark un-ticks.",
+  );
+  await confirmPanel.getByRole("button", { name: "Delete session" }).click();
+
+  // Origin-faithful navigation: this row was opened via Plan's own link
+  // (`state.from = "/plan"`), so the delete lands back there — the SAME
+  // `resolveLogBack` map N5's own test proves against every other origin.
+  await expect(page).toHaveURL(/\/plan$/);
+
+  // The checkmark un-ticks: doneN reverts to 0, index 0 is TODAY's slot
+  // again — not done, not upcoming.
+  await expect(page.locator(".plan-active-header .mono-status")).toHaveText(
+    "SESSION 1 OF 84",
+  );
+  await expect(page.locator(".plan-row-done")).toHaveCount(0);
+  const todayRow = page.locator(".plan-row-today").first();
+  await expect(todayRow).toHaveAttribute("aria-current", "step");
+
+  // The stale deep link, direct-loaded post-delete: the existing 5F
+  // not-found state (§1's own "already shipped, no new work" line).
+  await page.goto(`/today/log/${id}`);
+  await expect(page.getByText("This session is gone.")).toBeVisible();
+});
+
+// Log-delete spec (2026-08-18), §5 criterion 3, leg (b) verbatim: "three
+// saves (one pre-Reset at index 0, one post-Reset at index 0, one at
+// index 1), delete the MIDDLE one (newest holder of index 0, non-
+// terminal): tick stays, counter unchanged, the index-0 checkmark now
+// opens the pre-Reset log." Three distinct titles so the assertion at
+// the end can tell the pre-Reset log's own content apart from the
+// deleted post-Reset one, not merely a byte-equal id.
+test("§5.3 leg (b) re-point: deleting the middle (newest, non-terminal) holder of index 0 leaves the tick and counter alone, and re-points index 0's checkmark to the pre-Reset log", async ({
+  page,
+}) => {
+  const titlePreReset = `Delete Leg B Pre-Reset ${RUN_ID}`;
+  const titlePostReset = `Delete Leg B Post-Reset ${RUN_ID}`;
+  const titleIndex1 = `Delete Leg B Index1 ${RUN_ID}`;
+  await signInViaBackdoor(page, {
+    email: `log-delete-leg-b-${RUN_ID}@e2e.test`,
+    name: "Delete Leg B",
+  });
+  await choosePlan(page, "sprint");
+  await resetPlanProgress(page);
+
+  async function logAgainstPlan(title: string): Promise<void> {
+    await importBulk(
+      page,
+      [`${title} | AN | easy | 1`, "w 100m max"].join("\n"),
+    );
+    await page.locator(".workout-row").filter({ hasText: title }).click();
+    await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
+    await page.getByRole("link", { name: "Log it after" }).click();
+    await expect(page).toHaveURL(/\/library\/[^/]+\/log$/);
+    await expect(page.getByRole("heading", { name: title })).toBeVisible();
+    await page.getByRole("button", { name: /Log against plan/ }).click();
+    await expect(page).toHaveURL(/\/today$/);
+  }
+
+  async function capturePlanRowId(nth: number): Promise<string> {
+    await page.goto("/plan");
+    const row = page.locator(".plan-row-done").nth(nth);
+    await expect(row).toHaveAttribute("href", /^\/today\/log\/[^/]+$/);
+    const rowHref = await row.getAttribute("href");
+    return rowHref!.split("/").pop()!;
+  }
+
+  // Save #1 — pre-Reset, index 0.
+  await logAgainstPlan(titlePreReset);
+  const idPreReset = await capturePlanRowId(0);
+
+  // Reset zeroes doneN — index 0 is up for grabs again, the old row's
+  // own `plan_key`/`plan_index` untouched (spec §2's "linkage is
+  // history" rule).
+  await resetPlanProgress(page);
+
+  // Save #2 — post-Reset, index 0. This is the newest-wins holder of
+  // index 0 (spec 2's own resolution rule), the one this test deletes.
+  await logAgainstPlan(titlePostReset);
+  const idPostReset = await capturePlanRowId(0);
+  expect(idPostReset).not.toBe(idPreReset);
+
+  // Save #3 — index 1, the terminal session (doneN advances 1 -> 2).
+  await logAgainstPlan(titleIndex1);
+
+  await page.goto("/plan");
+  await expect(page.locator(".plan-active-header .mono-status")).toHaveText(
+    "SESSION 3 OF 84",
+  );
+  await expect(page.locator(".plan-row-done")).toHaveCount(2);
+
+  // Delete the MIDDLE save, deep-linked directly by its captured id —
+  // non-terminal (index 1 is doneN - 1, not index 0), so §2 condition 2
+  // never holds for this row.
+  await page.goto(`/today/log/${idPostReset}`);
+  await expect(
+    page.getByRole("heading", { name: titlePostReset }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Delete session" }).click();
+  const confirmPanel = page.locator(".log-delete-confirm");
+  await expect(confirmPanel).toBeVisible();
+  await confirmPanel.getByRole("button", { name: "Delete session" }).click();
+
+  // No `state.from` on this deep-linked entry — the cold fallback (§4
+  // N5's own rule) lands back on /today/log, never /plan.
+  await expect(page).toHaveURL(/\/today\/log$/);
+
+  // The tick stays, the counter is unchanged: idPostReset was never the
+  // terminal holder, so `unCounted` is false and doneN is still 2.
+  await page.goto("/plan");
+  await expect(page.locator(".plan-active-header .mono-status")).toHaveText(
+    "SESSION 3 OF 84",
+  );
+  await expect(page.locator(".plan-row-done")).toHaveCount(2);
+
+  // Index 0's checkmark now re-points to the PRE-RESET log — the next-
+  // newest survivor at that index — asserted by the captured id, so a
+  // false pass off a stale title match is impossible.
+  const row0 = page.locator(".plan-row-done").nth(0);
+  await expect(row0).toHaveAttribute("href", `/today/log/${idPreReset}`);
+  await row0.click();
+  await expect(page).toHaveURL(new RegExp(`/today/log/${idPreReset}$`));
+  await expect(
+    page.getByRole("heading", { name: titlePreReset }),
+  ).toBeVisible();
+});

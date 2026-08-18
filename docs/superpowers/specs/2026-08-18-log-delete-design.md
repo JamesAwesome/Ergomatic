@@ -31,7 +31,7 @@ that should never have existed can stop existing, and stop counting.
 |---|---|
 | Where | The from-the-log view (`/today/log/:id`) ONLY — never on list rows, never on the live post-workout summary (a just-rowed session's remedy is Discard, which already exists there) |
 | Placement | Bottom of the view, below the plan footer — last, quiet, away from Edit |
-| Idiom | The house staged destructive confirm (`WorkoutDetail.tsx`'s delete is the pattern: first tap stages, copy names the exact consequence, Cancel + confirm pair, 44px targets) |
+| Idiom | The house staged destructive confirm — `.baseline-confirm`/`.baseline-actions`: first tap stages, copy names the exact consequence, Cancel + confirm pair, 44px targets. **Reconciled 2026-08-18 (Task 2 review handoff):** the pattern is `WorkoutDetail.tsx`'s own **"Replace session"** panel (`replaceStage`), not its delete button — that button moved to the armed-in-place L4 idiom in fix round 1 (DEVIATIONS row 42) and no longer matches this description at all |
 | Copy, row carries plan linkage (`plan_key` non-null on the fetched row — client-decidable from the one fetch it already makes) | `This removes the session. If it is your latest plan session, the checkmark un-ticks.` confirm button `Delete session` |
 | Copy, no linkage | `This removes the session and its reflection.` confirm button `Delete session` |
 | Who decides the un-count | THE SERVER, at delete time (antagonist B3: the client cannot evaluate the newest-wins condition from the fetches it has, and cross-device staleness makes advance agreement impossible by construction). The conditional copy promises nothing the server may decline; `DELETE` responds `200 {unCounted: boolean}` and the client's post-delete state reflects what actually happened |
