@@ -10,14 +10,22 @@
 // gained are the grid's entry in the render switch and `useTripleTap`
 // below. Everything else here is Task 6's and unchanged.
 //
-// CR2 SPEC 3, TASK 1 (2026-08-16): `PagerRail` and the swipe handler
-// (`handleTouchStart`/`handleTouchEnd`, `paneAfterSwipe`,
-// `SWIPE_THRESHOLD_PX`) are GONE — design spec Ruling 3/4, the pane slide
-// and the swipe were both cut at the design gate. `SegmentedControl`
-// (`connected/SegmentedControl.tsx`) is the only way to change panes now,
-// and `ConnectionLine` (the mark + device caption + status) moved out of
-// the panes into this component's own header row — see the header's own
-// comment below for the shape.
+// CR2 SPEC 3, TASK 1 (2026-08-16): `PagerRail` and the OLD swipe handler
+// (`handleTouchStart`/`handleTouchEnd`) were removed — design spec Ruling
+// 3/4, the pane slide and the swipe were both cut at the design gate.
+// `SegmentedControl` (`connected/SegmentedControl.tsx`) became the only way
+// to change panes, and `ConnectionLine` (the mark + device caption +
+// status) moved out of the panes into this component's own header row —
+// see the header's own comment below for the shape.
+//
+// PHASE CS ITEM A (2026-08-17, task-2 brief) brings the swipe back, as a
+// SECOND way to change panes alongside the control (never a replacement):
+// `useSurfaceSwipe` (`connected/swipe.ts`), wired below onto the same
+// `choosePane` a control press uses. `paneAfterSwipe`/`SWIPE_THRESHOLD_PX`
+// are new names in that file, not the old ones resurrected — the old
+// handler's own `[role]`-wildcard interactive guard is exactly the bug the
+// device probe (docs/monitor/sessions/probe-2026-08-17-swipe/README.md)
+// exists to NOT repeat.
 //
 // THE MOUNT QUESTION (inherited from Task 4, decided here): **the surface
 // UNMOUNTS at `ended`, and the hook's existing unmount teardown owns the
@@ -66,6 +74,7 @@ import SegmentedControl, {
   PANES,
   type PaneId,
 } from "./connected/SegmentedControl";
+import { useSurfaceSwipe } from "./connected/swipe";
 import {
   buildSurfaceModel,
   type SurfaceModel,
@@ -278,6 +287,11 @@ export default function ConnectedSurface({
    *  `SegmentedControl` owns, not one this component renders. */
   const logOpener = useRef<HTMLElement | null>(null);
   const registerTap = useTripleTap(() => setLogOpen(true));
+  /** The surface element itself — `useSurfaceSwipe` (below) attaches its
+   *  native listeners here, once. Ref'd on the SECOND `<main>` only (the
+   *  live/armed/paused render, further down); the `ended` frame's own
+   *  `<main>` never carries it, matching the probe's own placement. */
+  const surfaceRef = useRef<HTMLElement | null>(null);
 
   // Fires once per ending, whichever side ended it. `endedBy` is already
   // whatever the truth was ("machine" when the PM finished or was stopped
@@ -309,13 +323,23 @@ export default function ConnectedSurface({
     saveLastPane(next);
   }
 
+  /** Phase CS Item A, task-2 brief: swipe is back, wired to the same
+   *  `choosePane` a control press uses below (persistence and the rail
+   *  stay exactly as they are — a swipe is just a second way to call it).
+   *  `blocked: logOpen` is spec A7: while the diagnostics sheet is up, a
+   *  drag starting anywhere never changes panes underneath it. This calls
+   *  `choosePane` directly, never `handleControlPress` — a swipe must
+   *  never count towards the triple-tap gesture (the old handler's own
+   *  note, carried over: `registerTap` is a control-press-only concern). */
+  useSurfaceSwipe(surfaceRef, { pane, blocked: logOpen, onChange: choosePane });
+
   /** A control press does BOTH things, always: it selects the pane and it
    *  counts towards the diagnostics gesture. Three presses on the grid
    *  target therefore land on the grid AND open the log — the sheet is a
-   *  modal over whichever pane the rower was heading for. (Swipe used to be
-   *  the primary navigation and this the fallback; the swipe handler is
-   *  gone — design spec 2026-08-16 Ruling 4 — so this is now the only way
-   *  to change panes.) */
+   *  modal over whichever pane the rower was heading for. Swipe (above,
+   *  `useSurfaceSwipe`) is back as of Phase CS Item A and is the OTHER way
+   *  to change panes — it never counts towards this gesture, so no number
+   *  of swipes ever opens the log on their own. */
   function handleControlPress(next: PaneId, target: HTMLElement): void {
     logOpener.current = target;
     choosePane(next);
@@ -396,7 +420,7 @@ export default function ConnectedSurface({
   });
 
   return (
-    <main className="screen connected-surface">
+    <main className="screen connected-surface" ref={surfaceRef}>
       {/* THE HEADER (connected-revamp Task 6's safety fix, restructured by
           CR2 spec 3 task 1 — design spec §3 "Structure"; the status caption
           split out to its own child by Task 6's FIX ROUND, CRITICAL 1 —

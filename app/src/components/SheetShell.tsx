@@ -120,7 +120,21 @@ export function SheetShell({
   if (!open) return null;
 
   return (
-    <div className="filter-sheet-backdrop" onClick={onDismiss}>
+    // `data-swipe-ignore` (Phase CS Item A, task-2 brief, Step 5): defence
+    // in depth for the connected surface's swipe guard
+    // (`workout/connected/swipe.ts`'s `isSwipeBlocked`), not the primary
+    // one — the connected surface's own `logSheetOpen`/`blocked` boolean
+    // already stops a swipe while any sheet using this shell is open. This
+    // is a `<div onClick>`, not a real button, so it needs a named
+    // opt-out to be caught by the "onClick/onPointerDown only on <button>
+    // or `[data-swipe-ignore]`" house rule the connected surface's own
+    // tests sweep for — and it makes the attribute a real, tested first
+    // consumer rather than an escape hatch nothing exercises.
+    <div
+      className="filter-sheet-backdrop"
+      onClick={onDismiss}
+      data-swipe-ignore
+    >
       <div
         ref={dialogRef}
         className="filter-sheet"

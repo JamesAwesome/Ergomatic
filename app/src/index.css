@@ -5507,6 +5507,19 @@ section:not(.news-pinned) .news-row:last-of-type {
 }
 
 .connected-surface {
+  /* Phase CS Item A, task-2 brief Step 6 (device probe:
+     docs/monitor/sessions/probe-2026-08-17-swipe/README.md): claims ONLY
+     the horizontal pan for `useSurfaceSwipe`'s own gesture, so the UA is
+     never free to treat a horizontal drag as ITS OWN pan-to-scroll and
+     hand this element `pointercancel` mid-drag — the probe's own falsified
+     candidate #2, conditional on this declaration shipping with the
+     handler (it now does). `pan-y`, not `none`: vertical panning (the page
+     scroll, and `.connected-grid-rows`'s own scroll below) is still the
+     UA's to arbitrate; only the horizontal axis is claimed. Retired with
+     the old handler (CR2 spec 3 Task 1) and had no rule here until this
+     task; `grep -n "touch-action" src/index.css` returned nothing before
+     it. */
+  touch-action: pan-y;
   display: flex;
   flex-direction: column;
   /* ZERO, not 10px (connected-revamp Task 6) — same reasoning as the
@@ -6246,6 +6259,20 @@ section:not(.news-pinned) .news-row:last-of-type {
    `min-height: 0` is what actually lets a flex child shrink below its
    content and therefore scroll at all. */
 .connected-grid-rows {
+  /* Phase CS Item A, task-2 brief Step 6: `.connected-surface`'s own
+     `touch-action: pan-y` (above) does NOT reach a finger that lands
+     inside this scroller — it is a separate `overflow-y: auto` element,
+     and `touch-action` is not inherited into an intersecting scroll
+     container by CSS cascade; a declaration on an ancestor stops applying
+     the moment the pointer's target is a DESCENDANT with its own
+     scrolling box. This is the probe's own convicted case (a grid-origin
+     drag) — repeated here so the grid's rows get the identical claim the
+     surface does, and no more: the grid still owns its own vertical
+     scroll (the probe's own open item — a WebKit directional-lock slop on
+     long, near-vertical drags, W3C Pointer Events issue #303 — is real and
+     UNFIXABLE past `pan-y`; see the probe README's own "No declaration
+     prevents it"). */
+  touch-action: pan-y;
   /* `0 1 auto`, not `1`: with four rows the list hugs them and the caption
      sits directly under, the way the mockup's portrait frame draws it; with
      twenty-five it shrinks past its content and scrolls instead of growing
