@@ -1324,3 +1324,85 @@ toolkit, not a history.
   reused empty-state string); POST stays additive for v0.11.0 clients; migration
   0010 is uncontested by any open PR; and DISTANCE-vs-machine-total remains the
   one genuinely EXTERNAL oracle in the criteria list.
+
+## Spec-stage anchor pass, 2026-08-18 (Phase CM, "connected metrics")
+
+- **"`Total Work Distance` excludes rest meters" (INFERENCE, from the field
+  list) — so the live total is `0x0031` TWD + `0x0032` restDistance.**
+  Falsified twice over by decoding the committed raw captures. TWD's final
+  value equals Sigma work PLUS Sigma rest exactly (`session-2-wu-4unequal.jsonl`:
+  1599 = 1535 + 64), and TWD ticks up one metre at a time DURING each rest in
+  lockstep with `restDistanceMeters` — so the sum double-counts the current
+  rest (measured overshoot +30 m). Worse, TWD is not a live counter at all:
+  it is a step function frozen for the entire work interval, advancing only at
+  boundaries and during rests (62 changes in 983 frames). Mid-work the spec's
+  number reads 360 m where the machine has 809 m. **Technique: for any field
+  whose name contains a scope word ("work", "total", "session"), plot it
+  against the frames' own state byte before believing the name. A field-list
+  INFERENCE describes the DOCUMENT's taxonomy, never the firmware's — and the
+  cheapest disproof is "does it move when the rower is resting?", three lines
+  over a capture we already own.** Corollary that generalises: a counter's
+  UPDATE CADENCE is as load-bearing as its scope, and no vendor table states
+  it. Ask "how often does this change?" of every field a design puts on a
+  live screen.
+
+- **"The just-finished interval's average, held from the interval's end
+  through the rest, from the `0x0038` boundary record."** Structurally
+  impossible: `0x0037`/`0x0038` carry the interval's own restTime/restDistance,
+  so the PM5 cannot emit them until the rest is OVER. Measured: interval 2
+  ends t=112.8 s, the record lands t=142.9 s — 0.3 s before the rule says to
+  discard it. Through the whole rest the newest `0x0038` is the PREVIOUS
+  interval's, so rest #1 shows the WARM-UP's 2:28.5 where the interval
+  averaged 2:11.0. And the mechanism is unnecessary: `0x0033.splitAvgPace`
+  already holds the finished interval's average flat for the entire rest,
+  agreeing with `0x0038` to <=0.2 s across all five recorded rests.
+  **Technique: for any "hold the value from record X across window W", find
+  X's ARRIVAL TIME in a capture and check it falls inside W. A record that
+  reports what happened during W cannot exist before W ends — and the field
+  the design is trying to reproduce is usually already being held by the
+  machine, one characteristic over.**
+
+- **"A +/-0.5 s/500m dead band makes the on-target state stable."** The band is
+  not the problem. Measured across seven work runs, the live interval average
+  does not enter +/-0.5 s of its own final value until 65-99% of the interval
+  has elapsed (median ~80%) — the standing start dominates. So the judged cell
+  reads SLOWER for most of every interval regardless of the rower, and becomes
+  informative only when there is least time to act. **Technique: before tuning
+  a threshold on a running average, plot the average's CONVERGENCE against
+  the window it averages over. "Is the band right?" is the wrong question
+  whenever the quantity has not settled; no scalar fixes a transient.**
+
+- **An exit criterion can be blind by TIMING rather than by construction.**
+  "The live total equals the summary's DISTANCE at the end of a piece" cannot
+  fail: at the terminal frame `restDistanceMeters` is 0 in every completed
+  capture and TWD has caught up, so the correct value, the double-counted
+  value and the frozen value all agree there. The two defects are visible
+  only mid-work and mid-rest. **Technique: for every equality criterion, ask
+  at WHICH INSTANT it is evaluated, then check whether the terms are
+  degenerate at that instant. An end-of-session comparison is blind to every
+  bug whose magnitude is zero at the end — which is most accumulator bugs.**
+
+- **Recurrence, third sighting: ask what the fake FEEDS the field under test.**
+  `fake.ts:672` zero-fills `splitAvgPace` and `:690` zero-fills
+  `restDistanceMeters`, so every fake-driven harness (e2e, the ten frozen
+  connected fixtures, `VITE_ENABLE_FAKE_MONITOR=1`, screenshots) is
+  structurally blind to BOTH numbers this spec adds — the AVG cell renders
+  nothing and the total adds zero. And `fake.ts:592-630`'s TWD model
+  (`Math.trunc(distanceMeters)` on a time goal) is a third wrong world,
+  contradicted by 2,363 raw frames.
+
+- **Attacked and NOT broken (Phase CM vetted ground):** the 0.01-vs-0.1
+  sec/lsb split between `0x0033` and `0x0038` is real, not a mis-transcription
+  — `0x0038` raw/10 reproduces `500 x splitTime / splitDist` exactly at all
+  nine committed boundaries, and `parse.ts:200`/`:274` are both correct (which
+  also means the spec's headline "10x hazard" is already neutralised before
+  any consumer sees it; the swap that CAN happen post-parse yields two values
+  0.2 s apart). `splitAvgPace` really is the programmed interval's own average
+  and resets exactly at work-interval starts (matched to `0x0038` in three
+  files) — but no committed capture holds an interval longer than 500 m /
+  129 s, so the multiple-splits-per-interval question is genuinely open and
+  the walk should keep asking it. "Treat a zero average as absent" is right
+  (the zero is on the wire at workout start and at each new interval's first
+  frame), though the spec cites the Last Split CHECKPOINT pair for it, which
+  is a different field. And the summary's DISTANCE now equals the machine's
+  own total to the metre (1599 = 1599, 500 = 500).
