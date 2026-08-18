@@ -44,9 +44,12 @@ print_card() {
 
 === WALK LAB · $COMPOSE_PROJECT_NAME ===
 App (open in CHROME on the LAPTOP — Web Bluetooth + the recording tap
-need it; the phone is never assumed):
+need it; the phone is never assumed). 127.0.0.1, NOT localhost: the
+stack's SITE_URL (compose.e2e.yml) is 127.0.0.1, and the api's origin
+allowlist derives from it — a localhost tab 403s the backdoor with
+"bad origin" (cost the 2026-08-18 walk its first ten minutes):
 
-    http://localhost:$APP_PORT
+    http://127.0.0.1:$APP_PORT
 
 Backdoor login — paste this in the DevTools console BEFORE hitting any
 login wall, then reload:
