@@ -2505,7 +2505,9 @@ next phase. One line per round, newest first.
   appends at the top rather than refilling its old slot. Accepted as the
   cost of remove-only (re-association and number-editing were both
   DECLINED, James's ruling); the next spec that touches log lifecycle
-  starts from this gap, not from rediscovering it.
+  starts from this gap, not from rediscovering it. **The next release's
+  notes carry the gap in plain words** (PM gate C1, 2026-08-18: spec +
+  ROADMAP + notes is the full disclosure chain for an accepted limit).
 - **QUEUED (final-review fix round observation, 2026-08-18): `today.png`'s
   regen diff showed an onboarding read-marker difference** unrelated to
   the branch that surfaced it — reverted there, unexplained. Owner: the

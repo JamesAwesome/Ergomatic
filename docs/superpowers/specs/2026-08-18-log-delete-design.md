@@ -148,7 +148,10 @@ is the live session's, not the log's).
    workout, LAST DONE exclusion releases it.
 6. The notes PR line for the next release: you can delete a session from
    its own page; deleting your LATEST plan session un-ticks its checkmark;
-   deleting older history never renumbers your plan.
+   deleting older history never renumbers your plan; AND the accepted gap
+   said plainly — re-logging a deleted session stamps today's date, so a
+   mistake found the next day can't be put back on its own day (PM gate
+   C1: a gap named in a spec is not disclosed until it is in the notes).
 8. Implementation note with teeth (the antagonist's operational catch):
    the worktree's compose stack can serve many-commits-stale code — its
    probe found a session_logs with NO plan_key column. Before any e2e of
