@@ -6,7 +6,7 @@ import HistoryList from "./HistoryList";
 import type { LogHistoryState } from "./useLogHistory";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import type { RecentLog } from "../api/useRecentLogs";
-import { LOG_SCROLL_KEY } from "./logScroll";
+import { LOG_SCROLL_KEY, saveLogScroll } from "./logScroll";
 
 const mockUseLogHistory = vi.fn<() => LogHistoryState>();
 vi.mock("./useLogHistory", () => ({
@@ -218,6 +218,25 @@ describe("HistoryList scroll (spec §4 N2)", () => {
     window.dispatchEvent(new Event("scroll"));
 
     expect(sessionStorage.getItem(LOG_SCROLL_KEY)).toBeNull();
+  });
+
+  // The consequence framing (review finding 2): a bare "nothing written"
+  // assertion above would still pass a mutant that writes 0 over an
+  // EXISTING real position, as long as nothing was there to begin with —
+  // this seeds a genuine prior save (the shape a real BACK return leaves
+  // behind) and proves the loading-phase clamp echo does not clobber it.
+  it("a real prior saved position survives a scroll event that fires while still loading (the clamp echo never overwrites it)", () => {
+    saveLogScroll(623);
+    mockUseLogHistory.mockReturnValue({ state: "loading" });
+    renderHistoryList();
+
+    Object.defineProperty(window, "scrollY", {
+      value: 0,
+      configurable: true,
+    });
+    window.dispatchEvent(new Event("scroll"));
+
+    expect(sessionStorage.getItem(LOG_SCROLL_KEY)).toBe("623");
   });
 
   it("saves scrollY to sessionStorage, throttled to ~100ms (the trailing value survives)", async () => {

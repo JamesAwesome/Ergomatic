@@ -6,6 +6,7 @@ import TabBar, { TABS } from "./TabBar";
 import { LIBRARY_FILTERS_KEY } from "../library/libraryFilters";
 import { LIBRARY_SCROLL_KEY } from "../library/libraryScroll";
 import { NEWS_SCROLL_KEY } from "../news/newsScroll";
+import { LOG_SCROLL_KEY } from "../log/logScroll";
 
 function renderAt(path: string) {
   return render(
@@ -129,6 +130,33 @@ describe("TabBar", () => {
 
       expect(sessionStorage.getItem(NEWS_SCROLL_KEY)).toBeNull();
       expect(sessionStorage.getItem(LIBRARY_SCROLL_KEY)).toBe("999");
+    });
+  });
+
+  // From-the-log spec (2026-08-18), §4 N7 — same clear-on-fresh-tap
+  // reasoning as Library's/News's own blocks above: a fresh visit to
+  // /today/log through the ALL SESSIONS heading link must never restore a
+  // stale offset from a previous visit, and the TODAY tab tap is the one
+  // link that's unambiguously a fresh visit.
+  describe("TODAY tab tap clears the saved log-history scroll position", () => {
+    beforeEach(() => sessionStorage.clear());
+
+    it("removes the saved log-history scroll position", async () => {
+      sessionStorage.setItem(LOG_SCROLL_KEY, "623");
+      renderAt("/you");
+
+      await userEvent.click(screen.getByRole("link", { name: "TODAY" }));
+
+      expect(sessionStorage.getItem(LOG_SCROLL_KEY)).toBeNull();
+    });
+
+    it("leaves other tabs' clicks alone (no accidental clear from an unrelated tab)", async () => {
+      sessionStorage.setItem(LOG_SCROLL_KEY, "623");
+      renderAt("/today");
+
+      await userEvent.click(screen.getByRole("link", { name: "LIBRARY" }));
+
+      expect(sessionStorage.getItem(LOG_SCROLL_KEY)).toBe("623");
     });
   });
 });
