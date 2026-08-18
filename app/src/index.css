@@ -2421,10 +2421,30 @@ button:disabled {
   margin: 20px 0 0;
 }
 
+/* Log-delete spec (2026-08-18), §1: the staged destructive confirm, last
+   in the view, below `.log-plan-footer`. `.button-l4` (index.css's "4 ·
+   destructive" level, own doc comment names "Delete workout, Discard at
+   rest") for the rest-state trigger — no new interactive rule needed,
+   only this spacing. Staged, it swaps for `.baseline-confirm`/
+   `.baseline-actions` (the house Cancel+confirm-pair idiom — six existing
+   consumers, including WorkoutDetail.tsx's OWN `replaceStage` panel),
+   reused verbatim: no new button/panel rule at all. */
+.log-delete-trigger {
+  margin: 24px 0 0;
+}
+
+.log-delete-confirm {
+  margin: 24px 0 0;
+}
+
 /* -- Plan (Phase 6A Task 3) ---------------------------------------------
    Tokens only — reuses --ink/--ink-3/--accent/--surface/--rule and the
    BaselineEditor confirm classes (.baseline-confirm/.baseline-actions/
-   .baseline-error), same as WorkoutDetail.tsx's delete confirm. */
+   .baseline-error) — the same Cancel+confirm-pair idiom
+   FromTheLog.tsx's own delete confirm reuses (log-delete spec,
+   2026-08-18); WorkoutDetail.tsx's OWN "Delete workout" moved to a
+   different idiom (arm-in-place, see its OwnerActions comment) in an
+   earlier fix round, so this line no longer describes that button. */
 
 .plan-intro {
   color: var(--ink-3);

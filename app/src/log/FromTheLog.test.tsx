@@ -659,3 +659,370 @@ describe("FromTheLog — criterion 2 (a v0.11.0, all-null-hero row)", () => {
     expect(screen.getByText("HELD · PAIN 2/5")).toBeVisible();
   });
 });
+
+// Log-delete spec (2026-08-18), §1 — the affordance. Copy strings and the
+// button label are quoted verbatim from the spec's own table; a self-
+// mutation swapping them is this task's own red-provable target.
+const LINKED_COPY =
+  "This removes the session. If it is your latest plan session, the checkmark un-ticks.";
+const UNLINKED_COPY = "This removes the session and its reflection.";
+const DELETE_BUTTON_NAME = "Delete session";
+
+describe("FromTheLog — log-delete spec (2026-08-18) §1 delete affordance", () => {
+  it("renders the Delete session trigger only in the ready state, never while loading/erroring/not-found", async () => {
+    mockApi(() => new Promise(() => {}));
+    await renderFromTheLog();
+    expect(
+      screen.queryByRole("button", { name: DELETE_BUTTON_NAME }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders no Delete session trigger on the not-found state", async () => {
+    mockApi(
+      () =>
+        new Response(JSON.stringify({ error: "not found" }), { status: 404 }),
+    );
+    await renderFromTheLog();
+    await waitFor(() =>
+      expect(screen.getByText("This session is gone.")).toBeVisible(),
+    );
+    expect(
+      screen.queryByRole("button", { name: DELETE_BUTTON_NAME }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders no Delete session trigger on the error state", async () => {
+    mockApi(() => new Response("", { status: 500 }));
+    await renderFromTheLog();
+    await waitFor(() =>
+      expect(screen.getByText("Couldn't load this session.")).toBeVisible(),
+    );
+    expect(
+      screen.queryByRole("button", { name: DELETE_BUTTON_NAME }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders the Delete session trigger below the plan footer in DOM order (Placement: bottom, below the plan footer, away from Edit)", async () => {
+    mockApi(
+      () =>
+        new Response(
+          JSON.stringify(storedRow({ planKey: "sprint", planIndex: 11 })),
+          { status: 200 },
+        ),
+    );
+    const { container } = await renderFromTheLog();
+    const trigger = await screen.findByRole("button", {
+      name: DELETE_BUTTON_NAME,
+    });
+    const footer = container.querySelector(".log-plan-footer");
+    expect(footer).not.toBeNull();
+    const position = footer!.compareDocumentPosition(trigger);
+    expect(position & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("first tap stages the confirm panel — the LINKED copy and Cancel/Delete session pair — when plan_key is non-null on the fetched row", async () => {
+    mockApi(
+      () =>
+        new Response(
+          JSON.stringify(storedRow({ planKey: "sprint", planIndex: 11 })),
+          { status: 200 },
+        ),
+    );
+    await renderFromTheLog();
+    await userEvent.click(
+      await screen.findByRole("button", { name: DELETE_BUTTON_NAME }),
+    );
+    expect(screen.getByText(LINKED_COPY)).toBeVisible();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: DELETE_BUTTON_NAME }),
+    ).toBeVisible();
+  });
+
+  it("first tap stages the confirm panel — the NO-LINKAGE copy — when plan_key is null on the fetched row", async () => {
+    mockApi(() => new Response(JSON.stringify(storedRow()), { status: 200 }));
+    await renderFromTheLog();
+    await userEvent.click(
+      await screen.findByRole("button", { name: DELETE_BUTTON_NAME }),
+    );
+    expect(screen.getByText(UNLINKED_COPY)).toBeVisible();
+  });
+
+  it("Cancel unstages — the trigger reappears, no DELETE call was ever sent", async () => {
+    const apiMock = mockApi(
+      () => new Response(JSON.stringify(storedRow()), { status: 200 }),
+    );
+    await renderFromTheLog();
+    await userEvent.click(
+      await screen.findByRole("button", { name: DELETE_BUTTON_NAME }),
+    );
+    expect(screen.getByText(UNLINKED_COPY)).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByText(UNLINKED_COPY)).not.toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: DELETE_BUTTON_NAME }),
+    ).toBeVisible();
+    expect(
+      apiMock.mock.calls.some(
+        ([, init]) => (init as RequestInit | undefined)?.method === "DELETE",
+      ),
+    ).toBe(false);
+  });
+
+  it("disables Cancel and the confirm button while the DELETE is in flight", async () => {
+    let resolveDelete: (res: Response) => void = () => {};
+    mockApi((_path, init) => {
+      if (init?.method === "DELETE") {
+        return new Promise<Response>((resolve) => {
+          resolveDelete = resolve;
+        });
+      }
+      return new Response(JSON.stringify(storedRow()), { status: 200 });
+    });
+    await renderFromTheLog();
+    await userEvent.click(
+      await screen.findByRole("button", { name: DELETE_BUTTON_NAME }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: DELETE_BUTTON_NAME }),
+    );
+
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: DELETE_BUTTON_NAME }),
+    ).toBeDisabled();
+
+    resolveDelete(
+      new Response(JSON.stringify({ unCounted: false }), { status: 200 }),
+    );
+    await waitFor(() =>
+      expect(screen.getByText("HISTORY SCREEN")).toBeVisible(),
+    );
+  });
+
+  it("a server error re-enables the confirm button with the server's message, staying staged", async () => {
+    mockApi((_path, init) => {
+      if (init?.method === "DELETE") {
+        return new Response(JSON.stringify({ error: "Couldn't delete." }), {
+          status: 500,
+        });
+      }
+      return new Response(JSON.stringify(storedRow()), { status: 200 });
+    });
+    await renderFromTheLog();
+    await userEvent.click(
+      await screen.findByRole("button", { name: DELETE_BUTTON_NAME }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: DELETE_BUTTON_NAME }),
+    );
+
+    expect(await screen.findByText("Couldn't delete.")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: DELETE_BUTTON_NAME }),
+    ).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeEnabled();
+    // Still staged — the copy is still on screen, the trigger hasn't come back.
+    expect(screen.getByText(UNLINKED_COPY)).toBeVisible();
+  });
+
+  it("a DELETE that rejects outright (a network failure, not a non-2xx response) re-enables with the generic message", async () => {
+    mockApi((_path, init) => {
+      if (init?.method === "DELETE") {
+        throw new Error("network down");
+      }
+      return new Response(JSON.stringify(storedRow()), { status: 200 });
+    });
+    await renderFromTheLog();
+    await userEvent.click(
+      await screen.findByRole("button", { name: DELETE_BUTTON_NAME }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: DELETE_BUTTON_NAME }),
+    );
+
+    expect(
+      await screen.findByText("Couldn't delete this session. Try again."),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: DELETE_BUTTON_NAME }),
+    ).toBeEnabled();
+  });
+
+  it("a 404 at confirm time (another tab already deleted it) navigates as success, not an error", async () => {
+    mockApi((_path, init) => {
+      if (init?.method === "DELETE") {
+        return new Response(JSON.stringify({ error: "not found" }), {
+          status: 404,
+        });
+      }
+      return new Response(JSON.stringify(storedRow()), { status: 200 });
+    });
+    await renderFromTheLog();
+    await userEvent.click(
+      await screen.findByRole("button", { name: DELETE_BUTTON_NAME }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: DELETE_BUTTON_NAME }),
+    );
+
+    await waitFor(() =>
+      expect(screen.getByText("HISTORY SCREEN")).toBeVisible(),
+    );
+    expect(screen.queryByText(UNLINKED_COPY)).not.toBeInTheDocument();
+  });
+
+  it("success navigates to resolveLogBack's target — a Plan origin lands back on /plan", async () => {
+    mockApi((_path, init) => {
+      if (init?.method === "DELETE") {
+        return new Response(JSON.stringify({ unCounted: false }), {
+          status: 200,
+        });
+      }
+      return new Response(JSON.stringify(storedRow()), { status: 200 });
+    });
+    await renderFromTheLog({
+      pathname: "/today/log/log-1",
+      state: { from: "/plan" },
+    });
+    await userEvent.click(
+      await screen.findByRole("button", { name: DELETE_BUTTON_NAME }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: DELETE_BUTTON_NAME }),
+    );
+
+    await waitFor(() => expect(screen.getByText("PLAN SCREEN")).toBeVisible());
+  });
+
+  it("success navigates to resolveLogBack's target — a Today origin lands back on /today", async () => {
+    mockApi((_path, init) => {
+      if (init?.method === "DELETE") {
+        return new Response(JSON.stringify({ unCounted: true }), {
+          status: 200,
+        });
+      }
+      return new Response(JSON.stringify(storedRow()), { status: 200 });
+    });
+    await renderFromTheLog({
+      pathname: "/today/log/log-1",
+      state: { from: "/today" },
+    });
+    await userEvent.click(
+      await screen.findByRole("button", { name: DELETE_BUTTON_NAME }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: DELETE_BUTTON_NAME }),
+    );
+
+    await waitFor(() => expect(screen.getByText("TODAY SCREEN")).toBeVisible());
+  });
+
+  it("the confirm DELETE call targets /api/logs/:id", async () => {
+    const apiMock = mockApi((_path, init) => {
+      if (init?.method === "DELETE") {
+        return new Response(JSON.stringify({ unCounted: false }), {
+          status: 200,
+        });
+      }
+      return new Response(JSON.stringify(storedRow()), { status: 200 });
+    });
+    await renderFromTheLog();
+    await userEvent.click(
+      await screen.findByRole("button", { name: DELETE_BUTTON_NAME }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: DELETE_BUTTON_NAME }),
+    );
+    await waitFor(() =>
+      expect(screen.getByText("HISTORY SCREEN")).toBeVisible(),
+    );
+    const deleteCall = apiMock.mock.calls.find(
+      ([, init]) => (init as RequestInit | undefined)?.method === "DELETE",
+    )!;
+    expect(deleteCall[0]).toBe("/api/logs/log-1");
+  });
+});
+
+// §5.1 exit criterion 1: "the copy/decision honesty test is a TABLE of
+// server decisions vs rendered outcomes... INCLUDING a state where plan
+// state changed between the fetch and the confirm: the copy's conditional
+// wording stays true and `unCounted` reports what actually happened."
+//
+// The client has NO predicate that predicts `unCounted` (spec's own words:
+// "the client only reads plan_key presence") — so this table proves the
+// STATIC, plan_key-only-derived copy never contradicts whatever the server
+// (mocked here) actually decides, across every shape that decision can
+// take. The linked copy is a HEDGE ("if it is your latest plan session,
+// the checkmark un-ticks") — true whether unCounted comes back true (row
+// 1) or false (rows 2 and 4, for two entirely different reasons: a
+// non-terminal index, and a race that invalidated an index that WAS
+// terminal at fetch time). The unlinked copy never mentions the checkmark
+// at all, so it can't be contradicted by any unCounted value (row 3).
+const HONESTY_TABLE: {
+  name: string;
+  row: StoredLog;
+  unCounted: boolean;
+  expectedCopy: string;
+}[] = [
+  {
+    name: "terminal linked — server actually un-counts",
+    row: storedRow({ planKey: "sprint", planIndex: 11 }),
+    unCounted: true,
+    expectedCopy: LINKED_COPY,
+  },
+  {
+    name: "non-terminal linked — server declines (not the latest slot)",
+    row: storedRow({ planKey: "sprint", planIndex: 3 }),
+    unCounted: false,
+    expectedCopy: LINKED_COPY,
+  },
+  {
+    name: "unlinked — no plan_key at all",
+    row: storedRow({ planKey: null, planIndex: null }),
+    unCounted: false,
+    expectedCopy: UNLINKED_COPY,
+  },
+  {
+    name: "stale-plan-changed-between-fetch-and-confirm — terminal at fetch time, but a Reset/Switch/second delete raced it before confirm",
+    row: storedRow({ planKey: "sprint", planIndex: 11 }),
+    unCounted: false,
+    expectedCopy: LINKED_COPY,
+  },
+];
+
+describe("FromTheLog — §5.1 the copy/decision honesty table", () => {
+  for (const { name, row, unCounted, expectedCopy } of HONESTY_TABLE) {
+    it(`${name}: renders the honest copy pre-confirm and completes cleanly on {unCounted: ${unCounted}}`, async () => {
+      mockApi((_path, init) => {
+        if (init?.method === "DELETE") {
+          return new Response(JSON.stringify({ unCounted }), { status: 200 });
+        }
+        return new Response(JSON.stringify(row), { status: 200 });
+      });
+      await renderFromTheLog();
+      await userEvent.click(
+        await screen.findByRole("button", { name: DELETE_BUTTON_NAME }),
+      );
+      // The copy is a pure function of plan_key presence, computed BEFORE
+      // the server has said anything about unCounted — asserted here,
+      // before the confirm tap below ever reaches the mocked response.
+      expect(screen.getByText(expectedCopy)).toBeVisible();
+      // Neither copy string ever claims the OTHER row's fact (no
+      // cross-contamination between the hedge and the unlinked copy).
+      const otherCopy =
+        expectedCopy === LINKED_COPY ? UNLINKED_COPY : LINKED_COPY;
+      expect(screen.queryByText(otherCopy)).not.toBeInTheDocument();
+
+      await userEvent.click(
+        screen.getByRole("button", { name: DELETE_BUTTON_NAME }),
+      );
+      // Whatever the server actually decided, the delete completes and
+      // navigates — the copy never has to be "walked back" by a follow-up
+      // screen state, because it never promised more than the hedge.
+      await waitFor(() =>
+        expect(screen.getByText("HISTORY SCREEN")).toBeVisible(),
+      );
+    });
+  }
+});

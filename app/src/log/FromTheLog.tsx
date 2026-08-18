@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useLocation, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import type { HeldResult, Thumbs } from "../api/useRecentLogs";
 import {
@@ -149,6 +149,7 @@ function buildPatch(
 export default function FromTheLog() {
   const { id } = useParams();
   const location = useLocation();
+  const navigate = useNavigate();
   const fetchState = useLogFetch(id);
   // Derived during render, not synced via an effect (see `FetchState`'s
   // own comment above) — `row`/`view` recompute from whatever the fetch
@@ -238,6 +239,65 @@ export default function FromTheLog() {
     } catch {
       setSaveError("Couldn't save. Try again.");
       setSaving(false);
+    }
+  }
+
+  // Log-delete spec (2026-08-18), §1: the staged destructive confirm.
+  // WorkoutDetail.tsx's own "Delete workout" (`OwnerActions`) has since
+  // moved to a DIFFERENT idiom than what §1's table describes (its own
+  // "Fix round 1 (F2)" comment: arm-in-place, disarm on blur/4s, no
+  // literal Cancel button — confirmed by that component's own test suite,
+  // which proves disarm via `fireEvent.blur`, never a Cancel click). §1's
+  // own text ("Cancel + confirm pair") and this task's brief ("Cancel
+  // unstages", a separately testable bullet from "first tap stages") both
+  // name a REAL Cancel control, which arm-in-place doesn't have. The
+  // house idiom that actually IS "stage → consequence copy → Cancel +
+  // confirm pair" is `.baseline-confirm`/`.baseline-actions` — used six
+  // places already, including WorkoutDetail.tsx's OWN `replaceStage` panel
+  // a few hundred lines above its delete button (`button-outline` Cancel
+  // beside a bare `button-primary` confirm, inside `.baseline-confirm`) —
+  // reused here verbatim rather than the delete button's own idiom, which
+  // no longer matches the spec's description at all.
+  const [deleteStaged, setDeleteStaged] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  function stageDelete() {
+    setDeleteError(null);
+    setDeleteStaged(true);
+  }
+
+  function cancelDelete() {
+    setDeleteError(null);
+    setDeleteStaged(false);
+  }
+
+  async function confirmDelete() {
+    if (row === null) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const res = await api(`/api/logs/${row.id}`, { method: "DELETE" });
+      // §1 "In-flight": a 404 means another tab already deleted this row —
+      // treated as success-and-navigate, never surfaced as an error (the
+      // antagonist's own "an error toast for an operation that succeeded"
+      // finding).
+      if (res.ok || res.status === 404) {
+        navigate(backTarget);
+        return;
+      }
+      let message = "Couldn't delete this session. Try again.";
+      try {
+        const body = (await res.json()) as { error?: unknown };
+        if (typeof body.error === "string") message = body.error;
+      } catch {
+        // Non-JSON error body — keep the generic message.
+      }
+      setDeleteError(message);
+      setDeleting(false);
+    } catch {
+      setDeleteError("Couldn't delete this session. Try again.");
+      setDeleting(false);
     }
   }
 
@@ -365,6 +425,51 @@ export default function FromTheLog() {
 
           {view.planFooter !== undefined && (
             <p className="log-plan-footer">{view.planFooter}</p>
+          )}
+
+          {/* §1 Placement: "Bottom of the view, below the plan footer —
+              last, quiet, away from Edit." Copy is a pure function of
+              `row.planKey` presence — the one fact this fetch already
+              carries (§1's own words: "client-decidable from the one
+              fetch it already makes"); the server, never the client,
+              decides `unCounted` at DELETE time. */}
+          {!deleteStaged ? (
+            <button
+              type="button"
+              className="button-l4 log-delete-trigger"
+              onClick={stageDelete}
+            >
+              Delete session
+            </button>
+          ) : (
+            <div className="baseline-confirm log-delete-confirm">
+              <p className="baseline-confirm-line">
+                {row.planKey !== null
+                  ? "This removes the session. If it is your latest plan session, the checkmark un-ticks."
+                  : "This removes the session and its reflection."}
+              </p>
+              {deleteError !== null && (
+                <p className="baseline-error">{deleteError}</p>
+              )}
+              <div className="baseline-actions">
+                <button
+                  type="button"
+                  className="button-outline"
+                  onClick={cancelDelete}
+                  disabled={deleting}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="button-primary"
+                  onClick={confirmDelete}
+                  disabled={deleting}
+                >
+                  Delete session
+                </button>
+              </div>
+            </div>
           )}
         </>
       )}
