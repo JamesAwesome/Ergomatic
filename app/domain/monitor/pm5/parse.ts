@@ -508,6 +508,11 @@ export function toMonitorFrame(raw: RawPm5Status): MonitorFrame {
     spm: raw.spm,
     heartRateBpm: raw.heartRateBpm,
     rowingActive: raw.rowingState === 1,
+    // Unconditional pass-through, same choice as `currentSplit` above —
+    // see `MonitorFrame.splitAvgPace`'s own doc comment for the driver-side
+    // clearing this function does NOT do (it has no frame history to
+    // compare against).
+    splitAvgPace: raw.splitAvgPace,
     // RAW machine value — see this function's own doc comment above.
     intervalIndex: intervalActive ? raw.intervalCount : null,
     intervalRemaining: null,

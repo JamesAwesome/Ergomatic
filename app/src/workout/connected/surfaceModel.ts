@@ -265,6 +265,7 @@ const NO_FRAME: MonitorFrame = {
   spm: null,
   heartRateBpm: null,
   rowingActive: false,
+  splitAvgPace: null,
   intervalIndex: 0,
   intervalRemaining: null,
   intervalAccrued: null,

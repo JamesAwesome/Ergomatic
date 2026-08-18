@@ -1163,6 +1163,25 @@ export function createPm5Driver(
    *  `program()` (below) — a re-armed run's own first clamp is a new fact
    *  too, not a repeat of the outgoing run's. */
   let clampedKeysLogged = new Set<number>();
+  /** THE EMITTED REFERENT'S OWN HISTORY (interval-referent-monotone spec,
+   *  2026-08-18 Task 2) — the last frame's clamped `intervalIndex` (the
+   *  same field `frameWithIndex` below sets), tracked so the very next
+   *  frame can tell "did the referent I'm about to emit just advance into
+   *  a NEW interval" from "is it the same interval as last time". That
+   *  question is what decides whether THIS frame's `splitAvgPace` is
+   *  trustworthy: the wire's 0x0033 (Additional Status 2) updates on its
+   *  own cadence, independent of 0x0031's (General Status) state-byte
+   *  flip, so the first `"rowing"` frame of a new interval can fire before
+   *  0x0033 has caught up — its `splitAvgPace` is still the JUST-FINISHED
+   *  interval's own settled average (measured on `session-2-wu-4unequal.
+   *  jsonl`: GS seq 781, t=143.176s, state flips to rowing/idx 2 while the
+   *  merged `splitAvgPace` still reads 131.11, interval 1's own value —
+   *  the fresh 0x0033 sample carrying 0 arrives 10ms later, at t=143.186s,
+   *  too late for this already-built frame). Reset alongside `session` and
+   *  `clampedKeysLogged` on every successful `program()` (below) — a
+   *  re-armed run's own first interval is a new fact too, not a
+   *  continuation of the outgoing run's numbering. */
+  let lastEmittedReferentIndex: number | null = null;
   /** R0 (CR2 spec 1, Task 1). The last totals actually PUT ON A FRAME.
    *  `logSummaryTotals` fires on 0x0039, which carries no per-interval pair
    *  of its own, so the value the rower last saw has to be remembered
@@ -1793,6 +1812,28 @@ export function createPm5Driver(
       base.state,
       programLength,
     );
+    // THE EMITTED REFERENT (interval-referent-monotone spec, 2026-08-18
+    // Task 2). Starts equal to `intervalIndex` above and is raised in lockstep
+    // wherever the stale-count rest clamp below raises `activeKey` — the
+    // SAME condition, not a second rule (this spec's own "one monotone
+    // answer" requirement). Provably safe to mirror: the clamp's `if`
+    // below only ever fires when `activeKey === intervalIndex` already
+    // (non-null) — the OTHER way `activeKey` can start (the rowing/
+    // resting/finished fallback a few lines down) sets it to `newestKey`
+    // directly, so `activeKey < newestKey` is already false and the clamp
+    // never touches it. This is the fix for the defect the design doc's
+    // "Which interval do these numbers belong to?" section names: before
+    // this field existed, `frameWithIndex` below built its `intervalIndex`
+    // straight from the unclamped constant, so a late 0x0033 left the
+    // FIRST resting frame of a rest naming the interval BEFORE the one
+    // that just finished, for one status tick (~450-540ms,
+    // `session-2-wu-4unequal.jsonl` GS seq 1489 and seq 2430 —
+    // `registerReplay.test.ts`'s own regression tests). Only 0x0031's own
+    // `mergeStatus` callback (below) calls `maybeEmitFrame`; 0x0033's own
+    // callback only sets `seen.as2` — so a 0x0033 sample that has not yet
+    // caught up to a state flip 0x0031 already reported gets no frame of
+    // its own to correct the one already built.
+    let emittedIntervalIndex = intervalIndex;
     // THE REGISTER WRITE (CR2 spec 1 — see `session`'s own doc comment).
     // Done BEFORE the frame is finished so the emitted frame already carries
     // the totals, and deliberately AFTER `computeRemainingForFrame`'s
@@ -1883,6 +1924,9 @@ export function createPm5Driver(
           );
         }
         activeKey = newestKey;
+        // `emittedIntervalIndex`'s own comment above: same clamp, same
+        // condition, applied to the consumer-facing field too.
+        emittedIntervalIndex = newestKey;
       }
     }
 
@@ -1986,7 +2030,28 @@ export function createPm5Driver(
       });
     }
 
-    const frameWithIndex: MonitorFrame = { ...base, intervalIndex };
+    // THE WORK-START CARRY-OVER GUARD (interval-referent-monotone spec,
+    // 2026-08-18 Task 2, the OTHER direction from the clamp above). Fires
+    // exactly on the first `"rowing"` frame whose referent has advanced
+    // past the previous frame's own — i.e. the tick a new interval's work
+    // begins — and nulls `splitAvgPace` there rather than let it carry the
+    // just-finished interval's settled average onto the new interval's own
+    // identity (`MonitorFrame.splitAvgPace`'s own doc comment has the wire
+    // mechanism and the citation). `lastEmittedReferentIndex` is this
+    // frame's own history, not `intervalIndex`'s (comparing against the
+    // CLAMPED value keeps this guard from ever firing off the very lag the
+    // clamp above just corrected).
+    const isFirstRowingFrameOfNewInterval =
+      base.state === "rowing" &&
+      emittedIntervalIndex !== null &&
+      lastEmittedReferentIndex !== null &&
+      emittedIntervalIndex > lastEmittedReferentIndex;
+    const frameWithIndex: MonitorFrame = {
+      ...base,
+      intervalIndex: emittedIntervalIndex,
+      splitAvgPace: isFirstRowingFrameOfNewInterval ? null : base.splitAvgPace,
+    };
+    lastEmittedReferentIndex = emittedIntervalIndex;
     const totals = [...session.seen.values()];
     const frame: MonitorFrame = {
       ...frameWithIndex,
@@ -4297,6 +4362,10 @@ export function createPm5Driver(
         // re-armed run's own first clamp is a new fact, not a repeat of
         // the outgoing run's.
         clampedKeysLogged = new Set();
+        // `lastEmittedReferentIndex`'s own comment: per-run state, same
+        // reason — the outgoing run's last interval is not "one behind"
+        // the new run's first, because they are different runs.
+        lastEmittedReferentIndex = null;
         // Diagnostics-only (R0, Task 1's own doc comment): the outgoing
         // run's last-seen totals belong to that run, not the new one.
         lastEmittedTotals = { elapsedSeconds: 0, distanceMeters: 0 };

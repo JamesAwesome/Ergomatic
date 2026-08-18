@@ -86,6 +86,28 @@ export interface MonitorFrame {
   //   runs while a stopped rower sits still, and a coasting flywheel
   //   banks meters on a piece the PM5 itself does not consider started.
   //   This byte is what the PM5 knew each time.
+  splitAvgPace: number | null;
+  // ^ 0x0033's (Additional Status 2) own Split Average Pace — seconds/500m
+  //   for the CURRENT interval's own average while rowing, and the
+  //   FINISHED interval's settled average through its trailing rest (the
+  //   connected-metrics design spec's ruling: judged only at rest, when it
+  //   is final — "The judgement" section). Passed through unconditionally
+  //   at the parse level (`pm5/parse.ts`'s `toMonitorFrame`, same
+  //   unconditional-pass-through choice as `currentSplit` above), `null`
+  //   only for a caller with no 0x0033 sample yet. `src/monitor/driver.ts`
+  //   additionally NULLS this field on exactly the first `"rowing"` frame
+  //   of a NEW interval (interval-referent-monotone spec, 2026-08-18 Task
+  //   2): 0x0033 updates on its own cadence, independent of 0x0031's state
+  //   byte, so that first frame can otherwise still carry the
+  //   JUST-FINISHED interval's own average for one status tick before a
+  //   fresher 0x0033 sample arrives — a value genuinely correct for the
+  //   OLD interval, wrongly paired with the NEW one's identity. Clearing
+  //   it (rather than pairing it with an interval field of its own) keeps
+  //   the same "one field, no lie" contract `intervalIndex` gets from the
+  //   clamp below, and costs nothing perceptible: the surface already
+  //   renders a zero average as nothing (design spec exit criterion 4), so
+  //   a `null` frame here reads identically to the genuinely-fresh 0 that
+  //   arrives one tick later.
   intervalIndex: number | null;
   // ^ OUR program index (0-based per work interval), never the raw machine
   //   value straight off the wire — normalized by the driver via
