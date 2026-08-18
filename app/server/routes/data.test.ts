@@ -718,6 +718,32 @@ describe("GET/POST /api/logs", () => {
     ],
   });
 
+  // Fix round 1 (task review, finding 4): a LITERAL, frozen copy of the
+  // pre-this-task body shape — deliberately NOT derived from
+  // `validLogBody()` above. `validLogBody()` is a live fixture other
+  // tests are free to extend (e.g. a future task adding its own optional
+  // key to it); if the exit-criterion-2 pin below read through that
+  // fixture, a later addition to `validLogBody()` would silently carry
+  // the new key into "the v0.11.0 shape" test and the pin would stop
+  // proving what its name says. `Object.freeze` makes an accidental
+  // mutation here throw in strict mode rather than silently drift too.
+  const V0_11_0_LOG_BODY = Object.freeze({
+    workoutId: null,
+    workoutTitle: "Steady State",
+    workoutType: "AT",
+    held: "held",
+    pain: 2,
+    notes: null,
+    steps: [
+      {
+        label: "Work",
+        targetSplit: 120,
+        actualSplit: 121,
+        actualSource: "stopwatch",
+      },
+    ],
+  });
+
   it("GET starts empty", async () => {
     const res = await asA(request(appFor(makeStores())).get("/api/logs"));
     expect(res.status).toBe(200);
@@ -876,7 +902,9 @@ describe("GET/POST /api/logs", () => {
   // defaults — additive-only between tags.
   it("POST in the exact v0.11.0 body shape (no hero keys) still 201s and stores null-null-null (exit criterion 2)", async () => {
     const app = appFor(makeStores());
-    const res = await asA(request(app).post("/api/logs")).send(validLogBody());
+    const res = await asA(request(app).post("/api/logs")).send(
+      V0_11_0_LOG_BODY,
+    );
     expect(res.status).toBe(201);
 
     const list = await asA(request(app).get("/api/logs"));
@@ -889,10 +917,15 @@ describe("GET/POST /api/logs", () => {
   });
 
   // From-the-log spec (2026-08-18), §2: the model's numbers round-trip
-  // through the API exactly, including a value that would truncate under
-  // a `real` column (the B8 probe value) — the API-level companion to
-  // storeContracts.ts's store-level B8 assertion.
-  it("accepts the three hero numbers and reads them back exactly, including the B8 probe value", async () => {
+  // through the API and the route's own validation exactly, using the B8
+  // probe value as the payload. Fix round 1 (task review, finding 5):
+  // this file runs against the in-memory fake (the `unit` project), so
+  // this proves the route's parsing/validation/response-shaping doesn't
+  // mangle the value — a JS-number pass-through claim, NOT that a real
+  // `double precision` column survives it. That storage-level claim is
+  // storeContracts.ts's "B8 probe" case, which runs against real
+  // Postgres via contracts.real.integration.test.ts.
+  it("the route accepts the B8 probe value and passes it through unmangled (fake store — proves parsing, not storage)", async () => {
     const app = appFor(makeStores());
     const res = await asA(request(app).post("/api/logs")).send({
       ...validLogBody(),
@@ -1428,6 +1461,39 @@ describe("GET/POST /api/logs", () => {
       expect(
         list.body.find((r: { id: string }) => r.id === second.body.id),
       ).toMatchObject({ planKey: "head", planIndex: 1 });
+    });
+
+    // Fix round 1 (task review, finding 1 — MEDIUM): spec §2's "never
+    // client input" invariant, given a red-provable witness. Today the
+    // route is safe only because it enumerates fields onto `LogInput`
+    // one at a time (`workoutTitle: body.workoutTitle`, etc.) rather than
+    // spreading `...body` — nothing currently reads `body.planKey` or
+    // `body.planIndex` at all. That's an accident of the route's current
+    // shape, not a proven invariant: a later refactor toward `...body`
+    // (plausible — every other field here is a straight passthrough)
+    // would silently start accepting client-controlled linkage with
+    // every existing test still green, because no existing test posts
+    // these two keys. This test closes that gap: even with
+    // `advancesPlan: false` (so the store-level guard can't be the thing
+    // that zeroes them — see the self-mutation note in the report), a
+    // client that posts planKey/planIndex directly still gets null/null
+    // back, because the route never reads them onto `LogInput` in the
+    // first place.
+    it("ignores client-posted planKey/planIndex entirely — the linkage is never client input (spec §2)", async () => {
+      const app = appFor(makeStores());
+      const created = await asA(request(app).post("/api/logs")).send({
+        ...validLogBody(),
+        planKey: "sprint",
+        planIndex: 99,
+        advancesPlan: false,
+      });
+      expect(created.status).toBe(201);
+
+      const list = await asA(request(app).get("/api/logs"));
+      const row = list.body.find(
+        (r: { id: string }) => r.id === created.body.id,
+      );
+      expect(row).toMatchObject({ planKey: null, planIndex: null });
     });
   });
 

@@ -474,6 +474,17 @@ describe("migration 0010: hero numbers and plan linkage", () => {
   let pool: pg.Pool;
   let db: Db;
   let tempDir: string;
+  // Fix round 1 (task review, finding 2): both cases below now read
+  // state built ONCE in beforeAll, rather than the first `it()` mutating
+  // shared container state (seeding the legacy row, then applying the
+  // real 0010 migration) that the second `it()` silently depended on.
+  // Previously, running the second test alone (e.g. `vitest -t "accepts
+  // a NEW row"`) would still pass even if 0010 never applied, because
+  // nothing in that test's own body proved order — its green was only
+  // meaningful as a side effect of running after the first test. Hoisting
+  // both the seed and the full migrate into beforeAll makes each `it`
+  // independently runnable and independently meaningful.
+  let preMigrationRowId: string;
 
   const PRE_0010_TAGS = [
     "0000_skinny_silver_fox",
@@ -521,14 +532,7 @@ describe("migration 0010: hero numbers and plan linkage", () => {
       }),
     );
     await migrate(db, { migrationsFolder: tempDir });
-  });
 
-  afterAll(async () => {
-    await pool.end().catch(() => {});
-    await container.stop().catch(() => {});
-  });
-
-  it("reads a pre-0010 (v0.11.0) row's existing fields unchanged, and all five new columns as null, after 0010 applies", async () => {
     const [u] = await db
       .insert(users)
       .values({
@@ -544,26 +548,35 @@ describe("migration 0010: hero numbers and plan linkage", () => {
     // insert builder lists every column the TS schema declares, and the
     // TS schema here already declares all five new columns — against the
     // real pre-0010 table, that statement 500s with "column ... does not
-    // exist" before this insert even reaches the assertion this test
-    // exists to make.
+    // exist" before this insert even reaches the assertion the first
+    // test below exists to make. Must run BEFORE the full migrate() call
+    // right below, while the table still lacks the five new columns.
     const inserted = await db.execute<{ id: string }>(
       sql`insert into "session_logs"
           ("user_id", "workout_title", "workout_type", "held", "pain", "thumbs", "steps")
           values (${u.id}, 'Pre-migration session', 'AT', 'held', 2, null, '[]'::jsonb)
           returning "id"`,
     );
-    const row = inserted.rows[0]!;
+    preMigrationRowId = inserted.rows[0]!.id;
 
     // The real, full folder — the boot-time migrate() call that ships
     // 0010. Only 0010 is new (0000-0009's hashes already match what ran
     // against tempDir above), so this is the moment the five ADD COLUMN
-    // statements fire.
+    // statements fire. Runs once here, shared by every `it` below —
+    // neither test needs the other to have run first.
     await migrate(db, { migrationsFolder: "drizzle" });
+  });
 
+  afterAll(async () => {
+    await pool.end().catch(() => {});
+    await container.stop().catch(() => {});
+  });
+
+  it("reads a pre-0010 (v0.11.0) row's existing fields unchanged, and all five new columns as null, after 0010 applies", async () => {
     const [after] = await db
       .select()
       .from(sessionLogs)
-      .where(eq(sessionLogs.id, row.id));
+      .where(eq(sessionLogs.id, preMigrationRowId));
     expect(after.held).toBe("held");
     expect(after.pain).toBe(2);
     expect(after.avgSplitSeconds).toBeNull();
@@ -583,9 +596,9 @@ describe("migration 0010: hero numbers and plan linkage", () => {
       })
       .returning();
 
-    // migrate() above (previous test, same shared container) already
-    // applied 0010 — this insert exercises the new columns directly
-    // against the real table, not just through the API layer.
+    // beforeAll above already applied 0010 (shared container) — this
+    // insert exercises the new columns directly against the real table,
+    // not just through the API layer.
     const [row] = await db
       .insert(sessionLogs)
       .values({

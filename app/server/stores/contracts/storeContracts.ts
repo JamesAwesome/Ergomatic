@@ -601,32 +601,14 @@ export function describeStoreContracts(
         });
       });
 
+      // Fix round 1 (task review, finding 3): `logInput()`'s own base
+      // shape never sets avgSplitSeconds/timeSeconds/distanceMeters at all
+      // (see the fixture's definition above) — the v0.11.0 body shape IS
+      // `logInput()` with no overrides, so this needs no deletes.
       it("create with no hero numbers posted stores all three null (v0.11.0 body shape)", async () => {
         const stores = await makeStores();
         const userId = await stores.makeUser();
-        const overrides = logInput();
-        delete (
-          overrides as {
-            avgSplitSeconds?: unknown;
-            timeSeconds?: unknown;
-            distanceMeters?: unknown;
-          }
-        ).avgSplitSeconds;
-        delete (
-          overrides as {
-            avgSplitSeconds?: unknown;
-            timeSeconds?: unknown;
-            distanceMeters?: unknown;
-          }
-        ).timeSeconds;
-        delete (
-          overrides as {
-            avgSplitSeconds?: unknown;
-            timeSeconds?: unknown;
-            distanceMeters?: unknown;
-          }
-        ).distanceMeters;
-        const { id } = await stores.logs.create(userId, overrides);
+        const { id } = await stores.logs.create(userId, logInput());
         const list = await stores.logs.list(userId, 10);
         const row = list.find((r) => r.id === id);
         expect(row).toMatchObject({
