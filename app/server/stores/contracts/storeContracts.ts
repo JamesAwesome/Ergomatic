@@ -1040,6 +1040,47 @@ export function describeStoreContracts(
           expect(planStateRow!.doneN).toBeGreaterThanOrEqual(0);
         });
 
+        // Task review H1: the case above doesn't isolate condition 1 —
+        // after the Switch, head's doneN is 0, so condition 2's term
+        // (`done_n = 0 + 1`) already declines before the key mismatch
+        // ever matters. This fixture makes condition 2 PASS (the sprint
+        // log's index 0 equals head's doneN-1) so ONLY the plan_key
+        // mismatch protects the counter: a sprint-linked log surviving
+        // into a HEAD advancing save (which makes head's doneN 1, the
+        // same terminal position the sprint log's own index sits at)
+        // must never un-count head's session just because the numbers
+        // line up.
+        it("wrong plan key with condition 2 otherwise satisfied: only the key mismatch protects the counter", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          await stores.planState.set(userId, "sprint");
+          const sprintLog = await stores.logs.create(userId, logInput());
+          expect(await stores.planState.get(userId)).toStrictEqual({
+            planKey: "sprint",
+            doneN: 1,
+          });
+
+          await stores.planState.set(userId, "head");
+          const headLog = await stores.logs.create(userId, logInput());
+          expect(await stores.planState.get(userId)).toStrictEqual({
+            planKey: "head",
+            doneN: 1,
+          });
+
+          // Condition 2 alone would now pass: sprintLog.planIndex (0)
+          // equals head's doneN - 1 (0). Only condition 1 (plan_key
+          // match) can still decline this delete.
+          const result = await stores.logs.delete(userId, sprintLog.id);
+          expect(result).toStrictEqual({ deleted: true, unCounted: false });
+
+          const planStateRow = await stores.planState.get(userId);
+          expect(planStateRow).toStrictEqual({ planKey: "head", doneN: 1 });
+          expect(planStateRow!.doneN).toBeGreaterThanOrEqual(0);
+
+          const headLinks = await stores.logs.listPlanLinks(userId, "head");
+          expect(headLinks).toStrictEqual([{ planIndex: 0, id: headLog.id }]);
+        });
+
         // NON-TERMINAL index — the B1 orphan fixture (antagonist, spec
         // §2 condition 2): two advancing saves, delete the FIRST (index
         // 0, non-terminal since the terminal index is now 1). The tick
