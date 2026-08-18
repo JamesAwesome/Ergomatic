@@ -5,7 +5,12 @@ import type { WorkoutInput, WorkoutType } from "../../domain/types.js";
 import { type Stores } from "../routes/data.js";
 import type { ArticleReadsStore } from "../stores/articleReads.js";
 import type { BaselinesRow, BaselinesStore } from "../stores/baselines.js";
-import type { LogInput, LogsStore } from "../stores/logs.js";
+import {
+  CursorNotFoundError,
+  type LogInput,
+  type LogPatch,
+  type LogsStore,
+} from "../stores/logs.js";
 import type {
   PlanKey,
   PlanStateRow,
@@ -300,6 +305,15 @@ function makeFakePlanStateStore(): FakePlanStateStore {
   } as unknown as FakePlanStateStore;
 }
 
+// From-the-log spec (2026-08-18), §3: a fake-only tiebreak counter for
+// `listPlanLinks`' newest-wins resolution (mirrors `loggedAt DESC` +
+// `id DESC` in spirit; the fake's `loggedAt` is a plain JS `Date`, which
+// two `new Date()` calls inside the same test can plausibly tie on down
+// to the millisecond, unlike real Postgres — see `workouts.ts`'s own
+// `insertionSeq` for the identical pattern already used in this file).
+// Never exposed on a stored row; strictly a same-process ordering aid.
+let logsInsertionSeq = 0;
+
 function makeFakeLogsStore(planState: FakePlanStateStore): LogsStore {
   const byUser = new Map<
     string,
@@ -309,12 +323,97 @@ function makeFakeLogsStore(planState: FakePlanStateStore): LogsStore {
         loggedAt: Date;
         planKey: string | null;
         planIndex: number | null;
+        seq: number;
       }
     >
   >();
   return {
-    async list(userId: string, limit: number) {
-      return (byUser.get(userId) ?? []).slice(0, limit);
+    // From-the-log spec (2026-08-18), §3: mirrors the real store's list()
+    // exactly — drops `steps` from the projection (zero client consumers;
+    // `GET /api/logs/:id` below still returns the full row), and
+    // cursor-paginates via `before`. `byUser`'s array is already
+    // newest-first (every `create()` unshifts), which is this fake's
+    // equivalent of `ORDER BY logged_at DESC, id DESC` — a `before` id's
+    // position in THIS user's own array marks the cursor; everything
+    // after it (older) is the next page. An id absent from this user's
+    // array (never existed, or belongs to someone else — `byUser` is
+    // already scoped per userId, so a foreign id can never be found here)
+    // throws `CursorNotFoundError`, matching the real store's explicit
+    // existence check.
+    async list(userId: string, limit: number, before?: string) {
+      const rows = byUser.get(userId) ?? [];
+      let source = rows;
+      if (before !== undefined) {
+        const idx = rows.findIndex((r) => r.id === before);
+        if (idx === -1) {
+          throw new CursorNotFoundError(before);
+        }
+        source = rows.slice(idx + 1);
+      }
+      return source
+        .slice(0, limit)
+        .map(({ steps: _steps, seq: _seq, ...rest }) => rest);
+    },
+    // From-the-log spec (2026-08-18), §3: full row (steps included),
+    // owner-scoped by construction — `byUser.get(userId)` can never see
+    // another user's rows at all, the same structural guarantee the real
+    // store's `WHERE user_id = $userId` gives.
+    async get(userId: string, id: string) {
+      const rows = byUser.get(userId) ?? [];
+      const found = rows.find((r) => r.id === id);
+      if (!found) return null;
+      const { seq: _seq, ...row } = found;
+      return row;
+    },
+    // From-the-log spec (2026-08-18), §3: mirrors the real store's `"key"
+    // in patch` presence check (LogPatch's own doc comment) — an absent
+    // key leaves the existing value untouched, present-and-null clears
+    // it. Owner-scoped the same way `get()` above is.
+    async update(userId: string, id: string, patch: LogPatch) {
+      const rows = byUser.get(userId) ?? [];
+      const idx = rows.findIndex((r) => r.id === id);
+      if (idx === -1) return null;
+      const existing = rows[idx];
+      const updated = { ...existing };
+      if ("thumbs" in patch) updated.thumbs = patch.thumbs ?? null;
+      if ("held" in patch) updated.held = patch.held ?? null;
+      if ("pain" in patch) updated.pain = patch.pain ?? null;
+      if ("notes" in patch) updated.notes = patch.notes ?? null;
+      rows[idx] = updated;
+      byUser.set(userId, rows);
+      const { seq: _seq, ...row } = updated;
+      return row;
+    },
+    // From-the-log spec (2026-08-18), §3: newest-wins per plan_index,
+    // mirroring the real store's `DISTINCT ON (plan_index) ... ORDER BY
+    // plan_index, logged_at DESC` — ties on `loggedAt` (a real
+    // possibility for this fake's plain `Date`, unlike real Postgres)
+    // resolve by `seq`, the fake's own insertion-order tiebreak.
+    async listPlanLinks(userId: string, planKey: string) {
+      const rows = byUser.get(userId) ?? [];
+      const byIndex = new Map<
+        number,
+        { id: string; loggedAt: Date; seq: number }
+      >();
+      for (const row of rows) {
+        if (row.planKey !== planKey || row.planIndex === null) continue;
+        const existing = byIndex.get(row.planIndex);
+        if (
+          !existing ||
+          row.loggedAt.getTime() > existing.loggedAt.getTime() ||
+          (row.loggedAt.getTime() === existing.loggedAt.getTime() &&
+            row.seq > existing.seq)
+        ) {
+          byIndex.set(row.planIndex, {
+            id: row.id,
+            loggedAt: row.loggedAt,
+            seq: row.seq,
+          });
+        }
+      }
+      return [...byIndex.entries()]
+        .map(([planIndex, v]) => ({ planIndex, id: v.id }))
+        .sort((a, b) => a.planIndex - b.planIndex);
     },
     async count(userId: string) {
       return (byUser.get(userId) ?? []).length;
@@ -368,6 +467,7 @@ function makeFakeLogsStore(planState: FakePlanStateStore): LogsStore {
         planIndex,
         id: crypto.randomUUID(),
         loggedAt: new Date(),
+        seq: (logsInsertionSeq += 1),
       };
       rows.unshift(row);
       byUser.set(userId, rows);

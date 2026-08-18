@@ -56,6 +56,13 @@ const asB = (req: request.Test) => req.set("Authorization", "Bearer token-b");
 // Well-formed but guaranteed-absent from any fake store's map.
 const NON_EXISTENT_UUID = "00000000-0000-0000-0000-000000000000";
 
+// From-the-log spec (2026-08-18), §3: `GET /api/logs` (the list) no longer
+// carries `steps` — tests that need to inspect a created log's steps fetch
+// the single row via `GET /api/logs/:id` instead (the from-the-log view's
+// own fetch, which still returns the full row).
+const getLogById = (app: express.Express, id: string) =>
+  asA(request(app).get(`/api/logs/${id}`));
+
 function validWorkoutBody(overrides: Partial<WorkoutInput> = {}): WorkoutInput {
   return {
     title: "Steady State",
@@ -106,6 +113,8 @@ describe("data router: auth guard", () => {
     ["post", "/api/workouts/bulk"],
     ["get", "/api/logs"],
     ["post", "/api/logs"],
+    ["get", "/api/logs/x"],
+    ["patch", "/api/logs/x"],
     ["get", "/api/plan"],
     ["put", "/api/plan"],
     ["get", "/api/prefs"],
@@ -1205,8 +1214,8 @@ describe("GET/POST /api/logs", () => {
       steps: [{ label: "0:30 @ ALL OUT" }],
     });
     expect(created.status).toBe(201);
-    const list = await asA(request(app).get("/api/logs"));
-    expect(list.body[0].steps[0]).toStrictEqual({ label: "0:30 @ ALL OUT" });
+    const fetched = await getLogById(app, created.body.id);
+    expect(fetched.body.steps[0]).toStrictEqual({ label: "0:30 @ ALL OUT" });
   });
 
   it("accepts a step with no targetSplit but a paired actual", async () => {
@@ -1216,8 +1225,8 @@ describe("GET/POST /api/logs", () => {
       steps: [{ label: "Effort", actualSplit: 140, actualSource: "assumed" }],
     });
     expect(created.status).toBe(201);
-    const list = await asA(request(app).get("/api/logs"));
-    expect(list.body[0].steps[0]).toStrictEqual({
+    const fetched = await getLogById(app, created.body.id);
+    expect(fetched.body.steps[0]).toStrictEqual({
       label: "Effort",
       actualSplit: 140,
       actualSource: "assumed",
@@ -1275,8 +1284,8 @@ describe("GET/POST /api/logs", () => {
       ],
     });
     expect(created.status).toBe(201);
-    const list = await asA(request(app).get("/api/logs"));
-    expect(list.body[0].steps[0]).toStrictEqual({
+    const fetched = await getLogById(app, created.body.id);
+    expect(fetched.body.steps[0]).toStrictEqual({
       label: "Work",
       targetSplit: 120,
       actualSplit: 120,
@@ -1524,8 +1533,8 @@ describe("GET/POST /api/logs", () => {
         ],
       });
       expect(created.status).toBe(201);
-      const list = await asA(request(app).get("/api/logs"));
-      expect(list.body[0].steps[0]).toStrictEqual({
+      const fetched = await getLogById(app, created.body.id);
+      expect(fetched.body.steps[0]).toStrictEqual({
         label: "Row 1",
         actualSplit: 145.5,
         actualSource: "pm5",
@@ -1606,8 +1615,8 @@ describe("GET/POST /api/logs", () => {
         ],
       });
       expect(created.status).toBe(201);
-      const list = await asA(request(app).get("/api/logs"));
-      expect(list.body[0].steps[0]).toStrictEqual({
+      const fetched = await getLogById(app, created.body.id);
+      expect(fetched.body.steps[0]).toStrictEqual({
         label: "Row 1",
         actualSource: "pm5",
         actualSeconds: 30,
@@ -1791,6 +1800,396 @@ describe("GET/POST /api/logs", () => {
       });
       expect(res.status).toBe(400);
       expect(res.body.field).toBe("deviceName");
+    });
+  });
+
+  // From-the-log spec (2026-08-18), §3: the list projection's ONE
+  // sanctioned field removal, legal against the additive-only rule
+  // because `RecentLog` (the response's only client reader,
+  // `src/api/useRecentLogs.ts`) never carried `steps` — grep-confirmed,
+  // pinned here as a runtime key check on the actual response.
+  describe("list projection drops steps (from-the-log spec, 2026-08-18)", () => {
+    it("GET /api/logs rows never carry a steps key", async () => {
+      const app = appFor(makeStores());
+      await asA(request(app).post("/api/logs")).send(validLogBody());
+      const list = await asA(request(app).get("/api/logs"));
+      expect(list.body).toHaveLength(1);
+      expect(list.body[0]).not.toHaveProperty("steps");
+    });
+
+    it("GET /api/logs/:id still returns the full row, steps included", async () => {
+      const app = appFor(makeStores());
+      const created = await asA(request(app).post("/api/logs")).send(
+        validLogBody(),
+      );
+      const fetched = await getLogById(app, created.body.id);
+      expect(fetched.body.steps).toStrictEqual(validLogBody().steps);
+    });
+  });
+
+  // From-the-log spec (2026-08-18), §3: cursor = the last row's id alone.
+  describe("GET /api/logs cursor pagination (?before=)", () => {
+    it("pages through the full list with no gaps or duplicates at limit=1", async () => {
+      const app = appFor(makeStores());
+      const a = await asA(request(app).post("/api/logs")).send(validLogBody());
+      const b = await asA(request(app).post("/api/logs")).send(validLogBody());
+      const c = await asA(request(app).post("/api/logs")).send(validLogBody());
+
+      const page1 = await asA(request(app).get("/api/logs?limit=1"));
+      expect(page1.body.map((r: { id: string }) => r.id)).toStrictEqual([
+        c.body.id,
+      ]);
+
+      const page2 = await asA(
+        request(app).get(`/api/logs?limit=1&before=${page1.body[0].id}`),
+      );
+      expect(page2.body.map((r: { id: string }) => r.id)).toStrictEqual([
+        b.body.id,
+      ]);
+
+      const page3 = await asA(
+        request(app).get(`/api/logs?limit=1&before=${page2.body[0].id}`),
+      );
+      expect(page3.body.map((r: { id: string }) => r.id)).toStrictEqual([
+        a.body.id,
+      ]);
+
+      const page4 = await asA(
+        request(app).get(`/api/logs?limit=1&before=${page3.body[0].id}`),
+      );
+      expect(page4.body).toStrictEqual([]);
+    });
+
+    it("rejects a malformed (non-uuid) before with 400, field named", async () => {
+      const res = await asA(
+        request(appFor(makeStores())).get("/api/logs?before=not-a-uuid"),
+      );
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe("before");
+    });
+
+    it("rejects a well-formed but absent before with 400, field named", async () => {
+      const res = await asA(
+        request(appFor(makeStores())).get(
+          `/api/logs?before=${NON_EXISTENT_UUID}`,
+        ),
+      );
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe("before");
+    });
+
+    it("rejects a foreign (another user's) before with 400, no existence leak", async () => {
+      const app = appFor(makeStores());
+      const created = await asA(request(app).post("/api/logs")).send(
+        validLogBody(),
+      );
+      const res = await asB(
+        request(app).get(`/api/logs?before=${created.body.id}`),
+      );
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe("before");
+    });
+
+    // The catch block's `instanceof CursorNotFoundError` check is a
+    // NARROW one (400, field-named) — anything else `stores.logs.list`
+    // might throw must NOT be swallowed as a false "bad cursor" 400. This
+    // is the one branch nothing else in this describe reaches: every
+    // other case's thrown error genuinely IS CursorNotFoundError.
+    it("rethrows a non-cursor error rather than mislabeling it a 400", async () => {
+      const stores = makeStores();
+      vi.spyOn(stores.logs, "list").mockRejectedValueOnce(
+        new Error("unexpected store failure"),
+      );
+      const res = await asA(request(appFor(stores)).get("/api/logs"));
+      expect(res.status).toBe(500);
+    });
+  });
+
+  // From-the-log spec (2026-08-18), §3: the from-the-log view's fetch.
+  describe("GET /api/logs/:id", () => {
+    it("returns the full row, steps included, for the owner", async () => {
+      const app = appFor(makeStores());
+      const created = await asA(request(app).post("/api/logs")).send(
+        validLogBody(),
+      );
+      const res = await getLogById(app, created.body.id);
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        id: created.body.id,
+        workoutTitle: "Steady State",
+      });
+      expect(res.body.steps).toStrictEqual(validLogBody().steps);
+    });
+
+    it("404s on a malformed (non-uuid) id", async () => {
+      const res = await asA(
+        request(appFor(makeStores())).get("/api/logs/not-a-uuid"),
+      );
+      expect(res.status).toBe(404);
+    });
+
+    it("404s on a well-formed but absent id (does not leak existence)", async () => {
+      const res = await asA(
+        request(appFor(makeStores())).get(`/api/logs/${NON_EXISTENT_UUID}`),
+      );
+      expect(res.status).toBe(404);
+    });
+
+    it("404s on another user's id (no existence leak either direction)", async () => {
+      const app = appFor(makeStores());
+      const created = await asA(request(app).post("/api/logs")).send(
+        validLogBody(),
+      );
+      const res = await asB(request(app).get(`/api/logs/${created.body.id}`));
+      expect(res.status).toBe(404);
+    });
+  });
+
+  // From-the-log spec (2026-08-18), §3: the API's first UPDATE.
+  describe("PATCH /api/logs/:id", () => {
+    it("updates only the given subset, leaving the rest alone", async () => {
+      const app = appFor(makeStores());
+      const created = await asA(request(app).post("/api/logs")).send({
+        ...validLogBody(),
+        held: "held",
+        pain: 2,
+        notes: "orig note",
+        thumbs: "up",
+      });
+
+      const res = await asA(
+        request(app).patch(`/api/logs/${created.body.id}`),
+      ).send({ pain: 4 });
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        held: "held",
+        pain: 4,
+        notes: "orig note",
+        thumbs: "up",
+      });
+
+      const fetched = await getLogById(app, created.body.id);
+      expect(fetched.body).toMatchObject({
+        held: "held",
+        pain: 4,
+        notes: "orig note",
+        thumbs: "up",
+      });
+    });
+
+    it.each([
+      ["held", "held"],
+      ["pain", 3],
+      ["thumbs", "up"],
+      ["notes", "some note"],
+    ])(
+      "an explicit null clears %s previously set to a real value",
+      async (field, value) => {
+        const app = appFor(makeStores());
+        const created = await asA(request(app).post("/api/logs")).send({
+          ...validLogBody(),
+          [field]: value,
+        });
+
+        const res = await asA(
+          request(app).patch(`/api/logs/${created.body.id}`),
+        ).send({ [field]: null });
+        expect(res.status).toBe(200);
+        expect(res.body[field]).toBeNull();
+      },
+    );
+
+    it("an absent key leaves that field untouched", async () => {
+      const app = appFor(makeStores());
+      const created = await asA(request(app).post("/api/logs")).send({
+        ...validLogBody(),
+        held: "held",
+        pain: 2,
+        notes: "keep me",
+        thumbs: "down",
+      });
+
+      const res = await asA(
+        request(app).patch(`/api/logs/${created.body.id}`),
+      ).send({ notes: "changed" });
+      expect(res.status).toBe(200);
+      // held/pain/thumbs were never named in the PATCH body — untouched.
+      expect(res.body).toMatchObject({
+        held: "held",
+        pain: 2,
+        thumbs: "down",
+        notes: "changed",
+      });
+    });
+
+    // Plan bullet's own example: an unknown key alongside a bogus attempt
+    // to rewrite the immutable `steps` — both silently ignored, 200, row
+    // unchanged except whatever recognized keys (none, here) were sent.
+    it("ignores unknown keys, including an attempt to rewrite steps, and 200s with the row unchanged", async () => {
+      const app = appFor(makeStores());
+      const created = await asA(request(app).post("/api/logs")).send(
+        validLogBody(),
+      );
+
+      const res = await asA(
+        request(app).patch(`/api/logs/${created.body.id}`),
+      ).send({ steps: [{ label: "Hijacked" }], banana: 1 });
+      expect(res.status).toBe(200);
+      expect(res.body.steps).toStrictEqual(validLogBody().steps);
+      expect(res.body).not.toHaveProperty("banana");
+    });
+
+    it("an empty body is a 200 no-op read", async () => {
+      const app = appFor(makeStores());
+      const created = await asA(request(app).post("/api/logs")).send({
+        ...validLogBody(),
+        notes: "unchanged",
+      });
+
+      const res = await asA(
+        request(app).patch(`/api/logs/${created.body.id}`),
+      ).send({});
+      expect(res.status).toBe(200);
+      expect(res.body.notes).toBe("unchanged");
+    });
+
+    // The no-op-read branch (empty body / unknown-keys-only) is still
+    // owner-checked: it reads via `stores.logs.get`, not `update`, so it
+    // needs its OWN 404 coverage distinct from the non-empty-patch 404
+    // cases below (which exercise `stores.logs.update`'s null return
+    // instead).
+    it("an empty body still 404s on a well-formed but absent id", async () => {
+      const res = await asA(
+        request(appFor(makeStores())).patch(`/api/logs/${NON_EXISTENT_UUID}`),
+      ).send({});
+      expect(res.status).toBe(404);
+    });
+
+    it("an empty body still 404s on another user's id", async () => {
+      const app = appFor(makeStores());
+      const created = await asA(request(app).post("/api/logs")).send(
+        validLogBody(),
+      );
+      const res = await asB(
+        request(app).patch(`/api/logs/${created.body.id}`),
+      ).send({});
+      expect(res.status).toBe(404);
+    });
+
+    // Value validation reuses POST's validators by import — same field,
+    // same exact message, one copy.
+    it.each([
+      ["held", "sideways", "held must be one of held|under|over or null"],
+      ["pain", 99, "pain must be an integer 1..5 or null"],
+      ["thumbs", "left", "thumbs must be one of up|down or null"],
+      ["notes", 12345, "notes must be a string or null"],
+    ])(
+      "rejects a bad %s value with 400, POST's exact message",
+      async (field, value, message) => {
+        const app = appFor(makeStores());
+        const created = await asA(request(app).post("/api/logs")).send(
+          validLogBody(),
+        );
+
+        const postRes = await asA(request(app).post("/api/logs")).send({
+          ...validLogBody(),
+          [field]: value,
+        });
+        expect(postRes.status).toBe(400);
+        expect(postRes.body.error).toBe(message);
+
+        const patchRes = await asA(
+          request(app).patch(`/api/logs/${created.body.id}`),
+        ).send({ [field]: value });
+        expect(patchRes.status).toBe(400);
+        expect(patchRes.body.field).toBe(field);
+        expect(patchRes.body.error).toBe(message);
+        expect(patchRes.body.error).toBe(postRes.body.error);
+      },
+    );
+
+    it("404s on a malformed (non-uuid) id", async () => {
+      const res = await asA(
+        request(appFor(makeStores())).patch("/api/logs/not-a-uuid"),
+      ).send({ pain: 3 });
+      expect(res.status).toBe(404);
+    });
+
+    it("404s on a well-formed but absent id", async () => {
+      const res = await asA(
+        request(appFor(makeStores())).patch(`/api/logs/${NON_EXISTENT_UUID}`),
+      ).send({ pain: 3 });
+      expect(res.status).toBe(404);
+    });
+
+    it("404s on another user's id and never touches that row", async () => {
+      const app = appFor(makeStores());
+      const created = await asA(request(app).post("/api/logs")).send({
+        ...validLogBody(),
+        notes: "A's note",
+      });
+
+      const res = await asB(
+        request(app).patch(`/api/logs/${created.body.id}`),
+      ).send({ notes: "hijacked" });
+      expect(res.status).toBe(404);
+
+      const fetched = await getLogById(app, created.body.id);
+      expect(fetched.body.notes).toBe("A's note");
+    });
+  });
+
+  // From-the-log spec (2026-08-18), §2/§3: Plan's done-row link.
+  describe("GET /api/logs?plan=", () => {
+    it("returns the linked log id per plan index", async () => {
+      const app = appFor(makeStores());
+      await asA(request(app).put("/api/plan")).send({ planKey: "sprint" });
+      const created = await asA(request(app).post("/api/logs")).send(
+        validLogBody(),
+      );
+
+      const res = await asA(request(app).get("/api/logs?plan=sprint"));
+      expect(res.status).toBe(200);
+      expect(res.body).toStrictEqual({
+        links: [{ planIndex: 0, id: created.body.id }],
+      });
+    });
+
+    it("rejects an invalid plan key with 400, field named", async () => {
+      const res = await asA(
+        request(appFor(makeStores())).get("/api/logs?plan=marathon"),
+      );
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe("plan");
+    });
+
+    // The reset collision (spec §2): after a reset, the next advancing
+    // save stamps index 0 again — the read side must resolve newest-wins,
+    // not the first (now stale) row at that index.
+    it("resolves a reset collision newest-wins: the later log wins its index", async () => {
+      const app = appFor(makeStores());
+      await asA(request(app).put("/api/plan")).send({ planKey: "sprint" });
+      await asA(request(app).post("/api/logs")).send(validLogBody());
+
+      await asA(request(app).put("/api/plan")).send({ reset: true });
+      const second = await asA(request(app).post("/api/logs")).send(
+        validLogBody(),
+      );
+
+      const res = await asA(request(app).get("/api/logs?plan=sprint"));
+      expect(res.body).toStrictEqual({
+        links: [{ planIndex: 0, id: second.body.id }],
+      });
+    });
+
+    it("is scoped per user", async () => {
+      const app = appFor(makeStores());
+      await asA(request(app).put("/api/plan")).send({ planKey: "sprint" });
+      await asA(request(app).post("/api/logs")).send(validLogBody());
+
+      const res = await asB(request(app).get("/api/logs?plan=sprint"));
+      expect(res.status).toBe(200);
+      expect(res.body).toStrictEqual({ links: [] });
     });
   });
 });

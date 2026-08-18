@@ -110,15 +110,16 @@ describe("POST/GET /api/logs: optional targetSplit and paired actuals round-trip
       });
     expect(created.status).toBe(201);
 
-    const list = await request(app)
-      .get("/api/logs")
+    // From-the-log spec (2026-08-18), §3: `GET /api/logs` (the list) no
+    // longer carries `steps` (zero client consumers) — `GET /api/logs/:id`
+    // is where the full row, steps included, is read back now.
+    const log = await request(app)
+      .get(`/api/logs/${created.body.id}`)
       .set("Authorization", bearer);
-    expect(list.status).toBe(200);
-    const log = list.body.find((l: { id: string }) => l.id === created.body.id);
-    expect(log).toBeDefined();
+    expect(log.status).toBe(200);
     // toStrictEqual (not toMatchObject): proves no extra keys leaked in
     // (e.g. a `targetSplit: null` placeholder jsonb round trip could have
     // introduced) and none of the intended keys were dropped.
-    expect(log.steps).toStrictEqual(steps);
+    expect(log.body.steps).toStrictEqual(steps);
   });
 });

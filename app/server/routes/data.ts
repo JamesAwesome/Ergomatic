@@ -9,12 +9,14 @@ import type { Baselines, Difficulty, Step } from "../../domain/types.js";
 import { validateWorkoutInput } from "../../domain/validate.js";
 import type { ArticleReadsStore } from "../stores/articleReads.js";
 import type { BaselinesStore } from "../stores/baselines.js";
-import type {
-  ActualSource,
-  HeldResult,
-  LogsStore,
-  LogStep,
-  Thumbs,
+import {
+  CursorNotFoundError,
+  type ActualSource,
+  type HeldResult,
+  type LogPatch,
+  type LogsStore,
+  type LogStep,
+  type Thumbs,
 } from "../stores/logs.js";
 import type { PlanKey, PlanStateStore } from "../stores/planState.js";
 import type {
@@ -133,6 +135,59 @@ function starterReadonly(res: Parameters<RequestHandler>[1]) {
 
 function isRec(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null;
+}
+
+// From-the-log spec (2026-08-18), §3: each returns an error MESSAGE (or
+// null when the value is acceptable) instead of writing the response
+// directly, so `POST /api/logs` and `PATCH /api/logs/:id` share exactly
+// ONE copy of each field's validation rule ("value validation reuses
+// POST's validators by IMPORT" — both routes below call these, neither
+// re-implements them). Each mirrors what used to be POST's own inline
+// check verbatim: undefined and null are both acceptable (POST always
+// treated an absent/explicit-null reflection field as "not answered");
+// anything else must be a genuine member/shape, or it's rejected with the
+// exact same message POST has always returned.
+function heldError(value: unknown): string | null {
+  if (
+    value !== undefined &&
+    value !== null &&
+    !HELD_RESULTS.includes(value as HeldResult)
+  ) {
+    return "held must be one of held|under|over or null";
+  }
+  return null;
+}
+
+function painError(value: unknown): string | null {
+  if (
+    value !== undefined &&
+    value !== null &&
+    (typeof value !== "number" ||
+      !Number.isInteger(value) ||
+      value < 1 ||
+      value > 5)
+  ) {
+    return "pain must be an integer 1..5 or null";
+  }
+  return null;
+}
+
+function thumbsError(value: unknown): string | null {
+  if (
+    value !== undefined &&
+    value !== null &&
+    !THUMBS_VALUES.includes(value as Thumbs)
+  ) {
+    return "thumbs must be one of up|down or null";
+  }
+  return null;
+}
+
+function notesError(value: unknown): string | null {
+  if (value !== null && value !== undefined && typeof value !== "string") {
+    return "notes must be a string or null";
+  }
+  return null;
 }
 
 // Bounds for a logged step: 30-600s/500m spans "sprinting" to "recovery
@@ -562,13 +617,153 @@ export function createDataRouter({
 
   // -- logs ---------------------------------------------------------------
 
+  // From-the-log spec (2026-08-18), §3: the `?plan=` variant is an ADDITION
+  // to this existing route, not a new one — Plan's done-row link resolves
+  // from `GET /api/logs?plan=<key>` returning `{ links: [...] }`, newest-
+  // wins per index (see `stores/logs.ts`'s `listPlanLinks`). It short-
+  // circuits before the ordinary cursor-list branch below: the two shapes
+  // ({links:[...]} vs. a plain row array) are mutually exclusive per
+  // request, distinguished by whether `plan` was sent at all.
   router.get("/api/logs", async (req, res) => {
+    if (req.query.plan !== undefined) {
+      if (
+        typeof req.query.plan !== "string" ||
+        !PLAN_KEYS.includes(req.query.plan as PlanKey)
+      ) {
+        badRequest(res, "plan must be one of sprint|head", "plan");
+        return;
+      }
+      const links = await stores.logs.listPlanLinks(
+        req.user!.id,
+        req.query.plan,
+      );
+      res.json({ links });
+      return;
+    }
+
     const rawLimit = Number(req.query.limit);
     const limit =
       Number.isFinite(rawLimit) && rawLimit > 0
         ? Math.min(100, Math.floor(rawLimit))
         : 20;
-    res.json(await stores.logs.list(req.user!.id, limit));
+
+    // Cursor = the last row's id alone, resolved entirely in SQL (spec
+    // §3) — the route never touches a timestamp here, only validates the
+    // id's SHAPE. "Unknown/foreign before id" (well-formed but doesn't
+    // resolve to one of this caller's own rows) is a 400, not a silent
+    // empty page: `stores.logs.list` throws `CursorNotFoundError` for
+    // exactly that case.
+    let before: string | undefined;
+    if (req.query.before !== undefined) {
+      if (
+        typeof req.query.before !== "string" ||
+        !UUID_RE.test(req.query.before)
+      ) {
+        badRequest(res, "before must be a valid id", "before");
+        return;
+      }
+      before = req.query.before;
+    }
+
+    try {
+      res.json(await stores.logs.list(req.user!.id, limit, before));
+    } catch (err) {
+      if (err instanceof CursorNotFoundError) {
+        badRequest(res, "before does not reference an existing log", "before");
+        return;
+      }
+      throw err;
+    }
+  });
+
+  // The from-the-log view's fetch (spec §3): full row, steps included.
+  // Owner-checked and 404 on BOTH absence and another user's id — the
+  // store's own `WHERE user_id = $userId` predicate makes the two cases
+  // structurally indistinguishable, so there's no existence leak to guard
+  // separately. Malformed (non-uuid) ids 404 the same way `/api/workouts/
+  // :id` does, before ever reaching the store (a real Postgres 22P02
+  // dressed up as a 500 otherwise).
+  router.get("/api/logs/:id", async (req, res) => {
+    if (!UUID_RE.test(req.params.id)) {
+      notFound(res);
+      return;
+    }
+    const row = await stores.logs.get(req.user!.id, req.params.id);
+    if (!row) {
+      notFound(res);
+      return;
+    }
+    res.json(row);
+  });
+
+  // The API's first UPDATE (spec §3). Every key is independently
+  // optional; presence is read with `in` (the `PUT /api/prefs` warmup
+  // precedent) so a key that's ABSENT never touches its column, while a
+  // key that's PRESENT-and-null clears it. Unknown keys (anything other
+  // than thumbs/held/pain/notes) are silently ignored, matching POST and
+  // `PUT /api/prefs` — a 400 on an unknown key would give this API two
+  // personalities and break additive-only in the new-client/old-server
+  // direction (spec §3, antagonist B6). An empty accepted-key set (an
+  // empty body, or a body carrying only unknown keys) is therefore a
+  // no-op READ, exactly like `PUT /api/prefs`'s own empty-patch guard —
+  // `stores.logs.update` is never called with an empty patch object.
+  router.patch("/api/logs/:id", async (req, res) => {
+    if (!UUID_RE.test(req.params.id)) {
+      notFound(res);
+      return;
+    }
+    const body = isRec(req.body) ? req.body : {};
+    const patch: LogPatch = {};
+
+    if ("held" in body) {
+      const err = heldError(body.held);
+      if (err) {
+        badRequest(res, err, "held");
+        return;
+      }
+      patch.held = (body.held as HeldResult | null) ?? null;
+    }
+    if ("pain" in body) {
+      const err = painError(body.pain);
+      if (err) {
+        badRequest(res, err, "pain");
+        return;
+      }
+      patch.pain = (body.pain as number | null) ?? null;
+    }
+    if ("thumbs" in body) {
+      const err = thumbsError(body.thumbs);
+      if (err) {
+        badRequest(res, err, "thumbs");
+        return;
+      }
+      patch.thumbs = (body.thumbs as Thumbs | null) ?? null;
+    }
+    if ("notes" in body) {
+      const err = notesError(body.notes);
+      if (err) {
+        badRequest(res, err, "notes");
+        return;
+      }
+      patch.notes = (body.notes as string | null) ?? null;
+    }
+
+    if (Object.keys(patch).length === 0) {
+      const row = await stores.logs.get(req.user!.id, req.params.id);
+      if (!row) {
+        notFound(res);
+        return;
+      }
+      res.json(row);
+      return;
+    }
+
+    const row = await stores.logs.update(req.user!.id, req.params.id, patch);
+    if (!row) {
+      notFound(res);
+      return;
+    }
+    res.json(row);
   });
 
   router.post("/api/logs", async (req, res) => {
@@ -608,39 +803,24 @@ export function createDataRouter({
     // 400 with the field named on a bad value. This is additive-compatible:
     // the old shape (held+pain always present) still validates identically,
     // so a v0.10.0/v0.10.1 client keeps working unchanged.
-    if (
-      body.held !== undefined &&
-      body.held !== null &&
-      !HELD_RESULTS.includes(body.held as HeldResult)
-    ) {
-      badRequest(res, "held must be one of held|under|over or null", "held");
+    const heldErr = heldError(body.held);
+    if (heldErr) {
+      badRequest(res, heldErr, "held");
       return;
     }
-    if (
-      body.pain !== undefined &&
-      body.pain !== null &&
-      (typeof body.pain !== "number" ||
-        !Number.isInteger(body.pain) ||
-        body.pain < 1 ||
-        body.pain > 5)
-    ) {
-      badRequest(res, "pain must be an integer 1..5 or null", "pain");
+    const painErr = painError(body.pain);
+    if (painErr) {
+      badRequest(res, painErr, "pain");
       return;
     }
-    if (
-      body.thumbs !== undefined &&
-      body.thumbs !== null &&
-      !THUMBS_VALUES.includes(body.thumbs as Thumbs)
-    ) {
-      badRequest(res, "thumbs must be one of up|down or null", "thumbs");
+    const thumbsErr = thumbsError(body.thumbs);
+    if (thumbsErr) {
+      badRequest(res, thumbsErr, "thumbs");
       return;
     }
-    if (
-      body.notes !== null &&
-      body.notes !== undefined &&
-      typeof body.notes !== "string"
-    ) {
-      badRequest(res, "notes must be a string or null", "notes");
+    const notesErr = notesError(body.notes);
+    if (notesErr) {
+      badRequest(res, notesErr, "notes");
       return;
     }
     // Task 3 (outside-plan logging): optional, defaults to true below (the

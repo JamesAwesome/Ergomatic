@@ -17,6 +17,10 @@ import type { NewWorkoutInput, WorkoutsStore } from "../workouts.js";
 // the fakes mirror that truth).
 // ---------------------------------------------------------------------------
 
+// Well-formed but guaranteed-absent from any backend (real Postgres or the
+// in-memory fake) a fresh `makeStores()` call produces.
+const NON_EXISTENT_UUID = "00000000-0000-0000-0000-000000000000";
+
 export interface SeededGlobalWorkout {
   id: string;
   sortOrder: number | null;
@@ -677,6 +681,217 @@ export function describeStoreContracts(
             planKey: "head",
             planIndex: 1,
           });
+        });
+      });
+
+      // From-the-log spec (2026-08-18), §3: the list projection explicitly
+      // drops `steps` (zero client consumers — `RecentLog`, the response's
+      // only reader, never carried it), while `get()` (the from-the-log
+      // view's own fetch) keeps the full row.
+      describe("list projection", () => {
+        it("list rows never include steps", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          await stores.logs.create(
+            userId,
+            logInput({ steps: [{ label: "Work", targetSplit: 120 }] }),
+          );
+          const list = await stores.logs.list(userId, 10);
+          expect(list[0]).not.toHaveProperty("steps");
+        });
+
+        it("get still returns the full row, steps included", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          const { id } = await stores.logs.create(
+            userId,
+            logInput({ steps: [{ label: "Work", targetSplit: 120 }] }),
+          );
+          const row = await stores.logs.get(userId, id);
+          expect(row).toMatchObject({
+            steps: [{ label: "Work", targetSplit: 120 }],
+          });
+        });
+      });
+
+      // From-the-log spec (2026-08-18), §3: cursor = the last row's id
+      // alone. The same-millisecond microsecond-tiebreak trap (exit
+      // criterion 9) can only be proved against REAL Postgres (a JS Date
+      // can't mint two rows a genuine microsecond apart) — see that case
+      // in `contracts.real.integration.test.ts`. These cases prove the
+      // ordinary, backend-agnostic cursor contract both stores share.
+      describe("cursor pagination", () => {
+        it("before paginates forward through the full list with no gaps or duplicates", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          const a = await stores.logs.create(userId, logInput());
+          const b = await stores.logs.create(userId, logInput());
+          const c = await stores.logs.create(userId, logInput());
+
+          const page1 = await stores.logs.list(userId, 1);
+          expect(page1.map((r) => r.id)).toStrictEqual([c.id]);
+
+          const page2 = await stores.logs.list(userId, 1, page1[0].id);
+          expect(page2.map((r) => r.id)).toStrictEqual([b.id]);
+
+          const page3 = await stores.logs.list(userId, 1, page2[0].id);
+          expect(page3.map((r) => r.id)).toStrictEqual([a.id]);
+
+          const page4 = await stores.logs.list(userId, 1, page3[0].id);
+          expect(page4).toStrictEqual([]);
+        });
+
+        it("before referencing an id that does not exist throws", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          await stores.logs.create(userId, logInput());
+          await expect(
+            stores.logs.list(userId, 10, NON_EXISTENT_UUID),
+          ).rejects.toThrow();
+        });
+
+        // Owner-scoping applies to the cursor id itself, not just the rows
+        // it would return: a foreign id must throw exactly like an absent
+        // one, never leak "yes, that id exists (just not to you)".
+        it("before referencing another user's id throws, not a silent empty page", async () => {
+          const stores = await makeStores();
+          const userA = await stores.makeUser();
+          const userB = await stores.makeUser();
+          const { id } = await stores.logs.create(userA, logInput());
+          await stores.logs.create(userB, logInput());
+          await expect(stores.logs.list(userB, 10, id)).rejects.toThrow();
+        });
+      });
+
+      // From-the-log spec (2026-08-18), §3: the from-the-log view's fetch —
+      // owner-checked, full row.
+      describe("get", () => {
+        it("returns the full row for the owner", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          const { id } = await stores.logs.create(
+            userId,
+            logInput({ notes: "hello" }),
+          );
+          expect(await stores.logs.get(userId, id)).toMatchObject({
+            id,
+            notes: "hello",
+          });
+        });
+
+        it("returns null for an absent id", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          expect(await stores.logs.get(userId, NON_EXISTENT_UUID)).toBeNull();
+        });
+
+        it("returns null for another user's id (no existence leak)", async () => {
+          const stores = await makeStores();
+          const userA = await stores.makeUser();
+          const userB = await stores.makeUser();
+          const { id } = await stores.logs.create(userA, logInput());
+          expect(await stores.logs.get(userB, id)).toBeNull();
+        });
+      });
+
+      // From-the-log spec (2026-08-18), §3: the API's first UPDATE.
+      describe("update", () => {
+        it("updates only the given subset, leaving the rest alone", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          const { id } = await stores.logs.create(
+            userId,
+            logInput({
+              held: "held",
+              pain: 2,
+              notes: "orig",
+              thumbs: "up",
+            }),
+          );
+          const updated = await stores.logs.update(userId, id, { pain: 4 });
+          expect(updated).toMatchObject({
+            held: "held",
+            pain: 4,
+            notes: "orig",
+            thumbs: "up",
+          });
+        });
+
+        it("an explicit null clears a field", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          const { id } = await stores.logs.create(
+            userId,
+            logInput({ notes: "orig" }),
+          );
+          const updated = await stores.logs.update(userId, id, {
+            notes: null,
+          });
+          expect(updated).toMatchObject({ notes: null });
+        });
+
+        it("returns null for an absent id", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          expect(
+            await stores.logs.update(userId, NON_EXISTENT_UUID, { pain: 3 }),
+          ).toBeNull();
+        });
+
+        it("returns null for another user's id, and never touches that row", async () => {
+          const stores = await makeStores();
+          const userA = await stores.makeUser();
+          const userB = await stores.makeUser();
+          const { id } = await stores.logs.create(
+            userA,
+            logInput({ notes: "A's note" }),
+          );
+          expect(
+            await stores.logs.update(userB, id, { notes: "hijacked" }),
+          ).toBeNull();
+          expect(await stores.logs.get(userA, id)).toMatchObject({
+            notes: "A's note",
+          });
+        });
+      });
+
+      // From-the-log spec (2026-08-18), §2/§3: Plan's done-row link and
+      // the `?plan=` route variant, newest-wins per index.
+      describe("listPlanLinks", () => {
+        it("returns the linked log id per plan index", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          await stores.planState.set(userId, "sprint");
+          const first = await stores.logs.create(userId, logInput());
+
+          const links = await stores.logs.listPlanLinks(userId, "sprint");
+          expect(links).toStrictEqual([{ planIndex: 0, id: first.id }]);
+        });
+
+        // The reset collision (spec §2, antagonist B5): after a reset, the
+        // next advancing save stamps index 0 again — the OLDER row at that
+        // index must not win.
+        it("a reset collision resolves newest-wins: the later loggedAt row wins the index", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          await stores.planState.set(userId, "sprint");
+          await stores.logs.create(userId, logInput());
+          await stores.planState.reset(userId);
+          const second = await stores.logs.create(userId, logInput());
+
+          const links = await stores.logs.listPlanLinks(userId, "sprint");
+          expect(links).toStrictEqual([{ planIndex: 0, id: second.id }]);
+        });
+
+        it("is scoped per user", async () => {
+          const stores = await makeStores();
+          const userA = await stores.makeUser();
+          const userB = await stores.makeUser();
+          await stores.planState.set(userA, "sprint");
+          await stores.logs.create(userA, logInput());
+          expect(
+            await stores.logs.listPlanLinks(userB, "sprint"),
+          ).toStrictEqual([]);
         });
       });
     });
