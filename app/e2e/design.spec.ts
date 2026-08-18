@@ -5923,6 +5923,57 @@ test.describe("connected screens (fake-driven)", () => {
       expect(tag.text).toBe("6K +4");
     });
 
+    // connected-metrics design spec, Task 5 (exit criterion 5's own
+    // computed-style requirement) — the AVG cell Task 4 added inside
+    // `.connected-hero-target` (a third flex child beside TGT's value +
+    // ref, task-4-report.md's own e2e-impact map naming this exact
+    // overlap risk; the "rows never overlap" test below still passes
+    // real-browser, this test is the geometry itself). `connected-pane-
+    // live.html` now carries a genuine non-zero AVG (Task 5's own fixture
+    // edit) — before that this cell rendered nothing in every committed
+    // fixture and no computed-style pin could exist for it.
+    test("target row's third cell: AVG label 15px ink-3, value 34px ink (unjudged while rowing)", async ({
+      page,
+    }) => {
+      await loadConnectedFixture(page, "connected-pane-live");
+      const label = await page
+        .locator(".connected-hero-avg-label")
+        .evaluate((el) => ({
+          fontSize: getComputedStyle(el).fontSize,
+          color: getComputedStyle(el).color,
+          text: el.textContent,
+        }));
+      expect(label.fontSize).toBe("15px");
+      expect(label.color).toBe(INK_3_RGB);
+      expect(label.text).toBe("AVG");
+
+      const value = await judgedColor(page, ".connected-hero-avg-value");
+      const valueFontSize = await page
+        .locator(".connected-hero-avg-value")
+        .evaluate((el) => getComputedStyle(el).fontSize);
+      expect(valueFontSize).toBe("34px");
+      // Live pane, rowing (not resting): design states table row 1 —
+      // unjudged, plain ink, however far from target. `connected-pane-
+      // live.html`'s own frame is genuinely rowing, so "within" (plain
+      // ink) is the CORRECT verdict here, not a coincidence of the
+      // fixture never reaching a rest.
+      expect(value.judgement).toBe("within");
+      expect(value.color).toBe(INK_RGB);
+      const valueText = await page
+        .locator(".connected-hero-avg-value")
+        .textContent();
+      expect(valueText).toBe("2:08.4");
+
+      // TGT is unaffected by AVG's presence — same value/ref this file's
+      // own "heroes: split..." test already pins, re-read here so a
+      // regression that shifted TGT's own text when AVG was added fails
+      // at the cell that would actually show it.
+      const target = await page
+        .locator(".connected-hero-split .connected-hero-target-value")
+        .textContent();
+      expect(target).toBe("2:06.0");
+    });
+
     test("heroes: rate 92px same treatment judged, target 40px + SPM 19px ink-3", async ({
       page,
     }) => {
@@ -7050,6 +7101,25 @@ test.describe("connected screens (fake-driven)", () => {
         });
       expect(rate1px.width).toBe("1px");
       expect(rate1px.padTop).toBe("16px");
+    });
+
+    // connected-metrics design spec, Task 5 — portrait's own step of the
+    // same AVG geometry the landscape describe block pins above (34px
+    // there, `calc(var(--c-size-target) - 6px)` — `PaneLive.tsx`'s own
+    // doc comment on why AVG tracks TGT's own portrait/landscape step
+    // through shared tokens rather than a second hardcoded pair).
+    test("target row's third cell, portrait: AVG label 14px ink-3, value 30px ink", async ({
+      page,
+    }) => {
+      await loadConnectedFixture(page, "connected-pane-live");
+      const labelFontSize = await page
+        .locator(".connected-hero-avg-label")
+        .evaluate((el) => getComputedStyle(el).fontSize);
+      expect(labelFontSize).toBe("14px");
+      const valueFontSize = await page
+        .locator(".connected-hero-avg-value")
+        .evaluate((el) => getComputedStyle(el).fontSize);
+      expect(valueFontSize).toBe("30px");
     });
 
     test("up-next: UP NEXT label mono 14 ink-3 over value mono 23 nowrap, then-less form, never wraps or overflows", async ({
