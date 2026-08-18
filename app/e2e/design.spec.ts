@@ -5101,7 +5101,7 @@ test.describe("connected screens (fake-driven)", () => {
       expect(band.borderColor).toBe(INK_RGB);
 
       // Always in the DOM (one markup, both orientations — the same
-      // toggle idiom `.connected-band-upnext-then` uses); landscape hides
+      // toggle idiom the "NEXT · " prefix span uses); landscape hides
       // it via CSS (§2A: "NO label"), it is never absent from the tree.
       await expect(page.locator(".connected-band-upnext-label")).toBeHidden();
       const upnext = await page
@@ -5118,9 +5118,10 @@ test.describe("connected screens (fake-driven)", () => {
       expect(upnext.fontSize).toBe("30px");
       expect(upnext.color).toBe(INK_RGB);
       expect(upnext.whiteSpace).toBe("nowrap");
-      expect(upnext.text.replace(/\s+/g, " ").trim()).toBe(
-        "NEXT · REST 3:00 · then WORK 2:06.0",
-      );
+      // PHASE CS Item B (task 2): the then-clause is retired outright — one
+      // richer phase, not two — so landscape's own value is "NEXT · " plus
+      // exactly the same string portrait shows, nothing appended.
+      expect(upnext.text.replace(/\s+/g, " ").trim()).toBe("NEXT · REST 3:00");
 
       const label = await page
         .locator(".connected-band-cell-label")
@@ -6174,8 +6175,12 @@ test.describe("connected screens (fake-driven)", () => {
       );
       expect(fontSize).toBe("23px");
       const text = await value.innerText();
-      expect(text.replace(/\s+/g, " ").trim()).toBe("WORK 2:06.0 · REST 3:00");
-      await expect(page.locator(".connected-band-upnext-then")).toBeHidden();
+      // PHASE CS Item B (task 2): the then-clause is retired outright, so
+      // this reads only the coming WORK phase's own composition-table
+      // string (distance, split, rate) — nothing appended for the rest
+      // that follows it.
+      expect(text.replace(/\s+/g, " ").trim()).toBe("WORK 2000m · 2:06.0 @22");
+      await expect(page.locator(".connected-band-upnext-then")).toHaveCount(0);
       // Queue item 7: portrait keeps its own stacked UP NEXT label above,
       // so the landscape-only "NEXT · " prefix stays hidden here too — no
       // double-labeling.
@@ -6315,20 +6320,46 @@ test.describe("connected screens (fake-driven)", () => {
       expect(await page.locator(".connected-value-absent").count()).toBe(0);
     });
 
-    test("up-next (armed branch): reads the FIRST interval forward, TOTAL LEFT full session", async ({
+    test("up-next (armed branch): reads the FIRST interval forward, TOTAL LEFT full session, and the rate survives at the corpus worst case", async ({
       page,
     }) => {
       await loadConnectedFixture(page, "connected-armed");
-      const value = await page
-        .locator(".connected-band-upnext-value")
-        .innerText();
-      expect(value.replace(/\s+/g, " ").trim()).toBe(
-        "NEXT · WORK 2:06.0 · then REST 3:00",
-      );
+      const upnext = page.locator(".connected-band-upnext-value");
+      const value = await upnext.innerText();
+      // PHASE CS Item B (task 2): the then-clause is retired, so armed's
+      // own value is just the coming WORK phase's composition-table
+      // string, nothing appended for the rest after it.
+      const normalized = value.replace(/\s+/g, " ").trim();
+      expect(normalized).toBe("NEXT · WORK 2000m · 2:06.0 @22");
       const total = await page
         .locator(".connected-band-cell-value")
         .textContent();
       expect(total).toBe("45:36");
+
+      // THE RATE SURVIVES (spec EC3): this fixture's 30-char string —
+      // "NEXT · WORK 2000m · 2:06.0 @22" — is the longest COMMITTED-
+      // FIXTURE string, not the corpus worst (that's 32 chars, the 70' O2
+      // continuous piece at server/seed/library/o2.ts:780 — see the
+      // spec's Width section for the correction). This element has room
+      // to spare regardless: the retired 35-char then-string rendered
+      // here for months pre-ruling, and the pin's own mutation measured
+      // this element's clientWidth at 679px with the 30-char string
+      // nowhere near filling it, on the phase's own reference landscape
+      // frame (844x390, this describe's `test.use`). The `toBe` above
+      // already proves the exact string, but this is the criterion's OWN
+      // assertion, independently
+      // falsifiable from the equality check above: the rendered text
+      // ENDS with its `@NN` rate token (never an ellipsis or a cut
+      // numeral) — the ellipsis on `.connected-band-upnext-value` and the
+      // `scrollWidth <= clientWidth` pins elsewhere in this file are the
+      // backstop that the path is never entered; this proves the token
+      // that backstop would have clipped is actually there, unclipped.
+      expect(normalized).toMatch(/@\d+$/);
+      const overflow = await upnext.evaluate((el) => ({
+        scrollWidth: el.scrollWidth,
+        clientWidth: el.clientWidth,
+      }));
+      expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth);
     });
   });
 

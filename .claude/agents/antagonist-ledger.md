@@ -910,3 +910,92 @@ toolkit, not a history.
   test that reads either one is blind to which is wired. Grep the FACTORY
   DEFAULT before believing any assertion that names one of them — the
   default is the assertion's real subject.**
+
+## Spec-stage anchor pass, 2026-08-17 (Phase CS, "connected swipe + NEXT")
+
+- **"The original swipe worked in every harness and failed under James's finger."**
+  The premise of a whole phase item, and its only source is one clause in THIS
+  ledger (`:66-67`, "and the rower says it does not work"), landed 2026-08-14/15
+  with no device, engine or transport recorded anywhere in the repo. The record
+  contradicts it: `ROADMAP.md:1755-1760` sets a Phase CR exit item "on his iPhone
+  against a real PM5 … when swiping LIVE <-> GRID" and `:1777-1778` records it
+  **PASSED, "it holds"**, on 2026-08-13 — one to two days earlier, on the exact
+  engine the new spec suspects (a phone + real PM5 can only be the native
+  Capacitor app; `walk-phase-cr2-exit/RUNSHEET.md:212-214`). Resolution: the
+  controller ASKED JAMES at the gate; he confirmed the failure was on the phone
+  (the walk's "it holds" was about column stability). The question cost one
+  message and settled what the whole ladder could not. **Technique: when a
+  spec's history section cites THIS ledger as its evidence, go find the ledger
+  entry's own source. An agent-written parenthetical is testimony, and it inherits
+  the confidence of a citation without ever having had one.** Corollary: grep
+  ROADMAP's exit-and-outcome pairs for the same gesture before accepting "it
+  failed on hardware" — this repo records what actually happened at the erg.
+
+- **"A missing/overridden `touch-action` is the strongest candidate for the old
+  device failure."** Falsified by the repo's own history in two commands.
+  `git show 3dc3b06^:app/src/index.css` puts `touch-action: pan-y` at line 6041
+  inside the `.connected-surface { … }` block that opens at 5988 — the very
+  element carrying `onTouchStart`/`onTouchEnd` — and `grep -c touch-action` over
+  that whole stylesheet returns **1**, so nothing overrode it either.
+  **Technique: before theorising about why a deleted feature failed, `git show
+  <deletion-commit>^:<file>` and read the code as it actually shipped.** A
+  hypothesis about a missing declaration is settled by the file it was missing
+  from, not by reasoning about what the browser would have done.
+
+- **"Pointer Events + `setPointerCapture` avoid the touch-specific cancel
+  semantics."** False, PRIMARY: W3C Pointer Events 3 fires `pointercancel` when
+  "the pointer is subsequently used by the user agent to manipulate the page
+  viewport (e.g. panning or zooming)" and the same algorithm must "implicitly
+  release the pointer capture". MDN `touch-action` says the same from the other
+  side. Capture is no shield against gesture arbitration, which is the exact
+  failure mode being chased — and the spec added an `onPointerCancel` handler four
+  lines after claiming it didn't need one. **Technique: when a design's rationale
+  says a new model avoids an old model's failure, find that failure's NAME in the
+  new model's spec. `touchcancel` → `pointercancel` is a rename, not a fix; a
+  design that then handles the renamed event has refuted itself in its own prose.**
+
+- **A whole rung of a verification ladder can be structurally impossible.**
+  `design.spec.ts:4589-4605`'s `loadConnectedFixture` does
+  `document.body.innerHTML = <static html>` — no React, no handlers, no `pane`
+  state — so "e2e asserts the swipe changes pane" cannot be written against the
+  ten committed connected fixtures at all; it belongs in `connected.spec.ts`, the
+  fake-driven live walk. Same rung, deeper: every harness that ever tested this
+  gesture (the fixtures AND the standalone CDP repro) ran an IDLE static DOM,
+  while the real surface rebuilds its model and both panes 5-11 times a second on
+  iOS (`pm5-interface-notes.md:4403`). **Technique: for any input-level test, ask
+  what the page is DOING while the input arrives, not just whether the input is
+  real. Ledger technique 8 upgraded a harness's input capability; this is the
+  other half — a static-page harness is blind to every failure whose trigger is
+  load.**
+
+- **`touch-action` is intersected only up to the first containing SCROLL
+  container** (PRIMARY, MDN: "up to the one that implements the gesture (in other
+  words, the first containing scrolling element)"). `index.css:6754` gives the
+  connected grid its own `overflow-y: auto` scroller, so a swipe starting on a
+  grid row — every GRID→LIVE swipe — may never reach the surface's `pan-y`.
+  **Technique: "declare `touch-action` on the surface" is not a location. Walk the
+  ancestor chain from where the finger actually lands and stop at the first
+  `overflow` that isn't `visible`; that element is where the declaration has to be.**
+
+- **A new string builder can drop a field that only two phase kinds carry.** A
+  "kind + extent + split + rate" composition, applied literally, renders bare
+  `TEST` and `WARM-UP 2000m`, silently discarding `label` ("All out", "Easy") —
+  and the warm-up is the FIRST thing the connected NEXT line ever says for a rower
+  with the preference on, because the armed branch reads `phases[0]`
+  (`surfaceModel.ts:772-774`). **Technique: for any builder replacing a `switch`
+  over a union, enumerate every member's producer and list which FIELDS each
+  actually sets. `phases()` and `warmupPhases()` set disjoint subsets; a rule
+  written from the two commonest members drops the other two in silence.**
+
+- **Attacked and NOT broken (Phase CS vetted ground):** the CSS-ellipsis
+  truncation design — the mechanism already ships (`index.css:6580-6587`), the
+  direction claim is right, and it is MOOT: rebuilding both strings over all 3,063
+  phases of the seeded 300 gives a new worst case of 30 chars against today's
+  shipped 39 (`"NEXT · WORK 1:00:00 2:14.0 @20"` vs
+  `"NEXT · WORK ALL OUT · then WORK ALL OUT"`), so the enriched line fits wherever
+  today's does and the two committed `scrollWidth <= clientWidth` pins stay green.
+  Also held: `Phase`'s field-presence rules for work/rest; `surfaceModel.ts:329-334`
+  exact; TOTAL LEFT's non-shrink — but guaranteed by `flex: 1 1 0%` + `min-width: 0`
+  on the SIBLING (`index.css:8093-8096`), not by anything on the cell itself;
+  and PE/`setPointerCapture`/`touch-action` availability against the repo's
+  iOS 15.0 deployment target (`project.pbxproj:239`).

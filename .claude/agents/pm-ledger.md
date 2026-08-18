@@ -552,3 +552,82 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   the cohort reads the correction as a regression. (Here: totals read lower and
   correct, `TOTAL M` is gone from LIVE, look at the post-session summary and
   the log sheet's SESSION line.)
+
+## Phase-open gate, 2026-08-17 (Phase CS slate: swipe returns, NEXT says more)
+
+- **"The old code was missing X" is a claim about a DELETED file — `git show` it
+  before building the fix on it.** The CS slate's central hypothesis was that the
+  pre-spec-3 swipe failed for want of `touch-action`. `git show
+  3dc3b06^:app/src/index.css:6041` has `touch-action: pan-y` on the pane
+  container, with a comment stating the exact rationale the spec proposed to
+  introduce. The antagonist ledger said touch-action was UNTESTED; the spec read
+  that as absent. The real candidate was in the same commit — the handler was
+  `onTouchStart`+`onTouchEnd` only, no `touchmove`, no `touchcancel`, no
+  dominant-axis check, committing on an event WKWebView never delivers once it
+  claims the gesture. **A retired mechanism's own source is one command away and
+  is the line that would falsify the claim.**
+
+- **A better harness of the same class is not an answer to harness blindness.**
+  CS's exit criterion 1 (Playwright `hasTouch` + CDP `Input.dispatchTouchEvent`,
+  four drag shapes) is a test the repo's own standalone repro ALREADY PASSED
+  while James's finger failed — CDP synthetic touch skips the arbitration that is
+  the whole failure. Chromium+CDP is not WKWebView. **When a harness has lied,
+  ask whether the replacement differs in CLASS or only in fidelity**; if only in
+  fidelity, it is a regression pin and must be labelled one, never the gate.
+
+- **Route a device-interaction question to the DEVICE, not to the erg.** CS sent
+  a WKWebView gesture question through /hardware-walk — erg time, operator
+  contract, a session — for a failure a PM5 cannot influence, with the criterion
+  itself hedged "on the phone IF a phone pass is scheduled". The instrument was
+  already ruled on at CR2's close: `VITE_ENABLE_FAKE_MONITOR=1 pnpm ios:build &&
+  pnpm ios:open` (build-time flag at `monitor/transports/index.ts:251`;
+  `ios:build` = `vite build && cap sync`) puts the real surface in WKWebView with
+  no erg, no TestFlight, no build number. **Probe on device BEFORE building the
+  ladder when the mystery is unexplained** — and attach Safari Web Inspector to
+  the WKWebView, which is the trace the failed attempt never had. Sharpens
+  "the definitive hardware walk was a WEB walk": that transfers for NUMBER
+  questions; for INPUT questions the only valid medium is the engine that failed.
+
+- **A new display builder must enumerate the union it renders, not the examples
+  the request mentioned.** CS item B specified four forms (distance work, time
+  work, rest, FINISH) against `expand.ts:12`'s `"warmup" | "work" | "rest" |
+  "test"` — omitting WARM-UP, which this very surface flags deliberately per a
+  checked-off James requirement (`ROADMAP.md:1697-1700`). Third occurrence of the
+  property-table lesson (spec 3's frames, 2a's READY word). **Exit criteria for a
+  string builder are a table over the type union × its optional fields.**
+
+- **Re-deriving a value the domain already resolved is a second source of truth.**
+  Item B proposed recomputing the split from `targetSplit` + `targetKind ===
+  "split"` when `EnginePhase.label` already carries exactly that set, and
+  `expand.ts:42` documents these builders as reading `label` straight through.
+  **Before adding fields to a display string, check whether the existing composer
+  already holds the semantics you are about to re-encode.**
+
+- **CSS truncation that already exists is not a design decision.**
+  `.connected-band-upnext-value` was already `nowrap/overflow-hidden/ellipsis`
+  (`index.css:6580-6587`); the spec presented ellipsis as its truncation choice
+  while the real question — does the added field survive at the reference width —
+  went unmeasured, with the field order sacrificing `@rate` first, one of the two
+  things James asked to see. "Pixel-verified in screenshots" passes on a
+  screenshot of a truncated line. **When a spec adds content to a fixed-width
+  line, make "the new field survives on the reference frame at the library's
+  longest string" the criterion.**
+
+- **A retired phase code is a dead name — check the ROADMAP before reusing one.**
+  "Phase CP" already means "the pause that isn't", folded into CR2
+  (`ROADMAP.md:1884`, `:2005`). The slate reused it for "connected polish";
+  renamed CS at the gate.
+
+- **Un-released stack at this gate: ONE merge** (#114, release tooling, zero
+  tester surface). The eleven-merge CR2 backlog is CLEARED — first clean slate
+  since v0.9.0, and the reason CS can be an attributable release rather than a
+  bundle. **Version PATCH (v0.10.2)**: swipe is additive to an existing control
+  and the NEXT line is a richer string on an existing element — neither adds a
+  capability class or a screen. If the device probe kills item A, item B ships
+  alone and is worth shipping alone. Notes must NAME the swipe: a gesture nobody
+  knows exists is not a feature, and this cohort already learned once that swipe
+  does not work.
+
+- **Backlog count at this gate: 24 unchecked items** — identical to the
+  2026-08-13 audit. CS is executed, not filed, so this is not filing-as-deferral;
+  but nothing has come off the pile in four days either.

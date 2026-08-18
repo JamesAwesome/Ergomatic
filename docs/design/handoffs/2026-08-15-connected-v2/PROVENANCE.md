@@ -75,6 +75,16 @@ guessing is how a wrong number ships.
    are both out of spec 3; the band ships as up-next + TOTAL LEFT; "session
    calories, folded" is a filed follow-up. ZONE additionally needs a
    max-HR source the app does not have.
+6. **The up-next line's "then" clause is RETIRED** (README §2A/§2C's own
+   example, `up-next REST 2:00 · then WORK 2:09.0`, and §2D's `WORK 10:00 ·
+   then REST 1:00` — James's ruling, connected-polish design spec Item B,
+   2026-08-17): one richer phase, not two. The band's `NEXT · ` line now
+   names only the single coming phase, built with its own extent, split
+   and rate (`connectedNextText`, `src/workout/connected/surfaceModel.ts`)
+   instead of the handoff's short form plus a second appended phase.
+   `SurfaceModel.thenNext` is gone from the interface, `.connected-band-
+   upnext-then` is deleted from `index.css`, and every fixture/e2e
+   assertion that pinned the word "then" in this band is gone with it.
 
 ## Not part of the design
 
