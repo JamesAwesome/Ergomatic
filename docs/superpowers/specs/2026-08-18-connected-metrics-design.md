@@ -108,35 +108,45 @@ builds it.
 
 | Frame | TGT | AVG |
 | --- | --- | --- |
-| Work, split target, average > 0 | target | live average, judged |
-| Work, average absent or zero | target | nothing |
+| Work, split target, average > 0 | this interval's target | live average, **plain ink, unjudged** |
+| Work, average absent or zero | this interval's target | nothing |
 | Work, effort target (no split) | effort word | live average, plain ink |
-| Rest, after a completed work interval | next target | the finished interval's average, held **by the machine** |
+| Rest, after a completed work interval | **the FINISHED interval's target** | that interval's average, held by the machine, **judged** |
 | Rest, before any work interval completes | as today | nothing |
 | Warm-up | as today (`Easy`) | live average, plain ink — never judged, per the standing rule that a warm-up must not read as a working interval |
 | Free piece, no split target | nothing | live average, plain ink |
 | Stale / disconnected | as today | last value, under the pane's existing staleness treatment |
 
-## The judgement — ONE OPEN DECISION
+## The judgement — SETTLED: suppressed while rowing, shown at rest
+
+**Why it cannot be live.** Measured across seven work runs, the interval
+average does not come within ±0.5 s of its own final value until **65-99%
+of the interval has elapsed** (median ~80%): the standing start dominates
+the running average. A judged cell would read SLOWER for most of every
+interval no matter how well the rower is pulling, and only become truthful
+when there is least time left to act. No value of the band fixes a
+transient.
+
+**James's ruling (2026-08-18):** show the average unjudged while the
+interval runs, and judge it only during the rest, when it is final.
+
+- **While rowing:** `AVG 2:11.8` in plain ink. Informational, climbing, no
+  colour, no verdict.
+- **At rest:** the finished interval's average, now settled, judged
+  faster / slower / on target against **that interval's** target, using
+  `ON_TARGET_BAND_SECONDS` (0.5 s/500m, a named constant).
+
+**Consequence this spec accepts, and states rather than discovers:** during
+a rest the baseline row is entirely about the interval that just finished,
+so `TGT` shows **that** interval's target, not the next one's. Pairing a
+verdict with the next interval's target would read as a judgement against a
+number the rower never rowed. The next interval's target is not lost — the
+footer's NEXT line has named it since #116 (`NEXT · WORK 2000m · 2:06.0
+@22`), which is what makes this affordable.
 
 Direction reuses the house rule (`summaryModel.ts:208-224`, unchanged and
-still two-bucket for finished rows). The live cell adds an **on-target**
-state a live number alone can reach.
-
-**The band is not the hard part, and the first draft asked the wrong
-question.** Measured across seven work runs, the live interval average does
-not come within ±0.5 s of its own final value until **65-99% of the
-interval has elapsed** (median ~80%): the standing start dominates the
-running average. A judged cell therefore reads SLOWER for most of every
-interval no matter how well the rower is pulling, and only becomes truthful
-when there is least time left to act — the exact inverse of this feature's
-purpose. No value of the band fixes that.
-
-**This decision is open and James is asked directly** (options in the
-brainstorm; the chosen one lands here before the plan is written):
-suppress judgement until the average settles; judge against elapsed-adjusted
-expectation rather than the raw target; or show the average unjudged and
-let TGT beside it do the work.
+still two-bucket for finished rows); the on-target state is new and, by
+this ruling, only ever reached at rest.
 
 ## Blast radius
 
@@ -195,3 +205,9 @@ let TGT beside it do the work.
 - We do not know what the monitor's own screen displays as total meters
   mid-interval; criterion 2's photograph is the only way to find out.
 - Nothing here changes the summary screen's accumulation.
+- **A rest-free program never shows a verdict.** Judgement lives in the
+  rest, so an `r0` interval program or a continuous piece gets the average
+  but never the colour. Accepted: the post-workout summary is where those
+  sessions read their verdict, and inventing a boundary-flash window to
+  cover them would put a judgement on screen at the one moment the rower is
+  starting the next effort.
