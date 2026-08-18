@@ -544,6 +544,15 @@ describe("the meters counter on the progress-bar row (connected-metrics design s
     expect([...row.children]).toStrictEqual([bar, counter]);
   });
 
+  it("floors fractional meters — the accumulator's tenths never reach the screen (James, exit walk: the ticking decimal made the counter jumpy)", () => {
+    renderPane("live", { sessionDistanceMeters: 1042.9 });
+    const counter = document.querySelector(".connected-progress-meters")!;
+    // FLOOR, not round: 1042.9 renders 1,042 — a total never claims a
+    // metre not yet rowed, and the PM5's own screen truncates the same way
+    // (walk-2026-08-18-metrics rest-1 photo: machine 325 beside our 325.4).
+    expect(counter.textContent).toBe("1,042m");
+  });
+
   it("zero meters still renders (only 'before the first frame' is absent)", () => {
     renderPane("live", { sessionDistanceMeters: 0 });
     const counter = document.querySelector(".connected-progress-meters")!;

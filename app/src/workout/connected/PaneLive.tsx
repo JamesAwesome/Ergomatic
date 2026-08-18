@@ -87,9 +87,16 @@ function judgedClass(
  *  contra the brief's own assumption that a pattern to follow already
  *  exists (see this task's report). `Intl.NumberFormat`, not a hand-rolled
  *  regex, for the same reason `fmtSplit`/`fmtDuration` are house functions
- *  rather than ad hoc string surgery at each call site. */
+ *  rather than ad hoc string surgery at each call site.
+ *
+ *  WHOLE METERS, floored (James, 2026-08-18, from the exit walk): the
+ *  accumulator carries tenths (`1042.1`) and rendering them made the
+ *  counter visibly jumpy — a tick every ~450ms on the least legible digit.
+ *  Floor rather than round, for two reasons: a session total should never
+ *  claim a metre not yet rowed, and the PM5's own screen truncates
+ *  (`325 m total` beside our 325.4 in the walk's rest-1 photo). */
 function fmtMeters(meters: number): string {
-  return `${new Intl.NumberFormat("en-US").format(meters)}m`;
+  return `${new Intl.NumberFormat("en-US").format(Math.floor(meters))}m`;
 }
 
 export default function PaneLive({ model }: { model: SurfaceModel }) {
