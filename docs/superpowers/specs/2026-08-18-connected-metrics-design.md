@@ -125,7 +125,8 @@ builds it.
 | Work, split target, average > 0 | this interval's target | live average, **plain ink, unjudged** |
 | Work, average absent or zero | this interval's target | nothing |
 | Work, effort target (no split) | effort word | live average, plain ink |
-| Rest, after a completed work interval | **the FINISHED interval's target** | that interval's average, held by the machine, **judged** |
+| Rest, after a completed work interval (split target) | **the FINISHED interval's target** | that interval's average, held by the machine, **judged** |
+| Rest, after a completed work interval (EFFORT target) | the finished interval's effort word | that interval's average, plain ink — an effort word is not a number to judge against (row added after Task 3's review; the implementation inferred this correctly and the spec now says it) |
 | Rest, before any work interval completes | as today | nothing |
 | Warm-up | as today (`Easy`) | live average, plain ink — never judged, per the standing rule that a warm-up must not read as a working interval |
 | Free piece, no split target | nothing | live average, plain ink |

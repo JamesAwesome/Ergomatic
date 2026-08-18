@@ -3,11 +3,15 @@
 // §§3-4). The panes themselves are dumb: they read fields off `SurfaceModel`
 // and place them. Two rules live here and nowhere else:
 //
-//  1. **ONE judgement path.** `judgedValue` below is the only function in
-//     `src/` that calls `domain/judge.ts`'s `judgeActual`. Every live actual
-//     on every pane — pane B's hero, rate, HR and meters cards — is a
-//     `JudgedValue` produced by that one helper (handoff §3: "One helper
-//     decides the colour; no pane implements its own judgement"). Pane C's
+//  1. **ONE judgement path — with one sanctioned exception.** `judgedValue`
+//     below is the only function in `src/` that calls `domain/judge.ts`'s
+//     `judgeActual`. Every live actual on every pane — pane B's hero, rate,
+//     HR and meters cards — is a `JudgedValue` produced by that one helper
+//     (handoff §3: "One helper decides the colour; no pane implements its
+//     own judgement"). The AVG cell (`avgValue`/`avgVerdict`, Phase CM) is
+//     the sanctioned second path: it needs an on-target state `judgeActual`
+//     has no concept of, and its own comment block carries the reasoning —
+//     this rule's statement is amended rather than silently contradicted. Pane C's
 //     grid (Task 7) inherits the same rule: every
 //     ACTUAL cell in `buildGridModel` below is a `judgedValue` too, and its
 //     PROGRAMMED cells are plain strings that structurally cannot carry a
