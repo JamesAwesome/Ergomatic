@@ -194,9 +194,15 @@ while rendering nothing.
 - [ ] **Step 1:** `VITE_ENABLE_FAKE_MONITOR=1 pnpm ios:build && pnpm
   ios:open` — the flag is for the diagnostics readout, not the fake, which
   a native build cannot reach.
-- [ ] **Step 2:** A rest-bearing program with unequal intervals (the
-  keystone `x2 / w 250m 6k @24` has no rests and **cannot exercise the
-  verdict at all** — 0 resting frames in 286).
+- [ ] **Step 2:** A rest-bearing program whose work intervals carry
+  **DISTINCT target splits** (e.g. a pyramid: `6k`, `6k-4`, `6k+4`), not
+  merely unequal lengths. Two reasons, both measured: the keystone
+  `x2 / w 250m 6k @24` has no rests and cannot exercise the verdict at all
+  (0 resting frames in 286); and every committed capture and fixture shares
+  ONE target across its work intervals, so the judged-target-swap mutation
+  is currently caught only by a boundary-condition test — this walk's
+  recording is what lets criterion 3 gain a value-based catch (Task 5
+  review's carry-forward).
 - [ ] **Step 3:** One instruction at a time, hardware-walk pacing:
   (a) **photograph phone and monitor in one frame, mid-work** — criterion 2;
   (b) the same **mid-rest**, where the two totals diverge if anything is
