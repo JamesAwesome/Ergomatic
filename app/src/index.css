@@ -5520,6 +5520,22 @@ section:not(.news-pinned) .news-row:last-of-type {
      task; `grep -n "touch-action" src/index.css` returned nothing before
      it. */
   touch-action: pan-y;
+  /* A swipe surface must not select the text under the thumb (James, from
+     the 2026-08-18 phone walk: "when i swiped on a hero, i noticed i could
+     select it, that could cause accidental fumbling of the phone"). A
+     drag across the hero on iOS otherwise starts a text selection, which
+     both looks broken mid-gesture and leaves a selection and a callout
+     menu behind on a screen the rower is holding at arm's length while
+     rowing.
+     Nothing on this surface is prose a rower would want to select: every
+     value is a live number, and the one genuinely copyable thing — the
+     connection log — has its own COPY LOG button rather than relying on a
+     text selection (`ConnectionLogSheet`). `-webkit-touch-callout` is the
+     matching half: it suppresses the long-press callout iOS raises even
+     when selection itself is off. */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
   display: flex;
   flex-direction: column;
   /* ZERO, not 10px (connected-revamp Task 6) — same reasoning as the
