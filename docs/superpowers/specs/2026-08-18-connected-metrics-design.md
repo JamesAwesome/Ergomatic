@@ -76,10 +76,24 @@ builds it.
   than inventing one.
 - **Why ours and not the machine's, given Sun fret:** because the machine's
   own TWD is unusable live (frozen mid-interval, includes rest, observed
-  non-monotone), and because the drift protection is not the source of the
-  number — it is `recordTwdVerdict` (`driver.ts:2518-2543`), which already
-  compares our accumulator against TWD **every frame** and logs divergence.
-  Sun fret happened because nothing compared. Something compares now.
+  non-monotone). The drift protection is layered, and the first draft
+  overstated the first layer — corrected here after Task 1's implementer
+  read the call site:
+  1. `recordTwdVerdict` (`driver.ts:2539-2552`) compares our accumulator
+     against TWD **once, at the session's terminal transition** — not every
+     frame — and is **suppressed for any program containing a distance
+     interval**, because TWD reports the GOAL there, not the distance rowed
+     (confirmed on hardware). For most of this library, it never fires.
+  2. The real automated protection is therefore this phase's own exit
+     criterion 1: a replay test pinning the displayed total against the
+     machine's reconstructed session meters at named MID-SESSION instants,
+     on a time-interval capture where TWD is honest.
+  3. The real external protection is criterion 2's photograph, which no
+     suppression can reach.
+  Sun fret happened because nothing compared. What compares now is the
+  replay pin and the photograph — named precisely, so nobody leans on a
+  terminal-only, distance-suppressed verdict believing it is a per-frame
+  guard.
 - **Meaning:** work + rest — James's ruling, and identical to what TWD
   itself means, so the live number, the summary's DISTANCE and the
   monitor's own total are all the same quantity.
