@@ -36,7 +36,11 @@ So "read the machine's field" is not automatically safer than computing.
 **The real principle is narrower and is what this spec now enforces: our
 number must never drift from the machine's without something noticing.**
 
-Mockups: `4a-meters-on-bar.png` and `README-4a-amendments.md`. This spec
+Mockups: `docs/design/handoffs/2026-08-18-avg-split-and-meters/` —
+`4a-meters-on-bar.png` and `README-4a-amendments.md`, committed after Task
+4's review found the citation dead (the files lived only in James's
+delivery zip, and the implementer rightly refused to build against an
+artifact it could not read). This spec
 follows them except where James's rulings or the wire overrule them, and
 each departure is named.
 
