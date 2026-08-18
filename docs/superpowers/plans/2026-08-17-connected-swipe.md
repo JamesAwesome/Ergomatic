@@ -123,6 +123,9 @@ falsified for the horizontal case; a *scrollable* row list is untested.
 - Modify: `app/src/workout/connected/swipe.ts` (add `useSurfaceSwipe`)
 - Modify: `app/src/workout/ConnectedSurface.tsx`
 - Modify: `app/src/index.css`
+- Modify: `app/src/components/SheetShell.tsx` (Step 5's `data-swipe-ignore`;
+  regenerating `e2e/fixtures/connected-log-sheet.html` is its mechanical
+  consequence)
 - Test: `app/src/workout/ConnectedSurface.test.tsx`
 
 **Interfaces:**
