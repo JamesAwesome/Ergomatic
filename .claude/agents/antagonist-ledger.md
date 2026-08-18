@@ -1448,3 +1448,57 @@ toolkit, not a history.
   traced both fields to their render sites AND their CSS, rather than trusting
   the doc comments — which in this file have twice described renderers that
   had already retired.
+
+## Ad hoc pass, 2026-08-18 (PR #123, the session-meters counter's flooring fix)
+
+- **"Flooring the meters counter fixes the jitter — the tenths were ticking
+  every ~450ms."** The premise is true and the fix does almost nothing.
+  Decoded 1085 0x0031 frames from `walk-2026-08-18-metrics/pyramid-pm5-
+  recording-*.jsonl.gz`: over 357.7 s of rowing the DISPLAYED STRING changed
+  1.97/s with tenths and **1.96/s floored**. The rate is `min(tick rate,
+  speed in m/s)` — at 3.72 m/s and 1.97 ticks/s the counter was already
+  tick-limited, advancing a median 1.90 m per tick, so every tick crossed a
+  metre boundary either way. **Technique: measure the change rate of the
+  RENDERED STRING, not the precision of the field behind it. A formatting
+  change that removes a digit removes churn per repaint, never repaints per
+  second — those are two different quantities and only one of them is what
+  "jumpy" means.**
+
+- **"The walk validated the calm."** The walk's rowing leg was Chrome on a
+  laptop (~508 ms effective spacing); its iPhone leg was the ZERO-STROKE
+  swipe leg (that walk's own README). `driver.ts` requests 100 ms and iOS
+  delivers ~90-180 ms (`pm5-interface-notes.md`, hardware-observed).
+  Resampling the same motion at the iOS spacing: **3.71 repaints/s on the
+  primary surface, ~2x what James called "far too jumpy" on the laptop.**
+  At >=2 m granularity the rate becomes speed-limited and therefore
+  transport-independent; at 1 m it inherits whatever the transport does.
+  **Technique: before accepting a UI-calm verdict, resample the capture at
+  the SHIPPING platform's own measured notification spacing. A desktop walk
+  is a different transport, not a slower version of the same one.**
+
+- **"The PM5's own screen truncates the same way (325 beside our 325.4)."**
+  False, and the cited evidence cannot decide it: floor(325.4) == round(325.4).
+  Decoding `totalWorkDistanceMeters` at all three walk instants — rest-1
+  325/325/325, rest-2 1043 vs ours 1042.1, **finish 1347 vs floor 1346 vs
+  round 1347**. At the only instant where floor and round disagree, the
+  machine agrees with ROUND. Worse, `summaryModel.ts` rounds, so the live
+  counter said `1,346m` where our own summary and the machine both say 1347.
+  **Technique: a rounding-convention claim needs a data point where floor
+  and round DISAGREE. A citation whose value satisfies both conventions is
+  decoration. And when one screen changes its rounding, grep every other
+  screen that renders the same number.**
+
+- **Attacked and not broken:** the shimmer worry and the staleness worry.
+  Playwright `setContent` against the three real rules measured `1,042m` /
+  `1,888m` / `1,111m` at an identical 81.859 px — `--font-mono` falls back to
+  `ui-monospace` and every candidate is fixed-advance, so same-width digit
+  swaps genuinely cannot shimmer. Staleness is an explicit link event with
+  its own banner, caption and `LAST` label — the counter's motion is not the
+  liveness cue, so quantising it introduces no stalled/live ambiguity. What
+  the same probe DID find: `flex: none` with no `min-width` made the bar's
+  width a function of the counter's character count — **999m -> 1,000m
+  shrank the bar 27.3 px on a 390 px pane**, at exactly the milestone James
+  named. **Technique: a layout-shift claim is cheap to settle for real —
+  `page.setContent` with the rules copied verbatim, `getBoundingClientRect`
+  on the FLEXING sibling, no server and no stack. Measure the neighbour that
+  absorbs the change, not the element that causes it.**
