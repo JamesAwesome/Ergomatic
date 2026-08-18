@@ -728,16 +728,27 @@ async function walkSurfaceToLog(
 
   // THE STORED LOG — the save posted for real; read it back off the same
   // route Today itself uses, in-page (same-origin, same session cookie).
+  // From-the-log spec (2026-08-18), §3: the list projection drops `steps`
+  // (zero client consumers) — the newest row's id comes off the list,
+  // then the full row (steps included) comes off `GET /api/logs/:id`,
+  // exactly like `data.test.ts`'s own fix for this same shape change.
   const logs = (await page.evaluate(() =>
     fetch("/api/logs").then((r) => r.json()),
+  )) as { id: string; deviceName: string | null }[];
+  const newestSummary = logs[0];
+  expect(
+    newestSummary,
+    "the just-saved log is the newest one back",
+  ).toBeDefined();
+  expect(newestSummary!.deviceName).toBe(deviceName);
+  const newest = (await page.evaluate(
+    (id) => fetch(`/api/logs/${id}`).then((r) => r.json()),
+    newestSummary!.id,
   )) as {
     deviceName: string | null;
     steps: { actualSource?: string; actualSeconds?: number }[];
-  }[];
-  const newest = logs[0];
-  expect(newest, "the just-saved log is the newest one back").toBeDefined();
-  expect(newest!.deviceName).toBe(deviceName);
-  const pm5Steps = newest!.steps.filter((step) => step.actualSource === "pm5");
+  };
+  const pm5Steps = newest.steps.filter((step) => step.actualSource === "pm5");
   expect(
     pm5Steps.length,
     "at least the one measured interval carries a pm5 step",

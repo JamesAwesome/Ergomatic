@@ -174,6 +174,54 @@ async function seedLogs(page: Page, count: number): Promise<void> {
   }
 }
 
+// From-the-log spec (2026-08-18), Task 6: unlike `seedLogs` above (a fake
+// title, no heroes, no reflection), the from-the-log sweep below needs the
+// FULL row this spec actually adds — a real library title (recurring-
+// failure #3: "test against a realistic fixture"), all three stored
+// heroes, and all four reflection fields answered, so §5B/§5C/§5D/§5G
+// each have something real to render rather than degrading to their own
+// absence idiom. Returns the created row's own id.
+async function postFromLogFixture(page: Page): Promise<string> {
+  const seaFret = LIBRARY_WORKOUTS.find((w) => w.title === "Sea Fret")!;
+  const result = await page.evaluate(
+    async (workout) => {
+      const res = await fetch("/api/logs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workoutId: null,
+          workoutTitle: workout.title,
+          workoutType: workout.type,
+          held: "held",
+          pain: 2,
+          thumbs: "up",
+          notes: "Felt strong through the back half.",
+          avgSplitSeconds: 124.5,
+          distanceMeters: 5000,
+          timeSeconds: 1500,
+          steps: [
+            {
+              label: "Work",
+              targetSplit: 125,
+              actualSplit: 124,
+              actualSource: "pm5",
+            },
+          ],
+          advancesPlan: false,
+        }),
+      });
+      return { ok: res.ok, status: res.status, body: await res.text() };
+    },
+    { title: seaFret.title, type: seaFret.type },
+  );
+  if (!result.ok) {
+    throw new Error(
+      `from-the-log fixture seed failed: ${result.status} ${result.body}`,
+    );
+  }
+  return (JSON.parse(result.body) as { id: string }).id;
+}
+
 // Phase 6B (Task 5): the session-route sweeps below (countdown, timer,
 // session complete) all need a tiny bulk-imported workout driven through
 // the real START -> countdown -> timer flow, not a seeded library workout —
@@ -2070,6 +2118,37 @@ test.describe("plan screen (a plan active)", () => {
     expect(styles.borderLeft).toBe("rgb(181, 52, 31)"); // --accent
   });
 
+  // Final whole-branch review (2026-08-18), finding IMPORTANT 1's own
+  // structural witness: `.plan-row:last-of-type` matched by TAG among ALL
+  // siblings of that tag, not by class — Task 6 wrapped every row in its
+  // own `<li><a|div class="plan-row">`, so each `.plan-row` became the
+  // ONLY element of its own tag inside its own `<li>`, and the old
+  // selector matched EVERY row rather than just the true last one (every
+  // divider vanished; `docs/screenshots/plan.png` shows rules before Task
+  // 6, none after). No prior sweep asserted the divider's PRESENCE, only
+  // its absence on the true last row (`.baseline-row`'s own PR #66 tests
+  // cover just that half) — asserting BOTH directions here is what keeps
+  // the fixed selector (`.plan-sequence > li:last-child .plan-row`) from
+  // silently inverting again: a selector that removes every divider, or
+  // one that never removes any, would each fail exactly one of these two
+  // checks.
+  test("a non-last plan row keeps its divider and the true last row still drops it", async ({
+    page,
+  }) => {
+    const rows = page.locator(".plan-sequence > li .plan-row");
+    await expect(rows).toHaveCount(84);
+
+    const firstBorder = await rows
+      .nth(0)
+      .evaluate((el) => getComputedStyle(el).borderBottomWidth);
+    expect(firstBorder).not.toBe("0px");
+
+    const lastBorder = await rows
+      .nth(83)
+      .evaluate((el) => getComputedStyle(el).borderBottomWidth);
+    expect(lastBorder).toBe("0px");
+  });
+
   // Reset/Switch: the staged-confirm idiom copied from BaselineEditor.tsx —
   // structurally proving the confirm panel itself (not just the header
   // buttons) clears the tap-target/axe bars, since it renders a different
@@ -2080,6 +2159,286 @@ test.describe("plan screen (a plan active)", () => {
       await expect(page.locator(".baseline-confirm")).toBeVisible();
     });
 
+    test("every visible interactive element has a >=44x44 tap target", async ({
+      page,
+    }) => {
+      await assertTapTargets(page);
+    });
+
+    test("zero WCAG 2A/2AA violations", async ({ page }) => {
+      await assertNoA11yViolations(page);
+    });
+  });
+
+  // From-the-log spec (2026-08-18) §1/§5, Task 6: the describe above's own
+  // fixture (`choosePlan` alone, doneN 0) never produces a DONE row at
+  // all — this sweep's whole point is the ONE new interactive element
+  // Task 6 adds to this screen, a done row rendered as an `<a>`
+  // (Plan.tsx), which the sibling describe above has never visited.
+  test.describe("with a linked done row (Task 6's own Plan.tsx change)", () => {
+    test.beforeEach(async ({ page }, testInfo) => {
+      await signInViaBackdoor(page, {
+        email: `design-plan-linked-${testInfo.parallelIndex}@e2e.test`,
+        name: "Design Plan Linked Tester",
+      });
+      await choosePlan(page, "sprint");
+      await resetPlanProgress(page);
+      // A real advancing save (default `advancesPlan: true`) — the ONLY
+      // way a genuinely linked done row exists (§2: linkage is stored,
+      // never inferred).
+      const result = await page.evaluate(async () => {
+        const res = await fetch("/api/logs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            workoutId: null,
+            workoutTitle: "Design Plan Link Sweep",
+            workoutType: "AT",
+            held: null,
+            pain: null,
+            notes: null,
+            steps: [{ label: "Work" }],
+          }),
+        });
+        return { ok: res.ok, status: res.status };
+      });
+      if (!result.ok) {
+        throw new Error(`advancing log seed failed: ${result.status}`);
+      }
+      await page.goto("/plan");
+      await expect(page.locator(".plan-row-done")).toHaveCount(1);
+      // `usePlanLinks`' own fetch (Plan.tsx, this task) is async — the
+      // row renders PLAIN first (a `<div>`, no `href`) and only becomes
+      // the `<a>` this whole describe exists to sweep once that fetch
+      // resolves. Waiting here, once, for every test in this describe,
+      // closes the race a bare `toHaveCount` leaves open (caught live:
+      // reading a still-plain row's `getComputedStyle` mid-swap once
+      // returned an empty string, the disconnected-node symptom of
+      // evaluating against a node React was already replacing).
+      await expect(page.locator(".plan-row-done")).toHaveAttribute(
+        "href",
+        /^\/today\/log\/[^/]+$/,
+      );
+    });
+
+    test("the linked done row is an <a> with a >=44x44 tap target, and the sweep still holds", async ({
+      page,
+    }) => {
+      const link = page.locator(".plan-row-done");
+      await expect(link).toHaveAttribute("href", /^\/today\/log\/[^/]+$/);
+      const tag = await link.evaluate((el) => el.tagName);
+      expect(tag).toBe("A");
+      // `.plan-row`'s own `min-height: 44px` rule — measured live rather
+      // than trusted from the CSS source, same reasoning `assertTapTargets`
+      // itself is built on (a computed box can diverge from an authored
+      // rule when flex/content pushes it taller or a sibling collapses it).
+      const box = await link.boundingBox();
+      expect(box).not.toBeNull();
+      expect(box!.height).toBeGreaterThanOrEqual(44);
+      await assertTapTargets(page);
+      await assertNoA11yViolations(page);
+    });
+
+    test("the linked row's own inherited color/decoration are unchanged from an ordinary <li> (no color regression from swapping <li> for <a>)", async ({
+      page,
+    }) => {
+      // `.plan-row`'s new `text-decoration: none; color: inherit;` rule
+      // (index.css, Task 6) exists exactly so this holds — an unstyled
+      // anchor would otherwise paint the UA default blue/underline here.
+      // Asserted on the ANCHOR ELEMENT ITSELF, not a child span: every
+      // child here (`.plan-row-index`/`.plan-row-status`) already carries
+      // its OWN explicit color (`.mono-status`/`.plan-row-status`'s own
+      // rules) regardless of this fix, so a child-level assertion would
+      // prove nothing about the rule this test exists to guard — the
+      // anchor's own computed color is the one property those don't
+      // shadow.
+      const styles = await page.locator(".plan-row-done").evaluate((el) => {
+        const s = getComputedStyle(el);
+        return { color: s.color, decoration: s.textDecorationLine };
+      });
+      expect(styles.color).toBe("rgb(27, 26, 23)"); // --ink, 15.41:1 on --page
+      expect(styles.decoration).toBe("none");
+    });
+  });
+});
+
+// From-the-log spec (2026-08-18) §5, Task 6: design witnesses for the
+// rows Tasks 4-5's own unit/e2e coverage and this task's own §4 sweep
+// don't reach — tap targets, WCAG, and computed token contrast on both
+// screens this spec ships, including EDIT MODE, which conditionally
+// renders a set of interactive elements (Save/Cancel + the reused
+// reflection card) no OTHER sweep in this file ever visits, since they
+// only exist behind this one screen's own Edit tap.
+test.describe("from-the-log (history list + detail view, §5)", () => {
+  let logId: string;
+
+  test.beforeEach(async ({ page }, testInfo) => {
+    await signInViaBackdoor(page, {
+      email: `design-fromlog-${testInfo.parallelIndex}@e2e.test`,
+      name: "Design From The Log Tester",
+    });
+    logId = await postFromLogFixture(page);
+  });
+
+  test.describe("history list (/today/log)", () => {
+    test.beforeEach(async ({ page }) => {
+      await page.goto("/today/log");
+      await expect(page.locator(".today-log-row").first()).toBeVisible();
+    });
+
+    test("every visible interactive element has a >=44x44 tap target", async ({
+      page,
+    }) => {
+      await assertTapTargets(page);
+    });
+
+    test("zero WCAG 2A/2AA violations", async ({ page }) => {
+      await assertNoA11yViolations(page);
+    });
+
+    test("no small mono label uses the failing --ink-4 color", async ({
+      page,
+    }) => {
+      await assertNoFailingInk4Labels(page);
+    });
+
+    // §5G: the hero snippet's own literal example, rendered from REAL
+    // stored numbers (not a unit-test mock) — `AVG 2:04.5 · 5,000 m`,
+    // exactly `log.spec.ts`'s own e2e fixture proves the same numbers
+    // format to, at the mono meta line's own vetted token color.
+    test("the hero snippet renders the stored AVG/DISTANCE pair, at --ink-3 token color", async ({
+      page,
+    }) => {
+      const hero = page.locator(".today-log-hero").first();
+      await expect(hero).toHaveText("AVG 2:04.5 · 5,000 m");
+      const color = await hero.evaluate((el) => getComputedStyle(el).color);
+      expect(color).toBe("rgb(87, 84, 76)"); // --ink-3, 6.69:1 on --page
+    });
+  });
+
+  test.describe("detail view, read-back (/today/log/:id)", () => {
+    test.beforeEach(async ({ page }) => {
+      await page.goto(`/today/log/${logId}`);
+      await expect(
+        page.getByRole("heading", { name: "Sea Fret" }),
+      ).toBeVisible();
+    });
+
+    test("every visible interactive element has a >=44x44 tap target", async ({
+      page,
+    }) => {
+      await assertTapTargets(page);
+    });
+
+    test("zero WCAG 2A/2AA violations", async ({ page }) => {
+      await assertNoA11yViolations(page);
+    });
+
+    // §5D: "Dashed block (handoff): the answered fields as HELD · PAIN
+    // 3/5 · LIKED segments ... note text beneath" — the dashed border is
+    // the one genuinely new visual rule this row adds (index.css's own
+    // comment: "only the read-back block and plan footer below are
+    // genuinely new rules"); the two text colors are the shared ink
+    // scale, computed live rather than trusted from a comment elsewhere.
+    test("the read-back block is a dashed border, and its two text rows meet the token contrast pair", async ({
+      page,
+    }) => {
+      const block = page.locator(".log-readback");
+      await expect(block).toBeVisible();
+      const style = await block.evaluate((el) => {
+        const s = getComputedStyle(el);
+        return {
+          borderStyle: s.borderTopStyle,
+          borderColor: s.borderTopColor,
+        };
+      });
+      expect(style.borderStyle).toBe("dashed");
+      expect(style.borderColor).toBe("rgb(201, 195, 178)"); // --rule-3
+
+      await expect(page.locator(".log-readback-segments")).toHaveText(
+        "HELD · PAIN 2/5 · LIKED",
+      );
+      const segmentColor = await page
+        .locator(".log-readback-segments")
+        .evaluate((el) => getComputedStyle(el).color);
+      expect(segmentColor).toBe("rgb(27, 26, 23)"); // --ink, 15.41:1 on --page
+
+      await expect(page.locator(".log-readback-note")).toHaveText(
+        "Felt strong through the back half.",
+      );
+      const noteColor = await page
+        .locator(".log-readback-note")
+        .evaluate((el) => getComputedStyle(el).color);
+      expect(noteColor).toBe("rgb(63, 60, 53)"); // --ink-2, 9.74:1 on --page
+    });
+  });
+
+  test.describe("detail view, EDIT MODE (/today/log/:id, Edit tapped)", () => {
+    test.beforeEach(async ({ page }) => {
+      await page.goto(`/today/log/${logId}`);
+      await page.getByRole("button", { name: "Edit" }).click();
+      await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
+    });
+
+    // The reflection card's own controls are vetted ground (§8: "the
+    // reflection card's controls" inherited from spec 1's own sweep) —
+    // this sweep's job is proving THIS route's own conditionally-rendered
+    // subtree (Save/Cancel alongside the reused card) clears the bars,
+    // since no OTHER sweep in this file ever puts this route into edit
+    // mode first.
+    test("every visible interactive element, including Save/Cancel, has a >=44x44 tap target", async ({
+      page,
+    }) => {
+      await assertTapTargets(page);
+    });
+
+    test("zero WCAG 2A/2AA violations in edit mode", async ({ page }) => {
+      await assertNoA11yViolations(page);
+    });
+
+    // §5D edit row, read precisely: "four clearable controls, same 46px
+    // targets, PLUS Save/Cancel" — the 46px figure names the FOUR
+    // reflection-card controls (spec 1's own vetted `.summary-held-chip`/
+    // `.summary-pain-chip`, §8 vetted ground), not Save/Cancel, which the
+    // row lists separately with no size figure of their own — so they
+    // owe only the house 44px floor (CLAUDE.md's hard requirement),
+    // already covered by the tap-target sweep above. Measured live
+    // (fix round, first draft wrongly held Save/Cancel to 46px too and
+    // found `.button-outline`'s real 44px — a correct-as-shipped value,
+    // not a defect; the test's own assumption was wrong, not the app).
+    test("the four reflection-card controls are each >=46px, and Save/Cancel each clear the house 44px floor", async ({
+      page,
+    }) => {
+      const heldChip = page.getByRole("button", { name: "HELD" });
+      const painChip = page.getByRole("button", { name: "Pain 3" });
+      const save = page.getByRole("button", { name: "Save" });
+      const cancel = page.getByRole("button", { name: "Cancel" });
+      const heldBox = await heldChip.boundingBox();
+      const painBox = await painChip.boundingBox();
+      const saveBox = await save.boundingBox();
+      const cancelBox = await cancel.boundingBox();
+      expect(heldBox).not.toBeNull();
+      expect(painBox).not.toBeNull();
+      expect(saveBox).not.toBeNull();
+      expect(cancelBox).not.toBeNull();
+      expect(heldBox!.height).toBeGreaterThanOrEqual(46);
+      expect(painBox!.height).toBeGreaterThanOrEqual(46);
+      expect(saveBox!.height).toBeGreaterThanOrEqual(44);
+      expect(cancelBox!.height).toBeGreaterThanOrEqual(44);
+    });
+  });
+
+  test.describe("detail view, not found (/today/log/:id, an id that 404s)", () => {
+    test.beforeEach(async ({ page }) => {
+      await page.goto("/today/log/00000000-0000-0000-0000-000000000000");
+      await expect(page.getByText("This session is gone.")).toBeVisible();
+    });
+
+    // §5F: "renders `This session is gone.` with ← LOG; no auto-redirect"
+    // — the copy and destination themselves are `e2e/log.spec.ts`'s own
+    // N4 test's job (§4's own cold-entry trio); this sweep's job is the
+    // ← LOG affordance's own tap target and this state's WCAG bar,
+    // neither of which N4 checks.
     test("every visible interactive element has a >=44x44 tap target", async ({
       page,
     }) => {

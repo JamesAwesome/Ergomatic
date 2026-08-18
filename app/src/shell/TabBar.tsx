@@ -1,6 +1,7 @@
 import { NavLink } from "react-router-dom";
 import { clearLibraryFilters } from "../library/libraryFilters";
 import { clearLibraryScroll } from "../library/libraryScroll";
+import { clearLogScroll } from "../log/logScroll";
 import { clearNewsScroll } from "../news/newsScroll";
 
 // A fresh Library visit forgets BOTH halves of "where you were" — the
@@ -15,7 +16,16 @@ function clearLibraryReturnState() {
 // CL item / ROADMAP "News scroll memory": News has no filters of its own
 // to clear alongside the scroll position (unlike Library above) — just
 // the one saved value.
+//
+// From-the-log spec (2026-08-18), §4 N7: TODAY gets the same one-value
+// clear as NEWS — the history list's own saved scroll, not Today's own
+// screen (Today has no scroll memory of its own). A tab tap on TODAY
+// always pops to Today's root either way (NavLink's own `to="/today"`),
+// so this clear only matters for a LATER fresh visit to /today/log
+// through the ALL SESSIONS heading link, which must never restore a
+// stale offset from a previous visit.
 const CLEAR_ON_TAB: Partial<Record<string, () => void>> = {
+  "/today": clearLogScroll,
   "/library": clearLibraryReturnState,
   "/news": clearNewsScroll,
 };

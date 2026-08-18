@@ -126,10 +126,23 @@ export interface SummaryMeta {
  *  field is absent, never a fabricated zero (§2B's own "no `0:00`, no
  *  `0 m`" rule) — see this module's own per-hero comments for the exact
  *  "present only when its underlying sum is greater than zero" rule each
- *  one applies. */
+ *  one applies.
+ *
+ *  Phase PW spec 2 §2: `avgSplitSeconds`/`timeSeconds` are the NUMBERS the
+ *  strings above were formatted FROM, exported so the from-the-log POST
+ *  site (`LogSession.tsx`'s shared body assembly) never re-derives one —
+ *  this module is the ONE place the number-string pairing is decided.
+ *  Each numeric field is present EXACTLY when its string sibling is:
+ *  `avgSplit = fmtSplit(avgSplitSeconds)`, `time = fmtDuration(timeSeconds
+ *  / 60)` (the formatter takes MINUTES — spec §2's documented trap, easy
+ *  to get backwards at a call site that already has raw seconds in
+ *  hand). `distanceMeters` already doubles as its own number (no separate
+ *  string sibling to pair with). */
 export interface SummaryHeroes {
   avgSplit?: string;
+  avgSplitSeconds?: number;
   time?: string;
+  timeSeconds?: number;
   distanceMeters?: number;
 }
 
@@ -203,7 +216,13 @@ export function deviationBarWidthPercent(deviationSeconds: number): number {
   return Math.min(50, Math.max(1.2, raw));
 }
 
-function judge(
+/** Exported (from-the-log spec, 2026-08-18, Task 5): the from-the-log
+ *  view's own row builder (`src/log/storedSummary.ts`) judges a stored
+ *  row's `actualSplit` against the STORED `avg_split_seconds` — the exact
+ *  same formula this module's own doors use to judge a row against their
+ *  freshly-computed working average, never re-derived a second time. Pure
+ *  visibility change only: the function itself is unmodified. */
+export function judge(
   rowSplitSeconds: number,
   workingAverageSeconds: number,
 ): RowJudgment {
@@ -403,7 +422,9 @@ function monitorHeroes(
   return {
     avgSplit:
       avgSplit.seconds !== undefined ? fmtSplit(avgSplit.seconds) : undefined,
+    avgSplitSeconds: avgSplit.seconds,
     time: timeSeconds !== undefined ? fmtDuration(timeSeconds / 60) : undefined,
+    timeSeconds,
     distanceMeters: monitorDistanceMeters(run),
   };
 }
@@ -682,7 +703,9 @@ function buildTimerModel(run: SessionRun, steps: LogStep[]): SummaryModel {
   const heroes: SummaryHeroes = {
     avgSplit:
       avgSplit.seconds !== undefined ? fmtSplit(avgSplit.seconds) : undefined,
+    avgSplitSeconds: avgSplit.seconds,
     time: timeSeconds !== undefined ? fmtDuration(timeSeconds / 60) : undefined,
+    timeSeconds,
     // DISTANCE: this module's header — timer door has no machine total.
   };
   const warmupRow = timerWarmupRow(run);
@@ -750,7 +773,10 @@ function buildManualModel(steps: LogStep[], dateIso: string): SummaryModel {
  *  the warm-up carries no reading (a lost boundary, or a TIME-kind warm-up
  *  that can never be measured at all). A row like that "carries" nothing;
  *  gate on an actual label, not the discriminant alone. */
-function targetsOnlyCaption(rows: SummaryRow[]): string | undefined {
+// Exported (from-the-log spec, Task 5): `storedSummary.ts`'s own caption
+// reuses this exact rule rather than a second copy — visibility change
+// only.
+export function targetsOnlyCaption(rows: SummaryRow[]): string | undefined {
   return rows.some(
     (r) =>
       r.measured && (r.timeLabel !== undefined || r.paceLabel !== undefined),
@@ -769,7 +795,10 @@ function targetsOnlyCaption(rows: SummaryRow[]): string | undefined {
  *  named explicitly so midnight can never print as `"24:XX"`. The empty
  *  locales array defers to the device's own locale exactly as the
  *  requirement asks. */
-function formatTimeOfDay(iso: string): string {
+// Exported (from-the-log spec, Task 5): `storedSummary.ts`'s own meta
+// builder reuses this exact formatter (same h23-pinned reasoning) rather
+// than a second copy — visibility change only.
+export function formatTimeOfDay(iso: string): string {
   return new Date(iso).toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit",

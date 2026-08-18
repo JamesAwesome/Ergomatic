@@ -1183,6 +1183,17 @@ button:disabled {
   display: inline-flex;
   align-items: center;
   min-height: var(--tap);
+  /* Task 6 design sweep (2026-08-18): `min-width` joins `min-height` —
+     every OTHER `.back-link` label in the app ("← BACK", "← DONE",
+     "← TODAY", "← PLAN") happened to be wide enough on its own content,
+     so this gap went uncaught until spec §4 N5's own `← LOG` (the
+     shortest label this class has ever carried, at 12px mono) measured
+     40.83px wide, real content under the house's 44px hit-target floor.
+     `inline-flex` + `align-items: center` already centers shorter
+     content within a taller/wider box, so this can only WIDEN a label
+     that was already narrower than 44px — no existing `.back-link` call
+     site loses anything. */
+  min-width: var(--tap);
   font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 600;
@@ -2245,6 +2256,29 @@ button:disabled {
   margin-top: 24px;
 }
 
+/* From-the-log spec (2026-08-18), §1: the heading is now the ALL SESSIONS
+   link to /today/log (44px target, via `--tap`) — layout only here
+   (flex + min-height); the link's own typography lives on
+   `.today-last-three-heading-link` below so it doesn't collide with
+   `.section-heading`'s own font rules on the shared `<h2>`. */
+.today-last-three-heading {
+  display: flex;
+  align-items: center;
+  min-height: var(--tap);
+}
+
+.today-last-three-heading-link {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap);
+}
+
 .today-log-list {
   list-style: none;
   margin: 8px 0 0;
@@ -2254,12 +2288,20 @@ button:disabled {
   gap: 2px;
 }
 
+/* `flex-wrap: wrap` added for the history list's own optional 4th child
+   (`.today-log-hero`, below) — Today's own 3-child rows never fill a
+   row's full width (the title's `overflow: hidden` gives it an automatic
+   flex minimum of 0, so it always shrinks to fit rather than forcing a
+   wrap), so this is inert for every row Today itself renders. */
 .today-log-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   min-height: 46px;
   border-top: 1px solid var(--rule-2);
+  text-decoration: none;
+  color: var(--ink);
 }
 
 .today-log-title {
@@ -2281,6 +2323,102 @@ button:disabled {
   letter-spacing: 0.04em;
   color: var(--ink-3);
   white-space: nowrap;
+}
+
+/* From-the-log spec (2026-08-18), §5G: the history list's own hero
+   snippet line (`AVG 2:04.5 · 5,000 m`) — `flex: 1 0 100%` is what drops
+   this 4th child to its own line under `.today-log-row`'s
+   `flex-wrap: wrap` (see that rule's own comment). Today's rows never
+   set the `hero` prop (`LogRow.tsx`), so this rule is inert there. */
+.today-log-hero {
+  flex: 1 0 100%;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+}
+
+/* -- History list (from-the-log spec, 2026-08-18, /today/log) ----------
+   Row idiom is `.today-log-row`/`.today-log-list`, reused verbatim (§1:
+   "one row component, not two") — only the screen's own header/list
+   spacing is new here. */
+
+.history-screen .screen-title {
+  margin: 4px 0 0;
+}
+
+.history-log-list {
+  margin: 16px 0 0;
+}
+
+/* -- From-the-log detail view (from-the-log spec, 2026-08-18,
+   /today/log/:id) — reuses PostWorkoutSummary's own extracted
+   meta/heroes/intervals/reflection-card pieces byte-for-byte (§1: "reuses
+   PostWorkoutSummary's rendering"; `.summary-eyebrow`/`.back-link`/
+   `.summary-title`/`.summary-heroes`/`.summary-intervals`/
+   `.summary-reflection-card`/`.summary-save-lead`/`.button-outline`/
+   `.field-error`/`.mono-status` all already styled there) — only the
+   read-back block and plan footer below are genuinely new rules.
+   `.overlay-screen` (Reader/Releases' own idiom, §4 N3) supplies the
+   own-scroller mechanism; no page-specific override needed on top of it. */
+
+/* Task 6 design sweep (2026-08-18): qualified as `.summary-reflection-
+   card.log-readback`, not bare `.log-readback` — `FromTheLog.tsx` always
+   carries both classes on the same div (grepped: the only usage), and a
+   bare single-class selector here loses the cascade to `.summary-
+   reflection-card`'s own conflicting `gap`/`border`/`margin` rule further
+   down this file (equal specificity, later source order wins) — caught
+   live: the read-back block was rendering a SOLID `--ink` border at
+   22px/24px gap/margin instead of this rule's own dashed `--rule-3`
+   border at 10px/16px, exactly the §5D property this class exists to
+   own. Two classes raises this selector's specificity above the bare
+   one, so it wins regardless of which rule comes first in the file. */
+.summary-reflection-card.log-readback {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border: 1px dashed var(--rule-3);
+  border-radius: var(--radius);
+  margin: 0 0 16px;
+}
+
+.log-readback-segments {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+  /* Fix round LOW (c): UA default <p> margin (~1em) inside a
+     `.log-readback`/`display: flex; gap: 10px` column double-spaces this
+     from the note below it, a visible gutter inconsistency on the
+     committed capture — `.log-readback-note`'s own `margin: 0` already
+     avoided this; this rule now matches it. */
+  margin: 0;
+}
+
+.log-readback-note {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--ink-2);
+  white-space: pre-wrap;
+  margin: 0;
+}
+
+.log-edit-button {
+  margin: 0 0 24px;
+}
+
+.log-edit-stack {
+  margin: 20px 0 0;
+}
+
+.log-plan-footer {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+  margin: 20px 0 0;
 }
 
 /* -- Plan (Phase 6A Task 3) ---------------------------------------------
@@ -2367,9 +2505,31 @@ button:disabled {
   min-height: 44px;
   padding: 0 10px;
   border-bottom: 1px solid var(--rule-2);
+  /* From-the-log spec (2026-08-18) §1: a done row with stored linkage
+     renders this class on an <a> (Plan.tsx) rather than the plain <li>/
+     <div> every other row still uses — harmless reset for those, needed
+     here so a linked row reads identically to an unlinked one. */
+  text-decoration: none;
+  color: inherit;
 }
 
-.plan-row:last-of-type {
+/* Final whole-branch review (2026-08-18), finding IMPORTANT 1 — the SAME
+   trap `.baseline-row`'s own comment above documents (PR #66), tripped
+   again: `:last-of-type` matches by TAG among ALL sibling elements of that
+   tag, not by class. Before Task 6, every `.plan-row` sat directly in
+   `.plan-sequence` as a sibling `<div>`, so "last div among the divs" and
+   "last `.plan-row`" were the same element — by accident, the exact
+   accident the older comment warns about. Task 6 wrapped each row in its
+   own `<li><a|div class="plan-row">…</a|div></li>` (Plan.tsx) so a
+   linked, done row could be an `<a>` instead of a `<div>` — which means
+   EVERY `.plan-row` is now the ONLY element of its own tag inside its own
+   `<li>`, so `:last-of-type` matched ALL of them, not just the true last
+   row, and every row's divider vanished (confirmed: `plan.png` had rules
+   before Task 6, none after). Selecting on STRUCTURE (the last `<li>` in
+   the list) instead of TAG IDENTITY is the fix that can't repeat this
+   trap a third time — it doesn't care whether the row inside is an `<a>`
+   or a `<div>`. */
+.plan-sequence > li:last-child .plan-row {
   border-bottom: none;
 }
 

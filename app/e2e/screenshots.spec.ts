@@ -629,6 +629,57 @@ test("plan", async ({ page }) => {
   });
 });
 
+// PM final-PR gate, condition 3: `plan.png` above is reset to zero done
+// rows (recurring failure #7's own trap in reverse — no done row at all,
+// let alone a linked one). This capture advances one real session through
+// the same `advancesPlan: true` path `log-detail` uses (a genuine atomic
+// upsert, not a faked checkmark), so Plan.tsx's own done-row link (§1:
+// "a done row with stored linkage becomes a link" — `usePlanLinks`,
+// `GET /api/logs?plan=<key>`) has something real to find and render row 1
+// as an `<a class="plan-row plan-row-done">` instead of a plain `<div>`.
+test("plan-linked", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-plan-linked@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await choosePlan(page, "sprint");
+  await resetPlanProgress(page);
+  await postLog(page, {
+    workoutTitle: "Sea Fret",
+    workoutType: "O2",
+    held: "held",
+    pain: 2,
+    avgSplitSeconds: 130,
+    timeSeconds: 780,
+    distanceMeters: 3000,
+    advancesPlan: true,
+    steps: [
+      {
+        label: "6:00 @ 6k",
+        targetSplit: 130,
+        actualSplit: 130,
+        actualSource: "stopwatch",
+        meters: 3000,
+      },
+    ],
+  });
+
+  await page.goto("/plan");
+  await page.locator(".plan-sequence").waitFor();
+  await expect(page.locator(".plan-row")).toHaveCount(84);
+
+  // The load-bearing assertion: a done row that is genuinely a link, not
+  // just a checkmark glyph — `usePlanLinks`'s fetch has to have resolved
+  // and matched row 1 before this holds.
+  const linkedRow = page.locator("a.plan-row-done");
+  await expect(linkedRow).toHaveCount(1);
+  await expect(linkedRow).toHaveAttribute("href", /\/today\/log\/.+/);
+
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "plan-linked.png"),
+  });
+});
+
 // Task 4 (ui-fix round): three captures from one continuous flow — the same
 // "multiple screenshots per test" idiom "today-unlogged" above uses for its
 // DEFAULT/ARMED pair. `library.png` is now the REST state proper (DESIGN.md's
@@ -1565,6 +1616,250 @@ test("post-workout-summary-landscape", async ({ page }) => {
     path: path.join(SCREENSHOTS_DIR, "post-workout-summary-landscape.png"),
   });
   await cleanupByTitle(page, title);
+});
+
+// From-the-log spec (2026-08-18), Task 4: the history list (`/today/log`).
+// POSTs session logs directly (a real in-page fetch, same idiom as the
+// `neutralizeGlobalRecency`/`logOnce` helpers `today.spec.ts` uses) rather
+// than running real timer sessions — this screen renders server rows, not
+// live session state, so seeding it directly is both faster and closer to
+// what the screen actually reads.
+async function postLog(
+  page: Page,
+  body: {
+    workoutTitle: string;
+    workoutType: string;
+    held?: "held" | "under" | "over" | null;
+    pain?: number | null;
+    thumbs?: "up" | "down" | null;
+    notes?: string | null;
+    avgSplitSeconds?: number | null;
+    distanceMeters?: number | null;
+    timeSeconds?: number | null;
+    // Task 5's own "log-detail" capture: real measured/judged rows and,
+    // via `advancesPlan` below, genuine plan linkage — both need fields
+    // this helper's original narrower signature (§5G's own hero-snippet
+    // capture, Task 4) never had to pass.
+    advancesPlan?: boolean;
+    steps?: {
+      label: string;
+      targetSplit?: number;
+      actualSplit?: number;
+      actualSource?: "assumed" | "stopwatch" | "pm5";
+      meters?: number;
+      seconds?: number;
+    }[];
+  },
+): Promise<void> {
+  const result = await page.evaluate(async (b) => {
+    const res = await fetch("/api/logs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workoutId: null,
+        held: null,
+        pain: null,
+        notes: null,
+        steps: [{ label: "Work" }],
+        advancesPlan: false,
+        ...b,
+      }),
+    });
+    return { ok: res.ok, status: res.status, body: await res.text() };
+  }, body);
+  if (!result.ok) {
+    throw new Error(`postLog failed: ${result.status} ${result.body}`);
+  }
+}
+
+// Exit criterion 2's own fixture, verbatim: the frozen v0.11.0 body shape
+// (no hero keys at all — server/routes/data.test.ts's own
+// `V0_11_0_LOG_BODY`) — the capture's null-hero row is the SAME shape a
+// pre-spec-2 client actually sent, not a hand-simulated null.
+async function postV0110Log(page: Page, title: string): Promise<void> {
+  const result = await page.evaluate(async (t) => {
+    const res = await fetch("/api/logs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workoutId: null,
+        workoutTitle: t,
+        workoutType: "AT",
+        held: "held",
+        pain: 2,
+        notes: null,
+        steps: [
+          {
+            label: "Work",
+            targetSplit: 120,
+            actualSplit: 121,
+            actualSource: "stopwatch",
+          },
+        ],
+        advancesPlan: false,
+      }),
+    });
+    return { ok: res.ok, status: res.status, body: await res.text() };
+  }, title);
+  if (!result.ok) {
+    throw new Error(`postV0110Log failed: ${result.status} ${result.body}`);
+  }
+}
+
+// §5G: the row idiom plus the hero snippet, four real sessions (recurring
+// failure #7's own floor) including one null-hero old row (exit criterion
+// 2's own v0.11.0 shape) — the screen's whole point is showing a rower
+// their real history, so an empty or single-row capture would show
+// nothing this task actually built.
+test("log-history", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-log-history@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await postV0110Log(page, "Steady State");
+  await postLog(page, {
+    workoutTitle: "Sea Fret",
+    workoutType: "O2",
+    held: "held",
+    pain: 2,
+    avgSplitSeconds: 124.5,
+    distanceMeters: 5000,
+  });
+  await postLog(page, {
+    workoutTitle: "Occluded Front",
+    workoutType: "AT",
+    held: "under",
+    pain: 1,
+    avgSplitSeconds: 118.2,
+    distanceMeters: 6200,
+  });
+  await postLog(page, {
+    workoutTitle: "Pressure Ridge",
+    workoutType: "TR",
+    held: "over",
+    pain: 3,
+    avgSplitSeconds: 132.7,
+    distanceMeters: 4500,
+  });
+
+  await page.goto("/today/log");
+  await expect(page.locator(".today-log-row")).toHaveCount(4);
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "log-history.png"),
+  });
+});
+
+// Task 5: the from-the-log detail view (/today/log/:id) — a real saved
+// row (via the real POST route, `advancesPlan: true` over a chosen+reset
+// plan so linkage is genuinely stamped by the server's own atomic upsert,
+// not faked client-side) reopened through the real UI: heroes, two
+// measured/judged rows, all four reflection fields answered (the
+// read-back, not the just-opened blank form), and the plan footer all on
+// one screen. Recurring failure #7, sharpened: the numbers below are
+// hand-checkable on the committed capture — AVG SPLIT 2:10.0 is exactly
+// `500 × (360+420) / (1500+1500)` (500 × (6:00+7:00) / (1500m+1500m)),
+// the same two rows' own time/meters shown below it, and DISTANCE 3,000 m
+// is exactly those two rows' meters summed — never a number the capture
+// itself can't be checked against.
+test("log-detail", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-log-detail@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await choosePlan(page, "sprint");
+  await resetPlanProgress(page);
+  await postLog(page, {
+    workoutTitle: "Sea Fret",
+    workoutType: "O2",
+    held: "under",
+    pain: 3,
+    thumbs: "up",
+    notes: "Held on through the back half.",
+    avgSplitSeconds: 130,
+    timeSeconds: 780,
+    distanceMeters: 3000,
+    advancesPlan: true,
+    steps: [
+      {
+        label: "6:00 @ 6k",
+        targetSplit: 130,
+        actualSplit: 120,
+        actualSource: "stopwatch",
+        meters: 1500,
+      },
+      {
+        label: "6:00 @ 6k",
+        targetSplit: 130,
+        actualSplit: 140,
+        actualSource: "stopwatch",
+        meters: 1500,
+      },
+    ],
+  });
+
+  await page.goto("/today/log");
+  const row = page.locator(".today-log-row").filter({ hasText: "Sea Fret" });
+  await expect(row).toBeVisible();
+  await row.click();
+  await expect(page).toHaveURL(/\/today\/log\/[^/]+$/);
+  await expect(page.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
+  await expect(page.getByText("AVG SPLIT")).toBeVisible();
+  await expect(page.getByText("2:10.0")).toBeVisible();
+  await expect(
+    page.getByText("UNDER · FASTER · PAIN 3/5 · LIKED"),
+  ).toBeVisible();
+  await expect(page.getByText("Held on through the back half.")).toBeVisible();
+  await expect(
+    page.getByText("Logged to Sprint (2k) Prep · SESSION 1 OF 84"),
+  ).toBeVisible();
+
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "log-detail.png"),
+  });
+});
+
+// PM final-PR gate, condition 3: the detail screen's OTHER install-day
+// reality — a row saved in the frozen pre-update body shape
+// (`postV0110Log`, byte-identical to server/routes/data.test.ts's own
+// `V0_11_0_LOG_BODY`: no avgSplitSeconds/timeSeconds/distanceMeters keys
+// on the wire at all). This is the state 100% of the tester's existing
+// corpus renders in on install day, and `log-detail.png` above never
+// shows it — every hero was populated there. Load-bearing per recurring
+// failure #7: `.summary-heroes` must be ABSENT entirely (not present-but-
+// empty, not dashes) — `SummaryHeroesBlock`'s own "every hero undefined
+// → return null" gate (PostWorkoutSummary.tsx) — while the row and the
+// reflection read-back (`held: "held", pain: 2`, no thumbs/notes) render
+// exactly as they do for a current-shape log.
+test("log-detail-legacy", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-log-detail-legacy@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await postV0110Log(page, "Steady State");
+
+  await page.goto("/today/log");
+  const row = page
+    .locator(".today-log-row")
+    .filter({ hasText: "Steady State" });
+  await expect(row).toBeVisible();
+  await row.click();
+  await expect(page).toHaveURL(/\/today\/log\/[^/]+$/);
+  await expect(
+    page.getByRole("heading", { name: "Steady State" }),
+  ).toBeVisible();
+
+  // The load-bearing assertion: no hero block at all.
+  await expect(page.locator(".summary-heroes")).toHaveCount(0);
+  await expect(page.getByText("AVG SPLIT")).toHaveCount(0);
+
+  // Rows + reflection read-back still render (storedSummary.ts's
+  // buildReadBack: HELD_READBACK_LABEL.held + "PAIN 2/5").
+  await expect(page.locator(".summary-row-list .summary-row")).toHaveCount(1);
+  await expect(page.getByText("HELD · PAIN 2/5")).toBeVisible();
+
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "log-detail-legacy.png"),
+  });
 });
 
 // Phase 6C Task 4, rebuilt on PostWorkoutSummary by Phase PW Task 5: the

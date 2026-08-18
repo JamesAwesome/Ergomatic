@@ -17,6 +17,10 @@ import type { NewWorkoutInput, WorkoutsStore } from "../workouts.js";
 // the fakes mirror that truth).
 // ---------------------------------------------------------------------------
 
+// Well-formed but guaranteed-absent from any backend (real Postgres or the
+// in-memory fake) a fresh `makeStores()` call produces.
+const NON_EXISTENT_UUID = "00000000-0000-0000-0000-000000000000";
+
 export interface SeededGlobalWorkout {
   id: string;
   sortOrder: number | null;
@@ -566,6 +570,383 @@ export function describeStoreContracts(
         });
         expect(list.find((r) => r.id === downId)).toMatchObject({
           thumbs: "down",
+        });
+      });
+
+      // From-the-log spec (2026-08-18), §2: the three hero numbers must
+      // round-trip through the REAL column type (double precision), not
+      // just through a JS object — this is the B8 probe. Verified
+      // independently against real Postgres (2026-08-18, docker
+      // postgres:18.4) that the probe CAN go red: `SELECT
+      // '2.7182818284'::real` returns `2.7182817` (float4 truncation),
+      // while `SELECT '2.7182818284'::double precision` returns the value
+      // unchanged — confirming a `real` column would fail this exact
+      // assertion and proving `double precision` is required, not
+      // decorative. That scratch verification is not committed as
+      // product code; this assertion against the schema's actual double
+      // precision columns is the permanent regression guard.
+      it("create round-trips the three hero numbers exactly, including a value that would truncate under real (B8 probe)", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        const { id } = await stores.logs.create(
+          userId,
+          logInput({
+            avgSplitSeconds: 2.7182818284,
+            timeSeconds: 3600.1234567891,
+            distanceMeters: 5000,
+          }),
+        );
+        const list = await stores.logs.list(userId, 10);
+        const row = list.find((r) => r.id === id);
+        expect(row).toMatchObject({
+          avgSplitSeconds: 2.7182818284,
+          timeSeconds: 3600.1234567891,
+          distanceMeters: 5000,
+        });
+      });
+
+      // Fix round 1 (task review, finding 3): `logInput()`'s own base
+      // shape never sets avgSplitSeconds/timeSeconds/distanceMeters at all
+      // (see the fixture's definition above) — the v0.11.0 body shape IS
+      // `logInput()` with no overrides, so this needs no deletes.
+      it("create with no hero numbers posted stores all three null (v0.11.0 body shape)", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        const { id } = await stores.logs.create(userId, logInput());
+        const list = await stores.logs.list(userId, 10);
+        const row = list.find((r) => r.id === id);
+        expect(row).toMatchObject({
+          avgSplitSeconds: null,
+          timeSeconds: null,
+          distanceMeters: null,
+        });
+      });
+
+      // From-the-log spec (2026-08-18), §2 "the linkage mechanism": the
+      // four cases the plan carries by name.
+      describe("plan linkage", () => {
+        it("an advancing save with a plan chosen stamps (planKey, planIndex)", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          await stores.planState.set(userId, "sprint");
+
+          const { id } = await stores.logs.create(userId, logInput());
+
+          const list = await stores.logs.list(userId, 10);
+          const row = list.find((r) => r.id === id);
+          expect(row).toMatchObject({ planKey: "sprint", planIndex: 0 });
+        });
+
+        it("a non-advancing save stores planKey/planIndex null, even with a plan chosen", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          await stores.planState.set(userId, "sprint");
+
+          const { id } = await stores.logs.create(
+            userId,
+            logInput({ advancesPlan: false }),
+          );
+
+          const list = await stores.logs.list(userId, 10);
+          const row = list.find((r) => r.id === id);
+          expect(row).toMatchObject({ planKey: null, planIndex: null });
+        });
+
+        it("an advancing save with NO plan chosen stores planKey/planIndex null (counter moved, nothing named)", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          expect(await stores.planState.get(userId)).toBeNull();
+
+          const { id } = await stores.logs.create(userId, logInput());
+
+          const list = await stores.logs.list(userId, 10);
+          const row = list.find((r) => r.id === id);
+          expect(row).toMatchObject({ planKey: null, planIndex: null });
+        });
+
+        it("two sequential advancing saves stamp consecutive indexes", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          await stores.planState.set(userId, "head");
+
+          const first = await stores.logs.create(userId, logInput());
+          const second = await stores.logs.create(userId, logInput());
+
+          const list = await stores.logs.list(userId, 10);
+          expect(list.find((r) => r.id === first.id)).toMatchObject({
+            planKey: "head",
+            planIndex: 0,
+          });
+          expect(list.find((r) => r.id === second.id)).toMatchObject({
+            planKey: "head",
+            planIndex: 1,
+          });
+        });
+      });
+
+      // From-the-log spec (2026-08-18), §3: the list projection explicitly
+      // drops `steps` (zero client consumers — `RecentLog`, the response's
+      // only reader, never carried it), while `get()` (the from-the-log
+      // view's own fetch) keeps the full row.
+      describe("list projection", () => {
+        it("list rows never include steps", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          await stores.logs.create(
+            userId,
+            logInput({ steps: [{ label: "Work", targetSplit: 120 }] }),
+          );
+          const list = await stores.logs.list(userId, 10);
+          expect(list[0]).not.toHaveProperty("steps");
+        });
+
+        it("get still returns the full row, steps included", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          const { id } = await stores.logs.create(
+            userId,
+            logInput({ steps: [{ label: "Work", targetSplit: 120 }] }),
+          );
+          const row = await stores.logs.get(userId, id);
+          expect(row).toMatchObject({
+            steps: [{ label: "Work", targetSplit: 120 }],
+          });
+        });
+
+        // Task 2 review, LOW 1: `LOG_LIST_COLUMNS` (stores/logs.ts) is a
+        // hand-maintained mirror of `sessionLogs`' columns, minus `steps`
+        // — nothing pinned it against drift before this test. A column
+        // added to the schema later and forgotten here would silently
+        // vanish from the list response with every other case in this
+        // describe still green (they all assert PRESENCE/ABSENCE of
+        // specific keys, never the full set). Comparing against `get()`'s
+        // own key set (the real, un-projected row) means this pin tracks
+        // the schema automatically — it never needs editing when a future
+        // column is added, only when one is deliberately EXCLUDED again.
+        it("the list projection is exactly get()'s key set minus steps — no column silently drops out", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          const { id } = await stores.logs.create(
+            userId,
+            logInput({ steps: [{ label: "Work", targetSplit: 120 }] }),
+          );
+          const [listRow] = await stores.logs.list(userId, 10);
+          const getRow = await stores.logs.get(userId, id);
+          const expectedKeys = Object.keys(getRow!)
+            .filter((k) => k !== "steps")
+            .sort();
+          expect(Object.keys(listRow).sort()).toStrictEqual(expectedKeys);
+        });
+      });
+
+      // From-the-log spec (2026-08-18), §3: cursor = the last row's id
+      // alone. The same-millisecond microsecond-tiebreak trap (exit
+      // criterion 9) can only be proved against REAL Postgres (a JS Date
+      // can't mint two rows a genuine microsecond apart) — see that case
+      // in `contracts.real.integration.test.ts`. These cases prove the
+      // ordinary, backend-agnostic cursor contract both stores share.
+      describe("cursor pagination", () => {
+        it("before paginates forward through the full list with no gaps or duplicates", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          const a = await stores.logs.create(userId, logInput());
+          const b = await stores.logs.create(userId, logInput());
+          const c = await stores.logs.create(userId, logInput());
+
+          const page1 = await stores.logs.list(userId, 1);
+          expect(page1.map((r) => r.id)).toStrictEqual([c.id]);
+
+          const page2 = await stores.logs.list(userId, 1, page1[0].id);
+          expect(page2.map((r) => r.id)).toStrictEqual([b.id]);
+
+          const page3 = await stores.logs.list(userId, 1, page2[0].id);
+          expect(page3.map((r) => r.id)).toStrictEqual([a.id]);
+
+          const page4 = await stores.logs.list(userId, 1, page3[0].id);
+          expect(page4).toStrictEqual([]);
+        });
+
+        it("before referencing an id that does not exist throws", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          await stores.logs.create(userId, logInput());
+          await expect(
+            stores.logs.list(userId, 10, NON_EXISTENT_UUID),
+          ).rejects.toThrow();
+        });
+
+        // Owner-scoping applies to the cursor id itself, not just the rows
+        // it would return: a foreign id must throw exactly like an absent
+        // one, never leak "yes, that id exists (just not to you)".
+        it("before referencing another user's id throws, not a silent empty page", async () => {
+          const stores = await makeStores();
+          const userA = await stores.makeUser();
+          const userB = await stores.makeUser();
+          const { id } = await stores.logs.create(userA, logInput());
+          await stores.logs.create(userB, logInput());
+          await expect(stores.logs.list(userB, 10, id)).rejects.toThrow();
+        });
+      });
+
+      // From-the-log spec (2026-08-18), §3: the from-the-log view's fetch —
+      // owner-checked, full row.
+      describe("get", () => {
+        it("returns the full row for the owner", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          const { id } = await stores.logs.create(
+            userId,
+            logInput({ notes: "hello" }),
+          );
+          expect(await stores.logs.get(userId, id)).toMatchObject({
+            id,
+            notes: "hello",
+          });
+        });
+
+        it("returns null for an absent id", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          expect(await stores.logs.get(userId, NON_EXISTENT_UUID)).toBeNull();
+        });
+
+        it("returns null for another user's id (no existence leak)", async () => {
+          const stores = await makeStores();
+          const userA = await stores.makeUser();
+          const userB = await stores.makeUser();
+          const { id } = await stores.logs.create(userA, logInput());
+          expect(await stores.logs.get(userB, id)).toBeNull();
+        });
+      });
+
+      // From-the-log spec (2026-08-18), §3: the API's first UPDATE.
+      describe("update", () => {
+        it("updates only the given subset, leaving the rest alone", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          const { id } = await stores.logs.create(
+            userId,
+            logInput({
+              held: "held",
+              pain: 2,
+              notes: "orig",
+              thumbs: "up",
+            }),
+          );
+          const updated = await stores.logs.update(userId, id, { pain: 4 });
+          expect(updated).toMatchObject({
+            held: "held",
+            pain: 4,
+            notes: "orig",
+            thumbs: "up",
+          });
+        });
+
+        it("an explicit null clears a field", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          const { id } = await stores.logs.create(
+            userId,
+            logInput({ notes: "orig" }),
+          );
+          const updated = await stores.logs.update(userId, id, {
+            notes: null,
+          });
+          expect(updated).toMatchObject({ notes: null });
+        });
+
+        // Task 2 review, LOW 2 fix-round coverage gap: the subset test
+        // above only ever exercises `pain`'s (and, separately, `notes`')
+        // own `"key" in patch` branch directly against the REAL store —
+        // `held` and `thumbs` were only ever proven via the fake (through
+        // the PATCH route's own tests), leaving those two branches
+        // uncovered on `logs.ts` itself. One case per field closes it.
+        it.each([
+          ["held", "under"],
+          ["thumbs", "down"],
+        ] as const)(
+          "updating only %s in isolation sets that column and leaves the rest untouched",
+          async (field, value) => {
+            const stores = await makeStores();
+            const userId = await stores.makeUser();
+            const { id } = await stores.logs.create(
+              userId,
+              logInput({ held: "held", pain: 2, notes: "orig", thumbs: "up" }),
+            );
+            const updated = await stores.logs.update(userId, id, {
+              [field]: value,
+            });
+            expect(updated).toMatchObject({
+              held: field === "held" ? value : "held",
+              pain: 2,
+              notes: "orig",
+              thumbs: field === "thumbs" ? value : "up",
+            });
+          },
+        );
+
+        it("returns null for an absent id", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          expect(
+            await stores.logs.update(userId, NON_EXISTENT_UUID, { pain: 3 }),
+          ).toBeNull();
+        });
+
+        it("returns null for another user's id, and never touches that row", async () => {
+          const stores = await makeStores();
+          const userA = await stores.makeUser();
+          const userB = await stores.makeUser();
+          const { id } = await stores.logs.create(
+            userA,
+            logInput({ notes: "A's note" }),
+          );
+          expect(
+            await stores.logs.update(userB, id, { notes: "hijacked" }),
+          ).toBeNull();
+          expect(await stores.logs.get(userA, id)).toMatchObject({
+            notes: "A's note",
+          });
+        });
+      });
+
+      // From-the-log spec (2026-08-18), §2/§3: Plan's done-row link and
+      // the `?plan=` route variant, newest-wins per index.
+      describe("listPlanLinks", () => {
+        it("returns the linked log id per plan index", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          await stores.planState.set(userId, "sprint");
+          const first = await stores.logs.create(userId, logInput());
+
+          const links = await stores.logs.listPlanLinks(userId, "sprint");
+          expect(links).toStrictEqual([{ planIndex: 0, id: first.id }]);
+        });
+
+        // The reset collision (spec §2, antagonist B5): after a reset, the
+        // next advancing save stamps index 0 again — the OLDER row at that
+        // index must not win.
+        it("a reset collision resolves newest-wins: the later loggedAt row wins the index", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          await stores.planState.set(userId, "sprint");
+          await stores.logs.create(userId, logInput());
+          await stores.planState.reset(userId);
+          const second = await stores.logs.create(userId, logInput());
+
+          const links = await stores.logs.listPlanLinks(userId, "sprint");
+          expect(links).toStrictEqual([{ planIndex: 0, id: second.id }]);
+        });
+
+        it("is scoped per user", async () => {
+          const stores = await makeStores();
+          const userA = await stores.makeUser();
+          const userB = await stores.makeUser();
+          await stores.planState.set(userA, "sprint");
+          await stores.logs.create(userA, logInput());
+          expect(
+            await stores.logs.listPlanLinks(userB, "sprint"),
+          ).toStrictEqual([]);
         });
       });
     });

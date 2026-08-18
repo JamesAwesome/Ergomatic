@@ -1,8 +1,10 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { PLANS } from "../../domain/plans.js";
 import type { PlanCode } from "../../domain/plans.js";
 import { usePlan } from "../api/usePlan";
 import type { PlanData, PlanKey, PlanSequenceItem } from "../api/usePlan";
+import { usePlanLinks } from "./usePlanLinks";
 
 const PLAN_KEYS: PlanKey[] = ["sprint", "head"];
 
@@ -94,6 +96,17 @@ function PlanView({
   choose: (planKey: PlanKey) => Promise<void>;
   reset: () => Promise<void>;
 }) {
+  // From-the-log spec (2026-08-18) §1/§3: one fetch on mount when a plan
+  // is active — called unconditionally (React's own rules-of-hooks; the
+  // `plan.planKey === null` early return sits below this), and the hook
+  // itself fires no fetch at all in that case (its own guard). `reset`
+  // does not change `planKey`, so a Reset alone doesn't refetch — every
+  // row is `today`/`upcoming` immediately after one anyway (see the
+  // `linkedLogId` derivation below), so a stale links Map is inert until
+  // the next real advance, which only ever happens after this screen has
+  // been left and revisited (a fresh mount, a fresh fetch).
+  const links = usePlanLinks(plan.planKey);
+
   const [pending, setPending] = useState<PendingAction>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -268,20 +281,51 @@ function PlanView({
       )}
 
       <ul className="plan-sequence" aria-label="Plan sequence">
-        {plan.sequence.map((item) => (
-          <li
-            key={item.index}
-            className={`plan-row plan-row-${item.status}`}
-            aria-current={item.status === "today" ? "step" : undefined}
-          >
-            <span className="plan-row-index mono-status">{item.index + 1}</span>
-            <CodeBadge code={item.code} />
-            <span className="plan-row-status" aria-hidden="true">
-              {STATUS_GLYPH[item.status]}
-            </span>
-            <span className="visually-hidden">{item.status}</span>
-          </li>
-        ))}
+        {plan.sequence.map((item) => {
+          // §1 (Task 6): a done row with stored linkage becomes a link;
+          // a done row with none (pre-spec-2 checkmarks, or a fetch that
+          // hasn't resolved/failed) stays plain text — no guessing. Only
+          // `status === "done"` ever consults `links` at all, so a
+          // malformed/adversarial response naming a today/upcoming index
+          // can never link a row that isn't actually done.
+          const linkedLogId =
+            item.status === "done" ? links.get(item.index) : undefined;
+          const rowClassName = `plan-row plan-row-${item.status}`;
+          const ariaCurrent = item.status === "today" ? "step" : undefined;
+          const rowContent = (
+            <>
+              <span className="plan-row-index mono-status">
+                {item.index + 1}
+              </span>
+              <CodeBadge code={item.code} />
+              <span className="plan-row-status" aria-hidden="true">
+                {STATUS_GLYPH[item.status]}
+              </span>
+              <span className="visually-hidden">{item.status}</span>
+            </>
+          );
+          return (
+            <li key={item.index}>
+              {linkedLogId !== undefined ? (
+                // `state.from = "/plan"` — `FromTheLog.tsx`'s own
+                // `resolveLogBack` map resolves this exact origin to the
+                // `← PLAN` label (spec §4 N5), already shipped in Task 5.
+                <Link
+                  to={`/today/log/${linkedLogId}`}
+                  state={{ from: "/plan" }}
+                  className={rowClassName}
+                  aria-current={ariaCurrent}
+                >
+                  {rowContent}
+                </Link>
+              ) : (
+                <div className={rowClassName} aria-current={ariaCurrent}>
+                  {rowContent}
+                </div>
+              )}
+            </li>
+          );
+        })}
       </ul>
     </main>
   );

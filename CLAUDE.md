@@ -325,6 +325,13 @@ often they recur.
     `pointercancel` readout, so the one case that needed instrumenting was
     walked without it. If a flag carries a diagnostic, say so where the
     flag is written down.
+14. **Treating a PR body as a record.** Five times in six PM gates, a real
+    finding lived only in a PR's Record block — an owed follow-up, an
+    unexplained capture diff, a product gap — and had to be rescued into
+    ROADMAP or a ledger at the gate, or was lost. **A PR body is a
+    presentation; anything with a life after merge goes in ROADMAP, a
+    ledger, DEVIATIONS, or a RUNSHEET at the moment it is found.**
+
 
 ## Commands
 

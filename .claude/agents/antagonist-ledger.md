@@ -1258,3 +1258,69 @@ toolkit, not a history.
   style in a real browser on both the surface and the scroller — the thing
   that makes the probe's conditional falsification transfer at all; and
   criterion 3, verified by opening `connected-armed-landscape.png`.
+## Spec-stage full pass (triad), 2026-08-18 (Phase PW spec 2, "from the log")
+
+- **"Opening a detail screen lands at the top — same witness shape as the News
+  fix."** The News fix's own CSS comment (`index.css:4992-4996`) records THREE
+  window-scroll fixes lost to real iOS WebKit, and `App.tsx:16-17` records that
+  **Playwright's WebKit never reproduced the failure**. Only the overlay
+  scroller worked, and its `position: fixed` then clamps `window.scrollY` to 0 —
+  the sibling requirement's own bug. **Technique: when a spec cites a past fix as
+  its witness, read that fix's comment for what it TRIED and what the harness
+  could SEE. A repo that fixed something four times wrote down why the first
+  three greens were lies, and the citation usually points at the green.**
+- **"Cursor = the last row's `loggedAt`+`id` pair, stable under equal
+  timestamps."** False before it reaches equal timestamps. Postgres `timestamptz`
+  is microseconds (`now()` measured `.884291`); drizzle maps it through
+  `new Date()`/`toISOString()` (`pg-core/columns/timestamp.js:30-36`) —
+  milliseconds. The truncated cursor sits EARLIER than its own row, so rows in
+  `[cursor_ms, true_ts)` are skipped permanently: a four-row demo returned only
+  the last one, two real rows gone. **Technique: for any keyset cursor, run the
+  timestamp through the ORM's `mapFromDriverValue` and back and diff it against
+  the column's declared precision. The type in the schema is not the type on the
+  wire, and truncation toward zero SKIPS rows rather than duplicating them —
+  silent, not noisy.**
+- **"The client posts what the summary displayed; the server stores it
+  verbatim."** Impossible: `SummaryHeroes` is `{avgSplit?: string; time?: string;
+  distanceMeters?: number}` — two of three are pre-formatted strings by design
+  (`summaryModel.ts:121-133`). **Technique: before accepting "we store what we
+  rendered", read the render model's TYPE. Display models are strings on purpose
+  in this repo, and "copy the rendered value" into a numeric column always means
+  a second reach past the model.**
+- **"Written in the same transaction as the plan_state upsert, so they can never
+  disagree."** The upsert (`stores/logs.ts:129-137`) is `insert {userId, doneN:1}
+  onConflictDoUpdate set doneN+1` — it carries no `planKey`, never reads `doneN`,
+  returns nothing, and increments even when `plan_key` is NULL. **Technique: a
+  "same transaction" guarantee names two writes; open the transaction and check
+  the second one actually HAS the values the first is claimed to agree with. An
+  upsert that only increments knows neither the key nor the index.**
+- **A design can kill an inference on the write side and re-import it on the
+  read side.** §2 rejected mapping done-rows to logs by order because Reset and
+  Switch zero `doneN` while logs persist (`stores/planState.ts:35-40`) — then
+  §3 resolved links by `plan_index`, which those same operations make
+  NON-UNIQUE per plan_key. **Technique: after a spec rejects an alternative for
+  a stated reason, re-apply that exact reason to every other section. The
+  rejection proves the author saw the hazard; it does not prove they carried it.**
+- **Two API personalities.** POST `/api/logs` ignores unknown keys; the repo's
+  only partial update, `PUT /api/prefs`, documents ignoring them as required
+  (`data.ts:884-890`); the spec's PATCH 400'd on them — which also breaks
+  additive-only in the new-client/old-server direction (`RELEASING.md:38`).
+  **Technique: before specifying validation on a NEW route, grep the nearest
+  existing route of the same verb-shape and quote its behaviour. "Same
+  validation as POST" usually means the value checks and silently inverts the
+  unknown-key policy.**
+- **`real` is not "full precision".** float4 round trip measured:
+  `2.7182818284 → 2.7182817`. Postgres's shortest-round-trip text output hides
+  it for ≤7-digit values, so a client-side formatter comparison — the spec's own
+  exit criterion — cannot see it at all. **Technique: a "byte-for-byte equals
+  what we rendered" criterion that formats BOTH sides in the same process has
+  tested the formatter, not the storage. Push the value through the real column
+  and prove the probe can go red.**
+- **Attacked and NOT broken (PW spec 2's vetted ground):** the timer door's TIME
+  survives a reload (`summaryModel.ts:584` reads the persisted run, not screen
+  lifetime); every §4 burn citation is real and individually verified
+  (`e2e/session.spec.ts:1038/1065/1146`, `News.tsx:209`, `AppRoutes.tsx`'s
+  `CompleteRedirect`, `BackLink.tsx`'s §2A label ruling, `Today.tsx:1458`'s
+  reused empty-state string); POST stays additive for v0.11.0 clients; migration
+  0010 is uncontested by any open PR; and DISTANCE-vs-machine-total remains the
+  one genuinely EXTERNAL oracle in the criteria list.

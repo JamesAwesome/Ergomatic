@@ -8,6 +8,8 @@ import {
 import Builder from "../builder/Builder";
 import BulkImport from "../builder/BulkImport";
 import EditWorkout from "../builder/EditWorkout";
+import FromTheLog from "../log/FromTheLog";
+import HistoryList from "../log/HistoryList";
 import Library from "../library/Library";
 import News from "../news/News";
 import Reader from "../news/Reader";
@@ -113,6 +115,25 @@ export default function AppRoutes({
       <Routes>
         <Route path="/" element={<Navigate to="/today" replace />} />
         <Route path="/today" element={<Today />} />
+        {/* From-the-log spec (2026-08-18), §4 N7: under the TODAY tab's own
+            URL prefix (not a bare /log — the tab convention is
+            prefix-based, and a route no tab's prefix matches would be the
+            app's first "no tab lit" screen) so TODAY stays lit for free.
+            /today/log/:id (Task 5) is the overlay detail view — registered
+            below the list route (React Router doesn't require this
+            ordering since one segment is static and the other dynamic,
+            same note as /library/import below, but declared list-then-
+            detail to match this file's own convention). Neither route is
+            in HIDDEN_TABBAR_PREFIXES above: §4 N7 keeps the tab bar
+            visible (TODAY lit) on both — LOG is not a fifth tab. */}
+        <Route path="/today/log" element={<HistoryList />} />
+        {/* Fix round LOW (e), INFO-level: FromTheLog.tsx's own root
+            element carries no `key={id}` (no in-place navigation between
+            two detail views exists yet) — see that component's own
+            comment for Reader.tsx's `key={article.slug}` precedent, the
+            fix this route would need if a "next session" style in-place
+            hop is ever added here. */}
+        <Route path="/today/log/:id" element={<FromTheLog />} />
         <Route path="/library" element={<Library />} />
         <Route path="/library/new" element={<Builder />} />
         {/* React Router ranks a static segment ("new") over a dynamic one

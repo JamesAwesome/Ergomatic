@@ -71,6 +71,13 @@
       "when": 1786992057047,
       "tag": "0009_brief_kingpin",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1787052306111,
+      "tag": "0010_familiar_maddog",
+      "breakpoints": true
     }
   ]
 }

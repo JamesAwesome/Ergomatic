@@ -173,6 +173,11 @@ const LOGS: RecentLog[] = [
     held: "held",
     pain: 2,
     thumbs: null,
+    avgSplitSeconds: null,
+    timeSeconds: null,
+    distanceMeters: null,
+    planKey: null,
+    planIndex: null,
   },
   {
     id: "log-2",
@@ -183,6 +188,11 @@ const LOGS: RecentLog[] = [
     held: "under",
     pain: 1,
     thumbs: "up",
+    avgSplitSeconds: null,
+    timeSeconds: null,
+    distanceMeters: null,
+    planKey: null,
+    planIndex: null,
   },
   {
     id: "log-3",
@@ -193,6 +203,11 @@ const LOGS: RecentLog[] = [
     held: "over",
     pain: 4,
     thumbs: null,
+    avgSplitSeconds: null,
+    timeSeconds: null,
+    distanceMeters: null,
+    planKey: null,
+    planIndex: null,
   },
 ];
 
@@ -282,7 +297,9 @@ function LogRouteProbe() {
 
 // Today links into both a workout's detail page (the suggestion card) and
 // the builder (`+ Build a workout`, empty-library case) — one probe route
-// per target so either click's landing state can be inspected.
+// per target so either click's landing state can be inspected. The
+// from-the-log spec (2026-08-18) adds two more targets: the ALL SESSIONS
+// heading link (`/today/log`) and each LAST THREE row (`/today/log/:id`).
 async function renderTodayWithProbes() {
   const { default: Today } = await import("./Today");
   return render(
@@ -291,6 +308,8 @@ async function renderTodayWithProbes() {
         <Route path="/today" element={<Today />} />
         <Route path="/library/:id" element={<LocationProbe />} />
         <Route path="/library/new" element={<LocationProbe />} />
+        <Route path="/today/log" element={<LocationProbe />} />
+        <Route path="/today/log/:id" element={<LocationProbe />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -1604,7 +1623,9 @@ describe("Today (LAST THREE)", () => {
     mockReady();
     await renderToday();
 
-    const section = screen.getByText("LAST THREE").closest("section")!;
+    const section = screen
+      .getByRole("heading", { name: "ALL SESSIONS" })
+      .closest("section")!;
     expect(within(section).getByText("Occluded Front")).toBeVisible();
     expect(within(section).getByText(/JUL 25/)).toBeVisible();
     expect(within(section).getByText(/HELD/)).toBeVisible();
@@ -1639,7 +1660,9 @@ describe("Today (LAST THREE)", () => {
     mockReady();
     await renderToday();
 
-    const section = screen.getByText("LAST THREE").closest("section")!;
+    const section = screen
+      .getByRole("heading", { name: "ALL SESSIONS" })
+      .closest("section")!;
     const row = within(section).getByText("Occluded Front").closest("li")!;
     expect(within(row).getByText("JUL 25 · HELD · 2/5")).toBeVisible();
   });
@@ -1656,12 +1679,19 @@ describe("Today (LAST THREE)", () => {
           held: null,
           pain: null,
           thumbs: null,
+          avgSplitSeconds: null,
+          timeSeconds: null,
+          distanceMeters: null,
+          planKey: null,
+          planIndex: null,
         },
       ],
     });
     await renderToday();
 
-    const section = screen.getByText("LAST THREE").closest("section")!;
+    const section = screen
+      .getByRole("heading", { name: "ALL SESSIONS" })
+      .closest("section")!;
     const row = within(section).getByText("Occluded Front").closest("li")!;
     expect(within(row).getByText("JUL 25")).toBeVisible();
     expect(within(row).queryByText(/·/)).not.toBeInTheDocument();
@@ -1679,14 +1709,63 @@ describe("Today (LAST THREE)", () => {
           held: null,
           pain: 2,
           thumbs: null,
+          avgSplitSeconds: null,
+          timeSeconds: null,
+          distanceMeters: null,
+          planKey: null,
+          planIndex: null,
         },
       ],
     });
     await renderToday();
 
-    const section = screen.getByText("LAST THREE").closest("section")!;
+    const section = screen
+      .getByRole("heading", { name: "ALL SESSIONS" })
+      .closest("section")!;
     const row = within(section).getByText("Occluded Front").closest("li")!;
     expect(within(row).getByText("JUL 25 · 2/5")).toBeVisible();
+  });
+
+  // From-the-log spec (2026-08-18), §1: the heading is now the ALL
+  // SESSIONS link to /today/log, replacing the static "LAST THREE" label.
+  it("the heading is the ALL SESSIONS link to /today/log", async () => {
+    mockReady();
+    await renderToday();
+
+    const link = screen.getByRole("link", { name: "ALL SESSIONS" });
+    expect(link).toHaveAttribute("href", "/today/log");
+  });
+
+  it("stamps state={from:'/today'} onto the ALL SESSIONS heading link", async () => {
+    mockReady();
+    await renderTodayWithProbes();
+    await userEvent.click(screen.getByRole("link", { name: "ALL SESSIONS" }));
+    expect(await screen.findByText("PROBE from=/today")).toBeVisible();
+  });
+
+  // §1: each LAST THREE row opens the from-the-log view — the row itself
+  // is the tappable target, not just its title text.
+  it("each row is a link to /today/log/:id", async () => {
+    mockReady();
+    await renderToday();
+
+    const section = screen
+      .getByRole("heading", { name: "ALL SESSIONS" })
+      .closest("section")!;
+    const link = within(section)
+      .getAllByRole("link")
+      .find((a) => a.getAttribute("href") === "/today/log/log-1");
+    expect(link).toBeDefined();
+    expect(within(link!).getByText("Occluded Front")).toBeVisible();
+  });
+
+  it("stamps state={from:'/today'} onto each LAST THREE row link", async () => {
+    mockReady();
+    await renderTodayWithProbes();
+
+    const row = screen.getByText("Occluded Front").closest("a")!;
+    await userEvent.click(row);
+    expect(await screen.findByText("PROBE from=/today")).toBeVisible();
   });
 });
 

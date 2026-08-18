@@ -9,6 +9,7 @@ import { usePreferences } from "../api/usePreferences";
 import type { PreferencesData } from "../api/usePreferences";
 import { useRecentLogs } from "../api/useRecentLogs";
 import type { RecentLog } from "../api/useRecentLogs";
+import { LogRow } from "../log/LogRow";
 import { fmtDuration } from "../../domain/duration.js";
 import { estimateMinutes } from "../../domain/expand.js";
 import { suggest, suggestFreestyle } from "../../domain/suggest.js";
@@ -124,34 +125,6 @@ function TodayChip({
 }
 
 const STALE_DRAFT_MS = 24 * 60 * 60 * 1000;
-
-// docs/design/README.md:185's LAST THREE row format, literally: type badge +
-// title + "JUL 25 · HELD · 2/10" — a date (not days-ago), the plain word,
-// and the pain figure. The handoff's own "2/10" is its unmodified 1-10
-// scale; docs/design/DEVIATIONS.md's first row establishes Ergomatic's is
-// 1-5 everywhere else (PainBar, WorkoutDetail's "PAIN n/5", Library's own
-// 1-5 PAIN filter cells) — matching the handoff's literal "/10" here would
-// contradict that already-decided, already-documented scale, so this uses
-// "/5" like every other pain display in the app.
-const MONTH_ABBREV = [
-  "JAN",
-  "FEB",
-  "MAR",
-  "APR",
-  "MAY",
-  "JUN",
-  "JUL",
-  "AUG",
-  "SEP",
-  "OCT",
-  "NOV",
-  "DEC",
-];
-
-function formatLogDate(loggedAt: string): string {
-  const d = new Date(loggedAt);
-  return `${MONTH_ABBREV[d.getMonth()]} ${d.getDate()}`;
-}
 
 /** Wall-clock time since a LIVE run started (F2, whole-branch review: the
  *  resume card's own elapsed-so-far reading) — `now - startedAt`, the same
@@ -1453,27 +1426,28 @@ function TodayView({
       )}
 
       <section className="today-last-three">
-        <h2 className="section-heading">LAST THREE</h2>
+        <h2 className="section-heading today-last-three-heading">
+          <Link
+            to="/today/log"
+            state={{ from: "/today" }}
+            className="today-last-three-heading-link"
+          >
+            ALL SESSIONS
+          </Link>
+        </h2>
         {logs.length === 0 ? (
           <p className="mono-status">No sessions logged yet.</p>
         ) : (
           <ul className="today-log-list">
             {logs.map((log) => (
-              <li key={log.id} className="today-log-row">
-                <TypeBadge type={log.workoutType} />
-                <span className="today-log-title">{log.workoutTitle}</span>
-                <span className="today-log-meta">
-                  {/* R-A: held/pain are nullable ahead of the write side that
-                      can produce a null row - each segment renders only when
-                      present (the F1 no-dash rule), joined by " · ". */}
-                  {[
-                    formatLogDate(log.loggedAt),
-                    log.held === null ? null : log.held.toUpperCase(),
-                    log.pain === null ? null : `${log.pain}/5`,
-                  ]
-                    .filter((segment) => segment !== null)
-                    .join(" · ")}
-                </span>
+              <li key={log.id}>
+                <Link
+                  to={`/today/log/${log.id}`}
+                  state={{ from: "/today" }}
+                  className="today-log-row"
+                >
+                  <LogRow log={log} />
+                </Link>
               </li>
             ))}
           </ul>

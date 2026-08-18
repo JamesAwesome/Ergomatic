@@ -291,3 +291,27 @@ sheet — not the live pane, which no longer carries a distance.
    showed must agree with what the wire actually carries).
 5. Only once 1-4 pass AND Pass B's required items (5, 6, 8) are clean:
    v0.10.0 tags (notes PR first, per the spec's own header line).
+
+## Queued from a later phase (append-only — CR2's own record above is CLOSED)
+
+**Phase PW spec 2 "from-the-log," criterion 8 (James, 2026-08-18; design
+spec `docs/superpowers/specs/2026-08-18-from-the-log-design.md` §7):**
+this walk already ran and CR2 tagged v0.10.0 — the item below belongs to
+a LATER phase's own device pass, appended here only because this is the
+repo's standing phone-pass checklist, not because it reopens anything
+CR2 closed above.
+
+- **N3's real check (§4 N3, §7 criterion 8) — the harness is blind to
+  this by the repo's own record** (three window-scroll fixes lost to
+  real iOS WebKit before the overlay-scroller mechanism won; Playwright's
+  WebKit build never reproduces the failure — `App.tsx`'s own comment).
+  Pass B, no rowing needed (a phone at the desk is enough, but a real
+  device is REQUIRED — desktop Chrome cannot exercise this): open
+  `/today/log` with enough sessions logged to scroll, scroll deep, tap a
+  row to open `/today/log/:id`, confirm it lands at the TOP (not mid-
+  scroll, not at the previous screen's offset). Return via the back
+  affordance, confirm the list's own scroll position survived the round
+  trip. Record PASS/FAIL and, on FAIL, which iOS version and whether the
+  failure matches the shape the repo's own comments describe (a late
+  Safari restoration pass winning after the app's own scroll-to-top
+  already ran).

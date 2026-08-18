@@ -333,6 +333,17 @@ interface LogFormFields {
   // default the same way the outside-plan toggle's `advancesPlan` already
   // does for its own optional key.
   deviceName?: string;
+  // From-the-log spec (2026-08-18), §2: the three stored-hero numbers,
+  // spread straight from the door's own `SummaryModel.heroes` the same
+  // optional-key way `deviceName` above already works — `summaryModel.ts`
+  // is the ONE place that decides whether a given hero exists for this
+  // door's run (monitor: all three when the run has them; timer: split/
+  // time only, distance always absent; manual: heroes is always `{}`, so
+  // all three read `undefined` here and JSON.stringify drops the key
+  // entirely below, same as an unset `deviceName`). Never re-derived here.
+  avgSplitSeconds?: number;
+  timeSeconds?: number;
+  distanceMeters?: number;
 }
 
 /** Fix round 1 (whole-branch review, I1): the two doors' `handleSave` were
@@ -732,6 +743,9 @@ function SessionDoorLog() {
         workoutTitle: activeRun.title,
         workoutType,
         steps: logSteps,
+        avgSplitSeconds: model.heroes.avgSplitSeconds,
+        timeSeconds: model.heroes.timeSeconds,
+        distanceMeters: model.heroes.distanceMeters,
       },
       opts,
     );
@@ -1000,6 +1014,9 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
           workoutType: activeWorkout.type,
           steps: logSteps,
           deviceName: monitorRun.deviceName,
+          avgSplitSeconds: model.heroes.avgSplitSeconds,
+          timeSeconds: model.heroes.timeSeconds,
+          distanceMeters: model.heroes.distanceMeters,
         },
         opts,
       );

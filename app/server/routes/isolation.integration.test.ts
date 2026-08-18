@@ -153,6 +153,8 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
       request(app).post(path).set("Authorization", bearer()),
     put: (path: string) =>
       request(app).put(path).set("Authorization", bearer()),
+    patch: (path: string) =>
+      request(app).patch(path).set("Authorization", bearer()),
     delete: (path: string) =>
       request(app).delete(path).set("Authorization", bearer()),
   });
@@ -274,7 +276,13 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
       (l: { id: string }) => l.id === aLogId,
     );
     expect(before).toMatchObject({ baselineK2: 100, baselineK6: 110 });
-    expect(before.steps).toStrictEqual([
+    // From-the-log spec (2026-08-18), §3: the list projection drops
+    // `steps` (zero client consumers) — `GET /api/logs/:id` is now where
+    // this suite (and the from-the-log view) reads the full row.
+    expect(before).not.toHaveProperty("steps");
+
+    const beforeFull = (await asA().get(`/api/logs/${aLogId}`)).body;
+    expect(beforeFull.steps).toStrictEqual([
       {
         label: "Work",
         targetSplit: 130,
@@ -294,7 +302,9 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
       (l: { id: string }) => l.id === aLogId,
     );
     expect(after).toMatchObject({ baselineK2: 100, baselineK6: 110 });
-    expect(after.steps).toStrictEqual(before.steps);
+
+    const afterFull = (await asA().get(`/api/logs/${aLogId}`)).body;
+    expect(afterFull.steps).toStrictEqual(beforeFull.steps);
   });
 
   it("every list/get endpoint shows B none of A's data, but B still sees every global", async () => {
@@ -382,6 +392,24 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
 
     // B's failed log attempt did not land for B either.
     expect((await asB().get("/api/logs")).body).toStrictEqual([]);
+  });
+
+  // From-the-log spec (2026-08-18), §3: the same owner-check pattern as
+  // the workouts test above, end to end over real Postgres and real auth
+  // — GET 404s on a foreign id (no existence leak), PATCH 404s the same
+  // way and never touches the row.
+  it("GET/PATCH /api/logs/:id 404 against A's log for B, and A's row survives B's PATCH attempt", async () => {
+    const getRes = await asB().get(`/api/logs/${aLogId}`);
+    expect(getRes.status).toBe(404);
+
+    const patchRes = await asB()
+      .patch(`/api/logs/${aLogId}`)
+      .send({ notes: "hijacked by B" });
+    expect(patchRes.status).toBe(404);
+
+    const stillA = await asA().get(`/api/logs/${aLogId}`);
+    expect(stillA.status).toBe(200);
+    expect(stillA.body.notes).toBe("first log");
   });
 
   it("neither A nor B can mutate a GLOBAL workout: 403 starter_readonly, not 404, not a silent no-op", async () => {
