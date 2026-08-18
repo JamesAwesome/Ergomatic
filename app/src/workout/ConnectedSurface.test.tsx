@@ -24,6 +24,7 @@ import {
   cleanup,
   fireEvent,
   render,
+  renderHook,
   screen,
   within,
 } from "@testing-library/react";
@@ -52,6 +53,7 @@ import { ARM_TIMEOUT_MS } from "../session/useStagedDiscard";
 import { commentStrippedSource, type CssRule, cssRules } from "../test/cssView";
 import { buildSurfaceModel } from "./connected/surfaceModel";
 import { PANES } from "./connected/SegmentedControl";
+import { useSurfaceSwipe } from "./connected/swipe";
 import ConnectedInterstitial from "./ConnectedInterstitial";
 import ConnectedSurface, {
   DEFAULT_PANE,
@@ -1221,11 +1223,284 @@ describe("End's hit box is small and out of the swipe corridor (safety fix, Jame
     expect(headerRules[1]!.body).not.toMatch(/justify-content\s*:/);
   });
 
-  // The swipe-originates-on-End tests retired with the swipe handler
-  // itself (CR2 spec 3 task 1, design spec Ruling 4) — End's hit box no
-  // longer shares a gesture surface with pane navigation at all; the
-  // remaining safety-fix invariant (small, out of the footer, never
-  // full-width) is covered by the two tests above.
+  // Swipe is back (Phase CS Item A, task-2 brief), but End's hit box still
+  // does not share a gesture surface with pane navigation: `isSwipeBlocked`
+  // (`workout/connected/swipe.ts`) refuses ANY `<button>` target, End
+  // included, so a drag starting on End can never be misread as a pane
+  // swipe — see "a drag starting on a rail button never swipes" below,
+  // which is this invariant's own test now that there is a swipe to
+  // collide with. The remaining safety-fix invariant this describe block
+  // covers (small, out of the footer, never full-width) is above.
+});
+
+// ---------------------------------------------------------------------------
+// The finger moves the panes again (Phase CS Item A, task-2 brief).
+// `useSurfaceSwipe` (`workout/connected/swipe.ts`) attaches native pointer
+// listeners to the ref this component hands it — every case below drives a
+// real `PointerEvent` at the actual `<main class="connected-surface">` DOM
+// node `ConnectedSurface` renders, never a spy over the hook.
+// ---------------------------------------------------------------------------
+
+describe("the finger moves the panes again (Phase CS Item A, task-2 brief)", () => {
+  // jsdom HAS a `PointerEvent` constructor but does NOT implement
+  // `setPointerCapture`/`releasePointerCapture`/`hasPointerCapture`
+  // (verified) — stubbed so `swipe.ts`'s own optional-chained calls have
+  // something to call instead of silently no-oping. This stub proves
+  // NOTHING about capture retargeting: the device probe
+  // (docs/monitor/sessions/probe-2026-08-17-swipe/README.md) is what showed
+  // a real WKWebView flips `event.target` to the surface after the first
+  // move, and no jsdom test — including every one below — can exercise
+  // that; `e2e/screenshots.spec.ts`'s own pin is what re-checks it on a
+  // real engine.
+  beforeEach(() => {
+    Element.prototype.setPointerCapture = vi.fn();
+    Element.prototype.releasePointerCapture = vi.fn();
+  });
+
+  /** `new PointerEvent(...)` defaults `pointerType` to `""` and `isPrimary`
+   *  to `false` in jsdom (verified) — both set explicitly on every fixture
+   *  event below, or a handler branch keyed on either would be silently
+   *  dead (or inverted) while this describe block still read green. */
+  function surfacePointerEvent(
+    type: "pointerdown" | "pointerup" | "pointercancel",
+    x: number,
+    opts: { pointerId?: number } = {},
+  ): PointerEvent {
+    return new PointerEvent(type, {
+      bubbles: true,
+      cancelable: true,
+      pointerId: opts.pointerId ?? 1,
+      pointerType: "touch",
+      isPrimary: true,
+      clientX: x,
+      clientY: 300,
+    });
+  }
+
+  const DRAG_START_X = 300;
+
+  /** A complete pointerdown -> pointerup drag on `target`, `dx` pixels of
+   *  horizontal travel from a fixed origin. No `pointermove` — `swipe.ts`'s
+   *  own hook never listens for one; the delta is read once, at up. */
+  function drag(
+    target: Element,
+    dx: number,
+    opts: { pointerId?: number } = {},
+  ): void {
+    fireEvent(target, surfacePointerEvent("pointerdown", DRAG_START_X, opts));
+    fireEvent(
+      target,
+      surfacePointerEvent("pointerup", DRAG_START_X + dx, opts),
+    );
+  }
+
+  it("down on the hero, move -80px, up: GRID's content is on screen and the rail agrees", () => {
+    renderSurface();
+    const hero = document.querySelector(".connected-hero")!;
+    drag(hero, -80);
+    expect(
+      screen.getByRole("group", { name: "Interval grid" }),
+    ).toBeInTheDocument();
+    expect(controlHalf("Grid")).toHaveAttribute("aria-current", "page");
+  });
+
+  it("down on a grid row cell, move +80px, up: the pane changes (the probe's own convicted case, end to end)", () => {
+    localStorage.setItem(LAST_PANE_KEY, "grid");
+    renderSurface();
+    const cell = document.querySelector<HTMLElement>(
+      ".connected-grid-rows .connected-grid-pace",
+    )!;
+    // The probe's whole finding lived here: a hand-built cell with no real
+    // `role="group"` ancestor would pass this test against the OLD, broken
+    // `[role]` predicate too (`swipe.test.ts`'s own comment) — this is the
+    // real `PaneGrid`, so the ancestor is real.
+    expect(cell.closest('[role="group"]')).not.toBeNull();
+    drag(cell, 80);
+    expect(controlHalf("Live")).toHaveAttribute("aria-current", "page");
+    expect(document.querySelector(".connected-pane-grid")).toBeNull();
+  });
+
+  it("down on a rail button, move -80px, up: the drag never changes panes", () => {
+    renderSurface();
+    drag(controlHalf("Grid"), -80);
+    // `isSwipeBlocked` refused this at pointerdown (the target is a
+    // `<button>`) — still "live", not "grid".
+    expect(controlHalf("Live")).toHaveAttribute("aria-current", "page");
+  });
+
+  it("with the log sheet open, a drag never changes panes underneath it", () => {
+    renderSurface();
+    // Three clicks on the same target: the door (handoff §5), and each one
+    // also selects the pane (`handleControlPress`), so the sheet opens
+    // already sitting on "grid".
+    fireEvent.click(controlHalf("Grid"));
+    fireEvent.click(controlHalf("Grid"));
+    fireEvent.click(controlHalf("Grid"));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    const cell = document.querySelector<HTMLElement>(
+      ".connected-grid-rows .connected-grid-pace",
+    )!;
+    drag(cell, 80); // would retreat grid -> live if not blocked
+    expect(controlHalf("Grid")).toHaveAttribute("aria-current", "page");
+  });
+
+  it("pointercancel mid-drag discards it, and a later clean drag still works (no stuck state)", () => {
+    renderSurface();
+    const hero = document.querySelector(".connected-hero")!;
+    fireEvent(hero, surfacePointerEvent("pointerdown", DRAG_START_X));
+    fireEvent(hero, surfacePointerEvent("pointercancel", DRAG_START_X - 50));
+    expect(controlHalf("Live")).toHaveAttribute("aria-current", "page");
+    // A fresh gesture, same target: if `pointercancel` had left the tracked
+    // state set, this `pointerdown` would be refused as "a gesture is
+    // already tracking" and the pane would never move.
+    drag(hero, -80);
+    expect(controlHalf("Grid")).toHaveAttribute("aria-current", "page");
+  });
+
+  it("pointercancel leaves evidence with the travelled deltas — the phone leg's only instrument for the WebKit-only cancel", () => {
+    // The spec's Design bullet 1 ("logged … so a field failure finally
+    // leaves evidence"). The one risk the device probe could not close is a
+    // WebKit directional-lock `pointercancel` that no Chromium run can
+    // observe (W3C pointerevents#303), so the walk is the only instrument —
+    // and a walker with nothing to read can only report a subjective "it
+    // didn't take". Asserting the DELTAS, not merely that something was
+    // logged: a readout that omits how far the finger travelled cannot
+    // distinguish "WebKit cancelled a real swipe" from "a stray tap".
+    const debug = vi.spyOn(console, "debug").mockImplementation(() => {});
+    try {
+      renderSurface();
+      const hero = document.querySelector(".connected-hero")!;
+      fireEvent(hero, surfacePointerEvent("pointerdown", DRAG_START_X));
+      fireEvent(hero, surfacePointerEvent("pointercancel", DRAG_START_X - 137));
+      expect(debug).toHaveBeenCalledWith(
+        expect.stringContaining("[swipe] pointercancel dx=-137"),
+      );
+    } finally {
+      debug.mockRestore();
+    }
+  });
+
+  it("a completed drag under the threshold reaches pointerup but never calls onChange (coverage: the no-op half of the commit branch)", () => {
+    renderSurface();
+    const hero = document.querySelector(".connected-hero")!;
+    drag(hero, -10); // tracked (not blocked), but paneAfterSwipe("live", -10, 0) === "live"
+    expect(controlHalf("Live")).toHaveAttribute("aria-current", "page");
+  });
+
+  // The DOM-level case just above cannot prove `onChange` was actually
+  // SKIPPED, not merely called with a value equal to the current pane:
+  // `choosePane("live")` while already on "live" calls `setPane("live")`,
+  // which React bails out of re-rendering for (`Object.is` equality) — so
+  // "onChange fires unconditionally" and "onChange fires only on a real
+  // change" are DOM-indistinguishable through `ConnectedSurface`. Proven by
+  // mutation: deleting `if (next !== paneRef.current)` in `swipe.ts` left
+  // the whole client suite green. This drives `useSurfaceSwipe` directly
+  // with a spy, the only vantage point the guard is observable from.
+  it("useSurfaceSwipe's own onChange spy: silent under threshold, fires exactly once, with the right value, once it commits", () => {
+    const el = document.createElement("div");
+    document.body.appendChild(el);
+    const ref = { current: el };
+    const onChange = vi.fn();
+    renderHook(() =>
+      useSurfaceSwipe(ref, { pane: "live", blocked: false, onChange }),
+    );
+    fireEvent(el, surfacePointerEvent("pointerdown", DRAG_START_X));
+    fireEvent(el, surfacePointerEvent("pointerup", DRAG_START_X - 10));
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent(el, surfacePointerEvent("pointerdown", DRAG_START_X));
+    fireEvent(el, surfacePointerEvent("pointerup", DRAG_START_X - 80));
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith("grid");
+    document.body.removeChild(el);
+  });
+
+  it("a second concurrent pointerdown does not start a second gesture", () => {
+    renderSurface();
+    const hero = document.querySelector(".connected-hero")!;
+    fireEvent(
+      hero,
+      surfacePointerEvent("pointerdown", DRAG_START_X, { pointerId: 1 }),
+    );
+    fireEvent(
+      hero,
+      surfacePointerEvent("pointerdown", DRAG_START_X, { pointerId: 2 }),
+    );
+    // The second pointer's own up does not commit: the tracked gesture is
+    // still pointer 1's, and pointer 2 never matched it.
+    fireEvent(
+      hero,
+      surfacePointerEvent("pointerup", DRAG_START_X - 80, { pointerId: 2 }),
+    );
+    expect(controlHalf("Live")).toHaveAttribute("aria-current", "page");
+    // The FIRST pointer's own up still completes the original gesture.
+    fireEvent(
+      hero,
+      surfacePointerEvent("pointerup", DRAG_START_X - 80, { pointerId: 1 }),
+    );
+    expect(controlHalf("Grid")).toHaveAttribute("aria-current", "page");
+  });
+
+  it("a swipe never counts towards the triple-tap diagnostics gesture (the old handler's own property, carried over)", () => {
+    renderSurface();
+    drag(document.querySelector(".connected-hero")!, -80); // live -> grid
+    drag(
+      document.querySelector<HTMLElement>(
+        ".connected-grid-rows .connected-grid-pace",
+      )!,
+      80,
+    ); // grid -> live
+    drag(document.querySelector(".connected-hero")!, -80); // live -> grid, third swipe
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The house rule this sweep makes structural (task-2 brief Step 5): within
+// `src/workout/connected/**` and `ConnectedSurface.tsx` itself,
+// `onClick`/`onPointerDown` land only on a real `<button>` or on an element
+// carrying `data-swipe-ignore` — because `isSwipeBlocked`
+// (`workout/connected/swipe.ts`) only refuses those two shapes, and a THIRD
+// operable-but-unmarked element would silently start swipe gestures no
+// finger should ever get to keep. Same `import.meta.glob` + `?raw` +
+// comment-stripped idiom `SheetShell.test.tsx`'s own "EVERY caller ships an
+// action" sweep uses, for the same reason: this needs no `@types/node`
+// directory walk, and stripping comments first is what stops this file's
+// own prose (which says "onClick" and "onPointerDown" several times over)
+// from satisfying its own sweep.
+// ---------------------------------------------------------------------------
+
+describe("onClick/onPointerDown structural sweep (task-2 brief Step 5)", () => {
+  it("every onClick/onPointerDown in src/workout/connected/** and ConnectedSurface.tsx is on <button> or [data-swipe-ignore]", () => {
+    const connectedDirSources = import.meta.glob("./connected/*.tsx", {
+      eager: true,
+      query: "?raw",
+      import: "default",
+    }) as Record<string, string>;
+    const files: [string, string][] = Object.entries(connectedDirSources)
+      .filter(([file]) => !file.includes(".test."))
+      .map(([file, text]) => [file, commentStrippedSource(text)]);
+    files.push([
+      "ConnectedSurface.tsx",
+      commentStrippedSource(CONNECTED_SURFACE_SOURCE),
+    ]);
+    expect(files.length).toBeGreaterThanOrEqual(7); // 6 connected/*.tsx + this file, today
+
+    const attrRegex = /\b(onClick|onPointerDown)=/g;
+    const violations: string[] = [];
+    for (const [file, source] of files) {
+      for (const match of source.matchAll(attrRegex)) {
+        const tagStart = source.lastIndexOf("<", match.index);
+        const tagName = /^<([A-Za-z][\w.]*)/.exec(source.slice(tagStart))?.[1];
+        const tagSlice = source.slice(tagStart, match.index);
+        const ok =
+          tagName === "button" || tagSlice.includes("data-swipe-ignore");
+        if (!ok) {
+          violations.push(`${file}: ${match[1]} on <${tagName ?? "?"}>`);
+        }
+      }
+    }
+    expect(violations).toStrictEqual([]);
+  });
 });
 
 // ---------------------------------------------------------------------------

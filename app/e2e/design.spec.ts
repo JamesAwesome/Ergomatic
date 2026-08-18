@@ -5034,6 +5034,66 @@ test.describe("connected screens (fake-driven)", () => {
     await cleanupAllConnected(page, title);
   });
 
+  // Phase CS Item A, Task 3 (task-3-brief.md Step 3): `touch-action:
+  // pan-y` on `.connected-surface` and `.connected-grid-rows` — the
+  // COMPUTED style in a real browser, never a grep of the stylesheet
+  // (jsdom does not implement `touch-action` cascade resolution at all,
+  // which is why this pin lives here and not in a unit test). It is
+  // load-bearing beyond its own size: the probe's own falsification of
+  // the touch-action/scroller-intersection candidate
+  // (docs/monitor/sessions/probe-2026-08-17-swipe/README.md — "FALSIFIED
+  // for the horizontal case, CONDITIONALLY") holds only for a build that
+  // ships both declarations, and this branch carried NEITHER before Task
+  // 2 landed them (`grep -n "touch-action" src/index.css` returned
+  // nothing beforehand, per that same README).
+  test("touch-action: pan-y on the surface and the grid scroller, computed in a real browser", async ({
+    page,
+  }) => {
+    const title = "Design Connected Touch Action Workout";
+    await injectConnectedFake(page, ROWING_STORY);
+    await openConnected(page, title, "design-connected-touch-action@e2e.test");
+    await walkToSurface(page);
+    await pumpUntilText(page, "2 OF 5");
+
+    // Read on the HERO while the LIVE pane is still up (it is a live-pane
+    // element and does not exist once GRID is showing — the first version
+    // of this assertion read it after the pane switch below and timed out
+    // waiting for a locator that could never resolve). Asserted on the
+    // hero rather than on `.connected-surface`, which carries the
+    // declaration, so the pin proves the property actually INHERITS to the
+    // element the finger lands on: from the 2026-08-18 phone walk, where
+    // dragging across the hero raised a text selection mid-gesture.
+    const heroUserSelect = await page
+      .locator(".connected-hero")
+      .first()
+      .evaluate((el) => getComputedStyle(el).userSelect);
+    expect(heroUserSelect).toBe("none");
+
+    await page.getByRole("button", { name: "Grid pane" }).click();
+    await expect(page.locator(".connected-grid-row").first()).toBeVisible();
+
+    const [surfaceTouchAction, rowsTouchAction] = await Promise.all([
+      page
+        .locator(".connected-surface")
+        .evaluate((el) => getComputedStyle(el).touchAction),
+      page
+        .locator(".connected-grid-rows")
+        .evaluate((el) => getComputedStyle(el).touchAction),
+    ]);
+    expect(surfaceTouchAction).toBe("pan-y");
+    expect(rowsTouchAction).toBe("pan-y");
+
+    // The same non-selection guarantee on a GRID ROW — the other surface a
+    // swipe starts from, and the one this phase's whole bug lived on.
+    const rowUserSelect = await page
+      .locator(".connected-grid-row")
+      .first()
+      .evaluate((el) => getComputedStyle(el).userSelect);
+    expect(rowUserSelect).toBe("none");
+
+    await cleanupAllConnected(page, title);
+  });
+
   // ---------------------------------------------------------------------
   // CR2 spec 3 Task 6: the §2 property-table sweep. Every test below names
   // a row (or a tight cluster of the same row's sub-properties) from
