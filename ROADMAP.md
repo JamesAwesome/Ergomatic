@@ -2366,6 +2366,22 @@ times read lower; `MONITOR_SPM_MIN` is its own triad PR, not spec 1's.
 opens; the v0.11.0 tag follows spec 1's notes PR per the release
 process.
 
+**Spec 2 "from-the-log" (James's 2026-08-18 brainstorm; design spec
+`docs/superpowers/specs/2026-08-18-from-the-log-design.md`):** OPENED
+2026-08-18 as a six-task decomposition — migration 0010 + the API's
+first UPDATE; the API's round trip + posting; the from-the-log view's
+own pure model; the history list + Today's link into it; the detail
+view's read-back/edit/back-label; Plan's done-row links + the §4
+navigation-flow sweep + reconciliation. Tasks 1-5 landed on branch
+`pw-log`; **Task 6 (this branch's final task) completes the
+decomposition** — Plan's tap-through, the §4 N1-N7 sweep gathered into
+one describe (spec §7 criterion 1's own requirement), the remaining §5
+design witnesses, and criterion 4's own e2e (advance a plan by saving,
+the done row opens the log that advanced it, Reset leaves that log's own
+footer unchanged). §7's nine exit criteria are evidenced in the task-6
+report; branch PENDING James's review before merge and the v0.12.0 tag
+(§7 criterion 7 names that version for the notes PR).
+
 ## Phase LG — The log screen's own words
 
 **Status:** ABSORBED INTO PHASE PW (2026-08-17, James's brainstorm). The

@@ -1183,6 +1183,17 @@ button:disabled {
   display: inline-flex;
   align-items: center;
   min-height: var(--tap);
+  /* Task 6 design sweep (2026-08-18): `min-width` joins `min-height` —
+     every OTHER `.back-link` label in the app ("← BACK", "← DONE",
+     "← TODAY", "← PLAN") happened to be wide enough on its own content,
+     so this gap went uncaught until spec §4 N5's own `← LOG` (the
+     shortest label this class has ever carried, at 12px mono) measured
+     40.83px wide, real content under the house's 44px hit-target floor.
+     `inline-flex` + `align-items: center` already centers shorter
+     content within a taller/wider box, so this can only WIDEN a label
+     that was already narrower than 44px — no existing `.back-link` call
+     site loses anything. */
+  min-width: var(--tap);
   font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 600;
@@ -2351,7 +2362,18 @@ button:disabled {
    `.overlay-screen` (Reader/Releases' own idiom, §4 N3) supplies the
    own-scroller mechanism; no page-specific override needed on top of it. */
 
-.log-readback {
+/* Task 6 design sweep (2026-08-18): qualified as `.summary-reflection-
+   card.log-readback`, not bare `.log-readback` — `FromTheLog.tsx` always
+   carries both classes on the same div (grepped: the only usage), and a
+   bare single-class selector here loses the cascade to `.summary-
+   reflection-card`'s own conflicting `gap`/`border`/`margin` rule further
+   down this file (equal specificity, later source order wins) — caught
+   live: the read-back block was rendering a SOLID `--ink` border at
+   22px/24px gap/margin instead of this rule's own dashed `--rule-3`
+   border at 10px/16px, exactly the §5D property this class exists to
+   own. Two classes raises this selector's specificity above the bare
+   one, so it wins regardless of which rule comes first in the file. */
+.summary-reflection-card.log-readback {
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -2483,6 +2505,12 @@ button:disabled {
   min-height: 44px;
   padding: 0 10px;
   border-bottom: 1px solid var(--rule-2);
+  /* From-the-log spec (2026-08-18) §1: a done row with stored linkage
+     renders this class on an <a> (Plan.tsx) rather than the plain <li>/
+     <div> every other row still uses — harmless reset for those, needed
+     here so a linked row reads identically to an unlinked one. */
+  text-decoration: none;
+  color: inherit;
 }
 
 .plan-row:last-of-type {

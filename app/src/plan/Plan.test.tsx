@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { PLANS } from "../../domain/plans";
 import type { PlanData, PlanKey, PlanSequenceItem } from "../api/usePlan";
 
@@ -38,9 +39,42 @@ function mockUsePlan(state: unknown) {
   vi.doMock("../api/usePlan", () => ({ usePlan: () => state }));
 }
 
-async function renderPlan() {
+// Plan's done-row link (spec §1/§3, Task 6): `usePlanLinks` is mocked at
+// the hook boundary, same idiom as `mockUsePlan` above and `HistoryList.
+// test.tsx`'s own `mockUseLogHistory` — a real fetch is never involved in
+// this file's tests. Defaults to no links at all, so every test written
+// before this task (none of which calls this) renders exactly as it did
+// pre-Task-6: every done row falls back to plain text.
+function mockUsePlanLinks(links: Map<number, string> = new Map()) {
+  vi.doMock("./usePlanLinks", () => ({ usePlanLinks: () => links }));
+}
+
+async function renderPlan(links: Map<number, string> = new Map()) {
+  mockUsePlanLinks(links);
   const { default: Plan } = await import("./Plan");
-  return render(<Plan />);
+  return render(<Plan />, { wrapper: MemoryRouter });
+}
+
+// HistoryList.test.tsx's own probe idiom, copied verbatim: a real route
+// change is the only way to observe `location.state` — a DOM attribute
+// assertion on the `<Link>` itself can't see it.
+function LocationProbe() {
+  const location = useLocation();
+  const from = (location.state as { from?: unknown } | null)?.from;
+  return <p>PROBE from={String(from)}</p>;
+}
+
+async function renderPlanWithProbe(links: Map<number, string>) {
+  mockUsePlanLinks(links);
+  const { default: Plan } = await import("./Plan");
+  return render(
+    <MemoryRouter initialEntries={["/plan"]}>
+      <Routes>
+        <Route path="/plan" element={<Plan />} />
+        <Route path="/today/log/:id" element={<LocationProbe />} />
+      </Routes>
+    </MemoryRouter>,
+  );
 }
 
 beforeEach(() => {
@@ -200,6 +234,105 @@ describe("Plan (active plan — sequence rendering)", () => {
     const list = document.querySelector(".plan-sequence")!;
     expect(list.tagName).toBe("UL");
     expect(list.children).toHaveLength(84);
+  });
+});
+
+// From-the-log spec (2026-08-18) §1: a done plan row with stored linkage
+// (`GET /api/logs?plan=<key>`'s newest-wins pairs) becomes a link to
+// `/today/log/:id`; a done row with NO linkage — the pre-spec-2 case, a
+// checkmark that predates this spec entirely — stays plain text rather
+// than guessing. Both are tested against the SAME fixture (SPRINT_ACTIVE,
+// doneN=11, indices 0..10 done) so one render proves the row-by-row
+// decision, not just "some row somewhere links."
+describe("Plan (done-row links, Task 6)", () => {
+  it("a done row with stored linkage renders as a link to its exact log, carrying state.from = /plan", async () => {
+    mockUsePlan({
+      state: "ready",
+      plan: SPRINT_ACTIVE,
+      choose: vi.fn(),
+      reset: vi.fn(),
+    });
+    const links = new Map([[0, "log-abc"]]);
+    await renderPlan(links);
+
+    const rows = document.querySelectorAll(".plan-row");
+    const linkedRow = rows[0]!;
+    expect(linkedRow.tagName).toBe("A");
+    expect(linkedRow).toHaveAttribute("href", "/today/log/log-abc");
+    expect(linkedRow).toHaveClass("plan-row-done");
+  });
+
+  it("tapping a linked done row navigates to its exact log id, carrying state.from = /plan (resolveLogBack's ← PLAN origin)", async () => {
+    mockUsePlan({
+      state: "ready",
+      plan: SPRINT_ACTIVE,
+      choose: vi.fn(),
+      reset: vi.fn(),
+    });
+    const links = new Map([[0, "log-abc"]]);
+    await renderPlanWithProbe(links);
+
+    await userEvent.click(document.querySelectorAll(".plan-row")[0]!);
+
+    expect(screen.getByText("PROBE from=/plan")).toBeVisible();
+  });
+
+  it("a done row with NO stored linkage stays plain text — never a guessed link", async () => {
+    mockUsePlan({
+      state: "ready",
+      plan: SPRINT_ACTIVE,
+      choose: vi.fn(),
+      reset: vi.fn(),
+    });
+    // Only index 0 is linked; indices 1..10 are also done but pre-spec-2
+    // (or otherwise unlinked) — every one of them must stay plain text.
+    const links = new Map([[0, "log-abc"]]);
+    await renderPlan(links);
+
+    const rows = document.querySelectorAll(".plan-row");
+    const unlinkedDoneRow = rows[1]!;
+    expect(unlinkedDoneRow.tagName).not.toBe("A");
+    expect(unlinkedDoneRow.querySelector("a")).toBeNull();
+    expect(unlinkedDoneRow).toHaveClass("plan-row-done");
+  });
+
+  it("today/upcoming rows never link even when the links map happens to carry their index", async () => {
+    mockUsePlan({
+      state: "ready",
+      plan: SPRINT_ACTIVE,
+      choose: vi.fn(),
+      reset: vi.fn(),
+    });
+    // Index 11 is TODAY in this fixture (doneN=11) — a link entry for it
+    // would only ever arrive from a stale/adversarial response, and must
+    // never be honored for a non-done row.
+    const links = new Map([[11, "log-today-somehow"]]);
+    await renderPlan(links);
+
+    const todayRow = document.querySelector('[aria-current="step"]')!;
+    expect(todayRow.tagName).not.toBe("A");
+    expect(todayRow.querySelector("a")).toBeNull();
+  });
+
+  it("a linked done row's tap target is at least 44px tall", async () => {
+    mockUsePlan({
+      state: "ready",
+      plan: SPRINT_ACTIVE,
+      choose: vi.fn(),
+      reset: vi.fn(),
+    });
+    const links = new Map([[0, "log-abc"]]);
+    await renderPlan(links);
+
+    const rows = document.querySelectorAll(".plan-row");
+    // jsdom has no real layout engine (min-height is a CSS rule, not a
+    // computed box), so this pins the STRUCTURAL guarantee the design.
+    // spec.ts tap-target sweep actually measures on a real browser: the
+    // link IS the row (no nested tap target under a non-interactive
+    // wrapper), carrying `.plan-row`'s own `min-height: 44px` rule
+    // directly rather than through an ancestor.
+    expect(rows[0]).toHaveClass("plan-row");
+    expect(rows[0]!.tagName).toBe("A");
   });
 });
 
