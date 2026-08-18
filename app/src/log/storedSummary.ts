@@ -31,10 +31,12 @@
 // ONLY producer of `actualSource: "stopwatch"`); a row with neither is
 // door-ambiguous only in the sense that it's exactly the "assumed
 // everything" shape both the manual door and a not-actually-timed timer
-// session produce — spec §5A calls this "BY HAND", the from-the-log view's
-// own word for that inferred bucket (see `sourceLabel`'s own comment for
-// why this is a deliberately DIFFERENT literal string than spec 1's live
-// manual door, "LOGGED BY HAND").
+// session produce. James's copy ruling (fix round, 2026-08-18): the third
+// bucket reads `LOGGED BY HAND` — matching spec 1's live manual door
+// (`summaryModel.ts`'s `buildManualModel`) and the handoff, not §5A's own
+// shorter table literal — so the identical fact never reads as two
+// different words depending on whether a rower is looking at a session
+// live or from the log.
 //
 // WARM-UP: stored `steps` never carries a warm-up row at all — neither
 // `buildMonitorLogSteps` nor `buildLogSteps` ever pushes one (module
@@ -133,20 +135,14 @@ export interface StoredSummaryView {
 }
 
 // §5A: `deviceName` when stored; else `TIMER` when any stored step carries
-// `actualSource: "stopwatch"`; else `BY HAND`. Deliberately the literal
-// string the design spec quotes (§5A), NOT spec 1's live manual-door
-// string `"LOGGED BY HAND"` (`summaryModel.ts`'s `buildManualModel`) —
-// the spec's own table writes this row's three outcomes as `deviceName` /
-// `TIMER` / `BY HAND` in parallel, and `TIMER` there is already an exact
-// match for the live door's own string, which reads as the shorter form
-// being deliberate rather than a shorthand in the prose. Flagged in this
-// task's own report as a value worth confirming with James — the two
-// screens would otherwise show a different word for the identical fact
-// about the identical saved session.
+// `actualSource: "stopwatch"`; else `LOGGED BY HAND`. James's copy ruling
+// (fix round, 2026-08-18) supersedes §5A's own shorter table literal
+// ("BY HAND") with the live door's exact string — see the module header's
+// SOURCE INFERENCE paragraph for why the two screens must agree.
 function sourceLabel(row: StoredLog): string {
   if (row.deviceName !== null) return row.deviceName;
   if (row.steps.some((s) => s.actualSource === "stopwatch")) return "TIMER";
-  return "BY HAND";
+  return "LOGGED BY HAND";
 }
 
 // §5A: "Spec 1's 2A rendering" — that rendering omits `timeLabel`
@@ -155,20 +151,23 @@ function sourceLabel(row: StoredLog): string {
 // doors (`buildMonitorModel`/`buildTimerModel`, `formatTimeOfDay` off
 // each door's own closing timestamp). A stored row always HAS a
 // `loggedAt` (`session_logs.logged_at` is `NOT NULL`), even for a by-hand
-// save — but showing a wall-clock reading next to "BY HAND" would fill in
-// a moment the original screen never claimed to know, the exact
+// save — but showing a wall-clock reading next to "LOGGED BY HAND" would
+// fill in a moment the original screen never claimed to know, the exact
 // fabrication §2B's own absence idiom forbids elsewhere. Gated on the
 // SAME inferred-source bucket, not a separate flag: `sourceLabel(row) ===
-// "BY HAND"` is precisely the door-ambiguous case this module's own
-// header describes (manual door, or a not-actually-timed session) —
-// symmetric with the two doors that DO get a timeLabel live.
+// "LOGGED BY HAND"` is precisely the door-ambiguous case this module's
+// own header describes (manual door, or a not-actually-timed session) —
+// symmetric with the two doors that DO get a timeLabel live, and BYTE-
+// IDENTICAL to what `buildManualModel` itself does (no `timeLabel` field
+// at all) — fix round's own 5A resolution: consistency with the live
+// door's manual-summary meta wins over table-literalism.
 function buildMeta(row: StoredLog): SummaryMeta {
   const source = sourceLabel(row);
   const meta: SummaryMeta = {
     dateLabel: formatLogDate(row.loggedAt),
     sourceLabel: source,
   };
-  if (source !== "BY HAND") {
+  if (source !== "LOGGED BY HAND") {
     meta.timeLabel = formatTimeOfDay(row.loggedAt);
   }
   return meta;
@@ -302,11 +301,13 @@ const HELD_READBACK_LABEL: Record<HeldResult, string> = {
 
 // Thumbs read-back words: "LIKED" for `up` is the design spec's own
 // literal example (§5D: "HELD · PAIN 3/5 · LIKED"). The spec never names
-// a `down` word — "DISLIKED" is this task's own judgment call (the
-// natural antonym, same terse-noun register as "LIKED"), flagged in the
-// report for confirmation rather than treated as spec-cited.
+// a `down` word — James's copy ruling (fix round, 2026-08-18): "LESS LIKE
+// THIS", reusing the live door's own control vocabulary verbatim
+// (`PostWorkoutSummary.tsx`'s thumbs-down button carries `aria-label="Less
+// like this"`) rather than a fresh invented antonym ("DISLIKED", this
+// task's original, unconfirmed guess).
 function thumbsReadBackLabel(thumbs: Thumbs): string {
-  return thumbs === "up" ? "LIKED" : "DISLIKED";
+  return thumbs === "up" ? "LIKED" : "LESS LIKE THIS";
 }
 
 function buildReadBack(row: StoredLog): StoredReadBack {
@@ -332,6 +333,16 @@ function buildReadBack(row: StoredLog): StoredReadBack {
   };
 }
 
+// Fix round MEDIUM: narrows against the real `PLANS` object via `in`,
+// not a hand-duplicated `"sprint" || "head"` literal union — a THIRD
+// preset added to `domain/plans.ts` in the future is recognized here for
+// free (this function needs no edit), where the old literal check would
+// have silently kept treating it as unknown with no typecheck to catch
+// the drift.
+function isKnownPlanKey(key: string): key is keyof typeof PLANS {
+  return key in PLANS;
+}
+
 // §5E: title resolves from `plan_key` against the client's PLANS table
 // (`domain/plans.ts`); an unknown key renders verbatim. The sequence
 // LENGTH has no fallback source when the key is unknown (PLANS is the
@@ -344,11 +355,7 @@ function buildReadBack(row: StoredLog): StoredReadBack {
 // everywhere else (§5C's judging gate, §2B's hero absence).
 function buildPlanFooter(row: StoredLog): string | undefined {
   if (row.planKey === null || row.planIndex === null) return undefined;
-  const known =
-    row.planKey === "sprint" || row.planKey === "head"
-      ? row.planKey
-      : undefined;
-  const preset = known !== undefined ? PLANS[known] : undefined;
+  const preset = isKnownPlanKey(row.planKey) ? PLANS[row.planKey] : undefined;
   const title = preset?.title ?? row.planKey;
   const session = `SESSION ${row.planIndex + 1}`;
   return preset !== undefined

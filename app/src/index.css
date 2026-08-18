@@ -2366,6 +2366,12 @@ button:disabled {
   font-size: 13px;
   letter-spacing: 0.04em;
   color: var(--ink);
+  /* Fix round LOW (c): UA default <p> margin (~1em) inside a
+     `.log-readback`/`display: flex; gap: 10px` column double-spaces this
+     from the note below it, a visible gutter inconsistency on the
+     committed capture — `.log-readback-note`'s own `margin: 0` already
+     avoided this; this rule now matches it. */
+  margin: 0;
 }
 
 .log-readback-note {

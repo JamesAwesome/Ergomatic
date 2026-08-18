@@ -127,6 +127,12 @@ export default function AppRoutes({
             in HIDDEN_TABBAR_PREFIXES above: §4 N7 keeps the tab bar
             visible (TODAY lit) on both — LOG is not a fifth tab. */}
         <Route path="/today/log" element={<HistoryList />} />
+        {/* Fix round LOW (e), INFO-level: FromTheLog.tsx's own root
+            element carries no `key={id}` (no in-place navigation between
+            two detail views exists yet) — see that component's own
+            comment for Reader.tsx's `key={article.slug}` precedent, the
+            fix this route would need if a "next session" style in-place
+            hop is ever added here. */}
         <Route path="/today/log/:id" element={<FromTheLog />} />
         <Route path="/library" element={<Library />} />
         <Route path="/library/new" element={<Builder />} />

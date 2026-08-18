@@ -176,6 +176,20 @@ describe("FromTheLog — §4 N5 back label", () => {
     const back = await screen.findByRole("link", { name: "← LOG" });
     expect(back).toHaveAttribute("href", "/today/log");
   });
+
+  // Fix round LOW (a): a SAFE in-app origin this screen doesn't have a
+  // label for (unmapped, but still `isSafeInAppPath`) used to link to
+  // that arbitrary path while labeling it `← LOG` — falling the TARGET
+  // back to /today/log too, not just the label, is what this test pins.
+  it("an unmapped-but-safe origin falls BOTH the target and the label back to /today/log · ← LOG (never a label naming one place while linking to another)", async () => {
+    mockApi(() => new Response(JSON.stringify(storedRow()), { status: 200 }));
+    await renderFromTheLog({
+      pathname: "/today/log/log-1",
+      state: { from: "/library" },
+    });
+    const back = await screen.findByRole("link", { name: "← LOG" });
+    expect(back).toHaveAttribute("href", "/today/log");
+  });
 });
 
 describe("FromTheLog — ready state rendering", () => {
@@ -551,21 +565,61 @@ describe("FromTheLog — §4 N6 edit", () => {
   });
 });
 
-describe("FromTheLog — N1 mount-side-effect test", () => {
-  it("localStorage is byte-identical after visiting /today/log/:id (the e2e/session.spec.ts idiom, unit-level)", async () => {
-    mockApi(() => new Response(JSON.stringify(storedRow()), { status: 200 }));
-    const before: Record<string, string> = {};
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i)!;
-      before[key] = localStorage.getItem(key)!;
-    }
+// Fix round LOW (b): the previous version of this describe block compared
+// jsdom's localStorage before/after against itself with NOTHING ever
+// seeded into it — `before`/`after` were both `{}` every run, so the
+// assertion could never distinguish "nothing written" from a real write-
+// then-remove; it was empty-to-empty by construction, not evidence of
+// anything. Dropped in favor of the real N1 witness: `e2e/log.spec.ts`'s
+// "N1: a live in-progress session is byte-identical..." test seeds a
+// GENUINE draft/run pair via a real session in progress and diffs actual
+// stored values, which this unit-level stand-in never could.
+
+describe("FromTheLog — criterion 2 (a v0.11.0, all-null-hero row)", () => {
+  // Exit criterion 2, this screen's own witness: "a session saved on
+  // v0.11.0 (no heroes posted) renders in history with rows and
+  // reflection, heroes absent — proven with a fixture posting the
+  // v0.11.0 body shape verbatim." `storedSummary.test.ts` already pins
+  // the MODEL half of this (every hero field independently `undefined`);
+  // this is the missing SCREEN half — buildStoredSummary's output
+  // actually reaching the DOM without a hero block, a crash, or a bare
+  // dash anywhere a hero used to be.
+  it("an all-null-hero row (the frozen v0.11.0 shape) renders no AVG SPLIT/TIME/DISTANCE anywhere, while rows and the read-back render normally", async () => {
+    mockApi(
+      () =>
+        new Response(
+          JSON.stringify(
+            storedRow({
+              deviceName: null,
+              avgSplitSeconds: null,
+              timeSeconds: null,
+              distanceMeters: null,
+              held: "held",
+              pain: 2,
+              steps: [
+                {
+                  label: "Work",
+                  targetSplit: 120,
+                  actualSplit: 121,
+                  actualSource: "stopwatch",
+                },
+              ],
+            }),
+          ),
+          { status: 200 },
+        ),
+    );
     await renderFromTheLog();
     await screen.findByRole("heading", { name: "Sea Fret" });
-    const after: Record<string, string> = {};
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i)!;
-      after[key] = localStorage.getItem(key)!;
-    }
-    expect(after).toStrictEqual(before);
+
+    expect(screen.queryByText("AVG SPLIT")).not.toBeInTheDocument();
+    expect(screen.queryByText("TIME")).not.toBeInTheDocument();
+    expect(screen.queryByText("DISTANCE")).not.toBeInTheDocument();
+    // Rows still render (the stored step, unmeasured since no meters
+    // field means the reconstructed elapsed time can't clear the floor —
+    // this row's own point is the HERO absence, not row judging).
+    expect(screen.getAllByRole("listitem")).toHaveLength(1);
+    // The read-back still renders from the two answered fields.
+    expect(screen.getByText("HELD · PAIN 2/5")).toBeVisible();
   });
 });

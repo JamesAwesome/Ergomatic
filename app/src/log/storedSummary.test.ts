@@ -91,7 +91,7 @@ describe("buildStoredSummary — §5A source derivation", () => {
     expect(view.meta.sourceLabel).toBe("TIMER");
   });
 
-  it("falls back to BY HAND when neither a deviceName nor any stopwatch-sourced step exists", () => {
+  it("falls back to LOGGED BY HAND when neither a deviceName nor any stopwatch-sourced step exists (James's copy ruling, fix round: matches the live door's own manual-door string)", () => {
     const view = buildStoredSummary(
       baseRow({
         deviceName: null,
@@ -106,10 +106,10 @@ describe("buildStoredSummary — §5A source derivation", () => {
         ],
       }),
     );
-    expect(view.meta.sourceLabel).toBe("BY HAND");
+    expect(view.meta.sourceLabel).toBe("LOGGED BY HAND");
   });
 
-  it("shows a time-of-day segment for a device/timer source but omits it for BY HAND (mirrors spec 1's manual-door omission)", () => {
+  it("shows a time-of-day segment for a device/timer source but omits it for LOGGED BY HAND (mirrors spec 1's manual-door omission byte-for-byte)", () => {
     const withDevice = buildStoredSummary(baseRow({ deviceName: "PM5 1" }));
     expect(withDevice.meta.timeLabel).toBeDefined();
     const byHand = buildStoredSummary(baseRow());
@@ -287,6 +287,11 @@ describe("buildStoredSummary — §5D read-back", () => {
     expect(under.readBack.segmentLine).toBe("UNDER · FASTER");
     const over = buildStoredSummary(baseRow({ held: "over" }));
     expect(over.readBack.segmentLine).toBe("OVER · SLOWER");
+  });
+
+  it("thumbs down reads back as LESS LIKE THIS (James's copy ruling, fix round: reuses the live door's own control aria-label vocabulary)", () => {
+    const view = buildStoredSummary(baseRow({ thumbs: "down" }));
+    expect(view.readBack.segmentLine).toBe("LESS LIKE THIS");
   });
 
   it("a notes-only log shows the note with no segment line above it (segment line requires >=1 of thumbs/held/pain)", () => {

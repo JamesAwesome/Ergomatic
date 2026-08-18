@@ -27,8 +27,22 @@ const LOG_BACK_LABELS: Record<string, string> = {
   "/plan": "← PLAN",
 };
 
-function logBackLabel(target: string): string {
-  return LOG_BACK_LABELS[target] ?? "← LOG";
+/** Fix round LOW (a): resolves TARGET and LABEL together from the SAME
+ *  lookup, never independently — the previous shape resolved `target` via
+ *  `resolveBackTarget` (which only validates the value is a SAFE in-app
+ *  path, e.g. `isSafeInAppPath`, not that it's one of THIS screen's three
+ *  known origins) and `label` via a separate `?? "← LOG"` fallback, so an
+ *  origin state carrying some other safe-but-unmapped in-app path (a
+ *  future caller, a hand-crafted deep link) would have linked there while
+ *  still LABELING it `← LOG` — exactly the "label names one place, the
+ *  affordance navigates to another" failure §4 N5 exists to forbid. An
+ *  unmapped origin now falls the TARGET back to `/today/log` too, so
+ *  label and destination can never diverge. */
+function resolveLogBack(origin: string): { target: string; label: string } {
+  const label = LOG_BACK_LABELS[origin];
+  return label === undefined
+    ? { target: "/today/log", label: "← LOG" }
+    : { target: origin, label };
 }
 
 type FetchState =
@@ -143,14 +157,14 @@ export default function FromTheLog() {
   const row = fetchState.state === "ready" ? fetchState.row : null;
 
   // §5F: a 404'd id always shows `← LOG`, overriding the origin-based
-  // label below — the row is gone, so a stale "← TODAY"/"← PLAN" origin
-  // is no more useful than the universal one, and the spec names this
-  // exact label for this exact state.
-  const originTarget = resolveBackTarget(location.state, "/today/log");
-  const backTarget =
-    fetchState.state === "not-found" ? "/today/log" : originTarget;
-  const backLabel =
-    fetchState.state === "not-found" ? "← LOG" : logBackLabel(originTarget);
+  // resolution below — the row is gone, so a stale "← TODAY"/"← PLAN"
+  // origin is no more useful than the universal one, and the spec names
+  // this exact label for this exact state.
+  const origin = resolveBackTarget(location.state, "/today/log");
+  const { target: backTarget, label: backLabel } =
+    fetchState.state === "not-found"
+      ? { target: "/today/log", label: "← LOG" }
+      : resolveLogBack(origin);
 
   // §4 N6: edit mode is in-page state, not a route — entering it pushes
   // nothing onto history, and leaving this screen any way at all (browser
@@ -230,7 +244,21 @@ export default function FromTheLog() {
   const view = row !== null ? buildStoredSummary(row) : null;
 
   return (
-    <main className="screen fromlog-screen overlay-screen" tabIndex={0}>
+    // §4 N3: `.overlay-screen` (Reader/Releases' own idiom) supplies the
+    // own-scroller mechanism — no page-specific class beyond it (fix
+    // round LOW: dropped an unstyled, unreferenced `.fromlog-screen`
+    // class this component used to also carry). No `key={id}` here,
+    // matching Releases.tsx's own "no key — this screen has no in-place
+    // navigation" precedent: every real entry into this route is a full
+    // Route-element mount (leaving `/today/log`/`/today`/`/plan` for a
+    // different `:id`), which already gets a fresh DOM node for free.
+    // INFO-level foot-gun, comment only: if a future change adds
+    // in-place navigation BETWEEN two `/today/log/:id` detail views
+    // (e.g. a "next session" link) without an intervening route change,
+    // it needs Reader.tsx's `key={article.slug}` treatment — the same
+    // fresh-DOM-node trick, keyed on `id` — or N3's scroll-lands-at-top
+    // guarantee silently breaks for that one path.
+    <main className="screen overlay-screen" tabIndex={0}>
       <p className="summary-eyebrow">FROM YOUR LOG</p>
       <Link to={backTarget} className="back-link">
         {backLabel}
@@ -261,8 +289,18 @@ export default function FromTheLog() {
         <>
           <SummaryMetaBlock title={row.workoutTitle} meta={view.meta} />
           <SummaryHeroesBlock heroes={view.heroes} />
-          <SummaryIntervalsBlock rows={view.rows} caption={view.caption} />
 
+          {/* Fix round ❌1: the handoff's own §3 "Section order" table
+              (docs/design/handoffs/2026-08-12-post-workout/README.md)
+              binds the from-the-log screen's layout (spec §1: "the
+              handoff... is the UI/UX authority" for surfaces this spec
+              re-skins) — "same minus the save options", which places the
+              reflection card at slot 4, ABOVE INTERVALS. §5's own table
+              is a property list, not an order spec, and this block used
+              to follow §5's row order (meta, heroes, rows, read-back,
+              footer) instead — corrected here: read-back/edit renders
+              BEFORE the intervals list, matching the handoff's own
+              section order exactly. */}
           {editing ? (
             <>
               <SummaryReflectionCard
@@ -322,6 +360,8 @@ export default function FromTheLog() {
               </button>
             </>
           )}
+
+          <SummaryIntervalsBlock rows={view.rows} caption={view.caption} />
 
           {view.planFooter !== undefined && (
             <p className="log-plan-footer">{view.planFooter}</p>
