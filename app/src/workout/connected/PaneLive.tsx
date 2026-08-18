@@ -89,14 +89,25 @@ function judgedClass(
  *  regex, for the same reason `fmtSplit`/`fmtDuration` are house functions
  *  rather than ad hoc string surgery at each call site.
  *
- *  WHOLE METERS, floored (James, 2026-08-18, from the exit walk): the
- *  accumulator carries tenths (`1042.1`) and rendering them made the
- *  counter visibly jumpy — a tick every ~450ms on the least legible digit.
- *  Floor rather than round, for two reasons: a session total should never
- *  claim a metre not yet rowed, and the PM5's own screen truncates
- *  (`325 m total` beside our 325.4 in the walk's rest-1 photo). */
+ *  QUANTISED TO 5 M (James's calm rule, 2026-08-18: dynamic is fine, but
+ *  no visual noise unless warranted). Whole-metre flooring was tried first
+ *  and MEASURED to do nothing — decoding the exit walk's own capture, the
+ *  rendered string changed 1.97/s with tenths and 1.96/s floored, because
+ *  at rowing speed (~3.7 m/s) every ~500ms tick crosses a metre boundary
+ *  anyway; on iOS's ~90-180ms notify spacing that becomes ~3.7 repaints/s.
+ *  At 5 m the repaint rate is speed-limited, not transport-limited:
+ *  ~0.74/s on EVERY platform, one readable sequential step (1,040 → 1,045)
+ *  every ~1.3 s of rowing.
+ *
+ *  ROUND, not floor — an earlier version floored and justified it as "the
+ *  PM5 truncates too", which the antagonist falsified: at the one walk
+ *  instant where floor and round disagree (finish, 1346.7) the machine
+ *  shows 1347, and `summaryModel.ts`'s DISTANCE rounds as well. Rounding
+ *  keeps this cell within ±2.5 m of both. The walk's same-frame protocol
+ *  allows ±5 m on THIS cell only; the summary hero stays exact and is what
+ *  criterion 2 compares at the finish. */
 function fmtMeters(meters: number): string {
-  return `${new Intl.NumberFormat("en-US").format(Math.floor(meters))}m`;
+  return `${new Intl.NumberFormat("en-US").format(Math.round(meters / 5) * 5)}m`;
 }
 
 export default function PaneLive({ model }: { model: SurfaceModel }) {

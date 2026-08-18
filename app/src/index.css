@@ -6345,6 +6345,16 @@ section:not(.news-pinned) .news-row:last-of-type {
   letter-spacing: 0.02em;
   color: var(--ink);
   white-space: nowrap;
+  /* Reserve the widest common width so the FLEXING BAR beside this cell
+     does not jump when the counter gains a character. Measured (antagonist,
+     2026-08-18, real rules in a 390px pane): without this, 999m -> 1,000m
+     shrank the bar 27.3px — a layout jolt at exactly the milestone James
+     named as the one place noise IS warranted. 6ch covers `9,999m`; the
+     `0.12em` absorbs letter-spacing's per-glyph tail. A session past
+     10,000m grows the cell once, which is a milestone, not noise.
+     Right-aligned so the reserved slack sits between bar and counter. */
+  min-width: calc(6ch + 0.12em);
+  text-align: right;
 }
 
 /* --- The band: up-next + TOTAL LEFT (CR2 spec 3 Task 4, design spec §2A/

@@ -531,26 +531,37 @@ describe("the baseline row: AVG beside TGT (connected-metrics design spec)", () 
 
 describe("the meters counter on the progress-bar row (connected-metrics design spec)", () => {
   it("renders the session total with a thousands separator, at the row's end", () => {
-    renderPane("live", { sessionDistanceMeters: 3842 });
+    renderPane("live", { sessionDistanceMeters: 3840 });
     const row = document.querySelector(".connected-progress-row")!;
     expect(row).not.toBeNull();
     const bar = row.querySelector(".connected-progress")!;
     expect(bar).not.toBeNull();
     const counter = row.querySelector(".connected-progress-meters")!;
-    expect(counter.textContent).toBe("3,842m");
+    expect(counter.textContent).toBe("3,840m");
     // "at the right end" (task brief) — the bar comes first in the DOM,
     // the counter last, and CSS (`flex: none` on the counter, `flex: 1`
     // on the bar) does the rest.
     expect([...row.children]).toStrictEqual([bar, counter]);
   });
 
-  it("floors fractional meters — the accumulator's tenths never reach the screen (James, exit walk: the ticking decimal made the counter jumpy)", () => {
+  it("quantises to 5m, rounding — the accumulator's churn never reaches the screen (James's calm rule; the measured fix, not the guessed one)", () => {
+    // Whole-metre flooring was measured to change nothing (1.97 -> 1.96
+    // repaints/s: at rowing speed every tick crosses a metre boundary).
+    // 5m makes the repaint rate speed-limited (~0.74/s on every transport)
+    // and the steps sequential. ROUND, because at the exit walk's finish —
+    // the one instant where floor and round disagree — the machine and the
+    // summary both round (fmtMeters' own comment has the decode).
     renderPane("live", { sessionDistanceMeters: 1042.9 });
-    const counter = document.querySelector(".connected-progress-meters")!;
-    // FLOOR, not round: 1042.9 renders 1,042 — a total never claims a
-    // metre not yet rowed, and the PM5's own screen truncates the same way
-    // (walk-2026-08-18-metrics rest-1 photo: machine 325 beside our 325.4).
-    expect(counter.textContent).toBe("1,042m");
+    expect(
+      document.querySelector(".connected-progress-meters")!.textContent,
+    ).toBe("1,045m");
+  });
+
+  it("rounds down as readily as up across the 5m boundary", () => {
+    renderPane("live", { sessionDistanceMeters: 1042.4 });
+    expect(
+      document.querySelector(".connected-progress-meters")!.textContent,
+    ).toBe("1,040m");
   });
 
   it("zero meters still renders (only 'before the first frame' is absent)", () => {
