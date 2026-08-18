@@ -266,8 +266,20 @@ falsified for the horizontal case; a *scrollable* row list is untested.
 
 ### Task 4: The phone leg (James + device — NOT an implementation task)
 
-- [ ] **Step 1:** `VITE_ENABLE_FAKE_MONITOR=1 pnpm ios:build && pnpm
-  ios:open`; run on James's phone from Xcode.
+- [ ] **Step 1:** `pnpm ios:build && pnpm ios:open`; run on James's phone
+  from Xcode, and connect to the **real PM5**.
+
+  **The fake cannot drive the native app — corrected 2026-08-18, after it
+  wasted a walk attempt.** This plan and the spec both said
+  `VITE_ENABLE_FAKE_MONITOR=1 pnpm ios:build` gives a fake device on the
+  phone with no erg needed. It does not, and no injection fixes it:
+  `adapters/monitorTransport.ts` picks the Capacitor BLE arm whenever
+  `isNative()`, and ONLY the web arm reaches `resolveDefaultTransport`'s
+  fake seam (that file's own header says so: "native picks Capacitor BLE
+  directly, and only the web arm reaches this seam at all"). The claim was
+  inherited from the spec's Step 0 and carried through this plan unchecked.
+  **No rowing is still required** — connect, let it arm, tap "Show me the
+  numbers", and the grid renders every row without a stroke.
 - [ ] **Step 2: The program must make the grid scroll.** A short program
   reproduces the probe and proves nothing new: load one with **≥9
   intervals** and walk it in **landscape** (the scroller fits 8 —

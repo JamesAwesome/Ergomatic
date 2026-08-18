@@ -4,10 +4,19 @@
 our own interactive-element guard, not WebKit.**
 
 Medium: native Capacitor app (WKWebView) on James's iPhone, built from
-branch `probe-swipe` (`d1da5f7`, throwaway — never merged) with
-`VITE_ENABLE_FAKE_MONITOR=1`. Trace captured to `sessionStorage` and
-retrieved with `copy(sessionStorage.getItem("ergomatic:probe-swipe"))`.
-1779 events over ~63 s of drags.
+branch `probe-swipe` (`d1da5f7`, throwaway — never merged). Trace captured
+to `sessionStorage` and retrieved with
+`copy(sessionStorage.getItem("ergomatic:probe-swipe"))`. 1779 events over
+~63 s of drags.
+
+**On the build flag, corrected 2026-08-18:** the probe was built with
+`VITE_ENABLE_FAKE_MONITOR=1` because the spec said that yields a fake
+device on the phone. It does not. `adapters/monitorTransport.ts` picks the
+Capacitor BLE arm whenever `isNative()`, and only the WEB arm reaches the
+fake seam — so the session behind this trace was a real PM5, and the flag
+was inert. Nothing in the verdict below depends on it (every claim here is
+read off pointer/touch events and the DOM), but a later reader must not
+infer that a fake can drive the native app. It cannot.
 
 ## What James saw
 
