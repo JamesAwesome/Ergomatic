@@ -2569,6 +2569,18 @@ program.ts` hardcodes PM5 Table 19 limits (`MIN_TIME_SECONDS = 20`,
   §19.2 has since WITHDRAWN, so the decision needs re-reasoning against the
   current record (re-reasoning draft in PR #70's body). **Trigger:** Capacitor
   BLE lands (PM5 reaches the phone), or a tester reports a mid-piece lost link.
+- **Remove the `PULL TO RESUME` block** (James, 2026-08-17: "we never got
+  rid of the pull to resume screen"): the stale-state band on
+  `ConnectedSurface.tsx` (~line 584) still renders its inverted ink field
+  when strokes stop mid-piece. CR2 2a task 5 only re-worded and un-occluded
+  it (PAUSED noun retired, in-flow, instruction not status); James's flag is
+  that the screen itself was supposed to go, not get politer. Work item:
+  decide what the stale frame state shows instead (nothing but the live
+  numbers? the END/AGAIN chip alone?), then remove the band, its CSS
+  (`connected-paused-*` family), the DEVIATIONS paused-treatment rows, and
+  the design/e2e witnesses that pin it. Owner: next connected-surface
+  phase — pairs naturally with James's stale-while-armed observation, still
+  owed from the CR2 phone pass.
 - **Anonymous-run logging (`workoutId: null`)** — every storage and server
   layer already accepts the record (nullable column, guards key on
   `completedAt` alone), but no product path can CREATE an anonymous run: the
