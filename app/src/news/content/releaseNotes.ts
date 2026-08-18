@@ -5,6 +5,28 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // Phase PW spec 1 (#117): the post-workout summary replaces the whole
+    // post-row flow, plus the connected footer's richer NEXT line (#116,
+    // Phase CS task 1-3 — its phase continues, but the change ships in
+    // this build so it is noted here, not re-noted later). v0.10.1 (#113,
+    // the null-tolerant read) was internal-only and folds in silently.
+    // Item order is rower-priority: the summary leads, the two number
+    // corrections ride directly under it because this build changes what
+    // TIME and DISTANCE mean, and the notes rule from the v0.10.0 gate
+    // holds — a number that reads differently must say where to look.
+    version: "v0.11.0",
+    date: "2026-08-17",
+    items: [
+      "Finishing a session lands on a summary now: your average split, total meters, and time up top, every interval listed under them. It replaces the old log screen on every door, connected, timer, and by hand.",
+      "Connected times read lower, and truer. TIME counts the work you rowed plus the rests you completed, never the clock on the wall. Leave mid-session and come back later, and it still says what you actually rowed.",
+      "Total meters is back, and it is the erg's own number. DISTANCE counts everything the flywheel counted, warm-up and rest meters included, so it should match the monitor exactly. Check them side by side after any session.",
+      "Each measured interval shows how far it sat from your session's own average: blue bar faster, red slower. A session with a single measured interval shows no bar, because there is nothing real to compare it against.",
+      "The hold question says which direction it means now: HELD, UNDER · FASTER, OVER · SLOWER. A thumbs up or down joins it, asking whether you want more sessions like this one.",
+      "The whole reflection is optional. Save the row and answer nothing, or clear any answer with a second tap. One honest caveat: there is no way to come back and fill it in later yet.",
+      "The connected footer's NEXT line tells you what you are about to row: the distance or time, the target split, and the stroke rate, instead of just naming the phase.",
+    ],
+  },
+  {
     // Phase CR2 in one build: the totals corrections (#99, #104), the
     // state-honesty wave (#102, #105, #111), the redesign (#109), and the
     // builder nudge fix (#108). Item order is rower-priority. The totals
