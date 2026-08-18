@@ -626,12 +626,31 @@ describe("createFakeTransport: programming — byte-for-byte verification, ack p
     expect(decodeGeneral(generals[0]!).totalWorkDistanceMeters).toBe(500);
   });
 
-  it("a time-kind program's totalWorkDistanceMeters tracks metres rowed, TRUNCATED to whole metres (never the goal)", async () => {
+  it("a time-kind program's totalWorkDistanceMeters is FROZEN through the whole work bout — never the live distance rowed (2026-08-18 connected-metrics spec, correcting CR2 spec 1 Task 8's own prior model)", async () => {
+    // Replaces the old pin that asserted `Math.trunc(distanceMeters)` here
+    // (23.9 m rowed -> 23) — 2,363 committed frames from
+    // `walk-2026-08-16/session-2-wu-4unequal.jsonl` contradict that: TWD is
+    // a SESSION counter, frozen during work, that only learns a time-goal
+    // interval's own metres at its boundary (design doc's field table).
+    // Nothing has completed a boundary yet in this fixture, so TWD reads 0
+    // throughout — even as the tick's own live distance climbs 23.9 m — not
+    // a truncated echo of it.
     const fake = createFakeTransport({
       program: PROGRAM,
       events: [
         {
           atMs: 100,
+          kind: "status",
+          workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+          elapsedSeconds: 10,
+          distanceMeters: 12,
+          spm: 24,
+          currentSplit: 110,
+          heartRateBpm: 140,
+          programIntervalIndex: 0,
+        },
+        {
+          atMs: 200,
           kind: "status",
           workoutState: WORKOUTSTATE_INTERVALWORKTIME,
           elapsedSeconds: 33.57,
@@ -646,10 +665,330 @@ describe("createFakeTransport: programming — byte-for-byte verification, ack p
     await programIt(fake, PROGRAM);
     const generals: Uint8Array[] = [];
     fake.subscribe(GENERAL_STATUS_UUID, (b) => generals.push(b));
-    fake.tick(100);
-    // Design doc's own TWD table: 23.9 m rowed -> 23, the FLOOR, not 24
-    // (Math.round would give the wrong answer here).
-    expect(decodeGeneral(generals[0]!).totalWorkDistanceMeters).toBe(23);
+    fake.tick(200);
+    expect(
+      generals.map((b) => decodeGeneral(b).totalWorkDistanceMeters),
+    ).toStrictEqual([0, 0]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 2026-08-18 connected-metrics spec, Task 1: the fake stops zero-filling
+// `splitAvgPace` and `restDistanceMeters`, and its `totalWorkDistanceMeters`
+// stops modelling the currently-armed interval's own live distance — see
+// `fake.ts`'s own header bullet and `totalWorkDistanceFor`'s doc comment for
+// the evidence (`walk-2026-08-16/session-2-wu-4unequal.jsonl`, 2,363 frames).
+// ---------------------------------------------------------------------------
+
+const TWO_INTERVALS_ONE_REST: WorkoutProgram = {
+  intervals: [
+    {
+      type: "work",
+      kind: "time",
+      value: 60,
+      targetSplit: 120,
+      displaySpm: 22,
+      restSeconds: 30,
+    },
+    {
+      type: "work",
+      kind: "time",
+      value: 60,
+      targetSplit: 120,
+      displaySpm: 22,
+      restSeconds: 0,
+    },
+  ],
+};
+
+describe("createFakeTransport: splitAvgPace (0x0033) — the interval's own running average, held through a rest", () => {
+  it("is non-zero and climbing while rowing, HOLDS flat across the entire rest, and resets to 0 on the next interval's first frame", async () => {
+    const fake = createFakeTransport({
+      program: TWO_INTERVALS_ONE_REST,
+      events: [
+        // Interval 0, two rowing ticks — the average climbs as more of the
+        // interval is known (500*10/40=125, then 500*30/130≈115.38).
+        {
+          atMs: 100,
+          kind: "status",
+          workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+          elapsedSeconds: 10,
+          distanceMeters: 40,
+          spm: 24,
+          currentSplit: 120,
+          heartRateBpm: 140,
+          programIntervalIndex: 0,
+        },
+        {
+          atMs: 200,
+          kind: "status",
+          workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+          elapsedSeconds: 30,
+          distanceMeters: 130,
+          spm: 24,
+          currentSplit: 118,
+          heartRateBpm: 145,
+          programIntervalIndex: 0,
+        },
+        // Rest begins — 0x0031's own elapsed/distance are the rest's own
+        // (irrelevant to this test), but splitAvgPace must HOLD at
+        // interval 0's own last-rowing value (~115.38) rather than
+        // recomputing from these.
+        {
+          atMs: 300,
+          kind: "status",
+          workoutState: WORKOUTSTATE_INTERVALREST,
+          elapsedSeconds: 5,
+          distanceMeters: 0,
+          spm: 0,
+          currentSplit: 0,
+          heartRateBpm: 130,
+          programIntervalIndex: 0,
+          restDistanceMeters: 8,
+        },
+        {
+          atMs: 400,
+          kind: "boundary",
+          actual: {
+            index: 0,
+            elapsedSeconds: 60,
+            distanceMeters: 280,
+            avgSpm: 22,
+            avgHeartRateBpm: 140,
+            restDistanceMeters: 0,
+          },
+          cumulativeElapsedSeconds: 60,
+          cumulativeDistanceMeters: 280,
+        },
+        // A second rest tick, later in the same rest — still held.
+        {
+          atMs: 500,
+          kind: "status",
+          workoutState: WORKOUTSTATE_INTERVALREST,
+          elapsedSeconds: 20,
+          distanceMeters: 0,
+          spm: 0,
+          currentSplit: 0,
+          heartRateBpm: 125,
+          programIntervalIndex: 0,
+          restDistanceMeters: 20,
+        },
+        // Interval 1's own FIRST frame — genuinely 0/0 on the wire, so the
+        // reset is a real recomputation (0), not a leftover hold.
+        {
+          atMs: 600,
+          kind: "status",
+          workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+          elapsedSeconds: 0,
+          distanceMeters: 0,
+          spm: 20,
+          currentSplit: 0,
+          heartRateBpm: 138,
+          programIntervalIndex: 1,
+        },
+      ],
+    });
+    await programIt(fake, TWO_INTERVALS_ONE_REST);
+    const as2: Uint8Array[] = [];
+    fake.subscribe(ADDITIONAL_STATUS_2_UUID, (b) => as2.push(b));
+    fake.tick(600);
+
+    expect(as2.map((b) => decodeAs2(b).splitAvgPace)).toStrictEqual([
+      125, // interval 0, first tick
+      115.38, // interval 0, climbing
+      115.38, // rest tick 1 — HELD, not recomputed from the rest's own 0 distance
+      115.38, // rest tick 2 — still held
+      0, // interval 1's own first frame — genuine reset, not a hold
+    ]);
+  });
+});
+
+describe("createFakeTransport: restDistanceMeters (0x0032) — accumulates during a rest, forced to 0 off it", () => {
+  it("is non-zero once the rower coasts in a rest, and 0 on every work tick regardless of what the script sets", async () => {
+    const fake = createFakeTransport({
+      program: TWO_INTERVALS_ONE_REST,
+      events: [
+        {
+          atMs: 100,
+          kind: "status",
+          workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+          elapsedSeconds: 10,
+          distanceMeters: 40,
+          spm: 24,
+          currentSplit: 120,
+          heartRateBpm: 140,
+          programIntervalIndex: 0,
+          // Deliberately set on a WORK tick — an impossible mid-work
+          // reading a script must not be able to put on the wire. The
+          // enforced 0 below is what proves this is FORCED, not merely
+          // defaulted.
+          restDistanceMeters: 999,
+        },
+        {
+          atMs: 200,
+          kind: "status",
+          workoutState: WORKOUTSTATE_INTERVALREST,
+          elapsedSeconds: 5,
+          distanceMeters: 0,
+          spm: 0,
+          currentSplit: 0,
+          heartRateBpm: 130,
+          programIntervalIndex: 0,
+          restDistanceMeters: 8,
+        },
+        {
+          atMs: 300,
+          kind: "status",
+          workoutState: WORKOUTSTATE_INTERVALREST,
+          elapsedSeconds: 15,
+          distanceMeters: 0,
+          spm: 0,
+          currentSplit: 0,
+          heartRateBpm: 125,
+          programIntervalIndex: 0,
+          restDistanceMeters: 22,
+        },
+      ],
+    });
+    await programIt(fake, TWO_INTERVALS_ONE_REST);
+    const as1: Uint8Array[] = [];
+    fake.subscribe(ADDITIONAL_STATUS_1_UUID, (b) => as1.push(b));
+    fake.tick(300);
+
+    expect(as1.map((b) => decodeAs1(b).restDistanceMeters)).toStrictEqual([
+      0, // WORK tick — forced to 0 despite the script's 999
+      8, // resting, coasting
+      22, // resting, further along
+    ]);
+  });
+});
+
+describe("createFakeTransport: totalWorkDistanceMeters (0x0031) — a SESSION counter, frozen during work, stepping at boundaries and ticking during rests", () => {
+  it("stays frozen through a whole work bout, steps at the boundary, ticks upward through the rest, then freezes again through the next work bout", async () => {
+    const fake = createFakeTransport({
+      program: TWO_INTERVALS_ONE_REST,
+      events: [
+        // Interval 0, two rowing ticks — TWD must NOT track this climbing
+        // live distance (40 -> 130): nothing has completed a boundary yet.
+        {
+          atMs: 100,
+          kind: "status",
+          workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+          elapsedSeconds: 10,
+          distanceMeters: 40,
+          spm: 24,
+          currentSplit: 120,
+          heartRateBpm: 140,
+          programIntervalIndex: 0,
+        },
+        {
+          atMs: 200,
+          kind: "status",
+          workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+          elapsedSeconds: 30,
+          distanceMeters: 130,
+          spm: 24,
+          currentSplit: 118,
+          heartRateBpm: 145,
+          programIntervalIndex: 0,
+        },
+        // A resting tick must precede the boundary (`boundaryBundle`'s own
+        // enforcement) — nothing has been banked yet at this point, so TWD
+        // still reads 0 here (no rest metres scripted on this one tick).
+        {
+          atMs: 300,
+          kind: "status",
+          workoutState: WORKOUTSTATE_INTERVALREST,
+          elapsedSeconds: 1,
+          distanceMeters: 0,
+          spm: 0,
+          currentSplit: 0,
+          heartRateBpm: 130,
+          programIntervalIndex: 0,
+        },
+        // Interval 0's boundary — its own 280 m of WORK now banks in.
+        {
+          atMs: 400,
+          kind: "boundary",
+          actual: {
+            index: 0,
+            elapsedSeconds: 60,
+            distanceMeters: 280,
+            avgSpm: 22,
+            avgHeartRateBpm: 140,
+            restDistanceMeters: 0,
+          },
+          cumulativeElapsedSeconds: 60,
+          cumulativeDistanceMeters: 280,
+        },
+        // The rest itself — TWD ticks upward with the rest's own metres.
+        {
+          atMs: 500,
+          kind: "status",
+          workoutState: WORKOUTSTATE_INTERVALREST,
+          elapsedSeconds: 10,
+          distanceMeters: 0,
+          spm: 0,
+          currentSplit: 0,
+          heartRateBpm: 125,
+          programIntervalIndex: 0,
+          restDistanceMeters: 15,
+        },
+        {
+          atMs: 600,
+          kind: "status",
+          workoutState: WORKOUTSTATE_INTERVALREST,
+          elapsedSeconds: 25,
+          distanceMeters: 0,
+          spm: 0,
+          currentSplit: 0,
+          heartRateBpm: 122,
+          programIntervalIndex: 0,
+          restDistanceMeters: 32,
+        },
+        // Interval 1 begins — the rest's 32 m is now LOCKED IN, and TWD
+        // freezes again for the whole of this new work bout regardless of
+        // this tick's own climbing distance (22 -> 90 below).
+        {
+          atMs: 700,
+          kind: "status",
+          workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+          elapsedSeconds: 5,
+          distanceMeters: 22,
+          spm: 20,
+          currentSplit: 130,
+          heartRateBpm: 138,
+          programIntervalIndex: 1,
+        },
+        {
+          atMs: 800,
+          kind: "status",
+          workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+          elapsedSeconds: 20,
+          distanceMeters: 90,
+          spm: 22,
+          currentSplit: 128,
+          heartRateBpm: 142,
+          programIntervalIndex: 1,
+        },
+      ],
+    });
+    await programIt(fake, TWO_INTERVALS_ONE_REST);
+    const generals: Uint8Array[] = [];
+    fake.subscribe(GENERAL_STATUS_UUID, (b) => generals.push(b));
+    fake.tick(800);
+
+    expect(
+      generals.map((b) => decodeGeneral(b).totalWorkDistanceMeters),
+    ).toStrictEqual([
+      0, // interval 0, tick 1 — nothing banked yet
+      0, // interval 0, tick 2 — still frozen, NOT the live 130 m
+      0, // rest's own first tick, before the boundary has landed
+      295, // rest, ticking: 280 (banked at the boundary) + 15 (this rest so far)
+      312, // rest, ticking further: 280 + 32
+      312, // interval 1, tick 1 — the rest's 32 m is now locked in and frozen
+      312, // interval 1, tick 2 — still frozen, NOT the live 90 m
+    ]);
   });
 });
 

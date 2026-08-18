@@ -1666,22 +1666,39 @@ describe("createPm5Driver: the full happy path over a real compiled workout (Sea
     // per-interval progress from a pair like this one, and its own
     // `intervalRemaining` assertion below documents the clamped-to-zero
     // consequence of that on this fixture's known-unrealistic elapsed
-    // value — but genuinely RESETTING this fixture per interval (closing
-    // this exception for good) is blocked by a separate, out-of-scope
-    // finding Task 6 made without fixing: the fake's `totalWorkDistanceFor`
-    // derives 0x0031's session-cumulative TWD field from this SAME per-tick
-    // `distanceMeters` (`fake.ts`), so genuinely separate per-interval
-    // accumulator keys make `recordTwdVerdict`'s own check unsatisfiable by
-    // ANY choice of this fixture's numbers — proved by exhaustion this task
-    // round, not left unresearched, and owed to whichever task closes the
-    // TWD/accumulator coupling next. Denylist form below so a real future
-    // divergence (any OTHER kind) still fails this test, exactly as it did
-    // before Task 11 existed.
+    // value.
+    //
+    // A SECOND carve-out, added by the 2026-08-18 connected-metrics spec's
+    // Task 1, which is the "whichever task closes the TWD/accumulator
+    // coupling next" this comment used to owe: `fake.ts`'s
+    // `totalWorkDistanceFor` no longer derives 0x0031's TWD from this SAME
+    // per-tick `distanceMeters` (it now banks real boundary/rest metres
+    // instead, independent of it — that function's own doc comment), so
+    // `recordTwdVerdict`'s check is no longer vacuously satisfied by
+    // construction: it now genuinely compares two INDEPENDENT numbers, and
+    // this fixture's own already-disclosed wire-impossibility (every key
+    // beyond 0 refused open, above) makes the driver's own accumulator
+    // read the last tick's raw session-cumulative total (3400 m) while the
+    // fake's honest, boundary-derived TWD reads the real work total (3000
+    // m, 0 rest scripted) — a 400 m gap this task's own correction is what
+    // makes VISIBLE, not a new defect it introduces. Exactly the "proved by
+    // exhaustion" unsatisfiability this comment used to name, now
+    // materialized rather than deferred. Closing it for good needs this
+    // fixture's elapsed/distance genuinely reset per interval, which
+    // conflicts with the `intervalRemaining` clamp assertion below that
+    // depends on this SAME unrealism (its own comment) — left as the next
+    // owed follow-up rather than widened here, since rewriting it changes
+    // what that assertion covers. Denylist form, same reasoning as
+    // "refused open" above: a real future divergence (any OTHER kind)
+    // still fails this test, exactly as it did before Task 11 existed.
     expect(
       log
         .entries()
         .filter(
-          (e) => e.kind === "divergence" && !e.detail.includes("refused open"),
+          (e) =>
+            e.kind === "divergence" &&
+            !e.detail.includes("refused open") &&
+            !e.detail.includes("accumulator and machine total differ"),
         ),
     ).toHaveLength(0);
     // D5, end to end over a real workout: the closing tick had no belt, and
