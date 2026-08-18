@@ -712,6 +712,31 @@ export function describeStoreContracts(
             steps: [{ label: "Work", targetSplit: 120 }],
           });
         });
+
+        // Task 2 review, LOW 1: `LOG_LIST_COLUMNS` (stores/logs.ts) is a
+        // hand-maintained mirror of `sessionLogs`' columns, minus `steps`
+        // — nothing pinned it against drift before this test. A column
+        // added to the schema later and forgotten here would silently
+        // vanish from the list response with every other case in this
+        // describe still green (they all assert PRESENCE/ABSENCE of
+        // specific keys, never the full set). Comparing against `get()`'s
+        // own key set (the real, un-projected row) means this pin tracks
+        // the schema automatically — it never needs editing when a future
+        // column is added, only when one is deliberately EXCLUDED again.
+        it("the list projection is exactly get()'s key set minus steps — no column silently drops out", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          const { id } = await stores.logs.create(
+            userId,
+            logInput({ steps: [{ label: "Work", targetSplit: 120 }] }),
+          );
+          const [listRow] = await stores.logs.list(userId, 10);
+          const getRow = await stores.logs.get(userId, id);
+          const expectedKeys = Object.keys(getRow!)
+            .filter((k) => k !== "steps")
+            .sort();
+          expect(Object.keys(listRow).sort()).toStrictEqual(expectedKeys);
+        });
       });
 
       // From-the-log spec (2026-08-18), §3: cursor = the last row's id
@@ -829,6 +854,36 @@ export function describeStoreContracts(
           });
           expect(updated).toMatchObject({ notes: null });
         });
+
+        // Task 2 review, LOW 2 fix-round coverage gap: the subset test
+        // above only ever exercises `pain`'s (and, separately, `notes`')
+        // own `"key" in patch` branch directly against the REAL store —
+        // `held` and `thumbs` were only ever proven via the fake (through
+        // the PATCH route's own tests), leaving those two branches
+        // uncovered on `logs.ts` itself. One case per field closes it.
+        it.each([
+          ["held", "under"],
+          ["thumbs", "down"],
+        ] as const)(
+          "updating only %s in isolation sets that column and leaves the rest untouched",
+          async (field, value) => {
+            const stores = await makeStores();
+            const userId = await stores.makeUser();
+            const { id } = await stores.logs.create(
+              userId,
+              logInput({ held: "held", pain: 2, notes: "orig", thumbs: "up" }),
+            );
+            const updated = await stores.logs.update(userId, id, {
+              [field]: value,
+            });
+            expect(updated).toMatchObject({
+              held: field === "held" ? value : "held",
+              pain: 2,
+              notes: "orig",
+              thumbs: field === "thumbs" ? value : "up",
+            });
+          },
+        );
 
         it("returns null for an absent id", async () => {
           const stores = await makeStores();

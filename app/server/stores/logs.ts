@@ -233,11 +233,18 @@ export function createLogsStore(db: Db) {
     // 500 against real Postgres, the same class of bug
     // `PUT /api/prefs`'s own empty-patch guard exists to dodge.
     async update(userId: string, id: string, patch: LogPatch) {
+      // Task 2 review, LOW 2: no `?? null` fallback here (there was one,
+      // briefly) — `LogPatch`'s own type is `T | null` on every field, so
+      // a present key is never literally `undefined`; a fallback for a
+      // shape the type already forbids was unreachable dead branch, not
+      // defensive coding (unlike `PUT /api/prefs`'s analogous idiom,
+      // which guards a real runtime possibility the prefs patch type
+      // doesn't rule out).
       const set: Record<string, unknown> = {};
-      if ("thumbs" in patch) set.thumbs = patch.thumbs ?? null;
-      if ("held" in patch) set.held = patch.held ?? null;
-      if ("pain" in patch) set.pain = patch.pain ?? null;
-      if ("notes" in patch) set.notes = patch.notes ?? null;
+      if ("thumbs" in patch) set.thumbs = patch.thumbs;
+      if ("held" in patch) set.held = patch.held;
+      if ("pain" in patch) set.pain = patch.pain;
+      if ("notes" in patch) set.notes = patch.notes;
 
       const rows = await db
         .update(sessionLogs)
