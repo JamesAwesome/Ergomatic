@@ -29,15 +29,17 @@
 //
 // THE BAND (design spec §3: "The up-next line is rendered by the band
 // directly") replaces `TimerRuler`'s own TOTAL LEFT row AND the old metric
-// row's UP NEXT strip in one element: up-next on the left (landscape: no
-// label, the full `then` form, `REST 2:00 · then WORK 2:09.0`; portrait: a
-// `UP NEXT` label over the `then`-less form, the shorter string this
-// content width can hold without wrapping or clipping — the `.timer-
-// upnext-then`-toggle idiom `UpNextStrip.tsx` used, reproduced here rather
-// than imported per this task's own forked-component rule), and the
-// `TOTAL LEFT` labelled cell on the right, reading `model.totalLeftDisplay`
-// directly — the bar above takes elapsed/totalSeconds itself now, so
-// nothing here subtracts a pre-computed remainder any more.
+// row's UP NEXT strip in one element: up-next on the left, ONE value
+// (`model.upNext`, `connectedNextText`'s composed string — distance/
+// duration + split + rate, no `then`-clause; Phase CS Item B retired it
+// everywhere), shown two ways by CSS alone, not two markups — landscape
+// prepends an unconditional "NEXT · " prefix span ahead of the value
+// (`REST 2:00`, `WORK 1500m · 2:13.0 @24`); portrait instead shows a
+// stacked `UP NEXT` label above the same value and hides the prefix, so
+// the line is never double-labelled — and the `TOTAL LEFT` labelled cell
+// on the right, reading `model.totalLeftDisplay` directly — the bar above
+// takes elapsed/totalSeconds itself now, so nothing here subtracts a
+// pre-computed remainder any more.
 //
 // CUT OUTRIGHT (design spec §2A's own casualty line, §3's fate table):
 // `TimerRuler` and `UpNextStrip` (never imported — the connected surface

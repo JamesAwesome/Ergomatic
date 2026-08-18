@@ -6336,13 +6336,18 @@ test.describe("connected screens (fake-driven)", () => {
         .textContent();
       expect(total).toBe("45:36");
 
-      // THE RATE SURVIVES (spec EC3, antagonist B1's own measured worst
-      // case): this fixture's 30-char string — "NEXT · WORK 2000m · 2:06.0
-      // @22" — is the seeded 300's longest NEXT line (antagonist B1:
-      // "new worst case 30 chars", measured across all 3,063 phases), on
-      // the phase's own reference landscape frame (844x390, this
-      // describe's `test.use`). The `toBe` above already proves the exact
-      // string, but this is the criterion's OWN assertion, independently
+      // THE RATE SURVIVES (spec EC3): this fixture's 30-char string —
+      // "NEXT · WORK 2000m · 2:06.0 @22" — is the longest COMMITTED-
+      // FIXTURE string, not the corpus worst (that's 32 chars, the 70' O2
+      // continuous piece at server/seed/library/o2.ts:780 — see the
+      // spec's Width section for the correction). This element has room
+      // to spare regardless: the retired 35-char then-string rendered
+      // here for months pre-ruling, and the pin's own mutation measured
+      // this element's clientWidth at 679px with the 30-char string
+      // nowhere near filling it, on the phase's own reference landscape
+      // frame (844x390, this describe's `test.use`). The `toBe` above
+      // already proves the exact string, but this is the criterion's OWN
+      // assertion, independently
       // falsifiable from the equality check above: the rendered text
       // ENDS with its `@NN` rate token (never an ellipsis or a cut
       // numeral) — the ellipsis on `.connected-band-upnext-value` and the

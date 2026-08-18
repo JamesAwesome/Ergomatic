@@ -137,12 +137,25 @@ deleted with it (recurring failure #5).
 ### Width (antagonist B1 — measured, not designed)
 
 Across all 3,063 phases of the seeded 300 (2k 1:52 / 6k 2:02
-baselines): new worst case 30 chars vs today's shipped 39 (`NEXT ·
-WORK ALL OUT · then WORK ALL OUT`). The enriched line fits wherever
-today's fits, both orientations. The existing ellipsis on
-`.connected-band-upnext-value` and the two committed
-`scrollWidth <= clientWidth` pins stay as the backstop — now
-load-bearing as proof the ellipsis path is NEVER entered, and the
+baselines), the corpus worst POST-RULING (middle dot, then-clause
+retired) is 32 chars: "Fair Wind", the 70' O2 continuous piece at
+6k+12 spm 20 (`server/seed/library/o2.ts:780`) →
+`NEXT · WORK 1:10:00 · 2:14.0 @20`. (B1's own "30 chars" figure was
+measured on the pre-ruling composition, before the then-clause was
+dropped and the dot swapped in — a different string shape, not this
+one.) Still narrower than today's shipped 39 (`NEXT · WORK ALL OUT ·
+then WORK ALL OUT`). The enriched line fits wherever today's fits,
+both orientations. EC3's armed fixture ("Filling Low") carries the
+longest COMMITTED-FIXTURE string at 30 chars (`NEXT · WORK 2000m ·
+2:06.0 @22`) — narrower than the corpus worst, but that element is
+proven room to spare regardless: the retired 35-char then-string
+(`NEXT · WORK 2:06.0 · then REST 3:00`) rendered there for months
+pre-ruling, and the pin's own mutation measured the element's
+`clientWidth` at 679px with the 30-char string nowhere near filling
+it — so the 32-char corpus worst fits the same element trivially. The
+existing ellipsis on `.connected-band-upnext-value` and the two
+committed `scrollWidth <= clientWidth` pins stay as the backstop —
+now load-bearing as proof the ellipsis path is NEVER entered, and the
 criterion is the PM's: the seeded library's longest string shows its
 rate on the reference landscape frame.
 
