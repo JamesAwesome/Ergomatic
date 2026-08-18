@@ -76,6 +76,8 @@ import {
   parseSplitIntervalData,
   toIntervalActual,
   toMonitorFrame,
+  toMonitorState,
+  WORKOUTSTATE_INTERVALWORKTIMETOREST,
   type Pm5ParseError,
   type RawPm5Status,
   type WorkoutSummary,
@@ -1163,25 +1165,46 @@ export function createPm5Driver(
    *  `program()` (below) — a re-armed run's own first clamp is a new fact
    *  too, not a repeat of the outgoing run's. */
   let clampedKeysLogged = new Set<number>();
-  /** THE EMITTED REFERENT'S OWN HISTORY (interval-referent-monotone spec,
-   *  2026-08-18 Task 2) — the last frame's clamped `intervalIndex` (the
-   *  same field `frameWithIndex` below sets), tracked so the very next
-   *  frame can tell "did the referent I'm about to emit just advance into
-   *  a NEW interval" from "is it the same interval as last time". That
-   *  question is what decides whether THIS frame's `splitAvgPace` is
-   *  trustworthy: the wire's 0x0033 (Additional Status 2) updates on its
-   *  own cadence, independent of 0x0031's (General Status) state-byte
-   *  flip, so the first `"rowing"` frame of a new interval can fire before
-   *  0x0033 has caught up — its `splitAvgPace` is still the JUST-FINISHED
-   *  interval's own settled average (measured on `session-2-wu-4unequal.
-   *  jsonl`: GS seq 781, t=143.176s, state flips to rowing/idx 2 while the
-   *  merged `splitAvgPace` still reads 131.11, interval 1's own value —
-   *  the fresh 0x0033 sample carrying 0 arrives 10ms later, at t=143.186s,
-   *  too late for this already-built frame). Reset alongside `session` and
+  /** SPLIT AVG PACE'S OWN PROVENANCE (interval-referent-monotone spec,
+   *  2026-08-18 Task 2; LEVEL-triggered as of fix round 1, finding B —
+   *  replaces an earlier edge-triggered "did the referent just advance"
+   *  check that only protected the first frame after a boundary, leaving a
+   *  DROPPED 0x0033 notify free to extend the same lie into a second
+   *  frame). Updated ONLY from the 0x0033 (Additional Status 2) `after`
+   *  callback (below) — never from `maybeEmitFrame`, which runs on 0x0031's
+   *  own, independent cadence — to exactly the program index that AS2
+   *  sample's OWN `intervalCount` byte names, translated through
+   *  `toProgramIndex` using the STATE ACTIVE AT THAT SAME MOMENT (`raw.
+   *  workoutState`, whatever the most recently merged 0x0031 sample set it
+   *  to — `raw` is updated before `after` runs, `mergeStatus`'s own doc
+   *  comment). That "state at arrival" qualifier is load-bearing, not
+   *  decorative: 0x0033's Interval Count is the SAME raw byte value on
+   *  both sides of a work→rest or rest→work boundary (the wire's own
+   *  forward-attribution convention, `intervalIndex.ts`'s own doc comment),
+   *  so the byte alone cannot distinguish "this sample is interval N's own
+   *  reading" from "this sample is stale, still interval N-1's" — only
+   *  pairing it with the state that was live when THIS SPECIFIC sample
+   *  arrived can. Comparing this against `emittedIntervalIndex` at
+   *  frame-build time (below) is what replaces the edge check: whenever
+   *  they disagree, `splitAvgPace` was captured before the referent it is
+   *  about to be attached to; that comparison is re-run FRESH on every
+   *  frame from state alone, needing no memory of the previous frame (the
+   *  file's own level-triggered idiom, `driver.ts:1965`'s comment on the
+   *  open-on-reset guard). A DELIBERATE non-goal: using the CURRENT tick's
+   *  own `toProgramIndex(status.intervalCount, base.state, ...)` output
+   *  instead (i.e. comparing `intervalIndex` itself, which already exists)
+   *  was tried and rejected — at a rest's own FIRST tick, that computation
+   *  reads one interval behind the very same clamp this task's own rest fix
+   *  raises the referent to (by construction: that lag is what the clamp
+   *  exists to correct), so it would wrongly null a splitAvgPace value that
+   *  is, in fact, already correct (`session-2-wu-4unequal.jsonl` GS seq
+   *  1489: splitAvgPace=129.89, genuinely interval 2's own settled average,
+   *  captured by the AS2 sample most recently merged BEFORE this GS tick,
+   *  while state was still `"rowing"`). Reset alongside `session` and
    *  `clampedKeysLogged` on every successful `program()` (below) — a
    *  re-armed run's own first interval is a new fact too, not a
    *  continuation of the outgoing run's numbering. */
-  let lastEmittedReferentIndex: number | null = null;
+  let splitAvgPaceProvenanceIndex: number | null = null;
   /** R0 (CR2 spec 1, Task 1). The last totals actually PUT ON A FRAME.
    *  `logSummaryTotals` fires on 0x0039, which carries no per-interval pair
    *  of its own, so the value the rower last saw has to be remembered
@@ -1813,26 +1836,60 @@ export function createPm5Driver(
       programLength,
     );
     // THE EMITTED REFERENT (interval-referent-monotone spec, 2026-08-18
-    // Task 2). Starts equal to `intervalIndex` above and is raised in lockstep
-    // wherever the stale-count rest clamp below raises `activeKey` — the
-    // SAME condition, not a second rule (this spec's own "one monotone
-    // answer" requirement). Provably safe to mirror: the clamp's `if`
-    // below only ever fires when `activeKey === intervalIndex` already
-    // (non-null) — the OTHER way `activeKey` can start (the rowing/
-    // resting/finished fallback a few lines down) sets it to `newestKey`
-    // directly, so `activeKey < newestKey` is already false and the clamp
-    // never touches it. This is the fix for the defect the design doc's
-    // "Which interval do these numbers belong to?" section names: before
-    // this field existed, `frameWithIndex` below built its `intervalIndex`
-    // straight from the unclamped constant, so a late 0x0033 left the
-    // FIRST resting frame of a rest naming the interval BEFORE the one
-    // that just finished, for one status tick (~450-540ms,
-    // `session-2-wu-4unequal.jsonl` GS seq 1489 and seq 2430 —
-    // `registerReplay.test.ts`'s own regression tests). Only 0x0031's own
-    // `mergeStatus` callback (below) calls `maybeEmitFrame`; 0x0033's own
-    // callback only sets `seen.as2` — so a 0x0033 sample that has not yet
-    // caught up to a state flip 0x0031 already reported gets no frame of
-    // its own to correct the one already built.
+    // Task 2). Starts equal to `intervalIndex` above and is raised below
+    // wherever the stale-count rest clamp raises `activeKey` — the SAME
+    // condition, not a second rule (this spec's own "one monotone answer"
+    // requirement). Provably safe to mirror: the clamp's own `if` only
+    // ever fires when `activeKey === intervalIndex` already (non-null) —
+    // the OTHER way `activeKey` can start (the rowing/resting/finished
+    // fallback a few lines down) sets it directly to a key already in
+    // `session.seen`, which short-circuits the clamp's own `< newestKey`
+    // gate before it ever runs.
+    //
+    // This is the fix for the defect the design doc's "Which interval do
+    // these numbers belong to?" section names: before this field existed,
+    // `frameWithIndex` below built its `intervalIndex` straight from the
+    // unclamped constant, so a late 0x0033 left the FIRST resting frame of
+    // a rest naming the interval BEFORE the one that just finished, for
+    // one status tick (~450-540ms, `session-2-wu-4unequal.jsonl` GS seq
+    // 1489 and seq 2430 — `registerReplay.test.ts`'s own regression
+    // tests). Only 0x0031's own `mergeStatus` callback (below) calls
+    // `maybeEmitFrame`; 0x0033's own callback only sets `seen.as2` — so a
+    // 0x0033 sample that has not yet caught up to a state flip 0x0031
+    // already reported gets no frame of its own to correct the one
+    // already built.
+    //
+    // FIX ROUND 1, FINDING A — tried and NARROWED, not adopted whole: the
+    // task review named a second source of the same class of bug, the
+    // open-on-reset guard below (`activeKey = openKey`), citing a
+    // hardware-documented poison tick (walk-2026-08-15 session B) where
+    // 0x0033's Interval Count increments EARLY, while state is still the
+    // ephemeral `WORKOUTSTATE_INTERVALWORKTIMETOREST` — `toProgramIndex`
+    // resolves a too-HIGH next-interval index for that one tick, the guard
+    // correctly refuses to OPEN a register key with it, and (before this
+    // fix round) `emittedIntervalIndex` kept the too-high value regardless,
+    // so the next honest tick's lower value read as the referent going
+    // backward. Mirroring `emittedIntervalIndex = openKey` UNCONDITIONALLY
+    // alongside that guard's own fold (the review's literal instruction)
+    // was implemented, self-tested green, and then found to REGRESS TWO
+    // pre-existing, unrelated `driver.test.ts` tests ("a reconnect
+    // timeline SPANNING a boundary", "the walk signature" checkpoint-lag
+    // test) — both are the guard's OWN documented "disclosed bounded edge"
+    // (its own comment, below): a genuinely NEW interval whose first tick
+    // collides with a STALE, gap-truncated register, where the raw
+    // `intervalIndex` computed above IS the true interval identity and
+    // only the session-total fold is the guard's accepted compromise.
+    // Mirroring it onto the emitted field there corrupted an otherwise-
+    // correct countdown/target with no wire fact behind it — trading one
+    // real defect for a worse one. The two shapes ARE distinguishable:
+    // Finding A's own cited mechanism is specifically the raw wire byte
+    // `WORKOUTSTATE_INTERVALWORKTIMETOREST` (8); neither regressing test's
+    // fixture uses it (both use plain `WORKOUTSTATE_INTERVALWORKTIME`, a
+    // genuine reset). The guard's own mirror (below) is gated on that
+    // exact byte for this reason — see its own comment for the full
+    // argument, the state-9 sibling case left un-gated for lack of
+    // evidence, and the synthetic regression test
+    // (`sessionTotals.test.ts`, "finding A").
     let emittedIntervalIndex = intervalIndex;
     // THE REGISTER WRITE (CR2 spec 1 — see `session`'s own doc comment).
     // Done BEFORE the frame is finished so the emitted frame already carries
@@ -2013,6 +2070,37 @@ export function createPm5Driver(
           );
         }
         activeKey = openKey;
+        // `emittedIntervalIndex`'s own comment above (fix round 1, finding
+        // A) — narrowed, NOT unconditional, after this exact mirror broke
+        // two pre-existing, legitimate regression tests (`driver.test.ts`:
+        // "a reconnect timeline SPANNING a boundary", "the walk signature"
+        // checkpoint-lag test). Both are the guard's OWN documented
+        // "disclosed bounded edge" — a genuinely NEW interval whose first
+        // tick collides with a STALE (gap-truncated) register — where the
+        // raw `intervalIndex` computed above is the TRUE interval identity
+        // and only the SESSION-TOTAL fold is the accepted compromise;
+        // mirroring it onto the emitted field there was corrupting an
+        // otherwise-correct countdown/target with no wire fact supporting
+        // it. Finding A's own cited mechanism is narrower than "any
+        // refused open": specifically the ephemeral `WORKOUTSTATE_
+        // INTERVALWORKTIMETOREST` (8) state, where the RAW tick has NOT
+        // genuinely reset (state 8 still reports the completed interval's
+        // own continuing pair, per the guard's own comment above) — so
+        // gating on that exact raw byte is what distinguishes "the
+        // computed index is a genuine lie" (mirror it) from "the computed
+        // index is the truth, only the register-fold is a disclosed
+        // compromise" (leave it). Neither `driver.test.ts` regression uses
+        // state 8 (both use `WORKOUTSTATE_INTERVALWORKTIME`, a genuine
+        // reset), confirming the two shapes are in fact distinguishable by
+        // this signal. State 9 (`WORKOUTSTATE_INTERVALWORKDISTANCETOREST`,
+        // the same ephemeral shape for a distance-kind interval) is the
+        // symmetric, plausible sibling case — NOT gated here, since no
+        // capture or existing test evidences it either way (parse.ts does
+        // not even name the ordinal today) — the same one-line extension
+        // if a future walk shows it.
+        if (status.workoutState === WORKOUTSTATE_INTERVALWORKTIMETOREST) {
+          emittedIntervalIndex = openKey;
+        }
       }
     }
 
@@ -2030,28 +2118,25 @@ export function createPm5Driver(
       });
     }
 
-    // THE WORK-START CARRY-OVER GUARD (interval-referent-monotone spec,
-    // 2026-08-18 Task 2, the OTHER direction from the clamp above). Fires
-    // exactly on the first `"rowing"` frame whose referent has advanced
-    // past the previous frame's own — i.e. the tick a new interval's work
-    // begins — and nulls `splitAvgPace` there rather than let it carry the
-    // just-finished interval's settled average onto the new interval's own
-    // identity (`MonitorFrame.splitAvgPace`'s own doc comment has the wire
-    // mechanism and the citation). `lastEmittedReferentIndex` is this
-    // frame's own history, not `intervalIndex`'s (comparing against the
-    // CLAMPED value keeps this guard from ever firing off the very lag the
-    // clamp above just corrected).
-    const isFirstRowingFrameOfNewInterval =
-      base.state === "rowing" &&
+    // THE CARRY-OVER GUARD (interval-referent-monotone spec, 2026-08-18
+    // Task 2, the OTHER direction from the clamp above; LEVEL-triggered as
+    // of fix round 1, finding B — `splitAvgPaceProvenanceIndex`'s own doc
+    // comment has the full mechanism and why the obvious CURRENT-tick
+    // computation was rejected). Nulls `splitAvgPace` whenever its own
+    // provenance interval is BEHIND the referent this frame is about to
+    // name — re-evaluated fresh every frame from `splitAvgPaceProvenanceIndex`
+    // alone, no memory of the previous frame, so a dropped 0x0033 notify
+    // extending the lag past one tick still gets caught on every frame it
+    // touches, not just the first.
+    const splitAvgPaceIsStale =
       emittedIntervalIndex !== null &&
-      lastEmittedReferentIndex !== null &&
-      emittedIntervalIndex > lastEmittedReferentIndex;
+      splitAvgPaceProvenanceIndex !== null &&
+      splitAvgPaceProvenanceIndex < emittedIntervalIndex;
     const frameWithIndex: MonitorFrame = {
       ...base,
       intervalIndex: emittedIntervalIndex,
-      splitAvgPace: isFirstRowingFrameOfNewInterval ? null : base.splitAvgPace,
+      splitAvgPace: splitAvgPaceIsStale ? null : base.splitAvgPace,
     };
-    lastEmittedReferentIndex = emittedIntervalIndex;
     const totals = [...session.seen.values()];
     const frame: MonitorFrame = {
       ...frameWithIndex,
@@ -3266,8 +3351,26 @@ export function createPm5Driver(
     ADDITIONAL_STATUS_2_UUID,
     "0x0033",
     parseAdditionalStatus2,
-    () => {
+    (decoded) => {
       seen.as2 = true;
+      // `splitAvgPaceProvenanceIndex`'s own doc comment (fix round 1,
+      // finding B): stamp THIS sample's own `intervalCount` with the
+      // state that was live the moment it arrived (`raw.workoutState` —
+      // `raw` is already merged with `decoded` by the time this callback
+      // runs, `mergeStatus`'s own doc comment, but `decoded.intervalCount`
+      // is used directly rather than re-reading it off `raw` so this stays
+      // correct even if a later merge races it, which nothing in this
+      // driver does today but nothing should have to prove). `undefined`
+      // `workoutState` (no 0x0031 ever seen yet) leaves this `null` — "no
+      // claim yet", not a fabricated interval.
+      splitAvgPaceProvenanceIndex =
+        raw.workoutState === undefined
+          ? null
+          : toProgramIndex(
+              decoded.intervalCount,
+              toMonitorState(raw.workoutState),
+              armedProgram()?.intervals.length ?? 0,
+            );
     },
   );
   mergeStatus(
@@ -4362,10 +4465,10 @@ export function createPm5Driver(
         // re-armed run's own first clamp is a new fact, not a repeat of
         // the outgoing run's.
         clampedKeysLogged = new Set();
-        // `lastEmittedReferentIndex`'s own comment: per-run state, same
-        // reason — the outgoing run's last interval is not "one behind"
-        // the new run's first, because they are different runs.
-        lastEmittedReferentIndex = null;
+        // `splitAvgPaceProvenanceIndex`'s own comment: per-run state, same
+        // reason — the outgoing run's last AS2 sample says nothing about
+        // the new run's own interval numbering.
+        splitAvgPaceProvenanceIndex = null;
         // Diagnostics-only (R0, Task 1's own doc comment): the outgoing
         // run's last-seen totals belong to that run, not the new one.
         lastEmittedTotals = { elapsedSeconds: 0, distanceMeters: 0 };

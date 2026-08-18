@@ -737,4 +737,32 @@ describe("session 2: the emitted interval referent is monotone across boundaries
     expect(secondRowingFrameOfKey2.frame.intervalIndex).toBe(2);
     expect(secondRowingFrameOfKey2.frame.splitAvgPace).toBe(0);
   });
+
+  it("fix round 1, finding B: the level-triggered guard does NOT null a rest frame's genuinely correct splitAvgPace (GS seq 1489, 2430) — the naive 'this tick's own toProgramIndex' formulation this test disproves would have", () => {
+    // Independently decoded off the raw 0x0033 bytes (byte 3 = intervalCount,
+    // u16LE@8/100 = splitAvgPace): the AS2 sample most recently merged
+    // BEFORE each of these GS ticks (seq 1488 for site 1, seq 2429 for site
+    // 2) was captured while state was still `"rowing"` — genuinely interval
+    // 2's/3's own settled average, not a carry-over. A provenance check
+    // built from THIS TICK's own `toProgramIndex(rawIntervalCount,
+    // "resting", ...)` output would read one interval BEHIND the
+    // post-clamp referent at exactly these two frames (that lag is the
+    // rest-onset defect this same task's clamp exists to correct) and
+    // would wrongly null a value that is, in fact, already right.
+    const restAfterKey2 = frameAtGeneralStatusSeq(
+      parsed,
+      ctx.frameSamples,
+      1489,
+    );
+    expect(restAfterKey2.frame.intervalIndex).toBe(2);
+    expect(restAfterKey2.frame.splitAvgPace).toBe(129.89);
+
+    const restAfterKey3 = frameAtGeneralStatusSeq(
+      parsed,
+      ctx.frameSamples,
+      2430,
+    );
+    expect(restAfterKey3.frame.intervalIndex).toBe(3);
+    expect(restAfterKey3.frame.splitAvgPace).toBe(128.82);
+  });
 });

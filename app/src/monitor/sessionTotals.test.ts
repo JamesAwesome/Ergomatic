@@ -1567,6 +1567,68 @@ describe("session accumulator: the walk's falsification (CR2 spec 1 Task 11)", (
   );
 
   it(
+    "interval-referent-monotone fix round 1, finding A: the SAME state-8 " +
+      "poison tick that the guard correctly refuses to OPEN a register key " +
+      "with must not leave the EMITTED referent at the too-high value it " +
+      "never legitimately opened either — no committed capture exercises " +
+      "this path (walk-2026-08-15 session B predates the recording format " +
+      "`registerReplay.test.ts` replays), so this reproduces the same " +
+      "shape the sibling test above uses, synthetically, and checks " +
+      "`frame.intervalIndex` instead of the session totals",
+    async () => {
+      const h = await programmed(TWO_INTERVAL_REST_PROGRAM);
+
+      // #1 — key0 opens normally, rowing, program index 0.
+      const f1 = await tick(
+        h,
+        {
+          elapsed: 52.14,
+          distance: 173.3,
+          state: WORKOUTSTATE_INTERVALWORKTIME,
+        },
+        0,
+      );
+      expect(f1.intervalIndex).toBe(0);
+
+      // #2 — THE POISON TICK (identical to the sibling test above): state 8
+      // still maps to "rowing", but 0x0033's Interval Count has already
+      // incremented to 1, so `toProgramIndex(1, "rowing", 2)` resolves
+      // program index 1 — a key `session.seen` does not hold yet. The
+      // open-on-reset guard correctly refuses to OPEN it (elapsed 60.05 is
+      // not before key 0's own register, 52.14) and folds `activeKey` back
+      // to 0 for the SESSION TOTALS. Before fix round 1, `emittedIntervalIndex`
+      // was untouched by that fold and stayed at the too-high 1 — the bug
+      // this test pins.
+      const f2 = await tick(
+        h,
+        {
+          elapsed: 60.05,
+          distance: 173.3,
+          state: WORKOUTSTATE_INTERVALWORKTIMETOREST,
+        },
+        1,
+      );
+      expect(f2.intervalIndex).toBe(0); // RED before the fix: was 1.
+
+      // #3 — the genuine rest tick. `toProgramIndex(1, "resting", 2)` folds
+      // back to program index 0 (the resting -1 offset) regardless of the
+      // guard, so this frame was ALWAYS correct — the defect is entirely in
+      // #2's own emitted value being wrong, which makes #2 -> #3 a backward
+      // step (1 -> 0) before the fix and a flat one (0 -> 0) after.
+      const f3 = await tick(
+        h,
+        { elapsed: 61.48, distance: 175, state: WORKOUTSTATE_INTERVALREST },
+        1,
+      );
+      expect(f3.intervalIndex).toBe(0);
+      // The property finding A names directly: the referent sequence across
+      // these three frames must never decrease.
+      expect(f2.intervalIndex! >= f1.intervalIndex!).toBe(true);
+      expect(f3.intervalIndex! >= f2.intervalIndex!).toBe(true);
+    },
+  );
+
+  it(
     "logs a divergence naming the refused key and the register it merged " +
       "into, on the poison tick itself",
     async () => {
@@ -1754,6 +1816,123 @@ describe("session accumulator: the walk's falsification (CR2 spec 1 Task 11)", (
         .entries()
         .filter((e) => e.kind === "divergence" && e.detail.includes("refused"));
       expect(allRefusals).toHaveLength(2);
+    },
+  );
+});
+
+describe("session accumulator: splitAvgPace provenance is LEVEL-triggered (interval-referent-monotone fix round 1, finding B)", () => {
+  it(
+    "a dropped 0x0033 notify leaves the stale verdict standing for AS MANY " +
+      "frames as AS2 stays silent, not just the first one after the " +
+      "referent advances — the gap an edge-triggered 'did the referent " +
+      "just change' check (fix round 1's own committed history) would " +
+      "have missed on the SECOND frame",
+    async () => {
+      const h = await programmed(TWO_INTERVAL_REST_PROGRAM);
+
+      // #1 — interval 0's own genuine average (140s/500m), established
+      // directly (not via tick()'s own zero-filled AS2 default) so this
+      // test controls the exact value under test. No prior 0x0031 exists
+      // yet, so this sample's own provenance resolves `null` ("no state to
+      // judge it against yet") — irrelevant here since the frame it
+      // precedes reads it as index 0 either way.
+      h.transport.notify(
+        ADDITIONAL_STATUS_2_UUID,
+        buildAdditionalStatus2Bytes({
+          elapsedSeconds: 50,
+          intervalCount: 0,
+          averagePowerWatts: 0,
+          totalCalories: 0,
+          splitAvgPace: 140,
+          splitAvgPowerWatts: 0,
+          splitAvgCalories: 0,
+          lastSplitTimeSeconds: 0,
+          lastSplitDistanceMeters: 0,
+        }),
+      );
+      const f1 = await tick(h, {
+        elapsed: 50,
+        distance: 170,
+        state: WORKOUTSTATE_INTERVALWORKTIME,
+      });
+      expect(f1.intervalIndex).toBe(0);
+      expect(f1.splitAvgPace).toBe(140);
+
+      // #2 — interval 0's rest begins. NO fresh 0x0033 accompanies it (the
+      // machine has not yet forward-attributed its count to the rest) —
+      // `toProgramIndex(0, "resting", 2)` clamps to 0 (its own boundary
+      // rule), still matching interval 0, so 140 stays correctly shown.
+      const f2 = await tick(h, {
+        elapsed: 52,
+        distance: 172,
+        state: WORKOUTSTATE_INTERVALREST,
+      });
+      expect(f2.intervalIndex).toBe(0);
+      expect(f2.splitAvgPace).toBe(140);
+
+      // #3 — a fresh 0x0033 NOW arrives (count forward-attributed to 1,
+      // the standing rest convention), captured while `raw.workoutState`
+      // is ALREADY `"resting"` (set by #2, above) — its own provenance is
+      // `toProgramIndex(1, "resting", 2) === 0`, still interval 0. Its
+      // `splitAvgPace` is STILL 140: the machine's own average field has
+      // not reset (matches the real capture, where this value legitimately
+      // holds through a whole rest — `MonitorFrame.splitAvgPace`'s own doc
+      // comment). Correctly not stale.
+      h.transport.notify(
+        ADDITIONAL_STATUS_2_UUID,
+        buildAdditionalStatus2Bytes({
+          elapsedSeconds: 55,
+          intervalCount: 1,
+          averagePowerWatts: 0,
+          totalCalories: 0,
+          splitAvgPace: 140,
+          splitAvgPowerWatts: 0,
+          splitAvgCalories: 0,
+          lastSplitTimeSeconds: 0,
+          lastSplitDistanceMeters: 0,
+        }),
+      );
+      const f3 = await tick(h, {
+        elapsed: 55,
+        distance: 175,
+        state: WORKOUTSTATE_INTERVALREST,
+      });
+      expect(f3.intervalIndex).toBe(0);
+      expect(f3.splitAvgPace).toBe(140);
+
+      // #4 — interval 1 GENUINELY begins (elapsed/distance reset). THE
+      // DROPPED NOTIFY: no fresh 0x0033 accompanies this transition, or
+      // the tick after it (#5, below) — the machine's own direct-rowing
+      // sample for interval 1 (which would read count=1, splitAvgPace
+      // reset toward 0) is delayed. The raw byte is still "1" from #3, but
+      // NOW read with `"rowing"` state: `toProgramIndex(1, "rowing", 2)
+      // === 1` directly — the referent genuinely, correctly advances with
+      // no clamp even needed. `splitAvgPaceProvenanceIndex` is UNCHANGED
+      // since #3 (0, stamped with `"resting"`), so `0 < 1` — correctly
+      // flagged stale.
+      const f4 = await tick(h, {
+        elapsed: 0,
+        distance: 0.5,
+        state: WORKOUTSTATE_INTERVALWORKTIME,
+      });
+      expect(f4.intervalIndex).toBe(1);
+      expect(f4.splitAvgPace).toBeNull();
+
+      // #5 — a SECOND consecutive rowing tick of interval 1, STILL with no
+      // fresh 0x0033. The referent (1) has not changed since #4, so an
+      // edge-triggered "did the referent just advance past the PREVIOUS
+      // FRAME's" check would see no change and let 140 back through here —
+      // exactly the gap this fix round closed. The level-triggered check
+      // re-derives the same verdict from `splitAvgPaceProvenanceIndex`
+      // alone (still frozen at 0, still `< 1`), independent of frame
+      // history, so this stays correctly null too.
+      const f5 = await tick(h, {
+        elapsed: 2,
+        distance: 6,
+        state: WORKOUTSTATE_INTERVALWORKTIME,
+      });
+      expect(f5.intervalIndex).toBe(1);
+      expect(f5.splitAvgPace).toBeNull();
     },
   );
 });
