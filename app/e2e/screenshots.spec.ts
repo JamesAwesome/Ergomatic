@@ -629,6 +629,57 @@ test("plan", async ({ page }) => {
   });
 });
 
+// PM final-PR gate, condition 3: `plan.png` above is reset to zero done
+// rows (recurring failure #7's own trap in reverse — no done row at all,
+// let alone a linked one). This capture advances one real session through
+// the same `advancesPlan: true` path `log-detail` uses (a genuine atomic
+// upsert, not a faked checkmark), so Plan.tsx's own done-row link (§1:
+// "a done row with stored linkage becomes a link" — `usePlanLinks`,
+// `GET /api/logs?plan=<key>`) has something real to find and render row 1
+// as an `<a class="plan-row plan-row-done">` instead of a plain `<div>`.
+test("plan-linked", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-plan-linked@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await choosePlan(page, "sprint");
+  await resetPlanProgress(page);
+  await postLog(page, {
+    workoutTitle: "Sea Fret",
+    workoutType: "O2",
+    held: "held",
+    pain: 2,
+    avgSplitSeconds: 130,
+    timeSeconds: 780,
+    distanceMeters: 3000,
+    advancesPlan: true,
+    steps: [
+      {
+        label: "6:00 @ 6k",
+        targetSplit: 130,
+        actualSplit: 130,
+        actualSource: "stopwatch",
+        meters: 3000,
+      },
+    ],
+  });
+
+  await page.goto("/plan");
+  await page.locator(".plan-sequence").waitFor();
+  await expect(page.locator(".plan-row")).toHaveCount(84);
+
+  // The load-bearing assertion: a done row that is genuinely a link, not
+  // just a checkmark glyph — `usePlanLinks`'s fetch has to have resolved
+  // and matched row 1 before this holds.
+  const linkedRow = page.locator("a.plan-row-done");
+  await expect(linkedRow).toHaveCount(1);
+  await expect(linkedRow).toHaveAttribute("href", /\/today\/log\/.+/);
+
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "plan-linked.png"),
+  });
+});
+
 // Task 4 (ui-fix round): three captures from one continuous flow — the same
 // "multiple screenshots per test" idiom "today-unlogged" above uses for its
 // DEFAULT/ARMED pair. `library.png` is now the REST state proper (DESIGN.md's
@@ -1764,6 +1815,50 @@ test("log-detail", async ({ page }) => {
 
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "log-detail.png"),
+  });
+});
+
+// PM final-PR gate, condition 3: the detail screen's OTHER install-day
+// reality — a row saved in the frozen pre-update body shape
+// (`postV0110Log`, byte-identical to server/routes/data.test.ts's own
+// `V0_11_0_LOG_BODY`: no avgSplitSeconds/timeSeconds/distanceMeters keys
+// on the wire at all). This is the state 100% of the tester's existing
+// corpus renders in on install day, and `log-detail.png` above never
+// shows it — every hero was populated there. Load-bearing per recurring
+// failure #7: `.summary-heroes` must be ABSENT entirely (not present-but-
+// empty, not dashes) — `SummaryHeroesBlock`'s own "every hero undefined
+// → return null" gate (PostWorkoutSummary.tsx) — while the row and the
+// reflection read-back (`held: "held", pain: 2`, no thumbs/notes) render
+// exactly as they do for a current-shape log.
+test("log-detail-legacy", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-log-detail-legacy@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await postV0110Log(page, "Steady State");
+
+  await page.goto("/today/log");
+  const row = page
+    .locator(".today-log-row")
+    .filter({ hasText: "Steady State" });
+  await expect(row).toBeVisible();
+  await row.click();
+  await expect(page).toHaveURL(/\/today\/log\/[^/]+$/);
+  await expect(
+    page.getByRole("heading", { name: "Steady State" }),
+  ).toBeVisible();
+
+  // The load-bearing assertion: no hero block at all.
+  await expect(page.locator(".summary-heroes")).toHaveCount(0);
+  await expect(page.getByText("AVG SPLIT")).toHaveCount(0);
+
+  // Rows + reflection read-back still render (storedSummary.ts's
+  // buildReadBack: HELD_READBACK_LABEL.held + "PAIN 2/5").
+  await expect(page.locator(".summary-row-list .summary-row")).toHaveCount(1);
+  await expect(page.getByText("HELD · PAIN 2/5")).toBeVisible();
+
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "log-detail-legacy.png"),
   });
 });
 
