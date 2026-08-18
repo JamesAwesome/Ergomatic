@@ -1745,7 +1745,16 @@ const MONITOR_COMPLETED_ACTUALS: IntervalActual[] = [
     index: 0,
     elapsedSeconds: 187,
     distanceMeters: 600,
-    avgSplit: 200,
+    // 500×187/600 = 155.8 (rounded to the wire's 0.1s resolution), not the
+    // old unrelated 200 (PM final-PR gate, condition round, 2026-08-17): a
+    // real PM5 computes this warm-up row's own average pace FROM the same
+    // elapsed/distance the row also displays (identity a `fake.ts`-driven
+    // capture caught contradicting its own hero, `log-monitor.png`). This
+    // row is UNJUDGED (excluded from `monitorAvgSplit`'s weighted average,
+    // this fixture's own comment above), so the exact figure is not
+    // load-bearing for the deviation math below — only its own internal
+    // coherence is.
+    avgSplit: 155.8,
     avgSpm: 20,
     avgHeartRateBpm: 110,
     restDistanceMeters: 0,
@@ -3252,10 +3261,17 @@ test.describe("post-workout summary (session door, just finished)", () => {
       .evaluate((el) => getComputedStyle(el).color);
     expect(eyebrowColor).toBe("rgb(87, 84, 76)"); // --ink-3, 6.69:1 on --page
 
+    // PM final-PR gate, condition round, 2026-08-17: the rust `--accent`
+    // fill (5.35:1) is GONE — James's ruling ("neutral is best, prefer
+    // black") after the PM gate flagged it colliding with the
+    // --judge-slower red family on this same screen. Inherits `--ink`
+    // from `.summary-hero-value` like every sibling hero; 15.41:1 on
+    // --page (the house text default, so it clears the 4.5:1 floor
+    // trivially — computed here rather than judged by eye).
     const leadValueColor = await page
       .locator(".summary-hero-lead .summary-hero-value")
       .evaluate((el) => getComputedStyle(el).color);
-    expect(leadValueColor).toBe("rgb(181, 52, 31)"); // --accent, 5.35:1 on --page
+    expect(leadValueColor).toBe("rgb(27, 26, 23)"); // --ink, 15.41:1 on --page
   });
 
   // §2A: title block. Newsreader is the loaded serif family (spec's own
@@ -4718,7 +4734,6 @@ const ROWING_STORY = [
       index: 0,
       elapsedSeconds: 15,
       distanceMeters: 100,
-      avgSplit: 112,
       avgSpm: 24,
       avgHeartRateBpm: 141,
       restDistanceMeters: 0,
@@ -4763,7 +4778,6 @@ const EXTREME_SPLIT_STORY = [
       index: 0,
       elapsedSeconds: 15,
       distanceMeters: 100,
-      avgSplit: 112,
       avgSpm: 24,
       avgHeartRateBpm: 141,
       restDistanceMeters: 0,

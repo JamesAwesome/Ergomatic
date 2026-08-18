@@ -8022,8 +8022,14 @@ section:not(.news-pinned) .news-row:last-of-type {
 }
 
 .summary-hero-lead .summary-hero-value {
+  /* No color override (PM final-PR gate, condition round, 2026-08-17,
+     James's ruling "neutral is best, prefer black"): this used to set
+     `color: var(--accent)` (rust/gold), which collided with the
+     --judge-slower red family on the same screen that introduces the
+     blue-faster/red-slower legend below. Inherits `--ink` from
+     `.summary-hero-value` like every sibling hero — only the size
+     hierarchy (36px vs 20px) still marks this as the lead. */
   font-size: 36px;
-  color: var(--accent);
 }
 
 .summary-hero:not(.summary-hero-lead) .summary-hero-value {

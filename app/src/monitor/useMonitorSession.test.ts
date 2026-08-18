@@ -656,7 +656,6 @@ describe("useMonitorSession: the happy walk, on a real library workout", () => {
           index: 0,
           elapsedSeconds: 480,
           distanceMeters: 1600,
-          avgSplit: 150,
           avgSpm: 22,
           avgHeartRateBpm: 140,
           restDistanceMeters: 0,
@@ -684,7 +683,6 @@ describe("useMonitorSession: the happy walk, on a real library workout", () => {
           index: 1,
           elapsedSeconds: 480,
           distanceMeters: 2000,
-          avgSplit: 120,
           avgSpm: 24,
           avgHeartRateBpm: 150,
           restDistanceMeters: 0,
@@ -712,7 +710,6 @@ describe("useMonitorSession: the happy walk, on a real library workout", () => {
           index: 2,
           elapsedSeconds: 480,
           distanceMeters: 2000,
-          avgSplit: 120,
           avgSpm: 24,
           avgHeartRateBpm: 155,
           restDistanceMeters: 0,
@@ -740,7 +737,6 @@ describe("useMonitorSession: the happy walk, on a real library workout", () => {
           index: 3,
           elapsedSeconds: 480,
           distanceMeters: 2000,
-          avgSplit: 120,
           avgSpm: 24,
           avgHeartRateBpm: 158,
           restDistanceMeters: 0,
@@ -772,7 +768,6 @@ describe("useMonitorSession: the happy walk, on a real library workout", () => {
           index: 4,
           elapsedSeconds: 480,
           distanceMeters: 2000,
-          avgSplit: 120,
           avgSpm: 24,
           avgHeartRateBpm: 161,
           restDistanceMeters: 0,
@@ -1157,7 +1152,6 @@ describe("useMonitorSession: the happy walk, on a real library workout", () => {
             index: 0,
             elapsedSeconds: 60,
             distanceMeters: 200,
-            avgSplit: 120,
             avgSpm: 24,
             avgHeartRateBpm: 142,
             restDistanceMeters: 0,
@@ -1207,7 +1201,6 @@ describe("useMonitorSession: the happy walk, on a real library workout", () => {
         index: 0,
         elapsedSeconds: 12,
         distanceMeters: 40,
-        avgSplit: 200,
         avgSpm: 18,
         avgHeartRateBpm: 90,
         restDistanceMeters: 0,
@@ -1282,7 +1275,6 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
         index: 0,
         elapsedSeconds: 60,
         distanceMeters: 200,
-        avgSplit: 120,
         avgSpm: 24,
         avgHeartRateBpm: 142,
         restDistanceMeters: 0,
@@ -1402,10 +1394,13 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     // ...and the prefill really carries the measurement, not just the
     // record: `actualSource: "pm5"` is what the caption counts as MEASURED
     // and what puts an ACTUAL line under the interval on the log screen.
+    // 150, not a hand-picked figure: `finalBoundary`'s own 60s/200m is what
+    // the fake derives `avgSplit` FROM (`derivedAvgSplit`, `transports/
+    // fake.ts`, PM final-PR gate condition round) — 500 * 60 / 200 exactly.
     const steps = buildMonitorLogSteps(seen!);
     expect(steps).toHaveLength(1);
     expect(steps[0]?.actualSource).toBe("pm5");
-    expect(steps[0]?.actualSplit).toBe(120);
+    expect(steps[0]?.actualSplit).toBe(150);
   });
 
   it("the hold is BOUNDED: a piece whose split never arrives hands off anyway, on the backstop", async () => {
@@ -2636,7 +2631,6 @@ describe("useMonitorSession: the seams and their defaults", () => {
             index: 0,
             elapsedSeconds: 30,
             distanceMeters: 100,
-            avgSplit: 150,
             avgSpm: 20,
             avgHeartRateBpm: 120,
             restDistanceMeters: 0,
@@ -2763,7 +2757,6 @@ describe("useMonitorSession: teardown", () => {
             index: 0,
             elapsedSeconds: 60,
             distanceMeters: 200,
-            avgSplit: 150,
             avgSpm: 22,
             avgHeartRateBpm: 140,
             restDistanceMeters: 0,
@@ -2903,7 +2896,6 @@ describe("useMonitorSession: coexistence with a phone SessionRun (Task 2's M-2)"
             index: 0,
             elapsedSeconds: 60,
             distanceMeters: 200,
-            avgSplit: 150,
             avgSpm: 22,
             avgHeartRateBpm: 140,
             restDistanceMeters: 0,

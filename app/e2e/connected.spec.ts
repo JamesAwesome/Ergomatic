@@ -106,11 +106,15 @@ interface FakeStatusEventLike {
 interface FakeBoundaryEventLike {
   atMs: number;
   kind: "boundary";
+  // No `avgSplit` field (PM final-PR gate, condition round, 2026-08-17,
+  // matching `transports/fake.ts`'s own `FakeBoundaryEvent.actual`): the
+  // fake derives 0x0037's Average Pace from this same elapsed/distance
+  // pair (`derivedAvgSplit`) rather than accepting an independently-
+  // scripted number a real PM5 could never send.
   actual: {
     index: number;
     elapsedSeconds: number;
     distanceMeters: number;
-    avgSplit: number;
     avgSpm: number;
     avgHeartRateBpm: number;
     restDistanceMeters: number;
@@ -194,7 +198,6 @@ function buildStoryEvents(): (FakeStatusEventLike | FakeBoundaryEventLike)[] {
         index: 0,
         elapsedSeconds: 15,
         distanceMeters: 100,
-        avgSplit: 112,
         avgSpm: 24,
         avgHeartRateBpm: 141,
         restDistanceMeters: 0,
@@ -700,10 +703,20 @@ async function walkSurfaceToLog(
   // PostWorkoutSummary by post-workout-summary spec Task 5): a rendered
   // pm5 split proves the mode engaged for real, not just that the route
   // matched. `buildStoryEvents()` above lands exactly ONE boundary
-  // (interval 0) before End is pressed — avgSplit 112 (its own boundary
-  // actual) -> fmtSplit "1:52.0", a real, plausible split, not a
-  // placeholder value, rendered in that one interval's own measured row.
-  await expect(page.getByText("1:52.0")).toBeVisible();
+  // (interval 0) before End is pressed — 15s/100m, the fake's own
+  // `derivedAvgSplit` (`transports/fake.ts`, PM final-PR gate condition
+  // round, 2026-08-17) computes 500×15/100 = 75s -> fmtSplit "1:15.0", a
+  // real, plausible split honestly derived from the SAME elapsed/distance
+  // this boundary carries, rendered in that one interval's own measured
+  // row — and, by the SAME derivation, the AVG SPLIT hero too, so a bare
+  // `getByText("1:15.0")` now matches BOTH (strict-mode violation,
+  // discovered running this walk): scoped to the row specifically.
+  // (This used to assert a scripted-but-unrelated "1:52.0" on the row
+  // alone — the exact incoherence the PM gate caught between this row and
+  // its own hero on `log-monitor.png`.)
+  await expect(
+    page.locator(".summary-row-pace", { hasText: "1:15.0" }),
+  ).toBeVisible();
 
   // Fill idiom from `session.spec.ts`'s own manual door coverage: HELD,
   // then a mid-scale pain rating (deliberately not the extremes). No plan

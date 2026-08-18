@@ -114,9 +114,19 @@ function IntervalRow({ row }: { row: SummaryRow }) {
         <span className={`summary-row-pace ${colorClass}`}>
           {row.paceLabel ?? ""}
         </span>
-        <span className="summary-row-bar-track">
-          <span className="summary-row-bar-tick" />
-          {row.judged !== undefined && (
+        {row.judged === undefined ? (
+          // PM final-PR gate (lone-measured-row ruling, 2026-08-17): §2B's
+          // own idiom ("any cell whose inputs are absent is ABSENT") plus
+          // §2E's warm-up-row precedent (measured but UNJUDGED renders no
+          // deviation bar) — a measured row with no `judged` (the count<2
+          // gate, `summaryModel.ts` finding 5) gets the SAME empty track
+          // the warm-up row renders: no center tick, no fill. Kept as an
+          // (empty) element, not omitted outright, so this row's columns
+          // still line up with judged sibling rows sharing this list.
+          <span className="summary-row-bar-track" />
+        ) : (
+          <span className="summary-row-bar-track">
+            <span className="summary-row-bar-tick" />
             <span
               className={`summary-row-bar ${colorClass}`}
               style={{
@@ -126,8 +136,8 @@ function IntervalRow({ row }: { row: SummaryRow }) {
                   : { left: "50%" }),
               }}
             />
-          )}
-        </span>
+          </span>
+        )}
         <span className={`summary-row-dev ${colorClass}`}>
           {row.judged?.deviationLabel ?? ""}
         </span>

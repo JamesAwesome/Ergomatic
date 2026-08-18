@@ -2158,13 +2158,18 @@ async function openLogMonitorForm(
       },
       // A short story: two rowing status ticks, interval 0's boundary, then
       // a status tick advancing into interval 1 — `connected.spec.ts`'s own
-      // first four frames, verbatim (plausible avgSplit/avgSpm/
-      // avgHeartRateBpm, not placeholders). That last frame is load-bearing,
-      // not decoration: `surfaceModel.ts`'s grid only marks a row
-      // `"completed"` once `index < activeIndex` — a boundary alone leaves
-      // interval 0 rendered as still-active until a later status names
-      // interval 1 current. No freeze/resume needed here; End is pressed the
-      // moment the grid shows the completed row.
+      // first four frames, verbatim (plausible avgSpm/avgHeartRateBpm, not
+      // placeholders; `avgSplit` is no longer a scripted field at all — the
+      // fake derives it FROM this boundary's own elapsedSeconds/
+      // distanceMeters, `derivedAvgSplit`/`transports/fake.ts`, PM
+      // final-PR gate condition round, 2026-08-17: 500×15/100 = 75s =
+      // "1:15.0", the value this file's own `log-monitor` test now expects
+      // and the value that agrees with the hero it sits under). That last
+      // frame is load-bearing, not decoration: `surfaceModel.ts`'s grid
+      // only marks a row `"completed"` once `index < activeIndex` — a
+      // boundary alone leaves interval 0 rendered as still-active until a
+      // later status names interval 1 current. No freeze/resume needed
+      // here; End is pressed the moment the grid shows the completed row.
       events: [
         {
           atMs: 3000,
@@ -2195,7 +2200,6 @@ async function openLogMonitorForm(
             index: 0,
             elapsedSeconds: 15,
             distanceMeters: 100,
-            avgSplit: 112,
             avgSpm: 24,
             avgHeartRateBpm: 141,
             restDistanceMeters: 0,

@@ -102,7 +102,6 @@ const TIMELINE_EVENTS: FakeTimelineEvent[] = [
       index: 0,
       elapsedSeconds: 60,
       distanceMeters: 220,
-      avgSplit: 118,
       avgSpm: 23,
       avgHeartRateBpm: 145,
       restDistanceMeters: 0,
@@ -778,7 +777,6 @@ describe("createFakeTransport: tick-driven timeline", () => {
             index: 0,
             elapsedSeconds: 60,
             distanceMeters: 220,
-            avgSplit: null,
             avgSpm: null,
             avgHeartRateBpm: null,
             restDistanceMeters: 0,
@@ -793,6 +791,44 @@ describe("createFakeTransport: tick-driven timeline", () => {
     fake.subscribe(SPLIT_INTERVAL_DATA_UUID, (b) => splits.push(b));
     expect(() => fake.tick(500)).not.toThrow();
     expect(splits).toHaveLength(1);
+  });
+
+  // `derivedAvgSplit`'s own zero-distance guard (PM final-PR gate,
+  // condition round, 2026-08-17): a real PM5 has nothing to average when
+  // nothing was rowed — the same "no reading" case the wire's own zero
+  // represents elsewhere (D5's heart-rate byte, `MONITOR_SPLIT_MAX`'s own
+  // doc comment). Distinct from the "null avg fields" test above, which
+  // covers avgSpm/avgHeartRateBpm's own `?? 0`/`?? HEARTRATE_NO_BELT`
+  // paths — this one is the ONLY way to exercise `derivedAvgSplit`'s
+  // `distanceMeters > 0` branch going false.
+  it("a boundary with zero distance derives avgSplit 0, never a division by zero", async () => {
+    const fake = createFakeTransport({
+      program: PROGRAM,
+      events: [
+        {
+          atMs: 500,
+          kind: "boundary",
+          actual: {
+            index: 0,
+            elapsedSeconds: 30,
+            distanceMeters: 0,
+            avgSpm: 0,
+            avgHeartRateBpm: null,
+            restDistanceMeters: 0,
+          },
+          cumulativeElapsedSeconds: 30,
+          cumulativeDistanceMeters: 0,
+        },
+      ],
+    });
+    await programIt(fake, PROGRAM);
+    const asSplits: Uint8Array[] = [];
+    fake.subscribe(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, (b) =>
+      asSplits.push(b),
+    );
+    fake.tick(500);
+    expect(asSplits).toHaveLength(1);
+    expect(decodeAsSplit(asSplits[0]!).splitIntervalAvgPace).toBe(0);
   });
 
   it("a large single tick delivers every event that has now become due, in order", async () => {
@@ -1060,7 +1096,6 @@ describe("createFakeTransport: D3 — the wire carries the MACHINE's numbering, 
             index: 1,
             elapsedSeconds: 60,
             distanceMeters: 200,
-            avgSplit: 120,
             avgSpm: 22,
             avgHeartRateBpm: 140,
             restDistanceMeters: 0,
@@ -1111,7 +1146,6 @@ describe("createFakeTransport: D3 — the wire carries the MACHINE's numbering, 
             index: 0,
             elapsedSeconds: 60,
             distanceMeters: 200,
-            avgSplit: 120,
             avgSpm: 22,
             avgHeartRateBpm: 140,
             restDistanceMeters: 0,
@@ -1159,7 +1193,6 @@ describe("createFakeTransport: D3 — the wire carries the MACHINE's numbering, 
             index: 0,
             elapsedSeconds: 60,
             distanceMeters: 200,
-            avgSplit: 120,
             avgSpm: 22,
             avgHeartRateBpm: 140,
             restDistanceMeters: 0,
@@ -2302,7 +2335,6 @@ describe("createFakeTransport: 0x0033's Last Split checkpoint — Task 6's inver
         index: 0,
         elapsedSeconds: 60,
         distanceMeters: 181,
-        avgSplit: 130,
         avgSpm: 22,
         avgHeartRateBpm: 138,
         restDistanceMeters: 0,
@@ -2328,7 +2360,6 @@ describe("createFakeTransport: 0x0033's Last Split checkpoint — Task 6's inver
         index: 1,
         elapsedSeconds: 60,
         distanceMeters: 150,
-        avgSplit: 129,
         avgSpm: 22,
         avgHeartRateBpm: 139,
         restDistanceMeters: 0,

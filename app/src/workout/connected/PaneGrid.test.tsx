@@ -1538,7 +1538,6 @@ describe("the grid, fake-driven", () => {
             index: 0,
             elapsedSeconds: warmup.value,
             distanceMeters: 1908,
-            avgSplit: 125.8,
             avgSpm: 18,
             avgHeartRateBpm: 142,
             restDistanceMeters: 0,

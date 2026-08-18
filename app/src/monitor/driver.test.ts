@@ -963,7 +963,6 @@ describe("createPm5Driver: HIGH-1 fix — intervalRemaining is correct on the FI
           index: 0,
           elapsedSeconds: 100,
           distanceMeters: 500,
-          avgSplit: 110,
           avgSpm: 22,
           avgHeartRateBpm: 140,
           restDistanceMeters: 0,
@@ -1092,7 +1091,6 @@ describe("createPm5Driver: Task 6 — the interval clock stops subtracting a che
           index: 0,
           elapsedSeconds: 58,
           distanceMeters: 181,
-          avgSplit: 120,
           avgSpm: 24,
           avgHeartRateBpm: 140,
           restDistanceMeters: 0,
@@ -1121,7 +1119,6 @@ describe("createPm5Driver: Task 6 — the interval clock stops subtracting a che
           index: 1,
           elapsedSeconds: 55,
           distanceMeters: 150,
-          avgSplit: 121,
           avgSpm: 24,
           avgHeartRateBpm: 141,
           restDistanceMeters: 0,
@@ -1216,7 +1213,6 @@ describe("createPm5Driver: Task 6 — the interval clock stops subtracting a che
           index: 0,
           elapsedSeconds: 60,
           distanceMeters: 45,
-          avgSplit: 130,
           avgSpm: 22,
           avgHeartRateBpm: 138,
           restDistanceMeters: 0,
@@ -1242,7 +1238,6 @@ describe("createPm5Driver: Task 6 — the interval clock stops subtracting a che
           index: 1,
           elapsedSeconds: 60,
           distanceMeters: 46,
-          avgSplit: 129,
           avgSpm: 22,
           avgHeartRateBpm: 139,
           restDistanceMeters: 0,
@@ -1339,7 +1334,6 @@ describe("createPm5Driver: Task 6 — the interval clock stops subtracting a che
           index: 0,
           elapsedSeconds: 60,
           distanceMeters: 200,
-          avgSplit: 130,
           avgSpm: 22,
           avgHeartRateBpm: 138,
           restDistanceMeters: 0,
@@ -1429,7 +1423,6 @@ describe("createPm5Driver: the full happy path over a real compiled workout (Sea
           index: 0,
           elapsedSeconds: 300,
           distanceMeters: 1000,
-          avgSplit: 130,
           avgSpm: 20,
           avgHeartRateBpm: 135,
           restDistanceMeters: 0,
@@ -1495,7 +1488,6 @@ describe("createPm5Driver: the full happy path over a real compiled workout (Sea
           index: 1,
           elapsedSeconds: 240,
           distanceMeters: 1000,
-          avgSplit: 132,
           avgSpm: 22,
           avgHeartRateBpm: 155,
           restDistanceMeters: 0,
@@ -1542,7 +1534,6 @@ describe("createPm5Driver: the full happy path over a real compiled workout (Sea
           index: 2,
           elapsedSeconds: 240,
           distanceMeters: 1000,
-          avgSplit: 132,
           avgSpm: 22,
           avgHeartRateBpm: 158,
           restDistanceMeters: 0,
@@ -1796,7 +1787,6 @@ describe("createPm5Driver: terminate + Appendix-E — the RUN closes, the driver
           index: 5,
           elapsedSeconds: 1,
           distanceMeters: 1,
-          avgSplit: null,
           avgSpm: null,
           avgHeartRateBpm: null,
           restDistanceMeters: 0,
@@ -1864,11 +1854,15 @@ describe("createPm5Driver: terminate + Appendix-E — the RUN closes, the driver
         index: null,
         elapsedSeconds: 1,
         distanceMeters: 1,
-        // The fake wrote 0 for these (the script authored `null`, and
-        // 0x0038 has no null sentinel for a pace/rate) — carried through
-        // verbatim, since an out-of-run boundary is emitted unchanged
-        // apart from its index.
-        avgSplit: 0,
+        // `avgSplit` is DERIVED by the fake itself (`500 * t / d`,
+        // `derivedAvgSplit`, `transports/fake.ts`) from this same
+        // elapsedSeconds/distanceMeters pair — 500 * 1 / 1 — never an
+        // independently-scripted number (PM final-PR gate, condition
+        // round). `avgSpm` is still the script's own field: the fake wrote
+        // 0 for it (the script authored `null`, and 0x0038 has no null
+        // sentinel for a rate) — carried through verbatim, since an
+        // out-of-run boundary is emitted unchanged apart from its index.
+        avgSplit: 500,
         avgSpm: 0,
         avgHeartRateBpm: null,
         restDistanceMeters: 0,
@@ -2197,7 +2191,6 @@ describe("createPm5Driver: Phase 7A-fix-2 Task 4 — a finished piece stops the 
           index: 0,
           elapsedSeconds: 40,
           distanceMeters: 160,
-          avgSplit: 118,
           avgSpm: 24,
           avgHeartRateBpm: 142,
           restDistanceMeters: 0,
@@ -4128,7 +4121,6 @@ describe("createPm5Driver: MED-2 — divergence logging", () => {
           index: 2,
           elapsedSeconds: 60,
           distanceMeters: 200,
-          avgSplit: 120,
           avgSpm: 22,
           avgHeartRateBpm: 140,
           restDistanceMeters: 0,
@@ -4176,7 +4168,6 @@ describe("createPm5Driver: MED-2 — divergence logging", () => {
           index: 0,
           elapsedSeconds: 60,
           distanceMeters: 200,
-          avgSplit: 120,
           avgSpm: 22,
           avgHeartRateBpm: 140,
           restDistanceMeters: 0,
@@ -4289,7 +4280,6 @@ describe("createPm5Driver: R-B — Interval Rest Distance (0x0037 offset 14-15) 
           index: 0,
           elapsedSeconds: 60,
           distanceMeters: 200,
-          avgSplit: 130,
           avgSpm: 20,
           avgHeartRateBpm: 130,
           restDistanceMeters: 8,
@@ -4326,7 +4316,6 @@ describe("createPm5Driver: R-B — Interval Rest Distance (0x0037 offset 14-15) 
           index: 1,
           elapsedSeconds: 60,
           distanceMeters: 220,
-          avgSplit: 100,
           avgSpm: 30,
           avgHeartRateBpm: 170,
           restDistanceMeters: 12,
@@ -4363,7 +4352,6 @@ describe("createPm5Driver: R-B — Interval Rest Distance (0x0037 offset 14-15) 
           index: 2,
           elapsedSeconds: 60,
           distanceMeters: 200,
-          avgSplit: 120,
           avgSpm: 24,
           avgHeartRateBpm: 150,
           restDistanceMeters: 6,
@@ -4470,7 +4458,6 @@ describe("createPm5Driver: D3 — a machine index the armed program's length can
           index: 9,
           elapsedSeconds: 60,
           distanceMeters: 200,
-          avgSplit: 120,
           avgSpm: 22,
           avgHeartRateBpm: 140,
           restDistanceMeters: 0,
@@ -4533,7 +4520,6 @@ describe("createPm5Driver: D3 — a machine index the armed program's length can
           index: 9,
           elapsedSeconds: 60,
           distanceMeters: 200,
-          avgSplit: 120,
           avgSpm: 22,
           avgHeartRateBpm: 140,
           restDistanceMeters: 0,
@@ -4735,7 +4721,6 @@ describe("createPm5Driver: Task 5 — actuals normalize via toActualIndex (minus
           index: 0,
           elapsedSeconds: 60,
           distanceMeters: 200,
-          avgSplit: 120,
           avgSpm: 22,
           avgHeartRateBpm: 140,
           restDistanceMeters: 0,
@@ -4807,7 +4792,6 @@ describe("createPm5Driver: Task 5 — actuals normalize via toActualIndex (minus
           index: 1,
           elapsedSeconds: 60,
           distanceMeters: 200,
-          avgSplit: 120,
           avgSpm: 22,
           avgHeartRateBpm: 140,
           restDistanceMeters: 0,
@@ -5261,7 +5245,6 @@ describe("createPm5Driver: D4 — a boundary's two halves, in the order the mach
           index: 0,
           elapsedSeconds: 60,
           distanceMeters: 200,
-          avgSplit: 130,
           avgSpm: 20,
           avgHeartRateBpm: 130,
           restDistanceMeters: 0,
@@ -5300,7 +5283,6 @@ describe("createPm5Driver: D4 — a boundary's two halves, in the order the mach
           index: 1,
           elapsedSeconds: 60,
           distanceMeters: 220,
-          avgSplit: 100,
           avgSpm: 30,
           avgHeartRateBpm: 170,
           restDistanceMeters: 0,
@@ -5352,13 +5334,19 @@ describe("createPm5Driver: D4 — a boundary's two halves, in the order the mach
     // one emission the erg produced carried interval 2's identity with
     // interval 1's averages, because 0x0038 was still one notification
     // behind. Identity AND averages must come from the same boundary.
+    // `avgSplit` is now DERIVED by the fake from each boundary's OWN
+    // elapsed/distance (500 * t / d, `derivedAvgSplit`, `transports/
+    // fake.ts`) rather than an independently-scripted number — interval
+    // 0's 60s/200m gives 150.0 exactly; interval 1's 60s/220m gives 136.4
+    // (rounded to the wire's 0.1s resolution). Still distinct per boundary,
+    // which is the property this test exists to pin.
     expect(boundaries[0]).toMatchObject({
       kind: "intervalComplete",
-      actual: { index: 0, avgSpm: 20, avgHeartRateBpm: 130, avgSplit: 130 },
+      actual: { index: 0, avgSpm: 20, avgHeartRateBpm: 130, avgSplit: 150 },
     });
     expect(boundaries[1]).toMatchObject({
       kind: "intervalComplete",
-      actual: { index: 1, avgSpm: 30, avgHeartRateBpm: 170, avgSplit: 100 },
+      actual: { index: 1, avgSpm: 30, avgHeartRateBpm: 170, avgSplit: 136.4 },
     });
   });
 
@@ -5571,7 +5559,6 @@ describe("createPm5Driver: a SECOND workout over the same fake, no reconnect (in
         index: 0,
         elapsedSeconds: 300,
         distanceMeters: 1200,
-        avgSplit: 125,
         avgSpm: 22,
         avgHeartRateBpm: null,
         restDistanceMeters: 0,
@@ -5716,7 +5703,6 @@ describe("createPm5Driver: a SECOND workout over the same fake, no reconnect (in
             index: 0,
             elapsedSeconds: 300,
             distanceMeters: 1200,
-            avgSplit: 125,
             avgSpm: 22,
             avgHeartRateBpm: null,
             restDistanceMeters: 0,
@@ -6642,7 +6628,6 @@ describe("createPm5Driver: fix-3 Task 3 — the settle and the empty arm, end to
         index: 0,
         elapsedSeconds: 300,
         distanceMeters: 1100,
-        avgSplit: 136,
         avgSpm: 22,
         avgHeartRateBpm: 140,
         restDistanceMeters: 0,
@@ -6905,7 +6890,6 @@ describe("createPm5Driver: D5 — the beltless heart rate never reaches a consum
           index: 0,
           elapsedSeconds: 60,
           distanceMeters: 200,
-          avgSplit: 120,
           avgSpm: 22,
           // The exact field the machine sent `0` on (§18's new-defect note).
           avgHeartRateBpm: null,

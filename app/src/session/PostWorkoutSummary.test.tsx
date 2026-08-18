@@ -420,6 +420,43 @@ describe("PostWorkoutSummary — intervals (§2E)", () => {
     expect((bar as HTMLElement).style.right).toBe("");
   });
 
+  // PM final-PR gate (lone-measured-row ruling, 2026-08-17): a measured
+  // row with `judged: undefined` (`summaryModel.test.ts`'s own "a single
+  // measured work row is UNJUDGED" — the count<2 gate, finding 5) used to
+  // still render the 14px track WITH its center tick and no fill — an
+  // empty widget that reads as broken, visible on both committed connected
+  // captures. §2B's own idiom ("any cell whose inputs are absent is
+  // ABSENT") applied here, and §2E's warm-up-row precedent (measured,
+  // "UNJUDGED (no deviation bar...)") extended to any unjudged measured
+  // row: no tick, no fill — the SAME empty `.summary-row-bar-track` the
+  // warm-up row already renders (kept, not removed outright, so the
+  // column still lines up with judged sibling rows in the same list).
+  it("a lone measured row (judged undefined) renders no deviation bar — no tick, no fill, same empty track the warm-up row renders", () => {
+    renderSummary({
+      model: monitorModel({
+        rows: [
+          {
+            measured: true,
+            isWarmup: false,
+            index: 1,
+            label: "6:00 @ 6k",
+            timeLabel: "6:00",
+            paceLabel: "2:05.0",
+            // judged intentionally absent — the lone-measured-row shape.
+          },
+        ],
+      }),
+    });
+    const row = screen.getByRole("listitem");
+    expect(row.querySelector(".summary-row-bar-tick")).toBeNull();
+    expect(row.querySelector(".summary-row-bar")).toBeNull();
+    // The pace still renders, unjudged (no faster/slower color class).
+    const pace = row.querySelector(".summary-row-pace");
+    expect(pace?.textContent).toBe("2:05.0");
+    expect(pace?.className).not.toContain("summary-row-faster");
+    expect(pace?.className).not.toContain("summary-row-slower");
+  });
+
   // A real, if unusual, monitor-door shape (LogSession.test.tsx's own
   // "unusable avgSplit" fixture, R-B/monitorWorkRows): a real elapsed
   // reading with no usable pace (avgSplit 0, "the wire had no reading" —
