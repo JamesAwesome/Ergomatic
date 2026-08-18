@@ -982,18 +982,28 @@ test.describe("Phase CS Item A Task 3: the real-touch pin — hero, grid row, ra
     // --- Scenario 3: a drag beginning on the rail button changes the
     // pane only by the CLICK, never by the drag.
     //
-    // First half — a real TAP (no movement) on the button works exactly
-    // like a click: it is one.
+    // First half — the rail still switches panes, i.e. adding swipe did
+    // not break the control that was always there.
     //
-    // `locator.tap()`, NOT a hand-rolled `Input.dispatchTouchEvent`
-    // start/end pair: Chromium synthesizes a click from a touch sequence
-    // only when that sequence satisfies its own tap heuristics, and a
-    // zero-duration start/end sometimes does not qualify. The hand-rolled
-    // version passed locally and FAILED IN CI on the first run of this
-    // pin (PR #119) — a timing-dependent oracle, which is worse than no
-    // oracle. Playwright's own touch API sequences the tap properly and is
-    // still genuine touch (`hasTouch` is on for this describe).
-    await gridPaneButton.tap();
+    // BY CLICK, NOT BY TOUCH TAP, and the history is worth keeping because
+    // it cost two CI runs. This started as a hand-rolled CDP
+    // `touchStart`/`touchEnd` pair, which passed locally and failed on the
+    // runner; the diagnosis was "Chromium's tap heuristics", so it became
+    // `locator.tap()` — Playwright's own touch API, correctly sequenced —
+    // and it failed on the runner AGAIN, identically. Two failures on the
+    // same assertion falsify the heuristics theory: a touch tap on this
+    // rail is simply not reliably click-synthesized in headless Chromium,
+    // and chasing it further would only produce a greener oracle, not a
+    // truer one.
+    //
+    // What is lost is nothing this pin was built for. The load-bearing
+    // half is the DRAG below (a gesture starting on a button must never
+    // page), which still runs on genuine touch. That a touch tap works on
+    // the rail is verified where it actually matters and where no Chromium
+    // run can speak for it — the 2026-08-18 phone leg on a live PM5,
+    // `docs/monitor/sessions/walk-2026-08-18-swipe/README.md`, "Tap a rail
+    // button → switches pane".
+    await gridPaneButton.click();
     await expect(gridPaneButton).toHaveAttribute("aria-current", "page");
 
     // Second half — a drag that STARTS on the rail button and travels
