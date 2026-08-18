@@ -1324,3 +1324,181 @@ toolkit, not a history.
   reused empty-state string); POST stays additive for v0.11.0 clients; migration
   0010 is uncontested by any open PR; and DISTANCE-vs-machine-total remains the
   one genuinely EXTERNAL oracle in the criteria list.
+
+## Spec-stage anchor pass, 2026-08-18 (Phase CM, "connected metrics")
+
+- **"`Total Work Distance` excludes rest meters" (INFERENCE, from the field
+  list) — so the live total is `0x0031` TWD + `0x0032` restDistance.**
+  Falsified twice over by decoding the committed raw captures. TWD's final
+  value equals Sigma work PLUS Sigma rest exactly (`session-2-wu-4unequal.jsonl`:
+  1599 = 1535 + 64), and TWD ticks up one metre at a time DURING each rest in
+  lockstep with `restDistanceMeters` — so the sum double-counts the current
+  rest (measured overshoot +30 m). Worse, TWD is not a live counter at all:
+  it is a step function frozen for the entire work interval, advancing only at
+  boundaries and during rests (62 changes in 983 frames). Mid-work the spec's
+  number reads 360 m where the machine has 809 m. **Technique: for any field
+  whose name contains a scope word ("work", "total", "session"), plot it
+  against the frames' own state byte before believing the name. A field-list
+  INFERENCE describes the DOCUMENT's taxonomy, never the firmware's — and the
+  cheapest disproof is "does it move when the rower is resting?", three lines
+  over a capture we already own.** Corollary that generalises: a counter's
+  UPDATE CADENCE is as load-bearing as its scope, and no vendor table states
+  it. Ask "how often does this change?" of every field a design puts on a
+  live screen.
+
+- **"The just-finished interval's average, held from the interval's end
+  through the rest, from the `0x0038` boundary record."** Structurally
+  impossible: `0x0037`/`0x0038` carry the interval's own restTime/restDistance,
+  so the PM5 cannot emit them until the rest is OVER. Measured: interval 2
+  ends t=112.8 s, the record lands t=142.9 s — 0.3 s before the rule says to
+  discard it. Through the whole rest the newest `0x0038` is the PREVIOUS
+  interval's, so rest #1 shows the WARM-UP's 2:28.5 where the interval
+  averaged 2:11.0. And the mechanism is unnecessary: `0x0033.splitAvgPace`
+  already holds the finished interval's average flat for the entire rest,
+  agreeing with `0x0038` to <=0.2 s across all five recorded rests.
+  **Technique: for any "hold the value from record X across window W", find
+  X's ARRIVAL TIME in a capture and check it falls inside W. A record that
+  reports what happened during W cannot exist before W ends — and the field
+  the design is trying to reproduce is usually already being held by the
+  machine, one characteristic over.**
+
+- **"A +/-0.5 s/500m dead band makes the on-target state stable."** The band is
+  not the problem. Measured across seven work runs, the live interval average
+  does not enter +/-0.5 s of its own final value until 65-99% of the interval
+  has elapsed (median ~80%) — the standing start dominates. So the judged cell
+  reads SLOWER for most of every interval regardless of the rower, and becomes
+  informative only when there is least time to act. **Technique: before tuning
+  a threshold on a running average, plot the average's CONVERGENCE against
+  the window it averages over. "Is the band right?" is the wrong question
+  whenever the quantity has not settled; no scalar fixes a transient.**
+
+- **An exit criterion can be blind by TIMING rather than by construction.**
+  "The live total equals the summary's DISTANCE at the end of a piece" cannot
+  fail: at the terminal frame `restDistanceMeters` is 0 in every completed
+  capture and TWD has caught up, so the correct value, the double-counted
+  value and the frozen value all agree there. The two defects are visible
+  only mid-work and mid-rest. **Technique: for every equality criterion, ask
+  at WHICH INSTANT it is evaluated, then check whether the terms are
+  degenerate at that instant. An end-of-session comparison is blind to every
+  bug whose magnitude is zero at the end — which is most accumulator bugs.**
+
+- **Recurrence, third sighting: ask what the fake FEEDS the field under test.**
+  `fake.ts:672` zero-fills `splitAvgPace` and `:690` zero-fills
+  `restDistanceMeters`, so every fake-driven harness (e2e, the ten frozen
+  connected fixtures, `VITE_ENABLE_FAKE_MONITOR=1`, screenshots) is
+  structurally blind to BOTH numbers this spec adds — the AVG cell renders
+  nothing and the total adds zero. And `fake.ts:592-630`'s TWD model
+  (`Math.trunc(distanceMeters)` on a time goal) is a third wrong world,
+  contradicted by 2,363 raw frames.
+
+- **Attacked and NOT broken (Phase CM vetted ground):** the 0.01-vs-0.1
+  sec/lsb split between `0x0033` and `0x0038` is real, not a mis-transcription
+  — `0x0038` raw/10 reproduces `500 x splitTime / splitDist` exactly at all
+  nine committed boundaries, and `parse.ts:200`/`:274` are both correct (which
+  also means the spec's headline "10x hazard" is already neutralised before
+  any consumer sees it; the swap that CAN happen post-parse yields two values
+  0.2 s apart). `splitAvgPace` really is the programmed interval's own average
+  and resets exactly at work-interval starts (matched to `0x0038` in three
+  files) — but no committed capture holds an interval longer than 500 m /
+  129 s, so the multiple-splits-per-interval question is genuinely open and
+  the walk should keep asking it. "Treat a zero average as absent" is right
+  (the zero is on the wire at workout start and at each new interval's first
+  frame), though the spec cites the Last Split CHECKPOINT pair for it, which
+  is a different field. And the summary's DISTANCE now equals the machine's
+  own total to the metre (1599 = 1599, 500 = 500).
+
+### Delta pass, 2026-08-18, Phase CM — the rest-phase referent switch
+
+- **"During a rest, `frame.intervalIndex` names the interval that just
+  finished, so the row can safely show its target."** FALSE for the first
+  emitted frame of most rests: 4 of 5 rest entries across every committed raw
+  capture (`walk-2026-08-16/session-2`, `walk-2026-08-17/step-3`) carry an
+  index one whole interval behind for **450-540 ms**. _Technique:_ decode the
+  raw jsonl and replay the DRIVER'S OWN emission rule, not the wire's. A frame
+  is emitted only from the 0x0031 handler (`driver.ts:3298`, deliberate —
+  comment at `:3182`), so a late 0x0033 never gets a frame to correct itself
+  and the documented 10-93 ms wire skew becomes a FULL STATUS TICK on screen.
+  Counting notify records misses this; counting emitted frames finds it.
+- **"The driver already clamps the stale rest count."** Half-true, and the
+  dangerous half is the other one: the stale-count rest clamp
+  (`driver.ts:1870-1887`) lifts `activeKey` (the register map) only, while the
+  consumer-facing field is built six lines later from the UNCLAMPED value
+  (`driver.ts:1989`, `{ ...base, intervalIndex }`). _Technique:_ read the line
+  that CONSUMES the clamped variable, never the clamp itself. Scar tissue can
+  be real and still not cover the seam you are standing on.
+- **"`splitAvgPace` reads 0 on the first frame of each interval"** (the spec's
+  own field table). FALSE: the first emitted frame of every work start in
+  every capture carries the PREVIOUS interval's average for 450-540 ms; 0
+  arrives on the second frame. Same one-tick mechanism. _Technique:_ a claim
+  about "the first frame" is about the EMISSION, not the field.
+- **An accepted limitation needs a number before it is accepted.** "An r0
+  program never shows a verdict" sounded like an edge case; against the real
+  seed it is **33 of 300 library workouts (11%)**, including 20-interval
+  pieces and every float workout, with zero AN coverage — and the walk's own
+  keystone (`session-1-keystone-2x250r0`) has **0 resting frames in 286**.
+  _Technique:_ quantify the accepted loss against production data
+  (`server/seed/library/`), and check whether the phase's own regression
+  capture can even reach the new code.
+- **Survived the attack:** the pane DOES disambiguate a phase-dependent
+  referent. `headerTrailing` renders `intervalLabelShort` in both orientations
+  (`ConnectedSurface.tsx:125-141`/`:498`; `index.css:7292` resets order only,
+  never display), reading `3 OF 4 · REST` off the SAME index the target would
+  use; and `upNext` during a rest names the FOLLOWING work phase with its
+  split and rate (`surfaceModel.ts:207` + `:837` + `:152`). _Attack used:_
+  traced both fields to their render sites AND their CSS, rather than trusting
+  the doc comments — which in this file have twice described renderers that
+  had already retired.
+
+## Ad hoc pass, 2026-08-18 (PR #123, the session-meters counter's flooring fix)
+
+- **"Flooring the meters counter fixes the jitter — the tenths were ticking
+  every ~450ms."** The premise is true and the fix does almost nothing.
+  Decoded 1085 0x0031 frames from `walk-2026-08-18-metrics/pyramid-pm5-
+  recording-*.jsonl.gz`: over 357.7 s of rowing the DISPLAYED STRING changed
+  1.97/s with tenths and **1.96/s floored**. The rate is `min(tick rate,
+  speed in m/s)` — at 3.72 m/s and 1.97 ticks/s the counter was already
+  tick-limited, advancing a median 1.90 m per tick, so every tick crossed a
+  metre boundary either way. **Technique: measure the change rate of the
+  RENDERED STRING, not the precision of the field behind it. A formatting
+  change that removes a digit removes churn per repaint, never repaints per
+  second — those are two different quantities and only one of them is what
+  "jumpy" means.**
+
+- **"The walk validated the calm."** The walk's rowing leg was Chrome on a
+  laptop (~508 ms effective spacing); its iPhone leg was the ZERO-STROKE
+  swipe leg (that walk's own README). `driver.ts` requests 100 ms and iOS
+  delivers ~90-180 ms (`pm5-interface-notes.md`, hardware-observed).
+  Resampling the same motion at the iOS spacing: **3.71 repaints/s on the
+  primary surface, ~2x what James called "far too jumpy" on the laptop.**
+  At >=2 m granularity the rate becomes speed-limited and therefore
+  transport-independent; at 1 m it inherits whatever the transport does.
+  **Technique: before accepting a UI-calm verdict, resample the capture at
+  the SHIPPING platform's own measured notification spacing. A desktop walk
+  is a different transport, not a slower version of the same one.**
+
+- **"The PM5's own screen truncates the same way (325 beside our 325.4)."**
+  False, and the cited evidence cannot decide it: floor(325.4) == round(325.4).
+  Decoding `totalWorkDistanceMeters` at all three walk instants — rest-1
+  325/325/325, rest-2 1043 vs ours 1042.1, **finish 1347 vs floor 1346 vs
+  round 1347**. At the only instant where floor and round disagree, the
+  machine agrees with ROUND. Worse, `summaryModel.ts` rounds, so the live
+  counter said `1,346m` where our own summary and the machine both say 1347.
+  **Technique: a rounding-convention claim needs a data point where floor
+  and round DISAGREE. A citation whose value satisfies both conventions is
+  decoration. And when one screen changes its rounding, grep every other
+  screen that renders the same number.**
+
+- **Attacked and not broken:** the shimmer worry and the staleness worry.
+  Playwright `setContent` against the three real rules measured `1,042m` /
+  `1,888m` / `1,111m` at an identical 81.859 px — `--font-mono` falls back to
+  `ui-monospace` and every candidate is fixed-advance, so same-width digit
+  swaps genuinely cannot shimmer. Staleness is an explicit link event with
+  its own banner, caption and `LAST` label — the counter's motion is not the
+  liveness cue, so quantising it introduces no stalled/live ambiguity. What
+  the same probe DID find: `flex: none` with no `min-width` made the bar's
+  width a function of the counter's character count — **999m -> 1,000m
+  shrank the bar 27.3 px on a 390 px pane**, at exactly the milestone James
+  named. **Technique: a layout-shift claim is cheap to settle for real —
+  `page.setContent` with the rules copied verbatim, `getBoundingClientRect`
+  on the FLEXING sibling, no server and no stack. Measure the neighbour that
+  absorbs the change, not the element that causes it.**

@@ -584,3 +584,185 @@ describe("session 2 (wu + 4 unequal, mixed rest): RED on unmodified code — the
     expect(clampedKeys(ctx.log)).toStrictEqual(new Set([1, 2]));
   });
 });
+
+// ============================================================================
+// INTERVAL-REFERENT-MONOTONE (2026-08-18, Task 2 — the triad core)
+// ============================================================================
+//
+// The design doc's "Which interval do these numbers belong to?" section
+// (`docs/superpowers/specs/2026-08-18-connected-metrics-design.md`): both
+// `frame.intervalIndex` and `frame.splitAvgPace` must resolve through ONE
+// monotone answer, never through the raw per-frame value directly. Ground
+// truth below was independently decoded THIS session from
+// `session-2-wu-4unequal.jsonl`'s own raw 0x0031/0x0033 bytes (a second,
+// from-scratch replay-and-inspect pass — not carried from the task brief):
+//
+// - Two of session 2's three rests (after program keys 2 and 3; the rest
+//   after key 1 is clean) begin with a frame whose `intervalIndex` names
+//   the interval BEFORE the one that just finished — GS (0x0031) rx seq
+//   1489 (t=263056.8ms, key-2's rest: reads 1, should read 2) and seq 2430
+//   (t=422267.7ms, key-3's rest: reads 2, should read 3). Both recover on
+//   the very next frame. Mechanism: only the 0x0031 handler emits frames
+//   (driver.ts's own comment near that handler), and 0x0033's Interval
+//   Count can still name the OLD interval for one status tick after 0x0031
+//   has already flipped to `"resting"`.
+// - The reverse carry-over at work start: 0x0033's `splitAvgPace` holds the
+//   JUST-FINISHED interval's own settled average through the WHOLE
+//   following rest (legitimate — that is the design's own ruling) and
+//   keeps holding it for one more status tick after 0x0031 flips to
+//   `"rowing"` on the NEXT interval, before a fresh 0x0033 sample (reading
+//   0) arrives. GS seq 781 (t=143175.7ms) is that first "rowing" frame of
+//   program key 2: the independently-decoded 0x0033 stream holds
+//   `splitAvgPace=131.11` (key 1's own average) from seq 601 through seq
+//   778, and the fresh `0` does not land until seq 783 (t=143186.3ms, 10ms
+//   AFTER seq 781's frame already built) — key 1's average, momentarily
+//   still paired with key 2's identity.
+
+/** Locates the driver frame emitted for one specific General Status
+ *  (0x0031) rx event, by that event's own recorded `seq` — the frame whose
+ *  `tMs` equals the event's own `t` (`replaySession`'s own doc comment: a
+ *  frame's `tMs` always equals its originating rx event's recorded `t`,
+ *  since `advanceClock` sets the replay clock to that `t` before delivering
+ *  the notification). Throws on a bad seq or a missing frame rather than
+ *  silently matching the wrong sample — the assertions below name a defect
+ *  by exact frame, and a mismatch here would make them name the wrong one. */
+function frameAtGeneralStatusSeq(
+  parsed: ParsedRecording,
+  frameSamples: DriverFrameSample[],
+  seq: number,
+): DriverFrameSample {
+  const event = parsed.events.find(
+    (e) =>
+      e.seq === seq &&
+      "dir" in e &&
+      e.dir === "rx" &&
+      e.char === GENERAL_STATUS_UUID,
+  );
+  if (!event || !("t" in event)) {
+    throw new Error(
+      `frameAtGeneralStatusSeq: no General Status rx event with seq ${seq}`,
+    );
+  }
+  const sample = frameSamples.find((s) => s.tMs === event.t);
+  if (!sample) {
+    throw new Error(
+      `frameAtGeneralStatusSeq: no driver frame at t=${event.t}ms (seq ${seq})`,
+    );
+  }
+  return sample;
+}
+
+describe("session 2: the emitted interval referent is monotone across boundaries (interval-referent-monotone spec, Task 2)", () => {
+  let ctx: Awaited<ReturnType<typeof replaySession>>;
+  let parsed: ParsedRecording;
+
+  beforeAll(async () => {
+    ctx = await replaySession("session-2-wu-4unequal.jsonl", SESSION_2_PROGRAM);
+    parsed = parseRecording(
+      readFileSync(`${SESSIONS_DIR}session-2-wu-4unequal.jsonl`, "utf8"),
+    );
+  });
+
+  it("RED on unmodified code: frame.intervalIndex never goes backward across the whole session, and the two rest-onset lag frames (GS seq 1489, 2430) now name the interval that just finished", () => {
+    // Bug-independent sanity check first (this file's own convention): a
+    // session this size produces a real, non-trivial frame count.
+    expect(ctx.frameSamples.length).toBeGreaterThan(900);
+
+    // THE MONOTONE PROPERTY, whole session. `null` (armed/idle/finished/
+    // terminated) is never compared — see `MonitorFrame.intervalIndex`'s
+    // own doc comment for why `null` carries no ordering claim.
+    for (let i = 1; i < ctx.frameSamples.length; i++) {
+      const prev = ctx.frameSamples[i - 1]!.frame.intervalIndex;
+      const cur = ctx.frameSamples[i]!.frame.intervalIndex;
+      if (prev !== null && cur !== null && cur < prev) {
+        const s = ctx.frameSamples[i]!;
+        throw new Error(
+          `frame ${i} (t=${s.tMs}ms, state=${s.frame.state}): intervalIndex ` +
+            `went backward, ${prev} -> ${cur}`,
+        );
+      }
+    }
+
+    // THE TWO NAMED DEFECT SITES, last — RED on unmodified code (each
+    // reads one interval BEHIND the interval that just finished; GREEN
+    // once the clamp is extended to the emitted field).
+    const restAfterKey2 = frameAtGeneralStatusSeq(
+      parsed,
+      ctx.frameSamples,
+      1489,
+    );
+    expect(restAfterKey2.frame.state).toBe("resting");
+    expect(restAfterKey2.frame.intervalIndex).toBe(2);
+
+    const restAfterKey3 = frameAtGeneralStatusSeq(
+      parsed,
+      ctx.frameSamples,
+      2430,
+    );
+    expect(restAfterKey3.frame.state).toBe("resting");
+    expect(restAfterKey3.frame.intervalIndex).toBe(3);
+  });
+
+  it("the first work-start frame of a new interval does not attribute the just-finished interval's splitAvgPace to it — GS seq 781 (key 1 -> key 2)", () => {
+    const firstRowingFrameOfKey2 = frameAtGeneralStatusSeq(
+      parsed,
+      ctx.frameSamples,
+      781,
+    );
+    // Bug-independent: this IS the frame the defect lives on — if the
+    // referent or state disagrees, the citation above is wrong, not the
+    // splitAvgPace assertion below.
+    expect(firstRowingFrameOfKey2.frame.state).toBe("rowing");
+    expect(firstRowingFrameOfKey2.frame.intervalIndex).toBe(2);
+    // RED on unmodified code: this frame's `splitAvgPace` still reads
+    // 131.11 — key 1's own settled average, independently decoded off the
+    // raw 0x0033 bytes above — wrongly paired with key 2's identity. The
+    // frame must not lie: Task 2 clears it rather than pair it with a
+    // second field (`MonitorFrame.splitAvgPace`'s own doc comment says
+    // why).
+    expect(firstRowingFrameOfKey2.frame.splitAvgPace).toBeNull();
+  });
+
+  it("the SECOND frame of that same new interval already carries its own (fresh, zeroed) splitAvgPace — the guard fires for exactly one frame, not the whole interval", () => {
+    // GS seq 784 is the very next frame after seq 781 (t=143626.4ms vs
+    // 143175.7ms, `session-2-wu-4unequal.jsonl`'s own recorded `t`s) —
+    // by which point the independently-decoded 0x0033 stream has already
+    // delivered its fresh `0` (seq 783, t=143186.3ms, 10ms after seq 781).
+    const secondRowingFrameOfKey2 = frameAtGeneralStatusSeq(
+      parsed,
+      ctx.frameSamples,
+      784,
+    );
+    expect(secondRowingFrameOfKey2.frame.state).toBe("rowing");
+    expect(secondRowingFrameOfKey2.frame.intervalIndex).toBe(2);
+    expect(secondRowingFrameOfKey2.frame.splitAvgPace).toBe(0);
+  });
+
+  it("fix round 1, finding B: the level-triggered guard does NOT null a rest frame's genuinely correct splitAvgPace (GS seq 1489, 2430) — the naive 'this tick's own toProgramIndex' formulation this test disproves would have", () => {
+    // Independently decoded off the raw 0x0033 bytes (byte 3 = intervalCount,
+    // u16LE@8/100 = splitAvgPace): the AS2 sample most recently merged
+    // BEFORE each of these GS ticks (seq 1488 for site 1, seq 2429 for site
+    // 2) was captured while state was still `"rowing"` — genuinely interval
+    // 2's/3's own settled average, not a carry-over. A provenance check
+    // built from THIS TICK's own `toProgramIndex(rawIntervalCount,
+    // "resting", ...)` output would read one interval BEHIND the
+    // post-clamp referent at exactly these two frames (that lag is the
+    // rest-onset defect this same task's clamp exists to correct) and
+    // would wrongly null a value that is, in fact, already right.
+    const restAfterKey2 = frameAtGeneralStatusSeq(
+      parsed,
+      ctx.frameSamples,
+      1489,
+    );
+    expect(restAfterKey2.frame.intervalIndex).toBe(2);
+    expect(restAfterKey2.frame.splitAvgPace).toBe(129.89);
+
+    const restAfterKey3 = frameAtGeneralStatusSeq(
+      parsed,
+      ctx.frameSamples,
+      2430,
+    );
+    expect(restAfterKey3.frame.intervalIndex).toBe(3);
+    expect(restAfterKey3.frame.splitAvgPace).toBe(128.82);
+  });
+});

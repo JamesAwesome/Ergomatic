@@ -3,11 +3,15 @@
 // §§3-4). The panes themselves are dumb: they read fields off `SurfaceModel`
 // and place them. Two rules live here and nowhere else:
 //
-//  1. **ONE judgement path.** `judgedValue` below is the only function in
-//     `src/` that calls `domain/judge.ts`'s `judgeActual`. Every live actual
-//     on every pane — pane B's hero, rate, HR and meters cards — is a
-//     `JudgedValue` produced by that one helper (handoff §3: "One helper
-//     decides the colour; no pane implements its own judgement"). Pane C's
+//  1. **ONE judgement path — with one sanctioned exception.** `judgedValue`
+//     below is the only function in `src/` that calls `domain/judge.ts`'s
+//     `judgeActual`. Every live actual on every pane — pane B's hero, rate,
+//     HR and meters cards — is a `JudgedValue` produced by that one helper
+//     (handoff §3: "One helper decides the colour; no pane implements its
+//     own judgement"). The AVG cell (`avgValue`/`avgVerdict`, Phase CM) is
+//     the sanctioned second path: it needs an on-target state `judgeActual`
+//     has no concept of, and its own comment block carries the reasoning —
+//     this rule's statement is amended rather than silently contradicted. Pane C's
 //     grid (Task 7) inherits the same rule: every
 //     ACTUAL cell in `buildGridModel` below is a `judgedValue` too, and its
 //     PROGRAMMED cells are plain strings that structurally cannot carry a
@@ -265,6 +269,7 @@ const NO_FRAME: MonitorFrame = {
   spm: null,
   heartRateBpm: null,
   rowingActive: false,
+  splitAvgPace: null,
   intervalIndex: 0,
   intervalRemaining: null,
   intervalAccrued: null,
@@ -419,6 +424,19 @@ export interface SurfaceModel {
    *  `totalLeftSeconds` (the subtraction route) dies in Task 4/5 and
    *  nothing else on the model carries elapsed as a number today. */
   elapsedSeconds: number;
+  /** THE SESSION'S OWN RUNNING TOTAL (connected-metrics design spec, "Total
+   *  meters (whole session)") — `frame.sessionDistanceMeters`, work + rest
+   *  by construction, read straight through (Task 4 places and formats
+   *  it). A plain running number, never a `JudgedValue`: nothing programs
+   *  a target for the WHOLE SESSION to judge it against, so there is no
+   *  verdict for this field to carry — unlike the now-dead session-wide
+   *  `meters` field this replaces (see `targetSplit`'s own neighbouring
+   *  comment for what died and why), this one is unjudged by design, not
+   *  by omission. `null` until the machine's first frame arrives — `0m`
+   *  thereafter — never conflated with the honestly-zero `NO_FRAME`
+   *  placeholder (`buildSurfaceModel`'s own `sessionDistanceMeters` local
+   *  checks `input.frame` directly for exactly this reason). */
+  sessionDistanceMeters: number | null;
   /** Where the intervals actually are, for the live pane's notched TOTAL
    *  LEFT bar (design spec §5). One entry per INTERIOR interval boundary —
    *  the bar's spans are the intervals the program has, never
@@ -436,6 +454,22 @@ export interface SurfaceModel {
   paceWhole: string;
   paceTenths: string;
   rate: JudgedValue;
+  /** THE INTERVAL AVERAGE (connected-metrics design spec, "Average split" +
+   *  States table): `frame.splitAvgPace`, plain ink and unjudged while the
+   *  interval runs (the standing start dominates a live running average
+   *  until 65-99% of the interval has elapsed — a judged cell would read
+   *  SLOWER for most of every interval no matter how well the rower is
+   *  pulling), judged only at REST against the FINISHED interval's own
+   *  target, using `ON_TARGET_BAND_SECONDS` — see `avgVerdict`. `absent`
+   *  for a zero/null reading (the wire's own "no sample yet" value), for a
+   *  referent mismatch (the driver already nulls `frame.splitAvgPace` when
+   *  its own provenance lags the referent — this file does not re-derive
+   *  that), for a rest with no completed WORK interval behind it (the
+   *  warm-up's own trailing rest), and for finished/terminated/idle
+   *  (`frame.intervalIndex === null` checked directly, never through the
+   *  `?? 0` laundering the interval clamp above uses — that laundering
+   *  would otherwise pair AVG with the warm-up's target). */
+  avg: JudgedValue;
   /** The rate hero's own target row: `FREE` when the phase carries no spm,
    *  and the house `DASH` when there is no phase at all — exactly the two
    *  cases `targetSplit.main` distinguishes, since a rate slot cannot claim
@@ -449,13 +483,20 @@ export interface SurfaceModel {
    *  presentation-string coupling. Mirrors `targetSplit` below; no `sub`
    *  because a rate target carries no ref to show underneath it. */
   targetRate: { main: string; absent: boolean };
-  // `meters` and `hr` (session-wide judged distance and heart rate) DIED
+  // `meters` and `hr` (session-wide JUDGED distance and heart rate) DIED
   // here (CR2 spec 3 Task 4, spec §3 fate table): `PaneLive`'s `TOTAL M`
   // and `HR` cells were their only render sites, and both cells are cut
   // outright — `GridRow.meters` (the grid's METERS column) is a different
   // field and SURVIVES; HR stays as a grid COLUMN, off `GridRow`, computed
   // locally in `buildGridModel` below rather than exposed here.
-  /** The TARGET SPLIT card: resolved value + the ref it came from. */
+  // `sessionDistanceMeters` above is NOT that field come back — it is an
+  // unjudged plain number restoring a render site (connected-metrics
+  // design spec), never a `JudgedValue`; see its own doc comment.
+  /** The TARGET SPLIT card: resolved value + the ref it came from —
+   *  ordinarily this interval's own target, but during a rest that folded
+   *  onto a completed WORK interval, the FINISHED interval's target
+   *  instead (connected-metrics design spec, States table) — see
+   *  `buildSurfaceModel`'s own `targetSplitPhase` for the exact rule. */
   targetSplit: { main: string; sub: string | null; absent: boolean };
   /** That card's third line — the ref when there is one, and EMPTY when
    *  there isn't. It used to read `NO SPLIT TARGET` beside a dash; both
@@ -556,10 +597,92 @@ const PACE_HERO_CAP_SECONDS = 599.9;
  *  exist. */
 const MID_SESSION_RESET_METERS = 1;
 
+/** THE REST VERDICT'S OWN BAND (connected-metrics design spec, "The
+ *  judgement" — SETTLED 2026-08-18): 0.5 s/500m, not `domain/judge.ts`'s
+ *  `PACE_TOLERANCE_SECONDS` (2s) — a tighter band because this comparison
+ *  judges a SETTLED number, the finished interval's own average held flat
+ *  by the machine through the whole rest, never a live one still
+ *  converging (the same design section's own measurement: a judged LIVE
+ *  cell would read SLOWER for 65-99% of every interval no matter how well
+ *  the rower pulls, which is why that comparison never runs while rowing —
+ *  see `avgValue` below). */
+export const ON_TARGET_BAND_SECONDS = 0.5;
+
+/** AVG's OWN COMPARISON — deliberately NOT a second call into
+ *  `domain/judge.ts`'s `judgeActual` (this file's header comment, rule 1:
+ *  "ONE judgement path... the only function in `src/` that calls
+ *  `judgeActual`"). Two reasons this is a dedicated comparator rather than
+ *  a second call site:
+ *   - the tolerance is `ON_TARGET_BAND_SECONDS` above, not `judgeActual`'s
+ *     `toleranceFor("pace")` (`PACE_TOLERANCE_SECONDS`, 2s) — adding a
+ *     third `kind` there for this one caller would grow that file's own
+ *     tripwire comment for a target it was never asked to carry, and this
+ *     task's scope is `surfaceModel.ts`/`.test.ts` alone (task-3 brief).
+ *   - the design spec cites the direction rule by name
+ *     (`summaryModel.ts:208-224`'s "+ = slower"), not `judgeActual`'s own
+ *     `fasterThanTarget` branch — the same answer, computed the way the
+ *     spec asks for it.
+ *  `"within"` reuses the SAME `Judgement` union and the SAME
+ *  `.timer-card-actual-within` CSS hook (`index.css`: "within tolerance IS
+ *  plain ink") — no new visual state exists to add. What is new is only
+ *  that AVG can reach a real verdict at all: `avgValue` below forces the
+ *  target `null` on every path but a genuine rest-after-a-completed-work-
+ *  interval, which resolves here to `"within"` the same "nothing to judge"
+ *  way `judgeActual`'s own rule 2 does — so "plain ink, unjudged" while
+ *  rowing falls out of this function rather than needing its own branch. */
+function avgVerdict(actualSeconds: number, targetSeconds: number): Judgement {
+  // "+ = slower" (summaryModel.ts:208-224): a positive deviation means the
+  // held average took MORE seconds per 500m than the target, i.e. slower —
+  // the same sign `judgeActual`'s own pace direction resolves to (`diff =
+  // actual - target`), arrived at independently per the design's own
+  // citation rather than by calling that function.
+  const deviationSeconds = actualSeconds - targetSeconds;
+  if (Math.abs(deviationSeconds) <= ON_TARGET_BAND_SECONDS) return "within";
+  return deviationSeconds > 0 ? "slower" : "faster";
+}
+
+/** AVG's own `JudgedValue` builder — mirrors `judgedValue`'s precedence
+ *  (stale beats everything; a `null` actual or target reads `"within"`)
+ *  without routing through `judgeActual`, for the reasons `avgVerdict`'s
+ *  own comment gives. `target` is `null` on every path except a genuine
+ *  rest-after-a-completed-work-interval with a numeric split target
+ *  (`buildSurfaceModel`'s own `avgJudgeTarget`) — everywhere else this
+ *  collapses to "show the number, plain ink", the design's "plain ink,
+ *  unjudged" rule for every state but the rest verdict. */
+function avgValue(args: {
+  actual: number | null;
+  target: number | null;
+  stale: boolean;
+}): JudgedValue {
+  const { actual, target, stale } = args;
+  const judgement: Judgement = stale
+    ? "stale"
+    : actual === null || target === null
+      ? "within"
+      : avgVerdict(actual, target);
+  return {
+    display: actual === null ? DASH : fmtSplit(actual),
+    judgement,
+    absent: actual === null,
+  };
+}
+
 export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
   const { phases, program, deviceName, status } = input;
   const frame = input.frame ?? NO_FRAME;
   const stale = staleFor(status);
+
+  // THE SESSION'S OWN RUNNING TOTAL (connected-metrics design spec, "Total
+  // meters (whole session)"): exposed here because `PaneLive` reads only
+  // `SurfaceModel`, never `frame`, directly (`ConnectedSurface.tsx`'s own
+  // `<PaneLive model={model} />`) — Task 4 places and formats it, this
+  // file only carries the fact through. Checked against `input.frame`,
+  // never the `frame` local (which falls back to `NO_FRAME`): `null` is
+  // "absent until the first frame arrives" (the design's own words) —
+  // `NO_FRAME.sessionDistanceMeters` is honestly `0`, which would
+  // otherwise be indistinguishable from a real first frame reporting zero.
+  const sessionDistanceMeters =
+    input.frame === null ? null : frame.sessionDistanceMeters;
 
   // TWO DIFFERENT COUNTS, deliberately (design spec §5b). The CLAMP is
   // against the program's own length — `frame.intervalIndex` is a program
@@ -587,6 +710,30 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
       ? phase.targetSplit
       : null;
   const targetSpm = phase?.spm ?? null;
+
+  // THE REST VERDICT'S OWN REFERENT (connected-metrics design spec, States
+  // table rows "Rest, after a completed work interval" vs "Rest, before
+  // any work interval completes"). `phaseIndexForInterval`'s own resting
+  // rule lands `phase` on the REST phase that folded onto the current
+  // referent — but only when one exists in `phases[]` at all: an interval
+  // with zero programmed rest never gets a `"rest"` phase
+  // (`domain/expand.ts`'s/`engine.ts`'s own truthiness checks on
+  // `restMinutes`/`warmup.restSeconds`), so a machine that briefly reports
+  // `resting` there still resolves `phase` to the WORK phase itself — the
+  // r0 case the design's own "Honest limits" names ("gets the average but
+  // never the colour"). `isRestPhase` is therefore the real discriminant,
+  // never `resting` alone.
+  const isRestPhase = phase?.type === "rest";
+  // The interval that JUST FINISHED — `undefined` unless this genuinely IS
+  // a rest phase AND the phase before it was real WORK (never a warm-up:
+  // the warm-up's own trailing rest is "before any work interval
+  // completes", design spec row 5, and must read exactly as it always
+  // has). ONE lookup shared by the TGT override below and by AVG's own
+  // judgement target, so the two can never name different intervals.
+  const finishedWorkPhase =
+    isRestPhase && phases[phaseIndex - 1]?.type === "work"
+      ? phases[phaseIndex - 1]
+      : undefined;
 
   // THE MIRROR (design spec §2, Item 3 — "mirror the machine wherever ITS
   // display shows 0, not only at armed"; 2a plan Task 3). Wherever the
@@ -676,11 +823,14 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
     format: (v) => String(Math.round(v)),
   });
   // THE SESSION-WIDE `meters` JUDGED VALUE DIED HERE (CR2 spec 3 Task 4):
-  // it fed only `PaneLive`'s own `TOTAL M` cell, which the redesign cuts
-  // outright (spec §3 fate table) — `frame.sessionDistanceMeters` has no
-  // remaining consumer in this module. `GridRow.meters` (the grid's own
-  // METERS column, a different fact — per-interval, not session-wide) is
-  // computed separately, in `buildGridModel` below.
+  // it fed only `PaneLive`'s own `TOTAL M` cell, which the redesign cut
+  // outright (spec §3 fate table). `frame.sessionDistanceMeters` gained a
+  // NEW, unjudged consumer above (`sessionDistanceMeters`,
+  // connected-metrics design spec, "Total meters (whole session)") — a
+  // plain running total, never a `JudgedValue`, since nothing programs a
+  // target for the whole session to judge it against. `GridRow.meters`
+  // (the grid's own METERS column, a different fact — per-interval, not
+  // session-wide) is still computed separately, in `buildGridModel` below.
   //
   // `hr` SURVIVES as a LOCAL value only — its own `PaneLive` HR cell is cut
   // the same way, but the grid's active row still needs a live HR reading
@@ -695,14 +845,53 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
     format: (v) => String(Math.round(v)),
   });
 
+  // THE INTERVAL AVERAGE (connected-metrics design spec, "Average split" +
+  // States table). `frame.splitAvgPace` already carries the ONLY
+  // provenance guarantee this file trusts: the driver nulls it whenever
+  // its own capture lagged the referent (`domain/monitor/types.ts`'s own
+  // field comment, interval-referent-monotone spec Task 2) — this
+  // function does not re-derive that; the checks below add only the
+  // product-level suppressions the wire cannot know about on its own.
+  const avgAbsentByReferent = frame.intervalIndex === null;
+  // ^ Checked against the RAW field, never `intervalIndex` (the laundered
+  // `?? 0` local a few lines up) — finished/terminated/idle report `null`
+  // here by the field's own business rule, and laundering it to 0 would
+  // pair AVG with the warm-up's own referent instead of suppressing it
+  // (design spec States table, "Finished / terminated / idle").
+  const avgSuppressedByRest = isRestPhase && finishedWorkPhase === undefined;
+  // ^ Design spec row "Rest, before any work interval completes": the
+  // warm-up's own trailing rest (or any rest with no completed WORK phase
+  // behind it) suppresses AVG even though 0x0033 may genuinely be holding
+  // a real number (the warm-up's own average) — a warm-up must never read
+  // as a working interval, at rest any more than while it runs.
+  const rawAvg = frame.splitAvgPace;
+  const avgActual =
+    avgAbsentByReferent ||
+    avgSuppressedByRest ||
+    rawAvg === null ||
+    rawAvg === 0
+      ? null
+      : rawAvg;
+  // Judged ONLY at rest, against the FINISHED interval's own numeric split
+  // target — everywhere else (rowing, warm-up, free, effort, the r0 edge)
+  // this is `null`, which `avgValue` resolves to `"within"`/plain ink, the
+  // design's "plain ink, unjudged" rule for every state but this one.
+  const avgJudgeTarget =
+    finishedWorkPhase?.targetKind === "split" &&
+    finishedWorkPhase.targetSplit !== undefined
+      ? finishedWorkPhase.targetSplit
+      : null;
+  const avg = avgValue({ actual: avgActual, target: avgJudgeTarget, stale });
+
   const [paceWhole, paceTenths] = pace.absent
     ? [pace.display, ""]
     : splitHero(pace.display);
 
   // THE NO-TARGET STATE (design spec §6, adversarial finding — REVISED
-  // 2026-08-12 by James, from #89's warm-up captures). Every REST phase,
-  // and any work phase without a numeric split target (an "effort" target,
-  // a warm-up, a legacy run frozen before `ref` existed), has no number for
+  // 2026-08-12 by James, from #89's warm-up captures). A REST phase with
+  // NOTHING finished behind it (the warm-up's own trailing rest, or any
+  // work phase without a numeric split target — an "effort" target, a
+  // warm-up, a legacy run frozen before `ref` existed) has no number for
   // the hero's TARGET slot.
   //
   // §6 originally made that a `DASH` on this surface, because the phase's
@@ -724,11 +913,30 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
   // one no test or capture had reached (tail review I-1). The caps are
   // deliberate and shared with the timer's UP NEXT strip; the reasoning is
   // beside `FREE` in `session/TimerTargets.tsx`.
+  //
+  // REST NO LONGER ALWAYS TAKES THE PLAIN "Rest" WORD (connected-metrics
+  // design spec, States table, "Rest, after a completed work interval" —
+  // OVERTURNS the rule this comment used to state without exception).
+  // `targetSplitPhase` below reads `finishedWorkPhase` in place of `phase`
+  // whenever this genuinely is a rest that folded onto a completed WORK
+  // interval, so the row reads as a verdict on what was rowed (`TGT
+  // 2:13.0 · AVG 2:11.8`, not `TGT Rest`) — pairing a verdict with the
+  // NEXT interval's target would judge a number the rower never rowed.
+  // `finishedWorkPhase` is `undefined` on every other path (rowing, the
+  // warm-up's own trailing rest, the r0 edge), where this collapses back
+  // to `phase` unchanged — "as today" everywhere the design's own States
+  // table says "as today".
+  const targetSplitPhase = finishedWorkPhase ?? phase;
+  const targetSplitPhaseSeconds =
+    targetSplitPhase?.targetKind === "split" &&
+    targetSplitPhase.targetSplit !== undefined
+      ? targetSplitPhase.targetSplit
+      : null;
   const targetSplit =
-    phase && targetSplitSeconds !== null
-      ? { ...targetSplitDisplay(phase), absent: false }
+    targetSplitPhase && targetSplitPhaseSeconds !== null
+      ? { ...targetSplitDisplay(targetSplitPhase), absent: false }
       : {
-          main: phase ? phase.label : DASH,
+          main: targetSplitPhase ? targetSplitPhase.label : DASH,
           sub: null,
           absent: true,
         };
@@ -841,6 +1049,7 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
     // doc comment above.
     totalLeftDisplay: fmtDuration(totalLeftSeconds / 60),
     elapsedSeconds,
+    sessionDistanceMeters,
     boundaries: intervalBoundaries(phases, measuredWorkSeconds(input.actuals)),
     // The log sheet captions this `SESSION m:ss` — its ONLY render site
     // since the redesign (PaneLive's running clock retired with the label
@@ -854,6 +1063,7 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
     paceWhole,
     paceTenths,
     rate,
+    avg,
     // `Free`, not a dash, for the same reason `targetSplit` names its phase
     // (James, 2026-08-12): the phone timer has always said `free` here, and
     // the two surfaces now share a language. Capitalized to sit beside the
@@ -873,9 +1083,13 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
             : String(targetSpm),
       absent: targetSpm === null,
     },
-    // `meters`/`hr` do NOT appear here (CR2 spec 3 Task 4) — see the doc
-    // comment above `targetSplit` for what died and why; `hr` still feeds
-    // the grid's `liveHr` param a few lines below, as a local value only.
+    // `meters`/`hr` (the old JUDGED distance/HR) do NOT appear here (CR2
+    // spec 3 Task 4) — see the doc comment above `targetSplit` for what
+    // died and why; `hr` still feeds the grid's `liveHr` param a few lines
+    // below, as a local value only. `sessionDistanceMeters` above and
+    // `avg` are the two connected-metrics fields that replace it — neither
+    // is the dead `meters` field's shape (unjudged number; judged-only-at-
+    // rest, respectively).
     targetSplit,
     targetSplitCaption: targetSplit.sub ?? "",
     grid: buildGridModel({

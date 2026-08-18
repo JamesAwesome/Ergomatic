@@ -201,6 +201,7 @@ function liveFrame(overrides: Partial<MonitorFrame> = {}): MonitorFrame {
     currentSplit: 117.8,
     spm: 21,
     heartRateBpm: 164,
+    splitAvgPace: null,
     intervalIndex: 1,
     intervalRemaining: { kind: "distance", value: 1200 },
     intervalAccrued: null,
@@ -343,10 +344,23 @@ describe("the fixtures are physically possible", () => {
 });
 
 describe("screen fixtures for pnpm screenshots", () => {
+  /** Task 5, connected-metrics (exit criterion 5): the ONLY frame override
+   *  on the file's own primary "rowing" fixture — deliberately not a change
+   *  to `liveFrame()`'s shared default, which every other capture below
+   *  inherits without overriding `splitAvgPace` itself (armed/paused/
+   *  disconnected genuinely have no average yet). `128.4` s/500m
+   *  ("2:08.4") — plausibly still converging toward the 2:06.0 target
+   *  shown beside it (`connected-hero-target-value`, unchanged), a touch
+   *  slower than the 1:57.8 CURRENT split already in this fixture: unjudged
+   *  plain ink either way (design states table row 1, "Work, split target,
+   *  average > 0" — never judged while rowing). Before this, `liveFrame`'s
+   *  own default (`splitAvgPace: null`) meant the AVG cell rendered nothing
+   *  in EVERY committed connected screenshot (task-4-report.md's own
+   *  flagged gap) — this is that gap's first non-zero fixture. */
   it("pane B, rowing", async () => {
-    await expect(capture("live")).toMatchFileSnapshot(
-      "../../e2e/fixtures/connected-pane-live.html",
-    );
+    await expect(
+      capture("live", { frame: { splitAvgPace: 128.4 } }),
+    ).toMatchFileSnapshot("../../e2e/fixtures/connected-pane-live.html");
   });
 
   /** THE FIX ROUND'S OWN CLOSED GAP (Task 6 fix round, CRITICAL 1). Every

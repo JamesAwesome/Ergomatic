@@ -6148,6 +6148,59 @@ section:not(.news-pinned) .news-row:last-of-type {
   color: var(--ink-3);
 }
 
+/* THE AVG LABEL (connected-metrics design spec, States table + "The
+   judgement"; task-4 brief's own verbatim geometry: "label 15px/0.1em ...
+   8px before AVG"). A THIRD flex child of `.connected-hero-target`
+   (`PaneLive.tsx`), sharing that row's `align-items: baseline`/`gap: 10px`
+   — the 10px figure is right for target-value -> target-ref (and, on the
+   rate hero, target-value -> SPM), but AVG's own leading edge is a
+   different figure (8px). Flexbox `gap` cannot express two different
+   pair-spacings on one row, so this rule corrects only the ONE boundary it
+   sits on rather than un-sharing the gap for every pair: `margin-left:
+   -2px` nets the parent's 10px down to 8px. `var(--c-size-label)` (15px
+   landscape / 14px portrait — grep `--c-size-label:`, line cites drift) —
+   the SAME token every other
+   label role on these panes already reads
+   (`.connected-hero-target-ref`/`.connected-band-cell-label`), not a new
+   size — is exactly why the brief's own figure (15) needs no orientation
+   query here: reusing the token is the "existing scale convention" the
+   brief's own Step 3 points at. */
+.connected-hero-avg-label {
+  font-family: var(--font-mono);
+  font-size: var(--c-size-label);
+  letter-spacing: 0.1em;
+  color: var(--ink-3);
+  margin-left: -2px;
+}
+
+/* THE AVG VALUE — 34px landscape (task-4 brief's own figure), derived from
+   `--c-size-target` (40px landscape / 36px portrait — grep the token,
+   line cites drift)
+   rather than a second hardcoded literal pair: AVG must always read
+   smaller than TGT so both numbers share one row without crowding, and
+   `calc(var(--c-size-target) - 6px)` keeps that 6px relationship in lockstep
+   with TGT's own portrait/landscape step (34px landscape, 30px portrait)
+   instead of two independently-pinned figures that could drift apart.
+   Tracking (-0.03em) matches `.connected-hero-target-value`'s own numeral
+   tracking — the same figure, not a new one. `margin-left: 2px` nets the
+   parent's 10px gap up to the brief's 12px label->value figure, the
+   opposite-direction correction `.connected-hero-avg-label` makes just
+   above. NO `color` declaration (the judged/absent convention
+   `.connected-hero-value`'s own comment gives, a few lines above this
+   block): `judgedClass` (`PaneLive.tsx`) layers `timer-card-actual-
+   {judgement}` on top, and `-within` (rowing) declares no colour of its
+   own — plain ink — while `-slower`/`-faster` (the rest verdict) repaint
+   it. That is the whole "judged colour absent while rowing, present at
+   rest" behaviour this task adds, and it falls out of leaving this rule's
+   own colour undeclared rather than needing a second class here. */
+.connected-hero-avg-value {
+  font-family: var(--font-mono);
+  font-size: calc(var(--c-size-target) - 6px);
+  line-height: 1;
+  letter-spacing: -0.03em;
+  margin-left: 2px;
+}
+
 /* --- The redesigned progress bar (CR2 spec 3 task 3, design spec §2A)
    `ConnectedProgressBar.tsx`. Mounted this task (Task 4) as `PaneLive`'s
    FIRST child, ahead of the heroes, matching §2A/§2C's own row order —
@@ -6247,6 +6300,61 @@ section:not(.news-pinned) .news-row:last-of-type {
   font-size: 12px;
   color: var(--ink-3);
   transform: translateX(50%);
+}
+
+/* THE PROGRESS-BAR ROW + METERS COUNTER (connected-metrics design spec,
+   "Total meters (whole session)"; task-4 brief's own verbatim geometry:
+   "counter 22px/0.02em, 14px gap, vertically centred on the 6px bar").
+   Wraps `ConnectedProgressBar` (`PaneLive.tsx`) rather than editing that
+   component: the counter is a PaneLive-level placement decision, not the
+   bar's own, and `ConnectedProgressBar.tsx`'s own header comment says it
+   "ships complete and standalone" — out of this task's scope to touch.
+   `align-items: center` centres the counter on the bar's 6px track in the
+   common (segmented) mode; the density-fallback mode (>16 boundaries,
+   that file's own comment) adds a second row of quarter-ticks beneath the
+   track, against which this same centring reads slightly high rather than
+   dead-centre on the fallback's own taller block — an accepted, rare-case
+   trade rather than a second layout for one component. No orientation
+   query: unlike the baseline row's AVG cell, the brief gives one set of
+   figures for this row and no existing `.connected-progress-*` rule
+   varies by orientation to begin with (grepped — none do). */
+.connected-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+/* THE BAR FLEXES (handoff §2) — sized here, not in `ConnectedProgressBar
+   .tsx`, for the same "wraps rather than edits" reason the block comment
+   above gives. */
+.connected-progress-row .connected-progress {
+  flex: 1;
+  min-width: 0;
+}
+
+/* `3,842m` (connected-metrics design spec) — `flex: none` (handoff §2),
+   never judged (`surfaceModel.ts`'s own `sessionDistanceMeters` doc
+   comment: "a plain running number, never a `JudgedValue` ... unjudged by
+   design, not by omission"), so `color: var(--ink)` is a safe, permanent
+   declaration here — no judgement class will ever need to out-rank it the
+   way `.connected-hero-value`'s bare inheritance has to stay open for. */
+.connected-progress-meters {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 22px;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+  white-space: nowrap;
+  /* Reserve the widest common width so the FLEXING BAR beside this cell
+     does not jump when the counter gains a character. Measured (antagonist,
+     2026-08-18, real rules in a 390px pane): without this, 999m -> 1,000m
+     shrank the bar 27.3px — a layout jolt at exactly the milestone James
+     named as the one place noise IS warranted. 6ch covers `9,999m`; the
+     `0.12em` absorbs letter-spacing's per-glyph tail. A session past
+     10,000m grows the cell once, which is a milestone, not noise.
+     Right-aligned so the reserved slack sits between bar and counter. */
+  min-width: calc(6ch + 0.12em);
+  text-align: right;
 }
 
 /* --- The band: up-next + TOTAL LEFT (CR2 spec 3 Task 4, design spec §2A/

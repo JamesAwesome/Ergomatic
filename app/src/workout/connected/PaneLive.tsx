@@ -78,6 +78,38 @@ function judgedClass(
   }`;
 }
 
+/** `3,842m` (connected-metrics design spec, "Total meters"). No house
+ *  helper for a thousands separator exists to reuse: a repo-wide grep for
+ *  `toLocaleString`/`Intl.NumberFormat` turns up nothing, and the summary
+ *  screen's own DISTANCE hero (`PostWorkoutSummary.tsx`'s
+ *  `heroes.distanceMeters`) renders the raw number with no separator at
+ *  all — this is the first consumer of one on this codebase, not a reuse,
+ *  contra the brief's own assumption that a pattern to follow already
+ *  exists (see this task's report). `Intl.NumberFormat`, not a hand-rolled
+ *  regex, for the same reason `fmtSplit`/`fmtDuration` are house functions
+ *  rather than ad hoc string surgery at each call site.
+ *
+ *  QUANTISED TO 5 M (James's calm rule, 2026-08-18: dynamic is fine, but
+ *  no visual noise unless warranted). Whole-metre flooring was tried first
+ *  and MEASURED to do nothing — decoding the exit walk's own capture, the
+ *  rendered string changed 1.97/s with tenths and 1.96/s floored, because
+ *  at rowing speed (~3.7 m/s) every ~500ms tick crosses a metre boundary
+ *  anyway; on iOS's ~90-180ms notify spacing that becomes ~3.7 repaints/s.
+ *  At 5 m the repaint rate is speed-limited, not transport-limited:
+ *  ~0.74/s on EVERY platform, one readable sequential step (1,040 → 1,045)
+ *  every ~1.3 s of rowing.
+ *
+ *  ROUND, not floor — an earlier version floored and justified it as "the
+ *  PM5 truncates too", which the antagonist falsified: at the one walk
+ *  instant where floor and round disagree (finish, 1346.7) the machine
+ *  shows 1347, and `summaryModel.ts`'s DISTANCE rounds as well. Rounding
+ *  keeps this cell within ±2.5 m of both. The walk's same-frame protocol
+ *  allows ±5 m on THIS cell only; the summary hero stays exact and is what
+ *  criterion 2 compares at the finish. */
+function fmtMeters(meters: number): string {
+  return `${new Intl.NumberFormat("en-US").format(Math.round(meters / 5) * 5)}m`;
+}
+
 export default function PaneLive({ model }: { model: SurfaceModel }) {
   // Both heroes signal "no target" the same way: the model's own `absent`
   // flag (I-1, carried forward — the target VALUE names the phase kind,
@@ -97,11 +129,32 @@ export default function PaneLive({ model }: { model: SurfaceModel }) {
           progress bar's own row order match design spec §2A/§2C exactly:
           the bar sits between the header and the heroes in BOTH
           orientations, so it renders FIRST here, ahead of the heroes. */}
-      <ConnectedProgressBar
-        boundaries={model.boundaries}
-        totalSeconds={model.totalSeconds}
-        elapsedSeconds={model.elapsedSeconds}
-      />
+      {/* THE METERS COUNTER (connected-metrics design spec, "Total meters
+          (whole session)"): restores a render site TOTAL M's own
+          retirement cut three days before this task
+          (`surfaceModel.ts`'s own comment on `sessionDistanceMeters`) —
+          right end of the progress-bar row, the bar flexing and the
+          counter `flex: none` (handoff §2, `index.css`). Wraps
+          `ConnectedProgressBar` rather than editing it: that component is
+          untouched, out of this task's scope, and ships complete on its
+          own (Task 3's own header comment). */}
+      <div className="connected-progress-row">
+        <ConnectedProgressBar
+          boundaries={model.boundaries}
+          totalSeconds={model.totalSeconds}
+          elapsedSeconds={model.elapsedSeconds}
+        />
+        {/* NOTHING AT ALL before the first frame (design spec: "Absent
+            until the first frame arrives; 0m thereafter") — the same
+            "absent, not blank" idiom this file already uses for
+            `heroLabel`/`targetSplitCaption`, never a dash: a session total
+            has no "no reading" phrase the way a judged cell does. */}
+        {model.sessionDistanceMeters !== null && (
+          <span className="connected-progress-meters">
+            {fmtMeters(model.sessionDistanceMeters)}
+          </span>
+        )}
+      </div>
       <div className="connected-heroes">
         <div className="connected-hero connected-hero-split">
           {/* NOTHING AT ALL when there is no label (I-1, carried forward):
@@ -136,6 +189,33 @@ export default function PaneLive({ model }: { model: SurfaceModel }) {
               <span className="connected-hero-target-ref">
                 {model.targetSplitCaption}
               </span>
+            )}
+            {/* THE AVG CELL (connected-metrics design spec, States table +
+                "The judgement"): a THIRD flex child of this same row, not a
+                sibling element — `TGT 2:13.0 · AVG 2:11.8` is one baseline
+                row, per the design's own placement, and `index.css`'s
+                margin corrections (`.connected-hero-avg-label`/`-value`)
+                net this row's shared 10px gap to the handoff's 8px/12px
+                figures either side of the label. NOTHING AT ALL when
+                absent (design spec: "nothing", never a dash) — the same
+                idiom `targetSplitCaption` above already uses; `model.avg`
+                is `SurfaceModel`'s own field (Task 3), never re-derived
+                here. Judged the same way pace/rate are (`judgedClass`,
+                this file's ONE helper) — `model.avg.judgement` is forced
+                `"within"` (plain ink) by `surfaceModel.ts` everywhere but
+                a rest that folded onto a completed work interval, which is
+                what makes "judged colour absent while rowing, present at
+                rest" fall out of the model rather than needing a branch
+                here. */}
+            {!model.avg.absent && (
+              <>
+                <span className="connected-hero-avg-label">AVG</span>
+                <span
+                  className={judgedClass("connected-hero-avg-value", model.avg)}
+                >
+                  {model.avg.display}
+                </span>
+              </>
             )}
           </div>
         </div>

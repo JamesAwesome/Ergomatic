@@ -205,6 +205,7 @@ function frame(overrides: Partial<MonitorFrame> = {}): MonitorFrame {
     currentSplit: WORK_PHASE.targetSplit!,
     spm: WORK_PHASE.spm ?? 22,
     heartRateBpm: 164,
+    splitAvgPace: null,
     intervalIndex: 1,
     intervalRemaining: { kind: "distance", value: 1200 },
     intervalAccrued: null,
@@ -578,18 +579,26 @@ describe("pane B — live (connected-revamp Task 3: two heroes; CR2 spec 3 Task 
   });
 
   // THE NO-TARGET STATE (design spec §6, as revised 2026-08-13): every REST
-  // phase hits this. The target slot holds its space and names the PHASE
-  // (`Rest`/`Free`) in `--ink-3` (`connected-value-absent`) where §6
-  // originally put a dash; the actual above stays UNJUDGED (plain ink — no
-  // `-faster`/`-slower`/`-stale` class), because a value with nothing to
-  // compare against must not be tinted.
-  it("during REST both targets name the phase (Rest / Free) in the absent tone, and both actuals above stay unjudged", () => {
+  // phase hits this. RATE HALF UNCHANGED: the target slot holds its space
+  // and names the PHASE (`Free`) in `--ink-3` (`connected-value-absent`)
+  // where §6 originally put a dash. SPLIT HALF OVERTURNED
+  // (connected-metrics design spec, 2026-08-18, States table — "Rest,
+  // after a completed work interval": TGT now names the FINISHED
+  // interval's own resolved split, not the rest phase's "Rest" word, so
+  // the row reads as a verdict on what was rowed — `surfaceModel.test.ts`'s
+  // own `avg` describe block is the model-level pin for this same frame).
+  // Both actuals above stay UNJUDGED regardless (plain ink — no
+  // `-faster`/`-slower`/`-stale` class): `pace`/`rate` are the LIVE
+  // heroes, whose own judging target is unaffected by the TGT-row
+  // override (`surfaceModel.ts`'s own comment on `targetSplitPhase`).
+  it("during REST the split target now names the FINISHED interval (not the phase word), the rate target still names the phase (Free), and both LIVE actuals above stay unjudged", () => {
     renderSurface({
       frame: frame({
         intervalIndex: 1,
         state: "resting",
         // Numbers that would scream "faster"/"slower" against any real
-        // target, to prove the absent target is what suppresses the tint.
+        // target, to prove the LIVE actuals stay unjudged through the rest
+        // regardless of what the TGT row now shows.
         currentSplit: 60,
         spm: 40,
       }),
@@ -598,16 +607,15 @@ describe("pane B — live (connected-revamp Task 3: two heroes; CR2 spec 3 Task 
       ".connected-hero-target-value",
     );
     expect(targets).toHaveLength(2);
-    // The WORDS, in order (split hero then rate hero) — a shared loop over
-    // both would pass if the two slots swapped, which is exactly the kind
-    // of thing this rename could break. The absent CLASS is what keeps
-    // §6's concern answered now that the slot carries a word: greyed, so
-    // it cannot read as a programmed number.
-    expect(targets[0]!.textContent).toBe("Rest");
+    // The split half: the finished interval's own resolved split — "2:06.0",
+    // the same `WORK_PHASE.targetSplit` every other test in this file
+    // derives its numbers from — no longer absent (a real target IS
+    // shown), so no `connected-value-absent` class on this one.
+    expect(targets[0]!.textContent).toBe("2:06.0");
+    expect(targets[0]!.className).not.toContain("connected-value-absent");
+    // The rate half: unchanged, still the WORD, still absent-toned.
     expect(targets[1]!.textContent).toBe("Free");
-    for (const target of targets) {
-      expect(target.className).toContain("connected-value-absent");
-    }
+    expect(targets[1]!.className).toContain("connected-value-absent");
 
     const paceValue = document.querySelector(
       ".connected-hero-split .connected-hero-value",

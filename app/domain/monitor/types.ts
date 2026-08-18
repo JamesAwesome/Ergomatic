@@ -86,6 +86,36 @@ export interface MonitorFrame {
   //   runs while a stopped rower sits still, and a coasting flywheel
   //   banks meters on a piece the PM5 itself does not consider started.
   //   This byte is what the PM5 knew each time.
+  splitAvgPace: number | null;
+  // ^ 0x0033's (Additional Status 2) own Split Average Pace — seconds/500m
+  //   for the CURRENT interval's own average while rowing, and the
+  //   FINISHED interval's settled average through its trailing rest (the
+  //   connected-metrics design spec's ruling: judged only at rest, when it
+  //   is final — "The judgement" section). Passed through unconditionally
+  //   at the parse level (`pm5/parse.ts`'s `toMonitorFrame`, same
+  //   unconditional-pass-through choice as `currentSplit` above). A caller
+  //   with no 0x0033 sample yet would see `undefined` through
+  //   `toMonitorFrame` — a path the driver's own emission gate makes
+  //   unreachable (frames emit only once general/AS1/AS2 have all been
+  //   seen), so the absent-value story in practice is: `src/monitor/driver.ts`
+  //   additionally NULLS this field whenever its own PROVENANCE interval
+  //   (which interval the last 0x0033 sample was actually captured for —
+  //   `splitAvgPaceProvenanceIndex`'s own doc comment has the full
+  //   mechanism) is behind the referent this frame names
+  //   (interval-referent-monotone spec, 2026-08-18 Task 2; LEVEL-triggered
+  //   as of fix round 1 — re-evaluated fresh every frame, not just the
+  //   first after a boundary, so a dropped 0x0033 notify cannot extend a
+  //   lie past one tick): 0x0033 updates on its own cadence, independent of
+  //   0x0031's state byte, so a frame can otherwise still carry the
+  //   JUST-FINISHED interval's own average after the referent has already
+  //   moved on to the next one — a value genuinely correct for the OLD
+  //   interval, wrongly paired with the NEW one's identity. Clearing it
+  //   (rather than pairing it with an interval field of its own) keeps the
+  //   same "one field, no lie" contract `intervalIndex` gets from the clamp
+  //   below, and costs nothing perceptible: the surface already renders a
+  //   zero average as nothing (design spec exit criterion 4), so a `null`
+  //   frame here reads identically to the genuinely-fresh 0 that arrives
+  //   once the provenance catches up.
   intervalIndex: number | null;
   // ^ OUR program index (0-based per work interval), never the raw machine
   //   value straight off the wire — normalized by the driver via

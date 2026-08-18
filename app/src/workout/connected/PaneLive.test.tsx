@@ -76,6 +76,7 @@ function frame(overrides: Partial<MonitorFrame> = {}): MonitorFrame {
     currentSplit: 117.8,
     spm: 21,
     heartRateBpm: 164,
+    splitAvgPace: null,
     intervalIndex: 1,
     intervalRemaining: { kind: "distance", value: 1200 },
     intervalAccrued: null,
@@ -422,6 +423,183 @@ describe("index.css: the landscape two-column split (design spec §2A)", () => {
 // ---------------------------------------------------------------------------
 // Disconnected step-down (design spec §2's own table): two rules, not one
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// connected-metrics design spec: the baseline row's AVG cell
+// ---------------------------------------------------------------------------
+
+describe("the baseline row: AVG beside TGT (connected-metrics design spec)", () => {
+  // Interval 1's own resolved split target is 126s (2:06.0) — the same
+  // fixture fact `surfaceModel.test.ts`'s `firstWorkPhase()` reads out of
+  // "Filling Low" rather than hardcoding.
+  it("work, rowing: AVG renders a label + value, plain ink, however far from target", () => {
+    renderPane("live", {
+      intervalIndex: 1,
+      state: "rowing",
+      splitAvgPace: 140,
+    });
+    const label = document.querySelector(".connected-hero-avg-label")!;
+    expect(label.textContent).toBe("AVG");
+    const value = document.querySelector(".connected-hero-avg-value")!;
+    expect(value.textContent).toBe("2:20.0");
+    // Task brief: "the judged colour present at rest and ABSENT while
+    // rowing" — 140 (2:20.0) is 14s slower than the 126s target, which
+    // would scream `-slower` if this cell were judged live; it is not
+    // (surfaceModel.ts's own `avgJudgeTarget`, null everywhere but a rest
+    // that folded onto a completed work interval).
+    expect(value.className).toContain("timer-card-actual-within");
+    expect(value.className).not.toContain("timer-card-actual-slower");
+    expect(value.className).not.toContain("timer-card-actual-faster");
+  });
+
+  it("rest after a completed interval: AVG is judged — the colour class this cell only ever wears at rest", () => {
+    // Same 130 s/500m reading `surfaceModel.test.ts`'s own rest-verdict
+    // test judges "slower" against interval 1's 126s target (deviation
+    // +4s, past ON_TARGET_BAND_SECONDS' 0.5s band).
+    renderPane("live", {
+      intervalIndex: 1,
+      state: "resting",
+      splitAvgPace: 130,
+    });
+    const label = document.querySelector(".connected-hero-avg-label")!;
+    expect(label.textContent).toBe("AVG");
+    const value = document.querySelector(".connected-hero-avg-value")!;
+    expect(value.textContent).toBe("2:10.0");
+    expect(value.className).toContain("timer-card-actual-slower");
+    expect(value.className).not.toContain("timer-card-actual-within");
+    // TGT, on the same row, names the FINISHED interval it is a verdict on
+    // (connected-metrics design spec States table) — not the rest word.
+    const target = document.querySelector(".connected-hero-target-value")!;
+    expect(target.textContent).toBe("2:06.0");
+  });
+
+  it("zero average while rowing: nothing renders at all — no label, no dash", () => {
+    renderPane("live", { intervalIndex: 1, state: "rowing", splitAvgPace: 0 });
+    expect(document.querySelector(".connected-hero-avg-label")).toBeNull();
+    expect(document.querySelector(".connected-hero-avg-value")).toBeNull();
+    // TGT is unaffected — still renders its own value, absent-or-not per
+    // its own rule, entirely independent of AVG's own absence.
+    expect(
+      document.querySelector(".connected-hero-target-value"),
+    ).not.toBeNull();
+  });
+
+  it("stale: AVG holds its last reading, greyed under the pane's existing staleness class", () => {
+    renderPane("stale", { intervalIndex: 1, splitAvgPace: 130 });
+    const value = document.querySelector(".connected-hero-avg-value")!;
+    expect(value.textContent).toBe("2:10.0");
+    expect(value.className).toContain("timer-card-actual-stale");
+  });
+
+  it("the rate hero's own target row never grows an AVG cell", () => {
+    renderPane("live", {
+      intervalIndex: 1,
+      state: "resting",
+      splitAvgPace: 130,
+    });
+    const rateHero = document.querySelector(".connected-hero-rate")!;
+    expect(rateHero.querySelector(".connected-hero-avg-label")).toBeNull();
+    expect(rateHero.querySelector(".connected-hero-avg-value")).toBeNull();
+  });
+
+  it("index.css: the AVG label reads var(--c-size-label)/0.1em/ink-3, netted to an 8px lead over the row's 10px gap", () => {
+    const body = ruleBody(".connected-hero-avg-label");
+    expect(body).toContain("var(--c-size-label)");
+    expect(body).toContain("letter-spacing: 0.1em");
+    expect(body).toContain("var(--ink-3)");
+    expect(body).toContain("margin-left: -2px");
+    expect(ruleBody(".connected-hero-target")).toContain("gap: 10px");
+  });
+
+  it("index.css: the AVG value is 6px under TGT's own target-value token, tracked -0.03em, netted to a 12px label gap, and declares no colour of its own", () => {
+    const body = ruleBody(".connected-hero-avg-value");
+    expect(body).toContain("calc(var(--c-size-target) - 6px)");
+    expect(body).toContain("letter-spacing: -0.03em");
+    expect(body).toContain("margin-left: 2px");
+    // No `color` declaration (the judged/absent convention
+    // `.connected-hero-value`'s own comment gives, a few lines above this
+    // block in `index.css`): the class `judgedClass` layers on top
+    // (`timer-card-actual-{judgement}`) must be free to win on source
+    // order, the same reason that comment gives for the TARGET value.
+    expect(body).not.toContain("color:");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// connected-metrics design spec: the meters counter on the progress-bar row
+// ---------------------------------------------------------------------------
+
+describe("the meters counter on the progress-bar row (connected-metrics design spec)", () => {
+  it("renders the session total with a thousands separator, at the row's end", () => {
+    renderPane("live", { sessionDistanceMeters: 3840 });
+    const row = document.querySelector(".connected-progress-row")!;
+    expect(row).not.toBeNull();
+    const bar = row.querySelector(".connected-progress")!;
+    expect(bar).not.toBeNull();
+    const counter = row.querySelector(".connected-progress-meters")!;
+    expect(counter.textContent).toBe("3,840m");
+    // "at the right end" (task brief) — the bar comes first in the DOM,
+    // the counter last, and CSS (`flex: none` on the counter, `flex: 1`
+    // on the bar) does the rest.
+    expect([...row.children]).toStrictEqual([bar, counter]);
+  });
+
+  it("quantises to 5m, rounding — the accumulator's churn never reaches the screen (James's calm rule; the measured fix, not the guessed one)", () => {
+    // Whole-metre flooring was measured to change nothing (1.97 -> 1.96
+    // repaints/s: at rowing speed every tick crosses a metre boundary).
+    // 5m makes the repaint rate speed-limited (~0.74/s on every transport)
+    // and the steps sequential. ROUND, because at the exit walk's finish —
+    // the one instant where floor and round disagree — the machine and the
+    // summary both round (fmtMeters' own comment has the decode).
+    renderPane("live", { sessionDistanceMeters: 1042.9 });
+    expect(
+      document.querySelector(".connected-progress-meters")!.textContent,
+    ).toBe("1,045m");
+  });
+
+  it("rounds down as readily as up across the 5m boundary", () => {
+    renderPane("live", { sessionDistanceMeters: 1042.4 });
+    expect(
+      document.querySelector(".connected-progress-meters")!.textContent,
+    ).toBe("1,040m");
+  });
+
+  it("zero meters still renders (only 'before the first frame' is absent)", () => {
+    renderPane("live", { sessionDistanceMeters: 0 });
+    const counter = document.querySelector(".connected-progress-meters")!;
+    expect(counter.textContent).toBe("0m");
+  });
+
+  it("absent before the first frame: renders nothing", () => {
+    const model = buildSurfaceModel({
+      phases: FIXTURE.phases,
+      program: FIXTURE.program,
+      status: "armed",
+      frame: null,
+      deviceName: DEVICE,
+      actuals: [],
+    });
+    expect(model.sessionDistanceMeters).toBeNull();
+    render(<PaneLive model={model} />);
+    expect(document.querySelector(".connected-progress-meters")).toBeNull();
+    // The bar itself still renders — its own absence is a separate, untested
+    // question this task does not touch.
+    expect(document.querySelector(".connected-progress")).not.toBeNull();
+  });
+
+  it("index.css: the row centres on the bar with a 14px gap; the bar flexes, the counter does not", () => {
+    const row = ruleBody(".connected-progress-row");
+    expect(row).toContain("align-items: center");
+    expect(row).toContain("gap: 14px");
+    expect(ruleBody(".connected-progress-row .connected-progress")).toContain(
+      "flex: 1",
+    );
+    const counter = ruleBody(".connected-progress-meters");
+    expect(counter).toContain("flex: none");
+    expect(counter).toContain("font-size: 22px");
+    expect(counter).toContain("letter-spacing: 0.02em");
+  });
+});
 
 describe("index.css: the disconnected step-down splits into two rules (design spec §2)", () => {
   it("portrait: split 100->76, rate 84->64, tenths 52->40", () => {

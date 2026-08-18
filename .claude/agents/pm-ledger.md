@@ -862,3 +862,63 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
 - **Good practice worth copying:** criterion 4's e2e takes the log id from the
   real anchor's `href` after a save through the shipped button, then reopens by
   id after Reset — an oracle that cannot pass by agreeing with client state.
+
+## Final-PR gate, 2026-08-18 (PR #123, Phase CM connected metrics — triad)
+
+- **My CS ruling ("live total metres does not get built") is ANSWERED, and the
+  thing that answered it was not a test.** The number had already shipped in
+  v0.10.0 and was walk-verified on hardware ("keystone totals within 0.2m");
+  this PR gave an existing, externally-checked number a second render site.
+  **Generalise: when a gate objects to surfacing a derived number, ask whether
+  that number is already surfaced and already externally checked somewhere
+  else.** "Restoring a render site" and "inventing a number" are different
+  risks and I judged the second when the first was true.
+- **The residual my objection was actually about survives, narrowed:**
+  `types.ts` calls `sessionDistanceMeters` "A DISPLAY ESTIMATE, never a
+  record: an interval that produces ZERO frames is lost entirely". No replay
+  capture can exercise that loss (they all have frames), and one photograph
+  cannot either. Bounded, non-compounding, under-reporting — accepted, but it
+  is the one place the live counter can still be wrong.
+- **Two independent derivations of the same user-facing quantity now ship on
+  two screens of the same app, and nothing compares them.** Live counter =
+  the driver's max-merge accumulator; summary DISTANCE = Σ over IntervalActual
+  records (`summaryModel.ts`), event-sourced from 0x0037/38, different
+  failure mode. Sun fret's exact shape, inside our own app. The PR asserted
+  they match as a fact in its first bullet. **Rule for any gate: when a PR
+  claims two of our own numbers agree, find both derivations and check whether
+  anything in the branch compares them. A replay harness that stubs
+  `actuals: []` cannot.**
+- **The cheapest fix for a cross-screen number claim is a walk the walk is
+  already doing.** Photographing the summary screen right after the session
+  puts monitor + live counter + summary DISTANCE on one record for zero extra
+  rowing. **At every walk-gated PR, ask which claims can be settled by a screen
+  James lands on anyway.**
+- **A rule the rower cannot learn from the screen is a release-notes
+  obligation, never a screen-copy one.** The AVG verdict appears only at rest;
+  the pane teaches it implicitly (the split hero mirrors to 0 in plain ink at
+  the same instant the AVG lights, so attention visibly hands over), but the
+  RULE is not derivable. CR2 cut six objects off this screen — adding a label
+  back to explain a rule undoes that for the wrong reason. Notes, one sentence.
+- **"11% of the library" hid the part that mattered.** 33 of 300 workouts never
+  show the verdict — but 29 of the 33 are O2 and zero are AN. The limit lands
+  hardest on the steady piece a casual rower is most likely to row first.
+  **Percentages of a library are not tester impact until they are broken down
+  by what people actually row.**
+- **A PR body that quotes the screen must quote the SCREEN.** #123's headline
+  bullet code-fenced `TGT 2:13.0 · AVG 2:11.8`; the shipped row reads
+  `2:06.0  6K +4  AVG  2:08.4`. CR2 deliberately deleted the word TARGET, and
+  the spec carried the same shorthand from an old handoff, so the wrong string
+  survived a full spec pass, five task reviews and a whole-branch APPROVE —
+  every one of which read the spec, not the PNG. **Check the code-fenced
+  strings in a PR body against the committed screenshot; nothing else will.**
+- **Roadmap absence, THIRD occurrence: `grep "Phase CM" ROADMAP.md` = 0**, after
+  CS (close gate) and PW (open gate). Backlog held at **24 unchecked items** —
+  identical at the 2026-08-13 audit, CS open, and CS close. I have twice read
+  the static count as "the pile is not shrinking". **The correct reading: two
+  consecutive phases were designed, built, reviewed and released without ever
+  entering the roadmap, so the count CANNOT move.** ROADMAP.md has stopped
+  being where the work is tracked, and the count is no longer evidence about
+  filing-as-deferral either way. Next gate: report the count AND the number of
+  shipped phases missing from the file. (Controller's note, same day: CS and
+  CM sections were added to ROADMAP.md at this gate's direction; a fourth
+  occurrence graduates this to CLAUDE.md's recurring-failures list.)

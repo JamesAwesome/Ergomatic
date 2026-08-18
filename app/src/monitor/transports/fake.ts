@@ -50,6 +50,17 @@
 //     fake-driven `program()` now exercises `driver.ts`'s structural
 //     readback (`verifyArmed`) end to end instead of only through
 //     `loadedIntervals()`'s introspection.
+//   - 2026-08-18 connected-metrics spec Task 1: it stops zero-filling
+//     `splitAvgPace` (0x0033) and `restDistanceMeters` (0x0032), and its
+//     `totalWorkDistanceMeters` (0x0031) stops tracking the CURRENTLY
+//     armed interval's own live distance — 2,363 committed frames from
+//     `walk-2026-08-16/session-2-wu-4unequal.jsonl` contradict that model.
+//     All three are now session-shaped: `splitAvgPace` recomputes while
+//     rowing and HOLDS through a rest (`updateSplitAvgPace`);
+//     `restDistanceMeters` is script-authored and forced to `0` off a rest
+//     (`FakeStatusEvent.restDistanceMeters`); TWD is a banked session
+//     total, frozen during work, stepping at boundaries and during rests
+//     (`bankedDistanceMeters`, `totalWorkDistanceFor`).
 //
 
 // Three ack shapes here are SYNTHETIC and say so at their definitions,
@@ -186,6 +197,20 @@ export interface FakeStatusEvent {
    *  otherwise. A timeline modelling the coast (meters accruing on a
    *  piece the PM5 does not consider started) sets 0 explicitly. */
   rowingState?: number;
+  /** 0x0032 byte 11-12, whole metres (design doc's field table,
+   *  2026-08-18 connected-metrics spec) — the machine's own Rest Distance,
+   *  script-authored the same way `FakeBoundaryEvent.actual.restDistanceMeters`
+   *  already is (R-B's own pattern: a rest distance this file computed by
+   *  formula, rather than the script's own coasting reading, would be
+   *  exactly the invented mechanism that pattern already refuses to be).
+   *  FORCED to `0` whenever this tick's own `workoutState` does not map to
+   *  `"resting"`, regardless of what a script sets here — "resets at each
+   *  work start" is a MACHINE invariant (the same measured behaviour that
+   *  makes `splitAvgPace`, below, hold through a rest and reset at the next
+   *  work start), not a scripting convenience, so a script cannot describe
+   *  an impossible mid-work non-zero reading here any more than
+   *  `boundaryBundle`'s own guard lets one describe an impossible boundary. */
+  restDistanceMeters?: number;
 }
 
 /** One interval-boundary event: the completed interval's actuals, matching
@@ -589,44 +614,61 @@ function toHex(bytes: Uint8Array): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join(" ");
 }
 
-/** CR2 spec 1, Task 8 — Step 3. `totalWorkDistanceMeters` (0x0031 byte 11,
- *  `parse.ts`) is NOT the live distance mirrored back: `state-architecture-
- *  review.md`'s own decode of all 16 distinct `structure` entries in
- *  `pm5-session4b-final.log.gz` (the design doc's TWD table) gives two
- *  DIFFERENT rules keyed on the armed interval's goal type, verbatim:
+/** CR2 spec 1, Task 8, CORRECTED by the 2026-08-18 connected-metrics spec's
+ *  own research pass. `totalWorkDistanceMeters` (0x0031 byte 11, `parse.ts`)
+ *  is a SESSION counter, not the live distance of whatever is currently
+ *  armed: `state-architecture-review.md`'s TWD table (this function's own
+ *  prior doc comment) proved the time-goal case wrong — `Math.trunc(this
+ *  interval's own live distance)`, which 2,363 committed frames from
+ *  `walk-2026-08-16/session-2-wu-4unequal.jsonl` contradict (design doc's
+ *  own "What the first draft got wrong" section: understatement up to 449 m
+ *  mid-interval). That capture's own field table gives the corrected rule:
+ *  TWD **includes rest metres**, is **frozen during work**, and steps at
+ *  boundaries and during rests — final value on that session is exactly
+ *  1599 = 1535 work + 64 rest.
  *
- *    Goal type   durationType   Samples                    TWD reads
- *    Time        0              20.9/23.9/25.8 m rowed     20/23/25 — rowed, truncated
- *    Distance    128            13.4 and 31.5 m rowed,     500/500/500/500 — the GOAL
- *                                goal 500
+ *  `bankedDistanceMeters` is the caller's own running total for everything
+ *  ALREADY LOCKED IN — every completed work interval's own metres (added at
+ *  its boundary) plus every completed rest's own final metres (folded in
+ *  the instant the next work interval starts) — PLUS, while resting, this
+ *  tick's own in-progress rest metres (`FakeStatusEvent.restDistanceMeters`)
+ *  layered on top by the caller before this function ever sees it
+ *  (`deliverStatus`'s own `bankedDistanceMeters + restNow`). That single
+ *  number is what makes TWD read as FROZEN throughout a work bout (nothing
+ *  changes it there) and as TICKING throughout a rest (the caller's own
+ *  `restNow` term climbs tick by tick) with no branch needed here for
+ *  either half.
  *
- *  and one of the distance-goal samples is a LIVE mid-row reading
- *  (workoutState 5/`rowing`, elapsed 76.54s, distance 31.5m, TWD still
- *  500) — not an arming artefact, so the suppression is not "TWD reads 0
- *  until something rowed", it reads the goal from the very first status
- *  tick after arming and never tracks metres at all on a distance piece.
- *  `distanceGoalMeters` is that goal, `null` for a time-goal interval (the
- *  caller derives it from `interval.value`, `ProgramInterval.kind ===
- *  "distance"`'s own field, `domain/monitor/program.ts` — the same armed
- *  interval `statusBundle` already looks up for `isDistance`, so this
- *  function stays pure and does not re-index `program.intervals` itself).
- *  `Math.trunc`, not `Math.round`, for the time-goal case: the table's own
- *  three samples are the FLOOR of the metres rowed (20.9 -> 20, not 21),
- *  never the nearest whole metre.
+ *  `distanceGoalMeters` is the CR2 finding this function's prior version
+ *  already had right and this correction does not disturb: a distance-goal
+ *  interval reports its own GOAL, not metres rowed, confirmed even
+ *  LIVE mid-row (workoutState 5/`rowing`, elapsed 76.54s, distance 31.5m,
+ *  TWD still 500 on a 500m goal) — the machine already knows a distance
+ *  interval's own contribution the instant it arms, unlike a time interval's
+ *  (which is unknowable until the interval actually completes), so this
+ *  reads as `bankedDistanceMeters + distanceGoalMeters` rather than waiting
+ *  for a boundary the same way a time interval's own contribution does:
+ *  the two rules are one and the same "add a work interval's own metres
+ *  the moment they become KNOWN" principle, just at different moments,
+ *  never a special case bolted on top of the session counter.
+ *  `null` for a time-goal interval (the caller derives it from
+ *  `interval.value`, `ProgramInterval.kind === "distance"`'s own field,
+ *  `domain/monitor/program.ts` — the same armed interval `statusBundle`
+ *  already looks up for `isDistance`, so this function stays pure and does
+ *  not re-index `program.intervals` itself).
  *
- *  Genuinely open (design doc's own "Still open" section): whether a
- *  MULTI-interval distance-goal program reports the per-interval goal or
- *  the programmed total — only single-interval 500 m pieces are in the
- *  record. This reads the CURRENTLY ARMED interval's own goal, the
- *  narrower and better-evidenced of the two readings and the one every
- *  captured sample is consistent with. */
+ *  Genuinely open (design doc's own "Still open" section, inherited
+ *  unchanged): whether a MULTI-interval distance-goal program reports the
+ *  per-interval goal or the programmed total — only single-interval 500 m
+ *  pieces are in either record. This reads the CURRENTLY ARMED interval's
+ *  own goal, the narrower and better-evidenced of the two readings. */
 function totalWorkDistanceFor(
   distanceGoalMeters: number | null,
-  distanceMeters: number,
+  bankedDistanceMeters: number,
 ): number {
   return distanceGoalMeters !== null
-    ? distanceGoalMeters
-    : Math.trunc(distanceMeters);
+    ? bankedDistanceMeters + distanceGoalMeters
+    : bankedDistanceMeters;
 }
 
 /** Builds the merged General/AdditionalStatus1/AdditionalStatus2 triple for
@@ -647,12 +689,25 @@ function totalWorkDistanceFor(
  *  `computeAccruedForFrame` read the per-interval 0x0031 pair directly —
  *  so this field is now sent purely to keep the wire model honest for
  *  whatever else reads 0x0033, not because a consumer still re-derives
- *  progress from it. */
+ *  progress from it.
+ *
+ *  `sessionMetrics` (2026-08-18 connected-metrics spec Task 1) carries the
+ *  three numbers this task adds/corrects, all computed by the CALLER
+ *  (`deliverStatus`/`deliverArmedBundle`) from state this pure function has
+ *  no access to (a held average, a session-wide banked total) — see
+ *  `updateSplitAvgPace`/`updateRestTracking`'s own doc comments for how
+ *  each is tracked, and `totalWorkDistanceFor`'s for how the third is
+ *  turned into the actual wire value. */
 function statusBundle(
   program: WorkoutProgram,
   e: FakeStatusEvent,
   lastSplit: { elapsedSeconds: number; distanceMeters: number },
   structure: WireArmedStructure,
+  sessionMetrics: {
+    splitAvgPace: number;
+    restDistanceMeters: number;
+    bankedDistanceMeters: number;
+  },
 ): { general: GeneralStatus; as1: AdditionalStatus1; as2: AdditionalStatus2 } {
   const interval = program.intervals[e.programIntervalIndex];
   const isDistance = interval?.kind === "distance";
@@ -669,7 +724,7 @@ function statusBundle(
       ),
       averagePowerWatts: 0,
       totalCalories: 0,
-      splitAvgPace: 0,
+      splitAvgPace: sessionMetrics.splitAvgPace,
       splitAvgPowerWatts: 0,
       splitAvgCalories: 0,
       lastSplitTimeSeconds: lastSplit.elapsedSeconds,
@@ -687,7 +742,7 @@ function statusBundle(
       heartRateBpm: e.heartRateBpm ?? HEARTRATE_NO_BELT,
       currentSplit: e.currentSplit,
       averageSplit: e.currentSplit,
-      restDistanceMeters: 0,
+      restDistanceMeters: sessionMetrics.restDistanceMeters,
       restSeconds: 0,
       ergMachineType: 1,
     },
@@ -701,7 +756,7 @@ function statusBundle(
       strokeState: 0,
       totalWorkDistanceMeters: totalWorkDistanceFor(
         isDistance ? interval!.value : null,
-        e.distanceMeters,
+        sessionMetrics.bankedDistanceMeters,
       ),
       // 0x0031's STRUCTURE fields — `workoutType` plus the interval-0
       // duration pair (fix-3 Task 5). The CALLER decides which structure
@@ -830,11 +885,20 @@ function boundaryBundle(
  *  `structure` is the caller's decision (`structureForTick()`), same as
  *  `statusBundle`'s own parameter — this is the bundle SESSION 4a's
  *  `lagStructureOneTick` scenario most often targets, since it is the very
- *  first status delivered after an accept. */
+ *  first status delivered after an accept.
+ *
+ *  `bankedDistanceMeters` (2026-08-18 connected-metrics spec Task 1) is the
+ *  caller's own session-total-so-far (`0` for a fresh program — Task 6's
+ *  reset makes that the honest value for anything newly armed). `AVG` is
+ *  always `0` here, never carried over like `ghost`'s two fields are: the
+ *  design doc's own field table gives `splitAvgPace` no carry-over rule of
+ *  its own — it "resets at work-interval start", and WAITTOBEGIN is
+ *  before any work interval has started. */
 function armedBundle(
   program: WorkoutProgram,
   structure: WireArmedStructure,
   ghost: { spm: number; currentSplit: number } = { spm: 0, currentSplit: 0 },
+  bankedDistanceMeters = 0,
 ): {
   general: GeneralStatus;
   as1: AdditionalStatus1;
@@ -855,6 +919,7 @@ function armedBundle(
     },
     { elapsedSeconds: 0, distanceMeters: 0 },
     structure,
+    { splitAvgPace: 0, restDistanceMeters: 0, bankedDistanceMeters },
   );
 }
 
@@ -1125,6 +1190,37 @@ export function createFakeTransport(
   // `computeAccruedForFrame` (`driver.ts`) no longer read it at all — the
   // per-interval 0x0031 pair alone is progress, checkpoint or not.
   let wireLastSplit = { elapsedSeconds: 0, distanceMeters: 0 };
+  // 2026-08-18 connected-metrics spec Task 1 — 0x0033's own Average Pace
+  // for the CURRENT/most-recently-rowed interval (`splitAvgPace`, design
+  // doc's field table). `updateSplitAvgPace` is the only writer: it
+  // recomputes this fresh from a tick's own elapsed/distance whenever the
+  // machine is genuinely ROWING (which is what makes it read 0 at workout
+  // start and at each interval's own first frame — the per-interval 0x0031
+  // pair itself resets there) and leaves it untouched otherwise, which is
+  // what makes it HOLD, unchanged, through an entire rest — measured across
+  // five committed rests, this field agrees with the boundary record to
+  // within 0.2 s for the whole window. Reset to `0` on every fresh accept
+  // (`onProgrammingFrameComplete`), same reason `wireLastSplit` is: a held
+  // average means nothing across a workout boundary.
+  let heldSplitAvgPace = 0;
+  // TWD's own SESSION total (`totalWorkDistanceFor`'s own doc comment) for
+  // everything ALREADY LOCKED IN: every completed work interval's own
+  // metres, added the instant its boundary arrives (`deliverOrCache`'s
+  // boundary branch), plus every completed rest's own final metres, folded
+  // in the instant the NEXT work interval starts (`deliverOrCache`'s status
+  // branch, the resting->rowing transition). Deliberately excludes the
+  // CURRENTLY in-progress rest's own metres — `deliverStatus` layers those
+  // on top itself (`bankedDistanceMeters + restNow`) so this number alone
+  // is what stays frozen for the whole of a work bout. Reset to `0` on
+  // every fresh accept, same reason `wireLastSplit` is.
+  let bankedDistanceMeters = 0;
+  // The MOST RECENT resting tick's own `restDistanceMeters` reading
+  // (`updateRestTracking`'s only writer) — tracked so the rest->work
+  // transition above knows exactly how much to fold into
+  // `bankedDistanceMeters` without re-deriving it from a stale event.
+  // Cleared the instant it is folded in; reset to `0` on every fresh accept
+  // too, for the same "means nothing across a workout boundary" reason.
+  let lastRestDistanceMeters = 0;
   // The machine's CURRENT state word, in `MonitorFrame` terms — updated
   // from every status event this fake processes (delivered or merely
   // cached; the PM keeps rowing whether or not the phone is listening).
@@ -1149,12 +1245,52 @@ export function createFakeTransport(
     machineState = toMonitorState(e.workoutState);
   }
 
+  /** `heldSplitAvgPace`'s only writer (its own doc comment has the full
+   *  reasoning) — recompute-while-rowing, hold otherwise. `derivedAvgSplit`
+   *  is the SAME `500 * t / d` formula 0x0037's own Average Pace uses
+   *  (that function's own doc comment): a real PM5 has no other source for
+   *  either field — both are the interval's own average, computed by the
+   *  machine from elapsed/distance it already has. */
+  function updateSplitAvgPace(e: FakeStatusEvent): number {
+    if (toMonitorState(e.workoutState) === "rowing") {
+      heldSplitAvgPace = derivedAvgSplit(e.elapsedSeconds, e.distanceMeters);
+    }
+    return heldSplitAvgPace;
+  }
+
+  /** `lastRestDistanceMeters`'s only writer, and the single place
+   *  `FakeStatusEvent.restDistanceMeters`'s "forced to 0 off a rest" rule
+   *  (that field's own doc comment) is enforced — a non-resting tick gets
+   *  `0` on the wire no matter what the script set. Returns exactly what
+   *  `statusBundle` should put on 0x0032 THIS tick, which `deliverStatus`
+   *  also layers on top of `bankedDistanceMeters` for TWD's own "ticks
+   *  during rests" half. */
+  function updateRestTracking(e: FakeStatusEvent): number {
+    if (toMonitorState(e.workoutState) === "resting") {
+      lastRestDistanceMeters = e.restDistanceMeters ?? 0;
+      return lastRestDistanceMeters;
+    }
+    return 0;
+  }
+
   function deliverStatus(e: FakeStatusEvent): void {
+    const splitAvgPace = updateSplitAvgPace(e);
+    const restNow = updateRestTracking(e);
     const { general, as1, as2 } = statusBundle(
       script.program,
       e,
       wireLastSplit,
       structureForTick(),
+      {
+        splitAvgPace,
+        restDistanceMeters: restNow,
+        // TWD "ticks during rests" (design doc's field table): the locked
+        // total plus THIS tick's own in-progress rest metres, layered on
+        // here rather than inside `bankedDistanceMeters` itself so that
+        // variable alone can stay the "frozen during work" value
+        // (`bankedDistanceMeters`'s own doc comment).
+        bankedDistanceMeters: bankedDistanceMeters + restNow,
+      },
     );
     notify(ADDITIONAL_STATUS_2_UUID, buildAdditionalStatus2Bytes(as2));
     notify(ADDITIONAL_STATUS_1_UUID, buildAdditionalStatus1Bytes(as1));
@@ -1208,6 +1344,7 @@ export function createFakeTransport(
       script.program,
       structureForTick(),
       armedGhost,
+      bankedDistanceMeters,
     );
     notify(ADDITIONAL_STATUS_2_UUID, buildAdditionalStatus2Bytes(as2));
     notify(ADDITIONAL_STATUS_1_UUID, buildAdditionalStatus1Bytes(as1));
@@ -1724,6 +1861,13 @@ export function createFakeTransport(
       lastBoundaryCumulative = { elapsedSeconds: 0, distanceMeters: 0 };
       wireLastSplit = { elapsedSeconds: 0, distanceMeters: 0 };
       latestBoundary = null;
+      // 2026-08-18 connected-metrics spec Task 1: the same "means nothing
+      // across a workout boundary" reasoning applies to the held average
+      // and the banked session total this task adds — see their own
+      // declaration comments.
+      heldSplitAvgPace = 0;
+      bankedDistanceMeters = 0;
+      lastRestDistanceMeters = 0;
       // Fix-round 1, F1: withheld until a subsequent `tick()` (or
       // `deliverArmedNow()`) — see `tick()`'s own doc comment for why
       // this is no longer synchronous with the ack itself. Fix wave
@@ -1785,6 +1929,21 @@ export function createFakeTransport(
       // whatever this event says supersedes it, including a WAITTOBEGIN
       // event, which a script is free to keep driving itself.
       clearArmedLevel();
+      // 2026-08-18 connected-metrics spec Task 1 — TWD's own "frozen
+      // during work" half: the instant the machine reports it is rowing
+      // again after a rest, that rest's own final metres (tracked live by
+      // `updateRestTracking`) are LOCKED IN to `bankedDistanceMeters`,
+      // using `machineState` from BEFORE `setLatestStatus` below
+      // overwrites it — this is the one place in the file that reads the
+      // OLD state deliberately, to detect the transition itself rather
+      // than either side of it alone.
+      if (
+        machineState === "resting" &&
+        toMonitorState(event.workoutState) === "rowing"
+      ) {
+        bankedDistanceMeters += lastRestDistanceMeters;
+        lastRestDistanceMeters = 0;
+      }
       setLatestStatus(event);
       if (!linkDown) deliverStatus(event);
     } else {
@@ -1820,6 +1979,15 @@ export function createFakeTransport(
         elapsedSeconds: event.cumulativeElapsedSeconds,
         distanceMeters: event.cumulativeDistanceMeters,
       };
+      // TWD's own "steps at boundaries" half (2026-08-18 connected-metrics
+      // spec Task 1): the interval that just completed contributes its own
+      // WORK metres to the session total the instant its boundary arrives
+      // — a time-goal interval's only possible moment to contribute, since
+      // nothing on the wire knows its final distance before this (
+      // `totalWorkDistanceFor`'s own doc comment). Unconditional and
+      // un-gated on `linkDown`, matching every other line in this block:
+      // the machine's own bookkeeping does not pause for the phone's radio.
+      bankedDistanceMeters += event.actual.distanceMeters;
       if (!linkDown) deliverBoundary(event);
     }
   }
