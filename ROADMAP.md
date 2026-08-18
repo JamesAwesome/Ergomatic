@@ -2409,6 +2409,16 @@ Ad hoc fix rounds outside the phase sequence — small bundles of device
 reports and quick fixes shipped as their own PR rather than waiting on the
 next phase. One line per round, newest first.
 
+- **QUEUED (James, 2026-08-18, from the erg): discard missing on an
+  early-ended workout's summary.** He ended a workout early and the
+  post-workout summary offered no "Discard without logging" — only save
+  paths. Scope, his ruling: **audit every surface where SAVE is an option
+  and ensure DISCARD is present beside it** (the spec-1 §2F save stacks
+  per door, the interrupted-session row's doors, and any early-END path),
+  not just the one repro. The house two-tap staged discard
+  (`useStagedDiscard`) is the pattern. Runs as its own bugfix round AFTER
+  Phase PW spec 2 merges; the repro screenshot is in the session record.
+
 - **PR #TBD** (2026-08-09, "crosslink" round, full cycle) — the ui-notes
   round below fixed the reader's own NEXT link but missed the two IN-PROSE
   cross-links inside article bodies (`workoutTypes.tsx`'s "Picking a
