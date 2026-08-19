@@ -1613,3 +1613,22 @@ toolkit, not a history.
   RULED at the gate (James: same band everywhere): the connected rest verdict's
   ±0.5s dead band now binds the summary too — the two surfaces' wire fields
   agree to ≤0.12s across every rest-bearing capture.
+
+## Vetted-ground amendment, 2026-08-18 (Phase LT Task 1 review broke anchor claim B3's soundness)
+
+- **The anchor's "row-local discriminant" (`actualSource === "pm5" &&
+  actualSpm === undefined` → pre-split measured value) was UNSOUND for new
+  rows.** A matched actual whose measurement is DROPPED (avgSpm null/0/out
+  of band) plus the unconditional authored-target copy produces a shape
+  byte-identical to a pre-split row — so the renderer would print the
+  rower's target as his measured rate. Found at TRIAD task review by asking
+  what every WRITE path can produce, not what the discriminant reads; the
+  exhibit was already in the suite (a walk-derived synthesized actual with
+  `avgSpm: null`). **Amendment (spec §2): the monitor builder writes the
+  authored `spm` only alongside `actualSpm` — a dropped measurement writes
+  neither — so the ambiguous shape is unreachable by new code and the
+  discriminant is sound BY CONSTRUCTION. Technique: a discriminant over
+  stored shapes is only as sound as the writers' reachable-shape set;
+  enumerate what new code can WRITE before trusting what old rows imply.
+  When a discriminant is ambiguous, prefer shrinking the writer's shape set
+  over widening the reader's heuristics.**
