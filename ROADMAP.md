@@ -2435,10 +2435,11 @@ rest-inclusive, proven unusable live); the interval's average
 (≤0.2 s vs the boundary record); the emitted interval referent lagged
 450-540 ms at boundaries and is now monotone (both driver clamps
 mirrored).
-- [ ] The walk (spec criterion 2): pyramid program with DISTINCT targets,
-      phone + monitor photographed mid-work AND mid-rest, the summary
-      screen photographed after (three totals, one record), the
-      final-interval-verdict question, the shallow drag.
+- [x] The walk (spec criterion 2), DONE 2026-08-18: pyramid program with
+      DISTINCT targets, phone + monitor photographed mid-work AND
+      mid-rest, the summary screen photographed after (three totals, one
+      record), the final-interval-verdict question, the shallow drag.
+      Record: `docs/monitor/sessions/walk-2026-08-18-metrics/`.
 - [ ] Follow-up (PM final gate): cross-pin `sessionDistanceMeters`
       against `monitorDistanceMeters` (the summary's Σ over
       IntervalActual) over the same capture — two derivations of one

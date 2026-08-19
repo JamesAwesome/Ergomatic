@@ -331,6 +331,15 @@ often they recur.
     ROADMAP or a ledger at the gate, or was lost. **A PR body is a
     presentation; anything with a life after merge goes in ROADMAP, a
     ledger, DEVIATIONS, or a RUNSHEET at the moment it is found.**
+15. **Writing release notes from your own branch instead of the tag's
+    range.** v0.13.0 was one command from being cut with notes covering
+    only the phase this session ran; session deletion had merged from a
+    parallel session in between, and testers would have found a delete
+    button no note mentioned. It was caught by reading the commit log by
+    hand, which is luck, not a gate. **Before cutting a tag, list every
+    merge since the previous one (`git log <prev-tag>..main --oneline
+    --merges`) and account for each: a note, or a stated reason it needs
+    none.** Parallel sessions make this the normal case, not the rare one.
 
 
 ## Commands
