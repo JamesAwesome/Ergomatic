@@ -1794,14 +1794,20 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     expect(steps[0]?.actualSource).toBe("pm5");
     expect(steps[0]?.actualSeconds).toBe(62.5);
     expect(steps[0]?.actualMeters).toBe(214);
-    // The averages are ABSENT from the log step, not zero and not the
-    // workout's: `buildMonitorLogSteps` drops a null average field
+    // The MEASURED averages are ABSENT from the log step, not zero and not
+    // the workout's: `buildMonitorLogSteps` drops a null average field
     // entirely, which is exactly what an omitted-average actual is supposed
     // to produce downstream (design spec §5's B3 — the fake sends real
     // non-zero averages on 0x0039, so this proves a drop, not an echo).
     expect(steps[0]).not.toHaveProperty("actualSplit");
-    expect(steps[0]).not.toHaveProperty("spm");
+    expect(steps[0]).not.toHaveProperty("actualSpm");
     expect(steps[0]).not.toHaveProperty("avgHr");
+    // Phase LT spec 1, §2: the AUTHORED target still renders (`spm`, from
+    // `ProgramInterval.displaySpm`, copied unconditionally regardless of
+    // whether an actual ever matched this interval) — ONE_INTERVAL's own
+    // `displaySpm: 22`, unrelated to the dropped/null measured average
+    // above.
+    expect(steps[0]?.spm).toBe(22);
 
     // ONE READ OF THE STASH ANSWERS "WHICH SOURCE FED THE RECORD".
     const entries = JSON.parse(result.current.exportLog()) as {

@@ -224,6 +224,22 @@ const PM5_MAX_SPLIT_SECONDS = 6000;
 const PM5_SPM_MIN = 0;
 const PM5_SPM_MAX = 99;
 
+// Phase LT spec 1 (2026-08-18), §2: `spm` above is now the AUTHORED target
+// on every door — its own bounds (0..99 pm5, 10..60 manual) are UNCHANGED,
+// so a v0.12.0-era client posting the pre-split shape (a monitor step's
+// `spm` holding the OLD measured value) still validates and 201s
+// byte-identically (additive-only between tags). `actualSpm` is new: the
+// monitor door's MEASURED average, own field-named bound. Min 1, not 0
+// ("POST already bounds pm5 spm 0..99; the new actualSpm key gets the same
+// bounds with min 1" — the u8 wire field's own floor,
+// `src/session/logDraft.ts`'s `MONITOR_SPM_MIN` doc comment carries the
+// full justification: sub-1 unrepresentable, so an exact 0 can only mean
+// "no strokes"). Max reuses `PM5_SPM_MAX` — the same upper bound `spm`
+// already enforces for a pm5-sourced reading, since both fields describe
+// the SAME wire quantity (`IntervalActual.avgSpm`), just two different
+// moments of it.
+const ACTUAL_SPM_MIN = 1;
+
 // Heart rate bound (2026-08-08, Phase 7C Task 3, spec §6): mirrors the
 // client's own `MONITOR_HR_MIN`/`MONITOR_HR_MAX` (`src/session/
 // logDraft.ts`) — the standard ANT+/BLE heart-rate profile's field range.
@@ -271,6 +287,7 @@ function validateLogStepEntry(
     avgHr,
     actualSeconds,
     actualMeters,
+    actualSpm,
   } = raw;
 
   if (typeof label !== "string" || label.length < 1 || label.length > 80) {
@@ -394,6 +411,20 @@ function validateLogStepEntry(
       message: at("actualMeters must be a number, >= 0"),
     };
   }
+  if (
+    actualSpm !== undefined &&
+    (typeof actualSpm !== "number" ||
+      !Number.isInteger(actualSpm) ||
+      actualSpm < ACTUAL_SPM_MIN ||
+      actualSpm > PM5_SPM_MAX)
+  ) {
+    return {
+      ok: false,
+      message: at(
+        `actualSpm must be an integer, ${ACTUAL_SPM_MIN}..${PM5_SPM_MAX}`,
+      ),
+    };
+  }
 
   // Built from an explicit field list (never spread/cast the raw input) so
   // any extra keys the client sent are silently dropped, not persisted.
@@ -406,6 +437,7 @@ function validateLogStepEntry(
   if (actualSeconds !== undefined) step.actualSeconds = actualSeconds;
   if (actualMeters !== undefined) step.actualMeters = actualMeters;
   if (spm !== undefined) step.spm = spm;
+  if (actualSpm !== undefined) step.actualSpm = actualSpm;
   if (meters !== undefined) step.meters = meters;
   if (seconds !== undefined) step.seconds = seconds;
   return { ok: true, step };
