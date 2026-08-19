@@ -2487,17 +2487,52 @@ Ad hoc fix rounds outside the phase sequence — small bundles of device
 reports and quick fixes shipped as their own PR rather than waiting on the
 next phase. One line per round, newest first.
 
-- **QUEUED (PM final-PR gate, 2026-08-18, PR #121): a logged session can
-  be browsed forever but never corrected or removed.** Spec 2 made every
-  log reachable and stored three client-supplied hero numbers the server
-  bounds-checks but cannot truth-check; the measured record is immutable
-  by design and `data.ts` has no DELETE route. A Sun-fret-class wrong
-  number is now permanent and visible. The next spec that touches stored
-  numbers answers "how does a rower correct or remove this?" first.
+- **ANSWERED (PM final-PR gate, 2026-08-18, PR #121 → `docs/superpowers/
+  specs/2026-08-18-log-delete-design.md`): a logged session can be
+  deleted, remove-only, from its own from-the-log view.** Spec 2 made
+  every log reachable and stored three client-supplied hero numbers the
+  server bounds-checks but cannot truth-check; the measured record was
+  immutable by design and `data.ts` had no DELETE route, so a Sun-fret-
+  class wrong number was permanent. `DELETE /api/logs/:id` now removes
+  the row; deleting your LATEST plan session un-ticks its checkmark
+  (terminal-only, §2's three-condition rule — a middle delete keeps the
+  tick, the plan counts sessions done and old history never renumbers
+  it). **NOT fully closed — the spec's own §4 accepted gap:** a session
+  with a WRONG NUMBER or logged against the wrong workout has exactly
+  one remedy — delete it and re-log by hand — and `logged_at` is a DB
+  default, not settable, so a mistake found the next day can't be
+  re-dated onto its own day, and re-logging a non-terminal plan session
+  appends at the top rather than refilling its old slot. Accepted as the
+  cost of remove-only (re-association and number-editing were both
+  DECLINED, James's ruling); the next spec that touches log lifecycle
+  starts from this gap, not from rediscovering it. **The next release's
+  notes carry the gap in plain words** (PM gate C1, 2026-08-18: spec +
+  ROADMAP + notes is the full disclosure chain for an accepted limit).
 - **QUEUED (final-review fix round observation, 2026-08-18): `today.png`'s
   regen diff showed an onboarding read-marker difference** unrelated to
   the branch that surfaced it — reverted there, unexplained. Owner: the
   next Today-capture pass; explain or fix before committing that capture.
+- **QUEUED (James's ruling, 2026-08-18, the tule-fog photos): the
+  INTERVALS section judges each interval against ITS OWN TARGET.** He beat
+  every target in a three-interval session (2:14.9/2:13.4/2:11.5 vs
+  2:17/2:16/2:15) and the screen painted two rows RED (+2.0/+0.5 vs the
+  session average) with no target visible anywhere (multi-target sessions
+  render no hint by the single-target rule) — the first real tester
+  misread the baseline on his first real workout. His words: "that
+  section needs to be about performance against target per int." Scope:
+  per-row deviation/bars re-baseline from session-working-average to the
+  row's own target (supersedes spec 1's R-C/R-E ROW semantics; the AVG
+  SPLIT hero keeps the session average, neutral ink); the target renders
+  INLINE per row (reverses #117's column removal, device evidence);
+  no-target rows abstain (absence idiom); CAPTURE measured SPM per
+  interval (wire delivers it, nothing stores it) and fold the parked
+  `MONITOR_SPM_MIN = 0` floor item in the same round. Stored
+  `LogStep.targetSplit` already exists, so history re-judges without new
+  split storage; from-the-log's §5C updates in the same round. **TRIAD
+  WEIGHT** (number meaning + stored shape): full antagonist on the spec,
+  PM final-PR gate, despite the bugfix framing. Photos:
+  `~/Desktop/tule-fog` at ruling time; the reconciled arithmetic is in
+  the session record.
 - **QUEUED (James, 2026-08-18, from the erg): discard missing on an
   early-ended workout's summary.** He ended a workout early and the
   post-workout summary offered no "Discard without logging" — only save

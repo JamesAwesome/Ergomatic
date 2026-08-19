@@ -268,6 +268,20 @@ function makeFakeWorkoutsStore(): WorkoutsStore & {
 
 type FakePlanStateStore = PlanStateStore & {
   _advance: (userId: string, by?: number) => PlanStateRow;
+  // Log-delete spec (2026-08-18), §2: mirrors the real store's
+  // conditional `UPDATE plan_state SET done_n = GREATEST(done_n - 1, 0)
+  // WHERE user_id = $1 AND plan_key = $planKey AND done_n = $expectedDoneN`
+  // (stores/logs.ts's `delete()`) — conditions 1+2 (current plan key,
+  // terminal index) live entirely in THIS check, exactly like the real
+  // UPDATE's own WHERE, so `logs.delete()` below can derive `unCounted`
+  // from this call's return value the same way the real store derives it
+  // from the UPDATE's row count, rather than re-deriving the conditions
+  // itself. Returns false (a no-op) on any mismatch, never throws.
+  _decrementIfCurrent: (
+    userId: string,
+    planKey: PlanKey,
+    expectedDoneN: number,
+  ) => boolean;
 };
 
 // set/reset are plain (not vi.fn-wrapped) here: consumers that need to
@@ -302,6 +316,25 @@ function makeFakePlanStateStore(): FakePlanStateStore {
       rows.set(userId, next);
       return next;
     },
+    _decrementIfCurrent(
+      userId: string,
+      planKey: PlanKey,
+      expectedDoneN: number,
+    ): boolean {
+      const current = rows.get(userId);
+      if (
+        !current ||
+        current.planKey !== planKey ||
+        current.doneN !== expectedDoneN
+      ) {
+        return false;
+      }
+      rows.set(userId, {
+        ...current,
+        doneN: Math.max(current.doneN - 1, 0),
+      });
+      return true;
+    },
   } as unknown as FakePlanStateStore;
 }
 
@@ -314,19 +347,53 @@ function makeFakePlanStateStore(): FakePlanStateStore {
 // Never exposed on a stored row; strictly a same-process ordering aid.
 let logsInsertionSeq = 0;
 
-function makeFakeLogsStore(planState: FakePlanStateStore): LogsStore {
-  const byUser = new Map<
-    string,
-    Array<
-      Omit<LogInput, "advancesPlan"> & {
-        id: string;
-        loggedAt: Date;
-        planKey: string | null;
-        planIndex: number | null;
-        seq: number;
-      }
-    >
+type FakeLogRow = Omit<LogInput, "advancesPlan"> & {
+  id: string;
+  loggedAt: Date;
+  planKey: string | null;
+  planIndex: number | null;
+  seq: number;
+};
+
+// Log-delete spec (2026-08-18), §2: the SAME newest-wins resolution
+// `listPlanLinks` and `delete` (both below) share — one function, not two
+// independently-hand-rolled copies of the tiebreak, mirroring the real
+// store's `resolveNewestPlanLink` (stores/logs.ts). `planIndex`, when
+// given, scopes to that one index (delete's own use — see that method).
+function resolveNewestFakeLink(
+  rows: FakeLogRow[],
+  planKey: string,
+  planIndex?: number,
+): { planIndex: number; id: string }[] {
+  const byIndex = new Map<
+    number,
+    { id: string; loggedAt: Date; seq: number }
   >();
+  for (const row of rows) {
+    if (row.planKey !== planKey || row.planIndex === null) continue;
+    if (planIndex !== undefined && row.planIndex !== planIndex) continue;
+    const existing = byIndex.get(row.planIndex);
+    if (
+      !existing ||
+      row.loggedAt.getTime() > existing.loggedAt.getTime() ||
+      (row.loggedAt.getTime() === existing.loggedAt.getTime() &&
+        row.seq > existing.seq)
+    ) {
+      byIndex.set(row.planIndex, {
+        id: row.id,
+        loggedAt: row.loggedAt,
+        seq: row.seq,
+      });
+    }
+  }
+  return [...byIndex.entries()].map(([idx, v]) => ({
+    planIndex: idx,
+    id: v.id,
+  }));
+}
+
+function makeFakeLogsStore(planState: FakePlanStateStore): LogsStore {
+  const byUser = new Map<string, FakeLogRow[]>();
   return {
     // From-the-log spec (2026-08-18), §3: mirrors the real store's list()
     // exactly — drops `steps` from the projection (zero client consumers;
@@ -391,29 +458,55 @@ function makeFakeLogsStore(planState: FakePlanStateStore): LogsStore {
     // resolve by `seq`, the fake's own insertion-order tiebreak.
     async listPlanLinks(userId: string, planKey: string) {
       const rows = byUser.get(userId) ?? [];
-      const byIndex = new Map<
-        number,
-        { id: string; loggedAt: Date; seq: number }
-      >();
-      for (const row of rows) {
-        if (row.planKey !== planKey || row.planIndex === null) continue;
-        const existing = byIndex.get(row.planIndex);
-        if (
-          !existing ||
-          row.loggedAt.getTime() > existing.loggedAt.getTime() ||
-          (row.loggedAt.getTime() === existing.loggedAt.getTime() &&
-            row.seq > existing.seq)
-        ) {
-          byIndex.set(row.planIndex, {
-            id: row.id,
-            loggedAt: row.loggedAt,
-            seq: row.seq,
-          });
-        }
+      return resolveNewestFakeLink(rows, planKey).sort(
+        (a, b) => a.planIndex - b.planIndex,
+      );
+    },
+
+    // Log-delete spec (2026-08-18), §2: mirrors the real store's
+    // delete() exactly (see that method's own comment in stores/logs.ts
+    // for the full rationale) — newest-wins (condition 3) is resolved
+    // via `resolveNewestFakeLink` BEFORE the row is spliced out (it
+    // stops being a candidate for its own index the moment it's gone),
+    // and conditions 1+2 (current plan key, terminal index) are never
+    // pre-checked here: they live entirely in `planState._decrementIfCurrent`,
+    // the fake's stand-in for the real UPDATE's own WHERE clause, so
+    // `unCounted` is exactly that call's return value.
+    async delete(userId: string, id: string) {
+      const rows = byUser.get(userId) ?? [];
+      const idx = rows.findIndex((r) => r.id === id);
+      if (idx === -1) {
+        return { deleted: false, unCounted: false };
       }
-      return [...byIndex.entries()]
-        .map(([planIndex, v]) => ({ planIndex, id: v.id }))
-        .sort((a, b) => a.planIndex - b.planIndex);
+      const target = rows[idx];
+
+      let isNewestWinsHolder = false;
+      if (target.planKey !== null && target.planIndex !== null) {
+        const [newest] = resolveNewestFakeLink(
+          rows,
+          target.planKey,
+          target.planIndex,
+        );
+        isNewestWinsHolder = newest?.id === id;
+      }
+
+      rows.splice(idx, 1);
+      byUser.set(userId, rows);
+
+      if (
+        target.planKey === null ||
+        target.planIndex === null ||
+        !isNewestWinsHolder
+      ) {
+        return { deleted: true, unCounted: false };
+      }
+
+      const unCounted = planState._decrementIfCurrent(
+        userId,
+        target.planKey as PlanKey,
+        target.planIndex + 1,
+      );
+      return { deleted: true, unCounted };
     },
     async count(userId: string) {
       return (byUser.get(userId) ?? []).length;

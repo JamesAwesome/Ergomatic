@@ -412,6 +412,49 @@ describe("two-user isolation, global-library sharing, and log-freezing across th
     expect(stillA.body.notes).toBe("first log");
   });
 
+  // Log-delete spec (2026-08-18), §2 — task review M1: the same owner-
+  // check idiom as the GET/PATCH test above, over DELETE. A fresh log is
+  // created here (rather than reusing `aLogId`) so this test never
+  // mutates state other tests in this file depend on. B's attempt 404s
+  // and never removes A's row (byte-comparison via GET); A's own DELETE
+  // then succeeds for real, over real Postgres and real auth.
+  it("DELETE /api/logs/:id 404s against A's log for B, and A's row survives B's attempt; A's own delete then succeeds", async () => {
+    const created = await asA()
+      .post("/api/logs")
+      .send({
+        workoutId: null,
+        workoutTitle: "Only A, delete target",
+        workoutType: "AT",
+        held: "held",
+        pain: 2,
+        notes: "delete me only via A",
+        steps: [{ label: "Work", targetSplit: 130 }],
+        // Not plan-linked: this test is about the owner-check idiom, not
+        // the un-count rule (exhaustively covered in storeContracts.ts) —
+        // keeping this row out of A's shared plan_state (from `aLogId`'s
+        // own beforeAll setup, doneN: 1) makes `unCounted: false` true by
+        // construction rather than by coincidental arithmetic.
+        advancesPlan: false,
+      });
+    expect(created.status).toBe(201);
+    const deleteTargetId = created.body.id;
+    const beforeFull = (await asA().get(`/api/logs/${deleteTargetId}`)).body;
+
+    const deleteByB = await asB().delete(`/api/logs/${deleteTargetId}`);
+    expect(deleteByB.status).toBe(404);
+
+    const stillThere = await asA().get(`/api/logs/${deleteTargetId}`);
+    expect(stillThere.status).toBe(200);
+    expect(stillThere.body).toStrictEqual(beforeFull);
+
+    const deleteByA = await asA().delete(`/api/logs/${deleteTargetId}`);
+    expect(deleteByA.status).toBe(200);
+    expect(deleteByA.body).toStrictEqual({ unCounted: false });
+
+    const goneForA = await asA().get(`/api/logs/${deleteTargetId}`);
+    expect(goneForA.status).toBe(404);
+  });
+
   it("neither A nor B can mutate a GLOBAL workout: 403 starter_readonly, not 404, not a silent no-op", async () => {
     const putA = await asA()
       .put(`/api/workouts/${globalWorkoutId}`)

@@ -949,6 +949,295 @@ export function describeStoreContracts(
           ).toStrictEqual([]);
         });
       });
+
+      // Log-delete spec (2026-08-18), §2: the un-count rule — the §5.2
+      // witness table. `delete()` returns `{deleted, unCounted}`; every
+      // case here also asserts `done_n >= 0` (the GREATEST-as-depth clamp
+      // must never be observed to matter, because the WHERE conditions
+      // make the floor unreachable by construction — see the dedicated
+      // floor test below).
+      describe("delete", () => {
+        it("returns deleted:false for an absent id, no plan_state touched", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          expect(
+            await stores.logs.delete(userId, NON_EXISTENT_UUID),
+          ).toStrictEqual({ deleted: false, unCounted: false });
+        });
+
+        it("returns deleted:false for another user's id, and never touches that row", async () => {
+          const stores = await makeStores();
+          const userA = await stores.makeUser();
+          const userB = await stores.makeUser();
+          const { id } = await stores.logs.create(userA, logInput());
+          expect(await stores.logs.delete(userB, id)).toStrictEqual({
+            deleted: false,
+            unCounted: false,
+          });
+          expect(await stores.logs.get(userA, id)).not.toBeNull();
+        });
+
+        it("a non-plan-linked log deletes with unCounted:false, no plan_state row touched", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          const { id } = await stores.logs.create(userId, logInput());
+          expect(await stores.logs.delete(userId, id)).toStrictEqual({
+            deleted: true,
+            unCounted: false,
+          });
+          expect(await stores.logs.get(userId, id)).toBeNull();
+        });
+
+        // Terminal newest link: the ONLY row at the terminal index — un-
+        // counts, the index vanishes from listPlanLinks (the checkmark's
+        // slot reopens: `?plan=` no longer lists it at done depth).
+        it("terminal newest link decrements doneN by one and the index drops out of listPlanLinks", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          await stores.planState.set(userId, "sprint");
+          const first = await stores.logs.create(userId, logInput());
+          const second = await stores.logs.create(userId, logInput());
+          expect(await stores.planState.get(userId)).toMatchObject({
+            doneN: 2,
+          });
+
+          const result = await stores.logs.delete(userId, second.id);
+          expect(result).toStrictEqual({ deleted: true, unCounted: true });
+
+          const planStateRow = await stores.planState.get(userId);
+          expect(planStateRow).toStrictEqual({ planKey: "sprint", doneN: 1 });
+          expect(planStateRow!.doneN).toBeGreaterThanOrEqual(0);
+
+          const links = await stores.logs.listPlanLinks(userId, "sprint");
+          expect(links).toStrictEqual([{ planIndex: 0, id: first.id }]);
+        });
+
+        // Wrong plan key: a Switch (planState.set to a different key)
+        // means the deleted log's OLD plan_key no longer matches CURRENT
+        // plan_state.planKey — the counter belongs to the new plan now,
+        // and old-plan logs must never touch it.
+        it("wrong plan key (Switch happened): unCounted false, counter untouched", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          await stores.planState.set(userId, "sprint");
+          const sprintLog = await stores.logs.create(userId, logInput());
+          expect(await stores.planState.get(userId)).toMatchObject({
+            planKey: "sprint",
+            doneN: 1,
+          });
+
+          await stores.planState.set(userId, "head");
+          expect(await stores.planState.get(userId)).toStrictEqual({
+            planKey: "head",
+            doneN: 0,
+          });
+
+          const result = await stores.logs.delete(userId, sprintLog.id);
+          expect(result).toStrictEqual({ deleted: true, unCounted: false });
+
+          const planStateRow = await stores.planState.get(userId);
+          expect(planStateRow).toStrictEqual({ planKey: "head", doneN: 0 });
+          expect(planStateRow!.doneN).toBeGreaterThanOrEqual(0);
+        });
+
+        // Task review H1: the case above doesn't isolate condition 1 —
+        // after the Switch, head's doneN is 0, so condition 2's term
+        // (`done_n = 0 + 1`) already declines before the key mismatch
+        // ever matters. This fixture makes condition 2 PASS (the sprint
+        // log's index 0 equals head's doneN-1) so ONLY the plan_key
+        // mismatch protects the counter: a sprint-linked log surviving
+        // into a HEAD advancing save (which makes head's doneN 1, the
+        // same terminal position the sprint log's own index sits at)
+        // must never un-count head's session just because the numbers
+        // line up.
+        it("wrong plan key with condition 2 otherwise satisfied: only the key mismatch protects the counter", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          await stores.planState.set(userId, "sprint");
+          const sprintLog = await stores.logs.create(userId, logInput());
+          expect(await stores.planState.get(userId)).toStrictEqual({
+            planKey: "sprint",
+            doneN: 1,
+          });
+
+          await stores.planState.set(userId, "head");
+          const headLog = await stores.logs.create(userId, logInput());
+          expect(await stores.planState.get(userId)).toStrictEqual({
+            planKey: "head",
+            doneN: 1,
+          });
+
+          // Condition 2 alone would now pass: sprintLog.planIndex (0)
+          // equals head's doneN - 1 (0). Only condition 1 (plan_key
+          // match) can still decline this delete.
+          const result = await stores.logs.delete(userId, sprintLog.id);
+          expect(result).toStrictEqual({ deleted: true, unCounted: false });
+
+          const planStateRow = await stores.planState.get(userId);
+          expect(planStateRow).toStrictEqual({ planKey: "head", doneN: 1 });
+          expect(planStateRow!.doneN).toBeGreaterThanOrEqual(0);
+
+          const headLinks = await stores.logs.listPlanLinks(userId, "head");
+          expect(headLinks).toStrictEqual([{ planIndex: 0, id: headLog.id }]);
+        });
+
+        // NON-TERMINAL index — the B1 orphan fixture (antagonist, spec
+        // §2 condition 2): two advancing saves, delete the FIRST (index
+        // 0, non-terminal since the terminal index is now 1). The tick
+        // must stay (deleting old history never renumbers the plan) and
+        // the still-terminal index-1 log must remain linked and
+        // reachable — un-counting the middle would strand it.
+        it("non-terminal index (B1 orphan): tick stays, counter unchanged, index-1 log still linked", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          await stores.planState.set(userId, "sprint");
+          const first = await stores.logs.create(userId, logInput());
+          const second = await stores.logs.create(userId, logInput());
+          expect(await stores.planState.get(userId)).toMatchObject({
+            doneN: 2,
+          });
+
+          const result = await stores.logs.delete(userId, first.id);
+          expect(result).toStrictEqual({ deleted: true, unCounted: false });
+
+          const planStateRow = await stores.planState.get(userId);
+          expect(planStateRow).toStrictEqual({ planKey: "sprint", doneN: 2 });
+          expect(planStateRow!.doneN).toBeGreaterThanOrEqual(0);
+
+          const links = await stores.logs.listPlanLinks(userId, "sprint");
+          expect(links).toStrictEqual([{ planIndex: 1, id: second.id }]);
+          expect(await stores.logs.get(userId, second.id)).not.toBeNull();
+        });
+
+        // Older same-index duplicate (a reset collision, spec §2
+        // condition 3): the OLDER row at an index is never the newest-
+        // wins holder — deleting it is a row-only delete, the newer
+        // holder and the counter are both untouched.
+        it("older same-index duplicate: row-only delete, counter and newer holder untouched", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          await stores.planState.set(userId, "sprint");
+          const older = await stores.logs.create(userId, logInput());
+          await stores.planState.reset(userId);
+          const newer = await stores.logs.create(userId, logInput());
+          expect(await stores.planState.get(userId)).toMatchObject({
+            planKey: "sprint",
+            doneN: 1,
+          });
+          expect(
+            await stores.logs.listPlanLinks(userId, "sprint"),
+          ).toStrictEqual([{ planIndex: 0, id: newer.id }]);
+
+          const result = await stores.logs.delete(userId, older.id);
+          expect(result).toStrictEqual({ deleted: true, unCounted: false });
+
+          const planStateRow = await stores.planState.get(userId);
+          expect(planStateRow).toStrictEqual({ planKey: "sprint", doneN: 1 });
+          expect(planStateRow!.doneN).toBeGreaterThanOrEqual(0);
+          expect(
+            await stores.logs.listPlanLinks(userId, "sprint"),
+          ).toStrictEqual([{ planIndex: 0, id: newer.id }]);
+        });
+
+        // Deleting the NEWEST holder of a NON-TERMINAL index (a reset
+        // collision where a later save has since moved the terminal
+        // index elsewhere): tick stays (condition 2 fails), and the
+        // `?plan=` link re-points to the older duplicate at that index —
+        // it does not just vanish, because a row still exists there.
+        it("newest holder of a non-terminal index: tick stays, link re-points to the older log", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          await stores.planState.set(userId, "sprint");
+          const older = await stores.logs.create(userId, logInput());
+          await stores.planState.reset(userId);
+          const newer = await stores.logs.create(userId, logInput());
+          const terminal = await stores.logs.create(userId, logInput());
+          expect(await stores.planState.get(userId)).toMatchObject({
+            doneN: 2,
+          });
+          expect(
+            await stores.logs.listPlanLinks(userId, "sprint"),
+          ).toStrictEqual([
+            { planIndex: 0, id: newer.id },
+            { planIndex: 1, id: terminal.id },
+          ]);
+
+          const result = await stores.logs.delete(userId, newer.id);
+          expect(result).toStrictEqual({ deleted: true, unCounted: false });
+
+          const planStateRow = await stores.planState.get(userId);
+          expect(planStateRow).toStrictEqual({ planKey: "sprint", doneN: 2 });
+          expect(planStateRow!.doneN).toBeGreaterThanOrEqual(0);
+          expect(
+            await stores.logs.listPlanLinks(userId, "sprint"),
+          ).toStrictEqual([
+            { planIndex: 0, id: older.id },
+            { planIndex: 1, id: terminal.id },
+          ]);
+        });
+
+        // Floor-unreachability (spec §2, antagonist B4): the plan was
+        // Reset AFTER the client fetched a now-stale "this is terminal"
+        // view. The WHERE's condition-2 term (`done_n = index + 1`)
+        // declines because doneN is back to 0 — never a bare decrement
+        // that would drive it to -1 (which would read to the rower as
+        // the word "undefined").
+        it("floor-unreachability: delete a formerly-terminal log after a Reset — WHERE declines, doneN never goes below 0", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          await stores.planState.set(userId, "sprint");
+          const terminal = await stores.logs.create(userId, logInput());
+          expect(await stores.planState.get(userId)).toStrictEqual({
+            planKey: "sprint",
+            doneN: 1,
+          });
+
+          await stores.planState.reset(userId);
+          expect(await stores.planState.get(userId)).toStrictEqual({
+            planKey: "sprint",
+            doneN: 0,
+          });
+
+          const result = await stores.logs.delete(userId, terminal.id);
+          expect(result).toStrictEqual({ deleted: true, unCounted: false });
+
+          const planStateRow = await stores.planState.get(userId);
+          expect(planStateRow).toStrictEqual({ planKey: "sprint", doneN: 0 });
+          expect(planStateRow!.doneN).toBeGreaterThanOrEqual(0);
+        });
+
+        // §5.4 bystander byte-comparison: deleting a log never mutates
+        // any other log's row — another user's row, and this user's OWN
+        // other logs, must read back byte-identical.
+        it("never mutates a bystander row — another user's, or this user's other logs (§5.4)", async () => {
+          const stores = await makeStores();
+          const userA = await stores.makeUser();
+          const userB = await stores.makeUser();
+          const doomed = await stores.logs.create(
+            userA,
+            logInput({ notes: "doomed" }),
+          );
+          const sibling = await stores.logs.create(
+            userA,
+            logInput({ notes: "sibling" }),
+          );
+          const strangers = await stores.logs.create(
+            userB,
+            logInput({ notes: "stranger" }),
+          );
+          const siblingBefore = await stores.logs.get(userA, sibling.id);
+          const strangerBefore = await stores.logs.get(userB, strangers.id);
+
+          await stores.logs.delete(userA, doomed.id);
+
+          expect(await stores.logs.get(userA, sibling.id)).toStrictEqual(
+            siblingBefore,
+          );
+          expect(await stores.logs.get(userB, strangers.id)).toStrictEqual(
+            strangerBefore,
+          );
+        });
+      });
     });
 
     describe("plan state", () => {

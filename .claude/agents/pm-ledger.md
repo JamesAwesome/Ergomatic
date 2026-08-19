@@ -922,3 +922,41 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   shipped phases missing from the file. (Controller's note, same day: CS and
   CM sections were added to ROADMAP.md at this gate's direction; a fourth
   occurrence graduates this to CLAUDE.md's recurring-failures list.)
+## Final-PR gate, 2026-08-18 (PR #124, log-delete — triad: first DELETE + a counter write)
+
+- **A gap named in a spec is not disclosed until it is in the NOTES.** The
+  delete-and-re-log-stamps-today gap was in spec §4 and correctly in ROADMAP
+  (first gate in six where nothing had to be rescued out of a Record block) —
+  and still absent from the release-notes clause a tester actually reads. The
+  full disclosure chain for an accepted limit is THREE places: the spec (why),
+  ROADMAP (who picks it up), the notes (what he does about it). Two of three
+  is the normal failure.
+- **Two variants of the same destructive copy must name the same loss.** The
+  plan-linked confirm said "This removes the session. If it is your latest
+  plan session, the checkmark un-ticks"; the unlinked one said "…and its
+  reflection". Same deletion, two mental models of what a session IS, and the
+  reflection was on screen above the confirm. Check destructive copy variants
+  against EACH OTHER, not just against the spec's table.
+- **A hedge is the honest answer when the server decides — but check what the
+  screen gives him to resolve it.** "If it is your latest plan session" is
+  unavoidable (cross-device staleness makes advance agreement impossible), and
+  the from-the-log view shows `SESSION 1 OF 84` with no done-count. Accepted:
+  a wrong guess fails in the conservative direction (tick stays). The rule:
+  when copy hedges on a condition, say whether the screen shows the condition,
+  and whether being wrong is safe.
+- **A QUEUED entry that SUPERSEDES shipped documented semantics needs the
+  superseded text to point forward.** The tule-fog target-judgment entry
+  reverses spec 1's R-C/R-E row semantics and #117's column removal; spec 1
+  said nothing. This is Phase LG's "self-closing condition nobody owns" in a
+  new costume — the next reader of spec 1 believes the old rule. (Closed at
+  this gate: spec 1's Measured-row cell now points forward.)
+- **A fix round that makes a condition red-provable is the gate working.** T1
+  review found condition 1 (plan key) unfalsifiable — every fixture declined
+  via condition 2 first — and the isolating Switch fixture was added and
+  live-mutation-verified against real Postgres. Copy this: for an N-condition
+  rule, ask which conditions can only be reached PAST the earlier ones.
+- **Recompute-the-headline: GREEN again** (`log-delete-confirm.png`: 1500+1500 m,
+  13:00, 500×780/3000 = 2:10.0, deviations ±10.0). Third consecutive run,
+  ten seconds each.
+- **Release stack at this gate:** v0.12.0 is the last tag with ZERO merges
+  since. Recommendation on merge: v0.13.0 MINOR (new capability, additive route).

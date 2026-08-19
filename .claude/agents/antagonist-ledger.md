@@ -1502,3 +1502,53 @@ toolkit, not a history.
   `page.setContent` with the rules copied verbatim, `getBoundingClientRect`
   on the FLEXING sibling, no server and no stack. Measure the neighbour that
   absorbs the change, not the element that causes it.**
+## Spec-stage full pass (triad), 2026-08-18 (log-delete: the first DELETE + a counter write)
+
+- **"Deleting a plan-linked log and decrementing `done_n` un-ticks that
+  session's checkmark."** Believed because the spec reasoned about the last
+  session only. False for every earlier index: `done_n` is a positional COUNT
+  (`data.ts:959`) while `plan_index` is immutable history, so deleting index 0
+  of a two-save cycle un-ticks index 0 and STRANDS the index-1 survivor at
+  status "today", where `Plan.tsx:292` never consults its link. **Technique:**
+  booted the server from source against a scratch DB, made two ordinary
+  advancing saves, applied the spec's rule in raw SQL, and read the two SHIPPED
+  read paths (`GET /api/plan`, `GET /api/logs?plan=`) back. The arithmetic was
+  readable in three lines; only the round trip made the orphan visible.
+- **"The exit criterion's e2e proves the checkmark re-points."** False: its
+  fixture (save, Reset, save, delete the newest) drives `done_n` to 0, so the
+  checkmark disappears instead. **Technique:** RUN THE FIXTURE THE CRITERION
+  SPECIFIES before believing its stated outcome — then find the minimal fixture
+  that WOULD pass. Here that fixture exists and is itself a demonstration of the
+  defect the criterion was blind to. An exit criterion is a claim, not a plan.
+- **"Condition 2 makes the `done_n` floor unreachable; the clamp is
+  belt-and-braces."** False under this DB: `show default_transaction_isolation`
+  is READ COMMITTED, so a Reset or Switch committing between the DELETE's
+  decide and its write lets `done_n - 1` land on -1 or on the wrong plan's
+  counter. And -1 is not benign — `GET /api/today` returns "No **undefined**
+  sessions in your library" (`sequence[Math.min(-1, …)]`). **Technique:** ask
+  the database what isolation it actually runs at, then WRITE the impossible
+  value and call the read paths. A guard split across a read and a later write
+  is not a guard; put the predicate in the UPDATE's WHERE and lock the row
+  (`FOR UPDATE`) the concurrent writer already locks.
+- **"The client can evaluate the server's predicate from the row plus plan
+  state."** False: the newest-wins condition needs a SIBLING fact carried by
+  neither `GET /api/logs/:id` nor `GET /api/plan` — only by
+  `GET /api/logs?plan=`. **Technique:** capture the actual response bodies and
+  try to compute the predicate from them by hand. Predicate-agreement designs
+  fail on INPUTS far more often than on logic; a shared imported predicate makes
+  the logic test true by construction and proves nothing about the inputs. When
+  agreement can't be guaranteed, have the server RETURN what it did.
+- **Operational:** a worktree's own compose stack can be many commits stale —
+  `ergomatic-61404` served a `session_logs` with no `plan_key` column while the
+  branch's source had it for two specs. **Technique:** before trusting any
+  browser/API probe, ask the running stack for a column or field the newest
+  spec introduced; if it's missing, rebuild or run the server from source
+  against a scratch DB (`DATABASE_URL=…/scratch npx tsx server/index.ts`,
+  migrations apply at boot — ~12s, and it's the honest oracle).
+- **Attacked and held (this spec's vetted ground):** Switch-back cannot
+  mis-decrement (doneN zeroing + newest-wins are both load-bearing); newest-wins
+  re-point needs no tombstone (demonstrated live); POST writes only
+  plan_state + session_logs, so deletion has no hidden derived state; the
+  owner-404 idiom carries; the cross-cycle re-pointed log renders its own date
+  and footer from its own columns — the honesty question was the tick's, not
+  the link's.
