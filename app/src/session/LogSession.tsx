@@ -37,6 +37,7 @@ import {
   loadMonitorRun,
   type MonitorRun,
 } from "../monitor/monitorRun";
+import type { SeriesData } from "../monitor/seriesRecorder";
 import { useStagedDiscard } from "./useStagedDiscard";
 import BackLink from "../shell/BackLink";
 import PostWorkoutSummary, { singleTargetHint } from "./PostWorkoutSummary";
@@ -344,6 +345,14 @@ interface LogFormFields {
   avgSplitSeconds?: number;
   timeSeconds?: number;
   distanceMeters?: number;
+  // Series capture spec (2026-08-19), §3: the monitor mode's own second
+  // addition, same optional-key idiom as `deviceName` above — attached
+  // straight from `monitorRun.series` (undefined when the run has none:
+  // an older record, a save-time sacrifice already dropped it client-side
+  // — Task 2's own `seriesDropped` flag is the audit trail, never
+  // re-derived here). Undefined here means `JSON.stringify` drops the key
+  // entirely below, exactly like an absent `deviceName` already does.
+  series?: SeriesData;
 }
 
 /** Fix round 1 (whole-branch review, I1): the two doors' `handleSave` were
@@ -453,6 +462,22 @@ function useLogForm(onSaved: () => void) {
         if (field === "workoutId") {
           res = await postLog({ ...body, workoutId: null });
         }
+      }
+      // Series capture spec (2026-08-19), §3: THE POST SACRIFICE — a
+      // non-ok response to a body carrying `series` retries ONCE with the
+      // key simply omitted (never a server-side "dropped" flag; Task 2's
+      // `MonitorRun.seriesDropped` is the only audit trail this needs),
+      // and only a failure of THAT retry surfaces the save error. The
+      // rower can always save the run; only the trace is sacrificed.
+      // Composes with the workoutId retry above rather than replacing it:
+      // a 413 (this route's own route-scoped 1mb limit still has a
+      // ceiling) is not a 400, so that block never fires for it and this
+      // one does (the red-provable 413 leg); a 400 that WAS about
+      // workoutId retries first with `series` unchanged, then lands here
+      // if the retry is STILL not ok and still carries `series`.
+      if (!res.ok && body.series !== undefined) {
+        const { series: _series, ...withoutSeries } = body;
+        res = await postLog(withoutSeries);
       }
       if (res.ok) {
         // Only ever fires on a genuine 201 — a failed save (network error,
@@ -1033,6 +1058,7 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
           avgSplitSeconds: model.heroes.avgSplitSeconds,
           timeSeconds: model.heroes.timeSeconds,
           distanceMeters: model.heroes.distanceMeters,
+          series: monitorRun.series,
         },
         opts,
       );

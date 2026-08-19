@@ -39,6 +39,14 @@ function fakeSessionStore(): SessionStore {
 
 function appFor(stores: Stores) {
   const app = express();
+  // Mirrors `app.ts`'s own route-scoped 1mb limit on POST /api/logs
+  // (series capture spec, 2026-08-19, §3) — mounted here too, same
+  // ordering, so this file's series-validation cases (up to the full
+  // 14,400-sample cap) exercise the real validator without a smaller
+  // harness-only body limit getting in the way first. Every other route
+  // keeps the default (see `server/app.test.ts` for the proof this
+  // scoping doesn't widen elsewhere).
+  app.post("/api/logs", express.json({ limit: "1mb" }));
   app.use(express.json());
   // Mounted here too (not just in the real app.ts) so this file also
   // documents/proves the data router inherits no-store when composed the
@@ -1965,6 +1973,224 @@ describe("GET/POST /api/logs", () => {
     });
   });
 
+  // Series capture spec (2026-08-19), §1/§3: the 1 Hz trace, optional,
+  // shape-and-band validated the same "reject a hand-crafted liar, never
+  // a real reading" way every other pm5-sourced field on this route
+  // already is. These cases run against the in-memory fake (`unit`
+  // project) — the full 14,400-sample worst case through the REAL
+  // route-scoped body-limit middleware and REAL Postgres is
+  // `server/app.test.ts` (the middleware limit itself) and
+  // `server/routes/seriesCapture.integration.test.ts` (S5, end to end).
+  describe("series (Phase LT spec 2, 2026-08-19)", () => {
+    const validSample = (overrides: Record<string, unknown> = {}) => ({
+      t: 10,
+      d: 23,
+      p: 1400,
+      spm: 24,
+      hr: 138,
+      ...overrides,
+    });
+
+    it("accepts a well-formed series and round-trips it on GET /:id", async () => {
+      const app = appFor(makeStores());
+      const series = {
+        samples: [validSample(), validSample({ t: 20, d: 47, hr: undefined })],
+      };
+      // `hr: undefined` above is JS-only (JSON.stringify drops it) — the
+      // wire shape genuinely omits the key for the second sample, proving
+      // hr is independently optional per-sample.
+      const created = await asA(request(app).post("/api/logs")).send({
+        ...validLogBody(),
+        series,
+      });
+      expect(created.status).toBe(201);
+
+      const fetched = await getLogById(app, created.body.id);
+      expect(fetched.body.series).toStrictEqual({
+        samples: [
+          { t: 10, d: 23, p: 1400, spm: 24, hr: 138 },
+          { t: 20, d: 47, p: 1400, spm: 24 },
+        ],
+      });
+    });
+
+    it("accepts truncated: true and stores it", async () => {
+      const app = appFor(makeStores());
+      const created = await asA(request(app).post("/api/logs")).send({
+        ...validLogBody(),
+        series: { samples: [validSample()], truncated: true },
+      });
+      expect(created.status).toBe(201);
+      const fetched = await getLogById(app, created.body.id);
+      expect(fetched.body.series.truncated).toBe(true);
+    });
+
+    it("series absent stores and reads back null", async () => {
+      const app = appFor(makeStores());
+      const created = await asA(request(app).post("/api/logs")).send(
+        validLogBody(),
+      );
+      expect(created.status).toBe(201);
+      const fetched = await getLogById(app, created.body.id);
+      expect(fetched.body.series).toBeNull();
+    });
+
+    it("series: null is treated the same as absent — 201, stored null", async () => {
+      const app = appFor(makeStores());
+      const created = await asA(request(app).post("/api/logs")).send({
+        ...validLogBody(),
+        series: null,
+      });
+      expect(created.status).toBe(201);
+      const fetched = await getLogById(app, created.body.id);
+      expect(fetched.body.series).toBeNull();
+    });
+
+    it("rejects series that isn't an object, field named", async () => {
+      const res = await asA(
+        request(appFor(makeStores())).post("/api/logs"),
+      ).send({ ...validLogBody(), series: "not an object" });
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe("series");
+    });
+
+    it("rejects series.samples that isn't an array, field named", async () => {
+      const res = await asA(
+        request(appFor(makeStores())).post("/api/logs"),
+      ).send({ ...validLogBody(), series: { samples: "nope" } });
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe("series");
+    });
+
+    it("rejects series.truncated: false (only true or omitted)", async () => {
+      const res = await asA(
+        request(appFor(makeStores())).post("/api/logs"),
+      ).send({
+        ...validLogBody(),
+        series: { samples: [validSample()], truncated: false },
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe("series");
+    });
+
+    it("rejects more than 14,400 samples", async () => {
+      const samples = Array.from({ length: 14_401 }, (_, i) =>
+        validSample({ t: i + 1 }),
+      );
+      const res = await asA(
+        request(appFor(makeStores())).post("/api/logs"),
+      ).send({ ...validLogBody(), series: { samples } });
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe("series");
+    });
+
+    it("accepts exactly 14,400 samples", async () => {
+      const samples = Array.from({ length: 14_400 }, (_, i) =>
+        validSample({ t: i + 1 }),
+      );
+      const res = await asA(
+        request(appFor(makeStores())).post("/api/logs"),
+      ).send({ ...validLogBody(), series: { samples } });
+      expect(res.status).toBe(201);
+    });
+
+    it.each([
+      ["t", -1],
+      ["t", 1.5],
+      ["t", 6_048_001],
+      ["d", -1],
+      ["d", 10_000_001],
+      ["p", -1],
+      ["p", 60_001],
+      ["spm", -1],
+      ["spm", 256],
+      ["hr", 19],
+      ["hr", 255],
+    ])(
+      "rejects a sample with an out-of-band %s (%s), field named series",
+      async (key, value) => {
+        const res = await asA(
+          request(appFor(makeStores())).post("/api/logs"),
+        ).send({
+          ...validLogBody(),
+          series: { samples: [validSample({ [key]: value })] },
+        });
+        expect(res.status).toBe(400);
+        expect(res.body.field).toBe("series");
+      },
+    );
+
+    it("accepts the exact boundary values (0/max) for t/d/p/spm and hr's own 20/254 band", async () => {
+      const app = appFor(makeStores());
+      const res = await asA(request(app).post("/api/logs")).send({
+        ...validLogBody(),
+        series: {
+          samples: [
+            { t: 0, d: 0, p: 0, spm: 0, hr: 20 },
+            { t: 6_048_000, d: 10_000_000, p: 60_000, spm: 255, hr: 254 },
+          ],
+        },
+      });
+      expect(res.status).toBe(201);
+    });
+
+    it("ignores unknown keys on a sample, storing only t/d/p/spm/hr", async () => {
+      const app = appFor(makeStores());
+      const created = await asA(request(app).post("/api/logs")).send({
+        ...validLogBody(),
+        series: {
+          samples: [{ ...validSample(), extra: "should be dropped" }],
+        },
+      });
+      expect(created.status).toBe(201);
+      const fetched = await getLogById(app, created.body.id);
+      expect(fetched.body.series.samples[0]).toStrictEqual(validSample());
+      expect(fetched.body.series.samples[0]).not.toHaveProperty("extra");
+    });
+
+    it("rejects a non-object sample, field named series", async () => {
+      const res = await asA(
+        request(appFor(makeStores())).post("/api/logs"),
+      ).send({ ...validLogBody(), series: { samples: ["not an object"] } });
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe("series");
+    });
+
+    // §6 exit criterion 6 / §7 additivity: the v0.14.0-era body shape (no
+    // `series` key at all — every field this task shipped) posts VERBATIM
+    // and still 201s, storing series null. Same frozen-literal idiom as
+    // `V0_11_0_LOG_BODY`/`V0_12_0_LOG_BODY` above (Object.freeze,
+    // deliberately NOT derived from a live fixture another test could
+    // extend).
+    const V0_14_0_LOG_BODY = Object.freeze({
+      workoutId: null,
+      workoutTitle: "Steady State",
+      workoutType: "AT",
+      held: "held",
+      pain: 2,
+      notes: null,
+      steps: [
+        {
+          label: "Work",
+          targetSplit: 120,
+          actualSplit: 121,
+          actualSource: "stopwatch",
+        },
+      ],
+    });
+
+    it("POST in the exact v0.14.0-era body shape (no series key) still 201s and stores series null (exit criterion 6)", async () => {
+      const app = appFor(makeStores());
+      const res = await asA(request(app).post("/api/logs")).send(
+        V0_14_0_LOG_BODY,
+      );
+      expect(res.status).toBe(201);
+
+      const fetched = await getLogById(app, res.body.id);
+      expect(fetched.body.series).toBeNull();
+    });
+  });
+
   // From-the-log spec (2026-08-18), §3: the list projection's ONE
   // sanctioned field removal, legal against the additive-only rule
   // because `RecentLog` (the response's only client reader,
@@ -1986,6 +2212,31 @@ describe("GET/POST /api/logs", () => {
       );
       const fetched = await getLogById(app, created.body.id);
       expect(fetched.body.steps).toStrictEqual(validLogBody().steps);
+    });
+
+    // Series capture spec (2026-08-19), §3 "List projection": `series`
+    // joins `steps` in the exclusion — same reason (dead weight for a
+    // list row's meta + hero snippet), same shape of proof.
+    it("GET /api/logs rows never carry a series key", async () => {
+      const app = appFor(makeStores());
+      await asA(request(app).post("/api/logs")).send({
+        ...validLogBody(),
+        series: { samples: [{ t: 10, d: 23, p: 1400, spm: 24 }] },
+      });
+      const list = await asA(request(app).get("/api/logs"));
+      expect(list.body).toHaveLength(1);
+      expect(list.body[0]).not.toHaveProperty("series");
+    });
+
+    it("GET /api/logs/:id still returns the full row, series included", async () => {
+      const app = appFor(makeStores());
+      const series = { samples: [{ t: 10, d: 23, p: 1400, spm: 24 }] };
+      const created = await asA(request(app).post("/api/logs")).send({
+        ...validLogBody(),
+        series,
+      });
+      const fetched = await getLogById(app, created.body.id);
+      expect(fetched.body.series).toStrictEqual(series);
     });
   });
 
@@ -2199,6 +2450,33 @@ describe("GET/POST /api/logs", () => {
       expect(res.status).toBe(200);
       expect(res.body.steps).toStrictEqual(validLogBody().steps);
       expect(res.body).not.toHaveProperty("banana");
+    });
+
+    // Series capture spec (2026-08-19), §3: "PATCH does not accept
+    // series" — no new code path, PATCH's own accepted-key set
+    // (thumbs/held/pain/notes) simply never grew one. `series` is an
+    // ordinary unknown key here, same fate as `banana`/`steps` above; the
+    // row's own `series` (set at POST time) survives byte-identical.
+    it("PATCH ignores an attempt to rewrite series — not in its accepted set, row unchanged", async () => {
+      const app = appFor(makeStores());
+      const series = { samples: [{ t: 10, d: 23, p: 1400, spm: 24 }] };
+      const created = await asA(request(app).post("/api/logs")).send({
+        ...validLogBody(),
+        series,
+      });
+
+      const res = await asA(
+        request(app).patch(`/api/logs/${created.body.id}`),
+      ).send({ series: { samples: [{ t: 999, d: 999, p: 999, spm: 999 }] } });
+      expect(res.status).toBe(200);
+      // The response is the full row (same shape GET /:id returns) — its
+      // own `series` still reflects what POST originally stored, proving
+      // the PATCH body's `series` was ignored as an unrecognized key, not
+      // that the field vanished from the response shape.
+      expect(res.body.series).toStrictEqual(series);
+
+      const fetched = await getLogById(app, created.body.id);
+      expect(fetched.body.series).toStrictEqual(series);
     });
 
     it("an empty body is a 200 no-op read", async () => {

@@ -203,6 +203,15 @@ function hasValidSeries(value: Record<string, unknown>): boolean {
  * safety net for any caller that reaches it without going through this
  * pre-pass first — there is exactly one, `loadMonitorRun`, today, but the
  * function is not exported and nothing pins that as permanent).
+ *
+ * Honest limit (Task 3 review, the re-review's own comment nit): this
+ * strips the RETURNED candidate only — the STORED copy under
+ * `MONITOR_RUN_KEY` still carries the malformed `series` untouched, and
+ * stays dirty until the next `saveMonitorRun` call overwrites it (a
+ * successful save, or the sacrifice retry, both replace the whole key).
+ * A reload before that next save re-reads the same malformed bytes and
+ * strips them again, identically — cheap, not a leak, but worth naming
+ * so a future reader doesn't assume this function repairs storage.
  */
 function stripMalformedSeries(
   value: Record<string, unknown>,

@@ -33,6 +33,7 @@ import {
   saveMonitorRun,
   type MonitorRun,
 } from "../monitor/monitorRun";
+import type { SeriesData } from "../monitor/seriesRecorder";
 // Pure function (task brief: "export the pure helper ... for tests") — a
 // static top-level import is safe here (unlike every other `./LogSession`
 // reference in this file, which goes through a per-test dynamic `import()`
@@ -285,7 +286,11 @@ const MONITOR_WORKOUT_ID = "id-monitor-fixture";
 // `IntervalActual.index` below is a position in THAT array, so a "both
 // measured" actuals list uses index 1 and 2, never 0.
 function buildMonitorFixture(
-  overrides: { actuals?: IntervalActual[]; deviceName?: string } = {},
+  overrides: {
+    actuals?: IntervalActual[];
+    deviceName?: string;
+    series?: SeriesData;
+  } = {},
 ): { run: MonitorRun; workout: LibraryWorkout } {
   const hoarfrost = library("Hoarfrost");
   const timeWork = hoarfrost.steps.find((s) => s.k === "w") as Extract<
@@ -349,6 +354,14 @@ function buildMonitorFixture(
     startedAt: FIXED_NOW.toISOString(),
     completedAt,
     terminated: false,
+    // Series capture spec (2026-08-19), §3: the KEY itself is omitted
+    // entirely (not `series: undefined`) when no override is given — a
+    // real `loadMonitorRun()` read (through a genuine JSON round trip)
+    // can never produce a present-but-undefined key, and an existing
+    // `toStrictEqual` comparison against this fixture object (the
+    // four-condition-gate test) would otherwise see a shape localStorage
+    // itself never produces.
+    ...(overrides.series !== undefined ? { series: overrides.series } : {}),
   };
   const workout: LibraryWorkout = {
     id: MONITOR_WORKOUT_ID,
@@ -2464,6 +2477,172 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
     const body = parsedBodies(apiFn)[0]!;
     expect("deviceName" in body).toBe(false);
+  });
+
+  // Series capture spec (2026-08-19), §3: the POST body attaches `series`
+  // straight from the loaded run when present.
+  it("omits series from the POST body when the run has none", async () => {
+    const { run, workout } = buildMonitorFixture();
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-no-series" }), {
+          status: 201,
+        }),
+      ),
+    );
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+    const body = parsedBodies(apiFn)[0]!;
+    expect("series" in body).toBe(false);
+  });
+
+  it("attaches series on the wire body when the run has one — the success leg", async () => {
+    const series: SeriesData = {
+      samples: [
+        { t: 10, d: 23, p: 1400, spm: 24, hr: 138 },
+        { t: 20, d: 47, p: 1350, spm: 25 },
+      ],
+    };
+    const { run, workout } = buildMonitorFixture({ series });
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    const clearSpy = mockMonitorRunClearSpy();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-with-series" }), {
+          status: 201,
+        }),
+      ),
+    );
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+    expect(apiFn).toHaveBeenCalledTimes(1);
+    const body = parsedBodies(apiFn)[0]!;
+    expect(body.series).toStrictEqual(series);
+    expect(loadMonitorRun()).toBeNull();
+    expect(clearSpy).toHaveBeenCalledTimes(1);
+  });
+
+  // Series capture spec (2026-08-19), §3: THE POST SACRIFICE — the
+  // red-provable 413 leg. A non-ok response to a body carrying `series`
+  // retries ONCE with the key omitted; the log saves series-less rather
+  // than failing outright.
+  it("the sacrifice retry: a 413 on the first POST retries once without series, and the log saves series-less", async () => {
+    const series: SeriesData = {
+      samples: [{ t: 10, d: 23, p: 1400, spm: 24, hr: 138 }],
+    };
+    const { run, workout } = buildMonitorFixture({ series });
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    const clearSpy = mockMonitorRunClearSpy();
+    let calls = 0;
+    const apiFn = mockApi(() => {
+      calls++;
+      if (calls === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ error: "payload too large" }), {
+            status: 413,
+          }),
+        );
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify({ id: "log-sacrificed" }), {
+          status: 201,
+        }),
+      );
+    });
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+    expect(apiFn).toHaveBeenCalledTimes(2);
+    const bodies = parsedBodies(apiFn);
+    expect(bodies[0]!.series).toStrictEqual(series);
+    expect("series" in bodies[1]!).toBe(false);
+    // The retried body is otherwise byte-identical — only `series` is
+    // genuinely gone (not present-and-undefined: `bodies[1]` came back
+    // through a real JSON.parse, so the key is truly absent, and the
+    // comparison object below is built the same way — a spread with an
+    // `undefined` value would leave the key PRESENT and fail
+    // `toStrictEqual` against a body that never had it).
+    const { series: _droppedSeries, ...firstWithoutSeries } = bodies[0]!;
+    expect(bodies[1]).toStrictEqual(firstWithoutSeries);
+    // A genuine 201 (even on the retry) clears MonitorRun exactly once,
+    // same as the ordinary success leg.
+    expect(loadMonitorRun()).toBeNull();
+    expect(clearSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("the sacrifice retry ALSO fails: surfaces the genuine error, MonitorRun survives for a real retry", async () => {
+    const series: SeriesData = {
+      samples: [{ t: 10, d: 23, p: 1400, spm: 24, hr: 138 }],
+    };
+    const { run, workout } = buildMonitorFixture({ series });
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    const clearSpy = mockMonitorRunClearSpy();
+    let calls = 0;
+    const apiFn = mockApi(() => {
+      calls++;
+      if (calls === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ error: "payload too large" }), {
+            status: 413,
+          }),
+        );
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify({ error: "boom" }), { status: 500 }),
+      );
+    });
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+
+    expect(
+      await screen.findByText("Couldn't save this session. Try again."),
+    ).toBeInTheDocument();
+    expect(apiFn).toHaveBeenCalledTimes(2);
+    expect(loadMonitorRun()).not.toBeNull();
+    expect(clearSpy).not.toHaveBeenCalled();
+  });
+
+  it("a non-ok response with no series present never triggers a second POST", async () => {
+    const { run, workout } = buildMonitorFixture();
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ error: "boom" }), { status: 500 }),
+      ),
+    );
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+
+    expect(
+      await screen.findByText("Couldn't save this session. Try again."),
+    ).toBeInTheDocument();
+    expect(apiFn).toHaveBeenCalledTimes(1);
   });
 
   it("a failed save does NOT clear MonitorRun — the record survives so a retry can still prefill", async () => {

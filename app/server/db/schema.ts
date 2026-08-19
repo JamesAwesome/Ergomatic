@@ -176,6 +176,19 @@ export const sessionLogs = pgTable(
     // time (§2), not enforced here.
     planKey: text("plan_key"),
     planIndex: integer("plan_index"),
+    // Series capture spec (2026-08-19), §3 "Server home": the run's 1 Hz
+    // trace, migration 0011 — one nullable jsonb column, no default,
+    // additive-only. A column, not a table: one lifecycle (the log's own),
+    // DELETE cascades free, and nothing streams or paginates samples this
+    // phase (YAGNI, recorded in the spec). Every existing row reads this
+    // back as null; nothing backfills. Untyped jsonb (no `.$type<>()`
+    // binding), same convention as `steps` above — `stores/logs.ts`'s
+    // `LogSeries` is the shape callers actually validate against, not a
+    // Drizzle-level type. Deliberately excluded from `LOG_LIST_COLUMNS`
+    // (`stores/logs.ts`) the same way `steps` already is: the list
+    // projection's own drift pin (`storeContracts.ts`) now reads
+    // "list = get - steps - series".
+    series: jsonb("series"),
   },
   (t) => [
     index("session_logs_user_id_idx").on(t.userId),

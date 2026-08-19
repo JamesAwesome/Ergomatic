@@ -417,9 +417,12 @@ function makeFakeLogsStore(planState: FakePlanStateStore): LogsStore {
         }
         source = rows.slice(idx + 1);
       }
+      // Series capture spec (2026-08-19), §3: `series` drops from the
+      // list projection the same way `steps` already does — see
+      // `stores/logs.ts`'s `LOG_LIST_COLUMNS` comment for the reason.
       return source
         .slice(0, limit)
-        .map(({ steps: _steps, seq: _seq, ...rest }) => rest);
+        .map(({ steps: _steps, series: _series, seq: _seq, ...rest }) => rest);
     },
     // From-the-log spec (2026-08-18), §3: full row (steps included),
     // owner-scoped by construction — `byUser.get(userId)` can never see
@@ -556,6 +559,7 @@ function makeFakeLogsStore(planState: FakePlanStateStore): LogsStore {
         avgSplitSeconds: stored.avgSplitSeconds ?? null,
         timeSeconds: stored.timeSeconds ?? null,
         distanceMeters: stored.distanceMeters ?? null,
+        series: stored.series ?? null,
         planKey,
         planIndex,
         id: crypto.randomUUID(),
