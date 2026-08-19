@@ -5,6 +5,28 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // Phase CM (#123): the session meters counter and the interval's own
+    // average on the connected LIVE pane, hardware-verified (the exit walk
+    // photographed monitor, live counter and summary agreeing sub-metre).
+    // The two rules a rower cannot learn from the screen are stated in
+    // plain words per the PM final gate: the colour appears only at rest
+    // (the average is not true until an interval is nearly done), and a
+    // rest-free piece never shows it. The counter steps in 5m increments
+    // by James's calm rule, measured rather than guessed (the antagonist's
+    // jitter pass). The swipe line closes the walk's finding: WebKit
+    // cancels off-horizontal drags inside a scrolling grid; flat drags
+    // page. No "check them side by side" promise of exact agreement - the
+    // live cell is quantised, the summary is exact.
+    version: "v0.13.0",
+    date: "2026-08-18",
+    items: [
+      "The connected screen counts your meters again: the whole session, work and rest, at the end of the progress bar. It moves in calm 5-meter steps; the summary at the end keeps the exact figure, and both were checked against the erg's own monitor in the same photo frame.",
+      "Your interval's average split now sits beside its target, under the big split. While you row it stays plain ink: an average spends most of an interval climbing from the standing start, so a verdict mid-interval would just say SLOWER at you. The moment the rest begins, it turns blue or red against the interval you just finished.",
+      "That also means a piece with no rests never shows the color, and neither does a session's final interval: the summary is where those verdicts live, every interval judged in its list.",
+      "About the swipe, from this week's erg session: a drag inside the scrolling interval list needs to be genuinely flat, or iOS takes it for a scroll. Drag level, or use the LIVE/GRID buttons, which always work.",
+    ],
+  },
+  {
     // Phase PW spec 2 (#121, the history + first edit) plus Phase CS's
     // swipe (#119) — CS's own gate asked for a v0.11.1 that was never cut,
     // so its notes ride here, including the gate's explicit ask that the

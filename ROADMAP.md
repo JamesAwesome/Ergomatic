@@ -2415,9 +2415,14 @@ refusing every grid-origin drag; `user-select` off the swipe surface.
 
 ## Phase CM — Connected metrics: the interval's average, the session's metres
 
-**Status:** PR #123 OPEN (branch `connected-metrics`), final review
-APPROVE, PM final gate GO-WITH-CHANGES (conditions folded), awaiting the
-hardware walk + James's word. TRIAD (number semantics). Spec at
+**Status:** MERGED #123 (main `3d0088c`, 2026-08-18), released as
+v0.13.0. Exit walk PASSED (`docs/monitor/sessions/walk-2026-08-18-metrics/`):
+three totals sub-metre in one frame, AVG digit-identical to the monitor's
+own average, WebKit convicted on the off-horizontal swipe cancel with the
+`pointercancel` readout's first field evidence. Post-merge, James's calm
+rule quantised the counter to 5m steps (rounded — floor was falsified at
+the walk's own finish) in a width-pinned slot. TRIAD (number semantics).
+Spec at
 `docs/superpowers/specs/2026-08-18-connected-metrics-design.md` — blocked
 once in full by the antagonist and rewritten; every load-bearing claim
 decoded from committed captures.
