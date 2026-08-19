@@ -316,6 +316,20 @@ CR2 closed above.
   Safari restoration pass winning after the app's own scroll-to-top
   already ran).
 
+**ANSWERED 2026-08-19 — all three, on a native dev build of `lt-series`
+with a real PM5; the record is `docs/monitor/sessions/walk-2026-08-19-series/`.
+S2: PASS (718,863 B written and read back byte-identical in the real
+WKWebView). S6: DENIED, exactly as predicted, tolerated. Fast-rate:
+~10 Hz measured — the native path honours the 0x0034 fast rate the web
+transport does not (every sample's bucket residual ≤ 0.1 s across 22
+consecutive seconds; a 500 ms gap is refuted at p≈4e-16), and the
+decimator produced exactly one sample per work-second on that 5×-denser
+stream, upgrading S7 from proven-by-construction to verified-on-hardware.
+Two findings there: the ring does NOT carry per-frame hex (a claim of
+mine the ring itself falsified), and this session's totals oracle went
+blind (machineTotal sampled only before rowing) — filed for the next
+connected-surface phase. The items below are kept for provenance.**
+
 **Phase LT spec 2 "series capture," §6.8 (James, 2026-08-19; design spec
 `docs/superpowers/specs/2026-08-19-series-capture-design.md` §4/§6):**
 this walk already ran and CR2 tagged v0.10.0 — the three items below
