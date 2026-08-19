@@ -1129,24 +1129,56 @@ describe("series / seriesDropped: the additive fields (§2 storage-home, never-m
     expect(loadMonitorRun()).toStrictEqual(viaJson(run));
   });
 
-  it("rejects a record whose series is present but malformed — not a plain record at all", () => {
-    const run = freshMonitorRun();
+  // LOW-3 (task-2 review): a malformed `series` used to discard the WHOLE
+  // record — the inverse of §3's own sacrifice principle ("the run is
+  // never what gets sacrificed"), applied at LOAD time instead of SAVE
+  // time. It is stripped instead, and the rest of the record — every
+  // field that validated fine on its own — still loads.
+  it("a series that is present but malformed (not a plain record at all) is STRIPPED, not a reason to discard the run", () => {
+    const run: MonitorRun = { ...freshMonitorRun(), actuals: [actual1] };
     localStorage.setItem(
       MONITOR_RUN_KEY,
-      JSON.stringify({ ...run, series: "nope" }),
+      JSON.stringify({ ...run, series: "garbage" }),
     );
-    expect(loadMonitorRun()).toBeNull();
-    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+
+    const loaded = loadMonitorRun();
+
+    expect(loaded).not.toBeNull();
+    expect(loaded!.series).toBeUndefined();
+    // Everything else that validated on its own still loaded.
+    expect(loaded!.workoutId).toBe(run.workoutId);
+    expect(loaded!.title).toBe(run.title);
+    expect(loaded!.actuals).toStrictEqual([actual1]);
+    // "Kept", not "discarded": the key itself is never cleared by this
+    // path — a load-time strip, not `clearMonitorRun()`.
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).not.toBeNull();
   });
 
-  it("rejects a record whose series.samples is the wrong shape (an object, not an array)", () => {
+  it("a malformed series.samples (an object, not an array) is stripped the same way, key intact", () => {
     const run = freshMonitorRun();
     localStorage.setItem(
       MONITOR_RUN_KEY,
       JSON.stringify({ ...run, series: { samples: {} } }),
     );
-    expect(loadMonitorRun()).toBeNull();
-    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+
+    const loaded = loadMonitorRun();
+
+    expect(loaded).not.toBeNull();
+    expect(loaded!.series).toBeUndefined();
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).not.toBeNull();
+  });
+
+  it("a record whose series is ALREADY valid (or absent) is untouched by the strip — only a malformed series is ever stripped", () => {
+    const withValid: MonitorRun = {
+      ...freshMonitorRun(),
+      series: sampleSeries(2),
+    };
+    saveMonitorRun(withValid);
+    expect(loadMonitorRun()!.series).toStrictEqual(withValid.series);
+
+    localStorage.clear();
+    saveMonitorRun(freshMonitorRun());
+    expect(loadMonitorRun()!.series).toBeUndefined();
   });
 
   it("rejects a record whose seriesDropped is any value other than true", () => {
@@ -1261,13 +1293,25 @@ describe("S4: the worst-case series serializes fast enough for a 30s flush caden
     const elapsedMs = performance.now() - start;
 
     // S4's own reporting requirement: the measured number is stated in test
-    // output (and carried into the task report), not just asserted against.
+    // output. LOW-2 (task-2 review): `console.log` alone is swallowed by
+    // vitest's console intercept in a normal run (visible only with
+    // `--disableConsoleIntercept`) — the number now ALSO rides the
+    // assertion's own message, so a normal failing (or `--reporter=verbose`
+    // passing) run shows it without a special flag. Kept as a `console.log`
+    // too: `grep`-able test output and the exact idiom S4's own check names.
     console.log(
       `S4 perf probe: JSON.stringify of a ${SERIES_SAMPLE_CAP}-sample MonitorRun took ${elapsedMs.toFixed(2)}ms`,
     );
 
     expect(samples).toHaveLength(SERIES_SAMPLE_CAP);
     expect(json.length).toBeGreaterThan(0);
-    expect(elapsedMs).toBeLessThan(100);
+    // LOW-2's own message argument must be a literal template directly in
+    // this call — eslint-plugin-vitest's `valid-expect` only allows a
+    // string/template LITERAL as the second argument, not a variable
+    // reference (a pre-built label would trip `tooManyArgs`).
+    expect(
+      elapsedMs,
+      `S4 perf probe: JSON.stringify of a ${SERIES_SAMPLE_CAP}-sample MonitorRun took ${elapsedMs.toFixed(2)}ms`,
+    ).toBeLessThan(100);
   });
 });

@@ -174,6 +174,46 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/** True when `value.series` is either absent or shaped enough to trust — a
+ *  plain record carrying a `samples` array, never a per-sample domain
+ *  validation (that is Task 3's server-side job, not this best-effort
+ *  client mirror's). Pulled out of `isMonitorRun` below (LOW-3, task-2
+ *  review) so `loadMonitorRun`'s own pre-pass (`stripMalformedSeries`) and
+ *  the validator share the identical rule rather than two copies
+ *  drifting. */
+function hasValidSeries(value: Record<string, unknown>): boolean {
+  const series = value.series;
+  return (
+    series === undefined ||
+    (isPlainRecord(series) && Array.isArray(series.samples))
+  );
+}
+
+/**
+ * LOW-3 (task-2 review): a malformed `series` used to discard the WHOLE
+ * record through `isMonitorRun`'s all-or-nothing conjunction — the
+ * inverse of §3's own sacrifice principle ("only the trace is ever
+ * sacrificed, never the run"), just applied at LOAD time instead of SAVE
+ * time. `loadMonitorRun` runs this FIRST: a `series` that fails
+ * `hasValidSeries` is dropped from the value before `isMonitorRun` ever
+ * sees it, so every other field — each validated entirely on its own —
+ * still loads. Returns the SAME reference when `series` is already valid
+ * or absent (the common case, and what lets `isMonitorRun`'s own
+ * `hasValidSeries` check stay in place downstream too, as a redundant
+ * safety net for any caller that reaches it without going through this
+ * pre-pass first — there is exactly one, `loadMonitorRun`, today, but the
+ * function is not exported and nothing pins that as permanent).
+ */
+function stripMalformedSeries(
+  value: Record<string, unknown>,
+): Record<string, unknown> {
+  if (hasValidSeries(value)) return value;
+  // `_series` is discarded on purpose, same `^_` ignore-pattern idiom
+  // `saveMonitorRun`'s own sacrifice retry already uses.
+  const { series: _series, ...withoutSeries } = value;
+  return withoutSeries;
+}
+
 function isMonitorRun(value: unknown): value is MonitorRun {
   if (!isPlainRecord(value)) return false;
   const program = value.program;
@@ -196,17 +236,12 @@ function isMonitorRun(value: unknown): value is MonitorRun {
     typeof value.terminated === "boolean" &&
     (value.endedBy === undefined || value.endedBy === "interrupted") &&
     // Phase LT spec 2, Task 2: same shallow "shaped enough not to crash an
-    // unconditional destructure" treatment as `logSeed` above — a v1/v2
-    // record simply omits `series` (undefined is fine), and when present it
-    // only has to prove it is a plain record carrying a `samples` array,
-    // never a per-sample domain validation (that is Task 3's server-side
-    // job, not this best-effort client mirror's). No unknown-key check
-    // anywhere in this validator (the `endedBy?` precedent this comment's
-    // own header cites) — this positive conjunction tolerates the new
-    // fields on records this task's own code never wrote, same as any
-    // other additive field ever has.
-    (value.series === undefined ||
-      (isPlainRecord(value.series) && Array.isArray(value.series.samples))) &&
+    // unconditional destructure" treatment as `logSeed` above. No
+    // unknown-key check anywhere in this validator (the `endedBy?`
+    // precedent this comment's own header cites) — this positive
+    // conjunction tolerates the new fields on records this task's own
+    // code never wrote, same as any other additive field ever has.
+    hasValidSeries(value) &&
     (value.seriesDropped === undefined || value.seriesDropped === true) &&
     (logSeed === undefined ||
       (isPlainRecord(logSeed) &&
@@ -268,7 +303,16 @@ export function loadMonitorRun(): MonitorRun | null {
   if (raw === null) return null;
   try {
     const parsed: unknown = JSON.parse(raw);
-    if (isMonitorRun(parsed)) return parsed;
+    // LOW-3: strip a malformed `series` BEFORE validating, so its own
+    // defect never costs the rest of an otherwise-good record
+    // (`stripMalformedSeries`'s own doc comment carries the full
+    // reasoning). A no-op (same reference back) whenever `series` is
+    // already valid or absent, or `parsed` is not even a plain record —
+    // `isMonitorRun` below still rejects those the same way it always has.
+    const candidate = isPlainRecord(parsed)
+      ? stripMalformedSeries(parsed)
+      : parsed;
+    if (isMonitorRun(candidate)) return candidate;
   } catch {
     // fall through: garbage JSON is handled the same as an unknown shape
   }

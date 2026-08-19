@@ -1,5 +1,5 @@
 import { act, renderHook } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   WORKOUTSTATE_INTERVALREST,
   WORKOUTSTATE_INTERVALWORKTIME,
@@ -3792,6 +3792,15 @@ describe("useMonitorSession: series capture — recorder wiring and the three fl
 });
 
 describe("useMonitorSession: S1 — the write-count witness (design spec §4)", () => {
+  // LOW-1 (task-2 review): the `Storage.prototype.setItem` spy below is
+  // never restored, and there is no file-wide `restoreMocks` config — the
+  // exact hazard the sacrifice describe block's own fix round found one
+  // block over (`monitorRun.test.ts`'s `afterEach(vi.restoreAllMocks())`).
+  // `afterEach` always runs, pass or fail, unlike a tail-of-test restore.
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("total localStorage writes for MONITOR_RUN_KEY ≈ boundaries + timer-flushes + 2 — collapsed writes, not one per sample", async () => {
     const flushTimer = manualInterval();
     const THREE_INTERVALS: WorkoutProgram = {
