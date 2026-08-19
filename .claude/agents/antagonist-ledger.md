@@ -1632,3 +1632,63 @@ toolkit, not a history.
   enumerate what new code can WRITE before trusting what old rows imply.
   When a discriminant is ambiguous, prefer shrinking the writer's shape set
   over widening the reader's heuristics.**
+
+## Spec-stage full pass (triad), 2026-08-19 (Phase LT spec 2, "series capture")
+
+- **"The wire's elapsed can key a 1 Hz decimator, and rests are recorded
+  because the machine keeps reporting through them."** The machine reports;
+  the CLOCK DOES NOT. Across the 30 s rest in `walk-2026-08-17/step-3`, all 66
+  0x0031 frames carry elapsed frozen at 60.00 and distance at 213.7 (0x0032
+  identical) — so an elapsed-keyed decimator emits ZERO samples for every rest,
+  under both the raw wire field and driver.ts's register-map sum. step-3: 308.5 s
+  wall → 243 samples. **Technique: when a design keys on a field, replay the
+  captures and print that field's VALUE through the state you care about — not
+  the frame count. "The frames keep arriving" and "the field keeps moving" are
+  different claims, and only the second one keys anything.**
+- **"Keyed on the WIRE's elapsed (`t`), cumulative — never duplicates."** Two
+  fields wearing one name: 0x0031's elapsed is PER-INTERVAL (`parse.ts:311-317`,
+  walk 4), and the only cumulative value is `MonitorFrame.sessionElapsedSeconds`,
+  a DERIVED sum (`driver.ts:2148-2155`). Keying on the wire field collapses
+  step-2 from 139 to 75 distinct seconds — the resets at wall=75.83 (wState 4→4,
+  a restSeconds:0 boundary) and 167.27. **Technique: when a spec names a field
+  and states its semantics in the same table cell, check whether the semantics
+  belong to the field or to something downstream that computes it.**
+- **"A total serialized byte ceiling of 1 MB" on the POST.** `app/server/app.ts:30`
+  is bare `express.json()`; body-parser 2.3.0 defaults `limit` to 102400
+  (`lib/utils.js:61-63`). Probed against real express: 2200 samples (106 KB) →
+  413 `entity.too.large`; 14,400 (720 KB) → 413. True ceiling ~2,150 samples
+  ≈ 36 minutes — below the memo's own 70-minute case. And `LogSession.tsx:437-466`
+  turns any non-ok into a permanent "Try again" over a deterministic body, so the
+  ROWER LOSES THE WHOLE LOG, not just the trace. **Technique: a size ceiling in a
+  spec is a claim about the middleware, not about the validator — read the
+  framework's default and POST a real body of the stated size before believing
+  either. The sacrifice ordering that protects localStorage must be repeated at
+  every OTHER boundary the payload crosses.**
+- **"The final sample's t/d agree with the machine's own terminal totals."**
+  ZERO 0x0039 end-of-workout frames exist in ANY committed recording (7 session
+  dirs + 3 top-level .gz; 0x0037/0038 pairs present 7/10/12) — the external number
+  the oracle names is not in the corpus, and CLAUDE.md item 11 already names the
+  substitute ("each interval's own final pre-reset reading"). It also fails by
+  construction: step-4's final decimated sample is t=43.16/d=150.7 against the
+  machine's t=43.67/d=151.8. **Technique: before accepting an external-number
+  oracle, grep the corpus for the CHARACTERISTIC that carries the number. An
+  oracle whose authority does not exist in the fixtures is an oracle that will be
+  loosened at task time.**
+- **"Riding the existing `recordActual` write — zero new write events."**
+  `recordActual` (`monitorRun.ts:373-392`) has no buffer parameter and RETURNS
+  EARLY WITHOUT SAVING on a refused actual (`:387-389`), a branch production
+  reaches (`useMonitorSession.ts:1101-1111`). **Technique: "rides an existing
+  write" is only true if the existing writer can SEE the new data and always
+  fires — read the early returns, not the save call.**
+- **Attacked and held (LT spec 2 vetted ground):** `isMonitorRun`
+  (`monitorRun.ts:149-176`) is a pure positive conjunction with no unknown-key
+  or key-count check, so `series`/`seriesDropped` survive the never-migrate
+  validator — the `endedBy?` precedent is real. The log door reads
+  `loadMonitorRun()` fresh (`LogSession.tsx:1219-1224`), so a series-less retried
+  record posts consistently. The ≤30 s loss window survives iOS backgrounding
+  because `Info.plist` declares NO `UIBackgroundModes` — a suspended app receives
+  no frames either, so nothing accrues to lose. `JSON.stringify` of 14,400
+  samples measured at 0.61 ms (bound 100 ms), real size 720 KB not 650 KB.
+  `navigator.storage.persist()` never prompts (PRIMARY, webkit.org/blog/14403) —
+  and the same heuristics mean a Capacitor WKWebView is probably DENIED: free,
+  not mitigation. `LOG_LIST_COLUMNS` exists (`stores/logs.ts:150`).
