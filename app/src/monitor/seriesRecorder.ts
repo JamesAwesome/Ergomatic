@@ -80,6 +80,28 @@
 // input this module deliberately does not take, §1) is out of this task's
 // scope; a future task widening this recorder's inputs is where that
 // tradeoff gets revisited, not silently inside this fix.
+//
+// CORRECTED (Task 1 re-review, comment-only handoff to Task 2): the
+// non-compounding-delay wording two paragraphs up is accurate ONLY for the
+// jitter shape it describes (a rejected candidate right after an
+// ALREADY-genuine reset, where `baseSeconds` is already correct and simply
+// resumes once real progress climbs back past the prior high-water mark).
+// It undersold a DIFFERENT, worse misclassification this same
+// `MAX_BOUNDARY_RESET_METERS` gate can produce: a GENUINE boundary whose
+// first post-reset frame is not observed until the rower has already
+// covered more than 3.0 m into the new interval — a dropped notification,
+// a reconnect gap, a slow poll — reads as `postResetDistanceMeters` already
+// past the threshold, and `isGenuineBoundary` rejects a fold that should
+// have happened. Unlike the jitter case, this is not a delay: the
+// completed interval's own final pre-reset reading is never folded into
+// `baseSeconds`/`baseMeters` AT ALL, so every sample this recorder emits
+// from that point forward is permanently short by the whole missed
+// interval's own duration and distance — not bounded, not self-correcting,
+// and not observable from inside this module (nothing here ever learns the
+// fold was skipped). Same disclosed-not-hidden posture as the paragraph
+// above, and the same out-of-scope fix (a machine-index-keyed max-merge):
+// stated honestly here because Task 2's flush/storage layer inherits
+// whatever this recorder emits and has no way to detect the gap either.
 
 import type { MonitorFrame } from "../../domain/monitor/types.js";
 

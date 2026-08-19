@@ -24,6 +24,11 @@ import {
   MONITOR_RUN_KEY,
   type MonitorRun,
 } from "./monitorRun";
+import {
+  SERIES_SAMPLE_CAP,
+  type Sample,
+  type SeriesData,
+} from "./seriesRecorder";
 
 // Realistic fixture, per repo convention (session/run.test.ts's own
 // comment): Filling Low (AT) — 3x2000m @ 6k+4 with 3' rest,
@@ -1060,5 +1065,209 @@ describe("interruptedTotalSeconds: work + programmed rest for completed interval
       ],
     };
     expect(interruptedTotalSeconds(run)).toBe(300);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase LT spec 2, Task 2. `docs/superpowers/specs/
+// 2026-08-19-series-capture-design.md` §2's storage-home row (`series?`),
+// §3's sacrifice ordering (`saveMonitorRun`'s own catch, `seriesDropped?`),
+// §4's S4 perf probe.
+// ---------------------------------------------------------------------------
+
+function sampleSeries(count: number): SeriesData {
+  const samples: Sample[] = [];
+  for (let i = 0; i < count; i += 1) {
+    samples.push({
+      t: (i + 1) * 10,
+      d: (i + 1) * 34,
+      p: 500,
+      spm: 24,
+      hr: 150,
+    });
+  }
+  return { samples };
+}
+
+describe("series / seriesDropped: the additive fields (§2 storage-home, never-migrate contract)", () => {
+  beforeEach(() => localStorage.clear());
+
+  it("a pre-series record round-trips exactly as before — never-migrate: no reader is forced to handle the field", () => {
+    const run = freshMonitorRun();
+    saveMonitorRun(run);
+    const loaded = loadMonitorRun();
+    expect(loaded).toStrictEqual(viaJson(run));
+    expect(loaded!.series).toBeUndefined();
+    expect(loaded!.seriesDropped).toBeUndefined();
+  });
+
+  it("a record WITH series (and truncated) validates and round-trips byte-identical", () => {
+    const series: SeriesData = { ...sampleSeries(3), truncated: true };
+    const run: MonitorRun = { ...freshMonitorRun(), series };
+    saveMonitorRun(run);
+    const loaded = loadMonitorRun();
+    expect(loaded).toStrictEqual(viaJson(run));
+    expect(loaded!.series).toStrictEqual(series);
+  });
+
+  it("a record with seriesDropped: true (and no series) validates and round-trips", () => {
+    const run: MonitorRun = { ...freshMonitorRun(), seriesDropped: true };
+    saveMonitorRun(run);
+    const loaded = loadMonitorRun();
+    expect(loaded).toStrictEqual(viaJson(run));
+    expect(loaded!.seriesDropped).toBe(true);
+    expect(loaded!.series).toBeUndefined();
+  });
+
+  it("both series and seriesDropped can coexist — the audit trail names a PRIOR drop, not necessarily the current write's own", () => {
+    const run: MonitorRun = {
+      ...freshMonitorRun(),
+      series: sampleSeries(1),
+      seriesDropped: true,
+    };
+    saveMonitorRun(run);
+    expect(loadMonitorRun()).toStrictEqual(viaJson(run));
+  });
+
+  it("rejects a record whose series is present but malformed — not a plain record at all", () => {
+    const run = freshMonitorRun();
+    localStorage.setItem(
+      MONITOR_RUN_KEY,
+      JSON.stringify({ ...run, series: "nope" }),
+    );
+    expect(loadMonitorRun()).toBeNull();
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+  });
+
+  it("rejects a record whose series.samples is the wrong shape (an object, not an array)", () => {
+    const run = freshMonitorRun();
+    localStorage.setItem(
+      MONITOR_RUN_KEY,
+      JSON.stringify({ ...run, series: { samples: {} } }),
+    );
+    expect(loadMonitorRun()).toBeNull();
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+  });
+
+  it("rejects a record whose seriesDropped is any value other than true", () => {
+    const run = freshMonitorRun();
+    localStorage.setItem(
+      MONITOR_RUN_KEY,
+      JSON.stringify({ ...run, seriesDropped: false }),
+    );
+    expect(loadMonitorRun()).toBeNull();
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+  });
+});
+
+describe("saveMonitorRun: the sacrifice (§3, ruling 3's own caution section)", () => {
+  beforeEach(() => localStorage.clear());
+  // `afterEach`, not a per-test `spy.mockRestore()` call at the tail of
+  // each `it`: a `mockRestore()` placed after the assertions never runs
+  // when an assertion throws first, and the un-restored spy then leaks
+  // into whichever test runs next — found by this task's own self-mutation
+  // exercise (removing the sacrifice retry made the FIRST test fail as
+  // expected, but its now-unrestored spy silently corrupted the SECOND
+  // test's own call count, and it read as a false pass instead of a second
+  // failure). `afterEach` always runs, pass or fail.
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("a thrown write WITH series present retries WITHOUT it, and the run survives series-less with seriesDropped: true", () => {
+    const run: MonitorRun = {
+      ...freshMonitorRun(),
+      actuals: [actual1],
+      series: sampleSeries(5),
+    };
+    const spy = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementationOnce(() => {
+        throw new DOMException("quota exceeded", "QuotaExceededError");
+      });
+
+    expect(() => saveMonitorRun(run)).not.toThrow();
+    expect(spy).toHaveBeenCalledTimes(2);
+
+    const survived = loadMonitorRun();
+    expect(survived).not.toBeNull();
+    expect(survived!.series).toBeUndefined();
+    expect(survived!.seriesDropped).toBe(true);
+    // Nothing else about the run was sacrificed with it — the actuals, the
+    // program, the identity all made it through on the smaller write.
+    expect(survived!.actuals).toStrictEqual([actual1]);
+    expect(survived!.workoutId).toBe(run.workoutId);
+    expect(survived!.title).toBe(run.title);
+  });
+
+  it("the retry ALSO throwing: today's odds, nothing worse — the run is unsaved, exactly as it always was before this task", () => {
+    const run: MonitorRun = { ...freshMonitorRun(), series: sampleSeries(5) };
+    const spy = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(() => {
+        throw new DOMException("quota exceeded", "QuotaExceededError");
+      });
+
+    expect(() => saveMonitorRun(run)).not.toThrow();
+    expect(spy).toHaveBeenCalledTimes(2);
+    expect(loadMonitorRun()).toBeNull();
+  });
+
+  it("a record with NO series at all skips the retry outright — one throw, one failed write, no pointless second attempt", () => {
+    const run = freshMonitorRun();
+    const spy = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(() => {
+        throw new DOMException("quota exceeded", "QuotaExceededError");
+      });
+
+    expect(() => saveMonitorRun(run)).not.toThrow();
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(loadMonitorRun()).toBeNull();
+  });
+
+  it("the happy path (no throw at all) is completely unaffected: one write, series intact, seriesDropped absent", () => {
+    const run: MonitorRun = { ...freshMonitorRun(), series: sampleSeries(2) };
+    const spy = vi.spyOn(Storage.prototype, "setItem");
+
+    saveMonitorRun(run);
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    const loaded = loadMonitorRun();
+    expect(loaded!.series).toStrictEqual(run.series);
+    expect(loaded!.seriesDropped).toBeUndefined();
+  });
+});
+
+describe("S4: the worst-case series serializes fast enough for a 30s flush cadence (§4)", () => {
+  it("JSON.stringify of a 14,400-sample record completes well under 100ms", () => {
+    const samples: Sample[] = Array.from(
+      { length: SERIES_SAMPLE_CAP },
+      (_, i) => ({
+        t: (i + 1) * 10,
+        d: (i + 1) * 34,
+        p: Math.round(120 * 10 + (i % 40)),
+        spm: 20 + (i % 10),
+        hr: 130 + (i % 60),
+      }),
+    );
+    const run: MonitorRun = {
+      ...freshMonitorRun(),
+      series: { samples, truncated: true },
+    };
+
+    const start = performance.now();
+    const json = JSON.stringify(run);
+    const elapsedMs = performance.now() - start;
+
+    // S4's own reporting requirement: the measured number is stated in test
+    // output (and carried into the task report), not just asserted against.
+    console.log(
+      `S4 perf probe: JSON.stringify of a ${SERIES_SAMPLE_CAP}-sample MonitorRun took ${elapsedMs.toFixed(2)}ms`,
+    );
+
+    expect(samples).toHaveLength(SERIES_SAMPLE_CAP);
+    expect(json.length).toBeGreaterThan(0);
+    expect(elapsedMs).toBeLessThan(100);
   });
 });

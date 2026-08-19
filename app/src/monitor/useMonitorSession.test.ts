@@ -26,7 +26,7 @@ import { buildRun } from "../session/engine";
 import type { LogSeed } from "../session/logDraft";
 import { loadRun, saveRun, type SessionRun } from "../session/run";
 import { createEventLog } from "./eventLog";
-import { loadMonitorRun } from "./monitorRun";
+import { loadMonitorRun, MONITOR_RUN_KEY } from "./monitorRun";
 import { buildMonitorLogSteps } from "../session/logDraft";
 import { monitorModeRun } from "../session/LogSession";
 import {
@@ -3552,5 +3552,501 @@ describe("useMonitorSession: exportLog", () => {
     expect(result.current.phase).toBe("ended");
     expect(result.current.exportLog()).toBe(log.exportLog());
     expect(result.current.exportLog()).not.toBe("[]");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase LT spec 2, Task 2. `docs/superpowers/specs/
+// 2026-08-19-series-capture-design.md` §2 (the flush policy), §3 (the
+// localStorage sacrifice — this file's own share of it lives in
+// `monitorRun.test.ts`, inside `saveMonitorRun`'s own catch), §4 (S1/S6).
+// ---------------------------------------------------------------------------
+
+/** A hand-driven stand-in for `setInterval`, matching `manualSchedule()`'s
+ *  own shape one describe block up (that helper is function-scoped to its
+ *  own `describe`, so this is a deliberate, small duplication rather than a
+ *  shared export — nothing here needs the handoff hold's own timer). The
+ *  ONE difference that matters: `fire()` can be called MORE THAN ONCE per
+ *  registration, the same way a real `setInterval`'s callback re-fires on
+ *  every tick from the SAME `setInterval()` call — this hook only ever
+ *  calls `seriesFlushSchedule()` once per run (`startSeriesFlush`'s own
+ *  doc comment), so `calls` should stay at length 1 for the life of a
+ *  session regardless of how many times a test fires it. */
+function manualInterval() {
+  const calls: { ms: number; fire: () => void; cancelled: boolean }[] = [];
+  return {
+    calls,
+    schedule: (cb: () => void, ms: number): (() => void) => {
+      const call = { ms, fire: cb, cancelled: false };
+      calls.push(call);
+      return () => {
+        call.cancelled = true;
+      };
+    },
+  };
+}
+
+describe("useMonitorSession: series capture — recorder wiring and the three flush points (Phase LT spec 2, Task 2)", () => {
+  const ONE_INTERVAL: WorkoutProgram = {
+    intervals: [
+      {
+        type: "work",
+        kind: "time",
+        value: 60,
+        targetSplit: 120,
+        displaySpm: 22,
+        restSeconds: 0,
+      },
+    ],
+  };
+  const TWO_LOCAL: WorkoutProgram = {
+    intervals: [
+      {
+        type: "work",
+        kind: "time",
+        value: 60,
+        targetSplit: 120,
+        displaySpm: 22,
+        restSeconds: 0,
+      },
+      {
+        type: "work",
+        kind: "time",
+        value: 60,
+        targetSplit: 120,
+        displaySpm: 22,
+        restSeconds: 0,
+      },
+    ],
+  };
+  const IDENTITY: RunIdentity = {
+    workoutId: "series-wiring",
+    title: "Series wiring",
+    ...TEST_SEED,
+  };
+
+  it("the boundary flush merges the trace into the SAME write that lands the accepted actual — nothing is written before the first flush point", async () => {
+    const { result, fake } = harness({
+      program: TWO_LOCAL,
+      events: [
+        status(100, { elapsedSeconds: 10, distanceMeters: 40 }),
+        status(200, { elapsedSeconds: 22, distanceMeters: 90 }),
+        {
+          atMs: 200,
+          kind: "boundary",
+          actual: {
+            index: 0,
+            elapsedSeconds: 22,
+            distanceMeters: 90,
+            avgSpm: 24,
+            avgHeartRateBpm: 140,
+            restDistanceMeters: 0,
+          },
+          cumulativeElapsedSeconds: 22,
+          cumulativeDistanceMeters: 90,
+        },
+      ],
+    });
+    await connect(result);
+    await programAndArm(result, fake, TWO_LOCAL, IDENTITY);
+
+    tick(fake, 100);
+    // The run just opened (the create write), and the recorder already has
+    // one sample — but nothing has flushed it yet: no boundary, no timer
+    // tick, no close.
+    expect(loadMonitorRun()?.series).toBeUndefined();
+
+    tick(fake, 100);
+    // The second frame lands, then the boundary — still open (interval 1 of
+    // 2 has not started reporting yet), so the ONLY thing that could have
+    // written a series this far is the boundary flush.
+    const midSession = loadMonitorRun();
+    expect(midSession?.completedAt).toBeNull();
+    expect(midSession?.actuals).toHaveLength(1);
+    expect(midSession?.series?.samples.map((s) => s.t)).toStrictEqual([
+      100, 220,
+    ]);
+  });
+
+  it("the 30-second timer flush fires independent of any boundary", async () => {
+    const flushTimer = manualInterval();
+    const { result, fake } = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [
+          status(100, { elapsedSeconds: 10, distanceMeters: 40 }),
+          status(200, { elapsedSeconds: 22, distanceMeters: 90 }),
+        ],
+      },
+      { seriesFlushSchedule: flushTimer.schedule },
+    );
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, IDENTITY);
+    // No run yet — the timer has not started.
+    expect(flushTimer.calls).toHaveLength(0);
+
+    tick(fake, 100);
+    // The run opened: the flush timer registers exactly once, at 30s.
+    expect(flushTimer.calls).toHaveLength(1);
+    expect(flushTimer.calls[0]!.ms).toBe(30_000);
+    expect(loadMonitorRun()?.series).toBeUndefined();
+
+    act(() => flushTimer.calls[0]!.fire());
+    expect(loadMonitorRun()?.series?.samples.map((s) => s.t)).toStrictEqual([
+      100,
+    ]);
+
+    tick(fake, 100);
+    // A second frame is fed, but nothing flushes it — no boundary, no
+    // second timer registration (still the same one, re-fired).
+    expect(flushTimer.calls).toHaveLength(1);
+    expect(loadMonitorRun()?.series?.samples.map((s) => s.t)).toStrictEqual([
+      100,
+    ]);
+
+    act(() => flushTimer.calls[0]!.fire());
+    expect(loadMonitorRun()?.series?.samples.map((s) => s.t)).toStrictEqual([
+      100, 220,
+    ]);
+  });
+
+  it("stop-at-close cancels the flush timer, and a post-close finish-grace actual does not grow the series", async () => {
+    // The WALK 5 shape, extended: two live frames before the finish (both
+    // feed the recorder), then the general-status frame that ends the
+    // workout (a THIRD live frame — still `phase === "live"` at the instant
+    // it arrives, so it feeds the recorder too), then the finish-grace
+    // actual, one notification later.
+    const flushTimer = manualInterval();
+    const { result, fake } = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [
+          status(100, { elapsedSeconds: 10, distanceMeters: 40 }),
+          status(200, { elapsedSeconds: 30, distanceMeters: 100 }),
+          {
+            atMs: 300,
+            kind: "status",
+            workoutState: WORKOUTSTATE_WORKOUTEND,
+            elapsedSeconds: 60,
+            distanceMeters: 200,
+            spm: 0,
+            currentSplit: 0,
+            heartRateBpm: 140,
+            programIntervalIndex: 0,
+          },
+          {
+            atMs: 300,
+            kind: "boundary",
+            actual: {
+              index: 0,
+              elapsedSeconds: 60,
+              distanceMeters: 200,
+              avgSpm: 24,
+              avgHeartRateBpm: 142,
+              restDistanceMeters: 0,
+            },
+            cumulativeElapsedSeconds: 60,
+            cumulativeDistanceMeters: 200,
+          },
+        ],
+      },
+      { seriesFlushSchedule: flushTimer.schedule },
+    );
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, IDENTITY);
+
+    tick(fake, 100); // -> live, t=100
+    tick(fake, 100); // t=300
+    expect(flushTimer.calls).toHaveLength(1);
+    expect(flushTimer.calls[0]!.cancelled).toBe(false);
+
+    tick(fake, 100); // the WORKOUTEND frame (t=600), the close, and the
+    // finish-grace actual, all in this one tick.
+
+    expect(result.current.phase).toBe("ended");
+    expect(result.current.actuals).toHaveLength(1);
+    // THE STOP: the flush timer was cancelled the instant the record
+    // closed — still registered (nothing removes the entry, the same
+    // `setInterval`-style idiom the handoff hold's own backstop uses), but
+    // marked cancelled.
+    expect(flushTimer.calls).toHaveLength(1);
+    expect(flushTimer.calls[0]!.cancelled).toBe(true);
+
+    const closed = loadMonitorRun();
+    expect(closed?.actuals).toHaveLength(1);
+    // All three PRE-close frames landed (100, 300, 600) — the close flush
+    // carries everything the recorder had at the instant it stopped.
+    expect(closed?.series?.samples.map((s) => s.t)).toStrictEqual([
+      100, 300, 600,
+    ]);
+
+    // Firing the (cancelled) timer by hand must not resurrect anything —
+    // belt-and-braces against the SAME outcome the cancellation above
+    // already prevents in production (a real cancelled `setInterval` never
+    // fires again at all).
+    act(() => flushTimer.calls[0]!.fire());
+    expect(loadMonitorRun()?.series?.samples.map((s) => s.t)).toStrictEqual([
+      100, 300, 600,
+    ]);
+  });
+});
+
+describe("useMonitorSession: S1 — the write-count witness (design spec §4)", () => {
+  it("total localStorage writes for MONITOR_RUN_KEY ≈ boundaries + timer-flushes + 2 — collapsed writes, not one per sample", async () => {
+    const flushTimer = manualInterval();
+    const THREE_INTERVALS: WorkoutProgram = {
+      intervals: [
+        {
+          type: "work",
+          kind: "time",
+          value: 60,
+          targetSplit: 120,
+          displaySpm: 22,
+          restSeconds: 0,
+        },
+        {
+          type: "work",
+          kind: "time",
+          value: 60,
+          targetSplit: 120,
+          displaySpm: 22,
+          restSeconds: 0,
+        },
+        {
+          type: "work",
+          kind: "time",
+          value: 60,
+          targetSplit: 120,
+          displaySpm: 22,
+          restSeconds: 0,
+        },
+      ],
+    };
+    const { result, fake } = harness(
+      {
+        program: THREE_INTERVALS,
+        events: [
+          status(100, { elapsedSeconds: 10, distanceMeters: 40 }),
+          status(200, { elapsedSeconds: 22, distanceMeters: 90 }),
+          {
+            atMs: 200,
+            kind: "boundary",
+            actual: {
+              index: 0,
+              elapsedSeconds: 22,
+              distanceMeters: 90,
+              avgSpm: 24,
+              avgHeartRateBpm: 140,
+              restDistanceMeters: 0,
+            },
+            cumulativeElapsedSeconds: 22,
+            cumulativeDistanceMeters: 90,
+          },
+          status(300, { elapsedSeconds: 8, distanceMeters: 30 }),
+          status(400, { elapsedSeconds: 19, distanceMeters: 80 }),
+          {
+            atMs: 400,
+            kind: "boundary",
+            actual: {
+              index: 1,
+              elapsedSeconds: 19,
+              distanceMeters: 80,
+              avgSpm: 24,
+              avgHeartRateBpm: 145,
+              restDistanceMeters: 0,
+            },
+            cumulativeElapsedSeconds: 41,
+            cumulativeDistanceMeters: 170,
+          },
+          status(500, {
+            workoutState: WORKOUTSTATE_WORKOUTEND,
+            elapsedSeconds: 5,
+            distanceMeters: 15,
+            spm: 0,
+            currentSplit: 0,
+          }),
+        ],
+      },
+      { seriesFlushSchedule: flushTimer.schedule },
+    );
+
+    const setItemSpy = vi.spyOn(Storage.prototype, "setItem");
+    const monitorWrites = (): number =>
+      setItemSpy.mock.calls.filter(([key]) => key === MONITOR_RUN_KEY).length;
+
+    await connect(result);
+    await programAndArm(result, fake, THREE_INTERVALS, {
+      workoutId: "s1",
+      title: "S1",
+      ...TEST_SEED,
+    });
+    expect(monitorWrites()).toBe(0);
+
+    tick(fake, 100); // live: the create write (1)
+    expect(monitorWrites()).toBe(1);
+
+    act(() => flushTimer.calls[0]!.fire()); // timer flush (2)
+    tick(fake, 100); // frame + boundary 0, merged write (3)
+    act(() => flushTimer.calls[0]!.fire()); // timer flush (4)
+    tick(fake, 100); // frame only — no boundary at this atMs, no write
+    tick(fake, 100); // frame + boundary 1, merged write (5)
+    tick(fake, 100); // the WORKOUTEND frame + close, merged write (6)
+
+    expect(result.current.phase).toBe("ended");
+    const boundaries = 2;
+    const timerFlushes = 2;
+    // §4 S1's own approximate formula, EXACT for this replayed session
+    // because the boundary and close writes are MERGED with their series
+    // snapshot rather than chased by a second write — a per-sample flush
+    // (this test's own self-mutation target) would instead write on every
+    // one of the six frames plus the boundaries and close, far past this
+    // number.
+    expect(monitorWrites()).toBe(boundaries + timerFlushes + 2);
+    expect(monitorWrites()).toBe(6);
+  });
+});
+
+describe("useMonitorSession: S6 — navigator.storage.persist() at first connect (design spec §4)", () => {
+  afterEach(() => {
+    // jsdom's own default (no Storage Manager API at all) is `undefined` —
+    // undo whichever test below added one, so later tests in this file see
+    // the same clean slate.
+    Reflect.deleteProperty(navigator, "storage");
+  });
+
+  it("calls persist() exactly once per connect, and logs a GRANTED outcome to the ring", async () => {
+    const persistMock = vi.fn().mockResolvedValue(true);
+    Object.defineProperty(navigator, "storage", {
+      configurable: true,
+      value: { persist: persistMock },
+    });
+    const log = createEventLog();
+    const fake = createFakeTransport({
+      program: TWO_INTERVALS,
+      deviceName: DEVICE_NAME,
+    });
+    const { result } = renderHook(() =>
+      useMonitorSession({
+        createTransport: () => fake,
+        createLog: () => log,
+        now: () => t0,
+        driverOptions: { settleTicks: 0, prepareSettleTicks: 0 },
+      }),
+    );
+
+    await connect(result);
+    await act(async () => {
+      await flush();
+    });
+
+    expect(persistMock).toHaveBeenCalledTimes(1);
+    const persistEntries = log
+      .entries()
+      .filter((e) => e.kind === "storage-persist");
+    expect(persistEntries).toHaveLength(1);
+    expect(persistEntries[0]!.detail).toBe("granted");
+  });
+
+  it("a denial — or a browser with no Storage Manager API at all, jsdom's own default — is tolerated: no behavior change, logged as denied", async () => {
+    // No `navigator.storage` at all here: exactly the "probably DENIED...
+    // on iOS" case §4 S6 names, and the shape this repo's own test
+    // environment already presents without any setup.
+    const log = createEventLog();
+    const fake = createFakeTransport({
+      program: TWO_INTERVALS,
+      deviceName: DEVICE_NAME,
+    });
+    const { result } = renderHook(() =>
+      useMonitorSession({
+        createTransport: () => fake,
+        createLog: () => log,
+        now: () => t0,
+        driverOptions: { settleTicks: 0, prepareSettleTicks: 0 },
+      }),
+    );
+
+    await connect(result);
+    await act(async () => {
+      await flush();
+    });
+
+    // No behavior change: the ordinary connect flow reached exactly where
+    // it always does.
+    expect(result.current.phase).toBe("pairing");
+    const persistEntries = log
+      .entries()
+      .filter((e) => e.kind === "storage-persist");
+    expect(persistEntries).toHaveLength(1);
+    expect(persistEntries[0]!.detail).toContain("denied");
+  });
+
+  it("a persist() that resolves false is logged as denied too, not just an absent API", async () => {
+    Object.defineProperty(navigator, "storage", {
+      configurable: true,
+      value: { persist: vi.fn().mockResolvedValue(false) },
+    });
+    const log = createEventLog();
+    const fake = createFakeTransport({
+      program: TWO_INTERVALS,
+      deviceName: DEVICE_NAME,
+    });
+    const { result } = renderHook(() =>
+      useMonitorSession({
+        createTransport: () => fake,
+        createLog: () => log,
+        now: () => t0,
+        driverOptions: { settleTicks: 0, prepareSettleTicks: 0 },
+      }),
+    );
+
+    await connect(result);
+    await act(async () => {
+      await flush();
+    });
+
+    const persistEntries = log
+      .entries()
+      .filter((e) => e.kind === "storage-persist");
+    expect(persistEntries).toHaveLength(1);
+    expect(persistEntries[0]!.detail).toContain("denied");
+  });
+
+  it("a persist() that throws SYNCHRONOUSLY (no runtime is documented to do this, but tolerated the same as any other denial) never escapes into connect()'s own error handling", async () => {
+    Object.defineProperty(navigator, "storage", {
+      configurable: true,
+      value: {
+        persist: (): never => {
+          throw new Error("synchronous storage failure");
+        },
+      },
+    });
+    const log = createEventLog();
+    const fake = createFakeTransport({
+      program: TWO_INTERVALS,
+      deviceName: DEVICE_NAME,
+    });
+    const { result } = renderHook(() =>
+      useMonitorSession({
+        createTransport: () => fake,
+        createLog: () => log,
+        now: () => t0,
+        driverOptions: { settleTicks: 0, prepareSettleTicks: 0 },
+      }),
+    );
+
+    await connect(result);
+    await act(async () => {
+      await flush();
+    });
+
+    // Not mapped through `mapRadioFailure` as a radio failure — the connect
+    // flow reached exactly where it always does.
+    expect(result.current.phase).toBe("pairing");
+    expect(result.current.error).toBeNull();
+    const persistEntries = log
+      .entries()
+      .filter((e) => e.kind === "storage-persist");
+    expect(persistEntries).toHaveLength(1);
+    expect(persistEntries[0]!.detail).toContain("threw synchronously");
   });
 });
