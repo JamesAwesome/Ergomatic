@@ -48,7 +48,15 @@ describe("judgeBand — the one shared on-target dead band (Phase LT spec 1, §1
     expect(source).toContain(
       'import { ON_TARGET_BAND_SECONDS } from "../../judgeBand.js"',
     );
-    expect(source).not.toMatch(/ON_TARGET_BAND_SECONDS\s*=(?!=)/);
+    // Final-review fix round (MINOR finding): the plain `\s*=(?!=)` regex
+    // only catches an untyped `ON_TARGET_BAND_SECONDS = 0.5`-shaped
+    // duplicate — a TYPE-ANNOTATED one (`const ON_TARGET_BAND_SECONDS:
+    // number = 0.5`) has a `: number` between the name and the `=`, which
+    // the old pattern's immediate `\s*=` never reaches, so it read that
+    // shape as a pass. The optional `(?::[^=]*)?` leg admits a colon plus
+    // any run of non-`=` characters (a type annotation) before the `=`,
+    // without weakening the `(?!=)` guard that keeps `==`/`===` out.
+    expect(source).not.toMatch(/ON_TARGET_BAND_SECONDS\s*(?::[^=]*)?=(?!=)/);
   });
 
   // §1's band legs, both directions, boundary inclusive both ways (the

@@ -752,12 +752,14 @@ export const MONITOR_SPLIT_MAX = 6000;
  *  UNREPRESENTABLE — the floor can only ever drop an EXACT 0, which means
  *  "no strokes", not a stroke-rate measurement. Existing stored zeros
  *  (from before this change, saved under the old 0 floor) still read back
- *  as `spm: 0` or `actualSpm: 0` verbatim — a `> 0` read guard to render
- *  them as absent is OWED TO THE RENDERER (a later task, §2's own
- *  "Display" row), not written by this task: this module only stops the
+ *  as `spm: 0` or `actualSpm: 0` verbatim — this module only stops the
  *  floor from admitting a NEW zero, it never rewrites or reinterprets a
- *  stored one. Same "drop the field on read, never migrate" treatment the
- *  split/HR bands already use, once that renderer exists. */
+ *  stored one. The `> 0` read guard that renders such a stored zero as
+ *  absent lives in `buildSpmCell` (`session/summaryModel.ts`, final-review
+ *  fix round) — the ONE place both renderers (live summary, from-the-log)
+ *  resolve this field, so it is written there once rather than
+ *  re-implemented per renderer. Same "drop the field on read, never
+ *  migrate" treatment the split/HR bands already use. */
 export const MONITOR_SPM_MIN = 1;
 export const MONITOR_SPM_MAX = 99;
 

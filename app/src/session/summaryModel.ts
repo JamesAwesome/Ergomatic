@@ -417,6 +417,21 @@ export function rowJudgment(step: {
  *     no cell at all, `undefined` — matching this module's per-cell
  *     absence idiom everywhere else, never an empty `{}`.
  *
+ *  THE FLOOR-ROW GUARD (final-review fix round, IMPORTANT finding):
+ *  either half also reads as absent when it is `<= 0`, not merely
+ *  `undefined` — spec §2's own promise ("existing stored zeros: rendered
+ *  as absent, `> 0` read guard"), implemented HERE, the one place both
+ *  renderers resolve this field (`logDraft.ts`'s `MONITOR_SPM_MIN`
+ *  comment names this exact obligation and points here). A pre-split row
+ *  saved under the old 0 floor (`actualSource: "pm5"`, no `actualSpm`,
+ *  `spm: 0`) would otherwise read as `{measured: 0}` — a real "0" on
+ *  screen, the wrong-number class this phase exists to kill. The same
+ *  guard applies to the POST-split target half too: a zero authored rate
+ *  is equally not a rate, even though a live monitor row can never
+ *  produce a zero MEASURED half post-split (`buildMonitorLogSteps` only
+ *  writes `actualSpm` when `avgSpm >= MONITOR_SPM_MIN`, i.e. `1` — the
+ *  write floor already forbids it there).
+ *
  *  EXPORTED for two reasons: (1) the PRE-SPLIT leg is, as of Task 1,
  *  unreachable through EITHER door builder below — `buildMonitorLogSteps`
  *  can no longer produce that shape at all (Task 1's §2 amendment made it
@@ -435,14 +450,21 @@ export function buildSpmCell(
   step: LogStep,
 ): { measured?: number; target?: number } | undefined {
   if (spmIsMeasured(step)) {
-    return step.spm !== undefined ? { measured: step.spm } : undefined;
+    return step.spm !== undefined && step.spm > 0
+      ? { measured: step.spm }
+      : undefined;
   }
-  if (step.actualSpm === undefined && step.spm === undefined) {
+  const measured =
+    step.actualSpm !== undefined && step.actualSpm > 0
+      ? step.actualSpm
+      : undefined;
+  const target = step.spm !== undefined && step.spm > 0 ? step.spm : undefined;
+  if (measured === undefined && target === undefined) {
     return undefined;
   }
   return {
-    ...(step.actualSpm !== undefined ? { measured: step.actualSpm } : {}),
-    ...(step.spm !== undefined ? { target: step.spm } : {}),
+    ...(measured !== undefined ? { measured } : {}),
+    ...(target !== undefined ? { target } : {}),
   };
 }
 

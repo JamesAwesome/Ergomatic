@@ -1637,6 +1637,53 @@ describe("buildSummaryModel — §2's SPM cell (measured/target pair, resolved b
     };
     expect(buildSpmCell(oldRowNoSpm)).toBeUndefined();
   });
+
+  // Final-review fix round (IMPORTANT finding): spec §2's floor row
+  // promises "Existing stored zeros: rendered as absent (`> 0` read
+  // guard)" — `logDraft.ts`'s own `MONITOR_SPM_MIN` comment names this
+  // exact obligation ("existing stored zeros ... still read back as
+  // `spm: 0` or `actualSpm: 0` verbatim") and deeds it to a later
+  // renderer task. That guard was never written. A row saved BEFORE
+  // `MONITOR_SPM_MIN` moved from 0 to 1 (the server still accepts a
+  // written 0 from v0.12/v0.13 clients — pre-dating this floor) is
+  // exactly the pre-split shape `spmIsMeasured` reads as measured:
+  // `actualSource: "pm5"`, no `actualSpm`, `spm: 0`. Before this fix,
+  // `buildSpmCell` returned `{ measured: 0 }` for it, which a real
+  // renderer paints as "0" — a measured stroke rate that was never
+  // really measured, the wrong-number class this whole phase exists to
+  // kill.
+  it("pre-split stored row with spm: 0 (old floor, pre-dates MONITOR_SPM_MIN=1): rendered as absent, never {measured: 0}", () => {
+    const oldZeroRow: LogStep = {
+      label: "old row, zero under the old floor",
+      actualSource: "pm5",
+      actualSplit: 130,
+      actualSeconds: 60,
+      spm: 0,
+    };
+    expect(buildSpmCell(oldZeroRow)).toBeUndefined();
+  });
+
+  // The guard applies to BOTH halves, not just the pre-split measured
+  // one — a zero TARGET is equally not a rate. A live monitor row can
+  // never carry `actualSpm: 0` (`buildMonitorLogSteps` only ever writes
+  // `actualSpm` when `avgSpm >= MONITOR_SPM_MIN` (1), so the measured
+  // half of a POST-split row is unreachable-zero by construction — the
+  // write floor already forbids it, which is why this leg only needs to
+  // prove the target half, and confirms an in-band `actualSpm` survives
+  // the guard unclipped rather than being accidentally treated as
+  // falsy). Nothing else ever guarded the target half, so an old
+  // stored `spm: 0` alongside a real `actualSpm` is the one shape that
+  // proves the target leg of the fix independently of the pre-split leg
+  // above.
+  it("post-split row with a zero TARGET (spm: 0) alongside a real measured actualSpm: target half absent, measured half untouched", () => {
+    const zeroTargetRow: LogStep = {
+      label: "zero target, real measurement",
+      actualSource: "pm5",
+      actualSpm: 24,
+      spm: 0,
+    };
+    expect(buildSpmCell(zeroTargetRow)).toStrictEqual({ measured: 24 });
+  });
 });
 
 // ---------------------------------------------------------------------

@@ -426,6 +426,31 @@ describe("buildStoredSummary — §2 SPM cell, the pre-/post-split discriminant 
     expect(row.spmCell).toStrictEqual({ measured: 24 });
   });
 
+  // Final-review fix round (IMPORTANT finding): the from-the-log door
+  // reads a STORED row straight off the wire with no door-measurability
+  // gate in front of it, so a genuinely old row with `spm: 0` (saved
+  // under the pre-`MONITOR_SPM_MIN`-1 floor) reaches `buildSpmCell` here
+  // too — `summaryModel.test.ts`'s own version of this test carries the
+  // full reasoning. Both renderers share the ONE `buildSpmCell`
+  // (`summaryModel.ts`), so this is the from-the-log leg of the same
+  // fix, not a second implementation of it.
+  it("an OLD (pre-split) monitor row with spm: 0 (old floor): rendered as absent, never {measured: 0}", () => {
+    const steps: StoredLog["steps"] = [
+      {
+        label: "old pm5 row, zero under the old floor",
+        actualSource: "pm5",
+        actualSeconds: 300,
+        actualSplit: 130,
+        spm: 0,
+        // No actualSpm key at all — same pre-split shape as the test
+        // above, but with the legacy zero this fix guards against.
+      },
+    ];
+    const view = buildStoredSummary(baseRow({ steps }));
+    const row = asMeasured(view.rows[0]);
+    expect(row.spmCell).toBeUndefined();
+  });
+
   it("a measured-only cell (no authored rate stored at all)", () => {
     const steps: StoredLog["steps"] = [
       { label: "a", actualSource: "pm5", actualSeconds: 300, actualSpm: 24 },
