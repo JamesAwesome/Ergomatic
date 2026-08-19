@@ -2458,7 +2458,11 @@ bugfix rounds; both QUEUED entries below re-dispositioned). Spec 1 at
 `docs/superpowers/specs/2026-08-18-target-truth-design.md`; phase-open
 gates run (PM GO-WITH-CHANGES + antagonist anchor, both folded; the
 anchor's attacked-and-held claims are the phase's vetted ground, in the
-ledger).
+ledger). LT-0 SHIPPED (#128). **Spec 1 IMPLEMENTED 2026-08-19** (Tasks
+1-4 done on branch `lt-truth`: the split/floor/server bound, the row/SPM
+model and shared band, both renderers, and the witness sweep +
+reconciliation) — awaiting final review, the triad's PM final-PR gate,
+and James's merge approval. Spec 2/3 remain re-gated, below.
 **Goal:** the summary's interval rows answer "did I hit MY targets" —
 target inline, judgment vs the row's own target with the connected
 surface's shared ±0.5s band, stroke rate shown (`24 / 22`), and discard
