@@ -125,10 +125,31 @@ describe("POST /api/logs: the full 14,400-sample worst-case series, through the 
     // mentions `series` — this is the HTTP-level witness of that; the
     // store-level drift pin (`storeContracts.ts`) is what actually proves
     // the SELECT can never silently regain it.
+    //
+    // LOW-4 (fix round): S4's own reporting idiom
+    // (`src/monitor/monitorRun.test.ts`'s "the measured milliseconds
+    // STATED in the test output") applied to S4's sibling check — S5's
+    // own "the list query timed with the column proven absent from its
+    // SELECT" — with a 720 KB row genuinely present for THIS user. The
+    // bound is generous on purpose: this measures a real HTTP round trip
+    // through Testcontainers Postgres (auth, routing, JSON
+    // serialization), not the tight in-process budget S4's own
+    // JSON.stringify-only probe uses — the claim under test is "excluding
+    // the column keeps list cheap regardless of the row's own size," not
+    // a perf SLA on this harness's own network stack.
+    const listStart = performance.now();
     const list = await request(app)
       .get("/api/logs")
       .set("Authorization", bearer);
+    const listElapsedMs = performance.now() - listStart;
+    console.log(
+      `S5 list-query probe: GET /api/logs with a 720KB series row present took ${listElapsedMs.toFixed(2)}ms`,
+    );
     expect(list.status).toBe(200);
     expect(list.body[0]).not.toHaveProperty("series");
+    expect(
+      listElapsedMs,
+      `S5 list-query probe: GET /api/logs with a 720KB series row present took ${listElapsedMs.toFixed(2)}ms`,
+    ).toBeLessThan(3000);
   }, 60_000);
 });

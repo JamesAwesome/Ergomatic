@@ -38,6 +38,7 @@ import {
   type MonitorRun,
 } from "../monitor/monitorRun";
 import type { SeriesData } from "../monitor/seriesRecorder";
+import type { MonitorLogEntry } from "../monitor/eventLog";
 import { useStagedDiscard } from "./useStagedDiscard";
 import BackLink from "../shell/BackLink";
 import PostWorkoutSummary, { singleTargetHint } from "./PostWorkoutSummary";
@@ -317,6 +318,39 @@ async function postLog(body: Record<string, unknown>): Promise<Response> {
   });
 }
 
+// Fix round (MED-LOW/LOW-3): the POST sacrifice ring-logs itself — the
+// live `MonitorEventLog` (`eventLog.ts`) this run's own recorder wrote to
+// is long gone by the time this screen renders (it's exported and
+// stashed at teardown, `useMonitorSession.ts` ~1470, well before
+// `LogSession` ever mounts), so there's no live instance to `.record()`
+// into. Instead this appends ONE more `MonitorLogEntry` (the exact
+// `{seq, kind, detail}` shape `eventLog.ts` already defines) onto the
+// SAME sessionStorage stash `MonitorLogRow` above already reads
+// (`ergomatic:last-rowed-log` — the copy a ROWED session keeps, which
+// this screen can only be showing for a run that was), so a systematic
+// server-side refusal of `series` becomes visible in diagnostics exactly
+// like every other monitor-session event, not just a client-console
+// inference from network tab. Best-effort and silent on any failure
+// (missing/malformed stash, sessionStorage disabled) — diagnostics never
+// block or complicate a save.
+function recordPostSacrifice(status: number): void {
+  try {
+    const raw = sessionStorage.getItem("ergomatic:last-rowed-log");
+    if (raw === null) return;
+    const entries = JSON.parse(raw) as MonitorLogEntry[];
+    const nextSeq =
+      entries.length > 0 ? entries[entries.length - 1]!.seq + 1 : 0;
+    entries.push({
+      seq: nextSeq,
+      kind: "post-sacrifice",
+      detail: `series dropped from POST /api/logs after status ${status}`,
+    });
+    sessionStorage.setItem("ergomatic:last-rowed-log", JSON.stringify(entries));
+  } catch {
+    // Best-effort diagnostics; never block or complicate the save.
+  }
+}
+
 // The part of the POST body that genuinely differs per door — where the
 // workout identity/steps come FROM (a frozen `SessionRun` vs a fetched
 // `LibraryWorkout`). `held`/`pain`/`notes` are NOT here: those are the
@@ -443,7 +477,17 @@ function useLogForm(onSaved: () => void) {
       delete body.deviceName;
     }
     try {
-      let res = await postLog(body);
+      // Fix round (MED-1): every retry below rebuilds from `currentBody`
+      // — the LAST body actually posted — never the original `body`.
+      // Rebuilding from the original would discard an EARLIER correction
+      // on a later retry: workout deleted mid-session -> 400 workoutId ->
+      // corrected retry (workoutId: null) ALSO fails, still carrying
+      // `series` -> the sacrifice must strip series from THAT corrected
+      // body, not re-post the original's now-stale workoutId (which is
+      // guaranteed to 400 again, surfacing a failure the sacrifice exists
+      // specifically to prevent).
+      let currentBody = body;
+      let res = await postLog(currentBody);
       // Retry once with `workoutId: null` ONLY when the 400 is specifically
       // about workoutId (the server's own `field` name on its error body —
       // server/routes/data.ts's `badRequest`) — e.g. the workout was
@@ -452,7 +496,7 @@ function useLogForm(onSaved: () => void) {
       // surface as a genuine failure, not be silently papered over by
       // stripping workoutId and resubmitting. The ONE place this policy
       // lives now, for both doors.
-      if (res.status === 400 && body.workoutId !== null) {
+      if (res.status === 400 && currentBody.workoutId !== null) {
         let field: unknown;
         try {
           field = ((await res.json()) as { field?: unknown }).field;
@@ -460,24 +504,30 @@ function useLogForm(onSaved: () => void) {
           field = undefined;
         }
         if (field === "workoutId") {
-          res = await postLog({ ...body, workoutId: null });
+          currentBody = { ...currentBody, workoutId: null };
+          res = await postLog(currentBody);
         }
       }
       // Series capture spec (2026-08-19), §3: THE POST SACRIFICE — a
       // non-ok response to a body carrying `series` retries ONCE with the
-      // key simply omitted (never a server-side "dropped" flag; Task 2's
-      // `MonitorRun.seriesDropped` is the only audit trail this needs),
-      // and only a failure of THAT retry surfaces the save error. The
-      // rower can always save the run; only the trace is sacrificed.
-      // Composes with the workoutId retry above rather than replacing it:
-      // a 413 (this route's own route-scoped 1mb limit still has a
-      // ceiling) is not a 400, so that block never fires for it and this
-      // one does (the red-provable 413 leg); a 400 that WAS about
-      // workoutId retries first with `series` unchanged, then lands here
-      // if the retry is STILL not ok and still carries `series`.
-      if (!res.ok && body.series !== undefined) {
-        const { series: _series, ...withoutSeries } = body;
-        res = await postLog(withoutSeries);
+      // key simply omitted, and only a failure of THAT retry surfaces the
+      // save error. The rower can always save the run; only the trace is
+      // sacrificed. Composes with the workoutId retry above (runs after
+      // it, against whatever `currentBody` that retry left behind) rather
+      // than replacing it: a 413 (this route's own route-scoped 1mb limit
+      // still has a ceiling) is not a 400, so that block never fires for
+      // it and this one does (the red-provable 413 leg); a 400 that WAS
+      // about workoutId retries first, then lands here if the retry is
+      // STILL not ok and still carries `series`. The audit trail is the
+      // ring event below (LOW-3) — never a server-side "dropped" flag;
+      // Task 2's `MonitorRun.seriesDropped` is the LOCALSTORAGE
+      // sacrifice's own separate audit trail (a write-time quota
+      // failure), not this one's.
+      if (!res.ok && currentBody.series !== undefined) {
+        recordPostSacrifice(res.status);
+        const { series: _series, ...withoutSeries } = currentBody;
+        currentBody = withoutSeries;
+        res = await postLog(currentBody);
       }
       if (res.ok) {
         // Only ever fires on a genuine 201 — a failed save (network error,

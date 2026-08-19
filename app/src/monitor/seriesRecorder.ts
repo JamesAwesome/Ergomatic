@@ -109,12 +109,38 @@ import type { MonitorFrame } from "../../domain/monitor/types.js";
  *  `truncated` is set exactly once — no eviction machinery. */
 export const SERIES_SAMPLE_CAP = 14_400;
 
+/** Fix round (MED-LOW-2, RULED): the SAME 20..254 bpm band
+ *  `logDraft.ts`'s `MONITOR_HR_MIN`/`MONITOR_HR_MAX` already applies to a
+ *  matched-actual's `avgHeartRateBpm` — an independent mirror here rather
+ *  than an import (this module is a lower-layer primitive `session/
+ *  logDraft.ts` itself depends on via `monitorRun.ts`'s `SeriesData`;
+ *  importing back from `logDraft.ts` would cycle). Before this fix, a
+ *  belt's own transient out-of-band byte (the wire forwards 1..19
+ *  unfiltered — `heartRateBpm` is only ever `null` for the true "no
+ *  belt" sentinels 0/255, `domain/monitor/pm5/parse.ts`'s `heartRate()`)
+ *  reached the server as a REAL `hr` value, and `data.ts`'s own `HR_MIN`
+ *  band (its comment: "reject a hand-crafted liar, not a real monitor
+ *  reading") 400ed the WHOLE POST on it — discarding the entire trace
+ *  for one out-of-band sample, the opposite of every other pm5 field's
+ *  drop-the-field-not-the-save treatment. Same fix, same layer it
+ *  belongs at: band it here, at the source, same as `logDraft.ts` already
+ *  does for the identical wire quantity one step downstream. */
+const HR_MIN = 20;
+const HR_MAX = 254;
+
 /** C2 logbook stroke-object shape (§1's Shape row, memo Q3, PRIMARY):
  *  cumulative tenths of a second, cumulative decimeters, tenths of a
  *  second per 500m, whole strokes/min. `hr` is ABSENT (never
  *  `undefined`-but-present) when the wire's own heart-rate sentinel
  *  resolved to `null` upstream (`domain/monitor/pm5/parse.ts`'s
- *  `heartRate()` — 255 or 0 -> `null` -> this module omits the key).
+ *  `heartRate()` — 255 or 0 -> `null` -> this module omits the key), OR
+ *  (fix round, MED-LOW-2) when it's a genuine but out-of-band reading
+ *  (the wire forwards 1..19 unfiltered) — this module bands `hr` to
+ *  20..254 at construction, same as `logDraft.ts`'s identical
+ *  `MONITOR_HR_MIN`/`MAX` treatment one step downstream, so a transient
+ *  bad byte never costs the whole trace at the server's own stricter
+ *  gate (`data.ts`'s `HR_MIN`/`MAX` 400s the WHOLE POST on an in-range
+ *  check, not just this one field).
  *
  *  `readonly` fields, and every `Sample` this module ever hands out is
  *  additionally `Object.freeze`d at creation (fix round, L2): `snapshot()`
@@ -260,8 +286,16 @@ export function createSeriesRecorder(): SeriesRecorder {
       spm: f.spm ?? 0,
       // `hr`'s readonly-optional shape (L2's freeze) means it must be
       // decided at construction, never assigned after — the spread of an
-      // empty object contributes no key at all when there is no belt.
-      ...(f.heartRateBpm != null ? { hr: f.heartRateBpm } : {}),
+      // empty object contributes no key at all when there is no belt
+      // (`heartRateBpm === null`) OR when it's a genuine wire reading
+      // OUTSIDE the 20..254 band above (fix round, MED-LOW-2) — same
+      // "drop the field, never the save" treatment `logDraft.ts` already
+      // gives the identical quantity one step downstream.
+      ...(f.heartRateBpm != null &&
+      f.heartRateBpm >= HR_MIN &&
+      f.heartRateBpm <= HR_MAX
+        ? { hr: f.heartRateBpm }
+        : {}),
     };
     samples.push(Object.freeze(sample));
   }

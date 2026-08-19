@@ -655,6 +655,37 @@ describe("createSeriesRecorder — hr presence (§1's Shape row: absent, never p
     const sample = rec.snapshot()!.samples[0]!;
     expect(sample.hr).toBe(143);
   });
+
+  // Fix round (MED-LOW-2, RULED): the wire forwards a genuine, non-null
+  // heartRateBpm byte 1..19 unfiltered (only 0/255 resolve to `null`
+  // upstream, `heartRate()`'s own sentinel handling) — before this fix
+  // such a reading rode straight onto the sample as a real `hr`, and the
+  // server's own `HR_MIN..HR_MAX` (20..254) band 400ed the WHOLE POST on
+  // it, discarding the entire trace for one out-of-band belt blip. Same
+  // "drop the field, never the save" treatment `logDraft.ts`'s
+  // `MONITOR_HR_MIN`/`MAX` already gives the identical wire quantity one
+  // step downstream — three legs: below band dropped, both band edges
+  // kept exactly.
+  it("fix round: a genuine but out-of-band heartRateBpm (15, below the 20..254 band) omits hr entirely", () => {
+    const rec = createSeriesRecorder();
+    rec.onFrame(frame({ heartRateBpm: 15 }));
+    const sample = rec.snapshot()!.samples[0]!;
+    expect("hr" in sample).toBe(false);
+  });
+
+  it("fix round: heartRateBpm 20 (the band's own floor) is kept exactly", () => {
+    const rec = createSeriesRecorder();
+    rec.onFrame(frame({ heartRateBpm: 20 }));
+    const sample = rec.snapshot()!.samples[0]!;
+    expect(sample.hr).toBe(20);
+  });
+
+  it("fix round: heartRateBpm 254 (the band's own ceiling) is kept exactly", () => {
+    const rec = createSeriesRecorder();
+    rec.onFrame(frame({ heartRateBpm: 254 }));
+    const sample = rec.snapshot()!.samples[0]!;
+    expect(sample.hr).toBe(254);
+  });
 });
 
 describe("createSeriesRecorder — the rest of the contract", () => {

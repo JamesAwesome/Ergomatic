@@ -2545,6 +2545,21 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     };
     const { run, workout } = buildMonitorFixture({ series });
     saveMonitorRun(run);
+    // LOW-3 (fix round, RULED): seed the diagnostics stash a real rowed
+    // session would already carry (`useMonitorSession.ts`'s own teardown
+    // write) — proves the sacrifice APPENDS to it, never replaces or
+    // ignores whatever the live session already logged. `beforeEach`
+    // above clears localStorage, never sessionStorage (this file's own
+    // "quiet door" describe block above uses the identical
+    // remove-then-set idiom for the same reason), so this removes any
+    // leftover key from a prior test before seeding a known value.
+    sessionStorage.removeItem("ergomatic:last-rowed-log");
+    sessionStorage.setItem(
+      "ergomatic:last-rowed-log",
+      JSON.stringify([
+        { seq: 0, kind: "session-start", detail: "prior entry" },
+      ]),
+    );
     mockWorkouts([workout]);
     mockBaselines();
     const clearSpy = mockMonitorRunClearSpy();
@@ -2586,6 +2601,23 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     // same as the ordinary success leg.
     expect(loadMonitorRun()).toBeNull();
     expect(clearSpy).toHaveBeenCalledTimes(1);
+
+    // LOW-3: the POST sacrifice ring-logs itself — the prior entry
+    // survives (APPEND, not overwrite), and one new entry names the
+    // sacrifice with the status (413) that triggered it.
+    const ring = JSON.parse(
+      sessionStorage.getItem("ergomatic:last-rowed-log")!,
+    ) as { seq: number; kind: string; detail: string }[];
+    expect(ring).toHaveLength(2);
+    expect(ring[0]).toStrictEqual({
+      seq: 0,
+      kind: "session-start",
+      detail: "prior entry",
+    });
+    expect(ring[1]!.kind).toBe("post-sacrifice");
+    expect(ring[1]!.detail).toContain("413");
+    expect(ring[1]!.seq).toBe(1);
+    sessionStorage.removeItem("ergomatic:last-rowed-log");
   });
 
   it("the sacrifice retry ALSO fails: surfaces the genuine error, MonitorRun survives for a real retry", async () => {
@@ -2622,6 +2654,75 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     expect(apiFn).toHaveBeenCalledTimes(2);
     expect(loadMonitorRun()).not.toBeNull();
     expect(clearSpy).not.toHaveBeenCalled();
+  });
+
+  // Fix round (MED-1): the two retries must COMPOSE — a workout deleted
+  // mid-session (400 workoutId) followed by a genuine failure on the
+  // CORRECTED body (which still carries `series`) must sacrifice `series`
+  // from that corrected body, never re-post the original's now-stale
+  // workoutId. Before the fix, the sacrifice rebuilt from the ORIGINAL
+  // `body` — the corrected retry's own body was discarded, so the
+  // "sacrifice" re-sent the stale workoutId and 400ed again, guaranteed,
+  // surfacing a failure §3 promises can never happen.
+  it("MED-1: workoutId correction survives into the sacrifice — deleted workout + series both recoverable, the log saves series-less", async () => {
+    const series: SeriesData = {
+      samples: [{ t: 10, d: 23, p: 1400, spm: 24, hr: 138 }],
+    };
+    const { run, workout } = buildMonitorFixture({ series });
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    const clearSpy = mockMonitorRunClearSpy();
+    let calls = 0;
+    const apiFn = mockApi(() => {
+      calls++;
+      if (calls === 1) {
+        // Leg 1: the workout was deleted mid-session — 400, field
+        // workoutId.
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              error: "workoutId does not exist",
+              field: "workoutId",
+            }),
+            { status: 400 },
+          ),
+        );
+      }
+      if (calls === 2) {
+        // Leg 2: the CORRECTED body (workoutId: null, series still
+        // present) still fails — a 413, this route's own ceiling.
+        return Promise.resolve(
+          new Response(JSON.stringify({ error: "payload too large" }), {
+            status: 413,
+          }),
+        );
+      }
+      // Leg 3: the sacrifice — corrected workoutId AND no series — saves.
+      return Promise.resolve(
+        new Response(JSON.stringify({ id: "log-med1" }), { status: 201 }),
+      );
+    });
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+    expect(apiFn).toHaveBeenCalledTimes(3);
+    const bodies = parsedBodies(apiFn);
+    expect(bodies[0]!.workoutId).toBe(MONITOR_WORKOUT_ID);
+    expect(bodies[0]!.series).toStrictEqual(series);
+    // Leg 2: the correction carried forward — workoutId null, series
+    // STILL present (this is what the original bug discarded).
+    expect(bodies[1]!.workoutId).toBeNull();
+    expect(bodies[1]!.series).toStrictEqual(series);
+    // Leg 3: BOTH corrections present at once — the workoutId fix from
+    // leg 2 survives, AND series is now gone.
+    expect(bodies[2]!.workoutId).toBeNull();
+    expect("series" in bodies[2]!).toBe(false);
+    expect(loadMonitorRun()).toBeNull();
+    expect(clearSpy).toHaveBeenCalledTimes(1);
   });
 
   it("a non-ok response with no series present never triggers a second POST", async () => {
