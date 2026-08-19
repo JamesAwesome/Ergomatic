@@ -1794,14 +1794,27 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     expect(steps[0]?.actualSource).toBe("pm5");
     expect(steps[0]?.actualSeconds).toBe(62.5);
     expect(steps[0]?.actualMeters).toBe(214);
-    // The averages are ABSENT from the log step, not zero and not the
-    // workout's: `buildMonitorLogSteps` drops a null average field
+    // The MEASURED averages are ABSENT from the log step, not zero and not
+    // the workout's: `buildMonitorLogSteps` drops a null average field
     // entirely, which is exactly what an omitted-average actual is supposed
     // to produce downstream (design spec §5's B3 — the fake sends real
     // non-zero averages on 0x0039, so this proves a drop, not an echo).
     expect(steps[0]).not.toHaveProperty("actualSplit");
-    expect(steps[0]).not.toHaveProperty("spm");
+    expect(steps[0]).not.toHaveProperty("actualSpm");
     expect(steps[0]).not.toHaveProperty("avgHr");
+    // Phase LT spec 1, §2, AMENDED at Task 1 review: `spm` is ALSO
+    // absent here, even though ONE_INTERVAL authors `displaySpm: 22` —
+    // this actual IS matched (the gate synthesized it at the deadline),
+    // so the amended rule applies: on a matched actual, `spm` is written
+    // ONLY alongside `actualSpm`, never alone. avgSpm is null on this
+    // synthesized actual (no reading at all, same as the split/HR
+    // averages above), so the target copy is suppressed too — a
+    // dropped measurement must never let the authored target stand in
+    // for a reading that didn't happen (`buildMonitorLogSteps`'s own
+    // doc comment carries the full rationale). Before the amendment this
+    // assertion read `.toBe(22)`; that was the exact defect the review
+    // caught — a NEW row, shaped like an OLD pre-split one.
+    expect(steps[0]).not.toHaveProperty("spm");
 
     // ONE READ OF THE STASH ANSWERS "WHICH SOURCE FED THE RECORD".
     const entries = JSON.parse(result.current.exportLog()) as {

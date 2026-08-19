@@ -52,12 +52,17 @@ async function setBaselines(page: Page): Promise<void> {
 /** Sets the warm-up preference via the real `PUT /api/prefs` route
  *  (2026-08-09 warmup-setting spec §2) — same real-networking reasoning as
  *  `setBaselines` above. Used by the captures whose whole point is to show
- *  the setting ON (the "countdown" screen's own next-phase line, and the
+ *  the setting ON (the "countdown" screen's own next-phase line, the
  *  "you-warmup-on" capture — ConfirmTargets' own WARM-UP row died with the
- *  screen, fast-follow Task 4), since the setting defaults OFF. */
+ *  screen, fast-follow Task 4 — and, as of Phase LT spec 1 Task 3, the DISTANCE
+ *  variant on "post-workout-summary" itself, so the mixed row list includes
+ *  a genuinely-measured completed WARM-UP row for the first time), since
+ *  the setting defaults OFF. */
 async function setWarmup(
   page: Page,
-  warmup: { kind: "time"; minutes: number; restSeconds?: number },
+  warmup: (
+    { kind: "time"; minutes: number } | { kind: "distance"; meters: number }
+  ) & { restSeconds?: number },
 ): Promise<void> {
   const result = await page.evaluate(async (patch) => {
     const res = await fetch("/api/prefs", {
@@ -1518,6 +1523,32 @@ test("timer-warmup-landscape", async ({ page }) => {
   await cleanupByTitle(page, title);
 });
 
+/** Rewinds the CURRENT phase's own `phaseStartedAt` (`session/run.ts`'s
+ *  `ergomatic.sessionRun`) so a real elapsed reading of exactly
+ *  `elapsedSecondsValue` is on the stopwatch the instant NEXT is next
+ *  clicked — the same reach `timerMidWarmup` above uses for its warm-up
+ *  rewind, generalized here so a live JUDGED (or on-target) distance row
+ *  can be recorded without waiting out several minutes of real elapsed
+ *  time. Reloads so the running Timer picks up the rewritten start; every
+ *  call site re-asserts its STEP heading is back on screen before clicking
+ *  NEXT — the gap between that reload and the click is the only real-time
+ *  jitter the recorded split is exposed to, and each call site below sizes
+ *  its own margin against it via the phase's own meters (a bigger phase
+ *  divides that jitter down further before it reaches the split). */
+async function recordDistanceActual(
+  page: Page,
+  elapsedSecondsValue: number,
+): Promise<void> {
+  await page.evaluate((elapsedMs) => {
+    const raw = localStorage.getItem("ergomatic.sessionRun");
+    if (raw === null) throw new Error("no stored run to rewind");
+    const run = JSON.parse(raw) as { phaseStartedAt: string };
+    run.phaseStartedAt = new Date(Date.now() - elapsedMs).toISOString();
+    localStorage.setItem("ergomatic.sessionRun", JSON.stringify(run));
+  }, elapsedSecondsValue * 1000);
+  await page.reload();
+}
+
 // Phase PW Task 5: the post-workout summary replaces SessionComplete AND
 // the old Log screen ("log-session") captures wholesale — one screen now,
 // reached directly off the finish stage (no intermediate hop). This one
@@ -1525,35 +1556,134 @@ test("timer-warmup-landscape", async ({ page }) => {
 // measured row (session-complete's own job) AND a filled-in reflection
 // card (log-session's own job) — the two things a rower actually sees on
 // the SAME screen now, never two different ones.
+//
+// Phase LT spec 1, Task 3 (2026-08-18): now THREE phases, not two — a
+// DISTANCE warm-up (100m, `setWarmup`) is on ahead of the original
+// time-then-distance pair, giving this LIVE-door capture the one row
+// state `log-detail.png` (a stored, no-warm-up door) can never show at
+// all: a genuinely measured, completed WARM-UP row, sitting alongside the
+// new TARGET/SPM columns. The "0:03 @ 6k" TIME phase is UNCHANGED and
+// stays a useful negative check: `timerWorkRows`'s own measurability gate
+// (`timerMeasurableElapsedSeconds`) recognizes ONLY `actualSource:
+// "stopwatch"`, never `"assumed"` (a TIME phase with no distance actual
+// to record — `buildLogSteps`'s own rule) — so this row renders
+// PRESCRIBED, exactly as it always has, proving Task 3's two new cells
+// (which only the MEASURED branch of `IntervalRow` renders) left the
+// prescribed branch untouched. The LAST work phase ("100m max") demonstrates
+// the ABSTAINED EFFORT row live: a real (stopwatch) elapsed reading with no
+// `targetSplit` at all — the same state `log-detail.png` also
+// demonstrates via the stored door, here reached through the live one.
+//
+// Phase LT spec 1, Task 4 (PM final-PR gate condition C1, 2026-08-19): until
+// this task, this was still the ONLY committed picture of the LIVE door
+// with ZERO judged rows — the TARGET/SPM cells rendered, but the blue/red-
+// vs-target judgment (the exact feature James's bug report was about) never
+// once appeared here, only on the STORED `log-detail.png` door. THREE new
+// distance work phases (ref `6k`, target 122.0 s/500m —
+// `SCREENSHOT_BASELINES.k6Seconds`) now sit between the unchanged
+// prescribed/abstained rows, each recorded via `recordDistanceActual`
+// above rather than a real multi-minute wait: a JUDGED FASTER row (actual
+// split 112.0, dev −10.0), a JUDGED SLOWER row (actual split 132.0, dev
+// +10.0), and an ON-TARGET row (actual split 122.0, dev 0.0, inside
+// `judgeBand.ts`'s ±0.5s band) — the same three-state mix `log-detail.png`
+// already proved on the stored door, now proved live too. Six phases total
+// (was three): every "STEP N OF 3" below became "STEP N OF 6".
 test("post-workout-summary", async ({ page }) => {
+  // Three real-elapsed distance waits now (the warm-up below, plus the
+  // "100m max" work phase already in the fixture) push this comfortably
+  // past Playwright's 30s default — same reasoning as
+  // `e2e/connected.spec.ts`'s/`design.spec.ts`'s own `test.setTimeout`
+  // calls for a multi-real-wait flow. The three new judged/on-target rows
+  // add no further REAL waiting (`recordDistanceActual` rewinds instead of
+  // waiting), just a few extra reload/expect round trips.
+  test.setTimeout(120_000);
   const title = "Screenshot Post Workout Summary Workout";
   await signInViaBackdoor(page, {
     email: "screenshots-post-workout-summary@e2e.test",
     name: "Screenshot Tester",
   });
   await setBaselines(page);
-  // Same tiny time-phase-then-distance-phase shape as e2e/session.spec.ts's
-  // own completion test: the time phase auto-advances in ~3s, then the
-  // distance phase's actual gets recorded on NEXT, producing the committed
-  // capture's one real, non-dash measured row.
+  await setWarmup(page, { kind: "distance", meters: 100 });
+  // Warm-up (100m, distance) — same real-elapsed-then-NEXT shape as the
+  // "100m max" work phase below — then the tiny time-phase-then-distance-
+  // phase pair (e2e/session.spec.ts's own completion test): the time
+  // phase auto-advances in ~3s, then the distance phase's actual gets
+  // recorded on NEXT, producing the committed capture's own real,
+  // non-dash measured rows. The MAX piece carries an authored rate too
+  // (`@22`, bulk grammar's spm token, independent of ref kind — Task 1's
+  // own confirmed syntax) — the abstained effort row's own SPM cell then
+  // renders TARGET-ONLY quiet (`buildSpmCell`: `actualSpm` is
+  // monitor-only, so a stopwatch-sourced row's authored rate is all it
+  // can ever show), the one SPM shape `log-detail.png` doesn't carry.
   await importBulk(
     page,
-    [`${title} | AN | easy | 1`, "w 0:03 6k", "w 100m max"].join("\n"),
+    [
+      `${title} | AN | easy | 1`,
+      "w 0:03 6k",
+      // Task 4's three new distance work phases — all against the SAME
+      // "6k" ref (target 122.0 s/500m, `SCREENSHOT_BASELINES.k6Seconds`)
+      // so every judged/on-target row below is checkable against the ONE
+      // TARGET number the fixture ever authors: "2:02.0".
+      "w 2000m 6k",
+      "w 2000m 6k",
+      "w 6000m 6k",
+      "w 100m max @22",
+    ].join("\n"),
   );
   await startFromLibrary(page, title);
   await page.getByRole("button", { name: "SKIP ›" }).click();
   await expect(page).toHaveURL(/\/session\/run$/);
-  await expect(page.getByText(/^STEP 1 OF 2/)).toBeVisible();
-  await expect(page.getByText("STEP 2 OF 2 · WORK · 100M")).toBeVisible({
+  await expect(page.getByText(/^STEP 1 OF 6 · WARM-UP/)).toBeVisible();
+  // A DISTANCE warm-up is priced too (`session/engine.ts`'s
+  // `warmupPhases`: `estimationSplit(baselines, {effort: "min"})`, "MIN"
+  // effort — SCREENSHOT_BASELINES' own k6Seconds 122.0 + 20 = 142.0
+  // s/500m), so it is JUST as suspect-bounded as any other distance
+  // phase (`isSuspectActual`, Timer.tsx): 100m prices at (100/500)×142.0
+  // = 28.4s, non-suspect window 14.2s-56.8s. Landing NEXT around 20s in
+  // (the same value, and the same "land centered" reasoning, as the
+  // "100m max" work phase below) sits safely inside it.
+  await page.waitForTimeout(20_000);
+  await page.getByRole("button", { name: "NEXT →" }).click();
+  await expect(page.getByText(/^STEP 2 OF 6/)).toBeVisible();
+  await expect(page.getByText("STEP 3 OF 6 · WORK · 2000M")).toBeVisible({
     timeout: 6000,
   });
-  // SCREENSHOT_BASELINES' own k2Seconds (112.0) prices this 100m/max
-  // phase's estimate at ~22.4s (domain/expand.js's own phaseSeconds
-  // formula, via estimationSplit's own max-effort branch) — landing NEXT
-  // around 20s in sits safely inside Timer.tsx's own non-suspect window
-  // (11.2s-44.8s), the same "land centered, not at either edge" reasoning
-  // e2e/session.spec.ts's own completion test documents for its own
-  // (smaller) baseline pair.
+  // JUDGED FASTER (Task 4, PM condition C1): `phaseSeconds` prices this
+  // 2000m/6k phase at (2000/500)×122.0 = 488.0s, non-suspect window
+  // 244.0s-976.0s. Rewinding to a precise 448.0s elapsed
+  // (`448 = 112.0 × 2000 / 500`) lands a real actual split of 112.0 —
+  // −10.0 against the 122.0 target, well outside `judgeBand.ts`'s ±0.5s
+  // on-target band. The 2000m/500m = 0.25 jitter factor between this
+  // rewind's reload and the NEXT click below would need over 2 real
+  // seconds of drift to visibly move this row off "about −10"; the STEP
+  // re-check right after the rewind bounds that drift to well under one.
+  await recordDistanceActual(page, 448);
+  await expect(page.getByText("STEP 3 OF 6 · WORK · 2000M")).toBeVisible();
+  await page.getByRole("button", { name: "NEXT →" }).click();
+  await expect(page.getByText("STEP 4 OF 6 · WORK · 2000M")).toBeVisible();
+  // JUDGED SLOWER: the mirror image — 528.0s elapsed
+  // (`528 = 132.0 × 2000 / 500`) lands an actual split of 132.0, +10.0.
+  await recordDistanceActual(page, 528);
+  await expect(page.getByText("STEP 4 OF 6 · WORK · 2000M")).toBeVisible();
+  await page.getByRole("button", { name: "NEXT →" }).click();
+  await expect(page.getByText("STEP 5 OF 6 · WORK · 6000M")).toBeVisible();
+  // ON-TARGET: a bigger phase (6000m, not 2000m) buys headroom against the
+  // same reload/click jitter — the 500/6000 = 0.083 factor is a third of
+  // the two rows above's own 0.25, so the same real-world drift that
+  // safely clears ±10.0 by a wide margin still lands this row's actual
+  // split inside `judgeBand.ts`'s tight ±0.5s band: 1464.0s elapsed
+  // (`1464 = 122.0 × 6000 / 500`) targets an actual split of exactly
+  // 122.0, dev 0.0.
+  await recordDistanceActual(page, 1464);
+  await expect(page.getByText("STEP 5 OF 6 · WORK · 6000M")).toBeVisible();
+  await page.getByRole("button", { name: "NEXT →" }).click();
+  await expect(page.getByText("STEP 6 OF 6 · WORK · 100M")).toBeVisible({
+    timeout: 6000,
+  });
+  // Landing NEXT around 20s in sits safely inside Timer.tsx's own
+  // non-suspect window (11.2s-44.8s), the same "land centered, not at
+  // either edge" reasoning e2e/session.spec.ts's own completion test
+  // documents for its own (smaller) baseline pair.
   await page.waitForTimeout(20_000);
   await page.getByRole("button", { name: "NEXT →" }).click();
   await expect(page.getByText("Finish this session?")).toBeVisible();
@@ -1563,8 +1693,71 @@ test("post-workout-summary", async ({ page }) => {
   await expect(page).toHaveURL(/\/session\/log$/);
   await expect(page.getByRole("heading", { name: title })).toBeVisible();
   const rows = page.locator(".summary-row");
-  await expect(rows).toHaveCount(2);
+  await expect(rows).toHaveCount(6);
+  const warmupRow = page.locator(".summary-row-warmup");
+  await expect(warmupRow).toHaveCount(1);
+  await expect(warmupRow.locator(".summary-row-time")).not.toBeEmpty();
+  await expect(warmupRow.locator(".summary-row-pace")).not.toBeEmpty();
   await expect(rows.last().locator(".summary-row-pace")).not.toBeEmpty();
+  // JUDGED FASTER/SLOWER (Task 4, PM condition C1): the live door's first
+  // ever committed judged rows — the actual `.summary-row-pace`/
+  // `.summary-row-bar` carry the SAME `summary-row-faster`/
+  // `summary-row-slower` color class the stored `log-detail.png` door's
+  // own rows do (`PostWorkoutSummary.tsx`'s `judgedColorClass`), proving
+  // the live door renders the feature's color, not just its TARGET/SPM
+  // cells. `.summary-row-dev`'s exact magnitude is left to a range (real
+  // browser timing, not a POSTed literal, feeds this row) but the SIGN and
+  // ".0"-precision format are pinned — recurring failure #7's own
+  // "invoke it and assert the consequence" rule, applied to a live capture
+  // rather than a unit test.
+  const fasterRow = rows.nth(2);
+  await expect(fasterRow.locator(".summary-row-target")).toHaveText("2:02.0");
+  await expect(fasterRow.locator(".summary-row-pace")).toHaveClass(
+    /summary-row-faster/,
+  );
+  await expect(
+    fasterRow.locator(".summary-row-bar-track .summary-row-bar"),
+  ).toHaveClass(/summary-row-faster/);
+  await expect(fasterRow.locator(".summary-row-dev")).toHaveText(/^−\d+\.\d$/);
+  const slowerRow = rows.nth(3);
+  await expect(slowerRow.locator(".summary-row-target")).toHaveText("2:02.0");
+  await expect(slowerRow.locator(".summary-row-pace")).toHaveClass(
+    /summary-row-slower/,
+  );
+  await expect(
+    slowerRow.locator(".summary-row-bar-track .summary-row-bar"),
+  ).toHaveClass(/summary-row-slower/);
+  await expect(slowerRow.locator(".summary-row-dev")).toHaveText(/^\+\d+\.\d$/);
+  // ON-TARGET: plain ink, no bar, no ± label — the third state
+  // `judgeBand.ts` produces, sitting right beside the two colored ones.
+  const onTargetRow = rows.nth(4);
+  await expect(onTargetRow.locator(".summary-row-target")).toHaveText("2:02.0");
+  await expect(onTargetRow.locator(".summary-row-dev")).toHaveText("");
+  await expect(
+    onTargetRow.locator(".summary-row-bar-track .summary-row-bar"),
+  ).toHaveCount(0);
+  await expect(onTargetRow.locator(".summary-row-pace")).not.toHaveClass(
+    /summary-row-faster|summary-row-slower/,
+  );
+  // The abstained effort row (the "100m max @22" phase, `rows.last()`): a
+  // real elapsed reading, no TARGET cell at all, but a real TARGET-ONLY
+  // quiet SPM cell (its own authored rate, `@22` — no measured half, a
+  // stopwatch-sourced row never gets `actualSpm`).
+  await expect(rows.last().locator(".summary-row-target")).toHaveText("");
+  await expect(rows.last().locator(".summary-row-spm")).toHaveText("/ 22");
+  await expect(
+    rows.last().locator(".summary-row-spm .summary-row-spm-target"),
+  ).toHaveText("/ 22");
+  // The "0:03 @ 6k" phase's own row: still PRESCRIBED (the negative
+  // check this comment block's own header names) — index/duration/
+  // target-pace/offset/dash, no `.summary-row-spm` at all (that class
+  // only exists on the MEASURED branch of `IntervalRow`).
+  const prescribedRow = rows.nth(1);
+  await expect(prescribedRow.locator(".summary-row-target")).toHaveText(
+    "2:02.0",
+  );
+  await expect(prescribedRow.locator(".summary-row-spm")).toHaveCount(0);
+  await expect(prescribedRow.locator(".summary-row-dash")).toHaveText("—");
 
   // Realistic, non-empty state (CLAUDE.md's own "screenshots that capture
   // empty states" rule): a real Held answer, pain level, and note, not the
@@ -1573,8 +1766,17 @@ test("post-workout-summary", async ({ page }) => {
   await page.getByRole("button", { name: "Pain 2" }).click();
   await page.getByLabel("NOTES").fill("Felt strong.");
 
+  // Task 4: six rows plus the reflection card no longer fit the 390×844
+  // viewport this file's other captures use unscrolled — `fullPage: true`
+  // (no `.tabbar`/other fixed element on `/session/log`, so no stitching
+  // artifact to guard against — see `neutralizeFixedTabBarForFullPageCapture`
+  // above for the case where one exists) keeps the hero AND every row in
+  // the ONE committed image, which recurring failure #7's own sharpened
+  // rule needs: a reviewer must be able to recompute the hero from the
+  // rows without a second capture.
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "post-workout-summary.png"),
+    fullPage: true,
   });
   await cleanupByTitle(page, title);
 });
@@ -1636,6 +1838,12 @@ async function postLog(
     avgSplitSeconds?: number | null;
     distanceMeters?: number | null;
     timeSeconds?: number | null;
+    // Phase LT spec 1, Task 3: §5A's own source-inference table reads
+    // `deviceName` first — a pm5-sourced `steps` entry with no
+    // `deviceName` here reads as door-ambiguous ("LOGGED BY HAND"), NOT
+    // as a monitor row, so a capture wanting a genuinely pm5-attributed
+    // session must set this explicitly.
+    deviceName?: string | null;
     // Task 5's own "log-detail" capture: real measured/judged rows and,
     // via `advancesPlan` below, genuine plan linkage — both need fields
     // this helper's original narrower signature (§5G's own hero-snippet
@@ -1648,6 +1856,15 @@ async function postLog(
       actualSource?: "assumed" | "stopwatch" | "pm5";
       meters?: number;
       seconds?: number;
+      // Phase LT spec 1, Task 3: the pm5-only pair — a pm5-sourced step's
+      // own elapsed reading (`storedSummary.ts`'s `measuredElapsedSeconds`
+      // reads THIS field for a pm5 row, never `actualSplit × meters ÷
+      // 500` the way a stopwatch row does) and the measured/target stroke
+      // rate split (`spm` = target on every door, `actualSpm` = measured,
+      // monitor-only — §2's own overload fix).
+      actualSeconds?: number;
+      spm?: number;
+      actualSpm?: number;
     }[];
   },
 ): Promise<void> {
@@ -1752,15 +1969,35 @@ test("log-history", async ({ page }) => {
 // Task 5: the from-the-log detail view (/today/log/:id) — a real saved
 // row (via the real POST route, `advancesPlan: true` over a chosen+reset
 // plan so linkage is genuinely stamped by the server's own atomic upsert,
-// not faked client-side) reopened through the real UI: heroes, two
-// measured/judged rows, all four reflection fields answered (the
-// read-back, not the just-opened blank form), and the plan footer all on
-// one screen. Recurring failure #7, sharpened: the numbers below are
-// hand-checkable on the committed capture — AVG SPLIT 2:10.0 is exactly
-// `500 × (360+420) / (1500+1500)` (500 × (6:00+7:00) / (1500m+1500m)),
-// the same two rows' own time/meters shown below it, and DISTANCE 3,000 m
-// is exactly those two rows' meters summed — never a number the capture
-// itself can't be checked against.
+// not faked client-side) reopened through the real UI: heroes, all four
+// reflection fields answered (the read-back, not the just-opened blank
+// form), and the plan footer all on one screen.
+//
+// Phase LT spec 1, Task 3 (2026-08-18): the row list is the spec's own
+// mixed set — every §1/§2 state in one capture, precisely, via the
+// direct-POST recipe (zero real-time/timing dependence, unlike a live
+// timer run): a JUDGED FASTER row, a JUDGED SLOWER row, an ON-TARGET row
+// (dead-even — 0s deviation, inside the ±0.5s band per `judgeBand.ts`),
+// and an ABSTAINED EFFORT row (no `targetSplit` at all — a MAX piece).
+// The SPM cell rides along on three of the four rows, each demonstrating
+// a DIFFERENT §2 shape: row 1/2 the modern both-halves cell
+// (`actualSpm`+`spm`), row 3 the OLD pre-split shape (`spm` holds the
+// measured value, no `actualSpm` key at all — exit criterion 3's own
+// discriminant, rendered as measured-only with no target half), row 4
+// the modern measured-only cell (a MAX piece's own real rate, no
+// authored target to show beside it).
+//
+// Recurring failure #7, sharpened: every number below is hand-checkable
+// on the committed capture. All four rows are 500m each (2,000 m total,
+// matching DISTANCE) with `actualSeconds` set to the row's own
+// `actualSplit` (a 500m piece's elapsed time and its split ARE the same
+// number) — total elapsed 120+140+118+100 = 478s, so AVG SPLIT
+// (`500 × Σt/Σd`) is EXACTLY `500 × 478/2000` = 119.5 = "1:59.5", and TIME
+// is the same 478s sum = "7:58". Each row's own judgment is likewise
+// checkable against its inline TARGET: row 1 120 vs 130 = −10.0 (faster,
+// outside the band); row 2 140 vs 130 = +10.0 (slower); row 3 118 vs 118
+// = 0.0 (inside ±0.5s, plain ink, no bar); row 4 has no TARGET cell at
+// all, so nothing to check it against.
 test("log-detail", async ({ page }) => {
   await signInViaBackdoor(page, {
     email: "screenshots-log-detail@e2e.test",
@@ -1771,28 +2008,59 @@ test("log-detail", async ({ page }) => {
   await postLog(page, {
     workoutTitle: "Sea Fret",
     workoutType: "O2",
+    // Every step below is pm5-sourced — a real device name is what makes
+    // §5A's source inference read this row as a monitor session rather
+    // than door-ambiguous "LOGGED BY HAND".
+    deviceName: "PM5 432331249",
     held: "under",
     pain: 3,
     thumbs: "up",
     notes: "Held on through the back half.",
-    avgSplitSeconds: 130,
-    timeSeconds: 780,
-    distanceMeters: 3000,
+    avgSplitSeconds: 119.5,
+    timeSeconds: 478,
+    distanceMeters: 2000,
     advancesPlan: true,
     steps: [
       {
-        label: "6:00 @ 6k",
+        label: "2:00 @ 2k",
         targetSplit: 130,
         actualSplit: 120,
-        actualSource: "stopwatch",
-        meters: 1500,
+        actualSeconds: 120,
+        actualSource: "pm5",
+        meters: 500,
+        actualSpm: 24,
+        spm: 22,
       },
       {
-        label: "6:00 @ 6k",
+        label: "2:20 @ 2k",
         targetSplit: 130,
         actualSplit: 140,
-        actualSource: "stopwatch",
-        meters: 1500,
+        actualSeconds: 140,
+        actualSource: "pm5",
+        meters: 500,
+        actualSpm: 26,
+        spm: 22,
+      },
+      {
+        label: "1:58 @ 6k",
+        targetSplit: 118,
+        actualSplit: 118,
+        actualSeconds: 118,
+        actualSource: "pm5",
+        meters: 500,
+        // No `actualSpm` key at all — the pre-split shape: `spm` holds
+        // the OLD measured value (exit criterion 3's own row-local
+        // discriminant, `spmIsMeasured`).
+        spm: 24,
+      },
+      {
+        label: "1:40 @ MAX",
+        // No targetSplit — a pure-effort piece, the abstained row.
+        actualSplit: 100,
+        actualSeconds: 100,
+        actualSource: "pm5",
+        meters: 500,
+        actualSpm: 28,
       },
     ],
   });
@@ -1804,7 +2072,7 @@ test("log-detail", async ({ page }) => {
   await expect(page).toHaveURL(/\/today\/log\/[^/]+$/);
   await expect(page.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
   await expect(page.getByText("AVG SPLIT")).toBeVisible();
-  await expect(page.getByText("2:10.0")).toBeVisible();
+  await expect(page.getByText("1:59.5")).toBeVisible();
   await expect(
     page.getByText("UNDER · FASTER · PAIN 3/5 · LIKED"),
   ).toBeVisible();
@@ -1812,6 +2080,30 @@ test("log-detail", async ({ page }) => {
   await expect(
     page.getByText("Logged to Sprint (2k) Prep · SESSION 1 OF 84"),
   ).toBeVisible();
+  // §1/§2's mixed set, each state asserted structurally (not just "the
+  // page contains the number somewhere" — a faster row's own dev label
+  // could otherwise coincidentally match a slower row's if the fixture
+  // numbers weren't distinct, which is why they are).
+  const rows = page.locator(".summary-row");
+  await expect(rows).toHaveCount(4);
+  await expect(rows.nth(0).locator(".summary-row-target")).toHaveText("2:10.0");
+  await expect(rows.nth(0).locator(".summary-row-dev")).toHaveText("−10.0");
+  await expect(rows.nth(0).locator(".summary-row-spm")).toHaveText("24 / 22");
+  await expect(rows.nth(1).locator(".summary-row-dev")).toHaveText("+10.0");
+  await expect(rows.nth(1).locator(".summary-row-spm")).toHaveText("26 / 22");
+  // Row 3: ON TARGET — plain ink, no bar, no ± label, but the OLD-shape
+  // SPM cell still renders (measured-only, no target half).
+  await expect(rows.nth(2).locator(".summary-row-dev")).toHaveText("");
+  await expect(rows.nth(2).locator(".summary-row-bar")).toHaveCount(0);
+  await expect(rows.nth(2).locator(".summary-row-spm")).toHaveText("24");
+  await expect(rows.nth(2).locator(".summary-row-pace")).not.toHaveClass(
+    /summary-row-faster|summary-row-slower/,
+  );
+  // Row 4: the abstained effort row — no TARGET cell, no dev, but a real
+  // measured-only SPM cell (its own real rate, no authored target).
+  await expect(rows.nth(3).locator(".summary-row-target")).toHaveText("");
+  await expect(rows.nth(3).locator(".summary-row-dev")).toHaveText("");
+  await expect(rows.nth(3).locator(".summary-row-spm")).toHaveText("28");
 
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "log-detail.png"),

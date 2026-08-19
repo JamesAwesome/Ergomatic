@@ -57,26 +57,39 @@ import { RUN_ID, signInViaBackdoor } from "./helpers";
 // file for real.
 //
 // THE FIXTURE PROGRAM is fixed and pre-computed, not re-derived here: a
-// bulk import of five `w 100m max` lines compiles (verified independently,
-// via `compileProgram` run against the exact same draft this test builds)
-// to `{ intervals: [ { kind: "distance", value: 100, targetSplit: null,
-// displaySpm: null, restSeconds: 0 } ] }` repeated five times. `createFake
-// Transport` asserts every incoming programming byte against its OWN
-// `script.program` (`fake.ts`'s own doc comment) — this Playwright process
-// cannot reach into the app's Vite-served JS to ask it what it actually
-// compiled, so the two have to agree by construction, not by introspection.
+// bulk import of five `w 100m max` lines (the first carrying an authored
+// rate, `@22` — LOW-3, Task 1 review: the connected e2e fixtures were
+// otherwise SPM-blind, every walked interval's `displaySpm` null, so no
+// e2e path ever exercised the authored-target half of the split at all)
+// compiles (verified independently, via `compileProgram` run against the
+// exact same draft this test builds) to `{ intervals: [ { kind:
+// "distance", value: 100, targetSplit: null, displaySpm: 22 (interval 0
+// only; null on the rest), restSeconds: 0 } ] }` — grammar per
+// `domain/bulk.ts`'s `parseWorkStep`, `@<n>` is the spm token
+// (`domain/bulk.test.ts`'s own fixtures, e.g. "w 1' 6k-2 @22 r5"),
+// independent of the ref kind (works the same after an effort ref like
+// `max` as after a split ref). `createFakeTransport` asserts every
+// incoming programming byte against its OWN `script.program` (`fake.ts`'s
+// own doc comment) — this Playwright process cannot reach into the app's
+// Vite-served JS to ask it what it actually compiled, so the two have to
+// agree by construction, not by introspection. `displaySpm` itself is
+// NEVER wired (`domain/monitor/program.ts`'s own doc comment on the
+// field, confirmed against `commands.ts`'s `buildProgrammingSequence`,
+// which never reads it), so giving one interval a real value here changes
+// nothing about the programming bytes this walk already asserts — it only
+// makes the fixture SPM-aware for whichever later task renders the cell.
 // Five intervals (not one) so pane C — reachable in a real browser for the
 // first time this phase, `screenshots.spec.ts`'s own fixture-swap approach
 // notwithstanding (that one draws real layout against SYNTHETIC data; this
 // walk is real layout against a REAL, fake-driven session) — renders its
 // full five-row grid.
 const FIXTURE_PROGRAM = {
-  intervals: Array.from({ length: 5 }, () => ({
+  intervals: Array.from({ length: 5 }, (_, i) => ({
     type: "work" as const,
     kind: "distance" as const,
     value: 100,
     targetSplit: null,
-    displaySpm: null,
+    displaySpm: i === 0 ? 22 : null,
     restSeconds: 0,
   })),
 };
@@ -84,7 +97,7 @@ const FIXTURE_PROGRAM = {
 const BULK_TEXT = (title: string): string =>
   [
     `${title} | AN | easy | 1`,
-    "w 100m max",
+    "w 100m max @22",
     "w 100m max",
     "w 100m max",
     "w 100m max",

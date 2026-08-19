@@ -1746,6 +1746,168 @@ describe("GET/POST /api/logs", () => {
         expect(res.status).toBe(201);
       }
     });
+
+    // LOW-4 (Task 1 review): an UNMATCHED monitor-door interval posts its
+    // authored `spm` with NO `actualSource` key at all (Phase LT spec 1,
+    // §2's amendment — `buildMonitorLogSteps`'s own "unmatched interval"
+    // branch never sets `actualSource`, since there is no actual to pair
+    // with). This shape's `spm` takes the MANUAL band (10..60), not the
+    // pm5-widened one (0..99) — `isPm5` keys strictly on `actualSource ===
+    // "pm5"`, absent here — even though the row plainly came off a
+    // monitor-mode workout. Previously untested: every other `spm` test in
+    // this file sent an explicit `actualSource`.
+    it("an unmatched-interval shape (spm present, no actualSource at all) validates spm against the MANUAL 10..60 band, not the pm5 0..99 one (LOW-4)", async () => {
+      const app = appFor(makeStores());
+      const tooLow = await asA(request(app).post("/api/logs")).send({
+        ...validLogBody(),
+        steps: [{ label: "Row 1", spm: 9 }],
+      });
+      expect(tooLow.status).toBe(400);
+      expect(tooLow.body.field).toBe("steps");
+      const tooHigh = await asA(request(app).post("/api/logs")).send({
+        ...validLogBody(),
+        steps: [{ label: "Row 1", spm: 61 }],
+      });
+      expect(tooHigh.status).toBe(400);
+      expect(tooHigh.body.field).toBe("steps");
+      for (const spm of [10, 60]) {
+        const ok = await asA(request(app).post("/api/logs")).send({
+          ...validLogBody(),
+          steps: [{ label: "Row 1", spm }],
+        });
+        expect(ok.status).toBe(201);
+      }
+    });
+  });
+
+  // Phase LT spec 1, §2 (the SPM overload split): `spm` above is now the
+  // AUTHORED target on every door, unchanged bounds (0..99 pm5,
+  // 10..60 manual, this file's own long-standing `spm` tests above).
+  // `actualSpm` is new — the monitor door's MEASURED average — additive,
+  // its own field-named bound (min 1, not 0: "POST already bounds pm5 spm
+  // 0..99; the new actualSpm key gets the same bounds with min 1").
+  describe("actualSpm (Phase LT spec 1, §2 — the SPM overload split)", () => {
+    it.each([
+      ["actualSpm 0 (below the floor — an exact 0 means no strokes)", 0],
+      ["actualSpm 100 (above PM5_SPM_MAX)", 100],
+      ["actualSpm -1", -1],
+    ])("rejects %s with 400 + field steps", async (_label, actualSpm) => {
+      const res = await asA(
+        request(appFor(makeStores())).post("/api/logs"),
+      ).send({
+        ...validLogBody(),
+        steps: [{ label: "Row 1", actualSource: "pm5", actualSpm }],
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe("steps");
+      expect(res.body.error).toContain("actualSpm");
+    });
+
+    it("rejects a non-integer actualSpm with 400 + field steps", async () => {
+      const res = await asA(
+        request(appFor(makeStores())).post("/api/logs"),
+      ).send({
+        ...validLogBody(),
+        steps: [{ label: "Row 1", actualSource: "pm5", actualSpm: 24.5 }],
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe("steps");
+      expect(res.body.error).toContain("actualSpm");
+    });
+
+    it("accepts actualSpm at both boundary values, 1 and 99", async () => {
+      const app = appFor(makeStores());
+      for (const actualSpm of [1, 99]) {
+        const res = await asA(request(app).post("/api/logs")).send({
+          ...validLogBody(),
+          steps: [{ label: "Row 1", actualSource: "pm5", actualSpm }],
+        });
+        expect(res.status).toBe(201);
+      }
+    });
+
+    // THE WIRE-SCOPING ROUND TRIP (§6 exit criterion 3): a new-shape
+    // monitor row carries BOTH halves — `spm` the authored target, from
+    // `ProgramInterval.displaySpm`, and `actualSpm` the measured average,
+    // from `IntervalActual.avgSpm` — and both survive the POST/GET cycle
+    // distinctly, proving the split is not silently collapsed back onto
+    // one field.
+    it("round-trips a new-shape row's spm (target) and actualSpm (measured) as DISTINCT values", async () => {
+      const app = appFor(makeStores());
+      const created = await asA(request(app).post("/api/logs")).send({
+        ...validLogBody(),
+        steps: [
+          {
+            label: "Row 1",
+            targetSplit: 120,
+            actualSplit: 121,
+            actualSource: "pm5",
+            spm: 20,
+            actualSpm: 24,
+          },
+        ],
+      });
+      expect(created.status).toBe(201);
+      const fetched = await getLogById(app, created.body.id);
+      expect(fetched.body.steps[0]).toStrictEqual({
+        label: "Row 1",
+        targetSplit: 120,
+        actualSplit: 121,
+        actualSource: "pm5",
+        spm: 20,
+        actualSpm: 24,
+      });
+      expect(fetched.body.steps[0].spm).not.toBe(
+        fetched.body.steps[0].actualSpm,
+      );
+    });
+  });
+
+  // §6 exit criterion 3 / §7 additivity: the v0.12.0-era body shape — a
+  // monitor-sourced step whose `spm` holds the OLD measured value (this
+  // task's own `actualSpm` field did not exist yet) — posts VERBATIM and
+  // still 201s. Same frozen-literal idiom as `V0_11_0_LOG_BODY` above
+  // (Object.freeze, deliberately NOT derived from a live fixture another
+  // test could extend).
+  const V0_12_0_LOG_BODY = Object.freeze({
+    workoutId: null,
+    workoutTitle: "Steady State",
+    workoutType: "AT",
+    held: "held",
+    pain: 2,
+    notes: null,
+    steps: [
+      {
+        label: "Row 1",
+        targetSplit: 120,
+        actualSplit: 145.5,
+        actualSource: "pm5",
+        spm: 25,
+        avgHr: 107,
+        actualSeconds: 29.1,
+        actualMeters: 100,
+      },
+    ],
+  });
+
+  it("POST in the exact v0.12.0-era body shape (pm5 step, no actualSpm key) still 201s and stores spm verbatim as the old measured value (§6 exit criterion 3)", async () => {
+    const app = appFor(makeStores());
+    const res = await asA(request(app).post("/api/logs")).send(
+      V0_12_0_LOG_BODY,
+    );
+    expect(res.status).toBe(201);
+
+    const fetched = await getLogById(app, res.body.id);
+    expect(fetched.body.steps[0]).toStrictEqual({
+      label: "Row 1",
+      targetSplit: 120,
+      actualSplit: 145.5,
+      actualSource: "pm5",
+      spm: 25,
+      avgHr: 107,
+      actualSeconds: 29.1,
+      actualMeters: 100,
+    });
   });
 
   // Phase 7C Task 3 (spec §5/§6): deviceName is a body-level, session-scoped

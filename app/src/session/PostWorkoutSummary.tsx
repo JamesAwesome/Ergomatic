@@ -4,6 +4,7 @@ import type { HeldResult, Thumbs } from "../api/useRecentLogs";
 import type { PlanData } from "../api/usePlan";
 import BackLink from "../shell/BackLink";
 import type {
+  MeasuredRow,
   SummaryHeroes,
   SummaryMeta,
   SummaryModel,
@@ -90,19 +91,108 @@ function judgedColorClass(direction: "faster" | "slower" | undefined): string {
   return "";
 }
 
+/** §2's compact SPM cell: `24 / 22`, measured first (plain ink), the
+ *  authored target after the slash in QUIET ink (`.summary-row-spm-target`
+ *  — the design's own explicit ruling for this one half, distinct from
+ *  the TARGET column's own plain-ink treatment). Either half
+ *  independently absent (§2's own "absent halves drop" rule): a
+ *  measured-only cell renders the bare number with no slash at all; a
+ *  target-only cell renders `/ 22` — no leading space, WHOLLY inside the
+ *  quiet span, since there is no measured half in front of it to
+ *  separate from. Always wraps in the outer `.summary-row-spm` span (even
+ *  when `cell` itself is `undefined`) so this row's columns still line up
+ *  with sibling rows in the list, the same "kept as an empty element"
+ *  idiom the bar-track below already uses. */
+function SpmCellSpan({
+  cell,
+}: {
+  cell?: { measured?: number; target?: number };
+}) {
+  return (
+    <span className="summary-row-spm">
+      {cell?.measured !== undefined && cell.measured}
+      {cell?.target !== undefined && (
+        <span className="summary-row-spm-target">
+          {cell?.measured !== undefined ? " / " : "/ "}
+          {cell.target}
+        </span>
+      )}
+    </span>
+  );
+}
+
+/** Review fix round (MEDIUM, 2026-08-18): `IntervalRow`'s own
+ *  `aria-label` REPLACES the row's content for assistive tech
+ *  (`role="listitem"`, no visible-text fallback) — §1/§2's headline
+ *  values (TARGET, the SPM cell, the judgment state) were sighted-only
+ *  until this function existed, a WCAG AA violation this repo's own hard
+ *  requirement (CLAUDE.md) does not allow. Three independent clauses,
+ *  each absent exactly when its own VISIBLE cell is absent (the accessible
+ *  name never speaks a fact the sighted cell doesn't also show):
+ *   - TARGET: `, target 2:10.0 per 500` — keyed on `targetLabel` alone,
+ *     same "abstains when" rule §1's own TARGET cell follows.
+ *   - SPM: mirrors §2's own "absent halves drop" rule in plain words —
+ *     both halves speak as `"24 strokes per minute, target 22"`,
+ *     measured-only as `"24 strokes per minute"`, target-only as
+ *     `"target 22 strokes per minute"`.
+ *   - Judgment: `onTarget` speaks as `"on target"`; `judged` speaks as a
+ *     plain `"<magnitude> faster/slower than target"` sentence — the
+ *     SAME sign convention the visible `±` label uses, spelled out
+ *     (`judged.direction`), not re-derived from `deviationSeconds`'s own
+ *     sign a second time. Neither fires when the row was never judged at
+ *     all (the abstained-effort-row shape).
+ *  Shared by BOTH branches of `IntervalRow` below (warm-up and regular):
+ *  a warm-up row's own `targetLabel`/`spmCell`/`judged`/`onTarget` are
+ *  always undefined by construction (§1's Warm-up row rule — neither
+ *  `monitorWarmupRow` nor `timerWarmupRow` ever sets any of them), so
+ *  every clause here is a documented no-op there, not a second code
+ *  path. Never called for a `PrescribedRow` — that shape has none of
+ *  these four fields at all (a different TypeScript type), so its own
+ *  aria-label (below) is unchanged, plain, and needs no clause. */
+function rowJudgmentDescription(row: MeasuredRow): string {
+  let out = "";
+  if (row.targetLabel !== undefined) {
+    out += `, target ${row.targetLabel} per 500`;
+  }
+  const cell = row.spmCell;
+  if (cell?.measured !== undefined && cell.target !== undefined) {
+    out += `, ${cell.measured} strokes per minute, target ${cell.target}`;
+  } else if (cell?.measured !== undefined) {
+    out += `, ${cell.measured} strokes per minute`;
+  } else if (cell?.target !== undefined) {
+    out += `, target ${cell.target} strokes per minute`;
+  }
+  if (row.onTarget === true) {
+    out += ", on target";
+  } else if (row.judged !== undefined) {
+    const magnitude = Math.abs(row.judged.deviationSeconds).toFixed(1);
+    const word = row.judged.direction === "faster" ? "faster" : "slower";
+    out += `, ${magnitude} ${word} than target`;
+  }
+  return out;
+}
+
 function IntervalRow({ row }: { row: SummaryRow }) {
   if (row.measured) {
     if (row.isWarmup) {
       return (
         <li
           className="summary-row summary-row-warmup"
-          aria-label={`Warm-up${row.timeLabel ? `, ${row.timeLabel}` : ""}${row.paceLabel ? ` at ${row.paceLabel} per 500` : ""}`}
+          aria-label={`Warm-up${row.timeLabel ? `, ${row.timeLabel}` : ""}${row.paceLabel ? ` at ${row.paceLabel} per 500` : ""}${rowJudgmentDescription(row)}`}
         >
           <span className="summary-row-index summary-row-warmup-label">
             WARM-UP
           </span>
           <span className="summary-row-time">{row.timeLabel ?? ""}</span>
+          {/* §1's Warm-up row rule: "a warm-up has no target by
+              definition" — `row.targetLabel`/`row.spmCell` are always
+              undefined here (never set by monitorWarmupRow/timerWarmupRow),
+              so these render as the same empty placeholders a measured
+              row's own absent cells render, keeping this row's columns
+              aligned with judged sibling rows below it. */}
+          <span className="summary-row-target">{row.targetLabel ?? ""}</span>
           <span className="summary-row-pace">{row.paceLabel ?? ""}</span>
+          <SpmCellSpan cell={row.spmCell} />
           <span className="summary-row-bar-track" />
           <span className="summary-row-dev" />
         </li>
@@ -112,22 +202,26 @@ function IntervalRow({ row }: { row: SummaryRow }) {
     return (
       <li
         className="summary-row"
-        aria-label={`Interval ${row.index}: ${row.label}${row.timeLabel ? `, ${row.timeLabel}` : ""}${row.paceLabel ? ` at ${row.paceLabel} per 500` : ""}`}
+        aria-label={`Interval ${row.index}: ${row.label}${row.timeLabel ? `, ${row.timeLabel}` : ""}${row.paceLabel ? ` at ${row.paceLabel} per 500` : ""}${rowJudgmentDescription(row)}`}
       >
         <span className="summary-row-index">{row.index}</span>
         <span className="summary-row-time">{row.timeLabel ?? ""}</span>
+        <span className="summary-row-target">{row.targetLabel ?? ""}</span>
         <span className={`summary-row-pace ${colorClass}`}>
           {row.paceLabel ?? ""}
         </span>
+        <SpmCellSpan cell={row.spmCell} />
         {row.judged === undefined ? (
           // PM final-PR gate (lone-measured-row ruling, 2026-08-17): §2B's
           // own idiom ("any cell whose inputs are absent is ABSENT") plus
           // §2E's warm-up-row precedent (measured but UNJUDGED renders no
-          // deviation bar) — a measured row with no `judged` (the count<2
-          // gate, `summaryModel.ts` finding 5) gets the SAME empty track
-          // the warm-up row renders: no center tick, no fill. Kept as an
-          // (empty) element, not omitted outright, so this row's columns
-          // still line up with judged sibling rows sharing this list.
+          // deviation bar) — a measured row with no `judged` (either
+          // genuinely unjudged, OR on-target — Task 2's `rowJudgment`
+          // encodes on-target as `judged` absent too, `onTarget: true`
+          // instead) gets the SAME empty track the warm-up row renders:
+          // no center tick, no fill, no color. Kept as an (empty)
+          // element, not omitted outright, so this row's columns still
+          // line up with judged sibling rows sharing this list.
           <span className="summary-row-bar-track" />
         ) : (
           <span className="summary-row-bar-track">

@@ -222,6 +222,93 @@ async function postFromLogFixture(page: Page): Promise<string> {
   return (JSON.parse(result.body) as { id: string }).id;
 }
 
+// Phase LT spec 1, Task 4 (witness sweep): the same four-row §1/§2 mixed
+// set `e2e/screenshots.spec.ts`'s own "log-detail" capture builds and
+// proves by hand in its own comment (row 1 target 130/actual 120 ->
+// −10.0 faster, spm 24/22; row 2 target 130/actual 140 -> +10.0 slower,
+// spm 26/22; row 3 target 118/actual 118 -> 0.0, inside the ±0.5s band ->
+// ON-TARGET, the OLD pre-split spm shape — `spm` holds the measured
+// value, no `actualSpm` key, so it renders measured-only with no target
+// half; row 4 no `targetSplit` at all -> the abstained effort row, spm
+// 28 measured-only). Reused verbatim rather than re-derived (that file's
+// own arithmetic already stands, cited not repeated) — this fixture's
+// only job here is task-3-report.md's own note: give this task's
+// COMPUTED-STYLE layer (the layer no existing e2e assertion reaches, live
+// `getComputedStyle`, not text/class-name presence) something real to
+// read. Returns the created row's own id.
+async function postJudgmentMixLog(page: Page): Promise<string> {
+  const result = await page.evaluate(async () => {
+    const res = await fetch("/api/logs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workoutId: null,
+        workoutTitle: "Sea Fret",
+        workoutType: "O2",
+        deviceName: "PM5 432331249",
+        held: "under",
+        pain: 3,
+        thumbs: "up",
+        notes: null,
+        avgSplitSeconds: 119.5,
+        timeSeconds: 478,
+        distanceMeters: 2000,
+        advancesPlan: false,
+        steps: [
+          {
+            label: "2:00 @ 2k",
+            targetSplit: 130,
+            actualSplit: 120,
+            actualSeconds: 120,
+            actualSource: "pm5",
+            meters: 500,
+            actualSpm: 24,
+            spm: 22,
+          },
+          {
+            label: "2:20 @ 2k",
+            targetSplit: 130,
+            actualSplit: 140,
+            actualSeconds: 140,
+            actualSource: "pm5",
+            meters: 500,
+            actualSpm: 26,
+            spm: 22,
+          },
+          {
+            label: "1:58 @ 6k",
+            targetSplit: 118,
+            actualSplit: 118,
+            actualSeconds: 118,
+            actualSource: "pm5",
+            meters: 500,
+            // The pre-split shape: no `actualSpm` key at all — `spm`
+            // holds the OLD measured value (exit criterion 3's own
+            // row-local discriminant, `spmIsMeasured`).
+            spm: 24,
+          },
+          {
+            label: "1:40 @ MAX",
+            // No targetSplit — a pure-effort piece, the abstained row.
+            actualSplit: 100,
+            actualSeconds: 100,
+            actualSource: "pm5",
+            meters: 500,
+            actualSpm: 28,
+          },
+        ],
+      }),
+    });
+    return { ok: res.ok, status: res.status, body: await res.text() };
+  });
+  if (!result.ok) {
+    throw new Error(
+      `judgment-mix fixture seed failed: ${result.status} ${result.body}`,
+    );
+  }
+  return (JSON.parse(result.body) as { id: string }).id;
+}
+
 // Phase 6B (Task 5): the session-route sweeps below (countdown, timer,
 // session complete) all need a tiny bulk-imported workout driven through
 // the real START -> countdown -> timer flow, not a seeded library workout —
@@ -1771,15 +1858,23 @@ async function seedInterruptedMonitorRun(page: Page): Promise<void> {
 // (no restSeconds lookup involved). The two work intervals' own displayed
 // pace is `actual.avgSplit` VERBATIM (`buildMonitorLogSteps`, logDraft.ts:
 // `step.actualSplit = actual.avgSplit` — the wire-reported reading, never
-// recomputed from elapsed/distance), while the WORKING AVERAGE they are
-// judged against is the weighted `500×Σt/Σd` over the same two intervals'
-// `elapsedSeconds`/`distanceMeters` (`monitorAvgSplit`, summaryModel.ts):
-// 500×(600+2400)/(2000+10000) = 125.0 exactly. Interval 1's avgSplit (150)
-// deviates +25.0 (SLOWER); interval 2's avgSplit (120) deviates −5.0
-// (FASTER) — opposite signs, both comfortably past the 50%-cap threshold
-// (|dev| >= 1.6s/500m caps the bar at 50% by construction, §1's own
-// formula), so this fixture also witnesses the CAP rule, not just the two
-// colors. TIME (R-D) sums `elapsedSeconds` (187+600+2400=3187) plus each
+// recomputed from elapsed/distance), while the baseline they are judged
+// against is Phase LT spec 1's re-baseline: EACH ROW'S OWN TARGET, not a
+// working average (`rowJudgment`, summaryModel.ts). Both work steps are
+// "@ 6K +12" (Hoarfrost's TIME step, Calm Sea's DISTANCE step), which the
+// real `compileProgram` pipeline resolves to the SAME `targetSplit`, 132,
+// off this fixture's own `MONITOR_FIXTURE_BASELINES.k6Seconds` (120) —
+// verified by reading `compileProgram`'s own output for this exact
+// fixture, not assumed. Interval 1's avgSplit (150) deviates +18.0
+// (SLOWER); interval 2's avgSplit (120) deviates −12.0 (FASTER) —
+// opposite signs, both comfortably past the 50%-cap threshold (|dev| >=
+// 1.6s/500m caps the bar at 50% by construction, §1's own formula), so
+// this fixture also witnesses the CAP rule, not just the two colors.
+// (Before the re-baseline this same fixture's two rows deviated +25.0/
+// −5.0 against a 125.0 WORKING AVERAGE — same two colors/directions by
+// coincidence, different magnitudes; Phase LT spec 1 task 2 updated the
+// two exact-label assertions below, nothing else about this fixture.)
+// TIME (R-D) sums `elapsedSeconds` (187+600+2400=3187) plus each
 // completed interval's own PROGRAMMED rest — interval 1's restSeconds=300
 // is independently verified by `buildInterruptedMonitorRun`'s own proven
 // "11:00" result (360+300=660) above; the warm-up's and interval 2's own
@@ -1798,8 +1893,8 @@ const MONITOR_COMPLETED_ACTUALS: IntervalActual[] = [
     // real PM5 computes this warm-up row's own average pace FROM the same
     // elapsed/distance the row also displays (identity a `fake.ts`-driven
     // capture caught contradicting its own hero, `log-monitor.png`). This
-    // row is UNJUDGED (excluded from `monitorAvgSplit`'s weighted average,
-    // this fixture's own comment above), so the exact figure is not
+    // row is UNJUDGED (a warm-up has no target by definition — §1's own
+    // rule, this fixture's own comment above), so the exact figure is not
     // load-bearing for the deviation math below — only its own internal
     // coherence is.
     avgSplit: 155.8,
@@ -2448,6 +2543,109 @@ test.describe("from-the-log (history list + detail view, §5)", () => {
     test("zero WCAG 2A/2AA violations", async ({ page }) => {
       await assertNoA11yViolations(page);
     });
+  });
+});
+
+// Phase LT spec 1, Task 4 (witness sweep): task-3-report.md's own note —
+// `e2e/screenshots.spec.ts`'s "log-detail" capture already proves this
+// exact fixture's TEXT/CLASS shape (row counts, cell text, the on-target
+// row's CLASS absence); this describe adds the layer that leaves
+// unwitnessed: the LIVE COMPUTED style on the same cells, via a real
+// browser cascade — the on-target row's plain ink is an absent CLASS
+// resolving to the ABSENT judge token, proven as a color, not a class
+// name.
+test.describe("from-the-log detail (Phase LT spec 1, Task 4: computed styles on the judged/on-target/SPM cells)", () => {
+  let logId: string;
+
+  test.beforeEach(async ({ page }, testInfo) => {
+    await signInViaBackdoor(page, {
+      email: `design-judgmentmix-${testInfo.parallelIndex}@e2e.test`,
+      name: "Design Judgment Mix Tester",
+    });
+    logId = await postJudgmentMixLog(page);
+    await page.goto(`/today/log/${logId}`);
+    await expect(page.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
+  });
+
+  // A new page state (four rows, TARGET+SPM on every one) never swept by
+  // this file's own tap-target sweep before — `pnpm screenshots` renders
+  // this exact fixture but never runs axe/tap-target checks against it.
+  test("every visible interactive element has a >=44x44 tap target with TARGET/SPM present on all four rows", async ({
+    page,
+  }) => {
+    await assertTapTargets(page);
+  });
+
+  test("zero WCAG 2A/2AA violations on the mixed judged/on-target/abstained list", async ({
+    page,
+  }) => {
+    await assertNoA11yViolations(page);
+  });
+
+  // §1's on-target row (index 2, dev 118−118=0.0 — inside the ±0.5s
+  // band): `screenshots.spec.ts`'s own capture already proves the CLASS
+  // is absent (`not.toHaveClass(/summary-row-faster|summary-row-slower/)`)
+  // — this proves the CONSEQUENCE, live: with neither class present, the
+  // cascade resolves `.summary-row-pace`/`.summary-row-dev` to plain
+  // `--ink`, never a `--judge-faster`/`--judge-slower` token surviving
+  // through some other selector (a class-name check alone cannot tell
+  // "no color rule fired" apart from "a DIFFERENT rule fired the same
+  // token by coincidence" — computed style can).
+  test("§1 on-target row: pace and dev compute to plain --ink, never a judge token — the absence proven, not assumed", async ({
+    page,
+  }) => {
+    const onTargetRow = page.locator(".summary-row").nth(2);
+    const paceColor = await onTargetRow
+      .locator(".summary-row-pace")
+      .evaluate((el) => getComputedStyle(el).color);
+    expect(paceColor).toBe("rgb(27, 26, 23)"); // --ink
+    expect(paceColor).not.toBe("rgb(29, 78, 137)"); // --judge-faster
+    expect(paceColor).not.toBe("rgb(150, 39, 24)"); // --judge-slower
+
+    const devColor = await onTargetRow
+      .locator(".summary-row-dev")
+      .evaluate((el) => getComputedStyle(el).color);
+    expect(devColor).not.toBe("rgb(29, 78, 137)"); // --judge-faster
+    expect(devColor).not.toBe("rgb(150, 39, 24)"); // --judge-slower
+  });
+
+  // §2's own ruling ("the authored target after the slash in quiet ink"),
+  // on this fixture's OLD pre-split row (index 2 — `spm: 24`, no
+  // `actualSpm`): the screenshot capture proves the text renders
+  // measured-only ("24"); this proves the row 0/1 modern-shape quiet half
+  // computes to the real --ink-3 token, live, the same check the monitor-
+  // door describe above runs against a different fixture (Hoarfrost/Calm
+  // Sea's own authored rates) — two independent fixtures pinning the same
+  // color, never duplicating each other's row content.
+  test("§2 SPM cell: the modern-shape quiet target half computes to --ink-3, live", async ({
+    page,
+  }) => {
+    const rows = page.locator(".summary-row");
+    await expect(rows.nth(0).locator(".summary-row-spm")).toHaveText("24 / 22");
+    const quietColor = await rows
+      .nth(0)
+      .locator(".summary-row-spm-target")
+      .evaluate((el) => getComputedStyle(el).color);
+    expect(quietColor).toBe("rgb(87, 84, 76)"); // --ink-3, DEVIATIONS row 47
+  });
+
+  // The task brief's own words: "the aria-label live (one design-layer
+  // accessible-name check on a judged row)". `rowJudgmentDescription`
+  // itself is pinned exactly at the component level
+  // (PostWorkoutSummary.test.tsx); this is the ONE live check proving the
+  // composed string actually reaches a real browser's accessibility tree
+  // on THIS door (from-the-log, `storedSummary.ts`'s §5C re-judge path) —
+  // a different render path than the monitor-door describe's own live
+  // check above, so this is a second, independent proof, not a repeat of
+  // it. Row 1 (target 130, actual 140) deviates +10.0 -> SLOWER.
+  test("the judged row's aria-label carries TARGET, SPM (both halves), and the judgment sentence — live, from-the-log door", async ({
+    page,
+  }) => {
+    const slowerRow = page.locator(".summary-row").nth(1);
+    const ariaLabel = await slowerRow.getAttribute("aria-label");
+    expect(ariaLabel).toContain("target 2:10.0 per 500"); // fmtSplit(130)
+    expect(ariaLabel).toContain("26 strokes per minute, target 22");
+    expect(ariaLabel).toContain("10.0 slower than target");
   });
 });
 
@@ -4317,12 +4515,13 @@ test.describe("post-workout summary (monitor door, completed — judged rows & m
     expect(value).toBe("12664");
   });
 
-  // Interval 1 (Hoarfrost, avgSplit 150) deviates +25.0 from the 125.0
-  // weighted average -> SLOWER; interval 2 (Calm Sea, avgSplit 120)
-  // deviates −5.0 -> FASTER (`buildCompletedMonitorRun`'s own doc comment
-  // has the full arithmetic). Rows render in `[warm-up, interval 1,
-  // interval 2]` order (`buildMonitorModel`: warmup row first, then
-  // `monitorWorkRows`'s own index order).
+  // Interval 1 (Hoarfrost, avgSplit 150) deviates +18.0 from its OWN 132s
+  // target -> SLOWER; interval 2 (Calm Sea, avgSplit 120) deviates −12.0
+  // from the SAME 132s target -> FASTER (Phase LT spec 1's re-baseline —
+  // `buildCompletedMonitorRun`'s own doc comment has the full arithmetic).
+  // Rows render in `[warm-up, interval 1, interval 2]` order
+  // (`buildMonitorModel`: warmup row first, then `monitorWorkRows`'s own
+  // index order).
   test("§2E judged colors: the slower row paints --judge-slower, the faster row paints --judge-faster, and the legend renders", async ({
     page,
   }) => {
@@ -4347,7 +4546,7 @@ test.describe("post-workout summary (monitor door, completed — judged rows & m
   });
 
   // §1's own capped formula (`min(50, max(1.2, |dev|/1.6×50))`) — both
-  // rows' deviations (25.0/5.0) are comfortably past the 1.6s threshold
+  // rows' deviations (18.0/12.0) are comfortably past the 1.6s threshold
   // that saturates the cap, so this fixture ALSO witnesses "a 4s outlier
   // must not paint past the track" (§1's own words), not merely that a
   // width renders at all. Anchoring: SLOWER bars grow from center-right
@@ -4388,14 +4587,17 @@ test.describe("post-workout summary (monitor door, completed — judged rows & m
     expect(fasterBarStyle.left).toBe("");
 
     const slowerDev = await slowerRow.locator(".summary-row-dev").innerText();
-    expect(slowerDev).toBe("+25.0");
+    expect(slowerDev).toBe("+18.0");
     const fasterDev = await fasterRow.locator(".summary-row-dev").innerText();
-    expect(fasterDev).toBe("−5.0"); // U+2212, the house minus sign
+    expect(fasterDev).toBe("−12.0"); // U+2212, the house minus sign
   });
 
   // R-C's own reconciliation row: rendered and measured, but never judged
-  // (no bar, no tick — the warm-up is excluded from the working average it
-  // would otherwise distort).
+  // (no bar, no tick — Phase LT spec 1's re-baseline: a warm-up interval
+  // has no target by definition, so there is nothing to judge it against;
+  // `rowJudgment`, summaryModel.ts, never even reaches a warm-up row — it
+  // is built straight from the machine actual, never through the
+  // targetSplit/actualSource gate a work row goes through).
   test("§2E warm-up row: labeled, measured, UNJUDGED — no bar, no tick", async ({
     page,
   }) => {
@@ -4408,6 +4610,46 @@ test.describe("post-workout summary (monitor door, completed — judged rows & m
     await expect(warmupRow.locator(".summary-row-pace")).not.toBeEmpty();
     await expect(warmupRow.locator(".summary-row-bar")).toHaveCount(0);
     await expect(warmupRow.locator(".summary-row-bar-tick")).toHaveCount(0);
+  });
+
+  // Task 4 (witness sweep): §2's own ruling, live — "the authored target
+  // after the slash in QUIET ink" — proven as a real computed color, not
+  // merely the `.summary-row-spm-target` class name resolving to SOME
+  // rule (the C1 review finding earlier in this file shows a class name
+  // alone can be a false positive). Both judged rows carry a real §2
+  // target half (Hoarfrost's own authored `spm: 22`, Calm Sea's `spm: 20`
+  // — `o2.ts`), so either suffices; the slower row is used for both this
+  // and the aria-label test below, one fixture read twice.
+  test("§2 SPM cell: the quiet target half's computed color is --ink-3, live", async ({
+    page,
+  }) => {
+    const rows = page.locator(".summary-row");
+    const slowerRow = rows.nth(1);
+    await expect(slowerRow.locator(".summary-row-spm")).toHaveText("24 / 22");
+    const quietColor = await slowerRow
+      .locator(".summary-row-spm-target")
+      .evaluate((el) => getComputedStyle(el).color);
+    expect(quietColor).toBe("rgb(87, 84, 76)"); // --ink-3, DEVIATIONS row 47
+  });
+
+  // Task 4 (witness sweep): the review fix round's `rowJudgmentDescription`
+  // (PostWorkoutSummary.tsx) is pinned exactly by
+  // `PostWorkoutSummary.test.tsx`'s own per-state RTL tests — this is the
+  // one LIVE check the brief calls for: the composed string actually
+  // reaches the real browser DOM's `aria-label` attribute on a genuinely
+  // judged row, not just a React Testing Library render. Interval 2
+  // (Calm Sea, avgSplit 120 vs its own 132s target) deviates −12.0 ->
+  // FASTER; substrings only (not the full string) — the exact wording is
+  // already pinned at the component level, this proves live delivery.
+  test("the judged row's aria-label carries TARGET, SPM (both halves), and the judgment sentence — live on the real DOM", async ({
+    page,
+  }) => {
+    const rows = page.locator(".summary-row");
+    const fasterRow = rows.nth(2);
+    const ariaLabel = await fasterRow.getAttribute("aria-label");
+    expect(ariaLabel).toContain("target 2:12.0 per 500"); // fmtSplit(132)
+    expect(ariaLabel).toContain("26 strokes per minute, target 20");
+    expect(ariaLabel).toContain("12.0 faster than target");
   });
 });
 

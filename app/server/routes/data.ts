@@ -211,18 +211,49 @@ const STEP_SPM_MAX = 60;
 // named minimum: `buildMonitorLogSteps` only ever sets actualSplit when the
 // wire reading is itself a positive number (its own `avgSplit > 0` gate).
 //
+// LOW-1 (Phase LT spec 1, Task 1 review, 2026-08-18): `spm`'s OWN meaning
+// changed underneath this bound without the bound itself moving — `spm` is
+// now the AUTHORED target on every door, not the monitor door's measured
+// reading (`ACTUAL_SPM_MIN` below is the new field for that). This
+// pm5-widened band still applies to `spm` for two real reasons: a
+// pre-split pm5 row (saved before this task; `spm` still holds its OLD
+// measured value there — `src/session/logDraft.ts`'s `spmIsMeasured`
+// names that shape) needs the exact bound it originally validated under,
+// and a NEW pm5-sourced row's authored target is itself a real stroke
+// rate a rower could set outside the 10..60 manual range. Both cases are
+// the SAME wire quantity at heart (`avgSpm`), just two different moments
+// of it — same as `ACTUAL_SPM_MIN`'s own comment already says.
+//
 // Branch review Medium-1 (2026-08-09): the wire's own top end (`avgSplit`
 // up to 6553.5, `avgSpm` up to 255) exceeds both bands above, which used to
 // 400 the WHOLE log for a genuinely-measured, wire-legal reading with no
 // recoverable retry. `buildMonitorLogSteps` now mirrors these exact numbers
 // client-side (`MONITOR_SPLIT_MAX`/`MONITOR_SPM_MIN`/`MAX`,
-// `src/session/logDraft.ts`) and drops `actualSplit`/`spm` rather than
-// posting a value past them — a well-behaved client can no longer trigger
-// these bands at all. They stay exactly as they are here to reject a
-// hand-crafted liar, same role `HR_MIN`/`MAX` below already has.
+// `src/session/logDraft.ts`) and drops `actualSplit`/the authored `spm`/
+// `actualSpm` (LT spec 1: the client-side floor and the split/measured
+// distinction both now live in that module) rather than posting a value
+// past them — a well-behaved client can no longer trigger these bands at
+// all. They stay exactly as they are here to reject a hand-crafted liar,
+// same role `HR_MIN`/`MAX` below already has.
 const PM5_MAX_SPLIT_SECONDS = 6000;
 const PM5_SPM_MIN = 0;
 const PM5_SPM_MAX = 99;
+
+// Phase LT spec 1 (2026-08-18), §2: `spm` above is now the AUTHORED target
+// on every door — its own bounds (0..99 pm5, 10..60 manual) are UNCHANGED,
+// so a v0.12.0-era client posting the pre-split shape (a monitor step's
+// `spm` holding the OLD measured value) still validates and 201s
+// byte-identically (additive-only between tags). `actualSpm` is new: the
+// monitor door's MEASURED average, own field-named bound. Min 1, not 0
+// ("POST already bounds pm5 spm 0..99; the new actualSpm key gets the same
+// bounds with min 1" — the u8 wire field's own floor,
+// `src/session/logDraft.ts`'s `MONITOR_SPM_MIN` doc comment carries the
+// full justification: sub-1 unrepresentable, so an exact 0 can only mean
+// "no strokes"). Max reuses `PM5_SPM_MAX` — the same upper bound `spm`
+// already enforces for a pm5-sourced reading, since both fields describe
+// the SAME wire quantity (`IntervalActual.avgSpm`), just two different
+// moments of it.
+const ACTUAL_SPM_MIN = 1;
 
 // Heart rate bound (2026-08-08, Phase 7C Task 3, spec §6): mirrors the
 // client's own `MONITOR_HR_MIN`/`MONITOR_HR_MAX` (`src/session/
@@ -271,6 +302,7 @@ function validateLogStepEntry(
     avgHr,
     actualSeconds,
     actualMeters,
+    actualSpm,
   } = raw;
 
   if (typeof label !== "string" || label.length < 1 || label.length > 80) {
@@ -394,6 +426,20 @@ function validateLogStepEntry(
       message: at("actualMeters must be a number, >= 0"),
     };
   }
+  if (
+    actualSpm !== undefined &&
+    (typeof actualSpm !== "number" ||
+      !Number.isInteger(actualSpm) ||
+      actualSpm < ACTUAL_SPM_MIN ||
+      actualSpm > PM5_SPM_MAX)
+  ) {
+    return {
+      ok: false,
+      message: at(
+        `actualSpm must be an integer, ${ACTUAL_SPM_MIN}..${PM5_SPM_MAX}`,
+      ),
+    };
+  }
 
   // Built from an explicit field list (never spread/cast the raw input) so
   // any extra keys the client sent are silently dropped, not persisted.
@@ -406,6 +452,7 @@ function validateLogStepEntry(
   if (actualSeconds !== undefined) step.actualSeconds = actualSeconds;
   if (actualMeters !== undefined) step.actualMeters = actualMeters;
   if (spm !== undefined) step.spm = spm;
+  if (actualSpm !== undefined) step.actualSpm = actualSpm;
   if (meters !== undefined) step.meters = meters;
   if (seconds !== undefined) step.seconds = seconds;
   return { ok: true, step };

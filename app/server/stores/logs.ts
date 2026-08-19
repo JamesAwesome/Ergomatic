@@ -48,6 +48,17 @@ export type Thumbs = "up" | "down";
 // whether `actualSplit` itself is present (the PM5 PAIRING EXCEPTION,
 // enforced in `routes/data.ts`'s `validateLogStepEntry`). Same "type-level
 // change only" note as the amendment above applies here too.
+//
+// Amendment (2026-08-18, Phase LT spec 1, §2 — the SPM overload split):
+// `spm` used to hold the monitor door's MEASURED average with no target
+// ever copied; it now holds the AUTHORED target on every door (timer,
+// manual, and monitor — `src/session/logDraft.ts`'s `LogStep` doc comment
+// carries the full rationale). `actualSpm` is new: the monitor door's
+// measured average, additive, same "type-level change only, no migration"
+// note (jsonb, no `.$type<>()` binding). A row saved before this split has
+// `actualSource === "pm5"` and no `actualSpm` at all — its `spm` holds the
+// OLD measured value; `src/session/logDraft.ts`'s exported
+// `spmIsMeasured` is the one shared discriminant for that row-local fact.
 export interface LogStep {
   label: string;
   targetSplit?: number;
@@ -59,6 +70,7 @@ export interface LogStep {
   avgHr?: number;
   actualSeconds?: number;
   actualMeters?: number;
+  actualSpm?: number;
 }
 
 export interface LogInput {

@@ -147,6 +147,27 @@ export interface LogStep {
   targetSplit?: number;
   actualSplit?: number;
   actualSource?: ActualSource;
+  /** THE AUTHORED TARGET stroke rate, on ALL doors (Phase LT spec 1, §2 —
+   *  the overload fix). Copied verbatim: from the phase's own `spm` on the
+   *  timer door (`buildLogSteps`, below) and the step's own `spm` on the
+   *  manual door (`buildManualLogSteps`, below); from `ProgramInterval.
+   *  displaySpm` on the monitor door (`buildMonitorLogSteps`, below) — but
+   *  on the monitor door ONLY when either (a) the interval is UNMATCHED
+   *  (no actual at all), or (b) a matched actual's `avgSpm` is in-band, so
+   *  `actualSpm` below is ALSO being written this same call — AMENDED at
+   *  Task 1 review: a matched actual whose measurement is dropped writes
+   *  neither field, never the target alone masquerading as a reading that
+   *  didn't happen (`buildMonitorLogSteps`'s own doc comment carries the
+   *  full rationale).
+   *
+   *  BEFORE THE SPLIT, this field ALSO held the monitor door's MEASURED
+   *  average (`actual.avgSpm`, written unconditionally, with no target ever
+   *  copied) — that meaning now lives in `actualSpm` below. A row saved
+   *  before this split predates that field entirely: `actualSource ===
+   *  "pm5" && actualSpm === undefined` means THIS field is the old
+   *  measured value, not a target — see `spmIsMeasured` (exported below)
+   *  for the one shared discriminant a renderer must use rather than
+   *  re-deriving this rule. */
   spm?: number;
   meters?: number;
   seconds?: number;
@@ -177,6 +198,55 @@ export interface LogStep {
    *  `IntervalActual.distanceMeters` (>= 0, whole meters) — same PM5
    *  PAIRING EXCEPTION as `actualSeconds` above. */
   actualMeters?: number;
+  /** THE MEASURED average stroke rate, monitor door only (Phase LT spec 1,
+   *  §2 — the overload fix, new/additive): written ONLY by
+   *  `buildMonitorLogSteps`, verbatim from `IntervalActual.avgSpm`,
+   *  banded `MONITOR_SPM_MIN..MONITOR_SPM_MAX` — same drop-the-field
+   *  treatment as `avgHr`/`actualSplit` above (an out-of-band reading, or
+   *  an exact 0 now that the floor is 1 — `MONITOR_SPM_MIN`'s own comment
+   *  — omits this field rather than rejecting the save). Present whenever
+   *  a matched actual's `avgSpm` is in-band, independent of `actualSplit`
+   *  — the one departure from the `avgHr`/`actualSeconds` PM5 PAIRING
+   *  EXCEPTION being that `spm` above rides ALONGSIDE this field rather
+   *  than being unconditional (AMENDED at Task 1 review — see `spm`'s own
+   *  doc comment and `buildMonitorLogSteps`'s). A row saved BEFORE this
+   *  split exists with `actualSource === "pm5"` and NO `actualSpm` at
+   *  all — its measured value lives in `spm` instead (see that field's
+   *  own doc comment, and `spmIsMeasured` below). */
+  actualSpm?: number;
+}
+
+/** THE ROW-LOCAL DISCRIMINANT for a pre-split monitor row (Phase LT spec 1,
+ *  §2, exit criterion 3): `spm`'s own doc comment above explains the
+ *  overload this field used to carry. A row saved before this split has
+ *  `actualSource === "pm5"` and NO `actualSpm` at all (that field did not
+ *  exist yet) — for exactly that shape, `spm` holds the OLD measured
+ *  value, not a target, and a renderer must show it as measured with no
+ *  target half. `"pm5"` is written unconditionally beside the only
+ *  measured-spm write (`buildMonitorLogSteps` below) and by no other
+ *  builder — this is an exact, row-local fact, never an age heuristic, and
+ *  never rewrites a stored row.
+ *
+ *  SOUND BY CONSTRUCTION (AMENDED at Task 1 review — the original cost of
+ *  this task's own review): new code can no longer reproduce the
+ *  pre-split shape at all — `buildMonitorLogSteps` now writes `spm` on a
+ *  matched actual ONLY alongside `actualSpm`, so `actualSource === "pm5"
+ *  && actualSpm === undefined` is true ONLY for a genuinely old row, never
+ *  a new dropped-measurement one. Before the amendment, a matched actual
+ *  whose `avgSpm` was dropped (null, 0, or out of band) still copied the
+ *  target unconditionally, producing exactly this discriminant's "old
+ *  row" shape from BRAND NEW code — a renderer would have printed the
+ *  TARGET as MEASURED, the wrong-number class this whole phase exists to
+ *  kill.
+ *
+ *  Exported so every renderer (the summary, from-the-log) imports this
+ *  ONE copy rather than re-deriving the condition — the earlier,
+ *  now-superseded design (a `deviceName`-based rule) got this wrong for a
+ *  NEW row; see §2's own history note. */
+export function spmIsMeasured(
+  step: Pick<LogStep, "actualSource" | "spm" | "actualSpm">,
+): boolean {
+  return step.actualSource === "pm5" && step.actualSpm === undefined;
 }
 
 // Shared by both builders: the step-text idiom's duration half. A work
@@ -669,12 +739,28 @@ export const MONITOR_HR_MAX = 254;
  *  as an upper bound. */
 export const MONITOR_SPLIT_MAX = 6000;
 
-/** The valid `spm` band for a monitor-sourced reading (branch review
- *  Medium-1): mirrors `server/routes/data.ts`'s pm5 `PM5_SPM_MIN`/
- *  `PM5_SPM_MAX` (`avgSpm`'s wire range is `0 .. 255`, wider than the
- *  server's `0..99`). Same drop-the-field treatment as the split/HR bands
- *  above. */
-export const MONITOR_SPM_MIN = 0;
+/** The valid `actualSpm` band for a monitor-sourced reading (branch review
+ *  Medium-1, floor amended Phase LT spec 1 §2): mirrors `server/routes/
+ *  data.ts`'s pm5 actualSpm bound (min 1, max `PM5_SPM_MAX`) — `avgSpm`'s
+ *  wire range is `0 .. 255`, wider than the server's `1..99`. Same
+ *  drop-the-field treatment as the split/HR bands above.
+ *
+ *  THE FLOOR (Phase LT spec 1, §2 — carried debt closed): `MONITOR_SPM_MIN`
+ *  moved from 0 to 1, justified by the FIELD'S TYPE, not device folklore —
+ *  no committed capture has ever shown `avgSpm` 0 (every boundary record
+ *  reads 23-29). `avgSpm` is a u8 at 1 spm/lsb, so a sub-1 average is
+ *  UNREPRESENTABLE — the floor can only ever drop an EXACT 0, which means
+ *  "no strokes", not a stroke-rate measurement. Existing stored zeros
+ *  (from before this change, saved under the old 0 floor) still read back
+ *  as `spm: 0` or `actualSpm: 0` verbatim — this module only stops the
+ *  floor from admitting a NEW zero, it never rewrites or reinterprets a
+ *  stored one. The `> 0` read guard that renders such a stored zero as
+ *  absent lives in `buildSpmCell` (`session/summaryModel.ts`, final-review
+ *  fix round) — the ONE place both renderers (live summary, from-the-log)
+ *  resolve this field, so it is written there once rather than
+ *  re-implemented per renderer. Same "drop the field on read, never
+ *  migrate" treatment the split/HR bands already use. */
+export const MONITOR_SPM_MIN = 1;
 export const MONITOR_SPM_MAX = 99;
 
 /** Builds the Log screen's monitor-mode step list straight from a completed
@@ -722,18 +808,29 @@ export const MONITOR_SPM_MAX = 99;
  *  number; **effort intervals still get every measured field below**, a
  *  deliberate departure from the 5G rule the phone-timer builders follow,
  *  §3's own "no target" note); `meters`/`seconds` from
- *  `ProgramInterval.value` by `kind`. When a matched actual exists:
+ *  `ProgramInterval.value` by `kind`. **`spm` — the AUTHORED target,
+ *  Phase LT spec 1 §2, AMENDED at Task 1 review** — copied from
+ *  `ProgramInterval.displaySpm`, but NOT unconditionally: on an UNMATCHED
+ *  interval (no actual at all — never reached, or a lost boundary pair)
+ *  it is copied straight through, since a programmed-then-abandoned
+ *  interval's target is still real; on a MATCHED actual it is written
+ *  ONLY ALONGSIDE `actualSpm` (see that field below) — a dropped
+ *  measurement writes neither, never the target alone standing in for a
+ *  measurement that didn't happen. When a matched actual exists:
  *  `actualSource: "pm5"` unconditionally (the **pm5 pairing exception**,
  *  `LogStep`'s own doc comment above) — `actualSplit` only when `avgSplit`
  *  is a number `> 0` AND `<= MONITOR_SPLIT_MAX` (`0` means the wire had no
  *  reading, §3; the upper band drops the field rather than posting a
  *  number the server's own `PM5_MAX_SPLIT_SECONDS` band would reject —
  *  branch review Medium-1, same drop-the-field rule `avgHr` already
- *  follows); `spm` only when it is within
- *  `MONITOR_SPM_MIN..MONITOR_SPM_MAX` (branch review Medium-1, same rule);
- *  `avgHr`/`actualSeconds`/`actualMeters` straight from the actual
- *  (`avgHr` additionally banded to `MONITOR_HR_MIN..MONITOR_HR_MAX`,
- *  `LogStep.avgHr`'s own doc comment). */
+ *  follows); `actualSpm` — the MEASURED average, Phase LT spec 1 §2 (this
+ *  field, not `spm`, now holds it) — only when it is within
+ *  `MONITOR_SPM_MIN..MONITOR_SPM_MAX` (branch review Medium-1, floor
+ *  amended by the spec — see `MONITOR_SPM_MIN`'s own comment); `spm` rides
+ *  alongside it (previous paragraph) precisely because this is the ONE
+ *  gate a dropped measurement must also fail; `avgHr`/`actualSeconds`/
+ *  `actualMeters` straight from the actual (`avgHr` additionally banded to
+ *  `MONITOR_HR_MIN..MONITOR_HR_MAX`, `LogStep.avgHr`'s own doc comment). */
 export function buildMonitorLogSteps(run: MonitorRun): LogStep[] {
   const seed = run.logSeed;
   if (
@@ -774,7 +871,21 @@ export function buildMonitorLogSteps(run: MonitorRun): LogStep[] {
         actual.avgSpm >= MONITOR_SPM_MIN &&
         actual.avgSpm <= MONITOR_SPM_MAX
       ) {
-        step.spm = actual.avgSpm;
+        // Phase LT spec 1, §2, AMENDED at Task 1 review (the discriminant
+        // was unsound for a new dropped-measurement row — a matched
+        // actual whose avgSpm is dropped used to still copy the target
+        // unconditionally, producing a shape byte-identical to a
+        // pre-split row: actualSource "pm5", no actualSpm, spm holding a
+        // number — except that number was now the TARGET, and a
+        // renderer keying on `spmIsMeasured` would print it as MEASURED.
+        // Fix: `spm` is written ONLY alongside `actualSpm` on a matched
+        // actual — a dropped measurement writes NEITHER field, so new
+        // code can never reproduce the pre-split shape and the row-local
+        // discriminant (`spmIsMeasured`) is sound by construction. Cost,
+        // accepted: a new matched-but-dropped row shows no SPM cell at
+        // all (absence over invention).
+        step.actualSpm = actual.avgSpm;
+        if (interval.displaySpm !== null) step.spm = interval.displaySpm;
       }
       if (
         actual.avgHeartRateBpm !== null &&
@@ -785,6 +896,13 @@ export function buildMonitorLogSteps(run: MonitorRun): LogStep[] {
       }
       step.actualSeconds = actual.elapsedSeconds;
       step.actualMeters = actual.distanceMeters;
+    } else {
+      // UNMATCHED interval (no actualSource at all): the authored target
+      // is still real regardless — an interval that was never reached,
+      // or whose boundary pair never both arrived, was still PROGRAMMED
+      // with this rate. Unambiguous against the row-local discriminant,
+      // which requires `actualSource === "pm5"` first.
+      if (interval.displaySpm !== null) step.spm = interval.displaySpm;
     }
     out.push(step);
   });

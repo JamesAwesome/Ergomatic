@@ -28,6 +28,7 @@
 import { fmtDuration } from "../../../domain/duration.js";
 import { fmtSplit } from "../../../domain/format.js";
 import { judgeActual, type Judgement } from "../../../domain/judge.js";
+import { ON_TARGET_BAND_SECONDS } from "../../judgeBand.js";
 import type {
   ProgramInterval,
   WorkoutProgram,
@@ -605,8 +606,17 @@ const MID_SESSION_RESET_METERS = 1;
  *  converging (the same design section's own measurement: a judged LIVE
  *  cell would read SLOWER for 65-99% of every interval no matter how well
  *  the rower pulls, which is why that comparison never runs while rowing —
- *  see `avgValue` below). */
-export const ON_TARGET_BAND_SECONDS = 0.5;
+ *  see `avgValue` below).
+ *
+ *  EXTRACTED to `../../judgeBand.js` (Phase LT spec 1, Task 2 — James's
+ *  2026-08-18 ruling that the summary's row judgment shares this SAME
+ *  band): this file no longer defines the number, it imports and
+ *  re-exports the one shared copy, so every existing import of
+ *  `ON_TARGET_BAND_SECONDS` from this module (this file's own
+ *  `avgVerdict` below, plus `surfaceModel.test.ts`) keeps resolving with
+ *  no other change. `judgeBand.test.ts`'s drift test pins this re-export
+ *  to the shared module's own value by reference, not just by number. */
+export { ON_TARGET_BAND_SECONDS };
 
 /** AVG's OWN COMPARISON — deliberately NOT a second call into
  *  `domain/judge.ts`'s `judgeActual` (this file's header comment, rule 1:

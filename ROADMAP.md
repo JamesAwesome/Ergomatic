@@ -2284,8 +2284,9 @@ measure.
 - **`MONITOR_SPM_MIN = 0`** persists a zero average rate as real. RE-PARKED
   — still true at `logDraft.ts:677`; changing the floor changes what gets
   PERSISTED (a dropped-vs-kept reading), which is triad territory, not a
-  close-out one-liner. Owner: Phase LG (the log screen's own phase), where
-  the field's consumers live.
+  close-out one-liner. Owner: **Phase LT spec 1** (re-owned 2026-08-18;
+  Phase LG closed without it — the floor becomes 1, justified by the
+  field's u8 type).
 - **The phone timer's landscape gutter absorbs no left inset.** RE-PARKED —
   untouched by CR2 BY RULING (spec 3's fork condition: the redesign must
   not reach the phone timer). Fix known and cheap; owner: the next phase
@@ -2450,15 +2451,54 @@ mirrored).
 - [ ] Follow-up: the fake's `restDistanceMeters` resets with no ~3-frame
       lag (fine while nothing renders it directly).
 
+## Phase LT — The log screen tells the whole truth
+
+**Status:** OPENED 2026-08-18 (absorbs the target-judgment and discard
+bugfix rounds; both QUEUED entries below re-dispositioned). Spec 1 at
+`docs/superpowers/specs/2026-08-18-target-truth-design.md`; phase-open
+gates run (PM GO-WITH-CHANGES + antagonist anchor, both folded; the
+anchor's attacked-and-held claims are the phase's vetted ground, in the
+ledger). LT-0 SHIPPED (#128). **Spec 1 IMPLEMENTED 2026-08-19** (Tasks
+1-4 done on branch `lt-truth`: the split/floor/server bound, the row/SPM
+model and shared band, both renderers, and the witness sweep +
+reconciliation) — awaiting final review, the triad's PM final-PR gate,
+and James's merge approval. Spec 2/3 remain re-gated, below.
+**Goal:** the summary's interval rows answer "did I hit MY targets" —
+target inline, judgment vs the row's own target with the connected
+surface's shared ±0.5s band, stroke rate shown (`24 / 22`), and discard
+wherever save is.
+**Slate:** LT-0 = the discard fix (its own small PR, FIRST — the manual
+door is the app's only discard-less save surface and the monitor path's
+fallthrough); spec 1 = targets/judgment/SPM (TRIAD: number meaning +
+stored shape); spec 2 = series capture (re-gated at its own open: memo
+committed, storage ceiling ruled); spec 3 = traces (HR descoped until a
+belt is confirmed).
+**Owed at the next tag (v0.14.0, range v0.13.0..main — RF15's rule):**
+four notes clauses: (1) rows judge against their own targets with the
+target shown (the erg ask); (2) stroke rate on measured intervals;
+(3) discard everywhere save is (#128 — RETROACTIVE, v0.13.0's tag message
+never announced it); (4) HISTORY RE-JUDGES TOO — sessions already viewed
+change colour (tule-fog rows go red→blue), plus #124's accepted re-log
+gap if still unannounced (retroactive, same chain).
+**Riding follow-ups (PM gate 2026-08-19):** `pnpm e2e -- -g` needs the
+double-dash form documented (pnpm swallows bare -g); a frozen-clock
+screenshot fixture (17 captures churn on wall-clock date stamps);
+`judge()`'s documented-unreachable dead-even branch (discriminated union
+if a second producer appears); the live summary's judged-state capture
+(closed by this PR's C1 recapture — verify at close).
+**Standing rulings:** same dead band everywhere; SPM cell `24 / 22`;
+supersedes PW spec 1's ROW semantics (its Measured-row cell points here);
+retires the lone-row abstention for targeted rows; `MONITOR_SPM_MIN`
+0→1 lands here (taken over from Phase LG, closed below).
+
 ## Phase LG — The log screen's own words
 
-**Status:** ABSORBED INTO PHASE PW (2026-08-17, James's brainstorm). The
-direction precondition is DISCHARGED there (UNDER = FASTER than target,
-ruled and documented at the type/enum/options sites); the LABELS change is RULED
-(option B, James 2026-08-17: `HELD / UNDER · FASTER / OVER · SLOWER` —
-LG piece 1 ships in PW spec 1, and this section closes when it merges). Pieces 2 (value
-migration) and 3 (the question itself) remain out by ruling. This section
-stays until PW ships the label decision, then closes with a pointer.
+**Status:** CLOSED 2026-08-18 (the PM's third-gate callout: the
+self-closing condition fired when #117 merged and nobody closed it).
+Piece 1 (labels) SHIPPED in PW spec 1 (#117, option B). Pieces 2 and 3
+remain out by the original ruling. The one surviving item this section
+owned — `MONITOR_SPM_MIN` — is now Phase LT spec 1's (see above). This
+section is a pointer, nothing more.
 **Goal:** the post-row self-report stops using two words that mean the
 opposite thing one screen away.
 
@@ -2518,7 +2558,7 @@ next phase. One line per round, newest first.
   regen diff showed an onboarding read-marker difference** unrelated to
   the branch that surfaced it — reverted there, unexplained. Owner: the
   next Today-capture pass; explain or fix before committing that capture.
-- **QUEUED (James's ruling, 2026-08-18, the tule-fog photos): the
+- **ABSORBED INTO PHASE LT SPEC 1 (2026-08-18 — see the Phase LT section; originally): the
   INTERVALS section judges each interval against ITS OWN TARGET.** He beat
   every target in a three-interval session (2:14.9/2:13.4/2:11.5 vs
   2:17/2:16/2:15) and the screen painted two rows RED (+2.0/+0.5 vs the
@@ -2539,7 +2579,7 @@ next phase. One line per round, newest first.
   PM final-PR gate, despite the bugfix framing. Photos:
   `~/Desktop/tule-fog` at ruling time; the reconciled arithmetic is in
   the session record.
-- **QUEUED (James, 2026-08-18, from the erg): discard missing on an
+- **ABSORBED AS PHASE LT-0 (2026-08-18 — ships FIRST as its own PR; the fallthrough diagnosis is in LT spec 1 §3; originally): discard missing on an
   early-ended workout's summary.** He ended a workout early and the
   post-workout summary offered no "Discard without logging" — only save
   paths. Scope, his ruling: **audit every surface where SAVE is an option

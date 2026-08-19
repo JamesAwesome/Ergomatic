@@ -24,6 +24,7 @@ import {
   MONITOR_SPLIT_MAX,
   MONITOR_SPM_MIN,
   MONITOR_SPM_MAX,
+  spmIsMeasured,
 } from "./logDraft";
 
 // Realistic fixtures throughout (repo convention, CLAUDE.md's own recurring
@@ -1257,7 +1258,7 @@ const THREE_STEP_RUN: MonitorRun = {
 };
 
 describe("buildMonitorLogSteps (7C spec §3)", () => {
-  it("maps walk 4's interval 0: label from the seed, target from the program, actualSplit/spm/avgHr/actualSeconds/actualMeters verbatim from the actual, source pm5", () => {
+  it("maps walk 4's interval 0: label from the seed, target from the program, actualSplit/actualSpm/avgHr/actualSeconds/actualMeters verbatim from the actual, source pm5 (Phase LT spec 1, §2: WALK4_DRAFT authors no spm, so the target half stays absent — the distinct-values split is its own dedicated test below)", () => {
     const steps = buildMonitorLogSteps(WALK4_RUN);
     // toStrictEqual, not the brief's own literal toEqual (repo's
     // vitest/prefer-strict-equal lint rule) — safe here since every value
@@ -1269,7 +1270,7 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
       meters: 100,
       actualSplit: WALK4_ACTUALS[0]!.avgSplit,
       actualSource: "pm5",
-      spm: WALK4_ACTUALS[0]!.avgSpm,
+      actualSpm: WALK4_ACTUALS[0]!.avgSpm,
       avgHr: WALK4_ACTUALS[0]!.avgHeartRateBpm ?? undefined,
       actualSeconds: WALK4_ACTUALS[0]!.elapsedSeconds,
       actualMeters: WALK4_ACTUALS[0]!.distanceMeters,
@@ -1294,7 +1295,7 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
       meters: 100,
       actualSplit: WALK4_ACTUALS[1]!.avgSplit,
       actualSource: "pm5",
-      spm: WALK4_ACTUALS[1]!.avgSpm,
+      actualSpm: WALK4_ACTUALS[1]!.avgSpm,
       avgHr: WALK4_ACTUALS[1]!.avgHeartRateBpm ?? undefined,
       actualSeconds: WALK4_ACTUALS[1]!.elapsedSeconds,
       actualMeters: WALK4_ACTUALS[1]!.distanceMeters,
@@ -1467,7 +1468,7 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
     expect(steps[0]!.actualSource).toBe("pm5");
     expect(steps[1]!.actualSource).toBeUndefined();
     expect(steps[1]!.actualSplit).toBeUndefined();
-    expect(steps[1]!.spm).toBeUndefined();
+    expect(steps[1]!.actualSpm).toBeUndefined();
     expect(steps[1]!.actualSeconds).toBeUndefined();
     expect(steps[1]!.actualMeters).toBeUndefined();
     expect(steps[2]!.actualSource).toBe("pm5");
@@ -1512,7 +1513,7 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
     });
   });
 
-  it("an effort interval (targetSplit null) still carries its measured actual, no target", () => {
+  it("an effort interval (targetSplit null) still carries its measured actual, no PACE target — but Fork Lightning's own authored spm still copies as the target half (Phase LT spec 1, §2: `displaySpm` is independent of `targetSplit`)", () => {
     // Fork Lightning's own real effort step (0:30 @ MAX) — realistic
     // fixture convention, and the same step buildLogSteps'/buildLogSeed's
     // own effort tests above use.
@@ -1557,9 +1558,15 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
     // distinction `buildManualLogSteps`' own effort test above pins.
     expect(steps[0]).toStrictEqual({
       label: logSeed.steps[0]!.label,
+      // The authored target half (Fork Lightning's own `spm: 32`,
+      // `workStepFrom`'s comment above) — coincidentally the SAME number
+      // as this fixture's measured actual below; the dedicated
+      // distinct-values test elsewhere in this describe block is what
+      // proves the split doesn't merely echo one field into the other.
+      spm: 32,
       actualSplit: 110,
       actualSource: "pm5",
-      spm: 32,
+      actualSpm: 32,
       avgHr: 150,
       actualSeconds: 30,
       actualMeters: 120,
@@ -1575,20 +1582,20 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
     const steps = buildMonitorLogSteps(run);
     expect(steps[0]!.actualSplit).toBeUndefined();
     expect(steps[0]!.actualSource).toBe("pm5");
-    expect(steps[0]!.spm).toBe(WALK4_ACTUALS[0]!.avgSpm);
+    expect(steps[0]!.actualSpm).toBe(WALK4_ACTUALS[0]!.avgSpm);
     expect(steps[0]!.avgHr).toBe(WALK4_ACTUALS[0]!.avgHeartRateBpm);
     expect(steps[0]!.actualSeconds).toBe(WALK4_ACTUALS[0]!.elapsedSeconds);
     expect(steps[0]!.actualMeters).toBe(WALK4_ACTUALS[0]!.distanceMeters);
   });
 
-  it("a null avgSpm omits spm (never a fabricated stroke rate), the rest of the mapping unaffected", () => {
+  it("a null avgSpm omits actualSpm (never a fabricated stroke rate), the rest of the mapping unaffected", () => {
     const run: MonitorRun = {
       ...WALK4_RUN,
       actuals: [{ ...WALK4_ACTUALS[0]!, avgSpm: null }],
     };
     const steps = buildMonitorLogSteps(run);
-    // toStrictEqual (not `.spm` toBeUndefined() alone): proves the `spm` key
-    // is truly ABSENT, not present-with-value-undefined.
+    // toStrictEqual (not `.actualSpm` toBeUndefined() alone): proves the
+    // `actualSpm` key is truly ABSENT, not present-with-value-undefined.
     expect(steps[0]).toStrictEqual({
       label: WALK4_RUN.logSeed!.steps[0]!.label,
       targetSplit: WALK4_RUN.program.intervals[0]!.targetSplit ?? undefined,
@@ -1643,7 +1650,7 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
     const steps = buildMonitorLogSteps(run);
     expect(steps[0]!.actualSplit).toBeUndefined();
     expect(steps[0]!.actualSource).toBe("pm5");
-    expect(steps[0]!.spm).toBe(WALK4_ACTUALS[0]!.avgSpm);
+    expect(steps[0]!.actualSpm).toBe(WALK4_ACTUALS[0]!.avgSpm);
     expect(steps[0]!.avgHr).toBe(WALK4_ACTUALS[0]!.avgHeartRateBpm);
     expect(steps[0]!.actualSeconds).toBe(WALK4_ACTUALS[0]!.elapsedSeconds);
     expect(steps[0]!.actualMeters).toBe(WALK4_ACTUALS[0]!.distanceMeters);
@@ -1659,14 +1666,14 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
   // Branch review Medium-1: avgSpm's own wire scale (readU8) tops out at
   // 255, past the server's pm5 band (`0..99`, PM5_SPM_MIN/MAX). Same
   // drop-the-field treatment, never a rejected save.
-  it("avgSpm 255 (the wire's own byte ceiling, past the server's 0..99 band) omits spm, the rest of the mapping unaffected (branch review Medium-1)", () => {
+  it("avgSpm 255 (the wire's own byte ceiling, past the server's 0..99 band) omits actualSpm, the rest of the mapping unaffected (branch review Medium-1)", () => {
     const run: MonitorRun = {
       ...WALK4_RUN,
       actuals: [{ ...WALK4_ACTUALS[0]!, avgSpm: 255 }],
     };
     const steps = buildMonitorLogSteps(run);
-    // toStrictEqual (not `.spm` toBeUndefined() alone): proves the `spm` key
-    // is truly ABSENT, not present-with-value-undefined.
+    // toStrictEqual (not `.actualSpm` toBeUndefined() alone): proves the
+    // `actualSpm` key is truly ABSENT, not present-with-value-undefined.
     expect(steps[0]).toStrictEqual({
       label: WALK4_RUN.logSeed!.steps[0]!.label,
       targetSplit: WALK4_RUN.program.intervals[0]!.targetSplit ?? undefined,
@@ -1677,7 +1684,10 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
       actualSeconds: WALK4_ACTUALS[0]!.elapsedSeconds,
       actualMeters: WALK4_ACTUALS[0]!.distanceMeters,
     });
-    // Both band edges (0 and 99) are still admitted.
+    // Both band edges (Phase LT spec 1, §2: the floor moved from 0 to 1 — a
+    // u8 field, sub-1 unrepresentable, so an exact 0 can only mean "no
+    // strokes" and is excluded separately, see the dedicated floor test
+    // below) are still admitted.
     const atMin: MonitorRun = {
       ...WALK4_RUN,
       actuals: [{ ...WALK4_ACTUALS[0]!, avgSpm: MONITOR_SPM_MIN }],
@@ -1686,8 +1696,27 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
       ...WALK4_RUN,
       actuals: [{ ...WALK4_ACTUALS[0]!, avgSpm: MONITOR_SPM_MAX }],
     };
-    expect(buildMonitorLogSteps(atMin)[0]!.spm).toBe(MONITOR_SPM_MIN);
-    expect(buildMonitorLogSteps(atMax)[0]!.spm).toBe(MONITOR_SPM_MAX);
+    expect(buildMonitorLogSteps(atMin)[0]!.actualSpm).toBe(MONITOR_SPM_MIN);
+    expect(buildMonitorLogSteps(atMax)[0]!.actualSpm).toBe(MONITOR_SPM_MAX);
+  });
+
+  // Phase LT spec 1, §2: `MONITOR_SPM_MIN` moved from 0 to 1, justified by
+  // the FIELD'S TYPE (avgSpm is a u8 at 1 spm/lsb, so a sub-1 average is
+  // unrepresentable) rather than device folklore — an exact 0 can only mean
+  // "no strokes", which is not a stroke-rate measurement, so it drops the
+  // field like any other out-of-band reading. This is the self-mutation
+  // target: reverting the floor to 0 turns this red (avgSpm 0 would then
+  // sit exactly at the (old) minimum and survive as actualSpm: 0).
+  it("avgSpm exactly 0 (no strokes) omits actualSpm — the floor (Phase LT spec 1, §2, red-provable)", () => {
+    const run: MonitorRun = {
+      ...WALK4_RUN,
+      actuals: [{ ...WALK4_ACTUALS[0]!, avgSpm: 0 }],
+    };
+    const steps = buildMonitorLogSteps(run);
+    expect(steps[0]!.actualSpm).toBeUndefined();
+    // Never rejects the step for it — every other verbatim field stands.
+    expect(steps[0]!.actualSource).toBe("pm5");
+    expect(steps[0]!.actualSplit).toBe(WALK4_ACTUALS[0]!.avgSplit);
   });
 
   // Branch review Medium-2: mutant M2b keyed the warmup skip on `i === 0`
@@ -1791,7 +1820,7 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
     expect(steps[1]!.actualSource).toBe("pm5");
     expect(steps[1]!.actualSeconds).toBe(65.3);
     expect(steps[1]!.actualMeters).toBe(200);
-    expect(steps[1]!.spm).toBe(23);
+    expect(steps[1]!.actualSpm).toBe(23);
   });
 
   // Branch review Medium-3: mutant `step.targetSplit =
@@ -1855,7 +1884,7 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
       meters: 500,
       actualSplit: 145.5,
       actualSource: "pm5",
-      spm: 25,
+      actualSpm: 25,
       avgHr: 141,
       actualSeconds: 145.5,
       actualMeters: 500,
@@ -1876,6 +1905,186 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
       },
     };
     expect(() => buildMonitorLogSteps(misaligned)).toThrow(MonitorLogSeedError);
+  });
+
+  // Phase LT spec 1, §2 (the overload split, AMENDED at Task 1 review): a
+  // real workout step authoring `spm: 20` (the target), reused across the
+  // three dropped-measurement legs below (null / exact 0 / in-band) so the
+  // ONLY variable between them is the actual's own `avgSpm` — the amended
+  // rule keys on that alone, never on whether a target was authored.
+  function buildSpmSplitRun(avgSpm: number | null): MonitorRun {
+    const draft = buildDraft({
+      id: "id-spm-split",
+      title: "SPM Split",
+      type: "AT",
+      steps: [
+        {
+          k: "w",
+          duration: { kind: "distance", meters: 100 },
+          ref: { base: "6k", off: 0 },
+          spm: 20,
+        },
+      ],
+    });
+    const built = buildRun(draft, BASELINES, NOW);
+    const program = compileOrThrow(built.phases);
+    expect(program.intervals[0]!.displaySpm).toBe(20);
+    const logSeed = buildLogSeed(built.phases, BASELINES);
+    return {
+      v: 2,
+      workoutId: draft.workoutId,
+      title: draft.title,
+      program,
+      logSeed,
+      actuals: [
+        {
+          index: 0,
+          elapsedSeconds: 30,
+          distanceMeters: 100,
+          avgSplit: 150,
+          avgSpm,
+          avgHeartRateBpm: 140,
+          restDistanceMeters: 0,
+        },
+      ],
+      deviceName: "PM5 432331249",
+      startedAt: NOW.toISOString(),
+      completedAt: NOW.toISOString(),
+      terminated: false,
+    };
+  }
+
+  // DISTINCT authored (20) and measured (24) values, so a survivor that
+  // still returns the pre-split shape (spm = avgSpm, no target copied) is
+  // red-provable — this is the overload's own self-mutation target.
+  it("splits the authored target (from ProgramInterval.displaySpm) into `spm` and the measured average (from IntervalActual.avgSpm) into `actualSpm` — distinct values (matched, in-band: the {both} shape)", () => {
+    const steps = buildMonitorLogSteps(buildSpmSplitRun(24));
+    expect(steps[0]!.spm).toBe(20);
+    expect(steps[0]!.actualSpm).toBe(24);
+    expect(steps[0]!.spm).not.toBe(steps[0]!.actualSpm);
+  });
+
+  it("a target-less interval (no authored spm on the step) leaves `spm` absent while `actualSpm` still carries the measurement", () => {
+    // WALK4_DRAFT's own steps author no spm at all.
+    const steps = buildMonitorLogSteps(WALK4_RUN);
+    expect(WALK4_RUN.program.intervals[0]!.displaySpm).toBeNull();
+    expect(steps[0]).not.toHaveProperty("spm");
+    expect(steps[0]!.actualSpm).toBe(WALK4_ACTUALS[0]!.avgSpm);
+  });
+
+  // THE AMENDMENT ITSELF (Phase LT spec 1, §2, Task 1 review, HIGH-1): a
+  // MATCHED actual whose measurement is DROPPED (avgSpm null, 0, or out
+  // of band) must write NEITHER `spm` NOR `actualSpm` — never the target
+  // alone standing in for a reading that didn't happen. Before the
+  // amendment, `buildMonitorLogSteps` still copied `spm` unconditionally
+  // here, producing a NEW row shaped exactly like an OLD pre-split one
+  // (`actualSource: "pm5"`, no `actualSpm`, `spm` holding a number) —
+  // except that number was the TARGET, not a measurement, and
+  // `spmIsMeasured` would have called it measured. This is that defect's
+  // own regression test.
+  describe("the dropped-measurement row (Task 1 review amendment)", () => {
+    it("avgSpm null (no reading at all) → neither spm nor actualSpm, even though the step authors spm: 20", () => {
+      const steps = buildMonitorLogSteps(buildSpmSplitRun(null));
+      expect(steps[0]).not.toHaveProperty("spm");
+      expect(steps[0]).not.toHaveProperty("actualSpm");
+      // Never rejects the step for it — every other verbatim field stands.
+      expect(steps[0]!.actualSource).toBe("pm5");
+      expect(steps[0]!.actualSplit).toBe(150);
+    });
+
+    it("avgSpm exactly 0 (the floor: no strokes) → neither spm nor actualSpm, even though the step authors spm: 20", () => {
+      const steps = buildMonitorLogSteps(buildSpmSplitRun(0));
+      expect(steps[0]).not.toHaveProperty("spm");
+      expect(steps[0]).not.toHaveProperty("actualSpm");
+      expect(steps[0]!.actualSource).toBe("pm5");
+    });
+
+    it("avgSpm 24, in-band → BOTH spm (the authored 20) and actualSpm (the measured 24) — the amendment's own positive case", () => {
+      const steps = buildMonitorLogSteps(buildSpmSplitRun(24));
+      expect(steps[0]!.spm).toBe(20);
+      expect(steps[0]!.actualSpm).toBe(24);
+    });
+  });
+
+  // THE REACHABLE-SHAPES TABLE (Task 1 review amendment): every shape
+  // `buildMonitorLogSteps` can produce for spm/actualSpm/actualSource,
+  // post-amendment. The pre-split shape — `actualSource: "pm5"`, `spm`
+  // holding a number, `actualSpm` ABSENT — is DELIBERATELY MISSING from
+  // this table: it is what `spmIsMeasured` keys "old row" on, and the
+  // whole point of the amendment is that new code can never produce it
+  // (see the dropped-measurement describe block above — the shape a
+  // pre-amendment bug WOULD have produced here collapses to {neither}
+  // instead).
+  describe("reachable shapes (Task 1 review amendment: the pre-split shape is UNREACHABLE from new code)", () => {
+    it("{both}: matched actual, avgSpm in-band, target authored", () => {
+      const steps = buildMonitorLogSteps(buildSpmSplitRun(24));
+      expect(steps[0]!.actualSource).toBe("pm5");
+      expect(steps[0]!.spm).toBe(20);
+      expect(steps[0]!.actualSpm).toBe(24);
+    });
+
+    it("{neither} + pm5: matched actual, measurement dropped, target authored (the shape the amendment exists to prevent from leaking `spm` alone)", () => {
+      const steps = buildMonitorLogSteps(buildSpmSplitRun(null));
+      expect(steps[0]!.actualSource).toBe("pm5");
+      expect(steps[0]).not.toHaveProperty("spm");
+      expect(steps[0]).not.toHaveProperty("actualSpm");
+    });
+
+    it("{spm only} + no actualSource: an UNMATCHED interval, target authored, no actual reached this position at all", () => {
+      const draft = buildDraft({
+        id: "id-spm-unmatched",
+        title: "SPM Unmatched",
+        type: "AT",
+        steps: [
+          {
+            k: "w",
+            duration: { kind: "distance", meters: 100 },
+            ref: { base: "6k", off: 0 },
+            spm: 20,
+          },
+        ],
+      });
+      const built = buildRun(draft, BASELINES, NOW);
+      const program = compileOrThrow(built.phases);
+      const logSeed = buildLogSeed(built.phases, BASELINES);
+      const run: MonitorRun = {
+        v: 2,
+        workoutId: draft.workoutId,
+        title: draft.title,
+        program,
+        logSeed,
+        actuals: [], // nothing ever matched interval 0
+        deviceName: "PM5 432331249",
+        startedAt: NOW.toISOString(),
+        completedAt: NOW.toISOString(),
+        terminated: false,
+      };
+      const steps = buildMonitorLogSteps(run);
+      expect(steps[0]!.spm).toBe(20);
+      expect(steps[0]).not.toHaveProperty("actualSpm");
+      expect(steps[0]).not.toHaveProperty("actualSource");
+    });
+  });
+});
+
+describe("spmIsMeasured: the row-local discriminant for a pre-split monitor row (Phase LT spec 1, §2)", () => {
+  it("an OLD monitor row (actualSource pm5, no actualSpm — predates the split, spm holds the measured value) reads as measured", () => {
+    expect(
+      spmIsMeasured({ actualSource: "pm5", spm: 24, actualSpm: undefined }),
+    ).toBe(true);
+  });
+
+  it("a NEW monitor row (actualSource pm5, actualSpm present — the split already applied, spm is the authored target) does NOT read as measured", () => {
+    expect(spmIsMeasured({ actualSource: "pm5", spm: 22, actualSpm: 24 })).toBe(
+      false,
+    );
+  });
+
+  it("a target-only row (timer/manual door, no actualSource pm5 at all) does NOT read as measured", () => {
+    expect(
+      spmIsMeasured({ actualSource: "assumed", spm: 20, actualSpm: undefined }),
+    ).toBe(false);
+    expect(spmIsMeasured({ spm: 20, actualSpm: undefined })).toBe(false);
   });
 });
 

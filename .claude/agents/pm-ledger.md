@@ -960,3 +960,74 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   ten seconds each.
 - **Release stack at this gate:** v0.12.0 is the last tag with ZERO merges
   since. Recommendation on merge: v0.13.0 MINOR (new capability, additive route).
+
+## Phase-open gate, 2026-08-18 (Phase LT slate: the log screen tells the whole truth)
+
+- **A spec that fixes "the target was invisible" can re-commit the same defect in
+  the field it adds.** LT spec 1 declined a target-SPM cell because "the target
+  rate already lives in the row label's authored text" — `refPaceLabel`
+  (`logDraft.ts:199-201`) is `${duration} @ ${refLabel(ref)}`, a pace reference
+  with no rate in it, and the only text renders of `spm` are `StepRow.tsx:92` and
+  `Today.tsx:751/769`, neither of them the log row. **When a spec adds a MEASURED
+  value, grep for where its TARGET renders before accepting "it's already shown".**
+  One command, and here it was the same defect the spec exists to close.
+- **A bug REPORT and a bug INVESTIGATION are different scope, and folding an
+  unreproduced one into a triad spec makes the triad hostage.** §3's early-END
+  discard item was "reproduce and record what you find" inside spec 1's exit
+  criteria. The repro was largely readable at source: `monitorModeRun`
+  (`LogSession.tsx:249-263`) returns null on any of four conditions, and the
+  fallthrough door is the one with `discardSlot={null}` (`:1218`). **Read the gate
+  before scheduling the walk;** if the fix is one door, it ships ahead of the
+  triad, not behind it.
+- **A QUEUED item's stated sequencing is a ruling.** James scoped the discard
+  round "its own bugfix round AFTER PW spec 2 merges" (ROADMAP). #121 merged, so
+  it was unblocked and standalone — folding it into a triad spec silently reversed
+  his own scoping. Check a queued entry's own sequencing sentence before absorbing it.
+- **Phase LG, third gate running, still had not closed** — its self-closing
+  condition fired at #117 and its last survivor (`MONITOR_SPM_MIN`) is now taken by
+  LT, while ROADMAP still read "Owner: Phase LG". A section with a self-closing
+  condition needs a named owner or it accumulates orphans forever. (Closed in the
+  same revision that landed this entry.)
+- **Roadmap absence, FOURTH occurrence** (`grep "Phase LT" ROADMAP.md` = 0, after
+  PW-open, CS-close, CM). Graduated to CLAUDE.md recurring failure 15 in the same
+  revision.
+- **Backlog: 30 unchecked, up from 24** at the 2026-08-13 audit, CS open and CS
+  close. First movement in five days, and it is upward.
+- **Release stack at this gate: TWO merges past v0.12.0** (#123, #124), with #124's
+  accepted gap owed a notes sentence by the three-place disclosure rule. Cut
+  v0.13.0 MINOR before LT spec 1 opens a PR (James has assigned the tag to the
+  other session; the notes obligations are in tracked files for it).
+
+## Final-PR gate, 2026-08-19 (PR #129, LT spec 1 — triad: row re-baseline + actualSpm split)
+
+- **The flagship capture showed every cell the spec named and none of the COLOUR
+  the phase exists to add.** `post-workout-summary.png`'s fixture is warm-up +
+  prescribed + abstained: TARGET cell ✓, SPM cell ✓, zero judged rows. `log-detail.png`
+  carried the blue/red, so the surface with a picture is HISTORY and the surface that
+  produced James's bug report has none. Criterion 5 said "a mixed judged/on-target/
+  abstained list" and four reviews read the assertions (`toHaveText("/ 22")`) rather
+  than the fixture's row inventory. **At any gate: read the capture's FIXTURE for the
+  state under test, not its assertions — assertions prove the cells render, only the
+  fixture decides whether the feature is in frame.** Second occurrence of the standing
+  "no committed picture of its judged state" follow-up.
+- **A tag cut hours before the gate can already be missing notes.** `v0.13.0` points at
+  main INCLUDING #128 (LT-0's discard) and its message names neither that nor #124's
+  accepted re-log gap — the notes leg of the three-place disclosure chain failed on the
+  very next tag after the rule was written. **Check the LATEST TAG's own message against
+  what it contains at every final gate**, not only when cutting one; an unshipped tag
+  message is amendable, a shipped one is not.
+- **Recompute-the-headline: GREEN on `log-detail.png`, fourth consecutive run** (7:58,
+  4×500 m = 2000, 478/4 = 1:59.5, and all four row judgments recomputed against their
+  inline targets: −10.0 / +10.0 / on-target / abstain). The second capture could only be
+  reconciled under a working-only AVG definition — **when a hero and its rows disagree,
+  first ask which SUBSET the hero is over; a warm-up row is the usual answer.**
+- **Absence as the ON TARGET idiom means the rower's best outcome renders as nothing,
+  while the new aria-label speaks it.** The a11y fix gave screen readers a judgment
+  sighted users don't get. Specced and vetted; recorded so the next log-screen spec
+  starts from it rather than rediscovering it.
+- **Drift discipline done right, for reuse:** one exported constant, a re-export at the
+  second surface, and a test that greps the second surface's SOURCE for any assignment
+  (both directions, regex verified red). Copy this shape for any "one value, two
+  surfaces" claim — an equality assertion alone passes after a copy is made.
+- **Backlog/process:** LT is IN ROADMAP (RF16 graduated, no fifth absence). Release stack:
+  v0.13.0 is the tip tag; #129 merges as v0.14.0 MINOR, notes owed to `v0.13.0..main`.
