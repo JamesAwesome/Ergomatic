@@ -79,6 +79,16 @@ export interface StoredLogStep {
   avgHr?: number;
   actualSeconds?: number;
   actualMeters?: number;
+  // Phase LT spec 1 (2026-08-18), §2, MEDIUM-1 (Task 1 review): the
+  // lockstep line this interface's own header comment demands —
+  // `session/logDraft.ts`'s `LogStep` gained this field the same task
+  // (the monitor door's MEASURED average, `spm` above reverting to the
+  // AUTHORED target on every door). Without it here, `spmIsMeasured`
+  // (`session/logDraft.ts`, structurally compatible with this type) would
+  // read `actualSpm` as always-absent on every stored row this module
+  // hands it, so EVERY stored pm5 row would misread as "predates the
+  // split" forever, regardless of when it was actually saved.
+  actualSpm?: number;
 }
 
 /** `GET /api/logs/:id`'s full row (spec §3) — the from-the-log view's own

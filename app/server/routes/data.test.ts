@@ -1746,6 +1746,38 @@ describe("GET/POST /api/logs", () => {
         expect(res.status).toBe(201);
       }
     });
+
+    // LOW-4 (Task 1 review): an UNMATCHED monitor-door interval posts its
+    // authored `spm` with NO `actualSource` key at all (Phase LT spec 1,
+    // §2's amendment — `buildMonitorLogSteps`'s own "unmatched interval"
+    // branch never sets `actualSource`, since there is no actual to pair
+    // with). This shape's `spm` takes the MANUAL band (10..60), not the
+    // pm5-widened one (0..99) — `isPm5` keys strictly on `actualSource ===
+    // "pm5"`, absent here — even though the row plainly came off a
+    // monitor-mode workout. Previously untested: every other `spm` test in
+    // this file sent an explicit `actualSource`.
+    it("an unmatched-interval shape (spm present, no actualSource at all) validates spm against the MANUAL 10..60 band, not the pm5 0..99 one (LOW-4)", async () => {
+      const app = appFor(makeStores());
+      const tooLow = await asA(request(app).post("/api/logs")).send({
+        ...validLogBody(),
+        steps: [{ label: "Row 1", spm: 9 }],
+      });
+      expect(tooLow.status).toBe(400);
+      expect(tooLow.body.field).toBe("steps");
+      const tooHigh = await asA(request(app).post("/api/logs")).send({
+        ...validLogBody(),
+        steps: [{ label: "Row 1", spm: 61 }],
+      });
+      expect(tooHigh.status).toBe(400);
+      expect(tooHigh.body.field).toBe("steps");
+      for (const spm of [10, 60]) {
+        const ok = await asA(request(app).post("/api/logs")).send({
+          ...validLogBody(),
+          steps: [{ label: "Row 1", spm }],
+        });
+        expect(ok.status).toBe(201);
+      }
+    });
   });
 
   // Phase LT spec 1, §2 (the SPM overload split): `spm` above is now the

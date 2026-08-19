@@ -1802,12 +1802,19 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     expect(steps[0]).not.toHaveProperty("actualSplit");
     expect(steps[0]).not.toHaveProperty("actualSpm");
     expect(steps[0]).not.toHaveProperty("avgHr");
-    // Phase LT spec 1, §2: the AUTHORED target still renders (`spm`, from
-    // `ProgramInterval.displaySpm`, copied unconditionally regardless of
-    // whether an actual ever matched this interval) — ONE_INTERVAL's own
-    // `displaySpm: 22`, unrelated to the dropped/null measured average
-    // above.
-    expect(steps[0]?.spm).toBe(22);
+    // Phase LT spec 1, §2, AMENDED at Task 1 review: `spm` is ALSO
+    // absent here, even though ONE_INTERVAL authors `displaySpm: 22` —
+    // this actual IS matched (the gate synthesized it at the deadline),
+    // so the amended rule applies: on a matched actual, `spm` is written
+    // ONLY alongside `actualSpm`, never alone. avgSpm is null on this
+    // synthesized actual (no reading at all, same as the split/HR
+    // averages above), so the target copy is suppressed too — a
+    // dropped measurement must never let the authored target stand in
+    // for a reading that didn't happen (`buildMonitorLogSteps`'s own
+    // doc comment carries the full rationale). Before the amendment this
+    // assertion read `.toBe(22)`; that was the exact defect the review
+    // caught — a NEW row, shaped like an OLD pre-split one.
+    expect(steps[0]).not.toHaveProperty("spm");
 
     // ONE READ OF THE STASH ANSWERS "WHICH SOURCE FED THE RECORD".
     const entries = JSON.parse(result.current.exportLog()) as {

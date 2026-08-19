@@ -1907,13 +1907,12 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
     expect(() => buildMonitorLogSteps(misaligned)).toThrow(MonitorLogSeedError);
   });
 
-  // Phase LT spec 1, §2 (the overload split): before this task `spm` held
-  // the monitor door's MEASURED average and the AUTHORED target was never
-  // copied at all. DISTINCT authored (20, from the draft step's own `spm`)
-  // and measured (24, the actual's `avgSpm`) values, so a survivor that
-  // still returns the pre-split shape (spm = avgSpm, no target copied) is
-  // red-provable — this is the overload's own self-mutation target.
-  it("splits the authored target (from ProgramInterval.displaySpm) into `spm` and the measured average (from IntervalActual.avgSpm) into `actualSpm` — distinct values", () => {
+  // Phase LT spec 1, §2 (the overload split, AMENDED at Task 1 review): a
+  // real workout step authoring `spm: 20` (the target), reused across the
+  // three dropped-measurement legs below (null / exact 0 / in-band) so the
+  // ONLY variable between them is the actual's own `avgSpm` — the amended
+  // rule keys on that alone, never on whether a target was authored.
+  function buildSpmSplitRun(avgSpm: number | null): MonitorRun {
     const draft = buildDraft({
       id: "id-spm-split",
       title: "SPM Split",
@@ -1931,7 +1930,7 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
     const program = compileOrThrow(built.phases);
     expect(program.intervals[0]!.displaySpm).toBe(20);
     const logSeed = buildLogSeed(built.phases, BASELINES);
-    const run: MonitorRun = {
+    return {
       v: 2,
       workoutId: draft.workoutId,
       title: draft.title,
@@ -1943,7 +1942,7 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
           elapsedSeconds: 30,
           distanceMeters: 100,
           avgSplit: 150,
-          avgSpm: 24,
+          avgSpm,
           avgHeartRateBpm: 140,
           restDistanceMeters: 0,
         },
@@ -1953,7 +1952,13 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
       completedAt: NOW.toISOString(),
       terminated: false,
     };
-    const steps = buildMonitorLogSteps(run);
+  }
+
+  // DISTINCT authored (20) and measured (24) values, so a survivor that
+  // still returns the pre-split shape (spm = avgSpm, no target copied) is
+  // red-provable — this is the overload's own self-mutation target.
+  it("splits the authored target (from ProgramInterval.displaySpm) into `spm` and the measured average (from IntervalActual.avgSpm) into `actualSpm` — distinct values (matched, in-band: the {both} shape)", () => {
+    const steps = buildMonitorLogSteps(buildSpmSplitRun(24));
     expect(steps[0]!.spm).toBe(20);
     expect(steps[0]!.actualSpm).toBe(24);
     expect(steps[0]!.spm).not.toBe(steps[0]!.actualSpm);
@@ -1965,6 +1970,100 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
     expect(WALK4_RUN.program.intervals[0]!.displaySpm).toBeNull();
     expect(steps[0]).not.toHaveProperty("spm");
     expect(steps[0]!.actualSpm).toBe(WALK4_ACTUALS[0]!.avgSpm);
+  });
+
+  // THE AMENDMENT ITSELF (Phase LT spec 1, §2, Task 1 review, HIGH-1): a
+  // MATCHED actual whose measurement is DROPPED (avgSpm null, 0, or out
+  // of band) must write NEITHER `spm` NOR `actualSpm` — never the target
+  // alone standing in for a reading that didn't happen. Before the
+  // amendment, `buildMonitorLogSteps` still copied `spm` unconditionally
+  // here, producing a NEW row shaped exactly like an OLD pre-split one
+  // (`actualSource: "pm5"`, no `actualSpm`, `spm` holding a number) —
+  // except that number was the TARGET, not a measurement, and
+  // `spmIsMeasured` would have called it measured. This is that defect's
+  // own regression test.
+  describe("the dropped-measurement row (Task 1 review amendment)", () => {
+    it("avgSpm null (no reading at all) → neither spm nor actualSpm, even though the step authors spm: 20", () => {
+      const steps = buildMonitorLogSteps(buildSpmSplitRun(null));
+      expect(steps[0]).not.toHaveProperty("spm");
+      expect(steps[0]).not.toHaveProperty("actualSpm");
+      // Never rejects the step for it — every other verbatim field stands.
+      expect(steps[0]!.actualSource).toBe("pm5");
+      expect(steps[0]!.actualSplit).toBe(150);
+    });
+
+    it("avgSpm exactly 0 (the floor: no strokes) → neither spm nor actualSpm, even though the step authors spm: 20", () => {
+      const steps = buildMonitorLogSteps(buildSpmSplitRun(0));
+      expect(steps[0]).not.toHaveProperty("spm");
+      expect(steps[0]).not.toHaveProperty("actualSpm");
+      expect(steps[0]!.actualSource).toBe("pm5");
+    });
+
+    it("avgSpm 24, in-band → BOTH spm (the authored 20) and actualSpm (the measured 24) — the amendment's own positive case", () => {
+      const steps = buildMonitorLogSteps(buildSpmSplitRun(24));
+      expect(steps[0]!.spm).toBe(20);
+      expect(steps[0]!.actualSpm).toBe(24);
+    });
+  });
+
+  // THE REACHABLE-SHAPES TABLE (Task 1 review amendment): every shape
+  // `buildMonitorLogSteps` can produce for spm/actualSpm/actualSource,
+  // post-amendment. The pre-split shape — `actualSource: "pm5"`, `spm`
+  // holding a number, `actualSpm` ABSENT — is DELIBERATELY MISSING from
+  // this table: it is what `spmIsMeasured` keys "old row" on, and the
+  // whole point of the amendment is that new code can never produce it
+  // (see the dropped-measurement describe block above — the shape a
+  // pre-amendment bug WOULD have produced here collapses to {neither}
+  // instead).
+  describe("reachable shapes (Task 1 review amendment: the pre-split shape is UNREACHABLE from new code)", () => {
+    it("{both}: matched actual, avgSpm in-band, target authored", () => {
+      const steps = buildMonitorLogSteps(buildSpmSplitRun(24));
+      expect(steps[0]!.actualSource).toBe("pm5");
+      expect(steps[0]!.spm).toBe(20);
+      expect(steps[0]!.actualSpm).toBe(24);
+    });
+
+    it("{neither} + pm5: matched actual, measurement dropped, target authored (the shape the amendment exists to prevent from leaking `spm` alone)", () => {
+      const steps = buildMonitorLogSteps(buildSpmSplitRun(null));
+      expect(steps[0]!.actualSource).toBe("pm5");
+      expect(steps[0]).not.toHaveProperty("spm");
+      expect(steps[0]).not.toHaveProperty("actualSpm");
+    });
+
+    it("{spm only} + no actualSource: an UNMATCHED interval, target authored, no actual reached this position at all", () => {
+      const draft = buildDraft({
+        id: "id-spm-unmatched",
+        title: "SPM Unmatched",
+        type: "AT",
+        steps: [
+          {
+            k: "w",
+            duration: { kind: "distance", meters: 100 },
+            ref: { base: "6k", off: 0 },
+            spm: 20,
+          },
+        ],
+      });
+      const built = buildRun(draft, BASELINES, NOW);
+      const program = compileOrThrow(built.phases);
+      const logSeed = buildLogSeed(built.phases, BASELINES);
+      const run: MonitorRun = {
+        v: 2,
+        workoutId: draft.workoutId,
+        title: draft.title,
+        program,
+        logSeed,
+        actuals: [], // nothing ever matched interval 0
+        deviceName: "PM5 432331249",
+        startedAt: NOW.toISOString(),
+        completedAt: NOW.toISOString(),
+        terminated: false,
+      };
+      const steps = buildMonitorLogSteps(run);
+      expect(steps[0]!.spm).toBe(20);
+      expect(steps[0]).not.toHaveProperty("actualSpm");
+      expect(steps[0]).not.toHaveProperty("actualSource");
+    });
   });
 });
 
