@@ -1314,4 +1314,51 @@ describe("S4: the worst-case series serializes fast enough for a 30s flush caden
       `S4 perf probe: JSON.stringify of a ${SERIES_SAMPLE_CAP}-sample MonitorRun took ${elapsedMs.toFixed(2)}ms`,
     ).toBeLessThan(100);
   });
+
+  // Task 4 handoff (task-2 review's own observation): S4 only measured the
+  // WRITE side (`JSON.stringify`, the 30s flush's own cost). Three
+  // surfaces `JSON.parse` a record up to the same ~720 KB worst case AT
+  // MOUNT — `loadMonitorRun` itself (this file, below), the diagnostics
+  // stash a rowed session's log screen reads, and the log detail screen's
+  // own `GET /api/logs/:id` response body — and none of them had a
+  // measured number. Same idiom as S4's own probe: a worst-case
+  // `JSON.stringify`d record, timed on the PARSE side, the number stated
+  // in both `console.log` and the assertion's own message (LOW-2's
+  // reporting fix, carried over identically), a generous bound rather than
+  // a tight one (this is a one-time mount cost, not a per-frame budget the
+  // way S4's flush cadence is).
+  it("JSON.parse of a 14,400-sample record (the mount-time cost the write-side S4 probe never measured) completes well under 100ms", () => {
+    const samples: Sample[] = Array.from(
+      { length: SERIES_SAMPLE_CAP },
+      (_, i) => ({
+        t: (i + 1) * 10,
+        d: (i + 1) * 34,
+        p: Math.round(120 * 10 + (i % 40)),
+        spm: 20 + (i % 10),
+        hr: 130 + (i % 60),
+      }),
+    );
+    const run: MonitorRun = {
+      ...freshMonitorRun(),
+      series: { samples, truncated: true },
+    };
+    const json = JSON.stringify(run);
+
+    const start = performance.now();
+    const parsed = JSON.parse(json) as MonitorRun;
+    const elapsedMs = performance.now() - start;
+
+    console.log(
+      `Parse-side perf probe: JSON.parse of a ${SERIES_SAMPLE_CAP}-sample MonitorRun took ${elapsedMs.toFixed(2)}ms`,
+    );
+
+    // Proves this actually parsed the real worst-case payload, not an
+    // empty/truncated string a mistaken slice would still time quickly.
+    expect(parsed.series?.samples).toHaveLength(SERIES_SAMPLE_CAP);
+    expect(parsed.series?.truncated).toBe(true);
+    expect(
+      elapsedMs,
+      `Parse-side perf probe: JSON.parse of a ${SERIES_SAMPLE_CAP}-sample MonitorRun took ${elapsedMs.toFixed(2)}ms`,
+    ).toBeLessThan(100);
+  });
 });

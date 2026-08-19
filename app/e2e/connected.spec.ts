@@ -313,6 +313,11 @@ const INTERSTITIAL_WRITE_DELAY_MS = 120;
 async function injectFakeMonitor(
   page: Page,
   deviceName: string,
+  // Task 4 (series capture, S3's real forced-quota leg): optional so every
+  // EXISTING call site keeps `buildStoryEvents()` byte-for-byte (this
+  // param defaults to it) — S3's own test is the first caller to pass a
+  // shorter, boundary-free timeline of its own.
+  events: (FakeStatusEventLike | FakeBoundaryEventLike)[] = buildStoryEvents(),
 ): Promise<void> {
   await page.addInitScript(
     ({ program, events, deviceName: name, delayWritesMs }) => {
@@ -325,7 +330,7 @@ async function injectFakeMonitor(
     },
     {
       program: FIXTURE_PROGRAM,
-      events: buildStoryEvents(),
+      events,
       deviceName,
       delayWritesMs: INTERSTITIAL_WRITE_DELAY_MS,
     },
@@ -440,8 +445,13 @@ async function walkToReady(
   title: string,
   email: string,
   deviceName: string,
+  // Task 4 (S3): forwarded straight to `injectFakeMonitor` — see that
+  // function's own comment. `undefined` here means "use its default"
+  // (`buildStoryEvents()`), exactly what every pre-existing call site got
+  // before this parameter existed.
+  events?: (FakeStatusEventLike | FakeBoundaryEventLike)[],
 ): Promise<void> {
-  await injectFakeMonitor(page, deviceName);
+  await injectFakeMonitor(page, deviceName, events);
   await signInViaBackdoor(page, { email, name: "Connected Walk Tester" });
   await setBaselines(page);
   await importBulk(page, BULK_TEXT(title));
@@ -760,6 +770,10 @@ async function walkSurfaceToLog(
   )) as {
     deviceName: string | null;
     steps: { actualSource?: string; actualSeconds?: number }[];
+    series: {
+      samples: { t: number; d: number; p: number; spm: number; hr?: number }[];
+      truncated?: true;
+    } | null;
   };
   const pm5Steps = newest.steps.filter((step) => step.actualSource === "pm5");
   expect(
@@ -768,6 +782,72 @@ async function walkSurfaceToLog(
   ).toBeGreaterThan(0);
   for (const step of pm5Steps) {
     expect(typeof step.actualSeconds).toBe("number");
+  }
+
+  // THE FULL LOOP (series capture spec, Task 4): the fake's own frames
+  // already feed `useMonitorSession.ts`'s `SeriesRecorder` (no fake-seam
+  // extension needed — checked before writing this, `handleFrame`'s own
+  // `seriesRecorderRef.current?.onFrame(frame)` calls run on every live
+  // frame this walk already drives), the recorder's snapshot rides the
+  // CLOSE flush onto `MonitorRun.series`, `LogSession.tsx` posts it, and
+  // the server stores it in the new `series` jsonb column — this is the
+  // first real-browser proof that whole chain actually delivers a trace
+  // through to `GET /api/logs/:id`, not just each link in isolation.
+  expect(
+    newest.series,
+    "the connected walk's series survived to GET /:id",
+  ).not.toBeNull();
+  const series = newest.series!;
+
+  // PLAUSIBLE VALUES, "count vs session seconds" (§4 exit criteria): the
+  // recorder decimates to one sample per WHOLE work-second the WIRE's own
+  // `elapsedSeconds` crosses — `buildStoryEvents()`'s own status frames
+  // are the single source of truth for which work-seconds this walk's
+  // fixture ever crosses (5, 10, 17, then 20..39 contiguously, then 45;
+  // the skipped 6-9/11-16/18-19/40-44 gaps are BY DESIGN, this file's own
+  // header on the story's pacing — not a defect this walk needs to prove
+  // anything about). Computed from the SAME `buildStoryEvents()` this
+  // walk actually injected, not a hand-copied magic number, so a future
+  // edit to the story's own timeline keeps this assertion honest instead
+  // of silently drifting stale. No boundary reset ever fires within this
+  // story's status frames (`elapsedSeconds` only ever increases,
+  // `buildStoryEvents()`'s own header on why: the clock keeps running
+  // through the freeze too) — this decimation model is a simplified,
+  // fixture-specific mirror of `seriesRecorder.ts`'s own bucket rule,
+  // deliberately omitting the reset-fold machinery that fixture never
+  // exercises.
+  let lastBucket = -1;
+  let expectedSamples = 0;
+  for (const e of buildStoryEvents()) {
+    if (e.kind !== "status") continue;
+    const bucket = Math.floor(e.elapsedSeconds);
+    if (bucket > lastBucket) {
+      lastBucket = bucket;
+      expectedSamples += 1;
+    }
+  }
+  expect(series.samples.length).toBe(expectedSamples);
+  // Sanity bound on the same "count vs session seconds" idea, independent
+  // of the exact-count derivation above: never more samples than the
+  // story's own maximum work-second (45), and never zero.
+  expect(series.samples.length).toBeGreaterThan(0);
+  expect(series.samples.length).toBeLessThanOrEqual(45);
+  // `t` (cumulative tenths of a second) strictly increases sample to
+  // sample — never a duplicate, never a decrease (this recorder's own
+  // "first-frame-wins, never a repeat, never a reset within this
+  // fixture" contract). First/last bucket match the story's own first
+  // (5s) and last (45s) status frames.
+  expect(series.samples[0]!.t).toBe(50);
+  expect(series.samples[series.samples.length - 1]!.t).toBe(450);
+  for (let i = 1; i < series.samples.length; i += 1) {
+    expect(series.samples[i]!.t).toBeGreaterThan(series.samples[i - 1]!.t);
+  }
+  // The story's own heart-rate field (139-142 bpm across its status
+  // frames) is always in-band (`seriesRecorder.ts`'s own 20..254 band) —
+  // every sample should carry it, never omit it.
+  for (const sample of series.samples) {
+    expect(sample.hr).toBeGreaterThanOrEqual(20);
+    expect(sample.hr).toBeLessThanOrEqual(254);
   }
 }
 
@@ -842,6 +922,198 @@ test.describe("Phase 7B Task 8: the connected walk, fake-driven — landscape (8
 
     await walkSurfaceToLog(page, title, deviceName);
     await cleanupByTitle(page, title);
+  });
+});
+
+// =========================================================================
+// Series capture spec (2026-08-19), Task 4 — S3's REAL forced-quota leg
+// (§4 S3: "the e2e probe fills storage to force a REAL QuotaExceededError
+// once, asserting the run survives with `seriesDropped`"). The mocked-
+// throw unit leg (`monitorRun.test.ts`'s own `saveMonitorRun` suite)
+// proves the CATCH/RETRY logic; this proves the premise underneath it —
+// that a real browser's `localStorage.setItem` genuinely throws when the
+// origin is full, and that the sacrifice ordering survives contact with
+// that real exception, not just a `vi.spyOn` stand-in for it.
+//
+// THE MECHANISM: fill the origin with junk key/value pairs, biggest chunk
+// first, halving on every failure, down to a small floor — this is
+// EXACTLY `localStorage`'s own quota check (total origin bytes after the
+// operation), so it works regardless of the real browser's actual quota
+// (never assumed, never hard-coded). Once full, free a SMALL, calibrated
+// amount of headroom by removing a few of the smallest (most recently
+// added, by construction — see `fillOriginStorage`'s own comment) junk
+// entries: enough for the SACRIFICE RETRY's own tiny delta (this run's
+// `completedAt`/`terminated` fields changing on an already-stored key,
+// ~20-30 bytes), nowhere near enough for the FIRST write's delta (the
+// SAME key gaining a ~1.3 KB `series` field it never carried before). The
+// browser's own quota check is keyed on the DELTA for a same-key
+// overwrite (new total minus the old value's own bytes), which is why the
+// absolute size of everything else already in the record never matters
+// here — only the size of what's CHANGING between the failing write and
+// the surviving retry does.
+//
+// THE SESSION: a short, single-interval, boundary-free timeline (no
+// pause/resume, no grid navigation — this test is about the STORAGE
+// mechanism, not the surface) driven with `window.__pm5FakeControls__
+// .tick()` in one big jump rather than real-time pacing (this file's own
+// header on why a direct CDP `tick()` call is immune to background-tab
+// timer throttling): `runDueEvents()` (`fake.ts`) delivers every event
+// whose `atMs` has passed in one synchronous pass, and the recorder's own
+// `onFrame` calls are synchronous closures over an in-memory buffer, not
+// React state — a big tick and 30 individually-real-time-paced ticks
+// produce IDENTICAL recorder output, just far faster to run.
+const S3_STORY_START_MS = 8000;
+const S3_SAMPLE_COUNT = 30;
+
+function buildS3Events(): FakeStatusEventLike[] {
+  return Array.from({ length: S3_SAMPLE_COUNT }, (_, i) => ({
+    atMs: S3_STORY_START_MS + i * 300,
+    kind: "status" as const,
+    workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+    elapsedSeconds: i + 1,
+    distanceMeters: (i + 1) * 7,
+    spm: 24,
+    currentSplit: 110,
+    heartRateBpm: 140,
+    programIntervalIndex: 0,
+  }));
+}
+
+/** Fills the origin's `localStorage` as full as `setItem`'s own real quota
+ *  check allows: chunk size starts at 1 MB and halves every time a chunk
+ *  of the current size throws, down to a 64-byte floor — by construction
+ *  this drives the origin to within [0, 64) bytes of its real ceiling,
+ *  whatever that ceiling actually is, without ever reading or assuming a
+ *  quota NUMBER. Returns every key it wrote, OLDEST FIRST — the small,
+ *  fine-grained entries near the quota's own edge are always at the END
+ *  of this array (each successive halving only adds entries once the
+ *  PRIOR, larger size no longer fits), which is what lets the caller free
+ *  a small, precise amount of headroom by popping off the tail. */
+async function fillOriginStorage(
+  page: Page,
+): Promise<{ key: string; size: number }[]> {
+  return page.evaluate(() => {
+    const added: { key: string; size: number }[] = [];
+    let chunkSize = 1024 * 1024;
+    let i = 0;
+    while (chunkSize >= 64) {
+      for (;;) {
+        const key = `s3-junk-${i}`;
+        i += 1;
+        try {
+          localStorage.setItem(key, "x".repeat(chunkSize));
+          added.push({ key, size: chunkSize });
+        } catch {
+          break;
+        }
+      }
+      chunkSize = Math.floor(chunkSize / 2);
+    }
+    return added;
+  });
+}
+
+test.setTimeout(60_000);
+
+test.describe("Series capture spec, Task 4: S3's real leg — a genuine QuotaExceededError, the run surviving series-less (§4 S3)", () => {
+  test("filling origin storage until setItem genuinely throws, then ending the session: the run survives with seriesDropped, junk cleaned up after", async ({
+    page,
+  }) => {
+    const title = `S3 Quota Walk ${RUN_ID}`;
+    const deviceName = "PM5 550110220";
+    await walkToReady(
+      page,
+      title,
+      `s3-quota-walk-${RUN_ID}@e2e.test`,
+      deviceName,
+      buildS3Events(),
+    );
+
+    // Fast-forward past every scripted status frame in one jump (this
+    // block's own header) — comfortably past the last event's own atMs
+    // (8000 + 29*300 = 16,700).
+    await page.evaluate(() => {
+      window.__pm5FakeControls__?.tick(20_000);
+    });
+
+    const added = await fillOriginStorage(page);
+    // Free a SMALL, calibrated amount of headroom — see this block's own
+    // header for why this specific window (enough for the tiny retry
+    // delta, nowhere near enough for the ~1.3 KB series delta) is what
+    // makes the first write throw and the sacrifice retry succeed.
+    const TARGET_FREE_BYTES = 600;
+    const headroomKeys: string[] = [];
+    let freed = 0;
+    while (freed < TARGET_FREE_BYTES && added.length > 0) {
+      const entry = added.pop()!;
+      headroomKeys.push(entry.key);
+      freed += entry.size;
+    }
+    await page.evaluate((keys) => {
+      for (const k of keys) localStorage.removeItem(k);
+    }, headroomKeys);
+
+    try {
+      // END — staged, two presses, identical idiom to the main walk.
+      await page.getByRole("button", { name: "End session" }).click();
+      await expect(
+        page.getByRole("button", { name: "Tap again to end" }),
+      ).toBeVisible();
+      await page.getByRole("button", { name: "Tap again to end" }).click();
+
+      // `closeRecord` (Task 2) runs SYNCHRONOUSLY inside `endSession`'s own
+      // click handler, before any `await` — but this still polls rather
+      // than reading once immediately, since Playwright's own `click()`
+      // resolving is no guarantee every React commit downstream of it has
+      // flushed yet.
+      await expect
+        .poll(
+          () =>
+            page.evaluate(() => localStorage.getItem("ergomatic.monitorRun")),
+          { timeout: 5000 },
+        )
+        .not.toBeNull();
+      const record = await page.evaluate(() =>
+        localStorage.getItem("ergomatic.monitorRun"),
+      );
+      const run = JSON.parse(record!) as {
+        completedAt: string | null;
+        terminated: boolean;
+        series?: unknown;
+        seriesDropped?: true;
+      };
+
+      // THE CHECK ITSELF (§4 S3, §6 exit criterion 4's real leg): the run
+      // survived — closed, terminated by the rower — and the trace, not
+      // the run, is what got sacrificed to the real quota failure.
+      expect(
+        run.completedAt,
+        "the run still closed despite the quota failure",
+      ).not.toBeNull();
+      expect(run.terminated).toBe(true);
+      expect(
+        run.seriesDropped,
+        "the audit trail: a write WITH series genuinely threw, and the retry without it is what actually persisted",
+      ).toBe(true);
+      expect(
+        run.series,
+        "the sacrificed field itself must be genuinely absent, not merely falsy",
+      ).toBeUndefined();
+    } finally {
+      // CLEAN UP THE JUNK (§4 S3's own instruction: "other tests share the
+      // origin"). Whatever is still in `added` after the headroom pop
+      // above is every entry that was NEVER removed; removing all of it
+      // plus the run record itself leaves the origin exactly as this test
+      // found it.
+      await page.evaluate(
+        (keys) => {
+          for (const k of keys) localStorage.removeItem(k);
+          localStorage.removeItem("ergomatic.monitorRun");
+        },
+        added.map((e) => e.key),
+      );
+      await cleanupByTitle(page, title);
+    }
   });
 });
 

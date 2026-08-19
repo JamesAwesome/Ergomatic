@@ -2462,7 +2462,18 @@ ledger). LT-0 SHIPPED (#128). **Spec 1 IMPLEMENTED 2026-08-19** (Tasks
 1-4 done on branch `lt-truth`: the split/floor/server bound, the row/SPM
 model and shared band, both renderers, and the witness sweep +
 reconciliation) — awaiting final review, the triad's PM final-PR gate,
-and James's merge approval. Spec 2/3 remain re-gated, below.
+and James's merge approval. **Spec 2 IMPLEMENTED 2026-08-19** (Tasks 1-4
+done on branch `lt-series`: the decimating recorder, the flush policy +
+localStorage sacrifice, the server `series` column + route-scoped 1mb
+limit + POST sacrifice, and the remaining storage proofs — S2's real-
+Chrome byte-identical probe, S3's real forced-quota leg, the fake-driven
+full loop through `GET /:id`) — awaiting final review, the triad's PM
+final-PR gate (TRIAD: two stored shapes, `MonitorRun.series` and the
+jsonb column, plus an invented mechanism — §7's own citation), and
+James's merge approval. This spec ships no notes clause of its own
+(§6 exit criterion 7: internal-only, rower-invisible until spec 3 renders
+the trace — stated here so the next release gate does not go hunting for
+one). Spec 3 remains re-gated, below.
 **Goal:** the summary's interval rows answer "did I hit MY targets" —
 target inline, judgment vs the row's own target with the connected
 surface's shared ±0.5s band, stroke rate shown (`24 / 22`), and discard

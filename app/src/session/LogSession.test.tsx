@@ -2620,6 +2620,79 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     sessionStorage.removeItem("ergomatic:last-rowed-log");
   });
 
+  // Task 4 handoff (task-2 review): `recordPostSacrifice` appends to the
+  // SAME stash `eventLog.ts`'s own live `record()` writes to, but it is a
+  // second, independent writer — without its own cap it would let the
+  // stash grow unboundedly across repeated sacrifices in one sitting
+  // (retried saves after a workout deletion, a flaky network), unlike
+  // every entry `record()` itself ever wrote. Same ring discipline
+  // `eventLog.ts`'s own `record()` applies (`DEFAULT_CAPACITY`, 500):
+  // oldest entries drop first, `seq` numbers are never rewritten (the
+  // dropped entries' own seqs are simply gone, exactly like the live
+  // log's own ring).
+  it("the POST sacrifice's own ring append is capped at 500 entries, oldest dropped first — the same discipline eventLog.ts's record() applies", async () => {
+    const series: SeriesData = {
+      samples: [{ t: 10, d: 23, p: 1400, spm: 24, hr: 138 }],
+    };
+    const { run, workout } = buildMonitorFixture({ series });
+    saveMonitorRun(run);
+    // Seed a stash already AT capacity (500 entries, seq 0..499) — one
+    // more sacrifice append must drop the oldest (seq 0), not grow past
+    // 500.
+    sessionStorage.removeItem("ergomatic:last-rowed-log");
+    const seeded = Array.from({ length: 500 }, (_, i) => ({
+      seq: i,
+      kind: "session-start",
+      detail: `entry ${i}`,
+    }));
+    sessionStorage.setItem("ergomatic:last-rowed-log", JSON.stringify(seeded));
+    mockWorkouts([workout]);
+    mockBaselines();
+    mockMonitorRunClearSpy();
+    let calls = 0;
+    const apiFn = mockApi(() => {
+      calls++;
+      if (calls === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ error: "payload too large" }), {
+            status: 413,
+          }),
+        );
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify({ id: "log-capped" }), { status: 201 }),
+      );
+    });
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+    expect(apiFn).toHaveBeenCalledTimes(2);
+
+    const ring = JSON.parse(
+      sessionStorage.getItem("ergomatic:last-rowed-log")!,
+    ) as { seq: number; kind: string; detail: string }[];
+    // Still exactly 500 — the append pushed the count to 501, then the
+    // cap trimmed the OLDEST one entry off the front.
+    expect(ring).toHaveLength(500);
+    // seq 0 (the oldest seeded entry) is gone; seq 1 (the next-oldest) is
+    // now the first surviving entry.
+    expect(ring[0]).toStrictEqual({
+      seq: 1,
+      kind: "session-start",
+      detail: "entry 1",
+    });
+    // The newest surviving entry is the sacrifice itself, seq 500 — never
+    // renumbered by the cap.
+    const newest = ring[ring.length - 1]!;
+    expect(newest.kind).toBe("post-sacrifice");
+    expect(newest.seq).toBe(500);
+    expect(newest.detail).toContain("413");
+    sessionStorage.removeItem("ergomatic:last-rowed-log");
+  });
+
   it("the sacrifice retry ALSO fails: surfaces the genuine error, MonitorRun survives for a real retry", async () => {
     const series: SeriesData = {
       samples: [{ t: 10, d: 23, p: 1400, spm: 24, hr: 138 }],

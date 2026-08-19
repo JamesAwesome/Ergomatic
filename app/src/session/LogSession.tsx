@@ -333,11 +333,22 @@ async function postLog(body: Record<string, unknown>): Promise<Response> {
 // inference from network tab. Best-effort and silent on any failure
 // (missing/malformed stash, sessionStorage disabled) — diagnostics never
 // block or complicate a save.
+//
+// Task 4 handoff (task-2 review): this is a SECOND, independent writer
+// onto the same stash `eventLog.ts`'s own live `record()` already writes
+// — without its own cap, a sitting with repeated sacrifices (a retried
+// save after a deleted workout, a flaky network) could grow this stash
+// without bound, unlike every entry `record()` itself ever wrote
+// (`eventLog.ts`'s own `DEFAULT_CAPACITY`). Mirrored here rather than
+// imported: `DEFAULT_CAPACITY` is module-private to `eventLog.ts` and this
+// function does not otherwise depend on that module at all.
+const POST_SACRIFICE_LOG_CAPACITY = 500;
+
 function recordPostSacrifice(status: number): void {
   try {
     const raw = sessionStorage.getItem("ergomatic:last-rowed-log");
     if (raw === null) return;
-    const entries = JSON.parse(raw) as MonitorLogEntry[];
+    let entries = JSON.parse(raw) as MonitorLogEntry[];
     const nextSeq =
       entries.length > 0 ? entries[entries.length - 1]!.seq + 1 : 0;
     entries.push({
@@ -345,6 +356,12 @@ function recordPostSacrifice(status: number): void {
       kind: "post-sacrifice",
       detail: `series dropped from POST /api/logs after status ${status}`,
     });
+    // Same ring idiom as `eventLog.ts`'s own `record()`: drop the OLDEST
+    // entries first, `seq` numbers never rewritten — the dropped entries'
+    // own seqs are simply gone, exactly like the live log's own ring.
+    if (entries.length > POST_SACRIFICE_LOG_CAPACITY) {
+      entries = entries.slice(entries.length - POST_SACRIFICE_LOG_CAPACITY);
+    }
     sessionStorage.setItem("ergomatic:last-rowed-log", JSON.stringify(entries));
   } catch {
     // Best-effort diagnostics; never block or complicate the save.
