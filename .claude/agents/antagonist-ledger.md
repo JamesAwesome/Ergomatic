@@ -1552,3 +1552,64 @@ toolkit, not a history.
   owner-404 idiom carries; the cross-cycle re-pointed log renders its own date
   and footer from its own columns — the honesty question was the tick's, not
   the link's.
+
+## Phase-open anchor pass (triad), 2026-08-18 (Phase LT spec 1, "target truth")
+
+- **"The target stroke rate already lives in the row label's authored text."**
+  False everywhere: both timer and manual labels are `refPaceLabel` =
+  `${duration} @ ${refLabel(ref)}` (`logDraft.ts:199-201`), and `refLabel`
+  (`domain/pace.ts:106-111`) emits only base/±off or MAX/MIN. A spec justified
+  hiding a new cell by claiming the value was already on screen. **Technique:
+  when a design omits a field because "it's already shown somewhere", open the
+  FORMATTER that builds the string it points at, not the object that holds the
+  value.**
+- **"`deviceName` non-null → the row's `spm` was measured" as the back-compat
+  discriminant.** Unnecessary and wrong for new rows: the door is knowable
+  PER ROW — `actualSource: "pm5"` is written unconditionally beside the only
+  `step.spm = actual.avgSpm` write (`logDraft.ts:770-777`) and by no other
+  builder — and the rule as written carries no age test, so it re-reads every
+  post-split authored target as a measurement. **Technique: for any
+  "distinguish old rows from new" rule, first look for a field already written
+  in the same `if` block as the ambiguous one. A row-local discriminant beats a
+  row-external one, and a rule about "old rows" needs a predicate that can
+  actually tell their age.**
+- **"Judged when the row has BOTH a measured actual and a target."** "Measured"
+  is not a field: `actualSplit` is also written with `actualSource: "assumed"`
+  — equal to the target — for every non-effort manual row (`logDraft.ts:481-483`)
+  and for completed timer TIME phases. Literal implementation paints the entire
+  by-hand door red `+0.0`, because `judge()` reads deviation 0 as SLOWER
+  (`summaryModel.ts:229-237`). **Technique: when a spec's gate uses an adjective
+  ("measured", "real", "actual"), find the union that already encodes it
+  (`ActualSource`) and make the spec name the member set. Adjectives compile to
+  presence checks.**
+- **A "zero means placeholder" premise nobody had ever seen.** The floor change
+  (`MONITOR_SPM_MIN` 0→1) is safe — `avgSpm` is a u8, 1 spm/lsb
+  (`pm5/parse.ts:271`), so sub-1 is unrepresentable — but all 14 committed
+  0x0038 boundary records across six captures read 23-29, never 0; the only
+  demonstrable producer of 0 is our own fake (`fake.ts:833`). **Technique:
+  separate "safe by construction" from "witnessed". A band change justified by
+  device behaviour should cite a frame that shows the behaviour; if the captures
+  can't, say the argument is about the FIELD'S TYPE instead.**
+- **A "reproduce it and file what you find" open item that the code already
+  answers.** END closes the record (`useMonitorSession.ts:1436-1449`), the nav
+  carries `?from=monitor` (`WorkoutDetail.tsx:337`), the gate passes, and the
+  monitor door's discard is unconditional (`LogSession.tsx:1066-1078`,
+  `PostWorkoutSummary.tsx:537-541`). The only discard-less save surface is the
+  manual door (`discardSlot={null}`, `:1218`) — where the monitor path lands on
+  ANY gate miss, including a catch-all `catch {}`. **Technique: before accepting
+  "reproduce, then fix", enumerate every render site of the missing affordance
+  and diff them; a missing control is a code question far more often than a
+  device question. And name the BUILD — a tester's repro lives in the binary he
+  rowed, not in main.**
+- **Attacked and held (Phase LT vetted ground):** warm-up carries no target on
+  all three doors (`logDraft.ts:305-317/:465-471/:757`; the distance warm-up's
+  display estimate is nulled at compile, `program.ts:125-131`); effort rows
+  genuinely lack `targetSplit` by the 6I rule while keeping measured actuals;
+  no non-monitor row can carry `deviceName` (`LogSession.tsx:1016` is the only
+  writer); additivity is witness-backed (`steps` is jsonb,
+  `validateLogStepEntry` never rejects unknown keys, GET is an unprojected
+  `db.select()`); retiring the `count>=2` lone-row gate is sound because the
+  tautology it guarded was self-comparison. One cross-surface seam found and
+  RULED at the gate (James: same band everywhere): the connected rest verdict's
+  ±0.5s dead band now binds the summary too — the two surfaces' wire fields
+  agree to ≤0.12s across every rest-bearing capture.
