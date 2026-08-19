@@ -3816,8 +3816,13 @@ test.describe("post-workout summary (session door, just finished)", () => {
 // ("Log it after"), not a completed timer run. Deliberately does NOT
 // re-sweep every assertion the session-door block above already covers on
 // the shared component — only what actually differs for this door: no
-// tab-bar hiding, no Discard button, no hero block, and a workout-detail
-// entry point instead of the finish hand-off.
+// tab-bar hiding, no hero block, and a workout-detail entry point instead
+// of the finish hand-off.
+//
+// LT-0 (2026-08-18-target-truth-design.md §3): this door used to also
+// differ by having no Discard button at all — the app's only discard-less
+// save surface. It now has one, same idiom as the other two doors; see
+// "renders LT-0's own Discard" below.
 test.describe("post-workout summary (manual door)", () => {
   const title = "Design Manual Summary Sweep";
 
@@ -3881,10 +3886,12 @@ test.describe("post-workout summary (manual door)", () => {
     await expect(page.locator(".tabbar")).toHaveCount(1);
   });
 
-  test("no Discard button at all — there is nothing staged to discard", async ({
+  test("renders LT-0's own Discard, same idiom as the other two doors", async ({
     page,
   }) => {
-    await expect(page.getByRole("button", { name: /discard/i })).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "DISCARD WITHOUT SAVING" }),
+    ).toBeVisible();
   });
 
   test("no hero block — the manual door has no measurement of any kind (§2B's date-only fallback)", async ({

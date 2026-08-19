@@ -1931,14 +1931,19 @@ test("log-detail-legacy", async ({ page }) => {
 
 // Phase 6C Task 4, rebuilt on PostWorkoutSummary by Phase PW Task 5: the
 // summary's OTHER door (Task 3, `/library/:id/log`) — visibly distinct from
-// the session door above (no tab-bar hiding, no Discard button at all, no
-// hero block, reached straight from a workout's detail screen rather than
-// the timer's own hand-off), so per the plan's own "both doors if visibly
-// distinct" clause this gets its own capture too. Same single-base "6k"
-// shape and SCREENSHOT_BASELINES pairing as the session door's capture, so
-// the two images read as the same product's two doors, not two different
-// products — and no real timer run is needed at all here, so this test
-// needs none of that one's extended timeout.
+// the session door above (no tab-bar hiding, no hero block, reached
+// straight from a workout's detail screen rather than the timer's own
+// hand-off), so per the plan's own "both doors if visibly distinct" clause
+// this gets its own capture too. Same single-base "6k" shape and
+// SCREENSHOT_BASELINES pairing as the session door's capture, so the two
+// images read as the same product's two doors, not two different products
+// — and no real timer run is needed at all here, so this test needs none
+// of that one's extended timeout.
+//
+// LT-0 (2026-08-18-target-truth-design.md §3): this door used to be the
+// app's only discard-less save surface ("no Discard button at all" — the
+// old comment right below this one) — it now HAS one, same idiom as the
+// other two doors, so this capture now shows it too.
 //
 // Today enhancements (Task 4), rewired by post-workout-summary spec §2F: a
 // plan is chosen here too, specifically so this capture also shows the
@@ -1970,9 +1975,11 @@ test("post-workout-summary-manual", async ({ page }) => {
   // k6Seconds, 122.0 -> "2:02.0") — the manual door reads CURRENT baselines
   // directly (the lock moment IS save time, Task 3's brief).
   await expect(page.getByText("PACES OFF 6K 2:02.0")).toBeVisible();
-  // No Discard button at all on this door — the visible difference the
-  // screenshot pair exists to show.
-  await expect(page.getByRole("button", { name: /discard/i })).toHaveCount(0);
+  // LT-0: Discard now renders here too — same button, same idiom as the
+  // session/monitor doors' own captures.
+  await expect(
+    page.getByRole("button", { name: "DISCARD WITHOUT SAVING" }),
+  ).toBeVisible();
   // The save stack's plan position, default state — a plan is active for
   // this fixture now.
   await expect(
@@ -1987,6 +1994,20 @@ test("post-workout-summary-manual", async ({ page }) => {
   await page
     .getByLabel("NOTES")
     .fill("Rowed at the gym, logging it after the fact.");
+
+  // LT-0: this capture exists specifically to show the new Discard button
+  // (the visible fix — the app's last discard-less save surface gained
+  // one). A plain, non-fullPage `page.screenshot()` at this fixed mobile
+  // viewport only shows the fold, and the reflection card + one interval
+  // row push the save stack's Discard past the bottom edge (the session
+  // door's own sibling capture, `post-workout-summary.png`, has the exact
+  // same pre-existing crop — its own Discard has never been in frame
+  // either) — scroll it into view so THIS capture's whole reason for
+  // existing is actually visible in the committed image, not merely
+  // present in the DOM.
+  await page
+    .getByRole("button", { name: "DISCARD WITHOUT SAVING" })
+    .scrollIntoViewIfNeeded();
 
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "post-workout-summary-manual.png"),

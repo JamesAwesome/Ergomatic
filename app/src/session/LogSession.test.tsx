@@ -28,6 +28,7 @@ import { buildLogSeed, buildLogSteps, formatLogDate } from "./logDraft";
 import { loadRun, RUN_KEY, saveRun, type SessionRun } from "./run";
 import { buildSummaryModel } from "./summaryModel";
 import {
+  connectGuardStage,
   loadMonitorRun,
   saveMonitorRun,
   type MonitorRun,
@@ -1505,7 +1506,7 @@ describe("LogSession: staged discard", () => {
 });
 
 describe("LogSession: the manual door (Task 3)", () => {
-  it("shows the title, the PACES OFF caption (referenced bases only), the row list with every actual 'assumed' (rendered as PRESCRIBED — the manual door never sets actualSource: stopwatch), and EXPECTED N/5 — with no Discard button at all", async () => {
+  it("shows the title, the PACES OFF caption (referenced bases only), the row list with every actual 'assumed' (rendered as PRESCRIBED — the manual door never sets actualSource: stopwatch), and EXPECTED N/5 — with a Discard button present (LT-0)", async () => {
     const workout = manualWorkoutFixture();
     mockWorkouts([workout]);
     mockBaselines();
@@ -1550,10 +1551,14 @@ describe("LogSession: the manual door (Task 3)", () => {
     expect(
       screen.getByRole("button", { name: SAVE_BUTTON }),
     ).not.toBeDisabled();
-    // The brief's own words: "no Discard button (nothing to discard)."
+    // LT-0: the last discard-less save surface now has one, same idiom as
+    // the other two doors — dedicated behavioural tests live in the
+    // "LogSession: the manual door's own staged discard (LT-0)" describe
+    // block below; this is just proof the button renders on the ordinary
+    // path.
     expect(
-      screen.queryByRole("button", { name: /discard/i }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("button", { name: "DISCARD WITHOUT SAVING" }),
+    ).toBeInTheDocument();
   });
 
   it("has no hero block at all — the manual door has no run and no measurement of any kind (§2B's own date-only fallback)", async () => {
@@ -2302,8 +2307,16 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
   // THE HIJACK PIN, at the screen level (unit-level coverage lives in the
   // `monitorModeRun` describe block above): a stale completed MonitorRun
   // for the SAME workout, reached with NO `from=monitor` flag, must render
-  // the manual form.
-  it("THE HIJACK PIN: no from=monitor flag + a stale completed MonitorRun for the SAME workout renders the manual form", async () => {
+  // the manual form. LT-0: that form's own Discard now renders (it always
+  // does, on this branch) — and, since a real record IS sitting in
+  // storage, firing it clears that record too (`handleManualDiscardClick`'s
+  // own doc comment: "a real, completed MonitorRun can be sitting in
+  // MONITOR_RUN_KEY right now"). Behavioural proof of the fire lives in the
+  // dedicated "own staged discard (LT-0)" describe block below; this test
+  // stays scoped to what it always proved — the manual form (not the
+  // monitor one) rendered — plus the one-line fact that Discard is no
+  // longer absent.
+  it("THE HIJACK PIN: no from=monitor flag + a stale completed MonitorRun for the SAME workout renders the manual form, now with Discard present (LT-0)", async () => {
     const { run } = buildMonitorFixture();
     saveMonitorRun(run);
     const workout = manualWorkoutFixture(MONITOR_WORKOUT_ID);
@@ -2316,8 +2329,8 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     // ordinary `buildManualLogSteps` path ran, not the monitor one.
     expect(screen.getByText("BY FEEL")).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /discard/i }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("button", { name: "DISCARD WITHOUT SAVING" }),
+    ).toBeInTheDocument();
   });
 
   it("a shallowly-valid MonitorRun with a malformed actuals entry never crashes the log door — it falls through to the manual form", async () => {
@@ -2517,16 +2530,38 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it("the plain manual door (no monitor run at all) still has no Discard slot — discardSlot stays null outside monitor mode", async () => {
+  it("LT-0: the plain manual door (no monitor run at all) now HAS a Discard — firing it navigates with storage byte-identical before and after (nothing was ever stored to clear)", async () => {
     const workout = manualWorkoutFixture();
     mockWorkouts([workout]);
     mockBaselines();
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const clearSpy = mockMonitorRunClearSpy();
     await renderManualLog(workout.id);
     await screen.findByRole("heading", { name: "Hoarfrost" });
 
+    // Nothing stored under either key before Discard fires — the pure
+    // by-hand case the task brief names.
+    expect(loadMonitorRun()).toBeNull();
+    expect(loadDraft()).toBeNull();
+    expect(loadRun()).toBeNull();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "DISCARD WITHOUT SAVING" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Tap again to discard" }),
+    );
+
     expect(
-      screen.queryByRole("button", { name: /discard/i }),
-    ).not.toBeInTheDocument();
+      await screen.findByText("WORKOUT DETAIL SCREEN"),
+    ).toBeInTheDocument();
+    // Byte-identical: still nothing stored under any of the three keys —
+    // the discard had nothing real to clear, and cleared nothing.
+    expect(loadMonitorRun()).toBeNull();
+    expect(loadDraft()).toBeNull();
+    expect(loadRun()).toBeNull();
+    expect(clearSpy).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it("leaving via BackLink (unmount) leaves the MonitorRun standing — loadMonitorRun() is still non-null after unmount", async () => {
@@ -2770,6 +2805,222 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
 
     const body = parsedBodies(apiFn)[0]!;
     expect(body.advancesPlan).toBe(false);
+  });
+});
+
+// LT-0 (2026-08-18-target-truth-design.md §3, phase-open gates' own
+// diagnosis): the manual door's plain (non-monitor) render was the app's
+// only discard-less save surface — AND exactly where `monitorModeRun`'s
+// four-condition gate falls through on any miss, including its own
+// catch-all `catch {}`. James's early-END repro is almost certainly that
+// fallthrough (a TestFlight binary, unproven against main — this file only
+// pins main's own behaviour, per the task brief's own diagnosis note).
+// Each force below drives the REAL UI through a genuine gate miss (never
+// hand-calling `monitorModeRun` — that pure function already has its own
+// describe block above) to the CONSEQUENCE the recurring-failures list
+// requires: the stranded record actually gone from storage, not merely "a
+// button exists."
+describe("LogSession: the manual door's own staged discard (LT-0)", () => {
+  // Force (a): the logSeed/program.intervals alignment check fails (the
+  // same fixture shape as "condition 4 ... a logSeed whose length no
+  // longer matches" in the monitorModeRun describe block above, driven
+  // through the whole screen this time). `connectGuardStage()` is the
+  // real, verified-against-code consequence a cleared MonitorRun produces
+  // for the rower: Today.tsx itself renders NO row for any COMPLETED
+  // MonitorRun (`UnloggedMonitorRow`'s own render-site guard is
+  // `completedAt === null` — read at source, this file's own top-level
+  // Today.tsx sweep) — the record's only visible trace is the "You have an
+  // unlogged session" warning `ConnectAction`/`connectGuardStage` stage the
+  // next time Connect (or Start) is pressed. The task brief's own looser
+  // "Today shows no unlogged-session row" phrasing does not describe an
+  // existing Today UI element for a completed run either way — noted here
+  // rather than asserted on a screen that never renders one.
+  it("force (a) corrupt logSeed.steps.length: the fallthrough door renders with Discard, and firing it clears the stranded MonitorRun", async () => {
+    const { run, workout } = buildMonitorFixture();
+    saveMonitorRun({
+      ...run,
+      logSeed: {
+        steps: run.logSeed!.steps.slice(1),
+        paces: run.logSeed!.paces,
+      },
+    });
+    mockWorkouts([workout]);
+    mockBaselines();
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    // The plain manual shape rendered (BY FEEL), never the monitor one —
+    // proves the gate genuinely missed rather than this test accidentally
+    // exercising the monitor branch.
+    expect(screen.getByText("BY FEEL")).toBeInTheDocument();
+    expect(loadMonitorRun()).not.toBeNull();
+    expect(connectGuardStage()).toBe("unlogged");
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "DISCARD WITHOUT SAVING" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Tap again to discard" }),
+    );
+
+    expect(
+      await screen.findByText("WORKOUT DETAIL SCREEN"),
+    ).toBeInTheDocument();
+    expect(loadMonitorRun()).toBeNull();
+    expect(connectGuardStage()).toBeNull();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  // Force (b): the same fixture shape as "condition 3 (workoutId match)
+  // removed" above — the stored record's own workoutId disagrees with this
+  // route's :id.
+  it("force (b) mismatched workoutId: the fallthrough door renders with Discard, and firing it clears the stranded MonitorRun", async () => {
+    const { run, workout } = buildMonitorFixture();
+    saveMonitorRun({ ...run, workoutId: "some-other-workout" });
+    mockWorkouts([workout]);
+    mockBaselines();
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    expect(screen.getByText("BY FEEL")).toBeInTheDocument();
+    expect(loadMonitorRun()).not.toBeNull();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "DISCARD WITHOUT SAVING" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Tap again to discard" }),
+    );
+
+    expect(
+      await screen.findByText("WORKOUT DETAIL SCREEN"),
+    ).toBeInTheDocument();
+    expect(loadMonitorRun()).toBeNull();
+  });
+
+  // Force (catch-all): the same fixture shape as the "never crashes the log
+  // door" test above (a malformed `actuals` entry `buildMonitorLogSteps`
+  // never anticipated) — `monitorModeRun`'s own condition-4 `catch {}`
+  // disqualifies the record on ANY exception, not only its documented
+  // `MonitorLogSeedError`.
+  it("force (catch-all) malformed actuals entry: Discard still clears the stranded MonitorRun", async () => {
+    const { run, workout } = buildMonitorFixture();
+    saveMonitorRun({ ...run, actuals: [null as unknown as IntervalActual] });
+    mockWorkouts([workout]);
+    mockBaselines();
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    expect(screen.getByText("BY FEEL")).toBeInTheDocument();
+    expect(loadMonitorRun()).not.toBeNull();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "DISCARD WITHOUT SAVING" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Tap again to discard" }),
+    );
+
+    expect(
+      await screen.findByText("WORKOUT DETAIL SCREEN"),
+    ).toBeInTheDocument();
+    expect(loadMonitorRun()).toBeNull();
+  });
+
+  // (c): a genuine off-app entry with nothing under either key at all.
+  it("(c) the pure by-hand door: Discard navigates with storage byte-identical (nothing before, nothing after) — clearMonitorRun is never even called", async () => {
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    const clearSpy = mockMonitorRunClearSpy();
+    await renderManualLog(workout.id);
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    expect(loadMonitorRun()).toBeNull();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "DISCARD WITHOUT SAVING" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Tap again to discard" }),
+    );
+
+    expect(
+      await screen.findByText("WORKOUT DETAIL SCREEN"),
+    ).toBeInTheDocument();
+    expect(loadMonitorRun()).toBeNull();
+    expect(clearSpy).not.toHaveBeenCalled();
+  });
+
+  it("arms on the first press without clearing anything or navigating — the fallthrough record survives untouched", async () => {
+    const { run, workout } = buildMonitorFixture();
+    saveMonitorRun({ ...run, workoutId: "some-other-workout" });
+    mockWorkouts([workout]);
+    mockBaselines();
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "DISCARD WITHOUT SAVING" }),
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Tap again to discard" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("WORKOUT DETAIL SCREEN")).not.toBeInTheDocument();
+    expect(loadMonitorRun()).not.toBeNull();
+  });
+
+  it("disarms on blur — a second press after focus moves away arms again instead of discarding", async () => {
+    const { run, workout } = buildMonitorFixture();
+    saveMonitorRun({ ...run, workoutId: "some-other-workout" });
+    mockWorkouts([workout]);
+    mockBaselines();
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    const discardBtn = screen.getByRole("button", {
+      name: "DISCARD WITHOUT SAVING",
+    });
+    await userEvent.click(discardBtn);
+    fireEvent.blur(
+      screen.getByRole("button", { name: "Tap again to discard" }),
+    );
+
+    expect(
+      screen.getByRole("button", { name: "DISCARD WITHOUT SAVING" }),
+    ).toBeInTheDocument();
+    expect(loadMonitorRun()).not.toBeNull();
+  });
+
+  // Mirrors "leaves an unrelated live run/draft byte-identical in storage
+  // after the monitor-mode discard fires" above, one door over: this
+  // branch's own qualified exception (`clearMonitorRun()` directly, never
+  // `discard.fire()`) must never touch an unrelated phone-timer session
+  // sitting in `./draft`/`./run` while this door clears its own fallen-
+  // through record.
+  it("leaves an unrelated live draft/run byte-identical after the plain-manual door's discard clears a fallen-through MonitorRun", async () => {
+    buildSessionFixture();
+    const draftBefore = localStorage.getItem(DRAFT_KEY);
+    const runBefore = localStorage.getItem(RUN_KEY);
+    expect(draftBefore).not.toBeNull();
+    expect(runBefore).not.toBeNull();
+
+    const { run, workout } = buildMonitorFixture();
+    saveMonitorRun({ ...run, workoutId: "some-other-workout" });
+    mockWorkouts([workout]);
+    mockBaselines();
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "DISCARD WITHOUT SAVING" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Tap again to discard" }),
+    );
+    await screen.findByText("WORKOUT DETAIL SCREEN");
+
+    expect(loadMonitorRun()).toBeNull();
+    expect(localStorage.getItem(DRAFT_KEY)).toBe(draftBefore);
+    expect(localStorage.getItem(RUN_KEY)).toBe(runBefore);
   });
 });
 
