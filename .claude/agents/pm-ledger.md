@@ -997,3 +997,37 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   accepted gap owed a notes sentence by the three-place disclosure rule. Cut
   v0.13.0 MINOR before LT spec 1 opens a PR (James has assigned the tag to the
   other session; the notes obligations are in tracked files for it).
+
+## Final-PR gate, 2026-08-19 (PR #129, LT spec 1 — triad: row re-baseline + actualSpm split)
+
+- **The flagship capture showed every cell the spec named and none of the COLOUR
+  the phase exists to add.** `post-workout-summary.png`'s fixture is warm-up +
+  prescribed + abstained: TARGET cell ✓, SPM cell ✓, zero judged rows. `log-detail.png`
+  carried the blue/red, so the surface with a picture is HISTORY and the surface that
+  produced James's bug report has none. Criterion 5 said "a mixed judged/on-target/
+  abstained list" and four reviews read the assertions (`toHaveText("/ 22")`) rather
+  than the fixture's row inventory. **At any gate: read the capture's FIXTURE for the
+  state under test, not its assertions — assertions prove the cells render, only the
+  fixture decides whether the feature is in frame.** Second occurrence of the standing
+  "no committed picture of its judged state" follow-up.
+- **A tag cut hours before the gate can already be missing notes.** `v0.13.0` points at
+  main INCLUDING #128 (LT-0's discard) and its message names neither that nor #124's
+  accepted re-log gap — the notes leg of the three-place disclosure chain failed on the
+  very next tag after the rule was written. **Check the LATEST TAG's own message against
+  what it contains at every final gate**, not only when cutting one; an unshipped tag
+  message is amendable, a shipped one is not.
+- **Recompute-the-headline: GREEN on `log-detail.png`, fourth consecutive run** (7:58,
+  4×500 m = 2000, 478/4 = 1:59.5, and all four row judgments recomputed against their
+  inline targets: −10.0 / +10.0 / on-target / abstain). The second capture could only be
+  reconciled under a working-only AVG definition — **when a hero and its rows disagree,
+  first ask which SUBSET the hero is over; a warm-up row is the usual answer.**
+- **Absence as the ON TARGET idiom means the rower's best outcome renders as nothing,
+  while the new aria-label speaks it.** The a11y fix gave screen readers a judgment
+  sighted users don't get. Specced and vetted; recorded so the next log-screen spec
+  starts from it rather than rediscovering it.
+- **Drift discipline done right, for reuse:** one exported constant, a re-export at the
+  second surface, and a test that greps the second surface's SOURCE for any assignment
+  (both directions, regex verified red). Copy this shape for any "one value, two
+  surfaces" claim — an equality assertion alone passes after a copy is made.
+- **Backlog/process:** LT is IN ROADMAP (RF16 graduated, no fifth absence). Release stack:
+  v0.13.0 is the tip tag; #129 merges as v0.14.0 MINOR, notes owed to `v0.13.0..main`.

@@ -2473,6 +2473,19 @@ fallthrough); spec 1 = targets/judgment/SPM (TRIAD: number meaning +
 stored shape); spec 2 = series capture (re-gated at its own open: memo
 committed, storage ceiling ruled); spec 3 = traces (HR descoped until a
 belt is confirmed).
+**Owed at the next tag (v0.14.0, range v0.13.0..main — RF15's rule):**
+four notes clauses: (1) rows judge against their own targets with the
+target shown (the erg ask); (2) stroke rate on measured intervals;
+(3) discard everywhere save is (#128 — RETROACTIVE, v0.13.0's tag message
+never announced it); (4) HISTORY RE-JUDGES TOO — sessions already viewed
+change colour (tule-fog rows go red→blue), plus #124's accepted re-log
+gap if still unannounced (retroactive, same chain).
+**Riding follow-ups (PM gate 2026-08-19):** `pnpm e2e -- -g` needs the
+double-dash form documented (pnpm swallows bare -g); a frozen-clock
+screenshot fixture (17 captures churn on wall-clock date stamps);
+`judge()`'s documented-unreachable dead-even branch (discriminated union
+if a second producer appears); the live summary's judged-state capture
+(closed by this PR's C1 recapture — verify at close).
 **Standing rulings:** same dead band everywhere; SPM cell `24 / 22`;
 supersedes PW spec 1's ROW semantics (its Measured-row cell points here);
 retires the lone-row abstention for targeted rows; `MONITOR_SPM_MIN`
