@@ -14,16 +14,25 @@
 //
 // WHY THIS ISN'T JUST `buildSummaryModel` AGAIN: that module's three door
 // builders each know which door produced the run (monitor/timer/manual)
-// and compute a FRESH working average from the door's own live actuals.
-// A stored row carries none of that: only `steps` (the persisted
-// `LogStep[]`) and the three already-computed hero numbers. §5C is
-// explicit that a stored row's rows are judged against the STORED
-// avg_split_seconds, "never re-averaged" — so this module does not call
-// `buildSummaryModel` at all, it re-derives the row/hero shapes directly
-// from the stored columns, reusing only the tiny presentation-formula
-// pieces `summaryModel.ts` exports for exactly this reuse (`judge`,
-// `targetsOnlyCaption`, `formatTimeOfDay`, `MIN_MEASURABLE_ELAPSED_SECONDS`,
-// `deviationBarWidthPercent` via `judge`).
+// and read fresh actuals straight off a live `MonitorRun`/`SessionRun`. A
+// stored row carries none of that: only `steps` (the persisted
+// `LogStep[]`) and the three already-computed hero numbers — so this
+// module does not call `buildSummaryModel` at all, it re-derives the
+// row/hero shapes directly from the stored columns, reusing the same
+// presentation-formula pieces `summaryModel.ts` exports for exactly this
+// reuse (`targetsOnlyCaption`, `formatTimeOfDay`,
+// `MIN_MEASURABLE_ELAPSED_SECONDS`).
+//
+// Phase LT spec 1, §4 (2026-08-18): row judgment is RE-BASELINED here too,
+// to the exact same §1 rule the live summary uses — each row judges
+// against ITS OWN stored `targetSplit`, via the identical imported
+// `rowJudgment`/`buildSpmCell` (Task 2) rather than a second, hand-rolled
+// copy of either rule. HISTORY: before this task, §5C judged every row
+// against the STORED `avg_split_seconds` working average ("never
+// re-averaged") — that whole baseline is gone from row judgment; the
+// stored `avg_split_seconds` hero itself is UNTOUCHED (still the session
+// average, still what `buildHeroes` below renders, ruling 4 — only the
+// per-row comparison changed).
 //
 // SOURCE INFERENCE (§5A, antagonist B7): a stored row has no explicit
 // "which door" column — `deviceName` names a monitor row, and a stopwatch-
@@ -53,9 +62,10 @@ import type { WorkoutType } from "../../domain/types.js";
 import type { HeldResult, Thumbs } from "../api/useRecentLogs";
 import { formatLogDate } from "../session/logDraft";
 import {
+  buildSpmCell,
   formatTimeOfDay,
-  judge,
   MIN_MEASURABLE_ELAPSED_SECONDS,
+  rowJudgment,
   targetsOnlyCaption,
   type SummaryHeroes,
   type SummaryMeta,
@@ -236,22 +246,17 @@ function measuredElapsedSeconds(step: StoredLogStep): number | undefined {
   return undefined;
 }
 
-// §5C: "measured rows judged against the STORED avg split, never
-// re-averaged, and only when `avg_split_seconds` is non-null AND two or
-// more stored steps carry `actualSplit`; if either fails, every row
-// renders unjudged, no bars." `judgeableCount` is computed once, over the
-// WHOLE steps array (matching the spec's literal "two or more stored
-// steps", not "two or more RENDERED-measured steps" — a step can in
-// principle carry `actualSplit` without clearing the elapsed-seconds
-// floor above, and the spec's own gate counts `actualSplit` presence,
-// not measured-row-ness).
-function buildRows(
-  steps: StoredLogStep[],
-  avgSplitSeconds: number | null,
-): SummaryRow[] {
-  const judgeableCount = steps.filter(
-    (s) => s.actualSplit !== undefined,
-  ).length;
+// §5C, re-baselined (Phase LT spec 1, §4): fed by stored `steps`, spec
+// 1's §1 rendering/judgment rule verbatim — `rowJudgment`/`buildSpmCell`
+// (Task 2, `summaryModel.ts`) are the ONE place either rule is decided;
+// this function never re-derives them. `targetLabel` keys on
+// `step.targetSplit` ALONE (§1's "abstains when" rule, antagonist B5) —
+// independent of whether the row ends up measured enough to judge at
+// all. `avgSplitSeconds` is no longer a parameter here: judgment reads
+// nothing but the row's own `targetSplit`/`actualSplit`/`actualSource`
+// (the stored session average still feeds ONLY the AVG SPLIT hero, via
+// `buildHeroes` below, untouched).
+function buildRows(steps: StoredLogStep[]): SummaryRow[] {
   return steps.map((step, i) => {
     const index = i + 1;
     const elapsed = measuredElapsedSeconds(step);
@@ -276,12 +281,8 @@ function buildRows(
     const timeLabel = fmtDuration(elapsed / 60);
     const paceLabel =
       step.actualSplit !== undefined ? fmtSplit(step.actualSplit) : undefined;
-    const judged =
-      step.actualSplit !== undefined &&
-      avgSplitSeconds !== null &&
-      judgeableCount >= 2
-        ? judge(step.actualSplit, avgSplitSeconds)
-        : undefined;
+    const targetLabel =
+      step.targetSplit !== undefined ? fmtSplit(step.targetSplit) : undefined;
     return {
       measured: true,
       isWarmup: false,
@@ -289,7 +290,9 @@ function buildRows(
       label: step.label,
       timeLabel,
       paceLabel,
-      judged,
+      targetLabel,
+      spmCell: buildSpmCell(step),
+      ...rowJudgment(step),
     };
   });
 }
@@ -382,7 +385,7 @@ function buildPlanFooter(row: StoredLog): string | undefined {
 export function buildStoredSummary(row: StoredLog): StoredSummaryView {
   const meta = buildMeta(row);
   const heroes = buildHeroes(row);
-  const rows = buildRows(row.steps, row.avgSplitSeconds);
+  const rows = buildRows(row.steps);
   const caption = targetsOnlyCaption(rows);
   const readBack = buildReadBack(row);
   const planFooter = buildPlanFooter(row);

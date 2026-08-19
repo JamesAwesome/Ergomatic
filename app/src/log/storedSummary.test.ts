@@ -154,53 +154,154 @@ describe("buildStoredSummary — §5B heroes, per-cell absence", () => {
   });
 });
 
-describe("buildStoredSummary — §5C row judging, both legs plus the abstention", () => {
-  const twoStopwatchSteps: StoredLog["steps"] = [
-    { label: "a", actualSplit: 120, actualSource: "stopwatch", meters: 1500 },
-    { label: "b", actualSplit: 140, actualSource: "stopwatch", meters: 1500 },
-  ];
+describe("buildStoredSummary — §5C row judging, re-baselined to each row's own target (Phase LT spec 1, §4)", () => {
+  // HISTORY NOTE: this describe block used to gate ALL row judgment on two
+  // avg_split_seconds-keyed legs ("non-null AND >=2 steps carry
+  // actualSplit") — the OLD §5C rule, judging every row against the
+  // STORED WORKING AVERAGE. Phase LT spec 1 §4 re-baselines this door to
+  // the exact §1 rule the live summary already uses (Task 2): each row
+  // judges against ITS OWN stored `targetSplit`, via the same imported
+  // `rowJudgment` — avg_split_seconds no longer participates in row
+  // judgment AT ALL (it still feeds the AVG SPLIT hero, untouched, via
+  // `buildHeroes`). The old leg-1/leg-2 tests are REPLACED below, not
+  // deleted outright — the rule they guarded no longer exists.
 
-  it("judges when avg_split_seconds is non-null AND >=2 stored steps carry actualSplit", () => {
-    const view = buildStoredSummary(
-      baseRow({ avgSplitSeconds: 130, steps: twoStopwatchSteps }),
-    );
-    expect(view.rows[0]!.measured).toBe(true);
-    expect(view.rows[1]!.measured).toBe(true);
-    const a = asMeasured(view.rows[0]);
-    const b = asMeasured(view.rows[1]);
-    expect(a.judged).toBeDefined();
-    expect(b.judged).toBeDefined();
-    expect(a.judged!.direction).toBe("faster"); // 120 < 130
-    expect(b.judged!.direction).toBe("slower"); // 140 > 130
-  });
-
-  it("leg 1 fails (avg_split_seconds null) — every row renders unjudged, no bars", () => {
-    const view = buildStoredSummary(
-      baseRow({ avgSplitSeconds: null, steps: twoStopwatchSteps }),
-    );
-    for (const row of view.rows) {
-      expect(asMeasured(row).judged).toBeUndefined();
-    }
-  });
-
-  it("leg 2 fails (fewer than 2 steps carry actualSplit) — the lone row renders unjudged, no bars (the abstention)", () => {
-    const oneStep: StoredLog["steps"] = [
-      { label: "a", actualSplit: 120, actualSource: "stopwatch", meters: 1500 },
-    ];
-    const view = buildStoredSummary(
-      baseRow({ avgSplitSeconds: 130, steps: oneStep }),
-    );
-    expect(asMeasured(view.rows[0]).judged).toBeUndefined();
-  });
-
-  it("accepted divergence: a step with no actualSplit at all still counts toward neither leg, and renders prescribed", () => {
+  it("judges a pm5-sourced row against its own target, independent of avg_split_seconds (which no longer gates judgment at all)", () => {
     const steps: StoredLog["steps"] = [
-      { label: "a", actualSplit: 120, actualSource: "stopwatch", meters: 1500 },
-      { label: "b", targetSplit: 130, seconds: 360 },
+      {
+        label: "a",
+        targetSplit: 130,
+        actualSplit: 124,
+        actualSource: "pm5",
+        actualSeconds: 300,
+      },
+    ];
+    // avg_split_seconds deliberately null — the OLD rule's leg 1 would
+    // have forced every row unjudged here; the new rule never reads this
+    // field for judgment at all.
+    const view = buildStoredSummary(baseRow({ avgSplitSeconds: null, steps }));
+    const row = asMeasured(view.rows[0]);
+    expect(row.judged).toBeDefined();
+    expect(row.judged!.direction).toBe("faster"); // 124 < 130
+    expect(row.judged!.deviationSeconds).toBe(-6);
+  });
+
+  it("judges a stopwatch-sourced row too (the timer door's own fingerprint)", () => {
+    const steps: StoredLog["steps"] = [
+      {
+        label: "a",
+        targetSplit: 130,
+        actualSplit: 140,
+        actualSource: "stopwatch",
+        meters: 1500,
+      },
+    ];
+    const view = buildStoredSummary(baseRow({ steps }));
+    const row = asMeasured(view.rows[0]);
+    expect(row.judged).toBeDefined();
+    expect(row.judged!.direction).toBe("slower"); // 140 > 130
+    expect(row.judged!.deviationSeconds).toBe(10);
+  });
+
+  it('never judges an "assumed"-sourced row, even when actual equals target exactly (antagonist B4 — the by-hand fixture stays unpainted)', () => {
+    const steps: StoredLog["steps"] = [
+      {
+        label: "a",
+        targetSplit: 130,
+        actualSplit: 130,
+        actualSource: "assumed",
+        seconds: 600,
+      },
+    ];
+    const view = buildStoredSummary(baseRow({ steps }));
+    // An "assumed" actual never clears `measuredElapsedSeconds` (that
+    // gate only recognizes pm5/stopwatch), so this row is
+    // PRESCRIBED-shaped — `judged`/`onTarget` don't even exist on this
+    // row's own type, the strongest form of "never judged".
+    const row = asPrescribed(view.rows[0]);
+    expect(row).not.toHaveProperty("judged");
+    expect(row).not.toHaveProperty("onTarget");
+  });
+
+  it("the RETIRED lone-row gate: a single judged row (previously abstained under the old count>=2 leg) now judges normally", () => {
+    const steps: StoredLog["steps"] = [
+      {
+        label: "a",
+        targetSplit: 130,
+        actualSplit: 124,
+        actualSource: "pm5",
+        actualSeconds: 300,
+      },
     ];
     const view = buildStoredSummary(baseRow({ avgSplitSeconds: 130, steps }));
-    expect(asMeasured(view.rows[0]).judged).toBeUndefined(); // only 1 actualSplit in the set
-    expect(view.rows[1]!.measured).toBe(false);
+    const row = asMeasured(view.rows[0]);
+    expect(row.judged).toBeDefined();
+    expect(row.judged!.direction).toBe("faster");
+  });
+
+  it("within the ±0.5s band (INCLUSIVE, both directions): onTarget, plain — no judged, no bar/±", () => {
+    const steps: StoredLog["steps"] = [
+      {
+        label: "a",
+        targetSplit: 130,
+        actualSplit: 130.5,
+        actualSource: "pm5",
+        actualSeconds: 300,
+      },
+      {
+        label: "b",
+        targetSplit: 130,
+        actualSplit: 129.5,
+        actualSource: "pm5",
+        actualSeconds: 300,
+      },
+    ];
+    const view = buildStoredSummary(baseRow({ steps }));
+    const a = asMeasured(view.rows[0]);
+    const b = asMeasured(view.rows[1]);
+    expect(a.onTarget).toBe(true);
+    expect(a.judged).toBeUndefined();
+    expect(b.onTarget).toBe(true);
+    expect(b.judged).toBeUndefined();
+  });
+
+  it("just outside the band (±0.6s): judged, not onTarget", () => {
+    const steps: StoredLog["steps"] = [
+      {
+        label: "a",
+        targetSplit: 130,
+        actualSplit: 130.6,
+        actualSource: "pm5",
+        actualSeconds: 300,
+      },
+    ];
+    const view = buildStoredSummary(baseRow({ steps }));
+    const row = asMeasured(view.rows[0]);
+    expect(row.judged).toBeDefined();
+    expect(row.onTarget).toBeUndefined();
+  });
+
+  it("abstains (no judged, no onTarget) when the row has no target at all, even with a real measured actual", () => {
+    const steps: StoredLog["steps"] = [
+      { label: "a", actualSplit: 130, actualSource: "pm5", actualSeconds: 300 },
+    ];
+    const view = buildStoredSummary(baseRow({ steps }));
+    const row = asMeasured(view.rows[0]);
+    expect(row.judged).toBeUndefined();
+    expect(row.onTarget).toBeUndefined();
+    expect(row.targetLabel).toBeUndefined();
+  });
+
+  it("the TARGET cell keys on targetSplit ALONE (antagonist B5): a pm5 pairing-exception row (time real, no usable pace) still shows its target while judged/onTarget stay absent", () => {
+    const steps: StoredLog["steps"] = [
+      { label: "a", targetSplit: 130, actualSource: "pm5", actualSeconds: 300 },
+    ];
+    const view = buildStoredSummary(baseRow({ steps }));
+    const row = asMeasured(view.rows[0]);
+    expect(row.targetLabel).toBe("2:10.0");
+    expect(row.paceLabel).toBeUndefined();
+    expect(row.judged).toBeUndefined();
+    expect(row.onTarget).toBeUndefined();
   });
 
   it("a pm5-sourced step below the minimum measurable floor renders prescribed, not measured", () => {
@@ -254,21 +355,108 @@ describe("buildStoredSummary — §5C row judging, both legs plus the abstention
     expect(row.targetPaceLabel).toBeUndefined();
   });
 
-  it("never re-averages: the judged deviation is computed against the STORED avg split, not the rows' own average", () => {
+  // HISTORY NOTE: this test used to be named "never re-averages: the
+  // judged deviation is computed against the STORED avg split, not the
+  // rows' own average" and proved judgment read `avg_split_seconds`
+  // rather than re-deriving an average from the two rows themselves.
+  // Phase LT spec 1 §4 retires that whole baseline — judgment now reads
+  // each row's own `targetSplit`, never any average, stored or
+  // re-derived. Rewritten (not deleted) to prove the SAME kind of
+  // independence against the NEW baseline: two rows with wildly
+  // different targets judge independently of one another and of
+  // avg_split_seconds, which this fixture sets to a third, unrelated
+  // number to prove it is read by nothing here.
+  it("each row judges independently against its OWN target — two different targets, avg_split_seconds unrelated and unread", () => {
     const steps: StoredLog["steps"] = [
-      { label: "a", actualSplit: 100, actualSource: "stopwatch", meters: 1500 },
-      { label: "b", actualSplit: 200, actualSource: "stopwatch", meters: 1500 },
+      {
+        label: "a",
+        targetSplit: 90,
+        actualSplit: 100,
+        actualSource: "stopwatch",
+        meters: 1500,
+      },
+      {
+        label: "b",
+        targetSplit: 190,
+        actualSplit: 200,
+        actualSource: "stopwatch",
+        meters: 1500,
+      },
     ];
-    // The rows' own average would be 150 — deliberately using a STORED
-    // avg far from that (90) to prove the judgment reads the stored
-    // number, not something re-derived from these two rows.
-    const view = buildStoredSummary(baseRow({ avgSplitSeconds: 90, steps }));
+    const view = buildStoredSummary(baseRow({ avgSplitSeconds: 9999, steps }));
     const a = asMeasured(view.rows[0]);
     const b = asMeasured(view.rows[1]);
-    expect(a.judged!.direction).toBe("slower"); // 100 > 90
+    expect(a.judged!.direction).toBe("slower"); // 100 > 90 (its OWN target)
     expect(a.judged!.deviationSeconds).toBe(10);
-    expect(b.judged!.direction).toBe("slower"); // 200 > 90
-    expect(b.judged!.deviationSeconds).toBe(110);
+    expect(b.judged!.direction).toBe("slower"); // 200 > 190 (its OWN target)
+    expect(b.judged!.deviationSeconds).toBe(10);
+  });
+});
+
+describe("buildStoredSummary — §2 SPM cell, the pre-/post-split discriminant (criterion 3)", () => {
+  it("a post-split row: measured first (actualSpm), authored target after the slash (spm)", () => {
+    const steps: StoredLog["steps"] = [
+      {
+        label: "a",
+        actualSource: "pm5",
+        actualSeconds: 300,
+        actualSpm: 24,
+        spm: 22,
+      },
+    ];
+    const view = buildStoredSummary(baseRow({ steps }));
+    const row = asMeasured(view.rows[0]);
+    expect(row.spmCell).toStrictEqual({ measured: 24, target: 22 });
+  });
+
+  it("an OLD (pre-split) monitor row: spm holds the measured value, no target half at all — the ROW-LOCAL discriminant, never an age heuristic (exit criterion 3)", () => {
+    const steps: StoredLog["steps"] = [
+      {
+        label: "old pm5 row",
+        actualSource: "pm5",
+        actualSeconds: 300,
+        actualSplit: 130,
+        spm: 24,
+        // No actualSpm key at all — the exact pre-split shape this row's
+        // own storage predates (this field did not exist yet).
+      },
+    ];
+    const view = buildStoredSummary(baseRow({ steps }));
+    const row = asMeasured(view.rows[0]);
+    expect(row.spmCell).toStrictEqual({ measured: 24 });
+  });
+
+  it("a measured-only cell (no authored rate stored at all)", () => {
+    const steps: StoredLog["steps"] = [
+      { label: "a", actualSource: "pm5", actualSeconds: 300, actualSpm: 24 },
+    ];
+    const view = buildStoredSummary(baseRow({ steps }));
+    const row = asMeasured(view.rows[0]);
+    expect(row.spmCell).toStrictEqual({ measured: 24 });
+  });
+
+  it("a target-only cell (the timer/manual doors never store a measured rate)", () => {
+    const steps: StoredLog["steps"] = [
+      {
+        label: "a",
+        actualSplit: 130,
+        actualSource: "stopwatch",
+        meters: 1500,
+        spm: 22,
+      },
+    ];
+    const view = buildStoredSummary(baseRow({ steps }));
+    const row = asMeasured(view.rows[0]);
+    expect(row.spmCell).toStrictEqual({ target: 22 });
+  });
+
+  it("absent entirely when neither half has a value", () => {
+    const steps: StoredLog["steps"] = [
+      { label: "a", actualSplit: 130, actualSource: "stopwatch", meters: 1500 },
+    ];
+    const view = buildStoredSummary(baseRow({ steps }));
+    const row = asMeasured(view.rows[0]);
+    expect(row.spmCell).toBeUndefined();
   });
 });
 

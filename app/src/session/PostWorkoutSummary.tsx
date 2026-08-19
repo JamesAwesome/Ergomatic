@@ -90,6 +90,36 @@ function judgedColorClass(direction: "faster" | "slower" | undefined): string {
   return "";
 }
 
+/** §2's compact SPM cell: `24 / 22`, measured first (plain ink), the
+ *  authored target after the slash in QUIET ink (`.summary-row-spm-target`
+ *  — the design's own explicit ruling for this one half, distinct from
+ *  the TARGET column's own plain-ink treatment). Either half
+ *  independently absent (§2's own "absent halves drop" rule): a
+ *  measured-only cell renders the bare number with no slash at all; a
+ *  target-only cell renders `/ 22` — no leading space, WHOLLY inside the
+ *  quiet span, since there is no measured half in front of it to
+ *  separate from. Always wraps in the outer `.summary-row-spm` span (even
+ *  when `cell` itself is `undefined`) so this row's columns still line up
+ *  with sibling rows in the list, the same "kept as an empty element"
+ *  idiom the bar-track below already uses. */
+function SpmCellSpan({
+  cell,
+}: {
+  cell?: { measured?: number; target?: number };
+}) {
+  return (
+    <span className="summary-row-spm">
+      {cell?.measured !== undefined && cell.measured}
+      {cell?.target !== undefined && (
+        <span className="summary-row-spm-target">
+          {cell?.measured !== undefined ? " / " : "/ "}
+          {cell.target}
+        </span>
+      )}
+    </span>
+  );
+}
+
 function IntervalRow({ row }: { row: SummaryRow }) {
   if (row.measured) {
     if (row.isWarmup) {
@@ -102,7 +132,15 @@ function IntervalRow({ row }: { row: SummaryRow }) {
             WARM-UP
           </span>
           <span className="summary-row-time">{row.timeLabel ?? ""}</span>
+          {/* §1's Warm-up row rule: "a warm-up has no target by
+              definition" — `row.targetLabel`/`row.spmCell` are always
+              undefined here (never set by monitorWarmupRow/timerWarmupRow),
+              so these render as the same empty placeholders a measured
+              row's own absent cells render, keeping this row's columns
+              aligned with judged sibling rows below it. */}
+          <span className="summary-row-target">{row.targetLabel ?? ""}</span>
           <span className="summary-row-pace">{row.paceLabel ?? ""}</span>
+          <SpmCellSpan cell={row.spmCell} />
           <span className="summary-row-bar-track" />
           <span className="summary-row-dev" />
         </li>
@@ -116,18 +154,22 @@ function IntervalRow({ row }: { row: SummaryRow }) {
       >
         <span className="summary-row-index">{row.index}</span>
         <span className="summary-row-time">{row.timeLabel ?? ""}</span>
+        <span className="summary-row-target">{row.targetLabel ?? ""}</span>
         <span className={`summary-row-pace ${colorClass}`}>
           {row.paceLabel ?? ""}
         </span>
+        <SpmCellSpan cell={row.spmCell} />
         {row.judged === undefined ? (
           // PM final-PR gate (lone-measured-row ruling, 2026-08-17): §2B's
           // own idiom ("any cell whose inputs are absent is ABSENT") plus
           // §2E's warm-up-row precedent (measured but UNJUDGED renders no
-          // deviation bar) — a measured row with no `judged` (the count<2
-          // gate, `summaryModel.ts` finding 5) gets the SAME empty track
-          // the warm-up row renders: no center tick, no fill. Kept as an
-          // (empty) element, not omitted outright, so this row's columns
-          // still line up with judged sibling rows sharing this list.
+          // deviation bar) — a measured row with no `judged` (either
+          // genuinely unjudged, OR on-target — Task 2's `rowJudgment`
+          // encodes on-target as `judged` absent too, `onTarget: true`
+          // instead) gets the SAME empty track the warm-up row renders:
+          // no center tick, no fill, no color. Kept as an (empty)
+          // element, not omitted outright, so this row's columns still
+          // line up with judged sibling rows sharing this list.
           <span className="summary-row-bar-track" />
         ) : (
           <span className="summary-row-bar-track">

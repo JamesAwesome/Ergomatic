@@ -522,6 +522,195 @@ describe("PostWorkoutSummary — intervals (§2E)", () => {
   });
 });
 
+// Phase LT spec 1, §1/§2 (Task 3): the re-baselined row's two new cells
+// (TARGET, `m:ss.t`; SPM, `24 / 22` with a quiet target half) and the
+// on-target (plain-ink) rendering `rowJudgment` (Task 2) already encodes
+// via `judged`/`onTarget`'s own mutual-exclusion invariant. Every fixture
+// row below is measured-shaped, built the same literal-object way this
+// file's own `monitorModel` rows already are (this file's job is the
+// SCREEN, not the model — the model's own derivation is
+// `summaryModel.test.ts`'s job).
+describe("PostWorkoutSummary — TARGET + SPM cells, on-target plain ink (§1/§2)", () => {
+  it("renders the TARGET cell (m:ss.t) when the row carries one, and an empty cell when it has none", () => {
+    renderSummary({
+      model: monitorModel({
+        rows: [
+          {
+            measured: true,
+            isWarmup: false,
+            index: 1,
+            label: "6:00 @ 6k",
+            timeLabel: "6:00",
+            paceLabel: "2:05.0",
+            targetLabel: "2:09.0",
+          },
+        ],
+      }),
+    });
+    const row = screen.getByRole("listitem");
+    expect(row.querySelector(".summary-row-target")?.textContent).toBe(
+      "2:09.0",
+    );
+  });
+
+  it("a row with no targetLabel renders an empty TARGET cell (absence, never a dash or a fabricated value)", () => {
+    renderSummary({
+      model: monitorModel({
+        rows: [
+          {
+            measured: true,
+            isWarmup: false,
+            index: 1,
+            label: "6:00 @ 6k",
+            timeLabel: "6:00",
+            paceLabel: "2:05.0",
+            // targetLabel intentionally absent — the pairing-exception
+            // shape (antagonist B5) still shows a real number when it
+            // HAS one; this fixture simply has none.
+          },
+        ],
+      }),
+    });
+    const row = screen.getByRole("listitem");
+    expect(row.querySelector(".summary-row-target")?.textContent).toBe("");
+  });
+
+  it("SPM cell §2: both halves present render `24 / 22`, the target half (after the slash) carrying the quiet class", () => {
+    renderSummary({
+      model: monitorModel({
+        rows: [
+          {
+            measured: true,
+            isWarmup: false,
+            index: 1,
+            label: "6:00 @ 6k",
+            timeLabel: "6:00",
+            paceLabel: "2:05.0",
+            spmCell: { measured: 24, target: 22 },
+          },
+        ],
+      }),
+    });
+    const row = screen.getByRole("listitem");
+    const spm = row.querySelector(".summary-row-spm")!;
+    expect(spm.textContent).toBe("24 / 22");
+    const target = spm.querySelector(".summary-row-spm-target")!;
+    expect(target).not.toBeNull();
+    expect(target.textContent).toBe(" / 22");
+  });
+
+  it("SPM cell: a measured-only half (no authored rate) renders the bare number, no slash, no quiet span", () => {
+    renderSummary({
+      model: monitorModel({
+        rows: [
+          {
+            measured: true,
+            isWarmup: false,
+            index: 1,
+            label: "6:00 @ 6k",
+            timeLabel: "6:00",
+            paceLabel: "2:05.0",
+            spmCell: { measured: 24 },
+          },
+        ],
+      }),
+    });
+    const row = screen.getByRole("listitem");
+    const spm = row.querySelector(".summary-row-spm")!;
+    expect(spm.textContent).toBe("24");
+    expect(spm.querySelector(".summary-row-spm-target")).toBeNull();
+  });
+
+  it("SPM cell: a target-only half renders `/ 22` wholly in the quiet class (no leading space, per §2's own literal example)", () => {
+    renderSummary({
+      model: monitorModel({
+        rows: [
+          {
+            measured: true,
+            isWarmup: false,
+            index: 1,
+            label: "6:00 @ 6k",
+            timeLabel: "6:00",
+            paceLabel: "2:05.0",
+            spmCell: { target: 22 },
+          },
+        ],
+      }),
+    });
+    const row = screen.getByRole("listitem");
+    const spm = row.querySelector(".summary-row-spm")!;
+    expect(spm.textContent).toBe("/ 22");
+    const target = spm.querySelector(".summary-row-spm-target")!;
+    expect(target.textContent).toBe("/ 22");
+  });
+
+  it("SPM cell: absent entirely (no spmCell on the row) renders an empty cell, not an empty widget", () => {
+    renderSummary({
+      model: monitorModel({
+        rows: [
+          {
+            measured: true,
+            isWarmup: false,
+            index: 1,
+            label: "6:00 @ 6k",
+            timeLabel: "6:00",
+            paceLabel: "2:05.0",
+            // spmCell intentionally absent.
+          },
+        ],
+      }),
+    });
+    const row = screen.getByRole("listitem");
+    expect(row.querySelector(".summary-row-spm")?.textContent).toBe("");
+  });
+
+  // James's tule-fog report (the spec's own naming): a row can beat its
+  // target and still land WITHIN the ±0.5s band — the on-target state
+  // renders PLAIN, same visual treatment as an unjudged row, never a
+  // color, never a bar, never a ± label, even though `onTarget: true` DID
+  // evaluate it (unlike a genuinely unjudged row where neither field is
+  // set at all).
+  it("an on-target row (onTarget: true, judged absent) renders plain ink: no faster/slower class, no bar tick/fill, no ± label", () => {
+    renderSummary({
+      model: monitorModel({
+        rows: [
+          {
+            measured: true,
+            isWarmup: false,
+            index: 1,
+            label: "6:00 @ 6k",
+            timeLabel: "6:00",
+            paceLabel: "2:09.3",
+            targetLabel: "2:09.0",
+            onTarget: true,
+            // judged intentionally absent — Task 2's own mutual-
+            // exclusion invariant.
+          },
+        ],
+      }),
+    });
+    const row = screen.getByRole("listitem");
+    const pace = row.querySelector(".summary-row-pace");
+    expect(pace?.className).not.toContain("summary-row-faster");
+    expect(pace?.className).not.toContain("summary-row-slower");
+    const dev = row.querySelector(".summary-row-dev");
+    expect(dev?.className).not.toContain("summary-row-faster");
+    expect(dev?.className).not.toContain("summary-row-slower");
+    expect(dev?.textContent).toBe("");
+    expect(row.querySelector(".summary-row-bar-tick")).toBeNull();
+    expect(row.querySelector(".summary-row-bar")).toBeNull();
+  });
+
+  it("by-hand (prescribed) rows are unpainted: no TARGET/SPM/bar geometry at all, only duration/target-pace/offset/dash", () => {
+    renderSummary({ model: prescribedOnlyModel() });
+    const rows = screen.getAllByRole("listitem");
+    for (const row of rows) {
+      expect(row.querySelector(".summary-row-spm")).toBeNull();
+      expect(row.querySelector(".summary-row-bar-track")).toBeNull();
+    }
+  });
+});
+
 describe("PostWorkoutSummary — save stack (§2F)", () => {
   it("with an active plan (not onboarding): Log against plan leads with the plan position, Save without logging is secondary", async () => {
     const user = userEvent.setup();

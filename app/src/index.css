@@ -8570,10 +8570,15 @@ section:not(.news-pinned) .news-row:last-of-type {
    spec's) HR zone list all share this one skeleton. `:not(:last-child)`
    rather than a rule on every row: the list's own bottom edge needs no
    trailing hairline. */
+/* Phase LT spec 1, §1/§2 (Task 3): `gap` 10px -> 8px, a DEVIATIONS-recorded
+   departure — the row grew a 6th/7th column (TARGET, SPM) on the SAME
+   390px mobile viewport, and every px reclaimed from the gap goes
+   straight to the deviation bar-track, the one column with no honest
+   minimum content width of its own. */
 .summary-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   padding: 9px 0;
 }
 
@@ -8595,9 +8600,16 @@ section:not(.news-pinned) .news-row:last-of-type {
   color: var(--ink-3);
 }
 
+/* Phase LT spec 1, Task 3: 64px -> 44px, a DEVIATIONS-recorded departure
+   from the PW-era shipped width (row 46) — measured live (a real DOM
+   span, `--font-mono` 13px 600, the widest values this cell ever holds:
+   "58:25"/"11:45"/"+10.0"-shaped strings) at 39.0px, so 44px keeps the
+   same ~5px safety margin `.summary-row-dev` below has always shipped
+   with, not a guess. The 20px this reclaims is the single biggest piece
+   of the new SPM column's own budget. */
 .summary-row-time,
 .summary-row-duration {
-  flex: 0 0 64px;
+  flex: 0 0 44px;
   font-family: var(--font-mono);
   font-size: 13px;
   color: var(--ink-2);
@@ -8612,6 +8624,44 @@ section:not(.news-pinned) .news-row:last-of-type {
   font-weight: 600;
   color: var(--ink);
   font-variant-numeric: tabular-nums;
+}
+
+/* Phase LT spec 1, §1/§2 (Task 3): the two new cells. `.summary-row-target`
+   is shared verbatim with the PRESCRIBED row's own target-pace cell above
+   (row 46 of DEVIATIONS.md already documents that shared rule's real,
+   shipped width) — same "a target split, m:ss.t" semantic, same visual
+   weight, deliberately reused rather than a second near-identical class.
+   `.summary-row-spm` is new — 52px at 12px (NOT the pace/target's own
+   13-14px scale; a deliberately smaller, quieter size, matching this
+   cell's own supporting-information role next to the row's judged pace).
+   Measured live, not guessed: `24 / 22` (this cell's own longest real
+   content — a two-digit measured rate, a two-digit target) renders at
+   50.4px at 12px 600-weight `--font-mono`, so 52px keeps a small but
+   real margin, the same "just enough, proven" discipline
+   `.summary-row-target`'s own 52px/"2:17.0" pairing already ships with. A
+   40px first cut (this file's own initial number, unmeasured) rendered
+   ITS content wider than its own column — caught opening the capture,
+   not by arithmetic; measuring first this time. */
+.summary-row-spm {
+  flex: 0 0 52px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* §2's own ruling, verbatim: "the authored target after the slash in
+   quiet ink". `--ink-3` (contrast computed against both backgrounds this
+   cell can sit on, task-3-report.md's own numbers: 6.69:1 on --page,
+   7.43:1 on --surface — both clear the house 4.5:1 AA floor with room to
+   spare) is this app's own established "quiet label" token (matches
+   `.summary-row-offset`, `.summary-legend`, `.summary-targets-only-
+   caption` a few rules below — never a bespoke color for one cell). */
+.summary-row-spm-target {
+  font-weight: 400;
+  color: var(--ink-3);
 }
 
 .summary-row-faster {
