@@ -1031,3 +1031,54 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   surfaces" claim — an equality assertion alone passes after a copy is made.
 - **Backlog/process:** LT is IN ROADMAP (RF16 graduated, no fifth absence). Release stack:
   v0.13.0 is the tip tag; #129 merges as v0.14.0 MINOR, notes owed to `v0.13.0..main`.
+
+## Final-PR gate, 2026-08-19 (PR #130, LT spec 2 series capture — triad: two stored shapes + an invented mechanism)
+
+- **CORRECTION to this ledger's own 2026-08-19 entry: `v0.13.0` = `e22bc31`
+  (#126). #127, #128 and #129 all landed AFTER the tag.** The claim that the
+  tag "points at main INCLUDING #128" was false, and ROADMAP inherited it as
+  "(#128 — RETROACTIVE, v0.13.0's tag message never announced it)". A tag
+  message CAN be wrong (that finding stands); this one was not. **Settle tag
+  membership with `git merge-base --is-ancestor <sha> vX.Y.Z^{commit}`, never
+  by reading either the tag message or a previous ledger line.**
+- **A risk note carried up "deliberately" into a collapsed `<details>` is not
+  disclosed.** The route-scoped 1 MB parser registers before `originCheck`/
+  `requireUser`, so the pre-auth buffer ceiling went 100 KB → 1 MB. Correctly
+  named, correctly accepted, and living in the single least durable place in
+  the repo. The three-place rule (spec / ROADMAP / notes) applies to ACCEPTED
+  ENGINEERING limits too, not only to rower-facing gaps; where no notes clause
+  is owed, two places still are.
+- **"Rower-invisible" is a claim about RENDERING, and a gate must test it
+  against LATENCY and STORAGE separately.** This spec renders nothing and is
+  honestly declared so — yet the save now uploads ~190 KB more and the phone
+  record grows ~200 KB. Both are safe by construction. The PR top said
+  "nothing to see yet" and stopped. **At any invisible-capability gate, ask
+  the three questions separately: does he SEE it, does he WAIT for it, does it
+  crowd something out.**
+- **A PR headline naming a data stream nobody has witnessed is the same defect
+  class as quoting a screen the capture disproves.** Line one claimed heart
+  rate is recorded; the spec's own §4 says belt delivery on James's PM5 is
+  unwitnessed, so `hr` will be absent for every tester. **Check headline nouns
+  against the spec's own unwitnessed list.**
+- **Device items appended to a CLOSED phase's runsheet are correctly HOUSED and
+  wrongly INDEXED.** S2-iOS, the persist() grant and the fast-rate re-measure
+  went onto `walk-phase-cr2-exit/RUNSHEET.md` (right — it is the standing phone
+  pass, still owed), with nothing in Phase LT pointing at them. **A phase that
+  parks work on another phase's sheet owes its own section a pointer**, or its
+  close gate cannot find its own open items.
+- **Capture-before-render sequencing carries an irreversibility the value
+  question usually misses.** Nothing reads this data until spec 3, so a
+  device-specific recorder defect is invisible AND permanent: the frames
+  evaporate, the measured record is immutable, PATCH refuses `series`. Ruling
+  at this gate: the three device items land BEFORE spec 3 is implemented.
+  **General form: when a spec starts CAPTURING something before anything reads
+  it, ask what corrects a bad capture later. If the answer is "nothing", the
+  device check moves in front of the renderer, not behind it.**
+- **§4's assumption table is the model to copy for any storage-touching spec.**
+  Seven claims, each with an evidence class and a named check, each check a
+  red-provable deliverable in the plan. It caught more than it was aimed at:
+  a task-2 review observation added a PARSE-side perf probe (720 KB at mount on
+  three surfaces) that the spec's own write-side S4 row never asked for.
+- **Release stack at this gate:** v0.13.0 is the tip tag; #128, #129 and (on
+  merge) #130 all ride **v0.14.0 MINOR**, range `v0.13.0..main`, four clauses,
+  none new from #130. The tag message must not name series capture.
