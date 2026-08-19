@@ -846,9 +846,12 @@ test.describe("Phase 6C Task 3: the manual door", () => {
 
     await expect(page).toHaveURL(/\/library\/[^/]+\/log$/);
     await expect(page.getByRole("heading", { name: title })).toBeVisible();
-    // No Discard button on this door at all — nothing to discard (the task
-    // brief's own words), unlike the session door's own staged confirm.
-    await expect(page.getByRole("button", { name: /discard/i })).toHaveCount(0);
+    // LT-0 (2026-08-18-target-truth-design.md §3): this door now HAS a
+    // Discard button, same idiom as the session door's own staged confirm
+    // — the app's last discard-less save surface gained one.
+    await expect(
+      page.getByRole("button", { name: "DISCARD WITHOUT SAVING" }),
+    ).toBeVisible();
     // Real content, never a bare dash: this workout's one step references
     // "6k" plainly (off 0), and it's the only step in the list. The manual
     // door has no measurement of any kind — the BY FEEL hint (§2D)
@@ -1463,5 +1466,109 @@ test.describe("Phase 7B Task 5: Connect over a real (not seeded) unlogged sessio
     expect(await monitorRunRaw(page)).toBeNull();
 
     await cleanupByTitle(page, title);
+  });
+});
+
+test.describe("LT-0: the manual door's own staged discard, driven through a forced monitorModeRun fallthrough", () => {
+  // Same seeding idiom as "Phase 7B Task 2" above (a real Connect
+  // affordance/PM5 can't produce this record in CI) — but deliberately
+  // shaped to DISQUALIFY from monitor mode rather than qualify for it:
+  // `workoutId` never matches the route it's placed under, forcing
+  // `monitorModeRun`'s condition 3 to miss and land this record on the
+  // manual door's PLAIN render — exactly where LT-0's diagnosis says
+  // James's early-END repro almost certainly fell through, in whatever
+  // build he rowed. `program`/`logSeed` stay empty-but-shaped (0 vs 0
+  // lengths — trivially "aligned"): the workoutId mismatch disqualifies
+  // the record before `buildMonitorLogSteps` would ever be reached, so its
+  // own alignment check isn't what's under test here (that's the unit
+  // suite's "force (a) corrupt logSeed.steps.length" — this leg only needs
+  // to prove the real browser's storage/UI consequence end to end).
+  async function seedMismatchedMonitorRun(page: Page): Promise<void> {
+    await page.evaluate(() => {
+      localStorage.setItem(
+        "ergomatic.monitorRun",
+        JSON.stringify({
+          v: 2,
+          workoutId: "lt-0-mismatched-workout-id",
+          title: "Stranded Connected Session",
+          program: { intervals: [] },
+          logSeed: { steps: [], paces: {} },
+          actuals: [],
+          deviceName: "PM5 430123456",
+          startedAt: new Date(Date.now() - 40 * 60 * 1000).toISOString(),
+          completedAt: new Date().toISOString(),
+          terminated: false,
+        }),
+      );
+    });
+  }
+
+  async function monitorRunRaw(page: Page): Promise<string | null> {
+    return page.evaluate(() => localStorage.getItem("ergomatic.monitorRun"));
+  }
+
+  test("a forced gate-miss (mismatched workoutId) renders the plain manual door WITH Discard, and firing it clears the stranded record — verified both in storage and via the Connect guard going quiet (the real, code-verified consequence; Today itself renders no row for any COMPLETED MonitorRun either way, per Today.tsx's own UnloggedMonitorRow gate)", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "lt0-manual-discard-fallthrough@e2e.test",
+      name: "LT-0 Fallthrough Tester",
+    });
+    await setBaselines(page, { k2Seconds: 100, k6Seconds: 120 });
+    await seedMismatchedMonitorRun(page);
+    const before = await monitorRunRaw(page);
+    expect(before).not.toBeNull();
+
+    // Open a real, seeded library workout — its :id is what the mismatched
+    // record's own workoutId will never equal.
+    await page.goto("/library");
+    await page.locator(".workout-row").first().click();
+    await expect(page.locator("h1.workout-detail-title")).toBeVisible();
+    const detailUrl = page.url();
+    const workoutId = detailUrl.match(/\/library\/([^/]+)$/)?.[1];
+    expect(workoutId).toBeTruthy();
+
+    // BEFORE the discard: Start already stages the "unlogged session"
+    // warning (`connectGuardStage()` reads ANY completed MonitorRun,
+    // regardless of workoutId) — this is the genuine, verified-at-source
+    // consequence a stranded record produces for the rower today, and
+    // what LT-0's fix makes go away.
+    await page.getByRole("button", { name: "Start" }).click();
+    await expect(
+      page.getByText(
+        "You have an unlogged session. Starting a new one discards it.",
+      ),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Cancel" }).click();
+    await expect(page.getByRole("button", { name: "Start" })).toBeVisible();
+
+    // THE FORCED FALLTHROUGH: navigate straight to the log door with
+    // `?from=monitor` — `monitorModeRun`'s condition 3 misses (workoutId
+    // mismatch), so this renders the PLAIN manual form, not the monitor
+    // one.
+    await page.goto(`/library/${workoutId}/log?from=monitor`);
+    await expect(page.getByText("BY FEEL")).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "DISCARD WITHOUT SAVING" }),
+    ).toBeVisible();
+    expect(await monitorRunRaw(page)).toBe(before);
+
+    await page.getByRole("button", { name: "DISCARD WITHOUT SAVING" }).click();
+    await page.getByRole("button", { name: "Tap again to discard" }).click();
+
+    // Navigates to the workout's own detail screen, same as the monitor
+    // door's own discard does.
+    await expect(page).toHaveURL(`/library/${workoutId}`);
+    expect(await monitorRunRaw(page)).toBeNull();
+
+    // AFTER: the same Start press no longer stages the warning — the
+    // record's disappearance is genuinely visible in the real UI, not
+    // merely absent from storage.
+    await page.getByRole("button", { name: "Start" }).click();
+    await expect(
+      page.getByText(
+        "You have an unlogged session. Starting a new one discards it.",
+      ),
+    ).toHaveCount(0);
   });
 });

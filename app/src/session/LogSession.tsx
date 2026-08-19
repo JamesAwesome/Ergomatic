@@ -832,9 +832,25 @@ function SessionDoorLog() {
  *  qualified exception is `useStagedDiscard` (imported for its `armed`/
  *  `arm`/`disarm` timing machine, the session door's own idiom, spec §4's
  *  own words): its `fire()` method calls `clearDraft`/`clearRun`
- *  internally, so the monitor branch's own discard handler below calls
- *  `disarm()` plus its OWN `clearMonitorRun()` directly, never `fire()` —
- *  the one call that would break the constraint. */
+ *  internally, so BOTH doors' own discard handlers below call `disarm()`
+ *  plus their own, narrower `clearMonitorRun()` directly, never `fire()` —
+ *  the one call that would break the constraint.
+ *
+ *  **LT-0 (2026-08-18-target-truth-design.md §3): the PLAIN-manual render
+ *  (below, once `monitorRun` is proven `null`) needs the identical
+ *  discipline, for a reason that isn't obvious from its name.**
+ *  `monitorModeRun`'s own "hijack pin" doc comment says a miss on ANY of
+ *  its four conditions "falls straight through to today's manual form,
+ *  byte-for-byte" — so the plain-manual branch is not only the genuine
+ *  off-app door, it is also where a REAL, completed `MonitorRun` lands the
+ *  instant its `workoutId` mismatches this route, its `logSeed` fails
+ *  `buildMonitorLogSteps`' alignment check, or the catch-all swallows an
+ *  unanticipated exception. That branch's own discard reads
+ *  `loadMonitorRun()` fresh at fire time (never the `monitorRun` state
+ *  var, which this branch has already proven `null`) and clears it the
+ *  same qualified-exception way, so the record this door was originally
+ *  trying to log for the rower doesn't survive as an invisible orphan once
+ *  they've explicitly asked to discard. */
 function ManualDoorLog({ workoutId }: { workoutId: string }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -1190,6 +1206,41 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
     );
   }
 
+  // LT-0 (2026-08-18-target-truth-design.md §3): the manual door's own
+  // staged discard — same two-tap idiom (armed/disarm,
+  // `summary-discard`/`summary-discard-armed`, `DISCARD WITHOUT SAVING`/
+  // `Tap again to discard`) as `handleDiscardClick`/
+  // `handleMonitorDiscardClick` above. Reaching this render already proves
+  // `monitorRun === null` — but that only means `monitorModeRun`'s OWN
+  // four-condition gate missed, not that nothing is stored: this is
+  // exactly the fallthrough target `monitorModeRun`'s own "hijack pin" doc
+  // comment describes, so a real, completed `MonitorRun` can be sitting in
+  // `MONITOR_RUN_KEY` right now (a mismatched `workoutId`, a misaligned
+  // `logSeed`, or the catch-all all land here with the record still real).
+  // Reading `loadMonitorRun()` fresh at fire time — never the `monitorRun`
+  // state var, fixed `null` in this branch by construction — is what
+  // catches it, the same "read the key directly" discipline
+  // `monitorModeRun`'s own doc comment already applies one call site up.
+  // Same qualified exception this component's header comment names:
+  // `clearMonitorRun()` directly, never `discard.fire()`, which would also
+  // clear `./draft`/`./run` — this component's own hard constraint — and
+  // could nuke an unrelated in-progress session elsewhere. A pure by-hand
+  // entry (nothing ever stored under either key) leaves storage
+  // byte-identical; the form state itself simply dies with this
+  // component's unmount, the same as an ordinary Back press already
+  // silently does today. Navigates to the workout's own detail screen —
+  // the same target `handleMonitorDiscardClick` above uses, for the same
+  // reason (spec §4: "navigates back to the detail"), not `/today`.
+  function handleManualDiscardClick() {
+    if (discard.armed) {
+      discard.disarm();
+      if (loadMonitorRun() !== null) clearMonitorRun();
+      navigate(`/library/${workoutId}`);
+    } else {
+      discard.arm();
+    }
+  }
+
   return (
     <PostWorkoutSummary
       title={workout.title}
@@ -1213,9 +1264,22 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
       saveError={saveError}
       onLogAgainstPlan={() => void handleSave()}
       onSaveWithoutLogging={() => void handleSave(saveWithoutLoggingOpts)}
-      // Nothing to discard (the brief's own words) — there's no staged
-      // Discard slot at all for this door, unlike the other two.
-      discardSlot={null}
+      // LT-0: the app's last discard-less save surface gains the staged
+      // discard, same idiom as the session/monitor doors above —
+      // `handleManualDiscardClick`'s own doc comment covers what it clears
+      // and why (a fallen-through `MonitorRun`, or nothing at all).
+      discardSlot={
+        <button
+          type="button"
+          className={
+            discard.armed ? "summary-discard-armed" : "summary-discard"
+          }
+          onClick={handleManualDiscardClick}
+          onBlur={discard.disarm}
+        >
+          {discard.armed ? "Tap again to discard" : "DISCARD WITHOUT SAVING"}
+        </button>
+      }
     >
       <MonitorLogRow />
       <RecordingDownloadRow />

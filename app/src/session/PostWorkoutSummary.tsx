@@ -408,11 +408,17 @@ export interface PostWorkoutSummaryProps {
   saveError: string | null;
   onLogAgainstPlan: () => void;
   onSaveWithoutLogging: () => void;
-  /** `null` when this door has nothing staged to discard (the manual
-   *  door's original, non-monitor branch — LogSession.tsx's own hard
-   *  constraint). A real `ReactNode` otherwise, built by the caller (the
-   *  two-tap machinery differs per door — which records clear, where a
-   *  fired discard navigates — the "per-door record semantics" §2F names). */
+  /** LT-0 (2026-08-18-target-truth-design.md §3): every current caller now
+   *  passes a real `ReactNode` — discard is present wherever save is, on
+   *  all three doors, including the manual door's plain (non-monitor)
+   *  render, which used to pass `null` here as the app's last
+   *  discard-less save surface. `ReactNode` (not a stricter non-nullable
+   *  type) stays the prop's own type regardless: this component enforces
+   *  nothing about presence, only renders what it's given — `null` is
+   *  still a legal value the component itself renders as "nothing extra."
+   *  Built by the caller (the two-tap machinery differs per door — which
+   *  records clear, where a fired discard navigates — the "per-door record
+   *  semantics" §2F names). */
   discardSlot: ReactNode;
   backFallback?: string;
   /** The diagnostics rows (MONITOR LOG · COPY / RECORDING · DOWNLOAD) —
