@@ -13,19 +13,73 @@
 // COMPLETED interval's own final pre-reset reading, folded in) plus the
 // CURRENT interval's own wire `elapsedSeconds` — never the wall clock,
 // never a raw field alone, never `sessionElapsedSeconds` (a different,
-// driver-owned derived sum with its own defects, B2). A reset is detected
-// FRAME-STREAM-LOCALLY: whenever a new frame's `elapsedSeconds` reads
-// LOWER than the immediately preceding frame's own reading — this fires at
-// every interval boundary, including a `restSeconds: 0` boundary where the
-// wire's `workoutState` never leaves its work-mapped ordinal (no REST state
-// exists to key on instead; proven on `walk-2026-08-17/step-3`'s first
-// boundary, `seriesRecorder.test.ts`'s own oracle section).
+// driver-owned derived sum with its own defects, B2).
 //
 // Because the wire freezes elapsed/distance for a rest's whole duration,
 // the work clock stops advancing too — no new whole work-second is ever
 // crossed during a rest, so rests produce ZERO samples for free, by
 // construction, without this module ever inspecting `state` at all (§1's
 // "Rest samples: NONE" row).
+//
+// GENUINE vs FALSE resets (fix round, task-1 review H1). A reset candidate
+// is detected FRAME-STREAM-LOCALLY: a new frame's `elapsedSeconds` reads
+// LOWER than the immediately preceding frame's own reading. That alone is
+// NOT sufficient to fold: `domain/monitor/types.ts`'s own
+// `MonitorFrame.elapsedSeconds` doc comment carries the falsifying half of
+// the very citation this module's header used to lean on — "That does NOT
+// generalize to every drop in `elapsedSeconds`... a Terminate re-bases
+// elapsed backward to a smaller non-zero value WITHOUT clearing distance at
+// all" — and `src/monitor/driver.ts`'s own SESSION REGISTER MAP comment
+// names the exact cost of trusting the raw edge: "the fold banked a
+// distance the machine never cleared — an exact 2.00x, six times in the
+// record", which is why THAT module abandoned edge-detection entirely for
+// a machine-index-keyed max-merge. This recorder's inputs are deliberately
+// narrower than `driver.ts`'s (§1's Source fields row: only 0x0031/0x0032,
+// never 0x0033's Interval Count — no reliable per-frame interval identity
+// exists here to key a max-merge on), so this module keeps edge-detection
+// but adds a GENUINE-BOUNDARY GATE before a detected edge is allowed to
+// fold, replaying `docs/monitor/sessions/pm5-session4b-final.log.gz`
+// (10,408 frames from four real sessions) to derive it:
+//
+//   - A genuine boundary's POST-reset `distanceMeters` is near zero (the
+//     wire clears distance at the SAME instant it resets elapsed, walk 4)
+//     — observed max across 19 genuine boundaries in that capture: 1.1 m.
+//     A Terminate's POST-reset distance holds the PRE-reset value exactly
+//     (never clears) — observed minimum across the 6 Terminate shapes in
+//     that capture: 13.4 m. `MAX_BOUNDARY_RESET_METERS` sits at 3.0,
+//     roughly the geometric middle, ~2m of headroom either side.
+//   - A genuine boundary's PRE-reset `elapsedSeconds` (the reading about to
+//     be folded in) is never a sub-second value in that same capture —
+//     observed minimum across the 19 genuine boundaries: 14.14 s. Five
+//     further false-shaped decreases exist in the SAME capture that the
+//     distance rule alone cannot reject (both readings already sit at
+//     0 m — indistinguishable from a genuine boundary on distance alone):
+//     backward jitter in the readings arriving in the first fraction of a
+//     second right after an ALREADY-genuine reset (observed max pre-reset
+//     elapsed across the 5 jitter shapes: 0.87 s). No real interval can
+//     complete in under one whole second — this recorder's own decimation
+//     floor — so `MIN_COMPLETED_INTERVAL_SECONDS` sits at 1.0: a reset
+//     candidate whose own pre-reset elapsed is this small can never have
+//     produced a sample of its own regardless, so declining to fold it
+//     costs nothing observable in the sample stream, only a sub-second,
+//     non-compounding delay in when the base catches up.
+//
+// Both rules independently verified against the full capture
+// (`seriesRecorder.test.ts`'s own H1 section): exactly the 6 Terminate +
+// 5 jitter shapes are rejected, all 19 genuine boundaries still fold, and
+// the two are exhaustive over every decrease that capture contains.
+//
+// HONEST RESIDUAL RISK, same class `driver.ts`'s own comment names for the
+// fold it replaced: this is still an edge-triggered heuristic on two
+// thresholds tuned to the widest gap the available captures show — a
+// pathological real sequence (a Terminate whose held distance happens to
+// read under 3.0 m, or a genuine interval shorter than 1.0 s) would still
+// be misclassified. Neither shape has been observed in any of the four
+// committed captures this task read. Stated, not hidden — the fix a
+// machine-index-keyed max-merge would need (0x0033's Interval Count, an
+// input this module deliberately does not take, §1) is out of this task's
+// scope; a future task widening this recorder's inputs is where that
+// tradeoff gets revisited, not silently inside this fix.
 
 import type { MonitorFrame } from "../../domain/monitor/types.js";
 
@@ -38,13 +92,22 @@ export const SERIES_SAMPLE_CAP = 14_400;
  *  second per 500m, whole strokes/min. `hr` is ABSENT (never
  *  `undefined`-but-present) when the wire's own heart-rate sentinel
  *  resolved to `null` upstream (`domain/monitor/pm5/parse.ts`'s
- *  `heartRate()` — 255 or 0 -> `null` -> this module omits the key). */
+ *  `heartRate()` — 255 or 0 -> `null` -> this module omits the key).
+ *
+ *  `readonly` fields, and every `Sample` this module ever hands out is
+ *  additionally `Object.freeze`d at creation (fix round, L2): `snapshot()`
+ *  returns a FRESH `samples` array on every call, but the `Sample` objects
+ *  inside it are the SAME shared instances across calls (and across every
+ *  caller that ever received them) — never copied. Callers must treat
+ *  every `Sample` as immutable; the freeze makes a mutation attempt throw
+ *  in strict mode (every ESM module in this codebase) rather than silently
+ *  corrupting this recorder's own internal history. */
 export interface Sample {
-  t: number;
-  d: number;
-  p: number;
-  spm: number;
-  hr?: number;
+  readonly t: number;
+  readonly d: number;
+  readonly p: number;
+  readonly spm: number;
+  readonly hr?: number;
 }
 
 export interface SeriesData {
@@ -52,15 +115,47 @@ export interface SeriesData {
   truncated?: true;
 }
 
-/** A reset is a genuine wire drop, never float noise on a held reading —
- *  half a hundredth-of-a-second (the wire's own smallest unit) is well
- *  under any real interval's shortest possible duration. */
+/** A reset CANDIDATE is a genuine wire drop, never float noise on a held
+ *  reading — half a hundredth-of-a-second (the wire's own smallest unit)
+ *  is well under any real interval's shortest possible duration. Whether a
+ *  candidate is allowed to FOLD is `isGenuineBoundary`'s own question. */
 const RESET_EPSILON_SECONDS = 0.005;
 /** Guards the whole-second `Math.floor` bucket against a value that is
  *  mathematically exactly on an integer boundary landing a hair under it
  *  from float accumulation (`baseSeconds` is a running sum of prior
  *  finals). */
 const BUCKET_EPSILON_SECONDS = 1e-9;
+
+/** See this file's own header comment for the full derivation and the
+ *  captured evidence both thresholds are tuned against
+ *  (`pm5-session4b-final.log.gz`, 30 total reset candidates: 19 genuine,
+ *  6 Terminate, 5 jitter). */
+const MIN_COMPLETED_INTERVAL_SECONDS = 1.0;
+const MAX_BOUNDARY_RESET_METERS = 3.0;
+
+/**
+ * True when a detected elapsed-decrease represents a GENUINE interval
+ * boundary (the wire clears distance at the same instant, walk 4) rather
+ * than a Terminate (holds distance exactly, `types.ts`'s own doc-cited
+ * capture) or sub-second jitter immediately after an already-genuine reset
+ * (too short to ever have produced a sample of its own). Exported for
+ * direct testing against `pm5-session4b-final.log.gz`'s own real shapes —
+ * `seriesRecorder.test.ts`'s H1 section.
+ *
+ * @param priorElapsedSeconds The immediately preceding frame's own
+ *   `elapsedSeconds` reading — what a genuine boundary would fold IN.
+ * @param postResetDistanceMeters The new (post-decrease) frame's own
+ *   `distanceMeters` reading.
+ */
+export function isGenuineBoundary(
+  priorElapsedSeconds: number,
+  postResetDistanceMeters: number,
+): boolean {
+  return (
+    priorElapsedSeconds >= MIN_COMPLETED_INTERVAL_SECONDS &&
+    postResetDistanceMeters <= MAX_BOUNDARY_RESET_METERS
+  );
+}
 
 export interface SeriesRecorder {
   onFrame(f: MonitorFrame): void;
@@ -81,13 +176,13 @@ export function createSeriesRecorder(): SeriesRecorder {
    *  `baseSeconds`, keyed off the SAME reset (the wire resets both
    *  fields together at once, `types.ts`'s own walk-4 citation). */
   let baseMeters = 0;
-  /** The immediately preceding frame's own raw reading — what a reset
-   *  folds IN, and what a reset is detected AGAINST. `null` before the
-   *  first frame (nothing to compare, nothing to fold). Elapsed and
-   *  distance are held as ONE pair, set together on every frame, so a
-   *  reset (which only ever fires once `lastReading` is non-null) can
-   *  never observe one half of the pair without the other — no fallback
-   *  value is ever needed for `distanceMeters` here. */
+  /** The immediately preceding frame's own raw reading — what a genuine
+   *  reset folds IN, and what a reset candidate is detected AGAINST.
+   *  `null` before the first frame (nothing to compare, nothing to fold).
+   *  Elapsed and distance are held as ONE pair, set together on every
+   *  frame, so a reset (which only ever fires once `lastReading` is
+   *  non-null) can never observe one half of the pair without the other —
+   *  no fallback value is ever needed for `distanceMeters` here. */
   let lastReading: { elapsedSeconds: number; distanceMeters: number } | null =
     null;
   /** The highest whole work-second bucket already claimed by a sample.
@@ -103,10 +198,17 @@ export function createSeriesRecorder(): SeriesRecorder {
 
     if (
       lastReading !== null &&
-      elapsed < lastReading.elapsedSeconds - RESET_EPSILON_SECONDS
+      elapsed < lastReading.elapsedSeconds - RESET_EPSILON_SECONDS &&
+      isGenuineBoundary(lastReading.elapsedSeconds, distance)
     ) {
-      // Interval boundary: fold the COMPLETED interval's own final
-      // pre-reset readings in, then this frame starts the new interval.
+      // Genuine interval boundary: fold the COMPLETED interval's own final
+      // pre-reset readings in, then this frame starts the new interval. A
+      // REJECTED candidate (a Terminate, or sub-second jitter) folds
+      // NOTHING — `lastReading` still updates below, so the work clock
+      // simply reads `baseSeconds` (unchanged) plus this frame's own
+      // smaller `elapsed`, which is LOWER than the previous high-water
+      // mark and so cannot win a new bucket (the guard below) until real
+      // progress climbs back past it.
       baseSeconds += lastReading.elapsedSeconds;
       baseMeters += lastReading.distanceMeters;
     }
@@ -117,9 +219,9 @@ export function createSeriesRecorder(): SeriesRecorder {
 
     // First-frame-wins: a bucket already claimed (by an earlier frame,
     // possibly a duplicate/held reading at the same underlying value —
-    // the dual-rate case) never re-fires. Never duplicates; a reconnect
-    // or stale gap can only ever produce a MISSING bucket, never a
-    // repeated one.
+    // the dual-rate case) never re-fires. Never duplicates; a reconnect,
+    // a stale gap, or a rejected reset candidate can only ever produce a
+    // MISSING bucket, never a repeated one.
     if (bucket <= lastEmittedBucket) return;
     lastEmittedBucket = bucket;
 
@@ -134,11 +236,12 @@ export function createSeriesRecorder(): SeriesRecorder {
       d: Math.round(workClockMeters * 10),
       p: Math.round((f.currentSplit ?? 0) * 10),
       spm: f.spm ?? 0,
+      // `hr`'s readonly-optional shape (L2's freeze) means it must be
+      // decided at construction, never assigned after — the spread of an
+      // empty object contributes no key at all when there is no belt.
+      ...(f.heartRateBpm != null ? { hr: f.heartRateBpm } : {}),
     };
-    if (f.heartRateBpm != null) {
-      sample.hr = f.heartRateBpm;
-    }
-    samples.push(sample);
+    samples.push(Object.freeze(sample));
   }
 
   function snapshot(): SeriesData | undefined {

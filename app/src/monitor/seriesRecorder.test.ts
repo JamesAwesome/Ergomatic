@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { gunzipSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import {
   parseAdditionalStatus1,
@@ -11,7 +12,11 @@ import {
 } from "../../domain/monitor/pm5/uuids.js";
 import type { MonitorFrame } from "../../domain/monitor/types.js";
 import { fromHexString, parseRecording } from "./transports/recording.js";
-import { createSeriesRecorder, SERIES_SAMPLE_CAP } from "./seriesRecorder.js";
+import {
+  createSeriesRecorder,
+  isGenuineBoundary,
+  SERIES_SAMPLE_CAP,
+} from "./seriesRecorder.js";
 
 // ---------------------------------------------------------------------
 // Real-wire replay helper (the oracle grounding, same idiom as
@@ -41,6 +46,15 @@ const SESSIONS_DIR = import.meta.url
 
 function readSessionFile(relativePath: string): string {
   return readFileSync(`${SESSIONS_DIR}${relativePath}`, "utf-8");
+}
+
+/** Same idea for a gzipped capture (`captureReplay.test.ts`'s own
+ *  precedent: decompress at test time rather than committing a second,
+ *  uncompressed duplicate of a recording). */
+function readGzSessionFile(relativePath: string): string {
+  return gunzipSync(readFileSync(`${SESSIONS_DIR}${relativePath}`)).toString(
+    "utf-8",
+  );
 }
 
 /** Decodes every 0x0031 arrival in a committed `.jsonl` recording into a
@@ -91,17 +105,87 @@ function replayFrames(relativePath: string): MonitorFrame[] {
   return frames;
 }
 
-/** The index of the first frame whose `elapsedSeconds` reads lower than
- *  the immediately preceding frame's own reading by more than the wire's
- *  smallest unit — i.e. the first genuine interval-boundary reset in a
- *  frame stream. `-1` if the stream never resets. */
-function findResetIndex(frames: MonitorFrame[]): number {
+/** `pm5-session4b-final.log.gz`'s own `[event] {"kind":"frame","frame":
+ *  {...}}` diagnostics-log lines — an OLDER, MonitorFrame-like shape
+ *  missing several fields the current type requires
+ *  (`sessionElapsedSeconds`/`sessionDistanceMeters`/`rowingActive`/
+ *  `splitAvgPace`/`intervalAccrued`). Filled honestly below (mirrored from
+ *  the per-interval pair, or derived from `state`, or `null`) — this
+ *  recorder never reads any of the filled-in fields, the identical
+ *  completeness-nicety reasoning as `replayFrames`'s own comment above. */
+interface LegacyLoggedFrame {
+  elapsedSeconds: number;
+  distanceMeters: number;
+  currentSplit: number | null;
+  spm: number | null;
+  heartRateBpm: number | null;
+  intervalIndex: number | null;
+  intervalRemaining: { kind: "time" | "distance"; value: number } | null;
+  state: MonitorFrame["state"];
+}
+
+/** Decodes every `[event] {"kind":"frame",...}` line in a committed legacy
+ *  `.log.gz` diagnostics capture into a `MonitorFrame`, in wire order.
+ *  Malformed lines (a handful in this real, messy operator log) are
+ *  skipped, never faked into a frame. */
+function replayLegacyLog(relativePath: string): MonitorFrame[] {
+  const text = readGzSessionFile(relativePath);
+  const frames: MonitorFrame[] = [];
+  const prefix = "[event] ";
+  for (const line of text.split("\n")) {
+    if (!line.startsWith(prefix)) continue;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line.slice(prefix.length));
+    } catch {
+      continue;
+    }
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      !("kind" in parsed) ||
+      (parsed as { kind?: unknown }).kind !== "frame"
+    ) {
+      continue;
+    }
+    const raw = (parsed as unknown as { frame: LegacyLoggedFrame }).frame;
+    frames.push({
+      elapsedSeconds: raw.elapsedSeconds,
+      distanceMeters: raw.distanceMeters,
+      sessionElapsedSeconds: raw.elapsedSeconds,
+      sessionDistanceMeters: raw.distanceMeters,
+      currentSplit: raw.currentSplit,
+      spm: raw.spm,
+      heartRateBpm: raw.heartRateBpm,
+      rowingActive: raw.state === "rowing",
+      splitAvgPace: null,
+      intervalIndex: raw.intervalIndex,
+      intervalRemaining: raw.intervalRemaining,
+      intervalAccrued: null,
+      state: raw.state,
+    });
+  }
+  return frames;
+}
+
+/** Every index in `frames` whose `elapsedSeconds` reads lower than the
+ *  immediately preceding frame's own reading by more than the wire's
+ *  smallest unit — i.e. every reset CANDIDATE in a frame stream (genuine
+ *  or not; `isGenuineBoundary` is the classifier, not this function). */
+function findAllResetIndices(frames: MonitorFrame[]): number[] {
+  const indices: number[] = [];
   for (let i = 1; i < frames.length; i++) {
     if (frames[i]!.elapsedSeconds < frames[i - 1]!.elapsedSeconds - 0.005) {
-      return i;
+      indices.push(i);
     }
   }
-  return -1;
+  return indices;
+}
+
+/** The first (genuine) interval-boundary reset in a frame stream, `-1` if
+ *  the stream never resets. */
+function findResetIndex(frames: MonitorFrame[]): number {
+  return findAllResetIndices(frames)[0] ?? -1;
 }
 
 /** The longest run of consecutive frames sharing the identical
@@ -128,8 +212,33 @@ function longestFrozenRun(frames: MonitorFrame[]): [number, number] {
   return [bestStart, bestEnd];
 }
 
+/** The first frame at or after `fromIndex` whose OWN `elapsedSeconds`,
+ *  folded onto `baseSeconds`, first reaches a whole work-second beyond
+ *  `afterBucket` — a ground-truth reference this suite uses to compute a
+ *  boundary's EXACT resulting fold value (M1), independent of the
+ *  recorder's own bucket bookkeeping. This is the spec's own bucket
+ *  definition (`Math.floor`), not a reimplementation of the recorder's
+ *  reset/genuineness logic. */
+function firstFrameAfterBucket(
+  frames: MonitorFrame[],
+  fromIndex: number,
+  baseSeconds: number,
+  afterBucket: number,
+): MonitorFrame {
+  for (let i = fromIndex; i < frames.length; i++) {
+    if (
+      Math.floor(baseSeconds + frames[i]!.elapsedSeconds + 1e-9) > afterBucket
+    ) {
+      return frames[i]!;
+    }
+  }
+  throw new Error(
+    `no frame after index ${fromIndex} ever crosses bucket ${afterBucket + 1}`,
+  );
+}
+
 describe("createSeriesRecorder — §6.1 oracle, decoded from the committed recordings through the real parsers", () => {
-  it("step-2 (walk-2026-08-17, 2×250m r0 no wu): exactly 139 samples, one work→work boundary, the fold carries the completed interval's own final reading forward", () => {
+  it("step-2 (walk-2026-08-17, 2×250m r0 no wu — itself a restSeconds:0 boundary, distance-interval shaped): exactly 139 samples; the boundary's exact fold VALUE; real d/p/spm at named samples; the interval's own terminal gap under one second", () => {
     const frames = replayFrames(
       "walk-2026-08-17/step-2-pm5-recording-1786973078979.jsonl",
     );
@@ -139,58 +248,133 @@ describe("createSeriesRecorder — §6.1 oracle, decoded from the committed reco
 
     const rec = createSeriesRecorder();
     for (const f of frames) rec.onFrame(f);
-    const series = rec.snapshot();
+    const series = rec.snapshot()!;
 
-    expect(series).toBeDefined();
-    expect(series!.truncated).toBeUndefined();
-    expect(series!.samples).toHaveLength(139);
+    expect(series.truncated).toBeUndefined();
+    expect(series.samples).toHaveLength(139);
 
-    // Interval 1's own closing sample: the whole work-second the final
-    // pre-reset reading itself falls in.
-    const closingIndex = Math.floor(finalPreReset.elapsedSeconds);
-    const closingSample = series!.samples[closingIndex]!;
+    // Exit criterion 1 (segment-end gap): the closing sample, found by
+    // matching the fold arithmetic's own `t` — L1: BY VALUE, never by
+    // array position, which would assume no gap ever precedes it.
     const finalReadingTenths = Math.round(finalPreReset.elapsedSeconds * 10);
-    // Exit criterion 1: within one whole second of the interval's own
-    // final pre-reset reading.
-    expect(Math.abs(closingSample.t - finalReadingTenths)).toBeLessThan(10);
+    const closingSample = series.samples.find(
+      (s) => Math.abs(s.t - finalReadingTenths) < 10,
+    );
+    expect(closingSample).toBeDefined();
+    // H2: the machine's OWN number — 249.8m at the boundary, ×10.
+    expect(closingSample!.d).toBe(2498);
 
-    // The fold: the very next sample (interval 2's first) carries `t`
-    // forward from the FOLDED base, not reset toward zero — proof the
-    // completed interval's final reading was carried across the
-    // restSeconds:0-shaped boundary (no REST state exists between these
-    // two work intervals; the reset is detected purely off the wire's own
-    // elapsed drop, never off `workoutState`).
-    const nextSample = series!.samples[closingIndex + 1]!;
-    expect(nextSample.t).toBeGreaterThanOrEqual(finalReadingTenths);
-    // ...and it is the very next whole second, not a jump — the fold adds
-    // exactly the one completed interval's own reading, nothing else.
-    expect(nextSample.t - finalReadingTenths).toBeLessThan(20);
+    // M1: the fold's EXACT value (not a <20-tenths band) — the next
+    // sample's `t`/`d` equal base-after-fold plus the independently-found
+    // winning frame's own raw reading, proving the completed interval's
+    // final reading was carried across whole, not approximated.
+    const closingBucket = Math.floor(finalPreReset.elapsedSeconds);
+    const windingFrame = firstFrameAfterBucket(
+      frames,
+      resetIndex,
+      finalPreReset.elapsedSeconds,
+      closingBucket,
+    );
+    const expectedNextT = Math.round(
+      (finalPreReset.elapsedSeconds + windingFrame.elapsedSeconds) * 10,
+    );
+    const expectedNextD = Math.round(
+      (finalPreReset.distanceMeters + windingFrame.distanceMeters) * 10,
+    );
+    const nextSample = series.samples.find((s) => s.t === expectedNextT);
+    expect(nextSample).toBeDefined();
+    expect(nextSample!.d).toBe(expectedNextD);
+
+    // H2: the final sample — the machine's own 2×250m piece, 497.6m total.
+    const lastSample = series.samples[series.samples.length - 1]!;
+    expect(lastSample.d).toBe(4976);
+
+    // M1: step-2's OWN terminal gap (distinct from the step-4 test below)
+    // — interval 2's last decimated sample trails the machine's own
+    // terminal reading (folded base + its own final elapsedSeconds) by
+    // under one second, asserted, never loosened.
+    const terminal = frames[frames.length - 1]!;
+    const terminalWorkClockSeconds =
+      finalPreReset.elapsedSeconds + terminal.elapsedSeconds;
+    const terminalGapSeconds = terminalWorkClockSeconds - lastSample.t / 10;
+    expect(terminalGapSeconds).toBeGreaterThanOrEqual(0);
+    expect(terminalGapSeconds).toBeLessThan(1);
+
+    // H2: real p/spm values at a named, mid-interval sample (found by
+    // VALUE) — not this module's null-fallback defaults.
+    const midSample = series.samples.find((s) => s.t === 302);
+    expect(midSample).toBeDefined();
+    expect(midSample!.d).toBe(1157);
+    expect(midSample!.p).toBe(1314);
+    expect(midSample!.spm).toBe(26);
+    expect(midSample!.hr).toBe(89);
   });
 
-  it("step-3 (walk-2026-08-17, wu 1:00 r0 + ...): exactly 243 samples; the restSeconds:0 boundary (wState never leaves the work-mapped ordinal) folds correctly; the 30s rest contributes ZERO samples", () => {
+  it("step-3 (walk-2026-08-17, wu 1:00 r0 + 1:00 r30 + ...): exactly 243 samples; BOTH boundaries' exact fold VALUE and segment-end gap; the 30s rest contributes ZERO samples", () => {
     const frames = replayFrames(
       "walk-2026-08-17/step-3-pm5-recording-second-rest-1786973713929.jsonl",
     );
 
-    // The FIRST reset in this file is the wu's own restSeconds:0 boundary
-    // into interval 1 — no REST wire state exists between them (the wu
+    const resetIndices = findAllResetIndices(frames);
+    expect(resetIndices).toHaveLength(2);
+
+    // The FIRST reset is the wu's own restSeconds:0 boundary into
+    // interval 1 — no REST wire state exists between them (the wu
     // configures zero trailing rest), so `workoutState` reads identically
     // on both sides of the reset. Proven directly against the decoded
-    // frames, not asserted: the wire's own state byte at the frame just
-    // before and just after the reset is the SAME ordinal.
-    const firstResetIndex = findResetIndex(frames);
-    expect(firstResetIndex).toBeGreaterThan(0);
-    expect(frames[firstResetIndex]!.state).toBe(
-      frames[firstResetIndex - 1]!.state,
+    // frames, not asserted.
+    expect(frames[resetIndices[0]!]!.state).toBe(
+      frames[resetIndices[0]! - 1]!.state,
     );
 
     const rec = createSeriesRecorder();
     for (const f of frames) rec.onFrame(f);
-    const series = rec.snapshot();
+    const series = rec.snapshot()!;
 
-    expect(series).toBeDefined();
-    expect(series!.truncated).toBeUndefined();
-    expect(series!.samples).toHaveLength(243);
+    expect(series.truncated).toBeUndefined();
+    expect(series.samples).toHaveLength(243);
+
+    // M1: EACH boundary's segment-end gap (exit criterion 1) and exact
+    // fold VALUE, threading the accumulated base across both resets in
+    // order — exactly as the recorder itself does.
+    let baseSecondsBeforeFold = 0;
+    let baseMetersBeforeFold = 0;
+    for (const resetIndex of resetIndices) {
+      const finalPreReset = frames[resetIndex - 1]!;
+      const finalReadingTenths = Math.round(
+        (baseSecondsBeforeFold + finalPreReset.elapsedSeconds) * 10,
+      );
+      const closingSample = series.samples.find(
+        (s) => Math.abs(s.t - finalReadingTenths) < 10,
+      );
+      expect(closingSample).toBeDefined();
+
+      const closingBucket = Math.floor(
+        baseSecondsBeforeFold + finalPreReset.elapsedSeconds,
+      );
+      const baseSecondsAfterFold =
+        baseSecondsBeforeFold + finalPreReset.elapsedSeconds;
+      const baseMetersAfterFold =
+        baseMetersBeforeFold + finalPreReset.distanceMeters;
+      const windingFrame = firstFrameAfterBucket(
+        frames,
+        resetIndex,
+        baseSecondsAfterFold,
+        closingBucket,
+      );
+      const expectedNextT = Math.round(
+        (baseSecondsAfterFold + windingFrame.elapsedSeconds) * 10,
+      );
+      const expectedNextD = Math.round(
+        (baseMetersAfterFold + windingFrame.distanceMeters) * 10,
+      );
+      const nextSample = series.samples.find((s) => s.t === expectedNextT);
+      expect(nextSample).toBeDefined();
+      expect(nextSample!.d).toBe(expectedNextD);
+
+      baseSecondsBeforeFold = baseSecondsAfterFold;
+      baseMetersBeforeFold = baseMetersAfterFold;
+    }
 
     // The frozen-clock proof: find the longest run of frames sharing one
     // held `elapsedSeconds` reading (the 30s rest — the wire's own
@@ -231,6 +415,120 @@ describe("createSeriesRecorder — §6.1 oracle, decoded from the committed reco
 
     expect(gapSeconds).toBeGreaterThanOrEqual(0);
     expect(gapSeconds).toBeLessThan(1);
+  });
+});
+
+describe("createSeriesRecorder — H1 fix round: the fold rejects Terminate double-counts and sub-second jitter", () => {
+  // `pm5-session4b-final.log.gz` — four real sessions, 10,408 decoded
+  // frames, 30 reset candidates total. `domain/monitor/types.ts`'s own
+  // `MonitorFrame.elapsedSeconds` doc comment and `src/monitor/driver.ts`'s
+  // SESSION REGISTER MAP comment both cite this exact capture for the
+  // Terminate defect this section proves fixed.
+  const frames = replayLegacyLog("pm5-session4b-final.log.gz");
+
+  interface ResetCandidate {
+    index: number;
+    priorElapsed: number;
+    priorDistance: number;
+    postDistance: number;
+    kind: "terminate" | "jitter" | "genuine";
+  }
+
+  /** Classifies every reset candidate in `frames` by the SAME structural
+   *  shapes the review named, independently of `isGenuineBoundary` (this
+   *  is the ground truth the module's own classifier is checked against,
+   *  not a restatement of it): a Terminate shape holds `distanceMeters`
+   *  EXACTLY unchanged and substantial (never near zero); a jitter shape
+   *  is a sub-second pre-reset elapsed reading that is not already a
+   *  Terminate shape; everything else is genuine. */
+  function classifyResetCandidates(
+    candidateFrames: MonitorFrame[],
+  ): ResetCandidate[] {
+    const candidates: ResetCandidate[] = [];
+    for (let i = 1; i < candidateFrames.length; i++) {
+      const prior = candidateFrames[i - 1]!;
+      const next = candidateFrames[i]!;
+      if (next.elapsedSeconds >= prior.elapsedSeconds - 0.005) continue;
+      const isTerminateShape =
+        next.distanceMeters === prior.distanceMeters &&
+        prior.distanceMeters > 5;
+      const isJitterShape = !isTerminateShape && prior.elapsedSeconds < 1.0;
+      candidates.push({
+        index: i,
+        priorElapsed: prior.elapsedSeconds,
+        priorDistance: prior.distanceMeters,
+        postDistance: next.distanceMeters,
+        kind: isTerminateShape
+          ? "terminate"
+          : isJitterShape
+            ? "jitter"
+            : "genuine",
+      });
+    }
+    return candidates;
+  }
+
+  it("decodes the full capture (a handful of malformed operator-log lines skipped, never faked)", () => {
+    expect(frames.length).toBe(10408);
+  });
+
+  it("isGenuineBoundary classifies every reset candidate correctly: 6 Terminate + 5 jitter rejected, 19 genuine accepted — the exact double-count the review measured", () => {
+    const candidates = classifyResetCandidates(frames);
+    expect(candidates).toHaveLength(30);
+
+    const terminateShapes = candidates.filter((c) => c.kind === "terminate");
+    const jitterShapes = candidates.filter((c) => c.kind === "jitter");
+    const genuineShapes = candidates.filter((c) => c.kind === "genuine");
+    expect(terminateShapes).toHaveLength(6);
+    expect(jitterShapes).toHaveLength(5);
+    expect(genuineShapes).toHaveLength(19);
+
+    // The exact injected double-count an unconditional fold would have
+    // produced from the 6 Terminate shapes alone: summing their own held
+    // readings ties this test to the review's own measured numbers.
+    const sumElapsed = terminateShapes.reduce((s, c) => s + c.priorElapsed, 0);
+    const sumDistance = terminateShapes.reduce(
+      (s, c) => s + c.priorDistance,
+      0,
+    );
+    expect(Math.round(sumElapsed * 100) / 100).toBe(252.09);
+    expect(Math.round(sumDistance * 10) / 10).toBe(139.4);
+
+    for (const c of [...terminateShapes, ...jitterShapes]) {
+      expect(isGenuineBoundary(c.priorElapsed, c.postDistance)).toBe(false);
+    }
+    for (const c of genuineShapes) {
+      expect(isGenuineBoundary(c.priorElapsed, c.postDistance)).toBe(true);
+    }
+  });
+
+  it("replaying the full capture through the actual recorder: none of the 11 false-shaped decreases ever creates a new sample; the fixed total is exact", () => {
+    const candidates = classifyResetCandidates(frames);
+    const falseIndices = new Set(
+      candidates.filter((c) => c.kind !== "genuine").map((c) => c.index),
+    );
+    expect(falseIndices.size).toBe(11);
+
+    const rec = createSeriesRecorder();
+    let priorSampleCount = 0;
+    const falseIndexDeltas: number[] = [];
+    for (let i = 0; i < frames.length; i++) {
+      rec.onFrame(frames[i]!);
+      const count = rec.snapshot()?.samples.length ?? 0;
+      if (falseIndices.has(i)) falseIndexDeltas.push(count - priorSampleCount);
+      priorSampleCount = count;
+    }
+    expect(falseIndexDeltas).toHaveLength(11);
+    // The smoking gun a naive fold produces: a Terminate or jitter frame
+    // creating a sample where none should exist. Fixed: zero growth
+    // across every one of the 11 — asserted exactly, not vacuously.
+    expect(falseIndexDeltas).toStrictEqual(new Array(11).fill(0));
+
+    // The fixed recorder's exact total across the whole capture —
+    // independently derived (see the task report), a strong regression
+    // pin: any change to either threshold, or to the fold itself, moves
+    // this number.
+    expect(rec.snapshot()!.samples.length).toBe(1145);
   });
 });
 
@@ -332,13 +630,14 @@ describe("createSeriesRecorder — hr presence (§1's Shape row: absent, never p
     expect(series.samples.length).toBeGreaterThan(0);
     // Bucket 0 can be claimed by an armed frame recorded before the
     // session's first-ever 0x0032 notification lands (§1's Source fields
-    // row: 0x0032 drives hr) — this leg proves the belt reading rides
-    // every sample once it has arrived at all, not that a value exists
-    // before the wire has sent one.
+    // row: 0x0032 drives hr) — L3: this real capture has EXACTLY one such
+    // sample (verified independently, see the task report), asserted
+    // exactly rather than as a vacuous "0 or 1" band, so the membership
+    // check below is never vacuously true.
     const withoutHr = series.samples.filter((s) => s.hr === undefined);
-    expect(withoutHr.length).toBeLessThanOrEqual(1);
-    expect(withoutHr.every((s) => s === series.samples[0])).toBe(true);
-    for (const s of series.samples.slice(withoutHr.length)) {
+    expect(withoutHr).toHaveLength(1);
+    expect(withoutHr[0]).toBe(series.samples[0]);
+    for (const s of series.samples.slice(1)) {
       expect(typeof s.hr).toBe("number");
     }
   });
@@ -417,5 +716,24 @@ describe("createSeriesRecorder — the rest of the contract", () => {
     expect(series.samples).toHaveLength(2);
     expect(series.samples[0]!.t).toBe(0);
     expect(series.samples[1]!.t).toBe(92);
+  });
+
+  it("snapshot()'s Sample objects are frozen (L2): a caller cannot mutate the recorder's own history", () => {
+    const rec = createSeriesRecorder();
+    rec.onFrame(frame({ elapsedSeconds: 0 }));
+    const sample = rec.snapshot()!.samples[0]!;
+    expect(Object.isFrozen(sample)).toBe(true);
+    expect(() => {
+      (sample as { hr?: number }).hr = 999;
+    }).toThrow();
+  });
+
+  it("snapshot() returns a fresh samples array each call, sharing the same Sample instances (L2, documented sharing rule)", () => {
+    const rec = createSeriesRecorder();
+    rec.onFrame(frame({ elapsedSeconds: 0 }));
+    const first = rec.snapshot()!;
+    const second = rec.snapshot()!;
+    expect(first.samples).not.toBe(second.samples);
+    expect(first.samples[0]).toBe(second.samples[0]);
   });
 });
