@@ -227,7 +227,23 @@ export interface MeasuredRow {
    *  (Task 3) tells "on-target, evaluated" apart from "never evaluated at
    *  all" by checking THIS flag before falling back to "nothing to
    *  show", which is exactly the distinction the task brief's own
-   *  encoding-choice note asks for. */
+   *  encoding-choice note asks for.
+   *
+   *  INVARIANT (fix round, review LOW-4): `judged` and `onTarget` are
+   *  MUTUALLY EXCLUSIVE — never both present, never both absent while the
+   *  other side of the "was this row evaluated" question says otherwise.
+   *  This holds ONLY because `rowJudgment` (below) is the SINGLE producer
+   *  of both fields together, in one `return`, and no other code path in
+   *  this file sets either. It is a behavioral guarantee, not a type-level
+   *  one — TypeScript's own structural typing does not forbid a caller
+   *  from setting both, or neither, by hand. If Task 3 (or any future
+   *  work) ever needs a SECOND producer of a `MeasuredRow` (a different
+   *  door, a hand-built fixture assembled outside `rowJudgment`), that
+   *  producer must go through `rowJudgment` too, or this pair belongs in
+   *  a discriminated union instead (e.g. `{ state: "judged"; judgment:
+   *  RowJudgment } | { state: "onTarget" } | { state: "unjudged" }`) so
+   *  the compiler enforces the exclusion this comment currently only
+   *  asserts in prose. */
   onTarget?: true;
 }
 

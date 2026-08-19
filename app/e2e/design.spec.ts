@@ -4403,8 +4403,11 @@ test.describe("post-workout summary (monitor door, completed — judged rows & m
   });
 
   // R-C's own reconciliation row: rendered and measured, but never judged
-  // (no bar, no tick — the warm-up is excluded from the working average it
-  // would otherwise distort).
+  // (no bar, no tick — Phase LT spec 1's re-baseline: a warm-up interval
+  // has no target by definition, so there is nothing to judge it against;
+  // `rowJudgment`, summaryModel.ts, never even reaches a warm-up row — it
+  // is built straight from the machine actual, never through the
+  // targetSplit/actualSource gate a work row goes through).
   test("§2E warm-up row: labeled, measured, UNJUDGED — no bar, no tick", async ({
     page,
   }) => {

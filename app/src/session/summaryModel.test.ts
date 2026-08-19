@@ -1017,9 +1017,19 @@ describe("buildSummaryModel — timer door, a real mixed measured/prescribed lis
     // §1's judged-when member set includes "stopwatch" (the timer door's
     // own source, `logDraft.ts`'s `buildLogSteps`) — the one real
     // stopwatch-measured work row here has a genuine "6K +4" target and
-    // is genuinely judged (either outright or landing on-target), proving
-    // the timer door's own measured rows can reach a verdict, not just
-    // the monitor door's pm5 rows.
+    // is genuinely judged, proving the timer door's own measured rows can
+    // reach a verdict, not just the monitor door's pm5 rows. Fix round
+    // (review LOW-3): pinned to the ACTUAL computed state, not an
+    // either/or — `elapsed = meters * 0.5` makes the reconstructed
+    // `actualSplit` a fixed 250s/500m regardless of which repeated-block
+    // occurrence `distanceIndex` lands on (`(meters*0.5/meters)*500 =
+    // 250`, a mathematical identity, not a coincidence of THIS fixture's
+    // numbers); "Filling Low"'s own `6K +4` target resolves to 124s/500m
+    // under this file's `BASELINES` (`k6Seconds: 120`) — verified by
+    // reading `buildRun`'s actual output for this exact fixture, not
+    // assumed, and identical across all four `2000m @ 6k+4` occurrences
+    // (the SAME authored offset repeats). 250 − 124 = +126s, nowhere near
+    // the 0.5s band: genuinely SLOWER, not on-target.
     const measuredWorkRow = asMeasured(
       model.rows.find(
         (r) =>
@@ -1028,10 +1038,11 @@ describe("buildSummaryModel — timer door, a real mixed measured/prescribed lis
           r.paceLabel === fmtSplit((elapsed / meters) * 500),
       ),
     );
-    expect(measuredWorkRow.targetLabel).toBeDefined();
-    expect(
-      measuredWorkRow.judged !== undefined || measuredWorkRow.onTarget === true,
-    ).toBe(true);
+    expect(measuredWorkRow.targetLabel).toBe(fmtSplit(124));
+    expect(measuredWorkRow.onTarget).toBeUndefined();
+    expect(measuredWorkRow.judged?.direction).toBe("slower");
+    expect(measuredWorkRow.judged?.deviationSeconds).toBe(126);
+    expect(measuredWorkRow.judged?.deviationLabel).toBe("+126.0");
   });
 
   it("no actuals recorded at all: every row is prescribed, the caption fires, TIME still reads wall-clock", () => {
@@ -1528,6 +1539,36 @@ describe("buildSummaryModel — §2's SPM cell (measured/target pair, resolved b
     });
     const row = asMeasured(buildSummaryModel({ door: "monitor", run }).rows[0]);
     expect(row.spmCell).toStrictEqual({ measured: 24, target: 20 });
+  });
+
+  // Fix round (review LOW-2): the COMMONEST cell shape had no model-level
+  // witness — an interval with no authored rate at all (`displaySpm:
+  // null`, e.g. a bulk-imported/manual-entry workout with no `@<n>`
+  // token) whose actual is still matched and in-band. `spm` is never set
+  // at all in this case (`buildMonitorLogSteps`'s own `if (interval.
+  // displaySpm !== null) step.spm = ...` guard), so the cell shows
+  // measured-only — `24`, no `/ 22` — the same "absent halves drop" rule,
+  // exercised on the target half this time rather than the measured one.
+  it("post-split, matched + in-band, but NO authored target rate at all (displaySpm null): measured-only, target half absent — the commonest untargeted-rate shape", () => {
+    const actual: IntervalActual = {
+      index: 0,
+      elapsedSeconds: 60,
+      distanceMeters: 250,
+      avgSplit: 130,
+      avgSpm: 24,
+      avgHeartRateBpm: null,
+      restDistanceMeters: 0,
+    };
+    const run = monitorRun({
+      program: {
+        intervals: [
+          interval({ kind: "distance", value: 250, displaySpm: null }),
+        ],
+      },
+      actuals: [actual],
+    });
+    const row = asMeasured(buildSummaryModel({ door: "monitor", run }).rows[0]);
+    expect(row.spmCell).toStrictEqual({ measured: 24 });
   });
 
   it("post-split, matched but DROPPED (avgSpm null): neither half — absence over invention (Task 1's own §2 amendment)", () => {
