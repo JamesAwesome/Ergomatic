@@ -2487,10 +2487,24 @@ belt is confirmed).
 **Owed at the next tag (v0.14.0, range v0.13.0..main — RF15's rule):**
 four notes clauses: (1) rows judge against their own targets with the
 target shown (the erg ask); (2) stroke rate on measured intervals;
-(3) discard everywhere save is (#128 — RETROACTIVE, v0.13.0's tag message
-never announced it); (4) HISTORY RE-JUDGES TOO — sessions already viewed
+(3) discard everywhere save is (#128 — a NORMAL v0.14.0 clause; CORRECTED
+at the 2026-08-19 PM gate: v0.13.0 is `e22bc31` (#126) and #127/#128/#129
+all landed AFTER it, so nothing here is retroactive — settle tag membership
+with `git merge-base --is-ancestor <sha> vX.Y.Z^{commit}`, never by reading
+a tag message or a ledger line); (4) HISTORY RE-JUDGES TOO — sessions already viewed
 change colour (tule-fog rows go red→blue), plus #124's accepted re-log
 gap if still unannounced (retroactive, same chain).
+**LT spec 2's accepted limit (PM gate C1):** POST /api/logs' route-scoped
+1 MB body parser registers before auth, so the pre-auth buffer ceiling on
+that one route is 1 MB (was 100 KB app-wide). Ordering pre-existing, no
+amplification path, accepted; owner = the next server-touching phase.
+**LT's device items live on CR2's runsheet** (`docs/monitor/sessions/walk-phase-cr2-exit/RUNSHEET.md`
+— the standing phone pass James still owes): the iOS storage probe, the
+`persist()` grant observation, and the fast-rate re-measure. **RULED at the
+PM gate: these land BEFORE spec 3 is implemented** — a device-specific
+recorder defect would be invisible AND permanent (frames evaporate, the
+record is immutable, PATCH refuses series), so the check moves in front of
+the renderer.
 **Riding follow-ups (PM gate 2026-08-19):** `pnpm e2e -- -g` needs the
 double-dash form documented (pnpm swallows bare -g); a frozen-clock
 screenshot fixture (17 captures churn on wall-clock date stamps);
