@@ -4,6 +4,7 @@ import type { HeldResult, Thumbs } from "../api/useRecentLogs";
 import type { PlanData } from "../api/usePlan";
 import BackLink from "../shell/BackLink";
 import type {
+  MeasuredRow,
   SummaryHeroes,
   SummaryMeta,
   SummaryModel,
@@ -120,13 +121,64 @@ function SpmCellSpan({
   );
 }
 
+/** Review fix round (MEDIUM, 2026-08-18): `IntervalRow`'s own
+ *  `aria-label` REPLACES the row's content for assistive tech
+ *  (`role="listitem"`, no visible-text fallback) — §1/§2's headline
+ *  values (TARGET, the SPM cell, the judgment state) were sighted-only
+ *  until this function existed, a WCAG AA violation this repo's own hard
+ *  requirement (CLAUDE.md) does not allow. Three independent clauses,
+ *  each absent exactly when its own VISIBLE cell is absent (the accessible
+ *  name never speaks a fact the sighted cell doesn't also show):
+ *   - TARGET: `, target 2:10.0 per 500` — keyed on `targetLabel` alone,
+ *     same "abstains when" rule §1's own TARGET cell follows.
+ *   - SPM: mirrors §2's own "absent halves drop" rule in plain words —
+ *     both halves speak as `"24 strokes per minute, target 22"`,
+ *     measured-only as `"24 strokes per minute"`, target-only as
+ *     `"target 22 strokes per minute"`.
+ *   - Judgment: `onTarget` speaks as `"on target"`; `judged` speaks as a
+ *     plain `"<magnitude> faster/slower than target"` sentence — the
+ *     SAME sign convention the visible `±` label uses, spelled out
+ *     (`judged.direction`), not re-derived from `deviationSeconds`'s own
+ *     sign a second time. Neither fires when the row was never judged at
+ *     all (the abstained-effort-row shape).
+ *  Shared by BOTH branches of `IntervalRow` below (warm-up and regular):
+ *  a warm-up row's own `targetLabel`/`spmCell`/`judged`/`onTarget` are
+ *  always undefined by construction (§1's Warm-up row rule — neither
+ *  `monitorWarmupRow` nor `timerWarmupRow` ever sets any of them), so
+ *  every clause here is a documented no-op there, not a second code
+ *  path. Never called for a `PrescribedRow` — that shape has none of
+ *  these four fields at all (a different TypeScript type), so its own
+ *  aria-label (below) is unchanged, plain, and needs no clause. */
+function rowJudgmentDescription(row: MeasuredRow): string {
+  let out = "";
+  if (row.targetLabel !== undefined) {
+    out += `, target ${row.targetLabel} per 500`;
+  }
+  const cell = row.spmCell;
+  if (cell?.measured !== undefined && cell.target !== undefined) {
+    out += `, ${cell.measured} strokes per minute, target ${cell.target}`;
+  } else if (cell?.measured !== undefined) {
+    out += `, ${cell.measured} strokes per minute`;
+  } else if (cell?.target !== undefined) {
+    out += `, target ${cell.target} strokes per minute`;
+  }
+  if (row.onTarget === true) {
+    out += ", on target";
+  } else if (row.judged !== undefined) {
+    const magnitude = Math.abs(row.judged.deviationSeconds).toFixed(1);
+    const word = row.judged.direction === "faster" ? "faster" : "slower";
+    out += `, ${magnitude} ${word} than target`;
+  }
+  return out;
+}
+
 function IntervalRow({ row }: { row: SummaryRow }) {
   if (row.measured) {
     if (row.isWarmup) {
       return (
         <li
           className="summary-row summary-row-warmup"
-          aria-label={`Warm-up${row.timeLabel ? `, ${row.timeLabel}` : ""}${row.paceLabel ? ` at ${row.paceLabel} per 500` : ""}`}
+          aria-label={`Warm-up${row.timeLabel ? `, ${row.timeLabel}` : ""}${row.paceLabel ? ` at ${row.paceLabel} per 500` : ""}${rowJudgmentDescription(row)}`}
         >
           <span className="summary-row-index summary-row-warmup-label">
             WARM-UP
@@ -150,7 +202,7 @@ function IntervalRow({ row }: { row: SummaryRow }) {
     return (
       <li
         className="summary-row"
-        aria-label={`Interval ${row.index}: ${row.label}${row.timeLabel ? `, ${row.timeLabel}` : ""}${row.paceLabel ? ` at ${row.paceLabel} per 500` : ""}`}
+        aria-label={`Interval ${row.index}: ${row.label}${row.timeLabel ? `, ${row.timeLabel}` : ""}${row.paceLabel ? ` at ${row.paceLabel} per 500` : ""}${rowJudgmentDescription(row)}`}
       >
         <span className="summary-row-index">{row.index}</span>
         <span className="summary-row-time">{row.timeLabel ?? ""}</span>

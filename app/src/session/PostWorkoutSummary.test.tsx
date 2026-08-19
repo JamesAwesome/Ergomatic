@@ -462,7 +462,13 @@ describe("PostWorkoutSummary — intervals (§2E)", () => {
   // reading with no usable pace (avgSplit 0, "the wire had no reading" —
   // dropped, never fabricated). Proves the row still renders MEASURED
   // (time shown) with an empty (not "undefined") pace cell, and that the
-  // aria-label degrades to naming only what was actually read.
+  // aria-label degrades to naming only what was actually read. Review
+  // fix round (MEDIUM): this fixture also carries no targetLabel/
+  // spmCell/judged/onTarget at all, so it doubles as the pin proving
+  // `rowJudgmentDescription`'s own three clauses stay silent (not a
+  // fabricated "no target" utterance) when the row was never judged and
+  // has no target — the name below is UNCHANGED by that function's
+  // addition, on purpose.
   it("a measured row with a time but no pace omits the pace segment from both the cell and the accessible name", () => {
     renderSummary({
       model: monitorModel({
@@ -473,7 +479,8 @@ describe("PostWorkoutSummary — intervals (§2E)", () => {
             index: 1,
             label: "6:00 @ 6k",
             timeLabel: "11:45",
-            // paceLabel intentionally absent.
+            // paceLabel intentionally absent (and so are targetLabel/
+            // spmCell/judged/onTarget — see the comment above).
           },
         ],
       }),
@@ -708,6 +715,125 @@ describe("PostWorkoutSummary — TARGET + SPM cells, on-target plain ink (§1/§
       expect(row.querySelector(".summary-row-spm")).toBeNull();
       expect(row.querySelector(".summary-row-bar-track")).toBeNull();
     }
+  });
+
+  // Review fix round (MEDIUM): the sighted-only defect — `IntervalRow`'s
+  // own `aria-label` replaces the row's content for assistive tech
+  // (`role="listitem"`, no visible-text fallback), so TARGET, the SPM
+  // cell, and the judgment state must be SPOKEN, not just painted. Every
+  // clause below is independently absent exactly when its own visible
+  // cell is absent (§2B's per-cell absence idiom, extended to the
+  // accessible name) — proven by the target-only-SPM/abstained-row case
+  // below carrying NEITHER the target clause NOR the judgment clause.
+  describe("accessible name carries TARGET, SPM, and the judgment state (review fix round, MEDIUM)", () => {
+    it("judged FASTER: target, both SPM halves, and a plain faster-than sentence", () => {
+      renderSummary({
+        model: monitorModel({
+          rows: [
+            {
+              measured: true,
+              isWarmup: false,
+              index: 1,
+              label: "6:00 @ 6k",
+              timeLabel: "6:00",
+              paceLabel: "2:05.0",
+              targetLabel: "2:09.0",
+              spmCell: { measured: 24, target: 22 },
+              judged: {
+                direction: "faster",
+                deviationSeconds: -4.2,
+                deviationLabel: "−4.2",
+                barWidthPercent: 50,
+              },
+            },
+          ],
+        }),
+      });
+      expect(screen.getByRole("listitem")).toHaveAccessibleName(
+        "Interval 1: 6:00 @ 6k, 6:00 at 2:05.0 per 500, target 2:09.0 per 500, 24 strokes per minute, target 22, 4.2 faster than target",
+      );
+    });
+
+    it("judged SLOWER: the same clauses, the plain slower-than sentence", () => {
+      renderSummary({
+        model: monitorModel({
+          rows: [
+            {
+              measured: true,
+              isWarmup: false,
+              index: 1,
+              label: "6:00 @ 6k",
+              timeLabel: "6:20",
+              paceLabel: "2:13.4",
+              targetLabel: "2:09.0",
+              spmCell: { measured: 26, target: 22 },
+              judged: {
+                direction: "slower",
+                deviationSeconds: 4.2,
+                deviationLabel: "+4.2",
+                barWidthPercent: 50,
+              },
+            },
+          ],
+        }),
+      });
+      expect(screen.getByRole("listitem")).toHaveAccessibleName(
+        "Interval 1: 6:00 @ 6k, 6:20 at 2:13.4 per 500, target 2:09.0 per 500, 26 strokes per minute, target 22, 4.2 slower than target",
+      );
+    });
+
+    it("ON TARGET: onTarget true, judged absent — the plain 'on target' clause, no faster/slower sentence", () => {
+      renderSummary({
+        model: monitorModel({
+          rows: [
+            {
+              measured: true,
+              isWarmup: false,
+              index: 1,
+              label: "6:00 @ 6k",
+              timeLabel: "6:00",
+              paceLabel: "2:09.3",
+              targetLabel: "2:09.0",
+              spmCell: { measured: 24 },
+              onTarget: true,
+            },
+          ],
+        }),
+      });
+      expect(screen.getByRole("listitem")).toHaveAccessibleName(
+        "Interval 1: 6:00 @ 6k, 6:00 at 2:09.3 per 500, target 2:09.0 per 500, 24 strokes per minute, on target",
+      );
+    });
+
+    it("target-only SPM on an abstained effort row: the SPM clause alone — no TARGET clause (no targetSplit), no judgment clause (never judged)", () => {
+      renderSummary({
+        model: monitorModel({
+          rows: [
+            {
+              measured: true,
+              isWarmup: false,
+              index: 2,
+              label: "100 m @ MAX",
+              timeLabel: "0:21",
+              paceLabel: "1:45.0",
+              spmCell: { target: 22 },
+              // targetLabel/judged/onTarget all intentionally absent —
+              // the abstained-effort-row shape.
+            },
+          ],
+        }),
+      });
+      expect(screen.getByRole("listitem")).toHaveAccessibleName(
+        "Interval 2: 100 m @ MAX, 0:21 at 1:45.0 per 500, target 22 strokes per minute",
+      );
+    });
+
+    it("by-hand (prescribed) rows: the accessible name is unchanged plain text — no target/SPM/judgment clause exists on this row shape at all", () => {
+      renderSummary({ model: prescribedOnlyModel() });
+      expect(
+        screen.getByRole("listitem", { name: /10:00 @ 6k \+8/ }),
+      ).toHaveAccessibleName("Interval 1: 10:00 @ 6k +8, not measured");
+    });
   });
 });
 

@@ -8565,12 +8565,16 @@ section:not(.news-pinned) .news-row:last-of-type {
   padding: 0;
 }
 
-/* README §8's shared row geometry: 9px 0 padding, 10px gap, 1px bottom
-   rule — the interval list, the prescribed-interval list and (a future
-   spec's) HR zone list all share this one skeleton. `:not(:last-child)`
-   rather than a rule on every row: the list's own bottom edge needs no
-   trailing hairline. */
-/* Phase LT spec 1, §1/§2 (Task 3): `gap` 10px -> 8px, a DEVIATIONS-recorded
+/* README §8's shared row geometry: 9px 0 padding, 1px bottom rule — the
+   interval list, the prescribed-interval list and (a future spec's) HR
+   zone list all share this one skeleton. `:not(:last-child)` rather than
+   a rule on every row: the list's own bottom edge needs no trailing
+   hairline. Review fix round (MINOR-1): this comment used to also claim
+   "10px gap", README §8's own literal number — STALE since Task 3
+   narrowed it; the actual departure and its reason are recorded once,
+   directly below, not restated here as two comments disagreeing with
+   each other.
+   Phase LT spec 1, §1/§2 (Task 3): `gap` 10px -> 8px, a DEVIATIONS-recorded
    departure — the row grew a 6th/7th column (TARGET, SPM) on the SAME
    390px mobile viewport, and every px reclaimed from the gap goes
    straight to the deviation bar-track, the one column with no honest

@@ -304,11 +304,17 @@ export function deviationBarWidthPercent(deviationSeconds: number): number {
  *  that call site is gone (§4's re-baseline routes it through
  *  `rowJudgment` too), so `baselineSeconds` below is named for what it
  *  IS today (whatever split this row is judged against), not what it
- *  used to be. */
-export function judge(
-  rowSplitSeconds: number,
-  baselineSeconds: number,
-): RowJudgment {
+ *  used to be.
+ *
+ *  MODULE-PRIVATE (review fix round, MINOR-2, 2026-08-18): grepped the
+ *  whole `src`/`server` tree — `rowJudgment` below is the only caller
+ *  anywhere, and no file imports `judge` by name from this module (not
+ *  even this module's own test file, which exercises this function only
+ *  indirectly through `rowJudgment`). Dropped the `export` rather than
+ *  deleting the function outright: it is still genuinely used, just
+ *  never from outside this file — a real, if narrow, distinction from
+ *  dead code. */
+function judge(rowSplitSeconds: number, baselineSeconds: number): RowJudgment {
   const deviationSeconds = rowSplitSeconds - baselineSeconds;
   // "+ = slower" (R-C/§1): a positive deviation means the row's own split
   // took MORE seconds per 500m than the baseline, i.e. slower. A
