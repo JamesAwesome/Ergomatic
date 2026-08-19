@@ -24,6 +24,8 @@ export const RELEASE_NOTES: ReleaseNote[] = [
       "Your interval's average split now sits beside its target, under the big split. While you row it stays plain ink: an average spends most of an interval climbing from the standing start, so a verdict mid-interval would just say SLOWER at you. The moment the rest begins, it turns blue or red against the interval you just finished.",
       "That also means a piece with no rests never shows the color, and neither does a session's final interval: the summary is where those verdicts live, every interval judged in its list.",
       "About the swipe, from this week's erg session: a drag inside the scrolling interval list needs to be genuinely flat, or iOS takes it for a scroll. Drag level, or use the LIVE/GRID buttons, which always work.",
+      "You can delete a wrong session. Open any session and scroll to the bottom: a duplicate, a test row, or a botched save stops existing rather than being rewritten. Deleting your most recent plan session also un-ticks its checkmark, so it stops counting as training you did; deleting older history leaves your plan's numbering alone.",
+      "One thing that does not exist yet: fixing a session's numbers. If a row is wrong, the only remedy is to delete it and log it again, which stamps today's date.",
     ],
   },
   {
