@@ -341,7 +341,7 @@ often they recur.
     --merges`) and account for each: a note, or a stated reason it needs
     none.** Parallel sessions make this the normal case, not the rare one.
 
-15. **Opening a phase without writing it into the ROADMAP.** Four phases
+16. **Opening a phase without writing it into the ROADMAP.** Four phases
     running (PW, CS close, CM, LT), the phase's own gate ran
     `grep "<phase>" ROADMAP.md` and got zero — the roadmap learned about
     the phase only when a gate demanded it. **The brainstorm that names a
