@@ -1771,15 +1771,23 @@ async function seedInterruptedMonitorRun(page: Page): Promise<void> {
 // (no restSeconds lookup involved). The two work intervals' own displayed
 // pace is `actual.avgSplit` VERBATIM (`buildMonitorLogSteps`, logDraft.ts:
 // `step.actualSplit = actual.avgSplit` — the wire-reported reading, never
-// recomputed from elapsed/distance), while the WORKING AVERAGE they are
-// judged against is the weighted `500×Σt/Σd` over the same two intervals'
-// `elapsedSeconds`/`distanceMeters` (`monitorAvgSplit`, summaryModel.ts):
-// 500×(600+2400)/(2000+10000) = 125.0 exactly. Interval 1's avgSplit (150)
-// deviates +25.0 (SLOWER); interval 2's avgSplit (120) deviates −5.0
-// (FASTER) — opposite signs, both comfortably past the 50%-cap threshold
-// (|dev| >= 1.6s/500m caps the bar at 50% by construction, §1's own
-// formula), so this fixture also witnesses the CAP rule, not just the two
-// colors. TIME (R-D) sums `elapsedSeconds` (187+600+2400=3187) plus each
+// recomputed from elapsed/distance), while the baseline they are judged
+// against is Phase LT spec 1's re-baseline: EACH ROW'S OWN TARGET, not a
+// working average (`rowJudgment`, summaryModel.ts). Both work steps are
+// "@ 6K +12" (Hoarfrost's TIME step, Calm Sea's DISTANCE step), which the
+// real `compileProgram` pipeline resolves to the SAME `targetSplit`, 132,
+// off this fixture's own `MONITOR_FIXTURE_BASELINES.k6Seconds` (120) —
+// verified by reading `compileProgram`'s own output for this exact
+// fixture, not assumed. Interval 1's avgSplit (150) deviates +18.0
+// (SLOWER); interval 2's avgSplit (120) deviates −12.0 (FASTER) —
+// opposite signs, both comfortably past the 50%-cap threshold (|dev| >=
+// 1.6s/500m caps the bar at 50% by construction, §1's own formula), so
+// this fixture also witnesses the CAP rule, not just the two colors.
+// (Before the re-baseline this same fixture's two rows deviated +25.0/
+// −5.0 against a 125.0 WORKING AVERAGE — same two colors/directions by
+// coincidence, different magnitudes; Phase LT spec 1 task 2 updated the
+// two exact-label assertions below, nothing else about this fixture.)
+// TIME (R-D) sums `elapsedSeconds` (187+600+2400=3187) plus each
 // completed interval's own PROGRAMMED rest — interval 1's restSeconds=300
 // is independently verified by `buildInterruptedMonitorRun`'s own proven
 // "11:00" result (360+300=660) above; the warm-up's and interval 2's own
@@ -1798,8 +1806,8 @@ const MONITOR_COMPLETED_ACTUALS: IntervalActual[] = [
     // real PM5 computes this warm-up row's own average pace FROM the same
     // elapsed/distance the row also displays (identity a `fake.ts`-driven
     // capture caught contradicting its own hero, `log-monitor.png`). This
-    // row is UNJUDGED (excluded from `monitorAvgSplit`'s weighted average,
-    // this fixture's own comment above), so the exact figure is not
+    // row is UNJUDGED (a warm-up has no target by definition — §1's own
+    // rule, this fixture's own comment above), so the exact figure is not
     // load-bearing for the deviation math below — only its own internal
     // coherence is.
     avgSplit: 155.8,
@@ -4317,12 +4325,13 @@ test.describe("post-workout summary (monitor door, completed — judged rows & m
     expect(value).toBe("12664");
   });
 
-  // Interval 1 (Hoarfrost, avgSplit 150) deviates +25.0 from the 125.0
-  // weighted average -> SLOWER; interval 2 (Calm Sea, avgSplit 120)
-  // deviates −5.0 -> FASTER (`buildCompletedMonitorRun`'s own doc comment
-  // has the full arithmetic). Rows render in `[warm-up, interval 1,
-  // interval 2]` order (`buildMonitorModel`: warmup row first, then
-  // `monitorWorkRows`'s own index order).
+  // Interval 1 (Hoarfrost, avgSplit 150) deviates +18.0 from its OWN 132s
+  // target -> SLOWER; interval 2 (Calm Sea, avgSplit 120) deviates −12.0
+  // from the SAME 132s target -> FASTER (Phase LT spec 1's re-baseline —
+  // `buildCompletedMonitorRun`'s own doc comment has the full arithmetic).
+  // Rows render in `[warm-up, interval 1, interval 2]` order
+  // (`buildMonitorModel`: warmup row first, then `monitorWorkRows`'s own
+  // index order).
   test("§2E judged colors: the slower row paints --judge-slower, the faster row paints --judge-faster, and the legend renders", async ({
     page,
   }) => {
@@ -4347,7 +4356,7 @@ test.describe("post-workout summary (monitor door, completed — judged rows & m
   });
 
   // §1's own capped formula (`min(50, max(1.2, |dev|/1.6×50))`) — both
-  // rows' deviations (25.0/5.0) are comfortably past the 1.6s threshold
+  // rows' deviations (18.0/12.0) are comfortably past the 1.6s threshold
   // that saturates the cap, so this fixture ALSO witnesses "a 4s outlier
   // must not paint past the track" (§1's own words), not merely that a
   // width renders at all. Anchoring: SLOWER bars grow from center-right
@@ -4388,9 +4397,9 @@ test.describe("post-workout summary (monitor door, completed — judged rows & m
     expect(fasterBarStyle.left).toBe("");
 
     const slowerDev = await slowerRow.locator(".summary-row-dev").innerText();
-    expect(slowerDev).toBe("+25.0");
+    expect(slowerDev).toBe("+18.0");
     const fasterDev = await fasterRow.locator(".summary-row-dev").innerText();
-    expect(fasterDev).toBe("−5.0"); // U+2212, the house minus sign
+    expect(fasterDev).toBe("−12.0"); // U+2212, the house minus sign
   });
 
   // R-C's own reconciliation row: rendered and measured, but never judged

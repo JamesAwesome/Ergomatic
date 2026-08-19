@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
+import { gunzipSync } from "node:zlib";
 import { fmtDuration } from "../../domain/duration.js";
 import { fmtSplit } from "../../domain/format.js";
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
@@ -26,8 +27,10 @@ import {
 } from "./logDraft";
 import type { SessionRun } from "./run";
 import {
+  buildSpmCell,
   buildSummaryModel,
   deviationBarWidthPercent,
+  rowJudgment,
   type MeasuredRow,
   type SummaryRow,
 } from "./summaryModel";
@@ -121,6 +124,7 @@ function interval(
     kind: "time" | "distance";
     value: number;
     targetSplit: number | null;
+    displaySpm: number | null;
     restSeconds: number;
   }> = {},
 ): WorkoutProgram["intervals"][number] {
@@ -153,6 +157,15 @@ const SESSIONS_DIR = import.meta.url
 
 function readSessionFile(relativePath: string): string {
   return readFileSync(`${SESSIONS_DIR}${relativePath}`, "utf-8");
+}
+
+/** Same idea as `readSessionFile` for a gzipped capture (this repo's own
+ *  `captureReplay.test.ts` precedent for decompressing at test time rather
+ *  than committing a second, uncompressed duplicate of a recording). */
+function readGzSessionFile(relativePath: string): string {
+  return gunzipSync(readFileSync(`${SESSIONS_DIR}${relativePath}`)).toString(
+    "utf-8",
+  );
 }
 
 // ---------------------------------------------------------------------
@@ -539,7 +552,7 @@ describe("buildSummaryModel — TIME (R-D) and AVG SPLIT (R-C), the walk-3 shape
     expect(model.heroes.avgSplit).not.toBe(fmtSplit(inclWarmup));
   });
 
-  it("the warm-up row itself: rendered, labeled WARM-UP, measured values shown, and UNJUDGED (no deviation bar, first in the row list)", () => {
+  it("the warm-up row itself: rendered, labeled WARM-UP, measured values shown, and UNJUDGED (no deviation bar, no TARGET/SPM cell, first in the row list) — §1's re-baseline: the two completed work rows now judge against their OWN 129s target, not a working average", () => {
     const run = monitorRun({ program, actuals: [wu, w1, w2] });
     const model = buildSummaryModel({ door: "monitor", run });
     const warmupRow = asMeasured(model.rows[0]);
@@ -548,6 +561,11 @@ describe("buildSummaryModel — TIME (R-D) and AVG SPLIT (R-C), the walk-3 shape
     expect(warmupRow.index).toBeUndefined();
     expect(warmupRow.timeLabel).toBe("1:00");
     expect(warmupRow.judged).toBeUndefined();
+    // §1: "a warm-up has no target by definition" — no TARGET/SPM cell
+    // and no on-target state either, never just "no bar".
+    expect(warmupRow.targetLabel).toBeUndefined();
+    expect(warmupRow.spmCell).toBeUndefined();
+    expect(warmupRow.onTarget).toBeUndefined();
 
     // `program` names 5 intervals (verbatim from the recording's own
     // header — the module header explains why it isn't trimmed); only the
@@ -559,9 +577,18 @@ describe("buildSummaryModel — TIME (R-D) and AVG SPLIT (R-C), the walk-3 shape
     const row1 = asMeasured(model.rows[1]);
     const row2 = asMeasured(model.rows[2]);
     expect(row1.index).toBe(1);
-    expect(row1.judged).toBeDefined();
+    // §1 re-baseline: judged against THIS row's own 129s target
+    // (`program`'s own `targetSplit: 129` on both work intervals), not
+    // the old working average — w1.avgSplit 140.1s vs target 129s is
+    // +11.1s, outside the band, SLOWER.
+    expect(row1.targetLabel).toBe(fmtSplit(129));
+    expect(row1.judged?.direction).toBe("slower");
+    expect(row1.judged?.deviationSeconds).toBeCloseTo(140.1 - 129, 5);
     expect(row2.index).toBe(2);
-    expect(row2.judged).toBeDefined();
+    // w2.avgSplit 139.8s vs the same 129s target: +10.8s, SLOWER too.
+    expect(row2.targetLabel).toBe(fmtSplit(129));
+    expect(row2.judged?.direction).toBe("slower");
+    expect(row2.judged?.deviationSeconds).toBeCloseTo(139.8 - 129, 5);
     expect(model.rows[3]!.measured).toBe(false);
     expect(model.rows[3]!.index).toBe(3);
     expect(model.rows[4]!.measured).toBe(false);
@@ -587,11 +614,17 @@ describe("buildSummaryModel — deviation bar clamp (§1)", () => {
   });
 });
 
-describe("buildSummaryModel — deviation signs and clamp, in a real monitor row", () => {
+describe("buildSummaryModel — deviation signs and clamp, in a real monitor row (§1 re-baseline: judged against EACH row's OWN target)", () => {
   // The keystone pair from the DISTANCE describe block above, re-derived
-  // here for its OWN clean numbers: avg = 500*(64.3+74.7)/500 = 139.0s
-  // exactly; row1 pace 128.6s (10.4s faster), row2 pace 149.4s (10.4s
-  // slower) — a symmetric pair, both saturating the 50% cap.
+  // here for its OWN clean numbers: row1 pace 128.6s, row2 pace 149.4s —
+  // both given the SAME 139.0s target (§1 re-baseline note: this fixture
+  // deliberately reuses the number that used to be the two-row working
+  // average, so every deviation/label below stays byte-identical to the
+  // pre-rebaseline test this one replaces — each row is still judged
+  // against its OWN `targetSplit` field, not a shared average; the pyramid
+  // wire-scoping witness and the tule-fog pin further down are where
+  // DISTINCT per-row targets get exercised). Faster/slower, symmetric,
+  // both saturating the 50% cap.
   const work1 = decodeActual(
     "00 00 00 00 00 00 83 02 00 fa 00 00 00 00 00 00 01 01",
     "00 00 00 1a 59 00 06 05 0f 00 62 03 30 0f a5 00 67 01 00",
@@ -607,39 +640,75 @@ describe("buildSummaryModel — deviation signs and clamp, in a real monitor row
     const run = monitorRun({
       program: {
         intervals: [
-          interval({ kind: "distance", value: 250 }),
-          interval({ kind: "distance", value: 250 }),
+          interval({ kind: "distance", value: 250, targetSplit: 139.0 }),
+          interval({ kind: "distance", value: 250, targetSplit: 139.0 }),
         ],
       },
       actuals: [work1, work2],
     });
     const model = buildSummaryModel({ door: "monitor", run });
-    expect(model.heroes.avgSplit).toBe("2:19.0"); // 500*139/500
 
     const row1 = asMeasured(model.rows[0]);
     const row2 = asMeasured(model.rows[1]);
     expect(row1.paceLabel).toBe("2:08.6");
     expect(row2.paceLabel).toBe("2:29.4");
+    expect(row1.targetLabel).toBe(fmtSplit(139.0));
+    expect(row2.targetLabel).toBe(fmtSplit(139.0));
     expect(row1.judged?.direction).toBe("faster");
     expect(row1.judged?.deviationLabel).toBe("−10.4");
     expect(row1.judged?.barWidthPercent).toBe(50);
+    expect(row1.onTarget).toBeUndefined();
     expect(row2.judged?.direction).toBe("slower");
     expect(row2.judged?.deviationLabel).toBe("+10.4");
     expect(row2.judged?.barWidthPercent).toBe(50);
+    expect(row2.onTarget).toBeUndefined();
   });
 
-  it("a single measured work row is UNJUDGED (review finding 5, RULED: a row's deviation against its own lone average is always exactly zero — judging it would paint the commonest session shape, one measured interval, with an invented full-width red/blue bar for a comparison that was never really made against anything but itself)", () => {
+  // HISTORY NOTE (§1/§6.2's own "the lone-row abstention is RETIRED for
+  // targeted rows" clause): before this task, a single measured work row
+  // was NEVER judged (PW review finding 5's `count >= 2` gate — "a row's
+  // deviation against its own lone average is always exactly zero"). That
+  // tautology no longer exists: this row's baseline is its OWN target
+  // field, not a working average built from itself, so a genuinely lone
+  // measured-and-targeted row is now judged like any other. This test
+  // used to assert `row.judged` was `undefined` for exactly this fixture
+  // (`work1` alone, no target) — rewritten, not deleted, per this task's
+  // brief, to prove the NEW rule instead of the retired one.
+  it("a single measured work row WITH a target is now JUDGED (finding 5's lone-row gate is retired for targeted rows — §1 ruling 1)", () => {
+    const run = monitorRun({
+      program: {
+        intervals: [
+          interval({ kind: "distance", value: 250, targetSplit: 140 }),
+        ],
+      },
+      actuals: [work1],
+    });
+    const model = buildSummaryModel({ door: "monitor", run });
+    const row = asMeasured(model.rows[0]);
+    // The hero is still well-defined over a single row (it IS that row's
+    // own pace) — R-C's formula is unaffected by this task.
+    expect(model.heroes.avgSplit).toBe(row.paceLabel);
+    // 128.6s actual vs 140s target = -11.4s, outside the band: FASTER,
+    // now genuinely judged rather than abstained.
+    expect(row.targetLabel).toBe(fmtSplit(140));
+    expect(row.judged).toBeDefined();
+    expect(row.judged?.direction).toBe("faster");
+    expect(row.onTarget).toBeUndefined();
+  });
+
+  // The abstains-when case that survives this rewrite: a lone row is
+  // STILL unjudged when it carries no target at all — now for the §1
+  // "targetSplit present" reason, never the retired count>=2 one.
+  it("a single measured work row with NO target stays unjudged — the abstains-when rule, not the retired lone-row gate", () => {
     const run = monitorRun({
       program: { intervals: [interval({ kind: "distance", value: 250 })] },
       actuals: [work1],
     });
     const model = buildSummaryModel({ door: "monitor", run });
     const row = asMeasured(model.rows[0]);
-    // The hero itself still shows — R-C's formula is well-defined over a
-    // single row (it IS that row's own pace) — only per-row JUDGING is
-    // suppressed.
-    expect(model.heroes.avgSplit).toBe(row.paceLabel);
+    expect(row.targetLabel).toBeUndefined();
     expect(row.judged).toBeUndefined();
+    expect(row.onTarget).toBeUndefined();
   });
 });
 
@@ -695,6 +764,37 @@ describe("buildSummaryModel — edge cases: absence, per-cell rules, captions", 
     expect(row.timeLabel).toBe("1:00");
     expect(row.paceLabel).toBeUndefined();
     expect(row.judged).toBeUndefined();
+  });
+
+  // §1's own "abstains when" clause (antagonist B5): a pm5 PAIRING-
+  // EXCEPTION row (real time/meters, no usable pace) still shows its
+  // TARGET — the cell keys on `targetSplit` ALONE, never on whether the
+  // row can be judged. Hiding it here would drop a true number the
+  // rower actually authored.
+  it("§1 B5: a pairing-exception row (measured, no pace) still shows its TARGET cell — the bar/± stay absent, the TARGET does not", () => {
+    const outOfBand: IntervalActual = {
+      index: 0,
+      elapsedSeconds: 60,
+      distanceMeters: 250,
+      avgSplit: 9999, // unusable — same fixture as the test above
+      avgSpm: null,
+      avgHeartRateBpm: null,
+      restDistanceMeters: 0,
+    };
+    const run = monitorRun({
+      program: {
+        intervals: [
+          interval({ kind: "distance", value: 250, targetSplit: 130 }),
+        ],
+      },
+      actuals: [outOfBand],
+    });
+    const model = buildSummaryModel({ door: "monitor", run });
+    const row = asMeasured(model.rows[0]);
+    expect(row.paceLabel).toBeUndefined(); // no pace to judge with
+    expect(row.targetLabel).toBe(fmtSplit(130)); // the target still shows
+    expect(row.judged).toBeUndefined(); // no bar/± — nothing to compute a deviation from
+    expect(row.onTarget).toBeUndefined();
   });
 
   it("a warm-up interval exists on the program but its own boundary never arrived: the row still renders, labeled, with every measured field absent", () => {
@@ -912,6 +1012,26 @@ describe("buildSummaryModel — timer door, a real mixed measured/prescribed lis
     expect(warmupRow.isWarmup).toBe(true);
     expect(warmupRow.timeLabel).toBe(fmtDuration(warmupElapsed / 60));
     expect(warmupRow.judged).toBeUndefined();
+    expect(warmupRow.targetLabel).toBeUndefined();
+
+    // §1's judged-when member set includes "stopwatch" (the timer door's
+    // own source, `logDraft.ts`'s `buildLogSteps`) — the one real
+    // stopwatch-measured work row here has a genuine "6K +4" target and
+    // is genuinely judged (either outright or landing on-target), proving
+    // the timer door's own measured rows can reach a verdict, not just
+    // the monitor door's pm5 rows.
+    const measuredWorkRow = asMeasured(
+      model.rows.find(
+        (r) =>
+          r.measured &&
+          !r.isWarmup &&
+          r.paceLabel === fmtSplit((elapsed / meters) * 500),
+      ),
+    );
+    expect(measuredWorkRow.targetLabel).toBeDefined();
+    expect(
+      measuredWorkRow.judged !== undefined || measuredWorkRow.onTarget === true,
+    ).toBe(true);
   });
 
   it("no actuals recorded at all: every row is prescribed, the caption fires, TIME still reads wall-clock", () => {
@@ -1247,5 +1367,397 @@ describe("buildSummaryModel — Phase PW spec 2 §2: the model exports the numbe
     expect(model.heroes.time).toBeUndefined();
     expect(model.heroes.timeSeconds).toBeUndefined();
     expect(model.heroes).toStrictEqual({});
+  });
+});
+
+// ---------------------------------------------------------------------
+// Phase LT spec 1, Task 2 — §1's row re-baseline: the band legs, the
+// judged-when member set, the tule-fog regression pin, and the
+// wire-scoping witness. §2's SPM cell lives in its own describe block
+// below.
+// ---------------------------------------------------------------------
+
+describe("buildSummaryModel — §1's band legs, at the row level (dev +0.4 -> on-target; +0.6 -> slower; boundary exactly 0.5 -> on-target, both directions)", () => {
+  // One hand-built pm5 actual per leg — `avgSplit` set directly (this
+  // describe block is about the ROW PIPELINE's own band arithmetic, not
+  // wire fidelity; the wire-scoping witness further down covers that
+  // separately with real decoded boundaries). Target is a round 130s on
+  // every leg; only `avgSplit` (the row's own measured pace) varies.
+  function rowAt(avgSplit: number) {
+    const actual: IntervalActual = {
+      index: 0,
+      elapsedSeconds: 130,
+      distanceMeters: 500,
+      avgSplit,
+      avgSpm: null,
+      avgHeartRateBpm: null,
+      restDistanceMeters: 0,
+    };
+    const run = monitorRun({
+      program: {
+        intervals: [
+          interval({ kind: "distance", value: 500, targetSplit: 130 }),
+        ],
+      },
+      actuals: [actual],
+    });
+    return asMeasured(buildSummaryModel({ door: "monitor", run }).rows[0]);
+  }
+
+  it("dev +0.4s (130.4 vs 130 target): within the band — plain, onTarget true, no bar/±", () => {
+    const row = rowAt(130.4);
+    expect(row.onTarget).toBe(true);
+    expect(row.judged).toBeUndefined();
+  });
+
+  it("dev +0.5s EXACTLY (130.5 vs 130): still on-target — the boundary is INCLUSIVE, documented here at the row level (`judgeBand.test.ts` pins the raw function; this pins the whole row pipeline)", () => {
+    const row = rowAt(130.5);
+    expect(row.onTarget).toBe(true);
+    expect(row.judged).toBeUndefined();
+  });
+
+  it("dev +0.6s (130.6 vs 130): one tenth past the boundary — SLOWER, judged with a real bar/±", () => {
+    const row = rowAt(130.6);
+    expect(row.onTarget).toBeUndefined();
+    expect(row.judged?.direction).toBe("slower");
+    expect(row.judged?.deviationLabel).toBe("+0.6");
+  });
+
+  it("dev -0.5s EXACTLY (129.5 vs 130): still on-target — symmetric on the fast side", () => {
+    const row = rowAt(129.5);
+    expect(row.onTarget).toBe(true);
+    expect(row.judged).toBeUndefined();
+  });
+
+  it("dev -0.6s (129.4 vs 130): one tenth past the boundary the other way — FASTER", () => {
+    const row = rowAt(129.4);
+    expect(row.onTarget).toBeUndefined();
+    expect(row.judged?.direction).toBe("faster");
+    expect(row.judged?.deviationLabel).toBe("−0.6");
+  });
+});
+
+describe("buildSummaryModel — §1's judged-when member set (antagonist B4): targetSplit + (pm5 | stopwatch) only, never 'assumed'", () => {
+  // The DIRECT, by-hand unit test the module's own `rowJudgment` doc
+  // comment names: neither door builder can actually feed this function
+  // an "assumed" step today (both gate MeasuredRow-ness on pm5/stopwatch
+  // before a step ever reaches here), so this proves the guard on its
+  // own terms rather than relying on that being an accident of two
+  // unrelated gates lining up. Mirrors exactly how `logDraft.ts` builds
+  // an assumed row (`:470`/`:552`): target and actual EQUAL, by
+  // construction — if the guard were missing, this would read
+  // "on-target" (or, against the OLD unbanded `judge()`, a tautological
+  // "+0.0 slower") for a row that was never really measured at all.
+  it("the by-hand fixture: an 'assumed' step with target === actual is NEVER judged, even though the numbers alone would read on-target", () => {
+    const byHand = {
+      targetSplit: 130,
+      actualSplit: 130,
+      actualSource: "assumed" as const,
+    };
+    expect(rowJudgment(byHand)).toStrictEqual({});
+  });
+
+  it("a genuinely unmeasured/untargeted 'assumed' step is also never judged (the ordinary case)", () => {
+    expect(rowJudgment({ actualSource: "assumed" as const })).toStrictEqual({});
+  });
+
+  it("pm5 and stopwatch both judge when target+actual are both present — the two REAL member-set entries", () => {
+    expect(
+      rowJudgment({
+        targetSplit: 130,
+        actualSplit: 140,
+        actualSource: "pm5",
+      }).judged?.direction,
+    ).toBe("slower");
+    expect(
+      rowJudgment({
+        targetSplit: 130,
+        actualSplit: 120,
+        actualSource: "stopwatch",
+      }).judged?.direction,
+    ).toBe("faster");
+  });
+
+  it("no target, no actualSplit, or no source at all — every combination abstains", () => {
+    expect(
+      rowJudgment({ actualSplit: 130, actualSource: "pm5" }),
+    ).toStrictEqual({}); // no target
+    expect(
+      rowJudgment({ targetSplit: 130, actualSource: "pm5" }),
+    ).toStrictEqual({}); // no actual
+    expect(rowJudgment({ targetSplit: 130, actualSplit: 130 })).toStrictEqual(
+      {},
+    ); // no source at all
+  });
+
+  // The real-fixture side of the same claim (recurring failure #3): a
+  // manual-door session (every row `actualSource: "assumed"` or absent,
+  // `buildManualLogSteps`'s own doc comment) NEVER produces a MeasuredRow
+  // at all — `buildManualModel` renders every row prescribed
+  // unconditionally — so `.judged`/`.onTarget` are structurally
+  // unreachable on that door regardless of this guard, from a real
+  // seeded library workout.
+  it("manual door, a real library workout: every row is prescribed — no row shape here even HAS a .judged field to check", () => {
+    const w = library("Calm Sea");
+    const steps = buildManualLogSteps({ steps: w.steps }, BASELINES);
+    const model = buildSummaryModel({
+      door: "manual",
+      steps,
+      dateIso: "2026-08-17T09:00:00.000Z",
+    });
+    expect(model.rows.every((r) => !r.measured)).toBe(true);
+  });
+});
+
+describe("buildSummaryModel — §2's SPM cell (measured/target pair, resolved by buildSpmCell)", () => {
+  it("post-split, matched + in-band: both halves present and distinct", () => {
+    const actual: IntervalActual = {
+      index: 0,
+      elapsedSeconds: 60,
+      distanceMeters: 250,
+      avgSplit: 130,
+      avgSpm: 24,
+      avgHeartRateBpm: null,
+      restDistanceMeters: 0,
+    };
+    const run = monitorRun({
+      program: {
+        intervals: [interval({ kind: "distance", value: 250, displaySpm: 20 })],
+      },
+      actuals: [actual],
+    });
+    const row = asMeasured(buildSummaryModel({ door: "monitor", run }).rows[0]);
+    expect(row.spmCell).toStrictEqual({ measured: 24, target: 20 });
+  });
+
+  it("post-split, matched but DROPPED (avgSpm null): neither half — absence over invention (Task 1's own §2 amendment)", () => {
+    const actual: IntervalActual = {
+      index: 0,
+      elapsedSeconds: 60,
+      distanceMeters: 250,
+      avgSplit: 130,
+      avgSpm: null,
+      avgHeartRateBpm: null,
+      restDistanceMeters: 0,
+    };
+    const run = monitorRun({
+      program: {
+        intervals: [interval({ kind: "distance", value: 250, displaySpm: 20 })],
+      },
+      actuals: [actual],
+    });
+    const row = asMeasured(buildSummaryModel({ door: "monitor", run }).rows[0]);
+    expect(row.spmCell).toBeUndefined();
+  });
+
+  it("unmatched interval (never reached): target only", () => {
+    const run = monitorRun({
+      program: {
+        intervals: [interval({ kind: "distance", value: 250, displaySpm: 22 })],
+      },
+      actuals: [],
+    });
+    const model = buildSummaryModel({ door: "monitor", run });
+    const row = model.rows[0]!;
+    if (row.measured) throw new Error("expected a prescribed row");
+    // Unmatched intervals render PRESCRIBED (no spmCell field exists on
+    // that shape at all) — the target still shows via the existing
+    // `targetPaceLabel`/duration cells, unaffected by this task.
+    expect(row.measured).toBe(false);
+  });
+
+  // `buildMonitorLogSteps` can no longer PRODUCE this shape (Task 1's §2
+  // amendment made the discriminant sound by construction) and the
+  // timer/manual doors already gate MeasuredRow-ness on `actualSource ===
+  // "stopwatch"`, which a pm5-shaped step always fails — so no door
+  // builder in this file can hand `buildSpmCell` a pre-split row today.
+  // `buildSpmCell` is exported for exactly this reason (its own doc
+  // comment): this is a genuinely old STORED shape (predating the
+  // split), tested directly rather than through a door that structurally
+  // cannot reach it any more.
+  it("pre-split old row (buildSpmCell, direct): actualSource pm5, no actualSpm at all — spm is the OLD measured value, no target half, spmIsMeasured's own discriminant", () => {
+    const oldRow: LogStep = {
+      label: "old row",
+      actualSource: "pm5",
+      actualSplit: 130,
+      actualSeconds: 60,
+      spm: 26, // pre-split: this WAS the measured value
+      // no actualSpm at all — the row-local discriminant's whole point
+    };
+    expect(buildSpmCell(oldRow)).toStrictEqual({ measured: 26 });
+  });
+
+  it("a pre-split row with no spm at all either: no cell — spmIsMeasured still reads true (actualSource pm5, actualSpm absent), but there is no measured number to show", () => {
+    const oldRowNoSpm: LogStep = {
+      label: "old row, no spm ever recorded",
+      actualSource: "pm5",
+      actualSplit: 130,
+      actualSeconds: 60,
+    };
+    expect(buildSpmCell(oldRowNoSpm)).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------
+// §6.1: THE TULE-FOG REGRESSION PIN. James's own session (the report that
+// opened this spec): targets 2:17.0/2:16.0/2:15.0 (137/136/135s), actuals
+// 2:14.9/2:13.4/2:11.5 (134.9/133.4/131.5s) — every actual FASTER than its
+// own target, yet the OLD screen (working-average baseline) painted two
+// of the three rows red. Built through `buildMonitorLogSteps` from a real
+// `MonitorRun` shape (never a hand-built `LogStep[]` — the exit
+// criterion's own requirement), since no committed recording of this
+// exact session exists yet (§6.1's own "asked, not assumed" clause —
+// nothing to replay). `avgSplit` is set directly per actual (the pin is
+// about the JUDGMENT baseline, not wire decoding); `distanceMeters: 500`
+// on every leg makes `elapsedSeconds === avgSplit` an exact, self-
+// consistent 500m-split identity rather than an arbitrary unrelated pair.
+// ---------------------------------------------------------------------
+
+describe("buildSummaryModel — §6.1 THE TULE-FOG REGRESSION PIN (James's own session, re-baselined)", () => {
+  it("three rows, every one faster than ITS OWN target: renders THREE BLUE (faster) rows, −2.1/−2.6/−3.5 — the screen that made him file the report now agrees with him", () => {
+    const targets = [137, 136, 135]; // 2:17.0 / 2:16.0 / 2:15.0
+    const actualSplits = [134.9, 133.4, 131.5]; // 2:14.9 / 2:13.4 / 2:11.5
+    const actuals: IntervalActual[] = actualSplits.map((avgSplit, i) => ({
+      index: i,
+      elapsedSeconds: avgSplit, // distanceMeters 500 below -> exact 500m-split identity
+      distanceMeters: 500,
+      avgSplit,
+      avgSpm: null,
+      avgHeartRateBpm: null,
+      restDistanceMeters: 0,
+    }));
+    const run = monitorRun({
+      program: {
+        intervals: targets.map((targetSplit) =>
+          interval({ kind: "distance", value: 500, targetSplit }),
+        ),
+      },
+      actuals,
+    });
+
+    const model = buildSummaryModel({ door: "monitor", run });
+    expect(model.rows).toHaveLength(3);
+
+    const expectedDeviations = [-2.1, -2.6, -3.5];
+    model.rows.forEach((r, i) => {
+      const row = asMeasured(r);
+      expect(row.paceLabel).toBe(fmtSplit(actualSplits[i]!));
+      expect(row.targetLabel).toBe(fmtSplit(targets[i]!));
+      expect(row.onTarget).toBeUndefined(); // every deviation is well outside the 0.5s band
+      expect(row.judged?.direction).toBe("faster");
+      expect(row.judged?.deviationSeconds).toBeCloseTo(
+        expectedDeviations[i]!,
+        5,
+      );
+      expect(row.judged?.deviationLabel).toBe(
+        `−${Math.abs(expectedDeviations[i]!).toFixed(1)}`,
+      );
+    });
+  });
+});
+
+// ---------------------------------------------------------------------
+// §6.3b: THE WIRE-SCOPING PROOF. `docs/monitor/sessions/walk-2026-08-18-
+// metrics/` — the Phase CM exit walk's own "first varied-target
+// rest-bearing capture" (that walk's README): a real 3-interval pyramid
+// (300m 6K@22, 700m 6K-4@24, 300m 6K+4@22 — DISTINCT distances/rates per
+// interval, so a scoping error can never hide behind two identical
+// numbers). Decoded here with the SAME parser functions the driver calls
+// (this file's own `decodeActual`, established in the oracle-bytes
+// describe block above), never re-derived. Two of the three decoded
+// values are independently cross-checked against the walk's own
+// PHOTOGRAPHED numbers (README's Criterion 3: "Interval 2 · 2:11.7 ave
+// /500m", and the summary's own row 3 "2:19.1") — an external oracle, not
+// just internal self-consistency (recurring failure #11's own lesson).
+//
+// RED-PROVABLE BY MIS-SCOPING THE INDEX: swapping which decoded boundary
+// gets which `normalizedIndex` (e.g. handing boundary 2's bytes
+// `index: 2` instead of `1`) changes which row each `paceLabel`/`spmCell`
+// lands on — every assertion below is keyed to a DISTINCT per-interval
+// number (300/700/300m, 130.3/131.7/139.1s, 29/27/27 spm, 22/24/22
+// target rate) specifically so a mis-scoped index fails at least one of
+// them. Performed as this task's own self-mutation pass (task-2-
+// report.md), not committed as a permanent second test — the assertions
+// below ARE the proof; the mutation is what confirms they bite.
+// ---------------------------------------------------------------------
+
+describe("buildSummaryModel — §6.3b THE WIRE-SCOPING PROOF (the pyramid capture, walk-2026-08-18-metrics)", () => {
+  it("the committed capture's own boundary bytes appear verbatim (review finding 6's own pattern, applied to a gzipped capture)", () => {
+    const text = readGzSessionFile(
+      "walk-2026-08-18-metrics/pyramid-pm5-recording-1787090555458.jsonl.gz",
+    );
+    for (const hex of [
+      "06 00 00 02 00 00 0e 03 00 2c 01 00 3c 00 20 00 01 01",
+      "06 00 00 1d 6c 6c 17 05 12 00 4c 03 fc 0e 9e 00 65 01 00",
+      "03 00 00 09 00 00 34 07 00 bc 02 00 3c 00 0f 00 01 02",
+      "03 00 00 1b 6c 6c 25 05 2a 00 3b 03 d4 0e 99 00 65 02 00",
+      "a0 20 00 b8 0b 00 43 03 00 2c 01 00 00 00 00 00 01 03",
+      "a0 20 00 1b 00 00 6f 05 12 00 ea 02 08 0e 82 00 65 03 00",
+    ]) {
+      expect(text).toContain(hex);
+    }
+  });
+
+  it("each row carries its OWN interval's decoded distance/pace/SPM — never a neighbor's (the scoping proof itself)", () => {
+    const b1 = decodeActual(
+      "06 00 00 02 00 00 0e 03 00 2c 01 00 3c 00 20 00 01 01",
+      "06 00 00 1d 6c 6c 17 05 12 00 4c 03 fc 0e 9e 00 65 01 00",
+      0,
+    );
+    const b2 = decodeActual(
+      "03 00 00 09 00 00 34 07 00 bc 02 00 3c 00 0f 00 01 02",
+      "03 00 00 1b 6c 6c 25 05 2a 00 3b 03 d4 0e 99 00 65 02 00",
+      1,
+    );
+    const b3 = decodeActual(
+      "a0 20 00 b8 0b 00 43 03 00 2c 01 00 00 00 00 00 01 03",
+      "a0 20 00 1b 00 00 6f 05 12 00 ea 02 08 0e 82 00 65 03 00",
+      2,
+    );
+    // Decoded once, pinned here so a future re-decode (or a mis-scoped
+    // index during the self-mutation pass) is caught against a fixed,
+    // independently-recorded set of numbers, not against itself.
+    expect([
+      b1.distanceMeters,
+      b2.distanceMeters,
+      b3.distanceMeters,
+    ]).toStrictEqual([300, 700, 300]);
+    expect([b1.avgSplit, b2.avgSplit, b3.avgSplit]).toStrictEqual([
+      130.3, 131.7, 139.1,
+    ]);
+    expect([b1.avgSpm, b2.avgSpm, b3.avgSpm]).toStrictEqual([29, 27, 27]);
+
+    const run = monitorRun({
+      program: {
+        intervals: [
+          interval({ kind: "distance", value: 300, displaySpm: 22 }),
+          interval({ kind: "distance", value: 700, displaySpm: 24 }),
+          interval({ kind: "distance", value: 300, displaySpm: 22 }),
+        ],
+      },
+      actuals: [b1, b2, b3],
+    });
+    const model = buildSummaryModel({ door: "monitor", run });
+    const [row1, row2, row3] = model.rows.map((r) => asMeasured(r));
+
+    // External oracle (README's own photographed numbers, digit-
+    // identical — Criterion 3's rest-2 photo and the summary's own row 3):
+    expect(row2!.paceLabel).toBe("2:11.7");
+    expect(row3!.paceLabel).toBe("2:19.1");
+    // The third (row1) has no photographed twin in the README, so it's
+    // pinned against the independently-decoded value above instead.
+    expect(row1!.paceLabel).toBe(fmtSplit(130.3));
+
+    // SPM: measured half scoped per row (29/27/27 — rows 2 and 3 share a
+    // measured value, which is exactly why distance/pace above are what
+    // actually prove the scoping; SPM alone couldn't distinguish them).
+    expect(row1!.spmCell?.measured).toBe(29);
+    expect(row2!.spmCell?.measured).toBe(27);
+    expect(row3!.spmCell?.measured).toBe(27);
+    // Target half scoped per row too (22/24/22 — rows 1 and 3 share a
+    // target, disambiguated by distance/pace instead).
+    expect(row1!.spmCell?.target).toBe(22);
+    expect(row2!.spmCell?.target).toBe(24);
+    expect(row3!.spmCell?.target).toBe(22);
   });
 });

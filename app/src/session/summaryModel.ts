@@ -97,6 +97,7 @@
 import { fmtDuration } from "../../domain/duration.js";
 import { fmtSplit } from "../../domain/format.js";
 import type { IntervalActual } from "../../domain/monitor/types.js";
+import { judgeVsTarget } from "../judgeBand.js";
 import {
   measuredSessionSeconds,
   type MonitorRun,
@@ -105,6 +106,7 @@ import {
   buildMonitorLogSteps,
   formatLogDate,
   MONITOR_SPLIT_MAX,
+  spmIsMeasured,
   type LogStep,
 } from "./logDraft";
 import type { SessionRun } from "./run";
@@ -146,10 +148,23 @@ export interface SummaryHeroes {
   distanceMeters?: number;
 }
 
-/** A judged measured row's deviation vs. the 2B working average (§2E,
- *  §1's own capped formula). `direction` is redundant with
- *  `deviationSeconds`'s sign but spares every consumer from re-deriving
- *  "faster means negative" — the ONE place that fact is decided. */
+/** A judged row's deviation vs. a baseline split — the shape itself is
+ *  baseline-agnostic (`direction`/`deviationLabel`/`barWidthPercent` are
+ *  computed the same way for either baseline `judge()` below is fed).
+ *  TWO baselines exist in this codebase today, deliberately kept as one
+ *  shape:
+ *   - `rowJudgment` below (Phase LT spec 1, §1, THIS module's own rows):
+ *     the row's OWN target — the re-baseline James's ruling asks for
+ *     (2026-08-18: "that section needs to be about performance against
+ *     target per int", superseding the working-average baseline).
+ *   - `storedSummary.ts` (from-the-log): still calls `judge()` directly
+ *     against the stored `avg_split_seconds` working average, until spec
+ *     1's own Task 3 re-baselines that door too (§4) — this is why the
+ *     doc comment below stays baseline-generic rather than naming
+ *     "target" specifically.
+ *  `direction` is redundant with `deviationSeconds`'s sign but spares
+ *  every consumer from re-deriving "faster means negative" — the ONE
+ *  place that fact is decided. */
 export interface RowJudgment {
   direction: "faster" | "slower";
   deviationSeconds: number;
@@ -160,14 +175,14 @@ export interface RowJudgment {
   barWidthPercent: number;
 }
 
-/** A measured row (§2E: index/time/pace/deviation-bar geometry) — includes
- *  the warm-up row, which is measured-shaped but never `judged` (R-C: "no
- *  deviation bar, excluded from the average"). `index` is absent for the
- *  warm-up row (it is never numbered — §2E labels it `WARM-UP` instead,
- *  via `isWarmup`). `timeLabel`/`paceLabel` are each independently absent
- *  when their own underlying reading is unavailable (per-cell absence);
- *  `judged` is present only when a `paceLabel` exists AND the door has a
- *  working average to compare it against. */
+/** A measured row (§2E: index/time/pace/deviation-bar geometry, §1's
+ *  re-baseline: TARGET + SPM cells) — includes the warm-up row, which is
+ *  measured-shaped but never judged and never carries a target (§1's
+ *  Warm-up row rule: "a warm-up has no target by definition"). `index` is
+ *  absent for the warm-up row (it is never numbered — §2E labels it
+ *  `WARM-UP` instead, via `isWarmup`). `timeLabel`/`paceLabel` are each
+ *  independently absent when their own underlying reading is unavailable
+ *  (per-cell absence). */
 export interface MeasuredRow {
   measured: true;
   isWarmup: boolean;
@@ -175,7 +190,45 @@ export interface MeasuredRow {
   label: string;
   timeLabel?: string;
   paceLabel?: string;
+  /** §1's inline TARGET cell: this row's own target split, `m:ss.t`.
+   *  Absent when the row has none — keyed on `targetSplit` ALONE (§1's
+   *  own "abstains when" rule: "the TARGET cell keys on targetSplit
+   *  alone"), so a pm5 pairing-exception row (real time/meters, no pace)
+   *  still shows its target even though `judged`/`onTarget` below can
+   *  never fire for it — hiding a true number would be the wrong-number
+   *  class this phase exists to kill (antagonist B5). Never present on
+   *  the warm-up row. */
+  targetLabel?: string;
+  /** §2's compact SPM cell: `24 / 22`, measured first, the authored
+   *  target after the slash. Either half independently absent (§2's own
+   *  "absent halves drop" rule) — `buildSpmCell` below is the ONE place
+   *  that resolves the pre-/post-split discriminant (`spmIsMeasured`,
+   *  `logDraft.ts`) into this shape. Absent entirely when NEITHER half
+   *  has a value. Never present on the warm-up row (no `LogStep` backs
+   *  it — see `monitorWarmupRow`/`timerWarmupRow`). */
+  spmCell?: { measured?: number; target?: number };
+  /** §1's re-baselined row judgment, against THIS row's own target — see
+   *  `rowJudgment` below for the judged-when rule (antagonist B4: the
+   *  member set is NAMED — `actualSource` `"pm5"` or `"stopwatch"` only,
+   *  never `"assumed"`) and this task's own documented encoding choice
+   *  for the third, on-target state: present ONLY when the row is judged
+   *  AND lands OUTSIDE `ON_TARGET_BAND_SECONDS` (faster or slower).
+   *  Within the band, `onTarget` below is `true` instead and this stays
+   *  absent — chosen over widening `RowJudgment.direction` to a third
+   *  value so this type (and its one other producer, `storedSummary.ts`'s
+   *  still-working-average-baseline call) and every existing
+   *  `.direction === "faster"` consumer keep compiling unchanged. */
   judged?: RowJudgment;
+  /** `true` ONLY when this row was judged (`rowJudgment`'s own gate —
+   *  target present, real measured actual, `pm5`/`stopwatch` source) AND
+   *  landed WITHIN `ON_TARGET_BAND_SECONDS`: plain ink, no bar, no `±`.
+   *  Absent in every other case, including the genuinely unjudged one (no
+   *  target, no measured actual, or an `"assumed"` source) — the renderer
+   *  (Task 3) tells "on-target, evaluated" apart from "never evaluated at
+   *  all" by checking THIS flag before falling back to "nothing to
+   *  show", which is exactly the distinction the task brief's own
+   *  encoding-choice note asks for. */
+  onTarget?: true;
 }
 
 /** A prescribed (unmeasured) row (§2E: index/distance-duration/target-pace/
@@ -216,12 +269,16 @@ export function deviationBarWidthPercent(deviationSeconds: number): number {
   return Math.min(50, Math.max(1.2, raw));
 }
 
-/** Exported (from-the-log spec, 2026-08-18, Task 5): the from-the-log
- *  view's own row builder (`src/log/storedSummary.ts`) judges a stored
- *  row's `actualSplit` against the STORED `avg_split_seconds` — the exact
- *  same formula this module's own doors use to judge a row against their
- *  freshly-computed working average, never re-derived a second time. Pure
- *  visibility change only: the function itself is unmodified. */
+/** BASELINE-GENERIC on purpose (the "vs. a baseline split" framing in
+ *  `RowJudgment`'s own doc comment above): `storedSummary.ts` (from-the-log)
+ *  still calls this directly against the STORED `avg_split_seconds`
+ *  working average, unmodified by this task — the exact old §2E formula,
+ *  never re-derived a second time. THIS module's own rows no longer call
+ *  it directly for that purpose (see `rowJudgment` below, Phase LT spec
+ *  1's re-baseline) — `rowJudgment` calls it too, but only ONCE it has
+ *  already ruled out the on-target band, feeding `target` as the second
+ *  argument in place of a working average; the math is identical either
+ *  way. */
 export function judge(
   rowSplitSeconds: number,
   workingAverageSeconds: number,
@@ -229,10 +286,15 @@ export function judge(
   const deviationSeconds = rowSplitSeconds - workingAverageSeconds;
   // "+ = slower" (R-C/§1): a positive deviation means the row's own split
   // took MORE seconds per 500m than the average, i.e. slower. A dead-even
-  // row (deviation exactly 0) reads as "slower" by this same rule — there
-  // is no third "even" bucket in the design (§1's own two-color legend,
-  // "← FASTER (BLUE) · SLOWER (RED) →", has no middle case) — pinned by a
-  // dedicated test.
+  // row (deviation exactly 0) reads as "slower" by this same rule when
+  // called directly (still true for `storedSummary.ts`'s own unbanded
+  // caller above) — there is no third "even" bucket in THIS function's
+  // own two-color legend, "← FASTER (BLUE) · SLOWER (RED) →". `rowJudgment`
+  // below never reaches this function with a dead-even (or any within-band)
+  // deviation at all — it intercepts the on-target case first via
+  // `judgeVsTarget`'s own band — so this comment's claim only still
+  // describes THIS function's behavior when called on its own, not the
+  // row list this module renders today.
   const direction: "faster" | "slower" =
     deviationSeconds < 0 ? "faster" : "slower";
   const sign = deviationSeconds < 0 ? "−" : "+";
@@ -245,25 +307,123 @@ export function judge(
   };
 }
 
-/** A working average plus how many rows built it — the `count` half exists
- *  for review finding 5 (RULED, controller, flagged for James at PR): when
- *  exactly ONE measured row fed the average, that row's own deviation
- *  against it is always exactly zero (it IS the average) — judging it
- *  anyway would paint the commonest session shape (one measured interval)
- *  with an invented full-width bar and a color, for a "deviation" that was
- *  never really measured against anything but itself. Callers gate
- *  `judge()` on `count >= 2`, never on `seconds !== undefined` alone. */
+/** Phase LT spec 1, §1's re-baselined row judgment — THIS row's own
+ *  target, not the door's working average (`judge()`'s own doc comment
+ *  above names the one remaining caller still on the old baseline).
+ *  Judged-when (antagonist B4, the member set NAMED — "assumed" actuals
+ *  equal their targets by construction, `logDraft.ts:470`/`:552`, and
+ *  judging them would paint the whole by-hand/held-target shape a
+ *  tautological on-target or a "+0.0" — see this repo's own history:
+ *  before this task, `judge()`'s unbanded dead-even rule would have read
+ *  that tautology as "slower"):
+ *   - `step.targetSplit` present (§1's own gate on the TARGET half too);
+ *   - `step.actualSplit` present (no pace, nothing to compute a deviation
+ *     from — the pairing-exception row's own reason `targetLabel` above
+ *     still shows while this stays absent);
+ *   - `step.actualSource` is `"pm5"` or `"stopwatch"` — never `"assumed"`.
+ *
+ *  Neither door builder below can actually FEED this function an
+ *  `"assumed"`-sourced step today (`isMonitorRowMeasurable`/
+ *  `timerMeasurableElapsedSeconds` already gate MeasuredRow-ness on
+ *  `"pm5"`/`"stopwatch"` before a step ever reaches here — an `"assumed"`
+ *  step is always PRESCRIBED-shaped instead), so the third check above is
+ *  currently unreachable-false via either door. It is written explicitly
+ *  anyway rather than relied on as an accident of two unrelated gates
+ *  lining up — `summaryModel.test.ts`'s own "by-hand fixture" test calls
+ *  this function directly with a hand-built `actualSource: "assumed"`
+ *  step to prove the guard holds on its own terms, and the self-mutation
+ *  recorded in task-2-report.md (widening this check to also accept
+ *  `"assumed"`) turns that one test red.
+ *
+ *  Within `ON_TARGET_BAND_SECONDS` (`judgeVsTarget`'s own band, shared
+ *  with the connected surface): `onTarget: true`, `judged` absent — see
+ *  `MeasuredRow`'s own doc comment for why a second field was chosen over
+ *  widening `RowJudgment.direction`. Outside it: `judged` carries the
+ *  `RowJudgment` (via `judge()`, fed `target` as its baseline — see that
+ *  function's own doc comment for why this is sound). Neither field when
+ *  unjudged. */
+export function rowJudgment(step: {
+  targetSplit?: number;
+  actualSplit?: number;
+  actualSource?: LogStep["actualSource"];
+}): { judged?: RowJudgment; onTarget?: true } {
+  if (
+    step.targetSplit === undefined ||
+    step.actualSplit === undefined ||
+    (step.actualSource !== "pm5" && step.actualSource !== "stopwatch")
+  ) {
+    return {};
+  }
+  const verdict = judgeVsTarget(step.actualSplit, step.targetSplit);
+  return verdict === "on-target"
+    ? { onTarget: true }
+    : { judged: judge(step.actualSplit, step.targetSplit) };
+}
+
+/** §2's compact SPM cell (`MeasuredRow.spmCell`'s own doc comment carries
+ *  the shape/absence rules) — the ONE place the pre-/post-split
+ *  discriminant (`spmIsMeasured`, `logDraft.ts`) resolves into a
+ *  measured/target pair. Three shapes, in the order `spmIsMeasured`
+ *  checks them:
+ *   - PRE-SPLIT monitor row (`spmIsMeasured` true): `step.spm` holds the
+ *     OLD measured value, never a target — rendered `{measured}`, no
+ *     target half, ever (a pre-split row structurally cannot carry one).
+ *   - POST-SPLIT (every other shape, both doors): `step.actualSpm`
+ *     (monitor-only, absent on timer/manual doors — `LogStep.actualSpm`'s
+ *     own doc comment) is the measured half, `step.spm` is the target
+ *     half — independently absent, per §2's own "absent halves drop"
+ *     rule.
+ *   - Neither half present (an untargeted, unmeasured step on any door):
+ *     no cell at all, `undefined` — matching this module's per-cell
+ *     absence idiom everywhere else, never an empty `{}`.
+ *
+ *  EXPORTED for two reasons: (1) the PRE-SPLIT leg is, as of this task,
+ *  unreachable through EITHER door builder below — `buildMonitorLogSteps`
+ *  can no longer produce that shape at all (Task 1's §2 amendment made it
+ *  sound by construction) and the timer/manual doors already gate
+ *  MeasuredRow-ness on `actualSource === "stopwatch"`, which a pm5-shaped
+ *  step always fails — so `summaryModel.test.ts` exercises that branch
+ *  directly with a hand-built `LogStep`, the only route left to it; (2)
+ *  `storedSummary.ts` (Task 3, from-the-log) reads a STORED `LogStep[]`
+ *  straight off the wire with no door-measurability gate in front of it
+ *  at all, so a genuinely old stored pm5 row DOES reach this shape live —
+ *  Task 3 can import this one function rather than re-deriving the same
+ *  three-way rule against its own `StoredLogStep` (structurally
+ *  compatible with the `Pick` this function's sibling `spmIsMeasured`
+ *  already accepts). */
+export function buildSpmCell(
+  step: LogStep,
+): { measured?: number; target?: number } | undefined {
+  if (spmIsMeasured(step)) {
+    return step.spm !== undefined ? { measured: step.spm } : undefined;
+  }
+  if (step.actualSpm === undefined && step.spm === undefined) {
+    return undefined;
+  }
+  return {
+    ...(step.actualSpm !== undefined ? { measured: step.actualSpm } : {}),
+    ...(step.spm !== undefined ? { target: step.spm } : {}),
+  };
+}
+
+/** A working average — the number the AVG SPLIT hero renders (ruling 4:
+ *  "the AVG SPLIT hero stays the session average, neutral ink, unjudged").
+ *  USED TO also carry `count` (PW review finding 5's lone-row gate: "a
+ *  row's deviation against its own lone average is always exactly zero —
+ *  judging it would paint an invented full-width bar for a comparison
+ *  never really made against anything but itself") — Phase LT spec 1
+ *  RETIRES that whole comparison (rows now judge against their OWN
+ *  target via `rowJudgment` above, never this average), so `count` is
+ *  gone: nothing reads it any more (the history note lives in
+ *  `summaryModel.test.ts`'s rewritten lone-row test, per this task's own
+ *  brief). */
 interface WorkingAverage {
   seconds: number | undefined;
-  count: number;
 }
 
 /** `500 × Σt/Σd`, absent when `Σd` is not `> 0` (R-C's own formula; the
  *  "no `0:00`, no `0 m`" per-cell absence rule extended to a division that
- *  would otherwise produce `NaN`/`Infinity`). `count` is `rows.length`
- *  unconditionally — every row a caller pushes here already passed that
- *  caller's own floor/exclusion checks (review findings 1/2), so array
- *  length IS the count of genuinely judgeable readings. */
+ *  would otherwise produce `NaN`/`Infinity`). */
 function weightedAverage(
   rows: { seconds: number; meters: number }[],
 ): WorkingAverage {
@@ -273,7 +433,7 @@ function weightedAverage(
     t += r.seconds;
     d += r.meters;
   }
-  return { seconds: d > 0 ? (500 * t) / d : undefined, count: rows.length };
+  return { seconds: d > 0 ? (500 * t) / d : undefined };
 }
 
 /**
@@ -396,9 +556,8 @@ function monitorTimeSeconds(run: MonitorRun): number | undefined {
  *  - `actual.elapsedSeconds < MIN_MEASURABLE_ELAPSED_SECONDS` — see that
  *    constant's own doc comment.
  *
- *  Returns the `{seconds, count}` pair (`WorkingAverage`'s own doc
- *  comment) — `count` is what lets `monitorWorkRows` apply finding 5's
- *  RULING (a lone measured row is never judged). */
+ *  Feeds ONLY the AVG SPLIT hero now (ruling 4 — `WorkingAverage`'s own
+ *  doc comment carries the history of what else used to read it). */
 function monitorAvgSplit(run: MonitorRun): WorkingAverage {
   const wuIndex = warmupIndex(run);
   const rows: { seconds: number; meters: number }[] = [];
@@ -461,8 +620,11 @@ function monitorWarmupRow(run: MonitorRun): MeasuredRow | null {
     label: "WARM-UP",
     timeLabel: fmtDuration(actual.elapsedSeconds / 60),
     paceLabel: paceSeconds !== undefined ? fmtSplit(paceSeconds) : undefined,
-    // UNJUDGED by construction: R-C excludes the warm-up from the working
-    // average, so there is nothing honest to compare it against.
+    // UNJUDGED, no TARGET, no SPM cell — all by construction, and all for
+    // the SAME reason now (§1's Warm-up row rule): a warm-up interval has
+    // no target at all, so `rowJudgment`/`buildSpmCell` are never even
+    // called here — this row is built straight from the machine actual,
+    // never through a `LogStep`.
   };
 }
 
@@ -480,10 +642,7 @@ function isMonitorRowMeasurable(step: LogStep): boolean {
   );
 }
 
-function monitorWorkRows(
-  run: MonitorRun,
-  avgSplit: WorkingAverage,
-): SummaryRow[] {
+function monitorWorkRows(run: MonitorRun): SummaryRow[] {
   const steps = buildMonitorLogSteps(run);
   return steps.map((step, i) => {
     const index = i + 1;
@@ -511,15 +670,8 @@ function monitorWorkRows(
     const timeLabel = fmtDuration(step.actualSeconds! / 60);
     const paceLabel =
       step.actualSplit !== undefined ? fmtSplit(step.actualSplit) : undefined;
-    // Finding 5 (RULED): a lone measured row is never judged — `count`
-    // must be at least 2 (`WorkingAverage`'s own doc comment), not merely
-    // `seconds !== undefined`.
-    const judged =
-      step.actualSplit !== undefined &&
-      avgSplit.seconds !== undefined &&
-      avgSplit.count >= 2
-        ? judge(step.actualSplit, avgSplit.seconds)
-        : undefined;
+    const targetLabel =
+      step.targetSplit !== undefined ? fmtSplit(step.targetSplit) : undefined;
     return {
       measured: true,
       isWarmup: false,
@@ -527,7 +679,9 @@ function monitorWorkRows(
       label: step.label,
       timeLabel,
       paceLabel,
-      judged,
+      targetLabel,
+      spmCell: buildSpmCell(step),
+      ...rowJudgment(step),
     };
   });
 }
@@ -536,7 +690,7 @@ function buildMonitorModel(run: MonitorRun): SummaryModel {
   const avgSplit = monitorAvgSplit(run);
   const heroes = monitorHeroes(run, avgSplit);
   const warmupRow = monitorWarmupRow(run);
-  const workRows = monitorWorkRows(run, avgSplit);
+  const workRows = monitorWorkRows(run);
   const rows = warmupRow !== null ? [warmupRow, ...workRows] : workRows;
 
   const iso =
@@ -590,6 +744,10 @@ function timerWarmupRow(run: SessionRun): MeasuredRow | null {
     label: "WARM-UP",
     timeLabel: fmtDuration(actual.elapsedSeconds / 60),
     paceLabel: fmtSplit(actual.splitSeconds),
+    // No targetLabel/spmCell/judged/onTarget — same reason as the monitor
+    // door's own warm-up row (§1: a warm-up has no target by definition;
+    // this row is built straight from `run.phases`/`run.actuals`, never
+    // through a `LogStep`, so `rowJudgment`/`buildSpmCell` never run here).
   };
 }
 
@@ -637,9 +795,8 @@ function timerMeasurableElapsedSeconds(step: LogStep): number | undefined {
  *  this function at all (`buildLogSteps` never emits one), so it is
  *  excluded from the average the same way R-C excludes it for the monitor
  *  door — a generalization of that rule's reasoning, not its letter (this
- *  module's own header). Returns `{seconds, count}` (`WorkingAverage`'s
- *  own doc comment) — `count` is what lets `timerWorkRows` apply finding
- *  5's RULING (a lone measured row is never judged). */
+ *  module's own header). Feeds ONLY the AVG SPLIT hero now (`WorkingAverage`'s
+ *  own doc comment carries the history of what else used to read it). */
 function timerAvgSplit(steps: LogStep[]): WorkingAverage {
   const rows: { seconds: number; meters: number }[] = [];
   for (const step of steps) {
@@ -652,10 +809,7 @@ function timerAvgSplit(steps: LogStep[]): WorkingAverage {
   return weightedAverage(rows);
 }
 
-function timerWorkRows(
-  steps: LogStep[],
-  avgSplit: WorkingAverage,
-): SummaryRow[] {
+function timerWorkRows(steps: LogStep[]): SummaryRow[] {
   return steps.map((step, i) => {
     const index = i + 1;
     const elapsedSeconds = timerMeasurableElapsedSeconds(step);
@@ -679,12 +833,8 @@ function timerWorkRows(
     }
     // timerMeasurableElapsedSeconds already proved this is a stopwatch
     // row with actualSplit defined — the `!` documents that.
-    // Finding 5 (RULED): a lone measured row is never judged — `count`
-    // must be at least 2, not merely `seconds !== undefined`.
-    const judged =
-      avgSplit.seconds !== undefined && avgSplit.count >= 2
-        ? judge(step.actualSplit!, avgSplit.seconds)
-        : undefined;
+    const targetLabel =
+      step.targetSplit !== undefined ? fmtSplit(step.targetSplit) : undefined;
     return {
       measured: true,
       isWarmup: false,
@@ -692,7 +842,9 @@ function timerWorkRows(
       label: step.label,
       timeLabel: fmtDuration(elapsedSeconds / 60),
       paceLabel: fmtSplit(step.actualSplit!),
-      judged,
+      targetLabel,
+      spmCell: buildSpmCell(step),
+      ...rowJudgment(step),
     };
   });
 }
@@ -709,7 +861,7 @@ function buildTimerModel(run: SessionRun, steps: LogStep[]): SummaryModel {
     // DISTANCE: this module's header — timer door has no machine total.
   };
   const warmupRow = timerWarmupRow(run);
-  const workRows = timerWorkRows(steps, avgSplit);
+  const workRows = timerWorkRows(steps);
   const rows = warmupRow !== null ? [warmupRow, ...workRows] : workRows;
 
   const iso = run.completedAt ?? run.startedAt;
