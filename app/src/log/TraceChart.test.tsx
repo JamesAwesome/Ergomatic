@@ -2,81 +2,63 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import {
-  parseAdditionalStatus1,
-  parseGeneralStatus,
-  toMonitorState,
-} from "../../domain/monitor/pm5/parse.js";
-import {
-  ADDITIONAL_STATUS_1_UUID,
-  GENERAL_STATUS_UUID,
-} from "../../domain/monitor/pm5/uuids.js";
 import type { MonitorFrame } from "../../domain/monitor/types.js";
-import {
-  fromHexString,
-  parseRecording,
-} from "../monitor/transports/recording.js";
+import { parseRecording } from "../monitor/transports/recording.js";
+import { createReplayTransport } from "../monitor/transports/replay.js";
+import { createPm5Driver } from "../monitor/driver.js";
+import { createEventLog } from "../monitor/eventLog.js";
 import { createSeriesRecorder } from "../monitor/seriesRecorder.js";
 import type { Sample, SeriesData } from "../monitor/seriesRecorder.js";
 import { buildTrace } from "./traceModel.js";
 import TraceChart from "./TraceChart";
 
 // ---------------------------------------------------------------------
-// The same readFileSync + real-parser replay idiom `seriesRecorder.test.ts`
-// established and `traceModel.test.ts` already reuses — trimmed here to
-// this suite's own need: a real, rich `SeriesData` (all three measures
-// clear the 3-reading gate on this capture) to exercise the rendered
-// component against, not a hand-built minimum (recurring failure #3).
+// Trace-truth Task 1's real-driver harness (`seriesRecorder.test.ts`'s own
+// `loadCaptureFrames` — re-derived here per this project's own "each test
+// file owns its own copy" convention), not a hand-rolled parse: this
+// recorder keys on `MonitorFrame.intervalIndex`, which only the real
+// driver computes. Trimmed here to this suite's own need: a real, rich
+// `SeriesData` (all three measures clear the 3-reading gate on this
+// capture) to exercise the rendered component against, not a hand-built
+// minimum (recurring failure #3).
 // ---------------------------------------------------------------------
 
-const SESSIONS_DIR = import.meta.url
+const REPO_ROOT = import.meta.url
   .replace(/^file:\/\//, "")
-  .replace(/src\/log\/TraceChart\.test\.tsx$/, "../docs/monitor/sessions/");
+  .replace(/app\/src\/log\/TraceChart\.test\.tsx$/, "");
 
-function replayFrames(relativePath: string): MonitorFrame[] {
-  const text = readFileSync(`${SESSIONS_DIR}${relativePath}`, "utf-8");
-  const { events } = parseRecording(text);
-  const frames: MonitorFrame[] = [];
-  let lastAs1: {
-    currentSplit: number;
-    spm: number;
-    heartRateBpm: number | null;
-  } | null = null;
-
-  for (const event of events) {
-    if (!("dir" in event) || event.dir !== "rx") continue;
-
-    if (event.char === ADDITIONAL_STATUS_1_UUID) {
-      const parsed = parseAdditionalStatus1(fromHexString(event.hex));
-      if ("error" in parsed) {
-        throw new Error(`0x0032 parse error: ${JSON.stringify(parsed.error)}`);
-      }
-      lastAs1 = parsed;
-      continue;
-    }
-
-    if (event.char !== GENERAL_STATUS_UUID) continue;
-    const gs = parseGeneralStatus(fromHexString(event.hex));
-    if ("error" in gs) {
-      throw new Error(`0x0031 parse error: ${JSON.stringify(gs.error)}`);
-    }
-
-    frames.push({
-      elapsedSeconds: gs.elapsedSeconds,
-      distanceMeters: gs.distanceMeters,
-      sessionElapsedSeconds: gs.elapsedSeconds,
-      sessionDistanceMeters: gs.distanceMeters,
-      currentSplit: lastAs1?.currentSplit ?? null,
-      spm: lastAs1?.spm ?? null,
-      heartRateBpm: lastAs1?.heartRateBpm ?? null,
-      rowingActive: gs.rowingState === 1,
-      splitAvgPace: null,
-      intervalIndex: null,
-      intervalRemaining: null,
-      intervalAccrued: null,
-      state: toMonitorState(gs.workoutState),
-    });
+async function loadCaptureFrames(
+  repoRelativePath: string,
+): Promise<MonitorFrame[]> {
+  const text = readFileSync(`${REPO_ROOT}${repoRelativePath}`, "utf-8");
+  const parsed = parseRecording(text);
+  const program = parsed.header.program;
+  if (!program) {
+    throw new Error(
+      `loadCaptureFrames: ${repoRelativePath} carries no header.program`,
+    );
   }
+
+  const replay = createReplayTransport(parsed);
+  const [dev] = await replay.transport.scan();
+  await replay.transport.connect(dev.id);
+
+  const log = createEventLog();
+  const driver = createPm5Driver(replay.transport, log, {
+    deviceName: dev.name,
+    now: () => replay.clock.now(),
+    schedule: (cb, ms) => replay.clock.schedule(cb, ms),
+  });
+
+  const frames: MonitorFrame[] = [];
+  driver.events((e) => {
+    if (e.kind === "frame") frames.push(e.frame);
+  });
+
+  const programPending = driver.program(program);
+  await replay.run();
+  await programPending;
+
   return frames;
 }
 
@@ -88,10 +70,10 @@ function seriesFromFrames(frames: MonitorFrame[]): SeriesData {
   return series;
 }
 
-function realSeries(): SeriesData {
+async function realSeries(): Promise<SeriesData> {
   return seriesFromFrames(
-    replayFrames(
-      "walk-2026-08-17/step-3-pm5-recording-second-rest-1786973713929.jsonl",
+    await loadCaptureFrames(
+      "docs/monitor/sessions/walk-2026-08-17/step-3-pm5-recording-second-rest-1786973713929.jsonl",
     ),
   );
 }
@@ -129,8 +111,8 @@ describe("TraceChart — absence (§1's idiom: no chart, no empty frame, no plac
 });
 
 describe("TraceChart — rendering from a REAL capture", () => {
-  it("renders the toggle (all three measures clear the gate on step-3), one polyline per pace segment, y-axis tick labels, and the text alternative on the figure", () => {
-    const series = realSeries();
+  it("renders the toggle (all three measures clear the gate on step-3), one polyline per pace segment, y-axis tick labels, and the text alternative on the figure", async () => {
+    const series = await realSeries();
     const expectedTrace = buildTrace(series, "pace")!;
 
     const { container } = render(<TraceChart series={series} />);
@@ -161,7 +143,7 @@ describe("TraceChart — rendering from a REAL capture", () => {
 
   it("tapping the Stroke rate toggle switches the drawn trace to rate's own model (different summary, different segment count)", async () => {
     const user = userEvent.setup();
-    const series = realSeries();
+    const series = await realSeries();
     const paceTrace = buildTrace(series, "pace")!;
     const rateTrace = buildTrace(series, "rate")!;
     // Ground: the two measures' own models differ on this capture, so a
@@ -198,7 +180,7 @@ describe("TraceChart — rendering from a REAL capture", () => {
 
   it("falls back to pace when the selected measure's own toggle option disappears out from under it (the series prop changes while 'Heart rate' is selected)", async () => {
     const user = userEvent.setup();
-    const richSeries = realSeries();
+    const richSeries = await realSeries();
 
     const { rerender } = render(<TraceChart series={richSeries} />);
     await user.click(screen.getByRole("button", { name: "Heart rate" }));
@@ -261,8 +243,8 @@ describe("TraceChart — the HR toggle is ABSENT (never present-and-disabled) wh
 });
 
 describe("TraceChart — §4's cut: no interval boundary marks render, ever (pinned absence)", () => {
-  it("a real, multi-segment trace carries no element any boundary-mark feature would plausibly use", () => {
-    const { container } = render(<TraceChart series={realSeries()} />);
+  it("a real, multi-segment trace carries no element any boundary-mark feature would plausibly use", async () => {
+    const { container } = render(<TraceChart series={await realSeries()} />);
     // Pinned negative: if a future change adds boundary marks under any
     // of these obvious names, this goes red on purpose (§4's own
     // "asserted as absence so a future re-add is a deliberate act").
@@ -291,8 +273,8 @@ describe("TraceChart — §4's cut: no interval boundary marks render, ever (pin
 });
 
 describe("TraceChart — §7.3 the inversion is a COORDINATE fact, not a class check", () => {
-  it("pace: a faster real sample renders at a SMALLER SVG y-pixel than a slower one, and a y-axis tick shares the identical (inverted) scale", () => {
-    const series = realSeries();
+  it("pace: a faster real sample renders at a SMALLER SVG y-pixel than a slower one, and a y-axis tick shares the identical (inverted) scale", async () => {
+    const series = await realSeries();
     const trace = buildTrace(series, "pace")!;
     expect(trace.invert).toBe(true);
 
