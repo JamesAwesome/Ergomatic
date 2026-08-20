@@ -6,6 +6,32 @@ on:
     branches: [main]
 
 jobs:
+  # About a fifth of the commits reaching main are documentation only —
+  # release notes, ledgers, ROADMAP, CLAUDE.md — and none of them can break a
+  # Playwright flow, yet each was paying e2e's ~8 minutes. This job answers
+  # one question: does the diff touch anything outside docs/? The reasoning,
+  # the allowlist and the fail-safes live in scripts/ci-changes.sh, which has
+  # its own tests in the `scripts` job below.
+  #
+  # Note the polarity everywhere downstream: the code jobs test
+  # `!= 'false'`, never `== 'true'`. Only a confident "everything here is
+  # documentation" skips them; a crash, a missing output, or a failure of
+  # this job runs them anyway. A wrongly-skipped e2e is a green suite that
+  # should have been red, and that must not be reachable by accident.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.decide.outputs.code }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # the script diffs against a merge base
+      - id: decide
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: echo "code=$(bash scripts/ci-changes.sh "$BASE" "$HEAD")" >> "$GITHUB_OUTPUT"
+
   root-hooks:
     runs-on: ubuntu-latest
     steps:
@@ -21,6 +47,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
   app:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -49,6 +77,8 @@ jobs:
       - run: pnpm dist:grep
 
   docker:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -69,6 +99,8 @@ jobs:
           push: false
 
   e2e:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -101,7 +133,9 @@ jobs:
           path: app/playwright-report/
           retention-days: 14
 
-  deploy-script:
+  # Runs on EVERY push, documentation or not: it is six seconds, and one of
+  # the scripts it tests is the one deciding whether the other jobs run.
+  scripts:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -109,10 +143,19 @@ jobs:
         run: |
           bash -n scripts/deploy.sh
           bash scripts/deploy.test.sh
+      - name: Lint + test the CI path filter
+        run: |
+          bash -n scripts/ci-changes.sh
+          bash scripts/ci-changes.test.sh
 
   deploy:
-    needs: [root-hooks, app, docker, e2e, deploy-script]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [changes, root-hooks, app, docker, e2e, scripts]
+    # A documentation-only push skips app/docker/e2e, and GitHub skips a job
+    # whose dependency skipped — so this cannot use a plain `needs` gate any
+    # more. It deploys when nothing FAILED, which keeps prod's SHA equal to
+    # main's tip even on documentation pushes (the app bundle is identical,
+    # but /api/version reports the deployed commit and should not lag).
+    if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
     runs-on: self-hosted
     environment: production
     permissions:
