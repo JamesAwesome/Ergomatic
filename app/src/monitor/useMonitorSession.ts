@@ -65,8 +65,10 @@ import {
   completeMonitorRun,
   createMonitorRun,
   recordActual,
+  saveMonitorRun,
   type MonitorRun,
 } from "./monitorRun";
+import { createSeriesRecorder, type SeriesRecorder } from "./seriesRecorder";
 import { defaultTransport } from "../adapters/monitorTransport";
 
 /** The session state machine (design spec §2, verbatim, MINUS `"paused"` —
@@ -226,6 +228,49 @@ function bestEffort(work: Promise<unknown>): void {
 }
 
 /**
+ * Phase LT spec 2, Task 2 (design spec §4, S6). Requests persistent storage
+ * once per successful connect — free either way, and this hook is
+ * deliberately NOT what decides whether it is granted: `persist()` itself
+ * is (S6's own PRIMARY citation, WebKit's policy blog — heuristics decide,
+ * and a Capacitor WKWebView is "probably DENIED" by them). Fire-and-forget
+ * (`bestEffort`) and never gates anything downstream: denial is TOLERATED,
+ * stated in the spec's own words as "NOT as mitigation" — nothing about
+ * `connect()`'s own success or failure reads this outcome.
+ *
+ * `navigator.storage`/`persist` are both optional-chained rather than
+ * feature-detected up front on purpose: some runtimes — this repo's own
+ * jsdom test environment among them — omit the Storage Manager API
+ * entirely, and that omission collapses cleanly onto the SAME "denied"
+ * outcome this function already logs; no separate branch for "does not
+ * exist" versus "exists and refused" is needed or wanted; a caller reading
+ * the ring only ever needs to know whether the trace ended up protected.
+ * Wrapped in its own `try`/`catch` (no runtime is documented to throw
+ * synchronously here, but a throw would otherwise escape into `connect()`'s
+ * own surrounding catch and get mis-reported as a radio failure — the exact
+ * kind of wrong-layer error this file's `mapRadioFailure` exists to sort,
+ * not extend to an unrelated API).
+ */
+function requestStoragePersistence(log: MonitorEventLog): void {
+  try {
+    bestEffort(
+      Promise.resolve(navigator.storage?.persist?.()).then((granted) => {
+        log.record(
+          "storage-persist",
+          granted === true
+            ? "granted"
+            : "denied (tolerated — design spec §4 S6, not mitigation)",
+        );
+      }),
+    );
+  } catch {
+    log.record(
+      "storage-persist",
+      "denied (persist() threw synchronously — tolerated, same as any other denial)",
+    );
+  }
+}
+
+/**
  * How long the ended hand-off waits for the final interval's split before
  * giving up on it — the BACKSTOP, not the expected path (hardware walk day
  * 2, 2026-08-11, `docs/monitor/pm5-interface-notes.md` §22 item 1; the
@@ -278,6 +323,19 @@ function bestEffort(work: Promise<unknown>): void {
  * `FINISH_GRACE_MS`'s own comment; change the two together or not at all.
  */
 const FINISH_HANDOFF_HOLD_MS = 3500;
+
+/** Phase LT spec 2 §2's flush policy, verbatim: "a 30-second timer" the
+ *  hook owns, independent of the boundary and close flushes. Not tuned —
+ *  the spec names the number directly, no derivation to carry. */
+const SERIES_FLUSH_INTERVAL_MS = 30_000;
+
+/** The default for `MonitorSessionDeps.seriesFlushSchedule` — a REPEATING
+ *  timer (`setInterval`, not `setTimeout`): the flush fires on every tick
+ *  until cancelled, for as long as a run stays open. */
+function defaultSeriesFlushSchedule(cb: () => void, ms: number): () => void {
+  const id = setInterval(cb, ms);
+  return () => clearInterval(id);
+}
 
 export interface MonitorSession {
   phase: ConnectedPhase;
@@ -377,6 +435,19 @@ export interface MonitorSessionDeps {
    *  unmounted test leaves no live timer). Defaults to `setTimeout` /
    *  `clearTimeout`. */
   schedule?: (cb: () => void, ms: number) => () => void;
+  /** The series recorder's 30-second flush timer (Phase LT spec 2 §2's
+   *  flush policy — `SERIES_FLUSH_INTERVAL_MS`), as a REPEATING
+   *  schedule-and-cancel pair: `cb` fires on every tick until the returned
+   *  canceller runs, not once. Deliberately a SEPARATE injection point from
+   *  `schedule` above rather than reusing it: this hook starts the flush
+   *  timer the instant a run opens, and reusing `schedule` would add an
+   *  extra call to every `schedule()`-call-count assertion in the ended
+   *  hand-off suite the moment any of those tests reaches `live` — a
+   *  one-shot backstop and a recurring flush are different enough
+   *  contracts to deserve their own seam anyway. Defaults to
+   *  `setInterval`/`clearInterval`. Injected so a test fires 30-second
+   *  flushes on demand instead of a session actually running that long. */
+  seriesFlushSchedule?: (cb: () => void, ms: number) => () => void;
   /** Passed to `createPm5Driver`. `deviceName` is NOT accepted here — it
    *  comes from the picker result, never from a caller's guess (spec's I5
    *  ruling: no screen ever renders the `"PM5"` placeholder). */
@@ -779,6 +850,17 @@ export function useMonitorSession(
   /** One `connect()` at a time — a second press while the monitor chooser is open
    *  must not open a second one. */
   const connectingRef = useRef(false);
+  /** Phase LT spec 2, Task 2. This session's own in-memory `SeriesRecorder`
+   *  (Task 1) — created at the exact moment `runRef` opens (the ready ->
+   *  live promotion in `handleFrame` below), fed every live frame, stopped
+   *  and dropped at close. Never a second source of truth for what got
+   *  persisted: the recorder owns its own buffer, and this hook only ever
+   *  flushes SNAPSHOTS of it onto `runRef`'s record via `withSeries` below. */
+  const seriesRecorderRef = useRef<SeriesRecorder | null>(null);
+  /** The 30-second flush timer's own canceller (`SERIES_FLUSH_INTERVAL_MS`),
+   *  or `null` when none is running — no run open, or the run has already
+   *  closed. Mirrors `handoffHoldRef`'s own "canceller or null" shape. */
+  const seriesFlushCancelRef = useRef<(() => void) | null>(null);
 
   const update = useCallback((patch: Partial<SessionState>): void => {
     stateRef.current = { ...stateRef.current, ...patch };
@@ -790,16 +872,94 @@ export function useMonitorSession(
     [],
   );
 
+  /** Attaches the recorder's CURRENT snapshot onto `run`, or returns `run`
+   *  UNCHANGED — the exact same reference — when there is nothing new to
+   *  attach: no recorder (never opened, or already stopped at close), or
+   *  no sample yet (`snapshot()` is `undefined` until the first one,
+   *  `seriesRecorder.ts`'s own doc comment). The unchanged-reference case is
+   *  load-bearing, not incidental: the boundary handler below tells "this
+   *  candidate really is a fresh object" from "there was nothing to add" by
+   *  this same identity check, and the 30-second flush uses it to skip a
+   *  pointless write when the recorder has produced nothing since the run
+   *  opened. */
+  const withSeries = useCallback((run: MonitorRun): MonitorRun => {
+    const series = seriesRecorderRef.current?.snapshot();
+    return series === undefined ? run : { ...run, series };
+  }, []);
+
+  /** Cancels the 30-second flush timer, if one is running. A no-op
+   *  otherwise, so every stop site (close, teardown) can call it
+   *  unconditionally — the same idiom `releaseHandoff` already uses for its
+   *  own canceller-or-null ref. */
+  const stopSeriesFlush = useCallback((): void => {
+    seriesFlushCancelRef.current?.();
+    seriesFlushCancelRef.current = null;
+  }, []);
+
+  /** Starts the 30-second flush (design spec §2's flush policy) — one per
+   *  run, cancelled at close or teardown (`stopSeriesFlush`). Each tick
+   *  re-snapshots the recorder and, only if it actually has something new
+   *  (the `withSeries` identity check), re-persists the run carrying it —
+   *  the ONE of the three flush points that fires on nothing but elapsed
+   *  time, independent of any boundary or the close write. Guards
+   *  `completedAt` defensively even though every call site also cancels
+   *  this timer at close: a tick already in flight when close runs must
+   *  never resurrect a record this same render just finished. */
+  const startSeriesFlush = useCallback((): void => {
+    stopSeriesFlush();
+    const schedule =
+      depsRef.current.seriesFlushSchedule ?? defaultSeriesFlushSchedule;
+    seriesFlushCancelRef.current = schedule(() => {
+      const run = runRef.current;
+      if (run === null || run.completedAt !== null) return;
+      const next = withSeries(run);
+      // BELT-AND-BRACES, same class as `mapProgramFailure`'s own `error:
+      // null` (task-4 review, LOW-5): `next === run` only when the recorder
+      // has produced ZERO samples, and the recorder is always created and
+      // fed the very SAME first live frame that opens `run` (`handleFrame`'s
+      // "ready" branch) — the first frame always wins bucket 0 regardless
+      // of its own `elapsedSeconds` (`seriesRecorder.ts`'s own
+      // `lastEmittedBucket` starts at -1), so an OPEN run's recorder always
+      // has at least one sample by construction. Currently unreachable
+      // (a mutant removing this line is expected to survive); kept because
+      // that invariant should not rest on a second function's ordering, and
+      // a future change to WHEN the recorder is created should not have to
+      // rediscover this guard's absence the hard way.
+      if (next === run) return;
+      runRef.current = next;
+      saveMonitorRun(next);
+    }, SERIES_FLUSH_INTERVAL_MS);
+  }, [withSeries, stopSeriesFlush]);
+
   /** Stamps `completedAt` on our own run, if one is open. The record's own
    *  `completeMonitorRun` is idempotent too; this guard is here so the
-   *  CALLER's decisions ("has this already ended?") read off one place. */
+   *  CALLER's decisions ("has this already ended?") read off one place.
+   *
+   *  **Phase LT spec 2, Task 2 — the CLOSE flush.** The last of the three
+   *  flush points (§2's flush policy): the recorder's final snapshot is
+   *  attached BEFORE `completeMonitorRun` runs, so the one write that
+   *  closes the record also carries whatever trace accumulated since the
+   *  last boundary or timer tick — never a second write chasing the first.
+   *  The recorder then STOPS (spec's own words) and this ref is dropped: a
+   *  finish-grace actual that reaches `handleEvent` after this runs must
+   *  find no recorder to attach anything from, which is what makes "the
+   *  series does not grow" after close true by construction rather than by
+   *  a second guard duplicating this one. */
   const closeRecord = useCallback(
     (terminated: boolean): void => {
       const run = runRef.current;
       if (run === null || run.completedAt !== null) return;
-      runRef.current = completeMonitorRun(run, { terminated }, nowDate());
+      const withFinalSeries = withSeries(run);
+      runRef.current = completeMonitorRun(
+        withFinalSeries,
+        { terminated },
+        nowDate(),
+      );
+      stopSeriesFlush();
+      seriesRecorderRef.current?.stop();
+      seriesRecorderRef.current = null;
     },
-    [nowDate],
+    [nowDate, withSeries, stopSeriesFlush],
   );
 
   /** The live finish hold: its backstop's canceller, or `null` when no hold
@@ -947,6 +1107,18 @@ export function useMonitorSession(
             );
           }
           const identity = identityRef.current;
+          // Phase LT spec 2, Task 2: the recorder opens in the SAME instant
+          // the record does — this is the "the record exists once the
+          // rower is actually rowing" moment `createMonitorRun`'s own call
+          // below is already keyed on, and the recorder's own work clock
+          // wants that first frame too (it can win a whole-second bucket
+          // immediately, `seriesRecorder.ts`'s own "first-frame-wins" doc
+          // comment). Fed BEFORE `createMonitorRun` so a caller who reads
+          // `runOpen: true` off this same `update()` could in principle
+          // already find a recorder producing samples, though nothing reads
+          // it until the first flush.
+          seriesRecorderRef.current = createSeriesRecorder();
+          seriesRecorderRef.current.onFrame(frame);
           runRef.current = createMonitorRun(
             {
               workoutId: identity.workoutId,
@@ -967,6 +1139,7 @@ export function useMonitorSession(
             },
             nowDate(),
           );
+          startSeriesFlush();
           const freeze = nextFreezeRun(null, frame);
           freezeRef.current = freeze;
           update({
@@ -987,6 +1160,14 @@ export function useMonitorSession(
         // state is this" actually changed when the erg stopped. `phase`
         // stays `"live"` through the whole freeze-and-resume; only `frozen`
         // flips.
+        //
+        // Phase LT spec 2, Task 2: every live frame feeds the recorder too
+        // — its own decimation is what turns this per-frame stream into a
+        // 1 Hz series; nothing about frozen/paused changes that (a stopped
+        // erg's frames simply never cross a new whole work-second, so a
+        // freeze naturally produces no samples of its own, the same "zero
+        // for free" the recorder's rest handling already relies on).
+        seriesRecorderRef.current?.onFrame(frame);
         const freeze = nextFreezeRun(freezeRef.current, frame);
         freezeRef.current = freeze;
         update({ frame, frozen: isPausedRun(freeze) });
@@ -998,7 +1179,7 @@ export function useMonitorSession(
       // transport) but no phase moves on it.
       update({ frame });
     },
-    [nowDate, update],
+    [nowDate, update, startSeriesFlush],
   );
 
   /** A terminal event from the machine: `workoutComplete` (an honest
@@ -1092,9 +1273,24 @@ export function useMonitorSession(
         // nothing else about the closed record's immutability moves.
         const run = runRef.current;
         if (run === null) return;
-        const next = recordActual(run, event.actual, {
+        // Phase LT spec 2, Task 2: THE BOUNDARY FLUSH (§2's flush policy —
+        // "the hook layer flushes after each boundary write lands"). Rather
+        // than a second write chasing `recordActual`'s own, the freshest
+        // series snapshot is attached to the CANDIDATE record passed in, so
+        // `recordActual`'s single internal `saveMonitorRun` call already
+        // carries both the accepted actual and the trace in one write —
+        // §4 S1's write-count check is what this collapsing is FOR.
+        // `candidate` is `run` itself, same reference, whenever there is
+        // nothing new to attach (`withSeries`'s own doc comment on why that
+        // matters): acceptance below is decided against `candidate`, not
+        // `run`, so a refusal (which `recordActual` returns as the exact
+        // object it was given) is still detected correctly even when
+        // `candidate !== run`.
+        const candidate = withSeries(run);
+        const next = recordActual(candidate, event.actual, {
           finalBoundary: event.finalBoundary === true,
         });
+        const accepted = next !== candidate;
         // OBSERVABILITY (walk day 2): the fate of every actual this hook is
         // offered, in one entry — what the machine named, whether the driver
         // vouched for it as the finish boundary, whether the record was
@@ -1103,12 +1299,12 @@ export function useMonitorSession(
         // arrived and was refused"; this is the entry that answers it.
         logRef.current?.record(
           "record-actual",
-          `index=${event.actual.index} finalBoundary=${event.finalBoundary === true} recordClosed=${run.completedAt !== null} -> ${next === run ? "REFUSED (the record returned unchanged)" : "accepted"} (actuals ${run.actuals.length} -> ${next.actuals.length})`,
+          `index=${event.actual.index} finalBoundary=${event.finalBoundary === true} recordClosed=${run.completedAt !== null} -> ${accepted ? "accepted" : "REFUSED (the record returned unchanged)"} (actuals ${run.actuals.length} -> ${next.actuals.length})`,
         );
-        // `recordActual` returns the SAME object when the record is closed
-        // and this actual is not its one permitted late arrival (its own
-        // immutability guard) — nothing to persist, nothing to re-render.
-        if (next !== run) {
+        // A refusal returns `candidate` itself unchanged — nothing to
+        // persist, nothing to re-render, exactly as `recordActual`'s own
+        // immutability guard always meant before `candidate` existed.
+        if (accepted) {
           runRef.current = next;
           update({ actuals: next.actuals });
         }
@@ -1154,7 +1350,7 @@ export function useMonitorSession(
       // back by itself, the phase stays `disconnected` and the rower's
       // recovery is End -> log, or leave and re-Connect fresh.
     },
-    [endByMachine, handleFrame, releaseHandoff, update],
+    [endByMachine, handleFrame, releaseHandoff, update, withSeries],
   );
 
   /** Drops the driver and the radio. FOUR STEPS, IN THIS ORDER (Task 7,
@@ -1244,6 +1440,15 @@ export function useMonitorSession(
       // `"final-boundary"` reason, since `releaseHandoff` is itself
       // idempotent (`handoffHoldRef.current === null` short-circuits it).
       releaseHandoff("teardown");
+      // Phase LT spec 2, Task 2: a run left OPEN through teardown (a link
+      // drop, a tab-bar escape, an unmount before any close event ever
+      // arrives — the "record stays open" side of spec's C5 lose-and-
+      // degrade) must not leave its 30-second flush timer ticking against a
+      // component that no longer exists. `closeRecord` already cancels this
+      // on every path that actually closes the record; this call is what
+      // covers every path that does not. Idempotent no-op when already
+      // stopped (`stopSeriesFlush`'s own doc comment).
+      stopSeriesFlush();
       // STEP 2: STASH. THE LOG SURVIVES THE SESSION (2026-08-08, hardware
       // walk 2): the ended hand-off frame navigates away on its first
       // render, so the in-memory trace died exactly when the operator
@@ -1298,7 +1503,7 @@ export function useMonitorSession(
       }
       bestEffort(driver.disconnect());
     },
-    [releaseHandoff],
+    [releaseHandoff, stopSeriesFlush],
   );
 
   const fail = useCallback(
@@ -1354,6 +1559,10 @@ export function useMonitorSession(
       await transport.connect(device.id);
       const log = (depsRef.current.createLog ?? createEventLog)();
       logRef.current = log;
+      // S6: once per connect, straight into this session's own ring —
+      // see `requestStoragePersistence`'s own doc comment for the full
+      // reasoning.
+      requestStoragePersistence(log);
       const driver = createPm5Driver(transport, log, {
         ...depsRef.current.driverOptions,
         deviceName: device.name,

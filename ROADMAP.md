@@ -2462,7 +2462,18 @@ ledger). LT-0 SHIPPED (#128). **Spec 1 IMPLEMENTED 2026-08-19** (Tasks
 1-4 done on branch `lt-truth`: the split/floor/server bound, the row/SPM
 model and shared band, both renderers, and the witness sweep +
 reconciliation) — awaiting final review, the triad's PM final-PR gate,
-and James's merge approval. Spec 2/3 remain re-gated, below.
+and James's merge approval. **Spec 2 IMPLEMENTED 2026-08-19** (Tasks 1-4
+done on branch `lt-series`: the decimating recorder, the flush policy +
+localStorage sacrifice, the server `series` column + route-scoped 1mb
+limit + POST sacrifice, and the remaining storage proofs — S2's real-
+Chrome byte-identical probe, S3's real forced-quota leg, the fake-driven
+full loop through `GET /:id`) — awaiting final review, the triad's PM
+final-PR gate (TRIAD: two stored shapes, `MonitorRun.series` and the
+jsonb column, plus an invented mechanism — §7's own citation), and
+James's merge approval. This spec ships no notes clause of its own
+(§6 exit criterion 7: internal-only, rower-invisible until spec 3 renders
+the trace — stated here so the next release gate does not go hunting for
+one). Spec 3 remains re-gated, below.
 **Goal:** the summary's interval rows answer "did I hit MY targets" —
 target inline, judgment vs the row's own target with the connected
 surface's shared ±0.5s band, stroke rate shown (`24 / 22`), and discard
@@ -2476,10 +2487,46 @@ belt is confirmed).
 **Owed at the next tag (v0.14.0, range v0.13.0..main — RF15's rule):**
 four notes clauses: (1) rows judge against their own targets with the
 target shown (the erg ask); (2) stroke rate on measured intervals;
-(3) discard everywhere save is (#128 — RETROACTIVE, v0.13.0's tag message
-never announced it); (4) HISTORY RE-JUDGES TOO — sessions already viewed
+(3) discard everywhere save is (#128 — a NORMAL v0.14.0 clause; CORRECTED
+at the 2026-08-19 PM gate: v0.13.0 is `e22bc31` (#126) and #127/#128/#129
+all landed AFTER it, so nothing here is retroactive — settle tag membership
+with `git merge-base --is-ancestor <sha> vX.Y.Z^{commit}`, never by reading
+a tag message or a ledger line); (4) HISTORY RE-JUDGES TOO — sessions already viewed
 change colour (tule-fog rows go red→blue), plus #124's accepted re-log
 gap if still unannounced (retroactive, same chain).
+**THE PHASE-CLOSE ERG BUNDLE (James, 2026-08-19: "lets do those at phase
+close").** Five parked device items now travel together as ONE session at
+LT's close, so the close gate finds them in one place instead of
+rediscovering five parked rows. Two need no rowing, three ride a single
+rest-bearing piece:
+- NO ROWING — CR2's phone pass items 5, 6, 8, still REQUIRED and owed
+  since that phase shipped: the mis-hit test toward END, both-rotations
+  occlusion (real safe-area insets; desktop Chrome reports 0 and no gate
+  can see it) plus the iOS-26 `100dvh` portrait eye, and triple-tap
+  diagnostics (`walk-phase-cr2-exit/RUNSHEET.md`, the tagged handoff list).
+- NO ROWING — the stale-while-armed observation (same runsheet): arm,
+  kill the link before stroke one, switch to GRID, record header/up-next/bar.
+- ONE REST-BEARING PIECE, ~4 min, answering three at once: the same-frame
+  DISTANCE photo (PW's PM-gate C3 row — the Sun-fret protocol aimed at
+  the summary's DISTANCE hero, never yet checked on hardware); **F-2 from
+  2026-08-19's walk** (that session's totals oracle went blind —
+  `machineTotal` was sampled only before rowing, so the accumulator had
+  nothing live to be checked against; a rest is where the CR2 walks
+  sampled it successfully, and this piece tests whether the NATIVE
+  transport samples it at all); and F-1's re-observation (the 6-MIN
+  discrepancy, unreproduced since 2026-08-17 — read the TIME hero after
+  ending and dump the localStorage record BEFORE pressing Log it).
+
+**LT spec 2's accepted limit (PM gate C1):** POST /api/logs' route-scoped
+1 MB body parser registers before auth, so the pre-auth buffer ceiling on
+that one route is 1 MB (was 100 KB app-wide). Ordering pre-existing, no
+amplification path, accepted; owner = the next server-touching phase.
+**LT's device items live on CR2's runsheet** (`docs/monitor/sessions/walk-phase-cr2-exit/RUNSHEET.md`
+— the standing phone pass James still owes): the iOS storage probe, the
+`persist()` grant observation, and the fast-rate re-measure. **DONE 2026-08-19** (walk-2026-08-19-series: S2 PASS, S6 denied-as-predicted, fast rate ~10 Hz with the decimator unaffected — spec 3 is unblocked on this condition). **S5b MEASURED 2026-08-19 (second pass, laptop path): 5.04× compression on a real trace, ~30 KB per typical session, ≈9 MB/year per rower — #130's last inferred number is now measured.** That same pass WITNESSED HEART RATE for the first time (83→123 bpm on the wire), which unblocks spec 3's descoped HR leg. The PM ruling that produced them: **these land BEFORE spec 3 is implemented** — a device-specific
+recorder defect would be invisible AND permanent (frames evaporate, the
+record is immutable, PATCH refuses series), so the check moves in front of
+the renderer.
 **Riding follow-ups (PM gate 2026-08-19):** `pnpm e2e -- -g` needs the
 double-dash form documented (pnpm swallows bare -g); a frozen-clock
 screenshot fixture (17 captures churn on wall-clock date stamps);

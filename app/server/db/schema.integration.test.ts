@@ -628,3 +628,146 @@ describe("migration 0010: hero numbers and plan linkage", () => {
     expect(after.planIndex).toBe(3);
   });
 });
+
+// Series capture spec (2026-08-19), §3 "Server home": migration 0011,
+// one additive, nullable jsonb column, no default, no backfill. Same
+// pre/post-migration shape as the 0010 describe above: a legacy row is
+// seeded against a migrations folder capped at 0010, then the real
+// (full) migrate() applies 0011 and both cases below read shared state
+// built once in beforeAll.
+describe("migration 0011: the series column", () => {
+  let container: StartedPostgreSqlContainer;
+  let pool: pg.Pool;
+  let db: Db;
+  let tempDir: string;
+  let preMigrationRowId: string;
+
+  const PRE_0011_TAGS = [
+    "0000_skinny_silver_fox",
+    "0001_tan_thunderball",
+    "0002_rare_khan",
+    "0003_spicy_firedrake",
+    "0004_slippery_starjammers",
+    "0005_fine_radioactive_man",
+    "0006_windy_wendell_vaughn",
+    "0007_shallow_kang",
+    "0008_strip_wu_steps",
+    "0009_brief_kingpin",
+    "0010_familiar_maddog",
+  ];
+
+  beforeAll(async () => {
+    container = await new PostgreSqlContainer("postgres:18.4").start();
+    ({ pool, db } = createDb(container.getConnectionUri()));
+
+    // A migrations folder containing only 0000-0010, so migrate() below
+    // cannot possibly apply 0011 — the legacy row (no series column at
+    // all) gets seeded against exactly the schema a real v0.13.0 deploy
+    // would have.
+    tempDir = await mkdtemp(path.join(tmpdir(), "drizzle-pre-0011-"));
+    await mkdir(path.join(tempDir, "meta"));
+    for (const [i, tag] of PRE_0011_TAGS.entries()) {
+      const idx = String(i).padStart(4, "0");
+      await copyFile(
+        path.join("drizzle", `${tag}.sql`),
+        path.join(tempDir, `${tag}.sql`),
+      );
+      await copyFile(
+        path.join("drizzle", "meta", `${idx}_snapshot.json`),
+        path.join(tempDir, "meta", `${idx}_snapshot.json`),
+      );
+    }
+    const journal = JSON.parse(
+      await readFile(path.join("drizzle", "meta", "_journal.json"), "utf-8"),
+    ) as { entries: { idx: number }[] };
+    await writeFile(
+      path.join(tempDir, "meta", "_journal.json"),
+      JSON.stringify({
+        ...journal,
+        entries: journal.entries.filter((e) => e.idx <= 10),
+      }),
+    );
+    await migrate(db, { migrationsFolder: tempDir });
+
+    const [u] = await db
+      .insert(users)
+      .values({
+        googleSub: "pre-0011-user",
+        email: "pre-0011@migrate.test",
+        name: "Pre 0011",
+      })
+      .returning();
+
+    // Seeded against the PRE-0011 schema (no series column at all) — raw
+    // SQL, same reason 0010's own block above uses it: the typed
+    // `sessionLogs` insert builder already declares `series` in this
+    // file's TS schema, and that statement would 500 against the real
+    // pre-0011 table. Must run before the full migrate() call below.
+    const inserted = await db.execute<{ id: string }>(
+      sql`insert into "session_logs"
+          ("user_id", "workout_title", "workout_type", "held", "pain", "steps")
+          values (${u.id}, 'Pre-0011 session', 'AT', 'held', 2, '[]'::jsonb)
+          returning "id"`,
+    );
+    preMigrationRowId = inserted.rows[0]!.id;
+
+    // The real, full folder — only 0011 is new here (0000-0010's hashes
+    // already match what ran against tempDir above), so this is the
+    // moment the ADD COLUMN statement fires. Runs once, shared by every
+    // `it` below.
+    await migrate(db, { migrationsFolder: "drizzle" });
+  });
+
+  afterAll(async () => {
+    await pool.end().catch(() => {});
+    await container.stop().catch(() => {});
+  });
+
+  it("reads a pre-0011 row's existing fields unchanged, and series as null, after 0011 applies (never-migrate contract)", async () => {
+    const [after] = await db
+      .select()
+      .from(sessionLogs)
+      .where(eq(sessionLogs.id, preMigrationRowId));
+    expect(after.held).toBe("held");
+    expect(after.pain).toBe(2);
+    expect(after.series).toBeNull();
+  });
+
+  it("accepts a NEW row with series populated, round-tripping exactly, once 0011 has applied", async () => {
+    const [u] = await db
+      .insert(users)
+      .values({
+        googleSub: "post-0011-user",
+        email: "post-0011@migrate.test",
+        name: "Post 0011",
+      })
+      .returning();
+
+    const series = {
+      samples: [
+        { t: 10, d: 23, p: 1400, spm: 24, hr: 138 },
+        { t: 20, d: 47, p: 1350, spm: 25 },
+      ],
+      truncated: true,
+    };
+
+    const [row] = await db
+      .insert(sessionLogs)
+      .values({
+        userId: u.id,
+        workoutTitle: "Series row",
+        workoutType: "AT",
+        held: null,
+        pain: null,
+        steps: [],
+        series,
+      })
+      .returning();
+
+    const [after] = await db
+      .select()
+      .from(sessionLogs)
+      .where(eq(sessionLogs.id, row.id));
+    expect(after.series).toStrictEqual(series);
+  });
+});

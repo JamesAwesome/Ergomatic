@@ -713,6 +713,31 @@ export function describeStoreContracts(
           });
         });
 
+        // Series capture spec (2026-08-19), §3: `series` joins `steps` in
+        // the list projection's exclusion — same reason (dead weight for
+        // a list row, zero client consumers there), same shape of proof.
+        it("list rows never include series", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          await stores.logs.create(
+            userId,
+            logInput({
+              series: { samples: [{ t: 10, d: 23, p: 140, spm: 24 }] },
+            }),
+          );
+          const list = await stores.logs.list(userId, 10);
+          expect(list[0]).not.toHaveProperty("series");
+        });
+
+        it("get still returns the full row, series included", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          const series = { samples: [{ t: 10, d: 23, p: 140, spm: 24 }] };
+          const { id } = await stores.logs.create(userId, logInput({ series }));
+          const row = await stores.logs.get(userId, id);
+          expect(row).toMatchObject({ series });
+        });
+
         // Task 2 review, LOW 1: `LOG_LIST_COLUMNS` (stores/logs.ts) is a
         // hand-maintained mirror of `sessionLogs`' columns, minus `steps`
         // — nothing pinned it against drift before this test. A column
@@ -723,7 +748,13 @@ export function describeStoreContracts(
         // own key set (the real, un-projected row) means this pin tracks
         // the schema automatically — it never needs editing when a future
         // column is added, only when one is deliberately EXCLUDED again.
-        it("the list projection is exactly get()'s key set minus steps — no column silently drops out", async () => {
+        // Series capture spec (2026-08-19), §3 "List projection": the
+        // drift pin updates DELIBERATELY — `series` joins `steps` as the
+        // second column the list projection excludes (a 720 KB
+        // worst-case trace is the same dead weight for a list row that
+        // `steps` already was), so this pin's own filter grows the
+        // matching key, not the assertion shape.
+        it("the list projection is exactly get()'s key set minus steps minus series — no column silently drops out", async () => {
           const stores = await makeStores();
           const userId = await stores.makeUser();
           const { id } = await stores.logs.create(
@@ -733,7 +764,7 @@ export function describeStoreContracts(
           const [listRow] = await stores.logs.list(userId, 10);
           const getRow = await stores.logs.get(userId, id);
           const expectedKeys = Object.keys(getRow!)
-            .filter((k) => k !== "steps")
+            .filter((k) => k !== "steps" && k !== "series")
             .sort();
           expect(Object.keys(listRow).sort()).toStrictEqual(expectedKeys);
         });
@@ -816,6 +847,62 @@ export function describeStoreContracts(
           const userB = await stores.makeUser();
           const { id } = await stores.logs.create(userA, logInput());
           expect(await stores.logs.get(userB, id)).toBeNull();
+        });
+      });
+
+      // Series capture spec (2026-08-19), §3 "Server home": the run's 1 Hz
+      // trace, a nullable jsonb column (migration 0011). S5's own check
+      // (§4's table) — Postgres round-trips a 650 KB-class jsonb value
+      // without surprises — is the worst-case case below; this suite runs
+      // against BOTH real Postgres (`contracts.real.integration.test.ts`)
+      // and the in-memory fakes (`contracts.fake.test.ts`), so the
+      // worst-case round trip is proved against REAL Postgres here, and
+      // the fake proved honest about matching it.
+      describe("series", () => {
+        it("absent series stores and reads back null", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          const { id } = await stores.logs.create(userId, logInput());
+          const row = await stores.logs.get(userId, id);
+          expect(row!.series).toBeNull();
+        });
+
+        it("round-trips a small series exactly, hr included and omitted, truncated set", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          const series = {
+            samples: [
+              { t: 10, d: 23, p: 1400, spm: 24, hr: 138 },
+              { t: 20, d: 47, p: 1350, spm: 25 },
+            ],
+            truncated: true as const,
+          };
+          const { id } = await stores.logs.create(userId, logInput({ series }));
+          const row = await stores.logs.get(userId, id);
+          expect(row!.series).toStrictEqual(series);
+        });
+
+        // S5 (§4's table): the full 14,400-sample worst case (ruling 2's
+        // cap; ~720 KB, the antagonist's own corrected arithmetic, §1)
+        // round-trips sample-identical through the real store. This is
+        // the "insert + GET read-back sample-identical" half of S5's own
+        // check; the HTTP-layer half (through the real body-limit
+        // middleware and the route's own validator) is
+        // `server/routes/seriesCapture.integration.test.ts`.
+        it("round-trips the full 14,400-sample worst case, sample-identical (S5)", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          const samples = Array.from({ length: 14_400 }, (_, i) => ({
+            t: (i + 1) * 10,
+            d: (i + 1) * 23,
+            p: 1400 + (i % 500),
+            spm: 20 + (i % 10),
+            ...(i % 3 === 0 ? { hr: 120 + (i % 100) } : {}),
+          }));
+          const series = { samples, truncated: true as const };
+          const { id } = await stores.logs.create(userId, logInput({ series }));
+          const row = await stores.logs.get(userId, id);
+          expect(row!.series).toStrictEqual(series);
         });
       });
 

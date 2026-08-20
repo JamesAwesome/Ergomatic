@@ -73,6 +73,28 @@ export interface LogStep {
   actualSpm?: number;
 }
 
+// Series capture spec (2026-08-19), §1/§3: a server-side MIRROR of the
+// client's `src/monitor/seriesRecorder.ts` `Sample`/`SeriesData` shapes —
+// not a shared import. Server code never imports from `src/` (the client
+// tree); this is the same "independent, own-bounds mirror" idiom `LogStep`
+// above already uses for the pm5-sourced fields it duplicates from
+// `logDraft.ts` rather than sharing a type across the client/server
+// boundary. `routes/data.ts`'s `validateSeries` is what actually
+// constructs a value of this shape — every field here has already passed
+// its own band check by the time it reaches this store.
+export interface LogSeriesSample {
+  t: number;
+  d: number;
+  p: number;
+  spm: number;
+  hr?: number;
+}
+
+export interface LogSeries {
+  samples: LogSeriesSample[];
+  truncated?: true;
+}
+
 export interface LogInput {
   workoutId: string | null;
   workoutTitle: string;
@@ -119,6 +141,15 @@ export interface LogInput {
   avgSplitSeconds?: number | null;
   timeSeconds?: number | null;
   distanceMeters?: number | null;
+  // Series capture spec (2026-08-19), §3: the 1 Hz trace, optional/
+  // nullable, same convention as `deviceName`/`thumbs` above — absent or
+  // explicit null both store null (an older client, a dropped series, or
+  // a non-monitor door posts nothing). Shape-and-band validated at the
+  // route (`routes/data.ts`'s `validateSeries`) before this type is ever
+  // constructed, same trust-boundary posture as every other numeric field
+  // on this interface. Deliberately excluded from `LOG_LIST_COLUMNS`
+  // below — see that constant's own comment.
+  series?: LogSeries | null;
   // Deliberately absent from this interface: `plan_key`/`plan_index` are
   // NEVER client input. `create()` below derives them itself, inside the
   // same transaction as the log insert, from the plan_state upsert's own
@@ -143,10 +174,14 @@ export interface LogPatch {
   notes?: string | null;
 }
 
-// The list projection (below) explicitly OMITS `steps` — see that
-// method's own comment. This is the shape every column BUT `steps`
-// produces, named once so `list()`'s return type reads intentionally
-// rather than as an unlabeled inline object.
+// The list projection (below) explicitly OMITS `steps` AND `series`
+// (series capture spec, 2026-08-19, §3 "List projection": a 720 KB-
+// worst-case trace is dead weight for a list rendering meta + a hero
+// snippet, exactly like `steps` already was — the drift pin in
+// `storeContracts.ts` reads "list = get - steps - series"). This is the
+// shape every column BUT those two produces, named once so `list()`'s
+// return type reads intentionally rather than as an unlabeled inline
+// object.
 const LOG_LIST_COLUMNS = {
   id: sessionLogs.id,
   userId: sessionLogs.userId,
@@ -530,6 +565,7 @@ export function createLogsStore(db: Db) {
             avgSplitSeconds: input.avgSplitSeconds ?? null,
             timeSeconds: input.timeSeconds ?? null,
             distanceMeters: input.distanceMeters ?? null,
+            series: input.series ?? null,
             planKey,
             planIndex,
           })

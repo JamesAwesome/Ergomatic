@@ -14,6 +14,8 @@ import {
   type ActualSource,
   type HeldResult,
   type LogPatch,
+  type LogSeries,
+  type LogSeriesSample,
   type LogsStore,
   type LogStep,
   type Thumbs,
@@ -456,6 +458,144 @@ function validateLogStepEntry(
   if (meters !== undefined) step.meters = meters;
   if (seconds !== undefined) step.seconds = seconds;
   return { ok: true, step };
+}
+
+// Series capture spec (2026-08-19), §1/§3: the recorder's own cap
+// (`src/monitor/seriesRecorder.ts`'s `SERIES_SAMPLE_CAP`) — a well-behaved
+// client can never post more than this many samples; a hand-crafted body
+// past it is rejected, never silently truncated server-side.
+const SERIES_SAMPLE_CAP = 14_400;
+// t/d "sane band" ceilings mirror this route's OWN existing session-scale
+// sanity bounds (`timeSeconds`'s 604800s, `distanceMeters`'s 1,000,000m,
+// both in the POST handler below) — expressed in THIS field's own units
+// (tenths-of-a-second, decimeters) rather than a fresh number invented for
+// the series alone. Generous on purpose (§1: gaps/reconnects can inflate
+// `t` past the recorder's nominal 4-hour/14,400-sample cap without
+// inflating sample COUNT) — this rejects a hand-crafted liar, never a real
+// reading; cross-sample consistency (monotonic `t`, the fold/decimation
+// invariants) is Task 1's own domain-level contract, not this route's.
+const SERIES_T_MAX = 604_800 * 10;
+const SERIES_D_MAX = 1_000_000 * 10;
+// p (tenths of a second per 500m) mirrors `PM5_MAX_SPLIT_SECONDS` above —
+// this route's own established "sane" pm5 split ceiling — in this field's
+// tenths unit.
+const SERIES_P_MAX = PM5_MAX_SPLIT_SECONDS * 10;
+// spm's honest wire ceiling: 0x0032's own stroke-rate byte is a plain u8
+// (`domain/monitor/pm5/parse.ts`'s `spm: readU8(bytes, 5)`), and the
+// recorder stores it unbanded (`seriesRecorder.ts`'s `spm: f.spm ?? 0` —
+// no drop-if-out-of-band the way `logDraft.ts`'s AUTHORED/matched-actual
+// fields get). The full representable range, not the narrower 10..60/
+// 0..99 bands those separately-purposed fields apply.
+const SERIES_SPM_MAX = 255;
+
+function validateSeriesSample(
+  raw: unknown,
+  index: number,
+): { ok: true; sample: LogSeriesSample } | { ok: false; message: string } {
+  const at = (msg: string) => `series.samples[${index}]: ${msg}`;
+  if (!isRec(raw)) return { ok: false, message: at("must be an object") };
+  const { t, d, p, spm, hr } = raw;
+  if (
+    typeof t !== "number" ||
+    !Number.isInteger(t) ||
+    t < 0 ||
+    t > SERIES_T_MAX
+  ) {
+    return {
+      ok: false,
+      message: at(`t must be an integer, 0..${SERIES_T_MAX}`),
+    };
+  }
+  if (
+    typeof d !== "number" ||
+    !Number.isInteger(d) ||
+    d < 0 ||
+    d > SERIES_D_MAX
+  ) {
+    return {
+      ok: false,
+      message: at(`d must be an integer, 0..${SERIES_D_MAX}`),
+    };
+  }
+  if (
+    typeof p !== "number" ||
+    !Number.isInteger(p) ||
+    p < 0 ||
+    p > SERIES_P_MAX
+  ) {
+    return {
+      ok: false,
+      message: at(`p must be an integer, 0..${SERIES_P_MAX}`),
+    };
+  }
+  if (
+    typeof spm !== "number" ||
+    !Number.isInteger(spm) ||
+    spm < 0 ||
+    spm > SERIES_SPM_MAX
+  ) {
+    return {
+      ok: false,
+      message: at(`spm must be an integer, 0..${SERIES_SPM_MAX}`),
+    };
+  }
+  if (
+    hr !== undefined &&
+    (typeof hr !== "number" ||
+      !Number.isInteger(hr) ||
+      hr < HR_MIN ||
+      hr > HR_MAX)
+  ) {
+    return {
+      ok: false,
+      message: at(`hr must be an integer, ${HR_MIN}..${HR_MAX}, or omitted`),
+    };
+  }
+  // Built from an explicit field list, same "never spread/cast the raw
+  // input" discipline `validateLogStepEntry` above already uses — any
+  // extra keys the client sent (the POST idiom: unknown sample keys are
+  // ignored, never rejected) are silently dropped, not persisted.
+  return {
+    ok: true,
+    sample: hr !== undefined ? { t, d, p, spm, hr } : { t, d, p, spm },
+  };
+}
+
+// Series capture spec (2026-08-19), §3: absent/null both mean "this run
+// had no series" (an older client, a dropped series, a non-monitor door)
+// — same "absent or explicit null both store null" convention as
+// `deviceName`/`thumbs` elsewhere on this route, since nothing here has a
+// use for distinguishing the two. A well-formed body validates every
+// sample independently; `truncated`, when present, must be the literal
+// `true` the recorder itself only ever sets (never a client-asserted
+// count/reason).
+function validateSeries(
+  raw: unknown,
+): { ok: true; series: LogSeries | null } | { ok: false; message: string } {
+  if (raw === undefined || raw === null) return { ok: true, series: null };
+  if (!isRec(raw)) return { ok: false, message: "series must be an object" };
+  if (!Array.isArray(raw.samples)) {
+    return { ok: false, message: "series.samples must be an array" };
+  }
+  if (raw.samples.length > SERIES_SAMPLE_CAP) {
+    return {
+      ok: false,
+      message: `series.samples must have at most ${SERIES_SAMPLE_CAP} entries`,
+    };
+  }
+  if (raw.truncated !== undefined && raw.truncated !== true) {
+    return { ok: false, message: "series.truncated must be true or omitted" };
+  }
+  const samples: LogSeries["samples"] = [];
+  for (let i = 0; i < raw.samples.length; i++) {
+    const result = validateSeriesSample(raw.samples[i], i);
+    if (!result.ok) return { ok: false, message: result.message };
+    samples.push(result.sample);
+  }
+  return {
+    ok: true,
+    series: raw.truncated === true ? { samples, truncated: true } : { samples },
+  };
 }
 
 export function createDataRouter({
@@ -991,6 +1131,17 @@ export function createDataRouter({
       steps.push(result.step);
     }
 
+    // Series capture spec (2026-08-19), §3: optional, absent or null both
+    // mean "this run had no series" — validated the same field-named-400
+    // way as `steps` above; `series` itself is the field name on any
+    // sub-check failure (matching `steps`' own precedent of naming the
+    // whole array field, not a per-index path).
+    const seriesResult = validateSeries(body.series);
+    if (!seriesResult.ok) {
+      badRequest(res, seriesResult.message, "series");
+      return;
+    }
+
     const baselines = await stores.baselines.get(req.user!.id);
     const { id } = await stores.logs.create(req.user!.id, {
       workoutId,
@@ -1010,6 +1161,7 @@ export function createDataRouter({
       timeSeconds: (body.timeSeconds as number | null | undefined) ?? null,
       distanceMeters:
         (body.distanceMeters as number | null | undefined) ?? null,
+      series: seriesResult.series,
     });
     res.status(201).json({ id });
   });

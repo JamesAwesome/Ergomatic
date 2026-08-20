@@ -315,3 +315,68 @@ CR2 closed above.
   failure matches the shape the repo's own comments describe (a late
   Safari restoration pass winning after the app's own scroll-to-top
   already ran).
+
+**ANSWERED 2026-08-19 — all three, on a native dev build of `lt-series`
+with a real PM5; the record is `docs/monitor/sessions/walk-2026-08-19-series/`.
+S2: PASS (718,863 B written and read back byte-identical in the real
+WKWebView). S6: DENIED, exactly as predicted, tolerated. Fast-rate:
+~10 Hz measured — the native path honours the 0x0034 fast rate the web
+transport does not (every sample's bucket residual ≤ 0.1 s across 22
+consecutive seconds; a 500 ms gap is refuted at p≈4e-16), and the
+decimator produced exactly one sample per work-second on that 5×-denser
+stream, upgrading S7 from proven-by-construction to verified-on-hardware.
+Two findings there: the ring does NOT carry per-frame hex (a claim of
+mine the ring itself falsified), and this session's totals oracle went
+blind (machineTotal sampled only before rowing) — filed for the next
+connected-surface phase. The items below are kept for provenance.**
+
+**Phase LT spec 2 "series capture," §6.8 (James, 2026-08-19; design spec
+`docs/superpowers/specs/2026-08-19-series-capture-design.md` §4/§6):**
+this walk already ran and CR2 tagged v0.10.0 — the three items below
+belong to a LATER phase's own device pass, appended here only because
+this is the repo's standing phone-pass checklist, not because it reopens
+anything CR2 closed above. All three are storage/platform claims the
+Chrome-only e2e harness genuinely cannot see (§4's own S2/S6 rows: "the
+harness cannot see iOS — stated, not hidden"); Pass B, no rowing needed
+for any of them (a phone at the desk, briefly connected, is enough).
+
+- **S2's iOS leg — does the real WKWebView actually hold the worst-case
+  series?** (§4 S2: "An iOS device leg on the phase walk sheet: same
+  probe in the real WKWebView.") The Chrome-only e2e probe
+  (`e2e/seriesStorage.spec.ts`, this task) proves desktop Chrome holds a
+  ~720 KB `localStorage` value byte-identical; MDN's 10 MiB sub-cap claim
+  and WebKit's 15%-of-disk origin-quota claim disagree about the
+  MECHANISM, and only a real device settles which one governs iOS. On the
+  native dev build, open the browser console (Safari Web Inspector,
+  attached over USB) and run the identical write-then-read-back probe
+  `seriesStorage.spec.ts` runs in-page (a worst-case ~720 KB `MonitorRun`
+  record, `localStorage.setItem` then `getItem`, byte-for-byte compare).
+  Record PASS/FAIL and, on FAIL, whether it throws immediately or silently
+  truncates (the two failure shapes §3's sacrifice ordering is built to
+  survive are not the same thing to observe).
+- **S6's persist() grant observation — is the origin actually DENIED
+  durable storage on iOS, as predicted?** (§4 S6: "a Capacitor WKWebView
+  is probably DENIED — this is free-but-likely-futile on iOS, recorded as
+  such, NOT as mitigation… The iOS grant status: a walk-sheet observation
+  item.") `useMonitorSession.ts`'s own call-once-and-log already runs on
+  every connected session; open the diagnostics ring (the MONITOR LOG copy
+  button on the Log screen, or the wire log export) after a connected
+  session on the native dev build and read the `persist()` outcome entry.
+  Record GRANTED or DENIED exactly as logged — this is an OBSERVATION, not
+  a gate: DENIED is the expected, tolerated result (§4 S6's own ruling),
+  and this item exists to confirm the prediction rather than to block on
+  it either way.
+- **The fast-rate re-measure — does a real ~10 Hz PM5 stream decimate
+  identically to the 2 Hz web/CI rate S7's own unit test proves?** (§1's
+  Decimation row, the memo's own iOS ~10 Hz hint; §4 S7: "the §6 dual-rate
+  test: a synthetic 10 Hz stream and the real 2 Hz recording decimate to
+  identical series" — proven BY CONSTRUCTION in the unit suite, never yet
+  measured against a REAL fast-rate wire.) Row a short connected piece
+  (a couple of minutes is enough) on the native dev build, download the
+  session's own recording (`docs/monitor/sessions/` idiom — the on-device
+  recorder if the native adapter records, or the wire log export
+  otherwise), and replay it: confirm the derived series has exactly one
+  sample per whole work-second crossed, no duplicates, no gaps beyond
+  genuine reconnect stalls, at whatever real per-second frame rate the
+  device actually delivered. Record the OBSERVED rate (frames/second) next
+  to PASS/FAIL — the number itself is the point, not just the pass.

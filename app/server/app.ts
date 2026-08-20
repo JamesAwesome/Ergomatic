@@ -27,6 +27,21 @@ export interface AppDeps {
 
 export function createApp(deps: AppDeps) {
   const app = express();
+  // Series capture spec (2026-08-19), §3: POST /api/logs's own `series`
+  // payload can run to ~720 KB worst case (14,400 samples, ruling 2) —
+  // comfortably past body-parser's own 100 KB default, which every OTHER
+  // route below keeps UNCHANGED (the antagonist's own probe: 2200 samples
+  // -> 413 before this route-scoped middleware existed). Method+path
+  // scoped (`app.post`, not `app.use`) so this ONLY ever widens the limit
+  // for this one route — registered BEFORE the app-wide default so a
+  // request TO this route hits the bigger-limit parser first. This is not
+  // a double-parse: body-parser's own `read()` (`node_modules/body-parser/
+  // lib/read.js`) skips re-reading a request whose stream is already
+  // finished (`onFinished.isFinished(req)`), so the app-wide
+  // `express.json()` below runs as a no-op pass-through for a body this
+  // one already consumed — every other route is untouched, still gated at
+  // the default 100 KB.
+  app.post("/api/logs", express.json({ limit: "1mb" }));
   app.use(express.json());
   app.use("/api", noStore);
   app.use(originCheck(deps.siteUrl));

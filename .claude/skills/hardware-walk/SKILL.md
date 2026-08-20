@@ -55,8 +55,19 @@ completion-vs-abandon declaration in the plan is what prevents it.
 - **Backdoor login is printed BEFORE the browser opens** — it's on the
   lab card (`walk-lab.sh up` prints it). If auth appears anyway, reprint
   the card; never make him hunt.
-- **Verify frames are live before asking him to row** (pacing memory): a
-  connect + a visible tick on screen is the go signal, spoken as one line.
+- **Verify frames are live before asking him to row** (pacing memory), and
+  ask for a signal that EXISTS in the state he is in: **at READY nothing
+  ticks** — the ghost target and the word READY are themselves rendered
+  from live frames, and no number moves until he pulls (James, 2026-08-19:
+  "numbers dont tick at the ready screen"). Ask him to confirm the screen
+  says READY; ask for moving numbers only mid-piece, never as the go signal.
+- **Say out loud whether the walk needs HEART RATE, in the plan and before
+  the piece** (James, 2026-08-19: "make sure to be explicit when you need
+  heart rate info"). A belt is a thing he has to go and put on; discovering
+  mid-analysis that the trace has no `hr` is discovering it too late. If an
+  item's evidence is better with HR — or if the item IS the still-unwitnessed
+  question of whether his belt delivers at all — the plan says so under
+  "Phone needed", and the pre-piece instruction repeats it.
 
 ## Phase 1 — lab up
 

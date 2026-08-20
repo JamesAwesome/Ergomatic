@@ -22,6 +22,7 @@
 import type { WorkoutProgram } from "../../domain/monitor/program.js";
 import type { IntervalActual } from "../../domain/monitor/types.js";
 import type { LogSeed } from "../session/logDraft";
+import type { SeriesData } from "./seriesRecorder";
 import { clearRun, loadRun } from "../session/run";
 
 export const MONITOR_RUN_KEY = "ergomatic.monitorRun";
@@ -93,6 +94,33 @@ export interface MonitorRun {
    * this file's never-migrate contract.
    */
   endedBy?: "interrupted";
+  /**
+   * Phase LT spec 2 (`docs/superpowers/specs/2026-08-19-series-capture-design.md`
+   * §2's storage-home row): the 1 Hz pace/rate/HR trace `useMonitorSession.ts`'s
+   * `SeriesRecorder` accumulates for the life of this run, flushed onto the
+   * record after each boundary write, on its own 30-second timer, and at
+   * close (never per-frame — §2's own rejected-before-design arithmetic:
+   * "by minute 70, re-serialize ~190 KB every second"). Additive-optional,
+   * the SAME never-migrate contract `endedBy?` above already established
+   * (the precedent §2's storage-home row cites by name): a record from
+   * before this task simply has none, and never gains one after the fact —
+   * there is no wire trace to build it FROM once a run is over. Absent
+   * whenever the recorder produced no sample at all — `SeriesData` is never
+   * an empty-array placeholder (`seriesRecorder.ts`'s own `snapshot()` doc
+   * comment: undefined until the first sample).
+   */
+  series?: SeriesData;
+  /**
+   * Set the one time a localStorage write WITH a series present threw and
+   * the retry-without-series inside `saveMonitorRun`'s own catch succeeded
+   * (§3's sacrifice ordering) — the audit trail of a trace that was
+   * sacrificed to save the run itself. Never written any other way, and
+   * (stated, not hidden, the plan's own self-review names this explicitly)
+   * not read by anything yet this task — a future screen's "trace lost"
+   * notice is the eventual consumer. Additive-optional, same never-migrate
+   * contract as `series` above.
+   */
+  seriesDropped?: true;
 }
 
 // Same discipline as `session/run.ts`'s own `isPlainRecord` — "shaped
@@ -146,6 +174,55 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/** True when `value.series` is either absent or shaped enough to trust — a
+ *  plain record carrying a `samples` array, never a per-sample domain
+ *  validation (that is Task 3's server-side job, not this best-effort
+ *  client mirror's). Pulled out of `isMonitorRun` below (LOW-3, task-2
+ *  review) so `loadMonitorRun`'s own pre-pass (`stripMalformedSeries`) and
+ *  the validator share the identical rule rather than two copies
+ *  drifting. */
+function hasValidSeries(value: Record<string, unknown>): boolean {
+  const series = value.series;
+  return (
+    series === undefined ||
+    (isPlainRecord(series) && Array.isArray(series.samples))
+  );
+}
+
+/**
+ * LOW-3 (task-2 review): a malformed `series` used to discard the WHOLE
+ * record through `isMonitorRun`'s all-or-nothing conjunction — the
+ * inverse of §3's own sacrifice principle ("only the trace is ever
+ * sacrificed, never the run"), just applied at LOAD time instead of SAVE
+ * time. `loadMonitorRun` runs this FIRST: a `series` that fails
+ * `hasValidSeries` is dropped from the value before `isMonitorRun` ever
+ * sees it, so every other field — each validated entirely on its own —
+ * still loads. Returns the SAME reference when `series` is already valid
+ * or absent (the common case, and what lets `isMonitorRun`'s own
+ * `hasValidSeries` check stay in place downstream too, as a redundant
+ * safety net for any caller that reaches it without going through this
+ * pre-pass first — there is exactly one, `loadMonitorRun`, today, but the
+ * function is not exported and nothing pins that as permanent).
+ *
+ * Honest limit (Task 3 review, the re-review's own comment nit): this
+ * strips the RETURNED candidate only — the STORED copy under
+ * `MONITOR_RUN_KEY` still carries the malformed `series` untouched, and
+ * stays dirty until the next `saveMonitorRun` call overwrites it (a
+ * successful save, or the sacrifice retry, both replace the whole key).
+ * A reload before that next save re-reads the same malformed bytes and
+ * strips them again, identically — cheap, not a leak, but worth naming
+ * so a future reader doesn't assume this function repairs storage.
+ */
+function stripMalformedSeries(
+  value: Record<string, unknown>,
+): Record<string, unknown> {
+  if (hasValidSeries(value)) return value;
+  // `_series` is discarded on purpose, same `^_` ignore-pattern idiom
+  // `saveMonitorRun`'s own sacrifice retry already uses.
+  const { series: _series, ...withoutSeries } = value;
+  return withoutSeries;
+}
+
 function isMonitorRun(value: unknown): value is MonitorRun {
   if (!isPlainRecord(value)) return false;
   const program = value.program;
@@ -167,6 +244,14 @@ function isMonitorRun(value: unknown): value is MonitorRun {
     (value.completedAt === null || typeof value.completedAt === "string") &&
     typeof value.terminated === "boolean" &&
     (value.endedBy === undefined || value.endedBy === "interrupted") &&
+    // Phase LT spec 2, Task 2: same shallow "shaped enough not to crash an
+    // unconditional destructure" treatment as `logSeed` above. No
+    // unknown-key check anywhere in this validator (the `endedBy?`
+    // precedent this comment's own header cites) — this positive
+    // conjunction tolerates the new fields on records this task's own
+    // code never wrote, same as any other additive field ever has.
+    hasValidSeries(value) &&
+    (value.seriesDropped === undefined || value.seriesDropped === true) &&
     (logSeed === undefined ||
       (isPlainRecord(logSeed) &&
         Array.isArray(logSeed.steps) &&
@@ -181,12 +266,41 @@ function isMonitorRun(value: unknown): value is MonitorRun {
  *  (the record's would-be callers, `createMonitorRun` below and 7B's
  *  in-progress actuals writes, have no different action to take on a failed
  *  write than a successful one: the in-memory session keeps running either
- *  way, only the localStorage mirror would be stale). */
+ *  way, only the localStorage mirror would be stale).
+ *
+ *  **THE SACRIFICE (Phase LT spec 2 §3, ruling 3's own caution section):**
+ *  a ~720 KB worst-case series (ruling 2's cap) changes the odds of the
+ *  ORIGINAL risk this comment already named — `monitorRun.ts:186-189` at
+ *  brainstorm time was O(KB) and negligible; it is not anymore. On a thrown
+ *  write WITH a `series` present, this catch retries ONCE, WITHOUT the
+ *  series, stamping `seriesDropped: true` on the smaller record — the trace
+ *  is what gets sacrificed, never the run. Honest claim, carried from the
+ *  spec verbatim rather than oversold: the retried, smaller write can ALSO
+ *  throw (a genuinely full origin, not merely a large record) — the run's
+ *  odds on that second failure return to TODAY's odds (this function's own
+ *  pre-existing best-effort swallow, unchanged below), they do not become a
+ *  guarantee. A record with no `series` at all skips the retry outright —
+ *  there is nothing smaller to try, and retrying an identical write would
+ *  only throw the identical way. `void` unchanged either way; nothing here
+ *  is a second source of truth for what got persisted — the CALLER's
+ *  in-memory copy is what every downstream read this session sees, exactly
+ *  as before this task. */
 export function saveMonitorRun(r: MonitorRun): void {
   try {
     localStorage.setItem(MONITOR_RUN_KEY, JSON.stringify(r));
   } catch {
-    // best-effort: a failed persist never interrupts the caller
+    if (r.series === undefined) return;
+    try {
+      // `_series` is discarded on purpose — the whole point of this
+      // destructure is to drop it; the `^_` ignore pattern in this repo's
+      // eslint config (`no-unused-vars`) is what allows the name.
+      const { series: _series, ...withoutSeries } = r;
+      const dropped: MonitorRun = { ...withoutSeries, seriesDropped: true };
+      localStorage.setItem(MONITOR_RUN_KEY, JSON.stringify(dropped));
+    } catch {
+      // The retry ALSO failed: today's odds, nothing worse — a run this
+      // size was never guaranteed to save even before this task existed.
+    }
   }
 }
 
@@ -198,7 +312,16 @@ export function loadMonitorRun(): MonitorRun | null {
   if (raw === null) return null;
   try {
     const parsed: unknown = JSON.parse(raw);
-    if (isMonitorRun(parsed)) return parsed;
+    // LOW-3: strip a malformed `series` BEFORE validating, so its own
+    // defect never costs the rest of an otherwise-good record
+    // (`stripMalformedSeries`'s own doc comment carries the full
+    // reasoning). A no-op (same reference back) whenever `series` is
+    // already valid or absent, or `parsed` is not even a plain record —
+    // `isMonitorRun` below still rejects those the same way it always has.
+    const candidate = isPlainRecord(parsed)
+      ? stripMalformedSeries(parsed)
+      : parsed;
+    if (isMonitorRun(candidate)) return candidate;
   } catch {
     // fall through: garbage JSON is handled the same as an unknown shape
   }

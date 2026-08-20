@@ -33,6 +33,7 @@ import {
   saveMonitorRun,
   type MonitorRun,
 } from "../monitor/monitorRun";
+import type { SeriesData } from "../monitor/seriesRecorder";
 // Pure function (task brief: "export the pure helper ... for tests") — a
 // static top-level import is safe here (unlike every other `./LogSession`
 // reference in this file, which goes through a per-test dynamic `import()`
@@ -285,7 +286,11 @@ const MONITOR_WORKOUT_ID = "id-monitor-fixture";
 // `IntervalActual.index` below is a position in THAT array, so a "both
 // measured" actuals list uses index 1 and 2, never 0.
 function buildMonitorFixture(
-  overrides: { actuals?: IntervalActual[]; deviceName?: string } = {},
+  overrides: {
+    actuals?: IntervalActual[];
+    deviceName?: string;
+    series?: SeriesData;
+  } = {},
 ): { run: MonitorRun; workout: LibraryWorkout } {
   const hoarfrost = library("Hoarfrost");
   const timeWork = hoarfrost.steps.find((s) => s.k === "w") as Extract<
@@ -349,6 +354,14 @@ function buildMonitorFixture(
     startedAt: FIXED_NOW.toISOString(),
     completedAt,
     terminated: false,
+    // Series capture spec (2026-08-19), §3: the KEY itself is omitted
+    // entirely (not `series: undefined`) when no override is given — a
+    // real `loadMonitorRun()` read (through a genuine JSON round trip)
+    // can never produce a present-but-undefined key, and an existing
+    // `toStrictEqual` comparison against this fixture object (the
+    // four-condition-gate test) would otherwise see a shape localStorage
+    // itself never produces.
+    ...(overrides.series !== undefined ? { series: overrides.series } : {}),
   };
   const workout: LibraryWorkout = {
     id: MONITOR_WORKOUT_ID,
@@ -2464,6 +2477,346 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
     const body = parsedBodies(apiFn)[0]!;
     expect("deviceName" in body).toBe(false);
+  });
+
+  // Series capture spec (2026-08-19), §3: the POST body attaches `series`
+  // straight from the loaded run when present.
+  it("omits series from the POST body when the run has none", async () => {
+    const { run, workout } = buildMonitorFixture();
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-no-series" }), {
+          status: 201,
+        }),
+      ),
+    );
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+    const body = parsedBodies(apiFn)[0]!;
+    expect("series" in body).toBe(false);
+  });
+
+  it("attaches series on the wire body when the run has one — the success leg", async () => {
+    const series: SeriesData = {
+      samples: [
+        { t: 10, d: 23, p: 1400, spm: 24, hr: 138 },
+        { t: 20, d: 47, p: 1350, spm: 25 },
+      ],
+    };
+    const { run, workout } = buildMonitorFixture({ series });
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    const clearSpy = mockMonitorRunClearSpy();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-with-series" }), {
+          status: 201,
+        }),
+      ),
+    );
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+    expect(apiFn).toHaveBeenCalledTimes(1);
+    const body = parsedBodies(apiFn)[0]!;
+    expect(body.series).toStrictEqual(series);
+    expect(loadMonitorRun()).toBeNull();
+    expect(clearSpy).toHaveBeenCalledTimes(1);
+  });
+
+  // Series capture spec (2026-08-19), §3: THE POST SACRIFICE — the
+  // red-provable 413 leg. A non-ok response to a body carrying `series`
+  // retries ONCE with the key omitted; the log saves series-less rather
+  // than failing outright.
+  it("the sacrifice retry: a 413 on the first POST retries once without series, and the log saves series-less", async () => {
+    const series: SeriesData = {
+      samples: [{ t: 10, d: 23, p: 1400, spm: 24, hr: 138 }],
+    };
+    const { run, workout } = buildMonitorFixture({ series });
+    saveMonitorRun(run);
+    // LOW-3 (fix round, RULED): seed the diagnostics stash a real rowed
+    // session would already carry (`useMonitorSession.ts`'s own teardown
+    // write) — proves the sacrifice APPENDS to it, never replaces or
+    // ignores whatever the live session already logged. `beforeEach`
+    // above clears localStorage, never sessionStorage (this file's own
+    // "quiet door" describe block above uses the identical
+    // remove-then-set idiom for the same reason), so this removes any
+    // leftover key from a prior test before seeding a known value.
+    sessionStorage.removeItem("ergomatic:last-rowed-log");
+    sessionStorage.setItem(
+      "ergomatic:last-rowed-log",
+      JSON.stringify([
+        { seq: 0, kind: "session-start", detail: "prior entry" },
+      ]),
+    );
+    mockWorkouts([workout]);
+    mockBaselines();
+    const clearSpy = mockMonitorRunClearSpy();
+    let calls = 0;
+    const apiFn = mockApi(() => {
+      calls++;
+      if (calls === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ error: "payload too large" }), {
+            status: 413,
+          }),
+        );
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify({ id: "log-sacrificed" }), {
+          status: 201,
+        }),
+      );
+    });
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+    expect(apiFn).toHaveBeenCalledTimes(2);
+    const bodies = parsedBodies(apiFn);
+    expect(bodies[0]!.series).toStrictEqual(series);
+    expect("series" in bodies[1]!).toBe(false);
+    // The retried body is otherwise byte-identical — only `series` is
+    // genuinely gone (not present-and-undefined: `bodies[1]` came back
+    // through a real JSON.parse, so the key is truly absent, and the
+    // comparison object below is built the same way — a spread with an
+    // `undefined` value would leave the key PRESENT and fail
+    // `toStrictEqual` against a body that never had it).
+    const { series: _droppedSeries, ...firstWithoutSeries } = bodies[0]!;
+    expect(bodies[1]).toStrictEqual(firstWithoutSeries);
+    // A genuine 201 (even on the retry) clears MonitorRun exactly once,
+    // same as the ordinary success leg.
+    expect(loadMonitorRun()).toBeNull();
+    expect(clearSpy).toHaveBeenCalledTimes(1);
+
+    // LOW-3: the POST sacrifice ring-logs itself — the prior entry
+    // survives (APPEND, not overwrite), and one new entry names the
+    // sacrifice with the status (413) that triggered it.
+    const ring = JSON.parse(
+      sessionStorage.getItem("ergomatic:last-rowed-log")!,
+    ) as { seq: number; kind: string; detail: string }[];
+    expect(ring).toHaveLength(2);
+    expect(ring[0]).toStrictEqual({
+      seq: 0,
+      kind: "session-start",
+      detail: "prior entry",
+    });
+    expect(ring[1]!.kind).toBe("post-sacrifice");
+    expect(ring[1]!.detail).toContain("413");
+    expect(ring[1]!.seq).toBe(1);
+    sessionStorage.removeItem("ergomatic:last-rowed-log");
+  });
+
+  // Task 4 handoff (task-2 review): `recordPostSacrifice` appends to the
+  // SAME stash `eventLog.ts`'s own live `record()` writes to, but it is a
+  // second, independent writer — without its own cap it would let the
+  // stash grow unboundedly across repeated sacrifices in one sitting
+  // (retried saves after a workout deletion, a flaky network), unlike
+  // every entry `record()` itself ever wrote. Same ring discipline
+  // `eventLog.ts`'s own `record()` applies (`DEFAULT_CAPACITY`, 500):
+  // oldest entries drop first, `seq` numbers are never rewritten (the
+  // dropped entries' own seqs are simply gone, exactly like the live
+  // log's own ring).
+  it("the POST sacrifice's own ring append is capped at 500 entries, oldest dropped first — the same discipline eventLog.ts's record() applies", async () => {
+    const series: SeriesData = {
+      samples: [{ t: 10, d: 23, p: 1400, spm: 24, hr: 138 }],
+    };
+    const { run, workout } = buildMonitorFixture({ series });
+    saveMonitorRun(run);
+    // Seed a stash already AT capacity (500 entries, seq 0..499) — one
+    // more sacrifice append must drop the oldest (seq 0), not grow past
+    // 500.
+    sessionStorage.removeItem("ergomatic:last-rowed-log");
+    const seeded = Array.from({ length: 500 }, (_, i) => ({
+      seq: i,
+      kind: "session-start",
+      detail: `entry ${i}`,
+    }));
+    sessionStorage.setItem("ergomatic:last-rowed-log", JSON.stringify(seeded));
+    mockWorkouts([workout]);
+    mockBaselines();
+    mockMonitorRunClearSpy();
+    let calls = 0;
+    const apiFn = mockApi(() => {
+      calls++;
+      if (calls === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ error: "payload too large" }), {
+            status: 413,
+          }),
+        );
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify({ id: "log-capped" }), { status: 201 }),
+      );
+    });
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+    expect(apiFn).toHaveBeenCalledTimes(2);
+
+    const ring = JSON.parse(
+      sessionStorage.getItem("ergomatic:last-rowed-log")!,
+    ) as { seq: number; kind: string; detail: string }[];
+    // Still exactly 500 — the append pushed the count to 501, then the
+    // cap trimmed the OLDEST one entry off the front.
+    expect(ring).toHaveLength(500);
+    // seq 0 (the oldest seeded entry) is gone; seq 1 (the next-oldest) is
+    // now the first surviving entry.
+    expect(ring[0]).toStrictEqual({
+      seq: 1,
+      kind: "session-start",
+      detail: "entry 1",
+    });
+    // The newest surviving entry is the sacrifice itself, seq 500 — never
+    // renumbered by the cap.
+    const newest = ring[ring.length - 1]!;
+    expect(newest.kind).toBe("post-sacrifice");
+    expect(newest.seq).toBe(500);
+    expect(newest.detail).toContain("413");
+    sessionStorage.removeItem("ergomatic:last-rowed-log");
+  });
+
+  it("the sacrifice retry ALSO fails: surfaces the genuine error, MonitorRun survives for a real retry", async () => {
+    const series: SeriesData = {
+      samples: [{ t: 10, d: 23, p: 1400, spm: 24, hr: 138 }],
+    };
+    const { run, workout } = buildMonitorFixture({ series });
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    const clearSpy = mockMonitorRunClearSpy();
+    let calls = 0;
+    const apiFn = mockApi(() => {
+      calls++;
+      if (calls === 1) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ error: "payload too large" }), {
+            status: 413,
+          }),
+        );
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify({ error: "boom" }), { status: 500 }),
+      );
+    });
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+
+    expect(
+      await screen.findByText("Couldn't save this session. Try again."),
+    ).toBeInTheDocument();
+    expect(apiFn).toHaveBeenCalledTimes(2);
+    expect(loadMonitorRun()).not.toBeNull();
+    expect(clearSpy).not.toHaveBeenCalled();
+  });
+
+  // Fix round (MED-1): the two retries must COMPOSE — a workout deleted
+  // mid-session (400 workoutId) followed by a genuine failure on the
+  // CORRECTED body (which still carries `series`) must sacrifice `series`
+  // from that corrected body, never re-post the original's now-stale
+  // workoutId. Before the fix, the sacrifice rebuilt from the ORIGINAL
+  // `body` — the corrected retry's own body was discarded, so the
+  // "sacrifice" re-sent the stale workoutId and 400ed again, guaranteed,
+  // surfacing a failure §3 promises can never happen.
+  it("MED-1: workoutId correction survives into the sacrifice — deleted workout + series both recoverable, the log saves series-less", async () => {
+    const series: SeriesData = {
+      samples: [{ t: 10, d: 23, p: 1400, spm: 24, hr: 138 }],
+    };
+    const { run, workout } = buildMonitorFixture({ series });
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    const clearSpy = mockMonitorRunClearSpy();
+    let calls = 0;
+    const apiFn = mockApi(() => {
+      calls++;
+      if (calls === 1) {
+        // Leg 1: the workout was deleted mid-session — 400, field
+        // workoutId.
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              error: "workoutId does not exist",
+              field: "workoutId",
+            }),
+            { status: 400 },
+          ),
+        );
+      }
+      if (calls === 2) {
+        // Leg 2: the CORRECTED body (workoutId: null, series still
+        // present) still fails — a 413, this route's own ceiling.
+        return Promise.resolve(
+          new Response(JSON.stringify({ error: "payload too large" }), {
+            status: 413,
+          }),
+        );
+      }
+      // Leg 3: the sacrifice — corrected workoutId AND no series — saves.
+      return Promise.resolve(
+        new Response(JSON.stringify({ id: "log-med1" }), { status: 201 }),
+      );
+    });
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+    expect(apiFn).toHaveBeenCalledTimes(3);
+    const bodies = parsedBodies(apiFn);
+    expect(bodies[0]!.workoutId).toBe(MONITOR_WORKOUT_ID);
+    expect(bodies[0]!.series).toStrictEqual(series);
+    // Leg 2: the correction carried forward — workoutId null, series
+    // STILL present (this is what the original bug discarded).
+    expect(bodies[1]!.workoutId).toBeNull();
+    expect(bodies[1]!.series).toStrictEqual(series);
+    // Leg 3: BOTH corrections present at once — the workoutId fix from
+    // leg 2 survives, AND series is now gone.
+    expect(bodies[2]!.workoutId).toBeNull();
+    expect("series" in bodies[2]!).toBe(false);
+    expect(loadMonitorRun()).toBeNull();
+    expect(clearSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("a non-ok response with no series present never triggers a second POST", async () => {
+    const { run, workout } = buildMonitorFixture();
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ error: "boom" }), { status: 500 }),
+      ),
+    );
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+
+    expect(
+      await screen.findByText("Couldn't save this session. Try again."),
+    ).toBeInTheDocument();
+    expect(apiFn).toHaveBeenCalledTimes(1);
   });
 
   it("a failed save does NOT clear MonitorRun — the record survives so a retry can still prefill", async () => {

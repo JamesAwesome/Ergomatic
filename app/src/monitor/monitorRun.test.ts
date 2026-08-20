@@ -24,6 +24,11 @@ import {
   MONITOR_RUN_KEY,
   type MonitorRun,
 } from "./monitorRun";
+import {
+  SERIES_SAMPLE_CAP,
+  type Sample,
+  type SeriesData,
+} from "./seriesRecorder";
 
 // Realistic fixture, per repo convention (session/run.test.ts's own
 // comment): Filling Low (AT) — 3x2000m @ 6k+4 with 3' rest,
@@ -1060,5 +1065,300 @@ describe("interruptedTotalSeconds: work + programmed rest for completed interval
       ],
     };
     expect(interruptedTotalSeconds(run)).toBe(300);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase LT spec 2, Task 2. `docs/superpowers/specs/
+// 2026-08-19-series-capture-design.md` §2's storage-home row (`series?`),
+// §3's sacrifice ordering (`saveMonitorRun`'s own catch, `seriesDropped?`),
+// §4's S4 perf probe.
+// ---------------------------------------------------------------------------
+
+function sampleSeries(count: number): SeriesData {
+  const samples: Sample[] = [];
+  for (let i = 0; i < count; i += 1) {
+    samples.push({
+      t: (i + 1) * 10,
+      d: (i + 1) * 34,
+      p: 500,
+      spm: 24,
+      hr: 150,
+    });
+  }
+  return { samples };
+}
+
+describe("series / seriesDropped: the additive fields (§2 storage-home, never-migrate contract)", () => {
+  beforeEach(() => localStorage.clear());
+
+  it("a pre-series record round-trips exactly as before — never-migrate: no reader is forced to handle the field", () => {
+    const run = freshMonitorRun();
+    saveMonitorRun(run);
+    const loaded = loadMonitorRun();
+    expect(loaded).toStrictEqual(viaJson(run));
+    expect(loaded!.series).toBeUndefined();
+    expect(loaded!.seriesDropped).toBeUndefined();
+  });
+
+  it("a record WITH series (and truncated) validates and round-trips byte-identical", () => {
+    const series: SeriesData = { ...sampleSeries(3), truncated: true };
+    const run: MonitorRun = { ...freshMonitorRun(), series };
+    saveMonitorRun(run);
+    const loaded = loadMonitorRun();
+    expect(loaded).toStrictEqual(viaJson(run));
+    expect(loaded!.series).toStrictEqual(series);
+  });
+
+  it("a record with seriesDropped: true (and no series) validates and round-trips", () => {
+    const run: MonitorRun = { ...freshMonitorRun(), seriesDropped: true };
+    saveMonitorRun(run);
+    const loaded = loadMonitorRun();
+    expect(loaded).toStrictEqual(viaJson(run));
+    expect(loaded!.seriesDropped).toBe(true);
+    expect(loaded!.series).toBeUndefined();
+  });
+
+  it("both series and seriesDropped can coexist — the audit trail names a PRIOR drop, not necessarily the current write's own", () => {
+    const run: MonitorRun = {
+      ...freshMonitorRun(),
+      series: sampleSeries(1),
+      seriesDropped: true,
+    };
+    saveMonitorRun(run);
+    expect(loadMonitorRun()).toStrictEqual(viaJson(run));
+  });
+
+  // LOW-3 (task-2 review): a malformed `series` used to discard the WHOLE
+  // record — the inverse of §3's own sacrifice principle ("the run is
+  // never what gets sacrificed"), applied at LOAD time instead of SAVE
+  // time. It is stripped instead, and the rest of the record — every
+  // field that validated fine on its own — still loads.
+  it("a series that is present but malformed (not a plain record at all) is STRIPPED, not a reason to discard the run", () => {
+    const run: MonitorRun = { ...freshMonitorRun(), actuals: [actual1] };
+    localStorage.setItem(
+      MONITOR_RUN_KEY,
+      JSON.stringify({ ...run, series: "garbage" }),
+    );
+
+    const loaded = loadMonitorRun();
+
+    expect(loaded).not.toBeNull();
+    expect(loaded!.series).toBeUndefined();
+    // Everything else that validated on its own still loaded.
+    expect(loaded!.workoutId).toBe(run.workoutId);
+    expect(loaded!.title).toBe(run.title);
+    expect(loaded!.actuals).toStrictEqual([actual1]);
+    // "Kept", not "discarded": the key itself is never cleared by this
+    // path — a load-time strip, not `clearMonitorRun()`.
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).not.toBeNull();
+  });
+
+  it("a malformed series.samples (an object, not an array) is stripped the same way, key intact", () => {
+    const run = freshMonitorRun();
+    localStorage.setItem(
+      MONITOR_RUN_KEY,
+      JSON.stringify({ ...run, series: { samples: {} } }),
+    );
+
+    const loaded = loadMonitorRun();
+
+    expect(loaded).not.toBeNull();
+    expect(loaded!.series).toBeUndefined();
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).not.toBeNull();
+  });
+
+  it("a record whose series is ALREADY valid (or absent) is untouched by the strip — only a malformed series is ever stripped", () => {
+    const withValid: MonitorRun = {
+      ...freshMonitorRun(),
+      series: sampleSeries(2),
+    };
+    saveMonitorRun(withValid);
+    expect(loadMonitorRun()!.series).toStrictEqual(withValid.series);
+
+    localStorage.clear();
+    saveMonitorRun(freshMonitorRun());
+    expect(loadMonitorRun()!.series).toBeUndefined();
+  });
+
+  it("rejects a record whose seriesDropped is any value other than true", () => {
+    const run = freshMonitorRun();
+    localStorage.setItem(
+      MONITOR_RUN_KEY,
+      JSON.stringify({ ...run, seriesDropped: false }),
+    );
+    expect(loadMonitorRun()).toBeNull();
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+  });
+});
+
+describe("saveMonitorRun: the sacrifice (§3, ruling 3's own caution section)", () => {
+  beforeEach(() => localStorage.clear());
+  // `afterEach`, not a per-test `spy.mockRestore()` call at the tail of
+  // each `it`: a `mockRestore()` placed after the assertions never runs
+  // when an assertion throws first, and the un-restored spy then leaks
+  // into whichever test runs next — found by this task's own self-mutation
+  // exercise (removing the sacrifice retry made the FIRST test fail as
+  // expected, but its now-unrestored spy silently corrupted the SECOND
+  // test's own call count, and it read as a false pass instead of a second
+  // failure). `afterEach` always runs, pass or fail.
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("a thrown write WITH series present retries WITHOUT it, and the run survives series-less with seriesDropped: true", () => {
+    const run: MonitorRun = {
+      ...freshMonitorRun(),
+      actuals: [actual1],
+      series: sampleSeries(5),
+    };
+    const spy = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementationOnce(() => {
+        throw new DOMException("quota exceeded", "QuotaExceededError");
+      });
+
+    expect(() => saveMonitorRun(run)).not.toThrow();
+    expect(spy).toHaveBeenCalledTimes(2);
+
+    const survived = loadMonitorRun();
+    expect(survived).not.toBeNull();
+    expect(survived!.series).toBeUndefined();
+    expect(survived!.seriesDropped).toBe(true);
+    // Nothing else about the run was sacrificed with it — the actuals, the
+    // program, the identity all made it through on the smaller write.
+    expect(survived!.actuals).toStrictEqual([actual1]);
+    expect(survived!.workoutId).toBe(run.workoutId);
+    expect(survived!.title).toBe(run.title);
+  });
+
+  it("the retry ALSO throwing: today's odds, nothing worse — the run is unsaved, exactly as it always was before this task", () => {
+    const run: MonitorRun = { ...freshMonitorRun(), series: sampleSeries(5) };
+    const spy = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(() => {
+        throw new DOMException("quota exceeded", "QuotaExceededError");
+      });
+
+    expect(() => saveMonitorRun(run)).not.toThrow();
+    expect(spy).toHaveBeenCalledTimes(2);
+    expect(loadMonitorRun()).toBeNull();
+  });
+
+  it("a record with NO series at all skips the retry outright — one throw, one failed write, no pointless second attempt", () => {
+    const run = freshMonitorRun();
+    const spy = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(() => {
+        throw new DOMException("quota exceeded", "QuotaExceededError");
+      });
+
+    expect(() => saveMonitorRun(run)).not.toThrow();
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(loadMonitorRun()).toBeNull();
+  });
+
+  it("the happy path (no throw at all) is completely unaffected: one write, series intact, seriesDropped absent", () => {
+    const run: MonitorRun = { ...freshMonitorRun(), series: sampleSeries(2) };
+    const spy = vi.spyOn(Storage.prototype, "setItem");
+
+    saveMonitorRun(run);
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    const loaded = loadMonitorRun();
+    expect(loaded!.series).toStrictEqual(run.series);
+    expect(loaded!.seriesDropped).toBeUndefined();
+  });
+});
+
+describe("S4: the worst-case series serializes fast enough for a 30s flush cadence (§4)", () => {
+  it("JSON.stringify of a 14,400-sample record completes well under 100ms", () => {
+    const samples: Sample[] = Array.from(
+      { length: SERIES_SAMPLE_CAP },
+      (_, i) => ({
+        t: (i + 1) * 10,
+        d: (i + 1) * 34,
+        p: Math.round(120 * 10 + (i % 40)),
+        spm: 20 + (i % 10),
+        hr: 130 + (i % 60),
+      }),
+    );
+    const run: MonitorRun = {
+      ...freshMonitorRun(),
+      series: { samples, truncated: true },
+    };
+
+    const start = performance.now();
+    const json = JSON.stringify(run);
+    const elapsedMs = performance.now() - start;
+
+    // S4's own reporting requirement: the measured number is stated in test
+    // output. LOW-2 (task-2 review): `console.log` alone is swallowed by
+    // vitest's console intercept in a normal run (visible only with
+    // `--disableConsoleIntercept`) — the number now ALSO rides the
+    // assertion's own message, so a normal failing (or `--reporter=verbose`
+    // passing) run shows it without a special flag. Kept as a `console.log`
+    // too: `grep`-able test output and the exact idiom S4's own check names.
+    console.log(
+      `S4 perf probe: JSON.stringify of a ${SERIES_SAMPLE_CAP}-sample MonitorRun took ${elapsedMs.toFixed(2)}ms`,
+    );
+
+    expect(samples).toHaveLength(SERIES_SAMPLE_CAP);
+    expect(json.length).toBeGreaterThan(0);
+    // LOW-2's own message argument must be a literal template directly in
+    // this call — eslint-plugin-vitest's `valid-expect` only allows a
+    // string/template LITERAL as the second argument, not a variable
+    // reference (a pre-built label would trip `tooManyArgs`).
+    expect(
+      elapsedMs,
+      `S4 perf probe: JSON.stringify of a ${SERIES_SAMPLE_CAP}-sample MonitorRun took ${elapsedMs.toFixed(2)}ms`,
+    ).toBeLessThan(100);
+  });
+
+  // Task 4 handoff (task-2 review's own observation): S4 only measured the
+  // WRITE side (`JSON.stringify`, the 30s flush's own cost). Three
+  // surfaces `JSON.parse` a record up to the same ~720 KB worst case AT
+  // MOUNT — `loadMonitorRun` itself (this file, below), the diagnostics
+  // stash a rowed session's log screen reads, and the log detail screen's
+  // own `GET /api/logs/:id` response body — and none of them had a
+  // measured number. Same idiom as S4's own probe: a worst-case
+  // `JSON.stringify`d record, timed on the PARSE side, the number stated
+  // in both `console.log` and the assertion's own message (LOW-2's
+  // reporting fix, carried over identically), a generous bound rather than
+  // a tight one (this is a one-time mount cost, not a per-frame budget the
+  // way S4's flush cadence is).
+  it("JSON.parse of a 14,400-sample record (the mount-time cost the write-side S4 probe never measured) completes well under 100ms", () => {
+    const samples: Sample[] = Array.from(
+      { length: SERIES_SAMPLE_CAP },
+      (_, i) => ({
+        t: (i + 1) * 10,
+        d: (i + 1) * 34,
+        p: Math.round(120 * 10 + (i % 40)),
+        spm: 20 + (i % 10),
+        hr: 130 + (i % 60),
+      }),
+    );
+    const run: MonitorRun = {
+      ...freshMonitorRun(),
+      series: { samples, truncated: true },
+    };
+    const json = JSON.stringify(run);
+
+    const start = performance.now();
+    const parsed = JSON.parse(json) as MonitorRun;
+    const elapsedMs = performance.now() - start;
+
+    console.log(
+      `Parse-side perf probe: JSON.parse of a ${SERIES_SAMPLE_CAP}-sample MonitorRun took ${elapsedMs.toFixed(2)}ms`,
+    );
+
+    // Proves this actually parsed the real worst-case payload, not an
+    // empty/truncated string a mistaken slice would still time quickly.
+    expect(parsed.series?.samples).toHaveLength(SERIES_SAMPLE_CAP);
+    expect(parsed.series?.truncated).toBe(true);
+    expect(
+      elapsedMs,
+      `Parse-side perf probe: JSON.parse of a ${SERIES_SAMPLE_CAP}-sample MonitorRun took ${elapsedMs.toFixed(2)}ms`,
+    ).toBeLessThan(100);
   });
 });
