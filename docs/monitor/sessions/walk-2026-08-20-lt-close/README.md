@@ -154,18 +154,44 @@ connect path. `grep` for `isConnected` / `getConnectedDevices` /
 (`useMonitorSession.ts:1531-1534`). The app never asks iOS whether it already
 holds this peripheral; it scans and connects from scratch every time.
 
-**Why this may be the missing half of F-2.** The PM5 is single-central. If
-iOS still holds a connection the app has forgotten, the machine already has a
-central, and a fresh connect-then-program is exactly the shape that ends in
-`LINK-FAILED`. It also fits the asymmetry that a force-quit did not fix and a
-reinstall did: deleting the app definitively releases every CoreBluetooth
-connection it owned.
+**Why this may be the missing half of F-2.** If iOS still holds a connection
+the app has forgotten, a fresh connect-then-program is a plausible route to
+`LINK-FAILED`.
+
+**CORRECTED 2026-08-20 by the Phase LL research pass — "the PM5 is
+single-central" HAS NO SOURCE.** It appears nowhere in Concept2's BLE or
+CSAFE documents and nowhere in our own record; it is a documented absence
+plus consistently singular language, and it was stated as fact here and to
+James during the walk. It must not be inherited as vetted ground. The
+observation in this finding stands on its own — the absent guard and the
+per-attempt transport are both verified — but the single-central premise
+is an assumption awaiting a one-line device probe.
 
 **Stated as a hypothesis, not a finding.** Nobody has observed iOS's own view
 of the connection during a failure, and there is no route to on a TestFlight
 build (F-3). What IS established is the absent guard and the per-attempt
 transport. The Capacitor plugin exposes `getConnectedDevices`; we have never
 called it.
+
+## F-2 addendum — it is not a CONNECT failure, it is a PROGRAM failure
+
+**Established by the Phase LL research pass, 2026-08-20, reading the code
+against this record's own wording.** This README says the retries "reached
+programming" — which means **connect kept succeeding** and programming kept
+failing. That reframes the finding.
+
+The loop is closed by construction, and all three parts are verified:
+`program()`'s catch never disconnects and never clears `driverRef` (contrast
+`connect()`'s catch at `useMonitorSession.ts:1607`); `handleTryAgain`
+(`ConnectedInterstitial.tsx:311-313`) reprograms over that same dead driver;
+and `connect()` early-returns while `driverRef` is set, so nothing can ever
+rebuild it. Retrying could not have worked.
+
+**Strongest instrumentable candidate for the underlying link death:** every
+connect attempt builds a **new `CBCentralManager`** (the plugin's
+`Plugin.swift:62-71` replaces its DeviceManager unconditionally) while its
+`deviceMap` retains peripherals from previous centrals. **It does not explain
+the force-quit survival**, which remains the open question.
 
 ## F-3 — the field cannot self-diagnose this class of bug at all
 

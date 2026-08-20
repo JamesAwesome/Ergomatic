@@ -1666,6 +1666,244 @@ its trigger above); the phase itself closes with the staged v0.7.0 release,
 which fires only after the library-rebalance PR merges (James's ruling:
 testers meet the rebalanced library).
 
+## Phase LL — The link can be lost, and the app has to say so
+
+**Status:** OPENED 2026-08-20 (James, after the LT close-out walk: "i think
+some of the bluetooth problems deserve their own phase with dedicated
+connection management research"). Phase-open PM gate run and folded — its
+verdict re-scoped the ask and is in `pm-ledger.md`.
+
+**This phase is the DISPOSAL of the triggered follow-on "Reconnect and
+background scan, five pieces", which is deleted in the same commit that
+creates this section.** Its stated trigger — "Capacitor BLE lands, or a
+tester reports a mid-piece lost link" — fired twice, and a fired trigger
+that stays a follow-on is filing-as-deferral. Two homes for one body of
+work is the CP/CR2 mistake; there is now one.
+
+**What and why, in plain words.** On 2026-08-20 James armed a workout on
+his phone, walked out of range, cycled Bluetooth off and on, and rowed.
+The screen never changed — it held `1 OF 3 · READY` the whole time, and
+his rowing went nowhere. Then it would not reconnect at all, surviving a
+force-quit and a PM5 restart, until he deleted and reinstalled the app.
+Separately he reports the opposite symptom: offering to Connect when the
+app is in fact already connected. **One root: the app's connection state
+is a local belief, never an observation, and it can be wrong in both
+directions.** The goal of this phase is not to keep the link alive. It is
+that a rower is never lied to about it, and never has to delete the app.
+
+Evidence: `docs/monitor/sessions/walk-2026-08-20-lt-close/` (F-1, F-2,
+F-3, F-6).
+
+### It starts with research, and the research decides the build
+
+**James's requirement, 2026-08-20, binding on this phase's shape:** the
+phase BEGINS with a research pass into Bluetooth connection-management
+best practice, and that pass carries an explicit **BUY vs BUILD
+evaluation** — "in case we could be leveraging a library rather than
+hand-rolling something we're not destined to be good at."
+
+No spec is written before that pass reports. The house research rule
+already applies (BLE lifecycle is a named OS-owned trigger; PRIMARY /
+SECONDARY / INFERENCE tagging; "nothing found" is a result), and this
+phase adds the buy-vs-build question on top of it.
+
+- [x] ~~**The research pass**~~ — **DONE 2026-08-20**:
+      `docs/superpowers/research/2026-08-20-ble-connection-management.md`.
+      **Recommendation: BUY NOTHING.** Every candidate's headline
+      connection-management feature is a wrapper over the same two
+      CoreBluetooth facilities we can reach ourselves, and the incumbent
+      plugin is healthily maintained (8.3.0 published this month — and its
+      iOS sources are byte-identical to our 8.2.0, so upgrading fixes
+      nothing here). Use the platform and call the functions we already
+      own. **The one input that flips the answer** and should be asked
+      before the spec: whether the app should keep logging while
+      backgrounded or terminated. **Revised sequence from the pass:
+      diagnosability → detection → recovery** (it moves diagnosability
+      FIRST — you cannot fix what you cannot see, and the walk proved it).
+      What the pass changed in this phase's own scope, below.
+- [ ] ~~The research pass's original brief, kept for the record:~~
+      Deliverable is a document, not a decision:
+      what the platform guarantees, what our plugin does with those
+      guarantees, what the alternatives are, and a recommendation with its
+      reasoning exposed. It must cover, at minimum:
+      - **The BUY side, seriously rather than as a formality.** What
+        exists for BLE connection management on a Capacitor/iOS app; what
+        each actually gives us over `@capacitor-community/bluetooth-le`;
+        migration cost; and the maintenance question that matters most
+        here — a BLE reconnect layer is exactly the kind of code whose
+        bugs only appear on real hardware, which is an argument FOR
+        borrowing someone else's battle-tested one.
+      - **The third option, which is neither buy nor build:** use the
+        platform's own primitive. Apple's `centralManager.connect` never
+        times out by contract — it is iOS's built-in "connect when this
+        device comes back" — and the plugin wraps it in a JS timeout that
+        CANCELS the pending connection (`DeviceManager.swift:397-411`).
+        We may be hand-rolling a replacement for something we currently
+        disarm. Settle this before costing anything else.
+      - **What the plugin already exposes that we never call** —
+        `getConnectedDevices`, `getDevices`/`retrievePeripherals`, and its
+        enabled-state channel — since "build" may turn out to mean "call
+        the two functions that are already there".
+      - **The does-it-exist question, asked of the PM5:** does the machine
+        have any concept of "the session I was part-way through
+        continues"? If not, reconnect can only ever mean "start watching
+        again", and no copy may promise otherwise. This is the PAUSED
+        lesson pointed at a new state, and it constrains the design more
+        than any library choice.
+      - **Apple, PRIMARY:** what `.poweredOff` does to live connections
+        and whether `didDisconnectPeripheral` is delivered through that
+        transition; what bounds the delay on an out-of-range drop (this
+        decides whether a frame-silence watchdog is mandatory or
+        belt-and-braces); and whether the per-app peripheral identifier
+        survives a delete-and-reinstall — which is also a candidate
+        explanation for the brick.
+      - **Our own prior art, quoted not re-derived:** the web arm's
+        stale-GATT-handle `InvalidStateError` "would have broken the
+        driver's whole reconnect path on real hardware while passing CI,
+        since the fake had no handle invalidation"
+        (`pm5-interface-notes.md:2502-2505`).
+
+### What the research changed — read before writing the spec
+
+- **The frame-silence watchdog is MANDATORY, not belt-and-braces.** Apple
+  documents no bound on out-of-range disconnection latency, and — the
+  important silence — **does not document whether
+  `didDisconnectPeripheral` fires on a Bluetooth power-off at all.** Since
+  that callback is our only detector, detection may be *structurally
+  absent* for exactly what James did. No amount of reading settles it.
+- **A cheap second signal exists and we never subscribe to it:** the
+  plugin's `startEnabledNotifications` channel reports the power-off
+  directly (`DeviceManager.swift:48-70`).
+- **iOS 17 ships Apple's own auto-reconnect** —
+  `CBConnectPeripheralOptionEnableAutoReconnect`, with an `isReconnecting`
+  signal — **and the incumbent plugin cannot reach it**, because it passes
+  `options: nil` and exposes no connect-options passthrough. That is a
+  fork/patch/upstream question, not a library-selection question, and it
+  is the shape "reconnect" would most likely take here if it is ever IN.
+- **F-2 is not a connect failure.** This record's own wording says the
+  retries "reached programming" — connect kept succeeding, programming
+  kept failing. Verified closed loop: `program()`'s catch never
+  disconnects and never clears `driverRef`, Try Again reprograms over the
+  same dead driver, and `connect()` early-returns while `driverRef` is
+  set. Strongest instrumentable candidate for the link death: every
+  connect attempt builds a **new `CBCentralManager`**
+  (`Plugin.swift:62-71`) while the plugin's `deviceMap` retains
+  peripherals from previous centrals. **It does not explain the
+  force-quit survival, which is still unexplained.**
+- **THE PM5 HAS NO RESUME CONCEPT — established by exhaustive
+  enumeration, not assumed.** Its workout state machine has fourteen
+  states and none concerns the link; a grep of the whole CSAFE spec for
+  resume/reconnect finds nothing. What exists instead: the machine keeps
+  counting and publishes its current state, so "start watching again"
+  recovers the numbers but **never the gap**. The only retrospective
+  store is a COMPLETED workout's internal log (`0x003F` +
+  `CSAFE_PM_GET_INTERNALLOGPARAMS`), which is not a mid-piece backfill.
+  This re-confirms DEVIATIONS 75 from first principles instead of
+  inheriting it, and it binds any future copy: **no wording may promise
+  a rower that a gap will be filled.**
+- **"The PM5 is single-central" HAS NO SOURCE** — absent from Concept2's
+  documents and from our own record, and it was stated as fact during the
+  walk. It is a documented absence plus consistently singular language.
+  Do not inherit it; settle it with a one-line device probe, on which
+  part of the recovery design depends.
+- **Two corrections to this phase's own opening text**, from the pass
+  reading the source rather than the brief: the connect timeout is a
+  Swift `DispatchWorkItem`, **not a JS timeout** (`DeviceManager.swift:
+  398-411`) — which changes where any fix lives — and raising it would
+  also un-bound **service discovery**, where there is a live path that
+  never resolves (`Device.swift:81-91`).
+
+### In scope
+
+- [ ] **Detection — make the banner that already exists actually fire.**
+      `1 OF 3 · READY` is structurally impossible once
+      `phase === "disconnected"` (`surfaceModel.ts:787`), so its
+      persistence proves the phase never moved. The app's only lost-link
+      detector is the plugin's disconnect callback, fired solely from
+      `didDisconnectPeripheral`; there is **no frame-silence watchdog
+      anywhere**. The `LOST THE MONITOR` treatment is already designed and
+      shipped (DEVIATIONS row 75) — this is not a design job, it is
+      making a shipped thing reachable. **M**
+- [ ] **Recovery — a way back that is not deleting the app.**
+      `program()`'s catch never disconnects the transport (contrast
+      `connect()`'s catch, `useMonitorSession.ts:1607`), and
+      `handleTryAgain` (`ConnectedInterstitial.tsx:311-313`) reprograms
+      over the same dead driver instead of reconnecting: a self-sustaining
+      `LINK-FAILED` loop by construction. Includes F-6's missing
+      already-connected guard — there is no `isConnected` /
+      `getConnectedDevices` call anywhere, and `createTransport` builds a
+      fresh transport per attempt, so a forgotten-but-live connection
+      against a single-central PM5 is exactly the failure shape observed.
+      **M**
+- [ ] **Diagnosability — move the diagnostic out from behind the door the
+      bug locks.** `MONITOR LOG · COPY` lives on the log screen
+      (`LogSession.tsx:668`), reachable only after a session finishes,
+      which is downstream of the failure under study. It belongs on the
+      failure and connected surfaces too. This is what made both walk
+      findings evidence-poor, and it scopes any fix. **S**
+- [ ] **Re-reason the failed-`program()`-leaves-a-run-open item.**
+      `driver.ts`'s `program()` replaces `activeRun` only after
+      `sendPrepare()`/`sendSequence()`/`verifyArmed()` all resolve, so a
+      throw part-way leaves the previous run open, still normalising the
+      next boundary and still emitting its own `workoutComplete`. Parked
+      in 7A-fix-2 Task 4's review (probe P3b) on a rationale citing a
+      destructive-reject fact that §19.2 has since WITHDRAWN; the decision
+      needs re-reasoning against the current record (draft in PR #70's
+      body). Directly relevant: a failed `program()` is the exact event
+      that started the walk's `LINK-FAILED` loop. **S**
+
+### Explicitly OUT — with what has to be true before each is IN
+
+Reconnect is **future work, not irrelevant** (James asked, 2026-08-20).
+It is out of THIS phase because the harm observed does not require it,
+because the shipped "lose and degrade" posture (design spec C5,
+DEVIATIONS 75/82) was never proven broken — only never proven working, its
+banner having never fired on native — and because it is the most
+invention-heavy piece available: `createPm5Driver` subscribes only at
+construction, has no teardown, and rebuilding a live driver
+double-processes every notification. Before reconnect is IN:
+
+1. The research pass has answered the buy-vs-build question and the
+   PM5's does-it-exist question.
+2. **The fake models handle invalidation.** Today it cannot prove a
+   reconnect works — see the quoted prior art above — so reconnect tests
+   would be theatre. This is a real work item and it lands first.
+3. Detection ships, so we have seen what "lose and degrade" actually
+   feels like on hardware before deciding to replace it.
+
+Also OUT, and each for a stated reason: **MISSED-rows inheritance**
+(DEVIATIONS 82 — they exist only to catch what a reconnect BACKFILL fails
+to fill; no backfill, no MISSED); **background scan** and
+**`DiscoveredMonitor.rssi`** (convenience, not the defect); and **any
+`RECONNECTING` copy** (DEVIATIONS row 75 made that ruling once; do not
+un-make it before the thing it promises exists).
+
+**Exit — written so it can go red.** On a real PM5 and a real phone, on a
+Release build: (a) a link killed BEFORE stroke one, and again MID-PIECE,
+moves the surface off `READY`/live numbers within a stated bound and says
+the link is lost; (b) Try Again reaches a fresh connect and programs
+successfully **without deleting the app**; (c) the full diagnostics ring
+for the episode is retrievable from the phone, from the failure screen
+itself; (d) if the delete-to-fix residue turns out to be iOS-side and
+unfixable, DEVIATIONS carries the row saying so and the recovery path is
+documented and non-destructive.
+
+**Sequencing (PM gate):** LT close → **LL** → CL2 → LQ → PROD. LL
+displaces CL2, which is two items whose gap has a stated workaround (the
+`xN` grammar already parses via import, `bulk.ts:268`). **LL is a PROD
+precondition** — PROD's exit, an empty-phone install reaching a logged row
+unaided, is unreachable while a link drop bricks the app.
+
+**Release posture (PM gate, 2026-08-20):** v0.14.0 carries this defect but
+does not own it — `git diff --stat v0.13.0 v0.14.0 --
+app/src/monitor/transports/ app/src/adapters/` is empty and the native BLE
+arm is unchanged since v0.10.0, so a rollback ships the same bug minus
+five notes clauses. Not pulled. **But the delete-and-reinstall workaround
+is DESTRUCTIVE** — it wipes `ergomatic.monitorRun`, `ergomatic.sessionRun`
+and `ergomatic.sessionDraft`, costing an unlogged session and any
+in-progress draft. It must not be handed to any tester but James until
+criterion (b) exists.
+
 ## Phase CL2 — Post-release authoring parity
 
 **Status:** Not started, and now UNBLOCKED — the v0.7.0 release it was
@@ -3116,25 +3354,6 @@ program.ts` hardcodes PM5 Table 19 limits (`MIN_TIME_SECONDS = 20`,
   monitor integration becomes real. Then: add a programming-limits channel
   to `MonitorCapabilities`, move the four constants there per-monitor, and
   template the six `CompileError` messages instead of hardcoding "PM5".
-- **Reconnect and background scan, five pieces** (Phase 7B Task 8
-  close-out; `docs/design/DEVIATIONS.md`'s lost-link and MISSED-rows rows;
-  design spec C5's descope): (1) Capacitor id-keyed reconnect; (2) DRIVER
-  RE-SUBSCRIBE, since `createPm5Driver` subscribes once at construction and
-  a transport that silently regains its link still needs its notification
-  handler re-attached; (3) a `Transport.scan()` background variant that can
-  watch for a known PM5 without the OS picker; (4) `DiscoveredMonitor.rssi`,
-  so a picker or auto-connect can rank by signal; (5) MISSED-rows inheritance,
-  which exists only to catch what a reconnect BACKFILL fails to fill and so
-  lands with reconnect or not at all. **A failed `program()` during an OPEN
-  run leaves the old run open and numbering** — `driver.ts`'s `program()`
-  replaces `activeRun` only after `sendPrepare()`/`sendSequence()`/
-  `verifyArmed()` all resolve, so a throw part-way leaves the previous run
-  open, still normalizing the next boundary and still emitting its own
-  `workoutComplete`. Pre-existing, parked deliberately in 7A-fix-2 Task 4's
-  review (probe P3b); its original rationale cited a destructive-reject fact
-  §19.2 has since WITHDRAWN, so the decision needs re-reasoning against the
-  current record (re-reasoning draft in PR #70's body). **Trigger:** Capacitor
-  BLE lands (PM5 reaches the phone), or a tester reports a mid-piece lost link.
 - **Remove the `PULL TO RESUME` block** (James, 2026-08-17: "we never got
   rid of the pull to resume screen"): the stale-state band on
   `ConnectedSurface.tsx` (~line 584) still renders its inverted ink field
