@@ -3266,9 +3266,19 @@ wall-clock date alone will NOT fix this.** A second, independent churn
 source lives in `e2e/helpers.ts`'s own `RUN_ID` (`Date.now()` + a random
 suffix, baked into every generated e2e user's email via
 `signInViaBackdoor`), which changes on EVERY run regardless of calendar
-date — confirmed on `you-derive-offer.png`, which differs
-run-to-run ONLY in that email string. The fixture fix needs to cover
-both sources or captures will keep re-churning after it ships; `judge()`'s
+date — confirmed on `you-derive-offer.png`: the string itself differs
+AND its own rendered LENGTH varies run to run (the exact sub-mechanism
+is not yet isolated — `RUN_ID`'s own two components are each
+nominally fixed-length in the current era, so the wrap is either a rarer
+edge case in one of them or a third source not yet found), which
+reflows the whole page wherever that email renders — measured at 26,327
+pixels differing across 13 row bands down to y=527, not a localized
+diff. **The fixture fix must neutralise the identity's own printed
+LENGTH (a fixed-width stub, not merely a frozen value) or the reflow
+keeps happening even once the string is otherwise deterministic; isolate
+the exact length-varying sub-mechanism before assuming a frozen `RUN_ID`
+alone fixes it.** Covers both sources or captures will keep re-churning
+after it ships; `judge()`'s
 documented-unreachable dead-even branch (discriminated union if a second
 producer appears); the live summary's judged-state capture (closed by
 this PR's C1 recapture — verify at close).

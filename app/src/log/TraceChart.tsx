@@ -52,6 +52,32 @@ const RIGHT_PAD = 8;
 const TOP_PAD = 10;
 const BOTTOM_PAD = 10;
 
+/** The plot area's own height and its bottom edge (the y-coordinate the
+ *  rest band sits ON, review round 2) — named once so `restBandsFor
+ *  Segment`'s geometry and the polyline/tick scales below all derive
+ *  from the SAME two numbers rather than re-deriving them separately. */
+const PLOT_HEIGHT = CHART_HEIGHT - TOP_PAD - BOTTOM_PAD;
+const PLOT_BOTTOM = CHART_HEIGHT - BOTTOM_PAD;
+
+/** Review round 2 (James's ruling, three mocked treatments against the
+ *  real tokens and geometry — bottom-anchored won): a full-height,
+ *  100%-opacity band read as "something is blocking the data", and let
+ *  the polyline cross it at full plot height, dropping the stroke's own
+ *  contrast from 17.11:1 to 3.62:1 wherever a rest sat on the chart's
+ *  own lowest plateau. A SHORT bar at the FOOT of the plot fixes both:
+ *  the band keeps its full `--trace-rest` colour/opacity (§3's own word
+ *  is "tint", never an alpha wash — that option was NOT chosen), and
+ *  `domainY`'s own 10% padding (`../charts/scale.js`'s `domainFromReadings`)
+ *  keeps the worst real reading clear of a strip this short in practice,
+ *  so the line stays close to its full 17.11:1 contrast almost
+ *  everywhere on the chart. Expressed as a FRACTION of `PLOT_HEIGHT`,
+ *  never a hardcoded pixel value, so a future non-fixed plot height
+ *  still gets a proportional bar (James's own mock used 14px in a
+ *  ~119px plot — this fraction reproduces that ratio against this
+ *  component's own real 120px plot). */
+const REST_BAND_HEIGHT_FRACTION = 14 / 119;
+const REST_BAND_HEIGHT = PLOT_HEIGHT * REST_BAND_HEIGHT_FRACTION;
+
 /** Decimation's own `columns` argument (Task 1's `decimate`, §3's "~2
  *  points per horizontal pixel"). An inline SVG has no fixed device-pixel
  *  width of its own (it scales with the viewport) — the plot area's own
@@ -167,13 +193,17 @@ export default function TraceChart({
         role="img"
         aria-label={trace.summary}
       >
-        {/* trace-truth Task 2 (spec §3): drawn FIRST — beneath the tick
-            marks and the polyline(s) — so the band reads as a background
-            tint the line and ticks sit on top of, never a foreground
-            overlay that could obscure a reading. Computed from the
-            FULL (non-decimated) points per segment; the polyline below
-            is decimated independently and stays one continuous stroke
-            across the band (§3: a rest is not a gap). */}
+        {/* trace-truth Task 2 (spec §3), review round 2: drawn FIRST —
+            beneath the tick marks and the polyline(s) — still guarantees
+            paint-order continuity (the line always sits on top, so it is
+            never occluded), but the band itself is now a SHORT bar at
+            the plot's own FOOT (`PLOT_BOTTOM`/`REST_BAND_HEIGHT`) rather
+            than a full-height fill — round 1 shipped the latter, which
+            read as "something is blocking the data" and let the line
+            cross it at full height. Computed from the FULL
+            (non-decimated) points per segment; the polyline below is
+            decimated independently and stays one continuous stroke
+            across the band's own x-range (§3: a rest is not a gap). */}
         {trace.points.map((segment, segIndex) =>
           restBandsForSegment(segment).map((band, bandIndex) => {
             const x1 = xScale(Math.max(trace.domainX[0], band.startX));
@@ -183,9 +213,9 @@ export default function TraceChart({
                 key={`${segIndex}-${bandIndex}`}
                 className="trace-rest-band"
                 x={x1}
-                y={TOP_PAD}
+                y={PLOT_BOTTOM - REST_BAND_HEIGHT}
                 width={Math.max(0, x2 - x1)}
-                height={CHART_HEIGHT - TOP_PAD - BOTTOM_PAD}
+                height={REST_BAND_HEIGHT}
               />
             );
           }),
@@ -223,6 +253,17 @@ export default function TraceChart({
           );
         })}
       </svg>
+      {/* F-2 (James's ruling, review round 2): one quiet line explaining
+          the shading, same idiom as `PostWorkoutSummary.tsx`'s own
+          `.summary-legend` ("<- FASTER (BLUE) . SLOWER (RED) ->") —
+          shown only when there is something to explain (that file's own
+          `hasJudgedRow` guard), never a permanent fixture on a rest-free
+          trace. Spec §3 forbids copy claiming the rest PACE is
+          meaningful; it says nothing about naming what the shading
+          itself is, so this says only that. */}
+      {trace.points.some((segment) => segment.some((p) => p.rest)) && (
+        <p className="trace-legend">SHADED = REST</p>
+      )}
     </figure>
   );
 }

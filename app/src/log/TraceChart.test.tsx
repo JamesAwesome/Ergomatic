@@ -453,6 +453,39 @@ describe("TraceChart — trace-truth Task 2: rests are drawn, but marked (§3), 
     }
   });
 
+  // F-1 (James's ruling, review round 2): a SHORT bar at the plot's own
+  // FOOT, never a full-height fill — round 1 shipped the latter, which
+  // let the polyline cross it at full height and read as "something is
+  // blocking the data". `CHART_HEIGHT`/`TOP_PAD`/`BOTTOM_PAD` are not
+  // exported from `TraceChart.tsx`, so this duplicates their values
+  // (same "each test file owns its own copy" convention this file's own
+  // program constants already use) rather than importing internals.
+  it("F-1: the rest band is a SHORT bar at the plot's own foot, never a full-height fill", async () => {
+    const CHART_HEIGHT = 140;
+    const TOP_PAD = 10;
+    const BOTTOM_PAD = 10;
+    const PLOT_HEIGHT = CHART_HEIGHT - TOP_PAD - BOTTOM_PAD; // 120
+    const PLOT_BOTTOM = CHART_HEIGHT - BOTTOM_PAD; // 130
+
+    const series = await realSeriesWithRest();
+    const { container } = render(<TraceChart series={series} />);
+    const bands = Array.from(container.querySelectorAll(".trace-rest-band"));
+    expect(bands.length).toBeGreaterThan(0);
+    for (const band of bands) {
+      const y = Number(band.getAttribute("y"));
+      const height = Number(band.getAttribute("height"));
+      // Bottom-anchored: the band's own bottom edge sits ON the plot's
+      // own foot, not floating mid-chart or hanging from the top.
+      expect(y + height).toBeCloseTo(PLOT_BOTTOM, 5);
+      // SHORT, never full-height: round 1's regression would have been
+      // `height === PLOT_HEIGHT` (120) — this pins it well under that,
+      // matching James's own ~14/119 mock ratio against this component's
+      // real 120px plot (~14.03).
+      expect(height).toBeLessThan(PLOT_HEIGHT * 0.3);
+      expect(height).toBeGreaterThan(0);
+    }
+  });
+
   // Not step-3: that capture's OWN mid-workout rest is frozen (zero
   // samples there, task-2-brief's own reasoning) but the recorder marks
   // `r: true` on ANY sample whose winning frame reads `state ===
@@ -479,5 +512,22 @@ describe("TraceChart — trace-truth Task 2: rests are drawn, but marked (§3), 
 
     const { container } = render(<TraceChart series={series} />);
     expect(container.querySelectorAll(".trace-rest-band")).toHaveLength(0);
+    // F-2 (review round 2): the legend is additive, never a permanent
+    // fixture — nothing to explain on a rest-free trace.
+    expect(container.querySelector(".trace-legend")).toBeNull();
+  });
+
+  // F-2 (James's ruling, review round 2): a quiet key explaining the
+  // shading — spec §3 forbids copy claiming the rest PACE is
+  // meaningful; it says nothing about naming what the shading itself
+  // is, same idiom as `PostWorkoutSummary.tsx`'s own `.summary-legend`.
+  it("F-2: a rest-bearing trace renders a legend naming the shading, absent on a rest-free one", async () => {
+    const restSeries = await realSeriesWithRest();
+    const { container: withRest } = render(<TraceChart series={restSeries} />);
+    const legend = withRest.querySelector(".trace-legend");
+    expect(legend).not.toBeNull();
+    expect(legend!.textContent).toBe("SHADED = REST");
+    // Never claims anything about the rest's own pace value (§3).
+    expect(legend!.textContent!.toLowerCase()).not.toMatch(/pace|split/);
   });
 });

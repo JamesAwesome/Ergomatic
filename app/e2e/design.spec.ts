@@ -2910,6 +2910,37 @@ test.describe("trace chart (trace-truth Task 2: rest-span design witness)", () =
     expect(await page.locator(".trace-svg polyline").count()).toBe(1);
   });
 
+  // F-1 (James's ruling, review round 2): a SHORT bar at the plot's own
+  // FOOT, computed in a REAL browser against the rendered SVG's own
+  // pixel geometry — never a full-height fill (round 1's own shipped
+  // shape, which let the polyline cross it at full height). Compared
+  // against the SVG's own viewBox-to-pixel scale factor rather than a
+  // hardcoded pixel count, so this stays correct at any viewport width.
+  test("the rest band is a SHORT bar at the plot's own foot, never a full-height fill (real browser geometry)", async ({
+    page,
+  }) => {
+    const svgBox = (await page.locator(".trace-svg").boundingBox())!;
+    const bandBox = (await page
+      .locator(".trace-rest-band")
+      .first()
+      .boundingBox())!;
+    // viewBox is "0 0 320 140" (`TraceChart.tsx`'s own CHART_WIDTH/
+    // CHART_HEIGHT) — the SVG's rendered pixel height maps 1:1 to that
+    // 140 user-unit height, so this scale factor converts either way
+    // without hardcoding the component's own internal constants.
+    const pxPerUnit = svgBox.height / 140;
+    const bandHeightUnits = bandBox.height / pxPerUnit;
+    const bandBottomUnits = (bandBox.y + bandBox.height - svgBox.y) / pxPerUnit;
+    // Bottom-anchored: within a pixel-rounding tolerance of the plot's
+    // own foot (CHART_HEIGHT - BOTTOM_PAD = 130).
+    expect(bandBottomUnits).toBeGreaterThan(128);
+    expect(bandBottomUnits).toBeLessThan(132);
+    // SHORT: well under the full plot height (120) — round 1's own
+    // regression would read close to 120 here.
+    expect(bandHeightUnits).toBeLessThan(36); // 120 * 0.3
+    expect(bandHeightUnits).toBeGreaterThan(0);
+  });
+
   // Structural, not a name-based guess: the band rect sits strictly
   // BEFORE the polyline(s) in document order, so it paints beneath them
   // (SVG's own paint order is document order) — never a foreground

@@ -264,7 +264,7 @@ describe("buildTrace — §3 pace inverts (faster is up), rate/hr do not", () =>
 });
 
 describe("buildTrace — §5's text alternative: real values, direction, no boundary claim", () => {
-  it("pace summary on step-3 names the measure, the session's first/last real reading, its fastest split, and the segment count — never the word 'interval'", async () => {
+  it("pace summary on step-3 names the measure, the session's first/last real reading, its fastest split, the segment count, and the rest clause — never the word 'interval'", async () => {
     const series = seriesFromFrames(await loadCaptureFrames(STEP3_PATH));
     const trace = buildTrace(series, "pace")!;
     // First/last/fastest real readings independently derived from the
@@ -273,11 +273,30 @@ describe("buildTrace — §5's text alternative: real values, direction, no boun
     const firstSeconds = realPace[0]! / 10;
     const lastSeconds = realPace[realPace.length - 1]! / 10;
     const fastestSeconds = Math.min(...realPace) / 10;
+    // Rest-run count, independently derived from the capture's own
+    // samples (never hand-copied): step-3's own TRAILING rest (its
+    // capture ends mid-rest, `seriesRecorder.ts`'s own corrected header
+    // comment) contributes 1 run of its own — F-3 review round 2.
+    let restRuns = 0;
+    let inRun = false;
+    for (const s of series.samples) {
+      if (s.r === true) {
+        if (!inRun) restRuns++;
+        inRun = true;
+      } else {
+        inRun = false;
+      }
+    }
+    const restClause =
+      restRuns > 0
+        ? `, ${restRuns} rest ${restRuns === 1 ? "span" : "spans"} shaded`
+        : "";
 
     expect(trace.summary).toBe(
-      `Pace, ${fmtSplit(firstSeconds)} at the start to ${fmtSplit(lastSeconds)} at the end, fastest ${fmtSplit(fastestSeconds)}, in ${trace.points.length} segments`,
+      `Pace, ${fmtSplit(firstSeconds)} at the start to ${fmtSplit(lastSeconds)} at the end, fastest ${fmtSplit(fastestSeconds)}, in ${trace.points.length} segments${restClause}`,
     );
     expect(trace.points.length).toBeGreaterThan(1); // the clause is exercised, not vacuous
+    expect(restRuns).toBe(1); // step-3's own trailing rest, ground truth
     expect(trace.summary.toLowerCase()).not.toContain("interval");
   });
 
@@ -390,5 +409,41 @@ describe("buildTrace — trace-truth Task 2: rests are marked on the point, not 
     // Cross-checked against the sample-level count directly
     // (seriesRecorder.test.ts's own oracle for this exact capture).
     expect(series.samples.filter((s) => s.r === true)).toHaveLength(21);
+  });
+
+  // F-3 (review round 2): the tint has no accessible presence of its own
+  // (an SVG `<rect>`, no `aria-*`) — this string is the ONLY place a
+  // screen-reader user learns a rest happened at all. Pinned against the
+  // real capture, not a hand-built minimum: 3 separate rest runs
+  // (9+8+4=21 samples, this file's own sibling test above) collapse to
+  // "3 rest spans" — a COUNT of runs, never their pace value (§3 forbids
+  // claiming the rest pace is meaningful; this clause doesn't).
+  it("buildSummary names the rest spans for a screen-reader user, on the real rest-bearing capture", async () => {
+    const frames = await loadCaptureFrames(
+      "docs/monitor/sessions/walk-2026-08-16/session-2-wu-4unequal.jsonl",
+      SESSION_2_PROGRAM,
+    );
+    const rec = createSeriesRecorder();
+    for (const f of frames) rec.onFrame(f);
+    const series = rec.snapshot()!;
+    const trace = buildTrace(series, "pace")!;
+    expect(trace.summary).toBe(
+      "Pace, 2:55.7 at the start to 2:02.1 at the end, fastest 1:54.8, in 2 segments, 3 rest spans shaded",
+    );
+  });
+
+  // The negative: a rest-free trace names no rest spans at all — the
+  // clause is additive, never a permanent fixture (same "no clause when
+  // nothing to say" idiom the existing segment clause already uses).
+  it("buildSummary names no rest spans when the trace has none", () => {
+    const series = {
+      samples: [
+        { t: 10, d: 40, p: 1200, spm: 20 },
+        { t: 20, d: 45, p: 1400, spm: 18 },
+        { t: 30, d: 80, p: 1200, spm: 20 },
+      ],
+    };
+    const trace = buildTrace(series, "pace")!;
+    expect(trace.summary).not.toContain("rest span");
   });
 });

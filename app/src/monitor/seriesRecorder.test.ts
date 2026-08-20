@@ -886,13 +886,16 @@ describe("createSeriesRecorder — trace-truth Task 1: the register map, driven 
 // ---------------------------------------------------------------------
 // trace-truth Task 2 (2026-08-20): rests are DRAWN, but MARKED (spec §3).
 // `session-2-wu-4unequal.jsonl` is used deliberately over step-3: step-3's
-// first rest is FROZEN (the rower stopped rowing, wire elapsed/distance
-// hold), which is exactly the shape that let a false premise survive —
-// session-2's own rests still ADVANCE (README: "wu 4 unequal"), so this
-// capture actually exercises a `state === "resting"` frame reporting a
-// real, changing `elapsedSeconds`/`distanceMeters`, not merely a frozen
-// hold this recorder already emits zero samples for "by construction"
-// (this file's own header comment) regardless of any `r` marking.
+// OWN MID-WORKOUT rest is FROZEN (the rower stopped rowing, wire
+// elapsed/distance hold for that one window), which is exactly the shape
+// that let a false premise survive — session-2's own rests still ADVANCE
+// (README: "wu 4 unequal"), so this capture actually exercises a
+// `state === "resting"` frame reporting a REAL, CHANGING
+// `elapsedSeconds`/`distanceMeters`, the case a frozen window can never
+// exercise on its own (review round 2: stale-citation fix — this used to
+// cite "this file's own header comment" for a "zero samples by
+// construction" claim; that header now says the OPPOSITE, correctly, per
+// this exact test's own evidence).
 // ---------------------------------------------------------------------
 
 /** `registerReplay.test.ts`'s own `SESSION_2_PROGRAM` (walk-2026-08-16,

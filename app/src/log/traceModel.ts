@@ -199,12 +199,37 @@ function formatValue(measure: Measure, value: number): string {
   return `${Math.round(value)} ${unit}`;
 }
 
+/** Counts contiguous runs of `rest === true` in `readings`' own wire
+ *  order — the same run-grouping `TraceChart.tsx`'s own
+ *  `restBandsForSegment` does per segment, but here across the whole
+ *  trace (a count for the TEXT alternative has no use for a segment
+ *  boundary the reader never sees rendered as a mark, §4). */
+function countRestRuns(readings: readonly Reading[]): number {
+  let runs = 0;
+  let inRun = false;
+  for (const r of readings) {
+    if (r.rest) {
+      if (!inRun) runs++;
+      inRun = true;
+    } else {
+      inRun = false;
+    }
+  }
+  return runs;
+}
+
 /** §5's text alternative: the measure, its first/last real reading (the
  *  session's own direction of travel), and its own extreme — "fastest"
  *  for pace (the minimum split), "highest" for rate/hr (the maximum
  *  count, since a stroke-rate trace can legitimately spike, spec 2's
  *  device-witnessed handoff to this spec). A segment clause is appended
- *  ONLY when the line actually breaks — never the word "interval". */
+ *  ONLY when the line actually breaks — never the word "interval".
+ *  Review round 2 (F-3): a rest clause is appended when the trace
+ *  carries any rest-marked reading — the ONLY place a screen-reader user
+ *  learns a rest happened at all, since the tint (§3's own design) has
+ *  no accessible presence of its own. Names that spans exist, never
+ *  their pace value — §3 forbids claiming the rest PACE is meaningful,
+ *  and this clause doesn't. */
 function buildSummary(
   measure: Measure,
   readings: readonly Reading[],
@@ -218,11 +243,16 @@ function buildSummary(
   const extremeLabel = measure === "pace" ? "fastest" : "highest";
   const segmentClause =
     segments.length > 1 ? `, in ${segments.length} segments` : "";
+  const restRuns = countRestRuns(readings);
+  const restClause =
+    restRuns > 0
+      ? `, ${restRuns} rest ${restRuns === 1 ? "span" : "spans"} shaded`
+      : "";
 
   return (
     `${MEASURE_LABEL[measure]}, ${formatValue(measure, first)} at the start ` +
     `to ${formatValue(measure, last)} at the end, ` +
-    `${extremeLabel} ${formatValue(measure, extreme)}${segmentClause}`
+    `${extremeLabel} ${formatValue(measure, extreme)}${segmentClause}${restClause}`
   );
 }
 
