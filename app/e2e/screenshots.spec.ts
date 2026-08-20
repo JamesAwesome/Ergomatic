@@ -2924,20 +2924,35 @@ async function openLogMonitorForm(
       // this fixture is not the place to get right a second time; ONE
       // boundary, `surfaceModel.ts`'s own single-row "MEASURED" grid, and
       // the pre-existing `log-monitor` assertions all stay exactly as
-      // this file originally proved them). Every status tick's own
-      // `elapsedSeconds` keeps climbing (never decreases), same WIRE-
-      // IMPOSSIBLE-but-harmless convention this file's own original
-      // comment already named and deferred (M-2): the recorder's genuine-
-      // boundary reset detection only triggers on a DECREASE, so a
-      // monotonic stream (real interval transitions or not) is always
-      // safe ground for it, and every consecutive pair below sits at
-      // most 3 s apart (never over the trace's own gap-break threshold),
-      // so the drawn line stays ONE continuous piece — no accidental
-      // split. `avgSplit`/`avgSpm` on the boundary are the fake's own
-      // scripted per-interval actuals (independent of the raw elapsed
-      // stream, `derivedAvgSplit`'s own doc comment) — unchanged from
-      // this file's own original 500×15/100 = 75s = "1:15.0" (the value
-      // `log-monitor`'s own assertion below still expects).
+      // this file originally proved them).
+      //
+      // CORRECTED (review finding I2, trace-truth Task 1 close-out): every
+      // status tick's own `elapsedSeconds`/`distanceMeters` RESETS to near
+      // zero at the interval-0 -> interval-1 boundary (ticks below,
+      // `atMs: 5400` onward) — a genuine PM5 clears both per-interval
+      // fields at the same instant it advances its own interval count
+      // (`domain/monitor/types.ts`'s own `MonitorFrame.elapsedSeconds` doc
+      // comment), so a monotonic-across-the-boundary stream was never
+      // physically real; it only read as "safe" under the recorder's OLD
+      // edge-triggered fold (which only ever looked for a DECREASE to
+      // detect a reset, so a stream that never decreased just never
+      // folded — this file's own now-corrected comment used to describe
+      // exactly that). The CURRENT recorder keys on `MonitorFrame.
+      // intervalIndex` instead (trace-truth spec §1/§2): `fake.ts`'s own
+      // `toMachineIndex(e.programIntervalIndex, ...)` round-trips each
+      // tick's `programIntervalIndex` onto the wire's 0x0033 Interval
+      // Count, so the real driver's `toProgramIndex` reads the key change
+      // straight off the boundary below regardless of what
+      // `elapsedSeconds` does — the reset here is for WIRE REALISM, not
+      // to keep the recorder from mis-folding (that hazard no longer
+      // exists). Every consecutive pair, BEFORE and AFTER folding, still
+      // sits at most 3 s apart (never over the trace's own gap-break
+      // threshold), so the drawn line stays ONE continuous piece — no
+      // accidental split. `avgSplit`/`avgSpm` on the boundary are the
+      // fake's own scripted per-interval actuals (independent of the raw
+      // elapsed stream, `derivedAvgSplit`'s own doc comment) — unchanged
+      // from this file's own original 500×15/100 = 75s = "1:15.0" (the
+      // value `log-monitor`'s own assertion below still expects).
       events: [
         {
           atMs: 3000,
@@ -3034,8 +3049,8 @@ async function openLogMonitorForm(
           atMs: 5400,
           kind: "status" as const,
           workoutState: 4,
-          elapsedSeconds: 17,
-          distanceMeters: 115,
+          elapsedSeconds: 2,
+          distanceMeters: 15,
           spm: 26,
           currentSplit: 102,
           heartRateBpm: 148,
@@ -3045,8 +3060,8 @@ async function openLogMonitorForm(
           atMs: 5700,
           kind: "status" as const,
           workoutState: 4,
-          elapsedSeconds: 19,
-          distanceMeters: 130,
+          elapsedSeconds: 4,
+          distanceMeters: 30,
           spm: 27,
           currentSplit: 100,
           heartRateBpm: 150,
@@ -3056,8 +3071,8 @@ async function openLogMonitorForm(
           atMs: 6000,
           kind: "status" as const,
           workoutState: 4,
-          elapsedSeconds: 21,
-          distanceMeters: 145,
+          elapsedSeconds: 6,
+          distanceMeters: 45,
           spm: 27,
           currentSplit: 99,
           heartRateBpm: 151,
@@ -3067,8 +3082,8 @@ async function openLogMonitorForm(
           atMs: 6300,
           kind: "status" as const,
           workoutState: 4,
-          elapsedSeconds: 23,
-          distanceMeters: 160,
+          elapsedSeconds: 8,
+          distanceMeters: 60,
           spm: 28,
           currentSplit: 98,
           heartRateBpm: 152,
@@ -3078,8 +3093,8 @@ async function openLogMonitorForm(
           atMs: 6600,
           kind: "status" as const,
           workoutState: 4,
-          elapsedSeconds: 25,
-          distanceMeters: 175,
+          elapsedSeconds: 10,
+          distanceMeters: 75,
           spm: 28,
           currentSplit: 97,
           heartRateBpm: 153,
@@ -3089,8 +3104,8 @@ async function openLogMonitorForm(
           atMs: 6900,
           kind: "status" as const,
           workoutState: 4,
-          elapsedSeconds: 27,
-          distanceMeters: 190,
+          elapsedSeconds: 12,
+          distanceMeters: 90,
           spm: 28,
           currentSplit: 96,
           heartRateBpm: 154,
@@ -3100,8 +3115,8 @@ async function openLogMonitorForm(
           atMs: 7200,
           kind: "status" as const,
           workoutState: 4,
-          elapsedSeconds: 29,
-          distanceMeters: 200,
+          elapsedSeconds: 14,
+          distanceMeters: 101,
           spm: 28,
           currentSplit: 95,
           heartRateBpm: 155,

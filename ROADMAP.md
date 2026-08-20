@@ -1889,6 +1889,78 @@ WebKit's throttling, so it does not rescue the JS half.
 
 ### In scope
 
+- [ ] **The trace tells the truth about the row** — spec 1, written
+      2026-08-20:
+      `docs/superpowers/specs/2026-08-20-trace-truth-design.md`. **TRIAD**
+      (a number's meaning AND a stored shape); full antagonist pass done
+      and folded into its §8. Index-keyed max-merge REPLACING the boundary
+      heuristic (not supplementing it — deletion retires four defects at
+      once); rests drawn but MARKED, which puts a rest flag in the stored
+      sample; and the chart gains the time axis it has never had. Three
+      PRs, accumulator first and alone. **This is spec 1 of the phase by
+      James's sequencing, ahead of the three items below.** **M**
+      **Task 1 review finding M1 (2026-08-20), owed to a later task:**
+      `traceModel.test.ts`'s own "the line breaks across a REAL gap"
+      evidence — a real capture proving a genuine >3s wire gap actually
+      splits the drawn line — was REMOVED, not migrated, during Task 1's
+      close-out (the only capture that had carried it,
+      `pm5-session4b-final.log.gz`, concatenates four real sessions through
+      one recorder, a scenario the new key-based accumulator does not
+      support and cannot be used as evidence for). The gap-break behavior
+      itself is unchanged and still covered by synthetic fixtures; what's
+      owed is a fresh REAL-capture witness of a genuine >3s gap, the same
+      evidentiary bar the rest of this module's tests hold themselves to.
+      Whichever task next touches `traceModel.ts`/its tests should either
+      capture one or explicitly re-decline with a stated reason.
+- [ ] **HARDWARE QUESTION owed to Phase LL's exit walk — DISTANCE only.**
+      **CORRECTED at the 2026-08-20 PM gate: an earlier version of this item
+      said the work→work reset had "never been confirmed on hardware." That
+      was wrong for ELAPSED, and a walk item that overstates what is unknown
+      buys an erg session to re-observe a settled fact.**
+      `pm5-interface-notes.md:3268-3271` records a 2×TIME program with
+      `restSeconds: 0` on both intervals where `state` stays `"rowing"`
+      across the boundary and "the very next frame reset[s] `elapsed` to 0"
+      — §19.1's correction at `:3290` calls it "the one and only
+      elapsed-reset-while-rowing in the whole log" ([S2] D4, 2026-08-06).
+      **What is genuinely open is whether DISTANCE resets at a work→work
+      boundary**, which neither passage states. It matters: if it does not,
+      the new accumulator silently OVER-reports on zero-rest boundaries —
+      direction-flipped from the bug just fixed, and a shape the old
+      edge-triggered code would have got right. Not exotic either:
+      `program.ts:554` defaults `restSeconds: 0`, so a warm-up→work0
+      transition is a zero-rest work→work boundary on essentially every
+      connected session. **Probably already answered from a committed file:**
+      the new accumulator is digit-identical to the shipped one on `step-3`,
+      and since the shipped one detects boundaries ONLY by a backward elapsed
+      jump, digit-identity across a key change is itself evidence a reset
+      occurred there — check whether `step-3` contains a `restSeconds: 0`
+      transition before booking any rowing. **S**
+- [ ] **A replacement real-capture witness for a genuine >3 s wire gap
+      breaking the trace line** — lost when three tests built on an invalid
+      four-session capture were removed (PR #140). **Owner BOUND to Phase
+      LL's exit walk** (PM gate, 2026-08-20): the deliverable is a CAPTURE,
+      and captures come from walks, not from tasks — and this phase's own
+      exit walk produces a genuine >3 s gap as a matter of course. Sits
+      beside exit clause (e) so the phase can go red on it. **S**
+- [ ] **BEFORE trace-truth task 3 (the time axis): its exit criterion 7 is
+      currently UNSATISFIABLE on the flagship capture, and the reason is
+      structural** (PM gate, 2026-08-20). Criterion 7 asks that the axis's
+      values "reconcile with the session's own TIME hero in the same frame".
+      On `docs/screenshots/log-monitor.png` they cannot: the chart's fastest
+      pace reads ~1:38 beside a measured row reading `1:15.0`, because
+      `screenshots.spec.ts:2951-2953` says outright that the fixture's
+      `avgSplit`/`avgSpm` are "the fake's own scripted per-interval actuals
+      (independent of the raw elapsed stream)" — the row and the trace are
+      wired to disagree BY CONSTRUCTION, so the repo's own
+      recompute-the-headline check returns a false RED on that screen
+      forever. Four `—` rows and the crop also mean the TIME hero is not in
+      frame at all. Task 3 either re-does the fixture so both numbers come
+      from one path, or the criterion moves to a capture where they do.
+      Recorded now so task 3 does not discover it at its own gate and fudge
+      the criterion. **Also task 3's business, same captures:** the y-axis
+      labels render CLIPPED (`L:40.0`, `L:50.0`) — pre-existing, shipped in
+      v0.14.0, and squarely in scope since criterion 7 says labels must be
+      readable. **S**
 - [ ] **Detection — make the banner that already exists actually fire.**
       `1 OF 3 · READY` is structurally impossible once
       `phase === "disconnected"` (`surfaceModel.ts:787`), so its
@@ -1952,15 +2024,20 @@ to fill; no backfill, no MISSED); **background scan** and
 `RECONNECTING` copy** (DEVIATIONS row 75 made that ruling once; do not
 un-make it before the thing it promises exists).
 
-**Exit — written so it can go red.** On a real PM5 and a real phone, on a
-Release build: (a) a link killed BEFORE stroke one, and again MID-PIECE,
+**Exit — written so it can go red.** Clause (e) added 2026-08-20 at the PM
+gate's finding that four of this phase's items had no exit clause; the
+trace-truth spec carries its own nine criteria and (e) is the phase-level
+hook to them. On a real PM5 and a real phone, on a Release build: (a) a link killed BEFORE stroke one, and again MID-PIECE,
 moves the surface off `READY`/live numbers within a stated bound and says
 the link is lost; (b) Try Again reaches a fresh connect and programs
 successfully **without deleting the app**; (c) the full diagnostics ring
 for the episode is retrievable from the phone, from the failure screen
 itself; (d) if the delete-to-fix residue turns out to be iOS-side and
 unfixable, DEVIATIONS carries the row saying so and the recovery path is
-documented and non-destructive.
+documented and non-destructive; **(e)** a trace recorded across a gap that
+spans an interval boundary is short by zero, rests are visibly marked as
+rests, and the chart carries a time axis that reconciles with the
+session's own TIME hero in the same frame.
 
 **Sequencing (PM gate):** LT close → **LL** → CL2 → LQ → PROD. LL
 displaces CL2, which is two items whose gap has a stated workaround (the
@@ -3393,6 +3470,45 @@ next phase. One line per round, newest first.
 
 ## Triggered follow-ons (not scheduled — each has an explicit trigger)
 
+- **An EXTERNAL oracle for the trace: the PM5's own internal log, and the
+  logbook** (James, 2026-08-20, from the erg: "there's a verification id
+  that the pm can give you for a row. Is checking if we can derive the
+  same verification id a way to validate our logbook traces are
+  correct?"). **The verification hash itself is NOT the lever** — it is a
+  workout SIGNATURE the PM5's firmware produces, and ErgZone's own issue
+  #117 closes the question in as many words: the workout-signing
+  cryptographic hash is one "we simply can't create (nor should we)". It
+  proves the machine's record was not tampered with en route to Concept2;
+  recomputing it is what it exists to prevent, and succeeding would only
+  prove we hashed the numbers we already hold.
+  **What the question DOES point at, and it is valuable** — this repo's
+  standing weakness is recurring failure 11, verifying the app only
+  against itself:
+  - `CSAFE_PM_GET_INTERNALLOGPARAMS` (0x99) plus
+    `CSAFE_PM_GET_INTERNALLOGMEMORY1/2/3` (0x6A) read out the machine's
+    own stored log, whose structure identifiers include `LOGSPLITDATA`
+    and the fixed/variable interval headers. That is an independent check
+    on our accumulator's BOUNDARIES and TOTALS, obtainable after the fact
+    with no rowing. **Hard limit, and it is decisive:** the identifier
+    list is exhaustive and contains **no per-stroke or per-sample
+    record**, and the logged-workout size field is 2 bytes — so it can
+    never validate the 1 Hz SHAPE, only the boundaries the shape hangs
+    on.
+  - A Concept2 logbook entry, for any session that goes up via ErgData,
+    carries authoritative splits at zero cost to us.
+  - **Cheap and worth taking whenever we next touch subscriptions:**
+    characteristic **`0x003F`** notifies the just-logged workout's hash,
+    internal log address and size after every workout. **We do not
+    subscribe to it** (we hold `0x0031`-`0x003A`). Storing that hash
+    beside our own log verifies nothing by itself, but it makes our
+    record LINKABLE to a logbook entry later — which is the
+    "spendable to logbook" question James asked when the series format
+    was designed.
+  **Deliberately NOT in the trace-truth spec** (2026-08-20): a new
+  subscription plus a new CSAFE conversation, on a spec already carrying
+  triad weight. **Trigger:** the next work that touches monitor
+  subscriptions or CSAFE, or the first time a trace's correctness is
+  disputed and our own corpus cannot settle it.
 - **App icon redraw** — **MOVED to Phase PROD** (James, 2026-08-20),
   where the corrected description lives. Correction worth keeping here so
   it does not come back: the arc is NOT misspelled. It reads ERGOMATIC;

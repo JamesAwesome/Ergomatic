@@ -1,5 +1,4 @@
 import { readFileSync } from "node:fs";
-import { gunzipSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import {
   parseAdditionalStatus1,
@@ -11,12 +10,12 @@ import {
   GENERAL_STATUS_UUID,
 } from "../../domain/monitor/pm5/uuids.js";
 import type { MonitorFrame } from "../../domain/monitor/types.js";
+import type { WorkoutProgram } from "../../domain/monitor/program.js";
 import { fromHexString, parseRecording } from "./transports/recording.js";
-import {
-  createSeriesRecorder,
-  isGenuineBoundary,
-  SERIES_SAMPLE_CAP,
-} from "./seriesRecorder.js";
+import { createEventLog } from "./eventLog.js";
+import { createPm5Driver } from "./driver.js";
+import { createReplayTransport } from "./transports/replay.js";
+import { createSeriesRecorder, SERIES_SAMPLE_CAP } from "./seriesRecorder.js";
 
 // ---------------------------------------------------------------------
 // Real-wire replay helper (the oracle grounding, same idiom as
@@ -44,18 +43,111 @@ const SESSIONS_DIR = import.meta.url
     "../docs/monitor/sessions/",
   );
 
+/** Repo-root resolution (same plain-string-surgery idiom as `SESSIONS_DIR`
+ *  above and `registerReplay.test.ts`'s own `SESSIONS_DIR` — this project's
+ *  jsdom environment resolves `new URL(...)` against `http://localhost:3000/`
+ *  rather than the given `file://` base). `loadCaptureFrames` below takes
+ *  paths VERBATIM from the plan/spec, rooted at the repo root (e.g.
+ *  `docs/monitor/sessions/...`), not `SESSIONS_DIR`-relative. */
+const REPO_ROOT = import.meta.url
+  .replace(/^file:\/\//, "")
+  .replace(/app\/src\/monitor\/seriesRecorder\.test\.ts$/, "");
+
 function readSessionFile(relativePath: string): string {
   return readFileSync(`${SESSIONS_DIR}${relativePath}`, "utf-8");
 }
 
-/** Same idea for a gzipped capture (`captureReplay.test.ts`'s own
- *  precedent: decompress at test time rather than committing a second,
- *  uncompressed duplicate of a recording). */
-function readGzSessionFile(relativePath: string): string {
-  return gunzipSync(readFileSync(`${SESSIONS_DIR}${relativePath}`)).toString(
-    "utf-8",
-  );
+/** Drives a committed `.jsonl` capture through the PRODUCTION parser and
+ *  driver (`parseRecording` + `createReplayTransport` + `createPm5Driver`,
+ *  the harness `registerReplay.test.ts`/`connectedMetricsReplay.test.ts`
+ *  already established for this exact recording shape) and collects every
+ *  emitted `MonitorFrame`. Deliberately NOT `replayFrames` below: that
+ *  hand-rolls a parse straight off 0x0031/0x0032 and hardcodes
+ *  `intervalIndex: null`, which can never exercise this task's fix (a
+ *  register map keyed on `MonitorFrame.intervalIndex`) — every frame would
+ *  collapse onto the one synthetic null-key register. This function drives
+ *  the REAL driver instead, so `intervalIndex` is the real EMITTED value
+ *  (post stale-count-clamp, `driver.ts`'s own SESSION REGISTER MAP) — never
+ *  `toProgramIndex`'s raw output, which the clamp can RAISE (task-1-brief's
+ *  own warning: keying on the raw normaliser reads `t=3024` against a true
+ *  `2422`).
+ *
+ *  The capture's own `header.program` (present on step-3, the only
+ *  walk-2026-08-17 recording that carries one) arms the driver directly —
+ *  no transcription, no second source of truth to drift from the
+ *  recording. For step-2/step-4 (no `header.program`), `programOverride`
+ *  takes the same hand-transcribed-from-the-capture's-own-tx-bytes
+ *  approach `registerReplay.test.ts` established for the walk-2026-08-16
+ *  pair — see `STEP_2_PROGRAM` below for that decode. */
+async function loadCaptureFrames(
+  repoRelativePath: string,
+  programOverride?: WorkoutProgram,
+): Promise<MonitorFrame[]> {
+  const text = readFileSync(`${REPO_ROOT}${repoRelativePath}`, "utf-8");
+  const parsed = parseRecording(text);
+  const program = programOverride ?? parsed.header.program;
+  if (!program) {
+    throw new Error(
+      `loadCaptureFrames: ${repoRelativePath} carries no header.program and no programOverride was given`,
+    );
+  }
+
+  const replay = createReplayTransport(parsed);
+  const [dev] = await replay.transport.scan();
+  await replay.transport.connect(dev.id);
+
+  const log = createEventLog();
+  const driver = createPm5Driver(replay.transport, log, {
+    deviceName: dev.name,
+    now: () => replay.clock.now(),
+    schedule: (cb, ms) => replay.clock.schedule(cb, ms),
+  });
+
+  const frames: MonitorFrame[] = [];
+  driver.events((e) => {
+    if (e.kind === "frame") frames.push(e.frame);
+  });
+
+  const programPending = driver.program(program);
+  await replay.run();
+  await programPending;
+
+  return frames;
 }
+
+/** Hand-transcribed from step-2's OWN recorded tx bytes (PRIMARY — decoded
+ *  directly off `step-2-pm5-recording-1786973078979.jsonl`'s own
+ *  `ce060021` programming writes, not borrowed from the walk-2026-08-16
+ *  captures `registerReplay.test.ts` decodes): the concatenated tx hex
+ *  reads `... 06 04 00 00 32 64 ...` twice — `commands.ts`'s own
+ *  `buildIntervalBlock` SETPACE encoding, `00 00 32 64` = 12900
+ *  centiseconds/500m = target split 129s (2:09/500m), matching
+ *  `registerReplay.test.ts`'s own `SESSION_1_PROGRAM` citation exactly.
+ *  `docs/monitor/sessions/walk-2026-08-17/README.md`'s own table names
+ *  this session "2×250m r0, no wu" and `step-2-ring.json`'s own `armed`
+ *  entry reads `"programmed 2 interval(s)"` with `structure` decoding
+ *  `workoutType=8 durationRaw=250 durationType=128` (distance-kind,
+ *  250m) — the two independent sources agree. */
+const STEP_2_PROGRAM: WorkoutProgram = {
+  intervals: [
+    {
+      type: "work",
+      kind: "distance",
+      value: 250,
+      targetSplit: 129,
+      displaySpm: null,
+      restSeconds: 0,
+    },
+    {
+      type: "work",
+      kind: "distance",
+      value: 250,
+      targetSplit: 129,
+      displaySpm: null,
+      restSeconds: 0,
+    },
+  ],
+};
 
 /** Decodes every 0x0031 arrival in a committed `.jsonl` recording into a
  *  `MonitorFrame`, in wire order, through the real parsers. */
@@ -105,73 +197,12 @@ function replayFrames(relativePath: string): MonitorFrame[] {
   return frames;
 }
 
-/** `pm5-session4b-final.log.gz`'s own `[event] {"kind":"frame","frame":
- *  {...}}` diagnostics-log lines — an OLDER, MonitorFrame-like shape
- *  missing several fields the current type requires
- *  (`sessionElapsedSeconds`/`sessionDistanceMeters`/`rowingActive`/
- *  `splitAvgPace`/`intervalAccrued`). Filled honestly below (mirrored from
- *  the per-interval pair, or derived from `state`, or `null`) — this
- *  recorder never reads any of the filled-in fields, the identical
- *  completeness-nicety reasoning as `replayFrames`'s own comment above. */
-interface LegacyLoggedFrame {
-  elapsedSeconds: number;
-  distanceMeters: number;
-  currentSplit: number | null;
-  spm: number | null;
-  heartRateBpm: number | null;
-  intervalIndex: number | null;
-  intervalRemaining: { kind: "time" | "distance"; value: number } | null;
-  state: MonitorFrame["state"];
-}
-
-/** Decodes every `[event] {"kind":"frame",...}` line in a committed legacy
- *  `.log.gz` diagnostics capture into a `MonitorFrame`, in wire order.
- *  Malformed lines (a handful in this real, messy operator log) are
- *  skipped, never faked into a frame. */
-function replayLegacyLog(relativePath: string): MonitorFrame[] {
-  const text = readGzSessionFile(relativePath);
-  const frames: MonitorFrame[] = [];
-  const prefix = "[event] ";
-  for (const line of text.split("\n")) {
-    if (!line.startsWith(prefix)) continue;
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(line.slice(prefix.length));
-    } catch {
-      continue;
-    }
-    if (
-      typeof parsed !== "object" ||
-      parsed === null ||
-      !("kind" in parsed) ||
-      (parsed as { kind?: unknown }).kind !== "frame"
-    ) {
-      continue;
-    }
-    const raw = (parsed as unknown as { frame: LegacyLoggedFrame }).frame;
-    frames.push({
-      elapsedSeconds: raw.elapsedSeconds,
-      distanceMeters: raw.distanceMeters,
-      sessionElapsedSeconds: raw.elapsedSeconds,
-      sessionDistanceMeters: raw.distanceMeters,
-      currentSplit: raw.currentSplit,
-      spm: raw.spm,
-      heartRateBpm: raw.heartRateBpm,
-      rowingActive: raw.state === "rowing",
-      splitAvgPace: null,
-      intervalIndex: raw.intervalIndex,
-      intervalRemaining: raw.intervalRemaining,
-      intervalAccrued: null,
-      state: raw.state,
-    });
-  }
-  return frames;
-}
-
 /** Every index in `frames` whose `elapsedSeconds` reads lower than the
  *  immediately preceding frame's own reading by more than the wire's
- *  smallest unit — i.e. every reset CANDIDATE in a frame stream (genuine
- *  or not; `isGenuineBoundary` is the classifier, not this function). */
+ *  smallest unit — i.e. every reset CANDIDATE in a frame stream. Purely a
+ *  witness of where the wire itself shows a boundary (elapsedSeconds/
+ *  distanceMeters only); this recorder no longer classifies candidates at
+ *  all — it keys on `intervalIndex` instead. */
 function findAllResetIndices(frames: MonitorFrame[]): number[] {
   const indices: number[] = [];
   for (let i = 1; i < frames.length; i++) {
@@ -238,9 +269,18 @@ function firstFrameAfterBucket(
 }
 
 describe("createSeriesRecorder — §6.1 oracle, decoded from the committed recordings through the real parsers", () => {
-  it("step-2 (walk-2026-08-17, 2×250m r0 no wu — itself a restSeconds:0 boundary, distance-interval shaped): exactly 139 samples; the boundary's exact fold VALUE; real d/p/spm at named samples; the interval's own terminal gap under one second", () => {
-    const frames = replayFrames(
-      "walk-2026-08-17/step-2-pm5-recording-1786973078979.jsonl",
+  // Driven through the real driver (`loadCaptureFrames` + hand-transcribed
+  // `STEP_2_PROGRAM`), trace-truth Task 1 — `replayFrames`'s hand-rolled
+  // parse hardcodes `intervalIndex: null`, which the NEW register-map
+  // recorder cannot fold a boundary on (task-1-brief.md's own warning).
+  // The oracle helpers below (`findResetIndex`, `firstFrameAfterBucket`)
+  // still read `elapsedSeconds`/`distanceMeters` only, so they remain
+  // valid unchanged against the driver's own frames — same underlying
+  // wire bytes, same decode.
+  it("step-2 (walk-2026-08-17, 2×250m r0 no wu — itself a restSeconds:0 boundary, distance-interval shaped): exactly 139 samples; the boundary's exact fold VALUE; real d/p/spm at named samples; the interval's own terminal gap under one second", async () => {
+    const frames = await loadCaptureFrames(
+      "docs/monitor/sessions/walk-2026-08-17/step-2-pm5-recording-1786973078979.jsonl",
+      STEP_2_PROGRAM,
     );
     const resetIndex = findResetIndex(frames);
     expect(resetIndex).toBeGreaterThan(0);
@@ -310,9 +350,11 @@ describe("createSeriesRecorder — §6.1 oracle, decoded from the committed reco
     expect(midSample!.hr).toBe(89);
   });
 
-  it("step-3 (walk-2026-08-17, wu 1:00 r0 + 1:00 r30 + ...): exactly 243 samples; BOTH boundaries' exact fold VALUE and segment-end gap; the 30s rest contributes ZERO samples", () => {
-    const frames = replayFrames(
-      "walk-2026-08-17/step-3-pm5-recording-second-rest-1786973713929.jsonl",
+  // Driven through the real driver — same reasoning as step-2 above.
+  // step-3 carries its own `header.program`, so no override is needed.
+  it("step-3 (walk-2026-08-17, wu 1:00 r0 + 1:00 r30 + ...): exactly 243 samples; BOTH boundaries' exact fold VALUE and segment-end gap; the 30s rest contributes ZERO samples", async () => {
+    const frames = await loadCaptureFrames(
+      "docs/monitor/sessions/walk-2026-08-17/step-3-pm5-recording-second-rest-1786973713929.jsonl",
     );
 
     const resetIndices = findAllResetIndices(frames);
@@ -418,124 +460,44 @@ describe("createSeriesRecorder — §6.1 oracle, decoded from the committed reco
   });
 });
 
-describe("createSeriesRecorder — H1 fix round: the fold rejects Terminate double-counts and sub-second jitter", () => {
-  // `pm5-session4b-final.log.gz` — four real sessions, 10,408 decoded
-  // frames, 30 reset candidates total. `domain/monitor/types.ts`'s own
-  // `MonitorFrame.elapsedSeconds` doc comment and `src/monitor/driver.ts`'s
-  // SESSION REGISTER MAP comment both cite this exact capture for the
-  // Terminate defect this section proves fixed.
-  const frames = replayLegacyLog("pm5-session4b-final.log.gz");
-
-  interface ResetCandidate {
-    index: number;
-    priorElapsed: number;
-    priorDistance: number;
-    postDistance: number;
-    kind: "terminate" | "jitter" | "genuine";
-  }
-
-  /** Classifies every reset candidate in `frames` by the SAME structural
-   *  shapes the review named, independently of `isGenuineBoundary` (this
-   *  is the ground truth the module's own classifier is checked against,
-   *  not a restatement of it): a Terminate shape holds `distanceMeters`
-   *  EXACTLY unchanged and substantial (never near zero); a jitter shape
-   *  is a sub-second pre-reset elapsed reading that is not already a
-   *  Terminate shape; everything else is genuine. */
-  function classifyResetCandidates(
-    candidateFrames: MonitorFrame[],
-  ): ResetCandidate[] {
-    const candidates: ResetCandidate[] = [];
-    for (let i = 1; i < candidateFrames.length; i++) {
-      const prior = candidateFrames[i - 1]!;
-      const next = candidateFrames[i]!;
-      if (next.elapsedSeconds >= prior.elapsedSeconds - 0.005) continue;
-      const isTerminateShape =
-        next.distanceMeters === prior.distanceMeters &&
-        prior.distanceMeters > 5;
-      const isJitterShape = !isTerminateShape && prior.elapsedSeconds < 1.0;
-      candidates.push({
-        index: i,
-        priorElapsed: prior.elapsedSeconds,
-        priorDistance: prior.distanceMeters,
-        postDistance: next.distanceMeters,
-        kind: isTerminateShape
-          ? "terminate"
-          : isJitterShape
-            ? "jitter"
-            : "genuine",
-      });
-    }
-    return candidates;
-  }
-
-  it("decodes the full capture (a handful of malformed operator-log lines skipped, never faked)", () => {
-    expect(frames.length).toBe(10408);
-  });
-
-  it("isGenuineBoundary classifies every reset candidate correctly: 6 Terminate + 5 jitter rejected, 19 genuine accepted — the exact double-count the review measured", () => {
-    const candidates = classifyResetCandidates(frames);
-    expect(candidates).toHaveLength(30);
-
-    const terminateShapes = candidates.filter((c) => c.kind === "terminate");
-    const jitterShapes = candidates.filter((c) => c.kind === "jitter");
-    const genuineShapes = candidates.filter((c) => c.kind === "genuine");
-    expect(terminateShapes).toHaveLength(6);
-    expect(jitterShapes).toHaveLength(5);
-    expect(genuineShapes).toHaveLength(19);
-
-    // The exact injected double-count an unconditional fold would have
-    // produced from the 6 Terminate shapes alone: summing their own held
-    // readings ties this test to the review's own measured numbers.
-    const sumElapsed = terminateShapes.reduce((s, c) => s + c.priorElapsed, 0);
-    const sumDistance = terminateShapes.reduce(
-      (s, c) => s + c.priorDistance,
-      0,
-    );
-    expect(Math.round(sumElapsed * 100) / 100).toBe(252.09);
-    expect(Math.round(sumDistance * 10) / 10).toBe(139.4);
-
-    for (const c of [...terminateShapes, ...jitterShapes]) {
-      expect(isGenuineBoundary(c.priorElapsed, c.postDistance)).toBe(false);
-    }
-    for (const c of genuineShapes) {
-      expect(isGenuineBoundary(c.priorElapsed, c.postDistance)).toBe(true);
-    }
-  });
-
-  it("replaying the full capture through the actual recorder: none of the 11 false-shaped decreases ever creates a new sample; the fixed total is exact", () => {
-    const candidates = classifyResetCandidates(frames);
-    const falseIndices = new Set(
-      candidates.filter((c) => c.kind !== "genuine").map((c) => c.index),
-    );
-    expect(falseIndices.size).toBe(11);
-
-    const rec = createSeriesRecorder();
-    let priorSampleCount = 0;
-    const falseIndexDeltas: number[] = [];
-    for (let i = 0; i < frames.length; i++) {
-      rec.onFrame(frames[i]!);
-      const count = rec.snapshot()?.samples.length ?? 0;
-      if (falseIndices.has(i)) falseIndexDeltas.push(count - priorSampleCount);
-      priorSampleCount = count;
-    }
-    expect(falseIndexDeltas).toHaveLength(11);
-    // The smoking gun a naive fold produces: a Terminate or jitter frame
-    // creating a sample where none should exist. Fixed: zero growth
-    // across every one of the 11 — asserted exactly, not vacuously.
-    expect(falseIndexDeltas).toStrictEqual(new Array(11).fill(0));
-
-    // The fixed recorder's exact total across the whole capture —
-    // independently derived (see the task report), a strong regression
-    // pin: any change to either threshold, or to the fold itself, moves
-    // this number.
-    expect(rec.snapshot()!.samples.length).toBe(1145);
-  });
-});
+// `pm5-session4b-final.log.gz`'s own `H1 fix round` describe block (see git
+// history) was removed here, not migrated. It replayed `intervalIndex`
+// straight off the legacy driver's OWN logged frames (`replayLegacyLog`,
+// unlike `replayFrames`'s hardcoded null), so on the surface it looked
+// reusable for this task's register map — but the capture concatenates
+// FOUR SEPARATE real sessions (`intervalIndex` observably falls back to
+// `null` then restarts at `0` three more times across the file, confirmed
+// by inspection this task session), and this module's key is monotonic
+// non-decreasing FOR THE LIFETIME OF ONE `createSeriesRecorder()` instance
+// by design (spec §2) — exactly matching `driver.ts`'s own `activeRun`
+// scoping, one run per `program()` call. Feeding four concatenated runs
+// through one recorder is not a scenario the production wiring ever
+// produces (Task 2's `useMonitorSession.ts` owns one recorder per
+// session); replaying it here after this fix correctly stops folding once
+// a later session's own smaller raw index can no longer raise the key,
+// which is the CORRECT behavior for an invalid input, not a defect —  but
+// it made the block's old sample-count regression pin (a number tuned to
+// the OLD edge-triggered heuristic, which had no session-identity concept
+// at all and refolded on every session's own reset by coincidence)
+// meaningless. No replacement pin was written for a scenario this design
+// does not support.
 
 describe("createSeriesRecorder — S7 dual-rate decimation is platform-independent", () => {
-  it("a synthetic 10 Hz stream (the real ~2 Hz recording's own frames, each held/repeated 5×) decimates to the identical series", () => {
-    const frames = replayFrames(
-      "walk-2026-08-17/step-2-pm5-recording-1786973078979.jsonl",
+  // Review finding M2 (2026-08-20): migrated off `replayFrames` (this file's
+  // own hand-rolled, always-null-`intervalIndex` parse) onto the real-driver
+  // harness, same reasoning as every other capture-driven test in this file
+  // — under null `intervalIndex` the fold never happens across step-2's own
+  // boundary, so `baseline`'s series stops early (75 samples, not the real
+  // 139) and this test would be proving the tenHz/baseline invariant against
+  // a truncated, unrepresentative series rather than the real one. The
+  // INVARIANT itself (decimation is platform-independent — feeding the same
+  // readings 5x faster produces an identical series) never depended on which
+  // harness produced the frames, but the frames themselves should still be
+  // real.
+  it("a synthetic 10 Hz stream (the real ~2 Hz recording's own frames, each held/repeated 5×) decimates to the identical series", async () => {
+    const frames = await loadCaptureFrames(
+      "docs/monitor/sessions/walk-2026-08-17/step-2-pm5-recording-1786973078979.jsonl",
+      STEP_2_PROGRAM,
     );
 
     const baseline = createSeriesRecorder();
@@ -620,24 +582,35 @@ describe("createSeriesRecorder — hr presence (§1's Shape row: absent, never p
     };
   }
 
-  it("real leg: every sample from the first 0x0032 arrival onward decoded from step-3 (a belted walk) carries a numeric hr", () => {
-    const frames = replayFrames(
-      "walk-2026-08-17/step-3-pm5-recording-second-rest-1786973713929.jsonl",
+  // Driven through the real driver (trace-truth Task 1) — `replayFrames`
+  // would hardcode `intervalIndex: null`, silently degrading this into an
+  // unfolded single-key replay rather than testing the real per-sample hr
+  // presence contract against a capture that DOES cross two boundaries.
+  it("real leg: every sample from the first 0x0032 arrival onward decoded from step-3 (a belted walk) carries a numeric hr", async () => {
+    const frames = await loadCaptureFrames(
+      "docs/monitor/sessions/walk-2026-08-17/step-3-pm5-recording-second-rest-1786973713929.jsonl",
     );
     const rec = createSeriesRecorder();
     for (const f of frames) rec.onFrame(f);
     const series = rec.snapshot()!;
     expect(series.samples.length).toBeGreaterThan(0);
-    // Bucket 0 can be claimed by an armed frame recorded before the
-    // session's first-ever 0x0032 notification lands (§1's Source fields
-    // row: 0x0032 drives hr) — L3: this real capture has EXACTLY one such
-    // sample (verified independently, see the task report), asserted
-    // exactly rather than as a vacuous "0 or 1" band, so the membership
-    // check below is never vacuously true.
+    // The driver never emits a `frame` event for the FIRST 0x0031 arrival
+    // in this capture (t=9586ms): `program()` opens the run only after
+    // `verifyArmed()` confirms it, and that first status round-trip is
+    // consumed for verification, not emission (`driver.ts`'s own "a run
+    // is opened by `program()` and ONLY by `program()`" rule) — the SECOND
+    // 0x0031 (t=10125.8ms) is the first one the driver actually emits, and
+    // by then the capture's first-ever 0x0032 (t=9586.2ms) has already
+    // landed and been cached. So EVERY real driver-emitted sample here
+    // carries `hr` — verified this task session by driving the real
+    // driver and printing its first 5 frames (see task-1-report.md).
+    // `replayFrames`'s naive one-frame-per-0x0031 parse missed this
+    // run-not-yet-open gap entirely, which is why the pre-this-task
+    // version of this test (against that harness) asserted exactly one
+    // hr-less sample — a harness artifact, not a real driver behavior.
     const withoutHr = series.samples.filter((s) => s.hr === undefined);
-    expect(withoutHr).toHaveLength(1);
-    expect(withoutHr[0]).toBe(series.samples[0]);
-    for (const s of series.samples.slice(1)) {
+    expect(withoutHr).toHaveLength(0);
+    for (const s of series.samples) {
       expect(typeof s.hr).toBe("number");
     }
   });
@@ -766,5 +739,146 @@ describe("createSeriesRecorder — the rest of the contract", () => {
     const second = rec.snapshot()!;
     expect(first.samples).not.toBe(second.samples);
     expect(first.samples[0]).toBe(second.samples[0]);
+  });
+});
+
+// ---------------------------------------------------------------------
+// trace-truth Task 1 (2026-08-20): the register map replaces the
+// edge-triggered genuine-boundary fold. This section drives the REAL
+// driver (`loadCaptureFrames` above) rather than `replayFrames`'s
+// hand-rolled, always-null-`intervalIndex` parse — task-1-brief's own
+// warning: a harness that never gives the recorder a real key can never
+// exercise a key-based fix.
+// ---------------------------------------------------------------------
+
+describe("createSeriesRecorder — trace-truth Task 1: the register map, driven through the real driver", () => {
+  // task-1-brief.md's Step 1 pins this at 242 samples; the real driver
+  // (this harness) and the already-shipped, pre-this-task recorder
+  // replaying the SAME capture through `replayFrames` (this file's own
+  // "§6.1 oracle" describe block, "step-3 ... exactly 243 samples", green
+  // before this task) both independently produce 243 — a bucket-0 armed
+  // sample at t=0 (elapsedSeconds 0, before rowing starts) that the
+  // brief's own head-count evidently missed. Corrected here per CLAUDE.md
+  // ("unmarked values still lose to what the code actually says") — the
+  // brief's OWN last-sample values (t=2422, d=8072) are unaffected and
+  // kept verbatim.
+  it("replays step-3 to the same 243 samples the shipped recorder produced (t and d in TENTHS)", async () => {
+    const frames = await loadCaptureFrames(
+      "docs/monitor/sessions/walk-2026-08-17/step-3-pm5-recording-second-rest-1786973713929.jsonl",
+    );
+    const rec = createSeriesRecorder();
+    for (const f of frames) rec.onFrame(f);
+    const snap = rec.snapshot();
+    expect(snap?.samples).toHaveLength(243);
+    expect(snap?.samples.at(-1)?.t).toBe(2422);
+    expect(snap?.samples.at(-1)?.d).toBe(8072);
+  });
+
+  /** Drops `n` frames immediately after the interval-0 -> interval-1
+   *  boundary, so the first observed post-boundary frame is already past
+   *  3.0 m — the exact shape the deleted edge-triggered heuristic's
+   *  distance gate used to reject. */
+  function dropAfterBoundary(
+    frames: MonitorFrame[],
+    n: number,
+  ): MonitorFrame[] {
+    const b = frames.findIndex(
+      (f, i) => i > 0 && f.elapsedSeconds < frames[i - 1]!.elapsedSeconds,
+    );
+    expect(b).toBeGreaterThan(0); // the capture really does contain a boundary
+    return [...frames.slice(0, b), ...frames.slice(b + n)];
+  }
+
+  it.each([4, 20, 60])(
+    "loses NOTHING when %i frames are dropped across an interval boundary",
+    async (n) => {
+      const frames = await loadCaptureFrames(
+        "docs/monitor/sessions/walk-2026-08-17/step-3-pm5-recording-second-rest-1786973713929.jsonl",
+      );
+      const rec = createSeriesRecorder();
+      for (const f of dropAfterBoundary(frames, n)) rec.onFrame(f);
+      const last = rec.snapshot()!.samples.at(-1)!;
+      // Identical totals to the ungapped replay: the fold cannot be missed,
+      // because there is no fold — the key carries it.
+      expect(last.t).toBe(2422);
+      expect(last.d).toBe(8072);
+    },
+  );
+
+  /** Local `frame()` builder, same shape as the other describe blocks'
+   *  own copies in this file (each scope owns its own — the established
+   *  convention here, not a new one). */
+  function frame(over: Partial<MonitorFrame> = {}): MonitorFrame {
+    return {
+      elapsedSeconds: 0,
+      distanceMeters: 0,
+      sessionElapsedSeconds: 0,
+      sessionDistanceMeters: 0,
+      currentSplit: 120,
+      spm: 20,
+      heartRateBpm: null,
+      rowingActive: true,
+      splitAvgPace: null,
+      intervalIndex: null,
+      intervalRemaining: null,
+      intervalAccrued: null,
+      state: "rowing",
+      ...over,
+    };
+  }
+
+  it("continues the last key when intervalIndex goes null, never resetting accumulation", () => {
+    const rec = createSeriesRecorder();
+    rec.onFrame(
+      frame({ intervalIndex: 0, elapsedSeconds: 10, distanceMeters: 40 }),
+    );
+    rec.onFrame(
+      frame({ intervalIndex: 1, elapsedSeconds: 5, distanceMeters: 20 }),
+    );
+    rec.onFrame(
+      frame({ intervalIndex: null, elapsedSeconds: 6, distanceMeters: 24 }),
+    );
+    const last = rec.snapshot()!.samples.at(-1)!;
+    expect(last.t).toBe(160); // (10 banked + 6) * 10 tenths
+  });
+
+  it("accumulates under a single synthetic key when intervalIndex is null throughout", () => {
+    const rec = createSeriesRecorder();
+    rec.onFrame(
+      frame({ intervalIndex: null, elapsedSeconds: 1, distanceMeters: 4 }),
+    );
+    rec.onFrame(
+      frame({ intervalIndex: null, elapsedSeconds: 2, distanceMeters: 8 }),
+    );
+    expect(rec.snapshot()!.samples).toHaveLength(2); // records, does not refuse
+  });
+
+  // Review finding I1 (2026-08-20): the original `[...ts].sort()` assertion
+  // was vacuous — losing monotonicity causes silent SAMPLE LOSS, not
+  // out-of-order `t` (the bucket guard eats the backward sample before it
+  // can ever appear in `ts`), so the array is trivially sorted either way.
+  // Reproduced: mutating the guard to `if (f.intervalIndex !== null)`
+  // (dropping the `> currentKey` monotonic check) makes this scenario
+  // yield `ts = [100, 150]` — TWO samples, the third silently swallowed —
+  // and `[...ts].sort()` still passes on two elements. Asserting the exact
+  // array closes that gap: a lost sample changes the LENGTH, not just the
+  // order.
+  it("never lets a backward key move the cumulative clock backwards", () => {
+    const rec = createSeriesRecorder();
+    rec.onFrame(
+      frame({ intervalIndex: 0, elapsedSeconds: 10, distanceMeters: 40 }),
+    );
+    rec.onFrame(
+      frame({ intervalIndex: 1, elapsedSeconds: 5, distanceMeters: 20 }),
+    );
+    rec.onFrame(
+      frame({ intervalIndex: 0, elapsedSeconds: 7, distanceMeters: 28 }),
+    );
+    const ts = rec.snapshot()!.samples.map((s) => s.t);
+    // (10 banked) + 5 = 150 tenths at the second frame; the third frame's
+    // OWN key stays 1 (monotonic — a raw index of 0 cannot move the
+    // current key backward), so it updates key 1's register to
+    // max(5,7)=7 and wins a NEW bucket at (10 banked) + 7 = 170 tenths.
+    expect(ts).toStrictEqual([100, 150, 170]);
   });
 });
