@@ -483,9 +483,21 @@ describe("createSeriesRecorder — §6.1 oracle, decoded from the committed reco
 // does not support.
 
 describe("createSeriesRecorder — S7 dual-rate decimation is platform-independent", () => {
-  it("a synthetic 10 Hz stream (the real ~2 Hz recording's own frames, each held/repeated 5×) decimates to the identical series", () => {
-    const frames = replayFrames(
-      "walk-2026-08-17/step-2-pm5-recording-1786973078979.jsonl",
+  // Review finding M2 (2026-08-20): migrated off `replayFrames` (this file's
+  // own hand-rolled, always-null-`intervalIndex` parse) onto the real-driver
+  // harness, same reasoning as every other capture-driven test in this file
+  // — under null `intervalIndex` the fold never happens across step-2's own
+  // boundary, so `baseline`'s series stops early (75 samples, not the real
+  // 139) and this test would be proving the tenHz/baseline invariant against
+  // a truncated, unrepresentative series rather than the real one. The
+  // INVARIANT itself (decimation is platform-independent — feeding the same
+  // readings 5x faster produces an identical series) never depended on which
+  // harness produced the frames, but the frames themselves should still be
+  // real.
+  it("a synthetic 10 Hz stream (the real ~2 Hz recording's own frames, each held/repeated 5×) decimates to the identical series", async () => {
+    const frames = await loadCaptureFrames(
+      "docs/monitor/sessions/walk-2026-08-17/step-2-pm5-recording-1786973078979.jsonl",
+      STEP_2_PROGRAM,
     );
 
     const baseline = createSeriesRecorder();
@@ -841,6 +853,16 @@ describe("createSeriesRecorder — trace-truth Task 1: the register map, driven 
     expect(rec.snapshot()!.samples).toHaveLength(2); // records, does not refuse
   });
 
+  // Review finding I1 (2026-08-20): the original `[...ts].sort()` assertion
+  // was vacuous — losing monotonicity causes silent SAMPLE LOSS, not
+  // out-of-order `t` (the bucket guard eats the backward sample before it
+  // can ever appear in `ts`), so the array is trivially sorted either way.
+  // Reproduced: mutating the guard to `if (f.intervalIndex !== null)`
+  // (dropping the `> currentKey` monotonic check) makes this scenario
+  // yield `ts = [100, 150]` — TWO samples, the third silently swallowed —
+  // and `[...ts].sort()` still passes on two elements. Asserting the exact
+  // array closes that gap: a lost sample changes the LENGTH, not just the
+  // order.
   it("never lets a backward key move the cumulative clock backwards", () => {
     const rec = createSeriesRecorder();
     rec.onFrame(
@@ -853,6 +875,10 @@ describe("createSeriesRecorder — trace-truth Task 1: the register map, driven 
       frame({ intervalIndex: 0, elapsedSeconds: 7, distanceMeters: 28 }),
     );
     const ts = rec.snapshot()!.samples.map((s) => s.t);
-    expect(ts).toStrictEqual([...ts].sort((a, b) => a - b));
+    // (10 banked) + 5 = 150 tenths at the second frame; the third frame's
+    // OWN key stays 1 (monotonic — a raw index of 0 cannot move the
+    // current key backward), so it updates key 1's register to
+    // max(5,7)=7 and wins a NEW bucket at (10 banked) + 7 = 170 tenths.
+    expect(ts).toStrictEqual([100, 150, 170]);
   });
 });

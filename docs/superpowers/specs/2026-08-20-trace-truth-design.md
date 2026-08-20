@@ -59,8 +59,12 @@ reduces this fix to "the bug fires less often" — which is the PM gate's own
 stated flip condition for preferring a marker instead.
 
 **Measured behaviour of the replacement** (production recorder, committed
-corpus, §8): digit-identical to today on a clean capture (`step-3`: 242
-samples, `t=2422`, `d=8072`); short by **zero** under injected gaps at both
+corpus, §8): digit-identical to today on a clean capture (`step-3`: 243
+samples — corrected from an earlier 242 head-count, verified two independent
+ways during Task 1's review: the real driver replay and the pre-fix shipped
+recorder's own `replayFrames`-based oracle test both independently produced
+243 for this exact capture — `t=2422`, `d=8072`); short by **zero** under
+injected gaps at both
 boundaries at every width from 4 to 60 dropped frames, where the shipped fold
 goes permanently short by 59.7 s/159.3 m and 60.0 s/213.7 m.
 
@@ -225,7 +229,9 @@ visible change to a feature v0.14.0 announced days earlier.
 ## §7 Exit criteria
 
 1. On a clean committed capture, the new accumulator reproduces the shipped
-   recorder digit-for-digit (`step-3`: 242 samples, `t=2422`, `d=8072`).
+   recorder digit-for-digit (`step-3`: 243 samples — corrected from an
+   earlier 242 head-count, see §1's own note above for how 243 was
+   established — `t=2422`, `d=8072`).
 2. With frames dropped across an interval boundary — at 4, 20 and 60 frames —
    the new accumulator is short by **zero**, and a test proves the shipped fold
    is not (red before, green after).

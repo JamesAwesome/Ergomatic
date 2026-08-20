@@ -37,15 +37,22 @@
 
 Add to `app/src/monitor/seriesRecorder.test.ts`. This is the "did I break the working case" pin and it should be GREEN before and after; write it first so you know the harness works.
 
+**CORRECTED (Task 1 review, I3): this step originally pinned 242 samples — an
+uncorroborated head-count. The real value is 243, verified two independent
+ways during Task 1's review: driving the real driver via `loadCaptureFrames`
+AND replaying the SAME capture through the pre-fix shipped recorder's own
+`replayFrames`-based oracle test (green before Task 1) both independently
+produced 243. `t=2422`/`d=8072` on the last sample are unaffected.**
+
 ```ts
-it("replays step-3 to the same 242 samples the shipped recorder produced (t and d in TENTHS)", async () => {
+it("replays step-3 to the same 243 samples the shipped recorder produced (t and d in TENTHS)", async () => {
   const frames = await loadCaptureFrames(
     "docs/monitor/sessions/walk-2026-08-17/step-3-pm5-recording-second-rest-1786973713929.jsonl",
   );
   const rec = createSeriesRecorder();
   for (const f of frames) rec.onFrame(f);
   const snap = rec.snapshot();
-  expect(snap?.samples).toHaveLength(242);
+  expect(snap?.samples).toHaveLength(243);
   expect(snap?.samples.at(-1)?.t).toBe(2422);
   expect(snap?.samples.at(-1)?.d).toBe(8072);
 });
@@ -172,7 +179,7 @@ Then delete `isGenuineBoundary`, `MIN_COMPLETED_INTERVAL_SECONDS`, `MAX_BOUNDARY
 - [ ] **Step 6: Run the tests**
 
 Run: `pnpm test --project client seriesRecorder`
-Expected: all PASS, including the three gap cases and the clean 242/2422/8072 pin.
+Expected: all PASS, including the three gap cases and the clean 243/2422/8072 pin (242 corrected to 243 — I3, see Step 1's own note above).
 
 - [ ] **Step 7: Delete the orphaned `isGenuineBoundary` tests and prove the symbols are gone**
 

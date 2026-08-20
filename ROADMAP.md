@@ -1899,6 +1899,19 @@ WebKit's throttling, so it does not rescue the JS half.
       sample; and the chart gains the time axis it has never had. Three
       PRs, accumulator first and alone. **This is spec 1 of the phase by
       James's sequencing, ahead of the three items below.** **M**
+      **Task 1 review finding M1 (2026-08-20), owed to a later task:**
+      `traceModel.test.ts`'s own "the line breaks across a REAL gap"
+      evidence — a real capture proving a genuine >3s wire gap actually
+      splits the drawn line — was REMOVED, not migrated, during Task 1's
+      close-out (the only capture that had carried it,
+      `pm5-session4b-final.log.gz`, concatenates four real sessions through
+      one recorder, a scenario the new key-based accumulator does not
+      support and cannot be used as evidence for). The gap-break behavior
+      itself is unchanged and still covered by synthetic fixtures; what's
+      owed is a fresh REAL-capture witness of a genuine >3s gap, the same
+      evidentiary bar the rest of this module's tests hold themselves to.
+      Whichever task next touches `traceModel.ts`/its tests should either
+      capture one or explicitly re-decline with a stated reason.
 - [ ] **Detection — make the banner that already exists actually fire.**
       `1 OF 3 · READY` is structurally impossible once
       `phase === "disconnected"` (`surfaceModel.ts:787`), so its

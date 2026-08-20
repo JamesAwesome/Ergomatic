@@ -809,13 +809,30 @@ async function walkSurfaceToLog(
   // anything about). Computed from the SAME `buildStoryEvents()` this
   // walk actually injected, not a hand-copied magic number, so a future
   // edit to the story's own timeline keeps this assertion honest instead
-  // of silently drifting stale. No boundary reset ever fires within this
-  // story's status frames (`elapsedSeconds` only ever increases,
-  // `buildStoryEvents()`'s own header on why: the clock keeps running
-  // through the freeze too) — this decimation model is a simplified,
-  // fixture-specific mirror of `seriesRecorder.ts`'s own bucket rule,
-  // deliberately omitting the reset-fold machinery that fixture never
-  // exercises.
+  // of silently drifting stale.
+  //
+  // CORRECTED (trace-truth Task 1 close-out, `pnpm e2e` run owed by that
+  // task's own review): the SAMPLE COUNT below is unaffected by Task 1's
+  // register-map fold — `elapsedSeconds` is strictly increasing across
+  // every status frame here (raw values 5, 10, 17, 20..39, 45, all
+  // distinct), so every frame wins a NEW bucket whether or not a fold
+  // constant is added underneath it, and this loop's own bucket-crossing
+  // count still matches. The LAST SAMPLE'S OWN `t` VALUE is NOT
+  // unaffected: `buildStoryEvents()`'s own `programIntervalIndex` DOES
+  // change (0 -> 1) between the two status frames straddling the
+  // boundary, even though `elapsedSeconds` never resets (the
+  // WIRE-IMPOSSIBLE shape this file's own comments above already
+  // disclose, kept deliberately — the freeze/PAUSED derivation this walk
+  // also proves needs the clock running through interval 1, and changing
+  // that would undermine THAT assertion instead). The recorder now keys
+  // on `MonitorFrame.intervalIndex` (spec §1/§2), so that key change folds
+  // interval 0's own final status reading (elapsedSeconds=10, the higher
+  // of its two ticks) into the base the instant interval 1's first frame
+  // arrives — +100 tenths (10s) on every sample from that frame on,
+  // regardless of `elapsedSeconds` never having decreased. This is
+  // CORRECT: the machine's own interval count genuinely advanced, and a
+  // completed interval's contribution belongs in the work clock exactly
+  // once. Old (pre-Task-1, no-fold-on-a-monotonic-stream) value: 450.
   let lastBucket = -1;
   let expectedSamples = 0;
   for (const e of buildStoryEvents()) {
@@ -835,10 +852,12 @@ async function walkSurfaceToLog(
   // `t` (cumulative tenths of a second) strictly increases sample to
   // sample — never a duplicate, never a decrease (this recorder's own
   // "first-frame-wins, never a repeat, never a reset within this
-  // fixture" contract). First/last bucket match the story's own first
-  // (5s) and last (45s) status frames.
+  // fixture" contract). First sample matches the story's own first
+  // status frame (5s); last sample is interval 0's own folded 10s PLUS
+  // the story's own last raw reading (45s) = 55s (see the correction
+  // above).
   expect(series.samples[0]!.t).toBe(50);
-  expect(series.samples[series.samples.length - 1]!.t).toBe(450);
+  expect(series.samples[series.samples.length - 1]!.t).toBe(550);
   for (let i = 1; i < series.samples.length; i += 1) {
     expect(series.samples[i]!.t).toBeGreaterThan(series.samples[i - 1]!.t);
   }
