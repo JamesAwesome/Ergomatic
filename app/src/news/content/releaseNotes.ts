@@ -5,6 +5,29 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // Phase LT in one build: LT-0's discard fix (#128), spec 1's
+    // targets/judgment/SPM (#129), spec 2's series capture (#130,
+    // rower-invisible on its own and deliberately unnoted), and spec 3's
+    // traces (#131). Range is v0.13.0..main, settled with `git merge-base
+    // --is-ancestor` rather than a tag message (RF15). Item order is
+    // rower-priority: the judgment change leads because it changes what a
+    // COLOR means on a screen testers already read, and the history line
+    // rides directly under it because rows they have already seen will
+    // change tone without them touching anything. #124's "no way to fix a
+    // session's numbers" gap was already announced in v0.13.0 and is not
+    // repeated. The trace item names the old-session limit in the same
+    // sentence, the v0.12.0 old-corpus precedent.
+    version: "v0.14.0",
+    date: "2026-08-20",
+    items: [
+      "Your interval rows now answer the question you actually asked: did I hit MY target. Each measured row shows its target beside what you rowed and is judged against that target, not against the session's own average. Faster is blue, slower is red, and anything inside half a second of the target is on target: plain ink, no verdict.",
+      "That also re-reads your history. Open a session you have looked at before and its rows may have changed color, because they are being judged by the new rule. A workout that beat every target used to paint its slowest rows red simply for being slower than the others. Those rows are blue now.",
+      "Stroke rate is on the rows at last, written as 24 / 22: what you actually pulled, then the rate the workout asked for.",
+      "Every screen that offers to save a session now also offers to discard it. The by-hand door was the last one that could trap you in a row you did not want.",
+      "Connected sessions draw their own trace under the interval list: your pace across the whole row, with stroke rate and heart rate a tap away. Heart rate appears only if a belt was on the wire. Sessions rowed before this update kept no trace and show no chart, so the first row you take after updating is the first one with a picture.",
+    ],
+  },
+  {
     // Phase CM (#123): the session meters counter and the interval's own
     // average on the connected LIVE pane, hardware-verified (the exit walk
     // photographed monitor, live counter and summary agreeing sub-metre).
