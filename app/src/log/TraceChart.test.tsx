@@ -289,3 +289,69 @@ describe("TraceChart — §4's cut: no interval boundary marks render, ever (pin
     }
   });
 });
+
+describe("TraceChart — §7.3 the inversion is a COORDINATE fact, not a class check", () => {
+  it("pace: a faster real sample renders at a SMALLER SVG y-pixel than a slower one, and a y-axis tick shares the identical (inverted) scale", () => {
+    const series = realSeries();
+    const trace = buildTrace(series, "pace")!;
+    expect(trace.invert).toBe(true);
+
+    const { container } = render(<TraceChart series={series} />);
+
+    // Parse the ACTUAL rendered polylines' pixel coordinates, in document
+    // (= drawn) order — not a parallel computation of what the component
+    // "should" have done. `decimate()` only reduces a segment once it
+    // exceeds ~2x its column budget (552 here); step-3's own 238 real
+    // pace readings never cross that, so every real point survives
+    // untouched — asserted below, not assumed, so this test cannot
+    // silently start comparing the wrong points if that ever changes.
+    const renderedPoints = Array.from(
+      container.querySelectorAll("polyline"),
+    ).flatMap((pl) =>
+      (pl.getAttribute("points") ?? "")
+        .trim()
+        .split(" ")
+        .filter(Boolean)
+        .map((pair) => {
+          const [x, y] = pair.split(",").map(Number);
+          return { x: x!, y: y! };
+        }),
+    );
+    const modelPoints = trace.points.flat();
+    expect(renderedPoints).toHaveLength(modelPoints.length);
+
+    const zipped = modelPoints.map((m, i) => ({
+      modelY: m.y, // seconds/500m — LOWER is FASTER
+      pixelY: renderedPoints[i]!.y,
+    }));
+    const fastest = zipped.reduce((a, b) => (b.modelY < a.modelY ? b : a));
+    const slowest = zipped.reduce((a, b) => (b.modelY > a.modelY ? b : a));
+    expect(fastest.modelY).toBeLessThan(slowest.modelY); // sanity: real, distinct values
+
+    // THE coordinate assertion §7.3 demands: the faster (lower split)
+    // sample renders HIGHER — a SMALLER SVG y-pixel (SVG y grows
+    // downward) — never inferred from `trace.invert`'s own boolean.
+    expect(fastest.pixelY).toBeLessThan(slowest.pixelY);
+
+    // Fit the affine map (pixelY = a*modelY + b) from these two REAL
+    // rendered points, then predict where a y-axis TICK — a DIFFERENT
+    // domain value, run through the component's own axis-drawing code
+    // path, not its line-drawing one — should land, and check the DOM.
+    // If ticks were ever computed off a different (e.g. un-inverted)
+    // scale than the line itself, this diverges; today they share one
+    // `yScale`, so it must hold.
+    const a =
+      (slowest.pixelY - fastest.pixelY) / (slowest.modelY - fastest.modelY);
+    const b = fastest.pixelY - a * fastest.modelY;
+
+    const tickLabels = Array.from(
+      container.querySelectorAll(".trace-tick-label"),
+    );
+    expect(tickLabels).toHaveLength(trace.ticksY.length);
+    expect(trace.ticksY.length).toBeGreaterThan(0);
+    const tickValue = trace.ticksY[0]!;
+    const expectedTickY = a * tickValue + b;
+    const actualTickY = Number(tickLabels[0]!.getAttribute("y"));
+    expect(actualTickY).toBeCloseTo(expectedTickY, 0);
+  });
+});

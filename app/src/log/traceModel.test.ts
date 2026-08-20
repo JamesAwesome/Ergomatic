@@ -187,6 +187,31 @@ describe("buildTrace — §7.2 the sentinel rule, proven against a REAL capture"
     expect(trace!.domainY[0]).toBeGreaterThan(0);
   });
 
+  it("step-3: the SAME rule for the rate channel — every spm===0 sample is excluded from both the drawn points and domainY (11 of 243 samples read spm===0 in this capture)", () => {
+    const series = seriesFromFrames(replayFrames(STEP3_PATH));
+    const zeroSpmSamples = series.samples.filter((s) => s.spm === 0);
+    // Pinned exactly, not "some" — a real count on this real capture, the
+    // same evidentiary bar the pace sentinel test above sets. Both fields
+    // share one exclusion code path (`realReadings`'s `switch`) with full
+    // branch coverage, but coverage alone never pins a REAL number —
+    // this is the rate channel's own witness of that.
+    expect(zeroSpmSamples).toHaveLength(11);
+
+    const rateTrace = buildTrace(series, "rate");
+    expect(rateTrace).not.toBeNull();
+
+    const drawnX = rateTrace!.points.flat().map((p) => p.x);
+    expect(drawnX).toHaveLength(243 - 11);
+    for (const s of zeroSpmSamples) {
+      expect(drawnX).not.toContain(s.t / 10);
+    }
+
+    // A stroke-rate sentinel would read as 0 spm — a real, low, but
+    // finite value; domainY's low edge still comes from the lowest REAL
+    // reading in this capture, never the sentinel floor.
+    expect(rateTrace!.domainY[0]).toBeGreaterThan(0);
+  });
+
   it("pm5-session4b-final.log.gz: the measured ~26%-of-samples reality this whole rule exists for (this file's own share: 271/1145 = 23.7%)", () => {
     const series = seriesFromFrames(
       replayLegacyLog("pm5-session4b-final.log.gz"),
