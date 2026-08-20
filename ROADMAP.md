@@ -1763,6 +1763,80 @@ phase adds the buy-vs-build question on top of it.
         since the fake had no handle invalidation"
         (`pm5-interface-notes.md:2502-2505`).
 
+### The background question, ANSWERED — and it did not reopen BUY
+
+**James's ruling, 2026-08-20: backgrounded YES, terminated NO.** His
+reasoning defines the scope: "backgrounded could happen by accident if a
+person gets an urgent text or a call and they answer mid-row." **This is
+not background workouts. It is not losing a rower's row to an
+interruption they did not choose.** Terminated-no removes state
+restoration entirely (restoration exists to relaunch a KILLED app).
+
+A research delta followed (same document, `# DELTA` section). Its result:
+
+- **A background mode would probably buy nothing, and the mechanism is
+  not the one anyone expected.** The obstacle is not iOS's app lifecycle,
+  it is **WebKit's own process throttler**: the complete set of things
+  that keep a WebContent process runnable is *visible, audible,
+  capturing*. A running timer, an open BLE subscription and a workout in
+  progress are on none of them, and **not one step in that chain reads
+  `UIBackgroundModes`.** So "the link stays up" and "we keep logging the
+  row" are genuinely different claims, and a background mode buys only
+  the first.
+- **COULD NOT ESTABLISH by reading**, and it is labelled that way: one
+  escape hatch depends on private RunningBoard SPI with no published
+  reference. **A 90-second probe settles it** — one build, two runs, with
+  and without the plist key (procedure in the delta's §D1e).
+- **The recommendation is CORRECT RESUME, not a background mode**, and it
+  is robust to that unknown — which is why the probe is not a blocker.
+  Compared on what the ROWER ends up with, the two options differ in
+  **exactly one row**: whether the app tells him he was away. If JS
+  freezes, the mode delivers nothing for the interruption case; if it
+  does not freeze, the case is already handled without it. Keep-awake
+  makes it decisive — the screen stays on, so the app is foregrounded for
+  the whole normal row, and a permanent architectural commitment would be
+  bought for an accident.
+- **BUY stays closed.** The flip condition was narrowed, not triggered:
+  `bluetooth-central` does not serve "backgrounded" for a WebView app,
+  and "terminated" is ruled out. `@capacitor/background-runner` is
+  eliminated on its own documentation (stateless, DOM-less, destroyed per
+  event).
+
+**Three findings from the delta that outlive the choice:**
+
+- [ ] **`seriesRecorder`'s boundary fold silently UNDER-COUNTS when a gap
+      spans an interval boundary** — it folds the stale pre-gap reading,
+      or (post-gap distance > 3 m) rejects the boundary outright and
+      drops samples until the work clock climbs back. **That is a WRONG
+      NUMBER, not a gap**, it is TRIAD weight, and it is true whichever
+      option this phase picks. Highest-priority item in this phase. **M**
+- [ ] **A backlog may already exist, twice over, unbuilt.** Apple
+      documents that for a foreground-only app "all Bluetooth-related
+      events… are queued by the system and delivered to the app only when
+      it resumes", and WebKit's IPC send queue is uncapped in source. Our
+      pipeline is wire-clock driven (`driver.ts`, `seriesRecorder.ts`,
+      three named wall-clock exceptions), so it **could consume a drained
+      backlog** — the row might reconstruct itself. Depth and duration of
+      both queues: could not establish. Probe before designing anything
+      that assumes loss. **S**
+- [ ] **Capacitor answers a killed WebContent process with
+      `webView.reload()`**, destroying the driver, the recorder and up to
+      30 s of unflushed series (the flush is a `setInterval`, frozen
+      while suspended). Flagged by the delta as contradicting its own
+      brief: **"terminated no" disposes of force-quit, not of memory
+      pressure**, and the system killing a backgrounded app is exactly
+      the termination case that matters here. **M**
+
+**Two corrections to this section's earlier text**, both from the delta:
+the claim that apps have been rejected for declaring `bluetooth-central`
+without a qualifying use **could not be sourced** — Bluetooth appears
+zero times in the App Store Review Guidelines, and 2.5.4 restricts USE,
+not declaration. And a carve-out the first pass predates: **iOS 26 grants
+foreground-equivalent Bluetooth privileges to an app that starts a Live
+Activity before backgrounding** — attractive for exactly this scenario,
+but it restores BLUETOOTH privileges only and says nothing about
+WebKit's throttling, so it does not rescue the JS half.
+
 ### What the research changed — read before writing the spec
 
 - **The frame-silence watchdog is MANDATORY, not belt-and-braces.** Apple
