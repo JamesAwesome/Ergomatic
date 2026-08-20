@@ -1082,3 +1082,76 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
 - **Release stack at this gate:** v0.13.0 is the tip tag; #128, #129 and (on
   merge) #130 all ride **v0.14.0 MINOR**, range `v0.13.0..main`, four clauses,
   none new from #130. The tag message must not name series capture.
+
+## Phase-open gate, 2026-08-20 (Phase LL: the BLE lost-link brick, TestFlight 688)
+
+- **"Should we pull the build" is usually the wrong axis — ask first whether the
+  build OWNS the bug.** v0.14.0 was cut hours before a link-loss brick was found
+  on it, and `git diff --stat v0.13.0 v0.14.0 -- app/src/monitor/transports/
+  app/src/adapters/` is EMPTY: the native BLE arm is unchanged since v0.10.0.
+  Rolling back would have shipped the same defect minus five notes clauses. Run
+  that one command before any pull/hotfix conversation. Second half of the same
+  point: expiring an internal TestFlight build stops NEW installs and does
+  nothing for a device that already has it, so with a cohort of one the lever
+  does not reach the only affected person.
+- **The delete-and-reinstall workaround is DESTRUCTIVE, and that is what sets
+  the cohort threshold.** A reinstall wipes `ergomatic.monitorRun`,
+  `ergomatic.sessionRun` and `ergomatic.sessionDraft` — an unlogged session and
+  an in-progress draft. At N=1 (the developer, who found it) accept-and-fix is
+  right; at N=2 "delete the app" costs a tester a row and must not be issued
+  until a non-destructive recovery door exists.
+- **"Deleting the app fixed it, therefore app-local state" is a guess about a
+  BOUNDARY, not a mechanism.** A full `setItem` census proved NO persisted key
+  in this app is an input to `scan()`, `connect()`, `program()`, or any driver
+  decision: `lastMonitorDevice` stores a device NAME for a caption (and IS read,
+  in `WorkoutDetail.tsx:196/302` — the dispatch's "nothing reads it" was wrong
+  twice over), and a stranded `monitorRun` only raises a panel whose "Connect
+  anyway" proceeds unconditionally (`ConnectAction.tsx:104`). A `localStorage`
+  clear would have fixed nothing. **Reinstall clears more than localStorage;
+  before designing against a storage hypothesis, enumerate what else that
+  boundary resets.** The force-quit-surviving residue remains UNESTABLISHED and
+  is most likely iOS-side.
+- **A screen that "never changed" can be a PROOF, not a mystery.** `1 OF 3 ·
+  READY` is structurally impossible once `phase === "disconnected"`
+  (`surfaceModel.ts:787`; `ConnectedSurface.tsx:404-410`;
+  `connectedAxes.ts:145-146`), so its persistence proves the phase never moved.
+  When a surface is state-derived and exhaustive, read the derivation backwards
+  before hypothesising about rendering.
+- **The app's only field diagnostic sat downstream of the door the bug locks.**
+  `MONITOR LOG · COPY` lives on the log screen (`LogSession.tsx:668`), reachable
+  only after a session finishes. Sharper than "TestFlight can't self-diagnose":
+  ask WHICH surface a diagnostic is reachable from, and whether the failure
+  under study can prevent reaching it.
+- **A triggered follow-on whose trigger has fired and which stays a follow-on IS
+  filing-as-deferral.** "Reconnect and background scan, five pieces" fired twice
+  (Capacitor BLE landed in 7D; a tester reported a mid-piece lost link now).
+  Promoting it to a phase is the disposal — but only if the follow-on entry is
+  DELETED in the same commit. Two homes for one body of work is the CP/CR2
+  mistake.
+- **Restore a descoped posture before replacing it.** The shipped stance is a
+  reviewed "lose and degrade" (DEVIATIONS rows 75/82) whose `LOST THE MONITOR`
+  banner already exists — and had never fired on native, because detection is
+  entirely event-driven off a plugin callback iOS need not deliver, with no
+  frame-silence watchdog anywhere. Ruling: Phase LL scopes detection, recovery
+  and diagnosability; RECONNECT IS OUT, and MISSED rows stay out with it
+  (DEVIATIONS 82: they exist only to catch what a reconnect BACKFILL fails to
+  fill). No `RECONNECTING` copy before the thing it promises exists.
+- **The fake cannot currently prove a reconnect works**, and our own record says
+  so: the web arm's GATT-cache `InvalidStateError` "would have broken the
+  driver's whole reconnect path on real hardware while passing CI, since the
+  fake had no handle invalidation" (`pm5-interface-notes.md:2502-2505`). Any
+  future reconnect work owes the fake a handle-invalidation model FIRST.
+- **A runsheet prediction was measured false, third occurrence of the class.**
+  `walk-phase-cr2-exit/RUNSHEET.md:196` predicted that on a pre-stroke link kill
+  "stale beats armed in the axes' precedence, so the armed protections drop".
+  The stale axis never engaged at all. Record the result into LT's close before
+  the walk is signed off, or the next reader inherits a falsified prediction as
+  a finding.
+- **Backlog: 35 unchecked, up from 30** (LT open) and 24 (2026-08-13); 14
+  triggered follow-ons; PROD and LQ both created 2026-08-20 with zero checkboxes
+  between them, plus #134's CL2 split. Still moving the wrong way.
+- **Sequencing ruling:** LT close → LL → CL2 → LQ → PROD. LL displaces CL2 (two
+  items after #134's split, and its gap has a stated workaround — the `xN`
+  grammar already parses via import, `bulk.ts:268`). LL is a PROD PRECONDITION:
+  PROD's exit ("an empty-phone install that reaches a logged row without a hand
+  from us") is unreachable while a link drop bricks the app.
