@@ -309,6 +309,85 @@ async function postJudgmentMixLog(page: Page): Promise<string> {
   return (JSON.parse(result.body) as { id: string }).id;
 }
 
+// Trace-rendering spec (Phase LT spec 3), Task 3: a plausible multi-
+// interval `series` for the design sweep's own structural witnesses
+// (token colors, contrast, tap targets, the accessible description, the
+// absence of boundary marks) — none of which need a device-realistic wire
+// capture (Task 1/2's own job, already proven there against a real
+// recording); this fixture's only job is giving the CHART something real
+// to draw, POSTed straight into the stored row the same hand-built way
+// `postJudgmentMixLog` above already builds its own `steps`. One real
+// wire second per sample (§3's own recorder cadence — `t` increments of 1
+// keep every consecutive gap under the 3 s break threshold, so this draws
+// as ONE continuous line, not a fragmented scatter), pace descending
+// smoothly 140s -> 112s/500m (so "faster is up" has a real shape to
+// check, and "fastest"/"at the end" coincide, monotonic by construction),
+// stroke rate and heart rate climbing alongside — all three toggle
+// measures end up with real readings, so every one of them renders.
+function traceLogSeries(): {
+  samples: { t: number; d: number; p: number; spm: number; hr: number }[];
+} {
+  const samples: {
+    t: number;
+    d: number;
+    p: number;
+    spm: number;
+    hr: number;
+  }[] = [];
+  for (let i = 0; i <= 40; i++) {
+    const pace = 140 - Math.round(i * 0.7); // 140 -> 112, monotonic
+    const spm = 22 + Math.round(i / 7); // 22 -> 28
+    const hr = 128 + Math.round(i * 0.6); // 128 -> 152
+    samples.push({ t: i * 10, d: i * 4, p: pace * 10, spm, hr });
+  }
+  return { samples };
+}
+
+async function postTraceLogFixture(page: Page): Promise<string> {
+  const seaFret = LIBRARY_WORKOUTS.find((w) => w.title === "Sea Fret")!;
+  const result = await page.evaluate(
+    async ({ workout, series }) => {
+      const res = await fetch("/api/logs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workoutId: null,
+          workoutTitle: workout.title,
+          workoutType: workout.type,
+          deviceName: "PM5 432331249",
+          held: "held",
+          pain: 2,
+          notes: null,
+          avgSplitSeconds: 124.5,
+          distanceMeters: 5000,
+          timeSeconds: 1500,
+          steps: [
+            {
+              label: "Work",
+              targetSplit: 125,
+              actualSplit: 124,
+              actualSource: "pm5",
+            },
+          ],
+          advancesPlan: false,
+          series,
+        }),
+      });
+      return { ok: res.ok, status: res.status, body: await res.text() };
+    },
+    {
+      workout: { title: seaFret.title, type: seaFret.type },
+      series: traceLogSeries(),
+    },
+  );
+  if (!result.ok) {
+    throw new Error(
+      `trace-chart fixture seed failed: ${result.status} ${result.body}`,
+    );
+  }
+  return (JSON.parse(result.body) as { id: string }).id;
+}
+
 // Phase 6B (Task 5): the session-route sweeps below (countdown, timer,
 // session complete) all need a tiny bulk-imported workout driven through
 // the real START -> countdown -> timer flow, not a seeded library workout —
@@ -2649,6 +2728,113 @@ test.describe("from-the-log detail (Phase LT spec 1, Task 4: computed styles on 
   });
 });
 
+// Trace-rendering spec (Phase LT spec 3), Task 3, §5's own witness sweep —
+// the design layer §7.6/§7.4's exit criteria name: computed styles no unit
+// test can see (a real browser cascade resolving `var(--ink)` etc.),
+// live tap targets/accessible names, and the structural absence of any
+// interval-boundary mark. `postTraceLogFixture` seeds the stored door
+// (`/today/log/:id`) — the live door renders the identical `<TraceChart>`
+// (one component, §1's own "same rules on both" — no reason to duplicate
+// every witness a second time against the other host).
+test.describe("trace chart (Phase LT spec 3, Task 3: design witnesses)", () => {
+  let logId: string;
+
+  test.beforeEach(async ({ page }, testInfo) => {
+    await signInViaBackdoor(page, {
+      email: `design-trace-${testInfo.parallelIndex}@e2e.test`,
+      name: "Design Trace Tester",
+    });
+    logId = await postTraceLogFixture(page);
+    await page.goto(`/today/log/${logId}`);
+    await expect(page.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
+  });
+
+  test("every visible interactive element has a >=44x44 tap target", async ({
+    page,
+  }) => {
+    await assertTapTargets(page);
+  });
+
+  test("zero WCAG 2A/2AA violations", async ({ page }) => {
+    await assertNoA11yViolations(page);
+  });
+
+  // §2's own toggle idiom: real controls, one per measure the series can
+  // actually draw — this fixture carries pace/rate/hr readings on every
+  // sample, so all three toggle buttons exist, each under its own spoken
+  // name (`MEASURE_LABEL[m].spoken`, `TraceChart.tsx`).
+  test("the toggle exposes three real controls (Pace/Stroke rate/Heart rate), each >=44x44", async ({
+    page,
+  }) => {
+    for (const name of ["Pace", "Stroke rate", "Heart rate"]) {
+      const button = page.getByRole("button", { name });
+      await expect(button).toBeVisible();
+      const box = await button.boundingBox();
+      expect(box).not.toBeNull();
+      expect(box!.width).toBeGreaterThanOrEqual(44);
+      expect(box!.height).toBeGreaterThanOrEqual(44);
+    }
+  });
+
+  // §2/§3: the line takes ink (never a judged token — a trace isn't a
+  // verdict), the tick label takes the quiet ink-3. Computed live, not
+  // trusted from the CSS source (house rule).
+  test("the polyline strokes --ink and the y-axis tick label fills --ink-3", async ({
+    page,
+  }) => {
+    const line = page.locator(".trace-line").first();
+    await expect(line).toBeVisible();
+    const stroke = await line.evaluate((el) => getComputedStyle(el).stroke);
+    expect(stroke).toBe("rgb(27, 26, 23)"); // --ink, 17.11:1 on --surface
+
+    const tickLabel = page.locator(".trace-tick-label").first();
+    await expect(tickLabel).toBeVisible();
+    const fill = await tickLabel.evaluate((el) => getComputedStyle(el).fill);
+    expect(fill).toBe("rgb(87, 84, 76)"); // --ink-3, 7.43:1 on --surface
+  });
+
+  // §5: "a text alternative naming the measure, its range, and the
+  // direction of travel ... computed from the same model that draws,
+  // never hand-written" — asserted with THIS fixture's own real values
+  // (the series above starts at 140s/500m, ends at 112s/500m, fastest
+  // 112s/500m — never rises above the start, so "fastest" and "at the
+  // end" coincide here, which the regex allows for rather than assumes
+  // away).
+  test("the figure's accessible description names Pace with real m:ss.t values, not placeholder text", async ({
+    page,
+  }) => {
+    const svg = page.locator(".trace-svg");
+    const label = await svg.getAttribute("aria-label");
+    expect(label).toMatch(
+      /^Pace, \d+:\d{2}\.\d at the start to \d+:\d{2}\.\d at the end, fastest \d+:\d{2}\.\d/,
+    );
+    expect(label).toContain("2:20.0 at the start"); // pace 140s/500m
+    expect(label).toContain("1:52.0 at the end"); // pace 112s/500m
+  });
+
+  // §4's own cut: NO interval boundary marks, ever, on this surface.
+  // Structural, not a name-based guess — every `<line>` inside the chart
+  // is a y-axis tick mark (one per tick label, `TraceChart.tsx`'s own
+  // `ticksY.map`), so a 1:1 count rules out any extra mark a future
+  // regression might quietly add.
+  test("no boundary marks: every SVG line is a y-axis tick, one-for-one with the tick labels", async ({
+    page,
+  }) => {
+    const lineCount = await page.locator(".trace-svg line").count();
+    const tickLabelCount = await page.locator(".trace-svg text").count();
+    expect(lineCount).toBeGreaterThan(0);
+    expect(lineCount).toBe(tickLabelCount);
+    // Belt-and-braces: no element anywhere in the chart carries a class
+    // or id even suggesting an interval/boundary concept.
+    expect(
+      await page.locator('.trace-figure [class*="boundary" i]').count(),
+    ).toBe(0);
+    expect(
+      await page.locator('.trace-figure [class*="interval" i]').count(),
+    ).toBe(0);
+  });
+});
+
 test.describe("builder screen", () => {
   test.beforeEach(async ({ page }) => {
     await signInViaBackdoor(page, {
@@ -3801,6 +3987,15 @@ test.describe("post-workout summary (session door, just finished)", () => {
     await expect(page.locator(".tabbar")).toHaveCount(0);
   });
 
+  // Trace-rendering spec (Phase LT spec 3), Task 3, §1's own ABSENT case,
+  // witnessed live: the timer door has no PM5, so no `series` prop is
+  // ever passed (`LogSession.tsx`) — no chart, no empty frame.
+  test("renders no trace chart — the timer door has no series to draw", async ({
+    page,
+  }) => {
+    await expect(page.locator(".trace-figure")).toHaveCount(0);
+  });
+
   test("no small mono label uses the failing --ink-4 color", async ({
     page,
   }) => {
@@ -4057,6 +4252,15 @@ test.describe("post-workout summary (manual door)", () => {
 
   test("no mono label ≤11px still paints at --ink-4", async ({ page }) => {
     await assertNoFailingInk4Labels(page);
+  });
+
+  // Trace-rendering spec (Phase LT spec 3), Task 3, §1's own ABSENT case,
+  // witnessed live: the by-hand door has no PM5 either — same "prop never
+  // passed" idiom as the timer door's own equivalent test above.
+  test("renders no trace chart — the by-hand door has no series to draw", async ({
+    page,
+  }) => {
+    await expect(page.locator(".trace-figure")).toHaveCount(0);
   });
 
   // §2A meta: the manual door's own source tag — the third of the three

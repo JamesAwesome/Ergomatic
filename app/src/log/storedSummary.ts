@@ -60,6 +60,7 @@ import { fmtSplit } from "../../domain/format.js";
 import { PLANS } from "../../domain/plans.js";
 import type { WorkoutType } from "../../domain/types.js";
 import type { HeldResult, Thumbs } from "../api/useRecentLogs";
+import type { SeriesData } from "../monitor/seriesRecorder.js";
 import { formatLogDate } from "../session/logDraft";
 import {
   buildSpmCell,
@@ -126,6 +127,19 @@ export interface StoredLog {
   distanceMeters: number | null;
   planKey: string | null;
   planIndex: number | null;
+  // Trace-rendering spec (Phase LT spec 3), §1: the stored door's own
+  // source — `server/stores/logs.ts`'s `LogSeries` column, re-typed
+  // against the CLIENT's own `SeriesData` shape rather than a second
+  // hand-mirrored copy (unlike `StoredLogStep` above, which mirrors the
+  // server's `LogStep` because that type has no client-side twin —
+  // `SeriesData` already does, and the two are structurally identical:
+  // `t`/`d`/`p`/`spm`/`hr?`, spec 2's own C2-logbook shape on both sides
+  // of the wire). `null` (not just absent) is the real, common case: any
+  // row logged before spec 2 shipped, or one whose series was sacrificed
+  // at either storage boundary — `TraceChart` (Task 2) treats an absent
+  // OR `null` series identically (nothing to draw), so this screen never
+  // has to tell the two apart itself.
+  series?: SeriesData | null;
 }
 
 /** §5D: the read-back's own three pieces. `empty` is the "all four null"

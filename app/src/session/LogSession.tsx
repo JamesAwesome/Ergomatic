@@ -1172,6 +1172,13 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
         onSaveWithoutLogging={() =>
           void handleMonitorSave(saveWithoutLoggingOpts)
         }
+        // Trace-rendering spec (Phase LT spec 3), §1: the live door's own
+        // source — straight off the loaded `MonitorRun.series`, the same
+        // record `handleMonitorSave` above already spreads onto the POST
+        // body (spec 2). The timer door and the manual door below both
+        // omit this prop entirely (neither has a PM5), which is the
+        // "absent" case `PostWorkoutSummary`'s own doc comment names.
+        series={monitorRun.series}
         discardSlot={
           <button
             type="button"

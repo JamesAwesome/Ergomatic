@@ -1692,3 +1692,52 @@ toolkit, not a history.
   `navigator.storage.persist()` never prompts (PRIMARY, webkit.org/blog/14403) —
   and the same heuristics mean a Capacitor WKWebView is probably DENIED: free,
   not mitigation. `LOG_LIST_COLUMNS` exists (`stores/logs.ts:150`).
+
+## Delta pass, 2026-08-19 (Phase LT spec 3, "trace rendering")
+
+- **"Interval boundaries can be derived by summing the stored steps' durations."**
+  False twice over, and the repo had already solved it. (1) The series starts at the
+  first rowing-active frame — the WARM-UP (`useMonitorSession.ts:1120`) — while
+  `buildMonitorLogSteps` emits no step for one (`logDraft.ts:851`), and
+  `storedSummary.ts:50` says the stored shape cannot recover it: every mark lands one
+  whole warm-up too far left, and the "totals disagree" guard never fires because the
+  disagreement IS the warm-up. (2) The named fallback ("the prescribed duration
+  otherwise") does not exist for a distance interval — `durationText`'s comment states
+  the construction guarantee that a work step has EXACTLY ONE of seconds/meters.
+  **Technique: before accepting a derivation over a stored shape, grep for a module
+  that already performs it** — `session/intervalBoundaries.ts` had the fold, the
+  lead-in, the warm-up cap and an "honest stop" for the unpriceable piece, all with
+  their rationale attached. Second technique: **when a spec inherits a per-row field
+  and starts CUMULATING it, its per-row caveats are new ground** — `actualSeconds`
+  carries an unverified work-vs-work+rest unit caveat that is bounded per row and
+  compounding once summed.
+- **"A 5th-95th-percentile clip marks the exceptional outlier."** False on this app's
+  own data. Replaying the three committed captures through the recorder's decimation
+  rule: 26% of samples carry `p === 0` (`seriesRecorder.ts:283` maps both a null
+  reading and the machine's own zero to 0), 262 of them in state `rowing`, in 12
+  separate runs up to 85 s long — 8,098 frames literally send `"currentSplit":0`. So
+  p5 = 0 exactly, and on a faster-is-up axis those render as twelve plunges to
+  "infinitely fast". Excluding zeros, p5/p95 still clips ~10% of EVERY session's
+  samples, because instantaneous 1 Hz pace is that noisy. **Technique: compute the
+  proposed statistic over the committed captures before believing a story about what
+  it will select.** A ~40-line replay script settled in minutes what the fixture
+  ("steady rowing plus one 164 spm") was constructed to confirm — and the exit
+  criterion written around that fixture would have passed while the mark fired dozens
+  of times per real trace. Corollary: a "min/max preserved per column" decimation rule
+  PROTECTS sentinel artifacts as faithfully as it protects real spikes.
+- **"A rest leaves a gap in the trace's clock."** False — the work clock freezes, so no
+  new whole-second bucket is crossed and rests produce zero samples by construction.
+  But gaps ARE real: 5-6 per capture, largest 41 s, from rejected reset candidates and
+  dropped frames. **Technique: when a spec forbids reading a gap as a boundary, count
+  the gaps in the captures and ask what actually produces them** — the prohibition was
+  right and its stated cause was wrong, which made the exit criterion's fixture
+  unbuildable as written.
+- **Attacked and HELD (spec 3's vetted ground):** the stored source round-trips
+  (`data.test.ts:1994`) and the list still excludes `series` (`stores/logs.ts:177-185`);
+  the shared horizontal domain already makes a late-starting HR line honest; the
+  inverted pace axis contradicts no shipped surface (the deviation bar draws faster
+  LEFT of a centre tick, which is orthogonal); min/max decimation is
+  orientation-independent; and the controller's bundle probe method is sound — a
+  `window.location.search` gate is a runtime value Rollup cannot fold (this repo's own
+  recurring failure #12 records the converse), so +94 KB gz is a floor, re-measured
+  independently at 158.18 KB gz baseline today.
