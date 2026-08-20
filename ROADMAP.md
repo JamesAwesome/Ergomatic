@@ -2500,7 +2500,7 @@ that one route is 1 MB (was 100 KB app-wide). Ordering pre-existing, no
 amplification path, accepted; owner = the next server-touching phase.
 **LT's device items live on CR2's runsheet** (`docs/monitor/sessions/walk-phase-cr2-exit/RUNSHEET.md`
 — the standing phone pass James still owes): the iOS storage probe, the
-`persist()` grant observation, and the fast-rate re-measure. **DONE 2026-08-19** (walk-2026-08-19-series: S2 PASS, S6 denied-as-predicted, fast rate ~10 Hz with the decimator unaffected — spec 3 is unblocked on this condition). The PM ruling that produced them: **these land BEFORE spec 3 is implemented** — a device-specific
+`persist()` grant observation, and the fast-rate re-measure. **DONE 2026-08-19** (walk-2026-08-19-series: S2 PASS, S6 denied-as-predicted, fast rate ~10 Hz with the decimator unaffected — spec 3 is unblocked on this condition). **One item added by James at that walk's close and OWED BEFORE #130 MERGES: S5b, the on-disk footprint of a REAL trace** (laptop path against the walk-lab stack, one short piece; the synthetic worst case compresses unrealistically and cannot answer it). The PM ruling that produced them: **these land BEFORE spec 3 is implemented** — a device-specific
 recorder defect would be invisible AND permanent (frames evaporate, the
 record is immutable, PATCH refuses series), so the check moves in front of
 the renderer.
