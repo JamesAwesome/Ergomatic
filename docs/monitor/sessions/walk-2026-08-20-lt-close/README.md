@@ -137,6 +137,36 @@ loaded workout to a different one also misbehaved on the phone.
 **Severity note for whoever picks this up:** v0.14.0 (688) is on TestFlight
 with this defect. The only escape a tester has is deleting the app.
 
+## F-6 — "sometimes when I go to Connect, we're actually still connected"
+
+**Operator observation, James, 2026-08-20**, offered after the walk and not
+part of its plan. Recorded because it is the SAME defect pointing the other
+way, and because it has a mechanism.
+
+F-1 is the app believing it is connected when it is not. This is the app
+offering to connect when it already is. Both follow from one thing: **the
+app's connection state is a local belief, never an observation.**
+
+**Checked, not assumed:** there is no already-connected guard anywhere on the
+connect path. `grep` for `isConnected` / `getConnectedDevices` /
+`connectedDevices` across `capacitorBle.ts` and `useMonitorSession.ts` returns
+**nothing**, and `createTransport` builds a fresh transport per attempt
+(`useMonitorSession.ts:1531-1534`). The app never asks iOS whether it already
+holds this peripheral; it scans and connects from scratch every time.
+
+**Why this may be the missing half of F-2.** The PM5 is single-central. If
+iOS still holds a connection the app has forgotten, the machine already has a
+central, and a fresh connect-then-program is exactly the shape that ends in
+`LINK-FAILED`. It also fits the asymmetry that a force-quit did not fix and a
+reinstall did: deleting the app definitively releases every CoreBluetooth
+connection it owned.
+
+**Stated as a hypothesis, not a finding.** Nobody has observed iOS's own view
+of the connection during a failure, and there is no route to on a TestFlight
+build (F-3). What IS established is the absent guard and the per-attempt
+transport. The Capacitor plugin exposes `getConnectedDevices`; we have never
+called it.
+
 ## F-3 — the field cannot self-diagnose this class of bug at all
 
 `WKWebView.isInspectable` has defaulted to `false` since iOS 16.4. Capacitor

@@ -2725,7 +2725,18 @@ already exists and shipped (DEVIATIONS row 75); the job is to make it
 fire. The phase is created by **DELETING** the "Reconnect and background
 scan, five pieces" follow-on, not sitting beside it — its trigger has now
 fired twice and two homes for one body of work is the CP/CR2 mistake.
-Proposed sequence: LT close → this phase → CL2 → LQ → PROD, on the
+**A third symptom, from James the same day: "sometimes when I go to
+connect we're actually still connected."** Same defect, opposite
+direction — and checked: there is NO already-connected guard on the
+connect path (no `isConnected`/`getConnectedDevices` call anywhere in
+`capacitorBle.ts` or `useMonitorSession.ts`), and `createTransport`
+builds a fresh transport per attempt. The app never asks iOS whether it
+already holds the peripheral. Since the PM5 is single-central, a
+forgotten-but-live connection is exactly the shape that ends in
+`LINK-FAILED`, and it fits the force-quit/reinstall asymmetry. Whatever
+the phase's final scope, **the app's connection state being a local
+belief rather than an observation is the thing all three symptoms
+share.** Proposed sequence: LT close → this phase → CL2 → LQ → PROD, on the
 grounds that it is a PROD precondition (PROD's exit, an empty-phone
 install reaching a logged row unaided, is unreachable while a link drop
 bricks the app). **F-3, the reason both findings are
