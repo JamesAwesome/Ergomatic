@@ -2013,6 +2013,39 @@ WebKit's throttling, so it does not rescue the JS half.
       above for why re-deriving it wasn't the proportionate fix). The
       y-axis clipping is fixed (`LEFT_PAD` 36 -> 42, both captures verified
       by eye). **S**
+- [ ] **THE COUNTDOWN STALLS DURING RESTS, and the progress bar with it**
+      (James, device report + two photos, 2026-08-20, rowing "Strong
+      Breeze"). He saw `TOTAL LEFT` reading roughly a minute high, and the
+      bar lagging when interval 4 handed over to interval 5 after its rest.
+      **One likely cause for both, and it falls straight out of this
+      phase's own B1 finding.** `surfaceModel.ts:970` computes
+      `totalLeftSeconds = totalSeconds - frame.sessionElapsedSeconds`, and
+      `totalSeconds` INCLUDES the programmed rests — but the antagonist
+      pass established that the PM5's elapsed clock only advances during a
+      rest while the flywheel is moving. Sit still through a rest and the
+      wire's elapsed freezes, so the countdown stops ticking down while
+      real time passes, and the bar's fill (driven by the same figure)
+      stalls at the boundary then jumps. Strong Breeze carries 10:00 of
+      rest across four rests; a ~1 min drift is the right order of
+      magnitude. **HYPOTHESIS, not a finding** — testable with no hardware
+      by replaying a committed rest-bearing capture and checking whether
+      `sessionElapsedSeconds` flatlines through the rests. **TRIAD** (a
+      number a rower reads). **M**
+- [ ] **Rename `TOTAL LEFT` to `EST LEFT`** (James's ruling, 2026-08-20).
+      Honest for a second reason independent of the stall above: a
+      DISTANCE interval's contribution to `totalSeconds` is distance ÷
+      target pace, so rowing faster than target makes the session
+      genuinely shorter than programmed. Copy only — rides the next PR
+      touching the connected surface. **S**
+- [x] ~~The progress bar's segments are unevenly divided~~ — **NOT A BUG,
+      settled 2026-08-20 from James's own two photos without touching the
+      code.** Strong Breeze (`app/server/seed/library/tr.ts`) is 5×2:00
+      work with rests of 2:00/2:00/3:00/3:00/none, so each interval's
+      share of the session is 4:00/4:00/5:00/5:00/2:00 — 20% / 20% / 25% /
+      25% / 10% of twenty minutes. Measured off his LIVE screenshot: 19.8%
+      / 19.8% / 25.4% / 25.1% / 9.9%. The bar is proportional to work plus
+      rest and the unequal rests are what make it uneven. Recorded because
+      it will look wrong again to the next person who sees it.
 - [ ] **Detection — make the banner that already exists actually fire.**
       `1 OF 3 · READY` is structurally impossible once
       `phase === "disconnected"` (`surfaceModel.ts:787`), so its
