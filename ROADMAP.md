@@ -1707,7 +1707,22 @@ already applies (BLE lifecycle is a named OS-owned trigger; PRIMARY /
 SECONDARY / INFERENCE tagging; "nothing found" is a result), and this
 phase adds the buy-vs-build question on top of it.
 
-- [ ] **The research pass.** Deliverable is a document, not a decision:
+- [x] ~~**The research pass**~~ — **DONE 2026-08-20**:
+      `docs/superpowers/research/2026-08-20-ble-connection-management.md`.
+      **Recommendation: BUY NOTHING.** Every candidate's headline
+      connection-management feature is a wrapper over the same two
+      CoreBluetooth facilities we can reach ourselves, and the incumbent
+      plugin is healthily maintained (8.3.0 published this month — and its
+      iOS sources are byte-identical to our 8.2.0, so upgrading fixes
+      nothing here). Use the platform and call the functions we already
+      own. **The one input that flips the answer** and should be asked
+      before the spec: whether the app should keep logging while
+      backgrounded or terminated. **Revised sequence from the pass:
+      diagnosability → detection → recovery** (it moves diagnosability
+      FIRST — you cannot fix what you cannot see, and the walk proved it).
+      What the pass changed in this phase's own scope, below.
+- [ ] ~~The research pass's original brief, kept for the record:~~
+      Deliverable is a document, not a decision:
       what the platform guarantees, what our plugin does with those
       guarantees, what the alternatives are, and a recommendation with its
       reasoning exposed. It must cover, at minimum:
@@ -1747,6 +1762,56 @@ phase adds the buy-vs-build question on top of it.
         driver's whole reconnect path on real hardware while passing CI,
         since the fake had no handle invalidation"
         (`pm5-interface-notes.md:2502-2505`).
+
+### What the research changed — read before writing the spec
+
+- **The frame-silence watchdog is MANDATORY, not belt-and-braces.** Apple
+  documents no bound on out-of-range disconnection latency, and — the
+  important silence — **does not document whether
+  `didDisconnectPeripheral` fires on a Bluetooth power-off at all.** Since
+  that callback is our only detector, detection may be *structurally
+  absent* for exactly what James did. No amount of reading settles it.
+- **A cheap second signal exists and we never subscribe to it:** the
+  plugin's `startEnabledNotifications` channel reports the power-off
+  directly (`DeviceManager.swift:48-70`).
+- **iOS 17 ships Apple's own auto-reconnect** —
+  `CBConnectPeripheralOptionEnableAutoReconnect`, with an `isReconnecting`
+  signal — **and the incumbent plugin cannot reach it**, because it passes
+  `options: nil` and exposes no connect-options passthrough. That is a
+  fork/patch/upstream question, not a library-selection question, and it
+  is the shape "reconnect" would most likely take here if it is ever IN.
+- **F-2 is not a connect failure.** This record's own wording says the
+  retries "reached programming" — connect kept succeeding, programming
+  kept failing. Verified closed loop: `program()`'s catch never
+  disconnects and never clears `driverRef`, Try Again reprograms over the
+  same dead driver, and `connect()` early-returns while `driverRef` is
+  set. Strongest instrumentable candidate for the link death: every
+  connect attempt builds a **new `CBCentralManager`**
+  (`Plugin.swift:62-71`) while the plugin's `deviceMap` retains
+  peripherals from previous centrals. **It does not explain the
+  force-quit survival, which is still unexplained.**
+- **THE PM5 HAS NO RESUME CONCEPT — established by exhaustive
+  enumeration, not assumed.** Its workout state machine has fourteen
+  states and none concerns the link; a grep of the whole CSAFE spec for
+  resume/reconnect finds nothing. What exists instead: the machine keeps
+  counting and publishes its current state, so "start watching again"
+  recovers the numbers but **never the gap**. The only retrospective
+  store is a COMPLETED workout's internal log (`0x003F` +
+  `CSAFE_PM_GET_INTERNALLOGPARAMS`), which is not a mid-piece backfill.
+  This re-confirms DEVIATIONS 75 from first principles instead of
+  inheriting it, and it binds any future copy: **no wording may promise
+  a rower that a gap will be filled.**
+- **"The PM5 is single-central" HAS NO SOURCE** — absent from Concept2's
+  documents and from our own record, and it was stated as fact during the
+  walk. It is a documented absence plus consistently singular language.
+  Do not inherit it; settle it with a one-line device probe, on which
+  part of the recovery design depends.
+- **Two corrections to this phase's own opening text**, from the pass
+  reading the source rather than the brief: the connect timeout is a
+  Swift `DispatchWorkItem`, **not a JS timeout** (`DeviceManager.swift:
+  398-411`) — which changes where any fix lives — and raising it would
+  also un-bound **service discovery**, where there is a live path that
+  never resolves (`Device.swift:81-91`).
 
 ### In scope
 
