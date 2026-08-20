@@ -1910,8 +1910,7 @@ WebKit's throttling, so it does not rescue the JS half.
       itself is unchanged and still covered by synthetic fixtures; what's
       owed is a fresh REAL-capture witness of a genuine >3s gap, the same
       evidentiary bar the rest of this module's tests hold themselves to.
-      Whichever task next touches `traceModel.ts`/its tests should either
-      capture one or explicitly re-decline with a stated reason.
+      Owner: the standalone item below.
 - [ ] **HARDWARE QUESTION owed to Phase LL's exit walk — DISTANCE only.**
       **CORRECTED at the 2026-08-20 PM gate: an earlier version of this item
       said the work→work reset had "never been confirmed on hardware." That
@@ -1942,6 +1941,33 @@ WebKit's throttling, so it does not rescue the JS half.
       and captures come from walks, not from tasks — and this phase's own
       exit walk produces a genuine >3 s gap as a matter of course. Sits
       beside exit clause (e) so the phase can go red on it. **S**
+- [ ] **BEFORE the next tag: two owed clauses plus a version-marker
+      ruling** (PM gate, round 4 of the Task 2 PR review, 2026-08-20).
+      **The two-clause notes obligation** (spec §7 criterion 9, the
+      pm-ledger, and a DEVIATIONS row 200 sentence all already say this —
+      this is the fourth, GREPPABLE home, because the last two tags each
+      shipped with a missing clause and whoever cuts v0.15.0 reads
+      ROADMAP and the merge log, not the spec): the next tag's notes
+      carry (1) a clause for the time axis and rest marking (the new,
+      observable-to-a-tester feature) and (2) a clause for the old
+      corpus (§5's declination overturned at the 2026-08-20 PM gate —
+      some traces recorded before this phase's fixes are silently wrong
+      and cannot be told apart from correct ones). **New condition, this
+      gate:** the phone→server trace leg must be WITNESSED before the tag
+      that announces the trace fix ships, or the notes say plainly that
+      traces are web-only today — announcing a fix for a leg nobody has
+      run on a phone is its own false-completeness risk, the same shape
+      as the two-clause rule itself protects against. **Version-marker
+      ruling (NOT implemented here — adding a field at a merge-gate
+      review is the escalate-mid-change hazard this repo's own rules
+      name):** the next change that touches `series` carries a `v`
+      version marker on `SeriesData`, decided before the phone→server leg
+      ships. Reason: the meaning of these bytes has changed twice in six
+      days with the bytes themselves unchanged (the accumulator fold,
+      then the rest marker), spec §9 has a third change queued, and one
+      integer per run makes era detection trivial RETROACTIVELY — absent
+      `v` IS the pre-fix marker, cheap only while the corpus is one
+      rower's two days old.
 - [ ] **BEFORE trace-truth task 3 (the time axis): its exit criterion 7 is
       currently UNSATISFIABLE on the flagship capture, and the reason is
       structural** (PM gate, 2026-08-20). Criterion 7 asks that the axis's
@@ -3260,10 +3286,28 @@ record is immutable, PATCH refuses series), so the check moves in front of
 the renderer.
 **Riding follow-ups (PM gate 2026-08-19):** `pnpm e2e -- -g` needs the
 double-dash form documented (pnpm swallows bare -g); a frozen-clock
-screenshot fixture (17 captures churn on wall-clock date stamps);
-`judge()`'s documented-unreachable dead-even branch (discriminated union
-if a second producer appears); the live summary's judged-state capture
-(closed by this PR's C1 recapture — verify at close).
+screenshot fixture (17 captures churn on wall-clock date stamps) —
+**scope note (trace-truth Task 2 review, 2026-08-20): freezing the
+wall-clock date alone will NOT fix this.** A second, independent churn
+source lives in `e2e/helpers.ts`'s own `RUN_ID` (`Date.now()` + a random
+suffix, baked into every generated e2e user's email via
+`signInViaBackdoor`), which changes on EVERY run regardless of calendar
+date — confirmed on `you-derive-offer.png`: the string itself differs
+AND its own rendered LENGTH varies run to run (the exact sub-mechanism
+is not yet isolated — `RUN_ID`'s own two components are each
+nominally fixed-length in the current era, so the wrap is either a rarer
+edge case in one of them or a third source not yet found), which
+reflows the whole page wherever that email renders — measured at 26,327
+pixels differing across 13 row bands down to y=527, not a localized
+diff. **The fixture fix must neutralise the identity's own printed
+LENGTH (a fixed-width stub, not merely a frozen value) or the reflow
+keeps happening even once the string is otherwise deterministic; isolate
+the exact length-varying sub-mechanism before assuming a frozen `RUN_ID`
+alone fixes it.** Covers both sources or captures will keep re-churning
+after it ships; `judge()`'s
+documented-unreachable dead-even branch (discriminated union if a second
+producer appears); the live summary's judged-state capture (closed by
+this PR's C1 recapture — verify at close).
 **Standing rulings:** same dead band everywhere; SPM cell `24 / 22`;
 supersedes PW spec 1's ROW semantics (its Measured-row cell points here);
 retires the lone-row abstention for targeted rows; `MONITOR_SPM_MIN`
@@ -3470,6 +3514,26 @@ next phase. One line per round, newest first.
 
 ## Triggered follow-ons (not scheduled — each has an explicit trigger)
 
+- **23 citations across 11 tracked files point into `.superpowers/`, which
+  is git-EXCLUDED and therefore unreachable to everyone except the session
+  that wrote it** (found 2026-08-20 at PR #141's PM gate, which caught three
+  such citations in that PR and required them replaced; the remaining 23 are
+  pre-existing and out of that PR's scope). `.git/info/exclude:7` excludes
+  `.superpowers/`, so `docs/superpowers/sdd/` does not exist and never did —
+  the SDD workspace is per-session scratch by design. Affected files include
+  `app/src/monitor/driver.test.ts`, `docs/TESTING.md`,
+  `docs/monitor/pm5-interface-notes.md`, and eight plans and specs.
+  **Why it matters rather than being tidy-up:** every one of these was
+  written as the AUTHORITY for a claim — a measurement, a ruling, a
+  rejected alternative — and a reader who follows it finds nothing, which
+  is indistinguishable from the claim being unsupported. The #141 gate's
+  own phrasing: a dangling citation is worse than no citation, because it
+  reads as evidence. **The durable authority for a measurement is the TEST
+  that pins it**, or a committed capture, or a ledger entry — never a
+  scratch report. **Trigger:** the next time any of those files is opened
+  for another reason, fix the citations in it; or one sweep if someone
+  wants the whole set gone. Do not create `docs/superpowers/sdd/` to make
+  the paths resolve — the scratch genuinely should not be committed.
 - **An EXTERNAL oracle for the trace: the PM5's own internal log, and the
   logbook** (James, 2026-08-20, from the erg: "there's a verification id
   that the pm can give you for a row. Is checking if we can derive the

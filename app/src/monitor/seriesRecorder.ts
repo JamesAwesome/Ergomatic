@@ -15,11 +15,22 @@
 // clock, never a raw field alone, never `sessionElapsedSeconds` (a
 // different, driver-owned derived sum with its own defects, B2).
 //
-// Because the wire freezes elapsed/distance for a rest's whole duration,
-// the work clock stops advancing too — no new whole work-second is ever
-// crossed during a rest, so rests produce ZERO samples for free, by
-// construction, without this module ever inspecting `state` at all (§1's
-// "Rest samples: NONE" row).
+// FALSE PREMISE, KILLED (trace-truth Task 2 exists because of this):
+// the freeze above is NOT universal. It held for the 66 consecutive
+// frames `step-3` shows crossing its OWN mid-workout rest (a rest with a
+// FOLLOWING interval to reset into) — but the wire keeps advancing
+// elapsed/distance during a rest whenever the rower keeps the flywheel
+// moving, and this module used to assume "rest -> zero samples, by
+// construction" as a physical guarantee rather than a fact about that
+// one window. Measured: 21 rest-state samples on
+// `session-2-wu-4unequal.jsonl` (a rest that genuinely advances), and
+// even `step-3` ITSELF — the very capture cited above as the freeze's
+// authority — carries 3 rest-state samples of its own at its own tail
+// (t=240.2/241.3/242.2, its last three samples: a TRAILING rest with no
+// following interval to reset into, so nothing ever froze it). This
+// module now marks every sample's own `r` field from the winning
+// frame's `state` directly (below) rather than relying on any
+// assumption that a rest can never produce one.
 //
 // THE REGISTER MAP (trace-truth spec §1/§2, replacing the fix-round's
 // edge-triggered genuine-boundary gate — see git history for that
@@ -111,6 +122,16 @@ export interface Sample {
   readonly p: number;
   readonly spm: number;
   readonly hr?: number;
+  /** trace-truth Task 2 (spec §3, James's ruling: rests are DRAWN, but
+   *  MARKED). Present and `true` ONLY for a sample recorded while the
+   *  winning frame's own `state` was `"resting"` — ABSENT means work, the
+   *  same absent-not-false idiom `hr` above already uses, so a work
+   *  sample costs zero extra bytes. The renderer cannot recover this
+   *  later (a stored log's steps never carry a warm-up row, so anything
+   *  positional derived from steps lands displaced); the recorder is the
+   *  only place that ever saw the wire's own state byte, so it must mark
+   *  the sample at construction. */
+  readonly r?: true;
 }
 
 export interface SeriesData {
@@ -219,6 +240,10 @@ export function createSeriesRecorder(): SeriesRecorder {
       f.heartRateBpm <= HR_MAX
         ? { hr: f.heartRateBpm }
         : {}),
+      // trace-truth Task 2 (spec §3): the WINNING frame's own state marks
+      // the sample. Same conditional-spread idiom as `hr` above — absent
+      // means work, costing zero extra bytes on a work sample.
+      ...(f.state === "resting" ? { r: true as const } : {}),
     };
     samples.push(Object.freeze(sample));
   }

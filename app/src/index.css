@@ -8961,6 +8961,31 @@ section:not(.news-pinned) .news-row:last-of-type {
   vector-effect: non-scaling-stroke;
 }
 
+/* trace-truth Task 2 (spec §3), review round 2: the primary signal a
+   rest happened (`.trace-legend`/`buildSummary` are companions now, not
+   substitutes), so still held to WCAG 1.4.11's 3:1 non-text floor.
+   Computed (`--trace-rest`'s own tokens.css comment carries the full
+   round-2 numbers): 4.72:1 against --surface, the only background
+   `.trace-figure` ever sits on — UNCHANGED from round 1 (only the
+   band's own geometry moved, `TraceChart.tsx`'s `REST_BAND_HEIGHT`). */
+.trace-rest-band {
+  fill: var(--trace-rest);
+}
+
+/* F-2 (review round 2): same quiet-caption idiom as `.summary-legend`
+   (`PostWorkoutSummary.tsx`) — mono, small, quiet ink, centered under
+   the element it explains. --ink-3 on --surface: 7.43:1 (this file's own
+   trace-tick-label rule a few lines below computes the identical
+   pairing; not re-measured here). */
+.trace-legend {
+  margin: 6px 0 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+  text-align: center;
+}
+
 .trace-tick-mark {
   stroke: var(--rule-3);
   stroke-width: 1;

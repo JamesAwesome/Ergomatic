@@ -30,7 +30,12 @@ import { useMemo, useState } from "react";
 import type { SeriesData } from "../monitor/seriesRecorder.js";
 import { linearScale, decimate } from "../charts/scale.js";
 import { formatTick } from "../charts/axis.js";
-import { buildTrace, type Measure, type TraceModel } from "./traceModel.js";
+import {
+  buildTrace,
+  type Measure,
+  type TraceModel,
+  type TracePoint,
+} from "./traceModel.js";
 
 const MEASURES: readonly Measure[] = ["pace", "rate", "hr"];
 
@@ -47,6 +52,45 @@ const RIGHT_PAD = 8;
 const TOP_PAD = 10;
 const BOTTOM_PAD = 10;
 
+/** The plot area's own height and its bottom edge (the y-coordinate the
+ *  rest band sits ON, review round 2) — named once so `restBandsFor
+ *  Segment`'s geometry and the polyline/tick scales below all derive
+ *  from the SAME two numbers rather than re-deriving them separately. */
+const PLOT_HEIGHT = CHART_HEIGHT - TOP_PAD - BOTTOM_PAD;
+const PLOT_BOTTOM = CHART_HEIGHT - BOTTOM_PAD;
+
+/** Review round 2 (James's ruling, three mocked treatments against the
+ *  real tokens and geometry — bottom-anchored won): a full-height,
+ *  100%-opacity band read as "something is blocking the data", and let
+ *  the polyline cross it at full plot height, dropping the stroke's own
+ *  contrast from 17.11:1 to 3.62:1 wherever a rest sat on the chart's
+ *  own lowest plateau. A SHORT bar at the FOOT of the plot fixes both:
+ *  the band keeps its full `--trace-rest` colour/opacity (§3's own word
+ *  is "tint", never an alpha wash — that option was NOT chosen), and
+ *  `domainY`'s own 10% padding (`../charts/scale.js`'s `domainFromReadings`)
+ *  keeps the worst real reading clear of a strip this short in practice,
+ *  so the line stays close to its full 17.11:1 contrast almost
+ *  everywhere on the chart. Expressed as a FRACTION of `PLOT_HEIGHT`,
+ *  never a hardcoded pixel value, so a future non-fixed plot height
+ *  still gets a proportional bar.
+ *
+ *  THE CRITERION (review round 3, R3-3; citation fixed round 4, C2):
+ *  not a number to preserve for its own sake — this fraction is sized
+ *  so the trace line's own LOWEST REAL EXCURSION clears the band with
+ *  clearly VISIBLE vertical separation (not merely a non-zero gap).
+ *  Evidence that stays reachable to everyone, not a report only one
+ *  session could read: the committed capture `docs/screenshots/
+ *  log-detail.png` (git-tracked, regenerated every `pnpm screenshots`
+ *  run) shows the property directly, and `TraceChart.test.tsx`'s own
+ *  "F-1: the rest band is a SHORT bar at the plot's own foot, never a
+ *  full-height fill" pins the band's own geometry (bottom-anchored,
+ *  well under the plot height) in CI on every push. A future change to
+ *  this value should be checked against that same visual property —
+ *  the line staying clear of the band with room to spare — not against
+ *  matching this particular fraction. */
+const REST_BAND_HEIGHT_FRACTION = 14 / 119;
+const REST_BAND_HEIGHT = PLOT_HEIGHT * REST_BAND_HEIGHT_FRACTION;
+
 /** Decimation's own `columns` argument (Task 1's `decimate`, §3's "~2
  *  points per horizontal pixel"). An inline SVG has no fixed device-pixel
  *  width of its own (it scales with the viewport) — the plot area's own
@@ -55,6 +99,58 @@ const BOTTOM_PAD = 10;
  *  MEASURE (§3): each measure's own trace is decimated on its own points,
  *  never columns computed once and reused across measures. */
 const PLOT_COLUMNS = CHART_WIDTH - LEFT_PAD - RIGHT_PAD;
+
+/** trace-truth Task 2 (spec §3): half a sample-second of padding on each
+ *  side of a rest run's own x-range, so a single ISOLATED rest sample
+ *  (surrounded by work on both sides) still draws a visible band rather
+ *  than a zero-width rect — the 1 Hz sample it came from genuinely
+ *  covers about this much of the timeline either side of its own
+ *  timestamp. Purely a rendering nicety; never affects `rest` itself or
+ *  which points are marked. */
+const REST_BAND_PAD_SECONDS = 0.5;
+
+interface RestBand {
+  startX: number;
+  endX: number;
+}
+
+/** Finds every contiguous run of `rest === true` points in ONE segment.
+ *  Never across a segment boundary — this function is only ever called
+ *  per-segment (below), so a run spanning two segments is impossible by
+ *  construction of the CALL SITE, not because a rest itself can't
+ *  straddle a real gap (a dropped frame mid-rest would split one across
+ *  two segments same as it would any other reading; `toSegments` doesn't
+ *  special-case rest either way — a rest run that DID straddle a gap
+ *  would simply become two separate bands, one per segment, which this
+ *  function still renders correctly). Returns each run's own x-range,
+ *  padded per `REST_BAND_PAD_SECONDS`. Reads the FULL, non-decimated
+ *  segment — a band's own boundary must reflect the real rest span even
+ *  when `decimate` would have dropped the exact point that started or
+ *  ended it. */
+function restBandsForSegment(points: readonly TracePoint[]): RestBand[] {
+  const bands: RestBand[] = [];
+  let runStart: number | null = null;
+  let runEnd = 0;
+  for (const p of points) {
+    if (p.rest) {
+      if (runStart === null) runStart = p.x;
+      runEnd = p.x;
+    } else if (runStart !== null) {
+      bands.push({
+        startX: runStart - REST_BAND_PAD_SECONDS,
+        endX: runEnd + REST_BAND_PAD_SECONDS,
+      });
+      runStart = null;
+    }
+  }
+  if (runStart !== null) {
+    bands.push({
+      startX: runStart - REST_BAND_PAD_SECONDS,
+      endX: runEnd + REST_BAND_PAD_SECONDS,
+    });
+  }
+  return bands;
+}
 
 export default function TraceChart({
   series,
@@ -110,6 +206,33 @@ export default function TraceChart({
         role="img"
         aria-label={trace.summary}
       >
+        {/* trace-truth Task 2 (spec §3), review round 2: drawn FIRST —
+            beneath the tick marks and the polyline(s) — still guarantees
+            paint-order continuity (the line always sits on top, so it is
+            never occluded), but the band itself is now a SHORT bar at
+            the plot's own FOOT (`PLOT_BOTTOM`/`REST_BAND_HEIGHT`) rather
+            than a full-height fill — round 1 shipped the latter, which
+            read as "something is blocking the data" and let the line
+            cross it at full height. Computed from the FULL
+            (non-decimated) points per segment; the polyline below is
+            decimated independently and stays one continuous stroke
+            across the band's own x-range (§3: a rest is not a gap). */}
+        {trace.points.map((segment, segIndex) =>
+          restBandsForSegment(segment).map((band, bandIndex) => {
+            const x1 = xScale(Math.max(trace.domainX[0], band.startX));
+            const x2 = xScale(Math.min(trace.domainX[1], band.endX));
+            return (
+              <rect
+                key={`${segIndex}-${bandIndex}`}
+                className="trace-rest-band"
+                x={x1}
+                y={PLOT_BOTTOM - REST_BAND_HEIGHT}
+                width={Math.max(0, x2 - x1)}
+                height={REST_BAND_HEIGHT}
+              />
+            );
+          }),
+        )}
         {trace.ticksY.map((tick) => {
           const y = yScale(tick);
           return (
@@ -143,6 +266,25 @@ export default function TraceChart({
           );
         })}
       </svg>
+      {/* F-2 (James's ruling, review round 2): one quiet line explaining
+          the band, same idiom as `PostWorkoutSummary.tsx`'s own
+          `.summary-legend` ("<- FASTER (BLUE) . SLOWER (RED) ->") —
+          shown only when there is something to explain (that file's own
+          `hasJudgedRow` guard), never a permanent fixture on a rest-free
+          trace. Spec §3 forbids copy claiming the rest PACE is
+          meaningful; it says nothing about naming what the mark
+          itself is, so this says only that.
+          "BAND = REST", never "SHADED = REST" (review round 4, C1):
+          round 1 shipped a full-height tint — THAT was shading. Round 2
+          replaced it with a short bar on the plot floor and the word
+          never moved with the geometry, so it named the rejected
+          treatment. "Band" stays true regardless of geometry, and
+          carries no colour word on purpose — `#97692a` reads amber in
+          the PR body and bronze on the actual capture; naming a colour
+          here would just be a second thing to get wrong later. */}
+      {trace.points.some((segment) => segment.some((p) => p.rest)) && (
+        <p className="trace-legend">BAND = REST</p>
+      )}
     </figure>
   );
 }

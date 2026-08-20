@@ -111,8 +111,12 @@ async function markArticleRead(page: Page, slug: string): Promise<void> {
   }
 }
 
-/** Neutralises `.tabbar`'s `position: fixed` for a `fullPage: true` capture.
- *  A full-page screenshot on a document taller than the viewport stitches
+/** Neutralises `.tabbar`'s `position: fixed`, for two DIFFERENT reasons
+ *  depending on the route (round 4 review: this comment used to name only
+ *  the first).
+ *
+ *  1. **`fullPage: true` on a plain document-flow screen** (`builder`):
+ *  a full-page screenshot on a document taller than the viewport stitches
  *  it together from scrolled segments; a fixed-position element gets
  *  redrawn at its *viewport-relative* spot in every segment, so on a page
  *  well past the 390×844 viewport (six steps plus an expanded editor) the
@@ -120,16 +124,35 @@ async function markArticleRead(page: Page, slug: string): Promise<void> {
  *  overlapping whatever content happened to be in that segment — a capture
  *  artifact, not a product bug (the bar being fixed is correct behaviour,
  *  so this is not a fix to `src/`). `position: static` makes it render
- *  exactly once, in its real DOM position — `AppRoutes.tsx` renders
- *  `<TabBar />` right after the routed screen inside `.app-shell`, so
- *  static positioning puts it at the true end of the document. `.app-shell`
- *  only carries `padding-bottom` to reserve room for the fixed bar so
- *  scrolled content doesn't land underneath it; with the bar no longer
- *  fixed that padding would just leave a blank gap above it, so this drops
- *  it too. Call right before any `fullPage: true` screenshot whose content
- *  can exceed one viewport — "builder" (see the other tests in this file:
- *  none of the rest sets `fullPage`, so none of those is exposed to
- *  this). */
+ *  exactly once, in its real DOM position — on THIS kind of route,
+ *  `AppRoutes.tsx` renders `<TabBar />` right after the routed screen
+ *  inside `.app-shell`, so static positioning puts it at the true end of
+ *  the document.
+ *
+ *  2. **Freeing the tabbar's own reserved space on an `.overlay-screen`
+ *  route** (`log-detail`, R3-1/round 4): `.overlay-screen`
+ *  (`index.css`) is `position: fixed; inset: 0` — it takes the WHOLE
+ *  routed screen out of `.app-shell`'s document flow, so claim 1 above
+ *  does NOT hold there: `.tabbar`, once static, lands at the literal top
+ *  of `.app-shell` (confirmed against the real stack — its only other
+ *  flow-contributing child is gone), not "the true end of the document".
+ *  `fullPage: true` is useless on this route for the identical reason
+ *  (Playwright measures `document`'s own scrollable size, which a fixed
+ *  element never contributes to) — `scrollTraceChartIntoFrame` (below)
+ *  is what actually reveals more content here, by scrolling the overlay
+ *  element's own internal `overflow-y: auto`. What THIS function still
+ *  buys on that route: the tabbar visually SAT ON TOP of the overlay's
+ *  own last ~45px (fixed, higher paint layer) before being neutralised,
+ *  so removing it frees that space for the overlay's real content to
+ *  show through.
+ *
+ *  The `.app-shell { padding-bottom: 0 }` line matters for case 1 only:
+ *  `.app-shell`'s own `padding-bottom` (reserved for the fixed bar so
+ *  scrolled content doesn't land underneath it) becomes a blank gap once
+ *  the bar is no longer fixed there, so this drops it. It is a NO-OP for
+ *  case 2 — `.overlay-screen` sets its own separate `padding-bottom`
+ *  directly (`index.css`), never inheriting `.app-shell`'s — kept here
+ *  anyway because it is harmless and case 1 still needs it. */
 async function neutralizeFixedTabBarForFullPageCapture(
   page: Page,
 ): Promise<void> {
@@ -138,6 +161,41 @@ async function neutralizeFixedTabBarForFullPageCapture(
       .tabbar { position: static !important; }
       .app-shell { padding-bottom: 0 !important; }
     `,
+  });
+}
+
+// R3-1 (review round 3): `.trace-figure`'s own bottom edge (now including
+// F-2's `.trace-legend`, its last child) needs to clear whichever
+// container actually scrolls THIS route — that is NOT always `window`.
+// `/session/log` (log-monitor's own door) is a plain document-flow
+// screen, so `window.scrollBy` moves it — but `/today/log/:id`
+// (log-detail's own door, `FromTheLog.tsx`) renders inside
+// `.overlay-screen` (`index.css`'s own documented iOS-scroll-restoration
+// idiom: `position: fixed; inset: 0; overflow-y: auto`), which takes
+// the whole screen OUT of `.app-shell`'s document flow and gives it an
+// INTERNAL scroll of its own — `window.scrollBy` has no effect on it at
+// all (confirmed against the real stack: `document.body.scrollHeight`
+// stays pinned at the viewport's own height the instant this mounts,
+// same collapse this file's own `.overlay-screen` CSS comment documents
+// for News's BACK-position tradeoff). `fullPage: true` is equally
+// ineffective here for the identical reason — Playwright measures
+// `document`'s own scrollable size, which this fixed, internally-
+// scrolling element never contributes to. Detects which case applies
+// and scrolls the RIGHT thing rather than assuming `window` always
+// works.
+async function scrollTraceChartIntoFrame(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const el = document.querySelector(".trace-figure");
+    if (el === null) return;
+    const rect = el.getBoundingClientRect();
+    const margin = 16;
+    const delta = rect.bottom - window.innerHeight + margin;
+    const overlay = document.querySelector(".overlay-screen");
+    if (overlay !== null) {
+      overlay.scrollTop += delta;
+    } else {
+      window.scrollBy(0, delta);
+    }
   });
 }
 
@@ -1921,8 +1979,23 @@ async function postLog(
 // must never be cited as, a picture of what real data looks like. The
 // `log-monitor` capture beside it comes from a genuine recorder replay and is
 // the representative one.
+// trace-truth Task 2 review (I-2): a run inside segment 2 (140 s/500m,
+// t 180..210s) is marked `r: true` — the ONLY committed capture that
+// shows the rest tint at all (`log-monitor`'s own fake program carries
+// no rest; see that fixture's own comment). Placed mid-segment, not at a
+// row boundary — this chart draws no boundary marks (§4) and the rest
+// band's own position is independent of the four rows' own split
+// points.
+const REST_WINDOW: readonly [number, number] = [180, 210];
 function buildLogDetailSeries(): {
-  samples: { t: number; d: number; p: number; spm: number; hr: number }[];
+  samples: {
+    t: number;
+    d: number;
+    p: number;
+    spm: number;
+    hr: number;
+    r?: true;
+  }[];
 } {
   const segments = [
     { end: 120, pace: 120, spm: 24 },
@@ -1936,17 +2009,20 @@ function buildLogDetailSeries(): {
     p: number;
     spm: number;
     hr: number;
+    r?: true;
   }[] = [];
   for (let t = 0; t <= 478; t += 2) {
     const seg =
       segments.find((s) => t < s.end) ?? segments[segments.length - 1]!;
     const jitter = t % 4 === 0 ? -1 : 1;
+    const resting = t >= REST_WINDOW[0] && t <= REST_WINDOW[1];
     samples.push({
       t: t * 10,
       d: t * 4,
       p: (seg.pace + jitter) * 10,
       spm: seg.spm + (t % 6 === 0 ? -1 : 0),
       hr: 130 + Math.round((t / 478) * 28),
+      ...(resting ? { r: true as const } : {}),
     });
   }
   return { samples };
@@ -2178,6 +2254,26 @@ test("log-detail", async ({ page }) => {
   await expect(page.locator(".trace-figure")).toBeVisible();
   await expect(page.locator(".trace-line").first()).toBeVisible();
 
+  // R3-1 (review round 3): a viewport-only capture cropped out the
+  // chart's own `.trace-legend` ("BAND = REST", F-2, round 4 wording) — the identical
+  // shape as I-2 (a committed capture that doesn't show the element the
+  // round added), one element later. First attempt copied `builder.png`'s
+  // `fullPage: true` + `neutralizeFixedTabBarForFullPageCapture` verbatim
+  // and it LOOKED fixed (the legend became visible) — but measurement
+  // against the real stack proved that was luck, not the mechanism:
+  // this route (`FromTheLog.tsx`) renders inside `.overlay-screen`
+  // (`position: fixed`, its OWN internal `overflow-y: auto`), which
+  // `fullPage: true` cannot see past (Playwright measures `document`'s
+  // own scrollable size, and a fixed element contributes nothing to
+  // it) — the legend was landing on the LAST pixel row of the capture,
+  // genuinely clipped, only reachable at all because neutralizing the
+  // tabbar freed the ~45px it used to visually cover. The tabbar
+  // neutralize is still correct (it frees that real space), but the fix
+  // that actually matters is scrolling the ELEMENT that owns the
+  // overflow — `scrollTraceChartIntoFrame` (above) now detects
+  // `.overlay-screen` and scrolls IT instead of `window`.
+  await neutralizeFixedTabBarForFullPageCapture(page);
+  await scrollTraceChartIntoFrame(page);
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "log-detail.png"),
   });
@@ -3212,16 +3308,6 @@ async function openLogMonitorForm(
 // bottom, which — on both fixtures below — keeps the TAIL of the
 // intervals list (the rows a human reads the chart's shape against) on
 // screen too, rather than centering the chart alone.
-async function scrollTraceChartIntoFrame(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    const el = document.querySelector(".trace-figure");
-    if (el === null) return;
-    const rect = el.getBoundingClientRect();
-    const margin = 16;
-    window.scrollBy(0, rect.bottom - window.innerHeight + margin);
-  });
-}
-
 test("log-monitor", async ({ page }) => {
   const title = "Screenshot Log Monitor Workout";
   await openLogMonitorForm(

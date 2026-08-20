@@ -7,6 +7,7 @@ import { createEventLog } from "../monitor/eventLog.js";
 import { createSeriesRecorder } from "../monitor/seriesRecorder.js";
 import type { Sample, SeriesData } from "../monitor/seriesRecorder.js";
 import type { MonitorFrame } from "../../domain/monitor/types.js";
+import type { WorkoutProgram } from "../../domain/monitor/program.js";
 import { fmtSplit } from "../../domain/format.js";
 import { buildTrace } from "./traceModel.js";
 
@@ -43,13 +44,14 @@ const REPO_ROOT = import.meta.url
  *  that never changes). */
 async function loadCaptureFrames(
   repoRelativePath: string,
+  programOverride?: WorkoutProgram,
 ): Promise<MonitorFrame[]> {
   const text = readFileSync(`${REPO_ROOT}${repoRelativePath}`, "utf-8");
   const parsed = parseRecording(text);
-  const program = parsed.header.program;
+  const program = programOverride ?? parsed.header.program;
   if (!program) {
     throw new Error(
-      `loadCaptureFrames: ${repoRelativePath} carries no header.program`,
+      `loadCaptureFrames: ${repoRelativePath} carries no header.program and no programOverride was given`,
     );
   }
 
@@ -86,6 +88,55 @@ function seriesFromFrames(frames: MonitorFrame[]): SeriesData {
 
 const STEP3_PATH =
   "docs/monitor/sessions/walk-2026-08-17/step-3-pm5-recording-second-rest-1786973713929.jsonl";
+
+/** `seriesRecorder.test.ts`'s own `SESSION_2_PROGRAM` (walk-2026-08-16,
+ *  hand-transcribed — no `header.program` on this recording). Duplicated
+ *  here per this file's own "each test file owns its own copy"
+ *  convention, stated in the file-header comment above. */
+const SESSION_2_PROGRAM: WorkoutProgram = {
+  intervals: [
+    {
+      type: "warmup",
+      kind: "distance",
+      value: 100,
+      targetSplit: null,
+      displaySpm: null,
+      restSeconds: 0,
+    },
+    {
+      type: "work",
+      kind: "time",
+      value: 60,
+      targetSplit: 129,
+      displaySpm: null,
+      restSeconds: 30,
+    },
+    {
+      type: "work",
+      kind: "time",
+      value: 120,
+      targetSplit: 129,
+      displaySpm: null,
+      restSeconds: 30,
+    },
+    {
+      type: "work",
+      kind: "distance",
+      value: 500,
+      targetSplit: 129,
+      displaySpm: null,
+      restSeconds: 30,
+    },
+    {
+      type: "work",
+      kind: "time",
+      value: 60,
+      targetSplit: 129,
+      displaySpm: null,
+      restSeconds: 0,
+    },
+  ],
+};
 
 describe("buildTrace — §7.2 the sentinel rule, proven against a REAL capture", () => {
   it("step-3 (wu 1:00 r0 + 1:00 r30, a real belted walk): every p===0 sample is excluded from both the drawn points and domainY", async () => {
@@ -213,7 +264,7 @@ describe("buildTrace — §3 pace inverts (faster is up), rate/hr do not", () =>
 });
 
 describe("buildTrace — §5's text alternative: real values, direction, no boundary claim", () => {
-  it("pace summary on step-3 names the measure, the session's first/last real reading, its fastest split, and the segment count — never the word 'interval'", async () => {
+  it("pace summary on step-3 names the measure, the session's first/last real reading, its fastest split, the segment count, and the rest clause — never the word 'interval'", async () => {
     const series = seriesFromFrames(await loadCaptureFrames(STEP3_PATH));
     const trace = buildTrace(series, "pace")!;
     // First/last/fastest real readings independently derived from the
@@ -222,11 +273,30 @@ describe("buildTrace — §5's text alternative: real values, direction, no boun
     const firstSeconds = realPace[0]! / 10;
     const lastSeconds = realPace[realPace.length - 1]! / 10;
     const fastestSeconds = Math.min(...realPace) / 10;
+    // Rest-run count, independently derived from the capture's own
+    // samples (never hand-copied): step-3's own TRAILING rest (its
+    // capture ends mid-rest, `seriesRecorder.ts`'s own corrected header
+    // comment) contributes 1 run of its own — F-3 review round 2.
+    let restRuns = 0;
+    let inRun = false;
+    for (const s of series.samples) {
+      if (s.r === true) {
+        if (!inRun) restRuns++;
+        inRun = true;
+      } else {
+        inRun = false;
+      }
+    }
+    const restClause =
+      restRuns > 0
+        ? `, ${restRuns} rest ${restRuns === 1 ? "span" : "spans"} marked`
+        : "";
 
     expect(trace.summary).toBe(
-      `Pace, ${fmtSplit(firstSeconds)} at the start to ${fmtSplit(lastSeconds)} at the end, fastest ${fmtSplit(fastestSeconds)}, in ${trace.points.length} segments`,
+      `Pace, ${fmtSplit(firstSeconds)} at the start to ${fmtSplit(lastSeconds)} at the end, fastest ${fmtSplit(fastestSeconds)}, in ${trace.points.length} segments${restClause}`,
     );
     expect(trace.points.length).toBeGreaterThan(1); // the clause is exercised, not vacuous
+    expect(restRuns).toBe(1); // step-3's own trailing rest, ground truth
     expect(trace.summary.toLowerCase()).not.toContain("interval");
   });
 
@@ -277,5 +347,103 @@ describe("buildTrace — the per-measure too-little-to-draw gate and other absen
     };
     expect(buildTrace(series, "pace")).not.toBeNull();
     expect(buildTrace(series, "hr")).toBeNull();
+  });
+});
+
+describe("buildTrace — trace-truth Task 2: rests are marked on the point, not folded into a gap (spec §3)", () => {
+  it("marks trace points recorded during a rest", () => {
+    const series = {
+      samples: [
+        { t: 10, d: 40, p: 1200, spm: 20 },
+        { t: 20, d: 45, p: 1400, spm: 18, r: true as const },
+        { t: 30, d: 80, p: 1200, spm: 20 },
+      ],
+    };
+    const model = buildTrace(series, "pace")!;
+    expect(model.points[0]!.map((pt) => pt.rest)).toStrictEqual([
+      false,
+      true,
+      false,
+    ]);
+  });
+
+  it("does NOT break the line across a rest — a rest is data, not a gap", () => {
+    // same series: exactly ONE segment, not three
+    const series = {
+      samples: [
+        { t: 10, d: 40, p: 1200, spm: 20 },
+        { t: 20, d: 45, p: 1400, spm: 18, r: true as const },
+        { t: 30, d: 80, p: 1200, spm: 20 },
+      ],
+    };
+    expect(buildTrace(series, "pace")!.points).toHaveLength(1);
+  });
+
+  // review finding M-1: this capture's pace trace is NOT one unbroken
+  // segment overall — it genuinely splits into 2 (354 + 57 points, a
+  // real >GAP_BREAK_SECONDS gap unrelated to any rest, same capture
+  // `seriesRecorder.test.ts`'s own Task-1 tests already exercise). What
+  // IS true, and what this test actually asserts: none of the capture's
+  // 3 separate rest runs (9+8+4 = 21 samples, `traceModel.test.ts`'s own
+  // sibling probe) straddles that real gap — every rested point lands in
+  // the SAME segment (index 0), never split across a boundary a rest
+  // itself did not create.
+  it("a real, non-frozen rest capture (session-2-wu-4unequal.jsonl) carries rest-marked points through to the model; the capture's own real gap splits it in two, but no rest run straddles that split", async () => {
+    const frames = await loadCaptureFrames(
+      "docs/monitor/sessions/walk-2026-08-16/session-2-wu-4unequal.jsonl",
+      SESSION_2_PROGRAM,
+    );
+    const rec = createSeriesRecorder();
+    for (const f of frames) rec.onFrame(f);
+    const series = rec.snapshot()!;
+    const model = buildTrace(series, "pace")!;
+    expect(model).not.toBeNull();
+    expect(model.points).toHaveLength(2); // the capture's own real gap
+    const restPerSegment = model.points.map(
+      (segment) => segment.filter((pt) => pt.rest).length,
+    );
+    // All 21 rested points live in ONE segment; the other carries none —
+    // proof that resting never introduced a split of its own (§3: a rest
+    // is data, not a gap) on top of the real gap this capture already has.
+    expect(restPerSegment).toStrictEqual([21, 0]);
+    // Cross-checked against the sample-level count directly
+    // (seriesRecorder.test.ts's own oracle for this exact capture).
+    expect(series.samples.filter((s) => s.r === true)).toHaveLength(21);
+  });
+
+  // F-3 (review round 2): the tint has no accessible presence of its own
+  // (an SVG `<rect>`, no `aria-*`) — this string is the ONLY place a
+  // screen-reader user learns a rest happened at all. Pinned against the
+  // real capture, not a hand-built minimum: 3 separate rest runs
+  // (9+8+4=21 samples, this file's own sibling test above) collapse to
+  // "3 rest spans" — a COUNT of runs, never their pace value (§3 forbids
+  // claiming the rest pace is meaningful; this clause doesn't).
+  it("buildSummary names the rest spans for a screen-reader user, on the real rest-bearing capture", async () => {
+    const frames = await loadCaptureFrames(
+      "docs/monitor/sessions/walk-2026-08-16/session-2-wu-4unequal.jsonl",
+      SESSION_2_PROGRAM,
+    );
+    const rec = createSeriesRecorder();
+    for (const f of frames) rec.onFrame(f);
+    const series = rec.snapshot()!;
+    const trace = buildTrace(series, "pace")!;
+    expect(trace.summary).toBe(
+      "Pace, 2:55.7 at the start to 2:02.1 at the end, fastest 1:54.8, in 2 segments, 3 rest spans marked",
+    );
+  });
+
+  // The negative: a rest-free trace names no rest spans at all — the
+  // clause is additive, never a permanent fixture (same "no clause when
+  // nothing to say" idiom the existing segment clause already uses).
+  it("buildSummary names no rest spans when the trace has none", () => {
+    const series = {
+      samples: [
+        { t: 10, d: 40, p: 1200, spm: 20 },
+        { t: 20, d: 45, p: 1400, spm: 18 },
+        { t: 30, d: 80, p: 1200, spm: 20 },
+      ],
+    };
+    const trace = buildTrace(series, "pace")!;
+    expect(trace.summary).not.toContain("rest span");
   });
 });

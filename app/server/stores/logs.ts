@@ -88,6 +88,10 @@ export interface LogSeriesSample {
   p: number;
   spm: number;
   hr?: number;
+  /** trace-truth Task 2 (spec §3): mirrors the client's `Sample.r` —
+   *  present and `true` only for a sample recorded while the machine was
+   *  resting; absent means work, same idiom as `hr` above. */
+  r?: true;
 }
 
 export interface LogSeries {

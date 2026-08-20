@@ -28,9 +28,15 @@
 // works in the same honest unit and never has to remember the tenths
 // convention again.
 //
-// REAL GAPS, NOT RESTS (§3): a rest freezes the work clock — no new whole
-// second is ever crossed (`seriesRecorder.ts`'s own header) — so it
-// produces ZERO samples and therefore no gap in `t` at all. A real gap is
+// REAL GAPS, NOT RESTS (§3): a rest does not always freeze the work
+// clock — the wire keeps advancing elapsed/distance during a rest
+// whenever the rower keeps the flywheel moving (`seriesRecorder.ts`'s
+// own header, corrected trace-truth Task 2: measured at 21 rest samples
+// on `session-2-wu-4unequal.jsonl`, and 3 even on `step-3`'s own tail).
+// Either way — frozen (zero samples, nothing to skip) or advancing
+// (samples at the ordinary cadence) — a rest by itself never produces a
+// gap in `t`, because the recorder's own work clock excludes rest
+// duration from its count regardless of which case it was. A real gap is
 // a dropped frame or a rejected reset candidate, and IS visible as a jump
 // in consecutive samples' `t`. This module breaks the line at any gap over
 // `GAP_BREAK_SECONDS` between two consecutive REAL (sentinel-excluded)
@@ -46,12 +52,26 @@ import { fmtSplit } from "../../domain/format.js";
 
 export type Measure = "pace" | "rate" | "hr";
 
+/** trace-truth Task 2 (spec §3): a `ChartPoint` plus the recorder's own
+ *  rest marker, carried through UNCHANGED so `TraceChart` can tint a rest
+ *  span without re-deriving anything from `Sample`/steps — the renderer
+ *  cannot recover this later (a stored log's steps never carry a warm-up
+ *  row, so anything positional derived from steps lands displaced; the
+ *  recorder is the only place that ever saw the wire's own state byte).
+ *  A structural superset of `ChartPoint` (never a narrower/different `x`/
+ *  `y`), so it still passes to `decimate` (Task 1's own shared primitive,
+ *  also consumed by bars/stacked bars — §2's tripwire) unchanged. */
+export interface TracePoint extends ChartPoint {
+  rest: boolean;
+}
+
 export interface TraceModel {
   /** Segments — a gap over `GAP_BREAK_SECONDS` between two consecutive
-   *  real readings starts a new one, so the drawn line breaks there.
-   *  Never empty: a model with nothing to draw is `null`, not
-   *  `{points: []}`. */
-  points: ChartPoint[][];
+   *  real readings starts a new one, so the drawn line breaks there. A
+   *  REST never starts a new segment (§3: a rest is present data, not a
+   *  gap) — only `GAP_BREAK_SECONDS` does. Never empty: a model with
+   *  nothing to draw is `null`, not `{points: []}`. */
+  points: TracePoint[][];
   /** `[0, the session's last sample's own t]`, in seconds — computed
    *  ONCE regardless of which measure is drawn (§3), so a heart-rate line
    *  that starts a third of the way across (a cold strap) reads as a late
@@ -103,10 +123,14 @@ const MIN_DOMAIN_HEIGHT: Record<Measure, number> = {
 const TICK_COUNT = 4;
 
 /** One measure's own real (non-sentinel) reading, already unit-converted
- *  to seconds (`t`) and the measure's own real unit (`value`). */
+ *  to seconds (`t`) and the measure's own real unit (`value`), plus the
+ *  recorder's own rest marker (trace-truth Task 2, spec §3) — the pace
+ *  value during a rest is real but not meaningful; `rest` is what says
+ *  so, carried straight from `Sample.r`, never re-derived. */
 interface Reading {
   t: number;
   value: number;
+  rest: boolean;
 }
 
 /** Extracts `measure`'s own real readings from `samples`, in wire order —
@@ -116,15 +140,16 @@ function realReadings(samples: readonly Sample[], measure: Measure): Reading[] {
   const out: Reading[] = [];
   for (const s of samples) {
     const t = s.t / 10;
+    const rest = s.r === true;
     switch (measure) {
       case "pace":
-        if (s.p !== 0) out.push({ t, value: s.p / 10 });
+        if (s.p !== 0) out.push({ t, value: s.p / 10, rest });
         break;
       case "rate":
-        if (s.spm !== 0) out.push({ t, value: s.spm });
+        if (s.spm !== 0) out.push({ t, value: s.spm, rest });
         break;
       case "hr":
-        if (s.hr !== undefined) out.push({ t, value: s.hr });
+        if (s.hr !== undefined) out.push({ t, value: s.hr, rest });
         break;
     }
   }
@@ -132,19 +157,24 @@ function realReadings(samples: readonly Sample[], measure: Measure): Reading[] {
 }
 
 /** Splits `readings` into segments wherever consecutive real readings are
- *  more than `GAP_BREAK_SECONDS` apart (§3). The rest case (no gap at all
- *  — the work clock froze) never trips this; a real gap (a dropped frame,
- *  a rejected reset candidate, or a long sentinel run) does. */
-function toSegments(readings: readonly Reading[]): ChartPoint[][] {
-  const segments: ChartPoint[][] = [];
-  let current: ChartPoint[] = [];
+ *  more than `GAP_BREAK_SECONDS` apart (§3). A rest never trips this on
+ *  its own — not because it "freezes" (it doesn't always: a rest whose
+ *  wire keeps advancing produces samples at the ordinary ~1s cadence,
+ *  same as work), but because the recorder's own work clock (`t`)
+ *  excludes rest duration from its count either way — a frozen rest
+ *  contributes no samples to skip over, an advancing one contributes
+ *  samples with no abnormal gap between them. A real gap (a dropped
+ *  frame, a rejected reset candidate, or a long sentinel run) does. */
+function toSegments(readings: readonly Reading[]): TracePoint[][] {
+  const segments: TracePoint[][] = [];
+  let current: TracePoint[] = [];
   let prevT: number | null = null;
   for (const r of readings) {
     if (prevT !== null && r.t - prevT > GAP_BREAK_SECONDS) {
       segments.push(current);
       current = [];
     }
-    current.push({ x: r.t, y: r.value });
+    current.push({ x: r.t, y: r.value, rest: r.rest });
     prevT = r.t;
   }
   // No trailing empty-segment guard: `current` always gains the loop's
@@ -169,12 +199,37 @@ function formatValue(measure: Measure, value: number): string {
   return `${Math.round(value)} ${unit}`;
 }
 
+/** Counts contiguous runs of `rest === true` in `readings`' own wire
+ *  order — the same run-grouping `TraceChart.tsx`'s own
+ *  `restBandsForSegment` does per segment, but here across the whole
+ *  trace (a count for the TEXT alternative has no use for a segment
+ *  boundary the reader never sees rendered as a mark, §4). */
+function countRestRuns(readings: readonly Reading[]): number {
+  let runs = 0;
+  let inRun = false;
+  for (const r of readings) {
+    if (r.rest) {
+      if (!inRun) runs++;
+      inRun = true;
+    } else {
+      inRun = false;
+    }
+  }
+  return runs;
+}
+
 /** §5's text alternative: the measure, its first/last real reading (the
  *  session's own direction of travel), and its own extreme — "fastest"
  *  for pace (the minimum split), "highest" for rate/hr (the maximum
  *  count, since a stroke-rate trace can legitimately spike, spec 2's
  *  device-witnessed handoff to this spec). A segment clause is appended
- *  ONLY when the line actually breaks — never the word "interval". */
+ *  ONLY when the line actually breaks — never the word "interval".
+ *  Review round 2 (F-3): a rest clause is appended when the trace
+ *  carries any rest-marked reading — the ONLY place a screen-reader user
+ *  learns a rest happened at all, since the tint (§3's own design) has
+ *  no accessible presence of its own. Names that spans exist, never
+ *  their pace value — §3 forbids claiming the rest PACE is meaningful,
+ *  and this clause doesn't. */
 function buildSummary(
   measure: Measure,
   readings: readonly Reading[],
@@ -188,11 +243,21 @@ function buildSummary(
   const extremeLabel = measure === "pace" ? "fastest" : "highest";
   const segmentClause =
     segments.length > 1 ? `, in ${segments.length} segments` : "";
+  const restRuns = countRestRuns(readings);
+  // "marked", never "shaded" (review round 4, C1's own reasoning applied
+  // here too): round 1's rest treatment was a full-height tint — that
+  // was shading. Round 2 replaced it with a short band, and this string
+  // would otherwise still be describing the rejected geometry, same
+  // mismatch C1 found in the visible `.trace-legend` text.
+  const restClause =
+    restRuns > 0
+      ? `, ${restRuns} rest ${restRuns === 1 ? "span" : "spans"} marked`
+      : "";
 
   return (
     `${MEASURE_LABEL[measure]}, ${formatValue(measure, first)} at the start ` +
     `to ${formatValue(measure, last)} at the end, ` +
-    `${extremeLabel} ${formatValue(measure, extreme)}${segmentClause}`
+    `${extremeLabel} ${formatValue(measure, extreme)}${segmentClause}${restClause}`
   );
 }
 

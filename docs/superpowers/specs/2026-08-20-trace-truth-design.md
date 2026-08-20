@@ -144,9 +144,25 @@ samples would carry it: ~9 bytes each on a ~50 byte sample, so under 3% growth
 on a rest-heavy session and 0% on a rest-free one. It does not move the storage
 ceiling (`SERIES_SAMPLE_CAP = 14400`) or the sacrifice ordering.
 
-**Logbook compatibility is preserved.** The C2-logbook-shaped keys (`t`, `d`,
-`p`, `spm`, `hr`) are untouched; `r` is additive, and any future export drops it
-by selecting the five it needs.
+**Logbook compatibility claim CORRECTED (round 4, C3 — this sentence was
+backwards).** The C2-logbook-shaped keys (`t`, `d`, `p`, `spm`, `hr`) are
+untouched, and `r` is additive — that part holds. But the ORIGINAL sentence
+here said a future export "drops `r` by selecting the five it needs", which
+gets the shape right and the CONSEQUENCE wrong. Checked against Concept2's own
+developer docs: their stroke object is genuinely `{t,d,p,spm,hr}` in our
+units, but "for interval workouts, time and distance start again at 0 for
+each interval" — ours are cumulative across the WHOLE session by design (§1).
+An export that selects the five and drops `r` uploads inflated time and
+distance for every interval after the first, silently. **`r` is not the field
+to drop — for a rest-bearing workout it is the ONLY per-sample evidence of
+where the intervals are** (interval boundary marks were cut from rendering,
+§4, for the identical reason stated above: the trace has no other honest
+source of interval structure). A future exporter must SPLIT the session on
+`r`'s own rest runs and RE-BASE each resulting segment's `t`/`d` back to zero
+before uploading, never simply select-and-drop it. (A workout whose work
+intervals run back-to-back with no rest between them has no sample-level
+boundary signal at all, `r`-based or otherwise — a real limit on what any
+export can reconstruct, out of this spec's scope to solve.)
 
 **Rendering.** `TraceChart` tints rest spans distinctly from work. The line is
 CONTINUOUS across a rest — a rest is not a gap and must not be drawn as one,
@@ -211,8 +227,13 @@ trace with a corpus caveat and then announcing its correction without one is
 inconsistent on the same feature; and PR #124's three-place rule binds an
 accepted limit to spec, ROADMAP and notes alike. The clause reads roughly:
 *"Traces from sessions you rowed before this update can be missing a whole
-interval if the link stuttered, and there is no way to tell a good one from a
-bad one. Only traces recorded from this build on are trustworthy."*
+interval if the link stuttered, or can show a rest as if you never stopped
+rowing, and there is no way to tell a good one from a bad one. Only traces
+recorded from this build on are trustworthy."* **(Round 4, C3: the original
+draft named fault 1 only — the interval gap. DEVIATIONS row 200 names two
+faults; a rower-facing clause covering half the corpus problem is worse than
+none, because it reads as complete. Both faults belong in the one clause,
+since both are the same "some old traces lie, silently" story to a tester.)**
 
 The time axis owes its own separate clause, being a visible change to a feature
 v0.14.0 announced days earlier.

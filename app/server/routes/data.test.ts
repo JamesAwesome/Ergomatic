@@ -2134,6 +2134,48 @@ describe("GET/POST /api/logs", () => {
       expect(res.status).toBe(201);
     });
 
+    // trace-truth Task 2 (spec §3): `r` is additive to the C2-logbook
+    // shape, absent-not-false, same idiom as `hr`. Without a dedicated
+    // destructure/validate/rebuild, `validateSeriesSample`'s existing
+    // "built from an explicit field list" idiom silently drops any
+    // unknown key at the boundary — this pins that it does NOT.
+    it("round-trips a rest-marked sample through POST and GET", async () => {
+      const app = appFor(makeStores());
+      const posted = { t: 10, d: 40, p: 1200, spm: 20, r: true };
+      const created = await asA(request(app).post("/api/logs")).send({
+        ...validLogBody(),
+        series: { samples: [posted] },
+      });
+      expect(created.status).toBe(201);
+      const fetched = await getLogById(app, created.body.id);
+      expect(fetched.body.series.samples[0]).toStrictEqual(posted);
+    });
+
+    it("a work sample (no r) round-trips with no r key at all — absent, not false", async () => {
+      const app = appFor(makeStores());
+      const created = await asA(request(app).post("/api/logs")).send({
+        ...validLogBody(),
+        series: { samples: [validSample()] },
+      });
+      expect(created.status).toBe(201);
+      const fetched = await getLogById(app, created.body.id);
+      expect(fetched.body.series.samples[0]).not.toHaveProperty("r");
+    });
+
+    it.each([false, 1, "yes"])(
+      "rejects r when it is not literally true (%j), field named series",
+      async (badR) => {
+        const res = await asA(
+          request(appFor(makeStores())).post("/api/logs"),
+        ).send({
+          ...validLogBody(),
+          series: { samples: [validSample({ r: badR })] },
+        });
+        expect(res.status).toBe(400);
+        expect(res.body.field).toBe("series");
+      },
+    );
+
     it("ignores unknown keys on a sample, storing only t/d/p/spm/hr", async () => {
       const app = appFor(makeStores());
       const created = await asA(request(app).post("/api/logs")).send({

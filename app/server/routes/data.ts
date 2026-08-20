@@ -494,7 +494,7 @@ function validateSeriesSample(
 ): { ok: true; sample: LogSeriesSample } | { ok: false; message: string } {
   const at = (msg: string) => `series.samples[${index}]: ${msg}`;
   if (!isRec(raw)) return { ok: false, message: at("must be an object") };
-  const { t, d, p, spm, hr } = raw;
+  const { t, d, p, spm, hr, r } = raw;
   if (
     typeof t !== "number" ||
     !Number.isInteger(t) ||
@@ -551,14 +551,20 @@ function validateSeriesSample(
       message: at(`hr must be an integer, ${HR_MIN}..${HR_MAX}, or omitted`),
     };
   }
+  // trace-truth Task 2 (spec §3): `r`'s shape is `true` or absent — never
+  // `false` (the absent-not-false idiom `hr` above already uses; a
+  // work sample must cost zero bytes, not carry `r: false`).
+  if (r !== undefined && r !== true) {
+    return { ok: false, message: at("r must be true or absent") };
+  }
   // Built from an explicit field list, same "never spread/cast the raw
   // input" discipline `validateLogStepEntry` above already uses — any
   // extra keys the client sent (the POST idiom: unknown sample keys are
   // ignored, never rejected) are silently dropped, not persisted.
-  return {
-    ok: true,
-    sample: hr !== undefined ? { t, d, p, spm, hr } : { t, d, p, spm },
-  };
+  const sample: LogSeriesSample = { t, d, p, spm };
+  if (hr !== undefined) sample.hr = hr;
+  if (r === true) sample.r = true;
+  return { ok: true, sample };
 }
 
 // Series capture spec (2026-08-19), §3: absent/null both mean "this run
