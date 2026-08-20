@@ -187,6 +187,14 @@ Roadmap: `ROADMAP.md` (phases + standing rules). Design reference: `docs/design/
   (fast, Docker-free — CI runs the full gate incl. integration/e2e). Both hooks fail
   loudly and block if the active Node major is below `.nvmrc`. Don't bypass with
   `--no-verify`; fix the failure.
+- **CI skips the code jobs on documentation-only pushes.** `scripts/ci-changes.sh`
+  (tested by `scripts/ci-changes.test.sh`, run in CI's `scripts` job) decides:
+  if every changed path is under `docs/`, `.claude/`, or root markdown, then
+  `app`, `docker` and `e2e` skip — otherwise they run, and every uncertainty
+  (bad sha, empty diff, unrecognised path, the script itself failing) resolves
+  to running them. **If you put anything CI must exercise under those paths,
+  change the allowlist in the same commit** — and note that release notes live
+  in `app/src/`, so a notes PR still runs the full gate.
 - pnpm only. ESM only. Server imports use `.js` extensions.
 - **Write for James first, the record second (James, 2026-08-16).** Binding
   for every PR body, design presentation, discussion, and SUMMARY — and
