@@ -3514,6 +3514,26 @@ next phase. One line per round, newest first.
 
 ## Triggered follow-ons (not scheduled — each has an explicit trigger)
 
+- **23 citations across 11 tracked files point into `.superpowers/`, which
+  is git-EXCLUDED and therefore unreachable to everyone except the session
+  that wrote it** (found 2026-08-20 at PR #141's PM gate, which caught three
+  such citations in that PR and required them replaced; the remaining 23 are
+  pre-existing and out of that PR's scope). `.git/info/exclude:7` excludes
+  `.superpowers/`, so `docs/superpowers/sdd/` does not exist and never did —
+  the SDD workspace is per-session scratch by design. Affected files include
+  `app/src/monitor/driver.test.ts`, `docs/TESTING.md`,
+  `docs/monitor/pm5-interface-notes.md`, and eight plans and specs.
+  **Why it matters rather than being tidy-up:** every one of these was
+  written as the AUTHORITY for a claim — a measurement, a ruling, a
+  rejected alternative — and a reader who follows it finds nothing, which
+  is indistinguishable from the claim being unsupported. The #141 gate's
+  own phrasing: a dangling citation is worse than no citation, because it
+  reads as evidence. **The durable authority for a measurement is the TEST
+  that pins it**, or a committed capture, or a ledger entry — never a
+  scratch report. **Trigger:** the next time any of those files is opened
+  for another reason, fix the citations in it; or one sweep if someone
+  wants the whole set gone. Do not create `docs/superpowers/sdd/` to make
+  the paths resolve — the scratch genuinely should not be committed.
 - **An EXTERNAL oracle for the trace: the PM5's own internal log, and the
   logbook** (James, 2026-08-20, from the erg: "there's a verification id
   that the pm can give you for a row. Is checking if we can derive the
