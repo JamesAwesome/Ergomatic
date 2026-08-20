@@ -1889,6 +1889,16 @@ WebKit's throttling, so it does not rescue the JS half.
 
 ### In scope
 
+- [ ] **The trace tells the truth about the row** — spec 1, written
+      2026-08-20:
+      `docs/superpowers/specs/2026-08-20-trace-truth-design.md`. **TRIAD**
+      (a number's meaning AND a stored shape); full antagonist pass done
+      and folded into its §8. Index-keyed max-merge REPLACING the boundary
+      heuristic (not supplementing it — deletion retires four defects at
+      once); rests drawn but MARKED, which puts a rest flag in the stored
+      sample; and the chart gains the time axis it has never had. Three
+      PRs, accumulator first and alone. **This is spec 1 of the phase by
+      James's sequencing, ahead of the three items below.** **M**
 - [ ] **Detection — make the banner that already exists actually fire.**
       `1 OF 3 · READY` is structurally impossible once
       `phase === "disconnected"` (`surfaceModel.ts:787`), so its
@@ -1952,15 +1962,20 @@ to fill; no backfill, no MISSED); **background scan** and
 `RECONNECTING` copy** (DEVIATIONS row 75 made that ruling once; do not
 un-make it before the thing it promises exists).
 
-**Exit — written so it can go red.** On a real PM5 and a real phone, on a
-Release build: (a) a link killed BEFORE stroke one, and again MID-PIECE,
+**Exit — written so it can go red.** Clause (e) added 2026-08-20 at the PM
+gate's finding that four of this phase's items had no exit clause; the
+trace-truth spec carries its own nine criteria and (e) is the phase-level
+hook to them. On a real PM5 and a real phone, on a Release build: (a) a link killed BEFORE stroke one, and again MID-PIECE,
 moves the surface off `READY`/live numbers within a stated bound and says
 the link is lost; (b) Try Again reaches a fresh connect and programs
 successfully **without deleting the app**; (c) the full diagnostics ring
 for the episode is retrievable from the phone, from the failure screen
 itself; (d) if the delete-to-fix residue turns out to be iOS-side and
 unfixable, DEVIATIONS carries the row saying so and the recovery path is
-documented and non-destructive.
+documented and non-destructive; **(e)** a trace recorded across a gap that
+spans an interval boundary is short by zero, rests are visibly marked as
+rests, and the chart carries a time axis that reconciles with the
+session's own TIME hero in the same frame.
 
 **Sequencing (PM gate):** LT close → **LL** → CL2 → LQ → PROD. LL
 displaces CL2, which is two items whose gap has a stated workaround (the
@@ -3393,6 +3408,45 @@ next phase. One line per round, newest first.
 
 ## Triggered follow-ons (not scheduled — each has an explicit trigger)
 
+- **An EXTERNAL oracle for the trace: the PM5's own internal log, and the
+  logbook** (James, 2026-08-20, from the erg: "there's a verification id
+  that the pm can give you for a row. Is checking if we can derive the
+  same verification id a way to validate our logbook traces are
+  correct?"). **The verification hash itself is NOT the lever** — it is a
+  workout SIGNATURE the PM5's firmware produces, and ErgZone's own issue
+  #117 closes the question in as many words: the workout-signing
+  cryptographic hash is one "we simply can't create (nor should we)". It
+  proves the machine's record was not tampered with en route to Concept2;
+  recomputing it is what it exists to prevent, and succeeding would only
+  prove we hashed the numbers we already hold.
+  **What the question DOES point at, and it is valuable** — this repo's
+  standing weakness is recurring failure 11, verifying the app only
+  against itself:
+  - `CSAFE_PM_GET_INTERNALLOGPARAMS` (0x99) plus
+    `CSAFE_PM_GET_INTERNALLOGMEMORY1/2/3` (0x6A) read out the machine's
+    own stored log, whose structure identifiers include `LOGSPLITDATA`
+    and the fixed/variable interval headers. That is an independent check
+    on our accumulator's BOUNDARIES and TOTALS, obtainable after the fact
+    with no rowing. **Hard limit, and it is decisive:** the identifier
+    list is exhaustive and contains **no per-stroke or per-sample
+    record**, and the logged-workout size field is 2 bytes — so it can
+    never validate the 1 Hz SHAPE, only the boundaries the shape hangs
+    on.
+  - A Concept2 logbook entry, for any session that goes up via ErgData,
+    carries authoritative splits at zero cost to us.
+  - **Cheap and worth taking whenever we next touch subscriptions:**
+    characteristic **`0x003F`** notifies the just-logged workout's hash,
+    internal log address and size after every workout. **We do not
+    subscribe to it** (we hold `0x0031`-`0x003A`). Storing that hash
+    beside our own log verifies nothing by itself, but it makes our
+    record LINKABLE to a logbook entry later — which is the
+    "spendable to logbook" question James asked when the series format
+    was designed.
+  **Deliberately NOT in the trace-truth spec** (2026-08-20): a new
+  subscription plus a new CSAFE conversation, on a spec already carrying
+  triad weight. **Trigger:** the next work that touches monitor
+  subscriptions or CSAFE, or the first time a trace's correctness is
+  disputed and our own corpus cannot settle it.
 - **App icon redraw** — **MOVED to Phase PROD** (James, 2026-08-20),
   where the corrected description lives. Correction worth keeping here so
   it does not come back: the arc is NOT misspelled. It reads ERGOMATIC;
