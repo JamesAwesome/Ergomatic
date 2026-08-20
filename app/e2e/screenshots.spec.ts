@@ -1912,6 +1912,15 @@ async function postLog(
 // shown, not smoothed" rule). No `hr` on any row's own stored fields, so
 // this series invents a plausible climbing 130->158 bpm independently
 // rather than pretending a number this fixture never measured.
+// FIXTURE HONESTY (final review, 2026-08-19): this series is HAND-BUILT to
+// track log-detail's own four hand-built row actuals, and its pace jitters by
+// about a second per 500m. A real device trace does not look like this — the
+// committed captures swing by double digits sample to sample and carry a ~26%
+// share of zero-pace sentinels (see `traceModel.test.ts`, which replays them).
+// The capture is honest about the chart's SHAPE and placement; it is not, and
+// must never be cited as, a picture of what real data looks like. The
+// `log-monitor` capture beside it comes from a genuine recorder replay and is
+// the representative one.
 function buildLogDetailSeries(): {
   samples: { t: number; d: number; p: number; spm: number; hr: number }[];
 } {
