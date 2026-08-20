@@ -149,6 +149,41 @@ spec 3's HR leg, descoped at the phase-open gate "until a belt is
 confirmed", is **now unblocked**; and every size number above is the
 WITH-HR case, i.e. the expensive one.
 
+## Item 5 — the phone's missing heart rate, chased and CLEARED (third pass)
+
+The first pass's phone trace carried no `hr` on any sample; today's
+laptop trace carried it on every one. With the belt on both times, that
+looked like a native-path defect on the exact field spec 3 renders.
+
+Protocol: belt on, connect on the phone, and **the PM5's own display
+confirmed 77 bpm BEFORE the first stroke** (the machine as the
+independent witness, not our app), then a 60-second piece — deliberately
+longer than the first pass's 22 s, which is inside the window where a
+cold strap reads nothing.
+
+Result: **61 of 61 samples carry `hr`** (103 → 132). The native path
+does not drop heart rate. The first pass was a cold strap, not a defect.
+Second independent witness that the belt reaches the app; spec 3's HR
+leg is well-founded.
+
+**F-4, RAISED AND WITHDRAWN — the 164 spm that wasn't a bug.** That
+session's final sample reads `spm: 164`, which the controller flagged as
+an impossible value the series admits because it bands stroke rate to the
+wire's full u8 range while `logDraft.ts` bands the same-named field
+1..99. James's explanation refutes it: he was pulling short, quick
+strokes as he finished, and at ~0.37 s between drives the machine
+computes 164 honestly. **The two bands are two different quantities —
+the series carries the INSTANTANEOUS rate, `logDraft`'s band applies to
+an interval AVERAGE — and `data.ts:483-489`'s existing comment already
+says exactly that.** Banding the series would have discarded a true
+measurement of how he rowed. No fix; the comment was right and the
+finding was mine to withdraw.
+
+**Handoff to spec 3 (rendering, not capture):** a stroke-rate trace can
+legitimately spike far above any average band. The renderer owes a sane
+vertical scale (clip or percentile, stated), never a capture-side drop —
+the data is honest and the axis is the thing that has to cope.
+
 ## What was NOT established
 
 The FIRST pass's build talked to prod, whose schema predates migration

@@ -141,6 +141,22 @@ open item, not a fact.
    grant observation (S6), and the fast-rate re-measure (the memo's iOS
    ~10 Hz hint) — three device items, one sheet entry.
 
+## §6b Handoffs to spec 3 (rendering), from the device passes
+
+- **The trace's `spm` is INSTANTANEOUS and can legitimately spike far
+  above any interval-average band** — a real 164 was measured on
+  hardware 2026-08-19 (short quick strokes at ~0.37 s between drives).
+  Capture stores it honestly; the RENDERER owes a sane vertical scale
+  (clip or percentile, stated in spec 3), never a capture-side drop.
+  A controller-raised "impossible value" finding was withdrawn on this
+  evidence; `data.ts:483-489`'s band comment was right.
+- **HR is confirmed live on both transports** (laptop 83→123; phone
+  61/61 samples 103→132, with the PM5's own display witnessing 77 bpm
+  before the piece). Spec 3's descoped HR leg is unblocked.
+- **A cold strap reads nothing for the first ~30 s.** A trace whose
+  early samples lack `hr` and whose later ones carry it is normal, not a
+  gap to interpolate.
+
 ## §7 Vetted ground inherited
 
 Phase LT's anchor ground carries (the band, the member set, the
