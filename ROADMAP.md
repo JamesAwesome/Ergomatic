@@ -2724,11 +2724,21 @@ rest-bearing piece:
     (`server/db/schema.ts:191`); one phone session logged and then read
     back through `GET /api/logs/:id` settles it, and the walk above
     produces exactly that for free.
-  - **One question for James, not a task:** spec 1's tule-fog exit pin is
-    honestly labelled a regression pin (both sides transcribed from our
-    own screen). Its own text says a recording of that session, if one
-    exists on his devices, would upgrade it to a real external oracle —
-    "asked, not assumed". It was never asked.
+  - **The tule-fog "upgrade the pin to an oracle" idea is CLOSED, and
+    should not be reopened** (James, 2026-08-20: "that was just a visual
+    bug"). The exit pass suggested asking whether a recording of that
+    session survives, per the spec's own "asked, not assumed" clause.
+    Asked and answered: only the prod DB row survives, it predates series
+    capture so carries no trace, and — the actual point — the pin does
+    not want one. Read the test (`summaryModel.test.ts:1704`): it hands
+    the model three targets and three actuals and asserts blue rows at
+    −2.1/−2.6/−3.5. That checks a RULE James ruled on (judge each row
+    against its own target, ±0.5s band), not a number against the
+    machine. Tule-fog's actuals were never in dispute; the baseline the
+    colour was computed from was. A recording would answer "did our
+    actuals match the erg" — a real question, covered elsewhere, and
+    never this bug. **Being a regression pin rather than an oracle is
+    CORRECT here, not a weakness to fix.**
 
 **LT spec 2's accepted limit (PM gate C1):** POST /api/logs' route-scoped
 1 MB body parser registers before auth, so the pre-auth buffer ceiling on
