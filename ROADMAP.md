@@ -1910,8 +1910,7 @@ WebKit's throttling, so it does not rescue the JS half.
       itself is unchanged and still covered by synthetic fixtures; what's
       owed is a fresh REAL-capture witness of a genuine >3s gap, the same
       evidentiary bar the rest of this module's tests hold themselves to.
-      Whichever task next touches `traceModel.ts`/its tests should either
-      capture one or explicitly re-decline with a stated reason.
+      Owner: the standalone item below.
 - [ ] **HARDWARE QUESTION owed to Phase LL's exit walk — DISTANCE only.**
       **CORRECTED at the 2026-08-20 PM gate: an earlier version of this item
       said the work→work reset had "never been confirmed on hardware." That
@@ -1942,6 +1941,33 @@ WebKit's throttling, so it does not rescue the JS half.
       and captures come from walks, not from tasks — and this phase's own
       exit walk produces a genuine >3 s gap as a matter of course. Sits
       beside exit clause (e) so the phase can go red on it. **S**
+- [ ] **BEFORE the next tag: two owed clauses plus a version-marker
+      ruling** (PM gate, round 4 of the Task 2 PR review, 2026-08-20).
+      **The two-clause notes obligation** (spec §7 criterion 9, the
+      pm-ledger, and a DEVIATIONS row 200 sentence all already say this —
+      this is the fourth, GREPPABLE home, because the last two tags each
+      shipped with a missing clause and whoever cuts v0.15.0 reads
+      ROADMAP and the merge log, not the spec): the next tag's notes
+      carry (1) a clause for the time axis and rest marking (the new,
+      observable-to-a-tester feature) and (2) a clause for the old
+      corpus (§5's declination overturned at the 2026-08-20 PM gate —
+      some traces recorded before this phase's fixes are silently wrong
+      and cannot be told apart from correct ones). **New condition, this
+      gate:** the phone→server trace leg must be WITNESSED before the tag
+      that announces the trace fix ships, or the notes say plainly that
+      traces are web-only today — announcing a fix for a leg nobody has
+      run on a phone is its own false-completeness risk, the same shape
+      as the two-clause rule itself protects against. **Version-marker
+      ruling (NOT implemented here — adding a field at a merge-gate
+      review is the escalate-mid-change hazard this repo's own rules
+      name):** the next change that touches `series` carries a `v`
+      version marker on `SeriesData`, decided before the phone→server leg
+      ships. Reason: the meaning of these bytes has changed twice in six
+      days with the bytes themselves unchanged (the accumulator fold,
+      then the rest marker), spec §9 has a third change queued, and one
+      integer per run makes era detection trivial RETROACTIVELY — absent
+      `v` IS the pre-fix marker, cheap only while the corpus is one
+      rower's two days old.
 - [ ] **BEFORE trace-truth task 3 (the time axis): its exit criterion 7 is
       currently UNSATISFIABLE on the flagship capture, and the reason is
       structural** (PM gate, 2026-08-20). Criterion 7 asks that the axis's

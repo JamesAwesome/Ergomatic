@@ -111,8 +111,12 @@ async function markArticleRead(page: Page, slug: string): Promise<void> {
   }
 }
 
-/** Neutralises `.tabbar`'s `position: fixed` for a `fullPage: true` capture.
- *  A full-page screenshot on a document taller than the viewport stitches
+/** Neutralises `.tabbar`'s `position: fixed`, for two DIFFERENT reasons
+ *  depending on the route (round 4 review: this comment used to name only
+ *  the first).
+ *
+ *  1. **`fullPage: true` on a plain document-flow screen** (`builder`):
+ *  a full-page screenshot on a document taller than the viewport stitches
  *  it together from scrolled segments; a fixed-position element gets
  *  redrawn at its *viewport-relative* spot in every segment, so on a page
  *  well past the 390×844 viewport (six steps plus an expanded editor) the
@@ -120,16 +124,35 @@ async function markArticleRead(page: Page, slug: string): Promise<void> {
  *  overlapping whatever content happened to be in that segment — a capture
  *  artifact, not a product bug (the bar being fixed is correct behaviour,
  *  so this is not a fix to `src/`). `position: static` makes it render
- *  exactly once, in its real DOM position — `AppRoutes.tsx` renders
- *  `<TabBar />` right after the routed screen inside `.app-shell`, so
- *  static positioning puts it at the true end of the document. `.app-shell`
- *  only carries `padding-bottom` to reserve room for the fixed bar so
- *  scrolled content doesn't land underneath it; with the bar no longer
- *  fixed that padding would just leave a blank gap above it, so this drops
- *  it too. Call right before any `fullPage: true` screenshot whose content
- *  can exceed one viewport — "builder" (see the other tests in this file:
- *  none of the rest sets `fullPage`, so none of those is exposed to
- *  this). */
+ *  exactly once, in its real DOM position — on THIS kind of route,
+ *  `AppRoutes.tsx` renders `<TabBar />` right after the routed screen
+ *  inside `.app-shell`, so static positioning puts it at the true end of
+ *  the document.
+ *
+ *  2. **Freeing the tabbar's own reserved space on an `.overlay-screen`
+ *  route** (`log-detail`, R3-1/round 4): `.overlay-screen`
+ *  (`index.css`) is `position: fixed; inset: 0` — it takes the WHOLE
+ *  routed screen out of `.app-shell`'s document flow, so claim 1 above
+ *  does NOT hold there: `.tabbar`, once static, lands at the literal top
+ *  of `.app-shell` (confirmed against the real stack — its only other
+ *  flow-contributing child is gone), not "the true end of the document".
+ *  `fullPage: true` is useless on this route for the identical reason
+ *  (Playwright measures `document`'s own scrollable size, which a fixed
+ *  element never contributes to) — `scrollTraceChartIntoFrame` (below)
+ *  is what actually reveals more content here, by scrolling the overlay
+ *  element's own internal `overflow-y: auto`. What THIS function still
+ *  buys on that route: the tabbar visually SAT ON TOP of the overlay's
+ *  own last ~45px (fixed, higher paint layer) before being neutralised,
+ *  so removing it frees that space for the overlay's real content to
+ *  show through.
+ *
+ *  The `.app-shell { padding-bottom: 0 }` line matters for case 1 only:
+ *  `.app-shell`'s own `padding-bottom` (reserved for the fixed bar so
+ *  scrolled content doesn't land underneath it) becomes a blank gap once
+ *  the bar is no longer fixed there, so this drops it. It is a NO-OP for
+ *  case 2 — `.overlay-screen` sets its own separate `padding-bottom`
+ *  directly (`index.css`), never inheriting `.app-shell`'s — kept here
+ *  anyway because it is harmless and case 1 still needs it. */
 async function neutralizeFixedTabBarForFullPageCapture(
   page: Page,
 ): Promise<void> {
@@ -2232,7 +2255,7 @@ test("log-detail", async ({ page }) => {
   await expect(page.locator(".trace-line").first()).toBeVisible();
 
   // R3-1 (review round 3): a viewport-only capture cropped out the
-  // chart's own `.trace-legend` ("SHADED = REST", F-2) — the identical
+  // chart's own `.trace-legend` ("BAND = REST", F-2, round 4 wording) — the identical
   // shape as I-2 (a committed capture that doesn't show the element the
   // round added), one element later. First attempt copied `builder.png`'s
   // `fullPage: true` + `neutralizeFixedTabBarForFullPageCapture` verbatim

@@ -244,9 +244,14 @@ function buildSummary(
   const segmentClause =
     segments.length > 1 ? `, in ${segments.length} segments` : "";
   const restRuns = countRestRuns(readings);
+  // "marked", never "shaded" (review round 4, C1's own reasoning applied
+  // here too): round 1's rest treatment was a full-height tint — that
+  // was shading. Round 2 replaced it with a short band, and this string
+  // would otherwise still be describing the rejected geometry, same
+  // mismatch C1 found in the visible `.trace-legend` text.
   const restClause =
     restRuns > 0
-      ? `, ${restRuns} rest ${restRuns === 1 ? "span" : "spans"} shaded`
+      ? `, ${restRuns} rest ${restRuns === 1 ? "span" : "spans"} marked`
       : "";
 
   return (

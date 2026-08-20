@@ -74,15 +74,20 @@ const PLOT_BOTTOM = CHART_HEIGHT - BOTTOM_PAD;
  *  never a hardcoded pixel value, so a future non-fixed plot height
  *  still gets a proportional bar.
  *
- *  THE CRITERION (review round 3, R3-3): not a number to preserve for
- *  its own sake — this fraction is sized so the trace line's own
- *  LOWEST REAL EXCURSION clears the band with clearly VISIBLE vertical
- *  separation (not merely a non-zero gap), confirmed against a real
- *  capture (`docs/screenshots/log-detail.png`, `.superpowers/sdd/
- *  2026-08-20-trace-truth/task-2-report.md`'s own description of it).
- *  A future change to this value should be checked against that same
- *  visual property — the line staying clear of the band with room to
- *  spare — not against matching this particular fraction. */
+ *  THE CRITERION (review round 3, R3-3; citation fixed round 4, C2):
+ *  not a number to preserve for its own sake — this fraction is sized
+ *  so the trace line's own LOWEST REAL EXCURSION clears the band with
+ *  clearly VISIBLE vertical separation (not merely a non-zero gap).
+ *  Evidence that stays reachable to everyone, not a report only one
+ *  session could read: the committed capture `docs/screenshots/
+ *  log-detail.png` (git-tracked, regenerated every `pnpm screenshots`
+ *  run) shows the property directly, and `TraceChart.test.tsx`'s own
+ *  "F-1: the rest band is a SHORT bar at the plot's own foot, never a
+ *  full-height fill" pins the band's own geometry (bottom-anchored,
+ *  well under the plot height) in CI on every push. A future change to
+ *  this value should be checked against that same visual property —
+ *  the line staying clear of the band with room to spare — not against
+ *  matching this particular fraction. */
 const REST_BAND_HEIGHT_FRACTION = 14 / 119;
 const REST_BAND_HEIGHT = PLOT_HEIGHT * REST_BAND_HEIGHT_FRACTION;
 
@@ -262,15 +267,23 @@ export default function TraceChart({
         })}
       </svg>
       {/* F-2 (James's ruling, review round 2): one quiet line explaining
-          the shading, same idiom as `PostWorkoutSummary.tsx`'s own
+          the band, same idiom as `PostWorkoutSummary.tsx`'s own
           `.summary-legend` ("<- FASTER (BLUE) . SLOWER (RED) ->") —
           shown only when there is something to explain (that file's own
           `hasJudgedRow` guard), never a permanent fixture on a rest-free
           trace. Spec §3 forbids copy claiming the rest PACE is
-          meaningful; it says nothing about naming what the shading
-          itself is, so this says only that. */}
+          meaningful; it says nothing about naming what the mark
+          itself is, so this says only that.
+          "BAND = REST", never "SHADED = REST" (review round 4, C1):
+          round 1 shipped a full-height tint — THAT was shading. Round 2
+          replaced it with a short bar on the plot floor and the word
+          never moved with the geometry, so it named the rejected
+          treatment. "Band" stays true regardless of geometry, and
+          carries no colour word on purpose — `#97692a` reads amber in
+          the PR body and bronze on the actual capture; naming a colour
+          here would just be a second thing to get wrong later. */}
       {trace.points.some((segment) => segment.some((p) => p.rest)) && (
-        <p className="trace-legend">SHADED = REST</p>
+        <p className="trace-legend">BAND = REST</p>
       )}
     </figure>
   );

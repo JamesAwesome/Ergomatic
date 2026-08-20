@@ -518,16 +518,24 @@ describe("TraceChart — trace-truth Task 2: rests are drawn, but marked (§3), 
   });
 
   // F-2 (James's ruling, review round 2): a quiet key explaining the
-  // shading — spec §3 forbids copy claiming the rest PACE is
-  // meaningful; it says nothing about naming what the shading itself
-  // is, same idiom as `PostWorkoutSummary.tsx`'s own `.summary-legend`.
-  it("F-2: a rest-bearing trace renders a legend naming the shading, absent on a rest-free one", async () => {
+  // band — spec §3 forbids copy claiming the rest PACE is meaningful;
+  // it says nothing about naming what the mark itself is, same idiom
+  // as `PostWorkoutSummary.tsx`'s own `.summary-legend`. "BAND = REST"
+  // (review round 4, C1): "SHADED = REST" named the round-1 treatment
+  // (a full-height tint) that round 2 replaced with a short bar — the
+  // word never moved with the geometry. No colour word either (`#97692a`
+  // reads differently to different eyes/PR bodies; "band" stays true
+  // regardless).
+  it("F-2: a rest-bearing trace renders a legend naming the band, absent on a rest-free one", async () => {
     const restSeries = await realSeriesWithRest();
     const { container: withRest } = render(<TraceChart series={restSeries} />);
     const legend = withRest.querySelector(".trace-legend");
     expect(legend).not.toBeNull();
-    expect(legend!.textContent).toBe("SHADED = REST");
-    // Never claims anything about the rest's own pace value (§3).
-    expect(legend!.textContent!.toLowerCase()).not.toMatch(/pace|split/);
+    expect(legend!.textContent).toBe("BAND = REST");
+    // Never claims anything about the rest's own pace value (§3), and
+    // never names a colour (round 4, C1).
+    expect(legend!.textContent!.toLowerCase()).not.toMatch(
+      /pace|split|amber|bronze|gold|orange|brown/,
+    );
   });
 });

@@ -236,10 +236,11 @@
      the band itself keeps its full 4.72:1 unchanged (opacity and hue are
      UNCHANGED from round 1 — only the band's own height/position moved).
      No longer the ONLY signal a rest happened (round 2 also adds a
-     `.trace-legend` line below the chart and a `buildSummary` clause,
-     `traceModel.ts`) but still held to WCAG 1.4.11's 3:1 non-text floor
-     on its own merits, since a sighted user reads the shading before
-     reading either text companion.
+     `.trace-legend` line below the chart, "BAND = REST" — round 4, C1:
+     never "SHADED", which named round 1's rejected full-height treatment
+     — and a `buildSummary` clause, `traceModel.ts`) but still held to
+     WCAG 1.4.11's 3:1 non-text floor on its own merits, since a sighted
+     user reads the band before reading either text companion.
      Computed (not eyeballed), against `--surface` (the only background
      `.trace-figure` ever sits on, `index.css`'s own trace-block comment):
      4.72:1. Also checked against `--page` (4.25:1, in case a future

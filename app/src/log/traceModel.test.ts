@@ -289,7 +289,7 @@ describe("buildTrace — §5's text alternative: real values, direction, no boun
     }
     const restClause =
       restRuns > 0
-        ? `, ${restRuns} rest ${restRuns === 1 ? "span" : "spans"} shaded`
+        ? `, ${restRuns} rest ${restRuns === 1 ? "span" : "spans"} marked`
         : "";
 
     expect(trace.summary).toBe(
@@ -428,7 +428,7 @@ describe("buildTrace — trace-truth Task 2: rests are marked on the point, not 
     const series = rec.snapshot()!;
     const trace = buildTrace(series, "pace")!;
     expect(trace.summary).toBe(
-      "Pace, 2:55.7 at the start to 2:02.1 at the end, fastest 1:54.8, in 2 segments, 3 rest spans shaded",
+      "Pace, 2:55.7 at the start to 2:02.1 at the end, fastest 1:54.8, in 2 segments, 3 rest spans marked",
     );
   });
 
