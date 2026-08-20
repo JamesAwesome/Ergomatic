@@ -166,6 +166,31 @@ Roadmap: `ROADMAP.md` (phases + standing rules). Design reference: `docs/design/
     with no behaviour change — however many files those touch. A
     thousand-line docs PR needs no PM; a one-line change to what a number
     means does.
+- **GROUP THE WORK, AND SPEND LESS DOING IT (James, 2026-08-20: "i want
+  to avoid small pr's and prefer to group things", "and preserve
+  credits").** Both halves are standing rules, and they bind the
+  controller more than the implementers.
+  - **Default to ONE PR per coherent chunk of work, not one per task.**
+    Phase LL spec 1 produced three PRs in a day for one spec, and that is
+    the shape to avoid. Small queued items ride the next PR that touches
+    their area rather than becoming their own branch: a stale comment, a
+    fixture fix, a docs correction, a follow-up sized in single files.
+    **The exception is narrow and stays:** work carrying TRIAD weight (a
+    number's meaning, a stored shape, auth) still lands alone when
+    bundling it would make its own gate harder to run — the accumulator
+    in #140 was right to ship by itself. "Would a reviewer have to hold
+    two unrelated risk models at once?" is the test, not diff size.
+  - **Spend proportionally.** Match the ceremony to the risk, and say
+    which gates you are SKIPPING and why rather than running them by
+    reflex. A non-triad UI task needs no PM gate and no antagonist pass —
+    the spec pass already covered it. Prefer one review over a review
+    plus three scoped re-reviews when the findings are documentation-
+    level. Use the cheapest model that can do the job, and remember that
+    a plan carrying complete code makes its implementer a transcriber.
+  - **The two pull against each other and the tie-break is stated:** a
+    bigger PR is cheaper to run gates on but harder to review. When
+    grouping would force a reviewer to reason about a stored-shape change
+    and an unrelated redesign in one pass, split. Otherwise group.
 - **Mid-phase requests batch to the phase's close-out task** (or the fast
   path after merge) instead of resuming a live agent — one review instead
   of several resumed contexts. Exception: anything that invalidates
@@ -349,7 +374,22 @@ often they recur.
     --merges`) and account for each: a note, or a stated reason it needs
     none.** Parallel sessions make this the normal case, not the rare one.
 
-16. **Opening a phase without writing it into the ROADMAP.** Four phases
+16. **Stating an unsourced premise as fact.** In one day the controller
+    told James "the PM5 is single-central" and "App Review scrutinises a
+    `bluetooth-central` declaration" — both load-bearing, both used to
+    reason about real decisions, both false or unsourceable, and both
+    caught by a research pass rather than by the person saying them. The
+    icon's "ERGOMATIO" claim is the same shape and survived three hops
+    over weeks because nobody opened the PNG. **A premise you cannot cite
+    is a premise you are inventing: tag it PRIMARY / SECONDARY /
+    INFERENCE, or do not say it.** The tell is a sentence that sounds
+    like it came from a document. Corollary from PR #141's gate:
+    **a dangling citation is worse than no citation, because it reads as
+    evidence** — 23 citations across 11 tracked files point into
+    `.superpowers/`, which is git-excluded and unreachable to anyone but
+    the session that wrote it.
+
+17. **Opening a phase without writing it into the ROADMAP.** Four phases
     running (PW, CS close, CM, LT), the phase's own gate ran
     `grep "<phase>" ROADMAP.md` and got zero — the roadmap learned about
     the phase only when a gate demanded it. **The brainstorm that names a
