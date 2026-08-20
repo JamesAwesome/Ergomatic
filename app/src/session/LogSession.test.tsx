@@ -579,6 +579,18 @@ describe("LogSession: prefill from a real completed run", () => {
     ).not.toBeDisabled();
   });
 
+  // Trace-rendering spec (Phase LT spec 3), §1: the timer door has no PM5
+  // — `PostWorkoutSummary`'s own `series` prop is never even passed here
+  // (`LogSession.tsx`'s timer-door call site), the same "absent means
+  // nothing" idiom the manual door below shares.
+  it("renders no trace chart — the timer door has no series to draw", async () => {
+    const { workout } = buildSessionFixture();
+    mockWorkouts([workout]);
+    await renderLog();
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    expect(document.querySelector(".trace-figure")).not.toBeInTheDocument();
+  });
+
   // Post-workout-summary spec (2026-08-17), §3 ruling: Save is never
   // disabled by an empty reflection. Choosing HELD/PAIN is still fully
   // possible; it just no longer gates Save. Clicking the SELECTED option a
@@ -1574,6 +1586,17 @@ describe("LogSession: the manual door (Task 3)", () => {
     ).toBeInTheDocument();
   });
 
+  // Trace-rendering spec (Phase LT spec 3), §1: the by-hand door has no
+  // PM5 either — same "prop never passed" idiom as the timer door above.
+  it("renders no trace chart — the by-hand door has no series to draw", async () => {
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    await renderManualLog(workout.id);
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    expect(document.querySelector(".trace-figure")).not.toBeInTheDocument();
+  });
+
   it("has no hero block at all — the manual door has no run and no measurement of any kind (§2B's own date-only fallback)", async () => {
     const workout = manualWorkoutFixture();
     mockWorkouts([workout]);
@@ -2206,6 +2229,49 @@ describe("LogSession: the manual door's monitor mode — buildSummaryModel's own
 });
 
 describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
+  // Trace-rendering spec (Phase LT spec 3), §1: the LIVE host's own
+  // wiring — `PostWorkoutSummary`'s `series` prop is fed straight off
+  // `monitorRun.series` at this door's own call site (`LogSession.tsx`).
+  // `<TraceChart>` (Task 2) owns the chart's own math/gates; this test's
+  // only job is proving the WIRING carries a real series through to a
+  // visible chart, below the intervals block.
+  it("renders the trace chart below the intervals block when the loaded run carries a series", async () => {
+    const series: SeriesData = {
+      samples: [
+        { t: 0, d: 0, p: 1400, spm: 22, hr: 128 },
+        { t: 200, d: 80, p: 1350, spm: 23, hr: 132 },
+        { t: 400, d: 165, p: 1250, spm: 24, hr: 138 },
+        { t: 600, d: 255, p: 1200, spm: 25, hr: 142 },
+        { t: 800, d: 350, p: 1150, spm: 26, hr: 148 },
+      ],
+    };
+    const { run, workout } = buildMonitorFixture({ series });
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    const figure = document.querySelector(".trace-figure");
+    const intervals = document.querySelector(".summary-intervals");
+    expect(figure).not.toBeNull();
+    expect(intervals).not.toBeNull();
+    expect(
+      intervals!.compareDocumentPosition(figure!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("renders no trace chart when the loaded run has no series (a pre-spec-2 record, or one sacrificed at save time)", async () => {
+    const { run, workout } = buildMonitorFixture();
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    expect(document.querySelector(".trace-figure")).not.toBeInTheDocument();
+  });
+
   it("shows the title/EXPECTED, PACES OFF from the frozen seed, and every row MEASURED with a real pm5 pace — the widened render gate", async () => {
     const { run, workout } = buildMonitorFixture();
     saveMonitorRun(run);

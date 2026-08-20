@@ -1866,6 +1866,17 @@ async function postLog(
       spm?: number;
       actualSpm?: number;
     }[];
+    // Trace-rendering spec (Phase LT spec 3), Task 3: the stored door's
+    // own source. This helper already builds every OTHER field by hand
+    // (steps, hero numbers) for the same reason a live timer run isn't
+    // used here — `log-detail` needs precise, hand-checkable per-row
+    // numbers a real session can't cheaply reproduce; `series` follows
+    // the identical convention rather than routing this already-direct-
+    // POST fixture through a live monitor session it was never built to
+    // use.
+    series?: {
+      samples: { t: number; d: number; p: number; spm: number; hr?: number }[];
+    };
   },
 ): Promise<void> {
   const result = await page.evaluate(async (b) => {
@@ -1887,6 +1898,49 @@ async function postLog(
   if (!result.ok) {
     throw new Error(`postLog failed: ${result.status} ${result.body}`);
   }
+}
+
+// Trace-rendering spec (Phase LT spec 3), Task 3: `log-detail`'s own
+// series — one continuous line (2 s cadence, under the 3 s gap-break
+// threshold) tracking the SAME four rows that test's own big header
+// comment already hand-checks (120/140/118/100 s per 500m, in that
+// order), so the drawn shape and the row numbers agree in the same
+// frame (recurring failure #7, sharpened). `d` is an arbitrary monotonic
+// filler — nothing in the chart reads it (Task 2's own `traceModel.ts`
+// never touches `Sample.d`) — and the small jitter keeps the line honest
+// (a real trace is never perfectly flat, `traceModel.ts`'s own "noise is
+// shown, not smoothed" rule). No `hr` on any row's own stored fields, so
+// this series invents a plausible climbing 130->158 bpm independently
+// rather than pretending a number this fixture never measured.
+function buildLogDetailSeries(): {
+  samples: { t: number; d: number; p: number; spm: number; hr: number }[];
+} {
+  const segments = [
+    { end: 120, pace: 120, spm: 24 },
+    { end: 260, pace: 140, spm: 26 },
+    { end: 378, pace: 118, spm: 24 },
+    { end: 478, pace: 100, spm: 28 },
+  ];
+  const samples: {
+    t: number;
+    d: number;
+    p: number;
+    spm: number;
+    hr: number;
+  }[] = [];
+  for (let t = 0; t <= 478; t += 2) {
+    const seg =
+      segments.find((s) => t < s.end) ?? segments[segments.length - 1]!;
+    const jitter = t % 4 === 0 ? -1 : 1;
+    samples.push({
+      t: t * 10,
+      d: t * 4,
+      p: (seg.pace + jitter) * 10,
+      spm: seg.spm + (t % 6 === 0 ? -1 : 0),
+      hr: 130 + Math.round((t / 478) * 28),
+    });
+  }
+  return { samples };
 }
 
 // Exit criterion 2's own fixture, verbatim: the frozen v0.11.0 body shape
@@ -2063,6 +2117,10 @@ test("log-detail", async ({ page }) => {
         actualSpm: 28,
       },
     ],
+    // Trace-rendering spec (Phase LT spec 3), Task 3: the row's own
+    // trace — `buildLogDetailSeries`'s own header comment names the
+    // exact correspondence to the four rows above.
+    series: buildLogDetailSeries(),
   });
 
   await page.goto("/today/log");
@@ -2104,6 +2162,12 @@ test("log-detail", async ({ page }) => {
   await expect(rows.nth(3).locator(".summary-row-target")).toHaveText("");
   await expect(rows.nth(3).locator(".summary-row-dev")).toHaveText("");
   await expect(rows.nth(3).locator(".summary-row-spm")).toHaveText("28");
+
+  // Trace-rendering spec (Phase LT spec 3), Task 3: the chart itself,
+  // below the intervals list — real, not the absence case (the row
+  // above carries a `series`).
+  await expect(page.locator(".trace-figure")).toBeVisible();
+  await expect(page.locator(".trace-line").first()).toBeVisible();
 
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "log-detail.png"),
@@ -2215,6 +2279,11 @@ test("log-detail-legacy", async ({ page }) => {
   // buildReadBack: HELD_READBACK_LABEL.held + "PAIN 2/5").
   await expect(page.locator(".summary-row-list .summary-row")).toHaveCount(1);
   await expect(page.getByText("HELD · PAIN 2/5")).toBeVisible();
+
+  // Trace-rendering spec (Phase LT spec 3), Task 3, §1's own ABSENT case:
+  // a pre-spec-2 row (this fixture's whole point, `postV0110Log`'s own
+  // header) has no `series` at all — no chart, no empty frame.
+  await expect(page.locator(".trace-figure")).toHaveCount(0);
 
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "log-detail-legacy.png"),
@@ -2831,76 +2900,202 @@ async function openLogMonitorForm(
           restSeconds: 0,
         })),
       },
-      // A short story: two rowing status ticks, interval 0's boundary, then
-      // a status tick advancing into interval 1 — `connected.spec.ts`'s own
-      // first four frames, verbatim (plausible avgSpm/avgHeartRateBpm, not
-      // placeholders; `avgSplit` is no longer a scripted field at all — the
-      // fake derives it FROM this boundary's own elapsedSeconds/
-      // distanceMeters, `derivedAvgSplit`/`transports/fake.ts`, PM
-      // final-PR gate condition round, 2026-08-17: 500×15/100 = 75s =
-      // "1:15.0", the value this file's own `log-monitor` test now expects
-      // and the value that agrees with the hero it sits under). That last
-      // frame is load-bearing, not decoration: `surfaceModel.ts`'s grid
-      // only marks a row `"completed"` once `index < activeIndex` — a
-      // boundary alone leaves interval 0 rendered as still-active until a
-      // later status names interval 1 current. No freeze/resume needed
-      // here; End is pressed the moment the grid shows the completed row.
+      // Trace-rendering spec (Phase LT spec 3), Task 3: densified past this
+      // file's own original short story (two ticks + one boundary) so the
+      // REAL `createSeriesRecorder()` — fed genuine wire frames through
+      // this exact fake-transport seam, never a hand-written `series` —
+      // produces a multi-point trace for `log-monitor.png` to show, real
+      // and multi-interval in the sense that matters to the chart: it
+      // spans two DIFFERENT `programIntervalIndex` stretches (a plain
+      // status field, no wire-index translation involved), not one
+      // program interval's own boundary a second time (a second scripted
+      // `boundary` event was tried and dropped — its own `actual.index`
+      // round-trips through `toMachineIndex`/the driver's forward-
+      // attribution rules, `domain/monitor/pm5/intervalIndex.ts`, which
+      // this fixture is not the place to get right a second time; ONE
+      // boundary, `surfaceModel.ts`'s own single-row "MEASURED" grid, and
+      // the pre-existing `log-monitor` assertions all stay exactly as
+      // this file originally proved them). Every status tick's own
+      // `elapsedSeconds` keeps climbing (never decreases), same WIRE-
+      // IMPOSSIBLE-but-harmless convention this file's own original
+      // comment already named and deferred (M-2): the recorder's genuine-
+      // boundary reset detection only triggers on a DECREASE, so a
+      // monotonic stream (real interval transitions or not) is always
+      // safe ground for it, and every consecutive pair below sits at
+      // most 3 s apart (never over the trace's own gap-break threshold),
+      // so the drawn line stays ONE continuous piece — no accidental
+      // split. `avgSplit`/`avgSpm` on the boundary are the fake's own
+      // scripted per-interval actuals (independent of the raw elapsed
+      // stream, `derivedAvgSplit`'s own doc comment) — unchanged from
+      // this file's own original 500×15/100 = 75s = "1:15.0" (the value
+      // `log-monitor`'s own assertion below still expects).
       events: [
         {
           atMs: 3000,
           kind: "status" as const,
           workoutState: 4,
-          elapsedSeconds: 5,
-          distanceMeters: 30,
-          spm: 24,
-          currentSplit: 110,
-          heartRateBpm: 140,
+          elapsedSeconds: 2,
+          distanceMeters: 13,
+          spm: 22,
+          currentSplit: 130,
+          heartRateBpm: 126,
           programIntervalIndex: 0,
         },
         {
           atMs: 3300,
           kind: "status" as const,
           workoutState: 4,
-          elapsedSeconds: 10,
-          distanceMeters: 70,
-          spm: 24,
-          currentSplit: 108,
-          heartRateBpm: 142,
+          elapsedSeconds: 4,
+          distanceMeters: 27,
+          spm: 23,
+          currentSplit: 122,
+          heartRateBpm: 130,
           programIntervalIndex: 0,
         },
         {
           atMs: 3600,
+          kind: "status" as const,
+          workoutState: 4,
+          elapsedSeconds: 6,
+          distanceMeters: 41,
+          spm: 24,
+          currentSplit: 116,
+          heartRateBpm: 134,
+          programIntervalIndex: 0,
+        },
+        {
+          atMs: 3900,
+          kind: "status" as const,
+          workoutState: 4,
+          elapsedSeconds: 8,
+          distanceMeters: 55,
+          spm: 24,
+          currentSplit: 112,
+          heartRateBpm: 138,
+          programIntervalIndex: 0,
+        },
+        {
+          atMs: 4200,
+          kind: "status" as const,
+          workoutState: 4,
+          elapsedSeconds: 10,
+          distanceMeters: 70,
+          spm: 25,
+          currentSplit: 108,
+          heartRateBpm: 141,
+          programIntervalIndex: 0,
+        },
+        {
+          atMs: 4500,
+          kind: "status" as const,
+          workoutState: 4,
+          elapsedSeconds: 12,
+          distanceMeters: 85,
+          spm: 25,
+          currentSplit: 106,
+          heartRateBpm: 144,
+          programIntervalIndex: 0,
+        },
+        {
+          atMs: 4800,
+          kind: "status" as const,
+          workoutState: 4,
+          elapsedSeconds: 14,
+          distanceMeters: 96,
+          spm: 26,
+          currentSplit: 104,
+          heartRateBpm: 146,
+          programIntervalIndex: 0,
+        },
+        {
+          atMs: 5100,
           kind: "boundary" as const,
           actual: {
             index: 0,
             elapsedSeconds: 15,
             distanceMeters: 100,
             avgSpm: 24,
-            avgHeartRateBpm: 141,
+            avgHeartRateBpm: 138,
             restDistanceMeters: 0,
           },
           cumulativeElapsedSeconds: 15,
           cumulativeDistanceMeters: 100,
         },
-        // WIRE-IMPOSSIBLE (M-2, final whole-branch review — the sixth site
-        // of this shape, `connected.spec.ts`'s own naming idiom copied
-        // here): elapsed/distance continue cumulatively from interval 0's
-        // own boundary above (15s/100m) instead of resetting per-interval,
-        // the same fixture-authoring shape review IMPORTANT-2 named at Task
-        // 6 fix round. Benign here — this frame only advances the grid's
-        // active row into interval 1 (the comment above names why that
-        // matters) and feeds `log-monitor.png`, which renders the
-        // diagnostics log's own recorded actuals, not METERS LEFT. Deferred
-        // with the other five, not fixed this round.
         {
-          atMs: 3900,
+          atMs: 5400,
           kind: "status" as const,
           workoutState: 4,
           elapsedSeconds: 17,
           distanceMeters: 115,
-          spm: 24,
-          currentSplit: 110,
-          heartRateBpm: 140,
+          spm: 26,
+          currentSplit: 102,
+          heartRateBpm: 148,
+          programIntervalIndex: 1,
+        },
+        {
+          atMs: 5700,
+          kind: "status" as const,
+          workoutState: 4,
+          elapsedSeconds: 19,
+          distanceMeters: 130,
+          spm: 27,
+          currentSplit: 100,
+          heartRateBpm: 150,
+          programIntervalIndex: 1,
+        },
+        {
+          atMs: 6000,
+          kind: "status" as const,
+          workoutState: 4,
+          elapsedSeconds: 21,
+          distanceMeters: 145,
+          spm: 27,
+          currentSplit: 99,
+          heartRateBpm: 151,
+          programIntervalIndex: 1,
+        },
+        {
+          atMs: 6300,
+          kind: "status" as const,
+          workoutState: 4,
+          elapsedSeconds: 23,
+          distanceMeters: 160,
+          spm: 28,
+          currentSplit: 98,
+          heartRateBpm: 152,
+          programIntervalIndex: 1,
+        },
+        {
+          atMs: 6600,
+          kind: "status" as const,
+          workoutState: 4,
+          elapsedSeconds: 25,
+          distanceMeters: 175,
+          spm: 28,
+          currentSplit: 97,
+          heartRateBpm: 153,
+          programIntervalIndex: 1,
+        },
+        {
+          atMs: 6900,
+          kind: "status" as const,
+          workoutState: 4,
+          elapsedSeconds: 27,
+          distanceMeters: 190,
+          spm: 28,
+          currentSplit: 96,
+          heartRateBpm: 154,
+          programIntervalIndex: 1,
+        },
+        {
+          atMs: 7200,
+          kind: "status" as const,
+          workoutState: 4,
+          elapsedSeconds: 29,
+          distanceMeters: 200,
+          spm: 28,
+          currentSplit: 95,
+          heartRateBpm: 155,
           programIntervalIndex: 1,
         },
       ],
@@ -2983,6 +3178,26 @@ async function openLogMonitorForm(
     .fill("Rowed against a connected monitor for the first time.");
 }
 
+// Trace-rendering spec (Phase LT spec 3), Task 3, recurring failure #7
+// (sharpened — "check the drawn shape against the row values in the same
+// frame"): every capture in this file is viewport-only, never
+// `fullPage: true` (this file's own `neutralizeFixedTabBarForFullPageCapture`
+// header names the one exception, "builder"), and the summary's reflection
+// card pushes the chart below a single 390×844/844×390 fold. Scrolls so
+// the chart's own bottom edge lands `margin` px above the viewport's own
+// bottom, which — on both fixtures below — keeps the TAIL of the
+// intervals list (the rows a human reads the chart's shape against) on
+// screen too, rather than centering the chart alone.
+async function scrollTraceChartIntoFrame(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const el = document.querySelector(".trace-figure");
+    if (el === null) return;
+    const rect = el.getBoundingClientRect();
+    const margin = 16;
+    window.scrollBy(0, rect.bottom - window.innerHeight + margin);
+  });
+}
+
 test("log-monitor", async ({ page }) => {
   const title = "Screenshot Log Monitor Workout";
   await openLogMonitorForm(
@@ -3005,6 +3220,14 @@ test("log-monitor", async ({ page }) => {
   await expect(
     page.locator(".summary-row-pace", { hasText: /^\d+:\d{2}\.\d$/ }).first(),
   ).toBeVisible();
+  // Trace-rendering spec (Phase LT spec 3), Task 3: a real trace, drawn
+  // from the SAME live session's own `MonitorRun.series` (the fake
+  // transport's frames flowed through the real `createSeriesRecorder()`,
+  // never a hand-written series) — below the intervals block, on the
+  // live door.
+  await expect(page.locator(".trace-figure")).toBeVisible();
+  await expect(page.locator(".trace-line").first()).toBeVisible();
+  await scrollTraceChartIntoFrame(page);
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "log-monitor.png"),
   });
@@ -3024,7 +3247,12 @@ test("log-monitor-landscape", async ({ page }) => {
   await expect(
     page.locator(".summary-row-pace", { hasText: /^\d+:\d{2}\.\d$/ }).first(),
   ).toBeVisible();
+  // Trace-rendering spec (Phase LT spec 3), Task 3, same reasoning as
+  // `log-monitor` above.
+  await expect(page.locator(".trace-figure")).toBeVisible();
+  await expect(page.locator(".trace-line").first()).toBeVisible();
   await page.setViewportSize({ width: 844, height: 390 });
+  await scrollTraceChartIntoFrame(page);
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "log-monitor-landscape.png"),
   });

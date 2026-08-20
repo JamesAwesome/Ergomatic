@@ -10,6 +10,7 @@ import {
 } from "../session/PostWorkoutSummary";
 import { resolveBackTarget } from "../shell/BackLink";
 import { buildStoredSummary, type StoredLog } from "./storedSummary";
+import TraceChart from "./TraceChart";
 
 // From-the-log spec (2026-08-18), §4 N5: the back affordance follows the
 // SHIPPED BackLink idiom (origin rides `location.state.from`), but unlike
@@ -422,6 +423,15 @@ export default function FromTheLog() {
           )}
 
           <SummaryIntervalsBlock rows={view.rows} caption={view.caption} />
+
+          {/* Trace-rendering spec (Phase LT spec 3), §1: "above the plan
+              footer on the stored one" — `row.series` is `null` (not just
+              absent) for the common ABSENT case (any row saved before
+              spec 2 shipped), which `<TraceChart>` treats identically to
+              `undefined` at its own type boundary; the `?? undefined`
+              here is only that type coercion, never a behavioral
+              decision this screen makes. */}
+          <TraceChart series={row.series ?? undefined} />
 
           {view.planFooter !== undefined && (
             <p className="log-plan-footer">{view.planFooter}</p>

@@ -3,6 +3,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import type { PlanData } from "../api/usePlan";
+import type { SeriesData } from "../monitor/seriesRecorder";
 import PostWorkoutSummary, {
   offsetFragment,
   singleTargetHint,
@@ -101,6 +102,32 @@ function plan(overrides: Partial<PlanData> = {}): PlanData {
     })),
     ...overrides,
   };
+}
+
+// Phase LT spec 3, Task 3: a plausible multi-interval `SeriesData` — three
+// segments of real pace/rate/hr readings, faster each interval (so a
+// "faster is up" trace has a real shape to draw), never touching the
+// `p === 0`/`spm === 0` sentinel question (Task 1/2's own job, already
+// proven against a real capture there; this file's job is the HOST's own
+// wiring/placement, not the trace math a second time).
+function realisticSeries(): SeriesData {
+  const samples: SeriesData["samples"] = [];
+  let t = 0;
+  for (const [pace, spm, hr] of [
+    [140, 22, 128],
+    [138, 22, 130],
+    [135, 23, 132],
+    [125, 24, 138],
+    [122, 24, 140],
+    [120, 25, 142],
+    [116, 26, 148],
+    [114, 27, 150],
+    [112, 28, 152],
+  ] as const) {
+    samples.push({ t: t * 10, d: t * 4, p: pace * 10, spm, hr });
+    t += 20;
+  }
+  return { samples };
 }
 
 function baseProps(
@@ -946,6 +973,39 @@ describe("offsetFragment", () => {
 
   it("falls back to the whole label when the idiom is absent (a legacy pre-ref label)", () => {
     expect(offsetFragment("some legacy label")).toBe("some legacy label");
+  });
+});
+
+// Phase LT spec 3, Task 3 (§1: "the live summary" host, placement below
+// the intervals block, absent when the door has none — every current door
+// but monitor, `LogSession.tsx`'s own doc comment). `<TraceChart>` already
+// owns every absence/gate rule (Task 2, `TraceChart.test.tsx`) — this
+// suite's only job is proving THIS screen passes `series` straight
+// through and puts the result in the right place, never re-testing the
+// chart's own math a second time.
+describe("PostWorkoutSummary — the trace chart (Phase LT spec 3)", () => {
+  it("renders the chart below the intervals block when `series` carries real readings", () => {
+    const { container } = renderSummary({ series: realisticSeries() });
+    const figure = container.querySelector(".trace-figure");
+    const intervals = container.querySelector(".summary-intervals");
+    expect(figure).not.toBeNull();
+    expect(intervals).not.toBeNull();
+    // DOM-order assertion, both directions (spec 1's fix-round technique,
+    // `FromTheLog.test.tsx`'s own precedent) — a single-bit check could
+    // pass on garbage input.
+    expect(
+      intervals!.compareDocumentPosition(figure!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      figure!.compareDocumentPosition(intervals!) &
+        Node.DOCUMENT_POSITION_PRECEDING,
+    ).toBeTruthy();
+  });
+
+  it("renders NOTHING when `series` is absent — the timer/by-hand doors' own shape (no `series` prop at all)", () => {
+    const { container } = renderSummary();
+    expect(container.querySelector(".trace-figure")).toBeNull();
   });
 });
 

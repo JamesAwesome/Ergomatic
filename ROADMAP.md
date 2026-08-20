@@ -2473,7 +2473,17 @@ jsonb column, plus an invented mechanism — §7's own citation), and
 James's merge approval. This spec ships no notes clause of its own
 (§6 exit criterion 7: internal-only, rower-invisible until spec 3 renders
 the trace — stated here so the next release gate does not go hunting for
-one). Spec 3 remains re-gated, below.
+one). **Spec 3 IMPLEMENTED 2026-08-20** (Tasks 1-3 done on branch
+`lt-traces`: the pure scale/axis primitives, the trace model + hand-rolled
+SVG chart component, and both hosts wired below their own intervals block
+with the witness sweep + recaptured `log-monitor`/`log-monitor-landscape`/
+`log-detail` screenshots) — awaiting final review, a PM final-PR gate
+(NOT the triad's full treatment: no number's meaning changed, no stored
+shape moved, no auth touched — spec §8's own "the antagonist pass is a
+DELTA pass" ruling), and James's merge approval. **Owed at the next tag**:
+exit criterion 8's own notes clause — "your connected sessions now draw a
+trace — pace by default, stroke rate and heart rate a tap away; sessions
+rowed before this release have no trace to draw."
 **Goal:** the summary's interval rows answer "did I hit MY targets" —
 target inline, judgment vs the row's own target with the connected
 surface's shared ±0.5s band, stroke rate shown (`24 / 22`), and discard
@@ -2482,8 +2492,10 @@ wherever save is.
 door is the app's only discard-less save surface and the monitor path's
 fallthrough); spec 1 = targets/judgment/SPM (TRIAD: number meaning +
 stored shape); spec 2 = series capture (re-gated at its own open: memo
-committed, storage ceiling ruled); spec 3 = traces (HR descoped until a
-belt is confirmed).
+committed, storage ceiling ruled); spec 3 = traces, pace/rate/HR all three
+(the HR descope lifted 2026-08-19 — the phase-close erg bundle's own
+S5b pass witnessed a real belt on the wire, ROADMAP's own "unblocks spec
+3's descoped HR leg" line above).
 **Owed at the next tag (v0.14.0, range v0.13.0..main — RF15's rule):**
 four notes clauses: (1) rows judge against their own targets with the
 target shown (the erg ask); (2) stroke rate on measured intervals;

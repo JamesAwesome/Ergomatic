@@ -2,6 +2,8 @@ import type { ReactNode } from "react";
 import { fmtSplit } from "../../domain/format.js";
 import type { HeldResult, Thumbs } from "../api/useRecentLogs";
 import type { PlanData } from "../api/usePlan";
+import type { SeriesData } from "../monitor/seriesRecorder.js";
+import TraceChart from "../log/TraceChart";
 import BackLink from "../shell/BackLink";
 import type {
   MeasuredRow,
@@ -514,6 +516,17 @@ export interface PostWorkoutSummaryProps {
    *  records clear, where a fired discard navigates — the "per-door record
    *  semantics" §2F names). */
   discardSlot: ReactNode;
+  /** Trace-rendering spec (Phase LT spec 3), §1: the LIVE door's own
+   *  source — `MonitorRun.series`, straight from the session record the
+   *  door already loaded, never re-derived here. Absent on every door but
+   *  monitor (timer/by-hand doors have no PM5, so no wire trace exists to
+   *  draw — `LogSession.tsx`'s own callers simply omit this prop, the
+   *  same "absent means nothing" idiom `deviceName` already uses one
+   *  layer down). `<TraceChart>` (Task 2) owns every absence/gate rule
+   *  from here: fewer than 3 real readings, no HR sample anywhere, etc. —
+   *  this component passes the value through and places the result,
+   *  nothing more. */
+  series?: SeriesData;
   backFallback?: string;
   /** The diagnostics rows (MONITOR LOG · COPY / RECORDING · DOWNLOAD) —
    *  §2F: "SURVIVE below the stack." Rendered as children rather than a
@@ -551,6 +564,7 @@ export default function PostWorkoutSummary({
   onLogAgainstPlan,
   onSaveWithoutLogging,
   discardSlot,
+  series,
   backFallback = "/today",
   children,
 }: PostWorkoutSummaryProps) {
@@ -633,6 +647,15 @@ export default function PostWorkoutSummary({
         pacesOffCaption={pacesOffCaption}
         caption={caption}
       />
+
+      {/* Trace-rendering spec (Phase LT spec 3), §1: "below the INTERVALS
+          list ... above the save stack on the live door" — placed here,
+          between the two, so it's the last thing a rower sees before the
+          save/discard controls. `<TraceChart>` renders nothing at all
+          when `series` is absent or too thin to draw (Task 2's own gate),
+          so this is an unconditional render, not a second absence check
+          duplicated here. */}
+      <TraceChart series={series} />
 
       <div className="action-stack summary-save-stack">
         {saveError !== null && <p className="field-error">{saveError}</p>}

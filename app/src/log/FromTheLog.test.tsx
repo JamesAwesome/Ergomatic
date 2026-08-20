@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { api } from "../api";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
+import type { SeriesData } from "../monitor/seriesRecorder";
 import type { StoredLog } from "./storedSummary";
 
 // Same `vi.doMock` + returned-spy idiom as LogSession.test.tsx's own
@@ -59,6 +60,32 @@ function storedRow(overrides: Partial<StoredLog> = {}): StoredLog {
     planIndex: null,
     ...overrides,
   };
+}
+
+// Phase LT spec 3, Task 3: a plausible multi-interval `SeriesData` — same
+// small three-segment shape `PostWorkoutSummary.test.tsx`'s own
+// `realisticSeries` builds (duplicated per this file's own established
+// precedent of NOT sharing small fixtures across test files), never
+// touching the sentinel/gap questions Task 1/2 already proved against a
+// real capture.
+function realisticSeries(): SeriesData {
+  const samples: SeriesData["samples"] = [];
+  let t = 0;
+  for (const [pace, spm, hr] of [
+    [140, 22, 128],
+    [138, 22, 130],
+    [135, 23, 132],
+    [125, 24, 138],
+    [122, 24, 140],
+    [120, 25, 142],
+    [116, 26, 148],
+    [114, 27, 150],
+    [112, 28, 152],
+  ] as const) {
+    samples.push({ t: t * 10, d: t * 4, p: pace * 10, spm, hr });
+    t += 20;
+  }
+  return { samples };
 }
 
 async function renderFromTheLog(
@@ -1025,4 +1052,70 @@ describe("FromTheLog — §5.1 the copy/decision honesty table", () => {
       );
     });
   }
+});
+
+// Phase LT spec 3, Task 3 (§1: "the from-the-log view" host, placement
+// below the intervals list, above the plan footer; ABSENT for "every
+// session logged before spec 2 shipped" — a stored row with `series:
+// null`, this describe's own fixture). `<TraceChart>` (Task 2) owns every
+// absence/gate rule already — this suite proves only that THIS screen
+// passes the fetched row's own `series` through and places the result
+// correctly.
+describe("FromTheLog — the trace chart (Phase LT spec 3)", () => {
+  it("renders the chart below the intervals list and above the plan footer, from the fetched row's own series", async () => {
+    mockApi(
+      () =>
+        new Response(
+          JSON.stringify(
+            storedRow({
+              series: realisticSeries(),
+              planKey: "sprint",
+              planIndex: 11,
+            }),
+          ),
+          { status: 200 },
+        ),
+    );
+    const { container } = await renderFromTheLog();
+    await screen.findByRole("heading", { name: "Sea Fret" });
+
+    const figure = container.querySelector(".trace-figure");
+    const intervals = container.querySelector(".summary-intervals");
+    const footer = container.querySelector(".log-plan-footer");
+    expect(figure).not.toBeNull();
+    expect(intervals).not.toBeNull();
+    expect(footer).not.toBeNull();
+
+    // DOM order, both directions (spec 1's own fix-round technique) —
+    // below intervals...
+    expect(
+      intervals!.compareDocumentPosition(figure!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      figure!.compareDocumentPosition(intervals!) &
+        Node.DOCUMENT_POSITION_PRECEDING,
+    ).toBeTruthy();
+    // ...and above the plan footer.
+    expect(
+      figure!.compareDocumentPosition(footer!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      footer!.compareDocumentPosition(figure!) &
+        Node.DOCUMENT_POSITION_PRECEDING,
+    ).toBeTruthy();
+  });
+
+  it("renders NOTHING for a pre-spec-2 stored row — `series: null`, §1's own ABSENT case", async () => {
+    mockApi(
+      () =>
+        new Response(JSON.stringify(storedRow({ series: null })), {
+          status: 200,
+        }),
+    );
+    const { container } = await renderFromTheLog();
+    await screen.findByRole("heading", { name: "Sea Fret" });
+    expect(container.querySelector(".trace-figure")).toBeNull();
+  });
 });
