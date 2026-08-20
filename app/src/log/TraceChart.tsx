@@ -72,9 +72,17 @@ const PLOT_BOTTOM = CHART_HEIGHT - BOTTOM_PAD;
  *  so the line stays close to its full 17.11:1 contrast almost
  *  everywhere on the chart. Expressed as a FRACTION of `PLOT_HEIGHT`,
  *  never a hardcoded pixel value, so a future non-fixed plot height
- *  still gets a proportional bar (James's own mock used 14px in a
- *  ~119px plot — this fraction reproduces that ratio against this
- *  component's own real 120px plot). */
+ *  still gets a proportional bar.
+ *
+ *  THE CRITERION (review round 3, R3-3): not a number to preserve for
+ *  its own sake — this fraction is sized so the trace line's own
+ *  LOWEST REAL EXCURSION clears the band with clearly VISIBLE vertical
+ *  separation (not merely a non-zero gap), confirmed against a real
+ *  capture (`docs/screenshots/log-detail.png`, `.superpowers/sdd/
+ *  2026-08-20-trace-truth/task-2-report.md`'s own description of it).
+ *  A future change to this value should be checked against that same
+ *  visual property — the line staying clear of the band with room to
+ *  spare — not against matching this particular fraction. */
 const REST_BAND_HEIGHT_FRACTION = 14 / 119;
 const REST_BAND_HEIGHT = PLOT_HEIGHT * REST_BAND_HEIGHT_FRACTION;
 

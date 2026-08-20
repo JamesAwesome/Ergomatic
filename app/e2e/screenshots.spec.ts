@@ -141,6 +141,41 @@ async function neutralizeFixedTabBarForFullPageCapture(
   });
 }
 
+// R3-1 (review round 3): `.trace-figure`'s own bottom edge (now including
+// F-2's `.trace-legend`, its last child) needs to clear whichever
+// container actually scrolls THIS route — that is NOT always `window`.
+// `/session/log` (log-monitor's own door) is a plain document-flow
+// screen, so `window.scrollBy` moves it — but `/today/log/:id`
+// (log-detail's own door, `FromTheLog.tsx`) renders inside
+// `.overlay-screen` (`index.css`'s own documented iOS-scroll-restoration
+// idiom: `position: fixed; inset: 0; overflow-y: auto`), which takes
+// the whole screen OUT of `.app-shell`'s document flow and gives it an
+// INTERNAL scroll of its own — `window.scrollBy` has no effect on it at
+// all (confirmed against the real stack: `document.body.scrollHeight`
+// stays pinned at the viewport's own height the instant this mounts,
+// same collapse this file's own `.overlay-screen` CSS comment documents
+// for News's BACK-position tradeoff). `fullPage: true` is equally
+// ineffective here for the identical reason — Playwright measures
+// `document`'s own scrollable size, which this fixed, internally-
+// scrolling element never contributes to. Detects which case applies
+// and scrolls the RIGHT thing rather than assuming `window` always
+// works.
+async function scrollTraceChartIntoFrame(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const el = document.querySelector(".trace-figure");
+    if (el === null) return;
+    const rect = el.getBoundingClientRect();
+    const margin = 16;
+    const delta = rect.bottom - window.innerHeight + margin;
+    const overlay = document.querySelector(".overlay-screen");
+    if (overlay !== null) {
+      overlay.scrollTop += delta;
+    } else {
+      window.scrollBy(0, delta);
+    }
+  });
+}
+
 /** Activates a preset plan via the real `PUT /api/plan` route — same
  *  in-page-fetch idiom as `setBaselines` above, duplicated from
  *  `e2e/design.spec.ts`'s own `choosePlan` rather than shared (this
@@ -2196,6 +2231,26 @@ test("log-detail", async ({ page }) => {
   await expect(page.locator(".trace-figure")).toBeVisible();
   await expect(page.locator(".trace-line").first()).toBeVisible();
 
+  // R3-1 (review round 3): a viewport-only capture cropped out the
+  // chart's own `.trace-legend` ("SHADED = REST", F-2) — the identical
+  // shape as I-2 (a committed capture that doesn't show the element the
+  // round added), one element later. First attempt copied `builder.png`'s
+  // `fullPage: true` + `neutralizeFixedTabBarForFullPageCapture` verbatim
+  // and it LOOKED fixed (the legend became visible) — but measurement
+  // against the real stack proved that was luck, not the mechanism:
+  // this route (`FromTheLog.tsx`) renders inside `.overlay-screen`
+  // (`position: fixed`, its OWN internal `overflow-y: auto`), which
+  // `fullPage: true` cannot see past (Playwright measures `document`'s
+  // own scrollable size, and a fixed element contributes nothing to
+  // it) — the legend was landing on the LAST pixel row of the capture,
+  // genuinely clipped, only reachable at all because neutralizing the
+  // tabbar freed the ~45px it used to visually cover. The tabbar
+  // neutralize is still correct (it frees that real space), but the fix
+  // that actually matters is scrolling the ELEMENT that owns the
+  // overflow — `scrollTraceChartIntoFrame` (above) now detects
+  // `.overlay-screen` and scrolls IT instead of `window`.
+  await neutralizeFixedTabBarForFullPageCapture(page);
+  await scrollTraceChartIntoFrame(page);
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "log-detail.png"),
   });
@@ -3230,16 +3285,6 @@ async function openLogMonitorForm(
 // bottom, which — on both fixtures below — keeps the TAIL of the
 // intervals list (the rows a human reads the chart's shape against) on
 // screen too, rather than centering the chart alone.
-async function scrollTraceChartIntoFrame(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    const el = document.querySelector(".trace-figure");
-    if (el === null) return;
-    const rect = el.getBoundingClientRect();
-    const margin = 16;
-    window.scrollBy(0, rect.bottom - window.innerHeight + margin);
-  });
-}
-
 test("log-monitor", async ({ page }) => {
   const title = "Screenshot Log Monitor Workout";
   await openLogMonitorForm(
