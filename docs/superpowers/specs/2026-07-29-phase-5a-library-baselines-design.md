@@ -104,6 +104,14 @@ centered with no letterboxing before committing.
 Recorded as a ROADMAP follow-on (not this phase): a clean SVG redraw fixing
 the AI-generation artifacts (the arc reads "ERGOMATIO", the rail "Cxoncept 2",
 the monitor label is unreadable), removing the third-party brand wordmark, and
+
+> **CORRECTION (James, 2026-08-20).** The arc is not misspelled. It reads
+> ERGOMATIC; the rabbit's ear crosses the final C and hides it at icon size.
+> This sentence is where the "ERGOMATIO" claim originated, and it was copied
+> into ROADMAP and then into a phase plan without anyone opening the PNG.
+> The rest of the sentence holds — the third-party rail mark and the baked-in
+> corners/shadow are real, and are the actual App Review blockers. Current
+> state lives in Phase PROD, not here.
 dropping the baked-in rounded corners and drop shadow that will double up with
 iOS's own mask. Gate: before any external TestFlight distribution or App Store
 submission.

@@ -1440,12 +1440,95 @@ word.
 **Goal:** Household-ready and installable.
 
 - [ ] Device account switcher (the design's SWITCH flow: multiple signed-in rowers, "Add another rower")
-- [ ] PWA installability (manifest, icons, standalone display)
-- [ ] Accessibility audit against the handoff's hard rules: every target ≥ 44×44 px, all text ≥ 4.5:1 AA
-- [ ] Calm-motion pass: no animation beyond the timer tick and progress bars
 - [ ] Backlog sweep of deferred niceties
+- [x] ~~PWA installability~~ · ~~Accessibility audit~~ · ~~Calm-motion pass~~ —
+      **MOVED to Phase PROD** (James, 2026-08-20): all three are release
+      gates for an audience outside the household, not household polish.
+      They are tracked there, not here; this line exists so nobody
+      concludes they were dropped.
 
-**Exit:** Two rowers share a phone by the erg without re-typing credentials; app installs to a home screen; audit findings closed.
+**Exit:** Two rowers share a phone by the erg without re-typing credentials.
+(Installability and the audits now exit with Phase PROD.)
+
+## Phase PROD — Productionization (the last phase before strangers)
+
+**Status:** Not started. **This is the final phase** (James, 2026-08-20:
+"the app icon and Apple login etc should all go into a productionization
+final phase"). It exists because a set of items share one trigger and one
+deadline rather than one subsystem: every one of them is a thing App
+Review, or a tester who is not James, will meet first.
+
+**Goal:** the app can be handed to someone outside the household without
+an apology.
+
+**The line this phase defends.** Internal TestFlight is exempt from all of
+it, which is why none of these have blocked anything so far. The moment a
+build goes to EXTERNAL TestFlight or the App Store, they all bind at once.
+Nothing here should be discovered at submission time.
+
+- [ ] **App icon redraw** (was a triggered follow-on). Replace the
+      AI-generated icon with a clean SVG. What is actually wrong with it,
+      checked against the asset itself
+      (`app/ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png`,
+      2026-08-20) rather than repeated from this file: the top arc DOES
+      read ERGOMATIC — **the rabbit's ear crosses the final C and hides
+      it**, so at icon size the wordmark loses its last letter. (An
+      earlier version of this line claimed the arc was misspelled
+      "ERGOMATIO"; that was wrong, it propagated for weeks, and James
+      corrected it. Nobody had opened the file.) The real blockers:
+      **the erg rail carries a third-party brand wordmark and logo**,
+      which has to come off; the icon bakes in its own rounded corners
+      and drop shadow, doubling up with iOS's mask; and the whole thing
+      is AI-generated raster art at one size. **App Review would reject
+      the third-party mark** — this is the hardest gate in the phase and
+      the only one needing a human with taste. **M**
+- [ ] **Apple sign-in** (was a triggered follow-on). Guideline 4.8:
+      required the moment a build leaves internal distribution. Works
+      with the existing openid-client stack (ES256 client secret,
+      form_post callback, name and email on first auth ONLY — Apple
+      sends them once and never again). **Design the allowlist story for
+      private-relay addresses FIRST**: `ALLOWED_EMAILS` cannot match a
+      relay address the rower has never seen, so the current door does
+      not survive contact with Apple sign-in unchanged. AUTH — triad
+      weight, full antagonist pass on its spec plus a PM final-PR gate. **L**
+- [ ] **Store metadata and the legal surface.** Not previously on this
+      roadmap in any form, and every item is required for submission: a
+      privacy policy at a real URL, a support URL, the App Privacy
+      questionnaire answered truthfully against what we actually store
+      (sessions, series traces, heart rate — heart rate is health data
+      and is answered as such), age rating, and store screenshots at the
+      required sizes. The screenshots are cheap here: `pnpm screenshots`
+      already produces honest captures of real data. **M**
+- [ ] **Accessibility audit against the handoff's hard rules** — every
+      target ≥ 44×44 px, all text ≥ 4.5:1 AA, computed and reported as
+      numbers rather than judged by eye (recurring failure 6). **Moved
+      here from Phase 10**: it is a release gate, not household polish,
+      and the phases that shipped since have each added surfaces it has
+      never covered. **M**
+- [ ] **Calm-motion pass** — no animation beyond the timer tick and the
+      progress bars. **Moved here from Phase 10** for the same reason:
+      `prefers-reduced-motion` is an App Review-adjacent accessibility
+      expectation, not a nicety. **S**
+- [ ] **PWA installability** (manifest, icons, standalone display).
+      **Moved here from Phase 10** — it shares the icon work above and
+      the same "someone outside the household installs this" trigger. **S**
+- [ ] **A cold-start pass on a device that has never run the app.**
+      Every walk and every gate this repo has ever run started from a
+      populated account. Nobody has watched a genuinely empty install
+      reach its first logged row on a phone — the onboarding cards, the
+      no-baselines door, and the first connect all exist and are tested,
+      but only against fixtures we seeded (recurring failure 3 and 11,
+      together). One walk, one new account, no shortcuts. **S**
+
+**Deliberately NOT in this phase:** Apple Health, Concept2 Logbook sync,
+the parametric generator, multi-rower switching. They are features with
+their own triggers; bundling them here would turn a release gate into an
+open-ended wish list and guarantee the phase never closes.
+
+**Exit:** a build passes App Review's mechanical checks with no
+placeholder artwork, a real sign-in path for a rower with no Google
+account, a truthful privacy declaration, and an empty-phone install that
+reaches a logged row without a hand from us.
 
 ## Phase CL — Cleanup
 
@@ -2763,15 +2846,12 @@ next phase. One line per round, newest first.
 
 ## Triggered follow-ons (not scheduled — each has an explicit trigger)
 
-- **App icon redraw**: replace the current AI-generated icon with a clean
-  SVG — the arc reads "ERGOMATIO" instead of "Ergomatic," the monitor
-  label is unreadable, and the machine carries a third-party brand
-  wordmark that needs to come off; also drop the baked-in rounded corners
-  and drop shadow, which double up with iOS's own icon mask. **Gated
-  before any EXTERNAL TestFlight distribution or App Store submission**
-  (App Review would reject the current artwork); internal-tester
-  TestFlight is exempt and can keep shipping with the placeholder in the
-  meantime.
+- **App icon redraw** — **MOVED to Phase PROD** (James, 2026-08-20),
+  where the corrected description lives. Correction worth keeping here so
+  it does not come back: the arc is NOT misspelled. It reads ERGOMATIC;
+  the rabbit's ear covers the final C. This entry asserted "ERGOMATIO"
+  for weeks and it was repeated into a phase plan before James corrected
+  it — nobody had opened the PNG. Verify artwork by looking at it.
 - **Apple sign-in**: required the moment a build goes to EXTERNAL TestFlight or the App Store (guideline 4.8; internal TestFlight is exempt). Works with the existing openid-client stack (ES256 client secret, form_post callback, name/email on first auth only); design the allowlist story for private-relay emails first.
 - **Apple Health (HealthKit)**: when workout data should flow to Health — write rowing workouts (distance/duration/energy) from the iOS shell; needs entitlements + privacy strings; plugin choice re-verified at build time.
 - **Concept2 Logbook sync**: post-workout cloud import; only compelling if ErgData-during-row becomes a habit.
