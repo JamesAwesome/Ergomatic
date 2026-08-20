@@ -1321,3 +1321,1027 @@ F-6); `.claude/agents/pm-ledger.md` (phase-open gate, 2026-08-20);
 **Not consulted, and it should be said:** no blog posts or StackOverflow
 answers are cited anywhere in this document. One Apple Developer Forums
 thread is cited once, in §3 Q4, and is labelled SECONDARY there.
+
+---
+
+# DELTA — 2026-08-20, later the same day: James answered the open question
+
+**Status: still a document, not a decision.** This section EXTENDS the pass
+above; nothing above it is rewritten or withdrawn except where a heading
+below says so in those words.
+
+## Why there is a delta
+
+The pass above ended with one input that would flip its recommendation:
+"whether the app should keep logging while backgrounded or terminated…
+**This is the question to put to James**, because it is the one input that
+changes the answer." He answered:
+
+> **BACKGROUNDED YES. TERMINATED NO.**
+>
+> "backgrounded could happen by accident if a person gets an urgent text or
+> a call and they answer mid-row."
+
+That answer is narrower and more useful than the question was. It is not a
+request for background workouts. It is: **do not lose a rower's row to an
+interruption they did not choose.** The screen stays lit for the whole row
+(`keep-awake`, §D5), so the app is foregrounded in the normal case. This
+work exists for the exception.
+
+Two consequences for scope, before anything else:
+
+- **State restoration leaves scope, mostly.** Restoration exists to let the
+  system relaunch a TERMINATED app; TERMINATED is out. One caveat that is
+  not a quibble and is developed in §D2c: the archived guide's termination
+  case is _the system killing a backgrounded app to reclaim memory_, which
+  is exactly what a long phone call can produce. "Terminated: no" disposes
+  of the user's force-quit; it does not dispose of memory pressure.
+- **A live background-execution question enters scope**, and it turns out
+  to have an answer nobody in this project had checked.
+
+## D0. The short version
+
+**Declaring `bluetooth-central` would keep the LINK up and keep frames
+arriving at our NATIVE layer. On the evidence I can read, it would not keep
+our JavaScript running — and every line of the pipeline that turns frames
+into a row is JavaScript.** "The link stays up" and "we keep logging the
+row" are, as the brief suspected, different claims, and a background mode
+buys only the first.
+
+The mechanism is not Apple's app lifecycle at all. It is WebKit's own
+process throttler, which suspends the WebContent process when the view stops
+being visible, on a rule that never consults `UIBackgroundModes` (§D1).
+There is exactly one source-visible escape hatch and it hinges on a
+RunningBoard attribute I cannot read from any document (§D1c) — so the final
+answer is **could not be established by reading, and the probe that settles
+it is one build and one tap** (§D1e).
+
+The recommendation is **correct resume, not a background mode** (§D8), and
+**BUY does not reopen** (§D7) — but for a different reason than the pass
+above gives, and the pass above's stated flip condition is therefore
+_narrowed rather than triggered_.
+
+---
+
+## D1. Does our JavaScript keep running when the app is backgrounded?
+
+This is the question the brief asked to have settled first, and it deserves
+its own chain of custody. Nothing here comes from a summarising fetch: every
+WebKit quotation below was `curl`ed as raw source from
+`raw.githubusercontent.com/WebKit/WebKit/main/...` this session and grepped
+locally. Line numbers are that tree's, today.
+
+### D1a. What our pipeline actually is, so the stakes are clear
+
+Everything above the transport is JavaScript in the WKWebView:
+`src/monitor/driver.ts` (the register-map accumulator, boundary detection,
+terminal-state machine), `src/monitor/seriesRecorder.ts` (the 1 Hz
+recorder), `src/monitor/useMonitorSession.ts` (the flushes and the run
+record). The native side ends at the plugin. PRIMARY, read this session.
+
+The one thing that is genuinely good news, and it is load-bearing later:
+**that pipeline is almost entirely free of the wall clock.** `driver.ts`'s
+own header states the policy — "never `Date.now()`/`setTimeout`" — and the
+file holds exactly ONE clock read (`driver.ts:860`, `options.now`, feeding
+three predicates) and ONE timer (`driver.ts:867`, `options.schedule`, one
+deadline). `seriesRecorder.ts` reads no clock at all: its header says the
+work clock is "0x0031's own `elapsedSeconds`/`distanceMeters`… **never the
+wall clock**". PRIMARY, both read this session.
+
+### D1b. The chain, read from WebKit's own source
+
+**Step 1 — backgrounding tells WebKit the view is not visible.** PRIMARY,
+`Source/WebKit/UIProcess/ios/WKApplicationStateTrackingView.mm`:
+
+```objc
+- (void)_applicationDidEnterBackground
+{
+    RefPtr page = [_webViewToTrack.get() _page].get();
+    if (!page) return;
+    page->applicationDidEnterBackground();
+    page->activityStateDidChange(WebCore::allActivityStates() - WebCore::ActivityState::IsInWindow);
+}
+```
+
+and `Source/WebKit/UIProcess/ios/PageClientImplIOS.mm:225-238`:
+
+```cpp
+bool PageClientImpl::isViewVisibleOrOccluded() { return isActiveViewVisible(); }
+bool PageClientImpl::isVisuallyIdle()          { return !isActiveViewVisible(); }
+```
+
+whose `isActiveViewVisible()` returns false once `[webView _isBackground]`
+is true (`:163-175`), and `_isBackground` is the app-state tracker's
+`isInBackground` (`WKApplicationStateTrackingView.mm:141`).
+
+**Step 2 — losing visibility drops the only activity our page holds.**
+PRIMARY, `Source/WebKit/UIProcess/WebPageProxy.cpp:3762-3827`,
+`WebPageProxy::updateThrottleState()`. The complete set of things that take
+a process activity there is three:
+
+```cpp
+    if (isViewVisible()) { … takeVisibleActivity(); }
+    else if (hasValidVisibleActivity()) { … dropVisibleActivity(); }
+
+    bool isAudible = internals().activityState.contains(ActivityState::IsAudible);
+    …            takeAudibleActivity();
+    bool isCapturingMedia = internals().activityState.contains(ActivityState::IsCapturingMedia);
+    …            takeCapturingActivity();
+```
+
+**Visible, audible, capturing. That is the whole list.** A running
+`setInterval`, a pending Promise, an open BLE subscription and an
+in-progress workout are not on it, and there is nothing to put them there.
+
+**Step 3 — no activities means the process is suspended.** PRIMARY,
+`Source/WebKit/UIProcess/ProcessThrottler.cpp:243-250`:
+
+```cpp
+ProcessThrottleState ProcessThrottler::expectedThrottleState()
+{
+    if (!m_foregroundActivities.isEmptyIgnoringNullReferences()) return ProcessThrottleState::Foreground;
+    if (!m_backgroundActivities.isEmptyIgnoringNullReferences()) return ProcessThrottleState::Background;
+    return ProcessThrottleState::Suspended;
+}
+```
+
+The transition is a handshake, not a timer: `updateThrottleStateIfNeeded`
+(`:355-386`) sends `PrepareToSuspend` and moves the process to the
+`Background` assertion, and when the web process replies
+`processReadyToSuspend` (`:422-431`) the state goes to `Suspended`. The
+20-second constant (`:49`, `static constexpr Seconds
+processSuspensionTimeout { 20_s }`) is only the safety net for a web process
+that never replies — **it is not a grace period you can count on.** The web
+process's own side of the handshake (`WebProcess::prepareToSuspend`,
+`Source/WebKit/WebProcess/WebProcess.cpp:1786-1837`) sets
+`m_processIsSuspended = true`, calls `releaseMemory`, `freezeAllLayerTrees`,
+`destroyRenderingResources` and `markAllLayersVolatile`, then reports ready.
+
+**Step 4 — even before suspension, timers are throttled to 1 Hz.** PRIMARY,
+`Source/WebCore/page/Page.cpp:3109-3127` and `:3157-3172`: a page that is
+`IsVisuallyIdle` enters `TimerThrottlingState::Enabled`, whose alignment
+interval is `DOMTimer::hiddenPageAlignmentInterval()`. PRIMARY,
+`Source/WebCore/page/DOMTimer.h:56`:
+
+```cpp
+    static constexpr Seconds hiddenPageAlignmentInterval() { return 1_s; }
+```
+
+and the setting that gates it defaults ON for us. PRIMARY,
+`Source/WTF/Scripts/Preferences/UnifiedWebPreferences.yaml:3965-3978`:
+
+```yaml
+HiddenPageDOMTimerThrottlingEnabled:
+  defaultValue:
+    WebKit:
+      "PLATFORM(COCOA) || PLATFORM(GTK)": true
+```
+
+**Nothing in any of the four steps reads `UIBackgroundModes`, a background
+task assertion, or anything else about why the host app is still alive.**
+That is the finding. WebKit suspends the WebContent process because the view
+stopped being visible, and a background mode does not make a view visible.
+
+### D1c. The one link I could not close — and it is the whole answer
+
+There is exactly one place in `WebPageProxy` where an `evaluateJavaScript`
+call takes a process activity of its own, and every BLE notification we
+receive travels through it (§D4a). PRIMARY,
+`Source/WebKit/UIProcess/WebPageProxy.cpp:7580-7586`:
+
+```cpp
+    RefPtr<ProcessThrottler::Activity> activity;
+#if USE(RUNNINGBOARD)
+    if (RefPtr pageClient = this->pageClient(); pageClient && pageClient->canTakeForegroundAssertions())
+        activity = protect(processContainingFrame(frameID)->throttler())->foregroundActivity("WebPageProxy::runJavaScriptInFrameInScriptWorld"_s);
+#endif
+```
+
+If that activity is taken, the WebContent process is held runnable for the
+duration of the call — which, at one call per notification and a documented
+100 ms notification cadence, would mean **our JavaScript keeps running while
+backgrounded.** If it is not taken, the message is queued to a suspended
+process and nothing runs.
+
+The guard decides it. PRIMARY,
+`Source/WebKit/UIProcess/ios/PageClientImplIOS.mm:208-220`, complete:
+
+```cpp
+bool PageClientImpl::canTakeForegroundAssertions()
+{
+    if (EndowmentStateTracker::singleton().isVisible()) {
+        // If the application is visible according to the UIKit visibility endowment then we can take
+        // foreground assertions. …
+        return true;
+    }
+
+    // If there is no run time limitation, then it means that the process is allowed to run for an extended
+    // period of time in the background (e.g. a daemon) and we let such processes take foreground assertions.
+    return [RBSProcessHandle currentProcess].activeLimitations.runTime == RBSProcessTimeLimitationNone;
+}
+```
+
+A backgrounded app is not visible, so the answer reduces to: **does a
+process running under the `bluetooth-central` background mode have
+`RBSProcessTimeLimitationNone`?**
+
+**I could not establish this.** In those words. `RBSProcessHandle` and
+`RBSProcessTimeLimitation` are private RunningBoard SPI; Apple publishes no
+reference for them, and Apple publishes no mapping from a `UIBackgroundModes`
+value to a runtime limitation. What Apple does say points AWAY from
+`None` — the archived Core Bluetooth guide's own rule for background-mode
+apps is "**Upon being woken up, an app has around 10 seconds to complete a
+task**" (quoted in full in §D3), which is the description of a finite
+limitation, not of none. But an inference from prose to a private
+enumeration is not evidence, and I am tagging it as what it is.
+
+**INFERENCE, and the honest reading of the whole chain:** JavaScript almost
+certainly stops. Steps 1-4 are unconditional and documented in source; the
+escape hatch requires a RunningBoard grant that Apple's own "around 10
+seconds" guidance argues against. But this is precisely the class of claim
+this repo has been burned by three times — a flag that could not work, a
+bundle probe that was a false green, an operator instruction that was
+impossible — and all three were caught by producing the artifact, never by
+reading. So: **not established by reading. §D1e is the probe.**
+
+### D1d. Two corroborations, and what each is worth
+
+Neither settles §D1c's private-SPI question, and I am not going to pretend
+they do. Both point the same way as the source chain.
+
+**(i) Apple staff, on this exact question.** Labelled **SECONDARY** to stay
+consistent with §3 Q4's treatment of Apple Developer Forums, but noting the
+badge: the reply carries Apple's "Frameworks Engineer" staff badge.
+https://developer.apple.com/forums/thread/64150, on a question titled
+"WKWebView javascript execution when app is backgrounded":
+
+> "This is by design, for the same reasons \*any\* app that is suspended no
+> longer gets to execute code.
+>
+> This might've been relaxed a little bit in iOS releases since you posed
+> the question, but only for a few seconds."
+
+A second Apple-staff thread, same label, is worth having beside it because
+it names the mechanism our case would depend on and denies the guarantee —
+https://developer.apple.com/forums/thread/764096, DTS Engineer, on whether
+the `audio` background mode guarantees non-suspension:
+
+> "Strictly speaking, no. The "audio" background category allows your app
+> to remain awake while your audio session is active, which isn't quite the
+> same as guaranteeing it will not be suspended."
+
+**(ii) Ionic built a whole second JavaScript runtime because of this.**
+PRIMARY, `@capacitor/background-runner`'s own README (the text that renders
+at capacitorjs.com/docs/apis/background-runner), section "About Background
+Runner":
+
+> "The challenge with standard Capacitor applications is that **the webview
+> is not available when these background events occur**, requiring you to
+> write native code to handle these events. This is where the Background
+> Runner plugin comes in."
+
+and its opening line:
+
+> "Background Runner provides an event-based standalone JavaScript
+> environment for executing your Javascript code **outside of the web
+> view**."
+
+PRIMARY, its iOS implementation
+(`packages/capacitor-plugin/ios/Sources/RunnerEngine/Context.swift`) imports
+`JavaScriptCore` and builds a `JSContext` — a separate interpreter, not the
+WebView's. And PRIMARY, its own "Runner Lifetimes" section rules it out for
+us on its own terms:
+
+> "runners are not long lived. **State is not maintained between calls to
+> events in the runner.** Each call to `dispatchEvent()` creates a new
+> context in which your runner code is loaded and executed, and once
+> `resolve()` or `reject()` is called, the context is destroyed."
+
+A stateless, short-lived context that cannot see the DOM cannot host
+`driver.ts`'s register-map accumulator. **Background Runner is not a
+candidate for this work**, and it is worth saying so explicitly because it
+is the first thing anyone searching "Capacitor background" will find.
+
+Capacitor's own maintainer says the flat version, SECONDARY (an issue
+comment on Ionic's tracker, jcesarmobile,
+ionic-team/capacitor#3340, 2021-05-24): "**Sadly the WKWebView pauses all
+the javascript execution once the app enters into background.** The
+background task plugin was for extending the time some code could be
+executed after the app goes into background, but only works with native code
+(plugins), not with javascript."
+
+### D1e. The probe that settles it — and it needs no native code
+
+**One TestFlight build, one tap, ninety seconds.** Have the connected
+surface append `{seq, Date.now()}` to a capped array in `localStorage` on
+every 0x0031 frame (or reuse the existing diagnostics ring, adding a wall
+clock to it for this build only — see §D9 item 4, the ring has none today).
+Row, background the app for ~60 s, return, read the record.
+
+- Stamps spanning the background window → JS ran. `canTakeForegroundAssertions()`
+  returned true, and §D1c's escape hatch is real for us.
+- A hole with a matching gap → JS was frozen. Everything in §D1b applies.
+- **A hole AND the app on its home screen with an empty session** → the
+  WebContent process was killed and Capacitor reloaded the page (§D2c).
+
+Run it twice: once with `bluetooth-central` declared and once without. The
+delta between those two runs is the entire value of the background mode, and
+it is currently unmeasured. **Do not write a spec that assumes either
+answer.**
+
+---
+
+## D2. If JavaScript does not survive, what would?
+
+The brief asks for the alternatives named honestly: native-side buffering, a
+bridge queue that drains on resume, timestamped catch-up, or nothing. Taking
+them in order of how much they already exist.
+
+### D2a. A bridge queue that drains on resume — this one may already exist, unbuilt and unbounded
+
+The path a PM5 notification takes, PRIMARY, all read this session:
+
+1. `Device.swift:230` — CoreBluetooth's `didUpdateValueFor` fires in the
+   plugin's native arm.
+2. `Plugin.swift:553-555` —
+   `self.notifyListeners("notification|<device>|<service>|<char>", data: ["value": value])`.
+3. `@capacitor/ios`'s `CAPPlugin.m:82-103` — `notifyListeners` looks up the
+   registered listeners. **With no listener registered and
+   `retainUntilConsumed:NO` (the default the plugin uses), the payload is
+   dropped on the floor.** With one registered — our case — it calls
+   `call.successHandler`.
+4. `CapacitorBridge.swift:578-596` — `toJs` does
+   `DispatchQueue.main.async { self.webView?.evaluateJavaScript("window.Capacitor.fromNative({…})") }`.
+
+So **there is no native buffer of our own anywhere on this path.** The only
+queue is WebKit's IPC send queue, and it is the same queue §D1c described:
+each `evaluateJavaScript` becomes a `RunJavaScriptInFrameInScriptWorld`
+message. PRIMARY,
+`Source/WebKit/Platform/IPC/Connection.cpp:643-679`: outgoing messages append
+to `m_outgoingMessages` without a cap; there is a
+`largeOutgoingMessageQueueCountThreshold` but its only effect is a
+`RELEASE_LOG_ERROR` ("Too many messages (%zu) in the queue…") and a client
+callback — **not a drop and not a bound.** PRIMARY,
+`Source/WebKit/Platform/IPC/cocoa/ConnectionCocoa.mm:231-247`: a mach send
+that times out stashes the message in `m_pendingOutgoingMachMessage` for
+later rather than discarding it.
+
+**INFERENCE, and it is the operative one:** if the app is alive in the
+background (it must be, or step 2 never runs), the frames pile up in the
+UI process's memory as un-sent IPC and, on return to foreground, drain into
+JavaScript in order. That is a drained backlog, arriving for free, with
+nobody having designed it.
+
+**What I could not establish, in those words:** whether that backlog
+actually survives a multi-minute background window in practice, or whether
+memory pressure collects it first (§D2c). It is unbounded by construction,
+which is not the same as reliable — an unbounded queue under memory pressure
+is a jetsam candidate, not a guarantee. **This is measured by the same probe
+as §D1e**, by counting frames rather than reading stamps.
+
+### D2b. Apple documents a system-level queue too — and it applies to us TODAY
+
+This one surprised me and it is the single most useful new fact in the
+delta. PRIMARY, the archived Core Bluetooth Programming Guide,
+"Performing Tasks While Your App Is in the Background", on **foreground-only
+apps** — which is exactly what Ergomatic is right now:
+
+> "All Bluetooth-related events that occur while a foreground-only app is in
+> the suspended state are **queued by the system and delivered to the app
+> only when it resumes to the foreground.**"
+
+and, from the same page:
+
+> "imagine that you are interacting with the data on a peripheral that
+> you're currently connected to. Now imagine that your app moves to the
+> suspended state… **If the connection to the peripheral is lost while your
+> app is suspended, you won't be aware that any disconnection occurred until
+> your app resumes to the foreground.**"
+
+Read together with §D2a, that is a two-stage queue — the system's, then
+WebKit's — and both are already in place with zero code written.
+
+**Two things it does NOT say, and both matter.** It states no depth, no
+duration and no eviction policy for that queue: **whether iOS holds 1,800
+notification events across a three-minute call could not be established.**
+And it explicitly warns that the disconnect itself is only learned on
+resume — so a link that dropped during the call is not detectable until the
+rower comes back, no matter what we build.
+
+### D2c. The failure mode that beats every queue: the WebContent process gets killed
+
+PRIMARY, `@capacitor/ios`'s `WebViewDelegationHandler.swift:158-162`,
+complete:
+
+```swift
+open func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+    CAPLog.print("⚡️  WebView process terminated")
+    bridge?.reset()
+    webView.reload()
+}
+```
+
+**Capacitor's response to a killed WebContent process is to reload the
+page.** Every piece of in-memory JavaScript state — the driver, the
+accumulator, the series recorder, the live `MonitorRun` reference, the BLE
+subscriptions — is destroyed, and the app restarts at the SPA's entry. A
+suspended WebContent process holding an unbounded backlog is precisely the
+kind of process iOS reclaims first.
+
+What survives is what was already written down: `ergomatic.monitorRun` in
+`localStorage`. And its cadence is the problem. PRIMARY,
+`useMonitorSession.ts:327-336` and `:899-930`: the series flush is
+**a 30-second repeating `setInterval`**, plus a flush at each interval
+boundary and one at close. A `setInterval` is a DOM timer — throttled to 1 s
+alignment while hidden and frozen entirely once the process suspends
+(§D1b step 4). **So the last flush before a kill is up to 30 seconds stale,
+and after backgrounding no further flush will ever run.**
+
+This is where I must contradict my own brief, gently and on the record. The
+brief says James's "TERMINATED NO" removes state restoration from scope
+because restoration exists to relaunch a terminated app. That is right about
+restoration. It is not right that termination is out: Apple's own framing of
+termination in this context is **the system killing a backgrounded app to
+free memory**, not the user force-quitting —
+
+> "**At some point, the system may need to terminate your app to free up
+> memory for the current foreground app**—causing any active or pending
+> connections to be lost, for instance."
+
+and the WebContent-process kill above is a strictly smaller, strictly more
+likely version of the same event that Capacitor already handles by throwing
+our state away. **"Terminated: no" disposes of the force-quit. It does not
+dispose of memory pressure, and memory pressure is what a three-minute call
+on a busy phone produces.**
+
+### D2d. Could our pipeline consume a late backlog? Mostly yes — with three named exceptions
+
+The brief asks this directly, on the grounds that PM5 frames carry their own
+elapsed and distance. The answer is better than I expected and it has a
+sharp edge.
+
+**Yes, for the series.** `seriesRecorder.ts` reads no clock: its work clock
+is `baseSeconds + elapsed` from the wire, its decimation buckets are whole
+work-seconds, and its own header says "never the wall clock". A backlog that
+drains **complete and in order** produces byte-identical samples to a live
+stream. PRIMARY.
+
+**Yes, for the driver's core.** `driver.ts` is frame-driven; its programming
+budgets are counted in general-status TICKS, never milliseconds
+(`driver.ts:148-159`). PRIMARY.
+
+**The three exceptions, each read this session:**
+
+1. `STRUCTURE_MISMATCH_WINDOW_MS = 2000` (`driver.ts:735`, read at `:3598`)
+   — a programming-verify window. Not crossed mid-row. Harmless.
+2. `activeRun.finishGraceUntil = now() + FINISH_GRACE_MS` (`driver.ts:2328`,
+   tested at `:3125`) — set on a terminal frame. If the terminal arrives in
+   the backlog, the grace is stamped at drain time and behaves; if it was
+   stamped BEFORE the gap, it is long expired by the time the backlog
+   drains, and the HRM re-fire the grace exists to absorb would be judged
+   out of window. Narrow, real, and worth a test.
+3. The summary-fallback deadline (`driver.ts:867`'s `schedule`, the file's
+   only timer) — a DOM timer, therefore frozen while suspended and fired
+   late. Same shape as #2.
+
+**And the sharp edge, which is a WRONG-NUMBER risk and belongs in any spec:**
+the "complete and in order" qualifier is doing all the work. If frames are
+**dropped** rather than queued, `seriesRecorder`'s boundary fold breaks
+silently. PRIMARY, `seriesRecorder.ts:247-262`: the fold adds
+`lastReading.elapsedSeconds`/`.distanceMeters` — the last frame seen BEFORE
+the gap — and it only folds at all if `isGenuineBoundary(lastReading.elapsedSeconds, distance)`
+holds, which requires the post-reset distance to be under
+`MAX_BOUNDARY_RESET_METERS = 3.0`. So a gap that spans an interval boundary
+gives two bad outcomes and no good one:
+
+- **Gate accepts** (the rower is barely into the new interval on return):
+  the fold banks the stale pre-gap reading, so `baseSeconds`/`baseMeters`
+  under-count the missed tail of the completed interval — for the rest of
+  the piece.
+- **Gate rejects** (the rower has covered more than 3 m): nothing folds at
+  all, the work clock drops below its high-water mark, and the recorder's
+  own first-bucket-wins guard (`:271-274`) drops every sample until the
+  clock climbs back past it — then resumes, permanently understated.
+
+The recorder's own comment already anticipates the benign half of this ("a
+reconnect, a stale gap… can only ever produce a MISSING bucket, never a
+repeated one") — it is right that nothing duplicates, and that is not the
+same as nothing being wrong. **A silent under-count of time and distance is
+exactly the class recurring-failure 11 is about.** Whichever option this
+phase takes, the recorder has to be TOLD about a gap rather than left to
+infer it from a stream that lies to it by omission.
+
+### D2e. Native-side buffering and timestamped catch-up, costed
+
+**Native-side buffering** — a fork or patch of the plugin that accumulates
+`didUpdateValueFor` payloads in a Swift array while `UIApplication.shared
+.applicationState != .active`, and drains them into
+`notifyListeners` on `willEnterForeground`. Twenty lines of Swift in a
+plugin we would then own. It converts §D2a's implicit, unbounded IPC queue
+into an explicit, bounded, inspectable one, and it fixes nothing else. **It
+only helps if the app process is alive to run it** — which requires the
+background mode. So it is not an alternative to a background mode; it is a
+second purchase on top of one.
+
+**Timestamped catch-up** — stamping each frame natively so JS can
+reconstruct real time on drain. Cheap to add, and it would answer #2 and #3
+above. But note what the PM5 already gives us for free: each 0x0031 frame
+carries its own per-interval elapsed and distance, so **the row is
+reconstructable from the frames themselves without any stamp**; a stamp
+would only serve the app's own wall-clock predicates. Worth ~10 lines
+whenever a native fork happens for another reason. Not worth a fork on its
+own.
+
+**Nothing** — see §D6, which is the recommendation.
+
+---
+
+## D3. What `bluetooth-central` actually grants, and what it costs
+
+Every quote in this section is PRIMARY from Apple, fetched this session; the
+archived guide is still served as real HTML at the URL in the appendix and
+was grepped locally rather than summarised.
+
+### D3a. It is a wake-on-event grant, not a keep-running grant
+
+Apple's current per-value wording no longer lives on the `UIBackgroundModes`
+page at all — that page's `possibleValues` entries carry empty `content`
+arrays — and has moved to the Xcode configuration page. PRIMARY,
+developer.apple.com/documentation/xcode/configuring-background-execution-modes,
+the table row, verbatim:
+
+> "Uses Bluetooth LE accessories — `bluetooth-central` — The app
+> communicates with a Bluetooth accessory while in the background."
+
+and the same page's Overview, which is the framing that matters:
+
+> "Typically, an app is in a suspended state when it's in the background.
+> However, there are a limited number of background execution modes your app
+> can support that enable it to run when in the background… For apps that
+> adopt one or more of these modes, **the system launches or resumes the
+> app, in the background, and affords it time to process any related
+> events.**"
+
+The archived Core Bluetooth guide is more specific about what we would get:
+
+> "When an app that implements the central role includes the
+> UIBackgroundModes key with the bluetooth-central value in its Info.plist
+> file, the Core Bluetooth framework allows your app to run in the
+> background to perform certain Bluetooth-related tasks. **While your app is
+> in the background you can still discover and connect to peripherals, and
+> explore and interact with peripheral data.** In addition, the system wakes
+> up your app when any of the CBCentralManagerDelegate or CBPeripheralDelegate
+> delegate methods are invoked…"
+
+and it bounds the wake explicitly, in the section titled "Use Background
+Execution Modes Wisely":
+
+> "Apps woken up for any Bluetooth-related events should process them and
+> return as quickly as possible so that the app can be suspended again."
+>
+> "- Apps should be **session based and provide an interface that allows the
+> user to decide when to start and stop the delivery of Bluetooth-related
+> events.**
+>
+> - **Upon being woken up, an app has around 10 seconds to complete a task.**
+>   Ideally, it should complete the task as fast as possible and allow itself
+>   to be suspended again. Apps that spend too much time executing in the
+>   background can be throttled back by the system or killed."
+
+**So the shape of what we would buy is: the link stays up, `didUpdateValueFor`
+keeps firing into Swift, and the app is woken in ~10-second slices to handle
+it.** That is a coherent picture for a native app that writes each sample to
+a database in a few milliseconds. It is not a picture in which a React
+render tree keeps ticking, which is the §D1 finding restated from Apple's
+side.
+
+For completeness, the general-purpose statement, PRIMARY,
+developer.apple.com/documentation/uikit/preparing-your-ui-to-run-in-the-background:
+
+> "When your app is in the background, it should do as little as possible,
+> and preferably nothing."
+>
+> "Apps don't normally receive any extra execution time after they enter the
+> background. However, UIKit does grant execution time to apps that support
+> any of the following time-sensitive capabilities: … **Communication with
+> Bluetooth LE accessories**, or conversion of the device into a Bluetooth LE
+> accessory. …"
+
+### D3b. What it costs on the scan side — and one fact that bites us specifically
+
+PRIMARY, `scanForPeripherals(withServices:options:)`, Discussion:
+
+> "Your app can scan for Bluetooth devices in the background by specifying
+> the `bluetooth-central` background mode. To do this, **your app must
+> explicitly scan for one or more services by specifying them in the
+> `serviceUUIDs` parameter.** The CBCentralManager scan option has no effect
+> while scanning in the background."
+
+and the archived guide:
+
+> "- The CBCentralManagerScanOptionAllowDuplicatesKey scan option key is
+> ignored, and multiple discoveries of an advertising peripheral are
+> coalesced into a single discovery event.
+>
+> - If all apps that are scanning for peripherals are in the background, the
+>   interval at which your central device scans for advertising packets
+>   increases. As a result, it may take longer to discover an advertising
+>   peripheral."
+
+**And our scan cannot satisfy that requirement as written.** PRIMARY,
+`app/src/monitor/transports/capacitorBle.ts:330-338` — the call passes **no
+`services` key at all**, only `namePrefix: "PM5"`, with a comment giving the
+reason: "0x0030 is not advertised and the plugin ANDs `services` with
+`namePrefix` at CoreBluetooth". Our own transport record says the same
+(`pm5-interface-notes.md:4360-4363`). A background scan MUST name services;
+ours names none, and the one service we care about is not advertised.
+Filtering on the device-information service (`0x180A`, which the PM5 does
+advertise — same note) would be legal but is a service nearly every BLE
+accessory publishes, so a background scan on it is close to unfiltered.
+
+Background scan is already OUT of this phase's scope. Recording it here so a
+later spec does not discover it at a gate.
+
+### D3c. A carve-out that did not exist when the earlier pass was written
+
+PRIMARY, developer.apple.com/documentation/corebluetooth, Overview,
+verbatim:
+
+> "In iOS 26 and later, your app can continue certain activities in the
+> background if the app starts a Live Activity before it goes to the
+> background. If your app has an instantiated `CBManager` and starts a Live
+> Activity, **it can use the same privileges while in the background that it
+> uses when it is in the foreground.** This means activities like scanning
+> without providing service UUID's and scanning with duplicates filter
+> disabled will be allowed while in the background."
+
+This is Apple's own, current, sanctioned mechanism for a session-style app
+to hold foreground-equivalent Bluetooth privileges while backgrounded, and
+it is tied to something the rower can SEE — a Live Activity on the Lock
+Screen — rather than to a silent assertion. It answers §D3b's scan
+restrictions completely.
+
+**It does not answer §D1.** A Live Activity restores _Bluetooth_ privileges;
+nothing in that paragraph or anywhere else says it changes WebKit's process
+throttling, and §D1b's chain does not consult it. Stating that plainly
+because it is exactly the kind of adjacent-sounding fact this repo has
+turned into a wrong assumption before.
+
+It is also a genuinely attractive PRODUCT idea for the very scenario James
+described — a rower on a phone call, glancing at the Lock Screen and seeing
+the row still counting. That is new scope, needs ActivityKit, needs iOS 26,
+and is not something this phase should absorb. Recorded for the roadmap, not
+proposed.
+
+### D3d. App Review's posture, which is milder than the brief supposes
+
+The brief says `bluetooth-central` is "a reviewed entitlement-adjacent
+declaration and apps have been rejected for declaring it without a
+qualifying use". **I could not establish that from Apple's own text**, and I
+am saying so rather than repeating it.
+
+PRIMARY, the App Store Review Guidelines
+(developer.apple.com/app-store/review/guidelines/, footer "Last Updated:
+June 8, 2026"). Guideline 2.5.4 **in full — this is the entire guideline**:
+
+> "2.5.4 Multitasking apps may only use background services for their
+> intended purposes: VoIP, audio playback, location, task completion, local
+> notifications, etc."
+
+**A case-insensitive grep of the entire guidelines page for "bluetooth"
+returns zero matches.** Bluetooth is not named anywhere in the App Store
+Review Guidelines. The nearest adjacent rule, PRIMARY, 2.4.2:
+
+> "Design your app to use power efficiently… Apps, including any third-party
+> advertisements displayed within them, may not run unrelated background
+> processes, such as cryptocurrency mining."
+
+**INFERENCE:** 2.5.4 restricts _use_, not _declaration_, and unlike
+guidelines 2.5.3 and 2.5.9 it carries no "will be rejected" clause. Its list
+ends in "etc.", so it reads as illustrative rather than exhaustive. An app
+that genuinely talks to a Bluetooth rowing monitor and declares
+`bluetooth-central` is using a background service for its intended purpose.
+**The review risk here is low and I would not let it drive the decision.**
+The rule's teeth are aimed at the misuse pattern — declaring `audio` and
+playing silence to stay alive — which is a thing we should not do for
+several reasons and which §D1d(i)'s second quote suggests would not reliably
+work inside a WKWebView anyway.
+
+---
+
+## D4. Does the incumbent plugin support any of this?
+
+**For the background mode: nothing needs to change in the plugin, and that
+is the point.** The declaration is an `Info.plist` key
+(`app/ios/App/App/Info.plist` has no `UIBackgroundModes` key today —
+verified, and re-verified this session). CoreBluetooth keeps delivering to
+`DeviceManager`/`Device` because those are `CBCentralManagerDelegate` /
+`CBPeripheralDelegate` implementations and the system wakes the app to call
+them. The plugin's own README says as much, SECONDARY (a third-party
+README): "If the app needs to use Bluetooth while it is in the background,
+you also have to add `bluetooth-central` to `UIBackgroundModes`." **It makes
+no claim about JavaScript continuing to run** — and neither does any other
+vendor document I found.
+
+**So the plugin is not the constraint. The WebView is.** That is a
+correction to the shape the brief anticipated: this is not a
+fork-or-patch question the way `EnableAutoReconnect` and the restore
+identifier were (§3 Q1b, §3 Q5). A fork buys nothing here unless we also
+want §D2e's native buffer, which only pays if §D1c's answer is "JS is
+frozen" AND we choose the background route anyway.
+
+**One thing the plugin does that a background design would have to reckon
+with**, PRIMARY, `@capacitor/ios`'s `CAPPlugin.m:82-94`: `notifyListeners`
+with `retainUntilConsumed:NO` — which is what `Plugin.swift:555` passes —
+**discards the payload entirely when no listener is registered.** After a
+WebContent-process reload (§D2c) the JS listeners are gone while the native
+`Device` is still subscribed, so frames arriving in that window are
+destroyed, not queued. That is a real hole and it exists today, background
+mode or not.
+
+---
+
+## D5. The keep-awake interaction
+
+`@capacitor-community/keep-awake@8.0.1` is installed and its iOS arm is
+three lines. PRIMARY,
+`node_modules/@capacitor-community/keep-awake/ios/Sources/KeepAwakePlugin/KeepAwakePlugin.swift:21-22`:
+
+```swift
+if !UIApplication.shared.isIdleTimerDisabled {
+    UIApplication.shared.isIdleTimerDisabled = true
+}
+```
+
+`isIdleTimerDisabled` suppresses the **auto-lock** timer. It has no bearing
+on backgrounding: a phone call, a tapped notification, or a swipe to another
+app backgrounds the app with the idle timer disabled exactly as without it.
+Our adapter already knows the wake lock is fragile across visibility
+changes — `src/adapters/keepAwake.ts:7` — and re-acquires on
+`visibilitychange`.
+
+**Does this change the cost/benefit? Yes, decisively, and in the direction
+of doing less.** Because the screen stays lit, the app is foregrounded for
+the entire normal row. The background window is not a mode the app operates
+in; it is an accident with a duration measured in the length of a text
+glance or a phone call. A background mode is a permanent architectural
+commitment — a reviewed `Info.plist` declaration, a scan path that must
+change (§D3b), a battery story, and (if §D1c goes the wrong way) a fork for
+native buffering — bought to serve a window the product is otherwise
+designed to never enter.
+
+**And here is the asymmetry that decides it.** If JS is frozen (the likely
+case), a background mode delivers _nothing at all_ for the interruption
+scenario: the link stays up, Swift keeps receiving, and the row still is not
+logged, because the thing that logs is asleep. If JS is not frozen, the
+interruption scenario is already handled without the mode for as long as the
+frames queue (§D2a/§D2b). **The background mode's value is bounded above by
+an answer we do not have, and is plausibly zero.** A correct resume path is
+valuable under BOTH answers.
+
+---
+
+## D6. The cheaper alternative, taken seriously: make the RESUME correct
+
+The brief asked for this compared on **what the rower ends up with**, not on
+elegance. So, the two columns, for the scenario James actually described —
+a two-minute phone call at minute 8 of a 20-minute piece.
+
+|                              | Background mode (`bluetooth-central`, JS frozen — the likely case)                      | Do nothing in the background; make resume correct                |
+| ---------------------------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| The link                     | Stays up.                                                                               | Stays up too, if iOS holds it — Apple documents no bound, §3 Q3. |
+| Frames during the call       | Delivered to Swift, then queued as IPC to a frozen WebView (§D2a).                      | Queued by the system, delivered on resume (§D2b).                |
+| The row's numbers on return  | Whatever drains, plus §D2d's silent under-count if anything was dropped.                | Same — identically.                                              |
+| If memory pressure hits      | WebContent killed → Capacitor reloads → session lost, up to 30 s of series lost (§D2c). | Identical. The mode does not protect the WebView.                |
+| What the rower is TOLD       | Nothing. No gap detection exists.                                                       | "You were away 2:04. The erg's own totals are what we kept."     |
+| What the rower must DO       | Unknown — no resume path exists either way.                                             | One tap, and the row continues.                                  |
+| New risk surface             | Info.plist declaration, scan path (§D3b), battery, possibly a plugin fork.              | None outside our own JS.                                         |
+| Cost if the premise is wrong | Total. Ships a capability that does not work and nobody notices until hardware.         | Small. A resume path is right under every answer to §D1c.        |
+
+**The two columns differ in exactly one row, and it is the row about talking
+to the rower.** That is the whole argument. Under James's framing — "don't
+lose the row to an accident" — the correct resume delivers most of the value
+because the _numbers_ were never the fragile part: the PM5 kept counting the
+whole time and republishes its current state (§5b above), so "start watching
+again" recovers where the machine IS. What is missing today is not data
+recovery. It is that the app has no idea it was ever away.
+
+**What "correct resume" concretely means here**, each anchored:
+
+1. **Know that it happened.** The app has exactly ONE lifecycle listener
+   today — `visibilitychange`, inside `src/adapters/keepAwake.ts:46`, for
+   the wake lock — and no `@capacitor/app` listener anywhere (grep, this
+   session). Capacitor's `App` plugin maps `resume` to
+   `UIApplication.willEnterForegroundNotification` on iOS (PRIMARY, its
+   README), which is the seam. Cost: a listener.
+2. **Measure the gap with something that has a clock.** The diagnostics ring
+   deliberately has none — `eventLog.ts:5-13`, "No wall clock: entries are
+   ordered by an internal monotonic `seq` counter" — but `MonitorRun.startedAt`
+   is an ISO timestamp (`monitorRun.ts:58`, `:391`), so wall-clock elapsed
+   is available and can be compared against the machine's own work clock on
+   the first frame back.
+3. **Tell the recorder, do not let it infer.** §D2d's fold corruption is the
+   sharp edge; a resume that hands `seriesRecorder` an explicit
+   "discontinuity here" is a small, testable change and it is the difference
+   between a gapped row and a wrong one.
+4. **Say it in the machine's vocabulary, not ours.** §5c above is binding
+   and unchanged: no surface may imply the gap is filled. The honest
+   sentence is about **watching** — "we stopped watching for 2:04; the erg
+   kept counting" — and the totals shown are the machine's.
+5. **Survive the reload case.** If §D2c fires, the app comes back on Today
+   with a `SESSION IN PROGRESS` card (`Today.tsx:1257-1266`) pointing at a
+   run whose series is up to 30 s stale and whose BLE session is gone. That
+   is a reachable, non-destructive path — nothing like deleting the app —
+   but nobody has ever walked it, and it should be walked before it is
+   trusted.
+
+**The honest cost of this option, stated rather than buried:** it does not
+make the app log a background row, and if James's real want turns out to be
+"my 20-minute piece survives a 10-minute interruption intact", this does not
+deliver it and no amount of resume polish will. His stated want is narrower
+than that, which is why this is the recommendation — but it is a product
+judgement resting on his sentence, not a technical proof, and he should be
+the one to confirm it.
+
+---
+
+## D7. Does BUY reopen? **No — and the pass above's flip condition is narrowed, not triggered**
+
+The pass above wrote: "**If the requirement were 'keep logging while the app
+is backgrounded or killed'**, this flips: that need is genuinely served by
+state restoration and `bluetooth-central`, the incumbent cannot express
+either, and a fork or a Cordova migration would be back on the table."
+
+That sentence was conditioned on a premise this delta has undermined.
+**"Backgrounded" is not served by `bluetooth-central` for an app whose
+logging lives in a WebView** — the mode keeps the app and the link alive, and
+WebKit suspends the WebView anyway on a rule that never looks at the mode
+(§D1b). The half of the flip condition that WAS live ("or killed") James has
+ruled out. So:
+
+- **`cordova-plugin-ble-central` does not become a candidate.** Its two
+  advantages are auto-reconnect (a pending `connect`, which we can reach
+  ourselves — §4e) and state restoration (which serves TERMINATED, which is
+  out). Neither helps a suspended WebView. The migration cost the pass
+  costed at §4c is unchanged and still dominant.
+- **A fork of the incumbent does not become necessary.** The background mode
+  needs no plugin change at all (§D4). The only fork worth anything here is
+  §D2e's native buffer, and it is contingent on an unmeasured answer and on
+  choosing the background route.
+- **`@capacitor/background-runner` is eliminated on its own documentation**
+  (§D1d(ii)): stateless, DOM-less, destroyed after each event. It cannot
+  host our accumulator.
+
+**BUY stays closed.** What the delta changes is not the buy/build answer but
+where the risk sits: it is no longer "which library reconnects best", it is
+"what does our own JavaScript do when the screen goes away", and no vendor
+sells that.
+
+---
+
+## D8. Recommendation
+
+**Do not declare `bluetooth-central`. Build the resume path. Measure §D1c
+before anyone writes a spec that depends on the answer.**
+
+In order:
+
+1. **Run the §D1e probe first.** One build, two runs (with and without the
+   Info.plist key), ninety seconds each. It is cheaper than the paragraph
+   arguing about it, and it converts the delta's largest INFERENCE into a
+   fact. **Nothing below depends on the outcome**, which is the point — but
+   the roadmap's next decision does.
+2. **Add the resume seam** — a `@capacitor/app` `resume`/`appStateChange`
+   listener and a gap computation from `MonitorRun.startedAt` against the
+   machine's work clock. Small, self-contained, valuable under every answer.
+3. **Tell `seriesRecorder` about discontinuities explicitly** (§D2d). This
+   is the only wrong-NUMBER item in the delta and it is therefore TRIAD work
+   under CLAUDE.md's rule: full antagonist pass on its spec, PM gate on its
+   PR.
+4. **Say what was missed, in the machine's vocabulary** (§D6 item 4, §5c
+   above). No wording may imply a gap was filled.
+5. **Walk the reload case** (§D2c/§D6 item 5) before trusting it. It is
+   reachable today and has never been exercised.
+6. **Leave `bluetooth-central` on the shelf with its price tag written
+   down**, so a future "background workouts" ask starts from §D3 rather than
+   from scratch. If that ask ever comes, the honest answer is not a
+   background mode — it is moving the accumulator out of the WebView, which
+   is a different and much larger project.
+
+This slots in behind the pass above's sequence (**diagnosability →
+detection → recovery**) rather than displacing it. Items 2-4 are recovery;
+item 1 is diagnosability by another name.
+
+---
+
+## D9. What I could not establish
+
+Each stated in those words, because each is a place a design could go wrong
+quietly.
+
+1. **Whether a `bluetooth-central` process has `RBSProcessTimeLimitationNone`,
+   and therefore whether `evaluateJavaScript` wakes the WebContent process
+   while backgrounded.** `RBSProcessHandle`/`RBSProcessTimeLimitation` are
+   private RunningBoard SPI with no published reference, and Apple publishes
+   no mapping from a background mode to a runtime limitation. **This is the
+   single fact the whole of §D1 turns on.** §D1e settles it.
+2. **How deep or how long iOS's own queue of Bluetooth events for a
+   suspended app runs.** Apple states the queue exists and states nothing
+   about its bounds (§D2b).
+3. **Whether WebKit's unbounded IPC send queue survives a multi-minute
+   background window in practice.** Unbounded in source (§D2a) is not the
+   same as reliable under memory pressure.
+4. **How long a gap actually was, from the app's own record.** The
+   diagnostics ring records `seq`, not time (`eventLog.ts:5-13`), by
+   deliberate design. Any gap measurement needs a second source; §D6 item 2
+   names one.
+5. **Whether apps have been rejected for declaring `bluetooth-central`
+   without a qualifying use.** Apple's guidelines never mention Bluetooth
+   (§D3d). The brief asserts this; I could not source it.
+6. **Whether the iOS 26 Live Activity carve-out affects WebKit's process
+   throttling.** Apple's paragraph is about Bluetooth privileges and says
+   nothing about the WebView; nothing in WebKit's throttler consults it.
+   Assume not until measured.
+
+## D10. What would have made me recommend differently
+
+- **If the §D1e probe showed JS running while backgrounded under
+  `bluetooth-central`**, the mode would be worth its price: the interruption
+  case would be genuinely solved, and §D2d's fold corruption would mostly
+  stop mattering because nothing would be missing. **This is the one result
+  that flips this delta, and it is one build away.**
+- **If James's want had been "a 20-minute piece survives a 10-minute
+  interruption"**, none of this delivers it, and the honest answer would be
+  to move the accumulator out of the WebView — a much larger project, and
+  the point at which `@capacitor/background-runner`'s stateless model or a
+  native rewrite would need real evaluation.
+- **If the app did not keep the screen awake**, backgrounding would be a
+  routine event rather than an accident, and the calculus in §D5 would
+  change entirely.
+- **If Capacitor recovered a killed WebContent process by restoring state
+  rather than reloading** (§D2c), the memory-pressure case would be much
+  less severe and the 30-second flush cadence would matter less.
+
+## Appendix — provenance for this delta
+
+**WebKit, fetched as raw source this session** from
+`raw.githubusercontent.com/WebKit/WebKit/main/…` and grepped locally
+(never summarised by a fetch tool):
+`Source/WebKit/UIProcess/ProcessThrottler.cpp`;
+`Source/WebKit/UIProcess/WebPageProxy.cpp`;
+`Source/WebKit/UIProcess/ios/WKApplicationStateTrackingView.mm`;
+`Source/WebKit/UIProcess/ios/PageClientImplIOS.mm`;
+`Source/WebKit/UIProcess/ios/WebPageProxyIOS.mm`;
+`Source/WebKit/UIProcess/Cocoa/ProcessAssertionCocoa.mm`;
+`Source/WebKit/WebProcess/WebProcess.cpp`;
+`Source/WebKit/Platform/IPC/Connection.cpp`;
+`Source/WebKit/Platform/IPC/cocoa/ConnectionCocoa.mm`;
+`Source/WebCore/page/Page.cpp`; `Source/WebCore/page/DOMTimer.{cpp,h}`;
+`Source/WTF/Scripts/Preferences/UnifiedWebPreferences.yaml`.
+**Caveat, stated:** this is WebKit trunk today, not the WebKit binary on any
+particular iOS release. The mechanism has been stable for years but the line
+numbers are trunk's.
+
+**Apple, fetched this session** via the documentation JSON endpoint, the
+`.md` rendering, or plain HTML:
+`documentation/xcode/configuring-background-execution-modes`;
+`documentation/bundleresources/information-property-list/uibackgroundmodes`;
+`documentation/corebluetooth` (Overview, incl. the iOS 26 Live Activity
+paragraph); `CBCentralManager.scanForPeripherals(withServices:options:)`;
+`CBCentralManagerOptionRestoreIdentifierKey`;
+`centralManager(_:willRestoreState:)`;
+`UIApplication.LaunchOptionsKey.bluetoothCentrals`;
+`UIApplication.beginBackgroundTask(withName:expirationHandler:)`;
+`UIApplication.backgroundTimeRemaining`;
+`documentation/uikit/preparing-your-ui-to-run-in-the-background`;
+the archived **Core Bluetooth Programming Guide**, chapter "Performing Tasks
+While Your App Is in the Background" (still served as real HTML, HTTP 200,
+47,625 bytes, footer "Updated: 2013-09-18"); the **App Store Review
+Guidelines** (plain HTML, footer "Last Updated: June 8, 2026"), §2.4.2 and
+§2.5.4.
+
+**Apple Developer Forums, labelled SECONDARY** (Apple-staff-badged replies):
+threads 64150 (Frameworks Engineer, WKWebView JS when backgrounded) and
+764096 (DTS Engineer, audio background mode and suspension).
+
+**Ionic / Capacitor, fetched this session:**
+`@capacitor/background-runner` README and its
+`ios/Sources/RunnerEngine/Context.swift`; the `@capacitor/app` README;
+ionic-team/capacitor issue 3340 (maintainer comment, SECONDARY).
+
+**Read from installed source this session:**
+`app/node_modules/@capacitor/ios/Capacitor/Capacitor/{CapacitorBridge.swift,
+CAPPlugin.m,WebViewDelegationHandler.swift}`;
+`app/node_modules/@capacitor-community/bluetooth-le/ios/Sources/BluetoothLe/{Plugin,Device}.swift`;
+`app/node_modules/@capacitor-community/keep-awake@8.0.1/ios/Sources/KeepAwakePlugin/KeepAwakePlugin.swift`;
+`app/src/monitor/{driver.ts,seriesRecorder.ts,useMonitorSession.ts,eventLog.ts,monitorRun.ts}`;
+`app/src/monitor/transports/capacitorBle.ts`;
+`app/src/adapters/keepAwake.ts`; `app/src/today/Today.tsx`;
+`app/ios/App/App/Info.plist`.
+
+**In-repo record cited:** `docs/monitor/pm5-interface-notes.md` (§21 items
+1/3/7, `:4360-4366`); `ROADMAP.md` § Phase LL; this document's own §3, §4,
+§5 and §8.
+
+**Not consulted:** no blog post is cited as evidence anywhere in this delta.
+Two forum threads are cited, both labelled SECONDARY at their point of use.
