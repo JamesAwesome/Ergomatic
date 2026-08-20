@@ -1741,3 +1741,70 @@ toolkit, not a history.
   `window.location.search` gate is a runtime value Rollup cannot fold (this repo's own
   recurring failure #12 records the converse), so +94 KB gz is a floor, re-measured
   independently at 158.18 KB gz baseline today.
+
+## Phase-exit pass, 2026-08-20 (Phase LT, the close-out walk + exit criteria)
+
+- **"The phone can be dumped over Safari Web Inspector before Log it."** False on
+  the build under test. `WKWebView.isInspectable` defaults false since iOS 16.4
+  (webkit.org/blog/13936, PRIMARY); Capacitor sets it from `isWebDebuggable`
+  (`CapacitorBridge.swift:458`), true only via config, `#if DEBUG`, or Info.plist
+  `CAPACITOR_DEBUG` (`CAPInstanceDescriptor.swift:137-147`) — and `debug.xcconfig`
+  is the `baseConfigurationReference` for the DEBUG configs only, while
+  `ios-release.sh` archives `-configuration Release`. The 2026-08-19 walk's own
+  Web Inspector dump worked because it was an Xcode DEBUG build. **Technique: a
+  debugging route proven on a dev build is a claim about the BUILD CONFIGURATION,
+  not the device. Follow the flag from the plist through the xcconfig to the
+  configuration the release script actually names.** Same class as
+  `VITE_ENABLE_FAKE_MONITOR`.
+- **"F-2: does the NATIVE transport sample TWD at all?"** Malformed. Total Work
+  Distance is bytes 11-13 of 0x0031 (`pm5-interface-notes.md:459`, C2 BLE doc
+  p.13; `parse.ts:135`) — the same characteristic every frame rides, so no
+  transport can deliver frames while omitting it. Decoding byte 8 + bytes 11-13
+  across the committed corpus settles what the observation actually meant: TWD is
+  ZERO for all 94 frames of walk-2026-08-17/step-4 and through every first work
+  interval, first going nonzero at a completed boundary (152/391 and 145/287 on
+  the two 2×250 captures, max 500). A 45 s single-interval piece can never produce
+  a nonzero machineTotal. **Technique: before booking hardware time for a "does
+  the device do X" question, find which characteristic carries X and replay the
+  corpus for it. A transport question and a machine-behaviour question look
+  identical in a ring entry.**
+- **"The same-frame DISTANCE photo goes at rest 1, because the REST screen shows
+  the session total and the END screen does not."** The phone half does not exist
+  at rest 1: the DISTANCE hero is Σ over IntervalActual (`summaryModel.ts:577-583`)
+  and renders only after Log it; the live pane's counter is the register-map
+  accumulator (`PaneLive.tsx:150-155`), a different derivation already
+  hardware-checked 2026-08-18. **Technique: for a same-frame oracle, check BOTH
+  sides exist in the same instant — name the render site and the moment it mounts,
+  not just the number.**
+- **"Item E re-observes F-1."** F-1's two surviving theories are
+  interruption-specific ("a fourth actual written by something only the real
+  browser does at reload"), and item E is a normal completion. The TIME-hero
+  formula IS shared (`measuredSessionSeconds` is a literal alias of
+  `interruptedTotalSeconds`, `monitorRun.ts:665`) — so the walk exercises the
+  formula but cannot exercise the theory. **Technique: an open finding's
+  re-observation must reproduce its MEDIUM, not just the code path it printed
+  through. Read the original finding's disposition paragraph, not its headline.**
+- **The phase's flagship feature has no picture of real data.**
+  `screenshots.spec.ts:1915-1923` honestly labels `log-detail`'s series hand-built,
+  then calls `log-monitor` "a genuine recorder replay" — but that series is the
+  REAL recorder fed HAND-SCRIPTED fake-transport events whose own comment concedes
+  they are "WIRE-IMPOSSIBLE-but-harmless". Neither capture can show the 26%
+  sentinel breaks or a real 41 s gap. **Technique: "real X" in a fixture comment
+  is a claim about the INPUT, not the module — ask which half of the pipeline the
+  word is defending.**
+- **Attacked and HELD (Phase LT exit ground):** spec 2's replay oracle is NOT
+  oracle-blind — `toMonitorFrame` passes `elapsedSeconds`/`distanceMeters` through
+  raw (`parse.ts:497-498`) and `maybeEmitFrame`'s emitted object spreads `base`
+  untouched, the register max-merge touching only `session*` fields the recorder
+  never reads (`driver.ts:2136-2156`), so the hand-built replay frames are faithful
+  for exactly the two fields under test. Spec 3's sentinel and gap criteria are
+  proven against committed captures, not fixtures (`traceModel.test.ts:167/190/215/262`).
+  The walk plan's own "four asks against two rests" worry is unfounded (three are
+  no-rowing, before the piece). The simulator settles nothing here: TestFlight
+  builds cannot run on it, and `isNative()` routes to Capacitor BLE which rejects
+  "BLE unsupported" (`capacitorBle.ts:138-145`; Apple TN2295) — so the armed
+  connected surface every bundle item needs is unreachable. WebKit says
+  `env(safe-area-inset-*)` tracks device physics, not browser chrome
+  (webkit.org/blog/7929, PRIMARY) — the Safari-in-simulator worry was right about
+  the conclusion and wrong about the mechanism; it is `100dvh` under collapsing
+  chrome that does not transfer, not the insets.
