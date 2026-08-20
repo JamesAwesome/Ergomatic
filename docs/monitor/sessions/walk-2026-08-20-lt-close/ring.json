@@ -1,0 +1,337 @@
+[
+ {
+  "seq": 0,
+  "kind": "storage-persist",
+  "detail": "denied (tolerated \u2014 design spec \u00a74 S6, not mitigation)"
+ },
+ {
+  "seq": 1,
+  "kind": "write",
+  "detail": "f1 76 04 13 02 01 02 60 f2"
+ },
+ {
+  "seq": 2,
+  "kind": "ack",
+  "detail": "f1 01 76 01 13 65 f2 slaveState=ready"
+ },
+ {
+  "seq": 3,
+  "kind": "prepare-sent",
+  "detail": "1 frame(s) acked"
+ },
+ {
+  "seq": 4,
+  "kind": "write",
+  "detail": "f1 76 55 18 01 00 01 01 08 17 01 00 03 05 00 00 00 17 70 04"
+ },
+ {
+  "seq": 5,
+  "kind": "write",
+  "detail": "02 00 3c 06 04 00 00 31 9c 14 01 01 18 01 01 17 01 01 03 05"
+ },
+ {
+  "seq": 6,
+  "kind": "write",
+  "detail": "80 00 00 01 f4 04 02 00 3c 06 04 00 00 31 9c 14 01 01 18 01"
+ },
+ {
+  "seq": 7,
+  "kind": "write",
+  "detail": "02 17 01 00 03 05 00 00 00 17 70 04 02 00 00 06 04 00 00 31"
+ },
+ {
+  "seq": 8,
+  "kind": "write",
+  "detail": "9c 14 01 01 13 02 01 01 f9 f2"
+ },
+ {
+  "seq": 9,
+  "kind": "ack",
+  "detail": "f1 81 76 14 18 01 17 03 04 06 14 18 17 03 04 06 14 18 17 03 04 06 14 13 eb f2 slaveState=ready"
+ },
+ {
+  "seq": 10,
+  "kind": "programmed",
+  "detail": "1 frame(s) acked"
+ },
+ {
+  "seq": 11,
+  "kind": "notify-first",
+  "detail": "0x0031 (19B)"
+ },
+ {
+  "seq": 12,
+  "kind": "structure",
+  "detail": "workoutType=8 durationRaw=0 durationType=128 raw=00 00 00 00 00 00 08 00 00 00 00 00 00 00 00 00 00 80 00"
+ },
+ {
+  "seq": 13,
+  "kind": "twd-sample",
+  "detail": "machineTotal=0m at elapsed=0s distance=0m workoutState=0 durationRaw=0 durationType=128"
+ },
+ {
+  "seq": 14,
+  "kind": "structure-mismatch",
+  "detail": "first sighting \u2014 observed workoutType=8 durationRaw=0 durationType=128; expected workoutType=8 durationRaw=6000 durationType=0 (the sent program's interval 0) (one entry per verify phase, never per tick; a HEALTHY arm whose first tick lagged leaves exactly this entry and still resolves)"
+ },
+ {
+  "seq": 15,
+  "kind": "notify-first",
+  "detail": "0x0032 (17B)"
+ },
+ {
+  "seq": 16,
+  "kind": "notify-first",
+  "detail": "0x0033 (20B)"
+ },
+ {
+  "seq": 17,
+  "kind": "structure",
+  "detail": "workoutType=8 durationRaw=6000 durationType=0 raw=00 00 00 00 00 00 08 00 00 00 00 00 00 00 70 17 00 00 00"
+ },
+ {
+  "seq": 18,
+  "kind": "frame",
+  "detail": "state=armed elapsed=0 distance=0 rowingActive=false spm=0"
+ },
+ {
+  "seq": 19,
+  "kind": "armed",
+  "detail": "programmed 3 interval(s)"
+ },
+ {
+  "seq": 20,
+  "kind": "twd-sample",
+  "detail": "machineTotal=0m at elapsed=0s distance=0m workoutState=0 durationRaw=6000 durationType=0"
+ },
+ {
+  "seq": 21,
+  "kind": "frame",
+  "detail": "state=rowing elapsed=0.94 distance=3.1 rowingActive=true spm=0"
+ },
+ {
+  "seq": 22,
+  "kind": "twd-sample",
+  "detail": "machineTotal=199m at elapsed=62.67s distance=199.2m workoutState=3 durationRaw=6000 durationType=0"
+ },
+ {
+  "seq": 23,
+  "kind": "frame",
+  "detail": "state=resting elapsed=62.67 distance=199.2 rowingActive=true spm=25"
+ },
+ {
+  "seq": 24,
+  "kind": "twd-sample",
+  "detail": "machineTotal=200m at elapsed=63.18s distance=200.6m workoutState=3 durationRaw=6000 durationType=0"
+ },
+ {
+  "seq": 25,
+  "kind": "twd-sample",
+  "detail": "machineTotal=225m at elapsed=73.85s distance=225.4m workoutState=3 durationRaw=6000 durationType=0"
+ },
+ {
+  "seq": 26,
+  "kind": "twd-sample",
+  "detail": "machineTotal=250m at elapsed=86.07s distance=250m workoutState=3 durationRaw=6000 durationType=0"
+ },
+ {
+  "seq": 27,
+  "kind": "twd-sample",
+  "detail": "machineTotal=275m at elapsed=98.23s distance=275.1m workoutState=3 durationRaw=6000 durationType=0"
+ },
+ {
+  "seq": 28,
+  "kind": "twd-sample",
+  "detail": "machineTotal=300m at elapsed=110.5s distance=300.7m workoutState=3 durationRaw=6000 durationType=0"
+ },
+ {
+  "seq": 29,
+  "kind": "twd-sample",
+  "detail": "machineTotal=326m at elapsed=120.1s distance=326.2m workoutState=3 durationRaw=6000 durationType=0"
+ },
+ {
+  "seq": 30,
+  "kind": "notify-first",
+  "detail": "0x0037 (18B)"
+ },
+ {
+  "seq": 31,
+  "kind": "split-half",
+  "detail": "0x0037 for Split/Interval Number 1 received (run open, state=resting)"
+ },
+ {
+  "seq": 32,
+  "kind": "notify-first",
+  "detail": "0x0038 (19B)"
+ },
+ {
+  "seq": 33,
+  "kind": "split-half",
+  "detail": "0x0038 for Split/Interval Number 1 received (run open, state=resting)"
+ },
+ {
+  "seq": 34,
+  "kind": "interval-complete",
+  "detail": "index=0 (machine reported 1)"
+ },
+ {
+  "seq": 35,
+  "kind": "record-actual",
+  "detail": "index=0 finalBoundary=false recordClosed=false -> accepted (actuals 0 -> 1)"
+ },
+ {
+  "seq": 36,
+  "kind": "structure",
+  "detail": "workoutType=8 durationRaw=500 durationType=128 raw=25 00 00 10 00 00 08 01 05 00 02 4c 01 00 f4 01 00 80 67"
+ },
+ {
+  "seq": 37,
+  "kind": "frame",
+  "detail": "state=rowing elapsed=0.37 distance=1.6 rowingActive=false spm=25"
+ },
+ {
+  "seq": 38,
+  "kind": "twd-sample",
+  "detail": "machineTotal=831m at elapsed=135.22s distance=500.9m workoutState=3 durationRaw=500 durationType=128"
+ },
+ {
+  "seq": 39,
+  "kind": "divergence",
+  "detail": "stale-count rest clamp: resting key 0 lifted to 1 (count lags state at the boundary)"
+ },
+ {
+  "seq": 40,
+  "kind": "frame",
+  "detail": "state=resting elapsed=135.22 distance=500.9 rowingActive=true spm=25"
+ },
+ {
+  "seq": 41,
+  "kind": "twd-sample",
+  "detail": "machineTotal=850m at elapsed=137.33s distance=518.7m workoutState=3 durationRaw=500 durationType=128"
+ },
+ {
+  "seq": 42,
+  "kind": "twd-sample",
+  "detail": "machineTotal=875m at elapsed=148.03s distance=544.7m workoutState=3 durationRaw=500 durationType=128"
+ },
+ {
+  "seq": 43,
+  "kind": "twd-sample",
+  "detail": "machineTotal=900m at elapsed=158.16s distance=568.1m workoutState=3 durationRaw=500 durationType=128"
+ },
+ {
+  "seq": 44,
+  "kind": "twd-sample",
+  "detail": "machineTotal=926m at elapsed=169.78s distance=594.2m workoutState=3 durationRaw=500 durationType=128"
+ },
+ {
+  "seq": 45,
+  "kind": "twd-sample",
+  "detail": "machineTotal=951m at elapsed=180.94s distance=619m workoutState=3 durationRaw=500 durationType=128"
+ },
+ {
+  "seq": 46,
+  "kind": "structure",
+  "detail": "workoutType=8 durationRaw=6000 durationType=0 raw=00 00 00 02 00 00 08 00 04 00 01 b8 03 00 70 17 00 00 64"
+ },
+ {
+  "seq": 47,
+  "kind": "frame",
+  "detail": "state=rowing elapsed=0 distance=0.2 rowingActive=false spm=25"
+ },
+ {
+  "seq": 48,
+  "kind": "notify",
+  "detail": "0x0037 00 00 00 02 00 00 45 05 00 f4 01 00 3c 00 79 00 01 02"
+ },
+ {
+  "seq": 49,
+  "kind": "split-half",
+  "detail": "0x0037 for Split/Interval Number 2 received (run open, state=rowing)"
+ },
+ {
+  "seq": 50,
+  "kind": "notify",
+  "detail": "0x0038 00 00 00 1b 87 70 45 05 1d 00 16 03 7a 0e 8f 00 67 02 00"
+ },
+ {
+  "seq": 51,
+  "kind": "split-half",
+  "detail": "0x0038 for Split/Interval Number 2 received (run open, state=rowing)"
+ },
+ {
+  "seq": 52,
+  "kind": "interval-complete",
+  "detail": "index=1 (machine reported 2)"
+ },
+ {
+  "seq": 53,
+  "kind": "record-actual",
+  "detail": "index=1 finalBoundary=false recordClosed=false -> accepted (actuals 1 -> 2)"
+ },
+ {
+  "seq": 54,
+  "kind": "twd-sample",
+  "detail": "machineTotal=1154m at elapsed=58.23s distance=202.6m workoutState=4 durationRaw=6000 durationType=0"
+ },
+ {
+  "seq": 55,
+  "kind": "notify",
+  "detail": "0x0037 70 17 00 ea 07 00 58 02 00 cb 00 00 00 00 00 00 00 03"
+ },
+ {
+  "seq": 56,
+  "kind": "split-half",
+  "detail": "0x0037 for Split/Interval Number 3 received (run open, state=rowing)"
+ },
+ {
+  "seq": 57,
+  "kind": "notify",
+  "detail": "0x0038 70 17 00 18 89 00 c5 05 0b 00 a1 02 37 0d 6c 00 67 03 00"
+ },
+ {
+  "seq": 58,
+  "kind": "split-half",
+  "detail": "0x0038 for Split/Interval Number 3 received (run open, state=rowing)"
+ },
+ {
+  "seq": 59,
+  "kind": "interval-complete",
+  "detail": "index=2 (machine reported 3)"
+ },
+ {
+  "seq": 60,
+  "kind": "record-actual",
+  "detail": "index=2 finalBoundary=false recordClosed=false -> accepted (actuals 2 -> 3)"
+ },
+ {
+  "seq": 61,
+  "kind": "divergence",
+  "detail": "intervalIndex=2 (0x0033) vs actual.index=3 (0x0037/38)"
+ },
+ {
+  "seq": 62,
+  "kind": "frame",
+  "detail": "state=finished elapsed=60 distance=202.6 rowingActive=false spm=26"
+ },
+ {
+  "seq": 63,
+  "kind": "final-totals",
+  "detail": "accumulator=1154.9m accumulatorElapsed=363.6s machineTotal=1154m durationType=0 registers=3 of 3 programmed 0:(122.2s,332m) 1:(181.5s,620.3m) 2:(60s,202.6m)"
+ },
+ {
+  "seq": 64,
+  "kind": "terminal-raw",
+  "detail": "state=finished 0x0031=70 17 00 ea 07 00 08 00 0a 00 01 82 04 00 70 17 00 00 67"
+ },
+ {
+  "seq": 65,
+  "kind": "terminal",
+  "detail": "finished"
+ },
+ {
+  "seq": 66,
+  "kind": "summary-reconciled",
+  "detail": "split-won \u2014 interval 2 was already recorded when the 3000ms finish grace closed (no 0x0039 was being held \u2014 one may still have ARRIVED and been refused storage; check for an out-of-window entry above before reading this as \"the summary never came\")"
+ }
+]

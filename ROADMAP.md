@@ -2658,7 +2658,38 @@ gap if still unannounced (retroactive, same chain).
 recorder omits the field instead of storing a sentinel. Stored-shape
 question, its own gate.
 
-**THE PHASE-CLOSE ERG BUNDLE (James, 2026-08-19: "lets do those at phase
+**THE PHASE-CLOSE ERG BUNDLE — WALKED 2026-08-20.** Record:
+`docs/monitor/sessions/walk-2026-08-20-lt-close/`. Items A/B/C (occlusion
+both rotations, the mis-hit test, triple-tap on the phone) **PASS** and are
+closed after being owed since CR2 shipped. Item D **FAILED HARD** and
+produced the two findings below, which are the walk's real output. Item E's
+DISTANCE oracle is **CLOSED** against the PM5's own View Detail screen — our
+hero (1156) and the machine's Total Work Distance (1154) are both correct and
+track two PM5 numbers the PM5 itself does not reconcile, its displayed
+interval rows summing to 901 against its own stated 899. **Still owed:** the
+phone→server trace leg (the piece ended up on web) and one read of the TIME
+hero off the screen.
+
+**F-1 / F-2, the walk's findings — an armed screen that lies, and a native
+app that bricks.** Armed, walked out of range, cycled Bluetooth off and on:
+the surface never changed, holding `1 OF 3 · READY` throughout, and rowing
+produced nothing. Then reconnect failed with `LINK-FAILED`; a force-quit did
+not clear it and neither did restarting the PM5, while the same PM5
+programmed fine from the laptop web build seconds later — **deleting and
+reinstalling the app was the only fix.** That isolates it to the native path
+and to app-local state surviving process death. v0.14.0 (688) is on
+TestFlight carrying it. James, 2026-08-20: "i think some of the bluetooth
+problems deserve their own phase with dedicated connection management
+research" — a PM verdict on that phase's shape, scope and sequencing is in
+flight; the ROADMAP follow-on "Reconnect and background scan, five pieces"
+is its likely nucleus and its stated trigger ("a tester reports a mid-piece
+lost link") has now fired twice. **F-3, the reason both findings are
+evidence-poor:** a TestFlight build can be neither inspected nor recorded
+(`isInspectable` false since iOS 16.4, `CAPACITOR_DEBUG` reaches Debug
+configurations only, and the recording tap is web-arm only), so a
+native-only defect leaves no machine-readable evidence at all.
+
+**THE ORIGINAL BUNDLE (James, 2026-08-19: "lets do those at phase
 close").** Five parked device items now travel together as ONE session at
 LT's close, so the close gate finds them in one place instead of
 rediscovering five parked rows. Two need no rowing, three ride a single
