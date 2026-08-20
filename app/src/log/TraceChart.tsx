@@ -21,15 +21,17 @@
 // `SegmentedControl.tsx`'s own `PANES` carries, so a fourth measure would
 // fail loudly rather than render silently unreachable.
 //
-// NO BOUNDARY MARKS (§4's cut, pinned): this file renders exactly three
-// kinds of SVG mark — the polyline(s), the y-axis tick marks/labels, and
-// nothing else. Any future interval-boundary feature is a deliberate,
-// separate addition, never a quiet insertion here.
+// NO BOUNDARY MARKS (§4's cut, pinned): this file renders the polyline(s),
+// the y-axis tick marks/labels, the rest band (Task 2), and — as of
+// trace-truth Task 3 — the x-axis (time) tick marks/labels, and nothing
+// else. None of these name an interval: the x-axis spans the trace's own
+// elapsed time, not step boundaries. Any future interval-boundary feature
+// is a deliberate, separate addition, never a quiet insertion here.
 
 import { useMemo, useState } from "react";
 import type { SeriesData } from "../monitor/seriesRecorder.js";
 import { linearScale, decimate } from "../charts/scale.js";
-import { formatTick } from "../charts/axis.js";
+import { chooseTicks, formatTick } from "../charts/axis.js";
 import {
   buildTrace,
   type Measure,
@@ -46,50 +48,79 @@ const MEASURE_LABEL: Record<Measure, { visible: string; spoken: string }> = {
 };
 
 const CHART_WIDTH = 320;
-const CHART_HEIGHT = 140;
-const LEFT_PAD = 36;
+/** Bumped from 36 (trace-truth Task 3): the y-axis label anchor sat at
+ *  `LEFT_PAD - 6` = 30, and the widest real label (`1:40.0`/`1:50.0`, 6
+ *  monospace glyphs) overhung that anchor far enough left to clip against
+ *  the SVG's own x=0 edge — confirmed on both committed captures, where
+ *  the clipped "1" reads as "L" (`L:40.0`). The extra 6 units of anchor
+ *  room removes the overhang; ordinary digits (`2:00.0` etc.) were never
+ *  clipped, so this is sized for the widest case, not the common one. */
+const LEFT_PAD = 42;
 const RIGHT_PAD = 8;
 const TOP_PAD = 10;
 const BOTTOM_PAD = 10;
 
-/** The plot area's own height and its bottom edge (the y-coordinate the
- *  rest band sits ON, review round 2) — named once so `restBandsFor
- *  Segment`'s geometry and the polyline/tick scales below all derive
- *  from the SAME two numbers rather than re-deriving them separately. */
-const PLOT_HEIGHT = CHART_HEIGHT - TOP_PAD - BOTTOM_PAD;
-const PLOT_BOTTOM = CHART_HEIGHT - BOTTOM_PAD;
+/** The plot's own frame — unchanged in SIZE since Task 2, still what the
+ *  y-scale, the polylines and the y-axis ticks live inside. Named
+ *  `PLOT_AREA_HEIGHT` (not `CHART_HEIGHT`, trace-truth Task 3) now that
+ *  the SVG's own total height is taller than the plot: the axis gutter
+ *  below is additional canvas, not a resize of this frame. `PLOT_BOTTOM`
+ *  is the one value the rest of this file needs from it (the y-scale's
+ *  own lower bound, and the axis gutter's own top edge) — no code here
+ *  still needs the plot's own height as a number now that the rest band
+ *  no longer sizes itself as a fraction of it (see that constant's own
+ *  comment below). */
+const PLOT_AREA_HEIGHT = 140;
+const PLOT_BOTTOM = PLOT_AREA_HEIGHT - BOTTOM_PAD;
+
+/** trace-truth Task 3 (spec §4): the axis gutter — the x-axis's own tick
+ *  marks/labels, and (moved down here from inside the plot, see the rest
+ *  band comment below) the rest band. `CHART_HEIGHT` is now the SVG's
+ *  full height (plot + gutter); the y-scale/polyline/y-ticks all keep
+ *  using `PLOT_BOTTOM` explicitly, never this, so none of their geometry
+ *  moves. */
+const AXIS_GUTTER_HEIGHT = 34;
+const CHART_HEIGHT = PLOT_AREA_HEIGHT + AXIS_GUTTER_HEIGHT;
 
 /** Review round 2 (James's ruling, three mocked treatments against the
  *  real tokens and geometry — bottom-anchored won): a full-height,
  *  100%-opacity band read as "something is blocking the data", and let
  *  the polyline cross it at full plot height, dropping the stroke's own
  *  contrast from 17.11:1 to 3.62:1 wherever a rest sat on the chart's
- *  own lowest plateau. A SHORT bar at the FOOT of the plot fixes both:
- *  the band keeps its full `--trace-rest` colour/opacity (§3's own word
- *  is "tint", never an alpha wash — that option was NOT chosen), and
- *  `domainY`'s own 10% padding (`../charts/scale.js`'s `domainFromReadings`)
- *  keeps the worst real reading clear of a strip this short in practice,
- *  so the line stays close to its full 17.11:1 contrast almost
- *  everywhere on the chart. Expressed as a FRACTION of `PLOT_HEIGHT`,
- *  never a hardcoded pixel value, so a future non-fixed plot height
- *  still gets a proportional bar.
+ *  own lowest plateau. Round 2's fix was a SHORT bar at the plot's own
+ *  foot, still INSIDE the plot's `[TOP_PAD, PLOT_BOTTOM)` y-range —
+ *  "in practice" clear of the line only because `domainY`'s own 10%
+ *  padding usually left room, never a hard guarantee.
  *
- *  THE CRITERION (review round 3, R3-3; citation fixed round 4, C2):
- *  not a number to preserve for its own sake — this fraction is sized
- *  so the trace line's own LOWEST REAL EXCURSION clears the band with
- *  clearly VISIBLE vertical separation (not merely a non-zero gap).
- *  Evidence that stays reachable to everyone, not a report only one
- *  session could read: the committed capture `docs/screenshots/
- *  log-detail.png` (git-tracked, regenerated every `pnpm screenshots`
- *  run) shows the property directly, and `TraceChart.test.tsx`'s own
- *  "F-1: the rest band is a SHORT bar at the plot's own foot, never a
- *  full-height fill" pins the band's own geometry (bottom-anchored,
- *  well under the plot height) in CI on every push. A future change to
- *  this value should be checked against that same visual property —
- *  the line staying clear of the band with room to spare — not against
- *  matching this particular fraction. */
-const REST_BAND_HEIGHT_FRACTION = 14 / 119;
-const REST_BAND_HEIGHT = PLOT_HEIGHT * REST_BAND_HEIGHT_FRACTION;
+ *  SUPERSEDED (trace-truth Task 3): the band now sits ENTIRELY in the new
+ *  axis gutter, its top edge flush with `PLOT_BOTTOM` and hanging DOWN
+ *  from there — never up into the plot. `yScale`'s own range tops out at
+ *  `PLOT_BOTTOM` (never higher), so no rendered polyline pixel can ever
+ *  reach a y-coordinate this band occupies: the crossing round 2 traded
+ *  off against is now impossible by construction, not merely unlikely in
+ *  practice. `TraceChart.test.tsx`'s own "the rest band never overlaps
+ *  the plot's own data space" pins exactly this — every band's `y` is
+ *  `>= PLOT_BOTTOM`, on a real rest-bearing capture. Colour/opacity
+ *  unchanged (`--trace-rest`, full strength — §3's own word is "tint",
+ *  never an alpha wash). */
+const REST_BAND_HEIGHT = 8;
+const REST_BAND_Y = PLOT_BOTTOM;
+
+/** trace-truth Task 3 (spec §4): the x-axis's own tick marks (a short
+ *  vertical line below the plot floor) and labels (below that), stacked
+ *  beneath the rest band row so nothing in the gutter overlaps anything
+ *  else in it. Positions, not fractions — this gutter has no reason to
+ *  scale with plot height the way the old in-plot rest band did. */
+const X_TICK_MARK_Y1 = REST_BAND_Y + REST_BAND_HEIGHT + 4;
+const X_TICK_MARK_LEN = 4;
+const X_TICK_MARK_Y2 = X_TICK_MARK_Y1 + X_TICK_MARK_LEN;
+const X_TICK_LABEL_Y = X_TICK_MARK_Y2 + 4;
+
+/** A fixed, modest x-axis tick budget for a small mobile chart — the same
+ *  reasoning `traceModel.ts`'s own `TICK_COUNT` (y-axis) gives: nothing
+ *  in spec §4 pins a count, and this keeps a narrow SVG legible without
+ *  crowding `chooseTicks`'s own round-number selection. */
+const X_TICK_COUNT = 4;
 
 /** Decimation's own `columns` argument (Task 1's `decimate`, §3's "~2
  *  points per horizontal pixel"). An inline SVG has no fixed device-pixel
@@ -180,9 +211,13 @@ export default function TraceChart({
   });
   const yScale = linearScale({
     domain: trace.domainY,
-    range: [CHART_HEIGHT - BOTTOM_PAD, TOP_PAD],
+    range: [PLOT_BOTTOM, TOP_PAD],
     invert: trace.invert,
   });
+  // trace-truth Task 3 (spec §4): `chooseTicks` reused unchanged, over
+  // the SAME `domainX` the polyline/x-scale already use — the axis spans
+  // exactly the trace's own duration, never a re-derived one.
+  const ticksX = chooseTicks(trace.domainX, X_TICK_COUNT);
 
   return (
     <figure className="trace-figure">
@@ -206,17 +241,22 @@ export default function TraceChart({
         role="img"
         aria-label={trace.summary}
       >
-        {/* trace-truth Task 2 (spec §3), review round 2: drawn FIRST —
-            beneath the tick marks and the polyline(s) — still guarantees
-            paint-order continuity (the line always sits on top, so it is
-            never occluded), but the band itself is now a SHORT bar at
-            the plot's own FOOT (`PLOT_BOTTOM`/`REST_BAND_HEIGHT`) rather
-            than a full-height fill — round 1 shipped the latter, which
-            read as "something is blocking the data" and let the line
-            cross it at full height. Computed from the FULL
-            (non-decimated) points per segment; the polyline below is
-            decimated independently and stays one continuous stroke
-            across the band's own x-range (§3: a rest is not a gap). */}
+        {/* trace-truth Task 2 (spec §3) / Task 3: drawn FIRST — beneath the
+            tick marks and the polyline(s) — still guarantees paint-order
+            continuity (the line always sits on top, so it is never
+            occluded), and (Task 3) the band now sits in the axis gutter
+            below the plot floor (`REST_BAND_Y` = `PLOT_BOTTOM`), never
+            inside the plot's own `[TOP_PAD, PLOT_BOTTOM)` y-range — round
+            1 shipped a full-height in-plot fill that read as "something is
+            blocking the data" and let the line cross it at full height;
+            round 2's in-plot short bar fixed the visual but the crossing
+            stayed geometrically possible, "in practice" prevented only by
+            `domainY`'s own padding. Moving the band out of the plot
+            entirely removes that "in practice" hedge — see the constant's
+            own comment above. Computed from the FULL (non-decimated)
+            points per segment; the polyline below is decimated
+            independently and stays one continuous stroke across the
+            band's own x-range (§3: a rest is not a gap). */}
         {trace.points.map((segment, segIndex) =>
           restBandsForSegment(segment).map((band, bandIndex) => {
             const x1 = xScale(Math.max(trace.domainX[0], band.startX));
@@ -226,7 +266,7 @@ export default function TraceChart({
                 key={`${segIndex}-${bandIndex}`}
                 className="trace-rest-band"
                 x={x1}
-                y={PLOT_BOTTOM - REST_BAND_HEIGHT}
+                y={REST_BAND_Y}
                 width={Math.max(0, x2 - x1)}
                 height={REST_BAND_HEIGHT}
               />
@@ -245,13 +285,48 @@ export default function TraceChart({
                 y2={y}
               />
               <text
-                className="trace-tick-label"
+                className="trace-tick-label trace-tick-label-y"
                 x={LEFT_PAD - 6}
                 y={y}
                 textAnchor="end"
                 dominantBaseline="middle"
               >
                 {formatTick(tick, selected)}
+              </text>
+            </g>
+          );
+        })}
+        {/* trace-truth Task 3 (spec §4): the x-axis — same tick-render
+            shape as the y-axis loop just above (a mark, then a label),
+            reused rather than hand-rolled a second way. `formatTick`'s
+            own `"time"` kind takes TENTHS (`../charts/axis.js`'s doc
+            comment), so each tick — a value in `domainX`'s own real
+            seconds — is converted back (`* 10`) at the one call site that
+            needs it; `domainX`/`xScale` themselves stay in seconds, the
+            same unit the polyline already uses. `data-testid="trace-x-tick"`
+            is this axis's own selector — the shared `.trace-tick-label`
+            class alone can't distinguish an x-label from a y-label now
+            that both exist. */}
+        {ticksX.map((tick) => {
+          const x = xScale(tick);
+          return (
+            <g key={tick}>
+              <line
+                className="trace-tick-mark"
+                x1={x}
+                x2={x}
+                y1={X_TICK_MARK_Y1}
+                y2={X_TICK_MARK_Y2}
+              />
+              <text
+                className="trace-tick-label trace-tick-label-x"
+                data-testid="trace-x-tick"
+                x={x}
+                y={X_TICK_LABEL_Y}
+                textAnchor="middle"
+                dominantBaseline="hanging"
+              >
+                {formatTick(tick * 10, "time")}
               </text>
             </g>
           );

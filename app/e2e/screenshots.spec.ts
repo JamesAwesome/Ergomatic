@@ -111,9 +111,9 @@ async function markArticleRead(page: Page, slug: string): Promise<void> {
   }
 }
 
-/** Neutralises `.tabbar`'s `position: fixed`, for two DIFFERENT reasons
- *  depending on the route (round 4 review: this comment used to name only
- *  the first).
+/** Neutralises `.tabbar`'s `position: fixed`, for THREE different reasons
+ *  across its callers (round 4 review: this comment used to name only the
+ *  first; trace-truth Task 3 added the third).
  *
  *  1. **`fullPage: true` on a plain document-flow screen** (`builder`):
  *  a full-page screenshot on a document taller than the viewport stitches
@@ -146,13 +146,24 @@ async function markArticleRead(page: Page, slug: string): Promise<void> {
  *  so removing it frees that space for the overlay's real content to
  *  show through.
  *
- *  The `.app-shell { padding-bottom: 0 }` line matters for case 1 only:
- *  `.app-shell`'s own `padding-bottom` (reserved for the fixed bar so
- *  scrolled content doesn't land underneath it) becomes a blank gap once
- *  the bar is no longer fixed there, so this drops it. It is a NO-OP for
- *  case 2 — `.overlay-screen` sets its own separate `padding-bottom`
- *  directly (`index.css`), never inheriting `.app-shell`'s — kept here
- *  anyway because it is harmless and case 1 still needs it. */
+ *  3. **Freeing the same reserved space on an ORDINARY plain-flow route,
+ *  no `fullPage` involved** (`log-monitor`/`log-monitor-landscape`,
+ *  trace-truth Task 3): `/library/:id/log` is claim 1's own route shape
+ *  (`.app-shell` flow, not `.overlay-screen`), but neither of these tests
+ *  ever sets `fullPage: true` — they take an ordinary viewport screenshot
+ *  after `scrollTraceChartIntoFrame`. The x-axis this task added sits low
+ *  enough in the chart that its OWN labels landed in the same visually
+ *  fixed-bar-covered zone claim 2 describes, on a screen shaped like claim
+ *  1. Same fix, reason 2's own words applied to a reason-1-shaped route.
+ *
+ *  The `.app-shell { padding-bottom: 0 }` line matters for cases 1 and 3
+ *  (both plain document flow): `.app-shell`'s own `padding-bottom`
+ *  (reserved for the fixed bar so scrolled content doesn't land underneath
+ *  it) becomes a blank gap once the bar is no longer fixed there, so this
+ *  drops it. It is a NO-OP for case 2 — `.overlay-screen` sets its own
+ *  separate `padding-bottom` directly (`index.css`), never inheriting
+ *  `.app-shell`'s — kept here anyway because it is harmless and cases 1/3
+ *  still need it. */
 async function neutralizeFixedTabBarForFullPageCapture(
   page: Page,
 ): Promise<void> {
@@ -3337,6 +3348,17 @@ test("log-monitor", async ({ page }) => {
   // live door.
   await expect(page.locator(".trace-figure")).toBeVisible();
   await expect(page.locator(".trace-line").first()).toBeVisible();
+  // trace-truth Task 3: the new x-axis pushed `.trace-figure`'s own
+  // bottom edge into the ~44px the fixed `.tabbar` visually covers on
+  // this plain document-flow route (`/library/:id/log` is not in
+  // `HIDDEN_TABBAR_PREFIXES`) — the axis's tick MARKS survived (they sit
+  // higher, at the gutter's own top) but the LABELS below them rendered
+  // fully behind the opaque bar, invisible in the committed capture.
+  // `neutralizeFixedTabBarForFullPageCapture`'s case 1 (this function's
+  // own header comment) is exactly this shape: freeing the reserved
+  // space by taking the bar out of fixed position, same fix `builder`
+  // already uses.
+  await neutralizeFixedTabBarForFullPageCapture(page);
   await scrollTraceChartIntoFrame(page);
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "log-monitor.png"),
@@ -3362,6 +3384,9 @@ test("log-monitor-landscape", async ({ page }) => {
   await expect(page.locator(".trace-figure")).toBeVisible();
   await expect(page.locator(".trace-line").first()).toBeVisible();
   await page.setViewportSize({ width: 844, height: 390 });
+  // Same reasoning as `log-monitor` above — more pressing here, the
+  // shorter 390px landscape viewport leaves even less headroom.
+  await neutralizeFixedTabBarForFullPageCapture(page);
   await scrollTraceChartIntoFrame(page);
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "log-monitor-landscape.png"),

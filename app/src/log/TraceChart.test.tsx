@@ -209,9 +209,23 @@ describe("TraceChart — rendering from a REAL capture", () => {
     );
     expect(expectedTrace.points.length).toBeGreaterThan(1); // the multi-segment path is exercised
 
-    const tickLabels = container.querySelectorAll(".trace-tick-label");
+    // `.trace-tick-label-y` (trace-truth Task 3): the y-axis's own
+    // modifier class, needed now that `.trace-tick-label` alone matches
+    // BOTH axes' labels.
+    const tickLabels = container.querySelectorAll(".trace-tick-label-y");
     expect(tickLabels.length).toBeGreaterThan(0);
     expect(tickLabels).toHaveLength(expectedTrace.ticksY.length);
+  });
+
+  // trace-truth Task 3 (spec §4), task brief Step 4: the chart's own
+  // x-axis, spanning the trace's own duration.
+  it("renders x-axis tick labels spanning the trace's own duration", async () => {
+    const series = await realSeries();
+    render(<TraceChart series={series} />);
+    const labels = screen.getAllByTestId("trace-x-tick");
+    expect(labels.length).toBeGreaterThanOrEqual(2);
+    expect(labels.at(0)).toHaveTextContent("0:00");
+    expect(labels.at(-1)!.textContent).toMatch(/^\d+:\d\d$/);
   });
 
   it("tapping the Stroke rate toggle switches the drawn trace to rate's own model (different summary, different segment count)", async () => {
@@ -405,8 +419,10 @@ describe("TraceChart — §7.3 the inversion is a COORDINATE fact, not a class c
       (slowest.pixelY - fastest.pixelY) / (slowest.modelY - fastest.modelY);
     const b = fastest.pixelY - a * fastest.modelY;
 
+    // `.trace-tick-label-y` (trace-truth Task 3): y-axis labels only —
+    // `.trace-tick-label` alone now also matches the x-axis's own labels.
     const tickLabels = Array.from(
-      container.querySelectorAll(".trace-tick-label"),
+      container.querySelectorAll(".trace-tick-label-y"),
     );
     expect(tickLabels).toHaveLength(trace.ticksY.length);
     expect(trace.ticksY.length).toBeGreaterThan(0);
@@ -453,19 +469,23 @@ describe("TraceChart — trace-truth Task 2: rests are drawn, but marked (§3), 
     }
   });
 
-  // F-1 (James's ruling, review round 2): a SHORT bar at the plot's own
-  // FOOT, never a full-height fill — round 1 shipped the latter, which
-  // let the polyline cross it at full height and read as "something is
-  // blocking the data". `CHART_HEIGHT`/`TOP_PAD`/`BOTTOM_PAD` are not
-  // exported from `TraceChart.tsx`, so this duplicates their values
-  // (same "each test file owns its own copy" convention this file's own
-  // program constants already use) rather than importing internals.
-  it("F-1: the rest band is a SHORT bar at the plot's own foot, never a full-height fill", async () => {
-    const CHART_HEIGHT = 140;
+  // F-1 (James's ruling, review round 2; SUPERSEDED trace-truth Task 3):
+  // round 1 shipped a full-height in-plot fill that read as "something is
+  // blocking the data"; round 2's fix was a SHORT bar at the plot's own
+  // foot, but still INSIDE the plot's own y-range — the crossing round 2
+  // fixed VISUALLY stayed geometrically possible, "in practice" prevented
+  // only by `domainY`'s own padding. Task 3 moves the band into the new
+  // axis gutter entirely, below the plot floor, so this test now pins the
+  // STRUCTURAL guarantee brief item 4 asks for: not merely that the band
+  // clears THIS capture's own lowest excursion, but that it is
+  // GEOMETRICALLY IMPOSSIBLE for it to ever share a y-coordinate with
+  // anything the plot draws, on any data. `PLOT_BOTTOM`/`TOP_PAD` are not
+  // exported from `TraceChart.tsx`, so this duplicates their values (same
+  // "each test file owns its own copy" convention this file's own program
+  // constants already use) rather than importing internals.
+  it("F-1: the rest band moved into the axis gutter — never overlaps the plot's own data space", async () => {
     const TOP_PAD = 10;
-    const BOTTOM_PAD = 10;
-    const PLOT_HEIGHT = CHART_HEIGHT - TOP_PAD - BOTTOM_PAD; // 120
-    const PLOT_BOTTOM = CHART_HEIGHT - BOTTOM_PAD; // 130
+    const PLOT_BOTTOM = 130; // PLOT_AREA_HEIGHT(140) - BOTTOM_PAD(10)
 
     const series = await realSeriesWithRest();
     const { container } = render(<TraceChart series={series} />);
@@ -474,14 +494,17 @@ describe("TraceChart — trace-truth Task 2: rests are drawn, but marked (§3), 
     for (const band of bands) {
       const y = Number(band.getAttribute("y"));
       const height = Number(band.getAttribute("height"));
-      // Bottom-anchored: the band's own bottom edge sits ON the plot's
-      // own foot, not floating mid-chart or hanging from the top.
-      expect(y + height).toBeCloseTo(PLOT_BOTTOM, 5);
-      // SHORT, never full-height: round 1's regression would have been
-      // `height === PLOT_HEIGHT` (120) — this pins it well under that,
-      // matching James's own ~14/119 mock ratio against this component's
-      // real 120px plot (~14.03).
-      expect(height).toBeLessThan(PLOT_HEIGHT * 0.3);
+      // Flush against the plot floor, hanging DOWN — never above it. The
+      // plot's own y-range is `[TOP_PAD, PLOT_BOTTOM)`; every rendered
+      // polyline/tick pixel lands inside that range (`yScale`'s own
+      // range tops out at `PLOT_BOTTOM`), so a band whose OWN top edge is
+      // `>= PLOT_BOTTOM` can never collide with one, on ANY data — not
+      // just this capture's.
+      expect(y).toBeCloseTo(PLOT_BOTTOM, 5);
+      expect(y).toBeGreaterThanOrEqual(PLOT_BOTTOM);
+      // SHORT, and well clear of the plot's own height (120) — round 1's
+      // regression would have read close to that.
+      expect(height).toBeLessThan(PLOT_BOTTOM - TOP_PAD);
       expect(height).toBeGreaterThan(0);
     }
   });

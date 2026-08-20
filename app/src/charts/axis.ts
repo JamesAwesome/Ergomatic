@@ -6,6 +6,7 @@
  */
 
 import { fmtSplit } from "../../domain/format.js";
+import { fmtDuration } from "../../domain/duration.js";
 
 /**
  * "Nice numbers for graph labels" (Heckbert, Graphics Gems I, 1990) — a
@@ -65,14 +66,26 @@ export function chooseTicks(domain: [number, number], count: number): number[] {
   return ticks;
 }
 
-export type TickKind = "pace" | "rate" | "hr";
+export type TickKind = "pace" | "rate" | "hr" | "time";
 
 /**
  * Format a single axis tick value. Pace ALWAYS goes through the house
  * `fmtSplit` (`domain/format.ts`) — never a bespoke formatter (the spec's
- * own cautionary tale is spec 1's `fmtDuration`-takes-minutes trap).
- * Rate and hr are whole-number counts (stroke rate, beats per minute)
- * with no house formatter of their own to delegate to.
+ * own cautionary tale is spec 1's `fmtDuration`-takes-minutes trap). Rate
+ * and hr are whole-number counts (stroke rate, beats per minute) with no
+ * house formatter of their own to delegate to.
+ *
+ * `"time"` (trace-truth Task 3, spec §4) is the one deliberate exception
+ * to "every other kind takes its own real unit": it takes TENTHS OF A
+ * SECOND, matching `Sample.t`'s own wire unit, never converted seconds —
+ * the recorder emits `Math.round(workClockSeconds * 10)`
+ * (`seriesRecorder.ts`), so a caller building x-axis ticks off a
+ * `domainX` already in real seconds multiplies back by 10 before calling
+ * this, rather than this function silently assuming seconds like `pace`'s
+ * `fmtSplit` does. Routed through the house `fmtDuration`
+ * (`domain/duration.ts`), never a bespoke `m:ss` formatter — the same
+ * cautionary tale this doc comment already names, `fmtDuration` takes
+ * MINUTES, so tenths convert via `/600` (10 tenths/s * 60 s/min).
  */
 export function formatTick(value: number, kind: TickKind): string {
   switch (kind) {
@@ -81,5 +94,7 @@ export function formatTick(value: number, kind: TickKind): string {
     case "rate":
     case "hr":
       return String(Math.round(value));
+    case "time":
+      return fmtDuration(value / 600);
   }
 }
