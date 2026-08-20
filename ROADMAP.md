@@ -2484,6 +2484,7 @@ DELTA pass" ruling), and James's merge approval. **Owed at the next tag**:
 exit criterion 8's own notes clause — "your connected sessions now draw a
 trace — pace by default, stroke rate and heart rate a tap away; sessions
 rowed before this release have no trace to draw."
+**DISCHARGED** as v0.14.0's fifth clause (PR #132).
 **Goal:** the summary's interval rows answer "did I hit MY targets" —
 target inline, judgment vs the row's own target with the connected
 surface's shared ±0.5s band, stroke rate shown (`24 / 22`), and discard
@@ -2496,7 +2497,10 @@ committed, storage ceiling ruled); spec 3 = traces, pace/rate/HR all three
 (the HR descope lifted 2026-08-19 — the phase-close erg bundle's own
 S5b pass witnessed a real belt on the wire, ROADMAP's own "unblocks spec
 3's descoped HR leg" line above).
-**Owed at the next tag (v0.14.0, range v0.13.0..main — RF15's rule):**
+**DISCHARGED in v0.14.0's notes (2026-08-20, PR #132 — the entry ships
+five clauses; range v0.13.0..main re-settled with `git merge-base
+--is-ancestor`, and #130's series capture is deliberately unnoted per its
+own criterion 7). Kept here as the record of what was owed:**
 four notes clauses: (1) rows judge against their own targets with the
 target shown (the erg ask); (2) stroke rate on measured intervals;
 (3) discard everywhere save is (#128 — a NORMAL v0.14.0 clause; CORRECTED
