@@ -2494,6 +2494,14 @@ with `git merge-base --is-ancestor <sha> vX.Y.Z^{commit}`, never by reading
 a tag message or a ledger line); (4) HISTORY RE-JUDGES TOO — sessions already viewed
 change colour (tule-fog rows go red→blue), plus #124's accepted re-log
 gap if still unannounced (retroactive, same chain).
+**Owed upstream from spec 3's delta pass (capture-side, NOT fixed in spec
+3):** `seriesRecorder.ts` stores `p`/`spm` of 0 for both "no reading" and
+"the machine said 0" — 26% of samples across the committed captures carry
+`p === 0`, 262 in state `rowing`. Spec 3 renders honestly around it
+(zeros are absent, never drawn); a follow-up should decide whether the
+recorder omits the field instead of storing a sentinel. Stored-shape
+question, its own gate.
+
 **THE PHASE-CLOSE ERG BUNDLE (James, 2026-08-19: "lets do those at phase
 close").** Five parked device items now travel together as ONE session at
 LT's close, so the close gate finds them in one place instead of
