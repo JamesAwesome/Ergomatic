@@ -18,6 +18,7 @@
 - **A null index continues the last key**; an all-null run accumulates under synthetic key `0`. **Falling back to edge detection on a null key is FORBIDDEN** (spec §2).
 - `BUCKET_EPSILON_SECONDS` REMAINS (whole-second flooring). `RESET_EPSILON_SECONDS`, `MIN_COMPLETED_INTERVAL_SECONDS`, `MAX_BOUNDARY_RESET_METERS` and `isGenuineBoundary` are DELETED.
 - Commands run in `app/`. `export PATH="$HOME/.local/share/nvm/v26.5.0/bin:$PATH"` first. `pnpm test --project client` for `src/` (never `unit`), `--project integration` for `server/`. Failing test first. Self-mutations restored byte-identical and diff-verified. Per-file coverage for every file touched. **`pnpm e2e` and `pnpm screenshots` FOREGROUND (blocking, 590000ms) — never backgrounded.** `git rev-parse --show-toplevel` before every commit; it must print the worktree path.
+- **Capture paths are VERBATIM and were checked with `ls` on 2026-08-20** — `step-3-pm5-recording-second-rest-1786973713929.jsonl` and `session-2-wu-4unequal.jsonl`. An earlier draft wrote `step-3.jsonl`, which does not exist; the filename carries its own provenance and is not to be shortened.
 - **Read both vitest summary lines** — "Tests" says all-passed while a file that failed to LOAD collects zero; grep "Test Files" too.
 
 ---
@@ -39,7 +40,7 @@ Add to `app/src/monitor/seriesRecorder.test.ts`. This is the "did I break the wo
 ```ts
 it("replays step-3 to the same 242 samples the shipped recorder produced (t and d in TENTHS)", async () => {
   const frames = await loadCaptureFrames(
-    "docs/monitor/sessions/walk-2026-08-17/step-3.jsonl",
+    "docs/monitor/sessions/walk-2026-08-17/step-3-pm5-recording-second-rest-1786973713929.jsonl",
   );
   const rec = createSeriesRecorder();
   for (const f of frames) rec.onFrame(f);
@@ -70,7 +71,7 @@ it.each([4, 20, 60])(
   "loses NOTHING when %i frames are dropped across an interval boundary",
   async (n) => {
     const frames = await loadCaptureFrames(
-      "docs/monitor/sessions/walk-2026-08-17/step-3.jsonl",
+      "docs/monitor/sessions/walk-2026-08-17/step-3-pm5-recording-second-rest-1786973713929.jsonl",
     );
     const rec = createSeriesRecorder();
     for (const f of dropAfterBoundary(frames, n)) rec.onFrame(f);
