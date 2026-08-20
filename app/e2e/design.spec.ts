@@ -2832,6 +2832,24 @@ test.describe("trace chart (Phase LT spec 3, Task 3: design witnesses)", () => {
     expect(fill).toBe("rgb(87, 84, 76)"); // --ink-3, 7.43:1 on --surface
   });
 
+  // trace-truth Task 3 (spec §4), exit criterion 7: the x-axis's own
+  // labels, checked SEPARATELY from the y-axis test just above — both
+  // share the same `.trace-tick-label` CSS rule, but this is the one
+  // place the x-axis's own computed fill (not merely its class name) is
+  // verified, live in a real browser cascade.
+  test("the x-axis renders, is visible, and its labels fill --ink-3", async ({
+    page,
+  }) => {
+    const xLabels = page.locator(".trace-tick-label-x");
+    await expect(xLabels.first()).toBeVisible();
+    expect(await xLabels.count()).toBeGreaterThanOrEqual(2);
+    await expect(xLabels.first()).toHaveText("0:00");
+    const fill = await xLabels
+      .first()
+      .evaluate((el) => getComputedStyle(el).fill);
+    expect(fill).toBe("rgb(87, 84, 76)"); // --ink-3, 7.43:1 on --surface
+  });
+
   // §5: "a text alternative naming the measure, its range, and the
   // direction of travel ... computed from the same model that draws,
   // never hand-written" — asserted with THIS fixture's own real values
@@ -2853,10 +2871,10 @@ test.describe("trace chart (Phase LT spec 3, Task 3: design witnesses)", () => {
 
   // §4's own cut: NO interval boundary marks, ever, on this surface.
   // Structural, not a name-based guess — every `<line>` inside the chart
-  // is a y-axis tick mark (one per tick label, `TraceChart.tsx`'s own
-  // `ticksY.map`), so a 1:1 count rules out any extra mark a future
-  // regression might quietly add.
-  test("no boundary marks: every SVG line is a y-axis tick, one-for-one with the tick labels", async ({
+  // is an axis tick mark, x or y (one per tick label, `TraceChart.tsx`'s
+  // own `ticksY.map`/`ticksX.map`, trace-truth Task 3), so a 1:1 count
+  // rules out any extra mark a future regression might quietly add.
+  test("no boundary marks: every SVG line is an axis tick, one-for-one with the tick labels", async ({
     page,
   }) => {
     const lineCount = await page.locator(".trace-svg line").count();
@@ -2910,13 +2928,15 @@ test.describe("trace chart (trace-truth Task 2: rest-span design witness)", () =
     expect(await page.locator(".trace-svg polyline").count()).toBe(1);
   });
 
-  // F-1 (James's ruling, review round 2): a SHORT bar at the plot's own
-  // FOOT, computed in a REAL browser against the rendered SVG's own
-  // pixel geometry — never a full-height fill (round 1's own shipped
-  // shape, which let the polyline cross it at full height). Compared
-  // against the SVG's own viewBox-to-pixel scale factor rather than a
-  // hardcoded pixel count, so this stays correct at any viewport width.
-  test("the rest band is a SHORT bar at the plot's own foot, never a full-height fill (real browser geometry)", async ({
+  // F-1 (James's ruling, review round 2; SUPERSEDED trace-truth Task 3):
+  // the band now lives in the axis gutter, BELOW the plot floor, computed
+  // in a REAL browser against the rendered SVG's own pixel geometry —
+  // never inside the plot's own y-range (round 1's full-height fill let
+  // the polyline cross it; round 2's short in-plot bar removed the
+  // visual crossing but not the geometric possibility). Compared against
+  // the SVG's own viewBox-to-pixel scale factor rather than a hardcoded
+  // pixel count, so this stays correct at any viewport width.
+  test("the rest band sits in the axis gutter, below the plot floor, never a full-height fill (real browser geometry)", async ({
     page,
   }) => {
     const svgBox = (await page.locator(".trace-svg").boundingBox())!;
@@ -2924,19 +2944,20 @@ test.describe("trace chart (trace-truth Task 2: rest-span design witness)", () =
       .locator(".trace-rest-band")
       .first()
       .boundingBox())!;
-    // viewBox is "0 0 320 140" (`TraceChart.tsx`'s own CHART_WIDTH/
-    // CHART_HEIGHT) — the SVG's rendered pixel height maps 1:1 to that
-    // 140 user-unit height, so this scale factor converts either way
-    // without hardcoding the component's own internal constants.
-    const pxPerUnit = svgBox.height / 140;
+    // viewBox is "0 0 320 174" (`TraceChart.tsx`'s own CHART_WIDTH/
+    // CHART_HEIGHT, trace-truth Task 3: 140 plot + 34 axis gutter) — the
+    // SVG's rendered pixel height maps 1:1 to that 174 user-unit height,
+    // so this scale factor converts either way without hardcoding the
+    // component's own internal constants beyond this one.
+    const pxPerUnit = svgBox.height / 174;
+    const bandTopUnits = (bandBox.y - svgBox.y) / pxPerUnit;
     const bandHeightUnits = bandBox.height / pxPerUnit;
-    const bandBottomUnits = (bandBox.y + bandBox.height - svgBox.y) / pxPerUnit;
-    // Bottom-anchored: within a pixel-rounding tolerance of the plot's
-    // own foot (CHART_HEIGHT - BOTTOM_PAD = 130).
-    expect(bandBottomUnits).toBeGreaterThan(128);
-    expect(bandBottomUnits).toBeLessThan(132);
-    // SHORT: well under the full plot height (120) — round 1's own
-    // regression would read close to 120 here.
+    // Flush against the plot floor (PLOT_AREA_HEIGHT(140) -
+    // BOTTOM_PAD(10) = 130), hanging DOWN — never floating higher, which
+    // would put it back inside the plot's own `[10, 130)` y-range.
+    expect(bandTopUnits).toBeGreaterThan(128);
+    expect(bandTopUnits).toBeLessThan(132);
+    // SHORT: well under the plot's own height (120).
     expect(bandHeightUnits).toBeLessThan(36); // 120 * 0.3
     expect(bandHeightUnits).toBeGreaterThan(0);
   });
@@ -6396,6 +6417,45 @@ test.describe("connected screens (fake-driven)", () => {
         ratio,
         `active-vs-upcoming contrast ${ratio.toFixed(2)}:1`,
       ).toBeCloseTo(2.61, 1);
+    });
+
+    // Phase CM follow-up (James, 2026-08-20): `.connected-progress-meters`
+    // reserves `min-width: calc(7ch + 0.12em)` — wide enough for a real
+    // five-digit session (Calm Sea, 10,000m, `server/seed/library/o2.ts`)
+    // — but nothing had ever rendered that case in a real browser cascade
+    // before this test. Loads the same committed fixture the rest of this
+    // block uses, then substitutes a five-digit total the way the grid
+    // pane's own no-clip test (below, `.connected-grid-meters`) already
+    // does for its own cell — real computed layout, not a unit-test DOM.
+    test("the session-meters counter doesn't clip or shrink the bar at a real five-digit total (10,000m)", async ({
+      page,
+    }) => {
+      await loadConnectedFixture(page, "connected-pane-live");
+      const measured = await page.evaluate(() => {
+        const row = document.querySelector(".connected-progress-row")!;
+        const bar = row.querySelector<HTMLElement>(".connected-progress")!;
+        const counter = row.querySelector<HTMLElement>(
+          ".connected-progress-meters",
+        )!;
+        const barWidthBefore = bar.getBoundingClientRect().width;
+        counter.textContent = "10,000m";
+        return {
+          counterScrollWidth: counter.scrollWidth,
+          counterClientWidth: counter.clientWidth,
+          counterText: counter.textContent,
+          barWidthBefore,
+          barWidthAfter: bar.getBoundingClientRect().width,
+        };
+      });
+      expect(measured.counterText).toBe("10,000m");
+      // No clip: the reserved width actually holds all seven characters.
+      expect(measured.counterScrollWidth).toBeLessThanOrEqual(
+        measured.counterClientWidth,
+      );
+      // The reserve's whole point (the CSS comment's own claim): the bar
+      // beside it does not move when the counter reaches its reserved
+      // width — never a hardcoded pixel budget, the property itself.
+      expect(measured.barWidthAfter).toBeCloseTo(measured.barWidthBefore, 0);
     });
 
     test("progress bar fallback (>16 boundaries): proportional fill + quarter-tick row", async ({

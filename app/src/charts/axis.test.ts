@@ -72,4 +72,13 @@ describe("formatTick", () => {
   it("formats an hr tick as a rounded bpm number", () => {
     expect(formatTick(150.5, "hr")).toBe("151");
   });
+
+  // trace-truth Task 3, spec §4: `Sample.t` is TENTHS of a second — the
+  // formatter takes tenths, never seconds, and routes through the house
+  // `fmtDuration`, never a bespoke `m:ss` formatter.
+  it("formats a time tick as m:ss from tenths of a second", () => {
+    expect(formatTick(0, "time")).toBe("0:00");
+    expect(formatTick(2422, "time")).toBe("4:02"); // step-3's own final t
+    expect(formatTick(600, "time")).toBe("1:00");
+  });
 });

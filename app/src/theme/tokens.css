@@ -226,15 +226,23 @@
      is blocking the data" rather than "this was a rest", and its own
      `.trace-line` polyline could still cross it at full height (a rest
      sitting on the chart's lowest plateau, e.g. a slow-pace rest, drops
-     the stroke's own contrast from 17.11:1 to 3.62:1 there). Now a
-     SHORT bar sitting on the axis at the FOOT of the plot
-     (`REST_BAND_HEIGHT_FRACTION` of the plot height, `TraceChart.tsx`)
-     rather than spanning the full plot height — the polyline's own real
-     data almost never renders inside that thin a strip (`domainY`'s own
-     10% padding keeps the worst real reading clear of it in practice),
-     so the stroke stays close to its full 17.11:1 across the chart, and
-     the band itself keeps its full 4.72:1 unchanged (opacity and hue are
-     UNCHANGED from round 1 — only the band's own height/position moved).
+     the stroke's own contrast from 17.11:1 to 3.62:1 there). Round 2's
+     fix was a SHORT bar, still sitting INSIDE the plot's own y-range,
+     protected from that crossing only "in practice" by `domainY`'s own
+     10% padding — a hedge, not a guarantee.
+
+     SUPERSEDED (trace-truth Task 3, spec §4): the band no longer sits
+     "on the axis at the foot of the plot" — it sits BELOW the plot
+     floor, entirely inside the new axis gutter (`TraceChart.tsx`'s
+     `REST_BAND_Y = PLOT_BOTTOM`, a flat `REST_BAND_HEIGHT = 8`;
+     `REST_BAND_HEIGHT_FRACTION` no longer exists — the band stopped
+     scaling with plot height once it left the plot). `yScale`'s own
+     range tops out at `PLOT_BOTTOM`, so no rendered polyline pixel can
+     ever reach a y-coordinate the band occupies: the crossing round 2
+     hedged as "in practice" prevented is now GEOMETRICALLY IMPOSSIBLE,
+     on any data, not merely padding-protected. The 3.62:1
+     line-on-band figure above is kept as the round-2 worst case for the
+     record; it no longer describes a reachable state.
      No longer the ONLY signal a rest happened (round 2 also adds a
      `.trace-legend` line below the chart, "BAND = REST" — round 4, C1:
      never "SHADED", which named round 1's rejected full-height treatment
@@ -244,10 +252,6 @@
      Computed (not eyeballed), against `--surface` (the only background
      `.trace-figure` ever sits on, `index.css`'s own trace-block comment):
      4.72:1. Also checked against `--page` (4.25:1, in case a future
-     surface reuses this chart off-card) and against `--ink` (the
-     polyline stroke, IF it ever dips into the band's own short height):
-     3.62:1 — no longer the normal case (round 1's full-height band made
-     this the norm; round 2's short band makes it the rare edge case),
-     but the number is real either way and still clears WCAG 1.4.11. */
+     surface reuses this chart off-card). */
   --trace-rest: #97692a;
 }

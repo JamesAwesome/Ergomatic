@@ -6365,15 +6365,18 @@ section:not(.news-pinned) .news-row:last-of-type {
   letter-spacing: 0.02em;
   color: var(--ink);
   white-space: nowrap;
-  /* Reserve the widest common width so the FLEXING BAR beside this cell
-     does not jump when the counter gains a character. Measured (antagonist,
-     2026-08-18, real rules in a 390px pane): without this, 999m -> 1,000m
-     shrank the bar 27.3px — a layout jolt at exactly the milestone James
-     named as the one place noise IS warranted. 6ch covers `9,999m`; the
-     `0.12em` absorbs letter-spacing's per-glyph tail. A session past
-     10,000m grows the cell once, which is a milestone, not noise.
-     Right-aligned so the reserved slack sits between bar and counter. */
-  min-width: calc(6ch + 0.12em);
+  /* Reserve the widest width a rower can actually reach so the FLEXING
+     BAR beside this cell does not jump when the counter gains a
+     character. Measured (antagonist, 2026-08-18, real rules in a 390px
+     pane): without any reserve, 999m -> 1,000m shrank the bar 27.3px — a
+     layout jolt James judged unacceptable. 7ch (bumped from 6ch,
+     2026-08-20 follow-up, Phase CM) covers `10,000m` (7 characters) — the
+     seeded library ships Calm Sea at exactly that distance
+     (`server/seed/library/o2.ts`), so five digits is not a hypothetical
+     ceiling, it is a workout on the shelf. The `0.12em` absorbs
+     letter-spacing's per-glyph tail. Right-aligned so the reserved slack
+     sits between bar and counter. */
+  min-width: calc(7ch + 0.12em);
   text-align: right;
 }
 
@@ -8904,7 +8907,13 @@ section:not(.news-pinned) .news-row:last-of-type {
    toggle border and the tick marks) measures 1.73:1 on --surface —
    DECORATION-ONLY, never text, the same posture `tokens.css`'s own
    `--progress-active` comment documents: the tick mark is redundant with
-   its own adjacent label, which independently clears 4.5:1 on its own. */
+   its own adjacent label, which independently clears 4.5:1 on its own.
+
+   trace-truth Task 3: the new x-axis tick marks/labels share these exact
+   two rules (`.trace-tick-mark`/`.trace-tick-label`) with the y-axis — no
+   NEW pairing to compute, `--ink-3` on `--surface` is still 7.43:1 for
+   the x-axis's own labels. `TraceChart.tsx`'s own `trace-tick-label-x`/
+   `-y` modifier classes exist for test selection only, not styling. */
 .trace-figure {
   margin: 0 0 24px;
   display: flex;

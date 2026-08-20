@@ -16,8 +16,38 @@ export const TEST_AUTH_SECRET = "e2e-secret";
  * process makes every run its own clean world; within one process the
  * suffix is constant, so re-sign-ins (reload flows, second-device tests)
  * still land on the same user.
+ *
+ * FIXED WIDTH BY CONSTRUCTION (2026-08-20, riding-follow-up fix): baked
+ * into every generated e2e user's email (`signInViaBackdoor` below), so
+ * this string's own printed LENGTH is part of every page that renders an
+ * account email — a length that varies run to run reflows the whole page
+ * around it, measured at 26,327 pixels differing across 13 row bands on
+ * `you-derive-offer.png` (ROADMAP, Phase LT follow-ups). The PREVIOUS
+ * shape (`Date.now()` + `Math.random().toString(36).slice(2, 8)`) rests
+ * its own fixed length on two things that are each merely TRUE TODAY, not
+ * GUARANTEED: `Date.now()`'s digit count is stable at 13 only until the
+ * year 2286, and `Number.prototype.toString(36)` on a random fraction is
+ * not spec-guaranteed to reach 6 digits before the slice — ECMA-262
+ * requires only the SHORTEST string that round-trips, so a value with an
+ * exact short terminating base-36 expansion truncates the slice (rare,
+ * unobserved directly, but not excludable — the "frozen clock" framing
+ * this comment's own history warns against: freezing `Date.now()` alone
+ * would still leave that second source live). `randomBase36(6)` below
+ * builds its 6 characters one at a time, so the result is exactly 6
+ * characters by CONSTRUCTION, not by an incidental property of float
+ * formatting — and the timestamp half is explicitly padded rather than
+ * trusted to stay 13 digits on its own.
  */
-export const RUN_ID = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+function randomBase36(length: number): string {
+  const alphabet = "0123456789abcdefghijklmnopqrstuvwxyz";
+  let out = "";
+  for (let i = 0; i < length; i++) {
+    out += alphabet[Math.floor(Math.random() * alphabet.length)];
+  }
+  return out;
+}
+
+export const RUN_ID = `${String(Date.now()).padStart(13, "0")}-${randomBase36(6)}`;
 
 /**
  * Signs in through the secret-gated backdoor (never real Google OAuth) and

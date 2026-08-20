@@ -570,6 +570,18 @@ describe("the meters counter on the progress-bar row (connected-metrics design s
     expect(counter.textContent).toBe("0m");
   });
 
+  // Phase CM follow-up (James, 2026-08-20): the reserved width used to
+  // hold only `9,999m` (`min-width: calc(6ch + 0.12em)`) while the seeded
+  // library ships Calm Sea at exactly 10,000m — a real, reachable
+  // five-digit session with no fixture anywhere exercising it. Pinned
+  // here against the real workout's own distance, not a round number
+  // chosen for convenience.
+  it("renders a real five-digit session total (Calm Sea, 10,000m) with its thousands separators, seven characters", () => {
+    renderPane("live", { sessionDistanceMeters: 10000 });
+    const counter = document.querySelector(".connected-progress-meters")!;
+    expect(counter.textContent).toBe("10,000m");
+  });
+
   it("absent before the first frame: renders nothing", () => {
     const model = buildSurfaceModel({
       phases: FIXTURE.phases,
@@ -598,6 +610,10 @@ describe("the meters counter on the progress-bar row (connected-metrics design s
     expect(counter).toContain("flex: none");
     expect(counter).toContain("font-size: 22px");
     expect(counter).toContain("letter-spacing: 0.02em");
+    // Phase CM follow-up (2026-08-20): reserved to 7ch (was 6ch) so
+    // 10,000m — Calm Sea's own distance — doesn't grow the cell past
+    // what's reserved.
+    expect(counter).toContain("min-width: calc(7ch + 0.12em)");
   });
 });
 

@@ -1889,7 +1889,7 @@ WebKit's throttling, so it does not rescue the JS half.
 
 ### In scope
 
-- [ ] **The trace tells the truth about the row** — spec 1, written
+- [x] **The trace tells the truth about the row** — spec 1, written
       2026-08-20:
       `docs/superpowers/specs/2026-08-20-trace-truth-design.md`. **TRIAD**
       (a number's meaning AND a stored shape); full antagonist pass done
@@ -1898,7 +1898,23 @@ WebKit's throttling, so it does not rescue the JS half.
       once); rests drawn but MARKED, which puts a rest flag in the stored
       sample; and the chart gains the time axis it has never had. Three
       PRs, accumulator first and alone. **This is spec 1 of the phase by
-      James's sequencing, ahead of the three items below.** **M**
+      James's sequencing, ahead of the three items below.** **DONE
+      2026-08-20 (Task 3, the time axis, trace-axis PR): all nine exit
+      criteria met.** Criterion 7's own capture choice (below, ROADMAP's
+      pre-task-3 item): `log-detail.png`, not `log-monitor.png` —
+      `buildLogDetailSeries()`'s own fixture already derives its series
+      from the SAME 478s used for the row's `timeSeconds`, so the axis's
+      own last label (`7:58`) reconciles with the `TIME` hero exactly, in
+      the same viewport-only frame; re-deriving `log-monitor.png`'s
+      `avgSplit`/`avgSpm` off its raw elapsed stream would be a
+      number-semantics change to the summary model, out of proportion to
+      a screenshot fixture. `log-monitor.png` is left as-is (a genuine
+      recorder replay, real wire frames through the real recorder — its
+      own stated purpose, distinct from criterion 7's reconciliation
+      check). The pre-existing y-axis label clipping (`L:40.0` ->
+      `1:40.0`) is also fixed (`LEFT_PAD` 36 -> 42). **The owed notes
+      clause (spec §7 criterion 9, below) is now due at the next tag —
+      nothing further blocks it.** **M**
       **Task 1 review finding M1 (2026-08-20), owed to a later task:**
       `traceModel.test.ts`'s own "the line breaks across a REAL gap"
       evidence — a real capture proving a genuine >3s wire gap actually
@@ -1952,7 +1968,10 @@ WebKit's throttling, so it does not rescue the JS half.
       observable-to-a-tester feature) and (2) a clause for the old
       corpus (§5's declination overturned at the 2026-08-20 PM gate —
       some traces recorded before this phase's fixes are silently wrong
-      and cannot be told apart from correct ones). **New condition, this
+      and cannot be told apart from correct ones). **Still open — Task 3
+      (the axis) landed 2026-08-20, so this item is now fully armed: both
+      clauses' subject matter exists in shipped code, and whoever cuts
+      v0.15.0 owes both.** **New condition, this
       gate:** the phone→server trace leg must be WITNESSED before the tag
       that announces the trace fix ships, or the notes say plainly that
       traces are web-only today — announcing a fix for a leg nobody has
@@ -1968,7 +1987,7 @@ WebKit's throttling, so it does not rescue the JS half.
       integer per run makes era detection trivial RETROACTIVELY — absent
       `v` IS the pre-fix marker, cheap only while the corpus is one
       rower's two days old.
-- [ ] **BEFORE trace-truth task 3 (the time axis): its exit criterion 7 is
+- [x] **BEFORE trace-truth task 3 (the time axis): its exit criterion 7 is
       currently UNSATISFIABLE on the flagship capture, and the reason is
       structural** (PM gate, 2026-08-20). Criterion 7 asks that the axis's
       values "reconcile with the session's own TIME hero in the same frame".
@@ -1986,7 +2005,47 @@ WebKit's throttling, so it does not rescue the JS half.
       the criterion. **Also task 3's business, same captures:** the y-axis
       labels render CLIPPED (`L:40.0`, `L:50.0`) — pre-existing, shipped in
       v0.14.0, and squarely in scope since criterion 7 says labels must be
-      readable. **S**
+      readable. **DONE 2026-08-20 (Task 3, trace-axis PR):** the criterion
+      moved to `log-detail.png` — its own fixture already derives the
+      series and the `TIME` hero from the same 478s, so the axis's last
+      label (`7:58`) reconciles exactly, in the same frame, with no fixture
+      change needed. `log-monitor.png` was left alone (see the spec-1 entry
+      above for why re-deriving it wasn't the proportionate fix). The
+      y-axis clipping is fixed (`LEFT_PAD` 36 -> 42, both captures verified
+      by eye). **S**
+- [ ] **THE COUNTDOWN STALLS DURING RESTS, and the progress bar with it**
+      (James, device report + two photos, 2026-08-20, rowing "Strong
+      Breeze"). He saw `TOTAL LEFT` reading roughly a minute high, and the
+      bar lagging when interval 4 handed over to interval 5 after its rest.
+      **One likely cause for both, and it falls straight out of this
+      phase's own B1 finding.** `surfaceModel.ts:970` computes
+      `totalLeftSeconds = totalSeconds - frame.sessionElapsedSeconds`, and
+      `totalSeconds` INCLUDES the programmed rests — but the antagonist
+      pass established that the PM5's elapsed clock only advances during a
+      rest while the flywheel is moving. Sit still through a rest and the
+      wire's elapsed freezes, so the countdown stops ticking down while
+      real time passes, and the bar's fill (driven by the same figure)
+      stalls at the boundary then jumps. Strong Breeze carries 10:00 of
+      rest across four rests; a ~1 min drift is the right order of
+      magnitude. **HYPOTHESIS, not a finding** — testable with no hardware
+      by replaying a committed rest-bearing capture and checking whether
+      `sessionElapsedSeconds` flatlines through the rests. **TRIAD** (a
+      number a rower reads). **M**
+- [ ] **Rename `TOTAL LEFT` to `EST LEFT`** (James's ruling, 2026-08-20).
+      Honest for a second reason independent of the stall above: a
+      DISTANCE interval's contribution to `totalSeconds` is distance ÷
+      target pace, so rowing faster than target makes the session
+      genuinely shorter than programmed. Copy only — rides the next PR
+      touching the connected surface. **S**
+- [x] ~~The progress bar's segments are unevenly divided~~ — **NOT A BUG,
+      settled 2026-08-20 from James's own two photos without touching the
+      code.** Strong Breeze (`app/server/seed/library/tr.ts`) is 5×2:00
+      work with rests of 2:00/2:00/3:00/3:00/none, so each interval's
+      share of the session is 4:00/4:00/5:00/5:00/2:00 — 20% / 20% / 25% /
+      25% / 10% of twenty minutes. Measured off his LIVE screenshot: 19.8%
+      / 19.8% / 25.4% / 25.1% / 9.9%. The bar is proportional to work plus
+      rest and the unequal rests are what make it uneven. Recorded because
+      it will look wrong again to the next person who sees it.
 - [ ] **Detection — make the banner that already exists actually fire.**
       `1 OF 3 · READY` is structurally impossible once
       `phase === "disconnected"` (`surfaceModel.ts:787`), so its
@@ -3035,7 +3094,7 @@ mirrored).
       comparing them; the replay harness exists, it stubs `actuals: []`.
 - [ ] Follow-up: a `connected-pane-rest` fixture/screenshot — the one new
       colour this phase adds has no committed picture of its judged state.
-- [ ] Follow-up (James, 2026-08-20, from the device): **the session-meters
+- [x] Follow-up (James, 2026-08-20, from the device): **the session-meters
       counter has room reserved for four digits, and the bar shrinks once at
       10,000m.** `.connected-progress-meters` reserves
       `min-width: calc(6ch + 0.12em)`, which holds `9,999m`; at `10,000m` the
@@ -3052,7 +3111,11 @@ mirrored).
       rower can reach the five-digit case today, on a workout we authored, and
       no gate has ever rendered it. Fix: reserve 7ch and add a five-digit
       fixture to both the unit test and the design sweep. Fast-path sized;
-      **James's ruling: do it at a logical point, not now.** **S**
+      **James's ruling: do it at a logical point, not now.** **DONE 2026-08-20
+      (trace-axis PR, grouped item G3):** `min-width: calc(7ch + 0.12em)`;
+      `PaneLive.test.tsx` gained a real 10,000m (Calm Sea) fixture; the design
+      sweep gained a real-browser no-clip/no-bar-shift check against the same
+      total. **S**
 - [ ] Follow-up: the fake's `restDistanceMeters` resets with no ~3-frame
       lag (fine while nothing renders it directly).
 
@@ -3303,7 +3366,18 @@ diff. **The fixture fix must neutralise the identity's own printed
 LENGTH (a fixed-width stub, not merely a frozen value) or the reflow
 keeps happening even once the string is otherwise deterministic; isolate
 the exact length-varying sub-mechanism before assuming a frozen `RUN_ID`
-alone fixes it.** Covers both sources or captures will keep re-churning
+alone fixes it.** **DONE 2026-08-20 (trace-axis PR, grouped item G2):**
+`RUN_ID` now builds both halves to a PROVABLY fixed width — the
+timestamp is `padStart`-ed to 13 digits rather than trusted to stay
+there, and the random suffix is built one character at a time
+(`randomBase36(6)`) rather than sliced off `Number.prototype.
+toString(36)`, whose own spec (ECMA-262) guarantees only the shortest
+round-tripping string, not a minimum length — the length-varying
+sub-mechanism this note above says was "not yet isolated" either was
+that slice or is now moot regardless, since the new construction cannot
+vary. The wall-clock date-stamp churn (17 captures) is a SEPARATE,
+still-open source — `pnpm e2e -- -g` documentation is also still owed.
+Covers both sources or captures will keep re-churning
 after it ships; `judge()`'s
 documented-unreachable dead-even branch (discriminated union if a second
 producer appears); the live summary's judged-state capture (closed by
