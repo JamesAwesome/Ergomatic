@@ -1912,6 +1912,17 @@ WebKit's throttling, so it does not rescue the JS half.
       evidentiary bar the rest of this module's tests hold themselves to.
       Whichever task next touches `traceModel.ts`/its tests should either
       capture one or explicitly re-decline with a stated reason.
+- [ ] **HARDWARE QUESTION owed to the next walk, raised by the trace-truth
+      re-review 2026-08-20:** the premise that the PM5 resets
+      `elapsedSeconds`/`distanceMeters` at EVERY interval transition is
+      hardware-verified (walk 4, `types.ts:31-40`, PRIMARY) only for a
+      **rest→work** boundary — `elapsed=37.81` → `elapsed=0`. Both the
+      screenshot fixture and the `connected.spec.ts` fixture that this
+      spec's Task 1 leans on use **work→work** transitions with
+      `restSeconds: 0`, and that case has never been confirmed on
+      hardware. It is foundational to the whole antagonist-vetted design,
+      not a Task 1 defect. One back-to-back rest-free piece settles it and
+      it rides the next walk. **S**
 - [ ] **Detection — make the banner that already exists actually fire.**
       `1 OF 3 · READY` is structurally impossible once
       `phase === "disconnected"` (`surfaceModel.ts:787`), so its
