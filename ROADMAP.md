@@ -2588,6 +2588,24 @@ mirrored).
       comparing them; the replay harness exists, it stubs `actuals: []`.
 - [ ] Follow-up: a `connected-pane-rest` fixture/screenshot — the one new
       colour this phase adds has no committed picture of its judged state.
+- [ ] Follow-up (James, 2026-08-20, from the device): **the session-meters
+      counter has room reserved for four digits, and the bar shrinks once at
+      10,000m.** `.connected-progress-meters` reserves
+      `min-width: calc(6ch + 0.12em)`, which holds `9,999m`; at `10,000m` the
+      cell grows to seven characters and takes ~13px from the flexing bar
+      beside it. Nothing clips or wraps — `white-space: nowrap`, `flex: none`,
+      and the bar carries `min-width: 0` — so this is a one-time layout shift,
+      not breakage, and the CSS comment currently defends it ("a milestone,
+      not noise"). **Two reasons to change it anyway.** (1) That defence is
+      inconsistent with why the reserve exists at all: the same jolt at
+      999→1,000m was MEASURED at 27.3px and judged unacceptable, and the
+      10,000m case was waved through by assertion rather than measurement.
+      (2) **Nothing tests it.** The largest meters fixture anywhere in the repo
+      is 3,842, while the seeded library ships **Calm Sea at 10,000m** — a
+      rower can reach the five-digit case today, on a workout we authored, and
+      no gate has ever rendered it. Fix: reserve 7ch and add a five-digit
+      fixture to both the unit test and the design sweep. Fast-path sized;
+      **James's ruling: do it at a logical point, not now.** **S**
 - [ ] Follow-up: the fake's `restDistanceMeters` resets with no ~3-frame
       lag (fine while nothing renders it directly).
 
@@ -2676,14 +2694,41 @@ the surface never changed, holding `1 OF 3 · READY` throughout, and rowing
 produced nothing. Then reconnect failed with `LINK-FAILED`; a force-quit did
 not clear it and neither did restarting the PM5, while the same PM5
 programmed fine from the laptop web build seconds later — **deleting and
-reinstalling the app was the only fix.** That isolates it to the native path
-and to app-local state surviving process death. v0.14.0 (688) is on
-TestFlight carrying it. James, 2026-08-20: "i think some of the bluetooth
+reinstalling the app was the only fix.** That isolates it to the **native path** —
+but NOT, as first written, to app-local state: the PM gate's storage census
+found no persisted key is an input to `scan()`, `connect()`, `program()` or
+any driver decision, so a `localStorage` clear would not have fixed it.
+"Reinstall fixed it, therefore our storage" is a guess about a BOUNDARY, not
+a mechanism; **why a force-quit did not clear it is UNESTABLISHED and is the
+open question.** v0.14.0 (688) carries it but does not OWN it —
+`git diff --stat v0.13.0 v0.14.0 -- app/src/monitor/transports/
+app/src/adapters/` is empty and the native BLE arm is unchanged since
+v0.10.0, so a rollback would ship the same defect minus five notes clauses.
+**What IS established:** `1 OF 3 · READY` is structurally impossible once
+`phase === "disconnected"` (`surfaceModel.ts:787`), so its persistence proves
+the phase never moved — the app never learned the link was gone. Its only
+lost-link detector is the plugin's disconnect callback, with no frame-silence
+watchdog anywhere, and the plugin fires that callback only from
+`didDisconnectPeripheral`. James, 2026-08-20: "i think some of the bluetooth
 problems deserve their own phase with dedicated connection management
-research" — a PM verdict on that phase's shape, scope and sequencing is in
-flight; the ROADMAP follow-on "Reconnect and background scan, five pieces"
-is its likely nucleus and its stated trigger ("a tester reports a mid-piece
-lost link") has now fired twice. **F-3, the reason both findings are
+research" — **PM verdict returned 2026-08-20 and is
+awaiting James's word** — summarised here because it re-scopes the ask:
+open the phase, but as **"the link can be lost, and the app has to say
+so"** (detection, recovery, diagnosability, plus re-reasoning the failed-
+`program()`-leaves-a-run-open item), with **RECONNECT ITSELF OUT**. The
+argument: the harm was not failing to rejoin, it was never being told and
+then not coming back — both fixable with zero reconnect — while reconnect
+is the most invention-heavy piece available (`createPm5Driver` subscribes
+only at construction, has no teardown, and rebuilding a live driver
+double-processes every notification). The `LOST THE MONITOR` banner
+already exists and shipped (DEVIATIONS row 75); the job is to make it
+fire. The phase is created by **DELETING** the "Reconnect and background
+scan, five pieces" follow-on, not sitting beside it — its trigger has now
+fired twice and two homes for one body of work is the CP/CR2 mistake.
+Proposed sequence: LT close → this phase → CL2 → LQ → PROD, on the
+grounds that it is a PROD precondition (PROD's exit, an empty-phone
+install reaching a logged row unaided, is unreachable while a link drop
+bricks the app). **F-3, the reason both findings are
 evidence-poor:** a TestFlight build can be neither inspected nor recorded
 (`isInspectable` false since iOS 16.4, `CAPACITOR_DEBUG` reaches Debug
 configurations only, and the recording tap is web-arm only), so a

@@ -56,6 +56,13 @@ behaviour worth repeating.
 phone's Bluetooth off and on again. The surface **never changed** — it held
 `1 OF 3 · READY` throughout. He then **started rowing, and nothing happened**.
 
+**The runsheet's written prediction was measured FALSE, and that is a result
+in its own right.** `walk-phase-cr2-exit/RUNSHEET.md:196` predicted that on a
+pre-stroke link kill "stale beats armed in the axes' precedence, so the armed
+protections drop" — the header showing a gold session-left instead of
+`READY`. **The stale axis never engaged at all.** Recorded here so the next
+reader does not inherit a falsified prediction as a finding.
+
 **Why it matters more than the parked note said.** The parked observation
 predicted the armed protections would drop and the header might show a gold
 session-left instead of `READY`. The reality is worse and quieter: the screen
@@ -80,15 +87,49 @@ build**, immediately. **Deleting and reinstalling the app fixed the phone.**
 
 **What that isolates.** The PM5 was healthy and programmable throughout, so
 this is not a machine fault and not a BLE-radio fault. It is specific to the
-native path, and — because a force-quit did not clear it and a reinstall did —
-it implicates **app-local state that survives process death**.
+**native path**. That much holds.
 
-**Candidates, UNVERIFIED and listed as leads, not conclusions:**
-`ergomatic.lastMonitorDevice` (`ConnectedInterstitial.tsx:43`) — note that a
-grep for `LAST_DEVICE_KEY` finds a writer and a reader inside that one file
-and no consumer anywhere else, which is itself worth someone's attention — and
-a stranded `ergomatic.monitorRun`. Neither was confirmed; the storage could
-not be read (F-3).
+**CORRECTED 2026-08-20, same day, by the phase-open PM gate — the first
+version of this section over-claimed and its named leads are dead.** It said
+the reinstall "implicates app-local state that survives process death" and
+named `ergomatic.lastMonitorDevice` and a stranded `ergomatic.monitorRun`.
+Both are refuted, and the reasoning was refuted with them:
+
+- **`lastMonitorDevice` cannot affect connecting.** It stores a device
+  **name**, for the `LAST USED ·` caption (`ConnectedInterstitial.tsx`'s
+  `saveLastDevice(name: string)`), while `connect()` uses `device.deviceId`
+  (`capacitorBle.ts`). The original note also claimed nothing outside that
+  file reads it; that was wrong — `WorkoutDetail.tsx:196,302` calls
+  `loadLastDevice()`. The grep behind the claim searched for the key
+  constant, and the consumers import the helper functions instead.
+- **A stranded `monitorRun` cannot brick anything either** — it raises a
+  confirm panel whose "Connect anyway" proceeds unconditionally
+  (`ConnectAction.tsx:104`).
+- The PM's storage census found **no persisted key in this app is an input to
+  `scan()`, `connect()`, `program()`, or any driver decision**. So
+  `localStorage.clear()` would not have fixed the phone.
+
+**"Deleting the app fixed it, therefore app-local state" is a guess about a
+BOUNDARY, not a mechanism.** A reinstall resets far more than web storage.
+**Why a force-quit did not clear it is UNESTABLISHED**, is the central
+mystery of this finding, and is most likely iOS-side. Nothing here should be
+read as pointing at a storage key.
+
+**Also refuted, and it matters for the release conversation:** this defect is
+not v0.14.0's. `git diff --stat v0.13.0 v0.14.0 -- app/src/monitor/transports/
+app/src/adapters/` is **empty** — the native BLE arm is unchanged since
+v0.10.0.
+
+**What the surface's own state machine proves, though.** `1 OF 3 · READY` is
+structurally impossible once `phase === "disconnected"` (`surfaceModel.ts:787`,
+`ConnectedSurface.tsx:404-410`, `connectedAxes.ts:145-146`). Its persistence
+is therefore not a rendering mystery: it **proves the phase never moved**, so
+the app never learned the link was gone. The app's only lost-link detector is
+the plugin's disconnect callback; there is **no frame-silence watchdog
+anywhere**, and the plugin resolves that callback only inside
+`didDisconnectPeripheral` — a Bluetooth power-off runs `stopScan()` +
+`emitState()` and nothing per-device. That is a mechanism, and it is
+consistent with everything observed.
 
 **Related, same session, unproven as the same cause:** switching from one
 loaded workout to a different one also misbehaved on the phone.
@@ -107,6 +148,14 @@ the absent recording tap on native, a native-only defect like F-2 leaves
 **no machine-readable evidence whatsoever** — only what the operator can
 describe. Established by the phase-exit pass before the walk, and the walk
 then demonstrated the cost.
+
+**Sharpened by the PM gate, and the sharper version is the actionable one:**
+the problem is not only that TestFlight cannot be inspected. It is that the
+app's one field diagnostic, `MONITOR LOG · COPY`, lives on the log screen
+(`LogSession.tsx:668`) and is reachable only **after a session finishes** —
+which is **downstream of the very door this bug locks**. Ask which surface a
+diagnostic is reachable from, and whether the failure under study prevents
+reaching it.
 
 ## F-4 — the DISTANCE oracle: CLOSED, and the 2m gap is the erg's own
 
