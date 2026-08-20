@@ -1515,10 +1515,46 @@ Nothing here should be discovered at submission time.
 - [ ] **A cold-start pass on a device that has never run the app.**
       Every walk and every gate this repo has ever run started from a
       populated account. Nobody has watched a genuinely empty install
-      reach its first logged row on a phone — the onboarding cards, the
-      no-baselines door, and the first connect all exist and are tested,
-      but only against fixtures we seeded (recurring failure 3 and 11,
-      together). One walk, one new account, no shortcuts. **S**
+      reach its first logged row — the onboarding cards, the no-baselines
+      door, and the first connect all exist and are tested, but only
+      against fixtures we seeded (recurring failures 3 and 11, together).
+      One run, one new account, no shortcuts. **The iOS SIMULATOR is the
+      right instrument for most of this** (James, 2026-08-20) — an erased
+      simulator IS a device that has never run the app, and it costs a
+      menu item instead of wiping his phone. What it CANNOT cover is the
+      first connect: `capacitorBle.ts`'s own "Simulator / no BLE
+      hardware" branch turns the plugin's `BLE unsupported` rejection
+      into a `BluetoothOffError`, so a simulator can never reach the
+      armed screen on the native build. Split it: empty-account
+      onboarding through to a by-hand logged row on the simulator; the
+      first CONNECT on the phone, folded into whatever erg visit is
+      next. **S**
+- [ ] **Stand the simulator up as a standing instrument, not a one-off.**
+      (James, 2026-08-20: "make sure to consider the iOS simulator".)
+      It is currently used nowhere — `grep -ri simulator` across the repo
+      returns only the FAKE TRANSPORT's own prose, never Apple's
+      simulator. Three of this phase's items want it and one other thing
+      does:
+      - **Store screenshots at the required sizes** — the simulator is
+        the standard instrument for these, and it is the only way to hit
+        Apple's exact device dimensions without owning each device.
+      - **The accessibility audit** — real Dynamic Type, VoiceOver, and
+        Reduce Motion, none of which desktop Chrome can produce and all
+        of which the audit is supposed to check.
+      - **The cold-start pass** above.
+      - **Layout pre-screening for future connected work**, with a
+        stated limit: a WEB build carrying `VITE_ENABLE_FAKE_MONITOR=1`
+        opened in the simulator's Mobile Safari DOES reach the fake
+        transport (`transports/index.ts:251`; `isNative()` is false in
+        Safari), giving an armed connected surface with no erg and no
+        BLE. But Safari is not the app's fullscreen WKWebView — it
+        carries a URL bar and a bottom toolbar, so its
+        `env(safe-area-inset-*)` values are NOT the shell's. Useful for
+        catching gross breakage; **never authoritative for a safe-area
+        or `100dvh` question**, which stays a real-phone check. This
+        limit is the whole reason the item is written down: an
+        instrument adopted without its boundary becomes the next "desktop
+        Chrome reports 0 insets and no gate can see it". **S**
 
 **Deliberately NOT in this phase:** Apple Health, Concept2 Logbook sync,
 the parametric generator, multi-rower switching. They are features with
