@@ -28,9 +28,15 @@
 // works in the same honest unit and never has to remember the tenths
 // convention again.
 //
-// REAL GAPS, NOT RESTS (§3): a rest freezes the work clock — no new whole
-// second is ever crossed (`seriesRecorder.ts`'s own header) — so it
-// produces ZERO samples and therefore no gap in `t` at all. A real gap is
+// REAL GAPS, NOT RESTS (§3): a rest does not always freeze the work
+// clock — the wire keeps advancing elapsed/distance during a rest
+// whenever the rower keeps the flywheel moving (`seriesRecorder.ts`'s
+// own header, corrected trace-truth Task 2: measured at 21 rest samples
+// on `session-2-wu-4unequal.jsonl`, and 3 even on `step-3`'s own tail).
+// Either way — frozen (zero samples, nothing to skip) or advancing
+// (samples at the ordinary cadence) — a rest by itself never produces a
+// gap in `t`, because the recorder's own work clock excludes rest
+// duration from its count regardless of which case it was. A real gap is
 // a dropped frame or a rejected reset candidate, and IS visible as a jump
 // in consecutive samples' `t`. This module breaks the line at any gap over
 // `GAP_BREAK_SECONDS` between two consecutive REAL (sentinel-excluded)
@@ -151,9 +157,14 @@ function realReadings(samples: readonly Sample[], measure: Measure): Reading[] {
 }
 
 /** Splits `readings` into segments wherever consecutive real readings are
- *  more than `GAP_BREAK_SECONDS` apart (§3). The rest case (no gap at all
- *  — the work clock froze) never trips this; a real gap (a dropped frame,
- *  a rejected reset candidate, or a long sentinel run) does. */
+ *  more than `GAP_BREAK_SECONDS` apart (§3). A rest never trips this on
+ *  its own — not because it "freezes" (it doesn't always: a rest whose
+ *  wire keeps advancing produces samples at the ordinary ~1s cadence,
+ *  same as work), but because the recorder's own work clock (`t`)
+ *  excludes rest duration from its count either way — a frozen rest
+ *  contributes no samples to skip over, an advancing one contributes
+ *  samples with no abnormal gap between them. A real gap (a dropped
+ *  frame, a rejected reset candidate, or a long sentinel run) does. */
 function toSegments(readings: readonly Reading[]): TracePoint[][] {
   const segments: TracePoint[][] = [];
   let current: TracePoint[] = [];

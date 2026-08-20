@@ -129,9 +129,19 @@ const SESSION_2_PROGRAM: WorkoutProgram = {
 };
 
 /** trace-truth Task 2's own real-rest fixture (brief's own instruction:
- *  step-3's rest is FROZEN — the wire's `elapsedSeconds` never advances,
- *  so it produces ZERO samples and can never exercise rest MARKING —
- *  session-2's rests still advance). */
+ *  step-3's OWN MID-WORKOUT rest is FROZEN — the wire's `elapsedSeconds`
+ *  never advances there, so THAT rest alone produces ZERO samples and
+ *  can't exercise rest MARKING on its own — session-2's rests still
+ *  advance throughout). NOT "step-3 never marks a rest at all": its
+ *  capture happens to END mid-rest, a TRAILING state with no following
+ *  interval to freeze it, so step-3 independently carries 3 rest
+ *  samples of its own (see the "Not step-3" comment on the rest-free
+ *  negative case below, in this same file) — `d`/`t` keep advancing
+ *  across all 3 (8027 -> 8051 -> 8072 decimetres), proof this trailing
+ *  window is genuinely non-frozen, not just a repeated final reading;
+ *  only `p`/`spm`/`hr` happen to hold flat. Still not enough (3, one
+ *  short contiguous run) to be this fixture's own primary positive
+ *  case — session-2 gives multiple separate runs and 21 total. */
 async function realSeriesWithRest(): Promise<SeriesData> {
   return seriesFromFrames(
     await loadCaptureFrames(

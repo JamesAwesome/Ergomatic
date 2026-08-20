@@ -75,14 +75,19 @@ interface RestBand {
   endX: number;
 }
 
-/** Finds every contiguous run of `rest === true` points in ONE segment
- *  (never across a segment boundary — a segment is already a maximal run
- *  of points with no real gap, and a rest never spans a gap by
- *  construction) and returns its own x-range, padded per
- *  `REST_BAND_PAD_SECONDS`. Reads the FULL, non-decimated segment — a
- *  band's own boundary must reflect the real rest span even when
- *  `decimate` would have dropped the exact point that started or ended
- *  it. */
+/** Finds every contiguous run of `rest === true` points in ONE segment.
+ *  Never across a segment boundary — this function is only ever called
+ *  per-segment (below), so a run spanning two segments is impossible by
+ *  construction of the CALL SITE, not because a rest itself can't
+ *  straddle a real gap (a dropped frame mid-rest would split one across
+ *  two segments same as it would any other reading; `toSegments` doesn't
+ *  special-case rest either way — a rest run that DID straddle a gap
+ *  would simply become two separate bands, one per segment, which this
+ *  function still renders correctly). Returns each run's own x-range,
+ *  padded per `REST_BAND_PAD_SECONDS`. Reads the FULL, non-decimated
+ *  segment — a band's own boundary must reflect the real rest span even
+ *  when `decimate` would have dropped the exact point that started or
+ *  ended it. */
 function restBandsForSegment(points: readonly TracePoint[]): RestBand[] {
   const bands: RestBand[] = [];
   let runStart: number | null = null;

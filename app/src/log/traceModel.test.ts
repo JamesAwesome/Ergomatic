@@ -360,7 +360,16 @@ describe("buildTrace — trace-truth Task 2: rests are marked on the point, not 
     expect(buildTrace(series, "pace")!.points).toHaveLength(1);
   });
 
-  it("a real, non-frozen rest capture (session-2-wu-4unequal.jsonl) carries rest-marked points through to the model, still one unbroken segment", async () => {
+  // review finding M-1: this capture's pace trace is NOT one unbroken
+  // segment overall — it genuinely splits into 2 (354 + 57 points, a
+  // real >GAP_BREAK_SECONDS gap unrelated to any rest, same capture
+  // `seriesRecorder.test.ts`'s own Task-1 tests already exercise). What
+  // IS true, and what this test actually asserts: none of the capture's
+  // 3 separate rest runs (9+8+4 = 21 samples, `traceModel.test.ts`'s own
+  // sibling probe) straddles that real gap — every rested point lands in
+  // the SAME segment (index 0), never split across a boundary a rest
+  // itself did not create.
+  it("a real, non-frozen rest capture (session-2-wu-4unequal.jsonl) carries rest-marked points through to the model; the capture's own real gap splits it in two, but no rest run straddles that split", async () => {
     const frames = await loadCaptureFrames(
       "docs/monitor/sessions/walk-2026-08-16/session-2-wu-4unequal.jsonl",
       SESSION_2_PROGRAM,
@@ -370,12 +379,15 @@ describe("buildTrace — trace-truth Task 2: rests are marked on the point, not 
     const series = rec.snapshot()!;
     const model = buildTrace(series, "pace")!;
     expect(model).not.toBeNull();
-    const restedPoints = model.points.flat().filter((pt) => pt.rest);
-    expect(restedPoints.length).toBeGreaterThan(0);
-    // The rest is DATA, not a GAP (§3): the recorder's own rested samples
-    // never widened the segment count beyond what the gap rule alone
-    // would have produced — no segment boundary is introduced BY rest
-    // marking. Cross-checked against the sample-level count directly
+    expect(model.points).toHaveLength(2); // the capture's own real gap
+    const restPerSegment = model.points.map(
+      (segment) => segment.filter((pt) => pt.rest).length,
+    );
+    // All 21 rested points live in ONE segment; the other carries none —
+    // proof that resting never introduced a split of its own (§3: a rest
+    // is data, not a gap) on top of the real gap this capture already has.
+    expect(restPerSegment).toStrictEqual([21, 0]);
+    // Cross-checked against the sample-level count directly
     // (seriesRecorder.test.ts's own oracle for this exact capture).
     expect(series.samples.filter((s) => s.r === true)).toHaveLength(21);
   });

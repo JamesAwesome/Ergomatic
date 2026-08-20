@@ -1921,8 +1921,23 @@ async function postLog(
 // must never be cited as, a picture of what real data looks like. The
 // `log-monitor` capture beside it comes from a genuine recorder replay and is
 // the representative one.
+// trace-truth Task 2 review (I-2): a run inside segment 2 (140 s/500m,
+// t 180..210s) is marked `r: true` — the ONLY committed capture that
+// shows the rest tint at all (`log-monitor`'s own fake program carries
+// no rest; see that fixture's own comment). Placed mid-segment, not at a
+// row boundary — this chart draws no boundary marks (§4) and the rest
+// band's own position is independent of the four rows' own split
+// points.
+const REST_WINDOW: readonly [number, number] = [180, 210];
 function buildLogDetailSeries(): {
-  samples: { t: number; d: number; p: number; spm: number; hr: number }[];
+  samples: {
+    t: number;
+    d: number;
+    p: number;
+    spm: number;
+    hr: number;
+    r?: true;
+  }[];
 } {
   const segments = [
     { end: 120, pace: 120, spm: 24 },
@@ -1936,17 +1951,20 @@ function buildLogDetailSeries(): {
     p: number;
     spm: number;
     hr: number;
+    r?: true;
   }[] = [];
   for (let t = 0; t <= 478; t += 2) {
     const seg =
       segments.find((s) => t < s.end) ?? segments[segments.length - 1]!;
     const jitter = t % 4 === 0 ? -1 : 1;
+    const resting = t >= REST_WINDOW[0] && t <= REST_WINDOW[1];
     samples.push({
       t: t * 10,
       d: t * 4,
       p: (seg.pace + jitter) * 10,
       spm: seg.spm + (t % 6 === 0 ? -1 : 0),
       hr: 130 + Math.round((t / 478) * 28),
+      ...(resting ? { r: true as const } : {}),
     });
   }
   return { samples };

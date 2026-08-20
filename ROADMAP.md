@@ -3260,10 +3260,18 @@ record is immutable, PATCH refuses series), so the check moves in front of
 the renderer.
 **Riding follow-ups (PM gate 2026-08-19):** `pnpm e2e -- -g` needs the
 double-dash form documented (pnpm swallows bare -g); a frozen-clock
-screenshot fixture (17 captures churn on wall-clock date stamps);
-`judge()`'s documented-unreachable dead-even branch (discriminated union
-if a second producer appears); the live summary's judged-state capture
-(closed by this PR's C1 recapture — verify at close).
+screenshot fixture (17 captures churn on wall-clock date stamps) —
+**scope note (trace-truth Task 2 review, 2026-08-20): freezing the
+wall-clock date alone will NOT fix this.** A second, independent churn
+source lives in `e2e/helpers.ts`'s own `RUN_ID` (`Date.now()` + a random
+suffix, baked into every generated e2e user's email via
+`signInViaBackdoor`), which changes on EVERY run regardless of calendar
+date — confirmed on `you-derive-offer.png`, which differs
+run-to-run ONLY in that email string. The fixture fix needs to cover
+both sources or captures will keep re-churning after it ships; `judge()`'s
+documented-unreachable dead-even branch (discriminated union if a second
+producer appears); the live summary's judged-state capture (closed by
+this PR's C1 recapture — verify at close).
 **Standing rulings:** same dead band everywhere; SPM cell `24 / 22`;
 supersedes PW spec 1's ROW semantics (its Measured-row cell points here);
 retires the lone-row abstention for targeted rows; `MONITOR_SPM_MIN`
