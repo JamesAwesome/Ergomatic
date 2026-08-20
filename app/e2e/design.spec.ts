@@ -343,7 +343,46 @@ function traceLogSeries(): {
   return { samples };
 }
 
-async function postTraceLogFixture(page: Page): Promise<string> {
+// trace-truth Task 2 (spec §3): a variant of `traceLogSeries` above
+// carrying a real, non-frozen rest run — 5 consecutive samples (i in
+// 15..19) marked `r: true`, values still real (the pace/spm/hr keep
+// advancing per the same formulas, never frozen or zeroed: §3's own
+// "the pace value during a rest is real but not meaningful"). `t` stays
+// one-second-apart throughout (same cadence as the base fixture), so the
+// rest introduces no gap of its own — the polyline must stay ONE
+// continuous segment across it.
+function traceLogSeriesWithRest(): {
+  samples: {
+    t: number;
+    d: number;
+    p: number;
+    spm: number;
+    hr: number;
+    r?: true;
+  }[];
+} {
+  const samples: {
+    t: number;
+    d: number;
+    p: number;
+    spm: number;
+    hr: number;
+    r?: true;
+  }[] = [];
+  for (let i = 0; i <= 40; i++) {
+    const pace = 140 - Math.round(i * 0.7); // 140 -> 112, monotonic
+    const spm = 22 + Math.round(i / 7); // 22 -> 28
+    const hr = 128 + Math.round(i * 0.6); // 128 -> 152
+    const rest = i >= 15 && i <= 19 ? { r: true as const } : {};
+    samples.push({ t: i * 10, d: i * 4, p: pace * 10, spm, hr, ...rest });
+  }
+  return { samples };
+}
+
+async function postTraceLogFixture(
+  page: Page,
+  series: ReturnType<typeof traceLogSeries> = traceLogSeries(),
+): Promise<string> {
   const seaFret = LIBRARY_WORKOUTS.find((w) => w.title === "Sea Fret")!;
   const result = await page.evaluate(
     async ({ workout, series }) => {
@@ -377,7 +416,7 @@ async function postTraceLogFixture(page: Page): Promise<string> {
     },
     {
       workout: { title: seaFret.title, type: seaFret.type },
-      series: traceLogSeries(),
+      series,
     },
   );
   if (!result.ok) {
@@ -2832,6 +2871,60 @@ test.describe("trace chart (Phase LT spec 3, Task 3: design witnesses)", () => {
     expect(
       await page.locator('.trace-figure [class*="interval" i]').count(),
     ).toBe(0);
+  });
+});
+
+// trace-truth Task 2 (spec §3, James's ruling: rests are DRAWN, but
+// MARKED). Own describe block, own fixture (`traceLogSeriesWithRest`) —
+// the block above's fixture carries no rest sample at all, so it can
+// never exercise this.
+test.describe("trace chart (trace-truth Task 2: rest-span design witness)", () => {
+  let logId: string;
+
+  test.beforeEach(async ({ page }, testInfo) => {
+    await signInViaBackdoor(page, {
+      email: `design-trace-rest-${testInfo.parallelIndex}@e2e.test`,
+      name: "Design Trace Rest Tester",
+    });
+    logId = await postTraceLogFixture(page, traceLogSeriesWithRest());
+    await page.goto(`/today/log/${logId}`);
+    await expect(page.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
+  });
+
+  // The band exists and carries its computed token — never eyeballed
+  // (house rule): `--trace-rest` (#97692a = rgb(151, 105, 42)), 4.72:1
+  // against `--surface`, the only background this card ever sits on
+  // (`tokens.css`'s own comment on the token carries the full computation).
+  test("a rest band renders with its computed --trace-rest fill, and the polyline stays ONE unbroken segment across it", async ({
+    page,
+  }) => {
+    const band = page.locator(".trace-rest-band").first();
+    await expect(band).toBeVisible();
+    const fill = await band.evaluate((el) => getComputedStyle(el).fill);
+    expect(fill).toBe("rgb(151, 105, 42)"); // --trace-rest
+
+    // §3: a rest is data, not a gap — the fixture's rest run introduces
+    // no gap of its own (every sample stays 1s apart), so the default
+    // (pace) trace must still be exactly one polyline, not fragmented
+    // around the rest.
+    expect(await page.locator(".trace-svg polyline").count()).toBe(1);
+  });
+
+  // Structural, not a name-based guess: the band rect sits strictly
+  // BEFORE the polyline(s) in document order, so it paints beneath them
+  // (SVG's own paint order is document order) — never a foreground
+  // overlay that could obscure a real reading.
+  test("the rest band paints beneath the polyline (document order: rect before polyline)", async ({
+    page,
+  }) => {
+    const order = await page
+      .locator(".trace-svg > *")
+      .evaluateAll((els) => els.map((el) => el.tagName.toLowerCase()));
+    const firstRect = order.indexOf("rect");
+    const firstPolyline = order.indexOf("polyline");
+    expect(firstRect).toBeGreaterThanOrEqual(0);
+    expect(firstPolyline).toBeGreaterThanOrEqual(0);
+    expect(firstRect).toBeLessThan(firstPolyline);
   });
 });
 

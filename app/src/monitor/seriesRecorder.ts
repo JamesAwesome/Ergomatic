@@ -111,6 +111,16 @@ export interface Sample {
   readonly p: number;
   readonly spm: number;
   readonly hr?: number;
+  /** trace-truth Task 2 (spec §3, James's ruling: rests are DRAWN, but
+   *  MARKED). Present and `true` ONLY for a sample recorded while the
+   *  winning frame's own `state` was `"resting"` — ABSENT means work, the
+   *  same absent-not-false idiom `hr` above already uses, so a work
+   *  sample costs zero extra bytes. The renderer cannot recover this
+   *  later (a stored log's steps never carry a warm-up row, so anything
+   *  positional derived from steps lands displaced); the recorder is the
+   *  only place that ever saw the wire's own state byte, so it must mark
+   *  the sample at construction. */
+  readonly r?: true;
 }
 
 export interface SeriesData {
@@ -219,6 +229,10 @@ export function createSeriesRecorder(): SeriesRecorder {
       f.heartRateBpm <= HR_MAX
         ? { hr: f.heartRateBpm }
         : {}),
+      // trace-truth Task 2 (spec §3): the WINNING frame's own state marks
+      // the sample. Same conditional-spread idiom as `hr` above — absent
+      // means work, costing zero extra bytes on a work sample.
+      ...(f.state === "resting" ? { r: true as const } : {}),
     };
     samples.push(Object.freeze(sample));
   }

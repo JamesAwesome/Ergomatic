@@ -30,7 +30,12 @@ import { useMemo, useState } from "react";
 import type { SeriesData } from "../monitor/seriesRecorder.js";
 import { linearScale, decimate } from "../charts/scale.js";
 import { formatTick } from "../charts/axis.js";
-import { buildTrace, type Measure, type TraceModel } from "./traceModel.js";
+import {
+  buildTrace,
+  type Measure,
+  type TraceModel,
+  type TracePoint,
+} from "./traceModel.js";
 
 const MEASURES: readonly Measure[] = ["pace", "rate", "hr"];
 
@@ -55,6 +60,53 @@ const BOTTOM_PAD = 10;
  *  MEASURE (§3): each measure's own trace is decimated on its own points,
  *  never columns computed once and reused across measures. */
 const PLOT_COLUMNS = CHART_WIDTH - LEFT_PAD - RIGHT_PAD;
+
+/** trace-truth Task 2 (spec §3): half a sample-second of padding on each
+ *  side of a rest run's own x-range, so a single ISOLATED rest sample
+ *  (surrounded by work on both sides) still draws a visible band rather
+ *  than a zero-width rect — the 1 Hz sample it came from genuinely
+ *  covers about this much of the timeline either side of its own
+ *  timestamp. Purely a rendering nicety; never affects `rest` itself or
+ *  which points are marked. */
+const REST_BAND_PAD_SECONDS = 0.5;
+
+interface RestBand {
+  startX: number;
+  endX: number;
+}
+
+/** Finds every contiguous run of `rest === true` points in ONE segment
+ *  (never across a segment boundary — a segment is already a maximal run
+ *  of points with no real gap, and a rest never spans a gap by
+ *  construction) and returns its own x-range, padded per
+ *  `REST_BAND_PAD_SECONDS`. Reads the FULL, non-decimated segment — a
+ *  band's own boundary must reflect the real rest span even when
+ *  `decimate` would have dropped the exact point that started or ended
+ *  it. */
+function restBandsForSegment(points: readonly TracePoint[]): RestBand[] {
+  const bands: RestBand[] = [];
+  let runStart: number | null = null;
+  let runEnd = 0;
+  for (const p of points) {
+    if (p.rest) {
+      if (runStart === null) runStart = p.x;
+      runEnd = p.x;
+    } else if (runStart !== null) {
+      bands.push({
+        startX: runStart - REST_BAND_PAD_SECONDS,
+        endX: runEnd + REST_BAND_PAD_SECONDS,
+      });
+      runStart = null;
+    }
+  }
+  if (runStart !== null) {
+    bands.push({
+      startX: runStart - REST_BAND_PAD_SECONDS,
+      endX: runEnd + REST_BAND_PAD_SECONDS,
+    });
+  }
+  return bands;
+}
 
 export default function TraceChart({
   series,
@@ -110,6 +162,29 @@ export default function TraceChart({
         role="img"
         aria-label={trace.summary}
       >
+        {/* trace-truth Task 2 (spec §3): drawn FIRST — beneath the tick
+            marks and the polyline(s) — so the band reads as a background
+            tint the line and ticks sit on top of, never a foreground
+            overlay that could obscure a reading. Computed from the
+            FULL (non-decimated) points per segment; the polyline below
+            is decimated independently and stays one continuous stroke
+            across the band (§3: a rest is not a gap). */}
+        {trace.points.map((segment, segIndex) =>
+          restBandsForSegment(segment).map((band, bandIndex) => {
+            const x1 = xScale(Math.max(trace.domainX[0], band.startX));
+            const x2 = xScale(Math.min(trace.domainX[1], band.endX));
+            return (
+              <rect
+                key={`${segIndex}-${bandIndex}`}
+                className="trace-rest-band"
+                x={x1}
+                y={TOP_PAD}
+                width={Math.max(0, x2 - x1)}
+                height={CHART_HEIGHT - TOP_PAD - BOTTOM_PAD}
+              />
+            );
+          }),
+        )}
         {trace.ticksY.map((tick) => {
           const y = yScale(tick);
           return (

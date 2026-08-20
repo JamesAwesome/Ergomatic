@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { MonitorFrame } from "../../domain/monitor/types.js";
+import type { WorkoutProgram } from "../../domain/monitor/program.js";
 import { parseRecording } from "../monitor/transports/recording.js";
 import { createReplayTransport } from "../monitor/transports/replay.js";
 import { createPm5Driver } from "../monitor/driver.js";
@@ -29,13 +30,14 @@ const REPO_ROOT = import.meta.url
 
 async function loadCaptureFrames(
   repoRelativePath: string,
+  programOverride?: WorkoutProgram,
 ): Promise<MonitorFrame[]> {
   const text = readFileSync(`${REPO_ROOT}${repoRelativePath}`, "utf-8");
   const parsed = parseRecording(text);
-  const program = parsed.header.program;
+  const program = programOverride ?? parsed.header.program;
   if (!program) {
     throw new Error(
-      `loadCaptureFrames: ${repoRelativePath} carries no header.program`,
+      `loadCaptureFrames: ${repoRelativePath} carries no header.program and no programOverride was given`,
     );
   }
 
@@ -74,6 +76,67 @@ async function realSeries(): Promise<SeriesData> {
   return seriesFromFrames(
     await loadCaptureFrames(
       "docs/monitor/sessions/walk-2026-08-17/step-3-pm5-recording-second-rest-1786973713929.jsonl",
+    ),
+  );
+}
+
+/** `seriesRecorder.test.ts`'s own `SESSION_2_PROGRAM` (walk-2026-08-16,
+ *  hand-transcribed — no `header.program` on this recording). Duplicated
+ *  per this file's own "each test file owns its own copy" convention. */
+const SESSION_2_PROGRAM: WorkoutProgram = {
+  intervals: [
+    {
+      type: "warmup",
+      kind: "distance",
+      value: 100,
+      targetSplit: null,
+      displaySpm: null,
+      restSeconds: 0,
+    },
+    {
+      type: "work",
+      kind: "time",
+      value: 60,
+      targetSplit: 129,
+      displaySpm: null,
+      restSeconds: 30,
+    },
+    {
+      type: "work",
+      kind: "time",
+      value: 120,
+      targetSplit: 129,
+      displaySpm: null,
+      restSeconds: 30,
+    },
+    {
+      type: "work",
+      kind: "distance",
+      value: 500,
+      targetSplit: 129,
+      displaySpm: null,
+      restSeconds: 30,
+    },
+    {
+      type: "work",
+      kind: "time",
+      value: 60,
+      targetSplit: 129,
+      displaySpm: null,
+      restSeconds: 0,
+    },
+  ],
+};
+
+/** trace-truth Task 2's own real-rest fixture (brief's own instruction:
+ *  step-3's rest is FROZEN — the wire's `elapsedSeconds` never advances,
+ *  so it produces ZERO samples and can never exercise rest MARKING —
+ *  session-2's rests still advance). */
+async function realSeriesWithRest(): Promise<SeriesData> {
+  return seriesFromFrames(
+    await loadCaptureFrames(
+      "docs/monitor/sessions/walk-2026-08-16/session-2-wu-4unequal.jsonl",
+      SESSION_2_PROGRAM,
     ),
   );
 }
@@ -253,8 +316,13 @@ describe("TraceChart — §4's cut: no interval boundary marks render, ever (pin
         '.trace-boundary, [data-boundary], [data-trace-boundary], [class*="boundary"]',
       ),
     ).toHaveLength(0);
-    // Only the three kinds of mark this component is meant to draw exist:
-    // polylines, tick lines, tick text.
+    // Only the kinds of mark this component is meant to draw exist:
+    // polylines, tick lines, tick text, and (trace-truth Task 2, §3) a
+    // rest-span `rect` — a REST mark, not the interval-BOUNDARY mark §4
+    // cuts; the negative selector above already pins that no element
+    // carries `.trace-boundary`/`[data-boundary]`/a `"boundary"`
+    // class-name substring, which a rest `rect` (`.trace-rest-band`)
+    // never does.
     const allowedTags = new Set([
       "polyline",
       "line",
@@ -265,6 +333,7 @@ describe("TraceChart — §4's cut: no interval boundary marks render, ever (pin
       "button",
       "span",
       "figure",
+      "rect",
     ]);
     for (const el of Array.from(container.querySelectorAll("svg *"))) {
       expect(allowedTags.has(el.tagName.toLowerCase())).toBe(true);
@@ -335,5 +404,70 @@ describe("TraceChart — §7.3 the inversion is a COORDINATE fact, not a class c
     const expectedTickY = a * tickValue + b;
     const actualTickY = Number(tickLabels[0]!.getAttribute("y"));
     expect(actualTickY).toBeCloseTo(expectedTickY, 0);
+  });
+});
+
+describe("TraceChart — trace-truth Task 2: rests are drawn, but marked (§3), real non-frozen rest capture", () => {
+  it("renders a rest band for every contiguous rest run, and the polyline stays ONE segment per the model's own segment count (unbroken across the rest)", async () => {
+    const series = await realSeriesWithRest();
+    const trace = buildTrace(series, "pace")!;
+    const restedCount = trace.points.flat().filter((p) => p.rest).length;
+    expect(restedCount).toBeGreaterThan(0); // the fixture really does carry rest points
+
+    const { container } = render(<TraceChart series={series} />);
+
+    const bands = container.querySelectorAll(".trace-rest-band");
+    expect(bands.length).toBeGreaterThan(0);
+
+    // The polyline count is decided ENTIRELY by the model's own segment
+    // count (`GAP_BREAK_SECONDS`, never rest) — proven directly against
+    // `traceModel.ts`'s own output, not assumed to be 1: this real
+    // capture's pace trace happens to carry a real (non-rest) gap
+    // elsewhere, and rest marking must not add to that count.
+    expect(container.querySelectorAll("polyline")).toHaveLength(
+      trace.points.length,
+    );
+  });
+
+  it("every rest band's rect sits fully within the plot area (never off-canvas from the ±0.5s padding at a series edge)", async () => {
+    const series = await realSeriesWithRest();
+    const { container } = render(<TraceChart series={series} />);
+    const bands = Array.from(container.querySelectorAll(".trace-rest-band"));
+    expect(bands.length).toBeGreaterThan(0);
+    for (const band of bands) {
+      const x = Number(band.getAttribute("x"));
+      const width = Number(band.getAttribute("width"));
+      expect(width).toBeGreaterThanOrEqual(0);
+      expect(x).toBeGreaterThanOrEqual(0);
+      expect(x + width).toBeLessThanOrEqual(320); // CHART_WIDTH
+    }
+  });
+
+  // Not step-3: that capture's OWN mid-workout rest is frozen (zero
+  // samples there, task-2-brief's own reasoning) but the recorder marks
+  // `r: true` on ANY sample whose winning frame reads `state ===
+  // "resting"` regardless of WHICH rest produced it — step-3's capture
+  // happens to END while the machine is still resting after its final
+  // interval (a trailing, non-frozen state with no next interval to
+  // reset into), so it actually carries 3 real rest samples of its own.
+  // A genuinely rest-free case needs a hand-built series instead, the
+  // same convention this file's own "absence" describe block above
+  // already uses for its negative cases.
+  it("a series with no r-marked sample anywhere renders no rest band at all", () => {
+    const series: SeriesData = {
+      samples: [
+        sample({ t: 0, p: 120, spm: 20 }),
+        sample({ t: 10, p: 118, spm: 20 }),
+        sample({ t: 20, p: 116, spm: 20 }),
+      ],
+    };
+    expect(
+      buildTrace(series, "pace")!
+        .points.flat()
+        .some((p) => p.rest),
+    ).toBe(false);
+
+    const { container } = render(<TraceChart series={series} />);
+    expect(container.querySelectorAll(".trace-rest-band")).toHaveLength(0);
   });
 });

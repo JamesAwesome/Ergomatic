@@ -46,12 +46,26 @@ import { fmtSplit } from "../../domain/format.js";
 
 export type Measure = "pace" | "rate" | "hr";
 
+/** trace-truth Task 2 (spec §3): a `ChartPoint` plus the recorder's own
+ *  rest marker, carried through UNCHANGED so `TraceChart` can tint a rest
+ *  span without re-deriving anything from `Sample`/steps — the renderer
+ *  cannot recover this later (a stored log's steps never carry a warm-up
+ *  row, so anything positional derived from steps lands displaced; the
+ *  recorder is the only place that ever saw the wire's own state byte).
+ *  A structural superset of `ChartPoint` (never a narrower/different `x`/
+ *  `y`), so it still passes to `decimate` (Task 1's own shared primitive,
+ *  also consumed by bars/stacked bars — §2's tripwire) unchanged. */
+export interface TracePoint extends ChartPoint {
+  rest: boolean;
+}
+
 export interface TraceModel {
   /** Segments — a gap over `GAP_BREAK_SECONDS` between two consecutive
-   *  real readings starts a new one, so the drawn line breaks there.
-   *  Never empty: a model with nothing to draw is `null`, not
-   *  `{points: []}`. */
-  points: ChartPoint[][];
+   *  real readings starts a new one, so the drawn line breaks there. A
+   *  REST never starts a new segment (§3: a rest is present data, not a
+   *  gap) — only `GAP_BREAK_SECONDS` does. Never empty: a model with
+   *  nothing to draw is `null`, not `{points: []}`. */
+  points: TracePoint[][];
   /** `[0, the session's last sample's own t]`, in seconds — computed
    *  ONCE regardless of which measure is drawn (§3), so a heart-rate line
    *  that starts a third of the way across (a cold strap) reads as a late
@@ -103,10 +117,14 @@ const MIN_DOMAIN_HEIGHT: Record<Measure, number> = {
 const TICK_COUNT = 4;
 
 /** One measure's own real (non-sentinel) reading, already unit-converted
- *  to seconds (`t`) and the measure's own real unit (`value`). */
+ *  to seconds (`t`) and the measure's own real unit (`value`), plus the
+ *  recorder's own rest marker (trace-truth Task 2, spec §3) — the pace
+ *  value during a rest is real but not meaningful; `rest` is what says
+ *  so, carried straight from `Sample.r`, never re-derived. */
 interface Reading {
   t: number;
   value: number;
+  rest: boolean;
 }
 
 /** Extracts `measure`'s own real readings from `samples`, in wire order —
@@ -116,15 +134,16 @@ function realReadings(samples: readonly Sample[], measure: Measure): Reading[] {
   const out: Reading[] = [];
   for (const s of samples) {
     const t = s.t / 10;
+    const rest = s.r === true;
     switch (measure) {
       case "pace":
-        if (s.p !== 0) out.push({ t, value: s.p / 10 });
+        if (s.p !== 0) out.push({ t, value: s.p / 10, rest });
         break;
       case "rate":
-        if (s.spm !== 0) out.push({ t, value: s.spm });
+        if (s.spm !== 0) out.push({ t, value: s.spm, rest });
         break;
       case "hr":
-        if (s.hr !== undefined) out.push({ t, value: s.hr });
+        if (s.hr !== undefined) out.push({ t, value: s.hr, rest });
         break;
     }
   }
@@ -135,16 +154,16 @@ function realReadings(samples: readonly Sample[], measure: Measure): Reading[] {
  *  more than `GAP_BREAK_SECONDS` apart (§3). The rest case (no gap at all
  *  — the work clock froze) never trips this; a real gap (a dropped frame,
  *  a rejected reset candidate, or a long sentinel run) does. */
-function toSegments(readings: readonly Reading[]): ChartPoint[][] {
-  const segments: ChartPoint[][] = [];
-  let current: ChartPoint[] = [];
+function toSegments(readings: readonly Reading[]): TracePoint[][] {
+  const segments: TracePoint[][] = [];
+  let current: TracePoint[] = [];
   let prevT: number | null = null;
   for (const r of readings) {
     if (prevT !== null && r.t - prevT > GAP_BREAK_SECONDS) {
       segments.push(current);
       current = [];
     }
-    current.push({ x: r.t, y: r.value });
+    current.push({ x: r.t, y: r.value, rest: r.rest });
     prevT = r.t;
   }
   // No trailing empty-segment guard: `current` always gains the loop's

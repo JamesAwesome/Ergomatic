@@ -7,6 +7,7 @@ import { createEventLog } from "../monitor/eventLog.js";
 import { createSeriesRecorder } from "../monitor/seriesRecorder.js";
 import type { Sample, SeriesData } from "../monitor/seriesRecorder.js";
 import type { MonitorFrame } from "../../domain/monitor/types.js";
+import type { WorkoutProgram } from "../../domain/monitor/program.js";
 import { fmtSplit } from "../../domain/format.js";
 import { buildTrace } from "./traceModel.js";
 
@@ -43,13 +44,14 @@ const REPO_ROOT = import.meta.url
  *  that never changes). */
 async function loadCaptureFrames(
   repoRelativePath: string,
+  programOverride?: WorkoutProgram,
 ): Promise<MonitorFrame[]> {
   const text = readFileSync(`${REPO_ROOT}${repoRelativePath}`, "utf-8");
   const parsed = parseRecording(text);
-  const program = parsed.header.program;
+  const program = programOverride ?? parsed.header.program;
   if (!program) {
     throw new Error(
-      `loadCaptureFrames: ${repoRelativePath} carries no header.program`,
+      `loadCaptureFrames: ${repoRelativePath} carries no header.program and no programOverride was given`,
     );
   }
 
@@ -86,6 +88,55 @@ function seriesFromFrames(frames: MonitorFrame[]): SeriesData {
 
 const STEP3_PATH =
   "docs/monitor/sessions/walk-2026-08-17/step-3-pm5-recording-second-rest-1786973713929.jsonl";
+
+/** `seriesRecorder.test.ts`'s own `SESSION_2_PROGRAM` (walk-2026-08-16,
+ *  hand-transcribed — no `header.program` on this recording). Duplicated
+ *  here per this file's own "each test file owns its own copy"
+ *  convention, stated in the file-header comment above. */
+const SESSION_2_PROGRAM: WorkoutProgram = {
+  intervals: [
+    {
+      type: "warmup",
+      kind: "distance",
+      value: 100,
+      targetSplit: null,
+      displaySpm: null,
+      restSeconds: 0,
+    },
+    {
+      type: "work",
+      kind: "time",
+      value: 60,
+      targetSplit: 129,
+      displaySpm: null,
+      restSeconds: 30,
+    },
+    {
+      type: "work",
+      kind: "time",
+      value: 120,
+      targetSplit: 129,
+      displaySpm: null,
+      restSeconds: 30,
+    },
+    {
+      type: "work",
+      kind: "distance",
+      value: 500,
+      targetSplit: 129,
+      displaySpm: null,
+      restSeconds: 30,
+    },
+    {
+      type: "work",
+      kind: "time",
+      value: 60,
+      targetSplit: 129,
+      displaySpm: null,
+      restSeconds: 0,
+    },
+  ],
+};
 
 describe("buildTrace — §7.2 the sentinel rule, proven against a REAL capture", () => {
   it("step-3 (wu 1:00 r0 + 1:00 r30, a real belted walk): every p===0 sample is excluded from both the drawn points and domainY", async () => {
@@ -277,5 +328,55 @@ describe("buildTrace — the per-measure too-little-to-draw gate and other absen
     };
     expect(buildTrace(series, "pace")).not.toBeNull();
     expect(buildTrace(series, "hr")).toBeNull();
+  });
+});
+
+describe("buildTrace — trace-truth Task 2: rests are marked on the point, not folded into a gap (spec §3)", () => {
+  it("marks trace points recorded during a rest", () => {
+    const series = {
+      samples: [
+        { t: 10, d: 40, p: 1200, spm: 20 },
+        { t: 20, d: 45, p: 1400, spm: 18, r: true as const },
+        { t: 30, d: 80, p: 1200, spm: 20 },
+      ],
+    };
+    const model = buildTrace(series, "pace")!;
+    expect(model.points[0]!.map((pt) => pt.rest)).toStrictEqual([
+      false,
+      true,
+      false,
+    ]);
+  });
+
+  it("does NOT break the line across a rest — a rest is data, not a gap", () => {
+    // same series: exactly ONE segment, not three
+    const series = {
+      samples: [
+        { t: 10, d: 40, p: 1200, spm: 20 },
+        { t: 20, d: 45, p: 1400, spm: 18, r: true as const },
+        { t: 30, d: 80, p: 1200, spm: 20 },
+      ],
+    };
+    expect(buildTrace(series, "pace")!.points).toHaveLength(1);
+  });
+
+  it("a real, non-frozen rest capture (session-2-wu-4unequal.jsonl) carries rest-marked points through to the model, still one unbroken segment", async () => {
+    const frames = await loadCaptureFrames(
+      "docs/monitor/sessions/walk-2026-08-16/session-2-wu-4unequal.jsonl",
+      SESSION_2_PROGRAM,
+    );
+    const rec = createSeriesRecorder();
+    for (const f of frames) rec.onFrame(f);
+    const series = rec.snapshot()!;
+    const model = buildTrace(series, "pace")!;
+    expect(model).not.toBeNull();
+    const restedPoints = model.points.flat().filter((pt) => pt.rest);
+    expect(restedPoints.length).toBeGreaterThan(0);
+    // The rest is DATA, not a GAP (§3): the recorder's own rested samples
+    // never widened the segment count beyond what the gap rule alone
+    // would have produced — no segment boundary is introduced BY rest
+    // marking. Cross-checked against the sample-level count directly
+    // (seriesRecorder.test.ts's own oracle for this exact capture).
+    expect(series.samples.filter((s) => s.r === true)).toHaveLength(21);
   });
 });

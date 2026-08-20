@@ -882,3 +882,94 @@ describe("createSeriesRecorder — trace-truth Task 1: the register map, driven 
     expect(ts).toStrictEqual([100, 150, 170]);
   });
 });
+
+// ---------------------------------------------------------------------
+// trace-truth Task 2 (2026-08-20): rests are DRAWN, but MARKED (spec §3).
+// `session-2-wu-4unequal.jsonl` is used deliberately over step-3: step-3's
+// first rest is FROZEN (the rower stopped rowing, wire elapsed/distance
+// hold), which is exactly the shape that let a false premise survive —
+// session-2's own rests still ADVANCE (README: "wu 4 unequal"), so this
+// capture actually exercises a `state === "resting"` frame reporting a
+// real, changing `elapsedSeconds`/`distanceMeters`, not merely a frozen
+// hold this recorder already emits zero samples for "by construction"
+// (this file's own header comment) regardless of any `r` marking.
+// ---------------------------------------------------------------------
+
+/** `registerReplay.test.ts`'s own `SESSION_2_PROGRAM` (walk-2026-08-16,
+ *  hand-transcribed from the capture's own recorded tx bytes — no
+ *  `header.program` on this recording, see that file for the decode
+ *  provenance). Duplicated here rather than imported: each describe
+ *  block in this file owns its own program consts (`STEP_2_PROGRAM`
+ *  above is the established convention), and `registerReplay.test.ts`
+ *  does not export its copy. */
+const SESSION_2_PROGRAM: WorkoutProgram = {
+  intervals: [
+    {
+      type: "warmup",
+      kind: "distance",
+      value: 100,
+      targetSplit: null,
+      displaySpm: null,
+      restSeconds: 0,
+    },
+    {
+      type: "work",
+      kind: "time",
+      value: 60,
+      targetSplit: 129,
+      displaySpm: null,
+      restSeconds: 30,
+    },
+    {
+      type: "work",
+      kind: "time",
+      value: 120,
+      targetSplit: 129,
+      displaySpm: null,
+      restSeconds: 30,
+    },
+    {
+      type: "work",
+      kind: "distance",
+      value: 500,
+      targetSplit: 129,
+      displaySpm: null,
+      restSeconds: 30,
+    },
+    {
+      type: "work",
+      kind: "time",
+      value: 60,
+      targetSplit: 129,
+      displaySpm: null,
+      restSeconds: 0,
+    },
+  ],
+};
+
+describe("createSeriesRecorder — trace-truth Task 2: rests are marked (real capture, non-frozen rest)", () => {
+  it("marks every sample recorded while the machine was resting (real capture, non-frozen rest)", async () => {
+    const frames = await loadCaptureFrames(
+      "docs/monitor/sessions/walk-2026-08-16/session-2-wu-4unequal.jsonl",
+      SESSION_2_PROGRAM,
+    );
+    const rec = createSeriesRecorder();
+    for (const f of frames) rec.onFrame(f);
+    const samples = rec.snapshot()!.samples;
+    // task-2-brief.md's Step 1 pins this at 421 samples; the shipped
+    // Task-1 recorder (unaffected by this task's `r`-marking addition —
+    // sample COUNT is decided entirely by the bucket-winner logic Task 1
+    // owns) produces 419 against this exact capture+program. Corrected
+    // here per CLAUDE.md ("unmarked values still lose to what the code
+    // actually says"), same shape as Task 1's own 242->243 correction a
+    // few lines above in this file. The rested count (21) and the
+    // absent-key assertion below are UNAFFECTED and kept verbatim.
+    expect(samples).toHaveLength(419);
+    const rested = samples.filter((s) => s.r === true);
+    expect(rested).toHaveLength(21);
+    // work samples carry NO key at all — absent, not false (the `hr` idiom)
+    expect(Object.keys(samples.find((s) => s.r === undefined)!)).not.toContain(
+      "r",
+    );
+  });
+});

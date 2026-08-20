@@ -218,4 +218,20 @@
      to redefine. */
   --size-countdown: 118px;
   --size-elapsed: 26px;
+
+  /* trace-truth Task 2 (spec §3, James's ruling: rests are DRAWN, but
+     MARKED). `TraceChart.tsx`'s `.trace-rest-band` — a solid background
+     band spanning a rest span's own x-range, drawn BENEATH the polyline
+     (`.trace-line` stays one continuous, undifferentiated stroke: §3 "a
+     rest is not a gap"). This is the ONLY signal a rest happened — no
+     adjacent text restates it (§3: "no copy claims otherwise"), so it is
+     held to WCAG 1.4.11's 3:1 non-text floor, not treated as
+     redundant decoration the way `--progress-active` above is.
+     Computed (not eyeballed), against `--surface` (the only background
+     `.trace-figure` ever sits on, `index.css`'s own trace-block comment):
+     4.72:1. Also checked against `--page` (4.25:1, in case a future
+     surface reuses this chart off-card) and against `--ink` (the
+     polyline stroke crossing the band): 3.62:1, so the line stays
+     legible where it passes through a tinted span. */
+  --trace-rest: #97692a;
 }

@@ -8961,6 +8961,15 @@ section:not(.news-pinned) .news-row:last-of-type {
   vector-effect: non-scaling-stroke;
 }
 
+/* trace-truth Task 2 (spec §3): the ONLY signal a rest happened — no
+   copy restates it, so this is the sole thing that must clear WCAG
+   1.4.11's 3:1 non-text floor, not redundant decoration. Computed
+   (`--trace-rest`'s own tokens.css comment carries the numbers): 4.72:1
+   against --surface, the only background `.trace-figure` ever sits on. */
+.trace-rest-band {
+  fill: var(--trace-rest);
+}
+
 .trace-tick-mark {
   stroke: var(--rule-3);
   stroke-width: 1;
