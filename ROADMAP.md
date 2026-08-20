@@ -2494,6 +2494,29 @@ with `git merge-base --is-ancestor <sha> vX.Y.Z^{commit}`, never by reading
 a tag message or a ledger line); (4) HISTORY RE-JUDGES TOO — sessions already viewed
 change colour (tule-fog rows go red→blue), plus #124's accepted re-log
 gap if still unannounced (retroactive, same chain).
+**THE PHASE-CLOSE ERG BUNDLE (James, 2026-08-19: "lets do those at phase
+close").** Five parked device items now travel together as ONE session at
+LT's close, so the close gate finds them in one place instead of
+rediscovering five parked rows. Two need no rowing, three ride a single
+rest-bearing piece:
+- NO ROWING — CR2's phone pass items 5, 6, 8, still REQUIRED and owed
+  since that phase shipped: the mis-hit test toward END, both-rotations
+  occlusion (real safe-area insets; desktop Chrome reports 0 and no gate
+  can see it) plus the iOS-26 `100dvh` portrait eye, and triple-tap
+  diagnostics (`walk-phase-cr2-exit/RUNSHEET.md`, the tagged handoff list).
+- NO ROWING — the stale-while-armed observation (same runsheet): arm,
+  kill the link before stroke one, switch to GRID, record header/up-next/bar.
+- ONE REST-BEARING PIECE, ~4 min, answering three at once: the same-frame
+  DISTANCE photo (PW's PM-gate C3 row — the Sun-fret protocol aimed at
+  the summary's DISTANCE hero, never yet checked on hardware); **F-2 from
+  2026-08-19's walk** (that session's totals oracle went blind —
+  `machineTotal` was sampled only before rowing, so the accumulator had
+  nothing live to be checked against; a rest is where the CR2 walks
+  sampled it successfully, and this piece tests whether the NATIVE
+  transport samples it at all); and F-1's re-observation (the 6-MIN
+  discrepancy, unreproduced since 2026-08-17 — read the TIME hero after
+  ending and dump the localStorage record BEFORE pressing Log it).
+
 **LT spec 2's accepted limit (PM gate C1):** POST /api/logs' route-scoped
 1 MB body parser registers before auth, so the pre-auth buffer ceiling on
 that one route is 1 MB (was 100 KB app-wide). Ordering pre-existing, no
