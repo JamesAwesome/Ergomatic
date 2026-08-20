@@ -2873,3 +2873,5 @@ program.ts` hardcodes PM5 Table 19 limits (`MIN_TIME_SECONDS = 20`,
   **Trigger:** James accepts the residue as everyday behavior
   (pending) — then a time-based janitor reaps a stamped-but-untouched
   draft a few hours after it starts.
+
+<!-- probe: docs-only commit for PR #135, deleted after -->
