@@ -103,9 +103,62 @@ general is unestablished — no rest occurred in this 45-second piece, and
 rests are where the CR2 walks sampled TWD successfully. **Filed for the
 next connected-surface phase; not a spec-2 defect.**
 
+
+## Item 4 — S5b: the on-disk footprint (added by James at the first pass's close, measured 2026-08-19 second pass)
+
+**Measured on a REAL trace in a REAL database, and heart rate was
+witnessed for the first time in the process.**
+
+Medium: laptop (Chrome + Web Bluetooth) against the walk-lab stack built
+from `lt-series`, real PM5, one 3-minute easy piece, logged through the
+shipped Save door. Rowing: ~3 min. Budget was 1 piece / ~3 min; not
+exceeded. Belt worn (see the HR finding below).
+
+| Measure | Real session (3 min work) | Realistic 4-hour ceiling |
+| --- | --- | --- |
+| Samples | 180 (exactly one per work-second) | 14,400 (the cap) |
+| JSON bytes | 10,107 (56.2 B/sample, `hr` present) | 862,024 |
+| **Stored bytes (Postgres)** | **2,006** | **161,127** |
+| Compression ratio | **5.04×** | **5.35×** |
+
+The ceiling row was NOT the synthetic probe record (whose constant
+`p`/`spm`/`hr` compress unrealistically — the trap §4's S5b row names).
+It was built by tiling THIS session's own 180 real samples 80 times with
+`t`/`d` offset per tile, so the value distributions are the rower's.
+
+**What this means at his cadence:** a typical 45-minute-work session
+stores ~30 KB on disk; ~300 sessions/year ≈ **9 MB/year per rower**.
+Five years of daily rowing is well under 100 MB. The 4-hour ceiling is
+161 KB — a session nobody rows. Series storage is a non-issue at
+household scale, and the number is now measured rather than inferred.
+
+Caveat, stated: `pg_column_size` reports the datum's stored size, which
+is authoritative here because both rows compressed small enough to stay
+inline (the real row at 2,006 B; the ceiling row at 161 KB is
+out-of-line TOAST and its number is the compressed payload). The
+per-year figure is arithmetic on the measured ratio, not a measured
+year.
+
+**F-3 (finding, and a good one): the heart-rate belt DELIVERS.** Spec 2
+descoped HR because "belt delivery on James's PM5 remains unwitnessed."
+This session's trace carries `hr` on every sample, rising 83 → 123 bpm
+across three minutes of easy rowing — physiologically sensible, wire-
+sourced, and the first time the app has seen it. Consequences: the
+`hr` field records exactly as designed (20-254 band, no dropped values);
+spec 3's HR leg, descoped at the phase-open gate "until a belt is
+confirmed", is **now unblocked**; and every size number above is the
+WITH-HR case, i.e. the expensive one.
+
 ## What was NOT established
 
-The build talked to prod, whose schema predates migration 0011, so no
-series reached a server on this pass (the client posted it; the old
-validator ignored the unknown key, as designed). The end-to-end
-phone→server→column path is proven only in CI against the real stack.
+The FIRST pass's build talked to prod, whose schema predates migration
+0011, so no series reached a server from the phone (the client posted
+it; the old validator ignored the unknown key, as designed). The
+end-to-end device→server→column path is still proven only in CI — the
+second pass closed the server half on the laptop path, not the phone's.
+
+The per-year storage figure is arithmetic on a measured ratio, not a
+measured year; and the compression ratio of a session with WILDLY
+different values (a max-effort piece with a thrashing HR trace) could
+differ from this easy-paddle sample, though not by an order of
+magnitude.
