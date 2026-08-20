@@ -1155,3 +1155,71 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   grammar already parses via import, `bulk.ts:268`). LL is a PROD PRECONDITION:
   PROD's exit ("an empty-phone install that reaches a logged row without a hand
   from us") is unreachable while a link drop bricks the app.
+
+## Final-PR gate, 2026-08-20 (PR #140, Phase LL trace-truth task 1 — triad: what a stored number means)
+
+- **A PR body can misreport the record, not just under-use it. RF14's sixth
+  occurrence in seven gates, and a new mutation.** #140's bullet 5 said the
+  unrepairable-corpus limit "is written into DEVIATIONS and the spec." The
+  spec, yes; DEVIATIONS, no (`git diff --stat -- docs/design/DEVIATIONS.md`
+  empty, `grep -iE "under-run|corpus|pre-fix"` exit 1); ROADMAP, no. The
+  previous five were findings STRANDED in a Record block. This one ASSERTED a
+  durable artifact that did not exist, which is harder to catch because it
+  reads as compliance. **At every gate, run the grep — do not accept the PR's
+  own claim that a row exists.**
+- **"No before/after is observable" is the wrong test for whether a notes
+  clause is owed.** Spec §5 declined a rower-facing clause for the fold on
+  that ground. Overturned. The question is not whether he can SEE the fix; it
+  is whether he now HOLDS records he should not trust — and the spec itself
+  says he does. Two things settle it: this repo has shipped the old-corpus
+  clause twice (v0.12.0, and `releaseNotes.ts:28` for this very feature four
+  days earlier), and #124's three-place rule binds accepted limits to the
+  notes. Chain at this gate was ONE of four.
+- **"Never confirmed on hardware" is a claim about our SEARCH, not about the
+  erg — grep the interface notes before parking a walk item.** #140's tail
+  commit told ROADMAP the PM5's work→work elapsed/distance reset had never
+  been seen on hardware. `pm5-interface-notes.md:3268-3271` (+ §19.1's
+  correction at :3290) records it under `TWO_TIME_NO_REST_PROGRAM`, two 60s
+  TIME intervals `restSeconds: 0` on both, state `"rowing"` throughout, elapsed
+  resetting to 0 — "the one and only elapsed-reset-while-rowing in the whole
+  log," 2026-08-06. Only DISTANCE is still open. A walk item that overstates
+  what is unknown buys an erg session to re-observe a settled fact.
+- **Digit-identity between an edge-triggered and a level-triggered accumulator
+  over the same capture is EVIDENCE ABOUT THE WIRE, not just a regression
+  pin.** The old recorder detects boundaries only by a backward elapsed jump;
+  the new one keys on the index. If they agree digit-for-digit on a capture
+  containing a key change, a reset must have occurred there. Reach for this
+  before scheduling hardware.
+- **A fixture can permanently disarm the recompute-the-headline check, and say
+  so in its own comment.** `log-monitor.png` shows a chart topping out at
+  ~1:38 beside a measured row reading `1:15.0`, because `screenshots.spec.ts`
+  scripts `avgSplit` "independent of the raw elapsed stream." Any future
+  reviewer running the check gets a false RED. Trace spec §7 criterion 7
+  ("values reconcile with the session's own TIME hero in the same frame") is
+  unsatisfiable on this fixture. **When a capture's two numbers are produced by
+  independent paths, the check is dead on that screen — find out before
+  writing an exit criterion that depends on it.**
+- **The "reads aloud in 30 seconds" rule has never been applied and cannot be
+  as written.** Above-the-fold word counts since it landed 2026-08-16: #124
+  229, #131 268, #129 269, #140 325, #137 334, #130 353, #117 373, #123 472.
+  Budget is ~75 words. Zero failures in seven, three of those gates mine.
+  Declined to fail #140 for being the median. **Rules for CLAUDE.md, not here
+  — James: either re-set the number (~150 words / 60s, which would bite #117
+  and #123) or drop the clock and keep the voice test.**
+- **Release call:** NO tag on this merge. `v0.14.0` (tagged 2026-08-20 06:58,
+  TF 688) has ZERO product code after it; this PR would be the first. Declined
+  the CR2 solo-canary precedent deliberately — that canary worked because a
+  tester could check it against the erg, and here nothing is observable, so a
+  solo tag is a version number with no falsification value. Next tag
+  **v0.15.0 MINOR** on task 3, two clauses (axis+rest marking; old corpus).
+  **Trigger to revisit:** tasks 2+3 slipping past ~a week, or a brick fix
+  tagging first — B4 puts the trigger threshold at 0.81s against a measured
+  worst gap of 0.810s, so wrong traces accrue on ordinary jitter, not on rare
+  events.
+- **Backlog: 37 unchecked (up from 35 at LL open, 30 at LT open, 24 on
+  2026-08-13); 15 triggered follow-ons.** Still moving the wrong way, and LL
+  now carries two bodies of work — the brick it was opened for (a PROD
+  precondition) and trace truth, inserted as spec 1 AFTER the phase-open gate
+  ran on a slate that did not contain it. The triad override caught it here,
+  at the most expensive moment. **A spec inserted at the front of an open
+  phase deserves a slate re-gate, not just its PR gate.**

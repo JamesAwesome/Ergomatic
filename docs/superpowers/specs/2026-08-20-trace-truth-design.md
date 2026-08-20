@@ -193,11 +193,29 @@ phone-recorded traces exist in prod — the phone→server leg is still owed
 
 **What is owed:** a `docs/design/DEVIATIONS.md` row stating that traces stored
 before this spec may under-run permanently and draw rest as work, and cannot be
-distinguished from correct ones. **What is NOT owed: a rower-facing notes
-clause.** A trace is per-session and immutable — no tester can observe a
-before/after on the same data, so the "flipping an error direction is a release
-event" precedent does not reach it. The time axis DOES owe one clause, being a
-visible change to a feature v0.14.0 announced days earlier.
+distinguished from correct ones. **LANDED** in PR #140 — the row was owed by
+criterion 8 and was initially missed, which the PM final-PR gate caught by
+grepping rather than by believing the PR body's claim that it existed.
+
+**A rower-facing notes clause IS owed. This paragraph originally said it was
+not; the PM final-PR gate OVERTURNED that on 2026-08-20 and the reversal is
+kept visible rather than edited away.** The original argument was that a trace
+is per-session and immutable, so no tester can observe a before/after on the
+same data. **That tests the wrong proposition.** The question is not whether he
+can SEE the fix; it is whether he now HOLDS records he should not trust — and
+this very section says he does ("cannot be distinguished from correct ones").
+Two things settle it: this repo has already shipped an old-corpus clause twice,
+the second time for THIS FEATURE four days earlier (`releaseNotes.ts:28`, "Sessions
+rowed before this update kept no trace and show no chart"), so announcing the
+trace with a corpus caveat and then announcing its correction without one is
+inconsistent on the same feature; and PR #124's three-place rule binds an
+accepted limit to spec, ROADMAP and notes alike. The clause reads roughly:
+*"Traces from sessions you rowed before this update can be missing a whole
+interval if the link stuttered, and there is no way to tell a good one from a
+bad one. Only traces recorded from this build on are trustworthy."*
+
+The time axis owes its own separate clause, being a visible change to a feature
+v0.14.0 announced days earlier.
 
 ## §6 Testing, and one harness rule that is not optional
 
@@ -254,7 +272,15 @@ visible change to a feature v0.14.0 announced days earlier.
    reconcile with the session's own `TIME` hero in the same frame — checked by
    eye on a committed capture, per recurring failure 7.
 8. `DEVIATIONS.md` carries the pre-fix-corpus row (§5).
-9. The next tag's notes carry one clause for the axis, none for the fold.
+9. The next tag's notes carry TWO clauses: one for the axis and rest marking,
+   and one for the old corpus (§5's declination overturned at the PM gate).
+   **Release shape, ruled 2026-08-20:** no tag on task 1's merge — v0.14.0 has
+   zero product code after it and a solo tag would carry no falsification value
+   here, since nothing about this fix is observable to a tester. Next tag is
+   **v0.15.0 MINOR when task 3 lands**. **Trigger to revisit:** tasks 2+3
+   slipping past about a week, or a link-loss fix tagging first — the fold's
+   trigger threshold is 0.81 s against a measured worst inter-frame gap of
+   0.810 s, so wrong traces accrue on ordinary jitter, not on rare events.
 
 ## §8 Vetted ground — what the antagonist attacked, and what it found
 

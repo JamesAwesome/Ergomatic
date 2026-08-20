@@ -1912,17 +1912,55 @@ WebKit's throttling, so it does not rescue the JS half.
       evidentiary bar the rest of this module's tests hold themselves to.
       Whichever task next touches `traceModel.ts`/its tests should either
       capture one or explicitly re-decline with a stated reason.
-- [ ] **HARDWARE QUESTION owed to the next walk, raised by the trace-truth
-      re-review 2026-08-20:** the premise that the PM5 resets
-      `elapsedSeconds`/`distanceMeters` at EVERY interval transition is
-      hardware-verified (walk 4, `types.ts:31-40`, PRIMARY) only for a
-      **rest→work** boundary — `elapsed=37.81` → `elapsed=0`. Both the
-      screenshot fixture and the `connected.spec.ts` fixture that this
-      spec's Task 1 leans on use **work→work** transitions with
-      `restSeconds: 0`, and that case has never been confirmed on
-      hardware. It is foundational to the whole antagonist-vetted design,
-      not a Task 1 defect. One back-to-back rest-free piece settles it and
-      it rides the next walk. **S**
+- [ ] **HARDWARE QUESTION owed to Phase LL's exit walk — DISTANCE only.**
+      **CORRECTED at the 2026-08-20 PM gate: an earlier version of this item
+      said the work→work reset had "never been confirmed on hardware." That
+      was wrong for ELAPSED, and a walk item that overstates what is unknown
+      buys an erg session to re-observe a settled fact.**
+      `pm5-interface-notes.md:3268-3271` records a 2×TIME program with
+      `restSeconds: 0` on both intervals where `state` stays `"rowing"`
+      across the boundary and "the very next frame reset[s] `elapsed` to 0"
+      — §19.1's correction at `:3290` calls it "the one and only
+      elapsed-reset-while-rowing in the whole log" ([S2] D4, 2026-08-06).
+      **What is genuinely open is whether DISTANCE resets at a work→work
+      boundary**, which neither passage states. It matters: if it does not,
+      the new accumulator silently OVER-reports on zero-rest boundaries —
+      direction-flipped from the bug just fixed, and a shape the old
+      edge-triggered code would have got right. Not exotic either:
+      `program.ts:554` defaults `restSeconds: 0`, so a warm-up→work0
+      transition is a zero-rest work→work boundary on essentially every
+      connected session. **Probably already answered from a committed file:**
+      the new accumulator is digit-identical to the shipped one on `step-3`,
+      and since the shipped one detects boundaries ONLY by a backward elapsed
+      jump, digit-identity across a key change is itself evidence a reset
+      occurred there — check whether `step-3` contains a `restSeconds: 0`
+      transition before booking any rowing. **S**
+- [ ] **A replacement real-capture witness for a genuine >3 s wire gap
+      breaking the trace line** — lost when three tests built on an invalid
+      four-session capture were removed (PR #140). **Owner BOUND to Phase
+      LL's exit walk** (PM gate, 2026-08-20): the deliverable is a CAPTURE,
+      and captures come from walks, not from tasks — and this phase's own
+      exit walk produces a genuine >3 s gap as a matter of course. Sits
+      beside exit clause (e) so the phase can go red on it. **S**
+- [ ] **BEFORE trace-truth task 3 (the time axis): its exit criterion 7 is
+      currently UNSATISFIABLE on the flagship capture, and the reason is
+      structural** (PM gate, 2026-08-20). Criterion 7 asks that the axis's
+      values "reconcile with the session's own TIME hero in the same frame".
+      On `docs/screenshots/log-monitor.png` they cannot: the chart's fastest
+      pace reads ~1:38 beside a measured row reading `1:15.0`, because
+      `screenshots.spec.ts:2951-2953` says outright that the fixture's
+      `avgSplit`/`avgSpm` are "the fake's own scripted per-interval actuals
+      (independent of the raw elapsed stream)" — the row and the trace are
+      wired to disagree BY CONSTRUCTION, so the repo's own
+      recompute-the-headline check returns a false RED on that screen
+      forever. Four `—` rows and the crop also mean the TIME hero is not in
+      frame at all. Task 3 either re-does the fixture so both numbers come
+      from one path, or the criterion moves to a capture where they do.
+      Recorded now so task 3 does not discover it at its own gate and fudge
+      the criterion. **Also task 3's business, same captures:** the y-axis
+      labels render CLIPPED (`L:40.0`, `L:50.0`) — pre-existing, shipped in
+      v0.14.0, and squarely in scope since criterion 7 says labels must be
+      readable. **S**
 - [ ] **Detection — make the banner that already exists actually fire.**
       `1 OF 3 · READY` is structurally impossible once
       `phase === "disconnected"` (`surfaceModel.ts:787`), so its
