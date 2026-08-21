@@ -203,6 +203,103 @@ describe("buildTrace — §3/§7.1 domainY: the full range of real readings, no 
   });
 });
 
+describe("buildTrace — 2026-08-20: rest samples are drawn but excluded from the vertical domain", () => {
+  function sample(over: Partial<Sample> = {}): Sample {
+    return Object.freeze({ t: 0, d: 0, p: 0, spm: 0, ...over }) as Sample;
+  }
+
+  // Real-capture regression for the reported bug: session-2's rests
+  // genuinely advance (non-frozen, James's own real paddling) and reach
+  // pace well outside the WORK range on this exact capture — the same
+  // shape as the 2026-08-20 photographed session (rests 5:00+/500m
+  // stretching a work range of ~2s into a flat line).
+  it("session-2-wu-4unequal (a real non-frozen-rest capture): domainY is bounded by WORK readings only, never by the rest excursion", async () => {
+    const frames = await loadCaptureFrames(
+      "docs/monitor/sessions/walk-2026-08-16/session-2-wu-4unequal.jsonl",
+      SESSION_2_PROGRAM,
+    );
+    const series = seriesFromFrames(frames);
+
+    const workTenths = series.samples
+      .filter((s) => s.p !== 0 && s.r !== true)
+      .map((s) => s.p);
+    const restTenths = series.samples
+      .filter((s) => s.p !== 0 && s.r === true)
+      .map((s) => s.p);
+    // Ground this test depends on: the capture really does carry a rest
+    // excursion outside the work range (measured, not assumed).
+    const workMaxSeconds = Math.max(...workTenths) / 10;
+    const restMaxSeconds = Math.max(...restTenths) / 10;
+    expect(restTenths.length).toBeGreaterThan(0);
+    expect(restMaxSeconds).toBeGreaterThan(workMaxSeconds);
+
+    const trace = buildTrace(series, "pace")!;
+    expect(trace).not.toBeNull();
+    // The domain still fully contains the WORK range (§3's original
+    // "no clipping" rule, unchanged for the population it now applies
+    // to) ...
+    expect(trace.domainY[1]).toBeGreaterThanOrEqual(workMaxSeconds);
+    // ... but must NOT be stretched out to the rest excursion — the bug
+    // being fixed. If domainY still counted rest, this would be >= the
+    // rest max instead.
+    expect(trace.domainY[1]).toBeLessThan(restMaxSeconds);
+
+    // The rest points are still DRAWN (never hidden) — present in the
+    // model, each marked, with its real (un-clipped-in-the-model) value.
+    const restPoints = trace.points.flat().filter((p) => p.rest);
+    expect(restPoints.length).toBe(restTenths.length);
+    expect(Math.max(...restPoints.map((p) => p.y))).toBeCloseTo(
+      restMaxSeconds,
+      5,
+    );
+  });
+
+  it("a rest excursion far outside a synthetic work range does not stretch domainY, on a hand-built minimum series", () => {
+    const series: SeriesData = {
+      samples: [
+        sample({ t: 0, p: 1180 }), // 118.0 s/500m, work
+        sample({ t: 1, p: 1190 }), // 119.0 s/500m, work
+        sample({ t: 2, p: 1185 }), // 118.5 s/500m, work
+        sample({ t: 3, p: 3600, r: true }), // 360.0 s/500m rest excursion
+        sample({ t: 4, p: 1180 }),
+      ],
+    };
+    const trace = buildTrace(series, "pace")!;
+    expect(trace).not.toBeNull();
+    // Contains the work range (118.0-119.0), padded outward — but
+    // nowhere near the 360.0 s/500m rest excursion, which would have
+    // pushed domainY[1] well past 300 if it still counted.
+    expect(trace.domainY[0]).toBeLessThanOrEqual(118.0);
+    expect(trace.domainY[1]).toBeGreaterThanOrEqual(119.0);
+    expect(trace.domainY[1]).toBeLessThan(200);
+    const restPoint = trace.points.flat().find((p) => p.rest);
+    expect(restPoint).toBeDefined();
+    expect(restPoint!.y).toBe(360); // still drawn at its real value
+  });
+
+  it("edge case: every real reading is a rest — no work data to scale by, so the measure does not draw (same per-measure absence idiom as the too-little-to-draw gate)", () => {
+    const series: SeriesData = {
+      samples: [
+        sample({ t: 0, p: 1200, r: true }),
+        sample({ t: 1, p: 1210, r: true }),
+        sample({ t: 2, p: 1190, r: true }),
+      ],
+    };
+    expect(buildTrace(series, "pace")).toBeNull();
+  });
+
+  it("edge case: only 1 work reading for the measure (below domainFromReadings' own 2-value floor), even though total real readings clear MIN_REAL_READINGS", () => {
+    const series: SeriesData = {
+      samples: [
+        sample({ t: 0, p: 1200 }), // the lone work reading
+        sample({ t: 1, p: 1300, r: true }),
+        sample({ t: 2, p: 1310, r: true }),
+      ],
+    };
+    expect(buildTrace(series, "pace")).toBeNull();
+  });
+});
+
 describe("buildTrace — §3/§7.4 the line breaks across a REAL gap, never across a rest", () => {
   // `pm5-session4b-final.log.gz`'s own "genuine ~41.5s wire gap" test was
   // removed here, not migrated — the same multi-session-concatenation

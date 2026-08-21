@@ -2965,18 +2965,28 @@ test.describe("trace chart (trace-truth Task 2: rest-span design witness)", () =
   // Structural, not a name-based guess: the band rect sits strictly
   // BEFORE the polyline(s) in document order, so it paints beneath them
   // (SVG's own paint order is document order) — never a foreground
-  // overlay that could obscure a real reading.
+  // overlay that could obscure a real reading. Walks ALL descendants
+  // (2026-08-20: the polylines moved one level deeper, into a
+  // `<g clip-path>` wrapper — see `TraceChart.tsx`'s `PLOT_CLIP_*` — so
+  // a direct-children-only query would no longer see them at all), and
+  // keys on the REST BAND's own class rather than "any rect" — the new
+  // clip-path's own `<rect>` (inside `<defs>`, never painted) sits even
+  // earlier in document order and would otherwise let this pass for the
+  // wrong reason.
   test("the rest band paints beneath the polyline (document order: rect before polyline)", async ({
     page,
   }) => {
-    const order = await page
-      .locator(".trace-svg > *")
-      .evaluateAll((els) => els.map((el) => el.tagName.toLowerCase()));
-    const firstRect = order.indexOf("rect");
-    const firstPolyline = order.indexOf("polyline");
-    expect(firstRect).toBeGreaterThanOrEqual(0);
+    const order = await page.locator(".trace-svg *").evaluateAll((els) =>
+      els.map((el) => ({
+        tag: el.tagName.toLowerCase(),
+        cls: el.getAttribute("class"),
+      })),
+    );
+    const firstRestBand = order.findIndex((e) => e.cls === "trace-rest-band");
+    const firstPolyline = order.findIndex((e) => e.tag === "polyline");
+    expect(firstRestBand).toBeGreaterThanOrEqual(0);
     expect(firstPolyline).toBeGreaterThanOrEqual(0);
-    expect(firstRect).toBeLessThan(firstPolyline);
+    expect(firstRestBand).toBeLessThan(firstPolyline);
   });
 });
 
@@ -6678,7 +6688,7 @@ test.describe("connected screens (fake-driven)", () => {
       expect(paneText).not.toMatch(/\bHR\b/);
     });
 
-    test("bottom band: rule above, up-next mono 30 ink flex1 nowrap no label, TOTAL LEFT labelled cell (label 15/0.10em/ink-3 over value 30/ink)", async ({
+    test("bottom band: rule above, up-next mono 30 ink flex1 nowrap no label, EST LEFT labelled cell (label 15/0.10em/ink-3 over value 30/ink)", async ({
       page,
     }) => {
       await loadConnectedFixture(page, "connected-pane-live");
@@ -6726,7 +6736,7 @@ test.describe("connected screens (fake-driven)", () => {
       expect(label.fontSize).toBe("15px");
       expect(label.letterSpacing).toBeCloseTo(15 * 0.1, 1);
       expect(label.color).toBe(INK_3_RGB);
-      expect(label.text).toBe("TOTAL LEFT");
+      expect(label.text).toBe("EST LEFT");
 
       const value = await page
         .locator(".connected-band-cell-value")
@@ -7053,7 +7063,7 @@ test.describe("connected screens (fake-driven)", () => {
       await cleanupAllConnected(page, title);
     });
 
-    test("under real portrait insets the live pane does not clip, and TOTAL LEFT is still inside it (390x844)", async ({
+    test("under real portrait insets the live pane does not clip, and EST LEFT is still inside it (390x844)", async ({
       page,
     }) => {
       const title = "Design Connected Portrait Inset Workout";
@@ -7212,13 +7222,13 @@ test.describe("connected screens (fake-driven)", () => {
     }
 
     // NO-OVERLAP, the frozen footer's own geometry check (connected-axes
-    // 2a task 5) — `.connected-band-cell` (TOTAL LEFT) is the element the
+    // 2a task 5) — `.connected-band-cell` (EST LEFT) is the element the
     // old overlay covered.
     for (const viewport of [
       { width: 390, height: 844, label: "portrait" },
       { width: 844, height: 390, label: "landscape" },
     ] as const) {
-      test(`the frozen footer never covers TOTAL LEFT — ${viewport.label} (${viewport.width}x${viewport.height})`, async ({
+      test(`the frozen footer never covers EST LEFT — ${viewport.label} (${viewport.width}x${viewport.height})`, async ({
         page,
       }) => {
         const title = `Design Connected Frozen No-Overlap ${viewport.label}`;
@@ -7801,7 +7811,7 @@ test.describe("connected screens (fake-driven)", () => {
       expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth);
     });
 
-    test("TOTAL LEFT: label + value mono 28 on a rule, above the bottom bar", async ({
+    test("EST LEFT: label + value mono 28 on a rule, above the bottom bar", async ({
       page,
     }) => {
       await loadConnectedFixture(page, "connected-pane-live");
@@ -7928,7 +7938,7 @@ test.describe("connected screens (fake-driven)", () => {
       expect(await page.locator(".connected-value-absent").count()).toBe(0);
     });
 
-    test("up-next (armed branch): reads the FIRST interval forward, TOTAL LEFT full session, and the rate survives at the corpus worst case", async ({
+    test("up-next (armed branch): reads the FIRST interval forward, EST LEFT full session, and the rate survives at the corpus worst case", async ({
       page,
     }) => {
       await loadConnectedFixture(page, "connected-armed");
@@ -8056,7 +8066,7 @@ test.describe("connected screens (fake-driven)", () => {
           viewport.label,
           overflow.scrollHeight <= overflow.clientHeight,
         ]).toStrictEqual([viewport.label, true]);
-        // The band's TOTAL LEFT stays fully inside the pane even with the
+        // The band's EST LEFT stays fully inside the pane even with the
         // banner's own height taken out of the track.
         const paneBox = await page
           .locator(".connected-pane-live")

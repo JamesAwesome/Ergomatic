@@ -2,7 +2,7 @@
 // §2C/§2D/Stale/Disconnected). REBUILT this task (Task 4): every label the
 // erg already shows four inches up the same sightline is gone — NOW,
 // TARGET, LEFT IN INTERVAL/METERS LEFT, TOTAL M, HR. What is left is what
-// the phone knows and the erg cannot: the two judged heroes, TOTAL LEFT,
+// the phone knows and the erg cannot: the two judged heroes, EST LEFT,
 // and what is coming.
 //
 // TWO HEROES, split left/right in landscape (flex 1.25/0.75, a 1px --rule
@@ -36,9 +36,12 @@
 // prepends an unconditional "NEXT · " prefix span ahead of the value
 // (`REST 2:00`, `WORK 1500m · 2:13.0 @24`); portrait instead shows a
 // stacked `UP NEXT` label above the same value and hides the prefix, so
-// the line is never double-labelled — and the `TOTAL LEFT` labelled cell
-// on the right, reading `model.totalLeftDisplay` directly — the bar above
-// takes elapsed/totalSeconds itself now, so nothing here subtracts a
+// the line is never double-labelled — and the `EST LEFT` labelled cell
+// (renamed 2026-08-20 from `TOTAL LEFT` — the figure is an estimate twice
+// over, a known countdown stall during rests plus a distance interval's
+// own price moving with actual vs target pace) on the right, reading
+// `model.totalLeftDisplay` directly — the bar above takes
+// elapsed/totalSeconds itself now, so nothing here subtracts a
 // pre-computed remainder any more.
 //
 // CUT OUTRIGHT (design spec §2A's own casualty line, §3's fate table):
@@ -247,10 +250,15 @@ export default function PaneLive({ model }: { model: SurfaceModel }) {
           </div>
         </div>
       </div>
-      {/* THE BAND (design spec §2A/§2C/§3): up-next + TOTAL LEFT, replacing
-          the metric row's own UP NEXT cell and `TimerRuler`'s TOTAL LEFT
-          row in one element. Class names are e2e-load-bearing (task
-          brief): `connected-band`, `connected-band-upnext`,
+      {/* THE BAND (design spec §2A/§2C/§3): up-next + EST LEFT (renamed
+          2026-08-20 from TOTAL LEFT — James's ruling: the figure is an
+          estimate, not a total, both from a known rest-countdown stall
+          and because a distance interval's contribution is priced at the
+          TARGET split, so rowing off-target makes the real session
+          shorter or longer than programmed), replacing the metric row's
+          own UP NEXT cell and `TimerRuler`'s TOTAL LEFT row in one
+          element. Class names are e2e-load-bearing (task brief):
+          `connected-band`, `connected-band-upnext`,
           `connected-band-cell`. */}
       <div className="connected-band">
         <div className="connected-band-upnext">
@@ -280,7 +288,7 @@ export default function PaneLive({ model }: { model: SurfaceModel }) {
           </span>
         </div>
         <div className="connected-band-cell">
-          <span className="connected-band-cell-label">TOTAL LEFT</span>
+          <span className="connected-band-cell-label">EST LEFT</span>
           <span className="connected-band-cell-value">
             {model.totalLeftDisplay}
           </span>

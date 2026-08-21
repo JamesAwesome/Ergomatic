@@ -237,10 +237,11 @@ describe("targets: value + tag/unit, no TARGET word (design spec §2A/§2C)", ()
 });
 
 // ---------------------------------------------------------------------------
-// §2A/§2C/§3: the band — up-next + TOTAL LEFT
+// §2A/§2C/§3: the band — up-next + EST LEFT (renamed 2026-08-20 from
+// TOTAL LEFT — the figure is an estimate, not a total).
 // ---------------------------------------------------------------------------
 
-describe("the band: up-next + TOTAL LEFT (design spec §2A/§2C/§3)", () => {
+describe("the band: up-next + EST LEFT (design spec §2A/§2C/§3)", () => {
   it("mid-session: the up-next value carries the then-less prefix only (Phase CS Item B: thenNext retired, task 1's minimal PaneLive fold)", () => {
     const { model } = renderPane("live", { intervalIndex: 1 });
     expect("thenNext" in model).toBe(false);
@@ -289,11 +290,11 @@ describe("the band: up-next + TOTAL LEFT (design spec §2A/§2C/§3)", () => {
     expect(value.querySelector(".connected-band-upnext-then")).toBeNull();
   });
 
-  it("TOTAL LEFT reads totalLeftDisplay, in a labelled cell named connected-band-cell", () => {
+  it("EST LEFT reads totalLeftDisplay, in a labelled cell named connected-band-cell", () => {
     const { model } = renderPane("live");
     const cell = document.querySelector(".connected-band-cell")!;
     expect(
-      within(cell as HTMLElement).getByText("TOTAL LEFT"),
+      within(cell as HTMLElement).getByText("EST LEFT"),
     ).toBeInTheDocument();
     const value = cell.querySelector(".connected-band-cell-value")!;
     expect(value.textContent).toBe(model.totalLeftDisplay);
