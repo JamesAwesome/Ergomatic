@@ -2134,7 +2134,11 @@ double-processes every notification. Before reconnect is IN:
 
 1. The research pass has answered the buy-vs-build question and the
    PM5's does-it-exist question.
-2. **The fake models handle invalidation.** Today it cannot prove a
+2. **The fake models handle invalidation.** **Merge this with Phase RC's
+   RC-8** (the fake's five contradictions of the real wire, including the
+   `intervalRestTimeSeconds: 0` hardcode at `fake.ts:878`) — they are one
+   piece of fake work and specced apart they get done twice. Today it
+   cannot prove a
    reconnect works — see the quoted prior art above — so reconnect tests
    would be theatre. This is a real work item and it lands first.
 3. Detection ships, so we have seen what "lose and degrade" actually
@@ -2618,11 +2622,66 @@ twice from committed bytes) or the state-9 frame (captured 2026-08-18).
   same row. That is a stated product rule, not an oversight. Revisit
   deliberately or not at all.
 
-**Sequencing.** RC-4, RC-5, RC-6 and RC-8 are independent of the link and
-can go any time. RC-1 is the phase's spine and needs only itself. RC-2,
-RC-3, RC-7 and RC-10's oracle leg all wait on Phase LL's A-2, because
-nothing arrives today. **LL therefore comes first**, which it already
-does in the PM gate's order.
+### Sequencing across RC, WU and LL — worked, not asserted (James, 2026-08-21)
+
+Ordered to avoid re-work. **Two collisions matter more than the logical
+dependencies** and are the reason this section exists rather than a
+sentence:
+
+- **`useMonitorSession.ts`, `driver.ts` and `surfaceModel.ts` are edited
+  by BOTH Phase WU and Phase LL.** No logical dependency, but a real
+  merge hazard. **WU and LL implementations must not run concurrently.**
+  Either WU lands first (it is small and compiler-enumerated) or it waits
+  for LL to merge. Not both at once.
+- **RC-8 and Phase LL both own work on the fake.** LL's reconnect
+  precondition is "the fake models handle invalidation" (its OUT list,
+  item 2); RC-8 is the fake's five contradictions of the real wire.
+  **These are ONE piece of fake work and must be specced together** —
+  doing the fake twice is precisely the re-work this ordering exists to
+  prevent. Whichever phase gets there first carries both, and the other's
+  item points at it.
+
+**The order:**
+
+**Wave 0 — unblocked today, no collisions with anything.** RC-4 (the
+Last Split 10x, which also fixes its mirror in `statusFrames.ts`) and
+RC-6 (band `spm`, drop zero `p` — `seriesRecorder.ts`). Neither file is
+touched by WU or LL. These can go now and need nothing from anyone.
+
+**Wave 1 — Phase WU.** No dependencies at all, mechanical, and the
+compiler enumerates the work. Landing it early means RC-1 and RC-5 are
+never written against a population that is about to change, and LL's spec
+is written against a simpler model. **This is the single biggest
+re-work-avoider in the list:** RC-1 changes what is stored and displayed
+for a population that includes warm-ups, and RC-5 reconciles three heroes
+whose disagreement is partly the warm-up. Do either before WU and both
+get written twice.
+
+**Wave 2 — Phase LL** (A-2, A-4, the diagnosability tier), carrying
+**RC-7** inside A-2's spec by the review's own ruling, and carrying the
+merged fake work above. LL stays ahead of the rest of RC because RC-2,
+RC-3 and RC-10's oracle leg are all blocked on A-2 — **nothing arrives on
+the wire today**, so they cannot even be tested before it lands. LL is
+also a PROD precondition and the only item here fixing a defect that
+bricks the app.
+
+**Wave 3 — RC-1**, the phase's spine, once WU has settled the population
+and the merged fake work has made a green test mean something. **RC-8's
+`intervalRestTimeSeconds: 0` hardcode gates this specifically:** RC-1
+carries exactly that field, and without the fake fix it ships green
+against a fake asserting the machine reports 0.
+
+**Wave 4 — RC-2 and RC-3** (need A-2's held link), **RC-5** (needs WU,
+and lands with or after RC-1 since RC-1 changes what is stored), and
+**RC-11** (needs RC-1's storage plus the clock decision).
+
+**Wave 5 — RC-10** (needs RC-1's per-interval `rest_time`, the dev key,
+and a `weight_class` answer), then **RC-9** and **RC-12**, which are
+cleanup and can trail anything.
+
+**What this does NOT reorder:** the PM gate's phase order (LT close → LL
+→ CL2 → LQ → PROD) stands. WU inserts ahead of LL only because it is
+small, independent and collides with it; RC as a whole sits after LL.
 
 **Exit — written so it can go red.** (a) A row rowed on a real PM5 stores
 work and rest as separate quantities, and its work-only distance and time
@@ -2743,9 +2802,13 @@ subagent implementation and review, and a PM final-PR gate.
   which RC-1 is already fixing.
 - **RC-1's spec gets simpler**, which is why sequencing matters below.
 
-**Sequencing: WU lands BEFORE RC-1.** Otherwise RC-1's spec has to design
-storage and display for a phase type that is about to be deleted, and the
-migration would be written twice. WU does not depend on Phase LL.
+**Sequencing: WU lands BEFORE RC-1, and must not run concurrently with
+Phase LL.** Before RC-1 because otherwise RC-1's spec designs storage and
+display for a phase type about to be deleted, and the migration is written
+twice. Not concurrent with LL because both edit `useMonitorSession.ts`,
+`driver.ts` and `surfaceModel.ts` — no logical dependency, a real merge
+hazard. WU has no dependencies of its own, so it is free to go first. The
+full worked order lives in Phase RC's "Sequencing across RC, WU and LL".
 
 **Exit.** (a) No `EnginePhase` can be a warm-up and the compiler proves
 it; (b) a replay of `session-2-wu-4unequal` shows every judged number for
