@@ -36,6 +36,14 @@ worth MORE once you know that four unions carry the member and only two
 are compiler-reachable (§2). The sites the compiler cannot see are the
 argument for making it work everywhere it can.
 
+**What "entirely" means, stated before anyone cites it as something else
+(PM gate 2026-08-21).** It is a claim about the PRODUCT: **nothing a rower
+can do produces a warm-up.** It is NOT a claim about the code. A database
+column (§4), two legacy readers on a persisted union (§5.2), the `wu`-line
+paste intercept and `validate.ts:85`'s stored-row guard (§9) all outlive
+this phase, each with a stated expiry. Do not let a later phase cite this
+removal as proof that no warm-up code exists.
+
 Reversed, named so nobody restores them as a regression:
 
 1. **The 2026-08-09 warmup-setting spec**
@@ -283,9 +291,16 @@ index-for-index with the program intervals — its own comment calls that
 **James's ruling, 2026-08-21: keep the guards as explicit legacy
 readers.**
 
-- Retype union 3's two readers to `kind: string` and KEEP them
-  (`logDraft.ts:851`, `summaryModel.ts:564`), each carrying a comment
-  saying it exists only for pre-WU persisted records.
+- KEEP union 3's two readers (`logDraft.ts:851`, `summaryModel.ts:564`).
+  **CORRECTED at the PM gate: keep the LITERAL UNION
+  (`kind: "warmup" | "work"`) with the `"warmup"` member commented
+  legacy-only — do NOT widen it to `kind: string`.** Widening a persisted
+  discriminant admits typos (`"warmUp"` would compile), erases the
+  enumeration a future implementer needs, and makes the owed cleanup
+  invisible to the compiler. A stored shape legitimately carries values no
+  current producer emits; that is what a stored shape is FOR, and it is
+  not the 2026-08-09 unreachable-member ambiguity Approach A exists to
+  end.
 - Give the `Timer.tsx` switches a DEFAULT arm rather than deleting the
   cases blind. **An exhaustive switch with no default is a runtime
   `undefined` generator the moment its union shrinks underneath it.**
@@ -309,6 +324,22 @@ included, will start with it."_ Two more live strings become lies:
 tab."_) and `bulk.ts:362` (_"Warm-ups are a setting now."_). All three
 must be rewritten — an instruction naming a deleted control is recurring
 failure 13 aimed at a tester.
+
+**But "no replacement feature" must not silence the question a tester
+asks in the first thirty seconds (PM gate 2026-08-21): "where did WARM-UP
+go, and how do I warm up now?"** There is a true, cheap answer this spec
+originally never stated: **build it into the workout as an ordinary first
+step.** The grammar already supports it; only the `wu` keyword goes. That
+sentence belongs in the release note alongside "the setting is gone" — a
+note that only announces a deleted control is the note that generates the
+question.
+
+**`yourFirstRow.tsx:13-14` is a SURGICAL edit, not a deletion.** Keep
+"Warm up for ten minutes first." — evergreen, still true, and the point of
+the paragraph. Delete only "Warm-ups are a setting now: set yours on the
+You tab under WARM-UP and every session, this one included, will start
+with it." Stated explicitly because an implementer sweeping instructional
+strings will otherwise cut the advice along with the mechanism.
 
 Today and `ConnectedInterstitial` carry no warm-up reference; §6 holds
 there.
@@ -454,6 +485,12 @@ inherit these and need not re-establish them:
    16, the machine's dimension, unrelated to our role.
 10. WU must not run concurrently with Phase LL.
 11. The owed `DROP COLUMN` really is in ROADMAP (`:2773-2776`).
+
+## §11.5 Release posture (PM gate, 2026-08-21)
+
+**No tag for WU alone.** A removal has nothing a tester can try, so a solo
+tag is a version number with no falsification value. WU is a MINOR clause
+riding whatever tag carries Phase LL's brick fix.
 
 ## §12 Open, could not be established by the pass
 
