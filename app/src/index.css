@@ -2824,27 +2824,6 @@ button:disabled {
   color: var(--ink);
 }
 
-/* Sits directly above `.builder-steps` (Builder.tsx) — the warm-up reads as
-   an implicit step 0. Task 7 first tried clawing 10px back off the page's
-   standard 18px block rhythm (the gap `.screen.builder-screen` already puts
-   between every other pair of blocks) with a negative margin-bottom, on the
-   idea that matching `.builder-steps`'s own internal 8px header-to-list gap
-   would read the line into that group. In review it read the other way: 8px
-   pulled the line tight against the STEPS header immediately below it, so
-   it looked like a caption of that header rather than a step of its own.
-   The standard 18px on both sides (the plain block rhythm every other pair
-   of blocks on this screen already gets) is what actually reads as "its
-   own line, directly above the list it precedes" — no closer to STEPS than
-   it is to whatever card sits above it. Task 1 (ui-fix round) contrast
-   sweep: --ink-3, not --ink-4, same blanket small-mono-label rule as this
-   file's other Builder labels. */
-.builder-warmup-line {
-  margin: 0;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--ink-3);
-}
-
 /* Task 1 (ui-fix round): "Save to library stays L1" — this used to be its
    own bespoke 62px accent button (`.builder-save`); it's now literally the
    level system's own `.button-l1` (Builder.tsx's className), 56px, with no

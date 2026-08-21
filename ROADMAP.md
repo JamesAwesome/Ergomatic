@@ -2803,12 +2803,22 @@ be split — it lands in one commit by choice, not by necessity.
       unmeasurable by construction, spec §12 concedes the population size
       is unknown, and an unmeasurable trigger never fires). Remove the
       legacy guards.** James's ruling 2026-08-21 keeps two readers of
-      the PERSISTED `LogSeed.steps[].kind` union alive, retyped `kind:
-      string` (`logDraft.ts:851`, `summaryModel.ts:564`), plus a default
-      arm on `Timer.tsx`'s switches. Without them a rower mid-session at
+      the PERSISTED `LogSeed.steps[].kind` union alive (`logDraft.ts`'s
+      `buildMonitorLogSteps` skip, `summaryModel.ts`'s
+      `warmupIndex`/`monitorAvgSplit` exclusion), plus a default arm on
+      `Timer.tsx`'s switches. Without them a rower mid-session at
       update time gets a moved AVG SPLIT on a stored record and a
       `STEP 1 OF 5 · undefined` label. They are deliberate vestigial code
       and they have an expiry.
+      **`kind` STAYS THE LITERAL `"warmup" | "work"` union — it is NOT
+      widened to `string`** (PM gate, 2026-08-21, overturning this
+      bullet's own earlier "retyped `kind: string`" wording, which
+      survived into the first draft of the Task 2 brief). Widening admits
+      typos, erases the enumeration, and hides this very cleanup from the
+      compiler: the literal union is what lets a future implementer grep
+      the member and find every site that still reads it. Nothing
+      PRODUCES `"warmup"` after Phase WU — `buildLogSeed` cannot — so the
+      member is legacy-read-only, not dead.
 - **`EnginePhase`'s `"warmup"` member** (`expand.ts:12`) is currently
   unreachable from `Step[]` but still in the union, and `expand.ts:139`
   says every downstream branch is untouched. Removing the member is a

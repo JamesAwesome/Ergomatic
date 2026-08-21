@@ -567,12 +567,25 @@ describe("loadDraft and a pre-2026-08-09 draft that still carries a `wu` step", 
     };
   }
 
-  it("loads it unchanged, and it produces no phase — the strip that used to run here was behaviour-neutral", () => {
+  it("loads it unchanged, produces no phase for it, and still attributes an index-keyed nudge ACROSS it", () => {
+    // INDEX ATTRIBUTION ACROSS THE HOLE is the half that matters, and the
+    // half the three deleted tests actually guarded. `stripLegacyWarmups`
+    // spliced the `wu` step out and RE-KEYED `nudges`/`spmOverrides`/
+    // `removed` around the gap; the claim that deleting it is safe is
+    // really the claim that nothing needs re-keying, because nothing is
+    // spliced. So this fixture keys both index-maps at position 1 — Calm
+    // Sea's own work step, sitting BEHIND the `wu` step at position 0 —
+    // and asserts the built phase carries them.
     const legacy = legacyDraftFor("Calm Sea", "id-legacy-1");
-    localStorage.setItem(DRAFT_KEY, JSON.stringify(legacy));
+    const withState: SessionDraft = {
+      ...legacy,
+      nudges: { 1: -5 },
+      spmOverrides: { 1: 24 },
+    };
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(withState));
 
     const draft = loadDraft();
-    expect(draft).toStrictEqual(legacy);
+    expect(draft).toStrictEqual(withState);
     expect(draft!.steps.some((st) => (st.k as string) === "wu")).toBe(true);
 
     // Calm Sea is a single 10000 m work step, so the ONLY phase this run
@@ -584,7 +597,18 @@ describe("loadDraft and a pre-2026-08-09 draft that still carries a `wu` step", 
       new Date(0),
     );
     expect(run.phases).toHaveLength(1);
-    expect(run.phases[0]!.meters).toBe(10000);
+    const phase = run.phases[0]!;
+    expect(phase.meters).toBe(10000);
+    // `originalIndex` is the DRAFT position, unshifted — 1, behind the
+    // surviving `wu` step, not the 0 a splice would have re-keyed it to.
+    expect(phase.originalIndex).toBe(1);
+    // The nudge reached the target it was keyed against: Calm Sea is
+    // 6k+12, so 120 + 12 − 5 = 127, not the un-nudged 132 a mis-keyed
+    // fold would leave (`effectiveSteps` folds a nudge into `ref.off`).
+    expect(phase.targetSplit).toBe(127);
+    // …and so did the SPM override, the other index-keyed map: 24, not
+    // Calm Sea's own authored 20.
+    expect(phase.spm).toBe(24);
   });
 
   it("returns the exact same draft by value when there is nothing to strip", () => {
