@@ -725,6 +725,15 @@ describe("toMonitorFrame: field mapping", () => {
     const frame = toMonitorFrame(baseRaw({ heartRateBpm: null }));
     expect(frame.heartRateBpm).toBeNull();
   });
+
+  // EST LEFT (Phase LL): restSeconds is a straight pass-through, same as
+  // currentSplit/spm/heartRateBpm above — the value distinguishes itself
+  // from baseRaw()'s other numeric fields so an override can't accidentally
+  // pass by reading a coincidentally-equal one.
+  it("passes restSeconds straight from AdditionalStatus1's Rest Time", () => {
+    const frame = toMonitorFrame(baseRaw({ restSeconds: 12.34 }));
+    expect(frame.restSeconds).toBe(12.34);
+  });
 });
 
 describe("toIntervalActual: field mapping (interface-notes.md's own reasoning comment)", () => {

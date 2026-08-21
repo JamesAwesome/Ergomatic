@@ -2979,6 +2979,7 @@ function frame(over: Partial<MonitorFrame>): MonitorFrame {
     spm: null,
     heartRateBpm: null,
     splitAvgPace: null,
+    restSeconds: 0,
     intervalIndex: 0,
     intervalRemaining: null,
     intervalAccrued: null,

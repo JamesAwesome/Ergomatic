@@ -202,6 +202,7 @@ function liveFrame(overrides: Partial<MonitorFrame> = {}): MonitorFrame {
     spm: 21,
     heartRateBpm: 164,
     splitAvgPace: null,
+    restSeconds: 0,
     intervalIndex: 1,
     intervalRemaining: { kind: "distance", value: 1200 },
     intervalAccrued: null,

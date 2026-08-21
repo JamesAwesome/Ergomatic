@@ -116,6 +116,24 @@ export interface MonitorFrame {
   //   zero average as nothing (design spec exit criterion 4), so a `null`
   //   frame here reads identically to the genuinely-fresh 0 that arrives
   //   once the provenance catches up.
+  restSeconds: number;
+  // ^ 0x0032's own Rest Time (Additional Status 1, offsets 13-15, 0.01
+  //   s/lsb) — parsed since Phase 7A (`pm5/parse.ts`'s
+  //   `AdditionalStatus1.restSeconds`) but never carried onto this type
+  //   until the EST LEFT fix (Phase LL): it is the field that makes a
+  //   countdown through a rest possible without the wall clock. Unlike
+  //   `MonitorFrame.elapsedSeconds` (the per-interval clock, which FREEZES
+  //   whenever `rowingActive` goes false — a rower sitting still through a
+  //   rest stops it dead), Rest Time counts down in real time regardless
+  //   of the flywheel (EST LEFT design spec §1/§5, measured against
+  //   `docs/monitor/sessions/walk-2026-08-16/session-2-wu-4unequal.jsonl`:
+  //   the interval clock froze at 133.08 for 26s while this field ran
+  //   26.91 -> 1.85, one second per second). Unconditional pass-through at
+  //   the parse level, same choice as `currentSplit`/`splitAvgPace` above
+  //   — no documented invalid sentinel exists for this field, and no
+  //   consumer needs one: `surfaceModel.ts`'s estimate only reads it while
+  //   `state === "resting"`, and what it reads outside a rest is
+  //   unspecified by the wire and simply unused.
   intervalIndex: number | null;
   // ^ OUR program index (0-based per work interval), never the raw machine
   //   value straight off the wire — normalized by the driver via

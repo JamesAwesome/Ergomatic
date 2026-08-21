@@ -513,6 +513,10 @@ export function toMonitorFrame(raw: RawPm5Status): MonitorFrame {
     // clearing this function does NOT do (it has no frame history to
     // compare against).
     splitAvgPace: raw.splitAvgPace,
+    // EST LEFT (Phase LL): unconditional pass-through, same choice as
+    // `currentSplit`/`splitAvgPace` above — see `MonitorFrame.restSeconds`'s
+    // own doc comment (`domain/monitor/types.ts`).
+    restSeconds: raw.restSeconds,
     // RAW machine value — see this function's own doc comment above.
     intervalIndex: intervalActive ? raw.intervalCount : null,
     intervalRemaining: null,

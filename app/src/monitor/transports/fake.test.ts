@@ -863,6 +863,104 @@ describe("createFakeTransport: restDistanceMeters (0x0032) — accumulates durin
   });
 });
 
+// EST LEFT (Phase LL design spec §6, plan Step 4): `restSeconds` (0x0032
+// offsets 13-15, Rest Time) used to be hardcoded `0` on every tick — this
+// describe block is the fake's own proof it no longer is, mirroring
+// `restDistanceMeters`'s own describe block just above (`FakeStatusEvent.
+// restSeconds`'s own doc comment has the full "same pattern" reasoning).
+describe("createFakeTransport: restSeconds (0x0032) — the machine's own Rest Time, counting DOWN in real time, forced to 0 off a rest", () => {
+  it("is script-authored and honest during a rest, and forced to 0 on every work tick regardless of what the script sets", async () => {
+    const fake = createFakeTransport({
+      program: TWO_INTERVALS_ONE_REST,
+      events: [
+        {
+          atMs: 100,
+          kind: "status",
+          workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+          elapsedSeconds: 10,
+          distanceMeters: 40,
+          spm: 24,
+          currentSplit: 120,
+          heartRateBpm: 140,
+          programIntervalIndex: 0,
+          // Deliberately set on a WORK tick — an impossible mid-work
+          // reading a script must not be able to put on the wire. The
+          // enforced 0 below is what proves this is FORCED, not merely
+          // defaulted.
+          restSeconds: 999,
+        },
+        {
+          atMs: 200,
+          kind: "status",
+          workoutState: WORKOUTSTATE_INTERVALREST,
+          elapsedSeconds: 5,
+          distanceMeters: 0,
+          spm: 0,
+          currentSplit: 0,
+          heartRateBpm: 130,
+          programIntervalIndex: 0,
+          // A real Rest Time COUNTS DOWN — 25 -> 12, not up, the opposite
+          // direction from `restDistanceMeters`'s own describe block just
+          // above (a rower coasts FARTHER, but the machine's clock counts
+          // the rest DOWN toward zero).
+          restSeconds: 25,
+        },
+        {
+          atMs: 300,
+          kind: "status",
+          workoutState: WORKOUTSTATE_INTERVALREST,
+          elapsedSeconds: 15,
+          distanceMeters: 0,
+          spm: 0,
+          currentSplit: 0,
+          heartRateBpm: 125,
+          programIntervalIndex: 0,
+          restSeconds: 12,
+        },
+      ],
+    });
+    await programIt(fake, TWO_INTERVALS_ONE_REST);
+    const as1: Uint8Array[] = [];
+    fake.subscribe(ADDITIONAL_STATUS_1_UUID, (b) => as1.push(b));
+    fake.tick(300);
+
+    expect(as1.map((b) => decodeAs1(b).restSeconds)).toStrictEqual([
+      0, // WORK tick — forced to 0 despite the script's 999
+      25, // resting, rest just started
+      12, // resting, counting down
+    ]);
+  });
+
+  // A script that never sets `restSeconds` — every fixture that predates
+  // this field — still gets exactly `0` on every tick, resting or not:
+  // the SAME wire value `statusBundle` used to hardcode unconditionally,
+  // so no existing fixture's own assertions depend on a value this task
+  // changed (plan Step 4's own instruction to check).
+  it("an unscripted fixture (restSeconds never set) still reports 0 through a rest, unchanged from before this task", async () => {
+    const fake = createFakeTransport({
+      program: TWO_INTERVALS_ONE_REST,
+      events: [
+        {
+          atMs: 100,
+          kind: "status",
+          workoutState: WORKOUTSTATE_INTERVALREST,
+          elapsedSeconds: 5,
+          distanceMeters: 0,
+          spm: 0,
+          currentSplit: 0,
+          heartRateBpm: 130,
+          programIntervalIndex: 0,
+        },
+      ],
+    });
+    await programIt(fake, TWO_INTERVALS_ONE_REST);
+    const as1: Uint8Array[] = [];
+    fake.subscribe(ADDITIONAL_STATUS_1_UUID, (b) => as1.push(b));
+    fake.tick(100);
+    expect(as1.map((b) => decodeAs1(b).restSeconds)).toStrictEqual([0]);
+  });
+});
+
 describe("createFakeTransport: totalWorkDistanceMeters (0x0031) — a SESSION counter, frozen during work, stepping at boundaries and ticking during rests", () => {
   it("stays frozen through a whole work bout, steps at the boundary, ticks upward through the rest, then freezes again through the next work bout", async () => {
     const fake = createFakeTransport({

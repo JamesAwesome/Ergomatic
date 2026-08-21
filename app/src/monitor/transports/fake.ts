@@ -211,6 +211,23 @@ export interface FakeStatusEvent {
    *  an impossible mid-work non-zero reading here any more than
    *  `boundaryBundle`'s own guard lets one describe an impossible boundary. */
   restDistanceMeters?: number;
+  /** 0x0032 offsets 13-15, 0.01 s/lsb (EST LEFT design spec §1/§6) — the
+   *  machine's own Rest Time, counting DOWN in real time regardless of the
+   *  flywheel (unlike the interval clock, which freezes when
+   *  `rowingActive` goes false — the whole bug this field's consumer
+   *  fixes). Script-authored, the SAME pattern as `restDistanceMeters`
+   *  just above (its own doc comment's reasoning applies verbatim: a
+   *  countdown this file computed by formula, rather than the script's own
+   *  authored reading, would be the invented mechanism that pattern
+   *  refuses to be) — and FORCED to `0` under the identical rule,
+   *  whenever this tick's own `workoutState` does not map to `"resting"`,
+   *  regardless of what a script sets here. Until this field existed,
+   *  `statusBundle` hardcoded `restSeconds: 0` on every tick, which is
+   *  EXACTLY the value every script that never sets it still gets (this
+   *  default changes nothing for a fixture that predates it) — a script
+   *  that wants a real countdown through a rest is the one that has to
+   *  set this explicitly, tick by tick, same as `restDistanceMeters`. */
+  restSeconds?: number;
 }
 
 /** One interval-boundary event: the completed interval's actuals, matching
@@ -706,6 +723,7 @@ function statusBundle(
   sessionMetrics: {
     splitAvgPace: number;
     restDistanceMeters: number;
+    restSecondsNow: number;
     bankedDistanceMeters: number;
   },
 ): { general: GeneralStatus; as1: AdditionalStatus1; as2: AdditionalStatus2 } {
@@ -743,7 +761,12 @@ function statusBundle(
       currentSplit: e.currentSplit,
       averageSplit: e.currentSplit,
       restDistanceMeters: sessionMetrics.restDistanceMeters,
-      restSeconds: 0,
+      // EST LEFT (design spec §1/§6): honest Rest Time, script-authored
+      // through `FakeStatusEvent.restSeconds` — see that field's own doc
+      // comment. Used to be hardcoded `0` on every tick (this file's own
+      // header comment names it as the reason no e2e/screenshot fixture
+      // could exercise this path before this task).
+      restSeconds: sessionMetrics.restSecondsNow,
       ergMachineType: 1,
     },
     general: {
@@ -919,7 +942,14 @@ function armedBundle(
     },
     { elapsedSeconds: 0, distanceMeters: 0 },
     structure,
-    { splitAvgPace: 0, restDistanceMeters: 0, bankedDistanceMeters },
+    {
+      splitAvgPace: 0,
+      restDistanceMeters: 0,
+      // WAITTOBEGIN is never `"resting"` — `restSecondsFor`'s own rule
+      // would force this to 0 regardless; honest here for the same reason.
+      restSecondsNow: 0,
+      bankedDistanceMeters,
+    },
   );
 }
 
@@ -1273,9 +1303,22 @@ export function createFakeTransport(
     return 0;
   }
 
+  /** `FakeStatusEvent.restSeconds`'s own "forced to 0 off a rest" rule,
+   *  enforced (that field's own doc comment) — no held state to track
+   *  (unlike `restDistanceMeters`, nothing downstream folds this into a
+   *  session-wide total; `surfaceModel.ts`'s consumer reads it live, per
+   *  tick, only while `state === "resting"`), so a plain per-tick read is
+   *  the whole function. */
+  function restSecondsFor(e: FakeStatusEvent): number {
+    return toMonitorState(e.workoutState) === "resting"
+      ? (e.restSeconds ?? 0)
+      : 0;
+  }
+
   function deliverStatus(e: FakeStatusEvent): void {
     const splitAvgPace = updateSplitAvgPace(e);
     const restNow = updateRestTracking(e);
+    const restSecondsNow = restSecondsFor(e);
     const { general, as1, as2 } = statusBundle(
       script.program,
       e,
@@ -1284,6 +1327,7 @@ export function createFakeTransport(
       {
         splitAvgPace,
         restDistanceMeters: restNow,
+        restSecondsNow,
         // TWD "ticks during rests" (design doc's field table): the locked
         // total plus THIS tick's own in-progress rest metres, layered on
         // here rather than inside `bankedDistanceMeters` itself so that

@@ -2013,12 +2013,33 @@ WebKit's throttling, so it does not rescue the JS half.
       above for why re-deriving it wasn't the proportionate fix). The
       y-axis clipping is fixed (`LEFT_PAD` 36 -> 42, both captures verified
       by eye). **S**
-- [ ] **THE COUNTDOWN STALLS DURING RESTS, and the progress bar with it**
-      (James, device report + two photos, 2026-08-20, rowing "Strong
-      Breeze"). He saw `TOTAL LEFT` reading roughly a minute high, and the
-      bar lagging when interval 4 handed over to interval 5 after its rest.
-      **One likely cause for both, and it falls straight out of this
-      phase's own B1 finding.** `surfaceModel.ts:970` computes
+- [x] ~~**THE COUNTDOWN STALLS DURING RESTS, and the progress bar with
+      it**~~ — **FIXED (Phase LL, 2026-08-20).** The hypothesis below was
+      confirmed: `surfaceModel.ts`'s old `totalLeftSeconds = totalSeconds -
+      frame.sessionElapsedSeconds` froze through a rest because the PM5's
+      per-interval clock (what that accumulation is built from) only
+      advances while `rowingActive` is true. The fix reads the field the
+      machine already sends instead — `frame.restSeconds` (0x0032's own
+      Rest Time, parsed since Phase 7A, consumed nowhere until now), which
+      counts down in real time regardless of the flywheel. `estElapsed` is
+      now every COMPLETED phase's own programmed length, summed, plus a
+      LIVE term for the current one (Rest Time during a rest, the raw
+      interval clock during work), clamped monotonic non-decreasing across
+      frames — proven against a whole replayed capture
+      (`docs/monitor/sessions/walk-2026-08-16/session-2-wu-4unequal.jsonl`),
+      including the capture's own `finished` frame, where the first design
+      of this fix went backwards 428.5 s from laundering a `null`
+      `intervalIndex` to `0`. Spec:
+      `docs/superpowers/specs/2026-08-20-est-left-design.md`. Two accepted
+      limits recorded in `docs/design/DEVIATIONS.md` (dawdling at the start
+      of a work interval still runs high; an unpriced phase's live term is
+      a hole, guarded on `PaneLive.tsx` by the same `hasRemainingEstimate`
+      the phone timer already uses). Original hypothesis, kept for the
+      record: (James, device report + two photos, 2026-08-20, rowing
+      "Strong Breeze"). He saw `TOTAL LEFT` reading roughly a minute high,
+      and the bar lagging when interval 4 handed over to interval 5 after
+      its rest. **One likely cause for both, and it falls straight out of
+      this phase's own B1 finding.** `surfaceModel.ts:970` computes
       `totalLeftSeconds = totalSeconds - frame.sessionElapsedSeconds`, and
       `totalSeconds` INCLUDES the programmed rests — but the antagonist
       pass established that the PM5's elapsed clock only advances during a

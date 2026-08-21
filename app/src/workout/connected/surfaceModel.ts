@@ -37,12 +37,17 @@ import type {
   IntervalActual,
   MonitorFrame,
 } from "../../../domain/monitor/types.js";
+import { phaseSeconds } from "../../../domain/expand.js";
 import type { EnginePhase } from "../../session/engine";
 import {
   intervalBoundaries,
   type IntervalBoundaries,
 } from "../../session/intervalBoundaries";
-import { phaseKindWord, totalSessionSecondsOf } from "../../session/Timer";
+import {
+  hasRemainingEstimate as phaseHasRemainingEstimate,
+  phaseKindWord,
+  totalSessionSecondsOf,
+} from "../../session/Timer";
 import { FREE, targetSplitDisplay } from "../../session/TimerTargets";
 
 /** What the surface itself renders differently — NOT a narrowed
@@ -271,6 +276,7 @@ const NO_FRAME: MonitorFrame = {
   heartRateBpm: null,
   rowingActive: false,
   splitAvgPace: null,
+  restSeconds: 0,
   intervalIndex: 0,
   intervalRemaining: null,
   intervalAccrued: null,
@@ -295,6 +301,17 @@ export interface SurfaceModelInput {
    *  an interval with no actual on record shows dashes rather than a
    *  re-derived number (see `buildGridModel`). */
   actuals: IntervalActual[];
+  /** EST LEFT (Phase LL design spec §3): the estimate must never
+   *  DECREASE, but `buildSurfaceModel` is otherwise pure — no clock, no
+   *  memory of the frame before this one. This is that memory, supplied
+   *  by the CALLER: the previous model's own `elapsedSeconds`.
+   *  `ConnectedSurface.tsx` is the one production caller that threads it
+   *  (a `useRef`, updated after every build); a replay test threads its
+   *  own loop variable the same way. Omitted or `undefined` reads as `0`
+   *  — the honest answer for the very first frame of a session, and the
+   *  same floor `armedMirror`'s own "un-started, always" stance already
+   *  assumes. */
+  previousElapsedSeconds?: number;
 }
 
 // --- Pane C's grid (handoff §3, "Pane C — the grid") ---------------------
@@ -414,17 +431,47 @@ export interface SurfaceModel {
    *  only render site, and the band cell that replaces it renders THIS
    *  field directly; `ConnectedProgressBar` takes elapsed/`totalSeconds`
    *  itself rather than a pre-subtracted figure. Pane C's grid header reads
-   *  it too — there is no room for a second ruler there either. */
+   *  it too — there is no room for a second ruler there either.
+   *
+   *  EST LEFT (Phase LL): `totalSeconds - elapsedSeconds` still, but
+   *  `elapsedSeconds` no longer mirrors the wire's own accumulated clock —
+   *  see that field's own doc comment for the estimate it now carries. */
   totalLeftDisplay: string;
   /** CR2 spec 3 Task 2 (antagonist correction 1): the model's own numeric
-   *  elapsed — `min(frame.sessionElapsedSeconds, totalSeconds)`, `0` on the
-   *  `armedMirror` branch (mirrors `totalLeftSeconds`'s own "armed reads
-   *  un-started, always" stance one line above it). `elapsedDisplay` below
-   *  is the same fact as a STRING for the log sheet; this is the NUMBER
-   *  Task 3's `ConnectedProgressBar` needs to place its fill, since
-   *  `totalLeftSeconds` (the subtraction route) dies in Task 4/5 and
-   *  nothing else on the model carries elapsed as a number today. */
+   *  elapsed, `0` on the `armedMirror` branch (mirrors `totalLeftSeconds`'s
+   *  own "armed reads un-started, always" stance one line above it).
+   *  `elapsedDisplay` below is the same fact as a STRING for the log
+   *  sheet; this is the NUMBER `ConnectedProgressBar` needs to place its
+   *  fill.
+   *
+   *  EST LEFT (Phase LL design spec §1): no longer a straight mirror of
+   *  `frame.sessionElapsedSeconds` — that field is the wire's own
+   *  accumulated clock, which FREEZES for the whole span of a rest a
+   *  rower sits through motionless (the bug this rewrite fixes). The
+   *  value here is `min(estElapsed, totalSeconds)` (§2: the cap is kept,
+   *  load-bearing so the bar can never exceed 100%), where `estElapsed`
+   *  is every COMPLETED phase's own PROGRAMMED length, summed, plus a
+   *  LIVE term for the phase in progress — the machine's own Rest Time
+   *  countdown (`frame.restSeconds`) during a rest, which counts down in
+   *  real time regardless of the flywheel, or the raw interval clock
+   *  otherwise — clamped to never decrease across frames (§3;
+   *  `input.previousElapsedSeconds` is how that memory reaches this
+   *  otherwise-pure function). See `buildSurfaceModel`'s own `estElapsed`
+   *  local for the exact formula and its citations. */
   elapsedSeconds: number;
+  /** EST LEFT (Phase LL design spec §4, plan Step 5): `true` unless every
+   *  phase from the current one to the end of the session is UNPRICED
+   *  (`phaseSeconds` returns `null` for all of them — reachable with a
+   *  null-baseline distance warm-up, `engine.ts:88-94`) — the identical
+   *  rule `session/Timer.tsx`'s `hasRemainingEstimate` already gives the
+   *  phone timer, reused rather than reinvented (its own doc comment has
+   *  the full reasoning: re-evaluated fresh every frame against the
+   *  CURRENT phase, not computed once). `PaneLive.tsx` hides the progress
+   *  bar and the EST LEFT cell entirely when this is `false`, the same
+   *  "absent, never a frozen 0:00/0%" stance the phone timer takes — an
+   *  unpriced phase's own live term is a genuine hole (DEVIATIONS.md), and
+   *  showing a number built on it would be worse than showing nothing. */
+  hasRemainingEstimate: boolean;
   /** THE SESSION'S OWN RUNNING TOTAL (connected-metrics design spec, "Total
    *  meters (whole session)") — `frame.sessionDistanceMeters`, work + rest
    *  by construction, read straight through (Task 4 places and formats
@@ -952,36 +999,83 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
         };
 
   const totalSeconds = totalSessionSecondsOf(phases);
-  // `sessionElapsedSeconds`, never `frame.elapsedSeconds`: 0x0031's own
-  // clock RESETS at every work interval (walk 4, interface-notes.md §18), so
-  // subtracting it counted the current interval only — TOTAL LEFT was
-  // recorded falling 1:30 -> 1:11 and then RISING to 1:38 as interval 2
-  // started. The driver's accumulated total is monotone across those resets,
-  // which is the only thing that makes this subtraction a countdown.
-  // ARMED READS UN-STARTED, ALWAYS (I-1, final whole-branch review). Frame
-  // 2D's own words: "Progress bar all-upcoming" and `TOTAL LEFT 50:00` — the
-  // whole session, nothing subtracted. This is the SAME defensive stance the
-  // pace/rate mirror above already takes: the wire's own carry-over rule
-  // (design spec §2 Item 3) says elapsed/distance genuinely zero at armed,
-  // but the surface says "un-started" on the STATUS, not on trusting
-  // `frame.sessionElapsedSeconds` to actually be zero every time — the same
-  // reasoning `armedMirror`'s own block gives for previewing the target
-  // instead of reading the wire's ghost.
+
+  // EST LEFT (Phase LL design spec §1): `frame.sessionElapsedSeconds` — the
+  // wire's own driver-accumulated clock — is what this used to subtract,
+  // and it is WRONG whenever a rower sits through a rest motionless: the
+  // PM5's own per-interval clock (what that accumulation is built from)
+  // freezes to the centisecond the instant `rowingActive` goes false, so
+  // the countdown stopped moving while real time kept passing (James's own
+  // report: TOTAL LEFT finished ~a minute high). The replacement sums
+  // every COMPLETED phase's own PROGRAMMED length, plus a LIVE term for
+  // whichever phase is current: the machine's own Rest Time countdown
+  // (`frame.restSeconds`, 0x0032 offsets 13-15) during a rest — which
+  // counts down in real time regardless of the flywheel, measured against
+  // `docs/monitor/sessions/walk-2026-08-16/session-2-wu-4unequal.jsonl`
+  // (spec §5) — or the raw per-interval clock (`frame.elapsedSeconds`)
+  // while a work phase is running, which is correct there: a rower in a
+  // WORK phase who has stopped pulling is not the case this fix exists
+  // for, and the PM5 has no pause capability mid-piece (there is no wire
+  // "paused" state at all — `MonitorFrame.state`'s own doc comment).
+  //
+  // `frame.intervalIndex === null` (armed/idle/finished/terminated — the
+  // business rule `MonitorFrame.intervalIndex`'s own doc comment states)
+  // has no CURRENT phase to found a phase-sum on. `phaseIndex`/`phase`/
+  // `isRestPhase` above are already laundered to phase 0 for exactly these
+  // states (`intervalIndex = frame.intervalIndex ?? 0`, needed there so
+  // the hero targets always show SOMETHING) — reusing that laundering HERE
+  // is precisely what a captured `finished` frame proved wrong: phase
+  // index 7 collapsed to 0, and the completed-phase sum collapsed with it,
+  // a measured −428.5 s jump (design spec §3). `surfaceModel.ts:865-870`
+  // (this file's own AVG cell) already refuses the identical laundering,
+  // checking the RAW field instead — this copies that stance rather than
+  // inventing a new one. The fallback for a null index is the driver's own
+  // session-accumulated total: not phase-founded, but never fabricates an
+  // interval-0 identity nobody reported.
+  const estElapsedRaw =
+    frame.intervalIndex === null
+      ? frame.sessionElapsedSeconds
+      : (() => {
+          let completed = 0;
+          for (let i = 0; i < phaseIndex; i++) {
+            completed += phaseSeconds(phases[i]!) ?? 0;
+          }
+          const live = isRestPhase
+            ? Math.max(0, (phaseSeconds(phase) ?? 0) - frame.restSeconds)
+            : frame.elapsedSeconds;
+          return completed + live;
+        })();
+  // MONOTONIC, NOT OPTIONAL (§3): replayed frame-by-frame over the same
+  // capture, the un-clamped estimate above drops five times — the
+  // finished-frame collapse cited above, a work→work boundary race where
+  // 0x0031's counters reset one notification before 0x0033's Interval
+  // Count (−29.25 s), and a mid-rest elapsed re-base the register map
+  // already absorbs for other consumers (−5.97 s). Clamping against the
+  // LAST model's own `elapsedSeconds` catches all three without having to
+  // enumerate their wire causes here. `buildSurfaceModel` has no memory of
+  // its own — `input.previousElapsedSeconds` is the caller's, see
+  // `SurfaceModelInput`'s own doc comment for who threads it and why.
+  const estElapsed = Math.max(estElapsedRaw, input.previousElapsedSeconds ?? 0);
+  // ARMED READS UN-STARTED, ALWAYS (I-1, final whole-branch review, carried
+  // forward unchanged by this rewrite). Frame 2D's own words: "Progress bar
+  // all-upcoming" and `TOTAL LEFT 50:00` — the whole session, nothing
+  // subtracted — the same defensive stance the pace/rate mirror above
+  // already takes: the wire's own carry-over rule (design spec §2 Item 3)
+  // says elapsed/distance genuinely zero at armed, but the surface says
+  // "un-started" on the STATUS, never on trusting the wire to actually be
+  // zero every time.
   const totalLeftSeconds = armedMirror
     ? totalSeconds
-    : Math.max(0, totalSeconds - frame.sessionElapsedSeconds);
-  // THE SAME "armed reads un-started" STANCE, as a NUMBER (CR2 spec 3 Task
-  // 2, antagonist correction 1) — `0`, never `frame.sessionElapsedSeconds`
-  // read straight through, for the identical reason `totalLeftSeconds`
-  // above gives: an armed frame's own carried-over pair is not to be
-  // trusted even where it happens to already read zero. Off-armed, this is
-  // simply the session clock capped at the session's own length (the same
-  // cap `totalLeftSeconds`'s `Math.max(0, …)` enforces from the other
-  // direction), so a machine that overran never hands Task 3's progress
-  // bar an elapsed figure past 100%.
-  const elapsedSeconds = armedMirror
-    ? 0
-    : Math.min(frame.sessionElapsedSeconds, totalSeconds);
+    : Math.max(0, totalSeconds - estElapsed);
+  // THE CAP IS KEPT (§2 — load-bearing, not incidental): `min(estElapsed,
+  // totalSeconds)` is what stops a long final interval (or an accumulated
+  // overrun) from ever pushing `ConnectedProgressBar`'s fill past 100%.
+  // `0` on the armedMirror branch, the identical "armed reads un-started"
+  // stance `totalLeftSeconds` just took, for the identical reason: an
+  // armed frame's own carried-over pair is not to be trusted even where it
+  // happens to already read zero.
+  const elapsedSeconds = armedMirror ? 0 : Math.min(estElapsed, totalSeconds);
+  const hasRemainingEstimate = phaseHasRemainingEstimate(phases, phaseIndex);
 
   const remaining = frame.intervalRemaining;
   const kindWord = phase ? phaseKindWord(phase.type) : "WORK";
@@ -1059,15 +1153,19 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
     // doc comment above.
     totalLeftDisplay: fmtDuration(totalLeftSeconds / 60),
     elapsedSeconds,
+    hasRemainingEstimate,
     sessionDistanceMeters,
     boundaries: intervalBoundaries(phases, measuredWorkSeconds(input.actuals)),
     // The log sheet captions this `SESSION m:ss` — its ONLY render site
     // since the redesign (PaneLive's running clock retired with the label
-    // layer; ConnectedSurface threads it to ConnectionLogSheet). It reads
-    // the accumulated pair for the same walk-4 reason TOTAL LEFT does, and
-    // the phase-exit walk leans on exactly that: it is the register map's
-    // elapsed axis, rower-visible, so a mis-keyed register write shows
-    // here as well as in distance.
+    // layer; ConnectedSurface threads it to ConnectionLogSheet). Reads the
+    // driver's accumulated pair straight through, DELIBERATELY unchanged by
+    // the EST LEFT rewrite above: this caption is "how long has the session
+    // actually been running" (walk 4's register map, rower-visible — a
+    // mis-keyed register write shows here as well as in distance), a real
+    // elapsed-time log rather than an estimate of what remains — a
+    // genuinely different question from `elapsedSeconds`'s now-estimated
+    // one, so the two are free to read different fields.
     elapsedDisplay: fmtDuration(frame.sessionElapsedSeconds / 60),
     pace,
     paceWhole,

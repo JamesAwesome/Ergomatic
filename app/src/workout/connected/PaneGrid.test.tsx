@@ -312,6 +312,7 @@ function frame(overrides: Partial<MonitorFrame> = {}): MonitorFrame {
     spm: 21,
     heartRateBpm: 164,
     splitAvgPace: null,
+    restSeconds: 0,
     intervalIndex: 1,
     intervalRemaining: { kind: "distance", value: 1200 },
     intervalAccrued: null,
@@ -534,11 +535,17 @@ describe("the shell header's composed GRID trailing (design spec §2B)", () => {
     const trailing = document.querySelector(".connected-line-trailing")!;
     const countdown = trailing.querySelector(".connected-header-countdown")!;
     expect(countdown).not.toBeNull();
-    expect(countdown.textContent).toBe("39:48 LEFT");
+    // EST LEFT (Phase LL): no longer a straight session-clock subtraction
+    // (was "39:48 LEFT" — `totalSeconds - frame.sessionElapsedSeconds`,
+    // 3216 - 828). This file's default `frame()` (`intervalIndex: 1`) lands
+    // on Filling Low's FIRST work phase (index 0 is the warm-up), so the
+    // new estimate is warm-up(480) + this frame's own live term(828) =
+    // 1308; totalLeft = 3216 - 1308 = 1908 s = 31:48.
+    expect(countdown.textContent).toBe("31:48 LEFT");
     // The ordinal half sits OUTSIDE the marker span, in the trailing's own
     // inherited ink-3 — only the countdown wears the mark, never the whole
     // caption (spec §2B: "the countdown portion in --marker gold").
-    expect(trailing.textContent).toBe("1 OF 4 · 39:48 LEFT");
+    expect(trailing.textContent).toBe("1 OF 4 · 31:48 LEFT");
   });
 
   it("falls back to the plain WARM-UP caption on the unnumbered warm-up — no ordinal to join TOTAL LEFT onto", () => {

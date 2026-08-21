@@ -206,6 +206,7 @@ function frame(overrides: Partial<MonitorFrame> = {}): MonitorFrame {
     spm: WORK_PHASE.spm ?? 22,
     heartRateBpm: 164,
     splitAvgPace: null,
+    restSeconds: 0,
     intervalIndex: 1,
     intervalRemaining: { kind: "distance", value: 1200 },
     intervalAccrued: null,

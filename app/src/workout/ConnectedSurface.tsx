@@ -310,6 +310,19 @@ export default function ConnectedSurface({
   // ending that has nothing to wait for, so this reads as "fire on ended"
   // exactly as it always did in all of them.
   const endedRef = useRef(false);
+  // EST LEFT (Phase LL design spec §3): `buildSurfaceModel` is pure and
+  // has no memory of the frame before this one — the monotonic clamp on
+  // its own estimate (`SurfaceModelInput.previousElapsedSeconds`'s own doc
+  // comment) needs one, and this is it. A REF would be the obvious
+  // choice, but this repo's own lint config (`react-hooks/refs`) forbids
+  // reading or writing `ref.current` during render — correctly: React may
+  // discard or replay a render pass, and a ref write has no such
+  // safety net. `useState` instead, using React's own sanctioned
+  // "adjusting state during rendering" pattern (calling `setState`
+  // directly in the render body, guarded by a comparison, rather than in
+  // an effect) — an effect would lag the clamp behind by one commit,
+  // which a monotonic guarantee cannot afford.
+  const [previousElapsedSeconds, setPreviousElapsedSeconds] = useState(0);
   useEffect(() => {
     if (session.phase !== "ended" || session.handoffHeld || endedRef.current) {
       return;
@@ -417,7 +430,14 @@ export default function ConnectedSurface({
     frame: session.frame,
     deviceName: session.deviceName,
     actuals: session.actuals,
+    previousElapsedSeconds,
   });
+  // The comparison guard is what makes this SAFE to call during render
+  // (React docs, "Adjusting state during rendering"): `setState` bails out
+  // of the update when the new value is unchanged, so this does not loop.
+  if (model.elapsedSeconds !== previousElapsedSeconds) {
+    setPreviousElapsedSeconds(model.elapsedSeconds);
+  }
 
   return (
     <main className="screen connected-surface" ref={surfaceRef}>
