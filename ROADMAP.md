@@ -2731,23 +2731,49 @@ library.
    solved rather than regressing it, but the requirement is retired and
    should be recorded as retired.
 
-**Not fast path, and TRIAD by the standing rule.** 37 non-test files,
-crossing `app/domain/` and `app/server/`, with a stored shape and a
-preferences migration. Full cycle: a spec, a full antagonist pass on it,
-subagent implementation and review, and a PM final-PR gate.
+**Design authority:**
+`docs/superpowers/specs/2026-08-21-warmup-removal-design.md` (2026-08-21).
+Approach A of three: full removal INCLUDING both type unions, so the
+compiler enumerates every dependent.
+
+**Not fast path, and TRIAD by the standing rule.** Full cycle: a spec, a
+full antagonist pass on it, subagent implementation and review, and a PM
+final-PR gate.
+
+**Footprint, MEASURED — this corrects the "37 non-test files" figure this
+section first carried.** That number was a grep for the string `warmup`
+and counted comments, historical release notes and CSS. Measured by
+removing each union member and reading `tsc`: `Phase["type"]`
+(`expand.ts:12`) produces 30 errors across 5 source and 9 test files;
+`IntervalType` (`program.ts:37`) produces 77 across 4 source and 29 test
+files. **Roughly nine source files against roughly thirty test files — the
+true risk is a large FIXTURE MIGRATION, not a domain-logic change.** And
+the two unions are compile-coupled through `WorkoutDetail.tsx:275` plus
+`enginePhase.compileCompat.test.ts`, which is the evidence for this being
+one task rather than the assertion it previously was.
 
 ### What the spec has to answer
 
-- **Existing stored rows keep their warm-ups.** Logged rows are immutable
-  and PATCH refuses series; the removal is FORWARD-ONLY and old rows must
-  keep rendering what they recorded. State it, and make sure the renderer
-  still has the branch after the model loses it — this is the one place
-  where deleting the concept too thoroughly breaks history.
-- **The `warmup jsonb` column: drop it or orphan it?** A `DROP COLUMN` has
-  a rollback ordering question this repo has been bitten by before
-  (recurring failure 10 records a `DROP COLUMN` sequencing that would have
-  broken rollback). Deciding to leave the column and stop reading it is a
-  legitimate answer and probably the cheaper one.
+- **CORRECTED 2026-08-21: a stored step list has NEVER contained a
+  warm-up** (`logDraft.ts:851`, `if (seedStep.kind === "warmup") return;`),
+  so this section's original worry about renderers losing a branch was
+  unfounded. What IS true: the stored TOTALS include the warm-up
+  (`summaryModel.ts:577-583` filters nothing, and `monitorTimeSeconds`'s
+  comment says "warm-up included") while the step list does not, and
+  recompute is impossible because the row persists `series` and `steps`
+  but never `actuals`. **James's ruling: forward-only, no marker, say
+  nothing.** Accepted cost: a pre-WU row is off by its warm-up against
+  Concept2 and nothing marks it.
+- **SETTLED 2026-08-21: expand/contract, two steps.** `0007` dropped the
+  two older warm-up columns in one migration, but its own comment says
+  that was safe because they were "never consumed anywhere" — this one is
+  consumed, migrations run at boot before the API serves a request, and a
+  rollback would hit a column that no longer exists. **WU ships NO
+  migration:** every read and write goes, the column stays.
+- [ ] **OWED to the next server-touching phase: `ALTER TABLE
+      "preferences" DROP COLUMN "warmup";`** One line, safe once no
+      deployed image reads it. Recorded here rather than in the spec
+      because a PR body is not a record (recurring failure 14).
 - **`EnginePhase`'s `"warmup"` member** (`expand.ts:12`) is currently
   unreachable from `Step[]` but still in the union, and `expand.ts:139`
   says every downstream branch is untouched. Removing the member is a
@@ -2810,12 +2836,20 @@ twice. Not concurrent with LL because both edit `useMonitorSession.ts`,
 hazard. WU has no dependencies of its own, so it is free to go first. The
 full worked order lives in Phase RC's "Sequencing across RC, WU and LL".
 
-**Exit.** (a) No `EnginePhase` can be a warm-up and the compiler proves
-it; (b) a replay of `session-2-wu-4unequal` shows every judged number for
-that row unchanged, or the change is stated and intended; (c) an
-already-logged row containing a warm-up still renders correctly; (d) no
-orphaned warm-up CSS or copy survives a grep of `src/` and `e2e/`; (e) a
-release note tells testers the setting is gone.
+**Exit.** (a) Neither `EnginePhase` nor `CompiledPhase` can carry a
+warm-up and the compiler proves it; **(b) CORRECTED 2026-08-21** — the
+original clause ("every judged number for that row unchanged") cannot hold
+and should not: post-WU there is no warm-up phase type, so replaying
+`session-2-wu-4unequal` constructs five WORK intervals and AVG SPLIT,
+which today excludes the warm-up, correctly moves. The honest clause is
+**the four working intervals' numbers are byte-identical and every
+whole-session number that moved moved by exactly the warm-up's own
+contribution, itemised in the PR body**; (c) an already-logged row renders
+correctly with its historical totals untouched; (d) no orphaned warm-up
+CSS, copy or live-behaviour comment survives a grep of `src/` and `e2e/`;
+(e) a release note tells testers the setting is gone and the two
+historical notes are unedited; (f) `PUT /api/prefs` no longer accepts a
+`warmup` key and the presence-check special case and its tests are gone.
 
 ## Phase CL2 — Post-release authoring parity
 
