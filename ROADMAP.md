@@ -2134,7 +2134,11 @@ double-processes every notification. Before reconnect is IN:
 
 1. The research pass has answered the buy-vs-build question and the
    PM5's does-it-exist question.
-2. **The fake models handle invalidation.** Today it cannot prove a
+2. **The fake models handle invalidation.** **Merge this with Phase RC's
+   RC-8** (the fake's five contradictions of the real wire, including the
+   `intervalRestTimeSeconds: 0` hardcode at `fake.ts:878`) — they are one
+   piece of fake work and specced apart they get done twice. Today it
+   cannot prove a
    reconnect works — see the quoted prior art above — so reconnect tests
    would be theatre. This is a real work item and it lands first.
 3. Detection ships, so we have seen what "lose and degrade" actually
@@ -2146,6 +2150,127 @@ to fill; no backfill, no MISSED); **background scan** and
 **`DiscoveredMonitor.rssi`** (convenience, not the defect); and **any
 `RECONNECTING` copy** (DEVIATIONS row 75 made that ruling once; do not
 un-make it before the thing it promises exists).
+
+### Spec inputs from the 2026-08-21 ecosystem review
+
+Not a second research pass — the pass already reported (BUY NOTHING;
+diagnosability → detection → recovery). These are inputs shaped against
+that sequence, from the review that also opened Phase RC above. Two of
+Phase RC's blockers are LL's to fix, because both are link-caused.
+
+**A-2 (detection/recovery tier) — hold the radio past the terminal frame
+until the machine says it logged the piece.** We disconnect **21.7, 24.1,
+30.6 and 107.3 ms** after the terminal 0x0031 on the four natural
+finishes we have bytes for, and the `disconnect` line is written after
+`await inner.disconnect()`, so real teardown began earlier. Keep the link
+up after `ended` until whichever comes first: a 0x0031 reporting state
+12, a 0x0039 arrival, or a bounded outer clock above 3.5 s.
+`parse.ts:431` already maps state 12 to `"finished"` and the driver
+already holds `raw.workoutState` in the finish path, so this is a read,
+not a parser change. Ship the wall clock as a live fallback and log which
+path fired — state 12 is an unobserved wire premise. **The real tension
+the spec must resolve:** `ConnectedSurface.tsx:60-63` deliberately
+refuses to hold a GATT link across iOS backgrounding.
+**Also correct the premise the whole finish design rests on:**
+`ConnectedSurface.tsx:52-55` says the final split arrives "~1 ms AFTER"
+the frame that ends the workout, from one walk-day-2 observation.
+Measured across four captures: **-179.9, +90.2, -89.7, +7.6 ms.** The
+sign varies; in two of four the split arrives FIRST, the hand-off hold
+never opens, and `FINISH_HANDOFF_HOLD_MS = 3500` buys nothing.
+
+**A-4 (detection tier) — four mechanisms produce the same silent short
+row, and only one is covered today.**
+
+- **A Bluetooth power-cycle delivers no per-device callback.** Apple: all
+  `CBPeripheral` objects "become invalid; you must retrieve or discover
+  these peripherals again". The plugin's `.poweredOff` arm
+  (`DeviceManager.swift:53-56`) runs `stopScan()` and
+  `emitState(enabled: false)` and resolves no per-device key. The signal
+  that IS emitted, `onEnabledChanged`, we never subscribe to. (That the
+  per-device callback never fires is INFERENCE — Apple documents it
+  neither way. Tag it so in the spec.)
+- **iOS backgrounding, and nobody had checked.** `Info.plist` declares no
+  `UIBackgroundModes` at all and the monitor stack registers no
+  app-lifecycle listener anywhere. **An incoming call mid-piece produces
+  the reported failure with no radio fault whatsoever.** This also
+  falsifies the third clause of `types.ts:429-433`.
+- **A single characteristic's subscribe rejection** calls `disconnectCb`
+  while every other subscription keeps delivering
+  (`capacitorBle.ts:430-448`) — a `disconnected` phase with an intact
+  frame stream, which then freezes the series recorder for the rest of
+  the session (197 of 419 samples lost on replay, `truncated` false, the
+  stored heroes unchanged).
+- **A genuine drop inside the `callerInitiatedDisconnect` window** is
+  swallowed as housekeeping (`capacitorBle.ts:227-238`).
+
+What to build, in the phase's own sequence: subscribe
+`startEnabledNotifications` (cheapest, and it covers James's exact
+reported trigger); add a status-arrival watchdog at the transport seam
+keyed on 0x0031 only, threshold **2500 ms — about 3x our worst recorded
+web gap (810 ms) and about 25x the native 100 ms cadence, and the
+constant's comment should say BOTH numbers**; give it a DISARM rule for
+workout states 10/11 and the finish hand-off window or it fires across
+every normal finish and races the boundary the hold protects; drive a
+`stale` link axis that recovers on the next valid frame rather than
+faking a disconnect; and route an interrupted close through a distinct
+reason code. **Today a link death and a rower stopping early are both
+`terminated: true`, and the server row carries neither flag.**
+
+**Before any recovery lands it needs a continuity rule.** RowTracer's
+`pm5web/transport.js:117-129` `pm5Continuity(before, after)` returns
+`"reset"` if elapsed went back more than 2 s, distance more than 5 m, or
+stroke count dropped, and `:319-333` preserves the interrupted capture
+and starts a clean one rather than merging — "Never merged silently."
+**MIT, so legally borrowable**, unlike ORM and qdomyos-zwift. A resumed
+stream folding into a stale register map is exactly the defect this phase
+was opened to prevent.
+
+**Diagnosability tier, three concrete gaps.** (1) There is no diagnostics
+seam on native at all: `adapters/monitorTransport.ts:49-56` returns
+`createCapacitorBleTransport()` raw, so byte capture is structurally
+impossible on the platform that produces every real row, and there is
+nowhere to hang the watchdog. **Build two decorators, not one** — a
+production-safe liveness/probe decorator on both arms, and the recorder
+kept behind its build-time constant; a single `withDiagnostics` wrapper
+would ship the recorder's whole module graph into production (recurring
+failure 12). (2) The ring records decisions and almost no numbers, has no
+time axis, and dies with the tab; on native it IS the record.
+(3) 0x0039 and 0x003A bypass `mergeStatus` entirely (direct `t.subscribe`
+at `driver.ts:3649/3653`) so even their hex would never reach the ring,
+and 0x003A's callback takes no `bytes` parameter at all. One-line fix,
+and it is the precondition for ever settling the summary premises.
+
+**Two corrections to this phase's own record**, both caught by the
+review's verification pass:
+
+- **The retry path's diagnosis was wrong.** The walk README said
+  `connect()`'s catch clears `driverRef`; it does not. The only two
+  `driverRef.current = null` sites are `cancel()` (`:1406`) and teardown
+  (`:1694`). `ConnectedInterstitial.tsx:299-309` reads a stale local and
+  says so in its own comment. **There is no existing discipline to copy;
+  the fix must be specified from scratch.**
+- **Do not inherit a loss estimate for the 0x0031-before-0x0033 skew.**
+  It has only ever been measured at 2 Hz (median 2-11 ms, p99 ~180 ms,
+  max 361 ms, quantised in ~90 ms steps that look like connection-event
+  scheduling). The misattribution window is wall-clock skew, not frame
+  count, so the primary platform's ~10 Hz is neutral-to-better. Measure
+  it; drop the estimate.
+
+**One cheap fix with an invariant behind it:** every connect attempt
+constructs a new `CBCentralManager` while the plugin reuses the old
+`Device` object with its callback map intact. Our half is one line —
+hoist the `initialize()` memo to module scope in `capacitorBle.ts` —
+restoring an invariant that file's own comment already claims holds.
+Verified safe; nothing depends on re-initialisation. The harm is still
+unproven and it still does not explain the force-quit survival.
+
+**Two walk items this phase owns** (the rest are Phase RC's): **W5**,
+a Bluetooth power-cycle armed but not rowing, to settle whether
+`didDisconnectPeripheral` fires for our device and whether
+`onEnabledChanged` would have caught it; and **W6**, background the app
+for 30 s mid-piece, to settle whether a backlog of BLE events drains on
+resume (Apple documents queuing; depth unknown) or the row simply loses
+the span.
 
 **Exit — written so it can go red.** Clause (e) added 2026-08-20 at the PM
 gate's finding that four of this phase's items had no exit clause; the
@@ -2177,6 +2302,520 @@ is DESTRUCTIVE** — it wipes `ergomatic.monitorRun`, `ergomatic.sessionRun`
 and `ergomatic.sessionDraft`, costing an unlogged session and any
 in-progress draft. It must not be handed to any tester but James until
 criterion (b) exists.
+
+## Phase RC — The row Concept2 would recognise
+
+**Status:** NOT OPENED. Named, scoped and evidenced by the ecosystem
+review of 2026-08-21 (`docs/monitor/pm5-ble-ecosystem-review.md`, which
+that review also reconciles). No spec is written yet. This section exists
+so the work has a home the moment one is, and so its findings stop living
+in a report (recurring failure 14).
+
+**What and why, in plain words.** We have never checked our rows against
+anything outside our own app. On 2026-08-21 a fourteen-agent adversarial
+review checked them against Concept2's published logbook schema, and the
+answer is that **our rows would not reconcile today, for two reasons that
+no accuracy work touches.** We store the wrong quantities, and we hang up
+before the machine tells us which row we just rowed. Both are fixable.
+The prize for fixing them is not a logbook feature: it is that Concept2's
+own server becomes the external oracle this project has never had.
+
+**The bar, and its three branches** (settled from Concept2's published
+API, PRIMARY):
+
+- **Numeric agreement** — our row matches the monitor's own log entry
+  field for field. **REACHABLE.** Needs RC-1 below plus Phase LL's link
+  work. Needs nothing from Concept2.
+- **`verification_code`** — the PM5 computes a 16-digit hash over date,
+  distance and duration and publishes it on 0x003F. C2 accepts the code
+  only if date, time, distance, workout_type and machine type all match
+  what the code was computed over. **REACHABLE IN PRINCIPLE**, gated
+  behind three unknowns (firmware band, fire timing, byte order) and
+  behind Phase LL's A-2. **This is the whole point of the phase:** a code
+  that fails closed is a permanent regression detector on every number we
+  compute, with no erg and no two-screen photograph.
+- **`verified: true`** — **CLOSED.** Concept2's own words: "Only trusted
+  clients are able to verify workouts. Please contact Concept2." No
+  amount of accuracy buys it. Stop asking.
+
+**James is obtaining a Concept2 developer key** (2026-08-21). That
+settles the review's first open decision and puts the sandbox in scope:
+`log-dev.concept2.com` is a real sandbox, and
+`GET /results/{id}/export/{csv|fit|tcx}` hands back Concept2's own
+canonical file for a row. It is the only external oracle this project has
+that needs no erg, and it can run in a test.
+
+### The two blockers, measured
+
+- **We store the wrong QUANTITIES.** C2's `distance` and `time` are
+  work-only, with rest in its own fields; ours are work + rest + warm-up.
+  Measured deltas against work-only truth: **+64 m / +90 s**
+  (session-2-wu-4unequal), **+47 m / +120 s** (pyramid). C2 dedups on
+  (user, date, time, distance), so that is two rows, always.
+  **The killer detail is that our own oracle cannot see it:** Total Work
+  Distance is work + rest too, decoded to the metre on two captures
+  (1535 + 64 = 1599; 1300 + 47 = 1347). PR #123's celebrated sub-metre
+  three-way agreement proves our accumulator matches the machine on a
+  quantity Concept2 does not store. **An oracle that shares your
+  definition is a mirror.**
+- **We never get the row's identity, because we hang up first.** Measured
+  from the terminal 0x0031 to our own recorded disconnect, all four
+  natural finishes: **21.7, 24.1, 30.6 and 107.3 ms.** And the census
+  that reframes it: **0x0039 and 0x003A are in the subscribe list of
+  every one of the six committed wire recordings and have delivered ZERO
+  notifications, ever, across five natural finishes.**
+  WORKOUTSTATE_WORKOUTLOGGED has never appeared either; every recording's
+  maximum state is 10. One hypothesis explains all three — the PM5 emits
+  its end-of-workout characteristics when it commits the log entry, and
+  we hang up microseconds too early, by construction, every time. The
+  entire summary-fallback subsystem (`noteSummary`, `graceIsOpen`,
+  `armSummaryReconcile`, `deriveFinalIntervalFromSummary` and its two
+  agonised-over premises) is **dead code at the erg.**
+
+### The work
+
+- [ ] **RC-1 — Store WORK and REST separately, per interval and per
+      session.** TRIAD (stored shape + a number's meaning). Nothing else
+      moves reconciliation. Add `restSeconds` and `type` to
+      `IntervalActual` from 0x0037 offsets 12-13 and 16 (they sit beside
+      `restDistanceMeters`, already carried from offset 14); store work
+      and rest as separate columns; keep the fused number as a DISPLAY
+      sum. **Two caveats the spec must carry:** (a) whether 0x0037's rest
+      time is a MEASUREMENT or a readback of the rest we programmed is
+      NOT established — every committed value equals the programmed rest
+      exactly — so do not sell it as the machine's measured rest; (b)
+      0x0037 arrives at the END of an interval's trailing rest (session-2
+      num=2 at t=142906 with the next interval's clock already at 0.03),
+      so a session ended during a rest loses the just-finished interval
+      entirely. That is a bigger undercount than anything RC-1 fixes and
+      belongs in the same spec. **Also carries the program-time warm-up
+      question** (see "The warm-up question" below): whether a warm-up is
+      compiled into the same PM5 piece as the working intervals is a
+      compiler change, it decides what a rower's Concept2 totals read, and
+      RC-1's spec is where it lands.
+- [ ] **RC-2 — Decode Log Entry Date/Time; log it beside our wall clock;
+      store nothing yet.** Format settled from two projects and checked
+      arithmetically: date `uint16` = month | day<<4 | (year-2000)<<9;
+      time `uint16` = minutes | hours<<8. **The residual that inverts the
+      headline:** the wire carries hours and minutes and NO SECONDS,
+      while C2's own hardware-sourced example row reads
+      `2015-08-05 13:15:41`. The wire cannot supply what C2's dedup key
+      wants. Settle the tolerance question before anything stores this as
+      an identity. Rides Phase LL's A-2 and its walk.
+- [ ] **RC-3 — Carry 0x0039's nine already-decoded fields into the
+      record.** TRIAD. `parseEndOfWorkoutSummary` decodes
+      `avgStrokeRate`, `endingHeartRateBpm`, `avgHeartRateBpm`,
+      `minHeartRateBpm`, `maxHeartRateBpm`, `dragFactorAverage`,
+      `recoveryHeartRateBpm`, `workoutType` and `avgPaceSecondsPer500m` —
+      **zero consumers, all nine.** Six are C2 top-level columns the
+      reconciliation table marks NOT CAPTURED. Strictly more coverage at
+      strictly lower cost than a new 0x003A parser, same prerequisite.
+      Caveat: `avgPaceSecondsPer500m`'s /10 scale rests on the same
+      document that was wrong about Last Split Time two pages earlier and
+      has never decoded a real byte — DOC-ONLY until a capture lands.
+- [ ] **RC-4 — Last Split Time is 0.01 s/lsb, not 0.1.** TRIAD, S,
+      **settled without an erg.** Both C2 documents print 0.1, four
+      times. Nine capture pairs say 0.01 (0x0033's u24LE@14 is the exact
+      hundredths value whose truncation to tenths is 0x0037's split
+      time), the PM5's own memory screen agrees (7476 → 1:14.7,
+      `walk-2026-08-17/README.md:14`), ORM agrees. **Our decode is 10x
+      TOO LARGE.** Dormant since CR2 spec 2a Task 6, and
+      `statusFrames.ts:222` mirrors the same error, so no round trip and
+      no hand-built fixture could ever have caught it. Fix
+      `parse.ts:203` to /100 and `statusFrames.ts:222` to *100, retarget
+      `parse.test.ts:198` and `:614`, and pin it with a REPLAY against
+      committed bytes, never a round trip. Ship the semantic with it: the
+      field is dimension-conditional and transiently live mid-interval,
+      so it can never be a countdown checkpoint at any scale.
+- [ ] **RC-5 — The three stored heroes contradict each other by up to
+      40 s/500 m.** TRIAD. DISTANCE sums work + machine rest over ALL
+      actuals including warm-up; TIME sums work + PROGRAMMED rest over
+      the same population; AVG SPLIT is 500·Σt/Σd over work metres only,
+      EXCLUDING warm-up. Session-2 prints 1599 m and 8:08.4 (implying
+      **2:32.7**) beside an AVG SPLIT of **2:08.5** — 24.3 s/500 m apart.
+      Pyramid: 2:13.1 against 2:53.0 implied, **39.9 s/500 m.** PR #117
+      shipped this exact shape through seven reviews; this one is in the
+      saved record, not a capture. **Not closed by the warm-up section
+      below:** Concept2 has no average-split field, so this is a rower
+      question with its own answer, and aligning DISTANCE and TIME with C2
+      can widen the contradiction rather than close it.
+- [ ] **RC-6 — Band `spm` and drop zero `p` in the stored series.**
+      TRIAD, S. `seriesRecorder.ts:230` writes `spm: f.spm ?? 0` unbanded
+      while the sibling `hr` two lines below is banded 20..254. The PM5
+      demonstrably emits 64 and 101 spm in coherent aligned frames at
+      boundaries; **two stored samples in the committed step-2 capture
+      would carry 64.** Also store no `p: 0` — 8 samples on session-2 and
+      2 on pyramid carry a zero pace, which C2's `stroke_data.p` has no
+      concept of and our own live surface refuses one layer up
+      (`surfaceModel.ts:586`).
+- [ ] **RC-7 — Stop writing `restDistanceMeters: 0` into the synthesized
+      final interval** (`driver.ts:3037`), which the code's own comment
+      already calls "a real gap". Unreachable today because no 0x0039
+      ever arrives — but Phase LL's A-2 is trying to make it reachable
+      and nobody had asked what it writes when it fires. **Sequence it
+      INSIDE A-2's spec.**
+- [ ] **RC-8 — Correct the fake's five contradictions of the real wire.**
+      Gates the honesty of everything above. `fake.ts` forces
+      `restSeconds` to 0 off a rest; writes `ergMachineType: 1` where the
+      machine reads 0 in 3448 of 3448 frames; writes `splitIntervalType:
+      0` always; writes Last Split Time/Distance unconditionally; and
+      **hardcodes `intervalRestTimeSeconds: 0` on every boundary**
+      (`fake.ts:878`) — precisely the field RC-1 wants to carry. RC-1
+      would otherwise ship green against a fake that says the machine
+      reports 0.
+- [ ] **RC-9 — Wire the free external oracles nobody reads.** (a)
+      0x0032's `averageSplit` (offset 9) is a PM5-computed session
+      average pace, decoded and discarded, sitting beside our own
+      `monitorAvgSplit` over a deliberately different population — two
+      computers, one quantity, zero new subscriptions. (b)
+      `logSummaryTotals` prints 0x0039's totals beside ours and records
+      no verdict; now that those totals are settled as work-only
+      cumulative, a verdict against them is sound where the TWD verdict
+      is suppressed. (c) The TWD verdict is switched off for the whole
+      session by any distance interval; all seven committed captures
+      contain one, so it has never fired on a capture.
+- [ ] **RC-10 — The Concept2 sandbox as a test oracle.** Once the dev key
+      lands: post a reconciled row to `log-dev.concept2.com`, pull
+      `export/{csv,fit,tcx}` back, and diff it against what we stored.
+      **Two gates on a POST that the numeric work does not cover:**
+      `weight_class` is REQUIRED for a rower and we store nothing
+      (product decision, one field); per-interval `rest_time` is REQUIRED
+      and we decode it at `parse.ts:236` then drop it (RC-1 closes this).
+      Also unresolved and worth settling before we post in anger: if
+      James runs ErgData too, success means our row and ErgData's row are
+      the SAME row under C2's dedup. Whether that merges, rejects or
+      duplicates is **not established by the review** and decides whether
+      this is leverage or a fight over ownership of the row.
+- [ ] **RC-11 — The stroke-data reframe, which is three-way not two.**
+      C2's `stroke_data[].t` restarts at 0 PER INTERVAL; ours is
+      cumulative across the session. Worse, our series clock is a THIRD
+      quantity — work plus however much of the trailing rest the wire
+      clock advanced before freezing (session-2: 398.4 work / 419.5
+      series / 488.4 header). **None of the three is C2's `time`.**
+      Depends on the warm-up section below. Our `r` rest marker has no C2
+      slot at all and stays ours-only, which is the honest boundary of
+      what Concept2 can hold for us.
+- [ ] **RC-12 — Documentation reconciliations**, each a defect by this
+      repo's own rule; fold into the PRs above rather than a sweep.
+      `driver.ts:2801-2870` and `pm5-interface-notes.md:4640-4657` still
+      call `deriveFinalIntervalFromSummary`'s two premises UNCONFIRMED
+      when a capture settled BOTH five days after they were written
+      (`walk-2026-08-15/session-c-rewalk-row1.json` seq 35 prints its own
+      three-way decision rule then reads 120 == 120 — cumulative AND
+      rest-exclusive; ORM's writer independently agrees).
+      `pm5-interface-notes.md:4393` says 0x0037's work-only status is
+      "still open" while `state-architecture-review.md:1310` says PROVEN
+      — the review is right. §20 items 17 and 24 are contradicted by the
+      captures that settle RC-4. `driver.ts:2094-2099` says "no capture
+      or existing test evidences" state 9; one committed two days later
+      does. `types.ts:429-433` claims `onDisconnect` covers the Bluetooth
+      stack resetting and iOS backgrounding — it covers neither.
+      `connectedAxes.ts:38-41` declares the link axis is "never invented"
+      then returns `"up"` from `phase` alone. `schema.ts:165-167` calls
+      `distance_meters` "the machine's whole-meter total" when it is our
+      sum, work+rest+warm-up.
+
+### The warm-up question, reframed 2026-08-21 (James)
+
+> **SUPERSEDED the same day: James chose to remove warm-ups entirely —
+> see Phase WU below, which lands BEFORE RC-1.** The reasoning below is
+> kept because it is why the removal is safe for Concept2 (the machine,
+> not us, decides what is in the row) and because it still governs any
+> future decision to reintroduce a warm-up in any form.
+
+
+This was written as "which population is the row?" — DISTANCE and TIME
+include the warm-up, AVG SPLIT excludes it, pick one. **That framing was
+wrong, and it hid the actual lever.** It is two questions, and only one of
+them is open.
+
+**The Concept2 half is not a choice, and the hash enforces it.**
+`program.ts:37` compiles `IntervalType = "warmup" | "work" | "test"` — the
+warm-up is an interval inside the type-8 workout we send the machine. So
+the PM5 already counted it: its log entry covers the warm-up, and the
+verification code is computed over THAT entry's date, distance and
+duration. Upload a distance that excludes the warm-up and Concept2 rejects
+the code. There is nothing here for a rower to consent to and nothing for
+us to decide at upload time. **This is the good kind of constraint — we
+cannot get it wrong silently.**
+
+**The lever is at PROGRAM time, and that is the real open question:**
+
+> **Should a warm-up be programmed as its own PM5 piece, separate from the
+> working intervals?**
+
+Program one workout and it is one C2 row with the warm-up inside, by
+mechanism. Program the warm-up separately and it is a separate PM5 log
+entry and a separate C2 row, cleanly, with no reconciliation cost either
+way. **The consequence that decides it is the rower's logbook, not ours:**
+a 2 km warm-up in front of a 6 km piece becomes an 8 km row, and their
+season total, rankings and any Concept2 challenge counts all include it.
+That argues for separate pieces by default, but it is a product call and it
+changes the compiler, so it belongs in RC-1's spec rather than being
+settled here.
+
+**The screen half stays open, and aligning with Concept2 does not close
+it.** C2 has no average-split field at all — it stores distance and time
+and derives pace — so AVG SPLIT's population is purely a rower question.
+Making DISTANCE and TIME C2-shaped can make RC-5 WORSE: the three heroes
+still contradict each other, just by a different amount. **RC-5 needs its
+own answer and must not be closed by citing this section.**
+
+**What this means for the enrichment layer, which is bigger than traces.**
+C2's per-interval `type` is `time|distance|calorie|wattminute` — a
+DIMENSION, not a ROLE. There is no warm-up flag, and `REST=2` has no C2
+twin either (see RC-1's map note). So "which intervals were working
+intervals" is ours-only, the same category as the `r` rest marker in
+RC-11. That is not decoration: every judgment this app makes hangs off that
+distinction. **Concept2 holds what happened; we hold what it meant.** Any
+design that treats our layer as an optional garnish on C2's row has the
+relationship backwards.
+
+### Walk items this phase owns
+
+Runsheet-ready, from the review's §6. **W2 is the single most valuable
+item** and W3/W4 ride the same piece.
+
+- **W1** — record the firmware version (2 min, no rowing). PM5
+  432331249's firmware has never been recorded anywhere in this repo, and
+  0x003F is gated to nine disjoint firmware bands. Without it we cannot
+  say whether the verification hash exists on our machine at all.
+- **W2** — **do not tear down at the finish.** One 2x250 m r0 keystone,
+  then stand still for 90 seconds and touch nothing. Settles whether the
+  summary path is reachable at all, when state 12 fires, and whether the
+  ~1-minute recovery-HR re-fire is real. **Needs a temporary build that
+  defers the disconnect**, or the laptop harness, which has the tap.
+- **W3** — the identity photograph, same piece: the PM5's View Detail
+  memory screen and the phone in ONE frame, plus the decoded
+  `logEntryDate`/`logEntryTime` from the ring. Settles the bit-packing
+  against a real erg and whether the monitor's own entry carries seconds.
+- **W4** — the verification hash, same piece: subscribe 0x003F, dump raw
+  hex, photograph the PM5's own 16-digit code in the same frame. Settles
+  whether 0x003F fires on our firmware, when, and which byte order the
+  monitor prints (CSAFE says byte 0 = MSB, the BLE table says "Lo" — the
+  two documents disagree). **The only route to the verification branch.**
+- **W7** — a distance-shaped summary (3x300 m r30, held open 90 s), only
+  if W2 shows 0x0039 arriving at all. Extends the cumulative/rest-exclusive
+  settlement, which rests on one TIME piece.
+
+**Not worth a walk:** re-observing 0x0037's work-only semantics (settled
+twice from committed bytes) or the state-9 frame (captured 2026-08-18).
+
+### Not now, each with its reason
+
+- **`CSAFE_PM_GET_TOTAL_WORKDISTANCE` (0xA4) as a distance oracle** —
+  speculative twice over: never issued against our firmware, and if it
+  behaves like TWD on a distance goal it reports the GOAL, in which case
+  lifting the suppression would be exactly wrong. A walk probe, not work.
+- **Subscribe 0x0036 for `stroke_count`** — a real C2 column we cannot
+  fill, but a fourth characteristic in every burst at 10 Hz, and the
+  column is not on the dedup key. After RC-1 and LL's A-2.
+- **Recovery heart rate** — the wire event fires about a minute after the
+  finish; both our 3 s grace and our teardown reject it. Not a product
+  feature. It is the clearest illustration of why A-2's close condition
+  should be an EVENT, not a duration.
+- **`MID_SESSION_RESET_METERS = 1`** — a genuine tuned-threshold instance
+  where workout states 0 and 13 state the answer, but purely cosmetic.
+  Prefer the state bytes only if the mirror is touched for another reason.
+- **A partial final interval for an END-mid-piece session** — the summary
+  shows dashes while a 44-sample trace of the 150.7 m rowed sits in the
+  same row. That is a stated product rule, not an oversight. Revisit
+  deliberately or not at all.
+
+### Sequencing across RC, WU and LL — worked, not asserted (James, 2026-08-21)
+
+Ordered to avoid re-work. **Two collisions matter more than the logical
+dependencies** and are the reason this section exists rather than a
+sentence:
+
+- **`useMonitorSession.ts`, `driver.ts` and `surfaceModel.ts` are edited
+  by BOTH Phase WU and Phase LL.** No logical dependency, but a real
+  merge hazard. **WU and LL implementations must not run concurrently.**
+  Either WU lands first (it is small and compiler-enumerated) or it waits
+  for LL to merge. Not both at once.
+- **RC-8 and Phase LL both own work on the fake.** LL's reconnect
+  precondition is "the fake models handle invalidation" (its OUT list,
+  item 2); RC-8 is the fake's five contradictions of the real wire.
+  **These are ONE piece of fake work and must be specced together** —
+  doing the fake twice is precisely the re-work this ordering exists to
+  prevent. Whichever phase gets there first carries both, and the other's
+  item points at it.
+
+**The order:**
+
+**Wave 0 — unblocked today, no collisions with anything.** RC-4 (the
+Last Split 10x, which also fixes its mirror in `statusFrames.ts`) and
+RC-6 (band `spm`, drop zero `p` — `seriesRecorder.ts`). Neither file is
+touched by WU or LL. These can go now and need nothing from anyone.
+
+**Wave 1 — Phase WU.** No dependencies at all, mechanical, and the
+compiler enumerates the work. Landing it early means RC-1 and RC-5 are
+never written against a population that is about to change, and LL's spec
+is written against a simpler model. **This is the single biggest
+re-work-avoider in the list:** RC-1 changes what is stored and displayed
+for a population that includes warm-ups, and RC-5 reconciles three heroes
+whose disagreement is partly the warm-up. Do either before WU and both
+get written twice.
+
+**Wave 2 — Phase LL** (A-2, A-4, the diagnosability tier), carrying
+**RC-7** inside A-2's spec by the review's own ruling, and carrying the
+merged fake work above. LL stays ahead of the rest of RC because RC-2,
+RC-3 and RC-10's oracle leg are all blocked on A-2 — **nothing arrives on
+the wire today**, so they cannot even be tested before it lands. LL is
+also a PROD precondition and the only item here fixing a defect that
+bricks the app.
+
+**Wave 3 — RC-1**, the phase's spine, once WU has settled the population
+and the merged fake work has made a green test mean something. **RC-8's
+`intervalRestTimeSeconds: 0` hardcode gates this specifically:** RC-1
+carries exactly that field, and without the fake fix it ships green
+against a fake asserting the machine reports 0.
+
+**Wave 4 — RC-2 and RC-3** (need A-2's held link), **RC-5** (needs WU,
+and lands with or after RC-1 since RC-1 changes what is stored), and
+**RC-11** (needs RC-1's storage plus the clock decision).
+
+**Wave 5 — RC-10** (needs RC-1's per-interval `rest_time`, the dev key,
+and a `weight_class` answer), then **RC-9** and **RC-12**, which are
+cleanup and can trail anything.
+
+**What this does NOT reorder:** the PM gate's phase order (LT close → LL
+→ CL2 → LQ → PROD) stands. WU inserts ahead of LL only because it is
+small, independent and collides with it; RC as a whole sits after LL.
+
+**Exit — written so it can go red.** (a) A row rowed on a real PM5 stores
+work and rest as separate quantities, and its work-only distance and time
+equal the monitor's own for the same piece; (b) the monitor's log entry
+date/time is decoded and logged from a real finish, with the
+seconds-resolution question answered either way; (c) the three heroes on
+one stored row reconcile with each other by hand arithmetic; (d) a row
+posted to the Concept2 sandbox comes back through `export/` matching what
+we stored, or the reason it cannot is documented; (e) if 0x003F turns out
+not to fire on our firmware, DEVIATIONS carries the row saying so and the
+verification branch is closed on the record rather than left hoped-for.
+
+## Phase WU — The warm-up leaves
+
+**Status:** NOT OPENED. **Decided by James, 2026-08-21**, during the Phase
+RC review: "let's just drop warmups. We uniquely do them nobody else
+does." Scope chosen the same day, from three costed options: **remove
+warm-ups ENTIRELY** — the setting, the preference, the `EnginePhase`
+member and every downstream branch — not merely stop programming them to
+the PM5. No spec yet.
+
+**What and why, in plain words.** The app prepends a configurable warm-up
+to every session. Nobody else in this space models one, Concept2's own
+data model has no slot for the idea, and the feature costs us a
+population disagreement in three different places. It goes.
+
+**The premise, stated accurately, because it is smaller than it sounds.**
+Warm-ups already left the `Step` union on 2026-08-09 (`expand.ts:135-139`:
+"no `Step[]` input can produce a `type: \"warmup\"` Phase anymore"). Today
+a warm-up is a GLOBAL PREFERENCE (`warmup jsonb` on the preferences row,
+`schema.ts:235`), not part of any workout — the 300-workout library
+carries exactly one `warmup` occurrence and it is in a test. So this
+retires a setting and its downstream, not a concept threaded through the
+library.
+
+**What this reverses, named so nobody restores it as a regression:**
+
+1. **The 2026-08-09 warmup-setting spec**
+   (`docs/superpowers/specs/2026-08-09-warmup-setting-design.md` and its
+   adversarial review), which deliberately built this shape — moving
+   warm-ups out of the Step union into a single setting, and replacing the
+   earlier `warmup_minutes`/`warmup_override` columns (`schema.ts:228-235`).
+2. **James's 2026-08-12 connected-mode requirement**, that the rower must
+   be able to see a warm-up is NOT a working interval. Shipped, and
+   announced to testers in the release notes
+   (`releaseNotes.ts:165`). Removing warm-ups dissolves the problem it
+   solved rather than regressing it, but the requirement is retired and
+   should be recorded as retired.
+
+**Not fast path, and TRIAD by the standing rule.** 37 non-test files,
+crossing `app/domain/` and `app/server/`, with a stored shape and a
+preferences migration. Full cycle: a spec, a full antagonist pass on it,
+subagent implementation and review, and a PM final-PR gate.
+
+### What the spec has to answer
+
+- **Existing stored rows keep their warm-ups.** Logged rows are immutable
+  and PATCH refuses series; the removal is FORWARD-ONLY and old rows must
+  keep rendering what they recorded. State it, and make sure the renderer
+  still has the branch after the model loses it — this is the one place
+  where deleting the concept too thoroughly breaks history.
+- **The `warmup jsonb` column: drop it or orphan it?** A `DROP COLUMN` has
+  a rollback ordering question this repo has been bitten by before
+  (recurring failure 10 records a `DROP COLUMN` sequencing that would have
+  broken rollback). Deciding to leave the column and stop reading it is a
+  legitimate answer and probably the cheaper one.
+- **`EnginePhase`'s `"warmup"` member** (`expand.ts:12`) is currently
+  unreachable from `Step[]` but still in the union, and `expand.ts:139`
+  says every downstream branch is untouched. Removing the member is a
+  compile-forcing change across every exhaustive switch. That is a
+  FEATURE — the compiler enumerates the work — but it is also why this is
+  one task and cannot be split across several.
+- **Does any NUMBER change for an existing row?** `judge.ts:78` treats
+  warmup alongside effort/rest/test as "no numeric target at all", and
+  AVG SPLIT already excludes warm-up phases. If no warm-up phases can
+  exist, those exclusions become dead code rather than changed behaviour —
+  **but that must be PROVEN by replaying a committed capture that contains
+  a warm-up** (`walk-2026-08-16/session-2-wu-4unequal.jsonl` is the one),
+  not argued. This is the triad clause.
+- **The does-it-exist question, pointed at ourselves.** A rower who warms
+  up will still warm up; they just will not do it inside a session. Is
+  there now a place where the app says nothing about warming up when it
+  used to? Name the gap and decide it deliberately, rather than
+  discovering it from a tester.
+- **Orphaned UI and CSS.** `you/WarmupRow.tsx` goes, and `index.css` is in
+  the touched list — recurring failure 5 is deleting a component and
+  leaving its rules behind, three times now. Grep the class names across
+  `src/` and `e2e/`.
+- **Release notes are history, not state.** `releaseNotes.ts:120` and
+  `:165` describe shipped behaviour at the time. Do NOT rewrite them; add
+  a new note saying the warm-up is gone.
+
+### The files, so the spec starts from a map
+
+- **Domain:** `expand.ts`, `judge.ts`, `types.ts`, `bulk.ts`,
+  `fixtures.ts`, `display/stepDetail.ts`, `generation/patterns.json`,
+  `monitor/program.ts` (the warm-up arm, `:512-526`), `monitor/types.ts`,
+  `monitor/pm5/commands.ts`
+- **Server:** `db/schema.ts` (`warmup jsonb`, `:235`), `routes/data.ts`,
+  `stores/logs.ts`, `stores/preferences.ts`
+- **Client:** `You.tsx`, `you/WarmupRow.tsx`, `api/usePreferences.ts`,
+  Builder (`Builder.tsx`, `builderState.ts`, `BulkImport.tsx`,
+  `StepCard.tsx`, `StepEditor.tsx`), session (`draft.ts`, `engine.ts`,
+  `intervalBoundaries.ts`, `logDraft.ts`, `summaryModel.ts`,
+  `Countdown.tsx`, `Timer.tsx`, `TimerRuler.tsx`, `TimerTargets.tsx`,
+  `PostWorkoutSummary.tsx`), `workout/connected/surfaceModel.ts`,
+  `monitor/driver.ts`, `monitor/useMonitorSession.ts`,
+  `WorkoutDetail.tsx`, `index.css`, `news/content/releaseNotes.ts`
+
+### What it buys Phase RC
+
+- **The program-time warm-up question disappears.** RC's own warm-up
+  section exists to decide whether a warm-up should be its own PM5 piece.
+  With no warm-ups, there is nothing to decide.
+- **RC-5 shrinks to the rest question alone.** Two of the three heroes
+  disagree partly because DISTANCE and TIME span the warm-up and AVG SPLIT
+  does not. Remove warm-ups and the remaining disagreement is rest-only,
+  which RC-1 is already fixing.
+- **RC-1's spec gets simpler**, which is why sequencing matters below.
+
+**Sequencing: WU lands BEFORE RC-1, and must not run concurrently with
+Phase LL.** Before RC-1 because otherwise RC-1's spec designs storage and
+display for a phase type about to be deleted, and the migration is written
+twice. Not concurrent with LL because both edit `useMonitorSession.ts`,
+`driver.ts` and `surfaceModel.ts` — no logical dependency, a real merge
+hazard. WU has no dependencies of its own, so it is free to go first. The
+full worked order lives in Phase RC's "Sequencing across RC, WU and LL".
+
+**Exit.** (a) No `EnginePhase` can be a warm-up and the compiler proves
+it; (b) a replay of `session-2-wu-4unequal` shows every judged number for
+that row unchanged, or the change is stated and intended; (c) an
+already-logged row containing a warm-up still renders correctly; (d) no
+orphaned warm-up CSS or copy survives a grep of `src/` and `e2e/`; (e) a
+release note tells testers the setting is gone.
 
 ## Phase CL2 — Post-release authoring parity
 

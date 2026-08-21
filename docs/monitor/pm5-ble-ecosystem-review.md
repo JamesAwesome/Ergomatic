@@ -1,5 +1,14 @@
 # PM5 BLE ecosystem review (2026-08-11)
 
+> **RECONCILED 2026-08-21** by a second, adversarial pass that judged our
+> connected state against a new standard: whether our rows would reconcile
+> with the **Concept2 Online Logbook**. That pass amended cross-check rows
+> d, e and g, added rows h-k, and roughly doubled the survey ledger. Its
+> findings are scoped as work in ROADMAP **Phase RC** and as spec inputs to
+> **Phase LL**; the full report's reasoning lives in the
+> `antagonist-ledger.md` entry of the same date. Where this document and a
+> committed capture disagree, the capture wins.
+
 A survey of open-source PM5/Concept2 BLE implementations, compared against
 this project's hardware-proven build (the comparison spine is
 `pm5-interface-notes.md` §20-§22; the code baseline is
@@ -374,10 +383,14 @@ looked), plus enrichments where the ecosystem adds something ours missed.
 | a | 0x0030 rowing service not advertised; name-prefix discovery is the way (§20 item 21) | ergarcade/pm5-base filters on `CE060000` with 0x0030 in `optionalServices` (`lib/pm5-ble.js`); ErgometerJS filters on `ce060000` + `PM\d` name regex with 0x0010/20/30 in optionalServices (`performancemonitorBle.ts#L772-778`); c2bluetooth scans by `C2_ROWING_BASE_UUID` (CE060000); ORM advertises only CE060000 (scan response) + the `PM5 ...` name and every real app finds it (`Pm5Peripheral.js`) | **CONFIRMED** — nobody filters on 0x0030. ENRICHMENT: the BASE service CE060000 IS advertised in practice (three projects filter-scan on it against real hardware), so name-prefix-only is not the only way; see recommendation R4 |
 | b | Status chars tick ~90-180 ms on iOS after writing 0x0034=3; rate enum 0=1s/1=500ms/2=250ms/3=100ms (§21 item 3, §4) | Enum confirmed byte-for-byte by ErgometerJS (`ergometer/typedefinitions.ts#L150-155`); forum t=94488 (snippet): notifications arrive at the set rate even when values unchanged. Rates others run: ErgometerJS rides the 500 ms default and only writes 0x0034 on app request; nobody else writes it at all (pm5-base defines-never-writes; c2bluetooth/BoutFitness/ha-c2_pm5 silent); ORM's emulator defaults 1000 ms and honors writes crudely (0→1000, else→250, TODO) | **CONFIRMED (mechanism)** / **NO-DATA (measured cadence)** — no other project measures delivered tick spacing on any platform; we are the only client running 100 ms. Watch item: plugin issue #688's bridge-side value coalescing under fast notifies |
 | c | PM5 populates 0x0031's structure fields in two steps after programming, ~180 ms type-then-duration (§21 item 2) | No project reads structure back after programming at all (ErgometerJS `waitForResponse:false`; c2bluetooth none; pyrow none; ORM is the peripheral side) — nothing to observe it with | **NO-DATA** — ours is the only observation on record |
-| d | End-of-workout split (0x0037/38) arrives LATER than one status tick after `finished`, inside 3 s (§22 item 5) | ORM's emulation emits final splits strictly AFTER the finished-status burst (`Pm5RowingService.js notifyData()` — trace-derived from a real PM5); ha-c2_pm5 sleeps `TERMINATE_GRACE_SECONDS` before disconnect explicitly to let 0x0039/3A land (`pm5_ble.py`); c2forum p=597026 (snippet): end-of-workout messages 0x0037-0x003A can be DROPPED entirely, and ErgData's mitigation is pulling the log via CSAFE 0x6A after finish | **CONFIRMED (ordering + lateness)** — and ENRICHED with a harder truth: the ecosystem says the final split can be LOST, not merely late, so a bounded wait needs a fallback (recommendation R1). Our 1-tick-to-3 s bound remains the only measurement anywhere |
-| e | 0x0031 elapsed/distance are PER-INTERVAL, resetting at next work (§20 item 12) | ORM PM5_Interface.md, from real-PM5 traces: elapsed "reset to zero" at interval rollover, NOT at split rollover; distance likewise; session-cumulative lives in Total Work Distance, updated only at interval end | **CONFIRMED** — with one sub-detail DIVERGENCE: ORM documents elapsed as STOPPED during a planned rest, while our §20 item 12 says the interval's count spans work + trailing rest; our single resting-state sample (37.81) cannot distinguish a running from a frozen timer. Next-walk item |
+| d | End-of-workout split (0x0037/38) arrives LATER than one status tick after `finished`, inside 3 s (§22 item 5) | ORM's emulation emits final splits strictly AFTER the finished-status burst (`Pm5RowingService.js notifyData()` — trace-derived from a real PM5); ha-c2_pm5 sleeps `TERMINATE_GRACE_SECONDS` before disconnect explicitly to let 0x0039/3A land (`pm5_ble.py`); c2forum p=597026 (snippet): end-of-workout messages 0x0037-0x003A can be DROPPED entirely, and ErgData's mitigation is pulling the log via CSAFE 0x6A after finish | **CONFIRMED (ordering + lateness)** — and ENRICHED with a harder truth: the ecosystem says the final split can be LOST, not merely late, so a bounded wait needs a fallback (recommendation R1). Our 1-tick-to-3 s bound remains the only measurement anywhere **AMENDED 2026-08-21 (ecosystem review under THE BAR): the measurement was WRONG.** Measured across four committed captures, the final split's arrival relative to the terminal frame is **-179.9, +90.2, -89.7, +7.6 ms** — the sign VARIES, and in two of four the split arrives FIRST, so `FINISH_HANDOFF_HOLD_MS = 3500` buys nothing in half of all finishes. The "~1 ms after" figure in `ConnectedSurface.tsx:52-55` rests on a single walk-day-2 observation that every capture since contradicts. **And the harder fact R1 anticipated:** 0x0039/0x003A have delivered ZERO frames across five natural finishes while appearing in every recording's subscribe list, and we disconnect 22-107 ms after the terminal frame — the summary path has never once been exercised at the erg. |
+| e | 0x0031 elapsed/distance are PER-INTERVAL, resetting at next work (§20 item 12) | ORM PM5_Interface.md, from real-PM5 traces: elapsed "reset to zero" at interval rollover, NOT at split rollover; distance likewise; session-cumulative lives in Total Work Distance, updated only at interval end | **CONFIRMED** — with one sub-detail DIVERGENCE: ORM documents elapsed as STOPPED during a planned rest, while our §20 item 12 says the interval's count spans work + trailing rest; our single resting-state sample (37.81) cannot distinguish a running from a frozen timer. Next-walk item **SETTLED 2026-08-21 — the open sub-detail is closed.** The interval clock keeps RUNNING into the rest and then freezes (session-2: frozen at 133.08 for 26 s while `restSeconds` ran 26.91 → 1.85), so neither ORM's "stopped" nor a plain "spans the rest" is right on its own. Also settled, and it CONTRADICTS ORM `PM5_Interface.md:262`: **Total Work Distance includes rest-coast metres** (1535 work + 64 rest = 1599 terminal TWD; 1300 + 47 = 1347). That matters beyond this row — it is why our own TWD oracle cannot see the work-vs-work+rest gap Concept2's schema cares about (Phase RC). |
 | f | Acked vs without-response writes for chunked CSAFE on iOS: we ack on iOS, without-response on web (recorded divergence; §17 item 10) | With-response is the ecosystem norm: ErgometerJS `writeValue`/`ble.withPromises.write` everywhere; c2bluetooth `response=true` on 0x0021. Plugin `Device.swift` L289-309: `writeWithoutResponse` resolves immediately with ZERO CoreBluetooth backpressure (no `peripheralIsReady`), so burst chunks can silently drop. ORM's peripheral declares 0x0021 write AND write-without-response, so the PM5 side presumably tolerates both (their choice, not a real-PM5 capture — weak evidence) | **CONFIRMED (acked is right for chunked CSAFE)** — our iOS choice matches the field; our web transport's without-response preference is the ecosystem outlier (recommendation R3) |
-| g | workoutType=8 (variable interval) quirks (§12 template, 25-interval 7-frame sends, §20 items 10/11) | ORM PM5_Interface.md + issue #118: the per-interval command string ErgZone sends is exactly our §12 sequence; ErgZone chunks ONE frame over six 20-byte writes (our framer's approach); apps only send type 8 when intervals are UNEQUAL — equal intervals get "optimised" to FIXEDTIME/DIST_INTERVAL; the PM5 caps at 50 splits (ORM expands fixed intervals to 25 work+rest pairs); forum t=204541 (snippet): config frames >~120 bytes fail and big-interval apps string multiple frames — our `framer.ts` 120-byte cap and multi-frame accumulation, corroborated | **CONFIRMED + ENRICHED** — sequence, chunking, frame cap, and multi-frame stringing all match commercial-app behavior. New facts: real apps prefer fixed-interval types for equal intervals (we always compile type 8 — legal, ErgZone-compatible, but not what ErgData would send); EXR routinely sends TERMINATEWORKOUT at session START, validating our terminate-shaped prepare |
+| g | workoutType=8 (variable interval) quirks (§12 template, 25-interval 7-frame sends, §20 items 10/11) | ORM PM5_Interface.md + issue #118: the per-interval command string ErgZone sends is exactly our §12 sequence; ErgZone chunks ONE frame over six 20-byte writes (our framer's approach); apps only send type 8 when intervals are UNEQUAL — equal intervals get "optimised" to FIXEDTIME/DIST_INTERVAL; the PM5 caps at 50 splits (ORM expands fixed intervals to 25 work+rest pairs); forum t=204541 (snippet): config frames >~120 bytes fail and big-interval apps string multiple frames — our `framer.ts` 120-byte cap and multi-frame accumulation, corroborated | **CONFIRMED + ENRICHED** — sequence, chunking, frame cap, and multi-frame stringing all match commercial-app behavior. New facts: real apps prefer fixed-interval types for equal intervals (we always compile type 8 — legal, ErgZone-compatible, but not what ErgData would send); EXR routinely sends TERMINATEWORKOUT at session START, validating our terminate-shaped prepare **ENRICHED 2026-08-21:** every piece we program reads back workoutType 8 in 3447 of 3448 committed frames (the one exception is an empty arm), and ergMachineType reads 0 in 3448 of 3448. |
+| h | Last Split Time decoded at 0.1 s/lsb, per BOTH Concept2 documents (four printings) | ORM `PM5_Interface.md:288` states the specifications contain an error and the true accuracy is 0.01 s. Nine of our own capture pairs agree (0x0033's u24LE@14 is the exact hundredths value whose truncation to tenths is 0x0037's split time), and the PM5's own memory screen agrees (7476 → 1:14.7, `walk-2026-08-17/README.md:14`) | **REFUTED — the documents, and us.** Our decode is 10x TOO LARGE (`parse.ts:203`). Dormant since CR2 spec 2a Task 6, and `statusFrames.ts:222` mirrors the same error, so neither a round trip nor a hand-built fixture could ever have caught it. Must-settle 3 CLOSED, no erg required |
+| i | Log Entry Date/Time bit-packing is "not stated on the page" (§23), so we key on arrival instead | ORM `C2toORMMapper.js:194-198, :220-222` WRITES it; VirtualPM5's independent samples 0x34B7/0x34F7 decode to 2026-07-11 and 2026-07-15 under the same formula, across three separate bit-fields | **SETTLED as a decode (INVERTED — their writer specifies our reader).** date `uint16` = month \| day<<4 \| (year-2000)<<9; time `uint16` = minutes \| hours<<8. Must-settle 2 CLOSED. **Residual that inverts the headline:** the wire is MINUTE-resolution and Concept2 stores seconds, so the wire cannot supply C2's dedup key as-is |
+| j | "The ecosystem's ultimate authority is the monitor's own log, and we have no route to it" (`state-architecture-review.md:876`) | CSAFE Rev 0.27 publishes the log READ COMMANDS (0x6A, `GET_INTERNALLOGPARAMS`) and names ten log structure identifiers **while defining the field layout of none of them** | **STANDS — must-settle 1 ANSWERED.** The commands are public, the format is not. Reconciliation with Concept2 must be achieved WITHOUT the monitor's log |
+| k | Concept2 verification might be a hash we can compute | Published logbook API: `verified` is a trusted-client relationship ("Only trusted clients are able to verify workouts. Please contact Concept2"); `verification_code` is a monitor-computed 16-digit code readable on 0x003F, accepted only if date, time, distance, workout_type and machine type match what it was computed over | **CLOSED (`verified`) / OPEN (`verification_code`).** No OSS project anywhere has reconciled a row with the Concept2 logbook — there is no prior art for this and we are first. See Phase RC |
 
 Cross-checks beyond the a-g brief that the survey settled:
 
@@ -512,6 +525,49 @@ a future reading of these projects doesn't import them:
   underlying fact (real apps fire terminate liberally) supports keeping
   our prepare's outcome-swallowing exactly as loose as it is.
 
+**Additions, 2026-08-21 reconciliation.** Patterns found and deliberately
+rejected in the second pass, or fixes it proposed and its own verification
+killed:
+
+- **Do not use ORM's 0x0039 writer as an oracle for Avg Pace.**
+  `WorkoutSummaryCharacteristic.js:63-64` comments `// Avg Pace (0.1 sec)` and then
+  writes `Math.round(data.workout.pace.average)` — whole seconds. Their writer
+  contradicts its own comment, so it specifies nothing for our reader.
+- **Do not adopt ORM's Total Work Distance description.** `PM5_Interface.md:262`
+  says TWD "only increased at the end of the interval". Our captures show it ticking
+  continuously through a WORKOUTROW interval (session-2 s758-776: 354→360) while
+  holding constant through an INTERVALWORKDISTANCE interval. Partial at best.
+- **Do not treat VirtualPM5's null result as refuting Concept2's own document.** Its
+  `pm5-older-logs-truths.md:51` says the "~1 min late" summary re-fire "is not
+  supported by either log" — but LOG11 had no strap paired (so no recovery HR to
+  revise) and LOG15 re-armed within ~9 s of every completion, which is C2's stated
+  disqualifying condition. A null result with a fully-explaining confound. The
+  `describeClosedGrace` comment stays.
+- **Do not make the refused-open emitted-index mirror unconditional.** Tempting
+  one-liner, and our own history refutes it: `driver.ts:1862-1897` records that it was
+  implemented, went green, and regressed two driver tests, because the guard fires in
+  two shapes and only one is a lie. Extend to state 9 and stop.
+- **Do not persist two folds of the same wire and reconcile them as "independent".**
+  Proposed and refuted here: `seriesRecorder`'s fold is DOWNSTREAM of the driver's
+  (same post-clamp key source, same inputs), so a zero-frame interval is skipped by
+  both and the delta is exactly zero in the case it was meant to catch.
+- **Do not accept a byte-inverse encoder OR a hand-built fixture as an oracle for a
+  scale.** This is literally how the Last Split Time 10x survived: `statusFrames.ts`
+  mirrors the parser and `parse.test.ts:198` pins `1234/10` by hand. Only a capture
+  or the machine's own screen can settle a scale.
+- **Do not copy RowTracer's `LIVENESS_STALE_MS = 5000` or ORM's 6000 ms.** Both are
+  unmeasured, and RowTracer's own docs say its transport work has never passed a
+  physical PM5. Our threshold comes from our own 3,442 measured gaps.
+- **Do not apply one `withDiagnostics` decorator across both transport arms.** It
+  dissolves the build-time gate that keeps `recording.ts` out of production `dist/`
+  (recurring failure 12's own scar). Two decorators, different gates.
+- **Do not claim 0x0037's rest time is a measurement.** Every committed value equals
+  the programmed rest exactly, and no PM5 mechanism is known that would separate them.
+  Carry the field; describe it honestly.
+- **Do not chase c2forum thread t=200769.** Still Cloudflare-403 to curl with a
+  browser UA and to WebFetch. It is ORM's cited source for the date bit-packing; read
+  `C2toORMMapper.js:189-223` instead, which implements it.
+
 ## 5. Things we do that nobody else does
 
 Worth knowing either way — each is either a genuine edge or a place where
@@ -548,6 +604,15 @@ we carry risk alone with no ecosystem prior art to lean on.
    We get the countdown fidelity; we also uniquely carry any fast-notify
    bridge risk (#688) — worth one eye at each future walk.
 
+**Additions, 2026-08-21 reconciliation.** (9) A barrier-gated replay harness
+that feeds committed wire bytes through the real driver with an INDEPENDENT
+decoder as its oracle. (10) Measured BLE inter-arrival statistics on a real
+PM5 (3,442 consecutive 0x0031 gaps across seven captures: max 810 ms, mean
+508 ms). (11) A build-time gate proven by `dist/` grep that keeps the capture
+tooling out of production. **Amend (3):** our end-of-workout split bound is
+now four measured values with a VARYING SIGN (-179.9, +90.2, -89.7,
++7.6 ms), not "one tick to 3 s".
+
 ## 6. Survey ledger
 
 Projects examined at file level, live, 2026-08-11: ErgometerJS,
@@ -563,3 +628,37 @@ Searched for and confirmed NONEXISTENT (404/no results, checked live):
 uvd/pyrow, ergarcade/pyrow, "krow", "OpenErgConsole", "TrackMyRow",
 "RowingCoach", npm "pm5-bluetooth", npm "concept2-ble", any React Native
 PM5 library.
+
+### Additions, 2026-08-21 reconciliation
+
+**Opened at file level this review, live 2026-08-20/21:**
+
+| Project / source | Layer read | Licence | Verdict |
+|---|---|---|---|
+| **Concept2 Online Logbook API**, `log.concept2.com/developers/documentation/` (note the trailing slash; `/developers` 403s) | Full published row schema, splits/intervals/targets/strokes/metadata, dedup rule, error codes, `log-dev` sandbox, `export/{csv,fit,tcx}` | Concept2 docs, not OSS | **PRIMARY and decisive.** Outranks every other source for the bar. A public JSON validator also exists |
+| **JaapvanEkris/openrowingmonitor** | Re-opened at: central-side HRM client (`ble/hrm/HrmService.js`, `PeripheralManager.js:392-424`), the INVERTED writers (`WorkoutSummaryCharacteristic.js`, `LoggedWorkoutCharacteristic.js`, `C2toORMMapper.js`), recorders, `docs/Integrations.md` | GPL-3.0 (facts only, no code) | Alive, 2026-07-28. **Has central-side code** (HRM) — settled, and it is the best watchdog prior art. Its `Integrations.md` contains zero occurrences of "concept2" or "logbook" |
+| **cagnulein/qdomyos-zwift** (was UNVERIFIED in the ledger) | `src/devices/concept2skierg/concept2skierg.cpp` (518 lines) | GPL-3.0 | Alive, 2026-08-21, 832★. **Now verified at file level.** Central-side, re-observes link state every 200 ms rather than storing it. Note: it is a **SkiErg** driver — lifecycle transfers, field decoding does not |
+| **cbikkula/pm5-dashboard ("RowTracer")** — NEW | `pm5web/transport.js` (the whole state machine, liveness watchdog, gap recorder, continuity rule, capture-quality metadata), `docs/known-issues.md` | **MIT — legally borrowable** | Alive, 2026-07-24. The closest thing to our product shape (Web Bluetooth PWA). Its own docs say it has never passed a physical PM5 |
+| **john-occasionally-blogs/VirtualPM5** — NEW | `docs/pm5-older-logs-truths.md`, `pm5-rirt-lifecycle.md`, `pm5-csafe-catalog.md`, one committed real-PM5 capture | **Apache-2.0** | Created 2026-07-28, alive 2026-08-21, 0★, single author. Swift PERIPHERAL emulator. Its capture-derived timing claims describe private logs it does not ship — **SECONDARY, capture-derived testimony**, not CAPTURE |
+| **OpenRowingCommunity/c2logbook** — NEW | `lib/src/types/c2_full_results.dart` and siblings | LGPL-3.0 | Alive 2026-01-24. Typed C2 client; useful only to CORROBORATE the published schema |
+| **sanderroosendaal/rowingdata** | `rowingdata.py` (7105 lines) grepped for the C2 upload path | MIT | Alive. **The brief's Tier 2 lead is wrong: it does NOT talk to the C2 logbook.** `uploadtoc2` does not exist in the module; only vestigial `c2username`/`c2password` fields remain. TCX/FIT comparator only |
+| **sanderroosendaal/rowsandallclient** | `main.go` + real TCX/FIT/JSON artifacts | MIT | Dormant 2024-12-07. Upload path is a multipart FILE post, not a row schema |
+| **OpenRowingCommunity/c2bluetooth** | Re-opened at session level per the brief | LGPL-3.0 | Alive but STALE (2025-06-05). Nothing new at the session layer |
+| **Concept2 BLE Rev 1.30 + CSAFE Rev 0.27 PDFs** | Full attribute tables, appendices | Concept2 | **The `.co.uk` URLs ORM cites now 404.** The `.co.in` mirror serves both |
+| **Apple CoreBluetooth documentation** | `centralManagerDidUpdateState`, `CBManagerState.resetting`, `retrieveConnectedPeripherals`, `didDisconnectPeripheral` | Apple | PRIMARY. Two of our contract comments are falsified by it |
+| **@capacitor-community/bluetooth-le 8.2.0** | `Plugin.swift`, `DeviceManager.swift`, `Device.swift`, `dist/esm/bleClient.js` | MIT | Re-opened at the init/deviceMap/callbackMap layer, which the 2026-08-11 review did not reach |
+
+**Confirmed NONEXISTENT or useless, checked live 2026-08-20/21 (do not re-hunt):**
+Painsled (no public source — the only GitHub org hit has zero BLE code), BoatCoach (no
+public source; two unrelated CSV-utility repos), rowsandall.com developer API
+(`/developers/` and `/api/` both 404), FTMS 1.0.1 spec PDF (403 — use the SIG XML
+mirrors), Concept2 SDK page (404), `stevescot/OpenRowingCode` (Arduino reed sensors),
+`OpenRowingCommunity/csafe-fitness` (generic CSAFE framing only, layer already
+settled), `mrverrall/go-row` (185-line PM5 module), `skitchbeatz/concept2-esphome`
+(one YAML, no licence), `gamalamadingdong/logbook-companion` (downstream of the
+published API), any NEW React Native / Kotlin / Swift PM5 **central** library (three
+searches, still none), c2forum t=200769 (still Cloudflare-403).
+
+**Standing result worth its own line:** **no OSS project anywhere has reconciled erg
+data with the Concept2 logbook.** ORM integrates with rowsandall, intervals.icu, TCX
+and FIT, and never with C2's own API. There is no prior art for the bar; we are first.
