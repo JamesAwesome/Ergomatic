@@ -27,7 +27,9 @@ import {
 } from "../../../domain/monitor/program.js";
 import type { MonitorFrame } from "../../../domain/monitor/types.js";
 import type { Baselines, WorkoutType } from "../../../domain/types.js";
+import { ONBOARDING_TITLES } from "../../../domain/onboarding.js";
 import { LIBRARY_WORKOUTS } from "../../../server/seed/library/index";
+import { ONBOARDING_LIBRARY_WORKOUTS } from "../../../server/seed/library/onboarding";
 import {
   commentStrippedSource,
   type CssRule,
@@ -77,6 +79,7 @@ function frame(overrides: Partial<MonitorFrame> = {}): MonitorFrame {
     spm: 21,
     heartRateBpm: 164,
     splitAvgPace: null,
+    restSeconds: 0,
     intervalIndex: 1,
     intervalRemaining: { kind: "distance", value: 1200 },
     intervalAccrued: null,
@@ -298,6 +301,92 @@ describe("the band: up-next + EST LEFT (design spec §2A/§2C/§3)", () => {
     ).toBeInTheDocument();
     const value = cell.querySelector(".connected-band-cell-value")!;
     expect(value.textContent).toBe(model.totalLeftDisplay);
+  });
+});
+
+// THE UNPRICED-PHASE GUARD (EST LEFT design spec §4/§7 item 7, plan Step
+// 5): reuses `session/Timer.tsx`'s own `hasRemainingEstimate` — see
+// `SurfaceModel.hasRemainingEstimate`'s own doc comment for the exact
+// reasoning. A REAL, reachable connected shape: "First 2k" (the onboarding
+// K2 test, 2000 m at MAX with no `spm`) run with NULL baselines — the same
+// `baselines: null` case `domain/expand.ts`'s own doc comment names for a
+// distance phase at an effort ref (`phases()`'s "case w" effort arm,
+// `engine.ts:88-94`'s sibling for a warm-up): `estimationSplit` returns
+// `null`, so `targetSplit` never gets set and `phaseSeconds` prices the
+// phase at nothing — the ONLY phase in this fixture (no warm-up, no rest),
+// so `hasRemainingEstimate` is `false` for the entire session, never just
+// transiently.
+describe("the unpriced-phase guard (design spec §4/§7 item 7)", () => {
+  function unpricedFixture(): {
+    program: WorkoutProgram;
+    phases: EnginePhase[];
+  } {
+    const w = ONBOARDING_LIBRARY_WORKOUTS.find(
+      (x) => x.title === ONBOARDING_TITLES.k2,
+    );
+    if (!w) throw new Error("missing onboarding fixture: First 2k");
+    const draft = buildDraft({
+      id: "first-2k",
+      title: w.title,
+      type: w.type,
+      steps: w.steps,
+    });
+    // NULL baselines, on purpose: the fixture's whole point is the "no
+    // estimate to make" branch `engine.ts`'s own doc comment describes.
+    const phases = buildRun(draft, null, t0, null).phases;
+    const program = compileProgram(phases);
+    if ("code" in program) {
+      throw new Error(`fixture failed to compile: ${program.code}`);
+    }
+    return { program, phases };
+  }
+  const UNPRICED = unpricedFixture();
+
+  function renderUnpriced(overrides: Partial<MonitorFrame> = {}) {
+    const model = buildSurfaceModel({
+      phases: UNPRICED.phases,
+      program: UNPRICED.program,
+      status: "live",
+      frame: frame({ intervalIndex: 0, ...overrides }),
+      deviceName: DEVICE,
+      actuals: [],
+    });
+    return { ...render(<PaneLive model={model} />), model };
+  }
+
+  it("the fixture is the shape this test claims: one phase, genuinely unpriced", () => {
+    expect(UNPRICED.phases).toHaveLength(1);
+    expect(UNPRICED.phases[0]!.type).toBe("work");
+    expect(UNPRICED.phases[0]!.meters).toBeDefined();
+    expect(UNPRICED.phases[0]!.targetSplit).toBeUndefined();
+  });
+
+  it("model.hasRemainingEstimate is false — phaseSeconds returns null for the only phase in range", () => {
+    const { model } = renderUnpriced();
+    expect(model.hasRemainingEstimate).toBe(false);
+  });
+
+  it("hides the progress bar AND the EST LEFT cell entirely — absent, never a frozen 0:00/0% (the phone timer's own stance)", () => {
+    renderUnpriced();
+    expect(
+      document.querySelector(".connected-progress"),
+    ).not.toBeInTheDocument();
+    expect(
+      document.querySelector(".connected-band-cell"),
+    ).not.toBeInTheDocument();
+    // The meters counter is a DIFFERENT, independently-reliable fact
+    // (`frame.sessionDistanceMeters`, not derived from the phase estimate)
+    // — the guard does not hide it too.
+    expect(
+      document.querySelector(".connected-progress-row"),
+    ).toBeInTheDocument();
+  });
+
+  it("an ordinary (priced) fixture still shows both — the guard is scoped, not a regression", () => {
+    const { model } = renderPane("live");
+    expect(model.hasRemainingEstimate).toBe(true);
+    expect(document.querySelector(".connected-progress")).toBeInTheDocument();
+    expect(document.querySelector(".connected-band-cell")).toBeInTheDocument();
   });
 });
 

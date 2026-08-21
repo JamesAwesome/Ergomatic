@@ -206,6 +206,7 @@ function frame(overrides: Partial<MonitorFrame> = {}): MonitorFrame {
     spm: WORK_PHASE.spm ?? 22,
     heartRateBpm: 164,
     splitAvgPace: null,
+    restSeconds: 0,
     intervalIndex: 1,
     intervalRemaining: { kind: "distance", value: 1200 },
     intervalAccrued: null,
@@ -346,6 +347,65 @@ describe("armed's first frame, in the DOM (I-1)", () => {
     expect(
       document.querySelector(".connected-band-cell-value")!.textContent,
     ).toBe(fmtDuration(totalSessionSecondsOf(FIXTURE.phases) / 60));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// EST LEFT (Phase LL): the monotonic clamp is WIRED IN, not just correct as
+// a pure function (review finding, IMPORTANT — `buildSurfaceModel` clamping
+// against `previousElapsedSeconds` only proves itself; `SurfaceModelInput.
+// previousElapsedSeconds` is OPTIONAL, so deleting the line that threads it
+// in `ConnectedSurface.tsx` compiles clean and leaves every existing test
+// green — the replay tests in `surfaceModel.test.ts` thread their own loop
+// variable and can never see this component's own wiring). This is the
+// sole guard for the measured -29.25 s / -5.97 s backward jumps (design
+// spec §3); it earns its own test at the component level.
+// ---------------------------------------------------------------------------
+
+describe("EST LEFT: the monotonic clamp is threaded into the real component, not only the pure function", () => {
+  it("a lower raw reading on the NEXT frame (a wire re-base, same interval) does not pull EST LEFT backward across a re-render", () => {
+    // Same `intervalIndex` both times — the completed-phase sum is
+    // therefore identical between the two frames, so the only thing that
+    // can move `EST LEFT` is the live term, i.e. `frame.elapsedSeconds`.
+    // A LOWER `elapsedSeconds` on the second frame is exactly the wire
+    // shape spec §3 names (a mid-rest re-base, a boundary race) — without
+    // `previousElapsedSeconds` actually reaching `buildSurfaceModel`, the
+    // second render has no memory of the first and simply recomputes a
+    // smaller number.
+    const { rerender, session: s } = renderSurface({
+      frame: frame({ intervalIndex: 1, state: "rowing", elapsedSeconds: 1000 }),
+    });
+    const before = document.querySelector(
+      ".connected-band-cell-value",
+    )!.textContent;
+
+    rerender(
+      <ConnectedSurface
+        phases={FIXTURE.phases}
+        program={FIXTURE.program}
+        session={{
+          ...s,
+          frame: frame({
+            intervalIndex: 1,
+            state: "rowing",
+            elapsedSeconds: 500,
+          }),
+        }}
+        onEnded={vi.fn()}
+      />,
+    );
+    const after = document.querySelector(
+      ".connected-band-cell-value",
+    )!.textContent;
+
+    // HELD, not merely "not smaller": the clamp's own contract is
+    // `max(estElapsedRaw, previousElapsedSeconds)`, so a lower raw reading
+    // must be fully absorbed, reproducing the FIRST render's own figure
+    // exactly — this is what a broken/missing wire cannot do (it would
+    // recompute EST LEFT higher than `before`, since a smaller elapsed
+    // means a LARGER remaining-time figure, the exact backward jump the
+    // clamp exists to prevent a rower from seeing).
+    expect(after).toBe(before);
   });
 });
 

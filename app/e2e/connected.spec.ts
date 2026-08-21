@@ -609,12 +609,18 @@ async function walkSurfaceToLog(
   const splitHero = page.locator(".connected-hero-split .connected-hero-value");
   const pausedSplit = await splitHero.textContent();
   expect(pausedSplit).toBe("—");
-  // THE BAND'S TOTAL LEFT KEEPS MOVING (spec §5's own "… + band TOTAL LEFT
-  // replace … `.timer-total-value`" line) — priced off the SAME
-  // accumulated `sessionElapsedSeconds` the retired strip read
-  // (`surfaceModel.ts`'s `totalLeftDisplay`), one driver clock behind the
-  // split hero's own suppression, so this re-anchors the same proof:
-  // something on pane B keeps counting while the hero holds.
+  // THE BAND'S EST LEFT KEEPS MOVING (spec §5's own "… + band TOTAL LEFT
+  // replace … `.timer-total-value`" line, TOTAL LEFT since renamed EST
+  // LEFT — PR #143) — this fixture's freeze is a WORK phase (`state`
+  // stays "rowing"), so `surfaceModel.ts`'s live term for it is still the
+  // raw interval clock (`frame.elapsedSeconds`), which `buildStoryEvents()`
+  // deliberately keeps advancing through the freeze (EST LEFT design spec
+  // §1: not `sessionElapsedSeconds` read directly any more — that was the
+  // pre-Phase-LL mechanism this comment used to describe, and this PR
+  // replaces it with a phase-sum plus that live term). One driver clock
+  // behind the split hero's own suppression either way, so this
+  // re-anchors the same proof: something on pane B keeps counting while
+  // the hero holds.
   const totalLeftValue = page.locator(".connected-band-cell-value");
   const pausedTotalLeft = await totalLeftValue.textContent();
   // Reads the same frozen hero value across two checks a beat apart —

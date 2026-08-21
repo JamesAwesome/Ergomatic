@@ -1957,26 +1957,34 @@ WebKit's throttling, so it does not rescue the JS half.
       and captures come from walks, not from tasks — and this phase's own
       exit walk produces a genuine >3 s gap as a matter of course. Sits
       beside exit clause (e) so the phase can go red on it. **S**
-- [ ] **BEFORE the next tag: two owed clauses plus a version-marker
-      ruling** (PM gate, round 4 of the Task 2 PR review, 2026-08-20).
-      **The two-clause notes obligation** (spec §7 criterion 9, the
+- [ ] **BEFORE the next tag: three owed clauses plus a version-marker
+      ruling** (PM gate, round 4 of the Task 2 PR review, 2026-08-20;
+      third clause added by the EST LEFT task, 2026-08-20).
+      **The notes obligation** (spec §7 criterion 9, the
       pm-ledger, and a DEVIATIONS row 200 sentence all already say this —
       this is the fourth, GREPPABLE home, because the last two tags each
       shipped with a missing clause and whoever cuts v0.15.0 reads
       ROADMAP and the merge log, not the spec): the next tag's notes
       carry (1) a clause for the time axis and rest marking (the new,
-      observable-to-a-tester feature) and (2) a clause for the old
+      observable-to-a-tester feature), (2) a clause for the old
       corpus (§5's declination overturned at the 2026-08-20 PM gate —
       some traces recorded before this phase's fixes are silently wrong
-      and cannot be told apart from correct ones). **Still open — Task 3
-      (the axis) landed 2026-08-20, so this item is now fully armed: both
-      clauses' subject matter exists in shipped code, and whoever cuts
-      v0.15.0 owes both.** **New condition, this
-      gate:** the phone→server trace leg must be WITNESSED before the tag
+      and cannot be told apart from correct ones), and (3) a clause for
+      EST LEFT (`docs/superpowers/specs/2026-08-20-est-left-design.md`
+      exit criterion 9): the connected screen's remaining-time estimate
+      used to stall/read high through a rest, and no longer does — the
+      rename from TOTAL LEFT shipped in the same window (PR #143) and its
+      own notes clause is separate; this one is about the COUNTDOWN
+      behavior, not the label. **Still open — Task 3 (the axis) landed
+      2026-08-20 and the EST LEFT fix landed 2026-08-20, so this item is
+      now fully armed: all three clauses' subject matter exists in
+      shipped code, and whoever cuts v0.15.0 owes all three.** **New
+      condition, this gate:** the phone→server trace leg must be
+      WITNESSED before the tag
       that announces the trace fix ships, or the notes say plainly that
       traces are web-only today — announcing a fix for a leg nobody has
       run on a phone is its own false-completeness risk, the same shape
-      as the two-clause rule itself protects against. **Version-marker
+      as the three-clause rule itself protects against. **Version-marker
       ruling (NOT implemented here — adding a field at a merge-gate
       review is the escalate-mid-change hazard this repo's own rules
       name):** the next change that touches `series` carries a `v`
@@ -2013,12 +2021,38 @@ WebKit's throttling, so it does not rescue the JS half.
       above for why re-deriving it wasn't the proportionate fix). The
       y-axis clipping is fixed (`LEFT_PAD` 36 -> 42, both captures verified
       by eye). **S**
-- [ ] **THE COUNTDOWN STALLS DURING RESTS, and the progress bar with it**
-      (James, device report + two photos, 2026-08-20, rowing "Strong
-      Breeze"). He saw `TOTAL LEFT` reading roughly a minute high, and the
-      bar lagging when interval 4 handed over to interval 5 after its rest.
-      **One likely cause for both, and it falls straight out of this
-      phase's own B1 finding.** `surfaceModel.ts:970` computes
+- [x] ~~**THE COUNTDOWN STALLS DURING RESTS, and the progress bar with
+      it**~~ — **FIXED (Phase LL, 2026-08-20).** The hypothesis below was
+      confirmed: `surfaceModel.ts`'s old `totalLeftSeconds = totalSeconds -
+      frame.sessionElapsedSeconds` froze through a rest because the PM5's
+      per-interval clock (what that accumulation is built from) only
+      advances while `rowingActive` is true. The fix reads the field the
+      machine already sends instead — `frame.restSeconds` (0x0032's own
+      Rest Time, parsed since Phase 7A, consumed nowhere until now), which
+      counts down in real time regardless of the flywheel. `estElapsed` is
+      now every COMPLETED phase's own programmed length, summed, plus a
+      LIVE term for the current one (Rest Time during a rest, the raw
+      interval clock during work), clamped monotonic non-decreasing across
+      frames — proven against a whole replayed capture
+      (`docs/monitor/sessions/walk-2026-08-16/session-2-wu-4unequal.jsonl`),
+      including the capture's own `finished` frame, where the first design
+      of this fix went backwards 428.5 s from laundering a `null`
+      `intervalIndex` to `0`. Spec:
+      `docs/superpowers/specs/2026-08-20-est-left-design.md`. THREE
+      accepted limits recorded in `docs/design/DEVIATIONS.md` (dawdling at
+      the start of a work interval still runs high; an unpriced phase's
+      live term is a hole, guarded on BOTH render sites of the number —
+      `PaneLive.tsx`'s bar and cell and `ConnectedSurface.tsx`'s GRID
+      header countdown — by the same `hasRemainingEstimate` the phone timer
+      already uses; and on DISTANCE work the estimate holds still for
+      seconds at each handover, measured at 6.6 s and 20.8 s on the pyramid
+      capture, see the triggered follow-on for why the obvious repair does
+      not work). Original hypothesis, kept for the
+      record: (James, device report + two photos, 2026-08-20, rowing
+      "Strong Breeze"). He saw `TOTAL LEFT` reading roughly a minute high,
+      and the bar lagging when interval 4 handed over to interval 5 after
+      its rest. **One likely cause for both, and it falls straight out of
+      this phase's own B1 finding.** `surfaceModel.ts:970` computes
       `totalLeftSeconds = totalSeconds - frame.sessionElapsedSeconds`, and
       `totalSeconds` INCLUDES the programmed rests — but the antagonist
       pass established that the PM5's elapsed clock only advances during a
@@ -3592,6 +3626,88 @@ next phase. One line per round, newest first.
 
 ## Triggered follow-ons (not scheduled — each has an explicit trigger)
 
+- **An e2e fixture that exercises a REST** — spec
+  `2026-08-20-est-left-design.md`'s exit criterion 6, recorded HALF MET
+  rather than reworded. The fake reports Rest Time honestly and
+  `FakeStatusEvent.restSeconds` is scriptable, but no e2e or screenshot
+  fixture drives `state: "resting"` with a scripted rest value, so the
+  countdown-through-a-rest behaviour is proven only at the replay layer
+  (a real capture through the production driver) plus a DOM-level wiring
+  test. The PM gate ruled that sufficient for MERGE and the fixture a
+  follow-up — recorded here because it lived only in the spec and a PR
+  body, which is recurring failure 14's seventh occurrence in eight
+  gates. **Trigger:** the next work touching the connected surface's e2e
+  fixtures. **S**
+- **HUNT THE E2E FLAKES — James, 2026-08-20: "post release lets hunt down
+  the flake".** Scheduled work, not a footnote. There are at least TWO
+  distinct recurring flakes and every prior sighting was disposed of the
+  same way — "passed on re-run" — which is how a real race stays alive for
+  months. **What is known, so nobody re-derives it:**
+  - **The manual-door tap-target flake.** Recurred across multiple gates
+    during Phase LT (PR #129's own record: "isolated-rerun-confirmed each
+    time"), and again on 2026-08-20 during PR #144's gates: one run at
+    **399/401 with a non-zero exit, then 401/401 twice on re-run.** A
+    failure that reproduces across unrelated diffs and months is a race in
+    the app or the harness, not noise.
+  - **The `design.spec.ts` layout-settling flake** (`stableBoundingBox`,
+    `:1677`/`:1697`) — already recorded under Phase CR2 as wanting "a
+    tracked fix rather than another per-task footnote". Same disposition,
+    same outcome. Fold both into one hunt.
+  **Why it matters beyond annoyance:** a suite that goes red for reasons we
+  have taught ourselves to ignore is a suite whose red has stopped meaning
+  anything. Today the controller had to decide, live, whether a 399/401 was
+  a regression or the known flake — and got it right only by re-running
+  twice. The next person may not, in either direction.
+  **First moves, cheapest first:** capture the actual failure (Playwright's
+  trace/video on retry, which CI may already be discarding) rather than
+  re-running until green; check whether the failures cluster by worker
+  index or by ordering, which separates a harness race from an app race;
+  and only then reach for the code. **Trigger: immediately after v0.15.0
+  ships.**
+- **CLOSED 2026-08-20 (PR #144, measurement recorded) — `intervalRestTimeSeconds`
+  agrees with the PROGRAMMED rest in every committed capture, so no stored TIME
+  hero is wrong.** The open question (raised the same day by the fake-vs-parser
+  audit, `docs/monitor/fake-vs-parser-audit.md`) was whether `summaryModel.ts`'s
+  TIME hero, which sums work seconds plus **programmed** rest for completed
+  intervals (R-D), is understating or overstating sessions where the machine's
+  own settled rest differed. It does not: `0x0037` offsets 12-13 decoded across
+  every completed interval in every committed wire recording — 14 records over
+  5 sessions — report exactly the programmed value, to the second.
+
+  | capture | programmed rests | `intervalRestTimeSeconds` decoded |
+  | --- | --- | --- |
+  | `walk-2026-08-16/session-1-keystone-2x250r0.jsonl` | r0, r0 | 0, 0 |
+  | `walk-2026-08-16/session-2-wu-4unequal.jsonl` | r0, r30, r30, r30, r0 | 0, 30, 30, 30, 0 |
+  | `walk-2026-08-17/step-2-*.jsonl` | r0, r0 | 0, 0 |
+  | `walk-2026-08-17/step-3-*.jsonl` | r0, r30 | 0, 30 |
+  | `walk-2026-08-18-metrics/pyramid-*.jsonl.gz` | r1, r1, none | 60, 60, 0 |
+
+  The mechanism behind the agreement is the one the item guessed: on a
+  PM5-programmed interval workout the machine ends the rest itself, so there is
+  no rower behaviour that can move the number. **Nothing is owed** — no
+  migration, no release note, no correction to a stored hero. The field stays
+  decoded and unconsumed on purpose; wiring it would add a second source for a
+  number that already has a correct one. **Re-open only if** a capture ever
+  shows a divergence (a manually-ended rest, a JustRow split, a firmware that
+  reports the elapsed rest rather than the settled one).
+- **The connected bar's fill and its notches are two axes on DISTANCE work,
+  and the estimate holds still for seconds at each handover** (measured
+  2026-08-20 at PR #144's PM gate; accepted and documented, `docs/design/
+  DEVIATIONS.md`'s third EST LEFT row). `estElapsed` banks each completed
+  phase's PROGRAMMED length while `intervalBoundaries` re-anchors its notches
+  to the MEASURED ones, so a rower off target sees EST LEFT and the bar stand
+  still into the rest — **6.6 s and 20.8 s** on the pyramid capture, pinned by
+  `surfaceModel.test.ts`'s "the DISTANCE-work limit, measured on a replay".
+  **The obvious repair was replayed and does not work:** banking measured
+  seconds changes nothing, because the PM5 emits an interval's 0x0037/0x0038
+  boundary record at the END of its rest, so the finished interval's actual
+  does not exist during its own rest. Neither does `frame.elapsedSeconds`
+  survive the rest coast (78.64 -> 88.67 -> 84.88 within one rest, same
+  capture). **Trigger:** a spec that wants the countdown and the notches on
+  one axis — it needs a wire source for the just-finished interval's work
+  time that arrives AT the boundary, and finding one is the first task, not
+  an assumption. TRIAD weight (it changes what a number means): full
+  antagonist pass on that spec.
 - **23 citations across 11 tracked files point into `.superpowers/`, which
   is git-EXCLUDED and therefore unreachable to everyone except the session
   that wrote it** (found 2026-08-20 at PR #141's PM gate, which caught three

@@ -370,9 +370,15 @@ often they recur.
     parallel session in between, and testers would have found a delete
     button no note mentioned. It was caught by reading the commit log by
     hand, which is luck, not a gate. **Before cutting a tag, list every
-    merge since the previous one (`git log <prev-tag>..main --oneline
-    --merges`) and account for each: a note, or a stated reason it needs
-    none.** Parallel sessions make this the normal case, not the rare one.
+    merge since the previous one and account for each: a note, or a
+    stated reason it needs none.** Parallel sessions make this the normal
+    case, not the rare one. **Use `git log <prev-tag>..main --oneline`
+    WITHOUT `--merges`** — this rule shipped prescribing `--merges`, and
+    on this repo that returns EMPTY, because main is squash-merged and has
+    no merge commits. The one gate that exists to stop notes being written
+    from a branch instead of a range was unrunnable as written for four
+    tags (found at PR #144's PM re-gate, 2026-08-20). A gate nobody can
+    run is not a gate.
 
 16. **Stating an unsourced premise as fact.** In one day the controller
     told James "the PM5 is single-central" and "App Review scrutinises a

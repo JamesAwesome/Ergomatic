@@ -142,16 +142,32 @@ export default function PaneLive({ model }: { model: SurfaceModel }) {
           untouched, out of this task's scope, and ships complete on its
           own (Task 3's own header comment). */}
       <div className="connected-progress-row">
-        <ConnectedProgressBar
-          boundaries={model.boundaries}
-          totalSeconds={model.totalSeconds}
-          elapsedSeconds={model.elapsedSeconds}
-        />
+        {/* THE UNPRICED-PHASE GUARD (EST LEFT design spec §4/§7 item 7):
+            `model.hasRemainingEstimate` is `false` only when every phase
+            from here to the end of the session is unpriced (no seconds,
+            no meters+targetSplit pair to price it) — the same rule the
+            phone timer already applies (`session/Timer.tsx`'s
+            `hasRemainingEstimate`) to hide its own phase bar rather than
+            render a frozen 0:00/0%. `model.boundaries`/`totalSeconds`/
+            `elapsedSeconds` are still well-typed here; the estimate they'd
+            draw is just not trustworthy, so nothing renders rather than a
+            wrong bar. */}
+        {model.hasRemainingEstimate && (
+          <ConnectedProgressBar
+            boundaries={model.boundaries}
+            totalSeconds={model.totalSeconds}
+            elapsedSeconds={model.elapsedSeconds}
+          />
+        )}
         {/* NOTHING AT ALL before the first frame (design spec: "Absent
             until the first frame arrives; 0m thereafter") — the same
             "absent, not blank" idiom this file already uses for
             `heroLabel`/`targetSplitCaption`, never a dash: a session total
-            has no "no reading" phrase the way a judged cell does. */}
+            has no "no reading" phrase the way a judged cell does. Kept
+            visible under the guard above: the session's own running total
+            is independently reliable (`frame.sessionDistanceMeters`, not
+            derived from the phase estimate), so an unpriced phase ahead is
+            no reason to hide it too. */}
         {model.sessionDistanceMeters !== null && (
           <span className="connected-progress-meters">
             {fmtMeters(model.sessionDistanceMeters)}
@@ -287,12 +303,17 @@ export default function PaneLive({ model }: { model: SurfaceModel }) {
             {model.upNext}
           </span>
         </div>
-        <div className="connected-band-cell">
-          <span className="connected-band-cell-label">EST LEFT</span>
-          <span className="connected-band-cell-value">
-            {model.totalLeftDisplay}
-          </span>
-        </div>
+        {/* Same guard as the progress bar above — EST LEFT is founded on
+            the identical estimate, so an unpriced remainder hides both or
+            neither. */}
+        {model.hasRemainingEstimate && (
+          <div className="connected-band-cell">
+            <span className="connected-band-cell-label">EST LEFT</span>
+            <span className="connected-band-cell-value">
+              {model.totalLeftDisplay}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );

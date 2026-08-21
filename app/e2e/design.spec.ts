@@ -6747,7 +6747,17 @@ test.describe("connected screens (fake-driven)", () => {
         }));
       expect(value.fontSize).toBe("30px");
       expect(value.color).toBe(INK_RGB);
-      expect(value.text).toBe("39:48");
+      // EST LEFT (Phase LL): no longer a straight session-clock subtraction
+      // (was "39:48"). `connected-pane-live`'s fixture (`intervalIndex: 1`)
+      // lands on Filling Low's FIRST work phase (index 0 is the warm-up),
+      // so the estimate is warm-up(480) + this frame's own live term — the
+      // INTERVAL clock, 205.44 s, which is what the fixture's own 800 m at
+      // its own 2:08.4 average takes. (It read `828` until PR #144's fix
+      // round: that was the SESSION clock, warm-up included, in the raw
+      // half too — impossible, and it put this cell 8:00 low beside a bar
+      // painted two intervals past its own `1 OF 4` caption.) 480 + 205.44
+      // = 685.44; totalLeft = 3216 - 685.44 = 2530.56 s.
+      expect(value.text).toBe("42:11");
     });
 
     test("split cap: 4 chars + tenths; slower than 9:59.9 shows —", async ({
@@ -7301,7 +7311,7 @@ test.describe("connected screens (fake-driven)", () => {
   test.describe("2B — GRID, landscape (design spec §2B)", () => {
     test.use({ viewport: { width: 844, height: 390 } });
 
-    test("header: GRID active, status composed ordinal + TOTAL LEFT in marker gold, no progress bar", async ({
+    test("header: GRID active, status composed ordinal + EST LEFT in marker gold, no progress bar", async ({
       page,
     }) => {
       await loadConnectedFixture(page, "connected-pane-grid");
@@ -7310,7 +7320,10 @@ test.describe("connected screens (fake-driven)", () => {
       ).toHaveAttribute("aria-current", "page");
       const trailing = page.locator(".connected-line-trailing");
       await expect(trailing).toContainText("1 OF 4");
-      await expect(trailing).toContainText("39:48 LEFT");
+      // EST LEFT (Phase LL): "42:11", not "39:48" — see the identical
+      // `connected-pane-grid` fixture's own note in the LIVE band test
+      // above ("bottom band: rule above...").
+      await expect(trailing).toContainText("42:11 LEFT");
       const countdown = await page
         .locator(".connected-header-countdown")
         .evaluate((el) => ({
@@ -7318,7 +7331,7 @@ test.describe("connected screens (fake-driven)", () => {
           text: el.textContent,
         }));
       expect(countdown.color).toBe(MARKER_RGB);
-      expect(countdown.text).toBe("39:48 LEFT");
+      expect(countdown.text).toBe("42:11 LEFT");
       await expect(page.locator(".connected-progress")).toHaveCount(0);
     });
 
@@ -7828,7 +7841,10 @@ test.describe("connected screens (fake-driven)", () => {
           text: el.textContent,
         }));
       expect(value.fontSize).toBe("28px");
-      expect(value.text).toBe("39:48");
+      // EST LEFT (Phase LL): "42:11", not "39:48" — see the identical
+      // `connected-pane-live` fixture's own note in the LIVE band test
+      // above ("bottom band: rule above...").
+      expect(value.text).toBe("42:11");
     });
 
     test("bottom bar: 54px full-width segmented bar, two equal halves, active fill ink/surface text mono 13 600, above home indicator", async ({

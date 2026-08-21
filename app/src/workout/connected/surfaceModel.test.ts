@@ -11,9 +11,15 @@
 // interval (so `METERS LEFT` is exercised against a genuine program rather
 // than a synthetic one).
 
-import { describe, expect, it } from "vitest";
-import { compileProgram } from "../../../domain/monitor/program.js";
+import { readFileSync } from "node:fs";
+import { gunzipSync } from "node:zlib";
+import { beforeAll, describe, expect, it } from "vitest";
+import {
+  compileProgram,
+  type WorkoutProgram,
+} from "../../../domain/monitor/program.js";
 import { fmtDuration } from "../../../domain/duration.js";
+import { phaseSeconds } from "../../../domain/expand.js";
 import { fmtSplit } from "../../../domain/format.js";
 import { PACE_TOLERANCE_SECONDS } from "../../../domain/judge.js";
 import type {
@@ -29,6 +35,10 @@ import { buildDraft } from "../../session/draft";
 import { buildRun, type EnginePhase } from "../../session/engine";
 import { totalSessionSecondsOf } from "../../session/Timer";
 import { targetSplitDisplay } from "../../session/TimerTargets";
+import { createEventLog } from "../../monitor/eventLog";
+import { createPm5Driver } from "../../monitor/driver";
+import { parseRecording } from "../../monitor/transports/recording";
+import { createReplayTransport } from "../../monitor/transports/replay";
 import {
   buildSurfaceModel,
   connectedNextText,
@@ -200,6 +210,7 @@ function frame(overrides: Partial<MonitorFrame> = {}): MonitorFrame {
     spm: 22,
     heartRateBpm: 164,
     splitAvgPace: null,
+    restSeconds: 0,
     intervalIndex: 1,
     intervalRemaining: { kind: "distance", value: 1200 },
     intervalAccrued: null,
@@ -591,7 +602,7 @@ describe("armed's first frame (I-1): the three properties 2D asks for beyond the
     ).not.toBeNull();
   });
 
-  it("TOTAL LEFT reads the whole session, un-started — never the wire's carried-over elapsed", () => {
+  it("EST LEFT reads the whole session, un-started — never the wire's carried-over elapsed (design spec: renamed from TOTAL LEFT on the connected surface, 2026-08-20)", () => {
     const totalSeconds = totalSessionSecondsOf(NO_WARMUP.phases);
     const m = buildSurfaceModel({
       phases: NO_WARMUP.phases,
@@ -857,9 +868,16 @@ describe('connectedNextText: exhaustive over Phase["type"] (Item B composition t
 // elapsed, Task 3's progress bar needs it since `totalLeftSeconds` (the
 // subtraction route) dies in Task 4/5.
 describe("elapsedSeconds: the model's own numeric elapsed (Task 3's progress bar)", () => {
-  it("mirrors sessionElapsedSeconds directly, off armed", () => {
+  // EST LEFT (Phase LL): no longer a straight mirror of
+  // `frame.sessionElapsedSeconds` — see `elapsedSeconds`'s own doc comment
+  // on `SurfaceModel`. Default `frame()` (`intervalIndex: 1`, `state:
+  // "rowing"`) lands on the fixture's FIRST work phase (`FIXTURE.phases[1]`
+  // — index 0 is the warm-up, which `phaseIndexForInterval` counts too),
+  // so the completed-phase sum is the warm-up alone (480 s, 8:00) and the
+  // live term is this override's own raw elapsed.
+  it("sums the completed phases' own programmed length plus the current phase's live term", () => {
     const m = model({ frame: frame({ elapsedSeconds: 600 }) });
-    expect(m.elapsedSeconds).toBe(600);
+    expect(m.elapsedSeconds).toBe(480 + 600);
   });
 
   it("never exceeds totalSeconds — the same overrun cap totalLeftSeconds already enforces from the other direction", () => {
@@ -888,13 +906,15 @@ describe("elapsedSeconds: the model's own numeric elapsed (Task 3's progress bar
       actuals: [],
     });
     expect(m.elapsedSeconds).toBe(0);
-    // Not armed: the ordinary mirror still applies — a suppression scoped
-    // to armed, not a change to the live formula.
+    // Not armed: the ordinary (EST LEFT) formula still applies — a
+    // suppression scoped to armed, not a change to the live formula. Same
+    // 480 (warm-up) + 900 (this override's live term) shape as the
+    // describe block's first test.
     const liveModel = model({
       status: "live",
       frame: frame({ sessionElapsedSeconds: 900, elapsedSeconds: 900 }),
     });
-    expect(liveModel.elapsedSeconds).toBe(900);
+    expect(liveModel.elapsedSeconds).toBe(480 + 900);
   });
 });
 
@@ -1122,7 +1142,7 @@ describe("live", () => {
     );
   });
 
-  it("prices TOTAL LEFT off the workout's own phases, not the machine's guess", () => {
+  it("prices EST LEFT off the workout's own phases, not the machine's guess", () => {
     // THE NUMBER, not a floor, and not `totalSeconds` compared to itself
     // (test-integrity sweep, P14). `totalLeftSeconds === totalSeconds - 600`
     // re-implements the impl's own one-liner and says nothing about where
@@ -1138,9 +1158,15 @@ describe("live", () => {
     //
     // `totalLeftSeconds` died off `SurfaceModel` (CR2 spec 3 Task 4) —
     // `totalLeftDisplay` is the field this proof reads now.
+    //
+    // EST LEFT (Phase LL): the SUBTRAHEND is no longer the override's own
+    // 600 s alone — `elapsedSeconds`'s own test above pins the exact
+    // formula (480 warm-up + 600 live term = 1080), reused here rather
+    // than re-derived, so this test stays about where `totalSeconds` came
+    // from (its own title) without ALSO re-proving the subtraction.
     const m = model({ frame: frame({ elapsedSeconds: 600 }) });
     expect(m.totalSeconds).toBe(3216);
-    expect(m.totalLeftDisplay).toBe(fmtDuration((3216 - 600) / 60));
+    expect(m.totalLeftDisplay).toBe(fmtDuration((3216 - (480 + 600)) / 60));
   });
 
   it("never reports a negative total left when the machine overruns", () => {
@@ -1427,14 +1453,50 @@ describe("sessionDistanceMeters: plumbing for Task 4 (PaneLive reads only the mo
 // ---------------------------------------------------------------------------
 
 describe("the session pair across a work-interval reset (walk 4)", () => {
+  // EST LEFT REWRITE (Phase LL, 2026-08-20) — WHY THIS FIXTURE'S NUMBERS
+  // CHANGED SHAPE, NOT JUST VALUE (a finding for the task report, per the
+  // brief: this file's own `:1508`-equivalent test is named there as one
+  // to read before editing). Before this task, `elapsedSeconds`/
+  // `totalLeftDisplay` were a straight subtraction of
+  // `frame.sessionElapsedSeconds` — the driver's own accumulated clock —
+  // which is exactly why the ORIGINAL two frames below (both defaulting
+  // `intervalIndex: 1`, only `state` differing) sufficed: the mechanism
+  // being protected never looked at `intervalIndex` at all, only at
+  // whether `sessionElapsedSeconds` (not `elapsedSeconds`) was read.
+  // `buildSurfaceModel` no longer computes either field that way (design
+  // spec §1: a phase-sum plus a live term, clamped monotonic per-frame by
+  // the CALLER, §3) — a fixture that never advances `intervalIndex` across
+  // a "work-interval reset" no longer exercises a boundary at all under
+  // the new mechanism, so it stopped being able to discriminate the bug
+  // this describe block is named for.
+  //
+  // The two tests below are REWRITTEN, not deleted, to protect the SAME
+  // property the walk-4 regression cost: EST LEFT must not rise when
+  // 0x0031's own per-interval clock resets across a genuine work-interval
+  // boundary. What changed is how that boundary is modelled (a REAL
+  // `intervalIndex` advance, 1 -> 2 — "interval 1"/"interval 2" in the
+  // ORIGINAL walk-4 recording's own 1-based work numbering, `program`
+  // index terms: interval 1 = `phases[1]`, the FIRST work phase after the
+  // warm-up; interval 2 = `phases[3]`, the second) and how the monotonic
+  // guarantee is exercised (`previousElapsedSeconds` threaded between
+  // calls the same way `ConnectedSurface.tsx` threads it in production —
+  // omitting that thread would let this test pass or fail by accident of
+  // the exact numbers chosen, never actually probing the clamp).
   /** The recorded shape, frame for frame: the last `resting` frame of
-   *  interval 1 (`elapsed=37.81 distance=101.8`), the first `rowing` frame of
-   *  interval 2 with 0x0031's own pair back at the floor
-   *  (`elapsed=0 distance=0.7`), and one frame further in. The driver's
-   *  accumulated pair climbs straight through the reset the raw pair takes. */
+   *  interval 1's own trailing rest (`elapsed=37.81 distance=101.8` on the
+   *  wire — the LIVE term this file computes reads `restSeconds`, not
+   *  this raw pair, but the pair is kept to match the original walk-4
+   *  capture's own numbers), the first `rowing` frame of interval 2 with
+   *  0x0031's own per-interval pair back at the floor (`elapsed=0
+   *  distance=0.7`), and one frame further in. */
   const ACROSS_THE_RESET = [
     frame({
       state: "resting",
+      intervalIndex: 1,
+      // The LAST frame of the rest: `restSeconds` at 0 (the machine's own
+      // countdown has reached its floor), so the live term credits the
+      // rest's full programmed 3:00 — this frame IS the boundary's edge.
+      restSeconds: 0,
       elapsedSeconds: 37.81,
       distanceMeters: 101.8,
       sessionElapsedSeconds: 37.81,
@@ -1442,6 +1504,7 @@ describe("the session pair across a work-interval reset (walk 4)", () => {
     }),
     frame({
       state: "rowing",
+      intervalIndex: 2,
       elapsedSeconds: 0,
       distanceMeters: 0.7,
       sessionElapsedSeconds: 37.81,
@@ -1449,6 +1512,7 @@ describe("the session pair across a work-interval reset (walk 4)", () => {
     }),
     frame({
       state: "rowing",
+      intervalIndex: 2,
       elapsedSeconds: 1.2,
       distanceMeters: 3.1,
       sessionElapsedSeconds: 39.01,
@@ -1456,23 +1520,34 @@ describe("the session pair across a work-interval reset (walk 4)", () => {
     }),
   ];
 
-  // `totalLeftSeconds` died off `SurfaceModel` (CR2 spec 3 Task 4) — this
-  // test now proves the identical session-pair fact from the complementary
-  // field, `elapsedSeconds` (Task 2's own field, kept: `totalLeftDisplay`
-  // is `fmtDuration((totalSeconds - elapsedSeconds-derived value)/60)`
-  // internally, so an `elapsedSeconds` that never FALLS across the reset is
-  // exactly what makes TOTAL LEFT never RISE — the same bug, read from the
-  // other direction).
-  it("elapsedSeconds never falls across the reset (the recorded 1:11 -> 1:38 TOTAL LEFT bug, same session pair)", () => {
-    const elapsed = ACROSS_THE_RESET.map(
-      (f) => model({ frame: f }).elapsedSeconds,
-    );
+  /** Threads `previousElapsedSeconds` between successive builds the way
+   *  `ConnectedSurface.tsx` does in production (that field's own doc
+   *  comment on `SurfaceModelInput`) — the monotonic clamp this rewrite
+   *  protects is a property of a SEQUENCE of frames, not any one frame in
+   *  isolation, so a test that built each frame's model independently
+   *  (as this file's plain `model()` helper does) would never exercise it. */
+  function modelsAcross(frames: MonitorFrame[]): SurfaceModel[] {
+    let previousElapsedSeconds: number | undefined;
+    return frames.map((f) => {
+      const m = model({ frame: f, previousElapsedSeconds });
+      previousElapsedSeconds = m.elapsedSeconds;
+      return m;
+    });
+  }
 
-    // Exact, not merely monotone: the middle frame is the one the recording
-    // caught jumping BACKWARDS on the raw clock — `elapsedSeconds` reads
-    // `sessionElapsedSeconds` (the driver's accumulated pair), which climbs
-    // straight through that reset rather than repeating it.
-    expect(elapsed).toStrictEqual([37.81, 37.81, 39.01]);
+  it("elapsedSeconds never falls across the reset (the recorded 1:11 -> 1:38 TOTAL LEFT bug, same session pair)", () => {
+    const elapsed = modelsAcross(ACROSS_THE_RESET).map((m) => m.elapsedSeconds);
+
+    // 1164 s = the warm-up (480) + the first work phase (2000 m @ 2:06.0 =
+    // 504) + its own trailing rest, fully credited (180, `restSeconds: 0`
+    // on the boundary frame) — phases[0..2], all now COMPLETE. The middle
+    // frame holds that exact total rather than collapsing to its own raw
+    // per-interval clock (0): the completed-phase sum already banked
+    // interval 1's rest, and the live term for the NEW phase (interval 2,
+    // just starting) is that raw 0 on top of it, not instead of it. The
+    // third frame ticks forward by exactly the raw clock's own advance
+    // (1.2 s) — nothing more, nothing collapsed.
+    expect(elapsed).toStrictEqual([1164, 1164, 1165.2]);
   });
 
   // `SurfaceModel.meters` died with it (CR2 spec 3 Task 4, spec §3 fate
@@ -1496,30 +1571,40 @@ describe("the session pair across a work-interval reset (walk 4)", () => {
     );
   });
 
-  // THE DISCRIMINATOR (antagonist phase-exit pass, §2B witness gap): every
-  // frame factory in this repo defaults `sessionElapsedSeconds ??
-  // f.elapsedSeconds`, so a suite full of mirrored pairs cannot tell WHICH
-  // elapsed `totalLeftDisplay` subtracts — mutating the model to read the
-  // interval-resetting `frame.elapsedSeconds` left everything green while
-  // reintroducing the recorded 1:11 -> 1:38 TOTAL LEFT bug. This test is
-  // the one place the pair DIVERGES under a `totalLeftDisplay` assertion:
-  // the reset frame's raw clock is 0, its session clock is 37.81, and the
-  // remaining time must move with the session clock.
-  it("TOTAL LEFT subtracts the SESSION clock, never the interval's own resetting one", () => {
-    const [before, atReset] = ACROSS_THE_RESET;
-    const shownBefore = model({ frame: before }).totalLeftDisplay;
-    const shownAtReset = model({ frame: atReset }).totalLeftDisplay;
+  // THE DISCRIMINATOR, RE-FOUNDED (antagonist phase-exit pass, §2B witness
+  // gap, ORIGINAL premise; EST LEFT rewrite, Phase LL — the mechanism this
+  // test discriminates changed, the fact it protects did not). The old
+  // wording ("subtracts the SESSION clock, never the interval's own
+  // resetting one") named the specific WRONG FIELD a mutant could read
+  // (`frame.elapsedSeconds` in place of `frame.sessionElapsedSeconds`) —
+  // that mutation is no longer even expressible the same way, since
+  // neither field is read directly any more (§1's phase-sum reads
+  // `frame.elapsedSeconds` ONLY as the current phase's own live term, atop
+  // a completed-phase sum `sessionElapsedSeconds` never contributed to).
+  // What still must hold, and is asserted below: EST LEFT must not RISE
+  // when 0x0031's own per-interval clock resets across a genuine
+  // work-interval boundary (the recorded 1:11 -> 1:38 bug, read from this
+  // field instead of `elapsedSeconds`), and the number is genuinely a
+  // SUBTRACTION, not a value that ignores the completed-phase credit a
+  // naive "just re-read the raw per-interval clock" mutant would produce.
+  it("EST LEFT does not rise across a work-interval boundary reset, and is not the raw per-interval clock alone", () => {
+    const [before, atReset] = modelsAcross(ACROSS_THE_RESET);
+    const shownBefore = before!.totalLeftDisplay;
+    const shownAtReset = atReset!.totalLeftDisplay;
 
-    // Same session elapsed (37.81) on both sides of the raw-clock reset,
-    // so the remaining clock must not move...
+    // Same estimate (1164 s elapsed, the previous test's own number) on
+    // both sides of the raw-clock reset, so the remaining clock must not
+    // move...
     expect(shownAtReset).toBe(shownBefore);
-    // ...and must differ from what a zeroed elapsed would show — which is
-    // exactly what the wrong-field mutation renders at the reset frame.
-    expect(shownAtReset).not.toBe(
-      model({
-        frame: frame({ elapsedSeconds: 0, sessionElapsedSeconds: 0 }),
-      }).totalLeftDisplay,
-    );
+    // 3216 - 1164 = 2052 s = 34:12, this file's own `totalSessionSecondsOf`
+    // fact from the "prices EST LEFT" test below, minus the exact
+    // elapsed this describe block's first test just pinned.
+    expect(shownAtReset).toBe(fmtDuration(2052 / 60));
+    // ...and must differ from what IGNORING the completed-phase credit and
+    // reading only the reset frame's own raw per-interval clock (0) would
+    // render — exactly the shape the pre-Phase-LL bug had, reincarnated as
+    // a mutation of the NEW mechanism rather than the old one.
+    expect(shownAtReset).not.toBe(fmtDuration(3216 / 60));
   });
 });
 
@@ -2119,5 +2204,743 @@ describe("the five fields die (CR2 spec 3 Tasks 4 and 5, spec §3 fate table)", 
     expect(keys).not.toContain("intervalClockLabel");
     expect(keys).not.toContain("totalLeftSeconds");
     expect(keys).not.toContain("intervalClockValue");
+  });
+});
+
+// ============================================================================
+// EST LEFT (Phase LL) — replay-based proof, driven through the REAL driver.
+// Plan Steps 1-2: the wire premise (design spec §5) and the monotonicity
+// guarantee (§3) are both settled by REPLAYING a committed capture, never
+// by reasoning alone — the first draft of this fix went backwards five
+// times on this exact capture (worst -428.5 s at the `finished` frame) and
+// reasoning never caught it; only frame-by-frame replay did. Harness
+// re-declared, not imported — this project's own convention for these
+// replay harnesses (`registerReplay.test.ts`'s own header: "no test file
+// in src/monitor/ imports another test file's harness"; this file lives
+// one directory further out still, so the same rule applies a fortiori).
+// ============================================================================
+
+/** Identical to `registerReplay.test.ts`/`connectedMetricsReplay.test.ts`'s
+ *  own `SESSION_2_PROGRAM` — hand-transcribed from the capture's own
+ *  `ce060021` programming tx bytes (those files' own header comments carry
+ *  the full provenance). Re-declared per this file's header comment above. */
+const SESSION_2_PROGRAM: WorkoutProgram = {
+  intervals: [
+    {
+      type: "warmup",
+      kind: "distance",
+      value: 100,
+      targetSplit: null,
+      displaySpm: null,
+      restSeconds: 0,
+    },
+    {
+      type: "work",
+      kind: "time",
+      value: 60,
+      targetSplit: 129,
+      displaySpm: null,
+      restSeconds: 30,
+    },
+    {
+      type: "work",
+      kind: "time",
+      value: 120,
+      targetSplit: 129,
+      displaySpm: null,
+      restSeconds: 30,
+    },
+    {
+      type: "work",
+      kind: "distance",
+      value: 500,
+      targetSplit: 129,
+      displaySpm: null,
+      restSeconds: 30,
+    },
+    {
+      type: "work",
+      kind: "time",
+      value: 60,
+      targetSplit: 129,
+      displaySpm: null,
+      restSeconds: 0,
+    },
+  ],
+};
+
+/** `EnginePhase[]` mirroring `SESSION_2_PROGRAM` one-for-one — identical
+ *  shape to `connectedMetricsReplay.test.ts`'s own `CM_PHASES` (that
+ *  file's own doc comment has the full reasoning for why rest phases are
+ *  interleaved only where `restSeconds > 0`), re-declared per this file's
+ *  own convention. */
+const SESSION_2_PHASES: EnginePhase[] = [
+  { type: "warmup", meters: 100, label: "Easy", originalIndex: -1 },
+  {
+    type: "work",
+    seconds: 60,
+    targetKind: "split",
+    targetSplit: 129,
+    label: "2:09.0",
+    originalIndex: 0,
+  },
+  { type: "rest", seconds: 30, label: "Rest", originalIndex: 0 },
+  {
+    type: "work",
+    seconds: 120,
+    targetKind: "split",
+    targetSplit: 129,
+    label: "2:09.0",
+    originalIndex: 1,
+  },
+  { type: "rest", seconds: 30, label: "Rest", originalIndex: 1 },
+  {
+    type: "work",
+    meters: 500,
+    targetKind: "split",
+    targetSplit: 129,
+    label: "2:09.0",
+    originalIndex: 2,
+  },
+  { type: "rest", seconds: 30, label: "Rest", originalIndex: 2 },
+  {
+    type: "work",
+    seconds: 60,
+    targetKind: "split",
+    targetSplit: 129,
+    label: "2:09.0",
+    originalIndex: 3,
+  },
+];
+
+const SESSION_2_DEVICE = "PM5 432331249";
+
+/** Repo-root resolution, `registerReplay.test.ts`'s own idiom (plain
+ *  string surgery on `import.meta.url` — this project's jsdom environment
+ *  resolves `new URL(...)` against `http://localhost:3000/`, not the given
+ *  `file://` base). Three directories up from `src/workout/connected/`
+ *  (out of `connected/`, `workout/`, `src/`) then into `app/`, matching
+ *  every other replay harness's own path arithmetic one level further. */
+const SESSION_2_PATH = import.meta.url
+  .replace(/^file:\/\//, "")
+  .replace(
+    /src\/workout\/connected\/surfaceModel\.test\.ts$/,
+    "../docs/monitor/sessions/walk-2026-08-16/session-2-wu-4unequal.jsonl",
+  );
+
+interface DriverFrameSample {
+  tMs: number;
+  frame: MonitorFrame;
+}
+
+/** Drives the committed capture through the PRODUCTION parser and driver —
+ *  the same harness shape `registerReplay.test.ts`/`connectedMetricsReplay.
+ *  test.ts` already established for this exact recording, re-derived here
+ *  (this file's own header comment). Collects every emitted `MonitorFrame`
+ *  with the virtual-clock timestamp it arrived on, so a test can measure
+ *  WALL time between two frames, not just read their own wire fields. */
+async function replaySession2(): Promise<DriverFrameSample[]> {
+  const text = readFileSync(SESSION_2_PATH, "utf8");
+  const parsed = parseRecording(text);
+
+  const replay = createReplayTransport(parsed);
+  const [dev] = await replay.transport.scan();
+  await replay.transport.connect(dev.id);
+
+  const log = createEventLog();
+  const driver = createPm5Driver(replay.transport, log, {
+    deviceName: dev.name,
+    now: () => replay.clock.now(),
+    schedule: (cb, ms) => replay.clock.schedule(cb, ms),
+  });
+
+  const samples: DriverFrameSample[] = [];
+  driver.events((e) => {
+    if (e.kind === "frame") {
+      samples.push({ tMs: replay.clock.now(), frame: e.frame });
+    }
+  });
+
+  const programPending = driver.program(SESSION_2_PROGRAM);
+  await replay.run();
+  await programPending;
+
+  return samples;
+}
+
+/** One maximal run of consecutive `state === "resting"` frames — a single
+ *  rest, start to end, exactly as the machine reported it. */
+function restingSpans(samples: DriverFrameSample[]): DriverFrameSample[][] {
+  const spans: DriverFrameSample[][] = [];
+  let current: DriverFrameSample[] = [];
+  for (const s of samples) {
+    if (s.frame.state === "resting") {
+      current.push(s);
+    } else if (current.length > 0) {
+      spans.push(current);
+      current = [];
+    }
+  }
+  if (current.length > 0) spans.push(current);
+  return spans;
+}
+
+describe("EST LEFT (Phase LL) — a null intervalIndex is never laundered to 0 (design spec §3, exit criterion 3)", () => {
+  // ISOLATED from the monotonic clamp on purpose (`previousElapsedSeconds`
+  // left unset, i.e. 0): the clamp alone would MASK a laundering defect in
+  // a threaded replay (a smaller estimate simply loses to the clamp's own
+  // floor), which is exactly why the spec names TWO guards, not one — this
+  // test proves the null-guard on its own, the same way
+  // `surfaceModel.ts:865-870` (the AVG cell) is provable without a clamp
+  // to hide behind.
+  it("finished: elapsedSeconds falls back to the driver's session-accumulated total, never a phase-0 collapse", () => {
+    const m = model({
+      frame: frame({
+        state: "finished",
+        intervalIndex: null,
+        // THE EXACT SHAPE OF THE CAPTURED -428.5 s REGRESSION (design spec
+        // §3's own table): a `finished` frame's RAW per-interval clock
+        // (`elapsedSeconds`) reads small — it reset at the last interval's
+        // own start and the piece was short — while the driver's
+        // ACCUMULATED session total (`sessionElapsedSeconds`) correctly
+        // carries the whole session's real progress. A test where the two
+        // coincide could not tell the honest fallback from the laundered
+        // collapse; this one is chosen so they diverge sharply.
+        elapsedSeconds: 5,
+        sessionElapsedSeconds: 2800,
+      }),
+    });
+    // The honest fallback (this file's own `estElapsedRaw`, the
+    // `frame.intervalIndex === null` branch): the driver's own
+    // session-accumulated clock, capped at the session length — NOT the
+    // tiny raw per-interval reading.
+    expect(m.elapsedSeconds).toBe(Math.min(2800, m.totalSeconds));
+    // What the laundered version would compute instead: `phaseIndex`
+    // collapses to phase 0 (the warm-up itself, nothing yet completed),
+    // and the live term there is the RAW `frame.elapsedSeconds` (5) — a
+    // near-total collapse, exactly the -428.5 s shape. Asserted as an
+    // inequality (not the exact wrong number) so this test does not
+    // become a second copy of the implementation.
+    expect(m.elapsedSeconds).not.toBe(5);
+  });
+});
+
+describe("EST LEFT (Phase LL) — the wire premise, verified against a real capture (design spec §5)", () => {
+  let samples: DriverFrameSample[];
+
+  beforeAll(async () => {
+    samples = await replaySession2();
+  }, 30_000);
+
+  it("sanity: the replay produced a real, non-trivial frame count with three rests", () => {
+    // Bug-independent first (this project's own convention throughout
+    // `registerReplay.test.ts`): if this fails, the harness or fixture is
+    // wrong, not the formula under test.
+    expect(samples.length).toBeGreaterThan(900);
+    expect(restingSpans(samples)).toHaveLength(3);
+  });
+
+  // THE PREMISE (§5's own table): for each of the three rests, the WIRE'S
+  // OWN accumulated clock (`sessionElapsedSeconds`, what `elapsedSeconds`
+  // used to subtract before this task) credits far less than the wall
+  // time that actually passed — because 0x0031's per-interval clock
+  // freezes whenever `rowingActive` goes false, and a rower sitting
+  // through a rest is exactly that. `restSeconds` (0x0032's Rest Time),
+  // the field this task's fix reads instead, is measured here to credit
+  // close to the FULL wall time — the reason the fix works at all. **If
+  // this does not reproduce the pinned numbers, the spec's premise is
+  // wrong and the fix built on it needs to stop** (plan Step 1's own
+  // instruction).
+  it("each rest: wall time vastly exceeds what the OLD session-clock mechanism credited, and restSeconds (the NEW mechanism) tracks the wall clock", () => {
+    const spans = restingSpans(samples);
+    // Pinned from design spec §5's own table, replayed against the
+    // production driver (not re-derived from a throwaway decode script).
+    const expected = [
+      { wallSeconds: 29.4, oldCredited: 9.45, tolerance: 1.5 },
+      { wallSeconds: 29.5, oldCredited: 7.23, tolerance: 1.5 },
+      { wallSeconds: 29.5, oldCredited: 3.9, tolerance: 1.5 },
+    ];
+
+    spans.forEach((span, i) => {
+      const first = span[0]!;
+      const last = span[span.length - 1]!;
+      const wallSeconds = (last.tMs - first.tMs) / 1000;
+      const oldCredited =
+        last.frame.sessionElapsedSeconds - first.frame.sessionElapsedSeconds;
+      // NEW mechanism: how much of the rest `restSeconds` (the machine's
+      // own countdown) says elapsed, first frame to last — this is
+      // literally the quantity `buildSurfaceModel`'s live term now reads.
+      const newCredited = first.frame.restSeconds - last.frame.restSeconds;
+
+      const {
+        wallSeconds: expectedWall,
+        oldCredited: expectedOld,
+        tolerance,
+      } = expected[i]!;
+      expect(
+        Math.abs(wallSeconds - expectedWall),
+        `rest ${i + 1}: wall=${wallSeconds}s vs pinned ${expectedWall}s`,
+      ).toBeLessThan(tolerance);
+      expect(
+        Math.abs(oldCredited - expectedOld),
+        `rest ${i + 1}: OLD mechanism credited=${oldCredited}s vs pinned ${expectedOld}s`,
+      ).toBeLessThan(tolerance);
+      // THE FIX'S OWN JUSTIFICATION: the new mechanism's credit is close to
+      // the wall clock, not close to the old (broken) one — Rest Time
+      // counts down in real time regardless of the flywheel.
+      expect(
+        Math.abs(newCredited - wallSeconds),
+        `rest ${i + 1}: NEW mechanism credited=${newCredited}s vs wall=${wallSeconds}s`,
+      ).toBeLessThan(tolerance);
+      expect(newCredited).toBeGreaterThan(oldCredited);
+    });
+  });
+
+  it("session-wide: 491.1 s wall against 419.76 s the OLD mechanism credited, across the whole capture", () => {
+    // The FIRST frame past `armed` (the first stroke), not literally
+    // `samples[0]`: the capture's own pre-roll (the machine sitting at
+    // WAITTOBEGIN before the rower's first pull) is not part of the
+    // SESSION's own wall time by any measure a rower would recognise, and
+    // is not what the spec's own 491.1 s measures.
+    const startIndex = samples.findIndex((s) => s.frame.state !== "armed");
+    expect(startIndex).toBeGreaterThan(-1);
+    const first = samples[startIndex]!;
+    // The capture's own `finished` frame, not literally the last EMITTED
+    // sample: the driver keeps delivering frames through whatever
+    // post-terminate/re-arm housekeeping the machine does after a workout
+    // genuinely ends (`MonitorRun`'s own doc comment on the run contract).
+    const finishedIndex = samples.findIndex(
+      (s) => s.frame.state === "finished",
+    );
+    expect(finishedIndex).toBeGreaterThan(-1);
+    const last = samples[finishedIndex]!;
+    const wallSeconds = (last.tMs - first.tMs) / 1000;
+    const oldCredited =
+      last.frame.sessionElapsedSeconds - first.frame.sessionElapsedSeconds;
+    expect(Math.abs(wallSeconds - 491.1)).toBeLessThan(2);
+    expect(Math.abs(oldCredited - 419.76)).toBeLessThan(2);
+  });
+});
+
+describe("EST LEFT (Phase LL) — monotonicity across a whole real capture (design spec §3, exit criterion 2)", () => {
+  // THE TEST THAT MATTERS (task brief's own words). The first design of
+  // this fix went backwards five times over this exact capture — worst
+  // -428.5 s at the capture's own `finished` frame, from laundering a
+  // `null` `intervalIndex` to `0` — and nobody caught it by reasoning; it
+  // took replaying frame by frame. This test is that replay, asserted
+  // directly against `SurfaceModel.elapsedSeconds` (never a parsed display
+  // string — `T - elapsedSeconds` is `totalLeftSeconds`, so a monotonic
+  // `elapsedSeconds` IS a monotonic (never-rising) EST LEFT, the same
+  // identity `buildSurfaceModel`'s own comment states).
+  it("never lets elapsedSeconds fall across the ENTIRE capture, including the finished frame", async () => {
+    const samples = await replaySession2();
+    // Bug-independent first: the capture must actually reach `finished` —
+    // otherwise this test would pass by never exercising the one frame
+    // that broke the first draft.
+    expect(samples.some((s) => s.frame.state === "finished")).toBe(true);
+
+    let previousElapsedSeconds: number | undefined;
+    let prev = -Infinity;
+    for (const s of samples) {
+      const m = buildSurfaceModel({
+        phases: SESSION_2_PHASES,
+        program: SESSION_2_PROGRAM,
+        status: "live",
+        frame: s.frame,
+        deviceName: SESSION_2_DEVICE,
+        actuals: [],
+        previousElapsedSeconds,
+      });
+      expect(
+        m.elapsedSeconds,
+        `elapsedSeconds fell at t=${s.tMs}ms, state=${s.frame.state}: ${m.elapsedSeconds} < ${prev}`,
+      ).toBeGreaterThanOrEqual(prev - 1e-9);
+      prev = m.elapsedSeconds;
+      previousElapsedSeconds = m.elapsedSeconds;
+    }
+  });
+
+  // THE CRITICAL GAP A REVIEW FOUND (exit criterion 1, spec §6's named
+  // hazard): monotonicity alone does not prove the estimate COUNTS DOWN
+  // through a rest — it is equally satisfied by a step function that
+  // credits the whole rest instantly the moment it starts and then sits
+  // FLAT (never falling, technically "monotonic") for the rest of the
+  // span. That inverse bug is exactly as wrong as the one this task
+  // fixes, just in the other direction: a rower would watch EST LEFT
+  // drop 3:00 at the first resting frame, then freeze. No fixture in
+  // this repo set `restSeconds` to anything but 0 until this test — every
+  // other test either reads `frame.restSeconds` directly off raw samples
+  // (the "wire premise" describe block above) or asserts monotonicity
+  // ALONE, neither of which can tell a real countdown from a step. This
+  // one asserts the RATE: consecutive frames within a single rest must
+  // advance `elapsedSeconds` by roughly the same amount as the wall clock
+  // between them, real 0x0032 `restSeconds` values from the replayed
+  // capture doing the crediting.
+  it("estElapsed advances ~1s per 1s of wall time THROUGH each rest — not a step function at rest entry (the inverse bug)", async () => {
+    const samples = await replaySession2();
+    const spans = restingSpans(samples);
+    // Bug-independent first: three real rests, matching design spec §5's
+    // own table — if this is wrong, the fixture is wrong, not the formula.
+    expect(spans).toHaveLength(3);
+
+    // One continuous walk across the WHOLE capture (not just the resting
+    // spans in isolation) — `previousElapsedSeconds` has to be threaded
+    // exactly the way `ConnectedSurface.tsx` does in production, and the
+    // rate check below only means something measured against a properly
+    // clamped sequence, not one seeded fresh at zero per span.
+    let previousElapsedSeconds: number | undefined;
+    const elapsedAt = new Map<DriverFrameSample, number>();
+    for (const s of samples) {
+      const m = buildSurfaceModel({
+        phases: SESSION_2_PHASES,
+        program: SESSION_2_PROGRAM,
+        status: "live",
+        frame: s.frame,
+        deviceName: SESSION_2_DEVICE,
+        actuals: [],
+        previousElapsedSeconds,
+      });
+      elapsedAt.set(s, m.elapsedSeconds);
+      previousElapsedSeconds = m.elapsedSeconds;
+    }
+
+    let spansChecked = 0;
+    for (const span of spans) {
+      expect(span.length).toBeGreaterThan(3);
+      const first = span[0]!;
+      const mid = span[Math.floor(span.length / 2)]!;
+      const last = span[span.length - 1]!;
+
+      // FIRST-TO-MID and MID-TO-LAST, not just first-to-last: the
+      // inverse-bug mutant (crediting the whole rest instantly the
+      // moment `state` becomes "resting", then holding flat) makes THIS
+      // span's own FIRST frame already carry the full credit — so a
+      // first-to-last check alone could still read as "advanced ~30s
+      // over the whole rest" by accident of where the span boundary
+      // falls. Splitting the span in two and requiring BOTH halves to
+      // advance at roughly the wall-clock rate is what actually
+      // distinguishes "counts down continuously" from "jumps once,
+      // anywhere in the span, then sits flat" — the flat half is what
+      // the assertion below catches wherever the jump landed.
+      for (const [a, b] of [
+        [first, mid],
+        [mid, last],
+      ] as const) {
+        const wallSeconds = (b.tMs - a.tMs) / 1000;
+        const elapsedDelta = elapsedAt.get(b)! - elapsedAt.get(a)!;
+        // The message must be an INLINE template literal, not a variable
+        // reference — `@vitest/eslint-plugin`'s `valid-expect` rule only
+        // recognises `expect(x, "...")`/`` expect(x, `...`) `` as its own
+        // AST shape; a message stored in a local and passed by reference
+        // reads as a disallowed third positional argument instead.
+        expect(
+          Math.abs(elapsedDelta - wallSeconds),
+          `rest span half at t=${a.tMs}..${b.tMs}ms: elapsed advanced ${elapsedDelta.toFixed(2)}s while ${wallSeconds.toFixed(2)}s of wall time passed`,
+        ).toBeLessThan(Math.max(1.5, wallSeconds * 0.3));
+      }
+      spansChecked++;
+    }
+    expect(spansChecked).toBe(3);
+  });
+});
+
+// ============================================================================
+// EST LEFT (Phase LL) — THE ACCEPTED LIMIT ON DISTANCE WORK, MEASURED.
+//
+// Found at PR #144's PM gate, and this block is the measurement the gate
+// asked for rather than the inference it arrived as. `estElapsed` banks each
+// COMPLETED phase's PROGRAMMED length; the progress bar's notches come from
+// `intervalBoundaries(phases, measuredWorkSeconds(actuals))` — MEASURED, and
+// that module says so outright. On TIME work the two agree, because the PM5
+// ends the interval at its programmed length. On DISTANCE work they diverge
+// by exactly the rower's deviation from target pace, and the monotonic clamp
+// (which must stay — spec §3) turns that divergence into a VISIBLE HOLD: the
+// estimate and the bar stand still at the handover until the rest has run
+// off the banked deficit.
+//
+// THE VEHICLE is `walk-2026-08-18-metrics`'s pyramid — the repo's only
+// committed distance-interval, rest-bearing capture, and the walk README's
+// own owed follow-up ("wire this capture into the replay suite so the state-9
+// path is pinned by test, not by photo"). The rower ran it well off target
+// (2:11.7 against a 1:58.5 middle interval, both photographed in the same
+// frame), which is precisely the condition the limit needs.
+//
+// WHY THE LIMIT IS ACCEPTED RATHER THAN FIXED HERE. The obvious repair —
+// bank the MEASURED work seconds for completed phases, where an actual
+// exists — was replayed against this same capture and does NOT remove the
+// hold: the PM5 emits an interval's 0x0037/0x0038 boundary record at the END
+// of its rest, not at the start (measured on this capture: interval 1's
+// actual arrives at t=473.2 s, the first frame of interval 3's work), so the
+// actual for the interval that just finished does not yet exist during its
+// own rest. The holds come out identical under both banking rules. Anything
+// that would remove them changes what the number MEANS and belongs in a spec
+// with an antagonist pass, not in a fix round — ROADMAP carries it as a
+// triggered follow-on with these numbers attached.
+// ============================================================================
+
+/** The pyramid's own program, hand-transcribed from the capture's OWN CSAFE
+ *  programming writes — the same provenance rule `SESSION_2_PROGRAM` follows.
+ *  The three `06 04 00 00 xx xx` target-pace values in the `ce060021` tx
+ *  frames decode (0.01 s/lsb) to 122.50 / 118.50 / 126.50 s per 500 m, the
+ *  three `03 05 80 00 00 xx xx` distances to 300 / 700 / 300 m, and the
+ *  `04 02 00 3c` rest values to 60 s on the first two intervals and 0 on the
+ *  last — which is the README's own `w 300m 6k @22 r1 · w 700m 6k-4 @24 r1 ·
+ *  w 300m 6k+4 @22`, and its photographed `1:58.5` middle target. */
+const PYRAMID_PROGRAM: WorkoutProgram = {
+  intervals: [
+    {
+      type: "work",
+      kind: "distance",
+      value: 300,
+      targetSplit: 122.5,
+      displaySpm: 22,
+      restSeconds: 60,
+    },
+    {
+      type: "work",
+      kind: "distance",
+      value: 700,
+      targetSplit: 118.5,
+      displaySpm: 24,
+      restSeconds: 60,
+    },
+    {
+      type: "work",
+      kind: "distance",
+      value: 300,
+      targetSplit: 126.5,
+      displaySpm: 22,
+      restSeconds: 0,
+    },
+  ],
+};
+
+/** `EnginePhase[]` mirroring `PYRAMID_PROGRAM` one-for-one, rest phases
+ *  interleaved only where `restSeconds > 0` — same shape and same reasoning
+ *  as `SESSION_2_PHASES` above. */
+const PYRAMID_PHASES: EnginePhase[] = [
+  {
+    type: "work",
+    meters: 300,
+    targetKind: "split",
+    targetSplit: 122.5,
+    label: "2:02.5",
+    originalIndex: 0,
+  },
+  { type: "rest", seconds: 60, label: "Rest", originalIndex: 0 },
+  {
+    type: "work",
+    meters: 700,
+    targetKind: "split",
+    targetSplit: 118.5,
+    label: "1:58.5",
+    originalIndex: 1,
+  },
+  { type: "rest", seconds: 60, label: "Rest", originalIndex: 1 },
+  {
+    type: "work",
+    meters: 300,
+    targetKind: "split",
+    targetSplit: 126.5,
+    label: "2:06.5",
+    originalIndex: 2,
+  },
+];
+
+const PYRAMID_PATH = import.meta.url
+  .replace(/^file:\/\//, "")
+  .replace(
+    /src\/workout\/connected\/surfaceModel\.test\.ts$/,
+    "../docs/monitor/sessions/walk-2026-08-18-metrics/pyramid-pm5-recording-1787090555458.jsonl.gz",
+  );
+
+/** Same harness as `replaySession2`, on the gzipped capture (decompressing
+ *  at test time rather than committing a second, uncompressed duplicate —
+ *  `session/summaryModel.test.ts`'s own precedent for this same file), and
+ *  additionally collecting the ACTUALS the driver files at each boundary, so
+ *  a test can see WHEN each one became available. */
+async function replayPyramid(): Promise<
+  { tMs: number; frame: MonitorFrame; actuals: IntervalActual[] }[]
+> {
+  const text = gunzipSync(readFileSync(PYRAMID_PATH)).toString("utf8");
+  const parsed = parseRecording(text);
+  const replay = createReplayTransport(parsed);
+  const [dev] = await replay.transport.scan();
+  await replay.transport.connect(dev.id);
+  const log = createEventLog();
+  const driver = createPm5Driver(replay.transport, log, {
+    deviceName: dev.name,
+    now: () => replay.clock.now(),
+    schedule: (cb, ms) => replay.clock.schedule(cb, ms),
+  });
+  const samples: {
+    tMs: number;
+    frame: MonitorFrame;
+    actuals: IntervalActual[];
+  }[] = [];
+  const actuals: IntervalActual[] = [];
+  driver.events((e) => {
+    if (e.kind === "intervalComplete" && e.actual.index !== null) {
+      actuals.push(e.actual);
+    }
+    if (e.kind === "frame") {
+      samples.push({
+        tMs: replay.clock.now(),
+        frame: e.frame,
+        actuals: [...actuals],
+      });
+    }
+  });
+  const programPending = driver.program(PYRAMID_PROGRAM);
+  await replay.run();
+  await programPending;
+  return samples;
+}
+
+/** How long the estimate STANDS STILL at each work->rest handover, in wall
+ *  seconds: from the last `rowing` frame before the machine goes `resting`,
+ *  until `SurfaceModel.elapsedSeconds` next increases. Threads
+ *  `previousElapsedSeconds` exactly the way `ConnectedSurface.tsx` does, so
+ *  the clamp is live — the hold is the clamp doing its job, not a bug in it.
+ */
+function handoverHolds(
+  samples: { tMs: number; frame: MonitorFrame }[],
+  phases: EnginePhase[],
+  program: WorkoutProgram,
+): number[] {
+  let previousElapsedSeconds: number | undefined;
+  const walk = samples.map((s) => {
+    const m = buildSurfaceModel({
+      phases,
+      program,
+      status: "live",
+      frame: s.frame,
+      deviceName: DEVICE,
+      actuals: [],
+      previousElapsedSeconds,
+    });
+    previousElapsedSeconds = m.elapsedSeconds;
+    return { tMs: s.tMs, est: m.elapsedSeconds, state: s.frame.state };
+  });
+  const holds: number[] = [];
+  for (let i = 1; i < walk.length; i += 1) {
+    if (walk[i]!.state !== "resting" || walk[i - 1]!.state !== "rowing") {
+      continue;
+    }
+    const from = walk[i - 1]!;
+    let j = i;
+    while (j < walk.length && walk[j]!.est <= from.est + 1e-9) j += 1;
+    holds.push((walk[Math.min(j, walk.length - 1)]!.tMs - from.tMs) / 1000);
+  }
+  return holds;
+}
+
+describe("EST LEFT (Phase LL) — the DISTANCE-work limit, measured on a replay (PR #144 PM gate)", () => {
+  let samples: Awaited<ReturnType<typeof replayPyramid>>;
+
+  beforeAll(async () => {
+    samples = await replayPyramid();
+  }, 30_000);
+
+  it("sanity: the capture is the distance-interval, rest-bearing session this block claims", () => {
+    // Bug-independent first, this file's own convention: if these fail the
+    // fixture is wrong, not the formula.
+    expect(samples.length).toBeGreaterThan(1000);
+    expect(samples.some((s) => s.frame.state === "resting")).toBe(true);
+    expect(samples.some((s) => s.frame.state === "finished")).toBe(true);
+    expect(PYRAMID_PROGRAM.intervals.every((i) => i.kind === "distance")).toBe(
+      true,
+    );
+  });
+
+  it("THE CAUSE: the machine's own measured work exceeds the programmed pricing, because the rower was slower than target", () => {
+    const final = samples[samples.length - 1]!.actuals;
+    // Two of the three intervals file an actual inside the capture (the
+    // third arrives in the finish grace and is the summary's business, not
+    // this pane's) — asserted so a harness change that lost them fails here.
+    expect(final.length).toBeGreaterThanOrEqual(2);
+    const measured = [final[0]!.elapsedSeconds, final[1]!.elapsedSeconds];
+    // Decoded independently from the capture's own 0x0037 records (78.2 s
+    // for 300 m, 184.4 s for 700 m) — the same numbers
+    // `session/summaryModel.test.ts` pins from those bytes.
+    expect(measured[0]).toBeCloseTo(78.2, 1);
+    expect(measured[1]).toBeCloseTo(184.4, 1);
+    // What `estElapsed` banks for those same two phases instead.
+    const programmed = [
+      phaseSeconds(PYRAMID_PHASES[0]!)!,
+      phaseSeconds(PYRAMID_PHASES[2]!)!,
+    ];
+    expect(programmed[0]).toBeCloseTo(73.5, 1);
+    expect(programmed[1]).toBeCloseTo(165.9, 1);
+    // The deficit each handover has to run off before the estimate can move
+    // again: 4.7 s and 18.5 s.
+    expect(measured[0]! - programmed[0]!).toBeCloseTo(4.7, 1);
+    expect(measured[1]! - programmed[1]!).toBeCloseTo(18.5, 1);
+  });
+
+  it("THE CONSEQUENCE, ACCEPTED: EST LEFT stands still for 6.6 s and 20.8 s at the two handovers", () => {
+    const holds = handoverHolds(samples, PYRAMID_PHASES, PYRAMID_PROGRAM);
+    expect(holds).toHaveLength(2);
+    // Pinned, not bounded, because this IS the accepted limit's own number —
+    // `docs/design/DEVIATIONS.md` cites these two figures, and a change to
+    // the banking rule must come here and change them deliberately rather
+    // than slide under a loose bound.
+    expect(Math.abs(holds[0]! - 6.57)).toBeLessThan(1);
+    expect(Math.abs(holds[1]! - 20.79)).toBeLessThan(1);
+    // AND THE HOLD IS THE DEFICIT, not something else that happens to be
+    // slow: each hold is at least the interval's own measured-minus-
+    // programmed deviation, and within a few frames of it. This is what ties
+    // the visible symptom to the mechanism the DEVIATIONS row names.
+    const final = samples[samples.length - 1]!.actuals;
+    const deficits = [
+      final[0]!.elapsedSeconds - phaseSeconds(PYRAMID_PHASES[0]!)!,
+      final[1]!.elapsedSeconds - phaseSeconds(PYRAMID_PHASES[2]!)!,
+    ];
+    holds.forEach((hold, i) => {
+      expect(
+        hold,
+        `handover ${i + 1}: held ${hold.toFixed(2)}s against a ${deficits[i]!.toFixed(2)}s banked deficit`,
+      ).toBeGreaterThanOrEqual(deficits[i]!);
+      expect(hold - deficits[i]!).toBeLessThan(3);
+    });
+  });
+
+  it("TIME work does not do this: the same detector finds no comparable hold on the time-interval capture", async () => {
+    // The claim the limit is SCOPED by — "on TIME work they agree, because
+    // the PM5 ends the interval itself". Same detector, same threading, the
+    // capture the rest of this file already replays.
+    const holds = handoverHolds(
+      await replaySession2(),
+      SESSION_2_PHASES,
+      SESSION_2_PROGRAM,
+    );
+    expect(holds).toHaveLength(3);
+    for (const hold of holds) {
+      // One frame gap (~0.5 s cadence, worst case a couple of ticks) — an
+      // order of magnitude below the distance case's 6.6 s and 20.8 s.
+      expect(hold).toBeLessThan(3);
+    }
+  });
+
+  it("monotonicity holds on a DISTANCE capture too (exit criterion 2, extended)", () => {
+    let previousElapsedSeconds: number | undefined;
+    let prev = -Infinity;
+    for (const s of samples) {
+      const m = buildSurfaceModel({
+        phases: PYRAMID_PHASES,
+        program: PYRAMID_PROGRAM,
+        status: "live",
+        frame: s.frame,
+        deviceName: DEVICE,
+        actuals: s.actuals,
+        previousElapsedSeconds,
+      });
+      expect(
+        m.elapsedSeconds,
+        `elapsedSeconds fell at t=${s.tMs}ms, state=${s.frame.state}: ${m.elapsedSeconds} < ${prev}`,
+      ).toBeGreaterThanOrEqual(prev - 1e-9);
+      prev = m.elapsedSeconds;
+      previousElapsedSeconds = m.elapsedSeconds;
+    }
   });
 });

@@ -1808,3 +1808,62 @@ toolkit, not a history.
   (webkit.org/blog/7929, PRIMARY) — the Safari-in-simulator worry was right about
   the conclusion and wrong about the mechanism; it is `100dvh` under collapsing
   chrome that does not transfer, not the insets.
+
+## Spec-design pass, 2026-08-20 (Phase LL, "EST LEFT" — the countdown that stalls)
+
+- **"The rower's position inside a rest is unknowable from the wire, so the
+  estimate must be reconstructed from programmed lengths."** False, and the
+  answer was already parsed in-repo: `0x0032` Additional Status 1 offsets
+  13-15 carry **Rest Time** (0.01 s/lsb; `pm5-interface-notes.md` §10;
+  decoded at `parse.ts:169`), counting DOWN in real time regardless of the
+  flywheel — measured on `session-2-wu-4unequal.jsonl`, interval elapsed
+  frozen at 133.08 for 26 s while restSec ran 26.91 → 1.85. Consumed by
+  nothing; `fake.ts` hardcoded it to 0, which is why no test could ever have
+  surfaced it. **Technique: before accepting "the machine cannot tell us X",
+  grep the PARSER for X.** This repo decodes more of the wire than it
+  consumes, and a field parsed-but-unused reads exactly like a field that
+  does not exist. Second technique: a spec that FORBIDS an input has usually
+  enumerated exactly two options; go looking for the third.
+- **"The bar's fill and the countdown are computed separately today."** False
+  and self-refuting: `surfaceModel.ts:970-984` gives `max(0, T−x)` and
+  `min(x, T)` off the same `x`, and `T − min(x,T) ≡ max(T−x, 0)`.
+  **Technique: when a spec explains a shared symptom by claiming two
+  independent producers, do the algebra before believing there are two.**
+- **"A completed-phase accumulator can only step forward."** False: five
+  measured backwards steps on one capture, worst −428.5 s at the `finished`
+  frame because `frame.intervalIndex` is null there and `surfaceModel.ts:703`
+  launders it `?? 0`, collapsing phaseIndex 7 → 0. **Technique: implement the
+  proposed formula verbatim in a throwaway replay test and assert MONOTONICITY
+  over a real capture — do not reason about it.** Then grep for `?? 0` on the
+  field your formula keys on and read who already refused it and why: the same
+  file refuses that laundering for the AVG cell, 160 lines away.
+- **"Ten minutes of rest, about a minute of drift — the right order of
+  magnitude."** Not a confirmation. Measured loss is 77% of rest wall-time,
+  predicting ~7:40 for that session. James was paddling lightly, which
+  reconciles it — but only once asked. **Technique: when a spec offers an
+  observed magnitude as evidence FOR a mechanism, compute what the mechanism
+  actually predicts. Off by 7× is under-determination wearing a
+  confirmation's clothes.**
+- **Citation hygiene, twice in one spec.** §4 cited `types.ts:36-38` for
+  flywheel gating (that passage says something else); it also named the
+  2026-08-20 walk record as replayable when that record's own README — which
+  the controller wrote — says no wire recording exists for the phone half.
+  **Technique: open every capture a spec names and count the frames before
+  planning work that replays it.** `ls` settles it in five seconds.
+- **Attacked and HELD:** the wall-clock prohibition (PW's shipped promise;
+  `Date.now()` genuinely breaks on suspend), `totalSeconds` including rests,
+  the subtraction being the mechanism, and `phases` being the flat work/rest
+  list. **The FAKE-VS-PARSER AUDIT that followed found the dangerous bucket
+  EMPTY at the time — CORRECTED 2026-08-20, same commit range as the fix it
+  gated: it is not empty any more.** The audit's own prediction landed on
+  its own subject the moment the fix shipped — `restSeconds` gained a real
+  consumer (`surfaceModel.ts`) and the fake's own value for it stayed `0`
+  for every existing fixture (script-authorable since this task, never
+  scripted by any e2e/screenshot fixture) — the exact HARDCODED-bucket shape
+  the audit was built to catch, now occupied by the field it was written
+  about. No live defect follows from this (the consumer is proven correct
+  against real wire bytes via a replay test, never the fake), but the
+  fake-driven layer has zero discriminating power over the mechanism as a
+  result — corrected in `docs/monitor/fake-vs-parser-audit.md` itself
+  (headline findings 1/3, the `restSeconds` table row, the two-rest-time-
+  fields section, and the "which HARDCODED fields" section).
