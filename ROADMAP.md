@@ -2513,6 +2513,13 @@ that needs no erg, and it can run in a test.
 
 ### The warm-up question, reframed 2026-08-21 (James)
 
+> **SUPERSEDED the same day: James chose to remove warm-ups entirely —
+> see Phase WU below, which lands BEFORE RC-1.** The reasoning below is
+> kept because it is why the removal is safe for Concept2 (the machine,
+> not us, decides what is in the row) and because it still governs any
+> future decision to reintroduce a warm-up in any form.
+
+
 This was written as "which population is the row?" — DISTANCE and TIME
 include the warm-up, AVG SPLIT excludes it, pick one. **That framing was
 wrong, and it hid the actual lever.** It is two questions, and only one of
@@ -2627,6 +2634,125 @@ posted to the Concept2 sandbox comes back through `export/` matching what
 we stored, or the reason it cannot is documented; (e) if 0x003F turns out
 not to fire on our firmware, DEVIATIONS carries the row saying so and the
 verification branch is closed on the record rather than left hoped-for.
+
+## Phase WU — The warm-up leaves
+
+**Status:** NOT OPENED. **Decided by James, 2026-08-21**, during the Phase
+RC review: "let's just drop warmups. We uniquely do them nobody else
+does." Scope chosen the same day, from three costed options: **remove
+warm-ups ENTIRELY** — the setting, the preference, the `EnginePhase`
+member and every downstream branch — not merely stop programming them to
+the PM5. No spec yet.
+
+**What and why, in plain words.** The app prepends a configurable warm-up
+to every session. Nobody else in this space models one, Concept2's own
+data model has no slot for the idea, and the feature costs us a
+population disagreement in three different places. It goes.
+
+**The premise, stated accurately, because it is smaller than it sounds.**
+Warm-ups already left the `Step` union on 2026-08-09 (`expand.ts:135-139`:
+"no `Step[]` input can produce a `type: \"warmup\"` Phase anymore"). Today
+a warm-up is a GLOBAL PREFERENCE (`warmup jsonb` on the preferences row,
+`schema.ts:235`), not part of any workout — the 300-workout library
+carries exactly one `warmup` occurrence and it is in a test. So this
+retires a setting and its downstream, not a concept threaded through the
+library.
+
+**What this reverses, named so nobody restores it as a regression:**
+
+1. **The 2026-08-09 warmup-setting spec**
+   (`docs/superpowers/specs/2026-08-09-warmup-setting-design.md` and its
+   adversarial review), which deliberately built this shape — moving
+   warm-ups out of the Step union into a single setting, and replacing the
+   earlier `warmup_minutes`/`warmup_override` columns (`schema.ts:228-235`).
+2. **James's 2026-08-12 connected-mode requirement**, that the rower must
+   be able to see a warm-up is NOT a working interval. Shipped, and
+   announced to testers in the release notes
+   (`releaseNotes.ts:165`). Removing warm-ups dissolves the problem it
+   solved rather than regressing it, but the requirement is retired and
+   should be recorded as retired.
+
+**Not fast path, and TRIAD by the standing rule.** 37 non-test files,
+crossing `app/domain/` and `app/server/`, with a stored shape and a
+preferences migration. Full cycle: a spec, a full antagonist pass on it,
+subagent implementation and review, and a PM final-PR gate.
+
+### What the spec has to answer
+
+- **Existing stored rows keep their warm-ups.** Logged rows are immutable
+  and PATCH refuses series; the removal is FORWARD-ONLY and old rows must
+  keep rendering what they recorded. State it, and make sure the renderer
+  still has the branch after the model loses it — this is the one place
+  where deleting the concept too thoroughly breaks history.
+- **The `warmup jsonb` column: drop it or orphan it?** A `DROP COLUMN` has
+  a rollback ordering question this repo has been bitten by before
+  (recurring failure 10 records a `DROP COLUMN` sequencing that would have
+  broken rollback). Deciding to leave the column and stop reading it is a
+  legitimate answer and probably the cheaper one.
+- **`EnginePhase`'s `"warmup"` member** (`expand.ts:12`) is currently
+  unreachable from `Step[]` but still in the union, and `expand.ts:139`
+  says every downstream branch is untouched. Removing the member is a
+  compile-forcing change across every exhaustive switch. That is a
+  FEATURE — the compiler enumerates the work — but it is also why this is
+  one task and cannot be split across several.
+- **Does any NUMBER change for an existing row?** `judge.ts:78` treats
+  warmup alongside effort/rest/test as "no numeric target at all", and
+  AVG SPLIT already excludes warm-up phases. If no warm-up phases can
+  exist, those exclusions become dead code rather than changed behaviour —
+  **but that must be PROVEN by replaying a committed capture that contains
+  a warm-up** (`walk-2026-08-16/session-2-wu-4unequal.jsonl` is the one),
+  not argued. This is the triad clause.
+- **The does-it-exist question, pointed at ourselves.** A rower who warms
+  up will still warm up; they just will not do it inside a session. Is
+  there now a place where the app says nothing about warming up when it
+  used to? Name the gap and decide it deliberately, rather than
+  discovering it from a tester.
+- **Orphaned UI and CSS.** `you/WarmupRow.tsx` goes, and `index.css` is in
+  the touched list — recurring failure 5 is deleting a component and
+  leaving its rules behind, three times now. Grep the class names across
+  `src/` and `e2e/`.
+- **Release notes are history, not state.** `releaseNotes.ts:120` and
+  `:165` describe shipped behaviour at the time. Do NOT rewrite them; add
+  a new note saying the warm-up is gone.
+
+### The files, so the spec starts from a map
+
+- **Domain:** `expand.ts`, `judge.ts`, `types.ts`, `bulk.ts`,
+  `fixtures.ts`, `display/stepDetail.ts`, `generation/patterns.json`,
+  `monitor/program.ts` (the warm-up arm, `:512-526`), `monitor/types.ts`,
+  `monitor/pm5/commands.ts`
+- **Server:** `db/schema.ts` (`warmup jsonb`, `:235`), `routes/data.ts`,
+  `stores/logs.ts`, `stores/preferences.ts`
+- **Client:** `You.tsx`, `you/WarmupRow.tsx`, `api/usePreferences.ts`,
+  Builder (`Builder.tsx`, `builderState.ts`, `BulkImport.tsx`,
+  `StepCard.tsx`, `StepEditor.tsx`), session (`draft.ts`, `engine.ts`,
+  `intervalBoundaries.ts`, `logDraft.ts`, `summaryModel.ts`,
+  `Countdown.tsx`, `Timer.tsx`, `TimerRuler.tsx`, `TimerTargets.tsx`,
+  `PostWorkoutSummary.tsx`), `workout/connected/surfaceModel.ts`,
+  `monitor/driver.ts`, `monitor/useMonitorSession.ts`,
+  `WorkoutDetail.tsx`, `index.css`, `news/content/releaseNotes.ts`
+
+### What it buys Phase RC
+
+- **The program-time warm-up question disappears.** RC's own warm-up
+  section exists to decide whether a warm-up should be its own PM5 piece.
+  With no warm-ups, there is nothing to decide.
+- **RC-5 shrinks to the rest question alone.** Two of the three heroes
+  disagree partly because DISTANCE and TIME span the warm-up and AVG SPLIT
+  does not. Remove warm-ups and the remaining disagreement is rest-only,
+  which RC-1 is already fixing.
+- **RC-1's spec gets simpler**, which is why sequencing matters below.
+
+**Sequencing: WU lands BEFORE RC-1.** Otherwise RC-1's spec has to design
+storage and display for a phase type that is about to be deleted, and the
+migration would be written twice. WU does not depend on Phase LL.
+
+**Exit.** (a) No `EnginePhase` can be a warm-up and the compiler proves
+it; (b) a replay of `session-2-wu-4unequal` shows every judged number for
+that row unchanged, or the change is stated and intended; (c) an
+already-logged row containing a warm-up still renders correctly; (d) no
+orphaned warm-up CSS or copy survives a grep of `src/` and `e2e/`; (e) a
+release note tells testers the setting is gone.
 
 ## Phase CL2 — Post-release authoring parity
 
