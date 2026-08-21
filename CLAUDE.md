@@ -326,6 +326,19 @@ often they recur.
     `boundary` events, and the boundary-actual sum is an unsound oracle —
     architecture review §F2). An agreement with our own fixtures proves
     nothing about the erg.
+    **AND ASK WHAT QUANTITY THE ORACLE MEASURES, not just whether it
+    agrees (2026-08-21).** This rule as written above would have passed
+    the defect that produced it. We DO compare against the machine —
+    `recordTwdVerdict` checks our accumulator against the PM5's Total
+    Work Distance, and PR #123 celebrated a sub-metre three-way
+    agreement. It proved nothing: TWD is work PLUS rest-coast metres
+    (decoded to the metre, 1535+64=1599 and 1300+47=1347) and so is our
+    sum, while Concept2's logbook — the actual authority for what the row
+    was — stores work only. Both screens in one photograph would have
+    shown two numbers agreeing about a quantity the authority does not
+    store. **An oracle that shares your definition is a mirror.** Before
+    trusting any external number, state what it measures and confirm it
+    is the same thing you are trying to be right about.
 12. **Settling a claim about build output by reading code instead of
     building it.** Twice now: `dist-grep.sh`'s own header records an
     identifier needle coming back clean against a build that genuinely
