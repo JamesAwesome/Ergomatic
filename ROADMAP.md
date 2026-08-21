@@ -3626,6 +3626,32 @@ next phase. One line per round, newest first.
 
 ## Triggered follow-ons (not scheduled — each has an explicit trigger)
 
+- **HUNT THE E2E FLAKES — James, 2026-08-20: "post release lets hunt down
+  the flake".** Scheduled work, not a footnote. There are at least TWO
+  distinct recurring flakes and every prior sighting was disposed of the
+  same way — "passed on re-run" — which is how a real race stays alive for
+  months. **What is known, so nobody re-derives it:**
+  - **The manual-door tap-target flake.** Recurred across multiple gates
+    during Phase LT (PR #129's own record: "isolated-rerun-confirmed each
+    time"), and again on 2026-08-20 during PR #144's gates: one run at
+    **399/401 with a non-zero exit, then 401/401 twice on re-run.** A
+    failure that reproduces across unrelated diffs and months is a race in
+    the app or the harness, not noise.
+  - **The `design.spec.ts` layout-settling flake** (`stableBoundingBox`,
+    `:1677`/`:1697`) — already recorded under Phase CR2 as wanting "a
+    tracked fix rather than another per-task footnote". Same disposition,
+    same outcome. Fold both into one hunt.
+  **Why it matters beyond annoyance:** a suite that goes red for reasons we
+  have taught ourselves to ignore is a suite whose red has stopped meaning
+  anything. Today the controller had to decide, live, whether a 399/401 was
+  a regression or the known flake — and got it right only by re-running
+  twice. The next person may not, in either direction.
+  **First moves, cheapest first:** capture the actual failure (Playwright's
+  trace/video on retry, which CI may already be discarding) rather than
+  re-running until green; check whether the failures cluster by worker
+  index or by ordering, which separates a harness race from an app race;
+  and only then reach for the code. **Trigger: immediately after v0.15.0
+  ships.**
 - **CLOSED 2026-08-20 (PR #144, measurement recorded) — `intervalRestTimeSeconds`
   agrees with the PROGRAMMED rest in every committed capture, so no stored TIME
   hero is wrong.** The open question (raised the same day by the fake-vs-parser
