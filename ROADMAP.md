@@ -3626,6 +3626,18 @@ next phase. One line per round, newest first.
 
 ## Triggered follow-ons (not scheduled — each has an explicit trigger)
 
+- **An e2e fixture that exercises a REST** — spec
+  `2026-08-20-est-left-design.md`'s exit criterion 6, recorded HALF MET
+  rather than reworded. The fake reports Rest Time honestly and
+  `FakeStatusEvent.restSeconds` is scriptable, but no e2e or screenshot
+  fixture drives `state: "resting"` with a scripted rest value, so the
+  countdown-through-a-rest behaviour is proven only at the replay layer
+  (a real capture through the production driver) plus a DOM-level wiring
+  test. The PM gate ruled that sufficient for MERGE and the fixture a
+  follow-up — recorded here because it lived only in the spec and a PR
+  body, which is recurring failure 14's seventh occurrence in eight
+  gates. **Trigger:** the next work touching the connected surface's e2e
+  fixtures. **S**
 - **HUNT THE E2E FLAKES — James, 2026-08-20: "post release lets hunt down
   the flake".** Scheduled work, not a footnote. There are at least TWO
   distinct recurring flakes and every prior sighting was disposed of the
