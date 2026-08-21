@@ -2384,7 +2384,11 @@ that needs no erg, and it can run in a test.
       num=2 at t=142906 with the next interval's clock already at 0.03),
       so a session ended during a rest loses the just-finished interval
       entirely. That is a bigger undercount than anything RC-1 fixes and
-      belongs in the same spec.
+      belongs in the same spec. **Also carries the program-time warm-up
+      question** (see "The warm-up question" below): whether a warm-up is
+      compiled into the same PM5 piece as the working intervals is a
+      compiler change, it decides what a rower's Concept2 totals read, and
+      RC-1's spec is where it lands.
 - [ ] **RC-2 — Decode Log Entry Date/Time; log it beside our wall clock;
       store nothing yet.** Format settled from two projects and checked
       arithmetically: date `uint16` = month | day<<4 | (year-2000)<<9;
@@ -2427,7 +2431,10 @@ that needs no erg, and it can run in a test.
       **2:32.7**) beside an AVG SPLIT of **2:08.5** — 24.3 s/500 m apart.
       Pyramid: 2:13.1 against 2:53.0 implied, **39.9 s/500 m.** PR #117
       shipped this exact shape through seven reviews; this one is in the
-      saved record, not a capture.
+      saved record, not a capture. **Not closed by the warm-up section
+      below:** Concept2 has no average-split field, so this is a rower
+      question with its own answer, and aligning DISTANCE and TIME with C2
+      can widen the contradiction rather than close it.
 - [ ] **RC-6 — Band `spm` and drop zero `p` in the stored series.**
       TRIAD, S. `seriesRecorder.ts:230` writes `spm: f.spm ?? 0` unbanded
       while the sibling `hr` two lines below is banded 20..254. The PM5
@@ -2481,7 +2488,7 @@ that needs no erg, and it can run in a test.
       quantity — work plus however much of the trailing rest the wire
       clock advanced before freezing (session-2: 398.4 work / 419.5
       series / 488.4 header). **None of the three is C2's `time`.**
-      Depends on the open decision below. Our `r` rest marker has no C2
+      Depends on the warm-up section below. Our `r` rest marker has no C2
       slot at all and stays ours-only, which is the honest boundary of
       what Concept2 can hold for us.
 - [ ] **RC-12 — Documentation reconciliations**, each a defect by this
@@ -2504,11 +2511,54 @@ that needs no erg, and it can run in a test.
       `distance_meters` "the machine's whole-meter total" when it is our
       sum, work+rest+warm-up.
 
-### The open decision, which needs James and not an agent
+### The warm-up question, reframed 2026-08-21 (James)
 
-**Which population is "the row"?** DISTANCE and TIME include the warm-up;
-AVG SPLIT excludes it. One of those is wrong for the rower and the other
-is wrong for Concept2, and RC-1, RC-5 and RC-11 all wait on the answer.
+This was written as "which population is the row?" — DISTANCE and TIME
+include the warm-up, AVG SPLIT excludes it, pick one. **That framing was
+wrong, and it hid the actual lever.** It is two questions, and only one of
+them is open.
+
+**The Concept2 half is not a choice, and the hash enforces it.**
+`program.ts:37` compiles `IntervalType = "warmup" | "work" | "test"` — the
+warm-up is an interval inside the type-8 workout we send the machine. So
+the PM5 already counted it: its log entry covers the warm-up, and the
+verification code is computed over THAT entry's date, distance and
+duration. Upload a distance that excludes the warm-up and Concept2 rejects
+the code. There is nothing here for a rower to consent to and nothing for
+us to decide at upload time. **This is the good kind of constraint — we
+cannot get it wrong silently.**
+
+**The lever is at PROGRAM time, and that is the real open question:**
+
+> **Should a warm-up be programmed as its own PM5 piece, separate from the
+> working intervals?**
+
+Program one workout and it is one C2 row with the warm-up inside, by
+mechanism. Program the warm-up separately and it is a separate PM5 log
+entry and a separate C2 row, cleanly, with no reconciliation cost either
+way. **The consequence that decides it is the rower's logbook, not ours:**
+a 2 km warm-up in front of a 6 km piece becomes an 8 km row, and their
+season total, rankings and any Concept2 challenge counts all include it.
+That argues for separate pieces by default, but it is a product call and it
+changes the compiler, so it belongs in RC-1's spec rather than being
+settled here.
+
+**The screen half stays open, and aligning with Concept2 does not close
+it.** C2 has no average-split field at all — it stores distance and time
+and derives pace — so AVG SPLIT's population is purely a rower question.
+Making DISTANCE and TIME C2-shaped can make RC-5 WORSE: the three heroes
+still contradict each other, just by a different amount. **RC-5 needs its
+own answer and must not be closed by citing this section.**
+
+**What this means for the enrichment layer, which is bigger than traces.**
+C2's per-interval `type` is `time|distance|calorie|wattminute` — a
+DIMENSION, not a ROLE. There is no warm-up flag, and `REST=2` has no C2
+twin either (see RC-1's map note). So "which intervals were working
+intervals" is ours-only, the same category as the `r` rest marker in
+RC-11. That is not decoration: every judgment this app makes hangs off that
+distinction. **Concept2 holds what happened; we hold what it meant.** Any
+design that treats our layer as an optional garnish on C2's row has the
+relationship backwards.
 
 ### Walk items this phase owns
 
