@@ -1971,33 +1971,61 @@ async function postLog(
 
 // Trace-rendering spec (Phase LT spec 3), Task 3: `log-detail`'s own
 // series — one continuous line (2 s cadence, under the 3 s gap-break
-// threshold) tracking the SAME four rows that test's own big header
+// threshold) tracking the SAME four WORK rows that test's own big header
 // comment already hand-checks (120/140/118/100 s per 500m, in that
 // order), so the drawn shape and the row numbers agree in the same
 // frame (recurring failure #7, sharpened). `d` is an arbitrary monotonic
 // filler — nothing in the chart reads it (Task 2's own `traceModel.ts`
-// never touches `Sample.d`) — and the small jitter keeps the line honest
-// (a real trace is never perfectly flat, `traceModel.ts`'s own "noise is
-// shown, not smoothed" rule). No `hr` on any row's own stored fields, so
-// this series invents a plausible climbing 130->158 bpm independently
-// rather than pretending a number this fixture never measured.
+// never touches `Sample.d`) — and the small jitter keeps the WORK line
+// honest (a real trace is never perfectly flat, `traceModel.ts`'s own
+// "noise is shown, not smoothed" rule). No `hr` on any row's own stored
+// fields, so this series invents a plausible climbing 130->158 bpm
+// independently rather than pretending a number this fixture never
+// measured.
 // FIXTURE HONESTY (final review, 2026-08-19): this series is HAND-BUILT to
-// track log-detail's own four hand-built row actuals, and its pace jitters by
-// about a second per 500m. A real device trace does not look like this — the
-// committed captures swing by double digits sample to sample and carry a ~26%
-// share of zero-pace sentinels (see `traceModel.test.ts`, which replays them).
-// The capture is honest about the chart's SHAPE and placement; it is not, and
-// must never be cited as, a picture of what real data looks like. The
-// `log-monitor` capture beside it comes from a genuine recorder replay and is
-// the representative one.
-// trace-truth Task 2 review (I-2): a run inside segment 2 (140 s/500m,
-// t 180..210s) is marked `r: true` — the ONLY committed capture that
-// shows the rest tint at all (`log-monitor`'s own fake program carries
-// no rest; see that fixture's own comment). Placed mid-segment, not at a
-// row boundary — this chart draws no boundary marks (§4) and the rest
-// band's own position is independent of the four rows' own split
-// points.
+// track log-detail's own four hand-built row actuals, and its WORK pace
+// jitters by about a second per 500m. A real device trace does not look
+// like this — the committed captures swing by double digits sample to
+// sample and carry a ~26% share of zero-pace sentinels (see
+// `traceModel.test.ts`, which replays them). The capture is honest about
+// the chart's SHAPE and placement; it is not, and must never be cited as,
+// a picture of what real WORK data looks like. The `log-monitor` capture
+// beside it comes from a genuine recorder replay and is the representative
+// one for that.
+// REST REALISM (rest-scale round, PM correction 2026-08-20): the rest
+// window's own pace is NOT derived from the surrounding segment any more
+// — round 1 of this fixture reused `seg.pace` unchanged during the rest,
+// which made the domain-exclusion fix invisible in this exact capture
+// (the rest sat at the SAME value as its own segment's work, so excluding
+// it moved nothing). `restPace()` below is calibrated off James's own
+// 2026-08-20 session (work ~2:02-2:04/500m, rests wandering around 3:20
+// with excursions past 5:00): it wanders from 200s (3:20) at the rest
+// window's own edges up to 310s (5:10) at its midpoint — materially
+// slower than every WORK row in this fixture (max 140s/500m), so this
+// capture now actually exercises the fix it is meant to demonstrate: a
+// domain that excluded the rest would top out near the WORK max (140s);
+// one that still counted it would top out past 300s. `traceModel.test.ts`
+// pins the equivalent assertion numerically; this fixture is what makes
+// it visible in a screenshot.
+// trace-truth Task 2 review (I-2): a run inside segment 2 (WORK pace
+// 140 s/500m, rest pace 200-310s/500m, t 180..210s) is marked `r: true`
+// — the ONLY committed capture that shows the rest tint at all
+// (`log-monitor`'s own fake program carries no rest; see that fixture's
+// own comment). Placed mid-segment, not at a row boundary — this chart
+// draws no boundary marks (§4) and the rest band's own position is
+// independent of the four rows' own split points.
 const REST_WINDOW: readonly [number, number] = [180, 210];
+/** Rest-scale round (2026-08-20): a wandering, materially-slower-than-work
+ *  pace for samples inside `REST_WINDOW` — see "REST REALISM" above for
+ *  the calibration and why this can no longer just reuse `seg.pace`.
+ *  Triangular: 200s (3:20) at the window's own edges, peaking at 310s
+ *  (5:10, past James's own observed 5:00 excursions) at its midpoint. */
+function restPace(t: number): number {
+  const span = REST_WINDOW[1] - REST_WINDOW[0];
+  const pos = (t - REST_WINDOW[0]) / span; // 0 at the start edge, 1 at the end edge
+  const shape = 1 - Math.abs(pos - 0.5) * 2; // 0 at either edge, 1 at the midpoint
+  return Math.round(200 + 110 * shape);
+}
 function buildLogDetailSeries(): {
   samples: {
     t: number;
@@ -2027,10 +2055,11 @@ function buildLogDetailSeries(): {
       segments.find((s) => t < s.end) ?? segments[segments.length - 1]!;
     const jitter = t % 4 === 0 ? -1 : 1;
     const resting = t >= REST_WINDOW[0] && t <= REST_WINDOW[1];
+    const workPace = seg.pace + jitter;
     samples.push({
       t: t * 10,
       d: t * 4,
-      p: (seg.pace + jitter) * 10,
+      p: (resting ? restPace(t) : workPace) * 10,
       spm: seg.spm + (t % 6 === 0 ? -1 : 0),
       hr: 130 + Math.round((t / 478) * 28),
       ...(resting ? { r: true as const } : {}),
@@ -2264,6 +2293,33 @@ test("log-detail", async ({ page }) => {
   // above carries a `series`).
   await expect(page.locator(".trace-figure")).toBeVisible();
   await expect(page.locator(".trace-line").first()).toBeVisible();
+  // Rest-scale round (PM correction, 2026-08-20): the assertion that
+  // proves the domain-exclusion fix on the EXACT data the screenshot
+  // above shows, not just a synthetic fixture in traceModel.test.ts.
+  // `buildLogDetailSeries`'s rest window now wanders 200-310s/500m
+  // (`restPace()`, materially slower than every WORK row here, whose
+  // slowest is row 2 at 140 s/500m) — under the OLD rule (domain from
+  // ALL real readings) the y-axis's slow edge would have to reach past
+  // 300s to cover it; under the fix (domain from WORK readings only)
+  // it stays anchored to the WORK range. Reading the actual rendered
+  // tick labels, not re-deriving the domain by hand, so this is
+  // red-provable by reverting the domain-exclusion fix alone.
+  const yTickTexts = await page
+    .locator(".trace-tick-label-y")
+    .allTextContents();
+  expect(yTickTexts.length).toBeGreaterThan(0);
+  const yTickSeconds = yTickTexts.map((text) => {
+    const m = text.match(/^(\d+):(\d\d)\.(\d)$/);
+    if (!m) throw new Error(`unparsed y-axis tick label "${text}"`);
+    return Number(m[1]) * 60 + Number(m[2]) + Number(m[3]) / 10;
+  });
+  const slowestTickSeconds = Math.max(...yTickSeconds);
+  // Nowhere near the rest excursion's own 200-310s range — proves the
+  // rest did NOT set the scale.
+  expect(slowestTickSeconds).toBeLessThan(200);
+  // Still covers the slowest WORK row (140 s/500m) with real padding —
+  // proves the fix didn't just clamp the axis arbitrarily tight either.
+  expect(slowestTickSeconds).toBeGreaterThanOrEqual(140);
 
   // R3-1 (review round 3): a viewport-only capture cropped out the
   // chart's own `.trace-legend` ("BAND = REST", F-2, round 4 wording) — the identical
