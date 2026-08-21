@@ -2038,11 +2038,16 @@ WebKit's throttling, so it does not rescue the JS half.
       including the capture's own `finished` frame, where the first design
       of this fix went backwards 428.5 s from laundering a `null`
       `intervalIndex` to `0`. Spec:
-      `docs/superpowers/specs/2026-08-20-est-left-design.md`. Two accepted
-      limits recorded in `docs/design/DEVIATIONS.md` (dawdling at the start
-      of a work interval still runs high; an unpriced phase's live term is
-      a hole, guarded on `PaneLive.tsx` by the same `hasRemainingEstimate`
-      the phone timer already uses). Original hypothesis, kept for the
+      `docs/superpowers/specs/2026-08-20-est-left-design.md`. THREE
+      accepted limits recorded in `docs/design/DEVIATIONS.md` (dawdling at
+      the start of a work interval still runs high; an unpriced phase's
+      live term is a hole, guarded on BOTH render sites of the number —
+      `PaneLive.tsx`'s bar and cell and `ConnectedSurface.tsx`'s GRID
+      header countdown — by the same `hasRemainingEstimate` the phone timer
+      already uses; and on DISTANCE work the estimate holds still for
+      seconds at each handover, measured at 6.6 s and 20.8 s on the pyramid
+      capture, see the triggered follow-on for why the obvious repair does
+      not work). Original hypothesis, kept for the
       record: (James, device report + two photos, 2026-08-20, rowing
       "Strong Breeze"). He saw `TOTAL LEFT` reading roughly a minute high,
       and the bar lagging when interval 4 handed over to interval 5 after
@@ -3621,24 +3626,50 @@ next phase. One line per round, newest first.
 
 ## Triggered follow-ons (not scheduled — each has an explicit trigger)
 
-- **`intervalRestTimeSeconds` is decoded and unconsumed — the summary's TIME
-  hero may be using PROGRAMMED rest where the machine reports ACTUAL**
-  (found 2026-08-20 by the fake-vs-parser audit,
-  `docs/monitor/fake-vs-parser-audit.md`). `0x0037` carries a whole-second
-  settled rest duration per completed interval — the time-side twin of
-  `intervalRestDistanceMeters`, which IS already wired into
-  `IntervalActual.restDistanceMeters`. So we store how far a rower drifted
-  during each rest and not how long the rest actually took, while
-  `summaryModel.ts`'s TIME hero sums work seconds plus **programmed** rest
-  for completed intervals (R-D) because that is all it had. **INFERENCE,
-  and it may be a non-issue:** on a PM5-controlled interval workout the
-  machine ends the rest itself, so actual and programmed may agree almost
-  always. "Almost always" is the interesting part — the gap, if it exists,
-  is a wrong number on a screen. **Cheap first step, no hardware:** decode
-  `intervalRestTimeSeconds` from the committed captures and compare it to
-  the programmed rest for the same intervals. If they always agree, close
-  this with the measurement recorded. **Trigger:** the next work touching
-  the summary's TIME, or anyone with ten minutes.
+- **CLOSED 2026-08-20 (PR #144, measurement recorded) — `intervalRestTimeSeconds`
+  agrees with the PROGRAMMED rest in every committed capture, so no stored TIME
+  hero is wrong.** The open question (raised the same day by the fake-vs-parser
+  audit, `docs/monitor/fake-vs-parser-audit.md`) was whether `summaryModel.ts`'s
+  TIME hero, which sums work seconds plus **programmed** rest for completed
+  intervals (R-D), is understating or overstating sessions where the machine's
+  own settled rest differed. It does not: `0x0037` offsets 12-13 decoded across
+  every completed interval in every committed wire recording — 14 records over
+  5 sessions — report exactly the programmed value, to the second.
+
+  | capture | programmed rests | `intervalRestTimeSeconds` decoded |
+  | --- | --- | --- |
+  | `walk-2026-08-16/session-1-keystone-2x250r0.jsonl` | r0, r0 | 0, 0 |
+  | `walk-2026-08-16/session-2-wu-4unequal.jsonl` | r0, r30, r30, r30, r0 | 0, 30, 30, 30, 0 |
+  | `walk-2026-08-17/step-2-*.jsonl` | r0, r0 | 0, 0 |
+  | `walk-2026-08-17/step-3-*.jsonl` | r0, r30 | 0, 30 |
+  | `walk-2026-08-18-metrics/pyramid-*.jsonl.gz` | r1, r1, none | 60, 60, 0 |
+
+  The mechanism behind the agreement is the one the item guessed: on a
+  PM5-programmed interval workout the machine ends the rest itself, so there is
+  no rower behaviour that can move the number. **Nothing is owed** — no
+  migration, no release note, no correction to a stored hero. The field stays
+  decoded and unconsumed on purpose; wiring it would add a second source for a
+  number that already has a correct one. **Re-open only if** a capture ever
+  shows a divergence (a manually-ended rest, a JustRow split, a firmware that
+  reports the elapsed rest rather than the settled one).
+- **The connected bar's fill and its notches are two axes on DISTANCE work,
+  and the estimate holds still for seconds at each handover** (measured
+  2026-08-20 at PR #144's PM gate; accepted and documented, `docs/design/
+  DEVIATIONS.md`'s third EST LEFT row). `estElapsed` banks each completed
+  phase's PROGRAMMED length while `intervalBoundaries` re-anchors its notches
+  to the MEASURED ones, so a rower off target sees EST LEFT and the bar stand
+  still into the rest — **6.6 s and 20.8 s** on the pyramid capture, pinned by
+  `surfaceModel.test.ts`'s "the DISTANCE-work limit, measured on a replay".
+  **The obvious repair was replayed and does not work:** banking measured
+  seconds changes nothing, because the PM5 emits an interval's 0x0037/0x0038
+  boundary record at the END of its rest, so the finished interval's actual
+  does not exist during its own rest. Neither does `frame.elapsedSeconds`
+  survive the rest coast (78.64 -> 88.67 -> 84.88 within one rest, same
+  capture). **Trigger:** a spec that wants the countdown and the notches on
+  one axis — it needs a wire source for the just-finished interval's work
+  time that arrives AT the boundary, and finding one is the first task, not
+  an assumption. TRIAD weight (it changes what a number means): full
+  antagonist pass on that spec.
 - **23 citations across 11 tracked files point into `.superpowers/`, which
   is git-EXCLUDED and therefore unreachable to everyone except the session
   that wrote it** (found 2026-08-20 at PR #141's PM gate, which caught three

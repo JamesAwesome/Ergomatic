@@ -35,7 +35,9 @@ import type {
   MonitorFrame,
 } from "../../../domain/monitor/types.js";
 import type { Baselines, WorkoutType } from "../../../domain/types.js";
+import { ONBOARDING_TITLES } from "../../../domain/onboarding.js";
 import { LIBRARY_WORKOUTS } from "../../../server/seed/library/index";
+import { ONBOARDING_LIBRARY_WORKOUTS } from "../../../server/seed/library/onboarding";
 import { createFakeTransport } from "../../monitor/transports/fake";
 import type {
   ConnectedPhase,
@@ -299,14 +301,26 @@ function kindsOf(f: Fixture): ("time" | "distance")[] {
   return f.program.intervals.map((i) => i.kind);
 }
 
-/** The session pair mirrors the raw pair unless a case overrides it — see
- *  `surfaceModel.test.ts`'s own copy of this factory for the full walk-4
- *  reasoning. */
+/** Filling Low's own warm-up, in seconds — the phase every non-warm-up
+ *  frame below sits behind, read off the fixture rather than typed. */
+const FILLING_LOW_WARMUP_SECONDS = FILLING_LOW.program.intervals[0]!.value;
+
+/** THE TWO CLOCKS ARE NOT THE SAME CLOCK (fix round, BLOCKING 1). This
+ *  factory used to set `elapsedSeconds` and `sessionElapsedSeconds` both to
+ *  `828`, and the header test below pinned the countdown that produced —
+ *  with a comment doing the arithmetic out loud, "warm-up(480) + this
+ *  frame's own live term(828)". 828 IS the warm-up plus this interval; it
+ *  cannot also be the clock of an interval that starts after the warm-up.
+ *  It was inert until EST LEFT made `frame.elapsedSeconds` load-bearing on
+ *  that very countdown, and then it pinned a wrong number as expected.
+ *  Derived instead, the way `ConnectedSurface.screens.test.tsx` derives its
+ *  own: 800 m at this file's 2:08.4 is 205.44 s on the interval clock, and
+ *  the session clock is the 8:00 warm-up in front of it. */
 function frame(overrides: Partial<MonitorFrame> = {}): MonitorFrame {
   const f: MonitorFrame = {
-    elapsedSeconds: 828,
+    elapsedSeconds: 205.44,
     distanceMeters: 800,
-    sessionElapsedSeconds: 828,
+    sessionElapsedSeconds: 0, // derived below, never mirrored
     sessionDistanceMeters: 800,
     currentSplit: 117.8,
     spm: 21,
@@ -322,7 +336,14 @@ function frame(overrides: Partial<MonitorFrame> = {}): MonitorFrame {
   };
   return {
     ...f,
-    sessionElapsedSeconds: overrides.sessionElapsedSeconds ?? f.elapsedSeconds,
+    // The warm-up is phase 0, so at `intervalIndex: 0` nothing precedes the
+    // interval and the two clocks genuinely coincide; anywhere else the
+    // session clock carries the warm-up in front of the interval's own.
+    sessionElapsedSeconds:
+      overrides.sessionElapsedSeconds ??
+      (f.intervalIndex === 0
+        ? f.elapsedSeconds
+        : FILLING_LOW_WARMUP_SECONDS + f.elapsedSeconds),
     sessionDistanceMeters: overrides.sessionDistanceMeters ?? f.distanceMeters,
   };
 }
@@ -535,17 +556,17 @@ describe("the shell header's composed GRID trailing (design spec §2B)", () => {
     const trailing = document.querySelector(".connected-line-trailing")!;
     const countdown = trailing.querySelector(".connected-header-countdown")!;
     expect(countdown).not.toBeNull();
-    // EST LEFT (Phase LL): no longer a straight session-clock subtraction
-    // (was "39:48 LEFT" — `totalSeconds - frame.sessionElapsedSeconds`,
-    // 3216 - 828). This file's default `frame()` (`intervalIndex: 1`) lands
-    // on Filling Low's FIRST work phase (index 0 is the warm-up), so the
-    // new estimate is warm-up(480) + this frame's own live term(828) =
-    // 1308; totalLeft = 3216 - 1308 = 1908 s = 31:48.
-    expect(countdown.textContent).toBe("31:48 LEFT");
+    // EST LEFT (Phase LL): no longer a straight session-clock subtraction.
+    // This file's default `frame()` (`intervalIndex: 1`) lands on Filling
+    // Low's FIRST work phase (index 0 is the warm-up), so the estimate is
+    // warm-up(480) + this frame's own live term — the INTERVAL clock,
+    // 205.44 s, which is what 800 m at the file's own 2:08.4 takes. 480 +
+    // 205.44 = 685.44; totalLeft = 3216 - 685.44 = 2530.56 s = 42:11.
+    expect(countdown.textContent).toBe("42:11 LEFT");
     // The ordinal half sits OUTSIDE the marker span, in the trailing's own
     // inherited ink-3 — only the countdown wears the mark, never the whole
     // caption (spec §2B: "the countdown portion in --marker gold").
-    expect(trailing.textContent).toBe("1 OF 4 · 31:48 LEFT");
+    expect(trailing.textContent).toBe("1 OF 4 · 42:11 LEFT");
   });
 
   it("falls back to the plain WARM-UP caption on the unnumbered warm-up — no ordinal to join TOTAL LEFT onto", () => {
@@ -587,6 +608,54 @@ describe("the shell header's composed GRID trailing (design spec §2B)", () => {
     const trailing = document.querySelector(".connected-line-trailing")!;
     expect(trailing.textContent).toBe("1 OF 4 · READY");
     expect(trailing.querySelector(".connected-header-countdown")).toBeNull();
+  });
+
+  // THE SECOND RENDER SITE OF THE SAME NUMBER (fix round, smaller item 1).
+  // `PaneLive.tsx` hides its bar and its EST LEFT cell when
+  // `model.hasRemainingEstimate` is false — an unpriced remainder has no
+  // trustworthy estimate to draw (EST LEFT design spec §4, DEVIATIONS'
+  // unpriced-phase row). `totalLeftDisplay` renders a SECOND time here, in
+  // the GRID header, and that site had no guard at all: the same rower who
+  // sees nothing on LIVE saw a confident gold countdown on GRID, built on
+  // the documented hole. One guard, both sites.
+  it("hides the GRID countdown too when the remainder is unpriced — LIVE and GRID cannot disagree about whether an estimate exists", () => {
+    // "First 2k" with NULL baselines: one distance phase at an effort ref
+    // that `estimationSplit` cannot price, so `phaseSeconds` returns null
+    // for the only phase there is — the same fixture `PaneLive.test.tsx`'s
+    // own unpriced-guard describe builds, for the same reason.
+    const w = ONBOARDING_LIBRARY_WORKOUTS.find(
+      (x) => x.title === ONBOARDING_TITLES.k2,
+    );
+    if (!w) throw new Error("missing onboarding fixture: First 2k");
+    const draft = buildDraft({
+      id: "first-2k",
+      title: w.title,
+      type: w.type,
+      steps: w.steps,
+    });
+    const phases = buildRun(draft, null, t0, null).phases;
+    const program = compileProgram(phases);
+    if ("code" in program) {
+      throw new Error(`fixture failed to compile: ${program.code}`);
+    }
+    // Bug-independent first: the fixture really is unpriced, or this test
+    // would pass against a guard that never fires.
+    expect(phases).toHaveLength(1);
+    expect(phases[0]!.targetSplit).toBeUndefined();
+
+    renderGrid(
+      { frame: frame({ intervalIndex: 0 }) },
+      {
+        program,
+        phases,
+        identity: { workoutId: "first-2k", title: w.title, ...TEST_SEED },
+      },
+    );
+    const trailing = document.querySelector(".connected-line-trailing")!;
+    expect(trailing.querySelector(".connected-header-countdown")).toBeNull();
+    // The interval caption still stands — the guard removes the number, not
+    // the rower's place in the session.
+    expect(trailing.textContent).toBe("1 OF 1 · WORK");
   });
 
   it("index.css paints the composed countdown span in --marker gold, never accent or a verdict", () => {

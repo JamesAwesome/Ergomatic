@@ -12,12 +12,14 @@
 // than a synthetic one).
 
 import { readFileSync } from "node:fs";
+import { gunzipSync } from "node:zlib";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   compileProgram,
   type WorkoutProgram,
 } from "../../../domain/monitor/program.js";
 import { fmtDuration } from "../../../domain/duration.js";
+import { phaseSeconds } from "../../../domain/expand.js";
 import { fmtSplit } from "../../../domain/format.js";
 import { PACE_TOLERANCE_SECONDS } from "../../../domain/judge.js";
 import type {
@@ -2639,5 +2641,306 @@ describe("EST LEFT (Phase LL) — monotonicity across a whole real capture (desi
       spansChecked++;
     }
     expect(spansChecked).toBe(3);
+  });
+});
+
+// ============================================================================
+// EST LEFT (Phase LL) — THE ACCEPTED LIMIT ON DISTANCE WORK, MEASURED.
+//
+// Found at PR #144's PM gate, and this block is the measurement the gate
+// asked for rather than the inference it arrived as. `estElapsed` banks each
+// COMPLETED phase's PROGRAMMED length; the progress bar's notches come from
+// `intervalBoundaries(phases, measuredWorkSeconds(actuals))` — MEASURED, and
+// that module says so outright. On TIME work the two agree, because the PM5
+// ends the interval at its programmed length. On DISTANCE work they diverge
+// by exactly the rower's deviation from target pace, and the monotonic clamp
+// (which must stay — spec §3) turns that divergence into a VISIBLE HOLD: the
+// estimate and the bar stand still at the handover until the rest has run
+// off the banked deficit.
+//
+// THE VEHICLE is `walk-2026-08-18-metrics`'s pyramid — the repo's only
+// committed distance-interval, rest-bearing capture, and the walk README's
+// own owed follow-up ("wire this capture into the replay suite so the state-9
+// path is pinned by test, not by photo"). The rower ran it well off target
+// (2:11.7 against a 1:58.5 middle interval, both photographed in the same
+// frame), which is precisely the condition the limit needs.
+//
+// WHY THE LIMIT IS ACCEPTED RATHER THAN FIXED HERE. The obvious repair —
+// bank the MEASURED work seconds for completed phases, where an actual
+// exists — was replayed against this same capture and does NOT remove the
+// hold: the PM5 emits an interval's 0x0037/0x0038 boundary record at the END
+// of its rest, not at the start (measured on this capture: interval 1's
+// actual arrives at t=473.2 s, the first frame of interval 3's work), so the
+// actual for the interval that just finished does not yet exist during its
+// own rest. The holds come out identical under both banking rules. Anything
+// that would remove them changes what the number MEANS and belongs in a spec
+// with an antagonist pass, not in a fix round — ROADMAP carries it as a
+// triggered follow-on with these numbers attached.
+// ============================================================================
+
+/** The pyramid's own program, hand-transcribed from the capture's OWN CSAFE
+ *  programming writes — the same provenance rule `SESSION_2_PROGRAM` follows.
+ *  The three `06 04 00 00 xx xx` target-pace values in the `ce060021` tx
+ *  frames decode (0.01 s/lsb) to 122.50 / 118.50 / 126.50 s per 500 m, the
+ *  three `03 05 80 00 00 xx xx` distances to 300 / 700 / 300 m, and the
+ *  `04 02 00 3c` rest values to 60 s on the first two intervals and 0 on the
+ *  last — which is the README's own `w 300m 6k @22 r1 · w 700m 6k-4 @24 r1 ·
+ *  w 300m 6k+4 @22`, and its photographed `1:58.5` middle target. */
+const PYRAMID_PROGRAM: WorkoutProgram = {
+  intervals: [
+    {
+      type: "work",
+      kind: "distance",
+      value: 300,
+      targetSplit: 122.5,
+      displaySpm: 22,
+      restSeconds: 60,
+    },
+    {
+      type: "work",
+      kind: "distance",
+      value: 700,
+      targetSplit: 118.5,
+      displaySpm: 24,
+      restSeconds: 60,
+    },
+    {
+      type: "work",
+      kind: "distance",
+      value: 300,
+      targetSplit: 126.5,
+      displaySpm: 22,
+      restSeconds: 0,
+    },
+  ],
+};
+
+/** `EnginePhase[]` mirroring `PYRAMID_PROGRAM` one-for-one, rest phases
+ *  interleaved only where `restSeconds > 0` — same shape and same reasoning
+ *  as `SESSION_2_PHASES` above. */
+const PYRAMID_PHASES: EnginePhase[] = [
+  {
+    type: "work",
+    meters: 300,
+    targetKind: "split",
+    targetSplit: 122.5,
+    label: "2:02.5",
+    originalIndex: 0,
+  },
+  { type: "rest", seconds: 60, label: "Rest", originalIndex: 0 },
+  {
+    type: "work",
+    meters: 700,
+    targetKind: "split",
+    targetSplit: 118.5,
+    label: "1:58.5",
+    originalIndex: 1,
+  },
+  { type: "rest", seconds: 60, label: "Rest", originalIndex: 1 },
+  {
+    type: "work",
+    meters: 300,
+    targetKind: "split",
+    targetSplit: 126.5,
+    label: "2:06.5",
+    originalIndex: 2,
+  },
+];
+
+const PYRAMID_PATH = import.meta.url
+  .replace(/^file:\/\//, "")
+  .replace(
+    /src\/workout\/connected\/surfaceModel\.test\.ts$/,
+    "../docs/monitor/sessions/walk-2026-08-18-metrics/pyramid-pm5-recording-1787090555458.jsonl.gz",
+  );
+
+/** Same harness as `replaySession2`, on the gzipped capture (decompressing
+ *  at test time rather than committing a second, uncompressed duplicate —
+ *  `session/summaryModel.test.ts`'s own precedent for this same file), and
+ *  additionally collecting the ACTUALS the driver files at each boundary, so
+ *  a test can see WHEN each one became available. */
+async function replayPyramid(): Promise<
+  { tMs: number; frame: MonitorFrame; actuals: IntervalActual[] }[]
+> {
+  const text = gunzipSync(readFileSync(PYRAMID_PATH)).toString("utf8");
+  const parsed = parseRecording(text);
+  const replay = createReplayTransport(parsed);
+  const [dev] = await replay.transport.scan();
+  await replay.transport.connect(dev.id);
+  const log = createEventLog();
+  const driver = createPm5Driver(replay.transport, log, {
+    deviceName: dev.name,
+    now: () => replay.clock.now(),
+    schedule: (cb, ms) => replay.clock.schedule(cb, ms),
+  });
+  const samples: {
+    tMs: number;
+    frame: MonitorFrame;
+    actuals: IntervalActual[];
+  }[] = [];
+  const actuals: IntervalActual[] = [];
+  driver.events((e) => {
+    if (e.kind === "intervalComplete" && e.actual.index !== null) {
+      actuals.push(e.actual);
+    }
+    if (e.kind === "frame") {
+      samples.push({
+        tMs: replay.clock.now(),
+        frame: e.frame,
+        actuals: [...actuals],
+      });
+    }
+  });
+  const programPending = driver.program(PYRAMID_PROGRAM);
+  await replay.run();
+  await programPending;
+  return samples;
+}
+
+/** How long the estimate STANDS STILL at each work->rest handover, in wall
+ *  seconds: from the last `rowing` frame before the machine goes `resting`,
+ *  until `SurfaceModel.elapsedSeconds` next increases. Threads
+ *  `previousElapsedSeconds` exactly the way `ConnectedSurface.tsx` does, so
+ *  the clamp is live — the hold is the clamp doing its job, not a bug in it.
+ */
+function handoverHolds(
+  samples: { tMs: number; frame: MonitorFrame }[],
+  phases: EnginePhase[],
+  program: WorkoutProgram,
+): number[] {
+  let previousElapsedSeconds: number | undefined;
+  const walk = samples.map((s) => {
+    const m = buildSurfaceModel({
+      phases,
+      program,
+      status: "live",
+      frame: s.frame,
+      deviceName: DEVICE,
+      actuals: [],
+      previousElapsedSeconds,
+    });
+    previousElapsedSeconds = m.elapsedSeconds;
+    return { tMs: s.tMs, est: m.elapsedSeconds, state: s.frame.state };
+  });
+  const holds: number[] = [];
+  for (let i = 1; i < walk.length; i += 1) {
+    if (walk[i]!.state !== "resting" || walk[i - 1]!.state !== "rowing") {
+      continue;
+    }
+    const from = walk[i - 1]!;
+    let j = i;
+    while (j < walk.length && walk[j]!.est <= from.est + 1e-9) j += 1;
+    holds.push((walk[Math.min(j, walk.length - 1)]!.tMs - from.tMs) / 1000);
+  }
+  return holds;
+}
+
+describe("EST LEFT (Phase LL) — the DISTANCE-work limit, measured on a replay (PR #144 PM gate)", () => {
+  let samples: Awaited<ReturnType<typeof replayPyramid>>;
+
+  beforeAll(async () => {
+    samples = await replayPyramid();
+  }, 30_000);
+
+  it("sanity: the capture is the distance-interval, rest-bearing session this block claims", () => {
+    // Bug-independent first, this file's own convention: if these fail the
+    // fixture is wrong, not the formula.
+    expect(samples.length).toBeGreaterThan(1000);
+    expect(samples.some((s) => s.frame.state === "resting")).toBe(true);
+    expect(samples.some((s) => s.frame.state === "finished")).toBe(true);
+    expect(PYRAMID_PROGRAM.intervals.every((i) => i.kind === "distance")).toBe(
+      true,
+    );
+  });
+
+  it("THE CAUSE: the machine's own measured work exceeds the programmed pricing, because the rower was slower than target", () => {
+    const final = samples[samples.length - 1]!.actuals;
+    // Two of the three intervals file an actual inside the capture (the
+    // third arrives in the finish grace and is the summary's business, not
+    // this pane's) — asserted so a harness change that lost them fails here.
+    expect(final.length).toBeGreaterThanOrEqual(2);
+    const measured = [final[0]!.elapsedSeconds, final[1]!.elapsedSeconds];
+    // Decoded independently from the capture's own 0x0037 records (78.2 s
+    // for 300 m, 184.4 s for 700 m) — the same numbers
+    // `session/summaryModel.test.ts` pins from those bytes.
+    expect(measured[0]).toBeCloseTo(78.2, 1);
+    expect(measured[1]).toBeCloseTo(184.4, 1);
+    // What `estElapsed` banks for those same two phases instead.
+    const programmed = [
+      phaseSeconds(PYRAMID_PHASES[0]!)!,
+      phaseSeconds(PYRAMID_PHASES[2]!)!,
+    ];
+    expect(programmed[0]).toBeCloseTo(73.5, 1);
+    expect(programmed[1]).toBeCloseTo(165.9, 1);
+    // The deficit each handover has to run off before the estimate can move
+    // again: 4.7 s and 18.5 s.
+    expect(measured[0]! - programmed[0]!).toBeCloseTo(4.7, 1);
+    expect(measured[1]! - programmed[1]!).toBeCloseTo(18.5, 1);
+  });
+
+  it("THE CONSEQUENCE, ACCEPTED: EST LEFT stands still for 6.6 s and 20.8 s at the two handovers", () => {
+    const holds = handoverHolds(samples, PYRAMID_PHASES, PYRAMID_PROGRAM);
+    expect(holds).toHaveLength(2);
+    // Pinned, not bounded, because this IS the accepted limit's own number —
+    // `docs/design/DEVIATIONS.md` cites these two figures, and a change to
+    // the banking rule must come here and change them deliberately rather
+    // than slide under a loose bound.
+    expect(Math.abs(holds[0]! - 6.57)).toBeLessThan(1);
+    expect(Math.abs(holds[1]! - 20.79)).toBeLessThan(1);
+    // AND THE HOLD IS THE DEFICIT, not something else that happens to be
+    // slow: each hold is at least the interval's own measured-minus-
+    // programmed deviation, and within a few frames of it. This is what ties
+    // the visible symptom to the mechanism the DEVIATIONS row names.
+    const final = samples[samples.length - 1]!.actuals;
+    const deficits = [
+      final[0]!.elapsedSeconds - phaseSeconds(PYRAMID_PHASES[0]!)!,
+      final[1]!.elapsedSeconds - phaseSeconds(PYRAMID_PHASES[2]!)!,
+    ];
+    holds.forEach((hold, i) => {
+      expect(
+        hold,
+        `handover ${i + 1}: held ${hold.toFixed(2)}s against a ${deficits[i]!.toFixed(2)}s banked deficit`,
+      ).toBeGreaterThanOrEqual(deficits[i]!);
+      expect(hold - deficits[i]!).toBeLessThan(3);
+    });
+  });
+
+  it("TIME work does not do this: the same detector finds no comparable hold on the time-interval capture", async () => {
+    // The claim the limit is SCOPED by — "on TIME work they agree, because
+    // the PM5 ends the interval itself". Same detector, same threading, the
+    // capture the rest of this file already replays.
+    const holds = handoverHolds(
+      await replaySession2(),
+      SESSION_2_PHASES,
+      SESSION_2_PROGRAM,
+    );
+    expect(holds).toHaveLength(3);
+    for (const hold of holds) {
+      // One frame gap (~0.5 s cadence, worst case a couple of ticks) — an
+      // order of magnitude below the distance case's 6.6 s and 20.8 s.
+      expect(hold).toBeLessThan(3);
+    }
+  });
+
+  it("monotonicity holds on a DISTANCE capture too (exit criterion 2, extended)", () => {
+    let previousElapsedSeconds: number | undefined;
+    let prev = -Infinity;
+    for (const s of samples) {
+      const m = buildSurfaceModel({
+        phases: PYRAMID_PHASES,
+        program: PYRAMID_PROGRAM,
+        status: "live",
+        frame: s.frame,
+        deviceName: DEVICE,
+        actuals: s.actuals,
+        previousElapsedSeconds,
+      });
+      expect(
+        m.elapsedSeconds,
+        `elapsedSeconds fell at t=${s.tMs}ms, state=${s.frame.state}: ${m.elapsedSeconds} < ${prev}`,
+      ).toBeGreaterThanOrEqual(prev - 1e-9);
+      prev = m.elapsedSeconds;
+      previousElapsedSeconds = m.elapsedSeconds;
+    }
   });
 });

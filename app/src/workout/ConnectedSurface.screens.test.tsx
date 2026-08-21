@@ -39,6 +39,7 @@ import type {
   IntervalActual,
   MonitorFrame,
 } from "../../domain/monitor/types.js";
+import { phaseSeconds } from "../../domain/expand.js";
 import type { Baselines, WorkoutType } from "../../domain/types.js";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import type {
@@ -48,6 +49,7 @@ import type {
 import { buildDraft } from "../session/draft";
 import { buildRun, type EnginePhase } from "../session/engine";
 import ConnectedSurface, { LAST_PANE_KEY } from "./ConnectedSurface";
+import { phaseIndexForInterval } from "./connected/surfaceModel";
 import type { PaneId } from "./connected/SegmentedControl";
 
 const baselines: Baselines = { k2Seconds: 112, k6Seconds: 122 };
@@ -171,32 +173,68 @@ function actualFor(index: number, program: WorkoutProgram): IntervalActual {
  *  prices it at 132 - 6 = 126 s/500m: 1905 m. */
 const WARMUP_ACTUAL_METERS = actualFor(0, FIXTURE.program).distanceMeters;
 
+/** THE PACE EVERY FIXTURE IN THIS FILE IS ROWED AT, and the one number the
+ *  frames below derive their clocks from. `2:08.4` per 500 m is already the
+ *  file's own published pace: it is `connected-pane-live`'s `splitAvgPace`
+ *  override, which is 0x0033's Split Average Pace — "seconds/500m for the
+ *  CURRENT interval's own average while rowing" (`domain/monitor/types.ts`'s
+ *  own doc comment on the field). So on any frame, that average, the
+ *  interval's own metres and the interval's own clock are three readings of
+ *  ONE fact and only two of them are free. */
+const FIXTURE_AVG_SPLIT = 128.4;
+
+/** Filling Low's warm-up, in seconds — the phase every non-warm-up frame in
+ *  this file sits behind, and therefore the offset between a frame's own
+ *  interval clock and the session clock. Read off the fixture rather than
+ *  typed, so the 8 passed to `libraryFixture` above cannot drift away from
+ *  it. */
+const FIXTURE_WARMUP_SECONDS = FIXTURE.program.intervals[0]!.value;
+
+/** How long an interval clock reads after `meters` at `FIXTURE_AVG_SPLIT`. */
+function secondsFor(meters: number): number {
+  return (meters / 500) * FIXTURE_AVG_SPLIT;
+}
+
 /** Mid-way through the first 2000 m rep, going a little too hard: the
  *  handoff's own mockup shows `1:57.8` against a `2:00.0` target, so the
  *  `"faster"` state is what the picture actually shows — BLUE in the
  *  committed capture (`connected-pane-live.png`), the mockup's ochre having
  *  been repainted 2026-08-13. */
 function liveFrame(overrides: Partial<MonitorFrame> = {}): MonitorFrame {
-  // The session pair mirrors the raw pair unless a case overrides it — see
-  // `connected/surfaceModel.test.ts`'s own copy of this factory for the
-  // full walk-4 reasoning.
+  // THE TWO CLOCKS ARE NOT THE SAME CLOCK, and this factory used to say they
+  // were. `elapsedSeconds` is 0x0031's PER-INTERVAL clock — it resets to zero
+  // at every interval boundary — while `sessionElapsedSeconds` is the
+  // driver's own session-accumulated total. Both used to read `828` here,
+  // and this comment's own next paragraph said what 828 is: "the 480 s
+  // warm-up plus 348 s of this interval". A number that INCLUDES the warm-up
+  // cannot also be the clock of an interval that starts after it, so the raw
+  // half was impossible from the moment it was written. It was inert while
+  // nothing read it; Phase LL's EST LEFT made `frame.elapsedSeconds`
+  // load-bearing on the headline countdown and the progress bar, and seven
+  // committed captures immediately started showing a number 8:00 too small
+  // beside a bar painted two intervals ahead of their own `1 OF 4` caption.
   //
-  // EXCEPT `sessionDistanceMeters`, which is set apart from the raw value on
-  // purpose (James, 2026-08-13, reading the landscape capture: "it renders
-  // 'meters left' but it's a time workout"). It used to mirror at 800 — the
-  // SAME number as the interval's own distance — so `TOTAL M 800` sat beside
-  // `METERS LEFT 1200` looking like two readings of one interval, when the
-  // first is the whole session. A rower one interval into Filling Low has
-  // the 8:00 warm-up behind them: `actualFor`'s own metres for that time
-  // interval, plus this interval's 800. The picture now shows two visibly
-  // different scopes instead of a coincidence, which is what made the screen
-  // scan wrong. `sessionElapsedSeconds` was always a genuine session value
-  // (828 s = the 480 s warm-up plus 348 s of this interval), so only the
-  // distance half was lying.
+  // DERIVED, NOT CHOSEN (the fix round's own rule, and why 348 was not just
+  // moved into the raw half): the frame already publishes 800 m and, on
+  // `connected-pane-live`, a 2:08.4 interval average. Those two fix the
+  // interval clock at 800/500 x 128.4 = 205.44 s — there is no third free
+  // number. 348 s against 800 m would have been 3:37.5 per 500 m, beside a
+  // 1:57.8 CURRENT split and a 2:08.4 average on the same screen.
+  //
+  // `sessionElapsedSeconds` is then the warm-up plus that: 480 + 205.44 =
+  // 685.44, and it stays a genuine SESSION value the way the old 828 was
+  // meant to be. `sessionDistanceMeters` is set apart from the raw value for
+  // the matching reason (James, 2026-08-13, reading the landscape capture:
+  // "it renders 'meters left' but it's a time workout"). It used to mirror
+  // at 800 — the SAME number as the interval's own distance — so `TOTAL M
+  // 800` sat beside `METERS LEFT 1200` looking like two readings of one
+  // interval, when the first is the whole session. A rower one interval into
+  // Filling Low has the 8:00 warm-up behind them: `actualFor`'s own metres
+  // for that time interval, plus this interval's 800.
   const f: MonitorFrame = {
-    elapsedSeconds: 828,
+    elapsedSeconds: secondsFor(800),
     distanceMeters: 800,
-    sessionElapsedSeconds: 828,
+    sessionElapsedSeconds: 0, // replaced below — see the return statement
     sessionDistanceMeters: WARMUP_ACTUAL_METERS + 800,
     currentSplit: 117.8,
     spm: 21,
@@ -210,22 +248,24 @@ function liveFrame(overrides: Partial<MonitorFrame> = {}): MonitorFrame {
     rowingActive: true,
     ...overrides,
   };
-  // ONE re-mirror, deliberately, and the asymmetry is the point.
-  // `sessionElapsedSeconds` follows `elapsedSeconds` whenever a case
-  // overrides only the raw half, because the two genuinely coincide for a
-  // frame that never crosses an interval reset. `sessionDistanceMeters` does
-  // NOT: mirroring it unconditionally is exactly what discarded the default
-  // above and made every capture's session total equal to its interval
-  // distance. There is no line for it here — the spread already carries
-  // either the default or the case's own override, which is what "does not
-  // mirror" means (tail review M-2: this used to be spelled out as
-  // `sessionDistanceMeters: f.sessionDistanceMeters`, a no-op after the
-  // spread that read like working code). A case that wants the mirror says
-  // so itself, and the warm-up fixture below does, where nothing precedes
-  // the warm-up so the two really are equal.
+  // THE SESSION CLOCK IS DERIVED FROM THE RAW ONE, never mirrored onto it.
+  // A case that overrides only the raw half (the warm-up capture below, at
+  // `intervalIndex: 0`) still gets a coherent session clock: the warm-up IS
+  // the first phase, so nothing precedes it and the two genuinely coincide;
+  // anywhere else the 8:00 warm-up sits in front and the session clock is
+  // that much larger. The old unconditional mirror is what let both halves
+  // read 828 (see above). `sessionDistanceMeters` gets no such line — the
+  // spread already carries either the default or the case's own override,
+  // which is what "does not mirror" means (tail review M-2: this used to be
+  // spelled out as `sessionDistanceMeters: f.sessionDistanceMeters`, a no-op
+  // after the spread that read like working code).
   return {
     ...f,
-    sessionElapsedSeconds: overrides.sessionElapsedSeconds ?? f.elapsedSeconds,
+    sessionElapsedSeconds:
+      overrides.sessionElapsedSeconds ??
+      (f.intervalIndex === 0
+        ? f.elapsedSeconds
+        : FIXTURE_WARMUP_SECONDS + f.elapsedSeconds),
   };
 }
 
@@ -283,6 +323,10 @@ function capture(pane: PaneId, options: CaptureOptions = {}): string {
     cancel: vi.fn().mockResolvedValue(undefined),
     exportLog: vi.fn().mockReturnValue(LOG_JSON),
   };
+  // `session.frame` is `liveFrame(...)` a few lines up and never null; the
+  // field is nullable on `MonitorSession` for the pre-first-frame case,
+  // which no capture in this file builds.
+  assertFramePossible(fixture, session.frame!);
   const view = render(
     <ConnectedSurface
       phases={fixture.phases}
@@ -312,6 +356,78 @@ function tripleTapGrid(): void {
 // happened — so the arithmetic gets its own assertion. A future editor who
 // hardcodes a metre count again fails HERE, with a reason, rather than
 // producing a snapshot diff that looks like a deliberate re-shoot.
+/** THE THREE THINGS A FRAME CANNOT LIE ABOUT, asserted on every frame this
+ *  file photographs (called from `capture()` below, so no case can opt out).
+ *
+ *  1. **The per-interval clock fits inside its own phase.** `elapsedSeconds`
+ *     is 0x0031's per-interval clock, which resets at every boundary, so it
+ *     can never carry a preceding phase's time. Priced against the phase's
+ *     own programmed length: a time phase because the machine ends it there,
+ *     a distance phase because every fixture in this file is rowed at or
+ *     faster than target (`FIXTURE_AVG_SPLIT` is 2:08.4 against Filling
+ *     Low's 2:06.0 and Sea Smoke's 2:12.0 — inside the tolerance the file's
+ *     own rows already use). A fixture that deliberately rows slower than
+ *     target would have to say so here rather than arrive by accident, which
+ *     is the point.
+ *  2. **The two clocks are not the same clock** anywhere past the first
+ *     phase — the exact defect this helper exists for.
+ *  3. **Distance and time imply a pace a human produces.** 800 m in 828 s is
+ *     3:37.5 per 500 m beside a 1:57.8 split on the same screen; 800 m in
+ *     205.44 s is the 2:08.4 the screen actually shows. Applied to the
+ *     interval pair and to the session pair, and tied to `splitAvgPace`
+ *     whenever the frame publishes one (0x0033's Split Average Pace is the
+ *     current interval's own average — `domain/monitor/types.ts`). */
+function assertFramePossible(
+  fixture: { program: WorkoutProgram; phases: EnginePhase[] },
+  frame: MonitorFrame,
+): void {
+  if (frame.intervalIndex === null) return;
+  const phaseIndex = phaseIndexForInterval(
+    fixture.phases,
+    frame.intervalIndex,
+    frame.state === "resting",
+  );
+  const priced = phaseSeconds(fixture.phases[phaseIndex]!);
+  if (priced !== null) {
+    expect(
+      frame.elapsedSeconds,
+      `interval clock ${frame.elapsedSeconds}s exceeds phase ${phaseIndex}'s own ${priced}s`,
+    ).toBeLessThanOrEqual(priced);
+  }
+  if (phaseIndex > 0) {
+    expect(
+      frame.sessionElapsedSeconds,
+      "the session clock must be strictly larger than the interval clock once a phase precedes it",
+    ).toBeGreaterThan(frame.elapsedSeconds);
+  } else {
+    expect(frame.sessionElapsedSeconds).toBe(frame.elapsedSeconds);
+  }
+  // An armed frame's pair is carry-over ghost data by design (see the armed
+  // capture's own comment), and a zero distance prices nothing.
+  if (frame.state === "armed") return;
+  for (const [meters, seconds, scope] of [
+    [frame.distanceMeters, frame.elapsedSeconds, "interval"],
+    [frame.sessionDistanceMeters, frame.sessionElapsedSeconds, "session"],
+  ] as const) {
+    if (meters <= 0 || seconds <= 0) continue;
+    const split = (seconds / meters) * 500;
+    expect(
+      split,
+      `${scope} pace ${split.toFixed(1)}s/500m is not a pace a human rows`,
+    ).toBeGreaterThan(80);
+    expect(
+      split,
+      `${scope} pace ${split.toFixed(1)}s/500m is not a pace a human rows`,
+    ).toBeLessThan(180);
+  }
+  if (frame.splitAvgPace !== null && frame.distanceMeters > 0) {
+    expect(
+      (frame.elapsedSeconds / frame.distanceMeters) * 500,
+      "the published interval average must be the interval's own metres over its own clock",
+    ).toBeCloseTo(frame.splitAvgPace, 1);
+  }
+}
+
 describe("the fixtures are physically possible", () => {
   it("every actual's distance, time and split agree with each other", () => {
     for (const { program } of [FIXTURE, LONG_FIXTURE]) {
@@ -331,6 +447,41 @@ describe("the fixtures are physically possible", () => {
         );
       }
     }
+  });
+
+  // --- THE ELAPSED AXIS (fix round, BLOCKING 1) -------------------------
+  //
+  // The block above checked the ACTUALS' three dimensions and nothing else,
+  // which is exactly why an impossible per-interval clock walked through it:
+  // `liveFrame()` set `elapsedSeconds` and `sessionElapsedSeconds` to the
+  // same 828, with a comment thirty lines up stating that 828 was the
+  // SESSION value (480 s of warm-up plus 348 s of this interval). Nothing
+  // read the raw half, so nothing failed — until EST LEFT started reading
+  // it and seven committed captures grew a wrong number and a bar two
+  // intervals ahead of their own caption. `assertFramePossible` below runs
+  // on EVERY frame this file photographs (it is called from `capture()`,
+  // not from a list a new case could forget to join), so a future editor
+  // who invents a clock fails here, with a reason.
+
+  it("every capture's interval clock fits inside its own phase, and its two clocks are not the same clock", () => {
+    // Directly, on the two frames the captures below actually build — the
+    // same assertions `capture()` runs, stated once where a reader looking
+    // for the rule will find it.
+    const live = liveFrame();
+    expect(live.elapsedSeconds).toBeCloseTo(205.44, 2);
+    expect(live.sessionElapsedSeconds).toBeCloseTo(685.44, 2);
+    // The warm-up is the one phase where the two DO coincide, and it is
+    // also the only connected fixture whose committed capture did not
+    // move when EST LEFT changed — the detector for this whole class.
+    const warmup = liveFrame({
+      intervalIndex: 0,
+      elapsedSeconds: 268,
+      distanceMeters: 942,
+      sessionDistanceMeters: 942,
+    });
+    expect(warmup.sessionElapsedSeconds).toBe(warmup.elapsedSeconds);
+    assertFramePossible(FIXTURE, live);
+    assertFramePossible(FIXTURE, warmup);
   });
 
   it("the live frame's session total is the warm-up plus this interval, both real", () => {
@@ -479,16 +630,50 @@ describe("screen fixtures for pnpm screenshots", () => {
    *  .ts` measures both counts AND the scroller budget each is derived
    *  from, in a real browser. */
   it("pane C, twenty-five intervals", async () => {
+    // EVERY NUMBER ON THIS FRAME IS DERIVED FROM THE ROWS ABOVE IT, and
+    // that is this case's own share of the fix round's blocking finding.
+    // It used to inherit `liveFrame()`'s raw clock wholesale, which meant a
+    // frame sitting eight intervals deep into Sea Smoke claimed an interval
+    // clock longer than the 25-interval session's first nine phases put
+    // together — and once EST LEFT started reading that clock, the header
+    // countdown moved 57:00 -> 33:36 on a screen whose own rows had not
+    // changed at all. The active interval is 500 m with 312 m left, so 188 m
+    // are rowed; at this file's one pace that is 48.28 s. The session pair
+    // is what the eight `actualFor` rows below plus the one programmed rest
+    // between interval 4 and interval 5 actually add up to, plus that.
+    //
+    // AND THIS CAPTURE IS ALSO THE ACCEPTED DISTANCE LIMIT'S OWN PICTURE,
+    // said out loud so the next reviewer recomputing the headline from the
+    // rows (recurring failure #7) finds an explanation rather than a
+    // defect. The rows measured `2:06` against a `2:12` pricing, seven of
+    // them, so `estElapsed` — which banks each completed phase's PROGRAMMED
+    // length — sits 42 s ahead of what the rows actually add up to, and the
+    // header reads `46:36 LEFT` where the rows' own arithmetic gives 47:18.
+    // That is `docs/design/DEVIATIONS.md`'s third EST LEFT row, measured on
+    // a replay in `connected/surfaceModel.test.ts`, not a fixture error.
+    const longActuals = Array.from({ length: 8 }, (_, i) =>
+      actualFor(i, LONG_FIXTURE.program),
+    );
+    const rowedMeters = 188;
+    const completedSeconds =
+      longActuals.reduce((sum, a) => sum + a.elapsedSeconds, 0) +
+      LONG_FIXTURE.program.intervals
+        .slice(0, 8)
+        .reduce((sum, iv) => sum + iv.restSeconds, 0);
     await expect(
       capture("grid", {
         fixture: LONG_FIXTURE,
         frame: {
           intervalIndex: 8,
+          elapsedSeconds: secondsFor(rowedMeters),
+          distanceMeters: rowedMeters,
+          sessionElapsedSeconds: completedSeconds + secondsFor(rowedMeters),
+          sessionDistanceMeters:
+            longActuals.reduce((sum, a) => sum + a.distanceMeters, 0) +
+            rowedMeters,
           intervalRemaining: { kind: "distance", value: 312 },
         },
-        actuals: Array.from({ length: 8 }, (_, i) =>
-          actualFor(i, LONG_FIXTURE.program),
-        ),
+        actuals: longActuals,
       }),
     ).toMatchFileSnapshot("../../e2e/fixtures/connected-pane-grid-long.html");
   });

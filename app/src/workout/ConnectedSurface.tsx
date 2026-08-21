@@ -126,7 +126,16 @@ function headerTrailing(model: SurfaceModel, pane: PaneId): ReactNode {
   if (
     pane !== "grid" ||
     model.status === "armed" ||
-    model.intervalOrdinalLabel === null
+    model.intervalOrdinalLabel === null ||
+    // THE UNPRICED-PHASE GUARD, SECOND SITE (EST LEFT fix round). This is
+    // the same `model.hasRemainingEstimate` `PaneLive.tsx` uses to hide its
+    // bar and its EST LEFT cell: when every phase from here to the end of
+    // the session is unpriced there is no estimate to show, and this header
+    // rendered `0:00 LEFT` in confident gold for exactly that case. LIVE
+    // and GRID render the SAME `totalLeftDisplay`; they must not disagree
+    // about whether it means anything. See DEVIATIONS' unpriced-phase row
+    // and design spec §4.
+    !model.hasRemainingEstimate
   ) {
     return model.intervalLabelShort;
   }
