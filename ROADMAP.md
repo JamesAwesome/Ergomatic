@@ -1957,26 +1957,34 @@ WebKit's throttling, so it does not rescue the JS half.
       and captures come from walks, not from tasks — and this phase's own
       exit walk produces a genuine >3 s gap as a matter of course. Sits
       beside exit clause (e) so the phase can go red on it. **S**
-- [ ] **BEFORE the next tag: two owed clauses plus a version-marker
-      ruling** (PM gate, round 4 of the Task 2 PR review, 2026-08-20).
-      **The two-clause notes obligation** (spec §7 criterion 9, the
+- [ ] **BEFORE the next tag: three owed clauses plus a version-marker
+      ruling** (PM gate, round 4 of the Task 2 PR review, 2026-08-20;
+      third clause added by the EST LEFT task, 2026-08-20).
+      **The notes obligation** (spec §7 criterion 9, the
       pm-ledger, and a DEVIATIONS row 200 sentence all already say this —
       this is the fourth, GREPPABLE home, because the last two tags each
       shipped with a missing clause and whoever cuts v0.15.0 reads
       ROADMAP and the merge log, not the spec): the next tag's notes
       carry (1) a clause for the time axis and rest marking (the new,
-      observable-to-a-tester feature) and (2) a clause for the old
+      observable-to-a-tester feature), (2) a clause for the old
       corpus (§5's declination overturned at the 2026-08-20 PM gate —
       some traces recorded before this phase's fixes are silently wrong
-      and cannot be told apart from correct ones). **Still open — Task 3
-      (the axis) landed 2026-08-20, so this item is now fully armed: both
-      clauses' subject matter exists in shipped code, and whoever cuts
-      v0.15.0 owes both.** **New condition, this
-      gate:** the phone→server trace leg must be WITNESSED before the tag
+      and cannot be told apart from correct ones), and (3) a clause for
+      EST LEFT (`docs/superpowers/specs/2026-08-20-est-left-design.md`
+      exit criterion 9): the connected screen's remaining-time estimate
+      used to stall/read high through a rest, and no longer does — the
+      rename from TOTAL LEFT shipped in the same window (PR #143) and its
+      own notes clause is separate; this one is about the COUNTDOWN
+      behavior, not the label. **Still open — Task 3 (the axis) landed
+      2026-08-20 and the EST LEFT fix landed 2026-08-20, so this item is
+      now fully armed: all three clauses' subject matter exists in
+      shipped code, and whoever cuts v0.15.0 owes all three.** **New
+      condition, this gate:** the phone→server trace leg must be
+      WITNESSED before the tag
       that announces the trace fix ships, or the notes say plainly that
       traces are web-only today — announcing a fix for a leg nobody has
       run on a phone is its own false-completeness risk, the same shape
-      as the two-clause rule itself protects against. **Version-marker
+      as the three-clause rule itself protects against. **Version-marker
       ruling (NOT implemented here — adding a field at a merge-gate
       review is the escalate-mid-change hazard this repo's own rules
       name):** the next change that touches `series` carries a `v`

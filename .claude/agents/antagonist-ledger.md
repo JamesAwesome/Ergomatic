@@ -1853,7 +1853,17 @@ toolkit, not a history.
 - **Attacked and HELD:** the wall-clock prohibition (PW's shipped promise;
   `Date.now()` genuinely breaks on suspend), `totalSeconds` including rests,
   the subtraction being the mechanism, and `phases` being the flat work/rest
-  list. **And the FAKE-VS-PARSER AUDIT that followed found the dangerous
-  bucket EMPTY** — all ~60 decoded fields traced, and no field has both a
-  real consumer and a fake constant, so nothing is hiding behind a hardcoded
-  value today (`docs/monitor/fake-vs-parser-audit.md`).
+  list. **The FAKE-VS-PARSER AUDIT that followed found the dangerous bucket
+  EMPTY at the time — CORRECTED 2026-08-20, same commit range as the fix it
+  gated: it is not empty any more.** The audit's own prediction landed on
+  its own subject the moment the fix shipped — `restSeconds` gained a real
+  consumer (`surfaceModel.ts`) and the fake's own value for it stayed `0`
+  for every existing fixture (script-authorable since this task, never
+  scripted by any e2e/screenshot fixture) — the exact HARDCODED-bucket shape
+  the audit was built to catch, now occupied by the field it was written
+  about. No live defect follows from this (the consumer is proven correct
+  against real wire bytes via a replay test, never the fake), but the
+  fake-driven layer has zero discriminating power over the mechanism as a
+  result — corrected in `docs/monitor/fake-vs-parser-audit.md` itself
+  (headline findings 1/3, the `restSeconds` table row, the two-rest-time-
+  fields section, and the "which HARDCODED fields" section).

@@ -2557,4 +2557,87 @@ describe("EST LEFT (Phase LL) — monotonicity across a whole real capture (desi
       previousElapsedSeconds = m.elapsedSeconds;
     }
   });
+
+  // THE CRITICAL GAP A REVIEW FOUND (exit criterion 1, spec §6's named
+  // hazard): monotonicity alone does not prove the estimate COUNTS DOWN
+  // through a rest — it is equally satisfied by a step function that
+  // credits the whole rest instantly the moment it starts and then sits
+  // FLAT (never falling, technically "monotonic") for the rest of the
+  // span. That inverse bug is exactly as wrong as the one this task
+  // fixes, just in the other direction: a rower would watch EST LEFT
+  // drop 3:00 at the first resting frame, then freeze. No fixture in
+  // this repo set `restSeconds` to anything but 0 until this test — every
+  // other test either reads `frame.restSeconds` directly off raw samples
+  // (the "wire premise" describe block above) or asserts monotonicity
+  // ALONE, neither of which can tell a real countdown from a step. This
+  // one asserts the RATE: consecutive frames within a single rest must
+  // advance `elapsedSeconds` by roughly the same amount as the wall clock
+  // between them, real 0x0032 `restSeconds` values from the replayed
+  // capture doing the crediting.
+  it("estElapsed advances ~1s per 1s of wall time THROUGH each rest — not a step function at rest entry (the inverse bug)", async () => {
+    const samples = await replaySession2();
+    const spans = restingSpans(samples);
+    // Bug-independent first: three real rests, matching design spec §5's
+    // own table — if this is wrong, the fixture is wrong, not the formula.
+    expect(spans).toHaveLength(3);
+
+    // One continuous walk across the WHOLE capture (not just the resting
+    // spans in isolation) — `previousElapsedSeconds` has to be threaded
+    // exactly the way `ConnectedSurface.tsx` does in production, and the
+    // rate check below only means something measured against a properly
+    // clamped sequence, not one seeded fresh at zero per span.
+    let previousElapsedSeconds: number | undefined;
+    const elapsedAt = new Map<DriverFrameSample, number>();
+    for (const s of samples) {
+      const m = buildSurfaceModel({
+        phases: SESSION_2_PHASES,
+        program: SESSION_2_PROGRAM,
+        status: "live",
+        frame: s.frame,
+        deviceName: SESSION_2_DEVICE,
+        actuals: [],
+        previousElapsedSeconds,
+      });
+      elapsedAt.set(s, m.elapsedSeconds);
+      previousElapsedSeconds = m.elapsedSeconds;
+    }
+
+    let spansChecked = 0;
+    for (const span of spans) {
+      expect(span.length).toBeGreaterThan(3);
+      const first = span[0]!;
+      const mid = span[Math.floor(span.length / 2)]!;
+      const last = span[span.length - 1]!;
+
+      // FIRST-TO-MID and MID-TO-LAST, not just first-to-last: the
+      // inverse-bug mutant (crediting the whole rest instantly the
+      // moment `state` becomes "resting", then holding flat) makes THIS
+      // span's own FIRST frame already carry the full credit — so a
+      // first-to-last check alone could still read as "advanced ~30s
+      // over the whole rest" by accident of where the span boundary
+      // falls. Splitting the span in two and requiring BOTH halves to
+      // advance at roughly the wall-clock rate is what actually
+      // distinguishes "counts down continuously" from "jumps once,
+      // anywhere in the span, then sits flat" — the flat half is what
+      // the assertion below catches wherever the jump landed.
+      for (const [a, b] of [
+        [first, mid],
+        [mid, last],
+      ] as const) {
+        const wallSeconds = (b.tMs - a.tMs) / 1000;
+        const elapsedDelta = elapsedAt.get(b)! - elapsedAt.get(a)!;
+        // The message must be an INLINE template literal, not a variable
+        // reference — `@vitest/eslint-plugin`'s `valid-expect` rule only
+        // recognises `expect(x, "...")`/`` expect(x, `...`) `` as its own
+        // AST shape; a message stored in a local and passed by reference
+        // reads as a disallowed third positional argument instead.
+        expect(
+          Math.abs(elapsedDelta - wallSeconds),
+          `rest span half at t=${a.tMs}..${b.tMs}ms: elapsed advanced ${elapsedDelta.toFixed(2)}s while ${wallSeconds.toFixed(2)}s of wall time passed`,
+        ).toBeLessThan(Math.max(1.5, wallSeconds * 0.3));
+      }
+      spansChecked++;
+    }
+    expect(spansChecked).toBe(3);
+  });
 });

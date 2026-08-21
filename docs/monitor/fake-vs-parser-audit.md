@@ -10,18 +10,29 @@ authority (PRIMARY where cited).
 
 ## Headline findings
 
-1. **The dangerous bucket (HARDCODED = consumed-but-constant) is EMPTY.**
-   Every raw field that actually reaches `MonitorFrame`, `IntervalActual`, or a
-   driver-internal decision (`workoutType`/`workoutDurationRaw`/`workoutDurationType`/
-   `totalWorkDistanceMeters` for the structural readback) is realistically modelled
-   in `fake.ts` — it varies with the script/tick rather than being pinned. This is a
-   genuine, checked negative result, not an assumption: I traced every field parsed
-   by the five decoders to its consumer (or lack of one) below. **No live defect is
-   currently hiding behind a fake constant**, because nothing currently wired to a
-   fake constant is read by product code. The risk this repo is carrying is entirely
-   in the UNCONSUMED bucket below — a field getting wired up tomorrow (as Rest Time
-   nearly was) inherits a hardcoded fake with no test able to catch a wrong scale,
-   wrong offset, or wrong sign.
+1. **CORRECTED — the dangerous bucket is NOT empty; `restSeconds` is its first
+   occupant.** This audit was landed as a read-only snapshot, and the EST LEFT task
+   (`docs/superpowers/specs/2026-08-20-est-left-design.md`) gave `restSeconds` a
+   real consumer in the SAME commit range: `surfaceModel.ts`'s `estElapsedRaw`
+   reads it as the live term for a rest in progress. `fake.ts` was taught to accept
+   a script-authored `FakeStatusEvent.restSeconds` in that same task, but **no
+   existing fixture in the repo — no e2e spec, no screenshot script — ever sets
+   it**, so every fake-driven test still gets the same constant `0` this audit
+   originally found (`fake.test.ts`'s own "unscripted fixture" test confirms this
+   is unchanged, deliberately, from before). That is exactly the HARDCODED bucket's
+   definition: a field with a real consumer, pinned constant in the fake.
+   **What this does NOT mean: no live defect is hiding today.** The consumer's own
+   correctness is independently proven against REAL wire bytes — a replay test
+   drives the actual PM5 parser/driver over a committed capture
+   (`docs/monitor/sessions/walk-2026-08-16/session-2-wu-4unequal.jsonl`) and
+   asserts `estElapsed` tracks wall time through three real rests, never touching
+   the fake at all. What IS true: any e2e or screenshot-level test exercising a
+   rest through the FAKE has zero discriminating power over this mechanism — a
+   wrong scale, sign, or offset in how the fake's `restSeconds` would be consumed
+   could not be caught at that layer, only at the unit/replay layer. Every OTHER
+   field that reaches `MonitorFrame`/`IntervalActual`/a driver decision remains
+   realistically modelled (bucket M) — this is a correction of one row, not of the
+   audit's method.
 2. **~15 flat zeros is about right — I count 14** flat-`0` fields plus one
    `HEARTRATE_NO_BELT`(=0)-by-convention field, all UNCONSUMED (table below). A
    further 4 fields (`ergMachineType` ×2, `dragFactor`, `splitAvgDragFactor`) are
@@ -31,8 +42,12 @@ authority (PRIMARY where cited).
    because it too is UNCONSUMED.
 3. **`restSeconds` (0x0032) and `intervalRestTimeSeconds` (0x0037) are genuinely
    different fields on the wire**, not two copies of one idea — see the dedicated
-   section below. Both are UNCONSUMED and both are hardcoded to `0` in the fake, so
-   wiring up either today ships with zero test coverage of its real behaviour.
+   section below. **CORRECTED:** `restSeconds` is no longer unconsumed —
+   `surfaceModel.ts` reads it (EST LEFT task, same commit range as this
+   correction) — though the fake still hardcodes it to `0` for every existing
+   fixture (finding 1, above). `intervalRestTimeSeconds` remains genuinely
+   UNCONSUMED and hardcoded to `0`; wiring it up today would still ship with zero
+   fake-level test coverage of its real behaviour.
 4. **0x0039's averages get a deliberately realistic non-zero default**
    (`deliverSummary`, fake.ts:2134) specifically so a gate that copies them across
    by mistake fails a test (fake.ts:2116-2124's own comment). The ~14 flat-zero
@@ -73,7 +88,7 @@ Legend: **M** = MODELLED, **H** = HARDCODED (consumed + constant), **U** = UNCON
 | `currentSplit` | M | `e.currentSplit`, varies | `MonitorFrame.currentSplit`; `surfaceModel.ts`'s armed-carry-over/ghost logic, `judge.ts` |
 | `averageSplit` | U (quasi-hardcode, `= e.currentSplit`) | not independently modelled | none found |
 | `restDistanceMeters` | U (flat `0` in `armedBundle`; session-tracked elsewhere but still never read downstream) | `sessionMetrics.restDistanceMeters` | none found — **not** the same field as `IntervalActual.restDistanceMeters`, which comes from 0x0037 (see below) |
-| `restSeconds` | **U — the field this audit exists for** | `0`, fake.ts:746, always | **none**. See dedicated section. |
+| `restSeconds` | **H — CORRECTED, the field this audit exists for, now the dangerous bucket's first occupant** | `0` for every existing fixture (script-authorable since the EST LEFT task, but nothing sets it), fake.ts | `surfaceModel.ts`'s `estElapsedRaw` (EST LEFT task) — the rest-phase live term. See dedicated section. |
 | `ergMachineType` | U (non-zero constant `1`) | `1`, fake.ts:747 | none found |
 
 ### 0x0033 — Additional Status 2 (`AdditionalStatus2`)
@@ -174,9 +189,16 @@ Definition rev 1.30 pp.13-20):
   SECONDARY/INFERENCE reasoning by analogy to R-B's already-shipped pattern, not
   a re-derivation from a fresh capture.
 
-Both are UNCONSUMED today, and both are hardcoded to `0` in the fake — wiring
-either up inherits a fake that cannot disprove a wrong scale, wrong offset, or a
-sign flip, exactly the situation this task's brief describes for `restSeconds`.
+**CORRECTED:** `restSeconds` is UNCONSUMED no longer — the EST LEFT task wired it
+into `surfaceModel.ts` in the same commit range this correction lands in — but the
+fake's own value is still `0` for every existing fixture (script-authorable, never
+scripted), so the situation this task's brief warned about happened to
+`restSeconds` exactly as predicted: it inherited a fake that cannot disprove a
+wrong scale, wrong offset, or a sign flip AT THE FAKE-DRIVEN (e2e/screenshot)
+layer — the real-wire replay test that DOES prove it correct lives one layer
+below, against the actual parser and a committed capture, never the fake.
+`intervalRestTimeSeconds` remains UNCONSUMED and hardcoded to `0`; the warning
+still applies to it in full.
 
 ---
 
@@ -247,10 +269,19 @@ list missed in a way that changes the shape of the finding.
 
 ## Which HARDCODED fields could hide a live defect right now
 
-**None.** Every field that is both consumed by product code and modelled by the
-fake varies realistically (table above, bucket M throughout). The dangerous
-combination this audit was designed to catch — a consumer trusting a field the fake
-pins to a constant — does not currently exist anywhere in the decode surface. The
-exposure is prospective: the moment any UNCONSUMED field above gets a consumer
-(as very nearly happened with `restSeconds` today), it inherits a hardcoded fake
-with no falsifying test, unless the fake is updated in the same change.
+**CORRECTED — one: `restSeconds`.** This section originally said "None," the
+moment before the exposure it predicted materialized: `restSeconds` gained a
+consumer (`surfaceModel.ts`, EST LEFT task) in the same commit range, and the
+fake's value for it stayed pinned at `0` for every existing fixture — the
+dangerous combination this audit exists to catch. It does NOT currently hide a
+live DEFECT (the consumer is independently proven correct against real wire bytes
+via a replay test over a committed capture, never the fake — see finding 1), but
+it does mean the fake-driven layer (e2e, screenshots) has zero discriminating
+power over this specific mechanism: a wrong scale, sign, or offset in how a
+script's `restSeconds` would be consumed could ship undetected at that layer.
+Every OTHER field that is both consumed and modelled by the fake still varies
+realistically (table above, bucket M). The exposure for every remaining
+UNCONSUMED field is still prospective, as originally written: the moment one of
+them gets a consumer, it inherits a hardcoded fake with no falsifying test unless
+the fake is updated in the same change — which is precisely what happened here,
+half-done (the fake CAN speak; nothing yet asks it to).

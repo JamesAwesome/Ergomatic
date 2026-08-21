@@ -306,11 +306,14 @@ export interface SurfaceModelInput {
    *  memory of the frame before this one. This is that memory, supplied
    *  by the CALLER: the previous model's own `elapsedSeconds`.
    *  `ConnectedSurface.tsx` is the one production caller that threads it
-   *  (a `useRef`, updated after every build); a replay test threads its
-   *  own loop variable the same way. Omitted or `undefined` reads as `0`
-   *  — the honest answer for the very first frame of a session, and the
-   *  same floor `armedMirror`'s own "un-started, always" stance already
-   *  assumes. */
+   *  — a `useState` with a render-phase comparison-then-set, NOT a ref
+   *  (this repo's `react-hooks/refs` lint forbids reading/writing
+   *  `ref.current` during render; that component's own comment carries
+   *  the full reasoning for the pattern it uses instead); a replay test
+   *  threads its own loop variable the same way. Omitted or `undefined`
+   *  reads as `0` — the honest answer for the very first frame of a
+   *  session, and the same floor `armedMirror`'s own "un-started,
+   *  always" stance already assumes. */
   previousElapsedSeconds?: number;
 }
 
