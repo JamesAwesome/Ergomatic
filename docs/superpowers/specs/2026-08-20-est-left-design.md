@@ -158,6 +158,18 @@ the phone half.
 5. The bar's fill remains capped at the session length; a long final interval
    cannot exceed 100%.
 6. The fake reports Rest Time honestly, and an e2e fixture exercises a rest.
+   **STATUS AT PR TIME: HALF MET, and deliberately not softened.** The fake
+   reports it honestly and `FakeStatusEvent.restSeconds` is scriptable — but a
+   grep of `e2e/` finds ZERO events driving `state: "resting"` with a scripted
+   rest value, so the back half is unmet in the repo today. The behaviour's
+   real proof lives one layer down: unit replay tests against a committed
+   capture (the mechanism) plus a component test that renders twice and reads
+   the DOM (the production wiring). Both were confirmed by an independent
+   reviewer applying the exact inverse-bug and deleted-wiring mutants.
+   **This is recorded rather than rewritten because weakening a criterion to
+   match what shipped is the failure this spec's own §6 warns about.** The PM
+   final-PR gate rules on whether replay-layer proof suffices for merge; if it
+   does, an e2e fixture is owed as a follow-up rather than a blocker.
 7. `PaneLive.tsx` guards the unpriced-phase case the way the phone timer does.
 8. `DEVIATIONS.md` carries §4's real accepted limits — the work-interval dawdle
    and the unpriced phase. NOT the over-rest sentence, which was wrong.
