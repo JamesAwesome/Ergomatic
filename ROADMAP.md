@@ -3613,6 +3613,24 @@ next phase. One line per round, newest first.
 
 ## Triggered follow-ons (not scheduled — each has an explicit trigger)
 
+- **`intervalRestTimeSeconds` is decoded and unconsumed — the summary's TIME
+  hero may be using PROGRAMMED rest where the machine reports ACTUAL**
+  (found 2026-08-20 by the fake-vs-parser audit,
+  `docs/monitor/fake-vs-parser-audit.md`). `0x0037` carries a whole-second
+  settled rest duration per completed interval — the time-side twin of
+  `intervalRestDistanceMeters`, which IS already wired into
+  `IntervalActual.restDistanceMeters`. So we store how far a rower drifted
+  during each rest and not how long the rest actually took, while
+  `summaryModel.ts`'s TIME hero sums work seconds plus **programmed** rest
+  for completed intervals (R-D) because that is all it had. **INFERENCE,
+  and it may be a non-issue:** on a PM5-controlled interval workout the
+  machine ends the rest itself, so actual and programmed may agree almost
+  always. "Almost always" is the interesting part — the gap, if it exists,
+  is a wrong number on a screen. **Cheap first step, no hardware:** decode
+  `intervalRestTimeSeconds` from the committed captures and compare it to
+  the programmed rest for the same intervals. If they always agree, close
+  this with the measurement recorded. **Trigger:** the next work touching
+  the summary's TIME, or anyone with ten minutes.
 - **23 citations across 11 tracked files point into `.superpowers/`, which
   is git-EXCLUDED and therefore unreachable to everyone except the session
   that wrote it** (found 2026-08-20 at PR #141's PM gate, which caught three
