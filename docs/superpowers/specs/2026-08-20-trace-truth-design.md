@@ -356,6 +356,59 @@ no Concept2 document states it, and `pm5-interface-notes.md:4600` lists the
 sibling question as open. INFERENCE. The empirical facts are PRIMARY from three
 independent hardware sessions.
 
+## §10 SUPERSESSION: rest samples are drawn but do not set the vertical scale
+
+**Added 2026-08-20, after James rowed on his phone and photographed the
+result.** This section overrides trace-rendering spec §3's "no clip" ruling for
+one specific class of sample. Written by the controller, not by an implementer,
+because a spec should not be edited by the task it governs.
+
+**What he saw.** His session's rowing spanned 2:01.9 to 2:03.7 — 1.8 seconds —
+but the chart's pace axis ran 1:40 to 6:40, because rest samples reach 5:00+ per
+500m. The entire session's variation was a flat line across the top; the
+difference between his best and worst interval was invisible.
+
+**The new rule.** Rest samples are still recorded, still drawn, and still marked
+by their band. They no longer contribute to the vertical domain, which is
+computed from work readings only. Rest excursions run off the bottom of the plot
+and clip.
+
+**This supersedes a ruling that was itself made after measurement, so it owes an
+argument rather than an edit.** Trace-rendering spec §3 ruled: *"The FULL range
+of the drawn measure's REAL readings, padded to a round number. No clipping, no
+outlier marks, no percentile"* — and that was RULED after an antagonist pass
+broke an earlier percentile-clip rule against the committed captures. Three
+things distinguish the two:
+
+1. **That rule was written under a premise this phase falsified.** At the time,
+   the project believed rests produced NO SAMPLES AT ALL — the "rests contribute
+   zero samples, by construction" claim that this phase's own antagonist pass
+   killed with measured evidence (21 rest samples on one capture, 3 on the very
+   capture the claim cited as proof). §3's "full range of real readings" never
+   contemplated the class of sample now dominating the domain, because it did
+   not know that class existed.
+2. **The killed rule was STATISTICAL; this is CATEGORICAL.** A 5th-95th
+   percentile clipped ~10% of the samples in EVERY session, including genuine
+   rowing readings, chosen by their position in a distribution. This excludes
+   only samples the machine itself labels `state === "resting"` — a fact about
+   what the rower was doing, not about where a number falls in a spread.
+3. **Nothing is hidden.** The percentile rule removed data from view. Every rest
+   sample is still drawn, still in the line, still marked. Only what SETS THE
+   SCALE changes.
+
+**What is lost, stated plainly:** a rower can no longer read how slow they were
+during a rest — those excursions clip. Accepted, for the same reason §3 forbids
+copy claiming a rest pace is meaningful: it is a real number that means nothing.
+The trade buys back the thing the chart exists for, which is seeing how your
+work intervals differed from each other.
+
+**Evidence it works, in the repo:** `log-detail.png`'s fixture previously
+carried rest samples at roughly the same pace as the surrounding work, so the
+capture was IDENTICAL with the change and without it — it could demonstrate
+neither the problem nor the fix. The fixture now carries realistic rest paces,
+and the committed capture shows a tight `1:40.0 / 2:00.0 / 2:20.0` axis with
+four distinct plateaus and the rest excursion clipped.
+
 ## §9 Out of scope, each with its reason
 
 - **Reconnect** — Phase LL's own ruling, with preconditions named in ROADMAP.

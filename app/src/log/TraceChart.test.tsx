@@ -346,7 +346,8 @@ describe("TraceChart — §4's cut: no interval boundary marks render, ever (pin
     // cuts; the negative selector above already pins that no element
     // carries `.trace-boundary`/`[data-boundary]`/a `"boundary"`
     // class-name substring, which a rest `rect` (`.trace-rest-band`)
-    // never does.
+    // never does. `defs`/`clippath` (2026-08-20) are the plot's own clip
+    // mechanism, not a boundary mark either.
     const allowedTags = new Set([
       "polyline",
       "line",
@@ -358,6 +359,8 @@ describe("TraceChart — §4's cut: no interval boundary marks render, ever (pin
       "span",
       "figure",
       "rect",
+      "defs",
+      "clippath",
     ]);
     for (const el of Array.from(container.querySelectorAll("svg *"))) {
       expect(allowedTags.has(el.tagName.toLowerCase())).toBe(true);
@@ -560,5 +563,86 @@ describe("TraceChart — trace-truth Task 2: rests are drawn, but marked (§3), 
     expect(legend!.textContent!.toLowerCase()).not.toMatch(
       /pace|split|amber|bronze|gold|orange|brown/,
     );
+  });
+});
+
+describe("TraceChart — 2026-08-20: domainY no longer includes rest, so the plot clips excursions", () => {
+  const TOP_PAD = 10;
+  const PLOT_BOTTOM = 130; // PLOT_AREA_HEIGHT(140) - BOTTOM_PAD(10)
+
+  it("a rest excursion's own pixel renders OUTSIDE the plot rect's own y-range (proof domainY did not stretch to absorb it), and the polylines are wrapped in a real SVG clip-path scoped to the plot rect", async () => {
+    const series: SeriesData = {
+      samples: [
+        sample({ t: 0, p: 1180, spm: 20 }),
+        sample({ t: 1, p: 1190, spm: 20 }),
+        sample({ t: 2, p: 1185, spm: 20 }),
+        sample({ t: 3, p: 3600, spm: 16, r: true }), // ~6:00/500m rest excursion
+        sample({ t: 4, p: 1180, spm: 20 }),
+      ],
+    };
+
+    const { container } = render(<TraceChart series={series} />);
+
+    const points = Array.from(container.querySelectorAll("polyline")).flatMap(
+      (pl) =>
+        (pl.getAttribute("points") ?? "")
+          .trim()
+          .split(" ")
+          .filter(Boolean)
+          .map((pair) => {
+            const [x, y] = pair.split(",").map(Number);
+            return { x: x!, y: y! };
+          }),
+    );
+    // If the rest excursion had counted toward domainY (the bug), every
+    // point would land inside [TOP_PAD, PLOT_BOTTOM) by construction of
+    // a linear scale over its own domain. It doesn't: at least one
+    // rendered pixel — the rest sample's — falls outside that range.
+    expect(points.some((p) => p.y < TOP_PAD || p.y > PLOT_BOTTOM)).toBe(true);
+
+    // The clip mechanism containing that overflow visually: a real
+    // clipPath/rect scoped to the plot rect, referenced by the group
+    // wrapping the polylines — never "the SVG viewBox clips" (that would
+    // also cut off the axis labels/rest band, which must stay visible).
+    const clipRect = container.querySelector("clipPath rect");
+    expect(clipRect).not.toBeNull();
+    expect(Number(clipRect!.getAttribute("y"))).toBeCloseTo(TOP_PAD, 5);
+    expect(Number(clipRect!.getAttribute("height"))).toBeCloseTo(
+      PLOT_BOTTOM - TOP_PAD,
+      5,
+    );
+
+    const clippedGroup = container.querySelector("[clip-path]");
+    expect(clippedGroup).not.toBeNull();
+    expect(clippedGroup!.tagName.toLowerCase()).toBe("g");
+    expect(clippedGroup!.querySelector("polyline")).not.toBeNull();
+    // The clip-path attribute references the SAME clipPath element by
+    // id, not merely two unrelated elements that happen to both exist.
+    const clipPathEl = container.querySelector("clipPath")!;
+    expect(clippedGroup!.getAttribute("clip-path")).toBe(
+      `url(#${clipPathEl.id})`,
+    );
+  });
+
+  it("a rest-free trace's clip rect never clips anything real: every rendered polyline pixel already sits inside it", async () => {
+    const series = await realSeries();
+    const { container } = render(<TraceChart series={series} />);
+    const clipRect = container.querySelector("clipPath rect")!;
+    const clipTop = Number(clipRect.getAttribute("y"));
+    const clipBottom = clipTop + Number(clipRect.getAttribute("height"));
+
+    const points = Array.from(container.querySelectorAll("polyline")).flatMap(
+      (pl) =>
+        (pl.getAttribute("points") ?? "")
+          .trim()
+          .split(" ")
+          .filter(Boolean)
+          .map((pair) => Number(pair.split(",")[1])),
+    );
+    expect(points.length).toBeGreaterThan(0);
+    for (const y of points) {
+      expect(y).toBeGreaterThanOrEqual(clipTop);
+      expect(y).toBeLessThanOrEqual(clipBottom);
+    }
   });
 });

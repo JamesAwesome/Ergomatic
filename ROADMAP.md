@@ -2031,12 +2031,16 @@ WebKit's throttling, so it does not rescue the JS half.
       by replaying a committed rest-bearing capture and checking whether
       `sessionElapsedSeconds` flatlines through the rests. **TRIAD** (a
       number a rower reads). **M**
-- [ ] **Rename `TOTAL LEFT` to `EST LEFT`** (James's ruling, 2026-08-20).
+- [x] **Rename `TOTAL LEFT` to `EST LEFT`** (James's ruling, 2026-08-20).
       Honest for a second reason independent of the stall above: a
       DISTANCE interval's contribution to `totalSeconds` is distance ÷
       target pace, so rowing faster than target makes the session
       genuinely shorter than programmed. Copy only — rides the next PR
-      touching the connected surface. **S**
+      touching the connected surface. **DONE 2026-08-20 (rest-scale PR):**
+      `PaneLive.tsx`'s band cell label only — the header countdown's own
+      `M:SS LEFT` format and the unconnected `TimerRuler`'s own `TOTAL
+      LEFT` row (a different surface, `model.totalLeftDisplay` still the
+      field name internally) are untouched. **S**
 - [x] ~~The progress bar's segments are unevenly divided~~ — **NOT A BUG,
       settled 2026-08-20 from James's own two photos without touching the
       code.** Strong Breeze (`app/server/seed/library/tr.ts`) is 5×2:00

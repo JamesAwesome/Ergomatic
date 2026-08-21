@@ -27,8 +27,14 @@
 // else. None of these name an interval: the x-axis spans the trace's own
 // elapsed time, not step boundaries. Any future interval-boundary feature
 // is a deliberate, separate addition, never a quiet insertion here.
+//
+// PLOT CLIP (2026-08-20): the polyline group also carries a `clip-path`
+// scoped to the plot rect (`PLOT_CLIP_*` below) — `traceModel.ts` now
+// builds `domainY` from WORK readings only, so a rest excursion's own
+// pixel can genuinely fall outside the plot; this is what makes it run
+// off the bottom instead of painting over the axis gutter/rest band.
 
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import type { SeriesData } from "../monitor/seriesRecorder.js";
 import { linearScale, decimate } from "../charts/scale.js";
 import { chooseTicks, formatTick } from "../charts/axis.js";
@@ -72,6 +78,21 @@ const BOTTOM_PAD = 10;
  *  comment below). */
 const PLOT_AREA_HEIGHT = 140;
 const PLOT_BOTTOM = PLOT_AREA_HEIGHT - BOTTOM_PAD;
+
+/** 2026-08-20: `domainY` (`traceModel.ts`) is now built from WORK
+ *  readings only, so a rest excursion's own pixel — computed off that
+ *  same `yScale`, unaware anything was excluded — can genuinely land
+ *  outside `[TOP_PAD, PLOT_BOTTOM)`. The polyline is clipped to exactly
+ *  this rect so an excursion runs off the bottom (or top) and simply
+ *  disappears there, rather than painting over the x-axis labels or the
+ *  rest band sitting in the gutter below `PLOT_BOTTOM`. Deliberately the
+ *  PLOT rect, not the full `[0, CHART_WIDTH]x[0, CHART_HEIGHT]` canvas —
+ *  clipping to the whole SVG would also cut off the y-axis labels
+ *  (anchored left of `LEFT_PAD`) and the gutter contents themselves. */
+const PLOT_CLIP_X = LEFT_PAD;
+const PLOT_CLIP_Y = TOP_PAD;
+const PLOT_CLIP_WIDTH = CHART_WIDTH - LEFT_PAD - RIGHT_PAD;
+const PLOT_CLIP_HEIGHT = PLOT_BOTTOM - TOP_PAD;
 
 /** trace-truth Task 3 (spec §4): the axis gutter — the x-axis's own tick
  *  marks/labels, and (moved down here from inside the plot, see the rest
@@ -189,6 +210,11 @@ export default function TraceChart({
   series: SeriesData | undefined;
 }) {
   const [measure, setMeasure] = useState<Measure>("pace");
+  // Scopes the plot clip-path to THIS component instance — React's own
+  // SSR/multi-instance-safe id (never a hardcoded string: two traces on
+  // one page, e.g. a future comparison view, would otherwise collide on
+  // one `id` and one clip-path would silently win for both).
+  const plotClipId = useId();
 
   const traces = useMemo(() => {
     const built = {} as Record<Measure, TraceModel | null>;
@@ -241,6 +267,16 @@ export default function TraceChart({
         role="img"
         aria-label={trace.summary}
       >
+        <defs>
+          <clipPath id={plotClipId}>
+            <rect
+              x={PLOT_CLIP_X}
+              y={PLOT_CLIP_Y}
+              width={PLOT_CLIP_WIDTH}
+              height={PLOT_CLIP_HEIGHT}
+            />
+          </clipPath>
+        </defs>
         {/* trace-truth Task 2 (spec §3) / Task 3: drawn FIRST — beneath the
             tick marks and the polyline(s) — still guarantees paint-order
             continuity (the line always sits on top, so it is never
@@ -331,15 +367,26 @@ export default function TraceChart({
             </g>
           );
         })}
-        {trace.points.map((segment, index) => {
-          const decimated = decimate(segment, PLOT_COLUMNS);
-          const pointsAttr = decimated
-            .map((p) => `${xScale(p.x)},${yScale(p.y)}`)
-            .join(" ");
-          return (
-            <polyline key={index} className="trace-line" points={pointsAttr} />
-          );
-        })}
+        {/* 2026-08-20: clipped to the plot rect (see `PLOT_CLIP_*` above)
+            — a rest excursion's own pixel can now fall outside
+            `[TOP_PAD, PLOT_BOTTOM)` since `domainY` no longer scales to
+            include it, and this is what stops it painting over the axis
+            gutter/rest band below instead of just running off the plot. */}
+        <g clipPath={`url(#${plotClipId})`}>
+          {trace.points.map((segment, index) => {
+            const decimated = decimate(segment, PLOT_COLUMNS);
+            const pointsAttr = decimated
+              .map((p) => `${xScale(p.x)},${yScale(p.y)}`)
+              .join(" ");
+            return (
+              <polyline
+                key={index}
+                className="trace-line"
+                points={pointsAttr}
+              />
+            );
+          })}
+        </g>
       </svg>
       {/* F-2 (James's ruling, review round 2): one quiet line explaining
           the band, same idiom as `PostWorkoutSummary.tsx`'s own

@@ -44,6 +44,19 @@
 // line across a long run of sentinel samples (no real pace exists there
 // either), exactly the "breaks... across a missing-hr stretch" behavior
 // §2 already describes for HR's own absence.
+//
+// RESTS ARE DRAWN BUT DO NOT SET THE VERTICAL SCALE (2026-08-20 ruling,
+// from a real photographed session where they did): a rest excursion
+// (pace 5:00+/500m on the 2026-08-20 walk; measured on the committed
+// `session-2-wu-4unequal.jsonl` capture at up to 364.9 s/500m against a
+// real WORK range of 114.8-210.7 s/500m) stretched `domainY` so far that
+// ~2s of genuine work-pace variation drew as a flat line across the top
+// of the chart. `domainY` below is now built from WORK readings only
+// (`rest === false`); rest points are still pushed into `points` exactly
+// as before (never hidden, never excluded from the line) — they simply
+// no longer widen the axis they render outside of. `TraceChart` clips the
+// polyline to the plot rect so a rest excursion runs off the bottom
+// rather than painting over the axis or the rest band.
 
 import { domainFromReadings, type ChartPoint } from "../charts/scale.js";
 import { chooseTicks } from "../charts/axis.js";
@@ -77,10 +90,12 @@ export interface TraceModel {
    *  that starts a third of the way across (a cold strap) reads as a late
    *  start rather than being rescaled to look complete. */
   domainX: [number, number];
-  /** The FULL range of this measure's real readings, padded to a round
-   *  number, floored at the measure's own minimum height. Never clipped,
-   *  never percentiled (§3's own ruling, broken by measurement before this
-   *  task started). */
+  /** The full range of this measure's real WORK readings — `rest === true`
+   *  readings are excluded from this domain (2026-08-20 ruling, above),
+   *  though never from `points` — padded to a round number, floored at
+   *  the measure's own minimum height. Still never clipped or
+   *  percentiled WITHIN the work readings themselves (§3's original
+   *  ruling, unchanged for the population it now applies to). */
   domainY: [number, number];
   ticksY: number[];
   /** true for pace (faster is UP, §3) — the caller builds the y `range`
@@ -270,16 +285,25 @@ export function buildTrace(
   const readings = realReadings(series.samples, measure);
   if (readings.length < MIN_REAL_READINGS) return null;
 
-  // Non-null by construction, not narrowed with an `if`: `readings.length`
-  // just cleared `MIN_REAL_READINGS` (3), which always clears
-  // `domainFromReadings`'s own lower `>= 2` floor — an `if (domainY ===
-  // null) return null` here would be permanently uncovered dead code (the
-  // `toSegments` comment above states the identical reasoning for its own
-  // trailing-segment guard).
-  const domainY = domainFromReadings(
-    readings.map((r) => r.value),
-    { minHeight: MIN_DOMAIN_HEIGHT[measure] },
-  )!;
+  // 2026-08-20 ruling (file header, above): the vertical domain is built
+  // from WORK readings only — a rest excursion must not stretch the
+  // scale, even though the rest point itself still draws (`toSegments`
+  // below still receives every `readings` entry, rest included). Unlike
+  // the old "all real readings" domain, this is NOT guaranteed non-null
+  // by `readings.length >= MIN_REAL_READINGS` alone: a run that clears 3
+  // total readings can still carry fewer than 2 WORK ones (up to and
+  // including "every reading here is a rest"), so `domainFromReadings`'s
+  // own `>= 2` floor can genuinely fail here where it couldn't before.
+  // When it does, there is no honest scale to draw this measure against
+  // — the same per-measure "too little to draw" absence idiom
+  // `MIN_REAL_READINGS` above already uses, extended to "too little
+  // WORK", rather than inventing a second, rest-inclusive fallback
+  // domain that would just reintroduce the bug for this one case.
+  const workValues = readings.filter((r) => !r.rest).map((r) => r.value);
+  const domainY = domainFromReadings(workValues, {
+    minHeight: MIN_DOMAIN_HEIGHT[measure],
+  });
+  if (domainY === null) return null;
 
   const lastSample = series.samples[series.samples.length - 1]!;
   const domainX: [number, number] = [0, lastSample.t / 10];
