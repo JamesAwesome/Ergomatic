@@ -5,6 +5,37 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // Phase LL spec 1 in one build: the boundary fold (#140), rests marked
+    // (#141), the time axis + the 10,000m counter reserve + screenshot
+    // determinism (#142), rests excluded from the pace scale + the TOTAL
+    // LEFT -> EST LEFT rename (#143), and the countdown fix (#144). Range
+    // v0.14.0..main, 11 commits, settled with `git log v0.14.0..main
+    // --oneline` — WITHOUT `--merges`, which returns empty on this repo
+    // because main is squash-merged (RF15, corrected at #144's PM re-gate;
+    // the gate had been unrunnable as written for four tags).
+    //
+    // Six merges need no note and each has a reason: #133/#134 roadmap
+    // structure, #135 CI, #137 a walk record, #138/#139 research docs —
+    // not one line under `app/src/`.
+    //
+    // Item order is rower-priority: the trace items lead because that is
+    // the screen he photographed, and the estimate follows because it is
+    // the number he filed a bug about. The distance caveat rides INSIDE
+    // the estimate item rather than becoming its own bullet (PM re-gate
+    // ruling): he reported this exact symptom four days ago, and a
+    // separate bullet reads as unrelated, which would make the residual
+    // look like a failed fix.
+    version: "v0.15.0",
+    date: "2026-08-20",
+    items: [
+      "Your session's trace now has a time axis along the bottom, so you can see where you were in the row rather than just the shape of it. The pace labels down the side were being cut off and now read properly.",
+      "Rests are drawn as rests. A small band on the axis marks where you stopped, and a rest no longer squashes the pace scale: on a session with real rests, your working intervals used to be a flat line across the top of the chart because the rest values stretched the axis. Now the scale comes from your rowing and the difference between your best and worst interval is actually visible.",
+      "One honest note about older traces: a session recorded before this update can be missing a whole interval if the Bluetooth link stuttered, and it drew rests as though you were rowing. There is no way to tell a good old trace from a bad one, and they cannot be repaired. Traces recorded from this build on are trustworthy.",
+      "TOTAL LEFT is now EST LEFT, and it keeps counting while you rest. It used to freeze whenever you stopped moving during a rest, because the erg's own clock stops with the flywheel, so a session with long rests finished reading about a minute high. It is still an estimate: on a distance piece rowed well off your target pace it can still pause for a few seconds going into the rest. That is measured and known, not the old bug.",
+      "The meters counter on the connected screen no longer nudges the progress bar when a session passes 10,000m.",
+    ],
+  },
+  {
     // Phase LT in one build: LT-0's discard fix (#128), spec 1's
     // targets/judgment/SPM (#129), spec 2's series capture (#130,
     // rower-invisible on its own and deliberately unnoted), and spec 3's
