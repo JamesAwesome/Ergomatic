@@ -4163,54 +4163,6 @@ button:disabled {
   background: var(--ink);
 }
 
-/* THE WARM-UP'S OWN FILL (design spec §5b, ruling 12, as James amended it
-   2026-08-12: the bar must MOVE while the rower is moving, and the warm-up
-   must still read as visibly not-work). So the bar carries THREE tones —
-   unfilled track, this, and the work fill — and this one advances with the
-   rower exactly like the fill it repaints, capped at the warm-up's own span
-   (`TimerRuler.tsx`'s `warmupFillPercent`). Ahead of the fill edge nothing
-   is painted at all: an unrowed warm-up is plain unfilled track, like any
-   other unrowed span.
-
-   THE VALUE IS A LIGHTER STEP OF WHATEVER THE SURFACE'S WORK FILL IS —
-   this rule is the phone timer's own. The connected surface no longer has
-   a matching override: `ConnectedProgressBar` (CR2 spec 3 Task 3, mounted
-   Task 4) is a 3-state bar — done/active/upcoming, `.connected-progress-
-   seg-*` below — with no fourth warm-up tone at all; a warm-up interval is
-   simply its own segment, active like any other while it runs. `PaneLive`
-   no longer imports `TimerRuler`, so nothing reaches this rule from that
-   surface any more. No new hue and no new token; this rule's own value is
-   ink-scale, same as it always was.
-
-   Computed WCAG relative-luminance ratios, not eyeballed:
-
-     phone timer   --ink-5 vs the --accent fill   2.16:1
-                   --ink-5 vs the --rule-2 track  1.97:1
-     connected     --ink-4 vs the --ink fill      3.23:1
-                   --ink-4 vs the --rule-2 track  3.78:1
-
-   The connected pair clears WCAG 1.4.11's 3:1 non-text floor on both sides
-   (the best any value could do there is 3.50:1). The phone pair cannot, and
-   NO colour can: `--accent` and `--rule-2` are only 4.25:1 apart, so a third
-   tone lighter than that fill and darker than that track has at most
-   sqrt(4.25) = 2.06:1 to either side. `--ink-5` lands within 5% of that
-   ceiling — a new token could not beat it, which is why none was added. That
-   pair also separates by HUE (neutral grey against the accent red), which a
-   luminance-only ratio cannot see.
-
-   It paints over the fill and under the notches (DOM order among positioned
-   siblings, `TimerRuler.tsx`). The warm-up's own boundary notch is
-   unaffected: `left: <span>` puts its 1px just RIGHT of this element, on the
-   work fill or the open track like any other notch, so Task 4's two-tone
-   rule still measures what it measured. */
-.timer-total-warmup {
-  position: absolute;
-  top: 0;
-  left: 0;
-  height: 100%;
-  background: var(--ink-5);
-}
-
 /* Behind the fill the same hairline is cut out of it rather than laid on
    it — see `TimerRuler.tsx`'s own comment for why an ink notch cannot be
    seen there (the connected pane fills this bar with `--ink` itself, so
@@ -5862,7 +5814,8 @@ section:not(.news-pinned) .news-row:last-of-type {
 
 /* ACCENT APPEARS NOWHERE ON THESE PANES (rule 1 at the top of this block).
    The two `TimerRuler`-reuse overrides that used to live here
-   (`.connected-pane .timer-total-bar span`/`.timer-total-warmup`) died with
+   (`.connected-pane .timer-total-bar span`, and a warm-up-fill override
+   whose base rule Phase WU has since deleted outright) died with
    `TimerRuler` itself (CR2 spec 3 Task 4): `PaneLive` no longer imports it
    — the redesign's own `ConnectedProgressBar` (Task 3) is a fork with its
    own class family (`.connected-progress-*`), never `.timer-total-*`, so
@@ -8597,13 +8550,6 @@ section:not(.news-pinned) .news-row:last-of-type {
   flex: 0 0 20px;
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--ink-3);
-}
-
-.summary-row-warmup-label {
-  flex: 0 0 auto;
-  font-size: 10px;
-  letter-spacing: 0.1em;
   color: var(--ink-3);
 }
 

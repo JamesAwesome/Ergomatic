@@ -9,16 +9,14 @@ import {
 import type { Baselines, PaceRef, Step } from "./types.js";
 
 export interface Phase {
-  type: "warmup" | "work" | "rest" | "test";
+  // Phase WU removed "warmup": no step, and no setting, produces a warm-up
+  // phase any more, so nothing downstream has a warm-up branch to render,
+  // program or price.
+  type: "work" | "rest" | "test";
   seconds?: number; // time-based phases
   meters?: number; // distance work phases
   // Work phases (resolved, nudge excluded — session nudges are applied by
-  // callers). Also set on a DISTANCE warm-up phase, which `buildRun`
-  // (src/session/engine.ts) prices with `estimationSplit`'s easy band for
-  // exactly the same display-only reason an effort phase carries one:
-  // `phaseSeconds` below cannot price `meters` without a split. Nothing
-  // programs a warm-up's number — `domain/monitor/program.ts`'s warmup arm
-  // nulls it.
+  // callers).
   targetSplit?: number;
   targetKind?: "split" | "effort"; // work phases only; set on every work phase
   // The raw ref a "split" targetKind phase was resolved from — set ONLY
@@ -132,13 +130,12 @@ export function phases(steps: Step[], baselines: Baselines | null): Phase[] {
         ? { index: Math.floor((i - preCount) / perSet) + 1, of: marker.count }
         : undefined;
     switch (s.k) {
-      // "wu" left the Step union 2026-08-09 (the warmup-setting spec): no
-      // Step[] input can produce a `type: "warmup"` Phase anymore — the
-      // ONLY producer is buildRun (engine.ts), prepending a phase straight
-      // from the preference, never through this switch. The Phase/
-      // EnginePhase "warmup" member itself is untouched; every downstream
-      // consumer (Timer, compileProgram, buildLogSeed) keeps working
-      // against phases built that other way.
+      // "wu" left the Step union 2026-08-09 (the warmup-setting spec) and
+      // Phase WU removed the `Phase["type"]` member it used to produce, so
+      // there is no warm-up anywhere in this pipeline any more. A `wu` key
+      // surviving in a stale localStorage draft matches no arm here and
+      // silently emits no phase, which is the intended outcome
+      // (`src/session/draft.ts`'s `loadDraft` comment records the check).
       case "r":
         out.push({
           type: "rest",

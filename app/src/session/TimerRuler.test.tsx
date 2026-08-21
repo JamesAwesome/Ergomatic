@@ -5,8 +5,6 @@ import TimerRuler, {
   notchPercents,
   rulerLabels,
   totalProgressPct,
-  warmupFillPercent,
-  warmupPercent,
 } from "./TimerRuler";
 import type { IntervalBoundaries } from "./intervalBoundaries";
 
@@ -68,7 +66,6 @@ describe("TimerRuler (component)", () => {
 const FIVE_OF_FIVE: IntervalBoundaries = {
   seconds: [300, 600, 900, 1200],
   predictedFrom: 0,
-  warmupEndsAt: null,
 };
 const TOTAL = 1500;
 
@@ -91,10 +88,7 @@ describe("notchPercents — what the bar will actually draw", () => {
 
   it("draws nothing for a single-interval session (no interior boundary)", () => {
     expect(
-      notchPercents(
-        { seconds: [], predictedFrom: null, warmupEndsAt: null },
-        TOTAL,
-      ),
+      notchPercents({ seconds: [], predictedFrom: null }, TOTAL),
     ).toStrictEqual([]);
   });
 
@@ -106,16 +100,10 @@ describe("notchPercents — what the bar will actually draw", () => {
     );
     expect(MAX_NOTCH_BOUNDARIES).toBe(16);
     expect(
-      notchPercents(
-        { seconds: at, predictedFrom: null, warmupEndsAt: null },
-        100,
-      ),
+      notchPercents({ seconds: at, predictedFrom: null }, 100),
     ).toHaveLength(16);
     expect(
-      notchPercents(
-        { seconds: over, predictedFrom: null, warmupEndsAt: null },
-        100,
-      ),
+      notchPercents({ seconds: over, predictedFrom: null }, 100),
     ).toStrictEqual([]);
   });
 
@@ -124,10 +112,7 @@ describe("notchPercents — what the bar will actually draw", () => {
     // the bar is exhausted, and the notch says so at the right edge rather
     // than disappearing (which would make the count disagree with `N OF M`).
     expect(
-      notchPercents(
-        { seconds: [900, 1800], predictedFrom: null, warmupEndsAt: null },
-        TOTAL,
-      ),
+      notchPercents({ seconds: [900, 1800], predictedFrom: null }, TOTAL),
     ).toStrictEqual([60, 100]);
   });
 
@@ -184,7 +169,6 @@ describe("TimerRuler — the notched bar", () => {
         boundaries={{
           seconds: [348, 648, 948, 1248],
           predictedFrom: 1,
-          warmupEndsAt: null,
         }}
       />,
     );
@@ -209,7 +193,6 @@ describe("TimerRuler — the notched bar", () => {
         boundaries={{
           seconds: [348, 648, 948, 1248],
           predictedFrom: 1,
-          warmupEndsAt: null,
         }}
       />,
     );
@@ -248,7 +231,6 @@ describe("TimerRuler — the notched bar", () => {
         boundaries={{
           seconds: [300, 600, 900, 1200],
           predictedFrom: null,
-          warmupEndsAt: null,
         }}
       />,
     );
@@ -286,7 +268,6 @@ describe("TimerRuler — the notched bar", () => {
         boundaries={{
           seconds: [900, 1800],
           predictedFrom: null,
-          warmupEndsAt: null,
         }}
       />,
     );
@@ -306,7 +287,6 @@ describe("TimerRuler — the notched bar", () => {
         boundaries={{
           seconds: [300, 600],
           predictedFrom: 0,
-          warmupEndsAt: null,
         }}
       />,
     );
@@ -334,7 +314,7 @@ describe("TimerRuler — the notched bar", () => {
       <TimerRuler
         totalLeftSeconds={1200}
         totalSeconds={1200}
-        boundaries={{ seconds: [], predictedFrom: null, warmupEndsAt: null }}
+        boundaries={{ seconds: [], predictedFrom: null }}
       />,
     );
     expect(notches()).toHaveLength(0);
@@ -351,7 +331,7 @@ describe("TimerRuler — the notched bar", () => {
       <TimerRuler
         totalLeftSeconds={1800}
         totalSeconds={1800}
-        boundaries={{ seconds, predictedFrom: null, warmupEndsAt: null }}
+        boundaries={{ seconds, predictedFrom: null }}
       />,
     );
     expect(notches()).toHaveLength(0);
@@ -367,7 +347,7 @@ describe("TimerRuler — the notched bar", () => {
       <TimerRuler
         totalLeftSeconds={1800}
         totalSeconds={1800}
-        boundaries={{ seconds, predictedFrom: null, warmupEndsAt: null }}
+        boundaries={{ seconds, predictedFrom: null }}
       />,
     );
     expect(notches()).toHaveLength(16);
@@ -381,31 +361,14 @@ describe("TimerRuler — the notched bar", () => {
   });
 });
 
-// --- The warm-up's own fill (design spec §5b) ------------------------------
-//
-// §5b: "Its span is proportionally real, but the leading chunk renders in
-// the UNFILLED-track tone rather than the working tone, so the structure
-// reads 'this part is not the work'. No new colour, no legend."
-//
-// AMENDED BY JAMES, 2026-08-12, after seeing the first reading rendered: the
-// warm-up span FILLS as it is rowed, in its own tone — "the bar should move
-// while the rower is moving, and the warm-up should still read as visibly
-// not-work". Three tones: unfilled track, warm-up fill, work fill. So the
-// element below is the FILL's own colour while the fill is inside the
-// warm-up, capped at the warm-up's span — not a block painted over the whole
-// span regardless of progress.
-
-/** The same 5-interval, 25:00 session, except interval 0 is an 8:00 warm-up:
- *  480 of 1500 seconds is 32% of the bar. */
-const WITH_WARMUP: IntervalBoundaries = {
-  seconds: [480, 780, 1080, 1380],
-  predictedFrom: 0,
-  warmupEndsAt: 480,
-};
-
-function warmupFill(): HTMLElement | null {
-  return document.querySelector(".timer-total-warmup");
-}
+// PHASE WU deleted the section that stood here: `warmupPercent`,
+// `warmupFillPercent` and the lighter third tone they sized (design spec
+// §5b as James amended it 2026-08-12 — "the bar should move while the rower
+// is moving, and the warm-up should still read as visibly not-work"). With
+// no warm-up there is no not-the-work span to tone, so the bar is back to
+// two tones. The ONE case worth keeping is the structural pin below, which
+// used to be that section's no-warm-up REGRESSION pin and is now simply
+// what the bar always looks like.
 
 function barChildren(): string[] {
   const bar = document.querySelector(".timer-total-bar")!;
@@ -414,134 +377,8 @@ function barChildren(): string[] {
   );
 }
 
-describe("warmupPercent — how much of the bar is not the work", () => {
-  it("scales the warm-up's own span against the session's length", () => {
-    expect(warmupPercent(WITH_WARMUP, TOTAL)).toBe(32);
-  });
-
-  it("is null when the session has no warm-up", () => {
-    expect(warmupPercent(FIVE_OF_FIVE, TOTAL)).toBeNull();
-  });
-
-  it("is null without the prop, and without a length to scale against", () => {
-    expect(warmupPercent(undefined, TOTAL)).toBeNull();
-    expect(warmupPercent(WITH_WARMUP, 0)).toBeNull();
-  });
-
-  it("clamps a warm-up that overran the estimated session", () => {
-    // The same overrun `notchPercents` clamps, for the same reason: the past
-    // is measured and the denominator is not.
-    expect(
-      warmupPercent({ ...WITH_WARMUP, warmupEndsAt: TOTAL + 600 }, TOTAL),
-    ).toBe(100);
-  });
-});
-
-describe("warmupFillPercent — the warm-up fills as it is rowed", () => {
-  it("is the fill edge while the rower is inside the warm-up", () => {
-    // 10% of the session elapsed, all of it inside a 32% warm-up: the bar
-    // has moved 10%, and every bit of that movement is warm-up tone.
-    expect(warmupFillPercent(WITH_WARMUP, TOTAL, 10)).toBe(10);
-    expect(warmupFillPercent(WITH_WARMUP, TOTAL, 31.9)).toBe(31.9);
-  });
-
-  it("stops at the warm-up's own span once the work has started", () => {
-    // Past the warm-up the chunk stops growing and the WORK fill carries on
-    // beyond it — the span is a cap, not a width.
-    expect(warmupFillPercent(WITH_WARMUP, TOTAL, 60)).toBe(32);
-    expect(warmupFillPercent(WITH_WARMUP, TOTAL, 100)).toBe(32);
-  });
-
-  it("draws nothing before the first stroke", () => {
-    // A bar at 0% is the empty track it has always been.
-    expect(warmupFillPercent(WITH_WARMUP, TOTAL, 0)).toBeNull();
-    expect(warmupFillPercent(WITH_WARMUP, TOTAL, -5)).toBeNull();
-  });
-
-  it("draws nothing when there is no warm-up, however far the fill has run", () => {
-    expect(warmupFillPercent(FIVE_OF_FIVE, TOTAL, 60)).toBeNull();
-    expect(warmupFillPercent(undefined, TOTAL, 60)).toBeNull();
-    expect(warmupFillPercent(WITH_WARMUP, 0, 60)).toBeNull();
-  });
-});
-
-describe("TimerRuler — the warm-up is not the work", () => {
-  it("grows the warm-up's own fill as the rower rows it", () => {
-    // 250s of the 1500s session elapsed — 16.67%, still inside the 32%
-    // warm-up. The bar has moved, and every pixel of that movement is the
-    // warm-up's own tone.
-    render(
-      <TimerRuler
-        totalLeftSeconds={TOTAL - 250}
-        totalSeconds={TOTAL}
-        boundaries={WITH_WARMUP}
-      />,
-    );
-    const fill = warmupFill();
-    expect(fill).not.toBeNull();
-    expect(Number.parseFloat(fill!.style.width)).toBeCloseTo(16.667, 3);
-    // …and the work fill underneath is the same width, so nothing of the
-    // working tone is showing yet.
-    const work = document.querySelector<HTMLElement>(".timer-total-bar span")!;
-    expect(Number.parseFloat(work.style.width)).toBeCloseTo(16.667, 3);
-    // Decoration, not information: the caption says WARM-UP in words.
-    expect(fill!.getAttribute("aria-hidden")).toBe("true");
-  });
-
-  it("caps the warm-up's fill at its span once the work is running", () => {
-    // At 60% elapsed the warm-up tone stops at 32% and the remaining 28% of
-    // the fill is the ordinary work tone — three tones on one bar.
-    render(
-      <TimerRuler
-        totalLeftSeconds={600}
-        totalSeconds={TOTAL}
-        boundaries={WITH_WARMUP}
-      />,
-    );
-    expect(warmupFill()!.style.width).toBe("32%");
-    expect(warmupFill()!.className).toBe("timer-total-warmup");
-    const work = document.querySelector<HTMLElement>(".timer-total-bar span")!;
-    expect(work.style.width).toBe("60%");
-  });
-
-  it("draws no warm-up fill at all before the first stroke", () => {
-    render(
-      <TimerRuler
-        totalLeftSeconds={TOTAL}
-        totalSeconds={TOTAL}
-        boundaries={WITH_WARMUP}
-      />,
-    );
-    expect(warmupFill()).toBeNull();
-    expect(
-      document.querySelector<HTMLElement>(".timer-total-bar span")!.style.width,
-    ).toBe("0%");
-  });
-
-  it("paints the warm-up's fill OVER the work fill and UNDER the notches", () => {
-    // DOM order is paint order here — every child is in the same
-    // relatively-positioned bar — so the fill comes first, the warm-up's own
-    // tone over its leading part, and the boundary hairlines last where
-    // nothing can bury them.
-    render(
-      <TimerRuler
-        totalLeftSeconds={600}
-        totalSeconds={TOTAL}
-        boundaries={WITH_WARMUP}
-      />,
-    );
-    const classes = barChildren();
-    expect(classes[0]).toBe("span"); // the work fill, the bar's only <span>
-    expect(classes[1]).toBe("timer-total-warmup");
-    expect(classes).toHaveLength(6); // fill + warm-up fill + 4 notches
-    expect(
-      classes.slice(2).every((c) => c.startsWith("timer-total-notch")),
-    ).toBe(true);
-  });
-
-  it("a session with NO warm-up draws no chunk at all", () => {
-    // THE REGRESSION PIN. Most sessions have none, and their bar is exactly
-    // the one Task 4 shipped: the fill and its notches, nothing between.
+describe("TimerRuler — the bar's own children", () => {
+  it("is the fill and its notches, nothing between", () => {
     render(
       <TimerRuler
         totalLeftSeconds={600}
@@ -549,7 +386,6 @@ describe("TimerRuler — the warm-up is not the work", () => {
         boundaries={FIVE_OF_FIVE}
       />,
     );
-    expect(warmupFill()).toBeNull();
     expect(barChildren()).toStrictEqual([
       "span",
       // 60% elapsed: the 20/40/60 notches are behind the fill, the 80 ahead.
@@ -558,25 +394,5 @@ describe("TimerRuler — the warm-up is not the work", () => {
       "timer-total-notch timer-total-notch-passed",
       "timer-total-notch",
     ]);
-  });
-
-  it("fills the warm-up even where the notches fall back to the quarter ruler", () => {
-    // The density fallback is about reading seventeen hairlines apart. It
-    // says nothing about whether the warm-up is the work, and a rower on a
-    // 17-interval session still deserves to be told.
-    const seconds = Array.from(
-      { length: MAX_NOTCH_BOUNDARIES + 1 },
-      (_, i) => (i + 1) * 80,
-    );
-    render(
-      <TimerRuler
-        totalLeftSeconds={TOTAL - 150}
-        totalSeconds={TOTAL}
-        boundaries={{ seconds, predictedFrom: null, warmupEndsAt: 300 }}
-      />,
-    );
-    expect(notches()).toHaveLength(0);
-    // 150s rowed of a 300s warm-up: half of a 20% span.
-    expect(warmupFill()!.style.width).toBe("10%");
   });
 });

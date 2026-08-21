@@ -70,19 +70,14 @@ vi.mock("../api/useBaselines", () => ({
   }),
 }));
 
-// 2026-08-09's warmup setting (design §4/§9): the CONNECT door threads the
-// rower's own preference into `buildRun`, exactly as the phone-timer door
-// does in `Countdown.tsx`. This file is the ONE place that can prove it —
-// it already intercepts the interstitial's props, so it can read the
-// phases and the log seed the screen actually built.
-//
-// The hook's return value is switchable per test (`preferencesReturn`)
-// rather than frozen, because the door has two arms and BOTH need pinning:
-// a loaded preference must reach `buildRun`, and a preference that has NOT
-// loaded must read as no warm-up rather than as anything invented. A
-// frozen "ready" mock can only ever prove the first, which is exactly the
-// gap the arc review's own M4 mutant (a hardcoded 3' warm-up) walked
-// through — see the two tests at the bottom of this file.
+// PHASE WU: the Connect door no longer threads a warm-up preference into
+// `buildRun` — there is no such parameter and no warm-up phase for it to
+// produce. The three cases at the bottom of this file that pinned the two
+// arms of that threading (loaded / not-yet-loaded / explicitly off) went
+// with it; `WorkoutDetail.tsx` does not call `usePreferences` at all any
+// more. The mock below stays because other code under this render still
+// reaches the hook, and `preferencesReturn` stays switchable for the same
+// reason.
 const READY_PREFS = {
   state: "ready",
   preferences: {
@@ -161,13 +156,11 @@ describe("the log seed WorkoutDetail builds (7C Task 1)", () => {
     // list, a swapped baselines object, or drops the call entirely.
     expect(identity.logSeed).toStrictEqual(buildLogSeed(phases, baselines));
     // And a concrete value, not just self-consistency against a
-    // vacuously-empty result: this rower's 8:00 warm-up SETTING (mocked
-    // above) plus the fixture's one 6k+4 distance work step. The warm-up
-    // row is the load-bearing half here — it can only be present if this
-    // screen actually threaded `usePreferences().preferences.warmup` into
-    // `buildRun`, which is this task's own caller obligation.
+    // vacuously-empty result: the fixture's one 6k+4 distance work step.
+    // Phase WU removed the `{ label: "8:00 warm-up", kind: "warmup" }` entry
+    // that used to lead this list — the rower's warm-up SETTING produced it,
+    // and neither the setting nor the phase type it built exists.
     expect(identity.logSeed.steps).toStrictEqual([
-      { label: "8:00 warm-up", kind: "warmup" },
       { label: "2000 m @ 6k +4", kind: "work" },
     ]);
     expect(identity.logSeed.paces).toStrictEqual({ k6: 122 });
@@ -213,57 +206,5 @@ describe("a connected session that ends", () => {
     await userEvent.click(screen.getByRole("button", { name: "FIRE EXIT" }));
     expect(navigate).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Connect" })).toBeInTheDocument();
-  });
-});
-
-// Arc review F6: the Connect door's two preference arms, BEHAVIOUR-pinned.
-// `WorkoutDetail.test.tsx`'s own not-ready test can only assert that the
-// screen doesn't break (it has no way to see what was built); these two
-// read the phases and the log seed the screen actually handed the
-// interstitial, so they bind the preference's VALUE, not its presence.
-describe("the Connect door and the warm-up setting (design §4/§9)", () => {
-  async function connectAndCapture() {
-    renderDetail();
-    await openConnect();
-    expect(capturedProps).not.toBeNull();
-    return capturedProps!;
-  }
-
-  it("threads the LOADED preference into buildRun: the phases and the seed both carry that exact warm-up", async () => {
-    const { phases, identity } = await connectAndCapture();
-    // Not just "a warm-up exists" — the 8:00 is the mocked preference's own
-    // value, so a door that invented its own duration fails here.
-    expect(phases[0]).toStrictEqual({
-      type: "warmup",
-      seconds: 480,
-      label: "Easy",
-      originalIndex: -1,
-    });
-    expect(identity.logSeed.steps[0]).toStrictEqual({
-      label: "8:00 warm-up",
-      kind: "warmup",
-    });
-  });
-
-  it("prepends NOTHING while the preference is still loading — the OFF default, never an invented warm-up", async () => {
-    preferencesReturn = { state: "loading" };
-    const { phases, identity } = await connectAndCapture();
-    expect(phases.some((p) => p.type === "warmup")).toBe(false);
-    expect(identity.logSeed.steps.some((s) => s.kind === "warmup")).toBe(false);
-    // The workout's own one work step is still all there, unshifted — a
-    // not-ready preference costs the session nothing but its warm-up.
-    expect(identity.logSeed.steps).toStrictEqual([
-      { label: "2000 m @ 6k +4", kind: "work" },
-    ]);
-  });
-
-  it("prepends nothing when the preference is loaded and OFF (null)", async () => {
-    preferencesReturn = {
-      ...READY_PREFS,
-      preferences: { ...READY_PREFS.preferences, warmup: null },
-    };
-    const { phases, identity } = await connectAndCapture();
-    expect(phases.some((p) => p.type === "warmup")).toBe(false);
-    expect(identity.logSeed.steps.some((s) => s.kind === "warmup")).toBe(false);
   });
 });

@@ -13,9 +13,9 @@
 //   actually came off a (simulated) wire, through the real driver and the
 //   real interval-index normalization, not values a test typed in.
 //
-// Every fixture in this file is "Filling Low" from the seeded 300 (8:00
-// warm-up, then 4 × 2000 m with 3:00 rest — retuned from 3 reps in Task 3,
-// 2026-08-10 library-rebalance, to reach its new 45-60 band), never a
+// Every fixture in this file is "Filling Low" from the seeded 300 (an 8:00
+// easy opener, then 4 × 2000 m with 3:00 rest — retuned from 3 reps in Task
+// 3, 2026-08-10 library-rebalance, to reach its new 45-60 band), never a
 // hand-built minimum.
 
 import { readFileSync } from "node:fs";
@@ -159,16 +159,21 @@ function fillingLow(): {
     id: "filling-low",
     title: w.title,
     type: w.type as WorkoutType,
-    steps: w.steps,
+    // Filling Low's own 8:00 `wu` row left the seed on 2026-08-09 and the
+    // warm-up PREFERENCE that replaced it left with Phase WU. The leading
+    // interval this whole file's indices assume is an authored 8' EASY step
+    // now, which compiles identically. Same 480s interval 0, same
+    // everything downstream.
+    steps: [
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 8 },
+        ref: { effort: "min" },
+      },
+      ...w.steps,
+    ],
   });
-  // 2026-08-09's warmup setting: Filling Low's own 8:00 `wu` row is gone
-  // from the seed; the warm-up interval this whole file's indices assume
-  // now comes from the rower's PREFERENCE, `buildRun`'s one producer for
-  // it. Same 480s interval 0, same everything downstream.
-  const phases = buildRun(draft, baselines, t0, {
-    kind: "time",
-    minutes: 8,
-  }).phases;
+  const phases = buildRun(draft, baselines, t0).phases;
   const program = compileProgram(phases);
   if ("code" in program) {
     throw new Error(`fixture failed to compile: ${program.code}`);
@@ -182,17 +187,23 @@ function fillingLow(): {
 
 const FIXTURE = fillingLow();
 
-/** The first work phase's own resolved split — every "slower"/"faster"
- *  fixture below is built relative to the WORKOUT's number, never a
- *  literal typed into this file. */
+/** The first SPLIT-REF work phase's own resolved split — every
+ *  "slower"/"faster" fixture below is built relative to the WORKOUT's
+ *  number, never a literal typed into this file.
+ *
+ *  Phase WU: this used to find the first `type: "work"` phase, which worked
+ *  only because phase 0 was a warm-up. Phase 0 is now the EASY opener — a
+ *  work phase, and one that carries an ESTIMATED `targetSplit` — so the
+ *  predicate has to name what it actually wants: the piece the rower chose
+ *  a pace for, `targetKind === "split"`. */
 const WORK_PHASE = (() => {
-  const p = FIXTURE.phases.find((x) => x.type === "work");
+  const p = FIXTURE.phases.find((x) => x.targetKind === "split");
   if (!p?.targetSplit) throw new Error("fixture has no split work phase");
   return p;
 })();
 
 /** Interval 1 is the first 2000 m work interval (interval 0 is the
- *  warm-up), so a frame with `intervalIndex: 1` sits on `WORK_PHASE`. */
+ *  easy opener), so a frame with `intervalIndex: 1` sits on `WORK_PHASE`. */
 function frame(overrides: Partial<MonitorFrame> = {}): MonitorFrame {
   // The session pair mirrors the raw pair unless a case overrides it — see
   // `connected/surfaceModel.test.ts`'s own copy of this factory for the
@@ -568,7 +579,7 @@ describe("pane B — live (connected-revamp Task 3: two heroes; CR2 spec 3 Task 
     // BOTH BRANCHES, on the same real fixture, because "renders nothing"
     // is only meaningful beside a case that renders something (tail review
     // M-5). Filling Low's interval 1 is a work piece at a 6K ref; its
-    // warm-up carries no target at all, which is the shape most phases
+    // easy opener carries no split ref, which is the shape most phases
     // have — Easy, Rest, All out and both effort words all caption blank.
     renderSurface({ frame: frame({ intervalIndex: 1 }) });
     const withRef = document.querySelector(".connected-hero-target-ref");
@@ -1663,7 +1674,7 @@ describe("the connected walk, fake-driven", () => {
           // THE CONSTANT, not its ordinal (task-7 review, L4). This was a
           // literal `3` under a comment naming INTERVALWORKTIME — and three
           // is INTERVALREST. The old assertions survived the lie because
-          // interval 1's phase is the warm-up with no rest phase after it,
+          // interval 1's phase is the easy opener with no rest phase after
           // so `phaseIndexForInterval`'s two branches resolved to the same
           // place. Naming the constant makes the slip impossible to retype,
           // and the status-word assertion below makes it impossible to
@@ -1730,12 +1741,15 @@ describe("the connected walk, fake-driven", () => {
     expect(document.querySelector(".connected-hero-value")!.textContent).toBe(
       "1:57.8",
     );
-    // And the interval the driver normalized to is Filling Low's 8:00
-    // warm-up (the program's interval 0), so the caption is that word alone:
-    // design spec §5b takes the warm-up out of the rower's count rather than
-    // making them read `1 OF 5` on a workout they know as four pieces.
-    expect(screen.getByText("WARM-UP")).toBeInTheDocument();
-    expect(screen.queryByText(/ OF /)).toBeNull();
+    // And the interval the driver normalized to is the program's interval
+    // 0, Filling Low's 8:00 easy opener. PHASE WU CHANGED WHAT THIS SAYS:
+    // that interval used to be a warm-up, which design spec §5b kept OUT of
+    // the rower's count — the caption read the bare word `WARM-UP` with no
+    // ordinal at all. There is no warm-up any more, so interval 0 is piece
+    // one of five like any other and the caption numbers it. The assertion
+    // moved because the product did, not because the old one stopped
+    // holding for some other reason.
+    expect(screen.getByText("1 OF 5 · WORK")).toBeInTheDocument();
 
     // THE PIN FOR THE ORDINAL ABOVE used to live here (task-7 review, L4):
     // pane A's status word was the one thing on this surface that read the
@@ -1746,7 +1760,8 @@ describe("the connected walk, fake-driven", () => {
     // connected-revamp Task 2), and nothing that survives reads `state`
     // unconditionally the way it did: `resting`'s only other consumer,
     // `phaseIndexForInterval`, is insensitive to this exact script (interval
-    // 0's warm-up has no adjacent rest phase for the boundary logic to pick
+    // 0's easy opener has no adjacent rest phase for the boundary logic to
+    // pick
     // between — confirmed against `server/seed/library/at.ts`'s "Filling
     // Low" fixture), so no surviving DOM text distinguishes the two
     // ordinals for this event. The wire-level decode itself stays

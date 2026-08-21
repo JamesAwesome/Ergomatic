@@ -129,9 +129,8 @@ describe("compileProgram: the 300-workout sweep", () => {
     // which test the LIMIT itself rather than what the library happens to
     // contain today). Sea Smoke (o2.ts) is the known largest — 24 IR
     // intervals (25 until 2026-08-09's warmup setting took every seeded
-    // workout's `wu` step out; the warm-up interval a rower actually gets
-    // is prepended from their PREFERENCE now, per the describe block at
-    // the bottom of this file).
+    // workout's `wu` step out; Phase WU then removed the preference that
+    // used to prepend one back, so 24 is simply what the library holds).
     const maxIntervals = Math.max(
       ...compiled.map((r) => (r.outcome === "compiled" ? r.intervalCount : 0)),
     );
@@ -195,124 +194,29 @@ describe("compileProgram: the removal dimension — leading-rest is live, not sy
   );
 });
 
-// INTEGRATION (2026-08-09 warmup-setting plan, Task 4): the phase
-// `buildRun` prepends from the SETTING reaches `compileProgram` as
-// interval 0 with `targetSplit: null`. Same assembly the Connect door
-// itself runs (`WorkoutDetail.tsx`'s `handleConnectProceed`: buildDraft ->
-// buildRun -> compileProgram), against a real seeded workout —
-// `domain/monitor/program.test.ts`'s own "warm-up arm" block pins the
-// compiler's half from hand-built phases; this is the half that proves the
-// two agree about the SHAPE `buildRun` actually emits.
-describe("compileProgram: the warm-up SETTING reaches interval 0", () => {
-  function programFor(
-    title: string,
-    warmup: Parameters<typeof buildRun>[3],
-  ): ReturnType<typeof compileProgram> {
+// PHASE WU deleted the describe that stood here, `compileProgram: the
+// warm-up SETTING reaches interval 0` — a 300-workout sweep plus three
+// cases pinning that `buildRun`'s prepended warm-up phase compiled to a
+// target-less interval 0, and to nothing at all with the preference off.
+// `buildRun` has no warm-up argument and `Phase["type"]` has no warm-up
+// member, so there is no prepend left to sweep for. The one case worth
+// keeping is below: a real seeded workout compiling end to end, through the
+// same `buildDraft -> buildRun -> compileProgram` assembly the Connect door
+// runs, to exactly the intervals its own steps describe.
+describe("compileProgram: a real seeded workout compiles to its own steps and nothing more", () => {
+  function programFor(title: string): ReturnType<typeof compileProgram> {
     const workout = LIBRARY_WORKOUTS.find((w) => w.title === title)!;
     const draft = buildDraft({
-      id: `warmup-${title}`,
+      id: `compile-${title}`,
       title: workout.title,
       type: workout.type,
       steps: workout.steps,
     });
-    return compileProgram(
-      buildRun(draft, DESIGN_BASELINES, NOW, warmup).phases,
-    );
+    return compileProgram(buildRun(draft, DESIGN_BASELINES, NOW).phases);
   }
 
-  it("across all 300 workouts, the warm-up is interval 0 and NOTHING ELSE is a warm-up", () => {
-    // Design spec §5b: every surface now reads `ProgramInterval.type`, and
-    // the numbering rule it feeds (`surfaceModel.ts`'s `intervalNumbering`)
-    // assumes a warm-up is the leading interval and the only one. That is a
-    // property of `engine.ts`'s `warmupPhases` + `buildRun`, not of the
-    // compiler, so it is pinned against the real library rather than a
-    // hand-built pair — with the preference ON for every workout, and OFF
-    // for every workout.
-    //
-    // Non-empty guard first (test-integrity sweep, S0e): every assertion in
-    // this test lives inside the loop, so an empty `LIBRARY_WORKOUTS` would
-    // pass it silently, "across all 300 workouts" and all. The count is in
-    // the title, so the count is what gets pinned.
-    expect(LIBRARY_WORKOUTS).toHaveLength(300);
-    for (const [i, workout] of LIBRARY_WORKOUTS.entries()) {
-      const draft = buildDraft({
-        id: `warmup-sweep-${i}`,
-        title: workout.title,
-        type: workout.type,
-        steps: workout.steps,
-      });
-      const on = compileProgram(
-        buildRun(draft, DESIGN_BASELINES, NOW, { kind: "time", minutes: 10 })
-          .phases,
-      );
-      const off = compileProgram(buildRun(draft, DESIGN_BASELINES, NOW).phases);
-      if (!("intervals" in on) || !("intervals" in off)) {
-        throw new Error(`${workout.title} failed to compile`);
-      }
-      const types = on.intervals.map((interval) => interval.type);
-      expect(types[0]).toBe("warmup");
-      expect(types.slice(1).includes("warmup")).toBe(false);
-      // And with the preference off there is no warm-up interval anywhere —
-      // the shape most sessions have, and the one §5b must not touch.
-      expect(off.intervals.some((interval) => interval.type === "warmup")).toBe(
-        false,
-      );
-      expect(off.intervals).toHaveLength(on.intervals.length - 1);
-    }
-  });
-
-  it("a TIME warm-up compiles to interval 0: a time interval, no target, no rate (Beam Sea)", () => {
-    const result = programFor("Beam Sea", { kind: "time", minutes: 10 });
-    expect("intervals" in result).toBe(true);
-    const { intervals } = result as { intervals: unknown[] };
-    expect(intervals[0]).toStrictEqual({
-      type: "warmup",
-      kind: "time",
-      value: 600,
-      targetSplit: null,
-      displaySpm: null,
-      restSeconds: 0,
-    });
-    // Beam Sea's own single 2000m interval follows, untouched.
-    expect(intervals).toHaveLength(2);
-  });
-
-  it("a DISTANCE warm-up compiles to interval 0 with targetSplit NULL, despite carrying a real display estimate (Beam Sea)", () => {
-    const workout = LIBRARY_WORKOUTS.find((w) => w.title === "Beam Sea")!;
-    const draft = buildDraft({
-      id: "warmup-distance",
-      title: workout.title,
-      type: workout.type,
-      steps: workout.steps,
-    });
-    const run = buildRun(draft, DESIGN_BASELINES, NOW, {
-      kind: "distance",
-      meters: 2000,
-      restSeconds: 90,
-    });
-    // The phone's own copy DOES carry the easy-band estimate — that is what
-    // prices the phase for the countdown (domain/expand.ts's
-    // `phaseSeconds`). 120 (6k) + 20 = 140 (domain/pace.ts:103).
-    expect(run.phases[0]).toMatchObject({ type: "warmup", targetSplit: 140 });
-
-    const result = compileProgram(run.phases);
-    expect("intervals" in result).toBe(true);
-    const { intervals } = result as { intervals: unknown[] };
-    // …and the WIRE does not: no pace target on a warm-up interval, ever.
-    expect(intervals[0]).toStrictEqual({
-      type: "warmup",
-      kind: "distance",
-      value: 2000,
-      targetSplit: null,
-      displaySpm: null,
-      // The setting's own trailing rest, folded onto the warm-up interval
-      // exactly as any other rest phase folds onto the interval before it.
-      restSeconds: 90,
-    });
-  });
-
-  it("prepends no interval at all when the setting is OFF (the default)", () => {
-    const result = programFor("Beam Sea", null);
+  it("Beam Sea compiles to its single 2000 m interval, with nothing in front of it", () => {
+    const result = programFor("Beam Sea");
     expect(result).toStrictEqual({
       intervals: [
         {

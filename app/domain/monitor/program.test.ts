@@ -48,14 +48,11 @@ function fillerWorkPhase(originalIndex: number): CompiledPhase {
 describe("compileProgram: real-starter pinned tables", () => {
   // 2026-08-09 (the warmup setting): every table in this describe used to
   // open with a warm-up interval, because every seeded workout opened with
-  // a `wu` step. `wu` left the `Step` union and the seeds were stripped, so
-  // `expandPhases` — this file's only phase source — can no longer produce
-  // a `type: "warmup"` phase at all (`domain/expand.ts`'s own comment where
-  // `case "wu"` used to be). A warm-up is now the rower's SETTING,
-  // prepended by `src/session/engine.ts`'s `buildRun`, which `domain/`
-  // cannot import: the warm-up interval's own compilation is pinned
-  // directly from hand-built phases in "the warm-up arm" below, and
-  // end-to-end from the setting in `src/monitor/program.sweep.test.ts`.
+  // a `wu` step. `wu` left the `Step` union and the seeds were stripped;
+  // Phase WU then removed the `type: "warmup"` Phase member and the
+  // preference that was its last producer, so no phase reaching this
+  // compiler can be a warm-up from any direction. The describe that pinned
+  // the compiler's own warm-up arm went with it.
 
   // TR "Beam Sea": 2000m continuous @ 2k+6, spm 24 (server/seed/library/
   // tr.ts). No rest anywhere — the simplest table there is, one plain
@@ -173,101 +170,13 @@ describe("compileProgram: real-starter pinned tables", () => {
   });
 });
 
-// 2026-08-09's warmup-setting design §4: the warm-up phase reaches this
-// compiler from `src/session/engine.ts`'s `buildRun` (the preference's one
-// producer), never from a step. `domain/` cannot import `src/`, so the
-// phases here are hand-built to the exact shape `warmupPhases` emits —
-// `src/monitor/program.sweep.test.ts` runs the same assertion through the
-// real `buildRun` so the two shapes cannot drift silently.
-describe("compileProgram: the warm-up arm", () => {
-  const work: CompiledPhase = {
-    type: "work",
-    targetKind: "split",
-    targetSplit: 110,
-    spm: 24,
-    seconds: 120,
-    originalIndex: 0,
-  };
-
-  it("compiles a TIME warm-up as interval 0 with no target and no rate", () => {
-    const result = compileProgram([
-      { type: "warmup", seconds: 600, originalIndex: -1 },
-      work,
-    ]);
-    expect(result).toStrictEqual({
-      intervals: [
-        {
-          type: "warmup",
-          kind: "time",
-          value: 600,
-          targetSplit: null,
-          displaySpm: null,
-          restSeconds: 0,
-        },
-        {
-          type: "work",
-          kind: "time",
-          value: 120,
-          targetSplit: 110,
-          displaySpm: 24,
-          restSeconds: 0,
-        },
-      ],
-    });
-  });
-
-  it("folds the setting's own trailing rest onto the warm-up interval", () => {
-    const result = compileProgram([
-      { type: "warmup", seconds: 600, originalIndex: -1 },
-      { type: "rest", seconds: 90, originalIndex: -1 },
-      work,
-    ]);
-    expect(result).toMatchObject({
-      intervals: [{ value: 600, restSeconds: 90 }, { value: 120 }],
-    });
-  });
-
-  it("never programs a DISTANCE warm-up's display estimate as a hard target", () => {
-    // The phase carries a real `targetSplit` (the easy-band estimate the
-    // phone needs to price `meters` at all — `domain/expand.ts`'s
-    // `phaseSeconds` returns null without one) and NO `targetKind`, so
-    // neither of the two older null-arms would catch it. Only the phase
-    // TYPE does. Without the warmup arm this interval compiles with
-    // `targetSplit: 140` and the PM5 is handed a pace the rower never
-    // chose for the one interval that is meant to have none.
-    const result = compileProgram([
-      { type: "warmup", meters: 2000, targetSplit: 140, originalIndex: -1 },
-      work,
-    ]);
-    expect(result).toStrictEqual({
-      intervals: [
-        {
-          type: "warmup",
-          kind: "distance",
-          value: 2000,
-          targetSplit: null,
-          displaySpm: null,
-          restSeconds: 0,
-        },
-        {
-          type: "work",
-          kind: "time",
-          value: 120,
-          targetSplit: 110,
-          displaySpm: 24,
-          restSeconds: 0,
-        },
-      ],
-    });
-  });
-});
-
-// Design spec §5b (ruling 12). The compiler KNOWS it is compiling a warm-up
-// — it nulls the target on exactly that branch — and used to throw the fact
-// away at the push site, so every consumer downstream inherited an interval
-// it could not tell from work: the caption counted it (a 4-piece workout read
-// `1 OF 5` while warming up) and the notched bar folded its span in as if the
-// rower were working. The type now travels with the interval.
+// Design spec §5b (ruling 12): the compiled interval carries its phase's own
+// TYPE rather than throwing it away at the push site. Two of this block's
+// three cases went with Phase WU — they contrasted a warm-up interval
+// against a work one, and there is no warm-up type left to contrast. What
+// survives is the claim `IntervalType` itself rests on and cites here by
+// name: a REST never becomes an interval, so `IntervalType` needs no "rest"
+// member.
 describe("compileProgram: the interval carries its phase type (§5b)", () => {
   const work: CompiledPhase = {
     type: "work",
@@ -278,22 +187,12 @@ describe("compileProgram: the interval carries its phase type (§5b)", () => {
     originalIndex: 0,
   };
 
-  it("marks the warm-up a warm-up and everything else work", () => {
-    const result = compileProgram([
-      { type: "warmup", seconds: 480, originalIndex: -1 },
-      work,
-      work,
-    ]);
-    // The fact the caption, the bar and the grid all READ, instead of
-    // re-deriving "was that a warm-up?" from phase indices.
-    expect(
-      "intervals" in result ? result.intervals.map((i) => i.type) : result,
-    ).toStrictEqual(["warmup", "work", "work"]);
-  });
-
   it("a REST never becomes an interval, so it never needs a type of its own", () => {
+    // Phase WU retyped the leading `{ type: "warmup", seconds: 480 }` phase
+    // to work; nothing else about this fixture changed, and the property it
+    // pins — rest folds, never becomes an interval — is untouched by that.
     const phases: CompiledPhase[] = [
-      { type: "warmup", seconds: 480, originalIndex: -1 },
+      { type: "work", seconds: 480, originalIndex: -1 },
       { type: "rest", seconds: 60, originalIndex: -1 },
       work,
       { type: "rest", seconds: 60, originalIndex: 0 },
@@ -305,23 +204,13 @@ describe("compileProgram: the interval carries its phase type (§5b)", () => {
       // Six phases in, three of them rests, three intervals out: every rest
       // folded into the PRECEDING interval's `restSeconds` (the H7 rule), so
       // `"rest"` cannot reach the push site and the output union is exactly
-      // the three non-rest types. This is the claim `ProgramInterval.type`
-      // rests on, pinned rather than assumed.
+      // the non-rest types. This is the claim `ProgramInterval.type` rests
+      // on, pinned rather than assumed.
       intervals: [
-        { type: "warmup", restSeconds: 60 },
+        { type: "work", restSeconds: 60 },
         { type: "work", restSeconds: 90 },
         { type: "work", restSeconds: 0 },
       ],
-    });
-  });
-
-  it("the type is the PHASE's own, never inferred from the interval's position", () => {
-    // A warm-up is always phase 0 in production (`src/session/engine.ts`'s
-    // `warmupPhases`, prepended by `buildRun`), so a compiler that simply
-    // called interval 0 the warm-up would satisfy every other fixture here.
-    // It must not: a session with no warm-up has no warm-up interval at all.
-    expect(compileProgram([work, work])).toMatchObject({
-      intervals: [{ type: "work" }, { type: "work" }],
     });
   });
 });
@@ -376,15 +265,19 @@ describe("compileProgram: rest folding (H7)", () => {
     });
   });
 
-  it("a warmup interval can absorb a following rest just like a work interval", () => {
+  it("a SINGLE trailing rest folds onto the interval before it — the base case the summing test above generalizes", () => {
+    // Phase WU retyped this fixture's leading phase from "warmup" to "work"
+    // (that member is gone). It keeps its own case rather than collapsing
+    // into the summing test above because the shapes differ: one rest, not
+    // two, and a target-less interval rather than a split-ref one.
     const phases: CompiledPhase[] = [
-      { type: "warmup", seconds: 300, originalIndex: 0 },
+      { type: "work", seconds: 300, originalIndex: 0 },
       { type: "rest", seconds: 30, originalIndex: 0 },
     ];
     expect(compileProgram(phases)).toStrictEqual({
       intervals: [
         {
-          type: "warmup",
+          type: "work",
           kind: "time",
           value: 300,
           targetSplit: null,

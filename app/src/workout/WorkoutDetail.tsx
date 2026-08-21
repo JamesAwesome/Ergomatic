@@ -4,7 +4,6 @@ import { api } from "../api";
 import { useWorkouts } from "../api/useWorkouts";
 import type { LibraryWorkout } from "../api/useWorkouts";
 import { useBaselines } from "../api/useBaselines";
-import { usePreferences } from "../api/usePreferences";
 import {
   probeBluetoothStatus,
   type BluetoothCapability,
@@ -153,18 +152,6 @@ function WorkoutDetailView({
   // door off this screen.
   const [nudges, setNudges] = useState<Record<number, number>>({});
   const [connectError, setConnectError] = useState<string | null>(null);
-  // The warm-up SETTING, for the CONNECT door's own `buildRun` below
-  // (2026-08-09's warmup-setting design §9: "every session — phone or
-  // connected — prepends it"). The phone-timer door reads the same
-  // preference in `Countdown.tsx`; this screen had no preferences access
-  // at all before, which is why the hook is new here.
-  //
-  // Deliberately NOT added to this screen's LOADING gate (the
-  // workouts/baselines pair above): a preference that hasn't arrived yet
-  // must not hold the whole workout detail behind a spinner, and Connect
-  // is many taps away from mount. A still-loading or failed fetch reads as
-  // "no warm-up," matching the OFF default every rower starts with.
-  const preferencesState = usePreferences();
   // `null` = the button/stack is showing; non-null = the full-screen
   // interstitial has taken over (handoff §2: "full screen... a sheet was
   // rejected"). Carries everything the interstitial needs so it never has
@@ -264,14 +251,7 @@ function WorkoutDetailView({
       return;
     }
     const draft = buildNudgedDraft(workout, nudges);
-    const run = buildRun(
-      draft,
-      baselines,
-      new Date(),
-      preferencesState.state === "ready"
-        ? (preferencesState.preferences.warmup ?? null)
-        : null,
-    );
+    const run = buildRun(draft, baselines, new Date());
     const compiled = compileProgram(run.phases);
     if ("code" in compiled) {
       setConnectError(compiled.message);
@@ -282,7 +262,7 @@ function WorkoutDetailView({
     // was just built from, at this same moment — the one point the connect
     // path ever has an `EnginePhase[]` to hand (`session/logDraft.ts`'s own
     // `buildLogSeed` doc comment: the connect path persists no draft for a
-    // later screen to recover labels/warmup-ness from instead).
+    // later screen to recover labels from instead).
     const logSeed = buildLogSeed(run.phases, baselines);
     setConnecting({
       program: compiled,

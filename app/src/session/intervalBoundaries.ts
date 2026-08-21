@@ -47,35 +47,6 @@ import type { EnginePhase } from "./engine";
 export interface IntervalBoundaries {
   seconds: number[];
   predictedFrom: number | null;
-  /**
-   * WHERE THE WARM-UP ENDS, in the same absolute seconds `seconds` uses —
-   * or `null` when this session has no warm-up, which is most of them
-   * (design spec §5b, ruling 12).
-   *
-   * The warm-up's span IS proportionally real: it is time the rower spends
-   * rowing, and shrinking it would lie about the shape of the session. What
-   * changes is its TONE — the bar fills THROUGH the warm-up as the rower
-   * rows it, in a lighter tone than the work fill, so the bar advances while
-   * the rower is moving and still reads as "this part is not the work"
-   * (James, 2026-08-12, amending §5b's first reading). This position is the
-   * cap on that fill: `TimerRuler`'s `warmupFillPercent`. No new colour, no
-   * legend.
-   *
-   * It is exactly `seconds[0]` whenever interval 0 is a warm-up, so it
-   * RE-ANCHORS for free: a warm-up the machine measured at 9:00 tones 9:00,
-   * not the programmed 8:00. And it is `null` in the three cases where
-   * there is no honest width to draw — no warm-up at all, a warm-up the
-   * honest stop could not price, and a session that is nothing BUT a
-   * warm-up (where the warm-up tone would be the only fill the bar could
-   * ever show, saying nothing).
-   *
-   * The span starts at 0 rather than carrying a start of its own: a
-   * warm-up is always the FIRST phase of a run — `src/session/engine.ts`'s
-   * `warmupPhases` is the one producer of `type: "warmup"` and `buildRun`
-   * prepends it ("ORDER IS PART OF THE CONTRACT", that function's own
-   * comment) — so there is nothing before it to leave untoned.
-   */
-  warmupEndsAt: number | null;
 }
 
 /** One interval as the caption counts it: its own non-rest phase plus every
@@ -83,8 +54,8 @@ export interface IntervalBoundaries {
 export interface IntervalGroup {
   /** What the interval IS, straight off its own phase — the same fact
    *  `ProgramInterval.type` carries on the compiled side (design spec §5b),
-   *  and the same three-member union for the same reason: a rest never gets
-   *  a group of its own, it folds onto the one before it. */
+   *  and the same union for the same reason: a rest never gets a group of
+   *  its own, it folds onto the one before it. */
   type: IntervalType;
   /** Position in the `phases` array of the interval's non-rest phase — the
    *  key `SessionRun.actuals` is stored under (`session/run.ts`: "keyed by
@@ -229,14 +200,5 @@ export function intervalBoundaries(
     seconds.push(cumulative);
   }
 
-  // The warm-up's own span, if this session has one (design spec §5b). It is
-  // the FIRST boundary and nothing else: interval 0's end, re-anchored or
-  // estimated exactly like every other position on this bar. A session whose
-  // first interval is work has no chunk to tone, and neither has one whose
-  // warm-up produced no boundary at all — the honest stop fired on it, or it
-  // is the only interval there is (see `IntervalBoundaries.warmupEndsAt`).
-  const warmupEndsAt =
-    groups[0]?.type === "warmup" && seconds.length > 0 ? seconds[0]! : null;
-
-  return { seconds, predictedFrom, warmupEndsAt };
+  return { seconds, predictedFrom };
 }

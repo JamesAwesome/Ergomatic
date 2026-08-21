@@ -63,12 +63,22 @@ const SESSIONS_DIR = import.meta.url
 
 /** Copied verbatim from `connectedMetricsReplay.test.ts:86` — see that
  *  file's own doc comment for the full transcription provenance. The
- *  MOVER capture: a 100m warm-up (interval 0) followed by four unequal
- *  work intervals. */
+ *  MOVER capture: a 100m easy opener (interval 0) followed by four unequal
+ *  work intervals.
+ *
+ *  PHASE WU RETYPED INTERVAL 0, and nothing else about it. It was
+ *  `type: "warmup"` when Task 1 pinned this file; the union no longer has
+ *  that member, so it is `"work"` here. Every other field is
+ *  byte-identical, `targetSplit: null` included — that null is what makes
+ *  the replay reproduce the recorded tx bytes exactly, because
+ *  `program.ts`'s warm-up arm only ever NULLED `targetSplit` and
+ *  `commands.ts:183` sends the same `NO_TARGET_PACE_SECONDS = 0` sentinel
+ *  for a target-less effort interval. The retype is the whole reason this
+ *  file's MOVER expectation moves. */
 const SESSION_2_PROGRAM: WorkoutProgram = {
   intervals: [
     {
-      type: "warmup",
+      type: "work",
       kind: "distance",
       value: 100,
       targetSplit: null,
@@ -118,7 +128,16 @@ const SESSION_2_PROGRAM: WorkoutProgram = {
  *  `phaseIndexForInterval` and this file's own `buildLogSeed` call both
  *  expect. */
 const CM_PHASES: EnginePhase[] = [
-  { type: "warmup", meters: 100, label: "Easy", originalIndex: -1 },
+  // Phase WU: was `{ type: "warmup", ..., originalIndex: -1 }`, where -1 was
+  // `engine.ts`'s `WARMUP_ORIGINAL_INDEX` sentinel — the warm-up came from a
+  // preference, not an authored step, so it had no draft index at all. Both
+  // are gone, so this is an ordinary work phase and needs a real index.
+  // 0 collides with the first timed piece below, which reads as "one
+  // authored step produced both" — inert here (nothing this harness calls
+  // reads `originalIndex`: `buildLogSeed` keys off type/label/ref, and
+  // `buildSummaryModel` reads the run's actuals and program) and kept so
+  // this array stays a verbatim copy of `connectedMetricsReplay.test.ts`'s.
+  { type: "work", meters: 100, label: "Easy", originalIndex: 0 },
   {
     type: "work",
     seconds: 60,
@@ -289,16 +308,25 @@ async function buildSummaryForCapture(capture: Capture): Promise<SummaryModel> {
 }
 
 describe("Phase WU — the two replay pins (task-1-brief.md)", () => {
-  // The MOVER. Today interval 0 is a warm-up and AVG SPLIT excludes it.
-  // Phase WU retypes it `work`; this pin exists so that change is visible
-  // and deliberate rather than silent. Post-WU expectations live in a
-  // later task, swapped in once the removal actually lands.
-  it("session-2: today's heroes, with the warm-up excluded from AVG SPLIT", async () => {
+  // The MOVER, now flipped. Interval 0 used to be a warm-up that AVG SPLIT
+  // excluded; Phase WU retyped it `work` (see `SESSION_2_PROGRAM`/
+  // `CM_PHASES` above), so its 100 m and its seconds now count towards the
+  // average like every other piece. That is the ONE number this removal is
+  // allowed to move, and it moves 128.467 -> 129.772 (2:08.5 -> 2:09.8):
+  // the opener was easy, so folding it in makes the session average slower.
+  //
+  // DISTANCE and TIME DO NOT MOVE, and that is the load-bearing half of
+  // this pin. Both already counted the warm-up before Phase WU — R-B sums
+  // every actual's work+rest distance and R-D sums every completed
+  // interval's seconds, neither of them ever consulting the interval TYPE —
+  // so retyping interval 0 cannot touch either. If one of them moves, the
+  // removal reached into an accumulator it had no business touching.
+  it("session-2: the retyped opener now counts towards AVG SPLIT", async () => {
     const summary = await buildSummaryForCapture(SESSION_2);
     expect(summary.heroes.distanceMeters).toBe(1599);
     expect(summary.heroes.timeSeconds).toBeCloseTo(488.4, 1);
-    expect(summary.heroes.avgSplitSeconds).toBeCloseTo(128.467, 2); // 2:08.5
-    expect(summary.rows.filter((r) => r.measured)).toHaveLength(5); // 1 wu + 4 work
+    expect(summary.heroes.avgSplitSeconds).toBeCloseTo(129.772, 2); // 2:09.8
+    expect(summary.rows.filter((r) => r.measured)).toHaveLength(5); // 5 work rows
   });
 
   // The INERT CONTROL. No warm-up anywhere in this capture, so every

@@ -65,28 +65,6 @@ async function setBaselines(page: Page): Promise<void> {
   }
 }
 
-/** Sets the warm-up preference via the real `PUT /api/prefs` route
- *  (2026-08-09 warmup-setting spec §2) — same in-page-fetch idiom as
- *  `setBaselines` above, for a describe whose sweep needs the setting ON
- *  rather than its OFF default. */
-async function setWarmup(
-  page: Page,
-  warmup:
-    { kind: "time"; minutes: number } | { kind: "distance"; meters: number },
-): Promise<void> {
-  const result = await page.evaluate(async (patch) => {
-    const res = await fetch("/api/prefs", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ warmup: patch }),
-    });
-    return { ok: res.ok, status: res.status, body: await res.text() };
-  }, warmup);
-  if (!result.ok) {
-    throw new Error(`warmup setup failed: ${result.status} ${result.body}`);
-  }
-}
-
 /** Activates a preset plan via the real `PUT /api/plan` route (Plan.tsx's
  *  own `choose`) — this is what puts a genuine 84-row sequence behind
  *  Today's plan-driven suggestion and the Plan screen's active view. */
@@ -1900,18 +1878,23 @@ function buildInterruptedMonitorRun(workoutId: string): MonitorRun {
     id: workoutId,
     title: hoarfrost.title,
     type: hoarfrost.type as WorkoutType,
-    steps: [timeWork, distanceWork],
+    // Phase WU: interval 0 came from `buildRun`'s deleted warm-up argument.
+    // An authored 4' EASY step compiles to the identical target-less
+    // interval, so every `IntervalActual.index` below is unchanged. What
+    // DID change is that it now produces a logged, numbered summary row
+    // rather than the unnumbered WARM-UP row.
+    steps: [
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 4 },
+        ref: { effort: "min" },
+      },
+      timeWork,
+      distanceWork,
+    ],
   });
   const started = startDraft(draft);
-  const built = buildRun(
-    started,
-    MONITOR_FIXTURE_BASELINES,
-    MONITOR_FIXED_NOW,
-    {
-      kind: "time",
-      minutes: 4,
-    },
-  );
+  const built = buildRun(started, MONITOR_FIXTURE_BASELINES, MONITOR_FIXED_NOW);
   const program = compileOrThrow(built.phases);
   const logSeed = buildLogSeed(built.phases, MONITOR_FIXTURE_BASELINES);
   const actuals: IntervalActual[] = [
@@ -2061,18 +2044,24 @@ function buildCompletedMonitorRun(workoutId: string): MonitorRun {
     id: workoutId,
     title: hoarfrost.title,
     type: hoarfrost.type as WorkoutType,
-    steps: [timeWork, distanceWork],
+    // Phase WU: interval 0 came from `buildRun`'s deleted warm-up argument.
+    // An authored 4' EASY step compiles to the identical target-less
+    // interval, so every `IntervalActual.index` below is unchanged. What
+    // DID change is that it now produces a logged, NUMBERED summary row
+    // rather than the unnumbered WARM-UP row — so this fixture's summary
+    // has three rows where it used to have a warm-up row plus two.
+    steps: [
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 4 },
+        ref: { effort: "min" },
+      },
+      timeWork,
+      distanceWork,
+    ],
   });
   const started = startDraft(draft);
-  const built = buildRun(
-    started,
-    MONITOR_FIXTURE_BASELINES,
-    MONITOR_FIXED_NOW,
-    {
-      kind: "time",
-      minutes: 4,
-    },
-  );
+  const built = buildRun(started, MONITOR_FIXTURE_BASELINES, MONITOR_FIXED_NOW);
   const program = compileOrThrow(built.phases);
   const logSeed = buildLogSeed(built.phases, MONITOR_FIXTURE_BASELINES);
   return {
@@ -3036,30 +3025,10 @@ test.describe("builder screen", () => {
     expect(trChipBg).toBe("rgb(27, 26, 23)"); // --type-tr = --ink
   });
 
-  // Phase 5F Task 7: the warm-up line moved above the step list, reading as
-  // an implicit step 0 rather than a footnote down by the totals — a
-  // real-browser structural pin, since jsdom has no layout and can't tell
-  // "above" from "below". The line itself is conditional on the warm-up
-  // SETTING now (2026-08-09 warmup-setting spec §5), which defaults OFF —
-  // unlike every other test in this describe (left at the default, class
-  // (a)), warm-up IS this test's subject, so it turns the setting ON via
-  // the real preferences route, then reloads so Builder's own
-  // `usePreferences` mount refetches it (a fresh `page.goto` would also
-  // work; `reload` is scoped to this one test rather than moving into the
-  // shared beforeEach, which every other test in the describe doesn't
-  // need).
-  test("the warm-up line precedes the step list", async ({ page }) => {
-    await setWarmup(page, { kind: "time", minutes: 10 });
-    await page.reload();
-
-    const warmup = page.locator(".builder-warmup-line");
-    const steps = page.locator(".builder-steps");
-    await expect(warmup).toBeVisible();
-
-    const warmupBox = await warmup.boundingBox();
-    const stepsBox = await steps.boundingBox();
-    expect(warmupBox!.y).toBeLessThan(stepsBox!.y);
-  });
+  // PHASE WU deleted the test that stood here, "the warm-up line precedes
+  // the step list" — the Builder's `+ N warm-up from your preferences` hint
+  // and the `.builder-warmup-line` element it rendered are gone with the
+  // setting they promised.
 
   // Phase 5F Tasks 3/4: the DUR field used to open a decimal number pad
   // (`inputMode="decimal"`) that had no way to type a colon — a rower
@@ -4957,18 +4926,22 @@ test.describe("post-workout summary (monitor door, completed — judged rows & m
   // `rowJudgment`, summaryModel.ts, never even reaches a warm-up row — it
   // is built straight from the machine actual, never through the
   // targetSplit/actualSource gate a work row goes through).
-  test("§2E warm-up row: labeled, measured, UNJUDGED — no bar, no tick", async ({
+  test("§2E opening row: numbered, measured, UNJUDGED — no bar, no tick", async ({
     page,
   }) => {
-    const warmupRow = page.locator(".summary-row-warmup");
-    await expect(warmupRow).toBeVisible();
-    await expect(warmupRow.locator(".summary-row-warmup-label")).toHaveText(
-      "WARM-UP",
-    );
-    await expect(warmupRow.locator(".summary-row-time")).not.toBeEmpty();
-    await expect(warmupRow.locator(".summary-row-pace")).not.toBeEmpty();
-    await expect(warmupRow.locator(".summary-row-bar")).toHaveCount(0);
-    await expect(warmupRow.locator(".summary-row-bar-tick")).toHaveCount(0);
+    // PHASE WU CHANGED WHAT THIS ROW IS. It was the unnumbered `WARM-UP`
+    // row — `.summary-row-warmup` / `.summary-row-warmup-label`, both
+    // deleted with the row type. Row 1 is an ordinary numbered row now, and
+    // it is still measured and still unjudged, because the fixture's
+    // opening piece is an EFFORT step and carries no target to judge
+    // against. Same rule, different reason for reaching it.
+    const openingRow = page.locator(".summary-row").first();
+    await expect(openingRow).toBeVisible();
+    await expect(openingRow.locator(".summary-row-index")).toHaveText("1");
+    await expect(openingRow.locator(".summary-row-time")).not.toBeEmpty();
+    await expect(openingRow.locator(".summary-row-pace")).not.toBeEmpty();
+    await expect(openingRow.locator(".summary-row-bar")).toHaveCount(0);
+    await expect(openingRow.locator(".summary-row-bar-tick")).toHaveCount(0);
   });
 
   // Task 4 (witness sweep): §2's own ruling, live — "the authored target
@@ -6339,7 +6312,7 @@ test.describe("connected screens (fake-driven)", () => {
       expect(status.fontSize).toBe("22px");
       expect(status.letterSpacing).toBeCloseTo(22 * 0.04, 1);
       expect(status.color).toBe(INK_RGB);
-      expect(status.text).toBe("1 OF 4 · WORK");
+      expect(status.text).toBe("2 OF 5 · WORK"); // Phase WU: was "1 OF 4 · WORK"
     });
 
     test("progress bar: 6px track, 3px gaps, done/active/upcoming colours (contrast logged)", async ({
@@ -6749,14 +6722,15 @@ test.describe("connected screens (fake-driven)", () => {
       expect(value.color).toBe(INK_RGB);
       // EST LEFT (Phase LL): no longer a straight session-clock subtraction
       // (was "39:48"). `connected-pane-live`'s fixture (`intervalIndex: 1`)
-      // lands on Filling Low's FIRST work phase (index 0 is the warm-up),
-      // so the estimate is warm-up(480) + this frame's own live term — the
-      // INTERVAL clock, 205.44 s, which is what the fixture's own 800 m at
-      // its own 2:08.4 average takes. (It read `828` until PR #144's fix
-      // round: that was the SESSION clock, warm-up included, in the raw
-      // half too — impossible, and it put this cell 8:00 low beside a bar
-      // painted two intervals past its own `1 OF 4` caption.) 480 + 205.44
-      // = 685.44; totalLeft = 3216 - 685.44 = 2530.56 s.
+      // lands on Filling Low's FIRST 2000 m rep (index 0 is the easy
+      // opener), so the estimate is opener(480) + this frame's own live
+      // term — the INTERVAL clock, 205.44 s, which is what the fixture's
+      // own 800 m at its own 2:08.4 average takes. (It read `828` until PR
+      // #144's fix round: that was the SESSION clock, the opener included,
+      // in the raw half too — impossible, and it put this cell 8:00 low
+      // beside a bar painted two intervals past its own caption.) 480 +
+      // 205.44 = 685.44; totalLeft = 3216 - 685.44 = 2530.56 s. The number
+      // is untouched by Phase WU; only the caption beside it renumbered.
       expect(value.text).toBe("42:11");
     });
 
@@ -7319,7 +7293,7 @@ test.describe("connected screens (fake-driven)", () => {
         page.getByRole("button", { name: "Grid pane" }),
       ).toHaveAttribute("aria-current", "page");
       const trailing = page.locator(".connected-line-trailing");
-      await expect(trailing).toContainText("1 OF 4");
+      await expect(trailing).toContainText("2 OF 5"); // Phase WU: was "1 OF 4"
       // EST LEFT (Phase LL): "42:11", not "39:48" — see the identical
       // `connected-pane-grid` fixture's own note in the LIVE band test
       // above ("bottom band: rule above...").
@@ -7412,7 +7386,9 @@ test.describe("connected screens (fake-driven)", () => {
       // solid `--rule-2` bottom border.
       const completed = page.locator(".connected-grid-completed");
       await expect(completed).toHaveCount(1);
-      await expect(completed.locator(".connected-grid-num")).toHaveText("WU");
+      // Phase WU: `1`, not `WU` — the leading interval is a numbered piece
+      // now, and the `#` column has no unnumbered case left at all.
+      await expect(completed.locator(".connected-grid-num")).toHaveText("1");
       const completedStyle = await completed.evaluate((el) => {
         const cs = getComputedStyle(el);
         return {
@@ -7511,8 +7487,10 @@ test.describe("connected screens (fake-driven)", () => {
         });
       expect(caption.fontSize).toBe("12px");
       expect(caption.color).toBe(INK_3_RGB);
+      // Phase WU renumbered every row: the leading easy piece is counted
+      // now, so Filling Low's four 2000 m reps are rows 2-5, not 1-4.
       expect(caption.text).toBe(
-        "3 MORE BELOW · ROWS 1, 2, 3, 4 ARE 2000 M PIECES · METERS COUNT DOWN",
+        "3 MORE BELOW · ROWS 2, 3, 4, 5 ARE 2000 M PIECES · METERS COUNT DOWN",
       );
     });
 

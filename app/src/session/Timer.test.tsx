@@ -12,7 +12,6 @@ import {
   startDraft,
   type SessionDraft,
 } from "./draft";
-import type { WarmupSetting } from "../api/usePreferences";
 import { buildRun, type EnginePhase } from "./engine";
 import { loadRun, saveRun, type SessionRun } from "./run";
 import {
@@ -25,6 +24,8 @@ import {
 import {
   hasRemainingEstimate,
   isSuspectActual,
+  phaseKindWord,
+  segmentKind,
   totalSessionSeconds,
 } from "./Timer";
 
@@ -39,14 +40,16 @@ function library(title: string) {
 
 // The phase-kind matrix fixture — the brief's own "a real starter workout
 // with an added effort step via the draft," extended one further step for
-// distance (no single library step list otherwise exercises warmup/
-// work-split/rest/work-effort/distance all in one run). Hoarfrost's own
-// real split-ref work step (time, spm 22, its own embedded 5' rest)
-// supplies work-split/rest; a distance split-ref step and an effort-ref
-// step are appended directly onto the draft; the WARM-UP comes from the
-// SETTING (`MATRIX_WARMUP` below, threaded through `buildRun`'s fourth
-// argument) since 2026-08-09's warmup-setting design made that its one
-// producer. The reps marker is deliberately NOT
+// distance (no single library step list otherwise exercises
+// work-effort-time/work-split/rest/work-effort-distance all in one run).
+// Hoarfrost's own real split-ref work step (time, spm 22, its own embedded
+// 5' rest) supplies work-split/rest; a distance split-ref step and an
+// effort-ref step are appended directly onto the draft. Phase 0's 4:00 EASY
+// piece was a `wu` row until 2026-08-09, then the rower's warm-up SETTING
+// (`buildRun`'s fourth argument) until Phase WU deleted that too; it is an
+// authored effort step now, with the same 240 s, so every phase index,
+// STEP N OF M and countdown below is unchanged. The reps marker is
+// deliberately NOT
 // reused here — appending steps after a LIVE "reps" marker would repeat
 // them too (domain/expand.ts's own `liveIndices`), doubling the appended
 // phases for no reason; this fixture wants each kind exactly once.
@@ -55,7 +58,7 @@ function library(title: string) {
 // 1: the label/UP NEXT value is the EXACT split, never a "lo–hi" band; the
 // TimerTargets sub-line is the ref it was resolved from instead, uppercased
 // (refLabel(ref).toUpperCase()).
-//   0 warmup   240s   "Easy"
+//   0 work     240s   effort "EASY"
 //   1 work     720s   split  "2:12.0", ref "6K +12"  spm 22
 //   2 rest     300s   "Rest"
 //   3 work     —      distance 500m, split "1:40.0", ref "2K"
@@ -71,6 +74,11 @@ function kindMatrixDraft(): SessionDraft {
     title: hoarfrost.title,
     type: hoarfrost.type as WorkoutType,
     steps: [
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 4 },
+        ref: { effort: "min" },
+      },
       splitWork,
       {
         k: "w",
@@ -88,13 +96,21 @@ function kindMatrixDraft(): SessionDraft {
 
 // No library workout authors a "test" (open-ended) step (Task 1's own
 // report: none exists in the seeded library) — a hand-built minimal draft.
-// Its warm-up, like the matrix fixture's, comes from the SETTING.
+// Its 2:00 EASY opener came from the warm-up SETTING until Phase WU
+// deleted it; an authored effort step gives the same two-phase run.
 function testKindDraft(): SessionDraft {
   return buildDraft({
     id: "id-test-kind",
     title: "Sprint Check",
     type: "AN",
-    steps: [{ k: "test", label: "2k test" }],
+    steps: [
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 2 },
+        ref: { effort: "min" },
+      },
+      { k: "test", label: "2k test" },
+    ],
   });
 }
 
@@ -102,44 +118,31 @@ function buildAndSaveRun(
   draft: SessionDraft,
   now = FIXED_NOW,
   baselines: Baselines | null = BASELINES,
-  warmup: WarmupSetting | null = null,
 ): SessionRun {
   saveDraft(startDraft(draft));
-  const run = buildRun(draft, baselines, now, warmup);
+  const run = buildRun(draft, baselines, now);
   saveRun(run);
   return run;
 }
 
-// The warm-up SETTING each fixture below pairs with. A rower's warm-up is
-// a preference now, never a step, so every fixture that needs a warmup
-// phase asks `buildRun` for one — the same one call site production uses
-// (`Countdown.tsx`). These are the exact durations the fixtures' step
-// lists used to carry as `wu` rows, so every phase index, STEP N OF M and
-// countdown below is unchanged.
-const MATRIX_WARMUP: WarmupSetting = { kind: "time", minutes: 4 };
-
 function matrixRun(now = FIXED_NOW): SessionRun {
-  return buildAndSaveRun(kindMatrixDraft(), now, BASELINES, MATRIX_WARMUP);
+  return buildAndSaveRun(kindMatrixDraft(), now, BASELINES);
 }
 
 function testKindRun(): SessionRun {
-  return buildAndSaveRun(testKindDraft(), FIXED_NOW, BASELINES, {
-    kind: "time",
-    minutes: 2,
-  });
+  return buildAndSaveRun(testKindDraft(), FIXED_NOW, BASELINES);
 }
 
 function onboardingShapedRun(): SessionRun {
-  return buildAndSaveRun(onboardingShapedDraft(), FIXED_NOW, null, {
-    kind: "time",
-    minutes: 10,
-  });
+  return buildAndSaveRun(onboardingShapedDraft(), FIXED_NOW, null);
 }
 
 // Phase 6I: the shape Task 3 seeds as the two designated onboarding
 // workouts (domain/onboarding.ts) — ONE distance work step at an effort
-// ref, nothing after it (no reps, no embedded rest), run beneath the
-// warm-up SETTING (`onboardingShapedRun` above).
+// ref, nothing after it (no reps, no embedded rest), preceded here by a
+// 10:00 EASY time piece so the run has a priceable phase ahead of the
+// unpriceable one (that lead used to come from the warm-up SETTING; Phase
+// WU made it an authored step).
 // Hand-built because the seed doesn't exist yet — this is the one shape in
 // the whole app where a distance work phase is ALSO the run's own final
 // phase, which is what actually exercises `hasRemainingEstimate`'s false
@@ -153,6 +156,11 @@ function onboardingShapedDraft(): SessionDraft {
     title: "First 6k",
     type: "O2",
     steps: [
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 10 },
+        ref: { effort: "min" },
+      },
       {
         k: "w",
         duration: { kind: "distance", meters: 6000 },
@@ -285,10 +293,41 @@ describe("isSuspectActual", () => {
   });
 });
 
+// PHASE WU, THE LEGACY-RECORD GUARD. `SessionRun` is PERSISTED
+// (`src/session/run.ts`), so a run stored before Phase WU can still hand
+// these two functions `type: "warmup"` — a value the shrunken
+// `Phase["type"]` union no longer admits, which is why the cast is
+// required to write the test at all. Both switches carry a `default` arm
+// for exactly this: without one, an exhaustive switch returns `undefined`
+// and the timer renders `STEP 1 OF 5 · undefined` over a dot the strip
+// cannot paint. "WORK"/"work" is the honest answer — Phase WU's whole
+// ruling is that a warm-up piece IS work.
+describe("the phase-word helpers survive a legacy persisted warm-up phase", () => {
+  const legacyWarmup = "warmup" as EnginePhase["type"];
+
+  it("phaseKindWord reads WORK for it, never undefined", () => {
+    expect(phaseKindWord(legacyWarmup)).toBe("WORK");
+  });
+
+  it("segmentKind reads work for it, never undefined", () => {
+    expect(segmentKind(legacyWarmup)).toBe("work");
+  });
+
+  it("still tells REST and TEST apart from work — the default arm is a fallback, not a collapse", () => {
+    expect(phaseKindWord("rest")).toBe("REST");
+    expect(phaseKindWord("test")).toBe("TEST");
+    expect(phaseKindWord("work")).toBe("WORK");
+    expect(segmentKind("rest")).toBe("rest");
+    expect(segmentKind("test")).toBe("work");
+    expect(segmentKind("work")).toBe("work");
+  });
+});
+
 describe("totalSessionSeconds", () => {
   it("sums every phase's full duration from the start: fixed seconds + a distance estimate + zero for an open-ended phase", () => {
     const phases: EnginePhase[] = [
-      phase({ type: "warmup", seconds: 300, label: "Easy" }),
+      phase({ seconds: 300, label: "EASY" }), // Phase WU: was type "warmup"
+
       // (2000/500)*120 = 480
       phase({ meters: 2000, targetSplit: 120, label: "2:00.0" }),
       phase({ type: "test", label: "All out" }), // no seconds/meters -> 0
@@ -305,7 +344,7 @@ describe("totalSessionSeconds", () => {
 });
 
 describe("hasRemainingEstimate — Phase 6I's shared gate for TOTAL LEFT + the phase bar", () => {
-  const priceable = phase({ type: "warmup", seconds: 300, label: "Easy" });
+  const priceable = phase({ seconds: 300, label: "EASY" }); // Phase WU: was "warmup"
   // An effort work phase with null-baselines: no targetSplit, no seconds,
   // no meters priced — exactly what `phases()` (domain/expand.ts) produces
   // for a distance-duration effort step under null baselines.
@@ -367,16 +406,20 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
     vi.setSystemTime(FIXED_NOW);
   });
 
-  it("warm-up: 'Easy' target, 'Free', count-DOWN remaining", async () => {
+  it("effort time piece: 'EASY' target, 'Free', count-DOWN remaining", async () => {
     mockKeepAwake();
     const run = matrixRun();
     runAtIndex(run, 0);
     await renderTimer();
 
-    expect(screen.getByText("STEP 1 OF 5 · WARM-UP")).toBeInTheDocument();
+    // PHASE WU CHANGED BOTH STRINGS. Phase 0 was a warm-up, so the step
+    // line read `· WARM-UP` (`phaseKindWord`'s deleted arm) and its target
+    // was the warm-up's own `Easy` label. It is an authored EASY effort
+    // step now: `· WORK`, and `effortWord`'s uppercase `EASY`.
+    expect(screen.getByText("STEP 1 OF 5 · WORK")).toBeInTheDocument();
     expect(screen.getByText("RUNNING")).toBeInTheDocument();
     expect(screen.getByText("4:00")).toBeInTheDocument(); // 240s remaining
-    expect(screen.getByText("Easy")).toBeInTheDocument();
+    expect(screen.getByText("EASY")).toBeInTheDocument();
     expect(screen.getByText("Free")).toBeInTheDocument();
     // Ui-fix round, Item 1: UP NEXT is exact now, never a "lo–hi" band.
     // Connected-revamp Task 6: the "then" phase (the rest that follows the
@@ -584,20 +627,20 @@ describe("Timer — phase-kind rendering (never a dash, per kind)", () => {
     expect(screen.queryByText("—")).not.toBeInTheDocument();
   });
 
-  // Phase 6I: at the WARM-UP (phase 0) of the same fixture, the test phase
+  // Phase 6I: at the EASY opener (phase 0) of the same fixture, the test phase
   // ahead has no estimate but that doesn't matter yet — nothing here reads
   // "remaining" per-phase, only whether ANYTHING from the current index
-  // onward prices. The warm-up itself has a real duration, so both rows
+  // onward prices. The opener itself has a real duration, so both rows
   // still render normally here (this test would fail under a "whole
   // session" reading of the gate, which the module header's own comment
   // explains is deliberately NOT what this checks).
-  it("still shows TOTAL LEFT and the phase bar during the warm-up, even though the test phase ahead of it has no estimate", async () => {
+  it("still shows TOTAL LEFT and the phase bar during the opener, even though the test phase ahead of it has no estimate", async () => {
     mockKeepAwake();
     const run = testKindRun();
     runAtIndex(run, 0);
     await renderTimer();
 
-    expect(screen.getByText("STEP 1 OF 2 · WARM-UP")).toBeInTheDocument();
+    expect(screen.getByText("STEP 1 OF 2 · WORK")).toBeInTheDocument();
     expect(document.querySelector(".timer-total")).toBeInTheDocument();
     expect(document.querySelector(".timer-phase-bar")).toBeInTheDocument();
   });
@@ -609,13 +652,13 @@ describe("Timer — Phase 6I: the null-baselines onboarding session (TOTAL LEFT 
     vi.setSystemTime(FIXED_NOW);
   });
 
-  it("shows TOTAL LEFT and the phase bar during the warm-up of a null-baselines onboarding-shaped session", async () => {
+  it("shows TOTAL LEFT and the phase bar during the opener of a null-baselines onboarding-shaped session", async () => {
     mockKeepAwake();
     const run = onboardingShapedRun();
     runAtIndex(run, 0);
     await renderTimer();
 
-    expect(screen.getByText("STEP 1 OF 2 · WARM-UP")).toBeInTheDocument();
+    expect(screen.getByText("STEP 1 OF 2 · WORK")).toBeInTheDocument();
     expect(document.querySelector(".timer-total")).toBeInTheDocument();
     expect(document.querySelector(".timer-phase-bar")).toBeInTheDocument();
   });
@@ -714,10 +757,10 @@ describe("Timer — legacy pre-ref run (Q3, fix round 1)", () => {
   it("renders the legacy phase's UP NEXT label verbatim (the stored band, not recomputed)", async () => {
     mockKeepAwake();
     const run = legacyKindMatrixRun();
-    runAtIndex(run, 0); // warm-up; UP NEXT names phase 1, the legacy phase
+    runAtIndex(run, 0); // the opener; UP NEXT names phase 1, the legacy phase
     await renderTimer();
 
-    expect(screen.getByText("STEP 1 OF 5 · WARM-UP")).toBeInTheDocument();
+    expect(screen.getByText("STEP 1 OF 5 · WORK")).toBeInTheDocument();
     // The OLD band string, byte-for-byte, not "WORK 2:12.0" — this run's
     // frozen label is never recomputed against the current domain code.
     // The phase after it (phase 2, untouched by this fixture's legacy
@@ -815,7 +858,7 @@ describe("Timer — controls", () => {
       screen.getByRole("button", { name: "Previous phase" }),
     );
 
-    expect(screen.getByText("STEP 1 OF 5 · WARM-UP")).toBeInTheDocument();
+    expect(screen.getByText("STEP 1 OF 5 · WORK")).toBeInTheDocument();
     expect(screen.getByText("4:00")).toBeInTheDocument();
   });
 
@@ -1482,7 +1525,7 @@ describe("Timer — the notched total bar", () => {
       type: "O2" as WorkoutType,
       steps: [rest5, piece(true), piece(true), piece(true), piece(false)],
     });
-    const run = buildAndSaveRun(draft, FIXED_NOW, BASELINES, null);
+    const run = buildAndSaveRun(draft, FIXED_NOW, BASELINES);
     runAtIndex(run, 0);
     await renderTimer();
 
@@ -1494,66 +1537,12 @@ describe("Timer — the notched total bar", () => {
     expect(lefts[2]).toBeCloseTo(83.333, 2);
   });
 
-  /** The warm-up fill's own width, as a percentage. */
-  function warmupFillWidth(): number | null {
-    const el = document.querySelector<HTMLElement>(".timer-total-warmup");
-    return el === null ? null : Number.parseFloat(el.style.width);
-  }
-
-  it("fills the warm-up in its own tone as the rower rows it (§5b)", async () => {
-    mockKeepAwake();
-    // The same bar the connected pane gets, on the surface most rowers
-    // actually see. The matrix fixture's warm-up is 240 of 1420 seconds
-    // (16.9% of the bar); two minutes in, the bar has MOVED 8.45% and all of
-    // that movement is still the warm-up's tone, short of its own notch.
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(FIXED_NOW);
-    const run = matrixRun();
-    runAtIndex(run, 0);
-    vi.setSystemTime(new Date(FIXED_NOW.getTime() + 120_000));
-    await renderTimer();
-
-    expect(warmupFillWidth()).toBeCloseTo((120 / 1420) * 100, 6);
-    expect(warmupFillWidth()!).toBeLessThan(notchLefts()[0]!);
-    expect(notchLefts()[0]).toBeCloseTo((240 / 1420) * 100, 6);
-  });
-
-  it("caps the warm-up's fill at its own notch once the work starts", async () => {
-    mockKeepAwake();
-    // A minute into the first work phase: the fill has run past the warm-up,
-    // so the warm-up tone stops at its span and the working tone carries the
-    // rest.
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(FIXED_NOW);
-    const run = matrixRun();
-    runAtIndex(run, 1);
-    vi.setSystemTime(new Date(FIXED_NOW.getTime() + 60_000));
-    await renderTimer();
-
-    expect(warmupFillWidth()).toBeCloseTo((240 / 1420) * 100, 6);
-    expect(warmupFillWidth()).toBeCloseTo(notchLefts()[0]!, 6);
-    const work = document.querySelector<HTMLElement>(".timer-total-bar span")!;
-    expect(Number.parseFloat(work.style.width)).toBeCloseTo(
-      (300 / 1420) * 100,
-      6,
-    );
-  });
-
-  it("draws no warm-up fill at all with the preference off", async () => {
-    mockKeepAwake();
-    // THE REGRESSION PIN on this surface: the same workout with the warm-up
-    // off is the bar it always was — one fill and its notches, nothing else.
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(FIXED_NOW);
-    const run = buildAndSaveRun(kindMatrixDraft(), FIXED_NOW, BASELINES, null);
-    runAtIndex(run, 0);
-    vi.setSystemTime(new Date(FIXED_NOW.getTime() + 120_000));
-    await renderTimer();
-
-    expect(run.phases.some((p) => p.type === "warmup")).toBe(false);
-    expect(warmupFillWidth()).toBeNull();
-    expect(notchLefts()).toHaveLength(2);
-  });
+  // PHASE WU deleted the three cases that stood here (the warm-up fill
+  // growing as it is rowed, capping at its own notch, and the no-warm-up
+  // regression pin). `TimerRuler`'s lighter warm-up tone and the
+  // `.timer-total-warmup` element it painted are gone with the concept, so
+  // the bar has two tones again and the notch assertions above and below
+  // are what remains to check.
 
   it("keeps the quarter ruler for a session with only one interval", async () => {
     mockKeepAwake();
@@ -1571,7 +1560,7 @@ describe("Timer — the notched total bar", () => {
         },
       ],
     });
-    const run = buildAndSaveRun(draft, FIXED_NOW, BASELINES, null);
+    const run = buildAndSaveRun(draft, FIXED_NOW, BASELINES);
     runAtIndex(run, 0);
     await renderTimer();
 

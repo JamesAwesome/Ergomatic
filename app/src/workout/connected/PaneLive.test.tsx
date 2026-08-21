@@ -51,12 +51,19 @@ function fillingLow(): { program: WorkoutProgram; phases: EnginePhase[] } {
     id: "filling-low",
     title: w.title,
     type: w.type as WorkoutType,
-    steps: w.steps,
+    // Phase WU: the 8:00 leading interval came from `buildRun`'s deleted
+    // warm-up argument. An authored EASY step compiles to the identical
+    // target-less interval, so every index and count here holds.
+    steps: [
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 8 },
+        ref: { effort: "min" },
+      },
+      ...w.steps,
+    ],
   });
-  const phases = buildRun(draft, baselines, t0, {
-    kind: "time",
-    minutes: 8,
-  }).phases;
+  const phases = buildRun(draft, baselines, t0).phases;
   const program = compileProgram(phases);
   if ("code" in program) {
     throw new Error(`fixture failed to compile: ${program.code}`);
@@ -333,7 +340,7 @@ describe("the unpriced-phase guard (design spec §4/§7 item 7)", () => {
     });
     // NULL baselines, on purpose: the fixture's whole point is the "no
     // estimate to make" branch `engine.ts`'s own doc comment describes.
-    const phases = buildRun(draft, null, t0, null).phases;
+    const phases = buildRun(draft, null, t0).phases;
     const program = compileProgram(phases);
     if ("code" in program) {
       throw new Error(`fixture failed to compile: ${program.code}`);

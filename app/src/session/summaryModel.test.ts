@@ -11,9 +11,8 @@ import {
   toIntervalActual,
   type RawPm5Status,
 } from "../../domain/monitor/pm5/parse.js";
-import type { Baselines, WorkoutType } from "../../domain/types.js";
+import type { Baselines, Step, WorkoutType } from "../../domain/types.js";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
-import type { WarmupSetting } from "../api/usePreferences";
 import { fromHexString } from "../monitor/transports/recording";
 import type { MonitorRun } from "../monitor/monitorRun";
 import { buildDraft, type SessionDraft } from "./draft";
@@ -102,10 +101,15 @@ function monitorRun(overrides: Partial<MonitorRun> = {}): MonitorRun {
     workoutId: null,
     title: "Test workout",
     program,
+    // Phase WU: every seed step is `kind: "work"` now — no interval can be
+    // a warm-up. The seed's own legacy `"warmup"` member is only ever
+    // reachable by a test that hands `monitorRun` an explicit `logSeed`
+    // override, which is exactly how a PERSISTED pre-WU record reaches the
+    // reader in production.
     logSeed: {
-      steps: program.intervals.map((iv, i) => ({
-        label: iv.type === "warmup" ? "Warm-up" : `Interval ${i}`,
-        kind: iv.type === "warmup" ? "warmup" : "work",
+      steps: program.intervals.map((_iv, i) => ({
+        label: `Interval ${i}`,
+        kind: "work" as const,
       })),
       paces: {},
     },
@@ -120,7 +124,7 @@ function monitorRun(overrides: Partial<MonitorRun> = {}): MonitorRun {
 
 function interval(
   over: Partial<{
-    type: "warmup" | "work" | "test";
+    type: "work" | "test";
     kind: "time" | "distance";
     value: number;
     targetSplit: number | null;
@@ -318,7 +322,7 @@ describe("buildSummaryModel — DISTANCE (R-B), the machine's own number, extern
     4,
   );
 
-  it("the rest-bearing session (wu + 4 unequal): DISTANCE === 1599, the machine TWD — a work-only sum reads 1535 and is WRONG", () => {
+  it("the rest-bearing session (5 unequal pieces): DISTANCE === 1599, the machine TWD — a work-only sum reads 1535 and is WRONG", () => {
     expect([wu, w2, w3, w4, w5].map((a) => a.distanceMeters)).toStrictEqual([
       100, 229, 461, 500, 245,
     ]);
@@ -329,7 +333,10 @@ describe("buildSummaryModel — DISTANCE (R-B), the machine's own number, extern
     const run = monitorRun({
       program: {
         intervals: [
-          interval({ type: "warmup", kind: "distance", value: 100 }),
+          // Phase WU retyped this interval (`type: "warmup"` before); it
+          // carries no target either way, and DISTANCE never consulted the
+          // type, so 1599 is unchanged.
+          interval({ kind: "distance", value: 100 }),
           interval({ kind: "distance", value: 229, restSeconds: 30 }),
           interval({ kind: "distance", value: 461, restSeconds: 30 }),
           interval({ kind: "distance", value: 500, restSeconds: 30 }),
@@ -419,7 +426,7 @@ describe("buildSummaryModel — DISTANCE (R-B), the machine's own number, extern
   });
 
   it("the free third oracle (review finding 6): step-3's own 3 completed boundaries sum to 808m, matching the machine's OWN TWD reading captured at teardown (step-3-ring.json's final-totals line: 'machineTotal=808m')", () => {
-    // work 160+214+429 (warmup + work1 + work2's own splitIntervalDistanceMeters)
+    // work 160+214+429 (the opener + work1 + work2's own splitIntervalDistanceMeters)
     // + rest 0+0+5 (their own intervalRestDistanceMeters) = 808. Reuses the
     // exact decoded boundaries from the TIME/AVG SPLIT describe block below
     // (re-decoded here rather than imported across describe blocks, same
@@ -449,7 +456,7 @@ describe("buildSummaryModel — DISTANCE (R-B), the machine's own number, extern
     const run = monitorRun({
       program: {
         intervals: [
-          interval({ type: "warmup", kind: "time", value: 60 }),
+          interval({ kind: "time", value: 60 }),
           interval({ kind: "time", value: 60, restSeconds: 30 }),
           interval({ kind: "time", value: 120, restSeconds: 30 }),
         ],
@@ -463,7 +470,9 @@ describe("buildSummaryModel — DISTANCE (R-B), the machine's own number, extern
 
 describe("buildSummaryModel — TIME (R-D) and AVG SPLIT (R-C), the walk-3 shape", () => {
   // walk-2026-08-17/step-3-pm5-recording-second-rest-1786973713929.jsonl —
-  // its own committed `header.program` (verbatim): warmup 60s r0, work 60s
+  // its own committed `header.program` (verbatim): 60s r0 (a warm-up when
+  // the walk was recorded — Phase WU retypes it work, and nothing else
+  // about the transcription changes), work 60s
   // r30 (targetSplit 129), work 120s r30 (targetSplit 129), work 500m r30,
   // work 60s r0. Only the first three intervals completed before the
   // session was reloaded mid-4th-piece (the file's own README, "F6" row).
@@ -471,7 +480,7 @@ describe("buildSummaryModel — TIME (R-D) and AVG SPLIT (R-C), the walk-3 shape
   // bytes rather than trusted from prose: "work 60+60+120 ... completed
   // rests 0+30+30 = 300 -> 5 MIN".
   //
-  // Boundary 1 (warmup) and boundary 2 (work 1) are the file's own two
+  // Boundary 1 (the opener) and boundary 2 (work 1) are the file's own two
   // downloaded 0x0037/0x0038 rx events (seq 414/415, 959/960 — the
   // recording was downloaded before boundary 3 arrived, per the walk's own
   // README table). Boundary 3's raw bytes are NOT in the .jsonl for that
@@ -483,7 +492,7 @@ describe("buildSummaryModel — TIME (R-D) and AVG SPLIT (R-C), the walk-3 shape
   // different diagnostic channel, not a re-derivation.
   const program: WorkoutProgram = {
     intervals: [
-      interval({ type: "warmup", kind: "time", value: 60, restSeconds: 0 }),
+      interval({ kind: "time", value: 60, restSeconds: 0 }),
       interval({ kind: "time", value: 60, targetSplit: 129, restSeconds: 30 }),
       interval({ kind: "time", value: 120, targetSplit: 129, restSeconds: 30 }),
       interval({
@@ -512,7 +521,7 @@ describe("buildSummaryModel — TIME (R-D) and AVG SPLIT (R-C), the walk-3 shape
     2,
   );
 
-  it("TIME === 5:00: Σ work seconds (60+60+120) + programmed rest for completed intervals (0+30+30), warm-up included (R-D)", () => {
+  it("TIME === 5:00: Σ work seconds (60+60+120) + programmed rest for completed intervals (0+30+30), every completed interval included (R-D)", () => {
     expect([wu, w1, w2].map((a) => a.elapsedSeconds)).toStrictEqual([
       60, 60, 120,
     ]);
@@ -522,9 +531,21 @@ describe("buildSummaryModel — TIME (R-D) and AVG SPLIT (R-C), the walk-3 shape
     expect(model.heroes.time).toBe(fmtDuration(300 / 60));
   });
 
-  it("AVG SPLIT excludes the warm-up (R-C) — no machine oracle exists for the weighted average (spec §5: 0x0032's Average Pace matches no candidate formula); the witness is §7's per-interval identity plus hand arithmetic over the real decoded boundaries", () => {
-    // work1 t=60.0 d=214, work2 t=120.0 d=429 (both read straight off the
-    // decoded actuals above, not retyped).
+  it("AVG SPLIT counts EVERY completed interval (R-C, post-Phase-WU) — no machine oracle exists for the weighted average (spec §5: 0x0032's Average Pace matches no candidate formula); the witness is §7's per-interval identity plus hand arithmetic over the real decoded boundaries", () => {
+    // THIS IS THE NUMBER PHASE WU MOVES, and it moves in the direction the
+    // removal implies. Interval 0 of this capture was programmed as a
+    // warm-up, and R-C used to drop it from the weighted average: the hero
+    // read `500 × (60+120) / (214+429)` = 2:20.0. There is no warm-up left
+    // to drop, so the hero is now `500 × (60+60+120) / (160+214+429)` =
+    // 2:29.4 — SLOWER, because the easy opener was the slowest piece in
+    // the session. Both figures were already computed in this test before
+    // Phase WU (it asserted the second one was WRONG); the arithmetic is
+    // untouched, only which of the two the model produces.
+    //
+    // The three boundaries' own readings, straight off the decoded actuals
+    // above, not retyped.
+    expect(wu.elapsedSeconds).toBe(60);
+    expect(wu.distanceMeters).toBe(160);
     expect(w1.elapsedSeconds).toBe(60);
     expect(w1.distanceMeters).toBe(214);
     expect(w2.elapsedSeconds).toBe(120);
@@ -533,50 +554,74 @@ describe("buildSummaryModel — TIME (R-D) and AVG SPLIT (R-C), the walk-3 shape
     const run = monitorRun({ program, actuals: [wu, w1, w2] });
     const model = buildSummaryModel({ door: "monitor", run });
 
-    // 500 × (60+120) / (214+429) = 500 × 180 / 643 = 139.9689...s.
-    const exclWarmup =
-      (500 * (w1.elapsedSeconds + w2.elapsedSeconds)) /
-      (w1.distanceMeters + w2.distanceMeters);
-    expect(model.heroes.avgSplit).toBe(fmtSplit(exclWarmup));
-    expect(model.heroes.avgSplit).toBe("2:20.0");
-
-    // Proving inclusion is WRONG, not just different (brief's own
-    // requirement: "a test PROVING ...-style inclusion fails"): compute
-    // the including-warm-up figure independently (not via
-    // buildSummaryModel — there is no door that produces it) and confirm
-    // it disagrees with the real, correct hero.
-    const inclWarmup =
+    const allThree =
       (500 * (wu.elapsedSeconds + w1.elapsedSeconds + w2.elapsedSeconds)) /
       (wu.distanceMeters + w1.distanceMeters + w2.distanceMeters);
-    expect(fmtSplit(inclWarmup)).toBe("2:29.4");
-    expect(model.heroes.avgSplit).not.toBe(fmtSplit(inclWarmup));
+    expect(model.heroes.avgSplit).toBe(fmtSplit(allThree));
+    expect(model.heroes.avgSplit).toBe("2:29.4");
+
+    // And the OLD hero, computed independently here, is what the model
+    // must no longer produce — the same "prove the other answer is wrong,
+    // not merely different" shape this case has always had, pointed the
+    // other way.
+    const droppingInterval0 =
+      (500 * (w1.elapsedSeconds + w2.elapsedSeconds)) /
+      (w1.distanceMeters + w2.distanceMeters);
+    expect(fmtSplit(droppingInterval0)).toBe("2:20.0");
+    expect(model.heroes.avgSplit).not.toBe(fmtSplit(droppingInterval0));
   });
 
-  it("the warm-up row itself: rendered, labeled WARM-UP, measured values shown, and UNJUDGED (no deviation bar, no TARGET/SPM cell, first in the row list) — §1's re-baseline: the two completed work rows now judge against their OWN 129s target, not a working average", () => {
+  it("a LEGACY stored run whose seed still says kind:'warmup' keeps its interval 0 OUT of AVG SPLIT — the record's number must not move under it", () => {
+    // THE KEPT GUARD (`summaryModel.ts`'s `warmupIndex`, `logDraft.ts`'s
+    // `LogSeed`). `LogSeed` is PERSISTED inside a `MonitorRun`, so a run
+    // finished and stored before Phase WU still carries `kind: "warmup"` on
+    // its first seed step — and the AVG SPLIT its owner already saw
+    // excluded that interval. Deleting the guard would silently restate
+    // that saved record as 2:29.4. Nothing PRODUCES this seed any more,
+    // which is why the fixture writes it by hand.
+    const run = monitorRun({
+      program,
+      actuals: [wu, w1, w2],
+      logSeed: {
+        steps: program.intervals.map((_iv, i) => ({
+          label: `Interval ${i}`,
+          kind: i === 0 ? ("warmup" as const) : ("work" as const),
+        })),
+        paces: {},
+      },
+    });
+    const model = buildSummaryModel({ door: "monitor", run });
+    expect(model.heroes.avgSplit).toBe("2:20.0");
+  });
+
+  it("interval 0 is an ordinary NUMBERED row now: measured, judged like any other, no unnumbered WARM-UP row above it — §1's re-baseline: the completed work rows judge against their OWN 129s target, not a working average", () => {
     const run = monitorRun({ program, actuals: [wu, w1, w2] });
     const model = buildSummaryModel({ door: "monitor", run });
-    const warmupRow = asMeasured(model.rows[0]);
-    expect(warmupRow.isWarmup).toBe(true);
-    expect(warmupRow.label).toBe("WARM-UP");
-    expect(warmupRow.index).toBeUndefined();
-    expect(warmupRow.timeLabel).toBe("1:00");
-    expect(warmupRow.judged).toBeUndefined();
-    // §1: "a warm-up has no target by definition" — no TARGET/SPM cell
-    // and no on-target state either, never just "no bar".
-    expect(warmupRow.targetLabel).toBeUndefined();
-    expect(warmupRow.spmCell).toBeUndefined();
-    expect(warmupRow.onTarget).toBeUndefined();
+    // PHASE WU CHANGED WHAT ROW 0 IS. It used to be the unnumbered
+    // `WARM-UP` row: `isWarmup: true`, no `index`, deliberately unjudged
+    // and target-less. That row, and the `isWarmup` field that marked it,
+    // are gone — interval 0 is piece one of five, numbered `1`, and it
+    // still carries no target because the CAPTURE gave it none (its
+    // `targetSplit` is null in the program above), not because the row
+    // type suppresses one.
+    const row0 = asMeasured(model.rows[0]);
+    expect(row0.index).toBe(1);
+    expect(row0.timeLabel).toBe("1:00");
+    expect(row0.targetLabel).toBeUndefined();
+    expect(row0.judged).toBeUndefined();
+    expect(row0.onTarget).toBeUndefined();
 
     // `program` names 5 intervals (verbatim from the recording's own
     // header — the module header explains why it isn't trimmed); only the
-    // first two non-warmup ones (index 1, 2) were ever completed, so the
-    // row list is warm-up + 4 work rows: two measured/judged, two
-    // prescribed (the piece the F6 reload interrupted, and the one after
-    // it, neither ever rowed).
+    // first three were ever completed, so the row list is 5 rows: three
+    // measured, two prescribed (the piece the F6 reload interrupted, and
+    // the one after it, neither ever rowed). The COUNT is unchanged — it
+    // was warm-up + 4 work rows before — but every row is numbered now, so
+    // the work pieces' own ordinals each rise by one.
     expect(model.rows).toHaveLength(5);
     const row1 = asMeasured(model.rows[1]);
     const row2 = asMeasured(model.rows[2]);
-    expect(row1.index).toBe(1);
+    expect(row1.index).toBe(2);
     // §1 re-baseline: judged against THIS row's own 129s target
     // (`program`'s own `targetSplit: 129` on both work intervals), not
     // the old working average — w1.avgSplit 140.1s vs target 129s is
@@ -584,15 +629,15 @@ describe("buildSummaryModel — TIME (R-D) and AVG SPLIT (R-C), the walk-3 shape
     expect(row1.targetLabel).toBe(fmtSplit(129));
     expect(row1.judged?.direction).toBe("slower");
     expect(row1.judged?.deviationSeconds).toBeCloseTo(140.1 - 129, 5);
-    expect(row2.index).toBe(2);
+    expect(row2.index).toBe(3);
     // w2.avgSplit 139.8s vs the same 129s target: +10.8s, SLOWER too.
     expect(row2.targetLabel).toBe(fmtSplit(129));
     expect(row2.judged?.direction).toBe("slower");
     expect(row2.judged?.deviationSeconds).toBeCloseTo(139.8 - 129, 5);
     expect(model.rows[3]!.measured).toBe(false);
-    expect(model.rows[3]!.index).toBe(3);
+    expect(model.rows[3]!.index).toBe(4);
     expect(model.rows[4]!.measured).toBe(false);
-    expect(model.rows[4]!.index).toBe(4);
+    expect(model.rows[4]!.index).toBe(5);
   });
 });
 
@@ -797,17 +842,24 @@ describe("buildSummaryModel — edge cases: absence, per-cell rules, captions", 
     expect(row.onTarget).toBeUndefined();
   });
 
-  it("a warm-up interval exists on the program but its own boundary never arrived: the row still renders, labeled, with every measured field absent", () => {
+  it("an interval whose own boundary never arrived renders PRESCRIBED, with no fabricated measurement", () => {
+    // Phase WU: interval 0 was `type: "warmup"` here, and the row it
+    // produced was the measured-shaped-but-empty WARM-UP row
+    // (`monitorWarmupRow`, since deleted). Interval 0 is an ordinary piece
+    // now, so a missing boundary puts it in the PRESCRIBED shape every
+    // other unmeasured interval already used — which is the same
+    // underlying rule ("never a fabricated 0:00") expressed through one
+    // row type instead of two.
     const run = monitorRun({
       program: {
         intervals: [
-          interval({ type: "warmup", kind: "time", value: 60 }),
+          interval({ kind: "time", value: 60 }),
           interval({ kind: "distance", value: 250 }),
         ],
       },
-      // Only the work interval (index 1) reported a boundary — the
-      // warm-up's own was lost (a real, named case: the run contract's
-      // `boundary-out-of-run`/divergence paths, `domain/monitor/types.ts`).
+      // Only interval 1 reported a boundary — interval 0's was lost (a
+      // real, named case: the run contract's `boundary-out-of-run`/
+      // divergence paths, `domain/monitor/types.ts`).
       actuals: [
         {
           ...decodeActual(
@@ -819,12 +871,12 @@ describe("buildSummaryModel — edge cases: absence, per-cell rules, captions", 
       ],
     });
     const model = buildSummaryModel({ door: "monitor", run });
-    const warmupRow = asMeasured(model.rows[0]);
-    expect(warmupRow.isWarmup).toBe(true);
-    expect(warmupRow.label).toBe("WARM-UP");
-    expect(warmupRow.timeLabel).toBeUndefined();
-    expect(warmupRow.paceLabel).toBeUndefined();
-    expect(warmupRow.judged).toBeUndefined();
+    const lostRow = model.rows[0]!;
+    expect(lostRow.measured).toBe(false);
+    expect(lostRow.index).toBe(1);
+    if (lostRow.measured) throw new Error("row 0 should be prescribed");
+    expect(lostRow.durationLabel).toBe("1:00");
+    expect(model.rows[1]!.measured).toBe(true);
   });
 
   it("interrupted date rule: meta uses startedAt, never completedAt, when endedBy is 'interrupted' (F6)", () => {
@@ -914,15 +966,20 @@ function library(title: string) {
   return w;
 }
 
-function sessionRunFixture(title: string, warmup?: WarmupSetting): SessionRun {
+/** Phase WU: this used to take a `warmup?: WarmupSetting` and thread it to
+ *  `buildRun`'s fourth argument. Both are gone. `extraLeadStep` is the
+ *  replacement the two cases that needed a leading interval now use — a
+ *  REAL authored step, prepended to the workout's own, which is the only
+ *  way a session can start with an easy piece at all now. */
+function sessionRunFixture(title: string, extraLeadStep?: Step): SessionRun {
   const w = library(title);
   const draft = buildDraft({
     id: `id-${title}`,
     title: w.title,
     type: w.type as WorkoutType,
-    steps: w.steps,
+    steps: extraLeadStep ? [extraLeadStep, ...w.steps] : w.steps,
   });
-  const built = buildRun(draft, BASELINES, NOW, warmup ?? null);
+  const built = buildRun(draft, BASELINES, NOW);
   // A real session takes real wall-clock time — `timerTimeSeconds` treats a
   // zero-length span as absent (the same "no 0:00" per-cell rule every
   // other hero follows), so `completedAt` must be strictly after
@@ -936,49 +993,57 @@ function sessionRunFixture(title: string, warmup?: WarmupSetting): SessionRun {
   };
 }
 
-function draftFor(title: string): SessionDraft {
+/** The draft `sessionRunFixture` built its run from — same `extraLeadStep`
+ *  argument, so a caller that prepended a step gets a draft whose own step
+ *  indices still line up with the run's `originalIndex` attribution
+ *  (`buildLogSteps` resolves labels through exactly that lookup). */
+function draftFor(title: string, extraLeadStep?: Step): SessionDraft {
   const w = library(title);
   return buildDraft({
     id: `id-${title}`,
     title: w.title,
     type: w.type as WorkoutType,
-    steps: w.steps,
+    steps: extraLeadStep ? [extraLeadStep, ...w.steps] : w.steps,
   });
 }
 
-describe("buildSummaryModel — timer door, a real mixed measured/prescribed list (Filling Low: wu + 3×2000m @ 6k+4)", () => {
-  it("one measured (stopwatch) distance occurrence among three, plus the phone-timer's own warm-up row, produces a genuinely mixed rows list with a computable AVG SPLIT and no DISTANCE hero", () => {
-    const draft = draftFor("Filling Low");
-    // A DISTANCE warm-up setting (`session/engine.ts`'s `warmupPhases`) so
-    // this fixture also exercises `timerWarmupRow`'s "a distance warm-up
-    // CAN be genuinely measured" branch (module header) — the ONLY
-    // producer of a `type: "warmup"` `EnginePhase` since "wu" left the
-    // authored `Step` union.
-    const run = sessionRunFixture("Filling Low", {
-      kind: "distance",
-      meters: 500,
-    });
-    const warmupIndex = run.phases.findIndex((p) => p.type === "warmup");
-    expect(warmupIndex).toBe(0); // warmupPhases prepends it — "ORDER IS PART OF THE CONTRACT"
-    const warmupMeters = run.phases[warmupIndex]!.meters!;
+describe("buildSummaryModel — timer door, a real mixed measured/prescribed list (Filling Low: a 500 m opener + 3×2000m @ 6k+4)", () => {
+  const EASY_500 = {
+    k: "w" as const,
+    duration: { kind: "distance" as const, meters: 500 },
+    ref: { effort: "min" as const },
+  };
+
+  it("one measured (stopwatch) distance occurrence among four produces a genuinely mixed rows list with a computable AVG SPLIT and no DISTANCE hero", () => {
+    // PHASE WU: the leading 500 m used to be a DISTANCE WARM-UP SETTING,
+    // and this case existed partly to exercise `timerWarmupRow`'s "a
+    // distance warm-up CAN be genuinely measured" branch. That builder and
+    // its unnumbered row are gone, so the same 500 m is an authored EASY
+    // step and its stopwatch reading now counts like any other row's — see
+    // the AVG SPLIT assertion below, which is the number that moves.
+    const run = sessionRunFixture("Filling Low", EASY_500);
+    const draft = draftFor("Filling Low", EASY_500);
+    const openerIndex = 0;
+    const openerMeters = run.phases[openerIndex]!.meters!;
 
     // Find the first WORK distance phase (a repeated-block occurrence) and
     // record a real stopwatch actual for it — the exact identity
     // `session/engine.ts`'s `nextDistance` uses (`splitSeconds = (elapsed /
     // meters) * 500`), applied by hand so the fixture is deterministic.
     const distanceIndex = run.phases.findIndex(
-      (p) => p.type === "work" && p.meters !== undefined,
+      (p, i) =>
+        i !== openerIndex && p.type === "work" && p.meters !== undefined,
     );
     expect(distanceIndex).toBeGreaterThanOrEqual(0);
     const meters = run.phases[distanceIndex]!.meters!;
     const elapsed = meters * 0.5; // an arbitrary, real-shaped pace
-    const warmupElapsed = warmupMeters * 0.6;
+    const openerElapsed = openerMeters * 0.6;
     const measuredRun: SessionRun = {
       ...run,
       actuals: {
-        [warmupIndex]: {
-          elapsedSeconds: warmupElapsed,
-          splitSeconds: (warmupElapsed / warmupMeters) * 500,
+        [openerIndex]: {
+          elapsedSeconds: openerElapsed,
+          splitSeconds: (openerElapsed / openerMeters) * 500,
           actualSource: "stopwatch",
         },
         [distanceIndex]: {
@@ -992,14 +1057,22 @@ describe("buildSummaryModel — timer door, a real mixed measured/prescribed lis
     const measuredCount = steps.filter(
       (s) => s.actualSource === "stopwatch",
     ).length;
-    expect(measuredCount).toBe(1); // exactly one of the three WORK occurrences — buildLogSteps never emits a warm-up LogStep at all
+    // TWO now, not one: the opener is an authored work step, so
+    // `buildLogSteps` emits a `LogStep` for it and its stopwatch reading is
+    // a measurement like any other. Before Phase WU it was a warm-up phase,
+    // which `buildLogSteps` never emitted a `LogStep` for at all.
+    expect(measuredCount).toBe(2);
 
     const model = buildSummaryModel({ door: "timer", run: measuredRun, steps });
     expect(model.heroes.distanceMeters).toBeUndefined(); // timer door: no machine total (module scope decision)
-    // The warm-up's own measured reading is excluded from the average
-    // (this module's generalization of R-C) even though it WAS measured —
-    // the working average is still just the one work row's own pace.
-    expect(model.heroes.avgSplit).toBe(fmtSplit((elapsed / meters) * 500));
+    // AVG SPLIT NOW COUNTS THE OPENER. It used to be `500 × Σt/Σd` over the
+    // one measured WORK row alone, because the warm-up's reading was
+    // excluded (this module's generalization of R-C). Both measured
+    // readings weigh in now, computed here from the fixture's own numbers
+    // rather than retyped as a literal.
+    expect(model.heroes.avgSplit).toBe(
+      fmtSplit((500 * (openerElapsed + elapsed)) / (openerMeters + meters)),
+    );
     expect(model.caption).toBeUndefined(); // at least one row was measured
 
     const measuredRows = model.rows.filter((r) => r.measured);
@@ -1007,12 +1080,14 @@ describe("buildSummaryModel — timer door, a real mixed measured/prescribed lis
     expect(measuredRows.length).toBeGreaterThan(0);
     expect(prescribedRows.length).toBeGreaterThan(0);
 
-    // The warm-up row itself: measured (a real reading), first, unjudged.
-    const warmupRow = asMeasured(model.rows[0]);
-    expect(warmupRow.isWarmup).toBe(true);
-    expect(warmupRow.timeLabel).toBe(fmtDuration(warmupElapsed / 60));
-    expect(warmupRow.judged).toBeUndefined();
-    expect(warmupRow.targetLabel).toBeUndefined();
+    // The opener's own row: measured (a real reading), first, and numbered
+    // `1`. It carries no target because it is an EFFORT step — that is a
+    // fact about the step, not about a row type that suppressed one.
+    const openerRow = asMeasured(model.rows[0]);
+    expect(openerRow.index).toBe(1);
+    expect(openerRow.timeLabel).toBe(fmtDuration(openerElapsed / 60));
+    expect(openerRow.judged).toBeUndefined();
+    expect(openerRow.targetLabel).toBeUndefined();
 
     // §1's judged-when member set includes "stopwatch" (the timer door's
     // own source, `logDraft.ts`'s `buildLogSteps`) — the one real
@@ -1032,10 +1107,7 @@ describe("buildSummaryModel — timer door, a real mixed measured/prescribed lis
     // the 0.5s band: genuinely SLOWER, not on-target.
     const measuredWorkRow = asMeasured(
       model.rows.find(
-        (r) =>
-          r.measured &&
-          !r.isWarmup &&
-          r.paceLabel === fmtSplit((elapsed / meters) * 500),
+        (r) => r.measured && r.paceLabel === fmtSplit((elapsed / meters) * 500),
       ),
     );
     expect(measuredWorkRow.targetLabel).toBe(fmtSplit(124));
@@ -1051,24 +1123,32 @@ describe("buildSummaryModel — timer door, a real mixed measured/prescribed lis
     const steps = buildLogSteps(run, draft);
     const model = buildSummaryModel({ door: "timer", run, steps });
     expect(model.caption).toBe("TARGETS ONLY · NOTHING MEASURED");
-    expect(model.rows.every((r) => !r.measured || r.isWarmup)).toBe(true);
+    // Phase WU deleted this case's `every(r => !r.measured || r.isWarmup)`
+    // assertion — the field is gone and there is no warm-up row to except,
+    // so the honest statement is simply that no row is measured.
+    expect(model.rows.every((r) => !r.measured)).toBe(true);
     expect(model.heroes.time).toBeDefined();
     expect(model.heroes.avgSplit).toBeUndefined();
   });
 
-  it("a TIME-kind warm-up setting: the warm-up row still renders, but can NEVER be measured (nextDistance only ever writes an actual for a phase with `meters` set) — every measured field absent", () => {
-    const run = sessionRunFixture("Filling Low", { kind: "time", minutes: 5 });
-    const draft = draftFor("Filling Low");
+  it("a TIME-kind leading step can NEVER be measured (nextDistance only ever writes an actual for a phase with `meters` set), so its row is prescribed and R-E's caption still fires", () => {
+    // Phase WU: this was a TIME-kind WARM-UP SETTING, and the row it
+    // produced was the measured-shaped-but-empty WARM-UP row that review
+    // FIX-2 caught silently eating the caption. The same unmeasurable
+    // leading step is an authored EASY time step now, and it renders in the
+    // PRESCRIBED shape — which is why the caption fires for a plainer
+    // reason than before, not a subtler one.
+    const EASY_5MIN = {
+      k: "w" as const,
+      duration: { kind: "time" as const, minutes: 5 },
+      ref: { effort: "min" as const },
+    };
+    const run = sessionRunFixture("Filling Low", EASY_5MIN);
+    const draft = draftFor("Filling Low", EASY_5MIN);
     const steps = buildLogSteps(run, draft);
     const model = buildSummaryModel({ door: "timer", run, steps });
-    const warmupRow = asMeasured(model.rows[0]);
-    expect(warmupRow.isWarmup).toBe(true);
-    expect(warmupRow.timeLabel).toBeUndefined();
-    expect(warmupRow.paceLabel).toBeUndefined();
-    // Review FIX-2: `measured: true` alone is not a real reading — this
-    // blank warm-up row is the exact shape that silently ate the caption.
-    // Every remaining row is prescribed (no stopwatch actuals recorded at
-    // all), so R-E's caption must still fire.
+    expect(model.rows[0]!.measured).toBe(false);
+    expect(model.rows[0]!.index).toBe(1);
     expect(model.caption).toBe("TARGETS ONLY · NOTHING MEASURED");
   });
 
@@ -1182,17 +1262,26 @@ describe("buildSummaryModel — timer door, a real mixed measured/prescribed lis
     expect(model.heroes.time).toBeUndefined();
   });
 
-  it("a warm-up row whose actual reads exactly 0 elapsed seconds (degenerate): timeLabel is absent", () => {
-    const run = sessionRunFixture("Filling Low", {
-      kind: "distance",
-      meters: 500,
-    });
-    const warmupIndex = run.phases.findIndex((p) => p.type === "warmup");
-    const zeroWarmup: SessionRun = {
+  it("a leading row whose actual reads exactly 0 elapsed seconds (degenerate): no measured row is produced at all", () => {
+    // Phase WU: this measured the WARM-UP row's own floor behaviour —
+    // `timerWarmupRow` returned a measured-shaped row with `timeLabel`
+    // absent for a below-floor reading. That builder is gone; a degenerate
+    // reading on an ordinary phase never reaches a row at all, because
+    // `buildLogSteps` is what produces the timer door's rows and this
+    // fixture passes it no steps. The floor itself
+    // (`MIN_MEASURABLE_ELAPSED_SECONDS`) stays pinned on the monitor door
+    // and on `timerAvgSplit` elsewhere in this file.
+    const EASY_500 = {
+      k: "w" as const,
+      duration: { kind: "distance" as const, meters: 500 },
+      ref: { effort: "min" as const },
+    };
+    const run = sessionRunFixture("Filling Low", EASY_500);
+    const zeroOpener: SessionRun = {
       ...run,
       completedAt: new Date(NOW.getTime() + 60_000).toISOString(),
       actuals: {
-        [warmupIndex]: {
+        0: {
           elapsedSeconds: 0,
           splitSeconds: 0,
           actualSource: "stopwatch",
@@ -1201,11 +1290,11 @@ describe("buildSummaryModel — timer door, a real mixed measured/prescribed lis
     };
     const model = buildSummaryModel({
       door: "timer",
-      run: zeroWarmup,
+      run: zeroOpener,
       steps: [],
     });
-    const warmupRow = asMeasured(model.rows[0]);
-    expect(warmupRow.timeLabel).toBeUndefined();
+    expect(model.rows).toStrictEqual([]);
+    expect(model.heroes.avgSplit).toBeUndefined();
   });
 });
 
@@ -1233,7 +1322,7 @@ describe("buildSummaryModel — manual door, a real library workout (Calm Sea, a
     expect(model.meta.sourceLabel).toBe("LOGGED BY HAND");
   });
 
-  it("a TIME-based work step (Hoarfrost: wu + 2×12' @ 6k+12) renders its duration as m:ss, not a meters suffix", () => {
+  it("a TIME-based work step (Hoarfrost: 2×12' @ 6k+12) renders its duration as m:ss, not a meters suffix", () => {
     const w = library("Hoarfrost");
     const steps = buildManualLogSteps({ steps: w.steps }, BASELINES);
     const timeStep = steps.find((s) => s.seconds !== undefined);
@@ -1274,7 +1363,7 @@ describe("buildSummaryModel — Phase PW spec 2 §2: the model exports the numbe
   it("monitor door (the walk-3 real-wire fixture): avgSplitSeconds/timeSeconds are present, and re-applying the documented formatters to them reproduces the display strings exactly", () => {
     const program: WorkoutProgram = {
       intervals: [
-        interval({ type: "warmup", kind: "time", value: 60, restSeconds: 0 }),
+        interval({ kind: "time", value: 60, restSeconds: 0 }),
         interval({
           kind: "time",
           value: 60,

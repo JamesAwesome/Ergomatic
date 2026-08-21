@@ -63,8 +63,9 @@ const BASELINES = { k2Seconds: 100, k6Seconds: 120 };
 const READY_PREFS = {
   difficulties: [] as never[],
   timeCapMinutes: 60,
-  // The warm-up SETTING (2026-08-09's design §2), OFF by default for
-  // everyone — so the default fixture below builds runs with no warm-up
+  // The warm-up SETTING (2026-08-09's design §2), removed by Phase WU from
+  // everything downstream; still present on the preferences shape until
+  // that phase's Task 3, so the mock keeps the key. No consumer reads it
   // phase at all, exactly like production's default.
   warmup: null as WarmupSetting | null,
   countdownSeconds: 10,
@@ -190,10 +191,13 @@ describe("Countdown", () => {
     // Hoarfrost's first phase is its 12' work step, labelled with the
     // resolved split (domain/expand.ts's `case "w"`: `fmtSplit(132)`).
     expect(screen.getByText("2:12.0")).toBeInTheDocument();
-    // The setting is OFF in READY_PREFS, so no warm-up was prepended.
+    // Phase WU: the `some(p => p.type === "warmup")` assertion that used to
+    // sit here is gone with the member — nothing can prepend a phase to a
+    // run any more, and the compiler says so. Hoarfrost's own four phases
+    // are the whole run.
     const built = loadRun();
     expect(built).not.toBeNull();
-    expect(built!.phases.some((p) => p.type === "warmup")).toBe(false);
+    expect(built!.phases).toHaveLength(4);
   });
 
   // Phase 6I: `needsBaselines()` (domain/needsBaselines.ts) is the SAME
@@ -616,77 +620,10 @@ describe("Countdown — F1 mount guard against rebuilding a progressed run", () 
   });
 });
 
-// 2026-08-09's warmup-setting design §4/§9: the phone-timer door is one of
-// the two places a session is born, and it must thread the rower's own
-// preference into `buildRun` — otherwise the setting is a screen that
-// changes nothing. This screen already waits for `usePreferences` to be
-// READY (it needs `countdownSeconds`), so there is no half-loaded window
-// to guess in.
-describe("Countdown — the warm-up setting reaches buildRun", () => {
-  function prefsWith(warmup: WarmupSetting | null) {
-    return {
-      state: "ready",
-      preferences: { ...READY_PREFS, warmup },
-    } as unknown;
-  }
-
-  it("prepends a TIME warm-up to the saved run, ahead of the workout's own first phase", async () => {
-    saveDraft(hoarfrostDraft("id-warmup-time"));
-    mockAdapters({
-      preferencesState: prefsWith({ kind: "time", minutes: 10 }),
-    });
-    await renderCountdown();
-
-    expect(await screen.findByText("GET ON THE HANDLE")).toBeInTheDocument();
-    const run = loadRun()!;
-    expect(run.phases[0]).toStrictEqual({
-      type: "warmup",
-      seconds: 600,
-      label: "Easy",
-      originalIndex: -1,
-    });
-    // Hoarfrost's own four phases follow it, unshifted.
-    expect(run.phases).toHaveLength(5);
-    // GET ON THE HANDLE's own next-phase line names the warm-up now.
-    expect(screen.getByText("Easy")).toBeInTheDocument();
-  });
-
-  it("prepends a DISTANCE warm-up and its trailing rest, in that order", async () => {
-    saveDraft(hoarfrostDraft("id-warmup-distance"));
-    mockAdapters({
-      preferencesState: prefsWith({
-        kind: "distance",
-        meters: 2000,
-        restSeconds: 90,
-      }),
-    });
-    await renderCountdown();
-
-    expect(await screen.findByText("GET ON THE HANDLE")).toBeInTheDocument();
-    const run = loadRun()!;
-    expect(run.phases.slice(0, 2)).toStrictEqual([
-      {
-        type: "warmup",
-        meters: 2000,
-        // estimationSplit's easy band against this file's 6k baseline:
-        // 120 + 20 (domain/pace.ts:103).
-        targetSplit: 140,
-        label: "Easy",
-        originalIndex: -1,
-      },
-      { type: "rest", seconds: 90, label: "Rest", originalIndex: -1 },
-    ]);
-    expect(run.phases).toHaveLength(6);
-  });
-
-  it("prepends nothing when the setting is OFF (the default for everyone)", async () => {
-    saveDraft(hoarfrostDraft("id-warmup-off"));
-    mockAdapters({ preferencesState: prefsWith(null) });
-    await renderCountdown();
-
-    expect(await screen.findByText("GET ON THE HANDLE")).toBeInTheDocument();
-    const run = loadRun()!;
-    expect(run.phases.some((p) => p.type === "warmup")).toBe(false);
-    expect(run.phases).toHaveLength(4);
-  });
-});
+// PHASE WU deleted the describe that stood here, `Countdown — the warm-up
+// setting reaches buildRun` (three cases: a prepended TIME warm-up, a
+// DISTANCE one plus its trailing rest, and the OFF default). `buildRun` has
+// no warm-up parameter and this screen no longer reads
+// `preferences.warmup`, so there is nothing left to thread. The saved run's
+// phase list is now just what the draft's steps expand to, which the
+// "builds the run and saves it" cases above already pin.

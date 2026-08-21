@@ -86,16 +86,23 @@ function fillingLow(): { program: WorkoutProgram; title: string; id: string } {
     id: "filling-low",
     title: w.title,
     type: w.type as WorkoutType,
-    steps: w.steps,
+    // Filling Low's 8:00 opener was a `wu` step in the seed until
+    // 2026-08-09, then the rower's warm-up PREFERENCE, and Phase WU removed
+    // that too. It is an authored 8' EASY step here, which compiles to the
+    // identical interval (`compileProgram` nulls an effort phase's target
+    // exactly as it nulled a warm-up's), so the program is still
+    // interval 0 = time 480 then 3 x distance 2000 and every index and
+    // count below is unchanged.
+    steps: [
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 8 },
+        ref: { effort: "min" },
+      },
+      ...w.steps,
+    ],
   });
-  // 2026-08-09's warmup setting: Filling Low's 8:00 warm-up is the rower's
-  // PREFERENCE now, not a `wu` step in the seed — `buildRun`'s fourth
-  // argument is its one producer. The compiled program is identical to
-  // what this fixture always produced (interval 0 = time 480, then 3 x
-  // distance 2000), so every index and count below is unchanged.
-  const compiled = compileProgram(
-    buildRun(draft, baselines, t0, { kind: "time", minutes: 8 }).phases,
-  );
+  const compiled = compileProgram(buildRun(draft, baselines, t0).phases);
   if ("code" in compiled) {
     throw new Error(`fixture failed to compile: ${compiled.code}`);
   }

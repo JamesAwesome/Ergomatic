@@ -99,13 +99,24 @@ function seaFretProgram(): WorkoutProgram {
     id: "session-totals-sea-fret",
     title: workout.title,
     type: workout.type,
-    steps: workout.steps,
+    // Phase WU: interval 0 used to come from the rower's warm-up SETTING,
+    // via `buildRun`'s (now deleted) fourth argument. An authored 5' EASY
+    // step compiles to the identical interval — `compileProgram` nulls an
+    // effort phase's target exactly as it nulled a warm-up's — so every
+    // index, count and total in this file is unchanged.
+    steps: [
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 5 },
+        ref: { effort: "min" },
+      },
+      ...workout.steps,
+    ],
   });
   const run = buildRun(
     draft,
     { k2Seconds: 100, k6Seconds: 120 },
     new Date("2026-01-01"),
-    { kind: "time", minutes: 5 },
   );
   const result = compileProgram(run.phases);
   if (!("intervals" in result)) {

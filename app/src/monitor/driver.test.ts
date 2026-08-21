@@ -87,29 +87,32 @@ afterEach(() => {
 // Fret ("O2: 2x4' at 6k+12 with 1' rest"), run through the EXACT assembly
 // `startSession` uses (`buildDraft` -> `buildRun` -> `compileProgram`),
 // matching `src/monitor/program.sweep.test.ts`'s own pattern. Compiles to
-// 3 intervals: a 300s warmup (no target/rest), then two 240s work
+// 3 intervals: a 300s target-less opener (no rest), then two 240s work
 // intervals at 6k+12 (targetSplit 132s/500m) each followed by a 60s rest —
 // values read off `compileProgram`'s own output for this fixture, not off
 // a wire capture (see the provenance note below).
 //
-// 2026-08-09's warmup setting: that 300s interval 0 was Sea Fret's own
-// `wu` step until the seeds were stripped; it is a per-user PREFERENCE
-// now, passed to `buildRun` below (its one producer). The 5 minutes are
-// the exact duration the seed carried, so the compiled program is
-// unchanged — but keeping the warm-up at all is a deliberate choice, and
-// this is the reason:
+// WHERE INTERVAL 0 COMES FROM. It was Sea Fret's own `wu` step until the
+// seeds were stripped (2026-08-09), then the rower's warm-up PREFERENCE
+// passed as `buildRun`'s fourth argument, and Phase WU removed that too.
+// It is now an authored 5' EASY step prepended to the draft's own steps
+// below. That reproduces the SAME compiled interval byte for byte —
+// `compileProgram` nulls an effort phase's target exactly as it nulled a
+// warm-up's, so `{type: "work", kind: "time", value: 300, targetSplit:
+// null, displaySpm: null, restSeconds: 0}` is unchanged apart from the
+// type word — and keeping interval 0 at all is a deliberate choice:
 //
 // **Interval 0 is the only rest-0 leading interval compiled from a real
 // workout in this file.** (Synthetic rest-0 fixtures exist elsewhere —
 // `twoIntervalNoRest`, `restlessProgram`, SESSION 4a's `REST_ZERO_PROGRAM`
 // — and independently pin the `toActualIndex(0, "rowing", 3)` clamp branch
 // itself; this fixture's distinct value is exercising that same boundary
-// through the full compiled-library-workout happy path.) The warm-up
+// through the full compiled-library-workout happy path.) The opener
 // compiles with `restSeconds: 0` (nothing follows it but the first work
 // phase), which makes its boundary a WORK->WORK one — no rest tick
 // separates it from interval 1, so the state word is still "rowing" when
 // 0x0037/38 arrive. Sea Fret's own two work steps each carry a 60s rest,
-// so a fixture that dropped the warm-up would remove that case from the
+// so a fixture that dropped the opener would remove that case from the
 // file entirely. See the timeline comment at the "program -> armed ->
 // frames" walk below, which spells the boundary out.
 //
@@ -121,7 +124,8 @@ afterEach(() => {
 // program it is handed. 4a's own committed capture
 // (`docs/monitor/pm5-interface-notes.md` SESSION 4a) used three synthetic
 // lab programs and read 6000, not 30000. What makes this fixture honest is
-// that a warm-up-on rower running Sea Fret really does program exactly
+// that a rower who opens Sea Fret with five easy minutes really does
+// program exactly
 // this three-interval shape — a real production configuration, applied to
 // a documented rule.
 function seaFretProgram(): WorkoutProgram {
@@ -132,13 +136,21 @@ function seaFretProgram(): WorkoutProgram {
     id: "driver-test-sea-fret",
     title: workout.title,
     type: workout.type,
-    steps: workout.steps,
+    // The 5' EASY opener — see this fixture's own header for why it is an
+    // authored step now and why the compiled interval is unchanged.
+    steps: [
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 5 },
+        ref: { effort: "min" },
+      },
+      ...workout.steps,
+    ],
   });
   const run = buildRun(
     draft,
     { k2Seconds: 100, k6Seconds: 120 },
     new Date("2026-01-01"),
-    { kind: "time", minutes: 5 },
   );
   const result = compileProgram(run.phases);
   if (!("intervals" in result)) {
@@ -376,7 +388,7 @@ async function programViaStub(
   // The armed readback for `p` ITSELF (`armedStatusFor`), not the shared
   // `ARMED_GENERAL_STATUS` constant: every caller before walk 5 happened to
   // pass a program whose interval 0 is 60s (so the two are the same bytes),
-  // and a caller that passes anything else — Sea Fret's 300s warm-up, say —
+  // and a caller that passes anything else — Sea Fret's 300s opener, say —
   // would otherwise hang here waiting for a structure the machine was never
   // told to hold.
   transport.notify(GENERAL_STATUS_UUID, armedStatusFor(p));
@@ -1393,7 +1405,7 @@ describe("createPm5Driver: the full happy path over a real compiled workout (Sea
   it("program -> armed -> frames (with re-derived intervalRemaining) -> boundaries -> complete", async () => {
     const program = seaFretProgram();
     const timeline: FakeTimelineEvent[] = [
-      // Interval 0 (the 300s warmup): one live tick 120s in.
+      // Interval 0 (the 300s easy opener): one live tick 120s in.
       {
         atMs: 100,
         kind: "status",
@@ -1405,7 +1417,7 @@ describe("createPm5Driver: the full happy path over a real compiled workout (Sea
         heartRateBpm: 130,
         programIntervalIndex: 0,
       },
-      // Interval 0's boundary is a WORK->WORK one: the warmup compiles with
+      // Interval 0's boundary is a WORK->WORK one: the opener compiles with
       // `restSeconds: 0`, so no rest tick ever separates it from interval 1
       // and the state word is still "rowing" when 0x0037/38 arrive. Task 5
       // (interface-notes.md §19.8, answering §17 item 13): the fake's
@@ -5549,7 +5561,7 @@ describe("createPm5Driver: programming over a loaded workout ACCEPTS and REPLACE
 describe("createPm5Driver: a SECOND workout over the same fake, no reconnect (interface-notes.md §19.4)", () => {
   it("two coherent runs: the second run's actuals are numbered from 0 again (today: the fake's single-program model throws)", async () => {
     const program = seaFretProgram();
-    // Sea Fret's interval 0 is the 300s warmup, restSeconds 0 — so its
+    // Sea Fret's interval 0 is the 300s easy opener, restSeconds 0 — so its
     // boundary is legitimately delivered while the machine still reads
     // `rowing` (a trailing rest would require a `resting` tick first,
     // `boundaryBundle`'s own enforced rule).
@@ -5587,7 +5599,7 @@ describe("createPm5Driver: a SECOND workout over the same fake, no reconnect (in
     const { fake, driver, events, log } = harness({
       program,
       events: [
-        // Run 1: row the warmup out, complete it, then finish the piece.
+        // Run 1: row the opener out, complete it, then finish the piece.
         rowingTick(1000, 0, 100, 400),
         firstBoundary(2000),
         rowingTick(3000, 1, 320, 1300),
@@ -5623,7 +5635,7 @@ describe("createPm5Driver: a SECOND workout over the same fake, no reconnect (in
     expect(events.filter((e) => e.kind === "workoutComplete")).toHaveLength(1);
 
     // Run 1's opening reading, as the baseline run 2 has to match: 100
-    // seconds into Sea Fret's 300s warmup, 200 to go.
+    // seconds into Sea Fret's 300s opener, 200 to go.
     expect(firstRowingFrameAfter(run1Start)?.intervalRemaining).toStrictEqual({
       kind: "time",
       value: 200,
@@ -5857,7 +5869,8 @@ describe("createPm5Driver: the log records frame STATE CHANGES, not every frame"
     // interface-notes.md §18: status notifications arrive ~2/second, so one
     // log entry per frame filled the 500-entry ring — and evicted the
     // write/ack trace the log exists for — inside about four minutes. A
-    // trace that cannot survive a warm-up is not observability.
+    // trace that cannot survive a five-minute easy piece is not
+    // observability.
     const timeline: FakeTimelineEvent[] = Array.from(
       { length: 10 },
       (_, i) => ({
@@ -6114,7 +6127,7 @@ describe("createPm5Driver: Task 1 (fix-3) — the 'structure' log entry makes 0x
     // Fix-3 Task 4 changed WHAT those three fields are, not how often they
     // are logged: the fake used to hardcode `8/0/0` on every tick, and now
     // reports the structure of the workout it is actually holding — Sea
-    // Fret's interval 0 is the 300s warmup, so `durationRaw=30000` at
+    // Fret's interval 0 is the 300s opener, so `durationRaw=30000` at
     // duration type Time. Unchanged across the session, hence still one
     // entry.
     const entries = log.entries().filter((e) => e.kind === "structure");
@@ -6636,7 +6649,7 @@ describe("createPm5Driver: fix-3 Task 3 — the settle and the empty arm, end to
     };
   }
 
-  /** Sea Fret's interval 0 (a 300 s warmup, no trailing rest) completing. */
+  /** Sea Fret's interval 0 (a 300 s easy opener, no trailing rest) completing. */
   function boundaryAt(atMs: number): FakeTimelineEvent {
     return {
       atMs,
@@ -7480,11 +7493,11 @@ describe("createPm5Driver: fix-3 Task 4 — armed means armed WITH the workout w
     expect(structureEntries(log)).toBe(0);
   });
 
-  it("a REAL library workout arms for real: Sea Fret's 300s warmup reads back 30000/Time and program() resolves", async () => {
+  it("a REAL library workout arms for real: Sea Fret's 300s opener reads back 30000/Time and program() resolves", async () => {
     // The briefing's realistic-fixture rule — Sea Fret through the exact
     // `buildDraft -> buildRun -> compileProgram` assembly `startSession`
-    // uses, not a hand-built minimum. Its interval 0 is the 300s warm-up
-    // the rower's SETTING prepends (see `seaFretProgram`'s own note), so
+    // uses, not a hand-built minimum. Its interval 0 is the 300s easy
+    // opener the draft authors (see `seaFretProgram`'s own note), so
     // the readback the machine owes us — by SESSION 4a's documented rule,
     // applied here, not quoted from a capture of this workout — is 30000 at
     // duration type Time.
@@ -8875,7 +8888,7 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
    *  parameter, because what those values MEAN (work-only or work plus
    *  trailing rest) is the whole subject of §23 walk item 4.
    *
-   *  Sea Fret compiles to three intervals: a 300 s warm-up with no rest,
+   *  Sea Fret compiles to three intervals: a 300 s opener with no rest,
    *  then 2x240 s work each carrying a 60 s rest — so the program's own
    *  total rest allowance is 120 s, verified off `compileProgram`'s output
    *  for this fixture, and that is the number the two readings below
@@ -8932,7 +8945,7 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
    *  changes between them, which is what isolates §23 walk item 4's
    *  question to one number. */
   const SEA_FRET_WORK_ONLY_PRIORS = [
-    { seconds: 300, meters: 1000 }, // the warm-up, which carries no rest anyway
+    { seconds: 300, meters: 1000 }, // the opener, which carries no rest anyway
     { seconds: 240, meters: 1200 }, // work interval 1, its 60s rest excluded
   ];
   /** 300 + 240 + 240: the three intervals' WORK, with the programmed 120 s

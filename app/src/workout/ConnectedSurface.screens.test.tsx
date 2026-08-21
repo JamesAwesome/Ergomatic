@@ -77,12 +77,19 @@ function libraryFixture(
     id: title.toLowerCase().replace(/ /g, "-"),
     title: w.title,
     type: w.type as WorkoutType,
-    steps: w.steps,
+    // Phase WU: the leading interval came from `buildRun`'s deleted warm-up
+    // argument. An authored EASY step of the same length compiles to the
+    // identical target-less interval, so every index and count here holds.
+    steps: [
+      {
+        k: "w",
+        duration: { kind: "time", minutes: warmupMinutes },
+        ref: { effort: "min" },
+      },
+      ...w.steps,
+    ],
   });
-  const phases = buildRun(draft, baselines, t0, {
-    kind: "time",
-    minutes: warmupMinutes,
-  }).phases;
+  const phases = buildRun(draft, baselines, t0).phases;
   const program = compileProgram(phases);
   if ("code" in program) {
     throw new Error(`fixture failed to compile: ${program.code}`);
@@ -114,7 +121,7 @@ function noWarmupFixture(title: string): {
     type: w.type as WorkoutType,
     steps: w.steps,
   });
-  const phases = buildRun(draft, baselines, t0, null).phases;
+  const phases = buildRun(draft, baselines, t0).phases;
   const program = compileProgram(phases);
   if ("code" in program) {
     throw new Error(`fixture failed to compile: ${program.code}`);
@@ -564,7 +571,13 @@ describe("screen fixtures for pnpm screenshots", () => {
    *  8:00-warm-up-minus-3:32, so the fill sits inside the span rather than
    *  at either end of it. A time warm-up counts DOWN, hence the time-kind
    *  remaining. */
-  it("pane B, warming up", async () => {
+  // Phase WU: this was "pane B, warming up" — interval 0 was the rower's
+  // warm-up and the header read the bare word `WARM-UP`. It is an ordinary
+  // opening piece now (`1 OF 5 · WORK`), and the fixture is kept because
+  // interval 0 is still the one frame where the session total equals the
+  // interval's own distance and the target slot carries a word rather than
+  // a number.
+  it("pane B, the opening interval", async () => {
     await expect(
       capture("live", {
         frame: {
@@ -572,8 +585,8 @@ describe("screen fixtures for pnpm screenshots", () => {
           elapsedSeconds: 268,
           distanceMeters: 942,
           // Equal to the raw value here, and stated rather than inherited:
-          // a warm-up is the FIRST interval, so the session total genuinely
-          // is this interval's own distance. Everywhere else the two differ
+          // this is the FIRST interval, so the session total genuinely is
+          // this interval's own distance. Everywhere else the two differ
           // (see `liveFrame`).
           sessionDistanceMeters: 942,
           currentSplit: 142.3,
@@ -608,9 +621,9 @@ describe("screen fixtures for pnpm screenshots", () => {
 
   // --- Task 7 ------------------------------------------------------------
 
-  /** Mid-session on Filling Low: interval 1 (the warm-up) behind, interval
-   *  2 (the first 2000 m rep) running, two more to come — one of each of
-   *  the handoff's three row states in one frame. */
+  /** Mid-session on Filling Low: interval 1 (the easy opener) behind,
+   *  interval 2 (the first 2000 m rep) running, two more to come — one of
+   *  each of the handoff's three row states in one frame. */
   it("pane C, the grid mid-session", async () => {
     await expect(
       capture("grid", { actuals: [actualFor(0, FIXTURE.program)] }),

@@ -114,7 +114,7 @@ export function staleFor(status: SurfaceStatus): boolean {
 
 /** The NEXT line's own extent phrase (design spec §"Composition", Item B):
  *  `1500m` for a distance phase, the house duration format for a time one.
- *  A `rest`/`work`/`warmup` phase always has exactly one of the two set
+ *  A `rest`/`work` phase always has exactly one of the two set
  *  (`domain/expand.ts`'s producers never emit both); `test` phases have
  *  neither and never reach this helper (see `connectedNextText`'s own
  *  `test` branch, which composes no extent at all). */
@@ -138,7 +138,7 @@ function nextLineExtent(
  * domain's already-resolved display value — the exact split
  * (`fmtSplit(targetSplit)`), `"Easy"`, `"Rest"`, `"All out"`, or an effort
  * word (`"ALL OUT"`/`"EASY"`) — for every phase kind that carries one
- * (`domain/expand.ts`'s `phases()`, `session/engine.ts`'s `warmupPhases`).
+ * (`domain/expand.ts`'s `phases()`).
  * This function composes that label with the phase's own extent and rate;
  * it never calls `fmtSplit`/`resolveSplit` itself, so a future change to
  * how a target is resolved cannot silently drift the two apart the way a
@@ -164,7 +164,6 @@ export function connectedNextText(
   const kind = phaseKindWord(phase.type);
   switch (phase.type) {
     case "work":
-    case "warmup":
       // `@spm` only when spm is SET (design spec table) — `!== undefined`,
       // not truthiness, so a phase could never suppress its own rate by
       // resolving to a falsy-but-real spm (unreachable today, since a real
@@ -228,38 +227,37 @@ export function phaseIndexForInterval(
 /**
  * THE NUMBER THE ROWER HAS IN THEIR HEAD (design spec §5b, ruling 12).
  *
- * A warm-up is real time on the erg and a real `ProgramInterval`, but it is
- * no part of the count: a four-piece workout is four pieces whether or not
- * the rower's preference put eight easy minutes in front of them. So this
- * numbers the WORKING intervals 1..n and hands the warm-up `null` — the
- * caption drops its ordinal entirely, and Task 5's grid renders `WU` in the
- * `#` cell and starts at 1 on the first work piece.
+ * Every program interval is a piece the rower counts, so this numbers them
+ * 1..n and `workCount` is simply how many there are. It was NOT always an
+ * identity: a warm-up interval used to be excluded — unnumbered in the
+ * caption, `WU` in the grid's `#` cell — because a four-piece workout is
+ * four pieces whether or not the rower's preference put eight easy minutes
+ * in front of them. Phase WU removed the warm-up outright, so there is
+ * nothing left to skip.
  *
  * ONE RULE, TWO SURFACES: the caption below and the grid read the same
- * array, so a row's number and the header's `N OF M` cannot disagree.
+ * array, so a row's number and the header's `N OF M` cannot disagree. That
+ * is why this stays a shared array rather than each surface computing
+ * `i + 1` for itself.
  *
- * A "test" (open-ended all-out) interval COUNTS. "Working intervals only"
- * excludes the warm-up and nothing else — a test piece is the hardest work
- * in the session, not a preamble to it. (It is also unreachable today:
- * `compileProgram` rejects a phase with neither seconds nor meters, which
- * every "test" phase is — see its `unrepresentable-value` arm.)
+ * A "test" (open-ended all-out) interval COUNTS — a test piece is the
+ * hardest work in the session, not a preamble to it. (It is also
+ * unreachable today: `compileProgram` rejects a phase with neither seconds
+ * nor meters, which every "test" phase is — see its `unrepresentable-value`
+ * arm.)
  */
 export interface IntervalNumbering {
-  /** Per program interval, in the program's own order: its 1-based number
-   *  among the working intervals, or `null` if it is a warm-up. */
-  ordinals: (number | null)[];
-  /** The caption's denominator — how many intervals are the work. */
+  /** Per program interval, in the program's own order: its 1-based number. */
+  ordinals: number[];
+  /** The caption's denominator — how many intervals there are. */
   workCount: number;
 }
 
 export function intervalNumbering(
   intervals: readonly ProgramInterval[],
 ): IntervalNumbering {
-  let workCount = 0;
-  const ordinals = intervals.map((interval) =>
-    interval.type === "warmup" ? null : (workCount += 1),
-  );
-  return { ordinals, workCount };
+  const ordinals = intervals.map((_interval, i) => i + 1);
+  return { ordinals, workCount: ordinals.length };
 }
 
 /** The frame a pane renders before the machine has sent one (the instant
@@ -337,13 +335,13 @@ export interface GridRow {
   index: number;
   state: GridRowState;
   /** THE `#` CELL (connected-revamp Task 5, design spec §5b): the row's
-   *  1-based position among WORKING intervals, `null` for the warm-up.
-   *  `intervalNumbering(program.intervals)`'s own `ordinals` array, read
-   *  straight through — this function does not re-derive it, so the row and
-   *  the header's own `N OF M` cannot disagree (`buildSurfaceModel` reads
-   *  the same array for `intervalLabelShort`). `PaneGrid.tsx` renders `WU`
-   *  when this is `null`. */
-  ordinal: number | null;
+   *  1-based position. `intervalNumbering(program.intervals)`'s own
+   *  `ordinals` array, read straight through — this function does not
+   *  re-derive it, so the row and the header's own `N OF M` cannot disagree
+   *  (`buildSurfaceModel` reads the same array for `intervalLabelShort`).
+   *  Phase WU removed the `null`/`WU` case: there is no unnumbered
+   *  interval any more. */
+  ordinal: number;
   time: string;
   meters: string;
   /** Which cell is the ACTIVE row's countdown — the programmed dimension
@@ -377,10 +375,10 @@ export interface SurfaceModel {
   linked: boolean;
   /** `PM5 430123456`, or `PM5 430123456 · LOST`. */
   deviceCaption: string;
-  /** `INTERVAL 3 OF 24 · WORK`, or a bare `WARM-UP` while the warm-up runs
-   *  (design spec §5b — the ordinal belongs to the interval and a warm-up
-   *  has none, so there is no `INTERVAL` prefix left to hang on it). No
-   *  current renderer: its only one, `PaneTimer.tsx`'s pane A, retired with
+  /** `INTERVAL 3 OF 24 · WORK` (design spec §5b). Falls back to the bare
+   *  phase word for an interval with no ordinal at all, which only an
+   *  EMPTY program can now produce — Phase WU removed the unnumbered
+   *  warm-up that used to be the real case. No current renderer: its only one, `PaneTimer.tsx`'s pane A, retired with
    *  connected-revamp Task 2. CR2 spec 3 Task 5 CORRECTS an earlier plan
    *  assumption carried in this comment: the grid header does NOT rehome
    *  THIS field — it composes `intervalOrdinalLabel` (below) with
@@ -390,17 +388,17 @@ export interface SurfaceModel {
    *  unrendered — kept for the same reason `intervalLabelShort` is kept
    *  alongside it, not because a future task still owes it a home. */
   intervalLabel: string;
-  /** `3 OF 24 · WORK`, or `WARM-UP` (pane B's header line, where the device
-   *  name already occupies the left of the row). The denominator counts
-   *  WORKING intervals only — see `intervalNumbering`. CR2 spec 3 Task 2
-   *  (design spec §2D): gains an ARMED branch — `${ordinal} OF ${count} ·
-   *  READY`, bare `READY` when the armed interval is the unnumbered
-   *  warm-up — closing PROVENANCE item 3. */
+  /** `3 OF 24 · WORK` (pane B's header line, where the device name already
+   *  occupies the left of the row). The denominator is every interval — see
+   *  `intervalNumbering`. CR2 spec 3 Task 2 (design spec §2D): gains an
+   *  ARMED branch — `${ordinal} OF ${count} · READY` — closing PROVENANCE
+   *  item 3. */
   intervalLabelShort: string;
   /** CR2 spec 3 Task 2 (design spec §3, composition note under §2B):
-   *  ordinal-only sibling of `intervalLabelShort` — `3 OF 24`, or `null` on
-   *  the unnumbered warm-up, the same `null` rule `intervalLabelShort`
-   *  itself already applies. `intervalLabelShort` bakes the phase word in
+   *  ordinal-only sibling of `intervalLabelShort` — `3 OF 24`, or `null`
+   *  when the interval has no ordinal at all (an empty program; Phase WU
+   *  removed the unnumbered warm-up that used to be the real case).
+   *  `intervalLabelShort` bakes the phase word in
    *  (`· WORK`/`· READY`), which the grid header (§2B) does not want — it
    *  joins THIS field with `totalLeftDisplay` instead
    *  (`3 OF 12 · 38:20 LEFT`), so a later task reads the ordinal without
@@ -419,8 +417,8 @@ export interface SurfaceModel {
   nowLabel: string;
   /** THE NEXT LINE (connected-polish design spec, Item B): built by
    *  `connectedNextText` from the coming phase's own `label` plus its
-   *  extent and `@spm` — `WORK 1500m · 2:13.0 @24`, `WARM-UP 2000m · Easy`,
-   *  `TEST · All out`, `REST 1:00`, or `FINISH` past the last phase. One
+   *  extent and `@spm` — `WORK 1500m · 2:13.0 @24`, `TEST · All out`,
+   *  `REST 1:00`, or `FINISH` past the last phase. One
    *  richer phase, not two: `thenNext` is gone from this interface outright
    *  (the then-clause dies everywhere, James's ruling). CR2 spec 3 Task 2
    *  (design spec §2D) gains an ARMED branch — at armed this reads the
@@ -465,7 +463,7 @@ export interface SurfaceModel {
   /** EST LEFT (Phase LL design spec §4, plan Step 5): `true` unless every
    *  phase from the current one to the end of the session is UNPRICED
    *  (`phaseSeconds` returns `null` for all of them — reachable with a
-   *  null-baseline distance warm-up, `engine.ts:88-94`) — the identical
+   *  null-baseline distance effort phase) — the identical
    *  rule `session/Timer.tsx`'s `hasRemainingEstimate` already gives the
    *  phone timer, reused rather than reinvented (its own doc comment has
    *  the full reasoning: re-evaluated fresh every frame against the
@@ -491,11 +489,9 @@ export interface SurfaceModel {
   /** Where the intervals actually are, for the live pane's notched TOTAL
    *  LEFT bar (design spec §5). One entry per INTERIOR interval boundary —
    *  the bar's spans are the intervals the program has, never
-   *  `phases.length`. On a session with no warm-up that is exactly
-   *  `intervalLabelShort`'s own `OF N` minus one; with one, the extra span
-   *  is the warm-up's, which `warmupEndsAt` marks so the bar can tone it out
-   *  of the work (§5b). Completed intervals are re-anchored to the machine's
-   *  own actuals; see `session/intervalBoundaries.ts`. */
+   *  `phases.length` — exactly `intervalLabelShort`'s own `OF N` minus one.
+   *  Completed intervals are re-anchored to the machine's own actuals; see
+   *  `session/intervalBoundaries.ts`. */
   boundaries: IntervalBoundaries;
   elapsedDisplay: string;
   pace: JudgedValue;
@@ -515,11 +511,11 @@ export interface SurfaceModel {
    *  for a zero/null reading (the wire's own "no sample yet" value), for a
    *  referent mismatch (the driver already nulls `frame.splitAvgPace` when
    *  its own provenance lags the referent — this file does not re-derive
-   *  that), for a rest with no completed WORK interval behind it (the
-   *  warm-up's own trailing rest), and for finished/terminated/idle
-   *  (`frame.intervalIndex === null` checked directly, never through the
-   *  `?? 0` laundering the interval clamp above uses — that laundering
-   *  would otherwise pair AVG with the warm-up's target). */
+   *  that), for a rest with no completed WORK interval behind it, and for
+   *  finished/terminated/idle (`frame.intervalIndex === null` checked
+   *  directly, never through the `?? 0` laundering the interval clamp above
+   *  uses — that laundering would otherwise pair AVG with interval 0's
+   *  target). */
   avg: JudgedValue;
   /** The rate hero's own target row: `FREE` when the phase carries no spm,
    *  and the house `DASH` when there is no phase at all — exactly the two
@@ -744,11 +740,11 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
   const sessionDistanceMeters =
     input.frame === null ? null : frame.sessionDistanceMeters;
 
-  // TWO DIFFERENT COUNTS, deliberately (design spec §5b). The CLAMP is
-  // against the program's own length — `frame.intervalIndex` is a program
-  // index and a warm-up occupies one — while the caption's denominator below
-  // counts working intervals only. Collapsing them back into one number is
-  // exactly the defect this task exists to remove.
+  // The CLAMP is against the program's own length: `frame.intervalIndex` is
+  // a program index. This used to be one of TWO DIFFERENT COUNTS (design
+  // spec §5b) — the caption's denominator counted working intervals only,
+  // excluding the warm-up — and Phase WU collapsed them back into one
+  // legitimately, by removing the thing they differed over.
   const intervals = program.intervals.length;
   const rawIndex = frame.intervalIndex ?? 0;
   const intervalIndex = Math.min(
@@ -778,16 +774,15 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
   // referent — but only when one exists in `phases[]` at all: an interval
   // with zero programmed rest never gets a `"rest"` phase
   // (`domain/expand.ts`'s/`engine.ts`'s own truthiness checks on
-  // `restMinutes`/`warmup.restSeconds`), so a machine that briefly reports
+  // `restMinutes`), so a machine that briefly reports
   // `resting` there still resolves `phase` to the WORK phase itself — the
   // r0 case the design's own "Honest limits" names ("gets the average but
   // never the colour"). `isRestPhase` is therefore the real discriminant,
   // never `resting` alone.
   const isRestPhase = phase?.type === "rest";
   // The interval that JUST FINISHED — `undefined` unless this genuinely IS
-  // a rest phase AND the phase before it was real WORK (never a warm-up:
-  // the warm-up's own trailing rest is "before any work interval
-  // completes", design spec row 5, and must read exactly as it always
+  // a rest phase AND the phase before it was real WORK ("before any work
+  // interval completes", design spec row 5, must read exactly as it always
   // has). ONE lookup shared by the TGT override below and by AVG's own
   // judgement target, so the two can never name different intervals.
   const finishedWorkPhase =
@@ -916,14 +911,13 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
   // ^ Checked against the RAW field, never `intervalIndex` (the laundered
   // `?? 0` local a few lines up) — finished/terminated/idle report `null`
   // here by the field's own business rule, and laundering it to 0 would
-  // pair AVG with the warm-up's own referent instead of suppressing it
+  // pair AVG with interval 0's referent instead of suppressing it
   // (design spec States table, "Finished / terminated / idle").
   const avgSuppressedByRest = isRestPhase && finishedWorkPhase === undefined;
-  // ^ Design spec row "Rest, before any work interval completes": the
-  // warm-up's own trailing rest (or any rest with no completed WORK phase
-  // behind it) suppresses AVG even though 0x0033 may genuinely be holding
-  // a real number (the warm-up's own average) — a warm-up must never read
-  // as a working interval, at rest any more than while it runs.
+  // ^ Design spec row "Rest, before any work interval completes": a rest
+  // with no completed WORK phase behind it — a LEADING rest — suppresses
+  // AVG even though 0x0033 may genuinely be holding a real number, because
+  // there is no finished interval for that number to be a verdict on.
   const rawAvg = frame.splitAvgPace;
   const avgActual =
     avgAbsentByReferent ||
@@ -933,7 +927,7 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
       ? null
       : rawAvg;
   // Judged ONLY at rest, against the FINISHED interval's own numeric split
-  // target — everywhere else (rowing, warm-up, free, effort, the r0 edge)
+  // target — everywhere else (rowing, free, effort, the r0 edge)
   // this is `null`, which `avgValue` resolves to `"within"`/plain ink, the
   // design's "plain ink, unjudged" rule for every state but this one.
   const avgJudgeTarget =
@@ -949,16 +943,15 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
 
   // THE NO-TARGET STATE (design spec §6, adversarial finding — REVISED
   // 2026-08-12 by James, from #89's warm-up captures). A REST phase with
-  // NOTHING finished behind it (the warm-up's own trailing rest, or any
-  // work phase without a numeric split target — an "effort" target, a
-  // warm-up, a legacy run frozen before `ref` existed) has no number for
-  // the hero's TARGET slot.
+  // NOTHING finished behind it (a leading rest), or any work phase without
+  // a numeric split target (an "effort" target, a legacy run frozen before
+  // `ref` existed), has no number for the hero's TARGET slot.
   //
   // §6 originally made that a `DASH` on this surface, because the phase's
   // own WORD in the target's type weight "read as a target that doesn't
   // exist". The phone timer never adopted that rule — it kept showing
   // `Easy`/`Rest`/`All out` — and once the revamp taught the two surfaces
-  // one visual language, the same warm-up read `Easy` on the phone and
+  // one visual language, the same effort phase read `Easy` on the phone and
   // `— NO SPLIT TARGET` on the erg. James ruled the WORD, both places.
   //
   // §6's concern is answered by treatment rather than by omission: `absent`
@@ -982,8 +975,8 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
   // interval, so the row reads as a verdict on what was rowed (`TGT
   // 2:13.0 · AVG 2:11.8`, not `TGT Rest`) — pairing a verdict with the
   // NEXT interval's target would judge a number the rower never rowed.
-  // `finishedWorkPhase` is `undefined` on every other path (rowing, the
-  // warm-up's own trailing rest, the r0 edge), where this collapses back
+  // `finishedWorkPhase` is `undefined` on every other path (rowing, a
+  // leading rest, the r0 edge), where this collapses back
   // to `phase` unchanged — "as today" everywhere the design's own States
   // table says "as today".
   const targetSplitPhase = finishedWorkPhase ?? phase;
@@ -1083,12 +1076,20 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
   const remaining = frame.intervalRemaining;
   const kindWord = phase ? phaseKindWord(phase.type) : "WORK";
 
-  // THE ORDINAL BELONGS TO THE INTERVAL, THE WORD TO THE PHASE (§5b). An
-  // unnumbered interval — a warm-up — leaves the kind word standing on its
-  // own: `WARM-UP` while it runs, and `REST` through the warm-up setting's
-  // own trailing rest, which is still no part of the rower's count. A work
-  // interval is unchanged: `2 OF 4 · WORK`, `2 OF 4 · REST` in its rest.
-  const ordinal = numbering.ordinals[intervalIndex] ?? null;
+  // THE ORDINAL BELONGS TO THE INTERVAL, THE WORD TO THE PHASE (§5b):
+  // `2 OF 4 · WORK`, `2 OF 4 · REST` in its rest.
+  //
+  // The `null` fallback is the ONE unnumbered case Phase WU left behind: an
+  // EMPTY program, where the clamp above pins `intervalIndex` to 0 with no
+  // interval there to number. `compileProgram` cannot produce one
+  // (`no-work`), so this is defence, not an expected path — but it is what
+  // stops the caption reading `undefined OF 0`. The real case it used to
+  // serve, a warm-up interval, no longer exists. The explicit annotation is
+  // load-bearing: `ordinals` is `number[]` and `noUncheckedIndexedAccess`
+  // is off, so without it TypeScript would call an out-of-range read a
+  // `number` and delete the guard below as dead.
+  const ordinalAt: number | undefined = numbering.ordinals[intervalIndex];
+  const ordinal = ordinalAt ?? null;
   const counted = `${ordinal} OF ${numbering.workCount} · ${kindWord}`;
   // THE ORDINAL, ALONE (CR2 spec 3 Task 2, design spec §3): the grid header
   // (§2B) wants `3 OF 12` joined with `totalLeftDisplay`, never the phase
@@ -1097,11 +1098,11 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
   const intervalOrdinalLabel =
     ordinal === null ? null : `${ordinal} OF ${numbering.workCount}`;
   // READY (design spec §2D — "the READY word ships HERE", closing
-  // PROVENANCE item 3): the armed caption keeps the same "no ordinal on the
-  // warm-up" rule `counted`/`kindWord` already enforce, substituting the
-  // WORD only — `intervalOrdinalLabel` above is exactly the prefix this
-  // needs, so the two cannot drift apart the same way the grid `#` column
-  // and this caption already cannot (`ordinal`, read once, both places).
+  // PROVENANCE item 3): the armed caption keeps the same no-ordinal rule
+  // `counted`/`kindWord` already enforce, substituting the WORD only —
+  // `intervalOrdinalLabel` above is exactly the prefix this needs, so the
+  // two cannot drift apart the same way the grid `#` column and this
+  // caption already cannot (`ordinal`, read once, both places).
   const readyLabel =
     intervalOrdinalLabel === null ? "READY" : `${intervalOrdinalLabel} · READY`;
 
@@ -1329,8 +1330,12 @@ export function buildGridModel(args: {
     const rest =
       interval.restSeconds > 0 ? fmtDuration(interval.restSeconds / 60) : DASH;
     // THE `#` CELL (design spec §5b): read straight off `numbering`, never
-    // re-derived from `index` — see `GridRow.ordinal`'s own comment.
-    const ordinal = numbering.ordinals[index] ?? null;
+    // re-derived from `index` — see `GridRow.ordinal`'s own comment. The
+    // `?? index + 1` is unreachable while caller and callee share one
+    // program (`buildSurfaceModel` builds `numbering` from these same
+    // `intervals`); it exists so a mismatched pair renders a number rather
+    // than `undefined`.
+    const ordinal = numbering.ordinals[index] ?? index + 1;
     if (index === activeIndex) {
       const countdown = countdownDisplayFor(interval, remaining);
       const accrual = accruedDisplayFor(interval, accrued);
@@ -1518,26 +1523,20 @@ function footerCaptionFor(
  *  CONNECTED-REVAMP TASK 5 (design spec §5b, adversarial find, not named in
  *  the brief): the row numbers this caption prints must be the SAME numbers
  *  the grid's own `#` column shows, or the caption reads "ROW 2" beside a
- *  row visibly labelled "1". Before this task the caption used the raw
- *  program index (`i + 1`, warm-up included), which was silently correct
- *  only because the `#` column used to be the same raw index — now that the
- *  column reads `numbering.ordinals` instead (WU unnumbered, work starting
- *  at 1), this function reads the identical array rather than keeping its
- *  own count. A warm-up that is itself a distance interval (a real case —
- *  `WarmupSetting.kind === "meters"`, `engine.ts`'s `warmupPhases`) is
- *  excluded from the list entirely: it has no ordinal to be named by, the
- *  same reasoning `intervalNumbering`'s own doc comment gives for excluding
- *  it from `workCount`. */
+ *  row visibly labelled "1". It therefore reads `numbering.ordinals` rather
+ *  than keeping its own `i + 1` count — structurally the same array the
+ *  grid uses, even now that Phase WU has made the numbering an identity
+ *  again. */
 function distanceCaptionFor(
   intervals: ProgramInterval[],
   numbering: IntervalNumbering,
 ): string | null {
   const rows = intervals
-    .map((interval, i) => ({ interval, number: numbering.ordinals[i] ?? null }))
-    .filter(
-      (r): r is { interval: ProgramInterval; number: number } =>
-        r.interval.kind === "distance" && r.number !== null,
-    );
+    .map((interval, i) => ({
+      interval,
+      number: numbering.ordinals[i] ?? i + 1,
+    }))
+    .filter((r) => r.interval.kind === "distance");
   if (rows.length === 0) return null;
   const tail = "METERS COUNT DOWN";
   const first = rows[0]!;

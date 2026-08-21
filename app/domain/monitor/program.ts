@@ -34,14 +34,14 @@
  *  rejected as `leading-rest`. Pinned in `program.test.ts` ("a REST never
  *  becomes an interval, so it never needs a type of its own") rather than
  *  left as an assumption the union quietly depends on. */
-export type IntervalType = "warmup" | "work" | "test";
+export type IntervalType = "work" | "test";
 
 export interface CompiledPhase {
-  /** Mirrors `Phase["type"]` (`domain/expand.ts`). "warmup" and "test" carry
-   *  no target/spm — see the field comments below for how each type's
+  /** Mirrors `Phase["type"]` (`domain/expand.ts`). "test" carries no
+   *  target/spm — see the field comments below for how each type's
    *  absent fields are handled. */
   type: IntervalType | "rest";
-  /** Time-based duration in seconds — warmup, rest, and a time-duration
+  /** Time-based duration in seconds — rest, and a time-duration
    *  work phase. Undefined for a distance-duration work phase and for a
    *  "test" (open-ended, no fixed duration at all — see `compileProgram`'s
    *  own comment on that branch). */
@@ -55,17 +55,12 @@ export interface CompiledPhase {
    *  Phase 6I: with null baselines (the no-baseline onboarding workouts,
    *  `domain/needsBaselines.ts`) an "effort" phase has NO targetSplit at
    *  all — `targetKind`, never `targetSplit === undefined`, is what tells
-   *  the two work-phase kinds apart; see its own comment.
-   *
-   *  2026-08-09 (the warmup setting): a DISTANCE "warmup" phase carries one
-   *  too — the same display-only easy estimate, for the same reason (the
-   *  phone cannot price `meters` without a split). It is never programmed;
-   *  `compileProgram`'s warmup arm nulls it. */
+   *  the two work-phase kinds apart; see its own comment. */
   targetSplit?: number;
   /** Discriminates a work phase's target: "split" is a real, user-chosen
    *  pace; "effort" is a display estimate for "ALL OUT"/"EASY" — the
    *  compiler must not program the estimate as a hard target (see
-   *  `compileProgram`). Undefined for warmup/rest/test. */
+   *  `compileProgram`). Undefined for rest/test. */
   targetKind?: "split" | "effort";
   /** Display-only stroke rate. See `ProgramInterval.displaySpm`'s own
    *  comment for why this never reaches the wire. */
@@ -90,21 +85,13 @@ export interface CompiledPhase {
 export interface ProgramInterval {
   /** WHAT THIS INTERVAL IS — the compiled phase's own type, carried through
    *  rather than destroyed at the compile boundary (design spec §5b, ruling
-   *  12). This compiler has always KNOWN it was compiling a warm-up (the
-   *  `targetSplit` arm below nulls the target on exactly that test), and
-   *  used to push the interval without the fact, so every consumer
-   *  downstream inherited a warm-up it could not recognise: the live
-   *  caption counted it (a four-piece workout read `1 OF 5` while the rower
-   *  was still warming up), the notched TOTAL LEFT bar folded its span in as
-   *  if it were work, and the grid would have numbered it row 1. Each of
-   *  those surfaces now READS this instead of re-deriving "was that a
-   *  warm-up?" from phase indices — the one-source discipline the judgement
-   *  helper already has.
+   *  12), so a downstream surface READS what this interval is instead of
+   *  re-deriving it from phase indices — the one-source discipline the
+   *  judgement helper already has. The union carried a third member,
+   *  "warmup", until Phase WU removed the concept.
    *
-   *  NOT A WIRE FIELD. Nothing in `pm5/commands.ts` encodes it (a warm-up is
-   *  programmed as an ordinary interval that happens to have no target, and
-   *  the PM5 has no warm-up concept of its own); it is the IR remembering
-   *  what it compiled, for the phone's own screens.
+   *  NOT A WIRE FIELD. Nothing in `pm5/commands.ts` encodes it; it is the
+   *  IR remembering what it compiled, for the phone's own screens.
    *
    *  REQUIRED HERE, BUT A PERSISTED PROGRAM MAY PREDATE IT. A whole
    *  `WorkoutProgram` is embedded in `src/monitor/monitorRun.ts`'s
@@ -123,11 +110,8 @@ export interface ProgramInterval {
    *  rounding-rule comments; never a raw, unrounded phase value. */
   value: number;
   /** Frozen at confirm; null = no hard target (an effort phase, or a
-   *  warmup/test interval with nothing to aim for). See `compileProgram`'s
-   *  `targetKind` handling — this is null for a "warmup" phase whatever it
-   *  carries (2026-08-09's warmup setting gave a distance warm-up a
-   *  display-only estimate; the type is the discriminant there), for "no
-   *  ref at all",
+   *  "test" interval with nothing to aim for). See `compileProgram`'s
+   *  `targetKind` handling — this is null for "no ref at all",
    *  AND for "targetKind === effort" (when baselines were available, a real
    *  number the phone estimated for display, not a pace to program), which
    *  is exactly the H8 fix: reading `targetSplit === undefined` on the
@@ -168,11 +152,11 @@ export interface WorkoutProgram {
  *  requirement — these are not internal-only strings). */
 export type CompileError = {
   code:
-    // A rest phase with no preceding work/warmup/test interval to attach
+    // A rest phase with no preceding work/test interval to attach
     // to — the PM has no standalone-rest slot (its rest is always a
     // property of the interval before it).
     | "leading-rest"
-    // A work/warmup/test interval's duration is below the PM's documented
+    // A work/test interval's duration is below the PM's documented
     // minimum (interface-notes.md §8): :20 for time, 100 m for distance.
     | "interval-too-short"
     // An interval's folded (possibly summed) rest exceeds the PM's
@@ -181,7 +165,7 @@ export type CompileError = {
     // More than 50 intervals (interface-notes.md §8, PM5's limit; 30 on
     // PM3/PM4 — not this app's concern, only the PM5 is targeted).
     | "too-many-intervals"
-    // Zero work/warmup/test intervals survived — nothing to program.
+    // Zero work/test intervals survived — nothing to program.
     | "no-work"
     // A phase's value cannot be represented in the PM's wire units after
     // rounding (see `compileProgram`'s per-unit rounding-rule comments), or
@@ -327,7 +311,7 @@ function representableCentiseconds(raw: number): number | null {
  * `CSAFE_PM_SET_SPLITDURATION`); an open-ended interval has no such value
  * to give it. This function therefore treats ANY non-rest phase with
  * neither `seconds` nor `meters` set — which today can only be a "test"
- * phase, since warmup/work always set one — as `unrepresentable-value`,
+ * phase, since a work phase always sets one — as `unrepresentable-value`,
  * discovered generically from the phase's shape rather than special-cased
  * on `type === "test"`. The seeded 300 contain zero "test" steps (survey
  * confirmed), so this branch is exercised only by a synthetic fixture.
@@ -509,24 +493,13 @@ export function compileProgram(
     // sub-hundredth splits, unlike duration/rest, which only ever carry
     // whole seconds by construction upstream.
     //
-    // The WARM-UP arm (2026-08-09's warmup-setting design §4): a warm-up
-    // has no pace target by ruling, but since that design a DISTANCE
-    // warm-up does carry a `targetSplit` — the easy-band estimate
-    // `src/session/engine.ts`'s `warmupPhases` sets so the phone can price
-    // the phase at all (`domain/expand.ts`'s `phaseSeconds` needs `meters`
-    // AND a split). That number is display-only, exactly like an effort
-    // phase's, and must never reach the wire; unlike an effort phase it
-    // carries no `targetKind` to say so (that field is a work-phase
-    // discriminant — `Phase.targetKind`'s own comment), so the phase TYPE
-    // is the discriminant here. Without this arm a rower with a distance
-    // warm-up would have their 6k+20 estimate programmed as a hard target
-    // for the one interval that is meant to have none.
+    // Phase WU deleted the WARM-UP arm that used to sit alongside these two
+    // conditions: a distance warm-up carried a display-only easy estimate
+    // in `targetSplit` with no `targetKind` to mark it non-programmable, so
+    // the phase TYPE was the discriminant. No phase can be a warm-up any
+    // more, so the two remaining conditions are the whole rule again.
     let targetSplit: number | null;
-    if (
-      phase.type === "warmup" ||
-      phase.targetKind === "effort" ||
-      phase.targetSplit === undefined
-    ) {
+    if (phase.targetKind === "effort" || phase.targetSplit === undefined) {
       targetSplit = null;
     } else {
       const roundedSplit = representableCentiseconds(phase.targetSplit);

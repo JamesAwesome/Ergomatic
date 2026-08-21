@@ -552,8 +552,13 @@ describe("buildStoredSummary — §5E plan footer", () => {
   });
 });
 
-describe("buildStoredSummary — rows carry no warm-up (stored steps never included one)", () => {
-  it("every row's isWarmup is false, index is 1-based across the stored steps array", () => {
+describe("buildStoredSummary — row numbering", () => {
+  it("indexes rows 1-based across the stored steps array", () => {
+    // Phase WU deleted this case's other assertion,
+    // `rows.map(r => r.isWarmup)` — `SummaryRow` has no `isWarmup` field
+    // any more, so the property it pinned (a stored row is never a warm-up
+    // row) is now a fact about the type rather than one a test can state.
+    // The 1-based indexing half is untouched and stays.
     const view = buildStoredSummary(
       baseRow({
         steps: [
@@ -562,7 +567,6 @@ describe("buildStoredSummary — rows carry no warm-up (stored steps never inclu
         ],
       }),
     );
-    expect(view.rows.map((r) => r.isWarmup)).toStrictEqual([false, false]);
     expect(view.rows.map((r) => r.index)).toStrictEqual([1, 2]);
   });
 });

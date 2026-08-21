@@ -35,42 +35,49 @@ import IntervalSegments from "../components/IntervalSegments";
 import UpNextStrip from "../components/UpNextStrip";
 
 /** Maps an `EnginePhase.type` onto `IntervalSegments`'s own neutral
- *  `kinds` shape (`"work" | "rest" | "wu"`, Phase 7B Task 3's pinned prop
+ *  `kinds` shape (`"work" | "rest"`, Phase 7B Task 3's pinned prop
  *  interface for the extracted dot strip — `src/components/
  *  IntervalSegments.tsx`). That shape has no dedicated bucket for `"test"`
  *  (an open-ended piece, e.g. a bare "2k test" step) — folded into `"work"`
- *  here, the closest semantic match (an effortful interval, not a rest or a
- *  warm-up) — since the strip's own rendering doesn't discriminate by kind
- *  yet regardless (see that file's own doc comment), this mapping has no
+ *  here, the closest semantic match (an effortful interval, not a rest) —
+ *  since the strip's own rendering doesn't discriminate by kind yet
+ *  regardless (see that file's own doc comment), this mapping has no
  *  visible effect today; it only matters once a future consumer actually
- *  paints dots by kind. */
+ *  paints dots by kind.
+ *
+ *  THE `default` ARM IS DELIBERATE, not switch-hygiene. A `SessionRun` is
+ *  PERSISTED (`src/session/run.ts`), so a run stored before Phase WU can
+ *  still hand this function `type: "warmup"` — a value the shrunken union
+ *  no longer admits. Without a default an exhaustive switch returns
+ *  `undefined` for it, which paints nothing. "work" is the honest answer:
+ *  Phase WU's whole ruling is that a warm-up piece IS work. */
 // eslint-disable-next-line react-refresh/only-export-components
-export function segmentKind(type: EnginePhase["type"]): "work" | "rest" | "wu" {
+export function segmentKind(type: EnginePhase["type"]): "work" | "rest" {
   switch (type) {
-    case "warmup":
-      return "wu";
     case "rest":
       return "rest";
-    case "work":
-    case "test":
+    default:
       return "work";
   }
 }
 
 /** STEP N OF M's own kind word — a fixed vocabulary independent of the
  *  phase's resolved TARGET (that lives on `EnginePhase.label`; this reads
- *  only `.type`). */
+ *  only `.type`).
+ *
+ *  THE `default` ARM IS DELIBERATE — same reason as `segmentKind` above. A
+ *  pre-Phase-WU persisted `SessionRun` can still carry `type: "warmup"`,
+ *  and an exhaustive switch with no default would render that step's line
+ *  as `STEP 1 OF 5 · undefined`. "WORK" is what a warm-up piece is now. */
 // eslint-disable-next-line react-refresh/only-export-components
 export function phaseKindWord(type: EnginePhase["type"]): string {
   switch (type) {
-    case "warmup":
-      return "WARM-UP";
-    case "work":
-      return "WORK";
     case "rest":
       return "REST";
     case "test":
       return "TEST";
+    default:
+      return "WORK";
   }
 }
 
@@ -141,13 +148,12 @@ export function phaseProgressPct(phase: EnginePhase, elapsed: number): number {
  *  instead. Every REAL library effort-only workout (Dust Storm, Heat
  *  Lightning, …) embeds a rest phase after every occurrence, including the
  *  last, so this is true throughout those sessions — it's the two
- *  DESIGNATED onboarding workouts (a bare warm-up + one distance-effort
- *  work step, nothing after it — domain/onboarding.ts) that actually reach
- *  the false case, once the rower advances past the warm-up. Re-evaluated
- *  every render against the CURRENT `run.index`, not computed once for the
- *  whole session — the exact same phase list reads true during the
- *  warm-up (a real phase ahead has a real duration) and false once the
- *  effort piece itself is the only phase left. */
+ *  DESIGNATED onboarding workouts (one distance-effort work step and
+ *  nothing after it — domain/onboarding.ts) that actually reach the false
+ *  case. Re-evaluated every render against the CURRENT `run.index`, not
+ *  computed once for the whole session — the exact same phase list reads
+ *  true while a priceable phase is still ahead and false once the effort
+ *  piece itself is the only phase left. */
 // eslint-disable-next-line react-refresh/only-export-components
 export function hasRemainingEstimate(
   phases: EnginePhase[],
@@ -214,9 +220,9 @@ export function totalSessionSecondsOf(phases: EnginePhase[]): number {
  *  which case this renders the word once, not "REST · Rest" (whole-branch
  *  review, F4: exactly this duplication was visible in the committed
  *  timer.png). No other phase kind's label ever matches its own kind word
- *  (a warm-up's "Easy", a work phase's exact resolved split or "ALL
- *  OUT"/"EASY", a test phase's "All out" — none of them equal "WARM-UP"/
- *  "WORK"/"TEST"), so this only ever actually collapses the rest case, but
+ *  (a work phase's exact resolved split or "ALL OUT"/"EASY", a test
+ *  phase's "All out" — neither equals "WORK"/"TEST"), so this only ever
+ *  actually collapses the rest case, but
  *  the check is general rather than hardcoded to "rest" specifically.
  *  Shared by `upNextText`/`thenNextText` below — both build the identical
  *  "kind + resolved target" phrase for a different phase, one algorithm

@@ -35,12 +35,7 @@ function effortPhaseOf(title: string): EnginePhase {
     type: w.type as WorkoutType,
     steps: w.steps,
   });
-  const run = buildRun(
-    draft,
-    { k2Seconds: 112, k6Seconds: 122 },
-    TIMER_T0,
-    null,
-  );
+  const run = buildRun(draft, { k2Seconds: 112, k6Seconds: 122 }, TIMER_T0);
   const p = run.phases.find((x) => x.targetKind === "effort");
   if (!p) throw new Error(`${title} has no effort work phase`);
   return p;
@@ -49,10 +44,13 @@ function effortPhaseOf(title: string): EnginePhase {
 const TIMER_T0 = new Date("2026-08-07T09:00:00.000Z");
 
 describe("targetSplitDisplay", () => {
-  it("warmup: the label alone ('Easy'), no sub-line", () => {
-    expect(
-      targetSplitDisplay(phase({ type: "warmup", label: "Easy" })),
-    ).toStrictEqual({
+  it("a phase with no targetKind at all: the label alone, no sub-line", () => {
+    // Phase WU: this fixture was `{ type: "warmup", label: "Easy" }`. The
+    // property it pins is about the absent `targetKind`, not about the
+    // warm-up type — `targetSplitDisplay` keys on `targetKind`, never on
+    // `type` — so the same phase minus the deleted member proves the same
+    // thing. A stored pre-WU `SessionRun` can still reach this branch.
+    expect(targetSplitDisplay(phase({ label: "Easy" }))).toStrictEqual({
       main: "Easy",
       sub: null,
     });
@@ -223,8 +221,11 @@ describe("TimerTargets (component)", () => {
     expect(screen.queryByText("1:52.0")).not.toBeInTheDocument(); // 2k = 112
   });
 
-  it("renders 'Free' with no stray caption for a warm-up phase", () => {
-    render(<TimerTargets phase={phase({ type: "warmup", label: "Easy" })} />);
+  it("renders 'Free' with no stray caption for a phase with no targetKind", () => {
+    // Phase WU: was `{ type: "warmup", label: "Easy" }` — see
+    // `targetSplitDisplay`'s own case above for why the type is not the
+    // discriminant this exercises.
+    render(<TimerTargets phase={phase({ label: "Easy" })} />);
     expect(screen.getByText("Easy")).toBeInTheDocument();
     expect(screen.getByText("Free")).toBeInTheDocument();
     expect(screen.queryByText("spm")).not.toBeInTheDocument();

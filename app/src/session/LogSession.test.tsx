@@ -281,8 +281,8 @@ const MONITOR_WORKOUT_ID = "id-monitor-fixture";
 // The 7C monitor-mode fixture — the SAME two real library steps
 // (`buildSessionFixture`/`manualWorkoutFixture`'s own Hoarfrost time-work +
 // Calm Sea distance-work) run through the REAL `buildDraft -> buildRun ->
-// compileProgram -> buildLogSeed` pipeline. Program intervals: [0] warmup,
-// [1] work (time, Hoarfrost), [2] work (distance, Calm Sea) —
+// compileProgram -> buildLogSeed` pipeline. Program intervals: [0] a 4'
+// EASY opener, [1] work (time, Hoarfrost), [2] work (distance, Calm Sea) —
 // `IntervalActual.index` below is a position in THAT array, so a "both
 // measured" actuals list uses index 1 and 2, never 0.
 function buildMonitorFixture(
@@ -306,13 +306,26 @@ function buildMonitorFixture(
     id: MONITOR_WORKOUT_ID,
     title: hoarfrost.title,
     type: hoarfrost.type as WorkoutType,
-    steps: [timeWork, distanceWork],
+    // Interval 0 used to come from `buildRun`'s warm-up SETTING argument,
+    // which Phase WU deleted. An authored 4' EASY step compiles to the
+    // identical interval (`compileProgram` nulls an effort phase's target
+    // exactly as it nulled a warm-up's), so every `IntervalActual.index`
+    // and every row position in this file is unchanged. What DID change is
+    // how it RENDERS: a warm-up seeded `kind: "warmup"`, which
+    // `buildMonitorLogSteps` skipped and `summaryModel` prepended as an
+    // unnumbered WARM-UP row. It is an ordinary numbered row now.
+    steps: [
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 4 },
+        ref: { effort: "min" },
+      },
+      timeWork,
+      distanceWork,
+    ],
   });
   const started = startDraft(draft);
-  const built = buildRun(started, BASELINES, FIXED_NOW, {
-    kind: "time",
-    minutes: 4,
-  });
+  const built = buildRun(started, BASELINES, FIXED_NOW);
   const program = compileOrThrow(built.phases);
   const logSeed = buildLogSeed(built.phases, BASELINES);
   const completedAt = new Date(
@@ -2285,9 +2298,10 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     expect(screen.getByText("EXPECTED 2/5")).toBeInTheDocument();
     expect(screen.getByText("PACES OFF 6K 2:00.0")).toBeInTheDocument();
 
-    // Row 0 is the fixture's own warm-up row (`buildRun`'s 4-minute warm-up
-    // setting) — measured-shaped but never judged (R-C). Rows 1/2 are the
-    // two work intervals: both carry a real avgSplit reading -> both
+    // Row 0 is the fixture's 4' EASY opener — an ordinary numbered row
+    // since Phase WU (it was an unnumbered WARM-UP row before, measured-
+    // shaped but never judged). Rows 1/2 are the two prescribed work
+    // intervals: both carry a real avgSplit reading -> both
     // MEASURED, each showing its own elapsed time and pace (fmtDuration/
     // fmtSplit of the actual reading — the deviation NUMBERS/colors are
     // `summaryModel.test.ts`'s own concern, this screen only proves the
@@ -2296,7 +2310,11 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
       document.querySelectorAll<HTMLElement>(".summary-row"),
     );
     expect(rows).toHaveLength(3);
-    expect(rows[0]!.className).toContain("summary-row-warmup");
+    // Phase WU replaced `expect(rows[0].className).toContain(
+    // "summary-row-warmup")` here: that class, and the unnumbered row it
+    // styled, no longer exist. Row 0 is numbered `1` like every other row.
+    expect(rows[0]!.className).not.toContain("summary-row-warmup");
+    expect(rows[0]!.querySelector(".summary-row-index")?.textContent).toBe("1");
     expect(within(rows[1]!).getByText("11:45")).toBeInTheDocument(); // 705s
     expect(within(rows[1]!).getByText("2:20.0")).toBeInTheDocument(); // avgSplit 140
     expect(within(rows[2]!).getByText("41:40")).toBeInTheDocument(); // 2500s
@@ -2332,7 +2350,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     const rows = Array.from(
       document.querySelectorAll<HTMLElement>(".summary-row"),
     );
-    expect(rows).toHaveLength(3); // warm-up + 2 work intervals
+    expect(rows).toHaveLength(3); // the easy opener + 2 work intervals
     expect(within(rows[1]!).getByText("11:45")).toBeInTheDocument();
     // Row 2 (Calm Sea) has no matched actual at all -> PRESCRIBED: target
     // split shown, never an assumed/measured reading (unlike the
@@ -2374,7 +2392,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     const rows = Array.from(
       document.querySelectorAll<HTMLElement>(".summary-row"),
     );
-    // Row 1 (Hoarfrost, after the warm-up row) carries no `actualSplit`
+    // Row 1 (Hoarfrost, after the opener's row) carries no `actualSplit`
     // (avgSplit 0 -> dropped, `logDraft.ts`'s own rule) but IS still
     // `measured: true` in the model's own row shape — `.summary-row-time`
     // still shows the elapsed reading.
@@ -2446,7 +2464,44 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
   });
 
   it("POSTs the pm5 steps verbatim (actualSource, avgHr, actualSeconds, actualMeters) plus deviceName, and clears MonitorRun exactly once on success", async () => {
-    const { run, workout } = buildMonitorFixture();
+    // EVERY interval measured, including the 4' opener at index 0. Before
+    // Phase WU this test used the fixture's default two actuals: interval 0
+    // was a warm-up, `buildMonitorLogSteps` dropped its seed step, and only
+    // two steps were ever POSTed. The opener is a real logged piece now, so
+    // the fixture has to measure it — the alternative would have been to
+    // relax the per-step assertions below, which is the wrong direction:
+    // this test exists to prove every pm5 step carries its own readings.
+    const { run, workout } = buildMonitorFixture({
+      actuals: [
+        {
+          index: 0,
+          elapsedSeconds: 240,
+          distanceMeters: 800,
+          avgSplit: 150,
+          avgSpm: 20,
+          avgHeartRateBpm: 120,
+          restDistanceMeters: 0,
+        },
+        {
+          index: 1,
+          elapsedSeconds: 705,
+          distanceMeters: 2000,
+          avgSplit: 140,
+          avgSpm: 24,
+          avgHeartRateBpm: 138,
+          restDistanceMeters: 0,
+        },
+        {
+          index: 2,
+          elapsedSeconds: 2500,
+          distanceMeters: 10000,
+          avgSplit: 125,
+          avgSpm: 26,
+          avgHeartRateBpm: 150,
+          restDistanceMeters: 0,
+        },
+      ],
+    });
     saveMonitorRun(run);
     mockWorkouts([workout]);
     mockBaselines();
@@ -2470,7 +2525,9 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     expect(body.workoutId).toBe(MONITOR_WORKOUT_ID);
     expect(body.deviceName).toBe("PM5 432331249 Row");
     const steps = body.steps as Record<string, unknown>[];
-    expect(steps).toHaveLength(2);
+    // 3, not 2: Phase WU made the opener an ordinary logged step rather
+    // than a warm-up seed step `buildMonitorLogSteps` skipped.
+    expect(steps).toHaveLength(3);
     for (const step of steps) {
       expect(step.actualSource).toBe("pm5");
       expect(typeof step.avgHr).toBe("number");

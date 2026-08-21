@@ -198,12 +198,19 @@ function libraryFixture(title: string, warmupMinutes: number): Fixture {
     id,
     title: w.title,
     type: w.type as WorkoutType,
-    steps: w.steps,
+    // Phase WU: the leading interval came from `buildRun`'s deleted warm-up
+    // argument. An authored EASY step of the same length compiles to the
+    // identical target-less interval, so every index and count here holds.
+    steps: [
+      {
+        k: "w",
+        duration: { kind: "time", minutes: warmupMinutes },
+        ref: { effort: "min" },
+      },
+      ...w.steps,
+    ],
   });
-  const phases = buildRun(draft, baselines, t0, {
-    kind: "time",
-    minutes: warmupMinutes,
-  }).phases;
+  const phases = buildRun(draft, baselines, t0).phases;
   const program = compileProgram(phases);
   if ("code" in program) {
     throw new Error(`fixture failed to compile: ${program.code}`);
@@ -215,16 +222,17 @@ function libraryFixture(title: string, warmupMinutes: number): Fixture {
   };
 }
 
-/** Task 5 fix round (coordinator directive): a warm-up whose OWN `kind` is
- *  `"distance"` is real and reachable (`WarmupSetting.kind === "distance"`,
- *  `engine.ts`'s `warmupPhases` — a rower can set a metres warm-up, not
- *  only a minutes one), and it is the one shape `libraryFixture` above
- *  cannot build (its warmup arg is always `{ kind: "time" }`). Every other
- *  fixture in this file opens with a TIME warm-up, so nothing was pinning
- *  `distanceCaptionFor`'s exclusion of a distance-kind warm-up from the
- *  caption's row list — the same exclusion this task's own `#` column
- *  numbering bug (fixed, not caught by a test until now) should have
- *  warned against leaving unpinned. */
+/** Task 5 fix round (coordinator directive): a LEADING interval whose own
+ *  `kind` is `"distance"`, which every other fixture in this file lacks
+ *  (they all open with a TIME piece). It exists so `distanceCaptionFor`'s
+ *  row list is exercised against a leading distance interval, not only
+ *  against mid-list ones.
+ *
+ *  Phase WU: this used to be a DISTANCE WARM-UP, from `buildRun`'s deleted
+ *  warm-up argument, and its point was that the caption EXCLUDED it (a
+ *  warm-up had no ordinal to name it by). It is an authored EASY distance
+ *  step now, so the caption includes it like any other distance row —
+ *  which is what the assertions below moved to say. */
 function distanceWarmupFixture(title: string, meters: number): Fixture {
   const w = LIBRARY_WORKOUTS.find((s) => s.title === title);
   if (!w) throw new Error(`missing library fixture: ${title}`);
@@ -233,12 +241,16 @@ function distanceWarmupFixture(title: string, meters: number): Fixture {
     id,
     title: w.title,
     type: w.type as WorkoutType,
-    steps: w.steps,
+    steps: [
+      {
+        k: "w",
+        duration: { kind: "distance", meters },
+        ref: { effort: "min" },
+      },
+      ...w.steps,
+    ],
   });
-  const phases = buildRun(draft, baselines, t0, {
-    kind: "distance",
-    meters,
-  }).phases;
+  const phases = buildRun(draft, baselines, t0).phases;
   const program = compileProgram(phases);
   if ("code" in program) {
     throw new Error(`fixture failed to compile: ${program.code}`);
@@ -250,15 +262,11 @@ function distanceWarmupFixture(title: string, meters: number): Fixture {
   };
 }
 
-/** THE NO-WARM-UP SHAPE (task-5-review finding, coordinator-flagged): the
- *  warm-up preference is OFF by default (`usePreferences`'s own null
- *  column) — Filling Low's own four 2000 m reps with NO warm-up phase at
- *  all, so program index 0 is a real WORK interval (ordinal 1), not an
- *  unnumbered one. Built directly through `buildRun`'s `null` warm-up arg
- *  (`libraryFixture` above always passes a real one) rather than adding a
- *  `warmupMinutes: 0` case to that helper, since `0` and `null` are
- *  different inputs on the real form (`WarmupSetting | null`) and this
- *  fixture's whole point is to be the `null` one. */
+/** THE NO-LEADING-PIECE SHAPE (task-5-review finding): Filling Low's own
+ *  four 2000 m reps with nothing in front of them, so program index 0 is
+ *  the first 2000 m rep. Distinct from `libraryFixture` above, which always
+ *  prepends one. (Before Phase WU the distinction was warm-up-on vs
+ *  warm-up-off; it is now simply a different program shape.) */
 function noWarmupFixture(title: string): Fixture {
   const w = LIBRARY_WORKOUTS.find((s) => s.title === title);
   if (!w) throw new Error(`missing library fixture: ${title}`);
@@ -269,7 +277,7 @@ function noWarmupFixture(title: string): Fixture {
     type: w.type as WorkoutType,
     steps: w.steps,
   });
-  const phases = buildRun(draft, baselines, t0, null).phases;
+  const phases = buildRun(draft, baselines, t0).phases;
   const program = compileProgram(phases);
   if ("code" in program) {
     throw new Error(`fixture failed to compile: ${program.code}`);
@@ -566,16 +574,24 @@ describe("the shell header's composed GRID trailing (design spec §2B)", () => {
     // The ordinal half sits OUTSIDE the marker span, in the trailing's own
     // inherited ink-3 — only the countdown wears the mark, never the whole
     // caption (spec §2B: "the countdown portion in --marker gold").
-    expect(trailing.textContent).toBe("1 OF 4 · 42:11 LEFT");
+    // Phase WU: `2 OF 5`, not `1 OF 4` — every interval is counted now.
+    expect(trailing.textContent).toBe("2 OF 5 · 42:11 LEFT");
   });
 
-  it("falls back to the plain WARM-UP caption on the unnumbered warm-up — no ordinal to join TOTAL LEFT onto", () => {
-    // intervalIndex 0 is Filling Low's own warm-up (`intervalOrdinalLabel`
-    // is `null` there — `surfaceModel.test.ts`'s own pin on the field).
+  it("joins the ordinal on interval 0 too — Phase WU left no unnumbered interval to fall back for", () => {
+    // This case used to pin the fallback: interval 0 was Filling Low's
+    // warm-up, `intervalOrdinalLabel` was `null` there, and the header
+    // showed the bare word `WARM-UP` with no countdown beside it. Interval
+    // 0 is a counted piece now, so the header composes the ordinal and the
+    // countdown exactly as it does anywhere else. The fallback branch
+    // survives in `headerTrailing` for the empty-program case, which
+    // `compileProgram` cannot produce.
     renderGrid({ frame: frame({ intervalIndex: 0 }) });
     const trailing = document.querySelector(".connected-line-trailing")!;
-    expect(trailing.textContent).toBe("WARM-UP");
-    expect(trailing.querySelector(".connected-header-countdown")).toBeNull();
+    expect(trailing.textContent).toBe("1 OF 5 · 50:11 LEFT");
+    expect(
+      trailing.querySelector(".connected-header-countdown"),
+    ).not.toBeNull();
   });
 
   it("shows READY, not a running countdown, at armed — even with warm-up disabled and a non-null ordinal (task-5-review finding)", () => {
@@ -633,7 +649,7 @@ describe("the shell header's composed GRID trailing (design spec §2B)", () => {
       type: w.type,
       steps: w.steps,
     });
-    const phases = buildRun(draft, null, t0, null).phases;
+    const phases = buildRun(draft, null, t0).phases;
     const program = compileProgram(phases);
     if ("code" in program) {
       throw new Error(`fixture failed to compile: ${program.code}`);
@@ -675,13 +691,13 @@ describe("row states (handoff §3's three treatments)", () => {
     renderGrid({ actuals: [actualFor(0, FILLING_LOW.program)] });
     expect(rows()).toHaveLength(5);
 
-    // 1 — COMPLETED: the machine's own numbers, over a solid rule. Row 1 is
-    // the warm-up (design spec §5b): its `#` cell reads `WU`, never a
-    // number, no matter that it is done.
+    // 1 — COMPLETED: the machine's own numbers, over a solid rule. Row 1's
+    // `#` cell read `WU` until Phase WU took the warm-up out of the
+    // numbering; it is piece one of five now.
     expect(row(1).className).toContain("connected-grid-completed");
     const done = cells(row(1));
-    expect(done.num).toBe("WU");
-    // The warm-up's programmed 480 s, as the machine reported rowing it —
+    expect(done.num).toBe("1");
+    // The opener's programmed 480 s, as the machine reported rowing it —
     // and the metres that 480 s at this row's own reported split actually
     // buys (480 / 126 * 500), not a literal that contradicted the pace
     // printed two cells to its right.
@@ -689,20 +705,20 @@ describe("row states (handoff §3's three treatments)", () => {
     expect(done.meters).toBe("1905");
     expect(done.hr).toBe("158");
 
-    // 2 — ACTIVE: a filled row, a now-marker, a bold index. Work numbering
-    // starts at 1 on the first work piece (§5b) — row 2 is that piece, so
-    // its `#` reads `1`, not `2`.
+    // 2 — ACTIVE: a filled row, a now-marker, a bold index. Phase WU: its
+    // `#` reads `2`, its own program position, where §5b's work-only
+    // numbering used to make it `1`.
     expect(row(2).className).toContain("connected-grid-active");
     expect(row(2).querySelector(".connected-grid-marker")).not.toBeNull();
     expect(row(2)).toHaveAttribute("aria-current", "step");
-    expect(cells(row(2)).num).toBe("1");
+    expect(cells(row(2)).num).toBe("2");
 
     // 3, 4 and 5 — UPCOMING: the PROGRAMMED values, never an actual, and
-    // work ordinals 2, 3, 4.
+    // ordinals 3, 4, 5 (Phase WU: were 2, 3, 4).
     for (const [n, ordinal] of [
-      [3, "2"],
-      [4, "3"],
-      [5, "4"],
+      [3, "3"],
+      [4, "4"],
+      [5, "5"],
     ] as const) {
       expect(row(n).className).toContain("connected-grid-upcoming");
       const next = cells(row(n));
@@ -717,14 +733,15 @@ describe("row states (handoff §3's three treatments)", () => {
 
   it("the ACTIVE row is the machine's interval, and it moves with it", () => {
     const first = renderGrid();
-    // Row 2 (program index 1) is the first work piece — ordinal 1, not the
-    // raw program index 2 (design spec §5b: work numbering starts at 1).
-    expect(cells(row(2)).num).toBe("1");
+    // Row 2 (program index 1) is the first 2000 m rep. Phase WU: ordinal
+    // `2`, its own program position — §5b's work-only numbering used to
+    // make it `1`.
+    expect(cells(row(2)).num).toBe("2");
     first.unmount();
 
     renderGrid({ frame: frame({ intervalIndex: 3 }) });
     expect(row(4).className).toContain("connected-grid-active");
-    expect(cells(row(4)).num).toBe("3");
+    expect(cells(row(4)).num).toBe("4"); // Phase WU: was "3"
     expect(row(2).className).toContain("connected-grid-completed");
   });
 
@@ -864,32 +881,34 @@ describe("distance intervals (handoff §3's distance rules)", () => {
   });
 
   it("names the distance rows IN WORDS under the grid, never a glyph", () => {
-    // The numbers here are WORK ordinals (design spec §5b), not raw program
-    // indices — Filling Low's four 2000 m reps are program indices 1-4
-    // (the warm-up occupies index 0), but the caption names them 1-4, the
-    // same numbers their own `#` cells show, never 2-5.
+    // PHASE WU CHANGED EVERY ROW NUMBER IN THESE CAPTIONS, by one, for the
+    // same reason the `#` column's did: the leading easy piece used to be
+    // an unnumbered warm-up excluded from the count, and it is an ordinary
+    // piece now. Filling Low's four 2000 m reps are program indices 1-4 and
+    // the caption names them 2, 3, 4, 5 — still the same numbers their own
+    // `#` cells show, which is the invariant this case exists for.
     //
     // Every expected string below is prefixed `N MORE BELOW ·` (CR2 spec 3
     // Task 5, design spec §2B): the default `frame()` fixture's own
-    // `intervalIndex: 1` puts the active row one past the warm-up, so `N`
-    // is the program's own row count minus 2 (the warm-up plus the active
-    // row itself) — `footerCaptionFor`'s own doc comment has the exact
+    // `intervalIndex: 1` puts the active row one past the opener, so `N`
+    // is the program's own row count minus 2 (the rows above and including
+    // the active one) — `footerCaptionFor`'s own doc comment has the exact
     // formula (`surfaceModel.ts`).
     const many = renderGrid();
     expect(
       screen.getByText(
-        "3 MORE BELOW · ROWS 1, 2, 3, 4 ARE 2000 M PIECES · METERS COUNT DOWN",
+        "3 MORE BELOW · ROWS 2, 3, 4, 5 ARE 2000 M PIECES · METERS COUNT DOWN",
       ),
     ).toBeInTheDocument();
     many.unmount();
 
     // The handoff's own one-row sentence, on the fixture that has one.
-    // Split Front's 8000 m piece is program index 1 (after its own
-    // warm-up) but WORK ordinal 1 — the caption and the row's `#` agree.
+    // Split Front's 8000 m piece is program index 1, ordinal 2 — the
+    // caption and the row's `#` agree.
     const one = renderGrid({}, SPLIT_FRONT);
     expect(
       screen.getByText(
-        "4 MORE BELOW · ROW 1 IS AN 8000 M PIECE · METERS COUNT DOWN",
+        "4 MORE BELOW · ROW 2 IS AN 8000 M PIECE · METERS COUNT DOWN",
       ),
     ).toBeInTheDocument();
     one.unmount();
@@ -904,13 +923,14 @@ describe("distance intervals (handoff §3's distance rules)", () => {
   });
 
   it("dashes an upcoming row that carries no target of its own", () => {
-    // A warm-up compiles to `targetSplit: null, displaySpm: null` (the H8
-    // rule: the compiler never programs an estimate as a hard target), and
-    // an upcoming row must show that as the house dash rather than
-    // inventing a number. Reachable only when such an interval sits AFTER
-    // the active one, which no seeded workout does — every library workout
-    // opens with its warm-up — so the program is reassembled here from
-    // three REAL compiled intervals rather than hand-written ones.
+    // An EFFORT interval compiles to `targetSplit: null, displaySpm: null`
+    // (the H8 rule: the compiler never programs an estimate as a hard
+    // target), and an upcoming row must show that as the house dash rather
+    // than inventing a number. Reachable only when such an interval sits
+    // AFTER the active one, which no seeded workout does — every fixture in
+    // this file opens with its easy piece — so the program is reassembled
+    // here from three REAL compiled intervals rather than hand-written
+    // ones.
     const reordered: Fixture = {
       ...SPLIT_FRONT,
       program: {
@@ -929,11 +949,12 @@ describe("distance intervals (handoff §3's distance rules)", () => {
     const bare = cells(row(3));
     expect(bare.pace).toBe("—");
     expect(bare.spm).toBe("—");
-    // THE WARM-UP READS `WU` EVEN OUT OF POSITION (design spec §5b): this
-    // fixture is the one case in the file where the warm-up is NOT program
-    // index 0 (every seeded workout opens with its own) — proof that the
-    // `#` cell reads `GridRow.ordinal`, not "is this row 0".
-    expect(bare.num).toBe("WU");
+    // Phase WU: this used to assert `WU`, the unnumbered warm-up's own `#`
+    // cell, and the point was that it read that way OUT OF POSITION. There
+    // is no unnumbered row left, so what survives is the plainer half of
+    // the same claim: the `#` cell reads `GridRow.ordinal` — the row's
+    // position in the program — never something re-derived.
+    expect(bare.num).toBe("3");
     // ...and the one distance row now reads with the indefinite article the
     // handoff's own sentence uses. `reordered` has 3 intervals total and
     // the active row is index 1, so exactly one row sits below it.
@@ -980,31 +1001,26 @@ describe("distance intervals (handoff §3's distance rules)", () => {
     expect(captionFor(180)).toContain("IS A 180 M PIECE");
   });
 
-  it("excludes a DISTANCE-KIND warm-up from the caption's row list (design spec §5b)", () => {
-    // The warm-up here is itself a distance interval — 1000 m, not one of
-    // Filling Low's own 2000 m work pieces. It gets no ordinal (§5b: "the
-    // denominator counts WORKING intervals only"), so it must not be named
-    // by the caption's row list either, even though its OWN `kind` is
-    // "distance" and would otherwise satisfy the caption's filter.
+  it("counts a LEADING DISTANCE interval into the caption's row list, breaking its uniformity", () => {
+    // PHASE WU INVERTED THIS CASE. The leading 1000 m interval was a
+    // DISTANCE WARM-UP: it had no ordinal (§5b: "the denominator counts
+    // WORKING intervals only"), so the caption's row list skipped it even
+    // though its own `kind` is "distance" and it satisfied the filter —
+    // leaving the four uniform 2000 m pieces to be listed by number. It is
+    // an ordinary numbered piece now, so it JOINS the list, its 1000 m
+    // breaks the uniformity check, and the caption falls to the counted
+    // branch. The exact string proves the count is 5, not 4.
     const fixture = distanceWarmupFixture("Filling Low", 1000);
     expect(fixture.program.intervals[0]).toMatchObject({
-      type: "warmup",
+      type: "work",
       kind: "distance",
       value: 1000,
     });
     renderGrid({}, fixture);
-    // The `#` cell still reads WU, exactly as the time-warm-up fixtures do.
-    expect(cells(row(1)).num).toBe("WU");
-    // If the warm-up leaked into the caption's count, the four uniform
-    // 2000 m pieces plus one non-matching 1000 m warm-up would break
-    // uniformity and fall to the OTHER branch entirely — "5 ROWS ARE
-    // DISTANCE PIECES", not the four-item list. The exact list proves both
-    // the count (4, not 5) and the numbers (1-4, not 2-5 or 1-5). Same
-    // 5-interval shape as Filling Low itself, active row 1 by default: 3
-    // rows sit below it.
+    expect(cells(row(1)).num).toBe("1");
     expect(
       screen.getByText(
-        "3 MORE BELOW · ROWS 1, 2, 3, 4 ARE 2000 M PIECES · METERS COUNT DOWN",
+        "3 MORE BELOW · 5 ROWS ARE DISTANCE PIECES · METERS COUNT DOWN",
       ),
     ).toBeInTheDocument();
   });
@@ -1689,8 +1705,8 @@ describe("the grid, fake-driven", () => {
 
     // Row 1 is COMPLETED and carries numbers the machine reported, decoded
     // by the real codec: 8:00 / 1908 m / 2:05.8 / 18 spm / 142 bpm — the
-    // handoff mockup's own first row, arrived at honestly. It is the
-    // warm-up (design spec §5b), so its `#` reads `WU`, not `1`.
+    // handoff mockup's own first row, arrived at honestly. Phase WU: its
+    // `#` reads `1` where it used to read `WU`.
     //
     // 1908, not the 2384 this story used to script (close-out item 6). The
     // frames above are hand-authored and then run through the REAL codec,
@@ -1701,7 +1717,7 @@ describe("the grid, fake-driven", () => {
     // checked a rendered string rather than the arithmetic between them.
     expect(row(1).className).toContain("connected-grid-completed");
     expect(cells(row(1))).toStrictEqual({
-      num: "WU",
+      num: "1",
       time: "8:00",
       meters: "1908",
       pace: "2:05.8",

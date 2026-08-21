@@ -64,10 +64,10 @@ function mockWorkoutsLoading() {
 }
 
 // Same mutable-box idiom as `workoutsMock` above, for the same reason.
-// Defaults to READY and OFF (`warmup: null`) — the setting's own production
-// default (server/stores/preferences.ts) — so every test not concerned
-// with the hint renders exactly as it would for a rower who never touched
-// the You screen's warm-up row.
+// Phase WU removed the Builder's own read of `preferences.warmup` (and the
+// hint line it fed), so the READY arm no longer needs a setter — the two
+// non-ready arms are still exercised, by the "no warm-up line while
+// preferences are loading" / "when preferences fail to load" cases below.
 let preferencesMock:
   | { state: "ready"; preferences: { warmup: WarmupSetting | null } }
   | { state: "loading" }
@@ -75,10 +75,6 @@ let preferencesMock:
   state: "ready",
   preferences: { warmup: null },
 };
-
-function mockPreferences(warmup: WarmupSetting | null) {
-  preferencesMock = { state: "ready", preferences: { warmup } };
-}
 
 function mockPreferencesLoading() {
   preferencesMock = { state: "loading" };
@@ -408,14 +404,19 @@ describe("Builder", () => {
     expect(screen.getByText("1 step")).toBeInTheDocument();
   });
 
-  // ---- TOTAL / warm-up hint / Save to library (task brief test 8) --------
-  // 2026-08-09's warmup setting: the hint is conditional on the setting
-  // being ON (spec §5), reading the house-format duration (time or
-  // meters), plus the rest when set — not a bare "N′" number any more.
+  // ---- TOTAL / Save to library (task brief test 8) -----------------------
+  //
+  // PHASE WU deleted the Builder's warm-up HINT LINE (`+ 10:00 warm-up from
+  // your preferences`, spec §5) and the five cases that pinned it: its two
+  // duration kinds, its optional rest clause, its absence when the setting
+  // was off, and its placement above the step list. There is no setting to
+  // read and no warm-up to promise, so the screen makes no such claim any
+  // more. The TOTAL/Save half of the first case survives below; the two
+  // "no warm-up line" cases after it survive too, now reading as ordinary
+  // assertions that the screen never mentions a warm-up at all.
 
   it("renders TOTAL and the primary button reads Save to library", async () => {
     mockBaselines(BASELINES);
-    mockPreferences({ kind: "time", minutes: 10 });
     mockApi(() => new Response(null, { status: 201 }));
     await renderBuilder();
 
@@ -423,64 +424,11 @@ describe("Builder", () => {
 
     expect(screen.getByText("TOTAL")).toBeInTheDocument();
     expect(screen.getByText("5 MIN")).toBeInTheDocument();
-    expect(
-      screen.getByText("+ 10:00 warm-up from your preferences"),
-    ).toBeInTheDocument();
+    expect(screen.queryByText(/warm-up/i)).not.toBeInTheDocument();
 
     expect(
       screen.getByRole("button", { name: "Save to library" }),
     ).toBeInTheDocument();
-  });
-
-  it("renders the hint with its rest appended when the setting has one", async () => {
-    mockBaselines(BASELINES);
-    mockPreferences({ kind: "time", minutes: 10, restSeconds: 120 });
-    mockApi(() => new Response(null, { status: 201 }));
-    await renderBuilder();
-
-    expect(
-      screen.getByText("+ 10:00 warm-up + 2:00 rest from your preferences"),
-    ).toBeInTheDocument();
-  });
-
-  it("renders a distance warm-up's hint in meters, house-format", async () => {
-    mockBaselines(BASELINES);
-    mockPreferences({ kind: "distance", meters: 2000 });
-    mockApi(() => new Response(null, { status: 201 }));
-    await renderBuilder();
-
-    expect(
-      screen.getByText("+ 2000 m warm-up from your preferences"),
-    ).toBeInTheDocument();
-  });
-
-  it("renders no hint at all when the setting is OFF (null)", async () => {
-    mockBaselines(BASELINES);
-    mockPreferences(null);
-    mockApi(() => new Response(null, { status: 201 }));
-    await renderBuilder();
-
-    expect(screen.queryByText(/warm-up/i)).not.toBeInTheDocument();
-  });
-
-  // ---- Warm-up placement (Phase 5F task 7) --------------------------------
-  // The warm-up is prepended at session start, not authored last — it reads
-  // as an implicit step 0, so it must sit above the step list rather than
-  // down by the totals where it used to live.
-
-  it("shows the warm-up above the step list, not below the totals", async () => {
-    mockBaselines(BASELINES);
-    mockPreferences({ kind: "time", minutes: 10 });
-    mockApi(() => new Response(null, { status: 201 }));
-    await renderBuilder();
-
-    const warmup = await screen.findByText(/warm-up from your preferences/);
-    const steps = screen.getByText("STEPS");
-
-    // FOLLOWING means `steps` comes after `warmup` in document order.
-    expect(
-      warmup.compareDocumentPosition(steps) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
   });
 
   it("renders — MIN and no warm-up line while preferences are loading", async () => {
@@ -520,12 +468,11 @@ describe("Builder", () => {
     expect(screen.queryByText(/warm-up/i)).not.toBeInTheDocument();
   });
 
-  it("does not include a wu step in the saved request body even though preferences supply a warm-up", async () => {
+  it("does not include a wu step in the saved request body", async () => {
     const api = mockApi(
       () => new Response(JSON.stringify({ id: "new-id" }), { status: 201 }),
     );
     mockBaselines(BASELINES);
-    mockPreferences({ kind: "time", minutes: 10 });
     await renderBuilder();
 
     await fillValidForm();

@@ -96,7 +96,12 @@ const STEP3_PATH =
 const SESSION_2_PROGRAM: WorkoutProgram = {
   intervals: [
     {
-      type: "warmup",
+      // Phase WU: this interval was transcribed `type: "warmup"` from the
+      // capture; the union has no such member now, so it reads `work`.
+      // Nothing else about it changes — the recorded tx bytes carry no
+      // warm-up concept at all (the PM5 has none), so the transcription is
+      // as faithful as it was.
+      type: "work",
       kind: "distance",
       value: 100,
       targetSplit: null,

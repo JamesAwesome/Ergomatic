@@ -176,30 +176,6 @@ function rowJudgmentDescription(row: MeasuredRow): string {
 
 function IntervalRow({ row }: { row: SummaryRow }) {
   if (row.measured) {
-    if (row.isWarmup) {
-      return (
-        <li
-          className="summary-row summary-row-warmup"
-          aria-label={`Warm-up${row.timeLabel ? `, ${row.timeLabel}` : ""}${row.paceLabel ? ` at ${row.paceLabel} per 500` : ""}${rowJudgmentDescription(row)}`}
-        >
-          <span className="summary-row-index summary-row-warmup-label">
-            WARM-UP
-          </span>
-          <span className="summary-row-time">{row.timeLabel ?? ""}</span>
-          {/* §1's Warm-up row rule: "a warm-up has no target by
-              definition" — `row.targetLabel`/`row.spmCell` are always
-              undefined here (never set by monitorWarmupRow/timerWarmupRow),
-              so these render as the same empty placeholders a measured
-              row's own absent cells render, keeping this row's columns
-              aligned with judged sibling rows below it. */}
-          <span className="summary-row-target">{row.targetLabel ?? ""}</span>
-          <span className="summary-row-pace">{row.paceLabel ?? ""}</span>
-          <SpmCellSpan cell={row.spmCell} />
-          <span className="summary-row-bar-track" />
-          <span className="summary-row-dev" />
-        </li>
-      );
-    }
     const colorClass = judgedColorClass(row.judged?.direction);
     return (
       <li
