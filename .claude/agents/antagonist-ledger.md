@@ -1867,3 +1867,76 @@ toolkit, not a history.
   result — corrected in `docs/monitor/fake-vs-parser-audit.md` itself
   (headline findings 1/3, the `restSeconds` table row, the two-rest-time-
   fields section, and the "which HARDCODED fields" section).
+
+## Ecosystem review under THE BAR, 2026-08-21 (connected state vs Concept2's logbook)
+
+- **"Our accumulator agrees with the machine, so our numbers are right."** True and
+  irrelevant. Total Work Distance is work PLUS rest-coast metres — decoded to the
+  metre on two captures (session-2: 1535 work + 64 rest = 1599 = terminal TWD;
+  pyramid: 1300 + 47 = 1347) — and Concept2's `distance` is work only. So the one
+  external number we check ourselves against measures a quantity the authority does
+  not store, and PR #123's celebrated sub-metre three-way agreement cannot see the
+  gap. **Technique: before trusting an oracle, ask what QUANTITY it measures, not
+  just whether it agrees.** An oracle that shares your definition is a mirror.
+
+- **"The end-of-workout summary path is a fallback we have not exercised much."**
+  False, and much worse: 0x0039 and 0x003A are subscribed in every one of the six
+  committed wire recordings and have delivered **zero** notifications, across five
+  natural finishes. WORKOUTSTATE_WORKOUTLOGGED has never appeared either. An entire
+  subsystem — `noteSummary`, `graceIsOpen`, `armSummaryReconcile`,
+  `deriveFinalIntervalFromSummary` and its two agonised-over premises — is dead code
+  at the erg, and we disconnect 22-107 ms after the terminal frame. **Technique:
+  count the RECEIVE frames per characteristic across every committed capture before
+  reasoning about any code that consumes one.** `grep` on the subscribe list proves
+  intent; only the rx census proves arrival.
+
+- **"The specification says 0.1 sec lsb, four times, in two documents."** False.
+  Last Split Time is 0.01 s/lsb: nine capture pairs where 0x0037's tenths value is the
+  exact truncation of 0x0033's hundredths, plus the PM5's own memory screen (7476 →
+  1:14.7). Our decode is 10x too LARGE and dormant. It survived because
+  `statusFrames.ts` is a deliberate byte-inverse of the parser and `parse.test.ts:198`
+  pins the same wrong scale by hand. **Technique: neither a round-trip through your
+  own encoder NOR a hand-built fixture is an oracle for a scale. Only a capture or the
+  machine's own screen is.** A vendor document is a hypothesis about the wire.
+
+- **"Three heroes on one screen, all derived from the same session, must agree."**
+  Never checked, and they do not: DISTANCE and TIME imply 2:32.7/500 m beside an AVG
+  SPLIT hero reading 2:08.5 on the same stored row (24.3 s apart; 39.9 s on the
+  pyramid piece). Each is computed over a deliberately different population of
+  intervals. **Technique: when a screen shows N numbers derived from one session,
+  recompute each from the others by hand before shipping.** PR #117 shipped this exact
+  shape and seven reviews missed it; the PM caught it with arithmetic.
+
+- **"No capture evidences that state, so the guard does not need to cover it."** The
+  claim was true when written (`driver.ts:2094-2099`, state 9) and false two days
+  later — `walk-2026-08-18-metrics` contains the frame, and the walk's own README said
+  so while the code comment did not. **Technique: when a walk lands a capture, grep
+  the guards whose comments say "no capture evidences this" and re-read every one.**
+  A comment that cites the absence of evidence has an expiry date and no alarm.
+
+- **"The premise is unverifiable on a healthy row."** False: it was verified, by a
+  capture committed five days after the premise was written down, whose own entry
+  printed its three-way decision rule before the numbers
+  (`walk-2026-08-15/session-c-rewalk-row1.json` seq 35: 120 == 120, not 150, not 60).
+  Nobody read the answer back, so the driver still hedges and the interface notes still
+  send the next conductor to re-row it. **Technique: an instrument that prints its own
+  decision rule has already decided; grep the CAPTURES for the instrument's format
+  string before scheduling hardware to answer the question.**
+
+- **Attacked and HELD:** the boundary pairing by identity rather than arrival order;
+  the register map's key discipline (and the recorded failure of its unconditional
+  generalisation); the both-sentinels-null HR rule; the band guards on interval rows;
+  the refusal to fabricate a measurement; the build-time gate keeping the recorder out
+  of production `dist/`. Also held: 0x0037's split time is WORK-ONLY, re-derived here
+  from the programmed interval lengths (1:00 r30 intervals read 60.0, not 90.0) — an
+  external anchor our own §20 item 22 never considered while calling the question open.
+
+- **Refuted candidate findings, recorded so they are not re-raised:** (1) "the series
+  fold and the driver fold are two independent derivations we could reconcile" — the
+  recorder keys on the driver's own post-clamp emitted index, so a lost interval is
+  lost by both and the delta is exactly zero in the case it was meant to catch;
+  (2) "0x003A carries three fields nothing else on the wire gives us" — two of the
+  three are on 0x0037 and already decoded; (3) "our review's claim that we have no
+  route to the monitor's log is half wrong" — the sentence attacked says the LOG has
+  no route, and Concept2 publishes the log READ COMMANDS while publishing none of the
+  record layouts, which is exactly the original claim.
