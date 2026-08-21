@@ -2628,11 +2628,17 @@ Ordered to avoid re-work. **Two collisions matter more than the logical
 dependencies** and are the reason this section exists rather than a
 sentence:
 
-- **`useMonitorSession.ts`, `driver.ts` and `surfaceModel.ts` are edited
-  by BOTH Phase WU and Phase LL.** No logical dependency, but a real
-  merge hazard. **WU and LL implementations must not run concurrently.**
-  Either WU lands first (it is small and compiler-enumerated) or it waits
-  for LL to merge. Not both at once.
+- **NARROWED 2026-08-21 at the PM gate: the collision is ONE file, not
+  three.** This bullet inherited its file list from the grep-era map.
+  Measured against the spec's actual footprint, `driver.ts` carries
+  warm-up COMMENTS only (`:2194`, `:3839-3867`) and
+  `useMonitorSession.ts` carries one (`:179`). The real overlap is
+  **`surfaceModel.ts` alone**. **WU and LL implementations still must not
+  run concurrently on `surfaceModel.ts`** — but **LL's DIAGNOSABILITY
+  TIER CAN RUN ALONGSIDE WU**: it touches `adapters/monitorTransport.ts`
+  and `LogSession.tsx`, not `surfaceModel.ts`, it is the cheapest LL item,
+  and it is the thing whose absence made both walk findings
+  evidence-poor.
 - **RC-8 and Phase LL both own work on the fake.** LL's reconnect
   precondition is "the fake models handle invalidation" (its OUT list,
   item 2); RC-8 is the fake's five contradictions of the real wire.
@@ -2648,14 +2654,28 @@ Last Split 10x, which also fixes its mirror in `statusFrames.ts`) and
 RC-6 (band `spm`, drop zero `p` — `seriesRecorder.ts`). Neither file is
 touched by WU or LL. These can go now and need nothing from anyone.
 
-**Wave 1 — Phase WU.** No dependencies at all, mechanical, and the
-compiler enumerates the work. Landing it early means RC-1 and RC-5 are
-never written against a population that is about to change, and LL's spec
-is written against a simpler model. **This is the single biggest
-re-work-avoider in the list:** RC-1 changes what is stored and displayed
-for a population that includes warm-ups, and RC-5 reconciles three heroes
-whose disagreement is partly the warm-up. Do either before WU and both
-get written twice.
+**Wave 1 — Phase WU. REWRITTEN 2026-08-21 at the PM gate: all three of
+this wave's original reasons were falsified and it now stands on a
+different one.** Struck: "the compiler enumerates the work" (spec §10
+opens by calling it False — two of the four warm-up unions are invisible
+to `tsc`); "the single biggest re-work-avoider … RC-5 reconciles three
+heroes whose disagreement is partly the warm-up" (measured at 5%, and 0%
+on the second exhibit); and "WU inserts ahead of LL only because it is
+small" (measured at ~65 grep-reachable files).
+
+**The surviving reasons, and they are enough:** WU precedes RC-1 because
+the program-time "should a warm-up be its own PM5 piece" question
+disappears entirely, and RC-1 would otherwise design storage for a
+population about to change. WU precedes LL **only because WU is SPECCED
+and LL's brick work is not** — a spec plus a spent antagonist pass versus
+a research pass and no spec. Ordering a ready thing behind an unwritten
+one costs calendar days in which nothing merges.
+
+**BINDING CONDITION (PM gate):** LL's brick spec is written IN PARALLEL,
+starting now. The collision rule below bars concurrent IMPLEMENTATIONS,
+not specs. **If LL's spec lands before WU's implementation finishes, the
+order flips without further argument** — the brick is the item that makes
+James delete his app.
 
 **Wave 2 — Phase LL** (A-2, A-4, the diagnosability tier), carrying
 **RC-7** inside A-2's spec by the review's own ruling, and carrying the
@@ -2731,23 +2751,64 @@ library.
    solved rather than regressing it, but the requirement is retired and
    should be recorded as retired.
 
-**Not fast path, and TRIAD by the standing rule.** 37 non-test files,
-crossing `app/domain/` and `app/server/`, with a stored shape and a
-preferences migration. Full cycle: a spec, a full antagonist pass on it,
-subagent implementation and review, and a PM final-PR gate.
+**Design authority:**
+`docs/superpowers/specs/2026-08-21-warmup-removal-design.md` (2026-08-21).
+Approach A of three: full removal INCLUDING both type unions, so the
+compiler enumerates every dependent.
+
+**Not fast path, and TRIAD by the standing rule.** Full cycle: a spec, a
+full antagonist pass on it, subagent implementation and review, and a PM
+final-PR gate.
+
+**Footprint, MEASURED (corrected twice — see the spec's revision 2).**
+The original "37 non-test files" was a string grep. The first measurement
+then probed the two unions SEPARATELY and misread its own output. Probing
+them TOGETHER: **59 errors across 23 files, 7 source and 16 test** —
+smaller than either half implies, because 18 files were pure
+mirror-breakage noise. `WorkoutDetail.tsx` needs no edit at all.
+**But the grep-only half is roughly 65 test and spec files**, so the work
+is bigger than any probe says AND less compiler-guided.
+**THERE ARE FOUR WARM-UP UNIONS, NOT TWO**, and the two the compiler
+cannot see are the ones that matter: `LogSeed.steps[].kind`
+(`logDraft.ts:590`) is PERSISTED, and its readers are exactly what keep a
+stored record's AVG SPLIT and saved log rows correct. The coupling between
+the two compiler-reachable unions is ONE-DIRECTIONAL, so the change could
+be split — it lands in one commit by choice, not by necessity.
 
 ### What the spec has to answer
 
-- **Existing stored rows keep their warm-ups.** Logged rows are immutable
-  and PATCH refuses series; the removal is FORWARD-ONLY and old rows must
-  keep rendering what they recorded. State it, and make sure the renderer
-  still has the branch after the model loses it — this is the one place
-  where deleting the concept too thoroughly breaks history.
-- **The `warmup jsonb` column: drop it or orphan it?** A `DROP COLUMN` has
-  a rollback ordering question this repo has been bitten by before
-  (recurring failure 10 records a `DROP COLUMN` sequencing that would have
-  broken rollback). Deciding to leave the column and stop reading it is a
-  legitimate answer and probably the cheaper one.
+- **CORRECTED 2026-08-21: a stored step list has NEVER contained a
+  warm-up** (`logDraft.ts:851`, `if (seedStep.kind === "warmup") return;`),
+  so this section's original worry about renderers losing a branch was
+  unfounded. What IS true: the stored TOTALS include the warm-up
+  (`summaryModel.ts:577-583` filters nothing, and `monitorTimeSeconds`'s
+  comment says "warm-up included") while the step list does not, and
+  recompute is impossible because the row persists `series` and `steps`
+  but never `actuals`. **James's ruling: forward-only, no marker, say
+  nothing.** Accepted cost: a pre-WU row is off by its warm-up against
+  Concept2 and nothing marks it.
+- **SETTLED 2026-08-21: expand/contract, two steps.** `0007` dropped the
+  two older warm-up columns in one migration, but its own comment says
+  that was safe because they were "never consumed anywhere" — this one is
+  consumed, migrations run at boot before the API serves a request, and a
+  rollback would hit a column that no longer exists. **WU ships NO
+  migration:** every read and write goes, the column stays.
+- [ ] **OWED to the next server-touching phase: `ALTER TABLE
+      "preferences" DROP COLUMN "warmup";`** One line, safe once no
+      deployed image reads it. Recorded here rather than in the spec
+      because a PR body is not a record (recurring failure 14).
+- [ ] **OWED at the first server-touching phase after TWO tags have
+      shipped — a countable trigger, replacing "once no pre-WU persisted
+      record can plausibly exist" (PM gate 2026-08-21: that trigger is
+      unmeasurable by construction, spec §12 concedes the population size
+      is unknown, and an unmeasurable trigger never fires). Remove the
+      legacy guards.** James's ruling 2026-08-21 keeps two readers of
+      the PERSISTED `LogSeed.steps[].kind` union alive, retyped `kind:
+      string` (`logDraft.ts:851`, `summaryModel.ts:564`), plus a default
+      arm on `Timer.tsx`'s switches. Without them a rower mid-session at
+      update time gets a moved AVG SPLIT on a stored record and a
+      `STEP 1 OF 5 · undefined` label. They are deliberate vestigial code
+      and they have an expiry.
 - **`EnginePhase`'s `"warmup"` member** (`expand.ts:12`) is currently
   unreachable from `Step[]` but still in the union, and `expand.ts:139`
   says every downstream branch is untouched. Removing the member is a
@@ -2796,10 +2857,12 @@ subagent implementation and review, and a PM final-PR gate.
 - **The program-time warm-up question disappears.** RC's own warm-up
   section exists to decide whether a warm-up should be its own PM5 piece.
   With no warm-ups, there is nothing to decide.
-- **RC-5 shrinks to the rest question alone.** Two of the three heroes
-  disagree partly because DISTANCE and TIME span the warm-up and AVG SPLIT
-  does not. Remove warm-ups and the remaining disagreement is rest-only,
-  which RC-1 is already fixing.
+- **RC-5 barely moves — CORRECTED 2026-08-21, quantified.** This
+  section originally claimed RC-5 "shrinks to the rest question alone".
+  Measured: **WU buys about 5%** (session-2's contradiction goes 24.2 s →
+  22.9 s) and **0% on the other exhibit** — the pyramid capture has no
+  warm-up at all, so its 39.9 s is untouched. RC-5 was already ~95% the
+  rest question. Do not let WU be cited as closing any part of it.
 - **RC-1's spec gets simpler**, which is why sequencing matters below.
 
 **Sequencing: WU lands BEFORE RC-1, and must not run concurrently with
@@ -2810,12 +2873,16 @@ twice. Not concurrent with LL because both edit `useMonitorSession.ts`,
 hazard. WU has no dependencies of its own, so it is free to go first. The
 full worked order lives in Phase RC's "Sequencing across RC, WU and LL".
 
-**Exit.** (a) No `EnginePhase` can be a warm-up and the compiler proves
-it; (b) a replay of `session-2-wu-4unequal` shows every judged number for
-that row unchanged, or the change is stated and intended; (c) an
-already-logged row containing a warm-up still renders correctly; (d) no
-orphaned warm-up CSS or copy survives a grep of `src/` and `e2e/`; (e) a
-release note tells testers the setting is gone.
+**Exit: see the spec's §8, which is the ONE list.** Ruling at the
+2026-08-21 PM gate — this section previously carried its own (a)-(f), and
+clause (b) still demanded "every whole-session number that moved moved by
+exactly the warm-up's own contribution" after spec §8 had already called
+that clause NOT EVALUABLE (DISTANCE and TIME cannot move; AVG SPLIT is a
+re-weighting with no additive contribution). ROADMAP's copy was also
+missing the inert-control criterion and the unlogged-record criterion.
+**A close gate reads ROADMAP, so two exit lists means closing against the
+wrong one.** When a spec writes numbered exit criteria, ROADMAP points at
+them and never copies them.
 
 ## Phase CL2 — Post-release authoring parity
 

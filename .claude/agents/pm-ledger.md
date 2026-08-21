@@ -1223,3 +1223,72 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   ran on a slate that did not contain it. The triad override caught it here,
   at the most expensive moment. **A spec inserted at the front of an open
   phase deserves a slate re-gate, not just its PR gate.**
+
+## Phase-open gate, 2026-08-21 (Phase WU: the warm-up leaves)
+
+- **When a measurement kills a phase's payoff, grep the phase name across
+  ROADMAP and fix EVERY section that argues from it — not just the phase's
+  own.** Revision 2 corrected RC-5's payoff to "5%, and 0% on the other
+  exhibit" inside Phase WU's section and left Phase RC's sequencing
+  section — the one that actually orders the work — still reading "the
+  single biggest re-work-avoider … RC-5 reconciles three heroes whose
+  disagreement is partly the warm-up", plus "the compiler enumerates the
+  work" (spec §10 opens by calling it False) and "WU inserts ahead of LL
+  **only because it is small**", eleven lines below a footprint that
+  measured it as ~65 files. One file arguing both sides. The correction is
+  cheap at the gate and invisible three weeks later.
+- **A phase with two exit lists closes against the wrong one.** ROADMAP
+  Phase WU exit (b) still carried "every whole-session number that moved
+  moved by exactly the warm-up's own contribution" while spec §8 called
+  that clause *not evaluable* (DISTANCE and TIME cannot move; AVG SPLIT is
+  a re-weighting). Close gates read ROADMAP. **Ruling: when a spec writes
+  numbered exit criteria, ROADMAP's exit becomes a POINTER to them, never
+  a second copy.**
+- **"Small" as a sequencing reason expires the moment the footprint is
+  measured — re-derive the order, do not patch the adjective.** WU's real
+  claim to going first is that it is the only SHOVEL-READY item on the
+  board: it has a spec and a spent antagonist pass, and Phase LL's brick
+  work (the PROD precondition, the thing that makes James delete his app)
+  has a research pass and no spec. Ordering a ready thing behind an
+  unwritten one costs calendar days in which nothing merges. **Condition
+  attached: the deferred phase's spec is written IN PARALLEL** — the
+  collision rule bars concurrent IMPLEMENTATIONS, not specs, so going
+  first should cost the other phase its implementation window only.
+- **A concurrency ban inherited from a grep file map is usually wider than
+  the measurement.** The WU/LL ban named three shared files; measured,
+  `driver.ts` and `useMonitorSession.ts` carry warm-up COMMENTS only and
+  the collision is `surfaceModel.ts` alone — which frees LL's
+  diagnosability tier (S) to run alongside. **Before accepting "these
+  phases collide", diff the measured footprints, not the file lists.**
+- **"Remove X entirely" is a claim about the PRODUCT, not the code, and it
+  will be cited as the latter.** WU ships with a DB column, two legacy
+  readers on a persisted union, a `wu`-line paste intercept and a
+  stored-row validation guard all alive. The right test is "can a user
+  produce X?" — say so in the spec, or a later phase cites the removal as
+  proof no such code exists.
+- **Widening a persisted discriminant to `string` to keep a legacy reader
+  alive is the wrong retype.** It admits typos, erases the enumeration,
+  and makes the owed cleanup invisible to the compiler. Keep the literal
+  union with the member commented legacy-only: a stored shape legitimately
+  carries values no current producer emits, which is NOT the same defect
+  as an unreachable member on a live type.
+- **An owed item whose trigger is unmeasurable never fires.** "Remove the
+  legacy guards once no pre-WU persisted record can plausibly exist" — the
+  spec's own §12 concedes the population size is unknown. Convert such
+  triggers to a countable one (a phase, a tag count) at the gate that
+  creates them.
+- **Deleting a setting: ask the cohort whether they USE it before the spec
+  is approved.** `warmup jsonb` is nullable with no default, so it is OFF
+  unless switched on — and nobody asked the one person who has it. Thirty
+  seconds of asking, versus a tester discovering it in a note. Related: a
+  ruling of "no replacement feature" must not silence the question "so
+  what do I do instead?" — here the true answer (build the warm-up in as
+  an ordinary first step) was never written down.
+- **Backlog: 60 unchecked, up from 37 the previous day** (35 at LL open, 30
+  at LT open, 24 on 2026-08-13). Twelve of the new ones are Phase RC's,
+  filed off a real fourteen-agent review — defensible filing, but the queue
+  in front of the brick has never been longer.
+- **Release call:** no tag for WU alone — a removal has nothing a tester
+  can try, so a solo tag is a version number with no falsification value
+  (the #140 ruling, applied in the other direction). MINOR clause, rides
+  the tag carrying LL's brick fix.
