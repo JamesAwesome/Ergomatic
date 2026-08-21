@@ -2740,17 +2740,20 @@ compiler enumerates every dependent.
 full antagonist pass on it, subagent implementation and review, and a PM
 final-PR gate.
 
-**Footprint, MEASURED — this corrects the "37 non-test files" figure this
-section first carried.** That number was a grep for the string `warmup`
-and counted comments, historical release notes and CSS. Measured by
-removing each union member and reading `tsc`: `Phase["type"]`
-(`expand.ts:12`) produces 30 errors across 5 source and 9 test files;
-`IntervalType` (`program.ts:37`) produces 77 across 4 source and 29 test
-files. **Roughly nine source files against roughly thirty test files — the
-true risk is a large FIXTURE MIGRATION, not a domain-logic change.** And
-the two unions are compile-coupled through `WorkoutDetail.tsx:275` plus
-`enginePhase.compileCompat.test.ts`, which is the evidence for this being
-one task rather than the assertion it previously was.
+**Footprint, MEASURED (corrected twice — see the spec's revision 2).**
+The original "37 non-test files" was a string grep. The first measurement
+then probed the two unions SEPARATELY and misread its own output. Probing
+them TOGETHER: **59 errors across 23 files, 7 source and 16 test** —
+smaller than either half implies, because 18 files were pure
+mirror-breakage noise. `WorkoutDetail.tsx` needs no edit at all.
+**But the grep-only half is roughly 65 test and spec files**, so the work
+is bigger than any probe says AND less compiler-guided.
+**THERE ARE FOUR WARM-UP UNIONS, NOT TWO**, and the two the compiler
+cannot see are the ones that matter: `LogSeed.steps[].kind`
+(`logDraft.ts:590`) is PERSISTED, and its readers are exactly what keep a
+stored record's AVG SPLIT and saved log rows correct. The coupling between
+the two compiler-reachable unions is ONE-DIRECTIONAL, so the change could
+be split — it lands in one commit by choice, not by necessity.
 
 ### What the spec has to answer
 
@@ -2774,6 +2777,14 @@ one task rather than the assertion it previously was.
       "preferences" DROP COLUMN "warmup";`** One line, safe once no
       deployed image reads it. Recorded here rather than in the spec
       because a PR body is not a record (recurring failure 14).
+- [ ] **OWED once no pre-WU persisted record can plausibly exist: remove
+      the legacy guards.** James's ruling 2026-08-21 keeps two readers of
+      the PERSISTED `LogSeed.steps[].kind` union alive, retyped `kind:
+      string` (`logDraft.ts:851`, `summaryModel.ts:564`), plus a default
+      arm on `Timer.tsx`'s switches. Without them a rower mid-session at
+      update time gets a moved AVG SPLIT on a stored record and a
+      `STEP 1 OF 5 · undefined` label. They are deliberate vestigial code
+      and they have an expiry.
 - **`EnginePhase`'s `"warmup"` member** (`expand.ts:12`) is currently
   unreachable from `Step[]` but still in the union, and `expand.ts:139`
   says every downstream branch is untouched. Removing the member is a
@@ -2822,10 +2833,12 @@ one task rather than the assertion it previously was.
 - **The program-time warm-up question disappears.** RC's own warm-up
   section exists to decide whether a warm-up should be its own PM5 piece.
   With no warm-ups, there is nothing to decide.
-- **RC-5 shrinks to the rest question alone.** Two of the three heroes
-  disagree partly because DISTANCE and TIME span the warm-up and AVG SPLIT
-  does not. Remove warm-ups and the remaining disagreement is rest-only,
-  which RC-1 is already fixing.
+- **RC-5 barely moves — CORRECTED 2026-08-21, quantified.** This
+  section originally claimed RC-5 "shrinks to the rest question alone".
+  Measured: **WU buys about 5%** (session-2's contradiction goes 24.2 s →
+  22.9 s) and **0% on the other exhibit** — the pyramid capture has no
+  warm-up at all, so its 39.9 s is untouched. RC-5 was already ~95% the
+  rest question. Do not let WU be cited as closing any part of it.
 - **RC-1's spec gets simpler**, which is why sequencing matters below.
 
 **Sequencing: WU lands BEFORE RC-1, and must not run concurrently with

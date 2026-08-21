@@ -388,10 +388,10 @@ toolkit, not a history.
   `server/**`, `domain/**`, `scripts/**` — nothing under `src/`, regardless of
   whether a file touches the DOM (the plan's own stated reasoning, "no DOM
   use, so unit," conflates the two). Measured: `pnpm test --project unit --
-  src/monitor` returns the exact same 43 files/1163 tests as `pnpm test
-  --project unit` with no filter at all — the filter matched nothing and the
+src/monitor` returns the exact same 43 files/1163 tests as `pnpm test
+--project unit` with no filter at all — the filter matched nothing and the
   command ran an unrelated, pre-existing suite. `pnpm test --project client --
-  src/monitor` correctly returns 104-105 files including every touched
+src/monitor` correctly returns 104-105 files including every touched
   module. **Technique: when a plan claims a `--project`/filter combination
   scopes a run, diff its reported file count against that same project run
   with NO filter.** An identical count is proof the filter did nothing —
@@ -581,7 +581,7 @@ toolkit, not a history.
   line captured over real Web Bluetooth carries only `v`/`app`/`transport`/`ua`,
   no `program` key. The sibling test only has a populated `header.program`
   because it BUILDS its own header itself (`buildRecordingFile(tap, {...,
-  program: ROUNDTRIP_PROGRAM})` around a synthetic fake-driven session) — it
+program: ROUNDTRIP_PROGRAM})` around a synthetic fake-driven session) — it
   never reads one out of a real capture, because a real Web Bluetooth capture
   never has one to read. `driver.program(p)` requires `WorkoutProgram`, not
   `WorkoutProgram | undefined`, so the plan's own interface (as written) is
@@ -591,6 +591,7 @@ toolkit, not a history.
   trusting that a sibling test's successful use of a type-optional field means
   THIS artifact populates it — a reader working elsewhere proves the reader
   works, not that the specific file has the data.**
+
 ## Task-brief pass, 2026-08-16 (CR2 spec 2b, F6 Tasks 1-5)
 
 - **"`useNavigate` is already imported in Today.tsx" / "the guard pin test
@@ -938,7 +939,7 @@ toolkit, not a history.
   element carrying `onTouchStart`/`onTouchEnd` — and `grep -c touch-action` over
   that whole stylesheet returns **1**, so nothing overrode it either.
   **Technique: before theorising about why a deleted feature failed, `git show
-  <deletion-commit>^:<file>` and read the code as it actually shipped.** A
+<deletion-commit>^:<file>` and read the code as it actually shipped.** A
   hypothesis about a missing declaration is settled by the file it was missing
   from, not by reasoning about what the browser would have done.
 
@@ -999,12 +1000,13 @@ toolkit, not a history.
   on the SIBLING (`index.css:8093-8096`), not by anything on the cell itself;
   and PE/`setPointerCapture`/`touch-action` availability against the repo's
   iOS 15.0 deployment target (`project.pbxproj:239`).
+
 ## Phase-open anchor pass, 2026-08-17 (Phase PW spec 1, the post-workout summary)
 
 - **"`Σ actual.distanceMeters` is the session distance — restore it as the walk's
   check route."** Off by 64 m against the machine on the one committed
   rest-bearing recording. Decoding every 0x0037 in `walk-2026-08-16/
-  session-2-wu-4unequal.jsonl`: Σ `splitIntervalDistanceMeters` = 1535, Σ
+session-2-wu-4unequal.jsonl`: Σ `splitIntervalDistanceMeters` = 1535, Σ
   `intervalRestDistanceMeters` = 64, and the final 0x0031
   `totalWorkDistanceMeters` = **1599** — exactly 1535 + 64. The PM5 counts the
   rower's coasting during programmed rests; `IntervalActual` has no slot for it.
@@ -1113,7 +1115,7 @@ toolkit, not a history.
 - **"Every genuinely operable control in this surface is a native
   `<button>`" — the premise a guard narrowing was justified with.** False:
   `SheetShell.tsx:123` is `<div className="filter-sheet-backdrop"
-  onClick={onDismiss}>`, rendered inside `.connected-surface`. Consequence nil
+onClick={onDismiss}>`, rendered inside `.connected-surface`. Consequence nil
   (a separate `logSheetOpen` boolean covers it), but the narrowing takes the
   sheet subtree from two independent guards to one, and the survivor is a
   boolean the next overlay author must remember. The same pass found the
@@ -1202,7 +1204,7 @@ toolkit, not a history.
 
 - **"The rows scrolled up and down, so the UA claimed the gesture."** Does not
   follow. `swipe.ts` refuses any drag with `|dy| >= |dx|` — so a
-  *deliberately diagonal* drag is refused by OUR OWN rule with the UA doing
+  _deliberately diagonal_ drag is refused by OUR OWN rule with the UA doing
   nothing, and the probe had already recorded this device delivering
   `pointerup` (never `pointercancel`) on a -178px vertical drag. A third
   mechanism fits too: a `pointerup` at coordinates frozen where scrolling took
@@ -1216,10 +1218,10 @@ toolkit, not a history.
 
 - **A build-flag instrument can be untestable by the suite that pins it.**
   The `pointercancel` readout is gated on `import.meta.env.DEV ||
-  import.meta.env.VITE_ENABLE_FAKE_MONITOR === "1"`; `ios:build` is
+import.meta.env.VITE_ENABLE_FAKE_MONITOR === "1"`; `ios:build` is
   `vite build` (DEV false), so ON THE PHONE only the flag arm can fire — and
   the pin runs under vitest, where DEV is true. Measured: `CI=true
-  VITE_ENABLE_FAKE_MONITOR= pnpm test --project client` -> 115 files / 2928
+VITE_ENABLE_FAKE_MONITOR= pnpm test --project client` -> 115 files / 2928
   tests, all green. Deleting the flag arm keeps every gate green and disarms
   the phone's only instrument for the phase's one open risk — the exact
   disarming that had already cost this walk once. **Technique: for any code
@@ -1230,7 +1232,7 @@ toolkit, not a history.
 - **"Two identical CI failures falsify the theory."** They falsified ONE
   theory (Chromium tap heuristics) and a second was adopted without a
   control: no run was ever made without the swipe handler, and `grep -rn
-  "\.tap(" app/e2e/` shows no green `locator.tap()` anywhere in this repo, so
+"\.tap(" app/e2e/` shows no green `locator.tap()` anywhere in this repo, so
   "headless Chromium can't tap this" has no precedent either. The downgrade
   to `.click()` also deleted the only automated touch coverage of the rail —
   the fallback path the phase's own platform-limit acceptance rests on.
@@ -1258,6 +1260,7 @@ toolkit, not a history.
   style in a real browser on both the surface and the scroller — the thing
   that makes the probe's conditional falsification transfer at all; and
   criterion 3, verified by opening `connected-armed-landscape.png`.
+
 ## Spec-stage full pass (triad), 2026-08-18 (Phase PW spec 2, "from the log")
 
 - **"Opening a detail screen lands at the top — same witness shape as the News
@@ -1282,14 +1285,14 @@ toolkit, not a history.
   silent, not noisy.**
 - **"The client posts what the summary displayed; the server stores it
   verbatim."** Impossible: `SummaryHeroes` is `{avgSplit?: string; time?: string;
-  distanceMeters?: number}` — two of three are pre-formatted strings by design
+distanceMeters?: number}` — two of three are pre-formatted strings by design
   (`summaryModel.ts:121-133`). **Technique: before accepting "we store what we
   rendered", read the render model's TYPE. Display models are strings on purpose
   in this repo, and "copy the rendered value" into a numeric column always means
   a second reach past the model.**
 - **"Written in the same transaction as the plan_state upsert, so they can never
   disagree."** The upsert (`stores/logs.ts:129-137`) is `insert {userId, doneN:1}
-  onConflictDoUpdate set doneN+1` — it carries no `planKey`, never reads `doneN`,
+onConflictDoUpdate set doneN+1` — it carries no `planKey`, never reads `doneN`,
   returns nothing, and increments even when `plan_key` is NULL. **Technique: a
   "same transaction" guarantee names two writes; open the transaction and check
   the second one actually HAS the values the first is claimed to agree with. An
@@ -1454,9 +1457,9 @@ toolkit, not a history.
 - **"Flooring the meters counter fixes the jitter — the tenths were ticking
   every ~450ms."** The premise is true and the fix does almost nothing.
   Decoded 1085 0x0031 frames from `walk-2026-08-18-metrics/pyramid-pm5-
-  recording-*.jsonl.gz`: over 357.7 s of rowing the DISPLAYED STRING changed
+recording-*.jsonl.gz`: over 357.7 s of rowing the DISPLAYED STRING changed
   1.97/s with tenths and **1.96/s floored**. The rate is `min(tick rate,
-  speed in m/s)` — at 3.72 m/s and 1.97 ticks/s the counter was already
+speed in m/s)` — at 3.72 m/s and 1.97 ticks/s the counter was already
   tick-limited, advancing a median 1.90 m per tick, so every tick crossed a
   metre boundary either way. **Technique: measure the change rate of the
   RENDERED STRING, not the precision of the field behind it. A formatting
@@ -1502,6 +1505,7 @@ toolkit, not a history.
   `page.setContent` with the rules copied verbatim, `getBoundingClientRect`
   on the FLEXING sibling, no server and no stack. Measure the neighbour that
   absorbs the change, not the element that causes it.**
+
 ## Spec-stage full pass (triad), 2026-08-18 (log-delete: the first DELETE + a counter write)
 
 - **"Deleting a plan-linked log and decrementing `done_n` un-ticks that
@@ -1617,7 +1621,7 @@ toolkit, not a history.
 ## Vetted-ground amendment, 2026-08-18 (Phase LT Task 1 review broke anchor claim B3's soundness)
 
 - **The anchor's "row-local discriminant" (`actualSource === "pm5" &&
-  actualSpm === undefined` → pre-split measured value) was UNSOUND for new
+actualSpm === undefined` → pre-split measured value) was UNSOUND for new
   rows.** A matched actual whose measurement is DROPPED (avgSpm null/0/out
   of band) plus the unconditional authored-target copy produces a shape
   byte-identical to a pre-split row — so the renderer would print the
@@ -1940,3 +1944,140 @@ toolkit, not a history.
   route to the monitor's log is half wrong" — the sentence attacked says the LOG has
   no route, and Concept2 publishes the log READ COMMANDS while publishing none of the
   record layouts, which is exactly the original claim.
+
+## Phase-open anchor pass (triad), 2026-08-21 (Phase WU, "the warm-up leaves")
+
+- **"The two unions are compile-coupled and cannot be split — removing
+  `Phase["type"]`'s member alone errors at `WorkoutDetail.tsx:275`."** False as
+  stated, and backwards. Measured in a throwaway worktree with `tsc -b --force`:
+  removing `Phase["type"]` alone gives 29 distinct errors over 15 files and **no
+  `WorkoutDetail.tsx` error at all** — shrinking the source union leaves
+  `EnginePhase` a SUBSET of `CompiledPhase`, still assignable. Only the reverse
+  order breaks the mirror (probe B, 77 errors). Both at once: 59 errors, 23 files
+  (7 source, 16 test) — SMALLER than either half implies, because 18 of B's files
+  were pure mirror-breakage noise, and `WorkoutDetail.tsx` needs no edit under the
+  approach actually chosen. **Technique: when a spec says two type changes are
+  coupled, run BOTH orders and the COMBINATION, and diff the three file sets. A
+  coupling claim derived from two separate one-at-a-time probes describes an
+  intermediate state nobody will ever compile; C ⊄ A ∪ B tells you which errors
+  were real work and which were the half-removal talking.**
+- **"Approach A removes the union members so the compiler enumerates every
+  dependent."** False for the dangerous half. `grep '"warmup"'` over non-test
+  source found FOUR unions carrying the member, not two: `LogSeed.steps[].kind`
+  (`logDraft.ts:590`) and `IntervalSegments`'s `kinds` (`:24`) are invisible to
+  both probes — and the first is PERSISTED, with its own comment saying "doing so
+  is a stored-shape migration, not a comment sweep". Its two readers are exactly
+  the ones protecting stored numbers: `logDraft.ts:851` (keeps the warm-up out of
+  a SAVED log) and `summaryModel.ts:564` (keeps it out of AVG SPLIT).
+  **Technique: a `tsc` error census is an enumeration of the union you edited, not
+  of the CONCEPT. Grep the string literal across non-test source and bucket the
+  hits by which union each belongs to — the ones the compiler misses are
+  disproportionately the persisted ones, because a stored shape is exactly the
+  place a codebase keeps a second copy of the discriminant.**
+- **"§5 covers the stored population: forward-only, rows already logged."**
+  Incomplete — there is a second population and it is the one that can still
+  change. `MonitorRun` and `SessionRun` both persist to localStorage under
+  deliberately shallow validators with no version bump and no strip
+  (`run.ts:74-90` is `Array.isArray(value.phases)`), so a pre-WU UNLOGGED record
+  survives the update. Deleting `warmupIndex` moves that record's AVG SPLIT;
+  deleting `logDraft.ts:851` adds a phantom row to what gets SAVED; and the timer's
+  exhaustive switches have no default — probe run: `phaseKindWord("warmup")` returns
+  `undefined`, rendering `STEP 1 OF 5 · undefined`. **Technique: for any removal of
+  a value from a union, ask which records ALREADY ON DISK contain it, then read the
+  loader's validator to see whether it can reject them. "Rows already logged" and
+  "records already written" are different populations, and only the second one is
+  still being read by live code paths.** Corollary: an exhaustive switch with no
+  default is a runtime `undefined` generator the moment the union shrinks under it.
+- **"§4: `0007` dropped two warm-up columns and its own comment says why — they
+  were 'never consumed anywhere'."** The comment does not exist:
+  `0007_shallow_kang.sql` is three lines of SQL. The quoted text is
+  `schema.ts:228-231` and says the OPPOSITE — "the **override** was never consumed
+  anywhere; **minutes' one consumer, the Builder hint, is rewritten against this
+  column**" — and `git show dad9643 -- server/stores/preferences.ts` removes both
+  fields from the drizzle SELECT in the same commit as the migration. **0007 IS the
+  hazard the spec cites it as a counterexample to.** The repo's real precedent is
+  the num retirement (`f0a2166` → `16ded6c`, whose message spells out the
+  two-release contract). The conclusion (expand/contract) holds and is stronger
+  than argued: `scripts/deploy.sh:22-30` rolls back by `git checkout --force $PREV`
+  - rebuild (an old SERVER image, not just old clients), `/api/health` is `select 1`
+    and stays green over a dead prefs path, and `stores.preferences.get()` has four
+    callers including `GET /api/today`. **Technique: when a spec attributes a
+    rationale to "its own comment", open the file and `grep '^--'`. A migration quote
+    that actually lives in `schema.ts` has been paraphrased at least once, and the
+    paraphrase is where the scope qualifier ("the override") gets dropped.** Second
+    technique: **for any rollback argument, read the health check the rollback gates
+    on** — a `select 1` cannot see a column.
+- **"Exit criterion 2: the whole-session numbers move by exactly the warm-up's own
+  contribution and no more."** Not evaluable, and two of the three terms cannot
+  move at all. Decoded all five 0x0037 records from `session-2-wu-4unequal.jsonl`:
+  DISTANCE (`summaryModel.ts:577-583`) and TIME (`monitorRun.ts:639-649`) are
+  unconditional over `run.actuals` and never consult warm-up-ness — 1599 m and
+  8:08.4 both ways. The sole mover is AVG SPLIT, 2:08.5 → 2:09.8, a RE-WEIGHTING
+  with no additive "contribution" to compare against. **Technique: before accepting
+  a criterion of the form "X moves by exactly Y", read each term's producer and ask
+  whether it can move at all; then ask whether the moving term is a SUM (where a
+  delta is meaningful) or a RATIO (where it is not). A criterion phrased additively
+  over a weighted average cannot go red on the right thing.** The honest form names
+  the value. And the inert control was missing: `session-1-keystone-2x250r0` is the
+  no-warm-up capture that must change by nothing, and no criterion named it —
+  the oracle-blindness shape, with the only named capture being the one that MUST
+  change.
+- **"§6: nothing is offered in place; the release notes are history."** One live
+  surface is instructional, not historical:
+  `news/content/bodies/yourFirstRow.tsx:13-14` is an evergreen onboarding article
+  telling the rower "set yours on the You tab under WARM-UP" — plus
+  `validate.ts:85` and `bulk.ts:362`, two live strings pointing at a screen that
+  will not exist. **Technique: "the copy is history" is a claim about each string's
+  TENSE, not its file. Grep the user-facing strings and sort them into dated notes
+  versus evergreen prose; the evergreen ones are instructions, and an instruction
+  that names a deleted control is recurring failure 13 aimed at a tester.**
+- **"§9: keep `droppedWarmupNotice` — a pasted `wu` line already fails validation
+  (`validate.test.ts:68`)."** Conclusion right, reason false. `bulk.ts:334-339`'s
+  `tryParseWarmupLine` intercepts a well-formed `wu N` and `continue`s BEFORE
+  `parseStepLine` builds a Step, so no `{k:"wu"}` ever reaches `validateSteps`; the
+  cited test calls the validator directly with a hand-built step. The paste yields
+  the NOTICE, not an error. **Technique: when a spec justifies keeping a guard by
+  citing a DIFFERENT guard that "already" handles the case, trace the input from the
+  entry point and find where it stops. A test that constructs the offending shape
+  by hand proves the validator, never that anything can reach it.**
+- **"WU shrinks RC-5 to the rest question alone."** Quantified: 5%, and 0% on the
+  other exhibit. Session-2's hero contradiction goes 24.2 s → 22.9 s; the pyramid
+  capture (39.9 s) is three work intervals with no warm-up, so WU moves it by
+  nothing. **Technique: when a phase's payoff is "it shrinks problem P", compute P
+  before and after over every exhibit P is cited with. A payoff stated as a
+  direction survives review; the same payoff stated as a percentage names the real
+  cause.**
+- **Attacked and HELD — Phase WU's VETTED GROUND:** (1) a stored step list has
+  never contained a warm-up (`logDraft.ts:851`, `storedSummary.ts:50-56`);
+  (2) recompute is impossible AND moot — an already-logged row's heroes are stored
+  COLUMNS (`storedSummary.ts:217-223`), untouchable by any code change; (3) "no
+  judged number changes for a session that never had a warm-up" — `warmupIndex`
+  → -1, both warm-up row builders → null, `warmupEndsAt` → null, DISTANCE/TIME
+  never conditional; (4) expand/contract with no migration in WU; (5) migrations
+  are awaited at boot before `listen` (`server/index.ts:28` / `:119`, single-replica
+  compose); (6) `warmup jsonb` nullable, no default, no CHECK, OFF by default;
+  (7) Approach A over B/C — the compiler-invisible unions strengthen it rather than
+  weakening it; (8) **the replay stays byte-faithful after the fixture edit** — the
+  warm-up arm (`program.ts:524-531`) only NULLS `targetSplit` and `commands.ts:183`
+  sends the same `0` sentinel an effort interval sends, so `{type:"work",
+targetSplit:null}` reproduces the recorded tx exactly and `divergences` stays
+  empty; (9) WU before RC-1, for the ROADMAP's stated reason at `:2542-2555` (the
+  program-time piece-splitting question disappears) rather than the spec's;
+  (10) WU not concurrent with LL; (11) the owed `DROP COLUMN` is really in ROADMAP.
+- **Scope findings that are grep-work, not compiler-work** (the spec's removal list
+  was incomplete and its "the compiler enumerates everything" mitigation therefore
+  unsound): `summaryModel`'s entire warm-up row machinery (`isWarmup` on two
+  exported types, `warmupIndex`, both row builders), `TimerRuler`'s three-tone bar,
+  `intervalBoundaries.warmupEndsAt` as a FIELD, `PaneGrid.tsx:185`'s `"WU"` arm,
+  `data.ts:65-91`'s six bound constants, `droppedWarmups` as an API RESPONSE field
+  (`data.ts:808` — additive-only decision unmade), three CSS regions beyond the two
+  named **and the named range is wrong: the block ends at 1596, and 1598-1600 opens
+  an unrelated comment**, four frozen e2e fixtures, six DEVIATIONS rows, five
+  committed screenshots that must be DELETED rather than regenerated, and a third
+  historical release note (`:204`). Also: `routes/data.ts:893` and
+  `stores/logs.ts:164` both cite the `PUT /api/prefs` warmup presence-check as the
+  PRECEDENT for a surviving idiom, so removing it also orphans the only written
+  explanation of a live pattern. And `patterns.json`'s own `_meta` says the
+  2026-08-09 drop did NOT orphan its `warmupMinutes` stats and the library rebalance
+  depends on them — the ROADMAP's file map points an implementer straight at it and
+  the spec must rule it OUT.
