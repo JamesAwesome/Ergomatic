@@ -13,7 +13,11 @@ import type {
 } from "../../domain/types.js";
 import { validateWorkoutInput } from "../../domain/validate.js";
 import type { ArticleReadsStore } from "../stores/articleReads.js";
-import type { BaselinesStore } from "../stores/baselines.js";
+import {
+  BASELINE_SOURCES,
+  type BaselineSource,
+  type BaselinesStore,
+} from "../stores/baselines.js";
 import {
   CursorNotFoundError,
   type ActualSource,
@@ -609,10 +613,50 @@ export function createDataRouter({
 
   router.put("/api/baselines", async (req, res) => {
     const body = isRec(req.body) ? req.body : {};
-    const patch: { k2Seconds?: number; k6Seconds?: number } = {};
+    // Narrower than the store's BaselinesPatch: this route never writes
+    // null (a clear is a deliberate future operation, spec rev 2 — today
+    // non-numbers 400), and the isTestResult block below relies on the
+    // numbers being real.
+    const patch: {
+      k2Seconds?: number;
+      k6Seconds?: number;
+      k2Source?: BaselineSource;
+      k6Source?: BaselineSource;
+    } = {};
 
+    // Phase BL PR A (baseline-onboarding spec 2026-08-22 rev 2, "The
+    // stored shape"): each numeric field may arrive with its own
+    // provenance source. Validated against the enum vocabulary here (the
+    // DB would reject garbage too, but as a 500, not a 400 naming the
+    // field), and a value arriving WITHOUT a source is stamped "manual" —
+    // an old client's plain write is exactly a manual entry. An absent
+    // numeric field gets no source key at all, so its stored source rides
+    // the same untouched-key patch semantics as its number.
     for (const field of ["k2Seconds", "k6Seconds"] as const) {
+      const sourceField = field === "k2Seconds" ? "k2Source" : "k6Source";
       const value = body[field];
+      const source = body[sourceField];
+      if (source !== undefined) {
+        if (
+          typeof source !== "string" ||
+          !(BASELINE_SOURCES as readonly string[]).includes(source)
+        ) {
+          badRequest(
+            res,
+            `${sourceField} must be one of ${BASELINE_SOURCES.join(", ")}`,
+            sourceField,
+          );
+          return;
+        }
+        if (value === undefined) {
+          badRequest(
+            res,
+            `${sourceField} requires ${field} in the same request`,
+            sourceField,
+          );
+          return;
+        }
+      }
       if (value === undefined) continue;
       if (
         typeof value !== "number" ||
@@ -626,7 +670,13 @@ export function createDataRouter({
         );
         return;
       }
-      patch[field] = value;
+      if (field === "k2Seconds") {
+        patch.k2Seconds = value;
+        patch.k2Source = (source as BaselineSource | undefined) ?? "manual";
+      } else {
+        patch.k6Seconds = value;
+        patch.k6Source = (source as BaselineSource | undefined) ?? "manual";
+      }
     }
 
     await stores.baselines.put(req.user!.id, patch);

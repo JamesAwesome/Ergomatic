@@ -121,6 +121,27 @@ export function describeStoreContracts(
           k6Seconds: 1500,
         });
       });
+
+      // Phase BL PR A: put() accepts per-field provenance beside the
+      // numbers, and get() still serves numbers ONLY (the lean-GET
+      // decision — provenance is stored, never served). toStrictEqual is
+      // the point: a fake or real store that started echoing source keys
+      // back would fail here identically. What the sources actually DO in
+      // Postgres (per-field independence, the manual default) is pinned
+      // against the real DB in baselineProvenance.integration.test.ts and
+      // stores.integration.test.ts.
+      it("put accepts per-field sources and get's projection stays numbers-only", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        await stores.baselines.put(userId, {
+          k2Seconds: 420,
+          k2Source: "tested",
+        });
+        expect(await stores.baselines.get(userId)).toStrictEqual({
+          k2Seconds: 420,
+          k6Seconds: null,
+        });
+      });
     });
 
     describe("preferences", () => {

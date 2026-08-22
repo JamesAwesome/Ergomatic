@@ -4,7 +4,11 @@ import type { UserStore } from "../auth/users.js";
 import type { WorkoutInput, WorkoutType } from "../../domain/types.js";
 import { type Stores } from "../routes/data.js";
 import type { ArticleReadsStore } from "../stores/articleReads.js";
-import type { BaselinesRow, BaselinesStore } from "../stores/baselines.js";
+import type {
+  BaselinesPatch,
+  BaselinesRow,
+  BaselinesStore,
+} from "../stores/baselines.js";
 import {
   CursorNotFoundError,
   type LogInput,
@@ -109,16 +113,27 @@ function assertUuidShape(id: string): void {
 }
 
 function makeFakeBaselinesStore(): BaselinesStore {
-  const rows = new Map<string, BaselinesRow>();
+  // Internal rows carry the provenance columns exactly like Postgres does
+  // (insert defaults 'manual', an update touches only the patch's own
+  // keys), but get() projects them off — mirroring the real store's
+  // deliberate numbers-only projection (PR A's lean-GET decision).
+  const rows = new Map<
+    string,
+    BaselinesRow & { k2Source: string; k6Source: string }
+  >();
   return {
     async get(userId: string) {
-      return rows.get(userId) ?? null;
+      const row = rows.get(userId);
+      if (!row) return null;
+      return { k2Seconds: row.k2Seconds, k6Seconds: row.k6Seconds };
     },
-    async put(
-      userId: string,
-      patch: { k2Seconds?: number | null; k6Seconds?: number | null },
-    ) {
-      const current = rows.get(userId) ?? { k2Seconds: null, k6Seconds: null };
+    async put(userId: string, patch: BaselinesPatch) {
+      const current = rows.get(userId) ?? {
+        k2Seconds: null,
+        k6Seconds: null,
+        k2Source: "manual",
+        k6Source: "manual",
+      };
       rows.set(userId, { ...current, ...patch });
     },
   } as unknown as BaselinesStore;
