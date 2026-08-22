@@ -1840,16 +1840,10 @@ some of the bluetooth problems deserve their own phase with dedicated
 connection management research"). Phase-open PM gate run and folded — its
 verdict re-scoped the ask and is in `pm-ledger.md`.
 
-**NEXT AND UNBLOCKED as of 2026-08-22.** Phase WU shipped (#150), so every
-sequencing constraint that stood in front of this phase is discharged:
-nothing collides with it any more, and the PM gate's binding condition
-(that LL's brick spec be written in parallel with WU) is satisfied by
-starting it now. **This phase is the next work.** Its inputs are the
-"Spec inputs from the 2026-08-21 ecosystem review" subsection below —
-that is the delta a spec author starts from, on top of the research pass.
-**Read Phase WU's "What this phase taught (2026-08-22)" before writing any
-task briefs** — three of its lessons bite this phase directly, listed
-again at the end of the spec-inputs subsection.
+**Implementation merged in #160. The phase stays OPEN on its exit walk**
+(clauses a-e, W5-W8, W9, 9a). Owner: James's next erg visit, run through
+`/hardware-walk`. The "Release posture" paragraph's cohort-of-one rule
+STANDS until clause (b) exists.
 
 **This phase is the DISPOSAL of the triggered follow-on "Reconnect and
 background scan, five pieces", which is deleted in the same commit that
@@ -2275,7 +2269,7 @@ WebKit's throttling, so it does not rescue the JS half.
       anywhere**. The `LOST THE MONITOR` treatment is already designed and
       shipped (DEVIATIONS row 75) — this is not a design job, it is
       making a shipped thing reachable. **M**
-- [x] **Recovery — a way back that is not deleting the app.** SHIPPED (Task 3): failure disposes (transport, driver, deviceName), the already-connected guard, the memo hoist.
+- [x] **Recovery — a failed attempt no longer poisons the next one.** SHIPPED (Task 3): failure disposes (transport, driver, deviceName); the already-connected guard (F-6 only — the force-quit brick is NOT covered and remains unexplained); the memo hoist. Clause (b) — "without deleting the app" on real hardware — stays with the exit walk.
       `program()`'s catch never disconnects the transport (contrast
       `connect()`'s catch, `useMonitorSession.ts:1607`), and
       `handleTryAgain` (`ConnectedInterstitial.tsx:311-313`) reprograms
@@ -2390,7 +2384,16 @@ What to build, in the phase's own sequence: subscribe
 reported trigger); add a status-arrival watchdog at the transport seam
 keyed on 0x0031 only, threshold **2500 ms — about 3x our worst recorded
 web gap (810 ms) and about 25x the native 100 ms cadence, and the
-constant's comment should say BOTH numbers**; give it a DISARM rule for
+constant's comment should say BOTH numbers**. **CORRECTED 2026-08-22
+(Phase LL anchor pass): the "25x native 100 ms cadence" half is FALSE.**
+100 ms is a REQUEST the record already shows is not honoured —
+`liveness.ts:121-127` measured ~508 ms mean delivered on web once the
+sample-rate write is sent (the write itself is fire-and-forget and its
+outcome is swallowed); native's own inter-frame gap distribution is
+UNMEASURED (spec exit criterion 9a, a walk deliverable). The shipped
+comment states the measured web margin (3.09x, 810.3 ms worst of 3,442
+gaps) and says native is unmeasured — it does not carry a native cadence
+number, because there isn't one to carry. Give it a DISARM rule for
 workout states 10/11 and the finish hand-off window or it fires across
 every normal finish and races the boundary the hold protects; drive a
 `stale` link axis that recovers on the next valid frame rather than
@@ -2471,7 +2474,7 @@ which bites this phase.** Full text in Phase WU's "What this phase taught":
    implementer brief must say gates run FOREGROUND and blocking; four
    rounds were lost to armed monitors that could never wake.
 
-**THE PHASE'S WALK CARD (Task 5, 2026-08-22)** — four questions plus one
+**THE PHASE'S WALK CARD (Task 5, 2026-08-22)** — five questions plus one
 deliverable, each stated so the walk can go red:
 
 - **W5** — Bluetooth power-cycle, armed but not rowing: does
@@ -2489,6 +2492,9 @@ deliverable, each stated so the walk can go red:
 - **W8** — leave an armed/live session untouched: does the PM5 ever emit
   TERMINATE on its own (an inactivity timeout)? `endedBy: "rower"` on the
   TERMINATE path asserts agency on the machine's behalf if it does.
+- **W9** — `getConnectedDevices` may be SYSTEM-scoped: a phone where
+  ErgData holds a DIFFERENT PM5 could be offered the wrong erg with no
+  picker. One tap at the walk settles it.
 - **9a (deliverable)** — the native inter-frame gap distribution from the
   liveness decorator's own snapshot, read off the ring on a real phone:
   the corpus's web-only numbers (worst 810.3 ms) are necessary, not
@@ -2498,6 +2504,11 @@ deliverable, each stated so the walk can go red:
   corpus hypothesis falsified) appears during any piece, copy the
   connection log immediately after; the timestamped frames around that
   moment name the real mechanism.
+- **WARNING — watch for false banners specifically:** a spurious watchdog
+  fire plus End inside the 10 s hysteresis stores `endedBy: "link-lost"`
+  on a healthy row. The threshold is web-derived (2500 ms); native is
+  unmeasured (see 9a). A false LOST banner during the walk is itself a
+  finding, not just an inconvenience to work around.
 - **The negative result is committed, not just reported:** a regression
   test (`useMonitorSession.test.ts`, "Phase LL minor 3") replays all 6
   corpus captures through the real `nextFreezeRun`/`isPausedRun` and pins
