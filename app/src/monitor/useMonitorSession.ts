@@ -266,6 +266,22 @@ function hasCharacteristicDegraded(
   );
 }
 
+/** Phase LL Task 2 REVIEW FIX (§2 mechanism 2): does `transport` carry the
+ *  liveness decorator's own `markSuspect()`? Same structural idiom as
+ *  `hasLivenessSnapshot`/`hasCharacteristicDegraded` above — every REAL
+ *  production transport does (`withLiveness`'s own return type), a bare
+ *  test `Transport` typically does not, and that is a no-op, never a
+ *  throw. See `liveness.ts`'s own doc comment on `markSuspect` for why
+ *  going around it (setting `frameSilence` directly, with no way back)
+ *  was the bug this check exists to prevent from recurring. */
+function hasMarkSuspect(
+  transport: Transport,
+): transport is Transport & { markSuspect(): void } {
+  return (
+    typeof (transport as { markSuspect?: unknown }).markSuspect === "function"
+  );
+}
+
 /** Phase LL Task 1: this hook's own production `schedule` for the liveness
  *  decorator — a plain `setTimeout`/`clearTimeout` pair, the same shape
  *  every other `schedule` dep in this file already has. Hoisted to MODULE
@@ -1897,13 +1913,26 @@ export function useMonitorSession(
       // adapter-layer seam (`src/adapters/appLifecycle.ts`); the platform
       // conditional lives there, never here. §4's continuity rule (Task 4,
       // not yet built by this phase) is what should ultimately arbitrate a
-      // resumed stream — until it exists, a resume reuses the SAME
-      // hysteresis a watchdog silence already goes through
-      // (`hysteresisCancelRef`): `frameSilence` latches immediately and
-      // only clears after `BANNER_RETRACT_HYSTERESIS_MS` of continuous
-      // healthy frames, so a resume can never blink the banner either.
-      // Flagged as an interim measure in this task's own report — Task 4
-      // inherits the seam, not a finished arbitration.
+      // resumed stream — until it exists, a resume LATCHES `frameSilence`
+      // immediately, same as any other silence, but the CLEARING path is
+      // real, not a claim: `transport.markSuspect()` (guarded by
+      // `hasMarkSuspect`) sets the liveness decorator's OWN internal
+      // `silent` flag, so the very next healthy 0x0031 arrival takes the
+      // decorator's EXISTING recovery branch and calls `deps.onRecovery()`
+      // — the SAME `handleFrameRecovery`/`BANNER_RETRACT_HYSTERESIS_MS`
+      // path a real watchdog silence goes through.
+      //
+      // REVIEW FIX (this was wrong the first time this task shipped):
+      // calling `update({ frameSilence: true })` directly here, with
+      // nothing touching the decorator's own `silent` flag, left `silent`
+      // at `false` for any pre-background stream that had been healthy —
+      // so `noteStatusArrival`'s `if (silent)` branch never matched on
+      // resume, `onRecovery` never fired, and `frameSilence` never cleared
+      // again for the rest of the session on any resume shorter than
+      // `SILENCE_THRESHOLD_MS` (a Control Center swipe, a notification
+      // peek — routine, not an edge case; reproduced empirically: 30
+      // healthy frames over 15s, banner still up). `markSuspect()` is what
+      // closes that gap — see its own doc comment in `liveness.ts`.
       const lifecycleResult = registerAppLifecycleListener((event) => {
         if (event !== "foreground") return;
         hysteresisCancelRef.current?.();
@@ -1913,6 +1942,7 @@ export function useMonitorSession(
           "app-lifecycle",
           "resumed from background — stream treated as suspect",
         );
+        if (hasMarkSuspect(transport)) transport.markSuspect();
       });
       if (lifecycleResult instanceof Promise) {
         void lifecycleResult.then((unsub) => {
