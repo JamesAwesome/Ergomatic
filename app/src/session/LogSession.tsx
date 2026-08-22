@@ -352,6 +352,12 @@ function recordPostSacrifice(status: number): void {
       entries.length > 0 ? entries[entries.length - 1]!.seq + 1 : 0;
     entries.push({
       seq: nextSeq,
+      // Phase LL Task 1: every OTHER writer onto this ring stamps `atMs`
+      // now (`eventLog.ts`'s own `record()`); this second, independent
+      // writer (this function's own header comment on why it exists at
+      // all) matches that shape rather than leaving its one entry the
+      // only unstamped one in a stash that is otherwise consistent.
+      atMs: Date.now(),
       kind: "post-sacrifice",
       detail: `series dropped from POST /api/logs after status ${status}`,
     });

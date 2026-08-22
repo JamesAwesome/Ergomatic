@@ -388,11 +388,14 @@ describe("the connection log sheet", () => {
     expect(parseLogEntries(JSON.stringify({ seq: 0 }))).toStrictEqual([]);
   });
 
-  it("numbers by SEQUENCE, because the log carries no clock", () => {
+  it("numbers by SEQUENCE — the display's ordering authority, even though entries carry atMs now", () => {
     // `eventLog.ts` orders by a monotonic `seq` on purpose: two entries
-    // recorded in one microtask carry the same `Date.now()` and lose their
-    // order. The mockup's leading timestamp column is that decision's
-    // casualty, recorded in DEVIATIONS.
+    // recorded in one microtask can carry the same `atMs` and lose their
+    // order (Phase LL Task 1 added `atMs`; it never replaced `seq` as the
+    // ordering authority). The mockup's leading timestamp column is still
+    // not what prints here, recorded in DEVIATIONS. An entry with no
+    // `atMs` at all (an older stash, or this fixture) renders identically
+    // — the display never reads that field.
     expect(logLine({ seq: 7, kind: "notify", detail: "0x0031 aa bb" })).toBe(
       "0007 NOTIFY 0x0031 aa bb",
     );

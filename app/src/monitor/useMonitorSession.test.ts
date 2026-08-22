@@ -35,10 +35,14 @@ import {
   type FakeScript,
   type FakeTimelineEvent,
 } from "./transports/fake";
+import type { LivenessDeps } from "./transports/liveness";
 import {
+  defaultLivenessSchedule,
   isPausedRun,
   nextFreezeRun,
   nextRowingStreak,
+  recordLivenessRecovery,
+  recordLivenessSilence,
   useMonitorSession,
   type ConnectedPhase,
   type FreezeRun,
@@ -4071,5 +4075,215 @@ describe("useMonitorSession: S6 — navigator.storage.persist() at first connect
       .filter((e) => e.kind === "storage-persist");
     expect(persistEntries).toHaveLength(1);
     expect(persistEntries[0]!.detail).toContain("threw synchronously");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase LL Task 1 (link-truth design spec §1): the hook's own production
+// liveness deps — `defaultLivenessSchedule`/`recordLivenessSilence`/
+// `recordLivenessRecovery`. Hoisted to module scope and exported
+// specifically so they are reachable WITHOUT driving the full `connect()`
+// -> real `defaultTransport` -> `withLiveness` -> an actual 0x0031 chain,
+// which every OTHER test in this file's own `createTransport` override
+// deliberately bypasses (`MonitorSessionDeps.createTransport`'s own doc
+// comment) — that bypass is exactly why these three needed their own
+// direct tests rather than relying on coverage from the rest of the file.
+// ---------------------------------------------------------------------------
+
+describe("Phase LL Task 1: the hook's own liveness deps", () => {
+  it("defaultLivenessSchedule fires fn after ms and its canceller stops it", () => {
+    vi.useFakeTimers();
+    try {
+      const fn = vi.fn();
+      const cancel = defaultLivenessSchedule(fn, 2500);
+
+      vi.advanceTimersByTime(2499);
+      expect(fn).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(fn).toHaveBeenCalledOnce();
+
+      // A second, independent instance — cancelling it must never fire.
+      const fn2 = vi.fn();
+      const cancel2 = defaultLivenessSchedule(fn2, 1000);
+      cancel2();
+      vi.advanceTimersByTime(1000);
+      expect(fn2).not.toHaveBeenCalled();
+      cancel(); // no-op post-fire, must not throw
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("recordLivenessSilence writes into the given log, and is a no-op against null", () => {
+    // No log yet (pre-connect) — a no-op, never a throw.
+    recordLivenessSilence(null, 2500);
+
+    const log = createEventLog();
+    recordLivenessSilence(log, 2500);
+
+    const entries = log.entries().filter((e) => e.kind === "liveness-silence");
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.detail).toBe("frame stream silent for 2500ms");
+  });
+
+  it("recordLivenessRecovery writes into the given log, and is a no-op against null", () => {
+    recordLivenessRecovery(null); // pre-connect: no-op
+
+    const log = createEventLog();
+    recordLivenessRecovery(log);
+
+    const entries = log.entries().filter((e) => e.kind === "liveness-recovery");
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.detail).toBe("frame stream resumed");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase LL Task 1: THE HOOK'S OWN WIRING — proving `livenessDepsRef`'s
+// `onSilence`/`onRecovery` closures (built inside the hook, never passed
+// `logRef` itself — `react-hooks/refs` forbids that) really do write into
+// THIS session's log once one exists. Every other test in this file
+// overrides `MonitorSessionDeps.createTransport`, which bypasses
+// `defaultTransport` (and therefore `livenessDepsRef`) entirely — this is
+// the one test that does NOT, via the same `vi.doMock` + fresh-import
+// idiom `adapters/monitorTransport.test.ts` already established, so the
+// hook reaches its own real default and this test can capture exactly the
+// `LivenessDeps` object it built.
+// ---------------------------------------------------------------------------
+
+describe("Phase LL Task 1: the hook's own composition with defaultTransport", () => {
+  afterEach(() => {
+    vi.resetModules();
+    vi.restoreAllMocks();
+  });
+
+  it("passes real onSilence/onRecovery to defaultTransport, and they write into THIS session's own log", async () => {
+    const stubTransport: Transport = {
+      scan: vi.fn(async () => [{ id: "dev-1", name: DEVICE_NAME }]),
+      connect: vi.fn(async () => undefined),
+      write: vi.fn(async () => undefined),
+      subscribe: vi.fn(() => () => undefined),
+      disconnect: vi.fn(async () => undefined),
+      onDisconnect: vi.fn(() => () => undefined),
+    };
+    const mockDefaultTransport = vi.fn((_deps: LivenessDeps) => stubTransport);
+    vi.doMock("../adapters/monitorTransport", () => ({
+      defaultTransport: mockDefaultTransport,
+    }));
+    // The file's own STATIC `import { useMonitorSession } from
+    // "./useMonitorSession"` (top of file, used by every other test) has
+    // already loaded that module — and everything it statically imports,
+    // `defaultTransport` included — into Vitest's module cache before this
+    // test ever runs. `vi.doMock` only changes what a FUTURE resolution
+    // returns; without clearing the cache first, the dynamic `import()`
+    // below would just hand back the ALREADY-CACHED module, still bound to
+    // the real `defaultTransport`. `resetModules()` here (not just in
+    // `afterEach`) is what makes the re-import genuinely fresh — the same
+    // reason `adapters/monitorTransport.test.ts` resets before, not only
+    // after, though that file never had a competing static import to race.
+    vi.resetModules();
+
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+    const { result } = renderHook(() => freshUseMonitorSession());
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    // The hook really did reach `defaultTransport` — never `createTransport`
+    // (undefined here, the zero-argument production call every real screen
+    // makes) — and passed it a REAL `LivenessDeps`, not a stub.
+    expect(mockDefaultTransport).toHaveBeenCalledOnce();
+    const deps = mockDefaultTransport.mock.calls[0]![0];
+    expect(typeof deps.now).toBe("function");
+    expect(typeof deps.schedule).toBe("function");
+    expect(typeof deps.onSilence).toBe("function");
+    expect(typeof deps.onRecovery).toBe("function");
+
+    // `connect()` has resolved past `transport.connect()`, so this
+    // session's own log exists (`useMonitorSession.ts`'s own ordering:
+    // `createLog` runs right after `transport.connect()`). Invoking the
+    // EXACT closures the hook built (not a reimplementation) is what
+    // covers `livenessDepsRef`'s own `onSilence`/`onRecovery` lines.
+    deps.onSilence(2500);
+    deps.onRecovery();
+
+    const exported = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(
+      exported.some(
+        (e) =>
+          e.kind === "liveness-silence" &&
+          e.detail === "frame stream silent for 2500ms",
+      ),
+    ).toBe(true);
+    expect(
+      exported.some(
+        (e) =>
+          e.kind === "liveness-recovery" && e.detail === "frame stream resumed",
+      ),
+    ).toBe(true);
+  });
+
+  it("exit criterion 7: fail() appends the transport's own liveness snapshot to the ring — proven with a REAL snapshot-carrying transport, not a stub without one", async () => {
+    const snapshotValue = {
+      atMs: 4200,
+      armed: true,
+      silent: true,
+      characteristics: {},
+      recentEvents: [],
+    };
+    // A stub that DOES carry `snapshot()` — every real production
+    // transport does (`withLiveness`'s own return type), which is exactly
+    // what `hasLivenessSnapshot`'s structural check exists to detect.
+    //
+    // `subscribe` THROWS: `createPm5Driver`'s own constructor calls
+    // `t.subscribe(...)` synchronously, many times, right at construction
+    // (`driver.ts`'s `mergeStatus`/raw subscriptions) — so this throw
+    // propagates out of `connect()`'s own `try` block and lands in its
+    // `catch (err) { fail(mapRadioFailure(err)); ... }`, the SAME catch a
+    // real driver-construction failure would hit. Picked deliberately over
+    // `scan-dismissed`/a `connect()` throw: BOTH of those fail before
+    // `logRef.current` is ever assigned (device not yet picked, or
+    // `transport.connect()` not yet resolved) — the ring literally has
+    // nothing to append into yet, which would make this test pass whether
+    // or not the append logic is correct. Failing here, AFTER `logRef
+    // .current = log` (the line right before `createPm5Driver` runs), is
+    // what actually exercises the append.
+    const stubTransport: Transport & { snapshot(): unknown } = {
+      scan: vi.fn(async () => [{ id: "dev-1", name: DEVICE_NAME }]),
+      connect: vi.fn(async () => undefined),
+      write: vi.fn(async () => undefined),
+      subscribe: vi.fn(() => {
+        throw new Error("driver construction boom");
+      }),
+      disconnect: vi.fn(async () => undefined),
+      onDisconnect: vi.fn(() => () => undefined),
+      snapshot: vi.fn(() => snapshotValue),
+    };
+    vi.doMock("../adapters/monitorTransport", () => ({
+      defaultTransport: vi.fn(() => stubTransport),
+    }));
+    vi.resetModules();
+
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+    const { result } = renderHook(() => freshUseMonitorSession());
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    expect(result.current.phase).toBe("failed");
+    const exported = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const snapshotEntry = exported.find((e) => e.kind === "liveness-snapshot");
+    expect(snapshotEntry).toBeDefined();
+    expect(JSON.parse(snapshotEntry!.detail)).toStrictEqual(snapshotValue);
   });
 });

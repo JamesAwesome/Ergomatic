@@ -1,6 +1,10 @@
 import type { Transport } from "../../domain/monitor/types.js";
 import { isNative } from "../platform";
 import { resolveDefaultTransport } from "../monitor/transports/index";
+import {
+  withLiveness,
+  type LivenessDeps,
+} from "../monitor/transports/liveness";
 
 /**
  * THE PLATFORM-CONDITIONAL DEFAULT TRANSPORT (ROADMAP CL item 2).
@@ -45,13 +49,44 @@ import { resolveDefaultTransport } from "../monitor/transports/index";
  * still never threads a production `createTransport` of its own (that
  * file's header comment, unchanged): the default now living here rather
  * than in `transports/index.ts` is the only thing that moved.
+ *
+ * **THE LIVENESS DECORATOR IS COMPOSED ON BOTH ARMS** (Phase LL Task 1,
+ * link-truth design spec §1: "A production-safe LIVENESS decorator, on
+ * BOTH arms"). This function is the ONE place platform choice is made
+ * (this comment's own opening line), which is exactly why it is also the
+ * one place `withLiveness` belongs — every caller of `defaultTransport`
+ * gets a watched transport with no second call site to remember. `deps`
+ * is REQUIRED, never defaulted here: `liveness.ts`'s own header explains
+ * why (the injected clock is not optional — a bare `Date.now()`/
+ * `setTimeout()` inside this function would be unprovable by the replay
+ * harness). `useMonitorSession.ts` supplies a real `Date.now`/`setTimeout`
+ * pair in production and threads its own `logRef` through `onSilence`/
+ * `onRecovery`; `adapters/monitorTransport.test.ts` supplies a manual one
+ * to prove the COMPOSITION itself, not just the decorator in isolation
+ * (the plan's own constraint: "every test that injects
+ * `MonitorSessionDeps.createTransport` bypasses the seam" — a test that
+ * only unit-tests `withLiveness` never exercises this function at all).
+ *
+ * The byte RECORDER (`transports/recording.ts`) is NOT composed here, on
+ * purpose — it stays behind its own build-time-foldable gate inside
+ * `resolveDefaultTransport`/`transports/index.ts`, reached only on the web
+ * arm's dev/e2e path. Composing it here too would be the exact
+ * `withDiagnostics` merge `liveness.ts`'s own header rules out: two
+ * decorators, deliberately not one.
  */
-export function defaultTransport():
-  Transport | null | Promise<Transport | null> {
+export function defaultTransport(
+  deps: LivenessDeps,
+): Transport | null | Promise<Transport | null> {
   if (isNative()) {
     return import("../monitor/transports/capacitorBle").then(
-      ({ createCapacitorBleTransport }) => createCapacitorBleTransport(),
+      ({ createCapacitorBleTransport }) =>
+        withLiveness(createCapacitorBleTransport(), deps),
     );
   }
-  return resolveDefaultTransport();
+  const web = resolveDefaultTransport();
+  if (web === null) return null;
+  if (web instanceof Promise) {
+    return web.then((t) => (t === null ? null : withLiveness(t, deps)));
+  }
+  return withLiveness(web, deps);
 }
