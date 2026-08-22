@@ -32,14 +32,18 @@ const ONBOARDING_TITLE_SET: ReadonlySet<string> = new Set(
   Object.values(ONBOARDING_TITLES),
 );
 
-/** Whether `title` is one of the two designated onboarding workouts —
- *  exact match only (no trim/case-fold: these are fixed seed titles, not
- *  user input). Every exclusion call site (suggestion pools, the Library
- *  list) ANDs this with the row's own `isGlobal` — title alone isn't
- *  enough: a rower's own custom workout that happens to share one of
- *  these titles is a real, ownable row, and must stay visible/suggestable
- *  (final-review fix, 2026-08-09). Only the two designated GLOBAL rows are
- *  ever meant to be invisible outside onboarding. */
+/** Whether `title` is one of the two designated test workouts — exact
+ *  match only (no trim/case-fold: these are fixed seed titles, not user
+ *  input). Surviving call sites (Phase 8A PR B made the rows VISIBLE in
+ *  the Library, so the old Library-list exclusion is gone): the two
+ *  suggestion-pool exclusions (Today.tsx's `entries` and /api/today —
+ *  SHUFFLE's checkpoint escape depends on the tests sitting outside every
+ *  pool), the no-baseline card's lookup, and the save-stack demotion
+ *  (PostWorkoutSummary, onboarding title on a no-baseline account). Every
+ *  exclusion call site ANDs this with the row's own `isGlobal` — title
+ *  alone isn't enough: a rower's own custom workout that happens to share
+ *  one of these titles is a real, ownable row, and must stay suggestable
+ *  (final-review fix, 2026-08-09). */
 export function isOnboardingTitle(title: string): boolean {
   return ONBOARDING_TITLE_SET.has(title);
 }

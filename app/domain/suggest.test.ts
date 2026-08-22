@@ -90,6 +90,27 @@ describe("suggest", () => {
       expect(r.reason).toBe(CHECKPOINT_REASON);
     });
 
+    it("pins a prescribed entry whose TYPE mismatches todayCode — the type filter is bypassed like every other (8C's id-refs rely on this)", () => {
+      // A deliberately mismatched entry: an O2-typed prescription on an AT
+      // day (the pre-PR-B 6K seed shape). The pin must hold anyway — a
+      // checkpoint is not a pool member, so the day-code type match never
+      // applies to it.
+      const o2Entry = w("o2-prescribed", {
+        type: "O2" as const,
+        difficulty: "hard" as const,
+        isGlobal: true,
+      });
+      const r = suggest({
+        todayCode: "AT",
+        prefs: { difficulties: ["easy", "medium", "hard"] },
+        library: [w("at1", { type: "AT" })],
+        prescribed: { entry: o2Entry, reason: CHECKPOINT_REASON },
+      });
+      expect(r.recommendationId).toBe("o2-prescribed");
+      expect(r.reason).toBe(CHECKPOINT_REASON);
+      expect(r.poolIds).toStrictEqual(["at1"]);
+    });
+
     it("keeps the prescribed entry OUT of poolIds, so SHUFFLE escapes into the day's own type pool", () => {
       const r = suggest({
         todayCode: "AN",

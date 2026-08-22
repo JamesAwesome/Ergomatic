@@ -586,4 +586,63 @@ describe("seedGlobalLibrary against real Postgres", () => {
       false,
     );
   });
+
+  // Pins BOTH user_id IS NULL scopings inside renameGlobalByTitle
+  // (adversarial review, 2026-08-22: all 181 prior tests stayed green with
+  // either scoping deleted). A rower's own rows colliding with BOTH sides
+  // of the rename map must be inert to the pre-pass: a personal "2K Test"
+  // must not trip the NOT EXISTS guard (that would silently skip the
+  // global rename and hand the legacy row to the delete pass), and a
+  // personal "First 2k" must never itself be renamed (the outer scope).
+  it("personal rows sharing either title are invisible to the rename: the guard ignores them and the outer scope never touches them", async () => {
+    await db.delete(workouts);
+    const [oldK2] = await wk.createMany(null, [LEGACY_ONBOARDING_ROWS[1]!]);
+
+    const user = await users.createUser({
+      googleSub: "legacy-rename-personal",
+      email: "legacy-rename-personal@x.com",
+      name: "Legacy Rename Personal",
+    });
+    // A personal row already under the NEW title (the guard's bait) and a
+    // personal row under the OLD title (the outer scope's bait) — both
+    // real, ownable rows the seed must never read or write.
+    const personalNew = await wk.create(user.id, {
+      title: ONBOARDING_TITLES.k2,
+      type: "AN",
+      difficulty: "hard",
+      pain: 5,
+      source: "user",
+      steps: [],
+    });
+    const personalOld = await wk.create(user.id, {
+      title: "First 2k",
+      type: "AN",
+      difficulty: "easy",
+      pain: 2,
+      source: "user",
+      steps: [],
+    });
+    const logId = await createLogFor(user.id, oldK2!.id, "First 2k", "AN");
+
+    await seedGlobalLibrary(db);
+
+    // (a) The GLOBAL rename still happened: renamed in place, same id,
+    // log link intact — a guard that counts personal rows would have
+    // skipped it and let the delete pass null the link.
+    const k2Global = (await wk.listGlobals()).find(
+      (g) => g.title === ONBOARDING_TITLES.k2,
+    )!;
+    expect(k2Global.id).toBe(oldK2!.id);
+    const logRow = await findLog(user.id, logId);
+    expect(logRow!.workoutId).toBe(oldK2!.id);
+
+    // (b) Both personal rows untouched: same ids, same titles — an outer
+    // scope without user_id IS NULL would have renamed personalOld.
+    const newAfter = await wk.get(user.id, personalNew.id);
+    expect(newAfter!.title).toBe(ONBOARDING_TITLES.k2);
+    expect(newAfter!.isGlobal).toBe(false);
+    const oldAfter = await wk.get(user.id, personalOld.id);
+    expect(oldAfter!.title).toBe("First 2k");
+    expect(oldAfter!.isGlobal).toBe(false);
+  });
 });
