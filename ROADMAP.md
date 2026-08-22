@@ -4789,7 +4789,12 @@ program.ts` hardcodes PM5 Table 19 limits (`MIN_TIME_SECONDS = 20`,
   monitor integration becomes real. Then: add a programming-limits channel
   to `MonitorCapabilities`, move the four constants there per-monitor, and
   template the six `CompileError` messages instead of hardcoding "PM5".
-- **Remove the `PULL TO RESUME` block** (James, 2026-08-17: "we never got
+- **Remove the `PULL TO RESUME` block** — CROSS-NOTE 2026-08-22: James
+  also observed the band FLASHING for a split second at flywheel-gated
+  work-interval starts (fully extended at the catch when the interval
+  opens). Phase LL's §2b suppresses that firing window; the removal this
+  entry wants remains separate and is strengthened by the report.
+  Original entry: **Remove the `PULL TO RESUME` block** (James, 2026-08-17: "we never got
   rid of the pull to resume screen"): the stale-state band on
   `ConnectedSurface.tsx` (~line 584) still renders its inverted ink field
   when strokes stop mid-piece. CR2 2a task 5 only re-worded and un-occluded
