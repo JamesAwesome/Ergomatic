@@ -1411,3 +1411,68 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
 - **Backlog: 71 unchecked, 23 triggered follow-ons** (72 at 8A open, 60 at WU
   open, 37 at LL open). Checking 8A's six takes it to 65 — the first net
   DECREASE recorded in this ledger.
+
+## Phase-open gate, 2026-08-22 (Phase BL slate: three doors in, one measurement out)
+
+- **A state a rower can leave but never re-enter has no demo path, and that is
+  worse than a demo COST.** `PUT /api/baselines` rejects `null`
+  (`data.ts:590-601`), the editor has no clear control, and `BaselineCard`
+  renders only while a baseline is missing — so a baselines-set account could
+  never see the onboarding doors again by any product path. Generalises 8A's
+  "six real saves deep": **at a slate gate, for every screen the phase adds,
+  ask which state the app must be in to render it and whether James's account
+  can reach that state.** Resolution here was better than the workaround:
+  James added "Reset baseline setup" on You as a product feature — when a
+  state is unreachable, first ask whether a rower would ever WANT to re-enter
+  it; if yes, the demo path is a feature, not a second test account.
+- **A design canvas is a citation and obeys RF16.** BL's spec cited the
+  "Baseline Onboarding" canvas eleven times as "the pixel reference";
+  `git ls-files docs/design` did not contain it and no URL existed in the
+  repo. **A canvas cited by a spec lands in `docs/design/` (source files)
+  with the live artifact URL in the spec, before any brief cites it.** Fixed
+  at this gate.
+- **Check whether the feature you are specifying already exists in a smaller
+  form, and reconcile the CONSTANTS.** BL specified a 16-cell estimate table
+  while `domain/deriveBaseline.ts` (`K2_K6_OFFSET_SECONDS = 7`) already
+  estimates the missing split and `BaselineEditor.tsx` seeds
+  `SEED_K2=112`/`SEED_K6=122` (a 10s gap; 1:52 is a club rower's 2k shipping
+  as every new rower's prefill). Three disagreeing answers to one
+  relationship, a fourth proposed, none reconciled. **When a phase adds a
+  number-producer, grep for the existing producers of the same number and
+  make agreement an exit criterion.**
+- **Enumerate write sites from the CODE, not from the spec's list.** BL's
+  provenance ruling named three and missed the editor's own derive OFFER — an
+  estimate the rower accepts, which the stated rule would record as `manual`.
+  Sibling of 8A's "enumerate every consumer of the exclusion predicate".
+- **An oracle stratified by an attribute you ruled out collecting cannot
+  ground the table.** Rankings are banded by age/weight/sex — the axes the
+  minimal-PII ruling excludes — over a self-selecting racing population.
+  **Ruling shape: replace "the numbers are right" (unfalsifiable) with
+  bounded, testable criteria — inside MIN/MAX_SPLIT, a stated conservative
+  bias (too-fast is the harmful direction), per-cell gap agreement with the
+  existing constant — and name James at the PR as the checker of a 16-row
+  table.**
+- **`isTestResult` rides `PUT /api/baselines`, not the log** — recording a
+  test and overwriting the baseline are the same call, so "decline changes
+  nothing" silently meant the measurement is lost. James's ruling: record
+  regardless; the prompt governs only the baseline write; PR B decouples.
+  **When a spec cites a wire field, open the route that owns it — the
+  coupling is the product decision.**
+- **A phase created out of another phase's bullet must DELETE that bullet.**
+  8B still carried the post-test prompt with a different mechanism and its
+  own exit. Split at this gate: prompt → BL; the test-history LIST stays 8B —
+  and BL gives `test_history` its first producer with NO consumer, which the
+  release notes must not paper over.
+- **The parallel-spec condition was applied once and breached — this time it
+  is countable:** LL's spec (parallel session) must exist before BL's PR C
+  opens. An unenforceable parallel condition is theatre.
+- **Backlog: 70 unchecked, 23 triggered follow-ons, 8 phases not started**
+  (71 at 8A close). The +5 is work being started, not filed.
+- **Release call:** v0.17.0, MINOR, its own tag — BL ships things James can
+  falsify on his own account. Notes owe four clauses (loop closed as
+  v0.16.0's notes promised; the You shortcut; doors are new-account-only,
+  Reset shows them; provenance stored, never shown). **App Privacy unchanged
+  PROVIDED the questionnaire answers stay transient** — ruled: they are
+  never stored; self-reported cardio frequency would otherwise be this
+  repo's first Health-and-Fitness field, and no privacy declaration exists
+  yet anywhere (Phase PROD owes it).

@@ -2169,3 +2169,95 @@ targetSplit:null}` reproduces the recorded tx exactly and `divergences` stays
 - `plans.ts`, `suggest.ts`, `onboarding.ts`, `seed.ts`, `seed/library/onboarding.ts`
   and `usePlan.ts` have zero commits since the 2026-08-12 spec. All churn is in
   `data.ts`, `Today.tsx`, `LogSession.tsx`, `Plan.tsx`, `tokens.css`.
+
+## Anchor pass, 2026-08-22 (Phase BL, "three doors in, one measurement out")
+
+- **"`POST /api/logs` accepts `isTestResult: true` and appends to
+  `test_history` (`data.ts:606`)."** The line number is right and the route is
+  wrong: `:606` sits inside `router.put("/api/baselines")` (opened `:582`);
+  `router.post("/api/logs")` opens at `:939` and never mentions the field.
+  Implementing it literally would have sent the flag where nothing reads it,
+  left `test_history` empty, and failed the phase's own exit criterion while
+  every other gate stayed green. **Technique: a `file:line` citation pins a
+  LINE, not a SCOPE — before trusting "endpoint X accepts field F", grep the
+  field and then find which `router.<verb>(` opened above the hit.** A correct
+  line number inside the wrong handler is the most credible kind of wrong.
+
+- **"`baselines` gains `source` (`manual | estimated | tested`)."** Structurally
+  impossible to mean what the spec wants: `baselines` is ONE row per user
+  carrying BOTH `k2Seconds` and `k6Seconds` (`schema.ts:63-73`), and both the
+  route and the store are strict per-FIELD patch semantics
+  (`stores/baselines.ts:23-33`'s `onConflictDoUpdate({set: {...patch}})`, which
+  the You editor's `touched` machinery deliberately relies on). So one `source`
+  column records whichever FIELD was written last — and the phase's own flow
+  produces mixed provenance within a day (door 1 writes both `estimated`, the
+  session-7 checkpoint writes k2 `tested`, the row then claims `tested` for an
+  unmeasured k6). **Technique: for any provenance/metadata column, count the
+  VALUES the row holds before accepting one column for them. A per-row tag on a
+  multi-value row is a lie the moment two values have different origins, and
+  the flow that creates the divergence is usually already in the same spec.**
+
+- **"Door 3 (row a test) sets your baseline."** Sets ONE. The app's standing
+  convention is that `baselines` is null the moment EITHER side is null
+  (`Today.tsx:417-424`, `Library.tsx:249-255`), so a rower who rows the 6k and
+  accepts lands back on Today looking at the same onboarding card. Doors 1 and
+  2 write both; door 3 writes one, and the spec never cited
+  `domain/deriveBaseline.ts` (`K2_K6_OFFSET_SECONDS = 7`), which already exists
+  as the editor's derivation OFFER. **Technique: for any "this door reaches a
+  working app" claim, find the predicate the app uses for "configured" and
+  hand-execute the door's END STATE against it.**
+
+- **"The 2k/6k pair must respect the domain's own invariant (6k slower than
+  2k)."** There is no such invariant. Server validates each field independently
+  against 60..240 (`data.ts:588-597`); the only relationship in the codebase is
+  a 7-second heuristic whose own header says "a starting ESTIMATE only, never a
+  measurement". What inversion would cost is real: `pace.ts:103` prices MAX as
+  `k2Seconds` and MIN as `k6Seconds + 20`, so k2 > k6+20 makes an ALL OUT
+  target slower than an EASY one. **Technique: when a spec says "respect the
+  existing invariant", grep for the ENFORCEMENT (a throw, a validator, a check
+  constraint, a test), not for the concept.**
+
+- **"Derive the table's values from Concept2's published logbook rankings."**
+  The named PRIMARY source cannot answer the question. Rankings filter by age
+  range, weight class, sex, country and adaptive classification — no experience
+  or cardio dimension (PRIMARY, fetched 2026-08-22) — while the table's axes
+  are experience x cardio and the standing PII ruling excludes exactly the axes
+  the source carries. And the ranked population is self-selected committed
+  ergers — structurally wrong for the "never rowed" cell. **Technique: before
+  accepting a deferred research task, open the named source and read its
+  FILTER/AXIS LIST.** A source's dimensions are the questions it can answer.
+
+- **"The shipped BaselineCard already carries exactly this 6k/2k toggle, so the
+  build reuses it."** True only in the both-missing state:
+  `showToggle={bothMissing}` (`BaselineCard.tsx:172`); the one-missing branch
+  deliberately offers ONLY the missing distance, and the You shortcut's
+  population is both-SET, a state the component refuses to render in at all.
+  **Technique: when a spec reuses a shipped component, enumerate the
+  component's OWN gating props and compare their domains against the new
+  caller's state space.** "It already has this control" is a claim about one
+  branch.
+
+- **A shipped card can assert a behaviour the app does not have, and a spec
+  will inherit it.** BL's "What and why" said "row a First 6k and it sets your
+  baseline". It sets nothing: the ONLY writer of baselines in the whole client
+  is `you/BaselineEditor.tsx:298` — while the card reads "SUGGESTED - SETS
+  YOUR BASELINE" and `START_HERE_STEPS[0]` teaches "Row 6k once. That is your
+  baseline." (pinned by `e2e/flows.spec.ts:52`). **Technique: for any "the app
+  already does X" premise, grep for the WRITER of the state X changes, not for
+  the screen that offers X.**
+
+- **Attacked and NOT broken (Phase BL VETTED GROUND):** the additive column's
+  read safety (the store PROJECTS `{k2Seconds, k6Seconds}` explicitly — traced
+  through all eight consumers); per-field patch semantics surviving new
+  fields; `real` precision for split seconds (float32 ulp ~7.6e-6 s in range);
+  8A's narrowed demotion, hand-executed for door 3's no-baseline rower (the
+  hazard is only a prompt WRITING before the stack renders — hence post-save
+  only); `ONBOARDING_TITLES` as the prompt's identity hook; and a dispatch
+  premise corrected: `suggest()` does not consume baselines (difficulty is an
+  authored row property; baselines reach suggestion only via `estMinutes`).
+
+- **A live migration-index collision, found by looking rather than
+  reasoning.** Journal head 0011; open PR #160 (Phase LL) already mints
+  `0012_amused_wild_child.sql`. Whichever merges second regenerates.
+  **Technique: `gh pr diff <n> --name-only | grep drizzle` across every open
+  PR is a ten-second check — run it at SPEC time, not implement time.**
