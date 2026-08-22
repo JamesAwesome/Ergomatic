@@ -1398,7 +1398,42 @@ below is 2026-08-12-era and ~25 merges have landed since, including Phase WU's
 warm-up removal — re-verify each against current code before any task brief is
 written, and take the phase-open gates (PM slate, antagonist delta pass
 against codebase movement — the spec already survived two adversarial reads
-and a PM holistic review, so the anchor is a delta, said aloud here). This section is the scoped-down phase-one slice of that draft after a
+and a PM holistic review, so the anchor is a delta, said aloud here).
+**Gates RUN 2026-08-22, both verdicts folded** (entries in both ledgers, this
+PR): PM GO-WITH-CONDITIONS, antagonist delta with one blocking find. The
+refresh + gate deltas and James's five rulings (same day):
+
+- **Rulings (James, 2026-08-22):** (1) post-rename, `6K Test`/`2K Test` are
+  VISIBLE in the Library (exclusion shrinks to suggestion pools only — a rower
+  can voluntarily re-test); (2) the no-baseline onboarding card gets its OWN
+  copy (friendlier heading) rather than rendering the instrument name;
+  (3) sequencing after 8A: the baseline-update prompt ships NEXT, before the
+  calendar; (4) the installed-build window on the rename is ACCEPTED — the
+  rename PR merges LAST in the phase, alone, tag cut promptly, notes name it —
+  no compatibility tag; (5) on a checkpoint day `Log against plan` LEADS the
+  save stack — the 6I demotion rule (`PostWorkoutSummary.tsx`, keyed on
+  `isOnboardingTitle`) narrows to its actual case (a baseline test on an
+  account that is not at a checkpoint), or the checkpoint soft-locks: the
+  non-advancing save writes `plan_key`/`plan_index` NULL and `done_n` never
+  passes index 6. A green test pins the wrong behaviour by taking
+  `isOnboarding` as a prop (`PostWorkoutSummary.test.tsx:883`) — the fix
+  derives it.
+- **PR shape:** TWO PRs. PR A = the seam (the union retires, the resolver,
+  the `suggest()` pin, Today wiring + override marker, save-stack fix, proof
+  and pixels) — compile-coupled, one PR. PR B = the rename + reclassification
+  + Library visibility + card copy, ALONE and LAST (triad: stored rows with
+  log links). Prescription refs are authored as `ONBOARDING_TITLES` CONSTANTS,
+  not literals, so PR A has no dependency on PR B's titles.
+- **Wire contract (antagonist B2):** `GET /api/plan`'s `sequence[].code` keeps
+  its name and its bare-string shape — checkpoints serialise the day's real
+  type. The prescription does NOT cross the wire in 8A (`Plan.tsx` computes
+  the checkpoint mark client-side from `PLANS`). Renaming or restructuring
+  that field would blank the plan line on installed builds.
+- **Known-open on ship (PM):** the measurement loop — nothing records a test
+  result (`isTestResult` has zero client senders) and no baseline prompt
+  exists; 8A's notes say so and the next phase closes it. Checkpoints are 6
+  real saves deep (`done_n` moves only via `POST /api/logs`; log deletion
+  decrements, so a demo is reversible) — the release notes say that too. This section is the scoped-down phase-one slice of that draft after a
 PM holistic review; the draft's §5 (wiring `GET /api/today`), §11b (the
 `suggested_title`/`suggestion_taken` capture task) and its `PrescriptionContext.date`
 field are deliberately NOT in it, and the review's file is the record of why.
@@ -1423,18 +1458,32 @@ follow-ons because they are two different features wearing one sentence.
 checkpoint reason, START runs it, and SHUFFLE escapes to an ordinary AN session;
 the head plan shows the 6K where sprint shows the 2K; a rower whose library
 holds no AN workout still gets their checkpoint; and no `"TEST"` string survives
-in plan data, the Plan screen, or the token file.
+in plan data, the Plan screen, or the token file. **Added at the 2026-08-22
+gate:** a pre-rename log recorded against `First 2k` still resolves to its
+workout after PR B; the override marker and the Plan-screen checkpoint marker
+each render (a stated design, not an absence); on a checkpoint day the save
+stack leads with `Log against plan` and the saved log carries `plan_key`/
+`plan_index`; the no-baseline onboarding card still renders after the rename;
+and `docs/design/README.md:99-100` (the wrong `7/31/55` cadence, real indices
+6/34/62 = sessions 7/35/63) is reconciled with the rest of the pixels.
 
 ## Phase 8B — Plan & Progress
 
 **Status:** Not started
 **Goal:** See where you are in the 84-session plan and whether you're getting faster.
 
-- [ ] Plan screen gains a month calendar with type marks, ALL/TO DO/DONE filters, and a legend (session rows: done sorted below upcoming; today highlighted) — layered onto the sequence list Phase 6A already built at `/plan`, not a new screen
-- [ ] **Stamp each log with the plan day it belonged to** (`plan_key`, `done_n`, nullable, server-side only): the calendar needs it to place a row, and `createLogsStore.create` already reads and upserts `plan_state` inside the log's own transaction (`stores/logs.ts:94-118`), so it costs a migration and a handful of lines with no client, draft, or API-contract change. It is also what makes "did I take my checkpoint?" answerable at any later date, since a prescription is authored, deterministic data. **S** **Coordination (2026-08-22): Phase RC will re-quantify columns on this same table in a parallel session — both migrations are additive and non-conflicting, but sequence them explicitly rather than landing blind.**
+- [ ] Plan screen gains a month calendar with type marks, ALL/TO DO/DONE filters, and a legend (session rows: done sorted below upcoming; today highlighted) — layered onto the sequence list Phase 6A already built at `/plan`, not a new screen **Gate condition (2026-08-22): BRAINSTORM before any spec or design pass, and its first question is the DATE MODEL** — `plan_state` is `{plan_key, done_n}` with no calendar awareness, nothing schedules a future plan day to a date, and the design reference contradicts itself (`docs/design/README.md:97` "a sequence, not a weekday calendar" vs `:315`'s month grid with greyed future days). A design pass now would draw the TO DO half of a screen whose data cannot exist. The brainstorm may run in parallel with 8A's implementation.
+- [x] ~~Stamp each log with the plan day it belonged to~~ — **already
+      DELIVERED before this phase opened** (found at the 2026-08-22 phase-open
+      gate): PW spec 2 shipped `plan_key`/`plan_index` on `session_logs`
+      (migration 0010, PR #121), stamped server-side in the log's own
+      transaction with newest-wins resolution and delete un-counting. The
+      column is `plan_index` (= `done_n - 1`), not `done_n`. No migration is
+      owed, and the 2026-08-22 RC migration-coordination note this bullet
+      briefly carried described work that no longer exists — struck same day.
 - [x] ~~Plan management: preset selection (2000 m sprint / 5–6 k head race), reset-to-session-1~~ — **delivered early in Phase 6A** (`/plan`'s preset cards, Reset, and Switch), since Today needed an active plan before this phase's own turn came up
 - [ ] ~~Progress screen: 2k/6k test trend bars (longer = slower, delta callout), minutes/week stacked by type, type mix, last-30-days~~ — **superseded by Phase 6J**: these three chart groups relocate onto You (Trend folded in, per the 2026-08-07 News tab handoff) instead of shipping as their own screen; this bullet stays struck-through rather than deleted so the supersession has a record
-- [ ] Test history list on **You**; test-type sessions prompt a baseline update. Sequencing: 8A is what makes a test session reachable from the plan at all, so it lands first.
+- [ ] Test history list on **You**; test sessions prompt a baseline update. Sequencing: 8A is what makes a test session reachable from the plan at all, so it lands first — and **this bullet ships NEXT after 8A, before the calendar (James, 2026-08-22)**: 8A opens a measurement loop nothing closes (no client sends `isTestResult`; the only baseline write is hand-typed on You), and this is what closes it. Wording note from the same gate: after 8A there is no test TYPE — a test session is identified by title or by prescription (`plan_index ∈ {6,34,62}`), so this bullet's design pass must say which.
 
 **Exit:** Logged sessions appear on the calendar and in every chart; a logged 2k test can update the 2k baseline through the staged-confirm flow.
 
@@ -4646,9 +4695,9 @@ next phase. One line per round, newest first.
 - **Apple Health (HealthKit)**: when workout data should flow to Health — write rowing workouts (distance/duration/energy) from the iOS shell; needs entitlements + privacy strings; plugin choice re-verified at build time.
 - **Concept2 Logbook sync**: post-workout cloud import; only compelling if ErgData-during-row becomes a habit.
 - **Parametric workout generator**: "generate me a 45' AT workout" from the library's authoring rules — the differentiator a static book can't match. Trigger: after Phase 6 makes workouts rowable end-to-end. **Trigger FIRED** — Phase 6 (6A–6D) closed the full card→log loop, both doors, real completion; this is now eligible to schedule, not just a standing intention. Its structural-reference loading is now DONE: Phase 6E's offline pipeline produced `app/domain/generation/patterns.json` (per type×duration-band interval-shape frequencies, work:rest ratios, pace-offset distributions, spm bands, warm-up conventions, rep-count ranges — aggregates only, no titles/prose/per-workout rows, per the content policy), the exact fixture this generator would consume. Phase 6F's UI-fix round is done too, so nothing sits ahead of it in the queue any more — not started, but eligible to schedule now, not just eligible in principle.
-- **"Which days did I override, and what was the other suggestion?"** (James, 2026-08-12, during the plan-prescriptions design). Two different questions wearing one sentence. The CHECKPOINT half needs no new capture at all once Phase 8B stamps `plan_key`/`done_n` on each log: a prescription is authored, deterministic data, so "did they take their checkpoint?" is computable at any later date from the log's own `workout_title`. The FREE-FORM half — what the ordinary suggestion would have been on a day the rower shuffled away — is genuinely not backfillable, because `suggest()` depends on the account's preferences and every entry's recency at that instant. It is also NOT one column: the suggestion in force lives on Today, and reaching the save means a new field on the versioned `SessionDraft` localStorage record plus every `buildDraft` entry point that never sees Today at all (Library, WorkoutDetail, BaselineCard, the manual log door). Priced accordingly here rather than smuggled into a checkpoint phase as "two nullable columns." **Trigger:** James wants the retrospective screen, not the column. Then design the screen first, and let it say which of the two questions it is actually asking.
+- **"Which days did I override, and what was the other suggestion?"** (James, 2026-08-12, during the plan-prescriptions design). Two different questions wearing one sentence. The CHECKPOINT half needs no new capture at all once Phase 8B stamps `plan_key`/`done_n` on each log: a prescription is authored, deterministic data — though NOT from the log's own `workout_title` as this entry originally said: `workout_title` is a save-time snapshot, pre-rename logs carry `First 2k` forever, and the sound method is `plan_index ∈ {6,34,62}` via the columns PW already shipped (corrected at the 2026-08-22 gate). The FREE-FORM half — what the ordinary suggestion would have been on a day the rower shuffled away — is genuinely not backfillable, because `suggest()` depends on the account's preferences and every entry's recency at that instant. It is also NOT one column: the suggestion in force lives on Today, and reaching the save means a new field on the versioned `SessionDraft` localStorage record plus every `buildDraft` entry point that never sees Today at all (Library, WorkoutDetail, BaselineCard, the manual log door). Priced accordingly here rather than smuggled into a checkpoint phase as "two nullable columns." **Trigger:** James wants the retrospective screen, not the column. Then design the screen first, and let it say which of the two questions it is actually asking.
 - **A third prescription producer and a real precedence hierarchy** (James, 2026-08-12). Phase 8A ships one producer (the plan) called from one place, so precedence is a comment, not a mechanism. **Trigger:** a second producer becomes real (8C's reservations are the likely first). Then introduce the resolver that orders them, with an asserting test, and settle what a displaced tier does — see 8C's own re-decide item.
-- **Retire `LEGACY_TITLE_RENAMES`** (the 8A seed rename map). Permanent code the moment it lands. **Trigger:** every deployed environment has booted past the rename, so no row can still carry `First 6k`/`First 2k`.
+- **Retire `LEGACY_TITLE_RENAMES`** (the 8A seed rename map). Permanent code the moment it lands. **Trigger:** every deployed environment has booted past the rename, so no WORKOUTS row can still carry `First 6k`/`First 2k`. Scope corrected at the 2026-08-22 gate: `session_logs.workout_title` is a save-time snapshot and keeps the old spelling FOREVER — the trigger is about the workouts table only, and any query over historical log titles needs both spellings permanently.
 - **Library export/import (private JSON)**: household members share their own transcriptions. Trigger: second active rower asks for it.
 - **Auto-capture baselines from the onboarding log**: Phase 6I's no-baseline
   card ends with a manually-entered baseline (You → baseline editor) —

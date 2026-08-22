@@ -2095,3 +2095,77 @@ targetSplit:null}` reproduces the recorded tx exactly and `divergences` stays
   session's own line-number citations (two CSS ranges) were wrong while its
   structural findings all held; trust a review's shapes, re-derive its
   coordinates.**
+
+## Delta pass, 2026-08-22 (Phase 8A open, plan prescriptions)
+
+- **"The 8A rename flows through one constant now, so it's easier than the spec's
+  plan."** The string change is easier; the SEMANTICS got worse, and the
+  centralisation is what hid it. `isOnboardingTitle` has FIVE consumers, not the
+  four an enumeration of `domain/onboarding.ts`'s own header comment produces —
+  the fifth is `LogSession.tsx:825/1115/1284`, feeding `PostWorkoutSummary.tsx:596`,
+  where an onboarding title DEMOTES `Log against plan` out of the lead slot
+  ("a baseline test must not silently consume plan session 1", 6I). 8A makes those
+  same two titles the plan's own checkpoints, which MUST consume a plan session or
+  `done_n` never advances past index 6 — and `stores/logs.ts:540` writes the
+  plan-linkage columns only on an advancing save, so the checkpoint is also
+  unanswerable to 8B. **Technique: a shared constant's own doc comment is an
+  enumeration written at one moment in time — grep the SYMBOL, not the comment.**
+  Corollary: when a phase gives an existing identity a NEW meaning, list every
+  predicate keyed on that identity and ask whether each one's meaning survived — a
+  rename that changes no predicate is exactly the change that gets waved through.
+
+- **"That collision would show up as a red test."** No. `PostWorkoutSummary.test.tsx:883`
+  pins the demotion by passing `isOnboarding: true` as a PROP, so it stays green
+  through the rename and through 8A entirely. **Technique: when a test takes the
+  disputed condition as an input instead of deriving it, it cannot see a change to
+  what produces that condition.** Ask what the test would have to compute for itself
+  before believing it guards the invariant.
+
+- **"`estimateMinutes` returns 0 for the effort-only test workouts, so the checkpoint
+  card shows 0 MIN."** FALSE, and I had it drafted as a finding. `expand.ts:224-227`
+  says "an effort distance step has no `targetSplit`, so `phaseSeconds` can't estimate
+  it" — that comment describes the NULL-BASELINES branch only. `pace.ts:101-102`
+  resolves `max → k2Seconds`, `min → k6Seconds + 20` whenever baselines exist, so the
+  estimate is real. **Ledger technique #9 applied to myself: read the declaration, not
+  the comment that measures one condition.**
+
+- **"The rename map retires once every environment has booted past it"
+  (ROADMAP triggered follow-on).** Unsatisfiable as written. `session_logs.workout_title`
+  (`schema.ts:112`) is a NOT NULL snapshot written at save time and never reconciled;
+  every pre-rename log carries `First 2k` permanently. **Technique: for any rename,
+  separate the rows that are RECONCILED from the rows that were COPIED.** A migration
+  fixes the first class; the second class outlives the migration and every query over
+  it needs both spellings forever.
+
+- **"§5's `GET /api/today` has no product consumers, so no wire risk."** True of that
+  route (re-verified) and it hid the sibling: `GET /api/plan` serialises
+  `sequence[].code` from `PLANS` (`data.ts:1131-1139`), the literal `"TEST"` crosses
+  it, and `usePlan.ts:9` / `Plan.tsx:300` / `Today.tsx:885` all consume it. Retiring
+  the `PlanCode` union is a wire change on an installed-client route. **Technique:
+  when a review clears ONE route of consumers, enumerate the other routes that
+  serialise the same domain type.** The clearance is about the endpoint; the risk is
+  about the type.
+
+- **Plan-tally arithmetic is cheap to settle by recount.** All of spec §6's numbers —
+  sprint 34/23/14/13, head 41/24/11/8, the strict pyramid, max-run ≤ 3, the six
+  checkpoint neighbours, AN+TR front 9→11 / back 15→16 — reproduce exactly from a
+  twenty-line script over the literal week arrays. **Technique: when a spec's claim is
+  a count over data that lives in the repo as a literal, recount it rather than
+  reading the table.** Two minutes, and it also proves the arrays have not moved.
+
+### Phase 8A VETTED GROUND (attacked this pass and held)
+
+- `contentEqual` (`seed.ts:19-33`) ignores title; the converge's delete pass
+  (`:80-88`) really would drop a renamed row; `workout_id` really is
+  `ON DELETE SET NULL` (`schema.ts:109-111`). The migration premise is sound.
+- `needsBaselines` (`needsBaselines.ts:16-18`) reads `steps` only — reclassifying
+  difficulty/pain cannot break the no-baseline promise.
+- `--type-tr: var(--ink)` (`tokens.css:132`), NOT an alias of `--type-test`;
+  deleting `--type-test` is safe.
+- The prescribed entry being outside `poolIds` is required by SHUFFLE's escape, so
+  the suggestion-pool exclusion filters are load-bearing and stay.
+- `plan_key`/`plan_index` shipped in migration 0010 (PR #121); 8B's stamp bullet is
+  satisfied, the column is `plan_index` (= `doneN - 1`), and no migration is owed.
+- `plans.ts`, `suggest.ts`, `onboarding.ts`, `seed.ts`, `seed/library/onboarding.ts`
+  and `usePlan.ts` have zero commits since the 2026-08-12 spec. All churn is in
+  `data.ts`, `Today.tsx`, `LogSession.tsx`, `Plan.tsx`, `tokens.css`.
