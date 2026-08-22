@@ -67,7 +67,7 @@ describe("continuity.check: the pure predicate", () => {
 // capture (exit criterion 6: "pinned against a synthetic resume built from
 // a real capture's frames"). Both hex payloads below are copied verbatim
 // from `docs/monitor/sessions/walk-2026-08-16/session-2-wu-4unequal.jsonl`
-// (a non-distance-goal, time-programmed capture) — the LAST 0x0031 sample
+// (a MIXED program (2 distance + 3 time intervals — wire-decoded at the Task 4 re-review; its usable segment is the time-programmed run this test slices)) — the LAST 0x0031 sample
 // in the file (twd=1599, the session's own final reading) paired as
 // "before" against the FIRST 0x0031 sample in the file (twd=100, captured
 // seconds after the workout armed) as "after": a real large backward jump,

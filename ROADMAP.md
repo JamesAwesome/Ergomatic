@@ -2095,7 +2095,7 @@ WebKit's throttling, so it does not rescue the JS half.
       / 19.8% / 25.4% / 25.1% / 9.9%. The bar is proportional to work plus
       rest and the unequal rests are what make it uneven. Recorded because
       it will look wrong again to the next person who sees it.
-- [ ] **Detection — make the banner that already exists actually fire.**
+- [x] **Detection — make the banner that already exists actually fire.** SHIPPED (Task 2, this branch): all four mechanisms + the hysteresis lifecycle.
       `1 OF 3 · READY` is structurally impossible once
       `phase === "disconnected"` (`surfaceModel.ts:787`), so its
       persistence proves the phase never moved. The app's only lost-link
@@ -2104,7 +2104,7 @@ WebKit's throttling, so it does not rescue the JS half.
       anywhere**. The `LOST THE MONITOR` treatment is already designed and
       shipped (DEVIATIONS row 75) — this is not a design job, it is
       making a shipped thing reachable. **M**
-- [ ] **Recovery — a way back that is not deleting the app.**
+- [x] **Recovery — a way back that is not deleting the app.** SHIPPED (Task 3): failure disposes (transport, driver, deviceName), the already-connected guard, the memo hoist.
       `program()`'s catch never disconnects the transport (contrast
       `connect()`'s catch, `useMonitorSession.ts:1607`), and
       `handleTryAgain` (`ConnectedInterstitial.tsx:311-313`) reprograms
@@ -2115,13 +2115,13 @@ WebKit's throttling, so it does not rescue the JS half.
       fresh transport per attempt, so a forgotten-but-live connection
       against a single-central PM5 is exactly the failure shape observed.
       **M**
-- [ ] **Diagnosability — move the diagnostic out from behind the door the
-      bug locks.** `MONITOR LOG · COPY` lives on the log screen
+- [x] **Diagnosability — move the diagnostic out from behind the door the
+      bug locks.** SHIPPED (Task 1): liveness decorator both arms, timestamped ring readable from the failure screen, 0x0039/0x003A routed. `MONITOR LOG · COPY` lives on the log screen
       (`LogSession.tsx:668`), reachable only after a session finishes,
       which is downstream of the failure under study. It belongs on the
       failure and connected surfaces too. This is what made both walk
       findings evidence-poor, and it scopes any fix. **S**
-- [ ] **Re-reason the failed-`program()`-leaves-a-run-open item.**
+- [x] **Re-reason the failed-`program()`-leaves-a-run-open item.** RESOLVED (Tasks 3+4): a failed program now disposes fully AND closes any open run with `endedBy: "program-failed"` — the parked P3b decision is superseded by construction; the terminate-then-disconnect ordering carries teardown's own chain.
       `driver.ts`'s `program()` replaces `activeRun` only after
       `sendPrepare()`/`sendSequence()`/`verifyArmed()` all resolve, so a
       throw part-way leaves the previous run open, still normalising the
@@ -2293,7 +2293,35 @@ which bites this phase.** Full text in Phase WU's "What this phase taught":
    implementer brief must say gates run FOREGROUND and blocking; four
    rounds were lost to armed monitors that could never wake.
 
-**Two walk items this phase owns** (the rest are Phase RC's): **W5**,
+**THE PHASE'S WALK CARD (Task 5, 2026-08-22)** — four questions plus one
+deliverable, each stated so the walk can go red:
+
+- **W5** — Bluetooth power-cycle, armed but not rowing: does
+  `didDisconnectPeripheral` fire for our device (INFERENCE either way —
+  Apple documents only connect/cancel), and does the now-subscribed
+  `onEnabledChanged` catch it as designed?
+- **W6** — background the app 30 s mid-piece: does a backlog of BLE events
+  drain on resume (Apple documents queuing; depth unknown), and does the
+  continuity guard pass the healthy resume (its corpus-derived bound says
+  it must)?
+- **W7** — navigate the PM5's own menu mid-session: does the wire go
+  quiet? If yes, that is a legitimate quiet period the watchdog's disarm
+  list does not cover and the 2500 ms threshold fires falsely — the one
+  disarm unknown the corpus cannot answer.
+- **W8** — leave an armed/live session untouched: does the PM5 ever emit
+  TERMINATE on its own (an inactivity timeout)? `endedBy: "rower"` on the
+  TERMINATE path asserts agency on the machine's behalf if it does.
+- **9a (deliverable)** — the native inter-frame gap distribution from the
+  liveness decorator's own snapshot, read off the ring on a real phone:
+  the corpus's web-only numbers (worst 810.3 ms) are necessary, not
+  sufficient, for the 2500 ms threshold on the platform it exists for.
+- **Capture ask that costs nothing extra:** the ring now survives to the
+  failure screen — if the row-to-resume FLASH (§2b, mechanism unexplained,
+  corpus hypothesis falsified) appears during any piece, copy the
+  connection log immediately after; the timestamped frames around that
+  moment name the real mechanism.
+
+**Two walk items this phase owns** (superseded by the card above — (the rest are Phase RC's): **W5**,
 a Bluetooth power-cycle armed but not rowing, to settle whether
 `didDisconnectPeripheral` fires for our device and whether
 `onEnabledChanged` would have caught it; and **W6**, background the app
