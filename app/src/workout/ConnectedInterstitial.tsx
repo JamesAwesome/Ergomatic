@@ -313,23 +313,27 @@ export default function ConnectedInterstitial({
     onRowInstead();
   }
 
+  // Phase LL Task 3 (§3), exit criterion 3: "no path from the failure state
+  // to program() without passing transport construction." This USED to
+  // branch on `session.deviceName` — "a device already on record means the
+  // link is still up, so only the PROGRAM needs retrying" — which was
+  // wrong twice over: `useMonitorSession.ts`'s `fail()` never actually
+  // cleared `driverRef` (the walk README's own diagnosis, corrected at the
+  // anchor pass), so a "still up" link was usually a DEAD one, and
+  // retrying `program()` against it reproduced the exact LINK-FAILED loop
+  // that cost James a reinstall on 2026-08-20. `fail()` now disposes
+  // completely on every failure — transport down, driver ref cleared,
+  // `deviceName` cleared — so `session.deviceName` is ALWAYS `null` by the
+  // time this screen can render `canRetry`. Try Again therefore always
+  // goes through `connect()`: a genuinely fresh scan/connect, with
+  // `program()` reached only via the "pairing" effect above, itself only
+  // reachable once a real device is found. No branch here calls
+  // `program()` directly any more — the structural half of the guarantee,
+  // not merely a consequence of the hook's own invariant holding.
   function handleTryAgain(): void {
     if (!canRetry || retryingRef.current) return;
     retryingRef.current = true;
-    // A device name already on record means `connect()` already built a
-    // driver for this attempt (`useMonitorSession.ts`: `deviceName` is set
-    // in the same synchronous block as `driverRef.current = driver`, and
-    // nothing clears it short of `cancel()`, which this screen never calls
-    // on a failure) — so the link is still up and only the PROGRAM needs
-    // retrying. No device name means the failure happened before a driver
-    // existed (transport-missing, bluetooth-off, scan-dismissed,
-    // permission-denied, or a link failure during connect() itself), so
-    // retrying means reopening the monitor chooser from scratch.
-    const attempt =
-      session.deviceName !== null
-        ? session.program(program, identity)
-        : session.connect();
-    void attempt.finally(() => {
+    void session.connect().finally(() => {
       retryingRef.current = false;
     });
   }

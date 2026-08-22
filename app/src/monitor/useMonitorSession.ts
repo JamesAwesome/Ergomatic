@@ -282,6 +282,23 @@ function hasMarkSuspect(
   );
 }
 
+/** Phase LL Task 3 (§3, F-6): does `transport` carry the already-connected
+ *  guard's own outcome-naming extension? Same structural idiom as the
+ *  three checks above — `capacitorBle.ts` exposes it (its own
+ *  `describeLastScan()` doc comment), `webBluetooth.ts`/`fake.ts`/every
+ *  bare test `Transport` do not (the guard is Apple-API-specific — there
+ *  is nothing for the web arm or the fake to implement), and
+ *  `withLiveness` forwards it through unchanged via its own `...inner`
+ *  spread. */
+function hasDescribeLastScan(
+  transport: Transport,
+): transport is Transport & { describeLastScan(): string | null } {
+  return (
+    typeof (transport as { describeLastScan?: unknown }).describeLastScan ===
+    "function"
+  );
+}
+
 /** Phase LL Task 1: this hook's own production `schedule` for the liveness
  *  decorator — a plain `setTimeout`/`clearTimeout` pair, the same shape
  *  every other `schedule` dep in this file already has. Hoisted to MODULE
@@ -1790,7 +1807,41 @@ export function useMonitorSession(
       if (snapshot !== undefined) {
         logRef.current?.record("liveness-snapshot", JSON.stringify(snapshot));
       }
-      update({ phase: "failed", error });
+      // Phase LL Task 3 (§3): FAILURE DISPOSES — the walk's actual root
+      // cause (2026-08-20, James deleted and reinstalled the app). The
+      // anchor pass corrected the walk README's own diagnosis: `connect()`
+      // 's catch never cleared `driverRef` (it never did), and
+      // `ConnectedInterstitial.tsx:298-313`'s retry branches on
+      // `session.deviceName`, which nothing but `cancel()` used to clear —
+      // so a version of this that touched only `driverRef`/the transport
+      // would REPLACE the LINK-FAILED loop with an INSTANT-FAIL loop
+      // (`program()` against a null driver fails `transport-missing`
+      // immediately, never reaching a fresh scan). All three go together,
+      // in order, BEFORE the `update()` below renders the failure screen:
+      // listeners unsubscribe first (nothing left to hear from a driver
+      // about to be disconnected — same ordering `teardown()` uses, for
+      // the same reason), then the transport itself goes down, then the
+      // ref clears. `driver.disconnect()` is the SAME method `teardown()`
+      // calls, hanging up the identical transport `connect()` built for
+      // this attempt — best-effort: a terminate this attempt may already
+      // have sent (`program()`'s own catch, guarded on `run !== null`) is
+      // independent and unaffected either way.
+      unsubscribeRef.current?.();
+      unsubscribeRef.current = null;
+      degradedUnsubRef.current?.();
+      degradedUnsubRef.current = null;
+      lifecycleUnsubRef.current?.();
+      lifecycleUnsubRef.current = null;
+      const driver = driverRef.current;
+      driverRef.current = null;
+      if (driver !== null) {
+        bestEffort(driver.disconnect());
+      }
+      // `deviceName: null` — the field Try Again's retry actually branches
+      // on (`ConnectedInterstitial.tsx`) — clears in the SAME `update()`
+      // as the phase flip, so the failure screen never paints with a
+      // device name a disposed driver can no longer back up.
+      update({ phase: "failed", error, deviceName: null });
     },
     [update],
   );
@@ -1880,6 +1931,20 @@ export function useMonitorSession(
       // see `requestStoragePersistence`'s own doc comment for the full
       // reasoning.
       requestStoragePersistence(log);
+      // Phase LL Task 3 (§3, F-6), "say so in the ring": the
+      // already-connected guard has no log to write to at `scan()` time
+      // (this session's log did not exist yet — it is created here, only
+      // once a device is actually found) — so its outcome is read back
+      // NOW, from the transport's own `describeLastScan()`, the instant a
+      // log exists. `null` only when the transport carries no such
+      // extension (every non-Capacitor transport), never for a real
+      // native connect that reached this line.
+      if (hasDescribeLastScan(transport)) {
+        const outcome = transport.describeLastScan();
+        if (outcome !== null) {
+          log.record("already-connected-guard", outcome);
+        }
+      }
       const driver = createPm5Driver(transport, log, {
         ...depsRef.current.driverOptions,
         deviceName: device.name,
