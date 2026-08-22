@@ -4,7 +4,6 @@ import { signOut as authSignOut } from "./adapters/auth";
 import { useArticleReads } from "./api/useArticleReads";
 import { startHereReadCount } from "./today/startHereSteps";
 import BaselineEditor from "./you/BaselineEditor";
-import WarmupRow from "./you/WarmupRow";
 
 function initials(name: string): string {
   return name
@@ -53,14 +52,12 @@ export default function You({
       {/* Task 7 (design spec §"Learning the app on You"): the mock's other
           settings rows (PRE-WORKOUT COUNTDOWN, PACE TOLERANCE, ACCENT
           COLOR) are filler (DEVIATIONS.md/handoff README §7) and are
-          deliberately not built. WARM-UP (below) is a second real one, but
-          NOT one of that filler set built for real: the mock's own
-          DEFAULT WARM-UP was already a fully-specified control (README
-          §11), superseded rather than filler — whole-branch review
-          finding G, DEVIATIONS' bottom row. Added by the 2026-08-09
-          warmup-setting spec §3. */}
+          deliberately not built. WARM-UP used to be the one exception —
+          a fully-specified control (README §11) built for real, not
+          filler — but Phase WU (2026-08-21) removed the setting; "Learning
+          the app" below is a real row of its own, unrelated to any of
+          this. */}
       <h2 className="section-heading">SETTINGS</h2>
-      <WarmupRow />
       <Link
         to="/you/learning"
         state={{ from: "/you" }}

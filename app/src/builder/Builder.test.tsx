@@ -10,7 +10,6 @@ import {
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import type { api } from "../api";
-import type { WarmupSetting } from "../api/usePreferences";
 import type { BuilderEditMode } from "./Builder";
 import { fromWorkout, newForm, newRow, type BuilderForm } from "./builderState";
 import type { Step } from "../../domain/types.js";
@@ -61,27 +60,6 @@ function mockWorkouts(titles: readonly string[] = []) {
 
 function mockWorkoutsLoading() {
   workoutsMock = { state: "loading" };
-}
-
-// Same mutable-box idiom as `workoutsMock` above, for the same reason.
-// Phase WU removed the Builder's own read of `preferences.warmup` (and the
-// hint line it fed), so the READY arm no longer needs a setter — the two
-// non-ready arms are still exercised, by the "no warm-up line while
-// preferences are loading" / "when preferences fail to load" cases below.
-let preferencesMock:
-  | { state: "ready"; preferences: { warmup: WarmupSetting | null } }
-  | { state: "loading" }
-  | { state: "error"; retry: () => void } = {
-  state: "ready",
-  preferences: { warmup: null },
-};
-
-function mockPreferencesLoading() {
-  preferencesMock = { state: "loading" };
-}
-
-function mockPreferencesError(retry: () => void = vi.fn()) {
-  preferencesMock = { state: "error", retry };
 }
 
 async function renderBuilder(mode?: BuilderEditMode) {
@@ -140,12 +118,8 @@ async function fillValidForm() {
 beforeEach(() => {
   vi.resetModules();
   mockWorkouts();
-  preferencesMock = { state: "ready", preferences: { warmup: null } };
   vi.doMock("../api/useWorkouts", () => ({
     useWorkouts: () => workoutsMock,
-  }));
-  vi.doMock("../api/usePreferences", () => ({
-    usePreferences: () => preferencesMock,
   }));
   // The draft-persistence suite below reads/writes the real
   // BUILDER_DRAFT_KEY slot — a clean slate for every test, including the
@@ -411,9 +385,12 @@ describe("Builder", () => {
   // duration kinds, its optional rest clause, its absence when the setting
   // was off, and its placement above the step list. There is no setting to
   // read and no warm-up to promise, so the screen makes no such claim any
-  // more. The TOTAL/Save half of the first case survives below; the two
-  // "no warm-up line" cases after it survive too, now reading as ordinary
-  // assertions that the screen never mentions a warm-up at all.
+  // more. Phase WU Task 3 then removed the `usePreferences` mock this
+  // describe block used to set up for that hint line — Builder no longer
+  // reads the hook at all, so pinning its "loading"/"error" arms tested
+  // nothing real; the surviving assertion below (no mention of a warm-up,
+  // ever) folds into the ordinary TOTAL/Save case and the — MIN case that
+  // already exists for its own, unrelated reason.
 
   it("renders TOTAL and the primary button reads Save to library", async () => {
     mockBaselines(BASELINES);
@@ -431,7 +408,7 @@ describe("Builder", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders — MIN and no warm-up line while preferences are loading", async () => {
+  it("renders — MIN when a distance row has no baseline to resolve its pace against", async () => {
     // TOTAL only ever renders the "— MIN" placeholder when `totals()`
     // itself returns null (builderState.ts's own "totals" suite: the one
     // documented null case is a distance-unit row with no baselines to
@@ -439,7 +416,6 @@ describe("Builder", () => {
     // 0, not null, so a plain fresh builder can't exercise this branch.
     // Baselines are unset here for exactly that reason.
     mockBaselines({ k2Seconds: null, k6Seconds: null });
-    mockPreferencesLoading();
     mockApi(() => new Response(null, { status: 201 }));
 
     const distanceRow = newRow("w");
@@ -456,15 +432,6 @@ describe("Builder", () => {
     await renderBuilder({ kind: "edit", id: "w1", initial });
 
     expect(screen.getByText("— MIN")).toBeInTheDocument();
-    expect(screen.queryByText(/warm-up/i)).not.toBeInTheDocument();
-  });
-
-  it("renders no warm-up line — no placeholder number either — when preferences fail to load", async () => {
-    mockBaselines(BASELINES);
-    mockPreferencesError();
-    mockApi(() => new Response(null, { status: 201 }));
-    await renderBuilder();
-
     expect(screen.queryByText(/warm-up/i)).not.toBeInTheDocument();
   });
 

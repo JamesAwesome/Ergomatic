@@ -11,7 +11,6 @@ import {
 } from "react-router-dom";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import type { WorkoutType } from "../../domain/types.js";
-import type { WarmupSetting } from "../api/usePreferences";
 import {
   buildDraft,
   loadDraft,
@@ -28,8 +27,8 @@ import { loadRun, saveRun, type SessionRun } from "./run";
 // 6k+12, spm 22, 5' rest). Its first phase is that work step, labelled
 // with the resolved split ("2:12.0" against this file's BASELINES).
 // (It used to open on a `wu` row labelled "Easy"; 2026-08-09's warmup
-// setting removed warm-ups from workouts entirely — the "warm-up SETTING"
-// describe block below covers the one way a run gets one now.)
+// setting removed warm-ups from workouts entirely, and Phase WU then
+// removed the setting itself — no run can carry a warm-up phase any more.)
 function hoarfrostDraft(id = "id-hoarfrost"): SessionDraft {
   const w = LIBRARY_WORKOUTS.find((s) => s.title === "Hoarfrost");
   if (!w) throw new Error("missing library fixture: Hoarfrost");
@@ -63,11 +62,6 @@ const BASELINES = { k2Seconds: 100, k6Seconds: 120 };
 const READY_PREFS = {
   difficulties: [] as never[],
   timeCapMinutes: 60,
-  // The warm-up SETTING (2026-08-09's design §2), removed by Phase WU from
-  // everything downstream; still present on the preferences shape until
-  // that phase's Task 3, so the mock keeps the key. No consumer reads it
-  // phase at all, exactly like production's default.
-  warmup: null as WarmupSetting | null,
   countdownSeconds: 10,
 };
 

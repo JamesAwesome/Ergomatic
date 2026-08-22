@@ -27,13 +27,12 @@ import {
 import { compileProgram } from "../../domain/monitor/program.js";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import type { WorkoutType } from "../../domain/types.js";
-import type { WarmupSetting } from "../api/usePreferences";
 
 // 6k baseline 2:02.0 (122s); off -2 -> 120s target; distance step reads its
 // meters, never an estimated duration. (It opened with a `wu` row until
 // 2026-08-09's warmup setting deleted that step kind — a real library
-// workout carries none now, and the rower's own setting is prepended at
-// `buildRun`.)
+// workout carries none now, and Phase WU then removed the setting itself,
+// so no session opens on a warm-up any more.)
 const WORKOUT: LibraryWorkout = {
   id: "w1",
   title: "Ladder Sets",
@@ -177,8 +176,6 @@ function mockApi(handler: () => Response) {
 function mockHooks(
   baselines: { k2Seconds: number | null; k6Seconds: number | null },
   workouts: LibraryWorkout[] = [WORKOUT],
-  warmup: WarmupSetting | null = null,
-  preferencesReady = true,
 ) {
   vi.doMock("../api/useWorkouts", () => ({
     useWorkouts: () => ({ state: "ready", workouts }),
@@ -186,26 +183,22 @@ function mockHooks(
   vi.doMock("../api/useBaselines", () => ({
     useBaselines: () => ({ state: "ready", baselines }),
   }));
-  // 2026-08-09's warmup setting: this screen reads `usePreferences` for
-  // the CONNECT door's own `buildRun` call (design §9 — a connected
-  // session prepends the rower's warm-up too). Mocked here for every test,
-  // not just the Connect ones, so the hook's real fetch never reaches the
-  // `api` spy several tests assert was never called. Defaults to OFF, the
-  // production default.
+  // Phase WU removed this screen's own reason to read `usePreferences`
+  // (the CONNECT door's `buildRun` call no longer takes a warm-up
+  // parameter). Still mocked here for every test, not just the Connect
+  // ones, because `ConnectedSurface` — which a Connect flow renders —
+  // reads the hook itself; this keeps its real fetch off the `api` spy
+  // several tests assert was never called.
   vi.doMock("../api/usePreferences", () => ({
-    usePreferences: () =>
-      preferencesReady
-        ? {
-            state: "ready",
-            preferences: {
-              difficulties: [],
-              timeCapMinutes: 60,
-              warmup,
-              countdownSeconds: 10,
-              startHereDismissed: true,
-            },
-          }
-        : { state: "loading" },
+    usePreferences: () => ({
+      state: "ready",
+      preferences: {
+        difficulties: [],
+        timeCapMinutes: 60,
+        countdownSeconds: 10,
+        startHereDismissed: true,
+      },
+    }),
   }));
 }
 
@@ -1499,31 +1492,13 @@ describe("Connect (handoff §1: the button, the caption, the Bluetooth states)",
     ).not.toBeInTheDocument();
   });
 
-  // 2026-08-09's warmup setting: this screen reads the preference for
-  // Connect's own `buildRun` call, but deliberately does NOT hold the
-  // whole workout behind it (see the hook's own comment in
-  // WorkoutDetail.tsx). This test pins exactly one thing — that a
-  // half-loaded hook neither blocks the button nor crashes the screen.
-  //
-  // IT DOES NOT PIN WHAT GETS BUILT, and must not be read as if it did
-  // (arc review F6: a mutant hardcoding a 3' warm-up at the Connect door
-  // left this test passing). This file has no way to see the phases or the
-  // log seed — it renders the REAL interstitial. Both preference arms are
-  // BEHAVIOUR-pinned next door, in
-  // `WorkoutDetail.connectedEnd.test.tsx`'s "the Connect door and the
-  // warm-up setting" describe, which intercepts the interstitial's props.
-  it("Connect proceeds normally while the warm-up preference is still loading", async () => {
-    mockHooks(NO_BASELINES, [EFFORT_ONLY_WORKOUT], null, false);
-    await renderDetail("/library/w-effort");
-
-    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
-
-    expect(
-      await screen.findByText("This device has no Bluetooth transport.", {
-        selector: ".connected-serif-line",
-      }),
-    ).toBeInTheDocument();
-  });
+  // Phase WU deleted the test that used to live here ("Connect proceeds
+  // normally while the warm-up preference is still loading"): it pinned
+  // that a half-loaded `usePreferences` neither blocked the Connect button
+  // nor crashed the screen, but that was only ever a risk while this
+  // screen read the hook for the CONNECT door's `buildRun` call — Phase WU
+  // removed both the read and the parameter. Went with the two arms it
+  // shared a describe with in `WorkoutDetail.connectedEnd.test.tsx`.
 
   // WORKOUT's own "test" step (an open-ended all-out, no fixed time or
   // distance) is exactly what `compileProgram` exists to refuse — a real

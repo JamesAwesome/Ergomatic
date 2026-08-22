@@ -1216,9 +1216,15 @@ describe("THE ACCENT CENSUS: accent is a CONTROL colour, and nothing else", () =
   // proves the STRONGER fact directly — no reused phone-timer component
   // renders inside a connected pane at all, so there is no accent surface
   // left for a missing override to expose.
+  //
+  // Phase WU Task 3 dropped this list's own `.connected-pane
+  // .timer-total-warmup` line: Phase WU's Task 2 deleted the base
+  // `.timer-total-warmup` rule outright (not just a connected-pane
+  // override of it), so the compound selector could never appear in
+  // DECLARATIONS regardless of what this file does — an assertion no
+  // change on either side of it could ever fail.
   it("no phone-timer component (TimerRuler, UpNextStrip, IntervalSegments) can render inside a connected pane any more", () => {
     expect(DECLARATIONS).not.toContain(".connected-pane .timer-total-bar");
-    expect(DECLARATIONS).not.toContain(".connected-pane .timer-total-warmup");
     expect(DECLARATIONS).not.toContain(".connected-pane .timer-dot-past");
     expect(DECLARATIONS).not.toContain(".connected-pane .timer-dot-current");
     expect(DECLARATIONS).not.toMatch(/\.connected-pane[^{]*\.timer-upnext/);

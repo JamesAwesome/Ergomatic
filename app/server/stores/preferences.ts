@@ -3,20 +3,9 @@ import type { Db } from "../db/index.js";
 import { preferences } from "../db/schema.js";
 import type { Difficulty } from "../../domain/types.js";
 
-// The warm-up SETTING (2026-08-09's warmup-setting design, §2). Mirrored
-// byte-identically in `app/src/api/usePreferences.ts`'s `WarmupSetting` —
-// keep the two in lockstep; the client cannot import this module. Bounds
-// (time 1..30 whole minutes; distance 100..10000 whole meters; rest 5..595
-// whole seconds) are enforced on PUT (`server/routes/data.ts`), not by this
-// type, which states shape only.
-export type WarmupSetting = (
-  { kind: "time"; minutes: number } | { kind: "distance"; meters: number }
-) & { restSeconds?: number };
-
 export interface PreferencesRow {
   difficulties: Difficulty[];
   timeCapMinutes: number;
-  warmup: WarmupSetting | null;
   countdownSeconds: number;
   paceToleranceSeconds: number;
   accentColor: string;
@@ -27,7 +16,6 @@ export interface PreferencesRow {
 export const PREFERENCES_DEFAULTS: PreferencesRow = {
   difficulties: ["easy", "medium", "hard"],
   timeCapMinutes: 60,
-  warmup: null,
   countdownSeconds: 10,
   paceToleranceSeconds: 1,
   accentColor: "#b5341f",
@@ -48,7 +36,6 @@ export function createPreferencesStore(db: Db) {
       return {
         difficulties: row.difficulties as Difficulty[],
         timeCapMinutes: row.timeCapMinutes,
-        warmup: row.warmup as WarmupSetting | null,
         countdownSeconds: row.countdownSeconds,
         paceToleranceSeconds: row.paceToleranceSeconds,
         accentColor: row.accentColor,

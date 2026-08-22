@@ -116,7 +116,6 @@ const ONLY_K6_BASELINE = { k2Seconds: null, k6Seconds: 122 };
 const DEFAULT_PREFS = {
   difficulties: ["easy", "medium", "hard"],
   timeCapMinutes: 60,
-  warmup: null,
   startHereDismissed: true,
 };
 

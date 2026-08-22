@@ -77,13 +77,12 @@ vi.mock("../api/useBaselines", () => ({
 // with it; `WorkoutDetail.tsx` does not call `usePreferences` at all any
 // more. The mock below stays because other code under this render still
 // reaches the hook, and `preferencesReturn` stays switchable for the same
-// reason.
+// reason. Phase WU Task 3 removed the `warmup` field itself.
 const READY_PREFS = {
   state: "ready",
   preferences: {
     difficulties: [],
     timeCapMinutes: 60,
-    warmup: { kind: "time", minutes: 8 } as { kind: "time"; minutes: number },
     countdownSeconds: 10,
     startHereDismissed: true,
   },

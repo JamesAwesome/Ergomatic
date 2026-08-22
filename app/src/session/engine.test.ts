@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import type { Baselines, WorkoutType } from "../../domain/types.js";
-import type { WarmupSetting } from "../api/usePreferences";
 import { buildDraft, withNudge, type SessionDraft } from "./draft";
 import {
   buildRun,
@@ -236,19 +235,9 @@ describe("buildRun", () => {
 // Phase WU deleted `buildRun`'s `warmup` parameter and the `warmupPhases`
 // producer behind it, so the suite that lived here — nine cases pinning the
 // prepended phase's shape, order, pricing and `originalIndex: -1` sentinel —
-// went with the code it tested. What is left is a TYPE-level assertion about
-// the preference shape itself, which Phase WU Task 3 owns and removes.
-describe("WarmupSetting (the preference type — Task 3 removes it)", () => {
-  it("cannot express a rest-only setting: every value names a kind and a duration", () => {
-    // A type-level assertion, deliberately: the design's §2 shape is an
-    // intersection of the kind union with an optional `restSeconds`, so
-    // "just give me 90 seconds of rest" is unrepresentable rather than
-    // silently accepted and dropped at runtime.
-    // @ts-expect-error a WarmupSetting with no kind is not assignable
-    const restOnly: WarmupSetting = { restSeconds: 90 };
-    expect(restOnly).toBeDefined();
-  });
-});
+// went with the code it tested. The one thing left after that — a
+// TYPE-level assertion about the `WarmupSetting` preference shape itself —
+// went with Task 3's removal of the type.
 
 describe("remainingSeconds", () => {
   it("returns the full phase duration at the instant a phase starts", () => {

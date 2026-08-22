@@ -2,28 +2,6 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import type { Difficulty } from "../../domain/types.js";
 
-/** The warm-up SETTING (2026-08-09's warmup-setting design, §2): a per-user
- *  preference that `buildRun` (`src/session/engine.ts`) prepends to every
- *  session, replacing the `wu` step type that left the authoring union.
- *  `null` (the column's default) means OFF, which is the default for
- *  everyone per James's ruling.
- *
- *  Written as an intersection of a kind-discriminated union with an
- *  optional `restSeconds` so a REST-ONLY setting is UNREPRESENTABLE: every
- *  value must name a `kind` and its duration first. Bounds (time 1..30
- *  whole minutes; distance 100..10000 whole meters; rest 5..595 whole
- *  seconds, the PM5 rest ceiling) are the SERVER's to enforce on PUT
- *  /api/prefs — this client type deliberately states the shape only.
- *
- *  MIRROR NOTE: this client copy must stay byte-identical to the server's
- *  own declaration (`server/stores/preferences.ts`'s `PreferencesRow.warmup`,
- *  Task 2) — the client cannot import from `server/stores/` and the repo's
- *  existing convention for this hook's other fields is a hand-mirrored
- *  client type, not a shared module. */
-export type WarmupSetting = (
-  { kind: "time"; minutes: number } | { kind: "distance"; meters: number }
-) & { restSeconds?: number };
-
 // GET /api/prefs already returns every PreferencesRow field (server/stores/
 // preferences.ts); this type only exposed warmupMinutes until Today (Phase
 // 6A) needed difficulties/timeCapMinutes too, and now Countdown (Phase 6B
@@ -31,15 +9,13 @@ export type WarmupSetting = (
 // START HERE block needs startHereDismissed. Purely additive each time — no
 // response shape changed, just what the client bothers to type.
 //
-// `warmup` (2026-08-09's warmup-setting design §2) REPLACED `warmupMinutes`
-// (Task 2 dropped the `warmupMinutes`/`warmupOverride` server columns; Task
-// 5 removed this hook's last reader of the old field, Builder.tsx's hint
-// line). The server always sends this key now — `null` means the setting
-// is OFF (the column's default), never absent.
+// The 2026-08-09 warmup-setting design (§2) REPLACED `warmupMinutes` with a
+// `warmup` field here (Task 2 of that spec dropped the `warmupMinutes`/
+// `warmupOverride` server columns); Phase WU (2026-08-21) then removed the
+// setting outright, and with it this field.
 export interface PreferencesData {
   difficulties: Difficulty[];
   timeCapMinutes: number;
-  warmup: WarmupSetting | null;
   countdownSeconds: number;
   startHereDismissed: boolean;
 }
