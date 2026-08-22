@@ -103,9 +103,13 @@ export function commit(s: DraftState): DraftState {
  *  that resend is no longer value-idempotent in PROVENANCE: a touched
  *  field ships with a source, so an away-and-back nudge to the exact
  *  stored number, Applied, demotes a stored tested/derived source to
- *  manual — with zero visible ConfirmLines. Correct per the spec's
- *  ruling (an act on the field is a manual re-assertion of its number),
- *  and named here so nobody reads it back as a bug. */
+ *  manual — with zero visible ConfirmLines. That stance (an act on the
+ *  field is a manual re-assertion of its number) is PR A's OWN decision,
+ *  not a spec ruling: the demotion runs conservative (it downgrades to
+ *  the least-claiming value, never fabricates a measurement), provenance
+ *  has zero consumers until `tested` exists, and the PM gate referred
+ *  the act-vs-origin question to James for re-opening at PR B's gate.
+ *  Named here so nobody reads it back as a bug OR as settled. */
 export function isDirty(s: DraftState): boolean {
   return s.touched.k2 || s.touched.k6;
 }

@@ -95,7 +95,7 @@ export const baselines = pgTable("baselines", {
   k2Seconds: real("k2_seconds"),
   k6Seconds: real("k6_seconds"),
   // NOT NULL with a 'manual' default, deliberately no nullable "unknown"
-  // fourth state: every pre-0012 row was written by the You editor (the
+  // fourth state: every pre-0013 row was written by the You editor (the
   // only writer that ever existed), so 'manual' is the truthful backfill,
   // and an old client's plain write IS a manual entry.
   k2Source: baselineSourceEnum("k2_source").notNull().default("manual"),

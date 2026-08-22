@@ -1487,8 +1487,27 @@ questionnaire + table + reset), with a STOP-POINT after B** — the phase
 may close and release on A+B if the table cannot meet its bounded
 criteria. **PR C opens only once Phase LL's spec exists** (James's
 sequencing ruling with teeth — LL runs in a parallel session).
-**Coordination:** LL's PR #160 mints drizzle 0012; whichever session
-merges second regenerates its migration index. James checks all 16 table
+**PR A LANDED via #164** (the provenance shape: `k2Source`/`k6Source`
+pgEnum, migration 0013 regenerated after LL's 0012 merged mid-flight;
+editor writes `manual` typed / `derived` accepted-offer; untouched
+fields no longer resend). PRs B and C still owe the other two enum
+values their writers (`tested`, `estimated`). **Three durable facts
+every later consumer of provenance must know (PR #164's gate):**
+(1) VERSION SKEW — a pre-#164 client's Apply resends untouched fields
+as plain writes, demoting a newer build's `derived`/`tested` source on
+a field its rower never touched; inherent to the additive wire, and PR
+B holds it when reasoning about `tested` longevity. (2) AWAY-AND-BACK —
+a stepper nudge with zero net change, Applied, stamps `manual` over a
+stored source with nothing visible; PR A's own conservative decision,
+act-vs-origin referred to James and re-opened at PR B's gate.
+(3) SOURCE-BESIDE-NULL — the source columns are NOT NULL with defaults
+while the numbers are nullable, so `k6Seconds: NULL, k6Source: 'manual'`
+is a real row state; every consumer keys on the NUMBER being non-null
+first. **The PR-C-waits-on-LL's-spec condition is DISCHARGED** —
+`docs/superpowers/specs/2026-08-22-link-truth-design.md` is on main.
+**Release correction: BL's tag is v0.18.0** (LL's notes PR claimed
+v0.17.0 first); PR A itself owes no note (nothing tester-visible —
+that accounting line is written here in advance per RF15). James checks all 16 table
 cells, printed in PR C's body. TRIAD: PM final-PR gates on A (and C if
 the table ships).
 
