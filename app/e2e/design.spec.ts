@@ -3609,13 +3609,20 @@ test.describe("you screen with the derivation offer visible (task review round, 
     page,
   }) => {
     const slot = page.locator(".baseline-derive-slot");
-    const before = await slot.boundingBox();
+    // `stableBoundingBox`, not the raw `boundingBox()` this used until the
+    // 2026-08-21 flake hunt REPRODUCED it: `waitFor()` resolves when the
+    // confirmation text ATTACHES, which is before the slot's own reflow has
+    // finished, so `after.y` was read mid-layout. Measured failure:
+    // expected 291, received 286 — a five-pixel shift that is the reflow,
+    // not a regression. The helper was already imported by this file and
+    // simply unused here.
+    const before = await stableBoundingBox(slot);
     expect(before).not.toBeNull();
 
     await page.getByRole("button", { name: "ESTIMATE FROM 6K (−7s)" }).click();
     await page.getByText("ESTIMATED — ADJUST WITH ± BELOW").waitFor();
 
-    const after = await slot.boundingBox();
+    const after = await stableBoundingBox(slot);
     expect(after).not.toBeNull();
     expect(after!.height).toBe(before!.height);
     expect(after!.y).toBe(before!.y);
