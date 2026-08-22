@@ -1500,6 +1500,9 @@ hand-typed.
       result as the new baseline (`tested`), sends `isTestResult` — the
       first client producer for `test_history` — and never blocks or
       auto-writes. Closes the loop 8A shipped open. **M**
+- [ ] **The You-screen re-test shortcut** (James, 2026-08-22): row the
+      6k / race the 2k next to the baseline fields on You, routing to
+      the same designated tests and landing in the same prompt. **S**
 
 **Exit:** the spec's draft exit criteria, refined at phase open — each
 door works end to end, the prompt closes the measurement loop, every

@@ -120,6 +120,22 @@ formula, no cleverness — a table a reviewer can read against the
 citations. The 2k/6k pair must respect the domain's own invariant
 (6k slower than 2k) structurally, asserted by test across all cells.
 
+### The You-screen re-test shortcut (James, 2026-08-22, added at spec review)
+
+Next to the baseline fields on You, a compact re-test affordance: row
+the 6k or race the 2k, right where the numbers live. It routes to the
+same two designated test workouts door 3 uses (via `ONBOARDING_TITLES`
+identity, start guards included) — no new mechanism, just a second
+entry point at the moment a rower is looking at their own splits and
+wondering if they are still true. Completing it lands in the same
+post-test prompt below, which is what makes the shortcut worth having:
+row from You, get offered the measurement, accept, and the numbers you
+were just looking at update in place with `tested` provenance. Exact
+placement and form (two compact outline buttons vs a single row with
+the distance choice) is the implementation's design pass against the
+You screen's existing vocabulary, with a DEVIATIONS row if the design
+reference has an opinion.
+
 ### The post-test prompt
 
 After a session whose workout is one of the two designated tests
@@ -128,7 +144,9 @@ consumer uses), the post-save flow offers the measured result as the
 new baseline: "Your 2k came out at 1:58.4 /500m. Update your
 baseline?" Accept writes the baseline (`tested`) AND sends
 `isTestResult: true` on the log so `test_history` finally has a
-producer. Decline changes nothing. The exact placement in
+producer. Decline changes nothing. The prompt fires for a test session
+reached through ANY door: onboarding door 3, a plan checkpoint, the
+Library, or the You-screen shortcut. The exact placement in
 `PostWorkoutSummary` (a staged line above the save stack vs a
 post-save sheet) is the implementation's design pass against the
 canvas vocabulary, with a DEVIATIONS row; the binding behaviors are:
@@ -172,6 +190,7 @@ honest chip on the result; door 2 writes exactly what an experienced
 rower types; door 3 offers both distances and either sets the
 baseline. After rowing a 2K Test the rower is OFFERED the measured
 result and accepting updates the baseline with `tested` provenance and
-a `test_history` row — the loop 8A shipped open is closed. Every
-baseline row in the DB carries a source, and no screen anywhere shows
-it.
+a `test_history` row — the loop 8A shipped open is closed. From You, a
+rower one tap from their baseline fields can start either test, and
+completing it offers the update in place. Every baseline row in the DB
+carries a source, and no screen anywhere shows it.
