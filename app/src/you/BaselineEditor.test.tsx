@@ -334,6 +334,32 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
       );
     });
 
+    // The MIRRORED side (triad review, low finding): the resend ban is two
+    // independent per-field checks, and the case above only pins the k6
+    // arm — re-adding `|| baselines.k2Seconds !== null` to the k2 arm
+    // left every test green until this one existed. Same shape, sides
+    // swapped: k2 is the already-real untouched field this time.
+    it("touching only 6k leaves an already-real, untouched k2 out of the body — resending it would flip its stored source to manual", async () => {
+      const save = mockReady({ k2Seconds: 112, k6Seconds: 122 });
+      await renderEditor();
+
+      await userEvent.click(screen.getByRole("button", { name: "6k faster" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: /apply baselines/i }),
+      );
+
+      expect(save).toHaveBeenCalledWith({
+        k6Seconds: 121.5,
+        k6Source: "manual",
+      });
+      expect(save).not.toHaveBeenCalledWith(
+        expect.objectContaining({ k2Seconds: expect.anything() }),
+      );
+      expect(save).not.toHaveBeenCalledWith(
+        expect.objectContaining({ k2Source: expect.anything() }),
+      );
+    });
+
     it("an untouched, still-null 2k is never fabricated: nudging only 6k, Apply omits k2Seconds entirely", async () => {
       // Both start null. Only 6k is acted on — 2k is never touched and
       // stays server-null, so it must never appear in the PUT body even
