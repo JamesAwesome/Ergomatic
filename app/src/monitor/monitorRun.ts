@@ -27,6 +27,21 @@ import { clearRun, loadRun } from "../session/run";
 
 export const MONITOR_RUN_KEY = "ergomatic.monitorRun";
 
+/**
+ * Phase LL Task 4 (design spec §4's writer table, the anchor pass's own
+ * verification "writer by writer"): the four close reasons a WIRE EVENT
+ * (or the P3b program-failure path) can honestly produce, excluding
+ * `"interrupted"` — that value has exactly one writer,
+ * `completeInterruptedRun` below, and is never passed through this type
+ * (F6's door has no wire event to report; "closed later with no evidence"
+ * is a different shape of honesty than these four). `completeMonitorRun`'s
+ * `args.endedBy` takes exactly this type, which is what makes "every
+ * writer sets its value" a compiler-checked fact rather than a convention:
+ * there is no way to close a run through that function without naming one
+ * of these four.
+ */
+export type CloseReason = "finished" | "rower" | "link-lost" | "program-failed";
+
 /** The monitor run: what a connected PM5 is (or just finished) programming
  *  and reporting against. `program`/`actuals` are the compiled IR and the
  *  interval-boundary actuals `MonitorDriver`'s `intervalComplete` events
@@ -88,12 +103,40 @@ export interface MonitorRun {
   completedAt: string | null;
   terminated: boolean;
   /**
-   * Present only when the rower closed an interrupted session through
-   * Today's row (F6). Absent = normal completion. Additive and optional
-   * on purpose: a v1/v2 record without it reads exactly as before, per
-   * this file's never-migrate contract.
+   * Phase LL Task 4 (design spec §4): WIDENS the field that already
+   * existed here (`"interrupted"`, F6) — never a third overlapping flag
+   * beside `terminated`. `terminated` already losslessly distinguishes an
+   * honest WORKOUTEND from a PM5 TERMINATE (the machine's OWN report);
+   * `endedBy` answers a different, previously-unrecorded question: HOW
+   * the record came to be closed, from the record's own honest
+   * perspective. Every value is one its one writer HONESTLY KNOWS at
+   * close time (`CloseReason`'s own doc comment names each writer):
+   *   - `"finished"` — machine WORKOUTEND (`endByMachine(false)`).
+   *   - `"rower"` — the rower ended it and the link was up: either the End
+   *     button with `linkGone === false`, or the machine's own TERMINATE
+   *     arriving over a live link (`endByMachine(true)`) — a TERMINATE
+   *     event is BY CONSTRUCTION link-up (it arrived), and the existing
+   *     "a MACHINE-TERMINATED ending" test's own words are "the rower
+   *     stopped the piece at the erg" — the same fact the End-button path
+   *     records, learned a different way (`useMonitorSession.ts` review
+   *     finding, Task 4).
+   *   - `"link-lost"` — the End button with `linkGone === true`.
+   *   - `"program-failed"` — a failed `program()` closing a run still open
+   *     (P3b).
+   *   - `"interrupted"` — UNCHANGED from its original meaning: closed later
+   *     through Today's row (F6), with NO evidence of a cause. Never
+   *     conflate this with the others: this is the ABSENCE of a story,
+   *     not a fifth story.
+   * A run's own `completedAt`/`terminated` pair can be set with NO
+   * `endedBy` at all only if some future writer forgets to pass one —
+   * `completeMonitorRun`'s own `args.endedBy` is REQUIRED, not optional,
+   * precisely so that can't happen silently.
+   * Additive and optional on the STORED record: a v1/v2 record written
+   * before this task, or any record whose writer predates a given close
+   * reason, reads back exactly as it always has — this file's
+   * never-migrate contract, unchanged.
    */
-  endedBy?: "interrupted";
+  endedBy?: CloseReason | "interrupted";
   /**
    * Phase LT spec 2 (`docs/superpowers/specs/2026-08-19-series-capture-design.md`
    * §2's storage-home row): the 1 Hz pace/rate/HR trace `useMonitorSession.ts`'s
@@ -243,7 +286,19 @@ function isMonitorRun(value: unknown): value is MonitorRun {
     typeof value.startedAt === "string" &&
     (value.completedAt === null || typeof value.completedAt === "string") &&
     typeof value.terminated === "boolean" &&
-    (value.endedBy === undefined || value.endedBy === "interrupted") &&
+    // Phase LL Task 4: widened alongside the type — a record written by
+    // ANY era's writer (a legacy `"interrupted"` row, or one of the four
+    // new `CloseReason` values) still loads. Shallow membership check
+    // only, same discipline as every other field this validator covers:
+    // "shaped enough not to crash a reader that unconditionally
+    // destructures `endedBy`," never a claim about which specific writer
+    // produced it.
+    (value.endedBy === undefined ||
+      value.endedBy === "finished" ||
+      value.endedBy === "rower" ||
+      value.endedBy === "link-lost" ||
+      value.endedBy === "program-failed" ||
+      value.endedBy === "interrupted") &&
     // Phase LT spec 2, Task 2: same shallow "shaped enough not to crash an
     // unconditional destructure" treatment as `logSeed` above. No
     // unknown-key check anywhere in this validator (the `endedBy?`
@@ -520,23 +575,33 @@ export function recordActual(
  * `terminated` event into a finished record"), landing here in the task
  * that finally has a caller for it (7B Task 4, `useMonitorSession`).
  *
- * Two fields move, together and only here: `completedAt` (the
- * "live" vs "finished but not yet logged" boundary
- * `MonitorRun.completedAt`'s own comment draws — after this the record is
- * immutable, and `recordActual` above refuses every later boundary) and
- * `terminated` (HOW it ended, `MonitorRun.terminated`'s own comment: 7C
- * has to tell "logged 12 of 12" from "abandoned at 8"). They are one
- * call rather than two setters precisely because a record that says
- * "finished" without saying how is the shape 7C cannot read.
+ * THREE fields move, together and only here (Phase LL Task 4 widens this
+ * from two): `completedAt` (the "live" vs "finished but not yet logged"
+ * boundary `MonitorRun.completedAt`'s own comment draws — after this the
+ * record is immutable, and `recordActual` above refuses every later
+ * boundary), `terminated` (HOW THE MACHINE reported it, `MonitorRun.
+ * terminated`'s own comment: 7C has to tell "logged 12 of 12" from
+ * "abandoned at 8"), and now `endedBy` (HOW THE RECORD reports it —
+ * `CloseReason`'s own doc comment names the four values and their one
+ * writer each). `args.endedBy` is REQUIRED, not optional: a close reason
+ * that could be silently omitted would reintroduce exactly the
+ * conflation §4 exists to fix (the two axes are independent — `finished`
+ * is the only `CloseReason` that pairs with `terminated: false`; every
+ * other close reason pairs with `terminated: true`, and this function
+ * trusts its caller for that pairing rather than re-deriving it, the
+ * same posture `terminated` itself has always had here). One call rather
+ * than three setters precisely because a record that says "finished"
+ * without saying how, or why, is the shape 7C (and now the server row)
+ * cannot read.
  *
  * **Idempotent by the same rule `recordActual` uses**: an already-closed
  * run is returned UNCHANGED and nothing is persisted — a second terminal
  * event, an End press racing the machine's own `workoutComplete`, or a
  * P3b close followed by the terminal event that was already in flight
  * must never re-stamp a later `completedAt` over the real one, nor flip
- * `terminated` after the fact. The hook has its own guard in front of
- * this (it ignores terminal events for a run it already closed, the
- * spec's P3b pin); this one is independent, for the same reason
+ * `terminated`/`endedBy` after the fact. The hook has its own guard in
+ * front of this (it ignores terminal events for a run it already closed,
+ * the spec's P3b pin); this one is independent, for the same reason
  * `recordActual`'s is: the record outlives the driver and the hook that
  * wrote it.
  *
@@ -544,7 +609,7 @@ export function recordActual(
  */
 export function completeMonitorRun(
   run: MonitorRun,
-  args: { terminated: boolean },
+  args: { terminated: boolean; endedBy: CloseReason },
   now: Date,
 ): MonitorRun {
   if (run.completedAt !== null) return run;
@@ -552,6 +617,7 @@ export function completeMonitorRun(
     ...run,
     completedAt: now.toISOString(),
     terminated: args.terminated,
+    endedBy: args.endedBy,
   };
   saveMonitorRun(next);
   return next;

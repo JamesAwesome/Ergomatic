@@ -176,6 +176,20 @@ export interface MonitorFrame {
   //   not the rower pulls (C4/H1). "finished" = WORKOUTEND;
   //   "terminated" = TERMINATE — distinct, because 7C must tell
   //   "logged 12 of 12" from "abandoned at 8" (H2).
+  /** Phase LL Task 4 (design spec §4's continuity rule): 0x0031's own Total
+   *  Work Distance (`pm5/parse.ts`'s `GeneralStatus.totalWorkDistanceMeters`,
+   *  offset 11, whole metres, unscaled) — an absolute, session-wide reading
+   *  `src/monitor/continuity.ts`'s `check` keys a resumed stream's honesty
+   *  on, UNLIKE `distanceMeters` above (which is per-interval and legally
+   *  resets at every boundary, walk 4). Additive-optional, same convention
+   *  as `MonitorRun.endedBy?`/`series?` elsewhere in this task's own diff:
+   *  every real constructor of this type (`toMonitorFrame` below,
+   *  `src/monitor/driver.ts`'s own spread-through of it) always sets it;
+   *  `undefined` only for the many pre-existing test fixtures across this
+   *  codebase that build a bare `MonitorFrame` literal without it — kept
+   *  optional specifically so this task's addition does not force every one
+   *  of those literals to grow a field their own test has no opinion on. */
+  totalWorkDistanceMeters?: number;
 }
 
 export interface IntervalActual {

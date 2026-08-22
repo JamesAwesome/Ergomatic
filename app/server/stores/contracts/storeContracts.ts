@@ -573,6 +573,47 @@ export function describeStoreContracts(
         });
       });
 
+      // Phase LL Task 4 (design spec §4, TRIAD; exit criterion 5). Same
+      // fake/real drift-catching shape as `thumbs` above — this describe
+      // block runs against BOTH `contracts.fake.test.ts` and
+      // `contracts.real.integration.test.ts`, so a store that silently
+      // drops the field diverges here, not just in a hand-written
+      // integration test.
+      it("create with endedBy omitted round-trips to null, same as an explicit null", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        const overrides = logInput();
+        delete (overrides as { endedBy?: unknown }).endedBy;
+        const { id } = await stores.logs.create(userId, overrides);
+        const list = await stores.logs.list(userId, 10);
+        const row = list.find((r) => r.id === id);
+        expect(row).toMatchObject({ endedBy: null });
+      });
+
+      it("create round-trips every member of the widened endedBy union, including the pre-existing interrupted value", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        const values = [
+          "finished",
+          "rower",
+          "link-lost",
+          "program-failed",
+          "interrupted",
+        ] as const;
+        const ids = await Promise.all(
+          values.map(
+            async (endedBy) =>
+              (await stores.logs.create(userId, logInput({ endedBy }))).id,
+          ),
+        );
+        const list = await stores.logs.list(userId, 10);
+        for (let i = 0; i < values.length; i++) {
+          expect(list.find((r) => r.id === ids[i])).toMatchObject({
+            endedBy: values[i],
+          });
+        }
+      });
+
       // From-the-log spec (2026-08-18), §2: the three hero numbers must
       // round-trip through the REAL column type (double precision), not
       // just through a JS object — this is the B8 probe. Verified

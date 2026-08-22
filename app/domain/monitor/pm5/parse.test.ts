@@ -686,6 +686,15 @@ describe("toMonitorFrame: field mapping", () => {
     expect(toMonitorFrame(baseRaw()).intervalRemaining).toBeNull();
   });
 
+  // Phase LL Task 4 (design spec §4's continuity rule): unconditional
+  // pass-through, same choice as `restSeconds`/`splitAvgPace` above —
+  // `src/monitor/continuity.ts`'s own consumption reads this field off a
+  // `MonitorFrame` it never re-decodes.
+  it("passes totalWorkDistanceMeters straight from GeneralStatus", () => {
+    const frame = toMonitorFrame(baseRaw({ totalWorkDistanceMeters: 1599 }));
+    expect(frame.totalWorkDistanceMeters).toBe(1599);
+  });
+
   it("intervalIndex is the raw Interval Count while rowing", () => {
     const frame = toMonitorFrame(
       baseRaw({ workoutState: 4, intervalCount: 5 }),

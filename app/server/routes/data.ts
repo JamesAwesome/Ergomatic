@@ -12,6 +12,7 @@ import type { BaselinesStore } from "../stores/baselines.js";
 import {
   CursorNotFoundError,
   type ActualSource,
+  type EndedBy,
   type HeldResult,
   type LogPatch,
   type LogSeries,
@@ -47,6 +48,17 @@ const DIFFICULTIES: Difficulty[] = ["easy", "medium", "hard"];
 const ACTUAL_SOURCES: ActualSource[] = ["assumed", "stopwatch", "pm5"];
 const HELD_RESULTS: HeldResult[] = ["held", "under", "over"];
 const THUMBS_VALUES: Thumbs[] = ["up", "down"];
+// Phase LL Task 4 (design spec §4, TRIAD): the known values — the SAME
+// five `server/db/schema.ts`'s `endedByEnum` accepts. `endedByError` below
+// is the "validateSeriesSample's cousin" the brief names: known value or
+// absent, reject anything else.
+const ENDED_BY_VALUES: EndedBy[] = [
+  "finished",
+  "rower",
+  "link-lost",
+  "program-failed",
+  "interrupted",
+];
 const PLAN_KEYS: PlanKey[] = ["sprint", "head"];
 const ACCENT_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 // Conservative slug shape, validated here rather than against the bundled
@@ -130,6 +142,22 @@ function thumbsError(value: unknown): string | null {
     !THUMBS_VALUES.includes(value as Thumbs)
   ) {
     return "thumbs must be one of up|down or null";
+  }
+  return null;
+}
+
+// Phase LL Task 4 (design spec §4, TRIAD; exit criterion 5: "rejects
+// unknown values"). Same shape as `heldError`/`thumbsError` above — known
+// value or absent/null accepted, anything else rejected with the field
+// named. `"interrupted"` is a genuine accepted value here (F6's own,
+// riding the widened union), not a special case.
+function endedByError(value: unknown): string | null {
+  if (
+    value !== undefined &&
+    value !== null &&
+    !ENDED_BY_VALUES.includes(value as EndedBy)
+  ) {
+    return "endedBy must be one of finished|rower|link-lost|program-failed|interrupted or null";
   }
   return null;
 }
@@ -983,6 +1011,13 @@ export function createDataRouter({
       badRequest(res, thumbsErr, "thumbs");
       return;
     }
+    // Phase LL Task 4: known value or absent, reject unknown (exit
+    // criterion 5).
+    const endedByErr = endedByError(body.endedBy);
+    if (endedByErr) {
+      badRequest(res, endedByErr, "endedBy");
+      return;
+    }
     const notesErr = notesError(body.notes);
     if (notesErr) {
       badRequest(res, notesErr, "notes");
@@ -1118,6 +1153,7 @@ export function createDataRouter({
       distanceMeters:
         (body.distanceMeters as number | null | undefined) ?? null,
       series: seriesResult.series,
+      endedBy: (body.endedBy as EndedBy | null | undefined) ?? null,
     });
     res.status(201).json({ id });
   });

@@ -290,6 +290,7 @@ function buildMonitorFixture(
     actuals?: IntervalActual[];
     deviceName?: string;
     series?: SeriesData;
+    endedBy?: MonitorRun["endedBy"];
   } = {},
 ): { run: MonitorRun; workout: LibraryWorkout } {
   const hoarfrost = library("Hoarfrost");
@@ -375,6 +376,9 @@ function buildMonitorFixture(
     // four-condition-gate test) would otherwise see a shape localStorage
     // itself never produces.
     ...(overrides.series !== undefined ? { series: overrides.series } : {}),
+    // Phase LL Task 4: same "omit the key entirely unless given" idiom as
+    // `series` above, same reason.
+    ...(overrides.endedBy !== undefined ? { endedBy: overrides.endedBy } : {}),
   };
   const workout: LibraryWorkout = {
     id: MONITOR_WORKOUT_ID,
@@ -2577,6 +2581,54 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     // Never the pre-formatted strings on these keys.
     expect(body.avgSplitSeconds).not.toBe(model.heroes.avgSplit);
     expect(body.timeSeconds).not.toBe(model.heroes.time);
+  });
+
+  // Phase LL Task 4 (design spec §4): the monitor door's own third
+  // addition to the wire body, same optional-key idiom `deviceName`/
+  // `series` already proved out — spread straight from `monitorRun.
+  // endedBy`, never re-derived here.
+  it("posts endedBy straight from the loaded MonitorRun when present", async () => {
+    const { run, workout } = buildMonitorFixture({ endedBy: "link-lost" });
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-endedby-monitor" }), {
+          status: 201,
+        }),
+      ),
+    );
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+
+    const body = parsedBodies(apiFn)[0]!;
+    expect(body.endedBy).toBe("link-lost");
+  });
+
+  it("a MonitorRun with no endedBy at all (a v1/v2 record predating this task, or a run no writer has closed a new way) omits the key from the POST body", async () => {
+    const { run, workout } = buildMonitorFixture();
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-no-endedby-monitor" }), {
+          status: 201,
+        }),
+      ),
+    );
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+
+    const body = parsedBodies(apiFn)[0]!;
+    expect("endedBy" in body).toBe(false);
   });
 
   it("an empty or >64-char deviceName is omitted from the POST body — the save still succeeds (branch review Minor)", async () => {

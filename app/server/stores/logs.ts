@@ -30,6 +30,15 @@ export type HeldResult = "held" | "under" | "over";
 // (generation's own thumbs consumption is explicitly OUT this phase —
 // spec §4).
 export type Thumbs = "up" | "down";
+// Phase LL Task 4 (design spec §4, TRIAD): the server-side mirror of
+// `src/monitor/monitorRun.ts`'s widened `MonitorRun.endedBy` — the SAME
+// five values, including `"interrupted"` (F6's pre-existing value, along
+// for the ride so the widened union is one additive shape, not two). The
+// pgEnum (`server/db/schema.ts`'s `endedByEnum`) is the value authority;
+// this type mirrors it the same way `HeldResult`/`Thumbs` above already
+// mirror theirs.
+export type EndedBy =
+  "finished" | "rower" | "link-lost" | "program-failed" | "interrupted";
 
 // Amendment (2026-08-02, Phase 6C Task 1.5): targetSplit is now OPTIONAL (an
 // effort step's frozen split is an estimate, never a prescription — the 5G
@@ -154,6 +163,14 @@ export interface LogInput {
   // on this interface. Deliberately excluded from `LOG_LIST_COLUMNS`
   // below — see that constant's own comment.
   series?: LogSeries | null;
+  // Phase LL Task 4 (design spec §4, TRIAD): the honest close reason,
+  // optional/nullable, same convention as `deviceName`/`thumbs` above —
+  // absent or explicit null both store null (a phone-timer/manual log has
+  // no monitor close to report; an older client posts nothing). Bounds-
+  // checked at the route (`routes/data.ts`'s `endedByError`) against the
+  // exact five known values before this type is ever constructed, same
+  // trust-boundary posture as every other field here.
+  endedBy?: EndedBy | null;
   // Deliberately absent from this interface: `plan_key`/`plan_index` are
   // NEVER client input. `create()` below derives them itself, inside the
   // same transaction as the log insert, from the plan_state upsert's own
@@ -207,6 +224,10 @@ const LOG_LIST_COLUMNS = {
   timeSeconds: sessionLogs.timeSeconds,
   planKey: sessionLogs.planKey,
   planIndex: sessionLogs.planIndex,
+  // Phase LL Task 4: a small scalar, same idiom as `deviceName`/`thumbs`
+  // above — included in the list projection (unlike `steps`/`series`,
+  // which are excluded for size).
+  endedBy: sessionLogs.endedBy,
 };
 
 // Log-delete spec (2026-08-18), §2: the newest-wins resolution rule,
@@ -572,6 +593,7 @@ export function createLogsStore(db: Db) {
             timeSeconds: input.timeSeconds ?? null,
             distanceMeters: input.distanceMeters ?? null,
             series: input.series ?? null,
+            endedBy: input.endedBy ?? null,
             planKey,
             planIndex,
           })

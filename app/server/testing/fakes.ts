@@ -560,6 +560,9 @@ function makeFakeLogsStore(planState: FakePlanStateStore): LogsStore {
         timeSeconds: stored.timeSeconds ?? null,
         distanceMeters: stored.distanceMeters ?? null,
         series: stored.series ?? null,
+        // Phase LL Task 4: same "absent means the real column reads back
+        // null, never a missing key" treatment as `thumbs`/`series` above.
+        endedBy: stored.endedBy ?? null,
         planKey,
         planIndex,
         id: crypto.randomUUID(),

@@ -59,6 +59,19 @@ export const heldResultEnum = pgEnum("held_result", ["held", "under", "over"]);
 // phase — spec §4).
 export const thumbsEnum = pgEnum("thumbs", ["up", "down"]);
 export const testDistanceEnum = pgEnum("test_distance", ["2k", "6k"]);
+// Phase LL Task 4 (design spec §4, TRIAD — a stored shape): the server-side
+// mirror of `MonitorRun.endedBy` (`src/monitor/monitorRun.ts`'s own
+// `CloseReason` union). `"interrupted"` rides along even though its own
+// writer (F6, Today's row) predates this task — the client-side field
+// already widened to include it, and posting it through unchanged is what
+// makes the widened union additive rather than a second, competing shape.
+export const endedByEnum = pgEnum("ended_by", [
+  "finished",
+  "rower",
+  "link-lost",
+  "program-failed",
+  "interrupted",
+]);
 
 export const baselines = pgTable("baselines", {
   userId: uuid("user_id")
@@ -189,6 +202,18 @@ export const sessionLogs = pgTable(
     // projection's own drift pin (`storeContracts.ts`) now reads
     // "list = get - steps - series".
     series: jsonb("series"),
+    // Phase LL Task 4 (design spec §4, TRIAD): migration 0012, one
+    // additive-optional enum column, no default, no backfill — every
+    // existing row reads this back as null (exit criterion 5's own "legacy
+    // rows read back unchanged", extended to the server row: a row written
+    // before this task simply has no `ended_by` at all). Nullable so a
+    // rower who saved before a close reason existed, or a pre-this-task
+    // client, is unaffected — this is the mirror of `MonitorRun.endedBy?`
+    // (`src/monitor/monitorRun.ts`), never a second source of truth for
+    // it: the CLIENT decides the value at close time (spec §4's own honest
+    // limit — a server row exists only if the rower saves), and this
+    // column only ever stores what `routes/data.ts`'s POST validated.
+    endedBy: endedByEnum("ended_by"),
   },
   (t) => [
     index("session_logs_user_id_idx").on(t.userId),
