@@ -14,7 +14,6 @@ import type { PlanData } from "../api/usePlan";
 import type { HeldResult, Thumbs } from "../api/useRecentLogs";
 import { fmtSplit } from "../../domain/format.js";
 import { isEffortRef } from "../../domain/pace.js";
-import { isOnboardingTitle } from "../../domain/onboarding.js";
 import { needsBaselines } from "../../domain/needsBaselines.js";
 import type {
   Baselines,
@@ -438,9 +437,10 @@ interface LogFormFields {
  *  header comment, retired along with it): the toggle could only default
  *  correctly for the session door, since the manual door's `workoutTitle`
  *  wasn't known synchronously at THIS hook's mount. Button order has no
- *  such constraint — `LogSession.tsx`'s door components compute
- *  `isOnboardingTitle` at RENDER time, after the workout has already
- *  resolved on every door, monitor branch included. `submit` now takes an
+ *  such constraint — `PostWorkoutSummary` itself derives which button
+ *  leads at RENDER time (Phase 8A: `isOnboardingTitle(title)` plus the
+ *  account's baselines state, both resolved by then on every door,
+ *  monitor branch included). `submit` now takes an
  *  explicit `advancesPlan` option instead: omitted or `true` leaves the key
  *  off the wire entirely (proving the server's own `?? true` default, same
  *  as before); `{ advancesPlan: false }` is what `Save without logging`
@@ -693,6 +693,13 @@ function SessionDoorLog() {
   const [run] = useState<SessionRun | null>(() => loadRun());
   const workoutsState = useWorkouts();
   const planState = usePlan();
+  // Phase 8A (James's ruling 5): the save stack derives which button leads
+  // from the workout title + the ACCOUNT's baselines state, so this door
+  // now reads the same hook the manual door always has. NEVER a gate —
+  // logging must not be hostage to this fetch (the same M1/M2 rule
+  // `planState` follows above); while loading/errored, `accountBaselines`
+  // below reads null, the identical value a genuinely-unset account has.
+  const baselinesState = useBaselines();
 
   // Only ever clears the draft/run records on a genuine 201 (`onSaved`
   // fires after that, never on a failed save) — a network error, a real
@@ -794,6 +801,23 @@ function SessionDoorLog() {
   const saveWithoutLoggingOpts: { advancesPlan?: boolean } =
     planState.state === "ready" ? { advancesPlan: false } : {};
 
+  // Phase 8A: the account's combined baseline pair, the save stack's
+  // second real input (PostWorkoutSummary derives the 6I demotion from it
+  // plus the title). Same partial-pair-reads-as-unset convention the
+  // manual door already applies; loading/error read as null too (see the
+  // hook's own comment above — a moment later the resolved fetch settles
+  // which button leads, and the demotion is only ever a protection for an
+  // account that has NO baselines).
+  const accountBaselines: Baselines | null =
+    baselinesState.state === "ready" &&
+    baselinesState.baselines.k2Seconds !== null &&
+    baselinesState.baselines.k6Seconds !== null
+      ? {
+          k2Seconds: baselinesState.baselines.k2Seconds,
+          k6Seconds: baselinesState.baselines.k6Seconds,
+        }
+      : null;
+
   const library = workoutsState.state === "ready" ? workoutsState.workouts : [];
   const libraryWorkout =
     run.workoutId !== null
@@ -822,8 +846,6 @@ function SessionDoorLog() {
     run: activeRun,
     steps: logSteps,
   });
-  const isOnboarding = isOnboardingTitle(activeRun.title);
-
   // Fix round 1 (I1): the body-assembly and 400-retry logic that used to
   // live in this door's own `handleSave` now lives once, in `useLogForm`'s
   // `submit` above — this is only what genuinely differs for this door:
@@ -871,7 +893,7 @@ function SessionDoorLog() {
       notes={notes}
       onNotes={setNotes}
       plan={plan}
-      isOnboarding={isOnboarding}
+      accountBaselines={accountBaselines}
       saving={saving}
       saveError={saveError}
       onLogAgainstPlan={() => void handleSave()}
@@ -1061,6 +1083,24 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
   const saveWithoutLoggingOpts: { advancesPlan?: boolean } =
     planState.state === "ready" ? { advancesPlan: false } : {};
 
+  // Phase 8A: the account's combined baseline pair for the save stack's
+  // lead derivation (PostWorkoutSummary keys the 6I demotion on it plus
+  // the title). Shared by both branches below. Computed WITHOUT gating on
+  // `baselinesState` — the monitor branch deliberately renders ahead of
+  // the baselines loading/error gates (its own render path never consults
+  // them), so while unresolved this reads null, the same value a
+  // genuinely-unset account has; the plain-manual branch sits behind those
+  // gates, where this equals its own step-resolving `baselines` value.
+  const accountBaselines: Baselines | null =
+    baselinesState.state === "ready" &&
+    baselinesState.baselines.k2Seconds !== null &&
+    baselinesState.baselines.k6Seconds !== null
+      ? {
+          k2Seconds: baselinesState.baselines.k2Seconds,
+          k6Seconds: baselinesState.baselines.k6Seconds,
+        }
+      : null;
+
   const workout = workoutsState.workouts.find((w) => w.id === workoutId);
   if (!workout) {
     return (
@@ -1112,8 +1152,6 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
       }
       throw err;
     }
-    const isOnboarding = isOnboardingTitle(activeWorkout.title);
-
     const handleMonitorSave = (opts: { advancesPlan?: boolean } = {}) =>
       submit(
         {
@@ -1165,7 +1203,7 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
         notes={notes}
         onNotes={setNotes}
         plan={plan}
-        isOnboarding={isOnboarding}
+        accountBaselines={accountBaselines}
         saving={saving}
         saveError={saveError}
         onLogAgainstPlan={() => void handleMonitorSave()}
@@ -1281,7 +1319,6 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
   const k2 = manualLockedBaseline("2k", workout.steps, baselines);
   const k6 = manualLockedBaseline("6k", workout.steps, baselines);
   const pacesText = pacesLockedText(k2, k6);
-  const isOnboarding = isOnboardingTitle(workout.title);
   // TS narrowing from the `!workout` guard above doesn't survive into a
   // function DECLARED later in this component (the arrow function passed
   // to `submit`, below) — the same separately-typed `const` alias fix the
@@ -1359,7 +1396,7 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
       notes={notes}
       onNotes={setNotes}
       plan={plan}
-      isOnboarding={isOnboarding}
+      accountBaselines={accountBaselines}
       saving={saving}
       saveError={saveError}
       onLogAgainstPlan={() => void handleSave()}

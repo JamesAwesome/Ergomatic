@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
+import { ONBOARDING_TITLES } from "../../domain/onboarding.js";
 import type { PlanData } from "../api/usePlan";
 import type { SeriesData } from "../monitor/seriesRecorder";
 import PostWorkoutSummary, {
@@ -147,7 +148,10 @@ function baseProps(
     notes: "",
     onNotes: vi.fn(),
     plan: plan(),
-    isOnboarding: false,
+    // Phase 8A: the save stack's lead is DERIVED inside the component from
+    // `title` + this pair — there is no injectable boolean any more. The
+    // base fixture is a baselined account rowing an ordinary title.
+    accountBaselines: { k2Seconds: 112, k6Seconds: 122 },
     saving: false,
     saveError: null,
     onLogAgainstPlan: vi.fn(),
@@ -861,7 +865,6 @@ describe("PostWorkoutSummary — save stack (§2F)", () => {
     const onSaveWithoutLogging = vi.fn();
     renderSummary({
       plan: plan({ doneN: 3, sequence: plan().sequence }),
-      isOnboarding: false,
       onLogAgainstPlan,
       onSaveWithoutLogging,
     });
@@ -880,8 +883,19 @@ describe("PostWorkoutSummary — save stack (§2F)", () => {
     expect(onSaveWithoutLogging).toHaveBeenCalledTimes(1);
   });
 
-  it("on an onboarding-title workout, Save without logging leads and Log against plan demotes to the outline slot", () => {
-    renderSummary({ plan: plan(), isOnboarding: true });
+  // Phase 8A (James's ruling 5, 2026-08-22): the 6I demotion narrowed to
+  // its actual population — an onboarding-titled workout on an account
+  // whose BASELINES ARE NULL. Both tests below build the condition from
+  // the REAL inputs (a designated title constant + a baselines state), so
+  // neither can stay green if the component's derivation breaks — the
+  // pre-8A version passed `isOnboarding: true` as a prop and pinned the
+  // soft-locking behaviour through any wiring change.
+  it("6I: an onboarding-titled workout on a NO-BASELINE account demotes Log against plan to the outline slot", () => {
+    renderSummary({
+      plan: plan(),
+      title: ONBOARDING_TITLES.k6,
+      accountBaselines: null,
+    });
     const lead = screen.getByRole("button", { name: "Save without logging" });
     expect(lead.className).toContain("summary-save-lead");
     const secondary = screen.getByRole("button", {
@@ -890,8 +904,30 @@ describe("PostWorkoutSummary — save stack (§2F)", () => {
     expect(secondary.className).toContain("summary-save-secondary");
   });
 
+  it("8A: the same onboarding-titled workout on a BASELINED account leads with Log against plan (the checkpoint day)", () => {
+    renderSummary({
+      plan: plan(),
+      title: ONBOARDING_TITLES.k2,
+      accountBaselines: { k2Seconds: 112, k6Seconds: 122 },
+    });
+    const lead = screen.getByRole("button", {
+      name: "Log against plan · SESSION 4 OF 12",
+    });
+    expect(lead.className).toContain("summary-save-lead");
+    expect(
+      screen.getByRole("button", { name: "Save without logging" }).className,
+    ).toContain("summary-save-secondary");
+  });
+
+  it("an ordinary title on a NO-BASELINE account still leads with Log against plan (the demotion keys on both inputs)", () => {
+    renderSummary({ plan: plan(), accountBaselines: null });
+    expect(
+      screen.getByRole("button", { name: /Log against plan/ }).className,
+    ).toContain("summary-save-lead");
+  });
+
   it("with no active plan, Log against plan is hidden (not disabled) and Save without logging leads alone", () => {
-    renderSummary({ plan: null, isOnboarding: false });
+    renderSummary({ plan: null });
     expect(
       screen.queryByRole("button", { name: /Log against plan/ }),
     ).not.toBeInTheDocument();
