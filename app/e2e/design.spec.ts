@@ -473,7 +473,7 @@ async function assertTapTargets(page: Page): Promise<void> {
   // three separate CDP round trips per element via re-querying Playwright
   // locators (`.all()` + `isVisible()` + `evaluate()` + `boundingBox()`),
   // any of which could land on a different node than the ones before it —
-  // see .superpowers/sdd/2026-08-21-warmup-removal/flake-investigation.md.
+  // see docs/superpowers/research/2026-08-22-e2e-readiness-gate-flake.md.
   // A node that no longer exists by measurement time surfaced as a `null`
   // bounding box misattributed to whatever unrelated element the next
   // round trip happened to resolve, not a real violation. That failure

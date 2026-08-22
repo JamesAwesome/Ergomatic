@@ -68,6 +68,12 @@ const DEVICE_NAME = "PM5 432331249";
 // every test in this file until this fixture grew real content.
 const TEST_SEED: { logSeed: LogSeed } = {
   logSeed: {
+    // `kind: "warmup"` is deliberate, not stale: Phase WU removed the
+    // producer, but `LogSeed` is PERSISTED, so a `MonitorRun` stored
+    // before Phase WU still carries this exact value. Keeping it here
+    // exercises `buildMonitorLogSteps`' legacy skip (`logDraft.ts`) —
+    // do not "modernize" this to a plain step, that changes what the
+    // function under test emits and moves assertions below.
     steps: [{ label: "8:00 warm-up", kind: "warmup" }],
     paces: { k6: 120 },
   },

@@ -46,6 +46,12 @@ const t0 = new Date("2026-08-05T12:00:00.000Z");
 // accumulation), not about seed CONTENT, so one placeholder constant fills
 // every call site rather than a bespoke seed per test.
 const TEST_SEED: LogSeed = {
+  // `kind: "warmup"` is deliberate, not stale: Phase WU removed the
+  // producer, but `LogSeed` is PERSISTED, so a `MonitorRun` stored
+  // before Phase WU still carries this exact value. Keeping it here
+  // exercises `buildMonitorLogSteps`' legacy skip (`logDraft.ts`) — do
+  // not "modernize" this to a plain step, that changes what the
+  // function under test emits and moves assertions below.
   steps: [{ label: "8:00 warm-up", kind: "warmup" }],
   paces: {},
 };

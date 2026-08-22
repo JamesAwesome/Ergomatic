@@ -2894,6 +2894,27 @@ missing the inert-control criterion and the unlogged-record criterion.
 wrong one.** When a spec writes numbered exit criteria, ROADMAP points at
 them and never copies them.
 
+### What this phase taught (2026-08-22)
+
+1. **`app/e2e/` is NOT typechecked.** `tsconfig.app.json` covers only
+   `src`, `domain` and `scripts`; Playwright transpiles and erases types
+   at run time without ever checking them. A stale 4-argument `buildRun()`
+   call compiled and ran silently in an e2e fixture, and a hand-rolled
+   `tsc` config scoped to `e2e/` alone surfaces 14 pre-existing errors
+   there today. Owner: the next infra-touching phase.
+2. **`pnpm e2e -- -g "pattern"` silently runs the FULL suite** — even the
+   double-dash form is swallowed; pnpm eats `-g` (its own `--global`) no
+   matter where it sits on the command line. The LT-era note prescribing
+   the double-dash form (above, PM gate 2026-08-19) was wrong and is now
+   corrected in place. **Working form: `pnpm exec playwright test
+   --grep`.**
+3. **A sweep for an idiom must key on the STRUCTURE, not the operand.**
+   The flake investigation's grep for the vulnerable readiness-gate
+   pattern keyed on the `title` variable name and missed a sixth instance
+   that hardcoded its literal instead of naming a variable — same gate,
+   same bug shape, invisible to a search for the operand rather than the
+   pattern.
+
 ## Phase CL2 — Post-release authoring parity
 
 **Status:** Not started, and now UNBLOCKED — the v0.7.0 release it was
@@ -4101,8 +4122,13 @@ amplification path, accepted; owner = the next server-touching phase.
 recorder defect would be invisible AND permanent (frames evaporate, the
 record is immutable, PATCH refuses series), so the check moves in front of
 the renderer.
-**Riding follow-ups (PM gate 2026-08-19):** `pnpm e2e -- -g` needs the
-double-dash form documented (pnpm swallows bare -g); a frozen-clock
+**Riding follow-ups (PM gate 2026-08-19):** ~~`pnpm e2e -- -g` needs the
+double-dash form documented (pnpm swallows bare -g)~~ **CORRECTED, Phase
+WU close (2026-08-22): the double-dash form does not fix it — `pnpm e2e
+-- -g "pattern"` still silently runs the FULL suite; pnpm swallows `-g`
+even after `--`. The working form is `pnpm exec playwright test
+--grep`.** See Phase WU's "What this phase taught" note below. A
+frozen-clock
 screenshot fixture (17 captures churn on wall-clock date stamps) —
 **scope note (trace-truth Task 2 review, 2026-08-20): freezing the
 wall-clock date alone will NOT fix this.** A second, independent churn
@@ -4130,8 +4156,7 @@ round-tripping string, not a minimum length — the length-varying
 sub-mechanism this note above says was "not yet isolated" either was
 that slice or is now moot regardless, since the new construction cannot
 vary. The wall-clock date-stamp churn (17 captures) is a SEPARATE,
-still-open source — `pnpm e2e -- -g` documentation is also still owed.
-Covers both sources or captures will keep re-churning
+still-open source. Covers both sources or captures will keep re-churning
 after it ships; `judge()`'s
 documented-unreachable dead-even branch (discriminated union if a second
 producer appears); the live summary's judged-state capture (closed by

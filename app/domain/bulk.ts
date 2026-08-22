@@ -53,13 +53,11 @@ export interface BulkResult {
 
 /** The shared "N warm-ups dropped" notice copy (2026-08-09's warmup-setting
  *  spec §6: "the import screen gains a notice line"; reworded by Phase WU,
- *  2026-08-21, when the warm-up setting itself was removed). A session
- *  draft loaded from localStorage can carry the SAME fact for the SAME
- *  reason — a `wu` step recorded before the setting shipped — so
- *  `session/draft.ts`'s legacy-draft strip imports this rather than
- *  spelling the sentence a second time; one function is what keeps the two
- *  doors from drifting into two different wordings of one fact. No
- *  em-dash, per the house rule for user-facing copy. */
+ *  2026-08-21, when the warm-up setting itself was removed). Its one real
+ *  consumer is `BulkImport.tsx`, which renders it against
+ *  `BulkResult.droppedWarmups` on the import screen; keeping the sentence
+ *  in one function is what stops a future caller from spelling it a second
+ *  way. No em-dash, per the house rule for user-facing copy. */
 export function droppedWarmupNotice(n: number): string {
   return `${n} warm-up line${n === 1 ? "" : "s"} dropped. Add a warm-up as an ordinary first step instead.`;
 }

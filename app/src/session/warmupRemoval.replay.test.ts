@@ -1,6 +1,7 @@
 // Phase WU (warm-up removal), Task 1 — the two behavioural pins that make
-// the eventual removal visible instead of silent
-// (`.superpowers/sdd/2026-08-21-warmup-removal/task-1-brief.md`). Nothing is
+// the eventual removal visible instead of silent (the durable statement of
+// these requirements is docs/superpowers/specs/2026-08-21-warmup-removal-design.md
+// §7-§8, its testing and exit-criteria sections). Nothing is
 // removed by this task: both pins land GREEN against TODAY's code, on
 // purpose — for a deletion the compiler drives the change, so a behavioural
 // pin is the only thing that can fail meaningfully. Phase WU's later task

@@ -1,9 +1,11 @@
 // Pane C — the grid (7B Task 7, handoff §3; rebuilt connected-revamp
 // Task 5, design spec §6/revision §4: single-line fixed-height rows, 32px
 // landscape / 40px portrait — no more two-line portrait row, no more
-// active-row third line, and the `#` column reads `WU` for the warm-up
-// with work numbering starting at 1, design spec §5b). Same two strategies
-// as `ConnectedSurface.test.tsx`, for the same reasons:
+// active-row third line, design spec §5b). Phase WU (2026-08-21) removed
+// the `WU` row the `#` column used to show for a warm-up
+// (`PaneGrid.tsx`'s own header comment) — every row is now an ordinary
+// numbered interval. Same two strategies as `ConnectedSurface.test.tsx`,
+// for the same reasons:
 //
 // - **One fake-driven walk** rows a REAL seeded library workout through the
 //   real `ConnectedInterstitial` -> real `useMonitorSession` -> real driver
@@ -14,13 +16,13 @@
 //   a row state can be put on screen without scripting the machine into it.
 //
 // Every fixture is a real library workout with MIXED time and distance
-// intervals, and every one of them opens with a warm-up (the rower's own
-// preference, prepended by `buildRun` — none is a seeded `wu` step any
-// more): "Filling Low" (8:00 warm-up, then 4 x 2000 m / 3:00 — so its `#`
-// column reads `WU, 1, 2, 3, 4`, never `1, 2, 3, 4, 5`), "Split Front"
-// (10:00 warm-up, 8000 m, then 4 x 3:00) and "Sea Smoke" (6:00 warm-up
-// then 24 x 500 m — the 25-interval scroll case the handoff itself works
-// through).
+// intervals, and every one of them opens with an ordinary authored first
+// interval standing in for the old warm-up (none is a seeded `wu` step,
+// and none comes from a preference — see `libraryFixture` below): "Filling
+// Low" (8:00 opener, then 4 x 2000 m / 3:00 — so its `#` column reads
+// `1, 2, 3, 4, 5`, never `WU, 1, 2, 3, 4`), "Split Front" (10:00 opener,
+// 8000 m, then 4 x 3:00) and "Sea Smoke" (6:00 opener then 24 x 500 m —
+// the 25-interval scroll case the handoff itself works through).
 
 import { readFileSync } from "node:fs";
 import { act, render, screen } from "@testing-library/react";
@@ -182,13 +184,13 @@ interface Fixture {
   identity: RunIdentity;
 }
 
-// 2026-08-09's warmup setting: a seeded workout no longer carries a `wu`
-// step, so the warm-up interval every fixture below opens with now comes
-// from the rower's PREFERENCE — `buildRun`'s fourth argument, its one
-// producer (`src/session/engine.ts`'s `warmupPhases`). The minutes passed
-// per title are exactly what that workout's own `wu` row used to carry, so
-// every interval index, count and duration asserted in this file is
-// unchanged. The connected surface still has to render a warm-up interval
+// Phase WU removed both the seeded `wu` step and the warm-up preference
+// that used to synthesize one. The interval every fixture below opens
+// with is now an ORDINARY authored first interval — see the `steps:`
+// array in `buildDraft` below, which builds it as a plain EASY step of
+// the same length the workout's own `wu` row used to carry, so every
+// interval index, count and duration asserted in this file is unchanged.
+// The connected surface still has to render that opening interval
 // correctly; this is the shape it arrives in now.
 function libraryFixture(title: string, warmupMinutes: number): Fixture {
   const w = LIBRARY_WORKOUTS.find((s) => s.title === title);
