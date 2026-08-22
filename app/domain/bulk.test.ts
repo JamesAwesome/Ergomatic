@@ -262,7 +262,7 @@ zzz 5`;
   // block parsed "successfully" into an unusable workout, and the only
   // complaint came from `validateSteps` much further downstream ("steps
   // must be a non-empty array (max 100)") — a message naming neither the
-  // warm-up nor the setting that replaced it.
+  // warm-up nor how to keep one.
   it("a block whose only lines are warm-ups is a parse ERROR, not an ok workout with no steps", () => {
     const text = `1 | Warmup Only | AT | medium | 3\nwu 10`;
     const result = parseBulk(text);
@@ -271,7 +271,8 @@ zzz 5`;
       {
         block: 0,
         line: 1,
-        message: "workout needs at least one step. Warm-ups are a setting now.",
+        message:
+          "workout needs at least one step. Add the warm-up as an ordinary first step.",
       },
     ]);
     // Still counted: the import notice should say the line was dropped
@@ -515,13 +516,13 @@ describe("effort refs in bulk blocks", () => {
 describe("droppedWarmupNotice", () => {
   it("pluralizes for N > 1", () => {
     expect(droppedWarmupNotice(2)).toBe(
-      "2 warm-up lines dropped. Warm-ups are a setting now.",
+      "2 warm-up lines dropped. Add a warm-up as an ordinary first step instead.",
     );
   });
 
   it("stays singular for exactly 1", () => {
     expect(droppedWarmupNotice(1)).toBe(
-      "1 warm-up line dropped. Warm-ups are a setting now.",
+      "1 warm-up line dropped. Add a warm-up as an ordinary first step instead.",
     );
   });
 

@@ -82,7 +82,9 @@ export function validateSteps(
       // still present it — this is the API boundary that must keep
       // rejecting it for as long as either path can produce the shape.
       case "wu":
-        errors.push("Warm-ups moved to Settings. Set yours on the You tab.");
+        errors.push(
+          "Warm-ups aren't a step kind. Add it as an ordinary first step.",
+        );
         break;
       case "r":
         if (!wholeSecond(s.minutes, SECOND, 180))

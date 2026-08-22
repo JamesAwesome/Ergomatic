@@ -19,8 +19,8 @@
  *   old "needs minutes" shape check still runs and still errors. A dropped
  *   line is a line we understood, not a line we skipped.
  * - A **warm-up-ONLY block is a parse error** ("workout needs at least one
- *   step. Warm-ups are a setting now."). Dropping its only content would
- *   make the block vanish silently.
+ *   step. Add the warm-up as an ordinary first step."). Dropping its only
+ *   content would make the block vanish silently.
  * - **Everything else is all-or-nothing** (Phase 5B/CL): ANY entry in
  *   `errors` — parse-level here, or validation-level in the route — means
  *   the whole paste creates NOTHING, so a rower can fix the one bad line
@@ -52,12 +52,8 @@ export interface BulkResult {
 }
 
 /** The shared "N warm-ups dropped" notice copy (2026-08-09's warmup-setting
- *  spec §6: "the import screen gains a notice line"). The plan's own global
- *  constraints section pins the literal `N warm-up lines dropped. Warm-ups
- *  are a setting now.` — this deliberately DIVERGES from it at `n === 1`
- *  ("1 warm-up line dropped", not "1 warm-up lines dropped"): the pinned
- *  wording was never grammar-checked at its own singular case, and the
- *  pluralized sentence is the better one (block2-review F4). A session
+ *  spec §6: "the import screen gains a notice line"; reworded by Phase WU,
+ *  2026-08-21, when the warm-up setting itself was removed). A session
  *  draft loaded from localStorage can carry the SAME fact for the SAME
  *  reason — a `wu` step recorded before the setting shipped — so
  *  `session/draft.ts`'s legacy-draft strip imports this rather than
@@ -65,7 +61,7 @@ export interface BulkResult {
  *  doors from drifting into two different wordings of one fact. No
  *  em-dash, per the house rule for user-facing copy. */
 export function droppedWarmupNotice(n: number): string {
-  return `${n} warm-up line${n === 1 ? "" : "s"} dropped. Warm-ups are a setting now.`;
+  return `${n} warm-up line${n === 1 ? "" : "s"} dropped. Add a warm-up as an ordinary first step instead.`;
 }
 
 const TYPES: WorkoutType[] = ["AN", "O2", "AT", "TR"];
@@ -359,7 +355,8 @@ export function parseBulk(text: string): BulkResult {
       errors.push({
         block: blockIndex,
         line: headerLine.lineNumber,
-        message: "workout needs at least one step. Warm-ups are a setting now.",
+        message:
+          "workout needs at least one step. Add the warm-up as an ordinary first step.",
       });
       return;
     }

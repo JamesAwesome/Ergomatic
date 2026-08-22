@@ -49,33 +49,13 @@ async function setBaselines(page: Page): Promise<void> {
   }
 }
 
-/** Sets the warm-up preference via the real `PUT /api/prefs` route
- *  (2026-08-09 warmup-setting spec §2) — same real-networking reasoning as
- *  `setBaselines` above. Used by the captures whose whole point is to show
- *  the setting ON (the "countdown" screen's own next-phase line, the
- *  "you-warmup-on" capture — ConfirmTargets' own WARM-UP row died with the
- *  screen, fast-follow Task 4 — and, as of Phase LT spec 1 Task 3, the DISTANCE
- *  variant on "post-workout-summary" itself, so the mixed row list includes
- *  a genuinely-measured completed WARM-UP row for the first time), since
- *  the setting defaults OFF. */
-async function setWarmup(
-  page: Page,
-  warmup: (
-    { kind: "time"; minutes: number } | { kind: "distance"; meters: number }
-  ) & { restSeconds?: number },
-): Promise<void> {
-  const result = await page.evaluate(async (patch) => {
-    const res = await fetch("/api/prefs", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ warmup: patch }),
-    });
-    return { ok: res.ok, status: res.status, body: await res.text() };
-  }, warmup);
-  if (!result.ok) {
-    throw new Error(`warmup setup failed: ${result.status} ${result.body}`);
-  }
-}
+// Phase WU (2026-08-21) deleted `setWarmup` (used to PUT the warm-up
+// preference for the "countdown", "you-warmup-on" and "post-workout-summary"
+// captures) along with the setting it drove. The countdown and
+// post-workout-summary captures already author their easy/warm-up-shaped
+// piece as an ordinary first step instead (see those tests below);
+// "you-warmup-on" had no such substitute — there is no longer a screen
+// state to capture — so that test and its capture are gone too.
 
 /** Phase 6I Task 7: dismisses START HERE on Today via an in-page fetch —
  *  same real-networking reasoning as `setBaselines` above — so a screenshot
@@ -1207,7 +1187,7 @@ test("releases", async ({ page }) => {
     page.getByRole("heading", { name: "Release notes" }),
   ).toBeVisible();
   await expect(page.locator(".news-release-version").first()).toContainText(
-    "v0.15.0",
+    "v0.16.0",
   );
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "releases.png"),
@@ -1241,10 +1221,6 @@ test("import", async ({ page }) => {
   });
 });
 
-// A fresh account's WARM-UP row reads its default OFF state (2026-08-09
-// warmup-setting spec §2: `null` is the column's default, off for
-// everyone) — no setup needed beyond baselines loading, unlike
-// "you-warmup-on" below.
 test("you", async ({ page }) => {
   await signInViaBackdoor(page, {
     email: "screenshots-you@e2e.test",
@@ -1254,38 +1230,16 @@ test("you", async ({ page }) => {
   // Same "LOADING…" race as /library — wait for the baseline card's real
   // content before capturing.
   await page.locator(".baseline-value").first().waitFor();
-  // Scoped by class, not accessible name: whole-branch review finding F's
-  // dedup fix means the meta slot holds the status value alone ("OFF"),
-  // not "WARM-UP · OFF" — the row's own title ("Warm-up") already says
-  // that word once.
-  await expect(
-    page.locator(".warmup-row-button .you-settings-row-meta"),
-  ).toHaveText("OFF");
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "you.png"),
   });
 });
 
-// The ON state's own house duration format (spec §3's own literal writes
-// the "WARM-UP · " prefix in; the shipped row doesn't, per finding F's
-// dedup fix — recorded where the row itself renders. `+ :30 REST` when
-// set — rendered here as `+ 0:30 REST`, block2-review F5) — "you.png"
-// above only ever shows the default OFF row.
-test("you-warmup-on", async ({ page }) => {
-  await signInViaBackdoor(page, {
-    email: "screenshots-you-warmup-on@e2e.test",
-    name: "Screenshot Tester",
-  });
-  await setWarmup(page, { kind: "time", minutes: 10, restSeconds: 30 });
-  await page.goto("/you");
-  await page.locator(".baseline-value").first().waitFor();
-  await expect(
-    page.locator(".warmup-row-button .you-settings-row-meta"),
-  ).toHaveText("10:00 + 0:30 REST");
-  await page.screenshot({
-    path: path.join(SCREENSHOTS_DIR, "you-warmup-on.png"),
-  });
-});
+// Phase WU (2026-08-21) deleted the WARM-UP row this file used to capture
+// twice: the default OFF state above (once part of "you", now the whole of
+// it) and the ON state below ("you-warmup-on", with its own duration-format
+// assertion). There is no longer a setting to be on or off, so only "you"
+// remains.
 
 test("you-staged", async ({ page }) => {
   await signInViaBackdoor(page, {
@@ -1466,8 +1420,8 @@ test("timer", async ({ page }) => {
   // committed capture shows a real, populated dots row, STEP line, resolved
   // TARGET SPLIT/RATE cards, and a meaningful UP NEXT (the rest phase),
   // landing on the WORK phase itself (phase 0) — the brief's own "work
-  // phase, targets visible" case, not the warm-up "countdown.png" already
-  // shows.
+  // phase, targets visible" case, not the EASY-effort opener
+  // "countdown.png" already shows.
   await importBulk(
     page,
     [`${title} | AT | medium | 3`, "w 4:00 6k @20 r1.5", "w 4:00 6k @20"].join(
@@ -1592,8 +1546,9 @@ async function recordDistanceActual(
 // already proved on the stored door, now proved live too. Six phases total
 // (was three): every "STEP N OF 3" below became "STEP N OF 6".
 test("post-workout-summary", async ({ page }) => {
-  // Three real-elapsed distance waits now (the warm-up below, plus the
-  // "100m max" work phase already in the fixture) push this comfortably
+  // Three real-elapsed distance waits now (the authored 100m easy opener
+  // below, plus the "100m max" work phase already in the fixture) push
+  // this comfortably
   // past Playwright's 30s default — same reasoning as
   // `e2e/connected.spec.ts`'s/`design.spec.ts`'s own `test.setTimeout`
   // calls for a multi-real-wait flow. The three new judged/on-target rows
@@ -3479,15 +3434,16 @@ const CONNECTED_STATES = [
   // suppressed, not merely absent because nothing was ever carried over.
   "connected-armed",
   "connected-pane-live",
-  // connected-revamp Task 4b (design spec §5b): the WARM-UP state, which had
-  // no committed picture of its own — every other live fixture is already
-  // past it. What it records: the caption with no ordinal, and the bar's
-  // three tones — the warm-up's leading span filling in ITS own tone as the
-  // rower rows it (`--ink-4` here, lighter than the ink work fill), the
-  // unrowed rest of that span in plain track, and the work fill beyond it
-  // (James, 2026-08-12: the bar must move while the rower is moving, and
-  // still read as visibly not-work).
-  "connected-pane-live-warmup",
+  // connected-revamp Task 4b (design spec §5b) originally added this as the
+  // WARM-UP state, the only live fixture caught mid-warm-up. Phase WU
+  // (2026-08-21) removed the concept the fixture depended on — no phase can
+  // be a warm-up any more — but the underlying frame is still the one no
+  // other fixture shows: interval 0, the opening piece, the single case
+  // where the session total equals the interval's own distance
+  // (`ConnectedSurface.screens.test.tsx`'s "pane B, the opening interval").
+  // Renamed rather than deleted for that reason; the file itself was
+  // regenerated against ordinary work-phase content, not warm-up content.
+  "connected-pane-live-opener",
   "connected-pane-live-nohr",
   "connected-paused",
   "connected-disconnected",

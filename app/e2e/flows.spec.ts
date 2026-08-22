@@ -178,9 +178,9 @@ test.describe("Phase 6A/6B: today -> detail -> countdown -> timer", () => {
     const endBox = await endButton.boundingBox();
     expect(endBox!.width).toBeGreaterThanOrEqual(44);
     expect(endBox!.height).toBeGreaterThanOrEqual(44);
-    // A fresh run always opens on its own phase 0 regardless of the warm-up
-    // setting (OFF here, the default) — "STEP 1 OF" however many, not
-    // pinning the total, which varies per workout.
+    // A fresh run always opens on its own phase 0 — "STEP 1 OF" however
+    // many, not pinning the total, which varies per workout. (No warm-up
+    // setting exists to open on instead, since Phase WU removed it.)
     await expect(page.getByText(/^STEP 1 OF \d+/)).toBeVisible();
 
     // Reload: the run/draft round-trip through localStorage, not router
@@ -196,8 +196,8 @@ test.describe("Phase 6A/6B: today -> detail -> countdown -> timer", () => {
 // it, a library session runs it". It set a 5:00 warm-up through the real
 // WarmupRow editor and then proved the session opened on it as
 // `STEP 1 OF N · WARM-UP`. There is no warm-up phase for a session to open
-// on, so the walk has nothing left to prove; the setting's own UI is Phase
-// WU Task 3's to remove.
+// on, so the walk has nothing left to prove; the setting's own UI (and
+// `WarmupRow.tsx` itself) was removed by Phase WU Task 3.
 
 test.describe("bugfix round: history-aware ← BACK", () => {
   // The exact recorded bug (owner's screen recording, 2026-08-02): Today ->

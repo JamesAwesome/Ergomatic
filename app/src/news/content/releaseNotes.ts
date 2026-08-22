@@ -5,6 +5,19 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // Phase WU (2026-08-21): the warm-up setting is gone. No tag covers
+    // Phase WU alone (ROADMAP's Phase WU section) — this entry rides
+    // whichever tag eventually carries Phase LL's brick fix, so version
+    // and date here are provisional and get reconciled by that tag's own
+    // "docs: vX.Y.Z's notes" commit (RF15's range discipline), which may
+    // add further items above this one from the same range.
+    version: "v0.16.0",
+    date: "2026-08-21",
+    items: [
+      "The warm-up setting is gone: WARM-UP on the You tab, and the automatic warm-up every session used to start with, no longer exist. If you want one, add it to the workout as an ordinary first step, and it will show up, count, and get judged like any other step.",
+    ],
+  },
+  {
     // Phase LL spec 1 in one build: the boundary fold (#140), rests marked
     // (#141), the time axis + the 10,000m counter reserve + screenshot
     // determinism (#142), rests excluded from the pace scale + the TOTAL

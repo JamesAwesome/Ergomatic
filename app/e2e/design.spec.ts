@@ -1940,7 +1940,7 @@ async function seedInterruptedMonitorRun(page: Page): Promise<void> {
 }
 
 // Task 6 (property sweep): a NORMALLY-completed (not interrupted) monitor
-// run with TWO measured work intervals plus a measured warm-up — the
+// run with TWO measured work intervals plus a measured opening piece — the
 // interrupted fixture above only ever carries one measured actual, so
 // `monitorAvgSplit`'s own `count >= 2` gate (finding 5) never lets a row
 // get JUDGED there. This is the fixture §2E's judged-color/deviation-bar/
@@ -1953,7 +1953,8 @@ async function seedInterruptedMonitorRun(page: Page): Promise<void> {
 // (LogSession.test.tsx) — never a hand-built minimum.
 //
 // Every number below is hand-verifiable, not merely "whatever the code
-// says": DISTANCE (R-B, Σ work+rest over ALL actuals incl. warm-up) =
+// says": DISTANCE (R-B, Σ work+rest over ALL actuals incl. the opening
+// piece) =
 // (600+0) + (2000+64) + (10000+0) = 12664 exactly — asserted as an EXACT
 // value below, since this sum is fully within this fixture's own control
 // (no restSeconds lookup involved). The two work intervals' own displayed
@@ -1978,8 +1979,8 @@ async function seedInterruptedMonitorRun(page: Page): Promise<void> {
 // TIME (R-D) sums `elapsedSeconds` (187+600+2400=3187) plus each
 // completed interval's own PROGRAMMED rest — interval 1's restSeconds=300
 // is independently verified by `buildInterruptedMonitorRun`'s own proven
-// "11:00" result (360+300=660) above; the warm-up's and interval 2's own
-// restSeconds are NOT independently known here (no committed capture
+// "11:00" result (360+300=660) above; the opening piece's and interval 2's
+// own restSeconds are NOT independently known here (no committed capture
 // pins them), so TIME is asserted structurally (`m:ss`, not a bare
 // rounded minute) rather than to an exact value — the honest scope this
 // module's own "CAN THROW"/"SCOPE DECISIONS" header asks every caller to
@@ -1991,11 +1992,11 @@ const MONITOR_COMPLETED_ACTUALS: IntervalActual[] = [
     distanceMeters: 600,
     // 500×187/600 = 155.8 (rounded to the wire's 0.1s resolution), not the
     // old unrelated 200 (PM final-PR gate, condition round, 2026-08-17): a
-    // real PM5 computes this warm-up row's own average pace FROM the same
+    // real PM5 computes this opening row's own average pace FROM the same
     // elapsed/distance the row also displays (identity a `fake.ts`-driven
     // capture caught contradicting its own hero, `log-monitor.png`). This
-    // row is UNJUDGED (a warm-up has no target by definition — §1's own
-    // rule, this fixture's own comment above), so the exact figure is not
+    // row is UNJUDGED (an EFFORT-ref step has no target by definition — §1's
+    // own rule, this fixture's own comment above), so the exact figure is not
     // load-bearing for the deviation math below — only its own internal
     // coherence is.
     avgSplit: 155.8,
@@ -4827,11 +4828,11 @@ test.describe("post-workout summary (monitor door, completed — judged rows & m
     expect(value.endsWith(":00")).toBe(false);
   });
 
-  // R-B: Σ(work + rest distance) over ALL actuals incl. the warm-up —
+  // R-B: Σ(work + rest distance) over ALL actuals incl. the opening piece —
   // (600+0) + (2000+64) + (10000+0) = 12664 exactly, fully independent of
   // any restSeconds lookup (this row's own inputs are entirely this
   // fixture's own numbers).
-  test("§2B DISTANCE: R-B's machine-matching sum — work + rest distance, incl. the warm-up, whole meters", async ({
+  test("§2B DISTANCE: R-B's machine-matching sum — work + rest distance, incl. the opening piece, whole meters", async ({
     page,
   }) => {
     const value = await page
@@ -4847,9 +4848,9 @@ test.describe("post-workout summary (monitor door, completed — judged rows & m
   // target -> SLOWER; interval 2 (Calm Sea, avgSplit 120) deviates −12.0
   // from the SAME 132s target -> FASTER (Phase LT spec 1's re-baseline —
   // `buildCompletedMonitorRun`'s own doc comment has the full arithmetic).
-  // Rows render in `[warm-up, interval 1, interval 2]` order
-  // (`buildMonitorModel`: warmup row first, then `monitorWorkRows`'s own
-  // index order).
+  // Rows render in `[opening piece, interval 1, interval 2]` order — all
+  // three come from the SAME `monitorWorkRows` index order now; there is no
+  // separate warm-up-row branch to special-case any more (Phase WU).
   test("§2E judged colors: the slower row paints --judge-slower, the faster row paints --judge-faster, and the legend renders", async ({
     page,
   }) => {
@@ -4921,11 +4922,14 @@ test.describe("post-workout summary (monitor door, completed — judged rows & m
   });
 
   // R-C's own reconciliation row: rendered and measured, but never judged
-  // (no bar, no tick — Phase LT spec 1's re-baseline: a warm-up interval
-  // has no target by definition, so there is nothing to judge it against;
-  // `rowJudgment`, summaryModel.ts, never even reaches a warm-up row — it
-  // is built straight from the machine actual, never through the
-  // targetSplit/actualSource gate a work row goes through).
+  // (no bar, no tick — Phase LT spec 1's re-baseline: an EFFORT-ref
+  // interval has no target by definition, so there is nothing to judge it
+  // against; `rowJudgment`, summaryModel.ts, never reaches such a row
+  // through the targetSplit/actualSource gate a work row goes through —
+  // it is built straight from the machine actual). Before Phase WU this
+  // was the warm-up interval specifically; the rule and the row are the
+  // same, only the reason for reaching them changed (see the test's own
+  // comment below).
   test("§2E opening row: numbered, measured, UNJUDGED — no bar, no tick", async ({
     page,
   }) => {
@@ -6357,8 +6361,9 @@ test.describe("connected screens (fake-driven)", () => {
       // phase-exit pass: the unit test reads the inline style, so a CSS
       // `flex-grow: 1 !important` would equalize the bar while every test
       // stayed green — the computed value is what the browser actually
-      // lays out). The fixture's program is wu 480s + 4×684s; the computed
-      // flex-grow ratios must match those durations, not each other.
+      // lays out). The fixture's program is a 480s opener + 4×684s; the
+      // computed flex-grow ratios must match those durations, not each
+      // other.
       const grows = await page
         .locator(".connected-progress-seg")
         .evaluateAll((els) =>
@@ -7253,7 +7258,7 @@ test.describe("connected screens (fake-driven)", () => {
     test("nothing in the band's own up-next value reflows at the notched content width", async ({
       page,
     }) => {
-      await loadConnectedFixture(page, "connected-pane-live-warmup");
+      await loadConnectedFixture(page, "connected-pane-live-opener");
       await page.setViewportSize({ width: 844, height: 390 });
 
       const client = await page.context().newCDPSession(page);
@@ -7763,7 +7768,7 @@ test.describe("connected screens (fake-driven)", () => {
     test("up-next: UP NEXT label mono 14 ink-3 over value mono 23 nowrap, then-less form, never wraps or overflows", async ({
       page,
     }) => {
-      await loadConnectedFixture(page, "connected-pane-live-warmup");
+      await loadConnectedFixture(page, "connected-pane-live-opener");
       const label = await page
         .locator(".connected-band-upnext-label")
         .evaluate((el) => {
@@ -8261,7 +8266,7 @@ test.describe("connected screens (fake-driven)", () => {
     const PROGRESS_ACTIVE_RGB_LOCAL = "rgb(138, 132, 120)";
     const fixtures = [
       "connected-pane-live",
-      "connected-pane-live-warmup",
+      "connected-pane-live-opener",
       "connected-pane-grid",
       "connected-pane-grid-long",
       "connected-armed",

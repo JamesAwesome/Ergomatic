@@ -558,25 +558,28 @@ describe("screen fixtures for pnpm screenshots", () => {
     ).toMatchFileSnapshot("../../e2e/fixtures/connected-armed.html");
   });
 
-  /** THE WARM-UP, mid-way through Filling Low's 8:00 easy start (design spec
-   *  §5b). Every other fixture in this file photographs interval 1 — the
-   *  first 2000 m rep — so nothing had a picture of the state §5b's table is
-   *  actually about: the caption reading `WARM-UP` with no ordinal at all,
-   *  both target slots naming the phase instead of a number — `Easy` and
-   *  `Free`, greyed — with both heroes unjudged (a warm-up is
-   *  never graded), and TOTAL LEFT's bar part-way through the warm-up's own
-   *  span — filling in ITS tone as the rower rows it, with the unrowed rest
-   *  of the span still plain track (James, 2026-08-12: the bar moves while
-   *  the rower moves, and still reads as visibly not-work). The frame is set
-   *  8:00-warm-up-minus-3:32, so the fill sits inside the span rather than
-   *  at either end of it. A time warm-up counts DOWN, hence the time-kind
-   *  remaining. */
-  // Phase WU: this was "pane B, warming up" — interval 0 was the rower's
-  // warm-up and the header read the bare word `WARM-UP`. It is an ordinary
-  // opening piece now (`1 OF 5 · WORK`), and the fixture is kept because
-  // interval 0 is still the one frame where the session total equals the
-  // interval's own distance and the target slot carries a word rather than
-  // a number.
+  /** Pane B, interval 0: Filling Low's 8:00 easy start, mid-way through.
+   *  Every other fixture in this file photographs interval 1 — the first
+   *  2000 m rep — so this is the only picture of interval 0's own quirk:
+   *  the session total equals the interval's own distance
+   *  (`sessionDistanceMeters` stated rather than inherited below, since
+   *  everywhere else the two differ — see `liveFrame`), and the frame is a
+   *  target-less time interval, hence the time-kind remaining rather than
+   *  a distance one. The frame is set 8:00-minus-3:32, so it lands inside
+   *  the interval rather than at either end.
+   *
+   *  Design spec §5b originally called this THE WARM-UP: the caption read
+   *  the bare word `WARM-UP` with no ordinal, and the bar gave the
+   *  warm-up's own span a third tone as the rower rowed it. Phase WU
+   *  (2026-08-21) removed the concept: the step is now an authored,
+   *  ordinary EASY-effort work step (`libraryFixture`'s own comment), so
+   *  the caption reads a numbered `1 OF 5 · WORK` and the progress bar has
+   *  only its usual two tones (active/upcoming). What did NOT change,
+   *  because an effort-ref phase has never carried a numeric target either:
+   *  both target slots still name the phase rather than a number (`EASY`,
+   *  `Free`), still greyed, and the pace hero is still unjudged — verified
+   *  against this fixture's own committed markup, not assumed carried
+   *  over. */
   it("pane B, the opening interval", async () => {
     await expect(
       capture("live", {
@@ -595,7 +598,7 @@ describe("screen fixtures for pnpm screenshots", () => {
           intervalRemaining: { kind: "time", value: 212 },
         },
       }),
-    ).toMatchFileSnapshot("../../e2e/fixtures/connected-pane-live-warmup.html");
+    ).toMatchFileSnapshot("../../e2e/fixtures/connected-pane-live-opener.html");
   });
 
   it("pane B, no HR monitor", async () => {

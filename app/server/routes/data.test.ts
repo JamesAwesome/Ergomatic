@@ -711,7 +711,8 @@ describe("POST /api/workouts/bulk", () => {
     expect(res.body.created).toHaveLength(0);
     expect(res.body.errors).toContainEqual(
       expect.objectContaining({
-        message: "workout needs at least one step. Warm-ups are a setting now.",
+        message:
+          "workout needs at least one step. Add the warm-up as an ordinary first step.",
       }),
     );
   });
