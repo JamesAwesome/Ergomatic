@@ -71,10 +71,11 @@ describe("registerWebAppLifecycleListener (the web arm, tested directly)", () =>
 });
 
 describe("registerAppLifecycleListener: platform dispatch", () => {
-  it("web: returns the unsubscribe SYNCHRONOUSLY (not a Promise) and reaches the DOM listener", async () => {
+  it("web: returns the unsubscribe SYNCHRONOUSLY (not a Promise) and is a genuine no-op — Phase LL minor 9 (RULED, spec amendment 2026-08-22): lifecycle-suspect marking is native-only, so the web arm never reaches the DOM listener and never calls back for either transition", async () => {
     vi.doMock("../platform", () => ({ isNative: () => false }));
     vi.resetModules();
     const { registerAppLifecycleListener } = await import("./appLifecycle");
+    const addEventListenerSpy = vi.spyOn(document, "addEventListener");
 
     const events: AppLifecycleEvent[] = [];
     const result = registerAppLifecycleListener((e) => events.push(e));
@@ -82,10 +83,18 @@ describe("registerAppLifecycleListener: platform dispatch", () => {
     const unsubscribe = result as () => void;
 
     setVisibility("hidden");
-    expect(events).toStrictEqual(["background"]);
-    unsubscribe();
     setVisibility("visible");
-    expect(events).toStrictEqual(["background"]);
+    // Neither transition reached `cb` — the mutation this test guards
+    // against is falling back to `registerWebAppLifecycleListener`, which
+    // would push `"background"` onto this array.
+    expect(events).toStrictEqual([]);
+    expect(addEventListenerSpy).not.toHaveBeenCalledWith(
+      "visibilitychange",
+      expect.anything(),
+    );
+    // The returned unsubscribe is callable and inert, same contract shape
+    // as the real listener's own unsubscribe.
+    expect(() => unsubscribe()).not.toThrow();
   });
 
   it("native: delegates to the native module via a dynamic import, and resolves the SAME callback vocabulary — never reaches the web arm's addEventListener", async () => {

@@ -80,7 +80,12 @@ The four, from the review, each with its cover:
    remains INFERENCE (Apple documents only the connect/cancel cases) and is
    walk item W5. The signal that IS emitted, `onEnabledChanged`, we have
    never subscribed to. **Subscribe it.** Cheapest fix in the phase.
-2. **iOS backgrounding.** `Info.plist` declares no `UIBackgroundModes` and
+2. **iOS backgrounding — NATIVE ONLY (ruled at the whole-branch review,
+   minor 9).** A browser tab switch does not interrupt Web Bluetooth the
+   way iOS suspends a webview, and marking every web `visibilitychange`
+   suspect showed LOST THE MONITOR for 10 s after any tab change in the
+   dev loop and the laptop walk harness. The resume-suspect marking
+   registers on the native arm only, in the adapter layer.** `Info.plist` declares no `UIBackgroundModes` and
    the monitor stack registers no app-lifecycle listener anywhere — an
    incoming call mid-piece produces the reported failure with no radio fault
    at all. **Register the lifecycle listener**; on resume, treat the stream
@@ -150,7 +155,8 @@ the existing derivation to the EXISTING `stale` status and `LostBanner`
 treatment. No new axis, no new word, no parallel path.
 
 **What fires it:** disconnect (real), enabled-off, and frame silence past
-threshold. All three land on the same shipped "LOST THE MONITOR" treatment
+threshold. **The same three define `linkGone` at the close (B1 ruling) —
+the banner and the stored reason share one definition of "lost".** All three land on the same shipped "LOST THE MONITOR" treatment
 (banner-as-shipped ruling). Live numbers freeze visibly; End keeps what we
 saw.
 
@@ -260,9 +266,18 @@ and "I bailed at minute two" are indistinguishable in the record.
   populated per close path — and every value is one the writer HONESTLY
   KNOWS, which the anchor pass verified writer by writer:
   - machine WORKOUTEND → `finished`
-  - End button with the link up → `rower` (`linkGone === false`, computed
-    on the line above the close)
-  - End button with the link gone → `link-lost` (`linkGone === true`)
+  - End button with the link up → `rower`
+  - End button with the link gone → `link-lost` — **and "gone" is the
+    SURFACE's definition, RULED at the whole-branch review (B1):**
+    `linkGone = phase === "disconnected" || frameSilence`. The first
+    draft's "computed one line above the close" predates Task 2, which
+    widened "lost" for the screen (watchdog silence, backgrounding) while
+    the record kept the old test — so a rower pressing End under a
+    LOST THE MONITOR banner stored `"rower"`, the exact conflation this
+    field exists to end, reintroduced by this phase's own left hand. The
+    invariant, stated once: **whatever fires the banner defines the
+    close.** §2a's firing list and this table can never disagree again
+    without one of them being wrong on its face.
   - a failed `program()` closing an open run → `program-failed` (was
     unmapped in the first draft)
   - Today's row, closed later with no evidence → `interrupted` — which

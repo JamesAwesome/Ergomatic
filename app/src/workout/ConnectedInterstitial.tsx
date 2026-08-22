@@ -272,8 +272,13 @@ export default function ConnectedInterstitial({
 
   // Mount-once: opens the monitor chooser the instant this screen exists. Not
   // gated on `session.phase` — this hook's own initial phase is always
-  // "idle", and Try Again below calls `connect()`/`program()` directly
-  // rather than relying on this effect firing again.
+  // "idle", and Try Again below (`handleTryAgain`) calls `connect()`
+  // directly rather than relying on this effect firing again. CORRECTED
+  // (whole-branch review, minor 7 — this comment used to say "connect()/
+  // program() directly"): Try Again never calls `program()` itself any
+  // more (Phase LL Task 3, `handleTryAgain`'s own comment) — only
+  // `connect()`; `program()` fires from the separate "pairing" phase
+  // effect below, once a real device is found.
   useEffect(() => {
     void session.connect();
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -302,8 +302,8 @@ describe("withLiveness: markSuspect (Phase LL Task 2 review fix, §2 mechanism 2
     expect(onRecovery).toHaveBeenCalledOnce();
   });
 
-  it("calling markSuspect() before the watchdog has ever armed does not throw, and does not fabricate a recovery on the FIRST real arrival (which is itself the arming event, not a recovery)", () => {
-    const { transport } = stubTransport();
+  it("calling markSuspect() before the watchdog has ever armed does not throw, and does not fabricate a recovery on the FIRST real arrival (which is itself the arming event, not a recovery) — recovery instead fires ONE FRAME LATER, on the second arrival, because `noteStatusArrival`'s arming branch returns before ever checking `silent`", () => {
+    const { transport, notify } = stubTransport();
     const timer = manualSchedule();
     const onRecovery = vi.fn();
     const clock = manualClock();
@@ -313,8 +313,38 @@ describe("withLiveness: markSuspect (Phase LL Task 2 review fix, §2 mechanism 2
       onSilence: vi.fn(),
       onRecovery,
     });
+
+    // THREE TIMES DEFERRED (this test used to stop right here, mistitled —
+    // it never delivered the frame its own title claims): mark suspect
+    // before the transport has ever seen a single 0x0031.
     expect(() => liveness.markSuspect()).not.toThrow();
     expect(liveness.snapshot().armed).toBe(false);
+    expect(liveness.snapshot().silent).toBe(true);
+
+    liveness.subscribe(GENERAL_STATUS_UUID, () => {});
+
+    // THE FIRST REAL ARRIVAL: `noteStatusArrival`'s `if (!armed)` branch
+    // fires and returns immediately — this frame IS the arming event, not
+    // a recovery, so `onRecovery` must not fire here even though `silent`
+    // is still `true` underneath (the arming branch never inspects it).
+    notify(GENERAL_STATUS_UUID, new Uint8Array());
+    expect(liveness.snapshot().armed).toBe(true);
+    expect(onRecovery).not.toHaveBeenCalled();
+    // THE MUTATION this guards against: `silent` is untouched by arming —
+    // it takes a SECOND arrival to clear it. A version that clears
+    // `silent` inside the arming branch (or fires `onRecovery` there)
+    // would flip either assertion above.
+    expect(liveness.snapshot().silent).toBe(true);
+
+    // ONE FRAME LATER (~500ms at the measured cadence — cosmetic here,
+    // `noteStatusArrival` gates on CALL ORDER, not elapsed time, but the
+    // clock still moves to keep the fixture honest about what "one frame"
+    // means): the SECOND real arrival now takes the `if (silent)` branch,
+    // since `armed` is already `true` this time.
+    clock.set(500);
+    notify(GENERAL_STATUS_UUID, new Uint8Array());
+    expect(onRecovery).toHaveBeenCalledOnce();
+    expect(liveness.snapshot().silent).toBe(false);
   });
 
   it("a repeated markSuspect() call while already silent does not schedule a second watchdog cancellation cycle or throw", () => {

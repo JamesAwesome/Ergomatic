@@ -1218,6 +1218,24 @@ export function useMonitorSession(
    *  connect's registration has resolved, or after `teardown()` has run
    *  it. */
   const lifecycleUnsubRef = useRef<(() => void) | null>(null);
+  /** Whole-branch review minor 1 (the native lifecycle unsub race): the
+   *  NATIVE arm's own `registerAppLifecycleListener` returns a `Promise`
+   *  (`registerNativeAppLifecycleListener`'s own async `addListener`), so
+   *  its resolution can land AFTER `fail()`/`teardown()` has already run
+   *  and nulled `lifecycleUnsubRef` for THIS attempt — without a token,
+   *  the `.then()` below would blindly overwrite the ref regardless, and
+   *  if a NEW `connect()` had already registered its OWN real listener by
+   *  then, that write silently REPLACES the new attempt's unsub with the
+   *  stale one: teardown from then on calls the wrong function, and the
+   *  new listener is never unregistered — leaked permanently into every
+   *  later session on this hook instance. One token object per attempt,
+   *  captured by that attempt's own `.then()` closure (never read back off
+   *  this ref by a LATER attempt's closure, which closes over its own
+   *  token) — `fail()`/`teardown()` flip `.cancelled` on whichever token is
+   *  current at the moment they run, which is always this attempt's own:
+   *  `connect()` is single-flight (`connectingRef`), so at most one
+   *  attempt is ever open. */
+  const lifecycleAttemptRef = useRef<{ cancelled: boolean } | null>(null);
 
   const livenessDepsRef = useRef<LivenessDeps>({
     now: () => Date.now(),
@@ -1596,8 +1614,36 @@ export function useMonitorSession(
           nowDate(),
           logRef.current,
         );
-        if (closed !== runRef.current) {
-          runRef.current = closed;
+        // `closed !== null` narrows for TS (`applyContinuityCheck`'s own
+        // general signature returns `MonitorRun | null`, echoing its
+        // input) — never actually reachable as null here: the only way
+        // this branch's other half (`closed !== runRef.current`) is true
+        // is a genuine `completeContinuityReset` result, which is always
+        // a full `MonitorRun`.
+        if (closed !== null && closed !== runRef.current) {
+          // Whole-branch review minor 2: fold the recorder's own trace
+          // into the just-closed record — the SAME `withSeries` step
+          // `closeRecord` always takes before a completion write, applied
+          // here too rather than skipped. Without this, `completeContinuityReset`
+          // (a pure transform with no access to the recorder) persists a
+          // record with no `series` at all — up to 30s of trace lost on
+          // the one close whose whole point is "preserve the interrupted
+          // record." `applyContinuityCheck`'s own "same reference" no-op
+          // contract is read off the UNFOLDED `closed` above, on purpose:
+          // `withSeries` always returns a NEW object when a snapshot
+          // exists, so comparing against ITS result here would make every
+          // live frame with recorder data look like a fresh reset.
+          const withFinalSeries = withSeries(closed);
+          runRef.current = withFinalSeries;
+          if (withFinalSeries !== closed) saveMonitorRun(withFinalSeries);
+          // Same two steps `closeRecord` always takes after its own
+          // completion write: the 30s flush timer would otherwise keep
+          // firing into a record that can never accept another write, and
+          // the recorder itself would keep running with nothing left to
+          // read its snapshots.
+          stopSeriesFlush();
+          seriesRecorderRef.current?.stop();
+          seriesRecorderRef.current = null;
           // RULED at Task 4's own review (F2/I2): every sibling close in
           // this file pairs the record close with THIS SAME
           // `phase: "ended"`/`runOpen: false` surface update, in the same
@@ -1636,7 +1682,7 @@ export function useMonitorSession(
       // transport) but no phase moves on it.
       update({ frame });
     },
-    [nowDate, update, startSeriesFlush],
+    [nowDate, update, startSeriesFlush, withSeries, stopSeriesFlush],
   );
 
   /** A terminal event from the machine: `workoutComplete` (an honest
@@ -1966,6 +2012,13 @@ export function useMonitorSession(
       // already follows.
       degradedUnsubRef.current?.();
       degradedUnsubRef.current = null;
+      // Minor 1: cancel THIS attempt's token before nulling the ref — a
+      // still-pending native promise's own `.then()` checks it and
+      // unregisters itself instead of overwriting a later attempt's real
+      // unsub (see the ref's own doc comment).
+      if (lifecycleAttemptRef.current !== null) {
+        lifecycleAttemptRef.current.cancelled = true;
+      }
       lifecycleUnsubRef.current?.();
       lifecycleUnsubRef.current = null;
       // STEP 4: DISCONNECT (terminate-then-disconnect for the "armed,
@@ -2022,6 +2075,11 @@ export function useMonitorSession(
       unsubscribeRef.current = null;
       degradedUnsubRef.current?.();
       degradedUnsubRef.current = null;
+      // Minor 1: same cancellation as `teardown()`'s own — see
+      // `lifecycleAttemptRef`'s doc comment.
+      if (lifecycleAttemptRef.current !== null) {
+        lifecycleAttemptRef.current.cancelled = true;
+      }
       lifecycleUnsubRef.current?.();
       lifecycleUnsubRef.current = null;
       const driver = driverRef.current;
@@ -2217,6 +2275,11 @@ export function useMonitorSession(
       // peek — routine, not an edge case; reproduced empirically: 30
       // healthy frames over 15s, banner still up). `markSuspect()` is what
       // closes that gap — see its own doc comment in `liveness.ts`.
+      // Minor 1: a fresh token for THIS attempt, checked (not read back off
+      // the ref) by the `.then()` below — see `lifecycleAttemptRef`'s own
+      // doc comment for the race this closes.
+      const lifecycleAttempt = { cancelled: false };
+      lifecycleAttemptRef.current = lifecycleAttempt;
       const lifecycleResult = registerAppLifecycleListener((event) => {
         if (event !== "foreground") return;
         hysteresisCancelRef.current?.();
@@ -2230,6 +2293,14 @@ export function useMonitorSession(
       });
       if (lifecycleResult instanceof Promise) {
         void lifecycleResult.then((unsub) => {
+          if (lifecycleAttempt.cancelled) {
+            // `fail()`/`teardown()` already ran for this attempt before the
+            // native promise settled — the ref may already belong to a
+            // LATER attempt's own real listener. Unregister this one
+            // directly rather than writing it anywhere.
+            unsub();
+            return;
+          }
           lifecycleUnsubRef.current = unsub;
         });
       } else {
@@ -2324,7 +2395,18 @@ export function useMonitorSession(
     if (phase === "ended") return;
     // The link is gone: no terminate to attempt, but the record still
     // closes and is still loggable (spec's C5 lose-and-degrade).
-    const linkGone = phase === "disconnected";
+    //
+    // WHOLE-BRANCH REVIEW B1 (RULED): `phase === "disconnected"` ALONE
+    // predates Task 2, which widened what "lost" means for the SCREEN —
+    // the watchdog and the app-lifecycle resume both latch `frameSilence`
+    // with `phase` still `"live"` (a suppressed stream is not a torn-down
+    // connection). Without the `frameSilence` half, a rower pressing End
+    // under a LOST THE MONITOR banner stored `"rower"` — the exact
+    // conflation `endedBy` exists to end, reintroduced by this phase's own
+    // left hand. Spec §4's invariant, stated once: whatever fires the
+    // banner (§2a's three: disconnect, enabled-off, frame silence past
+    // threshold) defines the close.
+    const linkGone = phase === "disconnected" || stateRef.current.frameSilence;
     // Close BEFORE awaiting anything: `terminate()` makes the machine
     // report `terminated`, which comes straight back as an event, and this
     // is what makes that event a no-op instead of a second ending.

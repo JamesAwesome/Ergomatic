@@ -2173,6 +2173,10 @@ WebKit's throttling, so it does not rescue the JS half.
       integer per run makes era detection trivial RETROACTIVELY — absent
       `v` IS the pre-fix marker, cheap only while the corpus is one
       rower's two days old.
+      **A FOURTH clause is now owed too (Phase LL, whole-branch review,
+      exit criterion 10):** a lost link now says so, and a lost-link
+      ending is recorded as such. Same "greppable home" reasoning as the
+      other three — whoever cuts the next tag owes all four.
 - [x] **BEFORE trace-truth task 3 (the time axis): its exit criterion 7 is
       currently UNSATISFIABLE on the flagship capture, and the reason is
       structural** (PM gate, 2026-08-20). Criterion 7 asks that the axis's
@@ -2487,14 +2491,12 @@ deliverable, each stated so the walk can go red:
   corpus hypothesis falsified) appears during any piece, copy the
   connection log immediately after; the timestamped frames around that
   moment name the real mechanism.
-
-**Two walk items this phase owns** (superseded by the card above — (the rest are Phase RC's): **W5**,
-a Bluetooth power-cycle armed but not rowing, to settle whether
-`didDisconnectPeripheral` fires for our device and whether
-`onEnabledChanged` would have caught it; and **W6**, background the app
-for 30 s mid-piece, to settle whether a backlog of BLE events drains on
-resume (Apple documents queuing; depth unknown) or the row simply loses
-the span.
+- **The negative result is committed, not just reported:** a regression
+  test (`useMonitorSession.test.ts`, "Phase LL minor 3") replays all 6
+  corpus captures through the real `nextFreezeRun`/`isPausedRun` and pins
+  zero PAUSED firings at any post-rest work-interval start, so a future
+  change to the guard cannot silently reopen the falsified mechanism
+  without a red test naming it.
 
 **Exit — written so it can go red.** Clause (e) added 2026-08-20 at the PM
 gate's finding that four of this phase's items had no exit clause; the
@@ -4820,8 +4822,15 @@ program.ts` hardcodes PM5 Table 19 limits (`MIN_TIME_SECONDS = 20`,
 - **Remove the `PULL TO RESUME` block** — CROSS-NOTE 2026-08-22: James
   also observed the band FLASHING for a split second at flywheel-gated
   work-interval starts (fully extended at the catch when the interval
-  opens). Phase LL's §2b suppresses that firing window; the removal this
-  entry wants remains separate and is strengthened by the report.
+  opens). **§2b's suspected mechanism was FALSIFIED, not fixed:** Task 2
+  replayed all 6 committed captures through the real driver and found zero
+  PAUSED firings at any post-rest work-interval start — the existing
+  `distanceMeters<=0` guard already excludes that case, so there was
+  nothing to suppress and no speculative fix shipped. The flash's real
+  mechanism is still unexplained; the walk card's capture ask (Task 5)
+  is the way it gets settled — copy the connection log immediately if it
+  recurs during a walk. The removal this entry wants remains separate and
+  is strengthened by the report regardless of cause.
   Original entry: **Remove the `PULL TO RESUME` block** (James, 2026-08-17: "we never got
   rid of the pull to resume screen"): the stale-state band on
   `ConnectedSurface.tsx` (~line 584) still renders its inverted ink field

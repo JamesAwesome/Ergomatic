@@ -30,6 +30,21 @@
 // `useMonitorSession.ts`'s job (mechanism 2's own consumer) to treat
 // whatever arrives after a resume as suspect until proven healthy, never
 // this file's.
+//
+// PHASE LL MINOR 9 (design spec §2 mechanism 2, amended 2026-08-22, RULED at
+// the whole-branch review): lifecycle-suspect marking is NATIVE ONLY now.
+// "A browser tab switch does not interrupt Web Bluetooth the way iOS
+// suspends a webview" — treating every web `visibilitychange` as suspect
+// showed LOST THE MONITOR for 10s after any ordinary tab change in the dev
+// loop and the laptop walk harness, a false alarm on a link nothing ever
+// touched. `registerAppLifecycleListener`'s web branch (below) is therefore
+// a genuine no-op: on web it registers nothing on `document` and never
+// calls `cb`, for either transition. `registerWebAppLifecycleListener`
+// still implements the raw Page Visibility mapping and stays exported and
+// directly tested — this is the ONE platform conditional (native-first
+// policy), so `useMonitorSession.ts`'s own resume handler needs no
+// `isNative()` check of its own: on web it simply never hears from this
+// module again.
 
 import { isNative } from "../platform";
 
@@ -80,5 +95,9 @@ export function registerAppLifecycleListener(
         registerNativeAppLifecycleListener(cb),
     );
   }
-  return registerWebAppLifecycleListener(cb);
+  // Minor 9 (this file's own header): web no longer marks the monitor
+  // stream suspect on visibilitychange — a genuine no-op, never
+  // `registerWebAppLifecycleListener`. `cb` is intentionally never called
+  // on this arm.
+  return () => undefined;
 }

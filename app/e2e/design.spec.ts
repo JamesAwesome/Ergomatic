@@ -2098,13 +2098,19 @@ function buildCompletedMonitorRun(workoutId: string): MonitorRun {
     actuals: MONITOR_COMPLETED_ACTUALS,
     deviceName: MONITOR_DEVICE_NAME,
     startedAt: MONITOR_FIXED_NOW.toISOString(),
-    // A normal completion (no `endedBy`) — §2A's date/time rule reads
-    // `completedAt`, unlike the interrupted branch above which reads
-    // `startedAt` (the F6 rule).
+    // A normal completion — §2A's date/time rule reads `completedAt`,
+    // unlike the interrupted branch above which reads `startedAt` (the F6
+    // rule). Whole-branch review minor 10: this used to omit `endedBy`
+    // entirely, a shape no real writer produces — every close stamps one
+    // (design spec §4's writer table) — and the honest value for a
+    // `terminated: false` natural finish is the machine's own WORKOUTEND
+    // door, `"finished"` (`completeMonitorRun`'s own doc comment: "finished
+    // is the only CloseReason that pairs with terminated: false").
     completedAt: new Date(
       MONITOR_FIXED_NOW.getTime() + 70 * 60 * 1000,
     ).toISOString(),
     terminated: false,
+    endedBy: "finished",
   };
 }
 

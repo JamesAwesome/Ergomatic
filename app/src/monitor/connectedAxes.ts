@@ -1,15 +1,19 @@
 // Four axes derived — never invented — from today's `ConnectedPhase` plus
-// the three facts the hook does not publish on its own (design spec
-// docs/superpowers/specs/2026-08-15-connected-axes-design.md §1): the freeze
-// predicate's own verdict (`frozen`, mirrors `useMonitorSession`'s
-// `freezeRef` via `isPausedRun`), whether this hook's own record is still
-// open (`runOpen`, mirrors `runRef` — `disconnected` deliberately leaves the
-// record open, so `phase` alone cannot say what `session` should read), and
-// whether a `failed` program attempt left the transport connected
-// (`failureLeavesLinkUp`, computed by the CALLER from `ConnectedError.reason`
-// — a genuine `ProgramRejection` the PM5 itself sent leaves the link up; a
-// radio/transport failure on our own side does not — this module only
-// consumes the already-computed boolean, it does not classify reasons).
+// the FOUR facts the hook does not publish on its own (design spec
+// docs/superpowers/specs/2026-08-15-connected-axes-design.md §1, widened by
+// Phase LL Task 2/§2a): the freeze predicate's own verdict (`frozen`,
+// mirrors `useMonitorSession`'s `freezeRef` via `isPausedRun`), whether this
+// hook's own record is still open (`runOpen`, mirrors `runRef` —
+// `disconnected` deliberately leaves the record open, so `phase` alone
+// cannot say what `session` should read), whether a `failed` program
+// attempt left the transport connected (`failureLeavesLinkUp`, computed by
+// the CALLER from `ConnectedError.reason` — a genuine `ProgramRejection` the
+// PM5 itself sent leaves the link up; a radio/transport failure on our own
+// side does not — this module only consumes the already-computed boolean,
+// it does not classify reasons), and whether the frame stream is currently
+// suspect (`frameSilence`, published by the liveness watchdog and an
+// app-lifecycle resume alike — §2a's own `deriveLink` reads it to demote a
+// live-looking phase to `"lost"` without a real `disconnected` transition).
 //
 // Every derivation below `switch`es EXHAUSTIVELY over all nine
 // `ConnectedPhase` members (`"paused"` retired, connected-axes 2a task 5 —

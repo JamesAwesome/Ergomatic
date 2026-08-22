@@ -39,7 +39,13 @@ import {
   type FakeTimelineEvent,
 } from "./transports/fake";
 import { withLiveness, type LivenessDeps } from "./transports/liveness";
-import { fromHexString } from "./transports/recording";
+import { fromHexString, parseRecording } from "./transports/recording";
+import {
+  parseGeneralStatus,
+  toMonitorState,
+} from "../../domain/monitor/pm5/parse.js";
+import { readFileSync } from "node:fs";
+import { gunzipSync } from "node:zlib";
 import {
   applyContinuityCheck,
   BANNER_RETRACT_HYSTERESIS_MS,
@@ -49,6 +55,7 @@ import {
   isPausedRun,
   nextFreezeRun,
   nextRowingStreak,
+  PAUSED_FRAME_HOLD,
   programHasDistanceGoal,
   recordLivenessRecovery,
   recordLivenessSilence,
@@ -2270,6 +2277,99 @@ describe("useMonitorSession: ending", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Whole-branch review, BLOCKING B1 (RULED): `endSession`'s own `linkGone`
+// (`phase === "disconnected"` alone) predates Task 2, which widened what
+// "lost" means for the SCREEN (watchdog silence, an app-lifecycle resume)
+// while the record kept the old, narrower test — so a rower pressing End
+// under a LOST THE MONITOR banner stored `"rower"`, the exact conflation
+// `endedBy` exists to end. Design spec §4's invariant: "whatever fires the
+// banner defines the close." This reproduces the watchdog half (mechanism
+// 1/2's shape: `frameSilence` latches while `phase` stays `"live"`, never
+// `"disconnected"`) through the REAL liveness decorator composition (spec
+// §6: "tests must assert the COMPOSITION, not just the decorator"), same
+// `vi.doMock` + fresh-import idiom Task 1/2's own composition suites use.
+// ---------------------------------------------------------------------------
+
+describe('Whole-branch review B1: End under a watchdog-fired banner (phase still "live") stores endedBy link-lost', () => {
+  afterEach(() => {
+    vi.resetModules();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it("a suppressed stream trips the REAL watchdog, latching frameSilence while phase stays live — End then stores link-lost, not rower", async () => {
+    vi.useFakeTimers();
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
+      events: [status(100, { elapsedSeconds: 20, distanceMeters: 70 })],
+    });
+    // Composes the REAL decorator around the fake — the same thing
+    // `defaultTransport` does in production — so this reaches the REAL
+    // watchdog `setTimeout`, never a stub call to `onSilence`.
+    const mockDefaultTransport = vi.fn((deps: LivenessDeps) =>
+      withLiveness(fake, deps),
+    );
+    vi.doMock("../adapters/monitorTransport", () => ({
+      defaultTransport: mockDefaultTransport,
+    }));
+    vi.resetModules();
+
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+    const { result } = renderHook(() =>
+      freshUseMonitorSession({
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: () => (): void => undefined,
+        },
+      }),
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+    // Delivers the one scripted status (arms the watchdog on this, its
+    // first 0x0031) and moves both clocks together, same discipline the
+    // mechanism-2 "REVIEWER'S PROBE" test uses — `fake.tick` is a virtual
+    // script clock, `vi.advanceTimersByTime` is the decorator's own real
+    // one, and in production a BLE notification arriving IS real
+    // wall-clock time.
+    act(() => {
+      fake.tick(100);
+      vi.advanceTimersByTime(100);
+    });
+    expect(result.current.phase).toBe("live");
+    expect(result.current.frameSilence).toBe(false);
+
+    // No further frame is ever delivered — real time alone crosses the
+    // watchdog's 2500ms threshold. THE POINT: phase stays "live" through
+    // this whole span. It never becomes "disconnected" — this is
+    // mechanism 1/2's silent-freeze shape, not a radio drop.
+    act(() => {
+      vi.advanceTimersByTime(2600);
+    });
+    expect(result.current.frameSilence).toBe(true);
+    expect(result.current.phase).toBe("live");
+
+    await act(async () => {
+      await result.current.endSession();
+    });
+
+    expect(result.current.phase).toBe("ended");
+    // THE BUG (pre-fix): `linkGone` read only `phase === "disconnected"`,
+    // which is false here, so this stored `endedBy: "rower"` — the exact
+    // conflation the field exists to end, reintroduced by this phase's own
+    // left hand (spec §4's own account of the bug).
+    expect(loadMonitorRun()).toMatchObject({
+      endedBy: "link-lost",
+    });
+  });
+});
+
 describe("useMonitorSession: the double-fire pin", () => {
   it("two program() calls on the same tick produce ONE wire conversation", async () => {
     const { result, fake, transport } = harness({ program: TWO_INTERVALS });
@@ -3650,6 +3750,127 @@ describe("the paused derivation, replayed frame by frame from the record", () =>
   });
 });
 
+// ---------------------------------------------------------------------------
+// Phase LL minor 3 (design spec §2b, task-2-report.md's own finding):
+// §2b's suspected mechanism — a flywheel-gated work-interval open reading
+// as PAUSED because the clock is legally stationary before the first pull
+// — was investigated and FALSIFIED, not fixed: replaying the corpus
+// through `nextFreezeRun`/`isPausedRun` found zero PAUSED firings at any
+// post-rest work-interval start (the `distanceMeters<=0` guard already
+// excludes it structurally). No speculative fix shipped. That negative
+// result lived only in a task report until now — this pins it as a
+// committed regression, so a future change to the guard cannot silently
+// reopen the mechanism without a red test naming it.
+//
+// Corpus reader: the SAME 6 committed captures `liveness.test.ts`'s own
+// `CORPUS_FILES` sweeps (`step-1` excluded there for the identical reason
+// — a 2-line disconnect-only fragment with no 0x0031 at all). Decodes
+// 0x0031 (GENERAL_STATUS_UUID) ALONE, through the real `parseGeneralStatus`/
+// `toMonitorState` — never hand-rolled. That is deliberately sufficient:
+// `nextFreezeRun`'s outer guard (`state !== "rowing" || distanceMeters <=
+// 0`) is entirely a function of those two 0x0031 fields, which is exactly
+// the mechanism under test here. `currentSplit`/`spm` come from a
+// DIFFERENT characteristic (0x0032) this reader never touches, so
+// `freezeKey`'s other two components are held at a fixed placeholder
+// deliberately — real values could only make the key diverge MORE often
+// frame to frame (more resets), never less, so a placeholder cannot
+// manufacture a false-negative PAUSED firing the guard itself would have
+// prevented at the boundary this test actually probes.
+// ---------------------------------------------------------------------------
+
+const LL_CORPUS_FILES = [
+  "walk-2026-08-16/session-1-keystone-2x250r0.jsonl",
+  "walk-2026-08-16/session-2-wu-4unequal.jsonl",
+  "walk-2026-08-17/step-2-pm5-recording-1786973078979.jsonl",
+  "walk-2026-08-17/step-3-pm5-recording-second-rest-1786973713929.jsonl",
+  "walk-2026-08-17/step-4-pm5-recording-1786974067695.jsonl",
+  "walk-2026-08-18-metrics/pyramid-pm5-recording-1787090555458.jsonl.gz",
+];
+
+const LL_SESSIONS_DIR = import.meta.url
+  .replace(/^file:\/\//, "")
+  .replace(
+    /src\/monitor\/useMonitorSession\.test\.ts$/,
+    "../docs/monitor/sessions/",
+  );
+
+function loadCorpusFreezeFrames(fileName: string): MonitorFrame[] {
+  const path = `${LL_SESSIONS_DIR}${fileName}`;
+  const text = fileName.endsWith(".gz")
+    ? gunzipSync(readFileSync(path)).toString("utf8")
+    : readFileSync(path, "utf8");
+  const recording = parseRecording(text);
+  const frames: MonitorFrame[] = [];
+  for (const event of recording.events) {
+    if (!("dir" in event) || event.dir !== "rx") continue;
+    if (event.char !== GENERAL_STATUS_UUID) continue;
+    const bytes = fromHexString(event.hex);
+    const gs = parseGeneralStatus(bytes);
+    if ("error" in gs) continue;
+    frames.push(
+      frame({
+        distanceMeters: gs.distanceMeters,
+        state: toMonitorState(gs.workoutState),
+      }),
+    );
+  }
+  return frames;
+}
+
+describe("Phase LL minor 3: §2b's falsification, pinned as a committed regression — zero PAUSED firings at any post-rest work-interval start, across the full committed corpus", () => {
+  it.each(LL_CORPUS_FILES)(
+    "%s: every resting -> rowing transition stays clear of PAUSED through the guard's own window",
+    (fileName) => {
+      const frames = loadCorpusFreezeFrames(fileName);
+      expect(frames.length).toBeGreaterThan(0);
+      const { runs } = replay(frames);
+
+      // Every frame index where the decoded state transitions FROM
+      // resting TO rowing — a post-rest work-interval start, the exact
+      // boundary §2b's suspected mechanism would have to fire at.
+      const postRestStarts: number[] = [];
+      for (let i = 1; i < frames.length; i += 1) {
+        if (
+          frames[i - 1]!.state === "resting" &&
+          frames[i]!.state === "rowing"
+        ) {
+          postRestStarts.push(i);
+        }
+      }
+
+      for (const start of postRestStarts) {
+        // `PAUSED_FRAME_HOLD` frames is the guard's own window (plus a
+        // 2-frame margin) — the mutation this test guards against is
+        // dropping `nextFreezeRun`'s `distanceMeters <= 0` half of the
+        // guard, which would let the zero-distance flywheel-gated frames
+        // right after a rest start accumulating toward PAUSED instead of
+        // resetting on every one of them.
+        const windowEnd = Math.min(runs.length, start + PAUSED_FRAME_HOLD + 2);
+        for (let i = start; i < windowEnd; i += 1) {
+          expect(isPausedRun(runs[i]!)).toBe(false);
+        }
+      }
+    },
+  );
+
+  it("sanity: the corpus genuinely contains post-rest work-interval starts — a suite where this were 0 for every file would prove nothing", () => {
+    const total = LL_CORPUS_FILES.reduce((sum, fileName) => {
+      const frames = loadCorpusFreezeFrames(fileName);
+      let count = 0;
+      for (let i = 1; i < frames.length; i += 1) {
+        if (
+          frames[i - 1]!.state === "resting" &&
+          frames[i]!.state === "rowing"
+        ) {
+          count += 1;
+        }
+      }
+      return sum + count;
+    }, 0);
+    expect(total).toBeGreaterThan(0);
+  });
+});
+
 describe("nextRowingStreak: the rowingActive fallback's own counter", () => {
   it("a NON-ROWING frame resets outright — an armed or resting frame cannot lend its position to the next pull", () => {
     // The same discipline `nextFreezeRun` applies for the same reason: a
@@ -4958,7 +5179,7 @@ describe("Phase LL Task 2 mechanism 2: the app-lifecycle listener (background/re
     expect(result.current.frameSilence).toBe(false);
   });
 
-  it("a foreground resume treats the stream as suspect (frameSilence:true) and records to the ring", async () => {
+  it("Phase LL minor 9 (RULED, spec amendment 2026-08-22): a WEB foreground resume does NOT treat the stream as suspect any more — lifecycle-suspect marking is native-only now, and harness() exercises the web arm (jsdom's isNative() is always false)", async () => {
     const { result } = harness({ program: TWO_INTERVALS });
     await connect(result);
 
@@ -4967,22 +5188,25 @@ describe("Phase LL Task 2 mechanism 2: the app-lifecycle listener (background/re
       setVisibility("visible");
     });
 
-    expect(result.current.frameSilence).toBe(true);
+    // THE BUG this ruling closes: before minor 9, this same web
+    // visibilitychange sequence latched `frameSilence:true` — a routine
+    // browser tab switch showed LOST THE MONITOR for 10s. The mutation
+    // this test guards against is `appLifecycle.ts`'s web branch falling
+    // back to `registerWebAppLifecycleListener`, which would flip this
+    // back to `true` and log an `app-lifecycle` ring entry again.
+    expect(result.current.frameSilence).toBe(false);
     const exported = JSON.parse(result.current.exportLog()) as {
       kind: string;
       detail: string;
     }[];
-    expect(exported.some((e) => e.kind === "app-lifecycle")).toBe(true);
+    expect(exported.some((e) => e.kind === "app-lifecycle")).toBe(false);
   });
 
-  it("teardown unregisters the listener — a visibilitychange after unmount touches nothing", async () => {
+  it("teardown does not throw on a post-unmount visibilitychange — the web arm's no-op unsubscribe (minor 9) is still a well-behaved callable, same contract shape a real listener's own teardown would need", async () => {
     const { result, unmount } = harness({ program: TWO_INTERVALS });
     await connect(result);
     unmount();
 
-    // Must not throw, and there is nothing left to observe the effect on —
-    // this pins that the listener is genuinely removed, not merely
-    // ignored, matching `unsubscribeRef`'s own teardown discipline.
     expect(() => {
       setVisibility("hidden");
       setVisibility("visible");
@@ -5028,7 +5252,7 @@ describe("Phase LL Task 2 mechanism 2: the app-lifecycle listener (background/re
     vi.restoreAllMocks();
   });
 
-  it("REVIEWER'S PROBE (review fix): a SHORT resume — shorter than SILENCE_THRESHOLD_MS, so the decorator's OWN watchdog timer never matures — still clears frameSilence after BANNER_RETRACT_HYSTERESIS_MS of healthy frames post-resume, because markSuspect() routes through the decorator instead of around it", async () => {
+  it("REVIEWER'S PROBE (review fix), driven through the NATIVE dispatch (Phase LL minor 9: lifecycle-suspect marking is native-only, so a web visibilitychange can no longer drive this — this probe's own value was always about markSuspect()'s routing, not which platform triggered it, so it moves to the native arm): a SHORT resume — shorter than SILENCE_THRESHOLD_MS, so the decorator's OWN watchdog timer never matures — still clears frameSilence after BANNER_RETRACT_HYSTERESIS_MS of healthy frames post-resume, because markSuspect() routes through the decorator instead of around it", async () => {
     vi.useFakeTimers();
     // 40 events, 500ms apart — the first arms the watchdog (Task 1's
     // arming rule); the rest are the post-resume "healthy frames" the
@@ -5052,6 +5276,21 @@ describe("Phase LL Task 2 mechanism 2: the app-lifecycle listener (background/re
     );
     vi.doMock("../adapters/monitorTransport", () => ({
       defaultTransport: mockDefaultTransport,
+    }));
+    // NATIVE-shaped dispatch (same idiom as the "NATIVE arm" test above):
+    // captures the hook's own callback so this test can fire a
+    // "foreground" transition directly, without going through
+    // `document.visibilityState` at all — the web arm no longer reaches
+    // this code path (minor 9), so a real probe of the SHORT-resume
+    // clearing bug has to look like this now.
+    let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener: vi.fn(
+        (cb: (event: "background" | "foreground") => void) => {
+          lifecycleCb = cb;
+          return () => undefined;
+        },
+      ),
     }));
     vi.resetModules();
 
@@ -5088,10 +5327,11 @@ describe("Phase LL Task 2 mechanism 2: the app-lifecycle listener (background/re
     // A SHORT resume: the decorator's own SILENCE_THRESHOLD_MS=2500ms
     // timer never started counting down from a genuine gap, let alone
     // matured — exactly the "Control Center swipe, not an edge case"
-    // scenario the review named.
+    // scenario the review named, now fired through the native dispatch.
+    expect(lifecycleCb).toBeDefined();
     act(() => {
-      setVisibility("hidden");
-      setVisibility("visible");
+      lifecycleCb!("background");
+      lifecycleCb!("foreground");
     });
     expect(result.current.frameSilence).toBe(true);
 
@@ -5115,6 +5355,121 @@ describe("Phase LL Task 2 mechanism 2: the app-lifecycle listener (background/re
     // reviewer's own probe, reproduced and now actually retracting.
     for (let i = 0; i < 25; i += 1) healthyFrame();
     expect(result.current.frameSilence).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Whole-branch review, minor 1: the native lifecycle unsub race. The
+// NATIVE arm's own `registerAppLifecycleListener` returns a `Promise`, so
+// its resolution can land AFTER `fail()`/`teardown()` already nulled
+// `lifecycleUnsubRef` for that attempt — a `.then()` with no cancellation
+// check would then blindly overwrite the ref, and if a LATER attempt had
+// already registered its own real listener by then, that write silently
+// replaces the new attempt's unsub with the stale one, leaking the new
+// listener forever. Driven with a CONTROLLABLE (deferred) promise per
+// attempt so this test can resolve them in the exact adversarial order —
+// same `vi.doMock("../adapters/appLifecycle")` idiom the "NATIVE arm" test
+// above uses, but with the resolution under this test's own control
+// instead of resolving eagerly.
+// ---------------------------------------------------------------------------
+
+describe("Whole-branch review minor 1: the native lifecycle unsub race, driven with a controllable promise", () => {
+  afterEach(() => {
+    vi.resetModules();
+    vi.restoreAllMocks();
+  });
+
+  function deferred<T>(): {
+    promise: Promise<T>;
+    resolve: (value: T) => void;
+  } {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  }
+
+  it("a STALE attempt's late-resolving promise unregisters itself instead of overwriting a LATER attempt's own real unsub", async () => {
+    const attempts: {
+      resolve: (unsub: () => void) => void;
+    }[] = [];
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener: vi.fn(() => {
+        const d = deferred<() => void>();
+        attempts.push(d);
+        return d.promise;
+      }),
+    }));
+    vi.resetModules();
+
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
+    });
+    const { result, unmount } = renderHook(() =>
+      freshUseMonitorSession({ createTransport: () => fake }),
+    );
+
+    // ATTEMPT 1: connects (registers its own pending native listener),
+    // then is cancelled — `cancel()` reaches `teardown()` synchronously
+    // for the pre-`programming` phase this lands in (no `driver.terminate
+    // ()` await in the way), which is where the token gets marked
+    // cancelled. The native promise itself is still unresolved.
+    await act(async () => {
+      await result.current.connect();
+    });
+    expect(attempts).toHaveLength(1);
+    await act(async () => {
+      await result.current.cancel();
+    });
+
+    // ATTEMPT 2: a fresh connect() on the SAME hook instance — legal once
+    // `cancel()`'s `teardown()` has nulled `driverRef` — registers its OWN
+    // pending native listener. Its promise stays unresolved too; `connect
+    // ()` never awaits it (`void lifecycleResult.then(...)`).
+    await act(async () => {
+      await result.current.connect();
+    });
+    expect(attempts).toHaveLength(2);
+
+    const unsub1 = vi.fn();
+    const unsub2 = vi.fn();
+
+    // THE ADVERSARIAL ORDER: attempt 1's stale promise resolves AFTER
+    // attempt 2 has already registered — exactly the race a real native
+    // `addListener` can produce (nothing orders two Promise resolutions
+    // against each other).
+    await act(async () => {
+      attempts[0]!.resolve(unsub1);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    // THE FIX'S OWN SIGNATURE: attempt 1's `unsub` is called IMMEDIATELY
+    // on its own late resolution (the cancellation branch calling it
+    // directly), never merely stored. Before the fix this assertion is
+    // false — `unsub1` is silently written into `lifecycleUnsubRef`
+    // instead, uncalled, and only invoked (wrongly) by a LATER teardown.
+    expect(unsub1).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      attempts[1]!.resolve(unsub2);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Final teardown (unmount) must reach attempt 2's REAL unsub — proof
+    // the ref was never clobbered by attempt 1's stale write. Before the
+    // fix, `lifecycleUnsubRef` ends up holding `unsub1` (the last write
+    // wins with no cancellation check), so `unsub2` is never called at
+    // all here — the leaked listener minor 1 describes.
+    unmount();
+    expect(unsub2).toHaveBeenCalledOnce();
+    // And `unsub1` was not invoked a second time by this teardown — it
+    // was already fully handled at its own resolution, above.
+    expect(unsub1).toHaveBeenCalledOnce();
   });
 });
 
@@ -5257,6 +5612,12 @@ describe("Phase LL Task 4: applyContinuityCheck (pure — the resumed-stream con
 });
 
 describe("Phase LL Task 4: the continuity consumption seam, through the real hook composition — a healthy resume never false-positives", () => {
+  afterEach(() => {
+    vi.doUnmock("../adapters/appLifecycle");
+    vi.resetModules();
+    vi.restoreAllMocks();
+  });
+
   it("a foreground resume followed by ordinary forward-moving live frames never closes the record (companion to continuity.test.ts's own corpus sweep, at the hook level)", async () => {
     const events: FakeTimelineEvent[] = [];
     for (let i = 1; i <= 10; i += 1) {
@@ -5264,26 +5625,42 @@ describe("Phase LL Task 4: the continuity consumption seam, through the real hoo
         status(i * 500, { elapsedSeconds: i * 0.5, distanceMeters: i * 2 }),
       );
     }
-    const { result, fake } = harness({
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
       program: TWO_INTERVALS,
       events,
     });
+    // Phase LL minor 9: lifecycle-suspect marking is native-only now, so
+    // this test's own resume trigger has to look like the native dispatch
+    // (same idiom the "NATIVE arm"/REVIEWER'S PROBE tests use) rather than
+    // a web `visibilitychange` — `harness()`'s own web arm can no longer
+    // produce this transition at all.
+    let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener: vi.fn(
+        (cb: (event: "background" | "foreground") => void) => {
+          lifecycleCb = cb;
+          return () => undefined;
+        },
+      ),
+    }));
+    vi.resetModules();
+
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+    const { result } = renderHook(() =>
+      freshUseMonitorSession({ createTransport: () => fake }),
+    );
+
     await connect(result);
     await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
     tick(fake, 500);
     expect(result.current.phase).toBe("live");
 
+    expect(lifecycleCb).toBeDefined();
     act(() => {
-      Object.defineProperty(document, "visibilityState", {
-        value: "hidden",
-        configurable: true,
-      });
-      document.dispatchEvent(new Event("visibilitychange"));
-      Object.defineProperty(document, "visibilityState", {
-        value: "visible",
-        configurable: true,
-      });
-      document.dispatchEvent(new Event("visibilitychange"));
+      lifecycleCb!("background");
+      lifecycleCb!("foreground");
     });
     expect(result.current.frameSilence).toBe(true);
 
@@ -5297,11 +5674,6 @@ describe("Phase LL Task 4: the continuity consumption seam, through the real hoo
     expect(result.current.phase).toBe("live");
     expect(loadMonitorRun()?.completedAt).toBeNull();
     expect(loadMonitorRun()?.endedBy).toBeUndefined();
-
-    Object.defineProperty(document, "visibilityState", {
-      value: "visible",
-      configurable: true,
-    });
   });
 });
 
@@ -5402,6 +5774,7 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
 
   afterEach(() => {
     vi.doUnmock("../adapters/monitorTransport");
+    vi.doUnmock("../adapters/appLifecycle");
     vi.resetModules();
     vi.restoreAllMocks();
   });
@@ -5429,6 +5802,19 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
     );
     vi.doMock("../adapters/monitorTransport", () => ({
       defaultTransport: mockDefaultTransport,
+    }));
+    // Phase LL minor 9: lifecycle-suspect marking is native-only now — the
+    // resume trigger below has to look like the native dispatch, same as
+    // every other test in this file that used to rely on a web
+    // `visibilitychange`.
+    let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener: vi.fn(
+        (cb: (event: "background" | "foreground") => void) => {
+          lifecycleCb = cb;
+          return () => undefined;
+        },
+      ),
     }));
     vi.resetModules();
 
@@ -5480,19 +5866,12 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
     expect(result.current.phase).toBe("live");
 
     // The resume: app-lifecycle marks the stream suspect (Task 2's own
-    // mechanism), the identical trigger a real background/foreground gap
-    // fires.
+    // mechanism, native-only per minor 9), the identical trigger a real
+    // background/foreground gap fires.
+    expect(lifecycleCb).toBeDefined();
     act(() => {
-      Object.defineProperty(document, "visibilityState", {
-        value: "hidden",
-        configurable: true,
-      });
-      document.dispatchEvent(new Event("visibilitychange"));
-      Object.defineProperty(document, "visibilityState", {
-        value: "visible",
-        configurable: true,
-      });
-      document.dispatchEvent(new Event("visibilitychange"));
+      lifecycleCb!("background");
+      lifecycleCb!("foreground");
     });
     expect(result.current.frameSilence).toBe(true);
 
@@ -5530,10 +5909,128 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
     expect(resetEntry).toBeDefined();
     expect(resetEntry!.detail).toContain("1354");
     expect(resetEntry!.detail).toContain("100");
+  }, 15000);
 
-    Object.defineProperty(document, "visibilityState", {
-      value: "visible",
-      configurable: true,
+  // -------------------------------------------------------------------
+  // Whole-branch review minor 2: the continuity reset was closing the
+  // record through `completeContinuityReset` directly — a pure transform
+  // that never touches `withSeries`/`stopSeriesFlush`/the recorder at
+  // all — instead of the SAME folding path every other close in this file
+  // uses (`closeRecord`'s own three steps). Up to 30s of trace could be
+  // lost on the one close whose whole point is preserving the record
+  // ("preserve the interrupted record" — §4's own words), and the flush
+  // timer kept running into a record that could never accept another
+  // write. Same fixture shape as the test above (real driver + real hook
+  // composition), plus a `seriesFlushSchedule` so the timer's own
+  // cancellation is directly observable too.
+  // -------------------------------------------------------------------
+  it("minor 2: a continuity reset folds the recorder's trace into the closed record and cancels the flush timer — the SAME three steps closeRecord already does for every other close", async () => {
+    const flushTimer = manualInterval();
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
+      // Two ordinary scripted frames, crossing a whole-second bucket
+      // (elapsed 10 -> 30), so the recorder banks TWO samples before the
+      // reset — a trivial one-sample fixture could pass even with the
+      // fold silently dropped, if the recorder's own "always has at
+      // least one sample" guarantee papered over it.
+      events: [
+        status(100, { elapsedSeconds: 10, distanceMeters: 40 }),
+        status(200, { elapsedSeconds: 30, distanceMeters: 100 }),
+      ],
     });
+    const intercepting = interceptingTransport(fake);
+    const mockDefaultTransport = vi.fn((deps: LivenessDeps) =>
+      withLiveness(intercepting, deps),
+    );
+    vi.doMock("../adapters/monitorTransport", () => ({
+      defaultTransport: mockDefaultTransport,
+    }));
+    let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener: vi.fn(
+        (cb: (event: "background" | "foreground") => void) => {
+          lifecycleCb = cb;
+          return () => undefined;
+        },
+      ),
+    }));
+    vi.resetModules();
+
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+    const { result } = renderHook(() =>
+      freshUseMonitorSession({
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: () => (): void => undefined,
+        },
+        seriesFlushSchedule: flushTimer.schedule,
+      }),
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+    await act(async () => {
+      let settled = false;
+      const pending = result.current
+        .program(TWO_INTERVALS, TWO_IDENTITY)
+        .finally(() => {
+          settled = true;
+        });
+      await flush();
+      for (let i = 0; i < 25 && !settled; i += 1) {
+        fake.tick(0);
+        await flush();
+      }
+      await pending;
+    });
+    act(() => {
+      fake.tick(100);
+    });
+    act(() => {
+      fake.tick(100);
+    });
+    expect(result.current.phase).toBe("live");
+    // Two whole-second buckets banked (10 -> 30) — the recorder has more
+    // than the trivial "always at least one" sample before the reset.
+    expect(flushTimer.calls).toHaveLength(1);
+    expect(flushTimer.calls[0]!.cancelled).toBe(false);
+
+    act(() => {
+      intercepting.deliverRaw(
+        GENERAL_STATUS_UUID,
+        fromHexString(REAL_TAIL_HEX),
+      );
+    });
+    expect(lifecycleCb).toBeDefined();
+    act(() => {
+      lifecycleCb!("background");
+      lifecycleCb!("foreground");
+    });
+    expect(result.current.frameSilence).toBe(true);
+
+    act(() => {
+      intercepting.deliverRaw(
+        GENERAL_STATUS_UUID,
+        fromHexString(REAL_HEAD_HEX),
+      );
+    });
+    expect(result.current.phase).toBe("ended");
+
+    const stored = loadMonitorRun();
+    expect(stored?.endedBy).toBe("link-lost");
+    // THE FIX: the trace banked before the reset survives the close — the
+    // mutation this guards against is `handleFrame`'s live branch writing
+    // `closed` straight into `runRef.current` without folding
+    // `withSeries` first, which leaves `series` `undefined` here.
+    expect(stored?.series?.samples.length).toBeGreaterThan(1);
+    // THE FLUSH TIMER: cancelled by the SAME `stopSeriesFlush()` call
+    // `closeRecord` already makes for every other close — before the fix
+    // this timer kept running (registered, uncancelled) into a record
+    // that could never accept another write.
+    expect(flushTimer.calls[0]!.cancelled).toBe(true);
   }, 15000);
 });
