@@ -23,3 +23,32 @@ export interface Prescription {
    *  consumer branches on where it came from. */
   reason: string;
 }
+
+/** The plan's own producer: the day's authored prescription, or null.
+ *  Exported for its own tests and for the Plan screen's checkpoint marker.
+ *  (Spec §3.2's `prescriptionForToday`/`PrescriptionContext` wrapper was
+ *  cut from phase one by the PM review — the precedence resolver arrives
+ *  with a second producer, Phase 8B/8C.) */
+export function planPrescription(
+  plan: { sessions: readonly { prescribe?: Prescription }[] },
+  sessionIndex: number,
+): Prescription | null {
+  return plan.sessions[sessionIndex]?.prescribe ?? null;
+}
+
+/** THE one resolution point from a ref to a real workout, shared by BOTH
+ *  suggestion callers (Today.tsx and /api/today) so this lookup exists
+ *  exactly once. A `globalOnly` ref finds the designated GLOBAL row and
+ *  NEVER a rower's own workout that happens to share the title — the same
+ *  isGlobal rule every onboarding-title exclusion applies. Returns null on
+ *  a miss (quiet degradation is right for a runtime miss; authored content
+ *  is guarded by prescription.test.ts's seed-resolution test instead). */
+export function resolvePrescribed<
+  T extends { title: string; isGlobal: boolean },
+>(ref: PrescribedRef, workouts: readonly T[]): T | null {
+  return (
+    workouts.find(
+      (w) => w.title === ref.title && (!ref.globalOnly || w.isGlobal),
+    ) ?? null
+  );
+}
