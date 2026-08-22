@@ -2716,7 +2716,10 @@ verification branch is closed on the record rather than left hoped-for.
 
 ## Phase WU — The warm-up leaves
 
-**Status:** NOT OPENED. **Decided by James, 2026-08-21**, during the Phase
+**Status:** SHIPPED 2026-08-22 — PR #150, main `1602248`, all nine exit
+criteria green at the final whole-branch review; James confirmed his own
+warm-up setting was OFF, so the removal cost the cohort nothing.
+**Decided by James, 2026-08-21**, during the Phase
 RC review: "let's just drop warmups. We uniquely do them nobody else
 does." Scope chosen the same day, from three costed options: **remove
 warm-ups ENTIRELY** — the setting, the preference, the `EnginePhase`
