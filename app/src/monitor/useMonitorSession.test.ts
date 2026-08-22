@@ -7,8 +7,10 @@ import {
   WORKOUTSTATE_WORKOUTEND,
 } from "../../domain/monitor/pm5/parse.js";
 import {
+  ADDITIONAL_STATUS_1_UUID,
   GENERAL_STATUS_UUID,
   RECEIVE_CHARACTERISTIC_UUID,
+  TRANSMIT_CHARACTERISTIC_UUID,
 } from "../../domain/monitor/pm5/uuids.js";
 import {
   compileProgram,
@@ -37,7 +39,10 @@ import {
 } from "./transports/fake";
 import type { LivenessDeps } from "./transports/liveness";
 import {
+  BANNER_RETRACT_HYSTERESIS_MS,
   defaultLivenessSchedule,
+  handleFrameRecovery,
+  handleFrameSilence,
   isPausedRun,
   nextFreezeRun,
   nextRowingStreak,
@@ -4139,6 +4144,77 @@ describe("Phase LL Task 1: the hook's own liveness deps", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Phase LL Task 2 (§2a): `handleFrameSilence`/`handleFrameRecovery`, tested
+// as PURE FUNCTIONS — same reasoning `recordLivenessSilence`/
+// `recordLivenessRecovery` above already established (directly reachable
+// without driving `connect()` -> `defaultTransport` -> `withLiveness`).
+// These wrap that pair with the hysteresis; the full-hook composition test
+// further below proves the WIRING (`livenessDepsRef`'s own `onSilence`/
+// `onRecovery` closures) reaches `session.frameSilence`.
+// ---------------------------------------------------------------------------
+
+describe("Phase LL Task 2: handleFrameSilence/handleFrameRecovery (the hysteresis, pure)", () => {
+  it("handleFrameSilence latches frameSilence:true, cancels a pending retract timer, and records to the log", () => {
+    const patches: { frameSilence: boolean }[] = [];
+    const update = (p: { frameSilence: boolean }): void => {
+      patches.push(p);
+    };
+    const cancel = vi.fn();
+    const log = createEventLog();
+
+    handleFrameSilence(update, cancel, log, 2500);
+
+    expect(patches).toStrictEqual([{ frameSilence: true }]);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(log.entries().some((e) => e.kind === "liveness-silence")).toBe(true);
+  });
+
+  it("handleFrameSilence with no pending timer (cancel: null) does not throw", () => {
+    const update = vi.fn();
+    expect(() => handleFrameSilence(update, null, null, 2500)).not.toThrow();
+    expect(update).toHaveBeenCalledExactlyOnceWith({ frameSilence: true });
+  });
+
+  it("handleFrameRecovery does NOT clear frameSilence itself — it schedules a retract timer at BANNER_RETRACT_HYSTERESIS_MS and records to the log", () => {
+    const update = vi.fn();
+    const cancel = vi.fn();
+    const scheduled: { fn: () => void; ms: number }[] = [];
+    const schedule = (fn: () => void, ms: number): (() => void) => {
+      scheduled.push({ fn, ms });
+      return vi.fn();
+    };
+    const log = createEventLog();
+
+    handleFrameRecovery(update, cancel, schedule, log);
+
+    // THE BANNER CANNOT BLINK (spec §2a): recovery alone never calls
+    // `update` — only the timer, once it fires, does.
+    expect(update).not.toHaveBeenCalled();
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(scheduled).toHaveLength(1);
+    expect(scheduled[0]!.ms).toBe(BANNER_RETRACT_HYSTERESIS_MS);
+    expect(log.entries().some((e) => e.kind === "liveness-recovery")).toBe(
+      true,
+    );
+
+    // Firing the scheduled callback is what actually retracts the banner.
+    scheduled[0]!.fn();
+    expect(update).toHaveBeenCalledExactlyOnceWith({ frameSilence: false });
+  });
+
+  it("handleFrameRecovery cancels a PRIOR pending retract timer before scheduling a new one — a second recovery restarts the clock rather than stacking two", () => {
+    const update = vi.fn();
+    const priorCancel = vi.fn();
+    const schedule = vi.fn(() => vi.fn());
+
+    handleFrameRecovery(update, priorCancel, schedule, null);
+
+    expect(priorCancel).toHaveBeenCalledOnce();
+    expect(schedule).toHaveBeenCalledOnce();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Phase LL Task 1: THE HOOK'S OWN WIRING — proving `livenessDepsRef`'s
 // `onSilence`/`onRecovery` closures (built inside the hook, never passed
 // `logRef` itself — `react-hooks/refs` forbids that) really do write into
@@ -4285,5 +4361,310 @@ describe("Phase LL Task 1: the hook's own composition with defaultTransport", ()
     const snapshotEntry = exported.find((e) => e.kind === "liveness-snapshot");
     expect(snapshotEntry).toBeDefined();
     expect(JSON.parse(snapshotEntry!.detail)).toStrictEqual(snapshotValue);
+  });
+
+  it("Phase LL Task 2 review fix (task-1-report Minor): a SECOND connect() that fails transport-missing does not carry the FIRST connection's liveness snapshot", async () => {
+    const snapshotValue = {
+      atMs: 4200,
+      armed: true,
+      silent: true,
+      characteristics: {},
+      recentEvents: [],
+    };
+    // Same construction-throw shape as the criterion-7 test above — fails
+    // AFTER `logRef.current = log` so the ring genuinely has something to
+    // append into.
+    const firstTransport: Transport & { snapshot(): unknown } = {
+      scan: vi.fn(async () => [{ id: "dev-1", name: DEVICE_NAME }]),
+      connect: vi.fn(async () => undefined),
+      write: vi.fn(async () => undefined),
+      subscribe: vi.fn(() => {
+        throw new Error("driver construction boom");
+      }),
+      disconnect: vi.fn(async () => undefined),
+      onDisconnect: vi.fn(() => () => undefined),
+      snapshot: vi.fn(() => snapshotValue),
+    };
+    const mockDefaultTransport = vi
+      .fn()
+      .mockReturnValueOnce(firstTransport)
+      // Second attempt: no transport resolves at all — `transport-missing`,
+      // exactly the path `fail()` reaches BEFORE `livenessRef.current` is
+      // ever reassigned this attempt.
+      .mockReturnValueOnce(null);
+    vi.doMock("../adapters/monitorTransport", () => ({
+      defaultTransport: mockDefaultTransport,
+    }));
+    vi.resetModules();
+
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+    const { result } = renderHook(() => freshUseMonitorSession());
+
+    await act(async () => {
+      await result.current.connect();
+    });
+    expect(result.current.phase).toBe("failed");
+    const afterFirst = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const countAfterFirst = afterFirst.filter(
+      (e) => e.kind === "liveness-snapshot",
+    ).length;
+    expect(countAfterFirst).toBe(1);
+
+    await act(async () => {
+      await result.current.connect();
+    });
+    expect(result.current.phase).toBe("failed");
+    expect(result.current.error?.reason).toBe("transport-missing");
+    const afterSecond = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const countAfterSecond = afterSecond.filter(
+      (e) => e.kind === "liveness-snapshot",
+    ).length;
+    // THE BUG: before the fix, `livenessRef.current` still held the FIRST
+    // transport's `snapshot()` (never cleared) — this second failure,
+    // which never resolved a transport at all, would ALSO append a
+    // `liveness-snapshot` entry describing the PREVIOUS connection's own
+    // diagnostics as if they belonged to this one.
+    expect(countAfterSecond).toBe(countAfterFirst);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase LL Task 2: THE BANNER CANNOT BLINK (§2a), proven through the FULL
+// hook composition — `livenessDepsRef`'s real `onSilence`/`onRecovery`
+// closures reaching `session.frameSilence`, not just the pure functions
+// above. Same `vi.doMock` + fresh-import idiom the Task 1 composition
+// describe block already established.
+// ---------------------------------------------------------------------------
+
+describe("Phase LL Task 2: the banner's hysteresis, through the real hook composition", () => {
+  afterEach(() => {
+    vi.resetModules();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it("silence latches frameSilence immediately; one healthy frame does NOT clear it; a second silence inside the window restarts the clock; only a full, uninterrupted 10s window retracts it", async () => {
+    vi.useFakeTimers();
+    const stubTransport: Transport = {
+      scan: vi.fn(async () => [{ id: "dev-1", name: DEVICE_NAME }]),
+      connect: vi.fn(async () => undefined),
+      write: vi.fn(async () => undefined),
+      subscribe: vi.fn(() => () => undefined),
+      disconnect: vi.fn(async () => undefined),
+      onDisconnect: vi.fn(() => () => undefined),
+    };
+    const mockDefaultTransport = vi.fn((_deps: LivenessDeps) => stubTransport);
+    vi.doMock("../adapters/monitorTransport", () => ({
+      defaultTransport: mockDefaultTransport,
+    }));
+    vi.resetModules();
+
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+    const { result } = renderHook(() => freshUseMonitorSession());
+
+    await act(async () => {
+      await result.current.connect();
+    });
+    const deps = mockDefaultTransport.mock.calls[0]![0];
+    expect(result.current.frameSilence).toBe(false);
+
+    act(() => {
+      deps.onSilence(2500);
+    });
+    expect(result.current.frameSilence).toBe(true);
+
+    // One healthy frame — the banner must NOT retract on this alone.
+    act(() => {
+      deps.onRecovery();
+    });
+    expect(result.current.frameSilence).toBe(true);
+
+    // Just under the hysteresis window: still latched.
+    act(() => {
+      vi.advanceTimersByTime(BANNER_RETRACT_HYSTERESIS_MS - 1);
+    });
+    expect(result.current.frameSilence).toBe(true);
+
+    // A SECOND silence inside the window restarts the clock — the whole
+    // window must run again, uninterrupted, from here.
+    act(() => {
+      deps.onSilence(2500);
+    });
+    act(() => {
+      deps.onRecovery();
+    });
+    act(() => {
+      vi.advanceTimersByTime(BANNER_RETRACT_HYSTERESIS_MS - 1);
+    });
+    expect(result.current.frameSilence).toBe(true);
+
+    // The full window, uninterrupted this time, finally retracts it.
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(result.current.frameSilence).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase LL Task 2 mechanism 3 (§2): the degraded-characteristic wiring,
+// through the fake — proving `useMonitorSession.ts`'s own
+// `hasCharacteristicDegraded`/`onCharacteristicDegraded` registration, not
+// just `capacitorBle.ts`'s routing (already pinned in
+// `capacitorBle.test.ts`). `harness()`'s fake carries the SAME structural
+// extension (`fake.ts`'s own `onCharacteristicDegraded`), reached through
+// `spyTransport`'s `...inner` spread exactly the way `liveness.ts`'s own
+// spread reaches it in production.
+// ---------------------------------------------------------------------------
+
+describe("Phase LL Task 2 mechanism 3: the degraded-characteristic wiring (useMonitorSession.ts's own half)", () => {
+  it("a non-critical characteristic's failSubscribe records a characteristic-degraded ring entry and leaves the session untouched", async () => {
+    const { result, fake } = harness({ program: TWO_INTERVALS });
+    await connect(result);
+    expect(result.current.phase).toBe("pairing");
+
+    act(() => {
+      fake.failSubscribe(ADDITIONAL_STATUS_1_UUID);
+    });
+
+    // The session continues — no phase change, no error.
+    expect(result.current.phase).toBe("pairing");
+    expect(result.current.error).toBeNull();
+    const exported = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const entry = exported.find((e) => e.kind === "characteristic-degraded");
+    expect(entry).toBeDefined();
+    expect(entry!.detail).toContain(ADDITIONAL_STATUS_1_UUID);
+  });
+
+  it("the CSAFE control characteristic's failSubscribe stays FATAL end to end, through the hook — the hang guard survives mechanism 3's split", async () => {
+    const { result, fake } = harness({ program: TWO_INTERVALS });
+    await connect(result);
+    expect(result.current.phase).toBe("pairing");
+
+    act(() => {
+      fake.failSubscribe(TRANSMIT_CHARACTERISTIC_UUID);
+    });
+
+    expect(result.current.phase).toBe("disconnected");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase LL Task 2 mechanism 2 (§2, "iOS backgrounding"): the app-lifecycle
+// listener's wiring — `harness()`'s own `createTransport` override still
+// reaches the REAL `registerAppLifecycleListener` (it is not part of
+// `MonitorSessionDeps`, by design — the same choice `requestStoragePersistence`
+// already made), so every test using `harness()` exercises the WEB arm
+// (jsdom's `isNative()` is always false); the native arm gets its own
+// `vi.doMock` composition test, same idiom as Task 1's own.
+// ---------------------------------------------------------------------------
+
+describe("Phase LL Task 2 mechanism 2: the app-lifecycle listener (background/resume)", () => {
+  function setVisibility(state: "visible" | "hidden"): void {
+    Object.defineProperty(document, "visibilityState", {
+      value: state,
+      configurable: true,
+    });
+    document.dispatchEvent(new Event("visibilitychange"));
+  }
+
+  afterEach(() => {
+    Object.defineProperty(document, "visibilityState", {
+      value: "visible",
+      configurable: true,
+    });
+  });
+
+  it("backgrounding alone does nothing — the risk is on RESUME, not on suspend", async () => {
+    const { result } = harness({ program: TWO_INTERVALS });
+    await connect(result);
+    expect(result.current.frameSilence).toBe(false);
+
+    act(() => {
+      setVisibility("hidden");
+    });
+
+    expect(result.current.frameSilence).toBe(false);
+  });
+
+  it("a foreground resume treats the stream as suspect (frameSilence:true) and records to the ring", async () => {
+    const { result } = harness({ program: TWO_INTERVALS });
+    await connect(result);
+
+    act(() => {
+      setVisibility("hidden");
+      setVisibility("visible");
+    });
+
+    expect(result.current.frameSilence).toBe(true);
+    const exported = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(exported.some((e) => e.kind === "app-lifecycle")).toBe(true);
+  });
+
+  it("teardown unregisters the listener — a visibilitychange after unmount touches nothing", async () => {
+    const { result, unmount } = harness({ program: TWO_INTERVALS });
+    await connect(result);
+    unmount();
+
+    // Must not throw, and there is nothing left to observe the effect on —
+    // this pins that the listener is genuinely removed, not merely
+    // ignored, matching `unsubscribeRef`'s own teardown discipline.
+    expect(() => {
+      setVisibility("hidden");
+      setVisibility("visible");
+    }).not.toThrow();
+  });
+
+  it("NATIVE arm: registerAppLifecycleListener resolves via the async native path, and its unsubscribe reaches lifecycleUnsubRef (the Promise branch)", async () => {
+    const nativeUnsub = vi.fn();
+    let nativeCb: ((event: "background" | "foreground") => void) | undefined;
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener: vi.fn(
+        (cb: (event: "background" | "foreground") => void) => {
+          nativeCb = cb;
+          return Promise.resolve(nativeUnsub);
+        },
+      ),
+    }));
+    vi.resetModules();
+
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
+    });
+    const { result, unmount } = renderHook(() =>
+      freshUseMonitorSession({ createTransport: () => fake }),
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+    // The Promise resolved and its unsubscribe was stored — proven by
+    // teardown actually calling it.
+    await act(async () => {
+      unmount();
+      await Promise.resolve();
+    });
+    expect(nativeUnsub).toHaveBeenCalledOnce();
+    expect(nativeCb).toBeDefined();
+
+    vi.resetModules();
+    vi.restoreAllMocks();
   });
 });

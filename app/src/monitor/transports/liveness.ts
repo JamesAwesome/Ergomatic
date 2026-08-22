@@ -219,6 +219,23 @@ export function withLiveness(
   }
 
   return {
+    // Phase LL Task 2 addendum: `...inner` FIRST, so a structural
+    // extension beyond the six core `Transport` methods this file
+    // otherwise names explicitly (`snapshot()` below is this file's OWN
+    // such extension) passes through UNCHANGED for whichever platform arm
+    // `inner` happens to be — `capacitorBle.ts`'s `onCharacteristicDegraded`
+    // (§2 mechanism 3) and `transports/fake.ts`'s own test-control surface
+    // are both reached ONLY through whatever `adapters/monitorTransport.ts`
+    // composes `withLiveness` around, so without this spread, a structural
+    // extension on `inner` would be silently dropped by this wrapper — the
+    // exact "every test that injects `MonitorSessionDeps.createTransport`
+    // bypasses the seam" gap the plan's own Global Constraints warn about,
+    // just one layer lower, inside the seam itself. The six explicit
+    // methods below still OVERRIDE the spread (object literal: later keys
+    // win), so every one of them keeps exactly the decorated behaviour
+    // this file exists to add — this is pure ADDITION, not a behaviour
+    // change to anything already documented here.
+    ...inner,
     async scan() {
       return inner.scan();
     },

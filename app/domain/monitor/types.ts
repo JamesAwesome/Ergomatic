@@ -427,8 +427,22 @@ export interface Transport {
    *  which arrives via `onDisconnect` instead. */
   disconnect(): Promise<void>;
   /** Registers a callback for an UNEXPECTED link drop (radio out of range,
-   *  the phone's Bluetooth stack resetting, iOS backgrounding — see the
-   *  design spec §4's iOS note) — never fired by a caller-initiated
-   *  `disconnect()`. Returns an unsubscribe function. */
+   *  the phone's Bluetooth stack resetting, a reported Bluetooth-disabled
+   *  event) — never fired by a caller-initiated `disconnect()`. Returns
+   *  an unsubscribe function.
+   *
+   *  **CORRECTED (Phase LL Task 2, link-truth design spec §2 mechanism
+   *  2):** this comment used to name "iOS backgrounding" among the
+   *  causes of an unexpected `onDisconnect` — false. `Info.plist`
+   *  declares no `UIBackgroundModes`, so the app's whole JS runtime
+   *  simply SUSPENDS while backgrounded; nothing in this codebase
+   *  observes CoreBluetooth actually tearing the link down for that
+   *  reason specifically, and whether `didDisconnectPeripheral` even
+   *  fires for a backgrounded app is INFERENCE, not measured (Apple
+   *  documents only the connect/cancel cases — walk item W5). Backgrounding
+   *  is instead detected at the ADAPTER layer (`src/adapters/
+   *  appLifecycle.ts`) and handled by treating the frame stream as
+   *  suspect on resume (`useMonitorSession.ts`'s own `frameSilence`) —
+   *  a SEPARATE mechanism from this callback, never a producer of it. */
   onDisconnect(cb: (reason: string) => void): () => void;
 }

@@ -625,6 +625,12 @@ export default function ConnectedInterstitial({
     // above, so `deriveLink`'s `"failed"` case never runs off this call
     // (M-1, `AxesInput.failureLeavesLinkUp`'s own doc comment).
     failureLeavesLinkUp: null,
+    // Phase LL Task 2 (§2a): threaded for completeness — this call site's
+    // own branch below reads `axes.session`, never `axes.link`, so
+    // `frameSilence` has no effect on what this component renders (it
+    // matters at `ConnectedSurface.tsx`'s own call, which does read
+    // `axes.link`).
+    frameSilence: session.frameSilence,
   });
   if (session.phase === "disconnected" && axes.session === "none") {
     return renderFailureScreen(LINK_LOST_NO_RUN_ERROR);
