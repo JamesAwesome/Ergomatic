@@ -681,6 +681,11 @@ export function createDataRouter({
 
     await stores.baselines.put(req.user!.id, patch);
 
+    // NOTE (Phase BL PR A): isTestResult deliberately does NOT imply a
+    // `tested` source — sources are explicit-only on this wire, so PR B's
+    // post-test prompt sends `k2Source`/`k6Source: "tested"` beside the
+    // flag. This flag still has zero client senders (gate-verified,
+    // spec rev 2); it only appends test history.
     if (body.isTestResult === true) {
       if (patch.k2Seconds !== undefined) {
         await stores.testHistory.append(req.user!.id, {

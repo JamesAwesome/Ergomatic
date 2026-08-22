@@ -1496,10 +1496,12 @@ the table ships).
 door suits them, and a rowed test finally gets RECORDED instead of
 hand-typed.
 
-- [ ] **Baseline provenance** (`source`: `manual | estimated | tested`,
-      stored, NEVER shown; existing rows migrate to `manual`; additive
-      API). **Triad core — lands per the grouping rule's triad
-      exception.** **M**
+- [ ] **Baseline provenance** — per NUMBER, James's rev-2 ruling:
+      `k2Source`/`k6Source`, each
+      `manual | estimated | derived | tested`, stored, NEVER shown;
+      existing rows migrate to `manual` (truthful — the You editor was
+      the only writer that ever existed); additive API. **Triad core —
+      lands per the grouping rule's triad exception.** **M**
 - [ ] **The three doors** replace the single-offer no-baseline card
       (outcome-framed per James: recommend / I know it / row it; door 3
       dual-distance, reusing the shipped BaselineCard toggle). **M**
