@@ -50,6 +50,110 @@ describe("suggest", () => {
     });
     expect(r.poolIds).toStrictEqual(["fit"]);
   });
+  // Phase 8A: a plan checkpoint pins its own designated workout. The
+  // prescribed entry mirrors the REAL seed row a checkpoint resolves to
+  // (server/seed/library/onboarding.ts's 2k: type AN, easy, pain 2,
+  // global) — not a hand-built minimum — and it is deliberately NOT a
+  // library/pool member: both callers exclude onboarding titles from the
+  // pool, and SHUFFLE's escape depends on it sitting outside poolIds.
+  const k2Entry = w("k2-test", {
+    type: "AN" as const,
+    difficulty: "easy" as const,
+    pain: 2,
+    estMinutes: 8,
+    lastDoneDaysAgo: null,
+    isGlobal: true,
+  });
+  const CHECKPOINT_REASON =
+    "Plan checkpoint: re-test your 2k and update your baseline.";
+
+  describe("prescribed (plan checkpoints)", () => {
+    it("pins the prescribed entry with its authored reason, bypassing every preference filter", () => {
+      // Every filter dimension is set to EXCLUDE the prescribed entry
+      // (wrong difficulty, wrong duration bucket, wrong pain, wrong
+      // source) — a checkpoint is not a suggestion from a pool, so none
+      // of them may hide it.
+      const r = suggest({
+        todayCode: "AN",
+        prefs: {
+          difficulties: ["hard"],
+          durations: ["45-60"],
+          painLevels: [5],
+          lastDone: "under21",
+          source: "custom",
+        },
+        library: [w("an1", { type: "AN", difficulty: "hard" })],
+        prescribed: { entry: k2Entry, reason: CHECKPOINT_REASON },
+      });
+      expect(r.recommendationId).toBe("k2-test");
+      expect(r.reason).toBe(CHECKPOINT_REASON);
+    });
+
+    it("keeps the prescribed entry OUT of poolIds, so SHUFFLE escapes into the day's own type pool", () => {
+      const r = suggest({
+        todayCode: "AN",
+        prefs: { difficulties: ["easy", "medium", "hard"] },
+        library: [w("an1", { type: "AN" }), w("an2", { type: "AN" })],
+        prescribed: { entry: k2Entry, reason: CHECKPOINT_REASON },
+      });
+      expect(r.recommendationId).toBe("k2-test");
+      expect(r.poolIds).not.toContain("k2-test");
+      expect(r.poolIds).toStrictEqual(["an1", "an2"]);
+    });
+
+    it("still returns the checkpoint when the library holds NONE of the day's type (above the empty-pool return)", () => {
+      const r = suggest({
+        todayCode: "AN",
+        prefs: { difficulties: ["easy", "medium", "hard"] },
+        library: [w("at-only", { type: "AT" })],
+        prescribed: { entry: k2Entry, reason: CHECKPOINT_REASON },
+      });
+      expect(r.recommendationId).toBe("k2-test");
+      expect(r.reason).toBe(CHECKPOINT_REASON);
+      expect(r.poolIds).toStrictEqual([]);
+      expect(r.fellBack).toBe(false);
+    });
+
+    it("a live todayPickId still wins over a prescription (SHUFFLE is the escape)", () => {
+      const r = suggest({
+        todayCode: "AN",
+        prefs: { difficulties: ["easy", "medium", "hard"] },
+        library: [w("an1", { type: "AN" }), w("an2", { type: "AN" })],
+        todayPickId: "an2",
+        prescribed: { entry: k2Entry, reason: CHECKPOINT_REASON },
+      });
+      expect(r.recommendationId).toBe("an2");
+      expect(r.reason).toMatch(/your pick/i);
+    });
+
+    it("a stale todayPickId that resolves to nothing yields back to the prescription", () => {
+      const r = suggest({
+        todayCode: "AN",
+        prefs: { difficulties: ["easy", "medium", "hard"] },
+        library: [w("an1", { type: "AN" })],
+        todayPickId: "gone-from-pool",
+        prescribed: { entry: k2Entry, reason: CHECKPOINT_REASON },
+      });
+      expect(r.recommendationId).toBe("k2-test");
+      expect(r.reason).toBe(CHECKPOINT_REASON);
+    });
+
+    it("fellBack keeps its ordinary pool meaning under a prescription — it describes the pool, not the pick", () => {
+      // Type-matched entries exist but none survive the filters: the pool
+      // falls back to the unfiltered type list (fellBack true) even while
+      // the prescription is the recommendation.
+      const r = suggest({
+        todayCode: "AN",
+        prefs: { difficulties: ["easy"] },
+        library: [w("an-hard", { type: "AN", difficulty: "hard" })],
+        prescribed: { entry: k2Entry, reason: CHECKPOINT_REASON },
+      });
+      expect(r.recommendationId).toBe("k2-test");
+      expect(r.fellBack).toBe(true);
+      expect(r.poolIds).toStrictEqual(["an-hard"]);
+    });
+  });
+
   it("falls back to the unfiltered type list when filters match nothing", () => {
     const r = suggest({
       todayCode: "AT",

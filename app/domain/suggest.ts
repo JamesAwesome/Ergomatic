@@ -88,6 +88,14 @@ export interface SuggestInput {
   library: LibraryEntry[];
   prefs: SuggestPrefs;
   todayPickId?: string;
+  /** Phase 8A: a plan checkpoint's own designated workout, resolved by the
+   *  caller (domain/prescription.ts) and pinned here with its authored
+   *  reason. Every preference filter is bypassed for it — a checkpoint is
+   *  not a suggestion from a pool, and the rower must still meet it. The
+   *  entry is deliberately NOT a pool member (both callers exclude the
+   *  onboarding titles from `library`), so SHUFFLE escapes into the day's
+   *  own type pool. */
+  prescribed?: { entry: LibraryEntry; reason: string } | null;
 }
 
 export interface Suggestion {
@@ -182,7 +190,7 @@ function passesSourceFilter(e: LibraryEntry, prefs: SuggestPrefs): boolean {
 }
 
 export function suggest(input: SuggestInput): Suggestion {
-  const { todayCode, library, prefs, todayPickId } = input;
+  const { todayCode, library, prefs, todayPickId, prescribed } = input;
 
   const typeMatched = library.filter((e) => e.type === todayCode);
   const filtered = typeMatched.filter(
@@ -199,6 +207,27 @@ export function suggest(input: SuggestInput): Suggestion {
   const sorted = [...pool].sort(byLeastRecentlyDone);
   const poolIds = sorted.map((e) => e.id);
 
+  const pickOverride = todayPickId
+    ? sorted.find((e) => e.id === todayPickId)
+    : undefined;
+
+  // The prescribed branch sits ABOVE the empty-pool early return, ON
+  // PURPOSE (spec §3.3, binding): that return fires from the type-matched
+  // pool alone, and an account whose library holds none of the day's own
+  // type must still get its checkpoint — the one day it matters most.
+  // Only a LIVE pick (one that resolves in today's pool) beats it: SHUFFLE
+  // is the escape, and a stale id yields back to the checkpoint.
+  // `fellBack` and `poolIds` keep their ordinary pool meaning — they
+  // describe the pool, which the escape hatch still uses.
+  if (prescribed && !pickOverride) {
+    return {
+      recommendationId: prescribed.entry.id,
+      reason: prescribed.reason,
+      poolIds,
+      fellBack,
+    };
+  }
+
   if (sorted.length === 0) {
     return {
       recommendationId: null,
@@ -208,9 +237,6 @@ export function suggest(input: SuggestInput): Suggestion {
     };
   }
 
-  const pickOverride = todayPickId
-    ? sorted.find((e) => e.id === todayPickId)
-    : undefined;
   const picked = pickOverride ?? sorted[0];
   const reason = buildReason(picked, pickOverride, fellBack, prefs);
 
