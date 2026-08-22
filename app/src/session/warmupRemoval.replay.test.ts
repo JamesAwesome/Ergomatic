@@ -295,9 +295,21 @@ async function buildSummaryForCapture(capture: Capture): Promise<SummaryModel> {
         finalBoundary: event.finalBoundary,
       });
     } else if (event.kind === "workoutComplete") {
-      run = completeMonitorRun(run, { terminated: false }, new Date(0));
+      run = completeMonitorRun(
+        run,
+        { terminated: false, endedBy: "finished" },
+        new Date(0),
+      );
     } else if (event.kind === "terminated") {
-      run = completeMonitorRun(run, { terminated: true }, new Date(0));
+      // Phase LL Task 4: mirrors `useMonitorSession.ts`'s own
+      // `endByMachine(true)` mapping — a machine TERMINATE arriving at
+      // all means the link was up, so it reads the same as the rower
+      // pressing End with the link up.
+      run = completeMonitorRun(
+        run,
+        { terminated: true, endedBy: "rower" },
+        new Date(0),
+      );
     }
   });
 

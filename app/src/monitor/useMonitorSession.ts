@@ -62,12 +62,15 @@ import {
 import { createEventLog, type MonitorEventLog } from "./eventLog";
 import type { LogSeed } from "../session/logDraft";
 import {
+  completeInterruptedRun,
   completeMonitorRun,
   createMonitorRun,
   recordActual,
   saveMonitorRun,
+  type CloseReason,
   type MonitorRun,
 } from "./monitorRun";
+import { check as checkContinuity } from "./continuity";
 import { createSeriesRecorder, type SeriesRecorder } from "./seriesRecorder";
 import { defaultTransport } from "../adapters/monitorTransport";
 import { registerAppLifecycleListener } from "../adapters/appLifecycle";
@@ -408,6 +411,76 @@ export function handleFrameRecovery(
   return schedule(() => {
     update({ frameSilence: false });
   }, BANNER_RETRACT_HYSTERESIS_MS);
+}
+
+/** Phase LL Task 4 (design spec §4's continuity rule): true whenever `p`
+ *  contains ANY distance-kind interval — the exact predicate
+ *  `src/monitor/driver.ts`'s own `recordTwdVerdict` already computes for
+ *  the identical reason (`continuity.ts`'s own header comment has the full
+ *  wire citation: a distance-goal interval makes 0x0031's Total Work
+ *  Distance report the interval's GOAL, not distance rowed, so a
+ *  continuity check keyed on that field must not run inside one). Factored
+ *  out, plain-value, directly testable — same discipline as
+ *  `handleFrameSilence`/`handleFrameRecovery` above. */
+export function programHasDistanceGoal(p: WorkoutProgram): boolean {
+  return p.intervals.some((i) => i.kind === "distance");
+}
+
+/**
+ * Phase LL Task 4 (design spec §4's continuity rule): the resumed-stream
+ * consumption seam, factored into a plain, directly-testable function —
+ * same discipline as `handleFrameSilence`/`handleFrameRecovery` above,
+ * extended one step further: this one's OWN side effect (closing the
+ * record) is itself a pure transform (`completeInterruptedRun`), so the
+ * whole decision is expressible without a hook, a ref, or a fake
+ * transport's own accurate wire-timing model standing between a test and
+ * the behaviour under test.
+ *
+ * Returns `run` UNCHANGED (the identical reference) whenever nothing
+ * closes — a caller tells "did this fire" from reference identity, the
+ * same idiom `withSeries` above already uses. Four reasons nothing
+ * closes, all short-circuited before `continuity.ts`'s own `check` is
+ * even called: the stream isn't currently suspect (`frameSilence` false —
+ * this is what makes re-invoking this function every live frame free);
+ * there is no run, or it is already closed (nothing left to protect —
+ * `recordActual`'s own guard already covers a closed run, this is belt
+ * and braces at the SOURCE of the close instead); there is no prior
+ * reading to compare against (`lastTwd === null`, the very first live
+ * frame of a run); or this particular frame carries no
+ * `totalWorkDistanceMeters` at all (`frameTwd === undefined` — an older
+ * `MonitorFrame` construction path, `domain/monitor/types.ts`'s own
+ * additive-optional doc comment on that field).
+ */
+export function applyContinuityCheck(
+  run: MonitorRun | null,
+  lastTwd: number | null,
+  frameTwd: number | undefined,
+  frameSilence: boolean,
+  now: Date,
+  log: MonitorEventLog | null,
+): MonitorRun | null {
+  if (!frameSilence) return run;
+  if (run === null || run.completedAt !== null) return run;
+  if (lastTwd === null || frameTwd === undefined) return run;
+  const distanceGoal = programHasDistanceGoal(run.program);
+  const verdict = checkContinuity(
+    { totalWorkDistanceMeters: lastTwd, distanceGoal },
+    { totalWorkDistanceMeters: frameTwd, distanceGoal },
+  );
+  if (verdict !== "reset") return run;
+  log?.record(
+    "continuity-reset",
+    `resumed stream failed continuity: totalWorkDistanceMeters ${lastTwd} ` +
+      `-> ${frameTwd} — preserving the interrupted record, never merging`,
+  );
+  // §4: "On reset: preserve the interrupted record, start clean, never
+  // merge." No reconnect flow exists this phase (spec §8) to start a
+  // genuinely new run from, so "never merge" is discharged the way this
+  // codebase already discharges it for every other untrustworthy-record
+  // case: CLOSE it. `recordActual`'s own `completedAt` guard is what then
+  // makes every later boundary refuse to fold in — the same protection
+  // `completeInterruptedRun` already gives Today's row.
+  return completeInterruptedRun(run, now);
 }
 
 /**
@@ -1047,6 +1120,15 @@ export function useMonitorSession(
    *  ever written while the phase is `ready`; once the session is live it is
    *  dead weight until the next `cancel()` clears it. */
   const rowingStreakRef = useRef<RowingStreak | null>(null);
+  /** Phase LL Task 4 (design spec §4's continuity rule): the last live
+   *  frame's own `totalWorkDistanceMeters`, tracked independently of
+   *  `state.frame` so a value survives exactly the instant the stream goes
+   *  suspect (nothing overwrites this ref while frames aren't arriving).
+   *  `null` before this run's first live frame, or once `cancel()` clears
+   *  it for the next one — never re-derived from `state.frame` directly,
+   *  the same "own it in a ref" discipline `freezeRef`/`rowingStreakRef`
+   *  already use for per-run tracking a render cycle must not lose. */
+  const lastTwdRef = useRef<number | null>(null);
   /** One `connect()` at a time — a second press while the monitor chooser is open
    *  must not open a second one. */
   const connectingRef = useRef(false);
@@ -1221,15 +1303,24 @@ export function useMonitorSession(
    *  finish-grace actual that reaches `handleEvent` after this runs must
    *  find no recorder to attach anything from, which is what makes "the
    *  series does not grow" after close true by construction rather than by
-   *  a second guard duplicating this one. */
+   *  a second guard duplicating this one.
+   *
+   *  **Phase LL Task 4 (design spec §4): `endedBy` is now a REQUIRED
+   *  second argument.** Every one of this function's three call sites
+   *  passes the one `CloseReason` its own writer honestly knows — see
+   *  each call site's own comment for which, and `CloseReason`'s own doc
+   *  comment (`monitorRun.ts`) for the full table. There is deliberately
+   *  no default: a close that could omit the reason would silently
+   *  recreate the exact `terminated: true` conflation this task exists to
+   *  end. */
   const closeRecord = useCallback(
-    (terminated: boolean): void => {
+    (terminated: boolean, endedBy: CloseReason): void => {
       const run = runRef.current;
       if (run === null || run.completedAt !== null) return;
       const withFinalSeries = withSeries(run);
       runRef.current = completeMonitorRun(
         withFinalSeries,
-        { terminated },
+        { terminated, endedBy },
         nowDate(),
       );
       stopSeriesFlush();
@@ -1419,6 +1510,20 @@ export function useMonitorSession(
           startSeriesFlush();
           const freeze = nextFreezeRun(null, frame);
           freezeRef.current = freeze;
+          // Phase LL Task 4: seed the continuity baseline from this run's
+          // very first live frame — the "live" branch below only ever
+          // compares against a PRIOR frame of THIS run, never a stale
+          // reading a previous run left behind (`cancel()` clears this ref
+          // too, but the very first frame of a fresh run reaches this
+          // branch, not that one, so it needs its own seed here). The `??
+          // null` arm is defensive, not reachable from this file's own
+          // test suite: every REAL frame construction
+          // (`toMonitorFrame`/`driver.ts`'s own spread-through) always
+          // sets this field — only a `MonitorFrame` a future caller built
+          // BARE (bypassing both) could ever omit it, the same "additive-
+          // optional, coverage-exempt fallback" shape `domain/monitor/
+          // types.ts`'s own doc comment on this field already names.
+          lastTwdRef.current = frame.totalWorkDistanceMeters ?? null;
           update({
             frame,
             phase: "live",
@@ -1445,6 +1550,49 @@ export function useMonitorSession(
         // freeze naturally produces no samples of its own, the same "zero
         // for free" the recorder's rest handling already relies on).
         seriesRecorderRef.current?.onFrame(frame);
+        // Phase LL Task 4 (design spec §4's continuity rule; Task 2's own
+        // consumption seam, `useMonitorSession.ts`'s app-lifecycle/
+        // watchdog comments above: "§4's continuity rule ... is what
+        // should ultimately arbitrate a resumed stream"). Runs whenever
+        // the banner currently considers the stream suspect
+        // (`frameSilence`) — covers BOTH suspect sources (a genuine
+        // watchdog silence and an app-lifecycle resume both latch
+        // `frameSilence` the identical way, so both resume through this
+        // same check). Deliberately NOT gated to "only the very first
+        // frame after suspicion": `applyContinuityCheck` re-checking every
+        // frame until the hysteresis retracts the banner is strictly
+        // safer (a delayed jump inside that window is still caught) and
+        // costs nothing once a `"reset"` verdict has closed the run
+        // (`run.completedAt !== null` short-circuits every further call).
+        // KNOWN GAP, disclosed rather than hidden: `applyContinuityCheck`
+        // itself is mutation-tested exhaustively in isolation
+        // (`useMonitorSession.test.ts`'s own describe block), and the
+        // NO-OP path through this exact wiring is proven end to end
+        // (the healthy-resume hook test, same file). The TRUE branch of
+        // the assignment below — an actual reset reaching `runRef.current`
+        // through this real composition — has no hook-level test:
+        // `transports/fake.ts` deliberately never exposes a way to make
+        // `totalWorkDistanceMeters` report a wire-impossible value (its
+        // own doc comments refuse exactly this shape of "invented
+        // mechanism" for other fields, e.g. `restDistanceMeters`), so a
+        // genuinely backward reading can only be produced by a hand-built
+        // stub transport reproducing CSAFE program-ack sequencing from
+        // scratch — judged disproportionate for this one assignment,
+        // given the decision logic it wires in is already fully proven.
+        const closed = applyContinuityCheck(
+          runRef.current,
+          lastTwdRef.current,
+          frame.totalWorkDistanceMeters,
+          stateRef.current.frameSilence,
+          nowDate(),
+          logRef.current,
+        );
+        if (closed !== runRef.current) runRef.current = closed;
+        // Same defensive, test-suite-unreachable `??` arm as the seed
+        // above — every real frame reaching this branch already carries
+        // the field.
+        lastTwdRef.current =
+          frame.totalWorkDistanceMeters ?? lastTwdRef.current;
         const freeze = nextFreezeRun(freezeRef.current, frame);
         freezeRef.current = freeze;
         update({ frame, frozen: isPausedRun(freeze) });
@@ -1478,7 +1626,21 @@ export function useMonitorSession(
       // Idempotence against End: `endSession()` sets `ended` before it ever
       // awaits, so a terminal event racing its `terminate()` finds this.
       if (stateRef.current.phase === "ended") return;
-      closeRecord(terminated);
+      // Phase LL Task 4 (design spec §4's writer table): `terminated` here
+      // is ALSO which `CloseReason` applies — `false` is an honest
+      // WORKOUTEND (`"finished"`); `true` is a TERMINATE, and a TERMINATE
+      // reaching this hook at all is, by construction, link-up (the frame
+      // arrived) — the same fact the End button's `linkGone === false`
+      // branch records, learned a different way. FINDING (task-4 brief did
+      // not name this call site explicitly; the spec's own writer table
+      // lists only "machine WORKOUTEND -> finished" — this reading is the
+      // honest extension, not a guess: the existing test for this exact
+      // path is titled "a MACHINE-TERMINATED ending" and its own comment
+      // says "the rower stopped the piece at the erg", the identical fact
+      // `"rower"` already means for the End-button path). See
+      // `MonitorRun.endedBy`'s own doc comment (`monitorRun.ts`) for the
+      // full table.
+      closeRecord(terminated, terminated ? "rower" : "finished");
       // THE HAND-OFF HOLD (walk day 2). Only a natural FINISH opens one: a
       // `terminated` close opens no finish grace in the driver either
       // (CSAFE-DEF footnote 12 — the Split/Interval Number is unstable when
@@ -2104,7 +2266,9 @@ export function useMonitorSession(
         // `raceScanTimeout` (`capacitorBle.ts`) already relies on.
         let pendingTerminate: Promise<void> | undefined;
         if (run !== null && run.completedAt === null) {
-          closeRecord(true);
+          // Phase LL Task 4 (design spec §4's writer table): "a failed
+          // program() closing an open run -> program-failed".
+          closeRecord(true, "program-failed");
           update({ runOpen: false });
           // ...and leave the erg terminated rather than holding an orphan.
           // EXCEPT on `disconnected`, where the link is gone and there is
@@ -2132,7 +2296,10 @@ export function useMonitorSession(
     // Close BEFORE awaiting anything: `terminate()` makes the machine
     // report `terminated`, which comes straight back as an event, and this
     // is what makes that event a no-op instead of a second ending.
-    closeRecord(true);
+    // Phase LL Task 4 (design spec §4's writer table): reuses `linkGone`
+    // computed one line above — never recomputed — "End with the link up
+    // -> rower", "End with the link gone -> link-lost".
+    closeRecord(true, linkGone ? "link-lost" : "rower");
     update({ phase: "ended", endedBy: "user", runOpen: false });
     const driver = driverRef.current;
     if (driver === null || linkGone) return;
@@ -2197,6 +2364,10 @@ export function useMonitorSession(
     identityRef.current = NO_IDENTITY;
     freezeRef.current = NO_FREEZE;
     rowingStreakRef.current = null;
+    // Phase LL Task 4: same per-run lifecycle as `freezeRef`/
+    // `rowingStreakRef` above — a stale reading from THIS run must never
+    // seed the next one's continuity baseline.
+    lastTwdRef.current = null;
     runRef.current = null;
     update(INITIAL_STATE);
   }, [teardown, update]);

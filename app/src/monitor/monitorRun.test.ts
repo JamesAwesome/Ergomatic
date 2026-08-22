@@ -670,12 +670,18 @@ describe("completeMonitorRun: the completion writer (7B Task 4's own first calle
     const run = { ...freshMonitorRun(), actuals: [actual1] };
     saveMonitorRun(run);
 
-    const done = completeMonitorRun(run, { terminated: false }, finishedAt);
+    const done = completeMonitorRun(
+      run,
+      { terminated: false, endedBy: "finished" },
+      finishedAt,
+    );
 
     expect(done.completedAt).toBe(finishedAt.toISOString());
     // An honest WORKOUTEND: 7C reads this to say "logged 4 of 4" rather
     // than "abandoned at 1".
     expect(done.terminated).toBe(false);
+    // Phase LL Task 4: the new third field, stamped in the same call.
+    expect(done.endedBy).toBe("finished");
     expect(done.actuals).toStrictEqual([actual1]);
     expect(loadMonitorRun()).toStrictEqual(viaJson(done));
     // A new record, the caller's own copy untouched (`recordActual`'s
@@ -686,11 +692,16 @@ describe("completeMonitorRun: the completion writer (7B Task 4's own first calle
   it("records a TERMINATE as terminated — the same close, a different story", () => {
     const run = freshMonitorRun();
 
-    const done = completeMonitorRun(run, { terminated: true }, finishedAt);
+    const done = completeMonitorRun(
+      run,
+      { terminated: true, endedBy: "rower" },
+      finishedAt,
+    );
 
     expect(done).toMatchObject({
       completedAt: finishedAt.toISOString(),
       terminated: true,
+      endedBy: "rower",
     });
   });
 
@@ -707,11 +718,19 @@ describe("completeMonitorRun: the completion writer (7B Task 4's own first calle
     saveMonitorRun(closed);
     const later = new Date("2026-08-05T12:45:00.000Z");
 
-    const after = completeMonitorRun(closed, { terminated: false }, later);
+    const after = completeMonitorRun(
+      closed,
+      { terminated: false, endedBy: "finished" },
+      later,
+    );
 
     expect(after).toBe(closed);
     expect(after.completedAt).toBe(finishedAt.toISOString());
     expect(after.terminated).toBe(true);
+    // Phase LL Task 4: the guard covers the new field too — a second call
+    // never stamps `endedBy` over whatever (nothing, here) the first close
+    // left in place.
+    expect(after.endedBy).toBeUndefined();
     expect(loadMonitorRun()).toStrictEqual(viaJson(closed));
   });
 
@@ -719,7 +738,11 @@ describe("completeMonitorRun: the completion writer (7B Task 4's own first calle
     const run = freshMonitorRun();
     saveMonitorRun(run);
 
-    const done = completeMonitorRun(run, { terminated: false }, finishedAt);
+    const done = completeMonitorRun(
+      run,
+      { terminated: false, endedBy: "finished" },
+      finishedAt,
+    );
 
     expect(recordActual(done, actual1)).toBe(done);
     expect(loadMonitorRun()?.actuals).toStrictEqual([]);
@@ -880,18 +903,22 @@ describe("connectGuardStage: the Connect door's lock", () => {
   });
 });
 
-// F6 spec 2b, Task 1. `endedBy` is the additive marker a rower's own
-// "end this interrupted session" door (Today's row, a later task) stamps
-// on a `MonitorRun` that never got a `workoutComplete`/`terminated` event
-// from the machine at all — the phone was disconnected, backgrounded past
-// recovery, or the rower simply walked away. Absent means "normal
-// completion" (or "still live"); it is never inferred from `terminated`
-// or `completedAt` alone, because both of those already mean something
-// else (`MonitorRun`'s own doc comments on each field).
-describe("endedBy: the additive interrupted marker (F6)", () => {
+// F6 spec 2b, Task 1; WIDENED Phase LL Task 4 (design spec §4). `endedBy`
+// started as the additive marker a rower's own "end this interrupted
+// session" door (Today's row) stamps on a `MonitorRun` that never got a
+// `workoutComplete`/`terminated` event from the machine at all — the phone
+// was disconnected, backgrounded past recovery, or the rower simply walked
+// away. Task 4 widens the SAME field to the four `CloseReason` values
+// every ordinary wire-driven close now also carries (see `CloseReason`'s
+// own doc comment for the full table) — `"interrupted"` keeps its
+// original, unchanged meaning throughout: absent means "normal completion"
+// (or "still live"); it is never inferred from `terminated` or
+// `completedAt` alone, because both of those already mean something else
+// (`MonitorRun`'s own doc comments on each field).
+describe("endedBy: the additive close-reason marker (F6, widened Phase LL Task 4)", () => {
   beforeEach(() => localStorage.clear());
 
-  it("round-trips endedBy through save/load", () => {
+  it("round-trips endedBy: interrupted through save/load — LEGACY value, unchanged meaning", () => {
     const run: MonitorRun = {
       ...freshMonitorRun(),
       v: 2,
@@ -905,6 +932,24 @@ describe("endedBy: the additive interrupted marker (F6)", () => {
     expect(loaded!.endedBy).toBe("interrupted");
   });
 
+  it.each(["finished", "rower", "link-lost", "program-failed"] as const)(
+    "round-trips the NEW value endedBy: %s through save/load",
+    (value) => {
+      const run: MonitorRun = {
+        ...freshMonitorRun(),
+        v: 2,
+        logSeed: TEST_SEED,
+        completedAt: new Date("2026-08-16T10:00:00.000Z").toISOString(),
+        terminated: value !== "finished",
+        endedBy: value,
+      };
+      saveMonitorRun(run);
+      const loaded = loadMonitorRun();
+      expect(loaded).toStrictEqual(viaJson(run));
+      expect(loaded!.endedBy).toBe(value);
+    },
+  );
+
   it("a record without endedBy loads unchanged (never-migrate: reads as normal completion)", () => {
     const run: MonitorRun = {
       ...freshMonitorRun(),
@@ -916,7 +961,27 @@ describe("endedBy: the additive interrupted marker (F6)", () => {
     expect(loaded).toStrictEqual(viaJson(run));
   });
 
-  it("rejects a record whose endedBy is any other value", () => {
+  // Exit criterion 5's own words: "legacy `interrupted` rows read back
+  // unchanged." A v1 record, written before EITHER this field existed at
+  // all or before it widened — `logSeed` genuinely absent (the v1 shape,
+  // not merely omitted from this fixture), `endedBy` its own original
+  // sole possible value.
+  it("a v1 LEGACY record with endedBy: interrupted (predating both logSeed and the widened union) reads back byte-identical", () => {
+    const { logSeed: _drop, ...v1Shaped } = freshMonitorRun();
+    const legacy = {
+      ...v1Shaped,
+      v: 1 as const,
+      completedAt: new Date("2026-08-16T10:00:00.000Z").toISOString(),
+      endedBy: "interrupted" as const,
+    };
+    saveMonitorRun(legacy);
+    const loaded = loadMonitorRun();
+    expect(loaded).toStrictEqual(viaJson(legacy));
+    expect(loaded!.endedBy).toBe("interrupted");
+    expect(loaded!.logSeed).toBeUndefined();
+  });
+
+  it("rejects a record whose endedBy is any other value — proves the widening did not open the gate to arbitrary strings", () => {
     const run = freshMonitorRun();
     localStorage.setItem(
       MONITOR_RUN_KEY,
@@ -924,6 +989,15 @@ describe("endedBy: the additive interrupted marker (F6)", () => {
     );
     expect(loadMonitorRun()).toBeNull();
     expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+  });
+
+  it("rejects a record whose endedBy is a plausible-but-unlisted string (e.g. a future sixth value) — the validator is a closed set, not a type-only contract", () => {
+    const run = freshMonitorRun();
+    localStorage.setItem(
+      MONITOR_RUN_KEY,
+      JSON.stringify({ ...run, endedBy: "reconnected" }),
+    );
+    expect(loadMonitorRun()).toBeNull();
   });
 });
 

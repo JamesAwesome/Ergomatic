@@ -522,6 +522,11 @@ export function toMonitorFrame(raw: RawPm5Status): MonitorFrame {
     intervalRemaining: null,
     intervalAccrued: null,
     state,
+    // Phase LL Task 4: unconditional pass-through, same choice as
+    // `currentSplit`/`splitAvgPace`/`restSeconds` above — see
+    // `MonitorFrame.totalWorkDistanceMeters`'s own doc comment
+    // (`domain/monitor/types.ts`) for what reads this and why.
+    totalWorkDistanceMeters: raw.totalWorkDistanceMeters,
   };
 }
 

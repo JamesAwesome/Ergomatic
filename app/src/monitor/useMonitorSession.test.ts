@@ -29,7 +29,7 @@ import { buildRun } from "../session/engine";
 import type { LogSeed } from "../session/logDraft";
 import { loadRun, saveRun, type SessionRun } from "../session/run";
 import { createEventLog } from "./eventLog";
-import { loadMonitorRun, MONITOR_RUN_KEY } from "./monitorRun";
+import { loadMonitorRun, MONITOR_RUN_KEY, type MonitorRun } from "./monitorRun";
 import { buildMonitorLogSteps } from "../session/logDraft";
 import { monitorModeRun } from "../session/LogSession";
 import {
@@ -40,6 +40,7 @@ import {
 } from "./transports/fake";
 import { withLiveness, type LivenessDeps } from "./transports/liveness";
 import {
+  applyContinuityCheck,
   BANNER_RETRACT_HYSTERESIS_MS,
   defaultLivenessSchedule,
   handleFrameRecovery,
@@ -47,6 +48,7 @@ import {
   isPausedRun,
   nextFreezeRun,
   nextRowingStreak,
+  programHasDistanceGoal,
   recordLivenessRecovery,
   recordLivenessSilence,
   useMonitorSession,
@@ -1957,6 +1959,94 @@ describe("useMonitorSession: ending", () => {
     expect(loadMonitorRun()).toMatchObject({
       completedAt: t0.toISOString(),
       terminated: true,
+      // Phase LL Task 4 (design spec §4's writer table): "End button with
+      // the link up -> rower".
+      endedBy: "rower",
+    });
+  });
+
+  it("Phase LL Task 4: End after the link is gone stores endedBy link-lost, distinguishable from the rower's own End", async () => {
+    const { result, fake, transport } = harness({
+      program: TWO_INTERVALS,
+      events: timeline,
+    });
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+    tick(fake, 100);
+    expect(result.current.phase).toBe("live");
+    act(() => {
+      fake.injectDisconnect();
+    });
+    expect(result.current.phase).toBe("disconnected");
+    const before = transport.wireWrites;
+
+    await act(async () => {
+      await result.current.endSession();
+    });
+
+    expect(result.current.phase).toBe("ended");
+    // No terminate attempted — the link is gone (spec's C5 lose-and-degrade).
+    expect(transport.wireWrites).toBe(before);
+    expect(loadMonitorRun()).toMatchObject({
+      completedAt: t0.toISOString(),
+      terminated: true,
+      endedBy: "link-lost",
+    });
+  });
+
+  it("Phase LL Task 4: an honest WORKOUTEND stores endedBy finished", async () => {
+    const { result, fake } = harness({
+      program: TWO_INTERVALS,
+      events: [
+        status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+        status(200, {
+          workoutState: WORKOUTSTATE_WORKOUTEND,
+          elapsedSeconds: 60,
+          distanceMeters: 200,
+          spm: 0,
+          currentSplit: 0,
+        }),
+      ],
+    });
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+    tick(fake, 100);
+    tick(fake, 100);
+
+    expect(result.current.phase).toBe("ended");
+    expect(result.current.endedBy).toBe("machine");
+    expect(loadMonitorRun()).toMatchObject({
+      completedAt: t0.toISOString(),
+      terminated: false,
+      endedBy: "finished",
+    });
+  });
+
+  it("Phase LL Task 4: a machine TERMINATE (the rower stopped the piece at the erg, not through End) stores endedBy rower — a TERMINATE reaching this hook at all means the link was up", async () => {
+    const { result, fake } = harness({
+      program: TWO_INTERVALS,
+      events: [
+        status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+        status(200, {
+          workoutState: WORKOUTSTATE_TERMINATE,
+          elapsedSeconds: 40,
+          distanceMeters: 130,
+          spm: 0,
+          currentSplit: 0,
+        }),
+      ],
+    });
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+    tick(fake, 100);
+    tick(fake, 100);
+
+    expect(result.current.phase).toBe("ended");
+    expect(result.current.endedBy).toBe("machine");
+    expect(loadMonitorRun()).toMatchObject({
+      completedAt: t0.toISOString(),
+      terminated: true,
+      endedBy: "rower",
     });
   });
 
@@ -2499,6 +2589,10 @@ describe("useMonitorSession: P3b — a failed program with a run open", () => {
     expect(loadMonitorRun()).toMatchObject({
       completedAt: t0.toISOString(),
       terminated: true,
+      // Phase LL Task 4 (design spec §4's writer table): "a failed
+      // program() closing an open run -> program-failed" — the
+      // previously-unmapped path.
+      endedBy: "program-failed",
     });
     // ...and the erg was left terminated rather than holding an orphan.
     // (The nak's own conversation plus this terminate; the count only has
@@ -2545,6 +2639,11 @@ describe("useMonitorSession: P3b — a failed program with a run open", () => {
     expect(loadMonitorRun()).toMatchObject({
       completedAt: t0.toISOString(),
       terminated: true,
+      // Phase LL Task 4: still `"program-failed"` even on the
+      // disconnected-rejection variant — the CLOSE REASON is "what closed
+      // this record" (a failed program with a run open), independent of
+      // whether a terminate could be attempted afterward.
+      endedBy: "program-failed",
     });
   });
 
@@ -4983,5 +5082,192 @@ describe("Phase LL Task 2 mechanism 2: the app-lifecycle listener (background/re
     // reviewer's own probe, reproduced and now actually retracting.
     for (let i = 0; i < 25; i += 1) healthyFrame();
     expect(result.current.frameSilence).toBe(false);
+  });
+});
+
+describe("Phase LL Task 4: programHasDistanceGoal (pure)", () => {
+  it("false for an all-time program", () => {
+    expect(programHasDistanceGoal(TWO_INTERVALS)).toBe(false);
+  });
+
+  it("true whenever ANY interval is distance-kind, even in a mixed program", () => {
+    const mixed: WorkoutProgram = {
+      intervals: [
+        TWO_INTERVALS.intervals[0]!,
+        {
+          type: "work",
+          kind: "distance",
+          value: 500,
+          targetSplit: 120,
+          displaySpm: 22,
+          restSeconds: 0,
+        },
+      ],
+    };
+    expect(programHasDistanceGoal(mixed)).toBe(true);
+  });
+});
+
+describe("Phase LL Task 4: applyContinuityCheck (pure — the resumed-stream consumption seam)", () => {
+  const startedAt = t0.toISOString();
+
+  function openRun(overrides: Partial<MonitorRun> = {}): MonitorRun {
+    return {
+      v: 2,
+      workoutId: "w1",
+      title: "Continuity Fixture",
+      program: TWO_INTERVALS,
+      actuals: [],
+      deviceName: DEVICE_NAME,
+      startedAt,
+      completedAt: null,
+      terminated: false,
+      ...overrides,
+    };
+  }
+
+  it("not suspect: returns run UNCHANGED (same reference), whatever the readings say", () => {
+    const run = openRun();
+    const result = applyContinuityCheck(run, 1000, 5, false, t0, null);
+    expect(result).toBe(run);
+  });
+
+  it("no run open: null in, null out", () => {
+    expect(applyContinuityCheck(null, 1000, 5, true, t0, null)).toBeNull();
+  });
+
+  it("an already-closed run is returned UNCHANGED — never re-closed or re-stamped", () => {
+    const closed = openRun({
+      completedAt: new Date("2026-08-07T09:30:00.000Z").toISOString(),
+      endedBy: "finished",
+    });
+    const result = applyContinuityCheck(closed, 1000, 5, true, t0, null);
+    expect(result).toBe(closed);
+  });
+
+  it("no prior reading yet (lastTwd null): continuation, unchanged", () => {
+    const run = openRun();
+    expect(applyContinuityCheck(run, null, 5, true, t0, null)).toBe(run);
+  });
+
+  it("this frame carries no totalWorkDistanceMeters (frameTwd undefined): continuation, unchanged", () => {
+    const run = openRun();
+    expect(applyContinuityCheck(run, 1000, undefined, true, t0, null)).toBe(
+      run,
+    );
+  });
+
+  it("a forward or equal reading: continuation, unchanged, even while suspect", () => {
+    const run = openRun();
+    expect(applyContinuityCheck(run, 1000, 1000, true, t0, null)).toBe(run);
+    expect(applyContinuityCheck(run, 1000, 5000, true, t0, null)).toBe(run);
+  });
+
+  it("suppressed on a distance-goal program, even for a large backward jump", () => {
+    const distanceProgram: WorkoutProgram = {
+      intervals: [
+        {
+          type: "work",
+          kind: "distance",
+          value: 500,
+          targetSplit: 120,
+          displaySpm: 22,
+          restSeconds: 0,
+        },
+      ],
+    };
+    const run = openRun({ program: distanceProgram });
+    const result = applyContinuityCheck(run, 1599, 100, true, t0, null);
+    expect(result).toBe(run);
+    expect(result?.completedAt).toBeNull();
+  });
+
+  it("a genuine backward jump while suspect closes the run as interrupted, and records the ring entry — the mutation this test guards against: dropping the `>` comparison so ANY change (even forward) closes the run", () => {
+    const run = openRun();
+    const log = createEventLog();
+    const now = new Date("2026-08-07T09:31:00.000Z");
+
+    const result = applyContinuityCheck(run, 1599, 100, true, now, log);
+
+    expect(result).not.toBe(run);
+    expect(result?.completedAt).toBe(now.toISOString());
+    // §4: "preserve the interrupted record, start clean, never merge" —
+    // `terminated` stays whatever it already was (`completeInterruptedRun`'s
+    // own contract, unchanged by this task), only `completedAt`/`endedBy`
+    // move.
+    expect(result?.terminated).toBe(false);
+    expect(result?.endedBy).toBe("interrupted");
+    expect(result?.actuals).toStrictEqual(run.actuals);
+
+    const entries = JSON.parse(log.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const resetEntry = entries.find((e) => e.kind === "continuity-reset");
+    expect(resetEntry).toBeDefined();
+    expect(resetEntry!.detail).toContain("1599");
+    expect(resetEntry!.detail).toContain("100");
+  });
+
+  it("a null log is tolerated — no throw, the close still happens", () => {
+    const run = openRun();
+    const result = applyContinuityCheck(run, 1599, 100, true, t0, null);
+    expect(result?.completedAt).not.toBeNull();
+  });
+
+  it("idempotent in practice: calling again against the NOW-CLOSED result is a no-op (the completedAt guard, not a second-check special case)", () => {
+    const run = openRun();
+    const once = applyContinuityCheck(run, 1599, 100, true, t0, null);
+    const twice = applyContinuityCheck(once, 100, 50, true, t0, null);
+    expect(twice).toBe(once);
+  });
+});
+
+describe("Phase LL Task 4: the continuity consumption seam, through the real hook composition — a healthy resume never false-positives", () => {
+  it("a foreground resume followed by ordinary forward-moving live frames never closes the record as interrupted (companion to continuity.test.ts's own corpus sweep, at the hook level)", async () => {
+    const events: FakeTimelineEvent[] = [];
+    for (let i = 1; i <= 10; i += 1) {
+      events.push(
+        status(i * 500, { elapsedSeconds: i * 0.5, distanceMeters: i * 2 }),
+      );
+    }
+    const { result, fake } = harness({
+      program: TWO_INTERVALS,
+      events,
+    });
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+    tick(fake, 500);
+    expect(result.current.phase).toBe("live");
+
+    act(() => {
+      Object.defineProperty(document, "visibilityState", {
+        value: "hidden",
+        configurable: true,
+      });
+      document.dispatchEvent(new Event("visibilitychange"));
+      Object.defineProperty(document, "visibilityState", {
+        value: "visible",
+        configurable: true,
+      });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    expect(result.current.frameSilence).toBe(true);
+
+    // Ordinary forward-moving frames post-resume — the fake's own
+    // `totalWorkDistanceFor` model never reports backward on a healthy
+    // time-programmed session (`continuity.test.ts`'s corpus derivation
+    // proves this against real hardware captures; this proves the WIRING
+    // doesn't misfire against it either).
+    for (let i = 0; i < 8; i += 1) tick(fake, 500);
+
+    expect(result.current.phase).toBe("live");
+    expect(loadMonitorRun()?.completedAt).toBeNull();
+    expect(loadMonitorRun()?.endedBy).toBeUndefined();
+
+    Object.defineProperty(document, "visibilityState", {
+      value: "visible",
+      configurable: true,
+    });
   });
 });

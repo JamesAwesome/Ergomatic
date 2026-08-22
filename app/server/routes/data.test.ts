@@ -879,6 +879,66 @@ describe("GET/POST /api/logs", () => {
     expect(down.status).toBe(201);
   });
 
+  // Phase LL Task 4 (design spec §4, TRIAD; exit criterion 5). Same shape
+  // as `thumbs` above, unit-level against the fake store — the
+  // Postgres-backed proof lives in `endedBy.integration.test.ts`.
+  it("accepts an EXPLICIT endedBy: null", async () => {
+    const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
+      {
+        ...validLogBody(),
+        endedBy: null,
+      },
+    );
+    expect(res.status).toBe(201);
+  });
+
+  it("rejects an invalid endedBy value with 400, field named", async () => {
+    const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
+      {
+        ...validLogBody(),
+        endedBy: "reconnected",
+      },
+    );
+    expect(res.status).toBe(400);
+    expect(res.body.field).toBe("endedBy");
+    expect(res.body.error).toBe(
+      "endedBy must be one of finished|rower|link-lost|program-failed|interrupted or null",
+    );
+  });
+
+  it("accepts every member of the widened union, including the pre-existing interrupted value", async () => {
+    const app = appFor(makeStores());
+    for (const value of [
+      "finished",
+      "rower",
+      "link-lost",
+      "program-failed",
+      "interrupted",
+    ]) {
+      const res = await asA(request(app).post("/api/logs")).send({
+        ...validLogBody(),
+        endedBy: value,
+      });
+      expect(res.status).toBe(201);
+    }
+  });
+
+  it("POST with no endedBy at all → 201, and the row reads back null (legacy client shape)", async () => {
+    const app = appFor(makeStores());
+    const res = await asA(request(app).post("/api/logs")).send({
+      workoutId: null,
+      workoutTitle: "Off the cuff",
+      workoutType: "AT",
+      notes: null,
+      steps: [{ label: "Work" }],
+    });
+    expect(res.status).toBe(201);
+
+    const list = await asA(request(app).get("/api/logs"));
+    const row = list.body.find((r: { id: string }) => r.id === res.body.id);
+    expect(row).toMatchObject({ endedBy: null });
+  });
+
   // Post-workout-summary spec (2026-08-17), §3: the redesigned reflection
   // card makes every answer optional — a POST with NO held/pain/thumbs at
   // all (not even present as null) must still 201, and the stored row
