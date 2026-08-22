@@ -5,15 +5,25 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
-    // Phase WU (2026-08-21): the warm-up setting is gone. No tag covers
-    // Phase WU alone (ROADMAP's Phase WU section) — this entry rides
-    // whichever tag eventually carries Phase LL's brick fix, so version
-    // and date here are provisional and get reconciled by that tag's own
-    // "docs: vX.Y.Z's notes" commit (RF15's range discipline), which may
-    // add further items above this one from the same range.
+    // v0.16.0 is REAL as of 2026-08-22: Phase 8A's tag (PRs #155/#156),
+    // which also carries Phase WU's warm-up removal — WU's "rides the
+    // next tag" ruling is satisfied by 8A's tag arriving first, not by
+    // LL's brick fix as the provisional comment here once guessed. RF15
+    // range discipline: `git log v0.15.0..main --oneline` (no --merges)
+    // enumerated at the 8A final-PR PM gate — ten merges; #146-#149/
+    // #151-#154 need no note (zero files under app/src/, verified by
+    // `git show --name-only`, not by title); #150 is the warm-up item;
+    // #155/#156 are the three items above it. Item order is
+    // rower-priority: the new capability leads, the rename explains what
+    // history now looks like, the open loop is stated plainly so the
+    // next phase's baseline prompt reads as the second half of a
+    // feature, and the removal closes.
     version: "v0.16.0",
-    date: "2026-08-21",
+    date: "2026-08-22",
     items: [
+      "Your plan's three test days now suggest the actual test: session 7 shows the 2K Test with the reason (sessions 35 and 63 too; the head-race plan pins the 6K Test), and Log against plan is the lead button when you finish one. Swapping the type chip overrides the checkpoint, and SHUFFLE still escapes to an ordinary session. Reaching a checkpoint takes real logged sessions, so it appears when you get there, not before.",
+      "First 6k and First 2k are now 6K Test and 2K Test, with honest difficulty and pain ratings, and they live in the Library like any other workout (filter AN for the 2K, AT for the 6K) so you can re-test whenever you want. Older log entries keep the old names: that is your history, not a bug.",
+      "After a test, the app does not record your new baseline yet: update it yourself on the You tab. A proper post-test baseline prompt is the next thing being built.",
       "The warm-up setting is gone: WARM-UP on the You tab, and the automatic warm-up every session used to start with, no longer exist. If you want one, add it to the workout as an ordinary first step, and it will show up, count, and get judged like any other step.",
     ],
   },
