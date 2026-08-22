@@ -96,14 +96,15 @@ and the log use. **The timer must read the session copy, not the library workout
 ### Plan
 Two presets, each an ordered 84-session sequence of type codes — **a sequence, not a
 weekday calendar**, so rest days float:
-- `sprint` "2 000 m sprint": pattern `O2 AT O2 TR O2 AT O2 AN`, 2k tests at indices 7/31/55
-- `head` "5–6 k head race": pattern `O2 O2 AT O2 TR O2 AT`, 6k tests at 7/31/55
+- `sprint` "2 000 m sprint": pattern `O2 AT O2 TR O2 AT O2 AN`, 2k tests at indices 6/34/62 (sessions 7/35/63)
+- `head` "5–6 k head race": pattern `O2 O2 AT O2 TR O2 AT`, 6k tests at the same 6/34/62 checkpoints
 `doneN` = sessions logged (prototype 11 → "SESSION 12 OF 84"). Saving a log increments it.
 Selecting a different plan or Reset sets `doneN = 0`.
 
 ### Suggestion engine (Today)
 ```
-todayCode = plan[doneN]  (TEST → treated as TR)
+todayCode = plan[doneN]  (a checkpoint day carries its real type; its prescribed
+                          test pins the card until SHUFFLE or a chip swap)
 pool      = library.filter(type === todayCode)
                    .sort(byLastDoneDesc)
                    .filter(diffs[difficulty] && wMinutes <= cap)   // You-screen prefs
@@ -136,7 +137,6 @@ random other member of `pool`. Changing the preference chips clears `todayPick`.
 | type O2 | `#2a6275` | aerobic |
 | type AT | `#8a5f18` | anaerobic threshold |
 | type AN | `#5c4382` | anaerobic |
-| type TEST | `#1b1a17` | 2k/6k test |
 | on-color text | `#fffdf7` | text on any type color or accent |
 | desk (outside frame) | `#ddd8cc` | prototype only |
 

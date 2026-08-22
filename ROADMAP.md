@@ -2082,7 +2082,7 @@ WebKit's throttling, so it does not rescue the JS half.
       ruling** (PM gate, round 4 of the Task 2 PR review, 2026-08-20;
       third clause added by the EST LEFT task, 2026-08-20).
       **The notes obligation** (spec §7 criterion 9, the
-      pm-ledger, and a DEVIATIONS row 200 sentence all already say this —
+      pm-ledger, and a DEVIATIONS row 204 sentence all already say this —
       this is the fourth, GREPPABLE home, because the last two tags each
       shipped with a missing clause and whoever cuts v0.15.0 reads
       ROADMAP and the merge log, not the spec): the next tag's notes

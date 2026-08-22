@@ -358,6 +358,44 @@ test("today", async ({ page }) => {
   });
 });
 
+// Phase 8A Task 2: the checkpoint-day pair. A REAL advanced plan (six
+// plan-advancing seeded logs — `stores/logs.ts` bumps done_n per save — so
+// doneN lands exactly on the sprint plan's first checkpoint, index 6 =
+// session 7) puts the prescribed 2k test on the card with its authored
+// reason; the second frame is the chips ruling's override marker
+// (`CHECKPOINT OVERRIDDEN` riding the plan line's swap arrow).
+test("today-checkpoint", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-today-checkpoint@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await setBaselines(page);
+  await dismissStartHere(page);
+  await choosePlan(page, "sprint");
+  // Deterministic doneN on a reused account: zero, then advance exactly 6.
+  await resetPlanProgress(page);
+  await seedLogs(page, 6);
+  await page.goto("/today");
+  await page.locator(".today-card").waitFor();
+  await expect(page.locator(".today-plan-line")).toContainText(
+    "SESSION 7 OF 84 · AN",
+  );
+  await expect(page.locator(".today-card-title")).toHaveText("First 2k");
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "today-checkpoint.png"),
+  });
+
+  // OVERRIDDEN: a chip swap displaces the prescription, visibly.
+  await page.getByRole("button", { name: "O2", exact: true }).click();
+  await expect(page.locator(".today-plan-line")).toContainText(
+    "AN → O2 · CHECKPOINT OVERRIDDEN",
+  );
+  await expect(page.locator(".today-card-title")).not.toHaveText("First 2k");
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "today-checkpoint-overridden.png"),
+  });
+});
+
 // Task 2 (2026-08-10 workout-step-detail spec §2/§7.1): the capped
 // (5+ piece) state of the piece region — "today.png" above never shows it,
 // since whichever real global workout the sprint plan happens to recommend
