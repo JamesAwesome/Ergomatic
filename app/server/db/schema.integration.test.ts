@@ -15,7 +15,7 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createDb, type Db } from "./index.js";
-import { sessionLogs, users, workouts } from "./schema.js";
+import { baselines, sessionLogs, users, workouts } from "./schema.js";
 import type pg from "pg";
 
 describe("migrations", () => {
@@ -937,5 +937,158 @@ describe("migration 0012: the ended_by column", () => {
             values (${u.id}, 'Bad ended_by', 'AT', 'held', 2, '[]'::jsonb, 'reconnecting')`,
       ),
     ).rejects.toThrow();
+  });
+});
+
+// Phase BL PR A (baseline provenance, spec 2026-08-22 rev 2 "The stored
+// shape"): `baselines` gains per-number provenance — `k2_source` and
+// `k6_source`, a `baseline_source` pgEnum (manual | estimated | derived |
+// tested), NOT NULL, default 'manual'. No nullable fourth state. Existing
+// rows reading 'manual' is TRUTHFUL, not a placeholder: the You editor is
+// the only baseline writer that has ever existed (gate-verified — nothing
+// else in the client writes a baseline), so every pre-0013 number was
+// hand-entered. Same pre/post-migration shape as the 0011/0012 describes
+// above. (Originally minted as 0012 on this branch; regenerated as 0013
+// after Phase LL's 0012_amused_wild_child merged first — the standing
+// drizzle-timestamp rule.)
+describe("migration 0013: baseline provenance columns", () => {
+  let container: StartedPostgreSqlContainer;
+  let pool: pg.Pool;
+  let db: Db;
+  let tempDir: string;
+  let preMigrationUserId: string;
+
+  const PRE_0013_TAGS = [
+    "0000_skinny_silver_fox",
+    "0001_tan_thunderball",
+    "0002_rare_khan",
+    "0003_spicy_firedrake",
+    "0004_slippery_starjammers",
+    "0005_fine_radioactive_man",
+    "0006_windy_wendell_vaughn",
+    "0007_shallow_kang",
+    "0008_strip_wu_steps",
+    "0009_brief_kingpin",
+    "0010_familiar_maddog",
+    "0011_futuristic_roxanne_simpson",
+    "0012_amused_wild_child",
+  ];
+
+  beforeAll(async () => {
+    container = await new PostgreSqlContainer("postgres:18.4").start();
+    ({ pool, db } = createDb(container.getConnectionUri()));
+
+    // A migrations folder containing only 0000-0012 (amused_wild_child
+    // included), so migrate() below cannot possibly apply 0013 — the
+    // legacy row (no source columns at all) gets seeded against exactly
+    // the schema a real post-Phase-LL deploy would have.
+    tempDir = await mkdtemp(path.join(tmpdir(), "drizzle-pre-0013-"));
+    await mkdir(path.join(tempDir, "meta"));
+    for (const [i, tag] of PRE_0013_TAGS.entries()) {
+      const idx = String(i).padStart(4, "0");
+      await copyFile(
+        path.join("drizzle", `${tag}.sql`),
+        path.join(tempDir, `${tag}.sql`),
+      );
+      await copyFile(
+        path.join("drizzle", "meta", `${idx}_snapshot.json`),
+        path.join(tempDir, "meta", `${idx}_snapshot.json`),
+      );
+    }
+    const journal = JSON.parse(
+      await readFile(path.join("drizzle", "meta", "_journal.json"), "utf-8"),
+    ) as { entries: { idx: number }[] };
+    await writeFile(
+      path.join(tempDir, "meta", "_journal.json"),
+      JSON.stringify({
+        ...journal,
+        entries: journal.entries.filter((e) => e.idx <= 12),
+      }),
+    );
+    await migrate(db, { migrationsFolder: tempDir });
+
+    const [u] = await db
+      .insert(users)
+      .values({
+        googleSub: "pre-0013-user",
+        email: "pre-0013@migrate.test",
+        name: "Pre 0013",
+      })
+      .returning();
+    preMigrationUserId = u.id;
+
+    // Seeded against the PRE-0013 schema (no source columns at all) — raw
+    // SQL, same reason 0011's own block above uses it: the typed
+    // `baselines` insert builder already declares the source columns in
+    // this file's TS schema, and that statement would fail against the
+    // real pre-0013 table. Must run before the full migrate() call below.
+    await db.execute(
+      sql`insert into "baselines" ("user_id", "k2_seconds", "k6_seconds")
+          values (${u.id}, 118, 127)`,
+    );
+
+    // The real, full folder — only 0013 is new here (0000-0012's hashes
+    // already match what ran against tempDir above), so this is the
+    // moment the enum + ADD COLUMN statements fire. Runs once, shared by
+    // every `it` below.
+    await migrate(db, { migrationsFolder: "drizzle" });
+  });
+
+  afterAll(async () => {
+    await pool.end().catch(() => {});
+    await container.stop().catch(() => {});
+  });
+
+  it("reads a pre-0013 row's numbers unchanged and both sources as 'manual' after 0013 applies — truthful, since the You editor was the only writer that ever existed", async () => {
+    const [after] = await db
+      .select()
+      .from(baselines)
+      .where(eq(baselines.userId, preMigrationUserId));
+    expect(after.k2Seconds).toBe(118);
+    expect(after.k6Seconds).toBe(127);
+    expect(after.k2Source).toBe("manual");
+    expect(after.k6Source).toBe("manual");
+  });
+
+  it("defaults a fresh row's sources to 'manual' when the insert names neither — an old server binary writing post-migration stays truthful", async () => {
+    const [u] = await db
+      .insert(users)
+      .values({
+        googleSub: "post-0013-user",
+        email: "post-0013@migrate.test",
+        name: "Post 0013",
+      })
+      .returning();
+    // Raw SQL naming ONLY the pre-0013 columns: this is the exact
+    // statement shape a not-yet-redeployed server (or any writer that
+    // never learned the source columns) still issues after the DB has
+    // migrated — the DEFAULT, not the ORM, is what must answer here.
+    await db.execute(
+      sql`insert into "baselines" ("user_id", "k2_seconds")
+          values (${u.id}, 130)`,
+    );
+    const [row] = await db
+      .select()
+      .from(baselines)
+      .where(eq(baselines.userId, u.id));
+    expect(row.k2Source).toBe("manual");
+    expect(row.k6Source).toBe("manual");
+  });
+
+  // Both rejection cases go through the raw pg pool, not db.execute():
+  // drizzle wraps every failure in its own "Failed query: …" error and
+  // buries Postgres's message in the cause, so a toThrow() regex against
+  // the wrapper would pass for ANY failure — including "column does not
+  // exist" — and prove nothing about the enum.
+  it("rejects a value outside the enum at the DB layer — a plain-text column would have stored 'banana'", async () => {
+    await expect(
+      pool.query(`update "baselines" set "k2_source" = 'banana'`),
+    ).rejects.toThrow(/invalid input value for enum baseline_source/);
+  });
+
+  it("rejects NULL — 'unknown provenance' is not a state this schema can represent", async () => {
+    await expect(
+      pool.query(`update "baselines" set "k6_source" = null`),
+    ).rejects.toThrow(/violates not-null constraint/);
   });
 });

@@ -72,6 +72,21 @@ export const endedByEnum = pgEnum("ended_by", [
   "program-failed",
   "interrupted",
 ]);
+// Phase BL PR A (baseline-onboarding spec 2026-08-22 rev 2, "The stored
+// shape"): per-NUMBER provenance for the two baseline splits — one row
+// holds two numbers with independent origins (a questionnaire estimates
+// both; a 2K test measures only k2), so a single row-level column would
+// lie to the very consumer the ruling exists for. Stored, never shown in
+// UI. `manual` = typed in the You editor; `estimated` = the questionnaire
+// table (PR C); `derived` = the ±7s counterpart derivation
+// (domain/deriveBaseline.ts) accepted as an offer; `tested` = a rowed
+// test's measured result accepted from the post-test prompt (PR B).
+export const baselineSourceEnum = pgEnum("baseline_source", [
+  "manual",
+  "estimated",
+  "derived",
+  "tested",
+]);
 
 export const baselines = pgTable("baselines", {
   userId: uuid("user_id")
@@ -79,6 +94,12 @@ export const baselines = pgTable("baselines", {
     .references(() => users.id, { onDelete: "cascade" }),
   k2Seconds: real("k2_seconds"),
   k6Seconds: real("k6_seconds"),
+  // NOT NULL with a 'manual' default, deliberately no nullable "unknown"
+  // fourth state: every pre-0012 row was written by the You editor (the
+  // only writer that ever existed), so 'manual' is the truthful backfill,
+  // and an old client's plain write IS a manual entry.
+  k2Source: baselineSourceEnum("k2_source").notNull().default("manual"),
+  k6Source: baselineSourceEnum("k6_source").notNull().default("manual"),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
