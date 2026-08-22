@@ -66,3 +66,18 @@ TestFlight (internal).
 Notes: internal builds expire after 90 days — re-upload (no new tag needed;
 BUILD increments with any new commit). First-time setup lives in
 docs/deploy.md ("iOS build machine" section, Task-7 activation).
+
+## Rollback constraints
+
+The server rollback floor is the newest version listed here. `deploy.sh`'s
+health-gated auto-rollback and any manual rollback must never cross it —
+the seed converges the global library BY TITLE at every boot, so a version
+whose seed does not know a rename will DELETE the renamed rows (nulling
+every `session_logs.workout_id` that pointed at them — unrecoverable link
+loss) and reinsert its own old-titled rows fresh. Rolling forward again
+renames the fresh rows, but the links are gone. Recovery is a DB backup,
+not a redeploy.
+
+| Floor | Why |
+| ----- | --- |
+| v0.16.0 (PR #156) | First version whose seed renames global rows in place (`First 6k`/`First 2k` → `6K Test`/`2K Test` via `LEGACY_TITLE_RENAMES`). Rolling the API back past it against a post-rename DB is unrecoverable log-link loss. |
