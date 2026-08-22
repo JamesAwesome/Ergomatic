@@ -2081,3 +2081,17 @@ targetSplit:null}` reproduces the recorded tx exactly and `divergences` stays
   2026-08-09 drop did NOT orphan its `warmupMinutes` stats and the library rebalance
   depends on them — the ROADMAP's file map points an implementer straight at it and
   the spec must rule it OUT.
+
+## Implementation-phase addendum, 2026-08-22 (Phase WU execution)
+
+- **"The vulnerable-gate count is five" — an undercount produced by the sweep's
+  own shape.** The flake investigation grepped for the idiom keyed on its
+  `title` VARIABLE and missed a sixth, structurally identical gate whose name
+  was the hardcoded literal `"First 6k"`. Caught by a reviewer grepping the
+  NAVIGATION ("Log it after" clicks) instead of the assertion. **Technique: a
+  sweep for an idiom keys on the STRUCTURE (the surrounding flow, the call
+  shape), never on an operand — any operand can be a variable in one instance
+  and a literal in the next. Corollary proven twice this phase: the same
+  session's own line-number citations (two CSS ranges) were wrong while its
+  structural findings all held; trust a review's shapes, re-derive its
+  coordinates.**
