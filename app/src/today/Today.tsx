@@ -1177,13 +1177,15 @@ function TodayView({
     // (canShuffle = poolIds.length > 1) already keeps a click from firing
     // this at all when the pool has 0 or 1 members.
     if (pool.length === 0) return;
-    // Defensive: suggest.ts's own invariant is poolIds.length > 0 iff
-    // recommendationId !== null (see `recommended`'s comment above), so
-    // past the guard above `recommendationId` is never actually null here.
+    // Since 8A a prescribed pin can hold `recommendationId` with the
+    // prescribed entry OUTSIDE `pool` (it is deliberately not a pool
+    // member — SHUFFLE's escape depends on that), so unlike pre-8A this
+    // fallback and the -1 arm below are both live paths, not defensive.
     const currentId = suggestion.recommendationId ?? pool[0];
     const currentIndex = pool.indexOf(currentId);
-    // Defensive: the same invariant means `currentId` is always one of
-    // `pool`'s own members, so `indexOf` never actually returns -1 here.
+    // On every checkpoint day the ROUTINE shuffle-escape path lands here
+    // with -1 (the pinned test is not in `pool`), stepping to `pool[0]`,
+    // the least-recently-done member. -1 is the escape, not an error.
     const nextIndex =
       currentIndex === -1 ? 0 : (currentIndex + 1) % pool.length;
     const nextId = pool[nextIndex];
