@@ -70,6 +70,7 @@ import {
 } from "./monitorRun";
 import { createSeriesRecorder, type SeriesRecorder } from "./seriesRecorder";
 import { defaultTransport } from "../adapters/monitorTransport";
+import type { LivenessDeps, LivenessSnapshot } from "./transports/liveness";
 
 /** The session state machine (design spec §2, verbatim, MINUS `"paused"` —
  *  connected-axes 2a, task 5). Every value here is reached by a REAL event
@@ -225,6 +226,64 @@ const NO_IDENTITY: { program: WorkoutProgram } & RunIdentity = {
  *  reads as one decision. */
 function bestEffort(work: Promise<unknown>): void {
   void work.catch(() => undefined);
+}
+
+/** Phase LL Task 1: does `transport` carry a liveness `snapshot()`? Every
+ *  REAL production transport does — `defaultTransport` composes
+ *  `withLiveness` on both platform arms (`adapters/monitorTransport.ts`) —
+ *  but a test's own `MonitorSessionDeps.createTransport` override
+ *  typically hands back a bare `Transport`, and `fail()` below must not
+ *  assume the method exists. A structural check, not an `instanceof`: the
+ *  wrapped object is a plain closure return, not a class instance. */
+function hasLivenessSnapshot(
+  transport: Transport,
+): transport is Transport & { snapshot(): LivenessSnapshot } {
+  return typeof (transport as { snapshot?: unknown }).snapshot === "function";
+}
+
+/** Phase LL Task 1: this hook's own production `schedule` for the liveness
+ *  decorator — a plain `setTimeout`/`clearTimeout` pair, the same shape
+ *  every other `schedule` dep in this file already has. Hoisted to MODULE
+ *  scope, not a closure built inside the hook, for one reason: it is a
+ *  pure function with nothing to close over, and a top-level function is
+ *  directly unit-testable (`useMonitorSession.test.ts` calls it with a
+ *  fake `fn`/real timers) without building a whole hook instance — the
+ *  ONLY way to reach it otherwise is the full `connect()` -> real
+ *  `defaultTransport` -> `withLiveness` -> an actual 0x0031 arrival chain,
+ *  which every existing test's own `createTransport` override deliberately
+ *  bypasses (this file's own `MonitorSessionDeps.createTransport` doc
+ *  comment). */
+export function defaultLivenessSchedule(
+  fn: () => void,
+  ms: number,
+): () => void {
+  const id = setTimeout(fn, ms);
+  return () => clearTimeout(id);
+}
+
+/** Phase LL Task 1: this hook's own production `onSilence` body, factored
+ *  out to a PLAIN VALUE (`MonitorEventLog | null`), never a ref — passing
+ *  `logRef` itself into a function reachable during render trips
+ *  `react-hooks/refs` ("Passing a ref to a function may read its value
+ *  during render"), even though this one only closes over it for later.
+ *  Taking the already-dereferenced log instead sidesteps that rule
+ *  entirely and stays directly testable: `useMonitorSession.test.ts` calls
+ *  this with a real `createEventLog()` instance, no ref needed. The hook
+ *  itself still reads `logRef.current` AT CALL TIME — `livenessDepsRef`'s
+ *  own `onSilence: (ms) => recordLivenessSilence(logRef.current, ms)`
+ *  below reads it inside a deferred arrow, not during render, same as
+ *  every other ref read in this file. */
+export function recordLivenessSilence(
+  log: MonitorEventLog | null,
+  ms: number,
+): void {
+  log?.record("liveness-silence", `frame stream silent for ${ms}ms`);
+}
+
+/** Phase LL Task 1: this hook's own production `onRecovery` body — same
+ *  reasoning as `recordLivenessSilence` above. */
+export function recordLivenessRecovery(log: MonitorEventLog | null): void {
+  log?.record("liveness-recovery", "frame stream resumed");
 }
 
 /**
@@ -861,6 +920,48 @@ export function useMonitorSession(
    *  or `null` when none is running — no run open, or the run has already
    *  closed. Mirrors `handoffHoldRef`'s own "canceller or null" shape. */
   const seriesFlushCancelRef = useRef<(() => void) | null>(null);
+  /** Phase LL Task 1 (link-truth design spec §1): whatever `connect()`'s
+   *  own transport resolved to, IF it carries a liveness `snapshot()` —
+   *  every REAL path does (`defaultTransport` composes `withLiveness` on
+   *  both platform arms), a test's own `MonitorSessionDeps.createTransport`
+   *  override typically does not, and that is fine: `fail()` below reads
+   *  this optionally, exactly the way it already treats every other
+   *  optional diagnostic. Set the instant `connect()`'s transport resolves
+   *  (before `scan()`/`connect()` can fail), so a failure mid-pairing still
+   *  gets whatever the decorator had already seen. Never explicitly
+   *  cleared — the next `connect()` simply overwrites it, same lifecycle
+   *  `logRef` already has (that ref's own comment explains why nothing
+   *  here nulls a diagnostic ref on teardown). */
+  const livenessRef = useRef<{ snapshot(): LivenessSnapshot } | null>(null);
+  /** This hook's OWN numeric clock (Phase LL Task 1) — NOT
+   *  `MonitorSessionDeps.now` (that one returns a `Date`, for the record's
+   *  ISO stamps only) and NOT `MonitorSessionDeps.schedule` (that one is
+   *  reserved for `FINISH_HANDOFF_HOLD_MS`, deliberately kept separate from
+   *  the series-flush schedule for the same reason — a call-count-sensitive
+   *  test suite already exists against it, `useMonitorSession.test.ts`'s
+   *  own `manualSchedule()`). The liveness decorator needs its OWN
+   *  monotonic-ms clock, matching `DriverOptions.now`/`ReplayClock`'s own
+   *  shape (`liveness.ts`'s header: the injected clock is not optional) —
+   *  a THIRD schedule seam, not a reuse of either existing one, so this
+   *  file's own tests never have to account for a watchdog timer they
+   *  never asked for. `onSilence`/`onRecovery` are thin arrows that read
+   *  `logRef.current` AT CALL TIME (never during render — `recordLiveness
+   *  Silence`/`recordLivenessRecovery`'s own doc comments explain why they
+   *  take the dereferenced log rather than the ref itself) because the
+   *  transport — and
+   *  this liveness wrapper around it — is built BEFORE `connect()` ever
+   *  creates the log (`createTransport` runs first; `createLog` runs only
+   *  after `transport.connect()` resolves, below). A plain `useRef`
+   *  initialiser, never rebuilt: every test that reaches this file's own
+   *  default composition gets ONE real `Date.now`/`setTimeout` pair for
+   *  the whole hook's life, same as `defaultTransport`'s own production
+   *  default would be built exactly once per real connect. */
+  const livenessDepsRef = useRef<LivenessDeps>({
+    now: () => Date.now(),
+    schedule: defaultLivenessSchedule,
+    onSilence: (ms) => recordLivenessSilence(logRef.current, ms),
+    onRecovery: () => recordLivenessRecovery(logRef.current),
+  });
 
   const update = useCallback((patch: Partial<SessionState>): void => {
     stateRef.current = { ...stateRef.current, ...patch };
@@ -1507,7 +1608,22 @@ export function useMonitorSession(
   );
 
   const fail = useCallback(
-    (error: ConnectedError): void => update({ phase: "failed", error }),
+    (error: ConnectedError): void => {
+      // Phase LL Task 1, exit criterion 7: the ring gains the liveness
+      // snapshot on FAILURE — the 2026-08-20 walk lost F-1's evidence
+      // precisely because the ring's only door was downstream of the
+      // failure that locked it (`ConnectedInterstitial.tsx`'s own
+      // failure-screen door, this task's other half). `livenessRef` is
+      // `null` before any transport has ever resolved (a `defaultTransport`
+      // rejection, unreachable today) and its `snapshot()` is undefined
+      // whenever a test's own `createTransport` override built a bare
+      // `Transport` — either way this is a no-op, never a throw.
+      const snapshot = livenessRef.current?.snapshot();
+      if (snapshot !== undefined) {
+        logRef.current?.record("liveness-snapshot", JSON.stringify(snapshot));
+      }
+      update({ phase: "failed", error });
+    },
     [update],
   );
 
@@ -1531,7 +1647,8 @@ export function useMonitorSession(
     // `createTransport` override) resolves on the same tick, so `await`
     // costs nothing observable there.
     const transport = await (
-      depsRef.current.createTransport ?? defaultTransport
+      depsRef.current.createTransport ??
+      (() => defaultTransport(livenessDepsRef.current))
     )();
     if (transport === null) {
       connectingRef.current = false;
@@ -1541,6 +1658,11 @@ export function useMonitorSession(
       });
       return;
     }
+    // Phase LL Task 1: captured whether or not scan/connect/program ever
+    // succeeds — `fail()` reads this optionally, so a failure at ANY later
+    // step (scan dismissed, a radio throw, a program rejection) still has
+    // whatever the decorator had already observed by then.
+    livenessRef.current = hasLivenessSnapshot(transport) ? transport : null;
     try {
       // The platform's chooser (browser chrome on web, the plugin's
       // in-process sheet on iOS). One result or none either way — the app
@@ -1557,7 +1679,16 @@ export function useMonitorSession(
       }
       update({ phase: "pairing" });
       await transport.connect(device.id);
-      const log = (depsRef.current.createLog ?? createEventLog)();
+      // Phase LL Task 1: the log's own `atMs` clock is the SAME `now` the
+      // liveness decorator uses (`livenessDepsRef.current.now`) — one
+      // clock, so a `liveness-silence`/`liveness-snapshot` entry's `atMs`
+      // and the `LivenessSnapshot.atMs` it carries read off the identical
+      // source, never two independent `Date.now()` calls that could drift
+      // a millisecond apart for no reason.
+      const log = (
+        depsRef.current.createLog ??
+        (() => createEventLog(undefined, livenessDepsRef.current.now))
+      )();
       logRef.current = log;
       // S6: once per connect, straight into this session's own ring —
       // see `requestStoragePersistence`'s own doc comment for the full
