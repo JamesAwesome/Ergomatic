@@ -163,6 +163,37 @@ carries the derivation). It cannot blink. It never says "reconnecting" and
 never promises anything — it reports, late and steadily, that the stream is
 back. Row 75 gains the sentence that says so.
 
+## §2b The resume band must not flash at a flywheel-gated interval start
+
+**AMENDED IN, 2026-08-22, mid-phase — James's device report, and it lives in
+the same derivation Task 2 edits:** after a rest completes, if the next work
+interval starts while the rower is fully extended and returning to the catch,
+the "row to resume" band sometimes flashes for a split second.
+
+**The suspected mechanism is already in this phase's vetted ground and must
+be VERIFIED from the corpus before the fix is written, not assumed:** work
+intervals open with frames at `el=0.00`, `rowingActive: false` until the
+first pull — the interval clock is flywheel-gated at the start of work
+exactly as it is during rests (measured: four such frames before the first
+stroke). A stale-frames detection that keys on the clock not advancing sees
+a legally stationary clock in that window.
+
+**The rule, mirroring James's own framing:** between an interval's start and
+its first stroke, the resume band never shows — "resume" has no meaning
+before the first pull, the same way the READY screen behaves after "Show me
+the numbers". The suppression window closes on the first frame with
+`rowingActive: true` or advancing elapsed.
+
+**Scope guard:** this amends the band's FIRING condition only. The standing
+follow-on to REMOVE the PULL TO RESUME band entirely (James, 2026-08-17)
+stays where it is and is strengthened by this report — the ROADMAP entry
+gains a cross-note. If the mechanism verification shows a different cause,
+STOP and report rather than fixing the wrong thing.
+
+**Exit criterion (joins §7 as 1a):** a replayed capture's own work-interval
+starts never show the band, pinned with a test whose mutation (drop the
+first-stroke guard) reds it against the corpus's measured `el=0.00` frames.
+
 ## §3 Recovery — specified from scratch, because the record was wrong
 
 **Correction inherited from the review:** the walk README's diagnosis said
