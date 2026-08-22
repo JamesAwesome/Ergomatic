@@ -4763,7 +4763,7 @@ test.describe("post-workout summary (manual door, onboarding title + plan active
     );
     await page.getByRole("link", { name: "Log it after" }).click();
     await expect(page).toHaveURL(/\/library\/[^/]+\/log$/);
-    await expect(page.getByRole("heading", { name: "First 6k" })).toBeVisible();
+    await expect(page.locator("h1.summary-title")).toHaveText("First 6k");
   });
 
   test("every visible interactive element has a >=44x44 tap target", async ({
