@@ -178,9 +178,9 @@ test.describe("Phase 6A/6B: today -> detail -> countdown -> timer", () => {
     const endBox = await endButton.boundingBox();
     expect(endBox!.width).toBeGreaterThanOrEqual(44);
     expect(endBox!.height).toBeGreaterThanOrEqual(44);
-    // A fresh run always opens on its own phase 0 regardless of the warm-up
-    // setting (OFF here, the default) — "STEP 1 OF" however many, not
-    // pinning the total, which varies per workout.
+    // A fresh run always opens on its own phase 0 — "STEP 1 OF" however
+    // many, not pinning the total, which varies per workout. (No warm-up
+    // setting exists to open on instead, since Phase WU removed it.)
     await expect(page.getByText(/^STEP 1 OF \d+/)).toBeVisible();
 
     // Reload: the run/draft round-trip through localStorage, not router
@@ -192,64 +192,12 @@ test.describe("Phase 6A/6B: today -> detail -> countdown -> timer", () => {
   });
 });
 
-// 2026-08-09 warmup-setting spec: the setting's own end-to-end walk,
-// against the real stack. Unlike the happy-path test above (which
-// deliberately leaves the setting at its OFF default — class (a),
-// default-off honesty), warm-up IS the subject here, so it's turned ON
-// through the real You screen UI (WarmupRow.tsx), not an API shortcut —
-// this walk exists to prove the whole seam, not just the server side of
-// it. Fast-follow spec §3 (the warm-up statement, adversarial I2): no
-// pre-session surface states the warm-up any more — ConfirmTargets' own
-// WARM-UP row (and its recount) died with the screen, honestly, per the
-// approved casualty ruling — so the only place this walk can still prove
-// the setting actually joined the session is the Timer itself, opening on
-// it as phase 0.
-test.describe("the warm-up setting: You sets it, a library session runs it", () => {
-  test("a time warm-up with rest set on You joins the session as its first phase", async ({
-    page,
-  }) => {
-    await signInViaBackdoor(page, {
-      email: "warmup-walk@e2e.test",
-      name: "Warmup Walk Tester",
-    });
-    await setBaselines(page);
-
-    // Set a 5:00 TIME warm-up with a 0:30 trailing rest through the real
-    // WarmupRow editor — "500"/"30" into the same masked ClockInput idiom
-    // the builder's own duration fields use, rendering "5:00"/"0:30".
-    // Scoped by class, not accessible name: whole-branch review finding F's
-    // dedup fix means the meta slot no longer restates "WARM-UP · " (the
-    // row's title already says "Warm-up"), so the two spans no longer
-    // combine into one matchable literal.
-    await page.goto("/you");
-    await page.locator(".warmup-row-button").click();
-    await page.getByLabel("Warm-up duration", { exact: true }).fill("500");
-    await page.getByLabel("Warm-up rest after", { exact: true }).fill("30");
-    await page.getByRole("button", { name: "Save" }).click();
-    await expect(page.locator(".warmup-row-button")).toBeVisible();
-    await expect(
-      page.locator(".warmup-row-button .you-settings-row-meta"),
-    ).toHaveText("5:00 + 0:30 REST");
-
-    // Open any library workout and start it — this walk doesn't pin which
-    // one, the same "read whatever's actually there" idiom the suggestion
-    // test above uses.
-    await page.goto("/library");
-    await page.locator(".workout-row").first().click();
-    await expect(page.locator("h1.workout-detail-title")).toBeVisible();
-    await page.getByRole("button", { name: "Start" }).click();
-    await expect(page).toHaveURL(/\/session\/countdown$/);
-
-    // Straight to the countdown -> SKIP -> the real Timer opens ON the
-    // warm-up phase: phase 0 of however many (buildRun's own ordering
-    // contract, engine.ts — warm-up first, its rest second, then the
-    // workout's own expanded steps).
-    await expect(page.getByText("GET ON THE HANDLE")).toBeVisible();
-    await page.getByRole("button", { name: "SKIP ›" }).click();
-    await expect(page).toHaveURL(/\/session\/run$/);
-    await expect(page.getByText(/^STEP 1 OF \d+ · WARM-UP/)).toBeVisible();
-  });
-});
+// PHASE WU deleted the walk that stood here, "the warm-up setting: You sets
+// it, a library session runs it". It set a 5:00 warm-up through the real
+// WarmupRow editor and then proved the session opened on it as
+// `STEP 1 OF N · WARM-UP`. There is no warm-up phase for a session to open
+// on, so the walk has nothing left to prove; the setting's own UI (and
+// `WarmupRow.tsx` itself) was removed by Phase WU Task 3.
 
 test.describe("bugfix round: history-aware ← BACK", () => {
   // The exact recorded bug (owner's screen recording, 2026-08-02): Today ->

@@ -122,80 +122,25 @@ export function saveDraft(d: SessionDraft): boolean {
   }
 }
 
-/** Strips any `wu`-kind step out of a loaded draft's `steps` (2026-08-09's
- *  warmup setting: `wu` left the authoring union — `domain/types.ts` — but
- *  a draft snapshotted into localStorage BEFORE that migration, at confirm
- *  time from a workout's own steps (`buildDraft`'s deep copy), can still
- *  carry one — the same legacy-data risk Task 2's server-side migration
- *  strips at the DB, for the one read path that migration cannot reach).
- *  Every index-keyed field (`nudges`, `spmOverrides`, `removed`) is
- *  RE-KEYED to the surviving steps' new positions — leaving them pointed
- *  at the old positions would silently misattribute a nudge or a removal
- *  to the wrong step the instant a `wu` step (always authored first, per
- *  every pre-migration seed) is spliced out from under them. Returns the
- *  same `d` reference, unchanged, when there is nothing to strip — the
- *  common case — so a caller comparing before/after by value sees no
- *  difference and no unnecessary `saveDraft` write is ever needed. */
-function stripLegacyWarmups(d: SessionDraft): {
-  draft: SessionDraft;
-  strippedCount: number;
-} {
-  const keepIndices: number[] = [];
-  d.steps.forEach((s, i) => {
-    if ((s.k as string) !== "wu") keepIndices.push(i);
-  });
-  if (keepIndices.length === d.steps.length) {
-    return { draft: d, strippedCount: 0 };
-  }
-
-  const remap = new Map<number, number>();
-  keepIndices.forEach((oldIndex, newIndex) => remap.set(oldIndex, newIndex));
-  const reindexed = (rec: Record<number, number>): Record<number, number> => {
-    const out: Record<number, number> = {};
-    for (const [key, value] of Object.entries(rec)) {
-      const next = remap.get(Number(key));
-      if (next !== undefined) out[next] = value;
-    }
-    return out;
-  };
-
-  return {
-    draft: {
-      ...d,
-      steps: keepIndices.map((i) => d.steps[i]!),
-      nudges: reindexed(d.nudges),
-      spmOverrides: reindexed(d.spmOverrides),
-      removed: d.removed
-        .map((i) => remap.get(i))
-        .filter((i): i is number => i !== undefined),
-    },
-    strippedCount: d.steps.length - keepIndices.length,
-  };
-}
-
 /** Loads the draft. Garbage JSON or an unrecognized version is discarded
  *  (the key is cleared) rather than crashing the caller — an expand-only
  *  shape means a stale build's `v` is the only thing that ever needs this
- *  escape hatch. Strips any legacy `wu` step (`stripLegacyWarmups` above)
- *  SILENTLY — fast-follow spec §3: ConfirmTargets was the one screen that
- *  used to surface `droppedWarmupNotice` when this fired (its own
- *  `loadDraftWithNotice` variant, since retired with the screen); every
- *  caller left is happy with an already-clean draft and no ceremony. A
- *  non-zero strip is still persisted back immediately (`saveDraft`) so the
- *  fix stays one-time: a second `loadDraft()` on the same key re-reads the
- *  already-clean value rather than re-stripping on every call. Pre-#71
- *  drafts are a month stale by now — the strip itself remains as data
- *  hygiene, just with nothing left to announce it. */
+ *  escape hatch.
+ *
+ *  Phase WU removed the `stripLegacyWarmups` pass that used to run here.
+ *  It spliced a legacy `wu`-kind step (the authoring union lost `wu` on
+ *  2026-08-09) out of a stored draft and re-keyed every index-keyed field
+ *  around the hole. Deleting it is behaviour-neutral, verified rather than
+ *  assumed: a `wu` step now passes `effectiveSteps` untouched (it gates on
+ *  `k !== "w"`) and `domain/expand.ts`'s `phases()` switch has no `wu` arm
+ *  and no default, so it emits no phase for one — exactly what the strip
+ *  achieved. Indices stay self-consistent because nothing is spliced. */
 export function loadDraft(): SessionDraft | null {
   const raw = localStorage.getItem(DRAFT_KEY);
   if (raw === null) return null;
   try {
     const parsed: unknown = JSON.parse(raw);
-    if (isSessionDraft(parsed)) {
-      const { draft, strippedCount } = stripLegacyWarmups(parsed);
-      if (strippedCount > 0) saveDraft(draft);
-      return draft;
-    }
+    if (isSessionDraft(parsed)) return parsed;
   } catch {
     // fall through: garbage JSON is handled the same as an unknown shape
   }

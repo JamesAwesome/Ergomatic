@@ -199,16 +199,6 @@ export default function Countdown() {
 
     const baselines = resolvedBaselines;
     const countdownSeconds = preferencesState.preferences.countdownSeconds;
-    // The warm-up SETTING (2026-08-09's design §4). This effect already
-    // waits for `preferencesState.state === "ready"` above (for
-    // `countdownSeconds`), so the value is loaded, not guessed — the phone
-    // timer door never builds a run against a half-loaded preference.
-    // `preferences.warmup` is never actually `undefined` (Task 2 landed;
-    // the server always sends the key), but `buildRun`'s own parameter
-    // accepts `WarmupSetting | null | undefined` and treats the two
-    // identically, so this stays defensive rather than asserting a
-    // response shape this file doesn't itself validate.
-    const warmup = preferencesState.preferences.warmup ?? null;
 
     const now = new Date();
     const startedAtMs = now.getTime();
@@ -226,7 +216,7 @@ export default function Countdown() {
     // preferences fetch took) — otherwise the very first "ready" render
     // could read fewer seconds remaining than `countdownSeconds`, or even a
     // negative elapsed if an earlier `nowMs` predates `startedAtMs`.
-    const run = buildRun(draft, baselines, now, warmup);
+    const run = buildRun(draft, baselines, now);
     saveRun(run);
     void Promise.resolve().then(() => {
       setBuilt({
@@ -356,8 +346,8 @@ export default function Countdown() {
   // label (a fmtSplit range, an effort word, or "Easy"/"Rest"/"All out") —
   // the same text the live timer's TARGET SPLIT card will show for phase 0,
   // not a re-derived phrase. `run.phases` is never empty (every draft has
-  // at least one step; a warm-up-only draft is the shortest legal one), but
-  // the fallback keeps this defensive rather than crash-on-empty.
+  // at least one step), but the fallback keeps this defensive rather than
+  // crash-on-empty.
   const nextLabel = run.phases[0]?.label ?? "";
 
   // Clear the draft AND drop the run this screen already built — both,

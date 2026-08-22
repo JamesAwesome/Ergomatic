@@ -162,9 +162,11 @@ export interface LogInput {
 
 // From-the-log spec (2026-08-18), §3: the API's first UPDATE. Every key is
 // independently optional at the TYPE level, but `update()` below reads
-// PRESENCE with the `"held" in patch` idiom (the `PUT /api/prefs`/warmup
-// precedent, `routes/data.ts`), not `!== undefined` — a key that is
-// present and explicitly `null` clears that column; a key that is absent
+// PRESENCE with the `"held" in patch` idiom (`routes/data.ts`'s own
+// comment on its PATCH handler has the full rationale — PUT /api/prefs's
+// `warmup` field used the identical idiom before Phase WU removed it), not
+// `!== undefined` — a key that is present and explicitly `null` clears
+// that column; a key that is absent
 // from `patch` leaves the existing value alone. `routes/data.ts`'s PATCH
 // handler builds this object from only the request body's recognized
 // keys (unknown keys never reach here at all — they're ignored before

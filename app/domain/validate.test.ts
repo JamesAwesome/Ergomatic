@@ -51,17 +51,18 @@ describe("validateSteps", () => {
     expect(validateSteps([work(), { k: "r", minutes: 200 }]).ok).toBe(false);
   });
 
-  // "wu" left the Step union 2026-08-09 (the warmup-setting spec):
-  // validateSteps is the permanent runtime guard for stored/imported data
-  // that can still present the retired shape — it rejects every wu step
-  // outright, regardless of whether its own minutes would have been
-  // in-bounds, with copy that points the rower at the new setting.
-  it("rejects a wu step with the copy that points at the setting", () => {
+  // "wu" left the Step union 2026-08-09 (the warmup-setting spec), and the
+  // setting itself left 2026-08-21 (Phase WU): validateSteps is the
+  // permanent runtime guard for stored/imported data that can still
+  // present the retired shape — it rejects every wu step outright,
+  // regardless of whether its own minutes would have been in-bounds, with
+  // copy that points the rower at authoring one as an ordinary step.
+  it("rejects a wu step with copy that points at authoring an ordinary step", () => {
     const r = validateSteps([{ k: "wu", minutes: 5 }, work()]);
     expect(r.ok).toBe(false);
     const errors = r.ok ? [] : r.errors;
     expect(errors[0]).toBe(
-      "Warm-ups moved to Settings. Set yours on the You tab.",
+      "Warm-ups aren't a step kind. Add it as an ordinary first step.",
     );
   });
   it("rejects a wu step even when its own minutes would have been in-bounds", () => {

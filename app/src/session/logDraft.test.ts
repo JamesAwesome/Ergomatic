@@ -825,20 +825,28 @@ describe("buildLogSeed: the monitor run's frozen log identity (7C spec §2)", ()
   });
 
   it("emits one seed step per NON-REST phase, in program-interval order, with the manual builder's own label text", () => {
-    // A 5' warm-up SETTING + w(2' = 120s @ 6k+4, rest 1' = 60s) + w(100m
-    // @ 6k+0) — the task brief's own exact phase shape: warmup,
-    // work@time, rest, work@distance. Built through the real buildDraft ->
-    // buildRun assembly (like this file's own "Nudge Fixture" tests
-    // above), not a hand-rolled EnginePhase array. The warm-up reaches
-    // `buildLogSeed` from the SETTING now (2026-08-09's design §4:
-    // `buildRun`'s fourth argument is the phase's one producer), not from
-    // a `wu` step — which is exactly what this task's integration test
-    // below pins.
+    // w(2' = 120s @ 6k+4, rest 1' = 60s) + w(100m @ 6k+0), with a 5' EASY
+    // opener in front — the task brief's own phase shape: work@time,
+    // rest, work@distance, one leading interval. Built through the real
+    // buildDraft -> buildRun assembly (like this file's own "Nudge Fixture"
+    // tests above), not a hand-rolled EnginePhase array.
+    //
+    // PHASE WU: that opener used to be a warm-up, prepended by `buildRun`'s
+    // fourth argument, and it seeded a `kind: "warmup"` step. Both are
+    // gone; it is an authored effort step and seeds `kind: "work"` like
+    // everything else. The seed's own `"warmup"` member survives for
+    // PERSISTED records only (`LogSeed`'s own comment), and nothing
+    // produces it any more.
     const draft = buildDraft({
       id: "id-seed-fixture",
       title: "Seed Fixture",
       type: "AT",
       steps: [
+        {
+          k: "w",
+          duration: { kind: "time", minutes: 5 },
+          ref: { effort: "min" },
+        },
         {
           k: "w",
           duration: { kind: "time", minutes: 2 },
@@ -852,38 +860,35 @@ describe("buildLogSeed: the monitor run's frozen log identity (7C spec §2)", ()
         },
       ],
     });
-    const built = buildRun(draft, BASELINES, NOW, {
-      kind: "time",
-      minutes: 5,
-    });
+    const built = buildRun(draft, BASELINES, NOW);
     expect(built.phases.map((p) => p.type)).toStrictEqual([
-      "warmup",
+      "work",
       "work",
       "rest",
       "work",
     ]);
     const seed = buildLogSeed(built.phases, BASELINES);
-    expect(seed.steps).toHaveLength(3); // warmup + 2 work; the rest folded
-    expect(seed.steps[0]).toStrictEqual({
-      label: expect.any(String),
-      kind: "warmup",
-    });
-    expect(seed.steps[1]!.kind).toBe("work");
-    expect(seed.steps[2]!.kind).toBe("work");
+    expect(seed.steps).toHaveLength(3); // 3 work; the rest folded
+    expect(seed.steps.map((st) => st.kind)).toStrictEqual([
+      "work",
+      "work",
+      "work",
+    ]);
     // Label parity (the load-bearing requirement): byte-identical to what
-    // buildManualLogSteps produces for the SAME authored steps.
+    // buildManualLogSteps produces for the SAME authored steps. Now three
+    // labels rather than two, since the opener is an authored step and the
+    // manual door builds one for it too.
     const manualLabels = buildManualLogSteps(
       { steps: draft.steps },
       BASELINES,
     ).map((s) => s.label);
-    expect(seed.steps[1]!.label).toBe(manualLabels[0]);
-    expect(seed.steps[2]!.label).toBe(manualLabels[1]);
+    expect(seed.steps.map((st) => st.label)).toStrictEqual(manualLabels);
     expect(seed.steps[1]!.label).toBe("2:00 @ 6k +4");
     expect(seed.steps[2]!.label).toBe("100 m @ 6k");
   });
 
   it("captures only the REFERENCED paces (the manual PACES LOCKED F1 rule: no step references 2k -> no k2)", () => {
-    // Filling Low: wu + 3x2000m @ 6k+4 — every work step references "6k",
+    // Filling Low: 3x2000m @ 6k+4 — every work step references "6k",
     // none reference "2k".
     const { run } = runFor("Filling Low");
     const seed = buildLogSeed(run.phases, BASELINES);
@@ -972,46 +977,13 @@ describe("buildLogSeed: the monitor run's frozen log identity (7C spec §2)", ()
     ]);
   });
 
-  // INTEGRATION (2026-08-09 warmup-setting plan, Task 4): the phase
-  // `buildRun` prepends from the SETTING reaches `buildLogSeed` as a
-  // `kind: "warmup"` seed step — the downstream half 7C already pins,
-  // reached from its new producer. A real seeded workout (Filling Low)
-  // carries the rest of the run, per the realistic-fixtures rule.
-  it("the SETTING's warm-up phase seeds one kind:'warmup' step, whose label carries the real duration in the house 'warm-up' idiom (both kinds)", () => {
-    const { draft } = runFor("Filling Low");
-
-    const timed = buildRun(draft, BASELINES, NOW, { kind: "time", minutes: 8 });
-    const timedSeed = buildLogSeed(timed.phases, BASELINES);
-    expect(timedSeed.steps[0]).toStrictEqual({
-      label: "8:00 warm-up",
-      kind: "warmup",
-    });
-    // Exactly ONE seed step is a warm-up, and it is the first — the seed
-    // stays aligned with `program.intervals` (this file's own alignment
-    // contract) whatever the setting says.
-    expect(timedSeed.steps.filter((s) => s.kind === "warmup")).toHaveLength(1);
-
-    const metered = buildRun(draft, BASELINES, NOW, {
-      kind: "distance",
-      meters: 2000,
-      restSeconds: 90,
-    });
-    const meteredSeed = buildLogSeed(metered.phases, BASELINES);
-    expect(meteredSeed.steps[0]).toStrictEqual({
-      label: "2000 m warm-up",
-      kind: "warmup",
-    });
-    // The setting's own trailing REST seeds no step of its own, exactly
-    // like every other rest phase.
-    expect(meteredSeed.steps).toHaveLength(timedSeed.steps.length);
-
-    // OFF (the default) seeds no warm-up step at all.
-    const bare = buildLogSeed(
-      buildRun(draft, BASELINES, NOW).phases,
-      BASELINES,
-    );
-    expect(bare.steps.some((s) => s.kind === "warmup")).toBe(false);
-  });
+  // PHASE WU deleted the integration case that stood here: it drove the
+  // warm-up SETTING through `buildRun` and pinned the `kind: "warmup"` seed
+  // step plus its "8:00 warm-up"/"2000 m warm-up" label idiom. There is no
+  // setting and no producer left, so nothing can write that kind. The seed
+  // reader that still honours it on PERSISTED records is pinned below,
+  // under "a stored run written before `type` existed still drops its
+  // warm-up when loaded back".
 
   it("a 'test' phase (defensive only — compileProgram never lets one reach production) seeds a bare, un-prefixed label", () => {
     const draft = buildDraft({
@@ -1302,7 +1274,7 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
     });
   });
 
-  it("a warmup interval produces NO step (manual parity, adversarial B2) and shifts nothing", () => {
+  it("a LEGACY kind:'warmup' seed step produces NO step (manual parity, adversarial B2) and shifts nothing", () => {
     const draft = buildDraft({
       id: "id-walk4-warmup-variant",
       title: "Walk 4 (warmup variant)",
@@ -1310,16 +1282,34 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
       steps: [
         {
           k: "w",
+          duration: { kind: "time", minutes: 1 },
+          ref: { effort: "min" },
+        },
+        {
+          k: "w",
           duration: { kind: "distance", meters: 100 },
           ref: { base: "6k", off: 0 },
         },
       ],
     });
-    // The warm-up comes from the SETTING now (2026-08-09's design §4), not
-    // from a step — `buildRun`'s fourth argument is its one producer.
-    const built = buildRun(draft, BASELINES, NOW, { kind: "time", minutes: 1 });
+    const built = buildRun(draft, BASELINES, NOW);
     const program = compileOrThrow(built.phases);
-    const logSeed = buildLogSeed(built.phases, BASELINES);
+    // PHASE WU: nothing PRODUCES `kind: "warmup"` any more — `buildRun`'s
+    // warm-up argument and the phase type behind it are both gone. The
+    // reader that skips such a step is deliberately KEPT, because `LogSeed`
+    // is PERSISTED and a `MonitorRun` written before Phase WU still carries
+    // the value (see `LogSeed`'s own doc comment). So this fixture writes
+    // the legacy value by hand onto an otherwise real seed — which is
+    // exactly the shape that comes back out of localStorage — instead of
+    // asking a producer that no longer exists to make one.
+    const realSeed = buildLogSeed(built.phases, BASELINES);
+    const logSeed = {
+      ...realSeed,
+      steps: [
+        { ...realSeed.steps[0]!, kind: "warmup" as const },
+        ...realSeed.steps.slice(1),
+      ],
+    };
     expect(logSeed.steps.map((s) => s.kind)).toStrictEqual(["warmup", "work"]);
     const run: MonitorRun = {
       v: 2,
@@ -1393,16 +1383,32 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
       steps: [
         {
           k: "w",
+          duration: { kind: "time", minutes: 1 },
+          ref: { effort: "min" },
+        },
+        {
+          k: "w",
           duration: { kind: "distance", meters: 100 },
           ref: { base: "6k", off: 0 },
         },
       ],
     });
-    const built = buildRun(draft, BASELINES, NOW, { kind: "time", minutes: 1 });
+    const built = buildRun(draft, BASELINES, NOW);
     const program = compileOrThrow(built.phases);
-    const logSeed = buildLogSeed(built.phases, BASELINES);
+    // Same Phase WU note as the case above: the legacy `kind: "warmup"` is
+    // written onto a real seed by hand, because no producer can emit one
+    // any more and this test's whole subject is a record written before
+    // that was true.
+    const realSeed = buildLogSeed(built.phases, BASELINES);
+    const logSeed = {
+      ...realSeed,
+      steps: [
+        { ...realSeed.steps[0]!, kind: "warmup" as const },
+        ...realSeed.steps.slice(1),
+      ],
+    };
     expect(program.intervals.map((i) => i.type)).toStrictEqual([
-      "warmup",
+      "work",
       "work",
     ]);
 
@@ -1723,13 +1729,15 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
   // instead of `seedStep.kind === "warmup"` and survived the whole suite —
   // every warmup fixture on the branch was LEADING. That fixture used to
   // be authorable (`wu` carried no positional constraint), and since
-  // 2026-08-09's warmup setting it is not: the setting only ever PREPENDS
-  // (`src/session/engine.ts`'s `warmupPhases`), so nothing in production
-  // can put a warmup phase in the middle any more. The skip is still
-  // written position-independently and this test still holds it to that,
-  // by splicing a REAL warm-up phase — `buildRun`'s own output for the
-  // setting, not a hand-typed literal — between two work phases.
-  it("a MID-WORKOUT warmup interval (work / warmup / work) produces NO step and does not shift the following work step's mapping (branch review Medium-2)", () => {
+  // 2026-08-09's warmup setting it was not: the setting only ever
+  // PREPENDED, so nothing in production could put a warmup phase in the
+  // middle any more, and since Phase WU
+  // nothing can put one ANYWHERE. The skip is still written
+  // position-independently and this test still holds it to that: the
+  // fixture is a real three-interval program whose MIDDLE seed step is
+  // hand-set to the legacy `kind: "warmup"` — the shape a pre-WU record
+  // can hand the reader out of localStorage.
+  it("a LEGACY MID-LIST kind:'warmup' seed step produces NO step and does not shift the following work step's mapping (branch review Medium-2)", () => {
     const draft = buildDraft({
       id: "id-mid-workout-warmup",
       title: "Mid-Workout Warmup",
@@ -1740,6 +1748,14 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
           duration: { kind: "distance", meters: 100 },
           ref: { base: "6k", off: 0 },
         },
+        // The MIDDLE interval, whose seed step this fixture then marks with
+        // the legacy `kind: "warmup"`. Before Phase WU it was a real
+        // warm-up phase spliced between the two work phases.
+        {
+          k: "w",
+          duration: { kind: "time", minutes: 1 },
+          ref: { effort: "min" },
+        },
         {
           k: "w",
           duration: { kind: "distance", meters: 200 },
@@ -1747,18 +1763,17 @@ describe("buildMonitorLogSteps (7C spec §3)", () => {
         },
       ],
     });
-    const leading = buildRun(draft, BASELINES, NOW, {
-      kind: "time",
-      minutes: 1,
-    });
-    const warmupPhase = leading.phases[0]!;
-    expect(warmupPhase.type).toBe("warmup");
-    const built = {
-      ...leading,
-      phases: [leading.phases[1]!, warmupPhase, leading.phases[2]!],
-    };
+    const built = buildRun(draft, BASELINES, NOW);
     const program = compileOrThrow(built.phases);
-    const logSeed = buildLogSeed(built.phases, BASELINES);
+    const realSeed = buildLogSeed(built.phases, BASELINES);
+    const logSeed = {
+      ...realSeed,
+      steps: [
+        realSeed.steps[0]!,
+        { ...realSeed.steps[1]!, kind: "warmup" as const },
+        realSeed.steps[2]!,
+      ],
+    };
     expect(logSeed.steps.map((s) => s.kind)).toStrictEqual([
       "work",
       "warmup",

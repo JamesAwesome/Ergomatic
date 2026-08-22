@@ -28,8 +28,8 @@
 //     `LogStep[]` needed. Every work row is derived internally via
 //     `buildMonitorLogSteps` (the exact function the Log screen already
 //     uses, so a summary row's label/measured fields can never drift from
-//     what a rower's saved log would show), and the warm-up row plus all
-//     three heroes are computed straight from `run.actuals`/`run.program`,
+//     what a rower's saved log would show), and all three heroes are
+//     computed straight from `run.actuals`/`run.program`,
 //     which is where the wire's rest-distance (R-B) and programmed rest
 //     seconds (R-D) actually live — `LogStep` never carries either.
 //   - The TIMER and MANUAL variants DO take caller-built `steps: LogStep[]`
@@ -96,7 +96,6 @@
 
 import { fmtDuration } from "../../domain/duration.js";
 import { fmtSplit } from "../../domain/format.js";
-import type { IntervalActual } from "../../domain/monitor/types.js";
 import { judgeVsTarget } from "../judgeBand.js";
 import {
   measuredSessionSeconds,
@@ -105,7 +104,6 @@ import {
 import {
   buildMonitorLogSteps,
   formatLogDate,
-  MONITOR_SPLIT_MAX,
   spmIsMeasured,
   type LogStep,
 } from "./logDraft";
@@ -178,16 +176,13 @@ export interface RowJudgment {
 }
 
 /** A measured row (§2E: index/time/pace/deviation-bar geometry, §1's
- *  re-baseline: TARGET + SPM cells) — includes the warm-up row, which is
- *  measured-shaped but never judged and never carries a target (§1's
- *  Warm-up row rule: "a warm-up has no target by definition"). `index` is
- *  absent for the warm-up row (it is never numbered — §2E labels it
- *  `WARM-UP` instead, via `isWarmup`). `timeLabel`/`paceLabel` are each
+ *  re-baseline: TARGET + SPM cells). `timeLabel`/`paceLabel` are each
  *  independently absent when their own underlying reading is unavailable
- *  (per-cell absence). */
+ *  (per-cell absence). Phase WU removed the `isWarmup` discriminant and the
+ *  unnumbered `WARM-UP` row it labelled — every row is a numbered piece
+ *  now. */
 export interface MeasuredRow {
   measured: true;
-  isWarmup: boolean;
   index?: number;
   label: string;
   timeLabel?: string;
@@ -198,16 +193,14 @@ export interface MeasuredRow {
    *  alone"), so a pm5 pairing-exception row (real time/meters, no pace)
    *  still shows its target even though `judged`/`onTarget` below can
    *  never fire for it — hiding a true number would be the wrong-number
-   *  class this phase exists to kill (antagonist B5). Never present on
-   *  the warm-up row. */
+   *  class this phase exists to kill (antagonist B5). */
   targetLabel?: string;
   /** §2's compact SPM cell: `24 / 22`, measured first, the authored
    *  target after the slash. Either half independently absent (§2's own
    *  "absent halves drop" rule) — `buildSpmCell` below is the ONE place
    *  that resolves the pre-/post-split discriminant (`spmIsMeasured`,
    *  `logDraft.ts`) into this shape. Absent entirely when NEITHER half
-   *  has a value. Never present on the warm-up row (no `LogStep` backs
-   *  it — see `monitorWarmupRow`/`timerWarmupRow`). */
+   *  has a value. */
   spmCell?: { measured?: number; target?: number };
   /** §1's re-baselined row judgment, against THIS row's own target — see
    *  `rowJudgment` below for the judged-when rule (antagonist B4: the
@@ -260,7 +253,6 @@ export interface MeasuredRow {
  *  not split out of `label`. */
 export interface PrescribedRow {
   measured: false;
-  isWarmup: boolean;
   index?: number;
   label: string;
   durationLabel?: string;
@@ -274,8 +266,8 @@ export interface SummaryModel {
   heroes: SummaryHeroes;
   rows: SummaryRow[];
   /** §2E: `TARGETS ONLY · NOTHING MEASURED`, present only when literally no
-   *  row (including the warm-up) carries a measurement (R-E, verbatim:
-   *  "appears only when NO row carries a measurement"). */
+   *  row carries a measurement (R-E, verbatim: "appears only when NO row
+   *  carries a measurement"). */
   caption?: string;
 }
 
@@ -523,9 +515,10 @@ function weightedAverage(
  * interface-notes.md §8 — 20s time / 100m distance) and comfortably above
  * what a button-press artifact reads.
  *
- * Applied uniformly across BOTH doors' warm-up and work rows, and both
- * AVG SPLIT computations — the review's own citation (`timerWarmupRow`/
- * `timerWorkRows`) named only the timer door, where the defect was found,
+ * Applied uniformly across BOTH doors' rows and both AVG SPLIT
+ * computations — the review's own citation (the timer door's own warm-up
+ * row, since removed, and `timerWorkRows`) named only that door, where the
+ * defect was found,
  * but the identical unguarded shape existed on the monitor door's own
  * `paceLabel`/`timeLabel` emission (gated only by `MONITOR_SPLIT_MAX`'s
  * upper band, never a lower one) — closed here too rather than left as a
@@ -537,34 +530,22 @@ export const MIN_MEASURABLE_ELAPSED_SECONDS = 1;
 // Monitor door
 // ---------------------------------------------------------------------
 
-/** Same map `buildMonitorLogSteps` (`logDraft.ts`) builds internally —
- *  duplicated here (not exported from that module) because this function
- *  needs it for the heroes AND the warm-up row, neither of which
- *  `buildMonitorLogSteps`'s own `LogStep[]` output carries (warm-up rows
- *  never appear there at all — `logDraft.ts`'s own doc comment, "shape
- *  parity with the manual door"). `IntervalActual.index === null` ("this
- *  actual's own interval identity is unknown") is skipped, same rule as
- *  every other consumer of `run.actuals` (`domain/monitor/types.ts`'s own
- *  doc comment on the field). */
-function actualByIndex(run: MonitorRun): Map<number, IntervalActual> {
-  const map = new Map<number, IntervalActual>();
-  for (const actual of run.actuals) {
-    if (actual.index !== null) map.set(actual.index, actual);
-  }
-  return map;
-}
-
-/** The warm-up interval's position in `run.program.intervals`, or -1 when
- *  this run has no warm-up (or no `logSeed` at all — a v1 `MonitorRun`
- *  predating the field, `MonitorRun.logSeed`'s own doc comment). At most
- *  one warm-up ever exists (`session/engine.ts`'s `warmupPhases`, the ONE
- *  producer, always emits zero or one) — `findIndex` rather than assuming
- *  index 0 for clarity, not because a second one is expected. */
+/** KEEP (Phase WU). A LEGACY warm-up interval's position in
+ *  `run.program.intervals`, or -1 when this run has none — which post-WU is
+ *  every run built by today's code, since `buildLogSeed` (`logDraft.ts`)
+ *  can no longer write `kind: "warmup"`. It stays because `LogSeed` is
+ *  PERSISTED: a `MonitorRun` stored before Phase WU still carries the
+ *  value, and dropping this would silently fold that run's warm-up
+ *  interval into its AVG SPLIT — moving a number on a record already shown
+ *  to the rower. Also -1 when there is no `logSeed` at all (a v1
+ *  `MonitorRun` predating the field, `MonitorRun.logSeed`'s own doc
+ *  comment). Owed removal: ROADMAP Phase WU, at the first server-touching
+ *  phase after two tags have shipped. */
 function warmupIndex(run: MonitorRun): number {
   return run.logSeed?.steps.findIndex((s) => s.kind === "warmup") ?? -1;
 }
 
-/** R-B: DISTANCE = Σ(work + rest distance) over ALL actuals incl. warm-up
+/** R-B: DISTANCE = Σ(work + rest distance) over ALL actuals
  *  — the erg-checkable total (0x0037's own Interval Rest Distance, task 2's
  *  wire addition). `restDistanceMeters` reads `?? 0` per that field's own
  *  documented contract: a `MonitorRun.actuals` entry persisted before the
@@ -582,8 +563,8 @@ function monitorDistanceMeters(run: MonitorRun): number | undefined {
   return total > 0 ? Math.round(total) : undefined;
 }
 
-/** R-D: TIME = Σ work seconds + programmed rest for completed intervals,
- *  warm-up included — `monitorRun.ts`'s `measuredSessionSeconds` (review
+/** R-D: TIME = Σ work seconds + programmed rest for completed intervals —
+ *  `monitorRun.ts`'s `measuredSessionSeconds` (review
  *  finding 3: this used to be a byte-for-byte duplicate of that module's
  *  `interruptedTotalSeconds`, a formula with its own OPEN hardware finding
  *  — F-1, the walk sheet's unreproduced "6 MIN where the wire computes 5"
@@ -599,10 +580,11 @@ function monitorTimeSeconds(run: MonitorRun): number | undefined {
   return total > 0 ? total : undefined;
 }
 
-/** R-C: AVG SPLIT = `500 × Σt/Σd` over measured WORK rows — warm-up
- *  EXCLUDED (R-C, verified against the committed walk-3 wire: including it
- *  moves the hero — see the test file's own oracle). Two further
- *  exclusions (review finding 1/2, neither present in the original cut):
+/** R-C: AVG SPLIT = `500 × Σt/Σd` over measured WORK rows. Post-Phase-WU
+ *  every interval of a freshly-built run is work, so the `wuIndex`
+ *  exclusion below fires only for a LEGACY stored run (see `warmupIndex`).
+ *  Two further exclusions (review finding 1/2, neither present in the
+ *  original cut):
  *
  *  - `actual.index === null` — an unattributable boundary
  *    (`IntervalActual.index`'s own doc comment: "must not be treated as
@@ -625,6 +607,9 @@ function monitorAvgSplit(run: MonitorRun): WorkingAverage {
   const rows: { seconds: number; meters: number }[] = [];
   for (const actual of run.actuals) {
     if (actual.index === null) continue;
+    // KEEP (Phase WU) — legacy-only. `warmupIndex` returns -1 for every run
+    // built by today's code, so this skips nothing; it still fires for a
+    // `MonitorRun` persisted before Phase WU, whose AVG SPLIT must not move.
     if (actual.index === wuIndex) continue;
     if (actual.elapsedSeconds < MIN_MEASURABLE_ELAPSED_SECONDS) continue;
     rows.push({
@@ -650,46 +635,6 @@ function monitorHeroes(
   };
 }
 
-/** The warm-up row (§2E: "Rendered, labeled WARM-UP, measured values
- *  shown, UNJUDGED"), or `null` when this run has no warm-up interval at
- *  all. When the warm-up's own boundary never arrived (the piece was
- *  skipped, or its actual was lost the same way any boundary can be — the
- *  run contract's `boundary-out-of-run`/divergence cases,
- *  `domain/monitor/types.ts`) OR its own elapsed reading is below
- *  `MIN_MEASURABLE_ELAPSED_SECONDS` (review finding 1 — a boundary this
- *  degenerate is not a real reading either), the row still renders (the
- *  label alone is honest — "there was a warm-up interval") with every
- *  measured field absent, never a fabricated `0:00`. */
-function monitorWarmupRow(run: MonitorRun): MeasuredRow | null {
-  const wuIndex = warmupIndex(run);
-  if (wuIndex === -1) return null;
-  const actual = actualByIndex(run).get(wuIndex);
-  if (
-    actual === undefined ||
-    actual.elapsedSeconds < MIN_MEASURABLE_ELAPSED_SECONDS
-  ) {
-    return { measured: true, isWarmup: true, label: "WARM-UP" };
-  }
-  const paceSeconds =
-    actual.avgSplit !== null &&
-    actual.avgSplit > 0 &&
-    actual.avgSplit <= MONITOR_SPLIT_MAX
-      ? actual.avgSplit
-      : undefined;
-  return {
-    measured: true,
-    isWarmup: true,
-    label: "WARM-UP",
-    timeLabel: fmtDuration(actual.elapsedSeconds / 60),
-    paceLabel: paceSeconds !== undefined ? fmtSplit(paceSeconds) : undefined,
-    // UNJUDGED, no TARGET, no SPM cell — all by construction, and all for
-    // the SAME reason now (§1's Warm-up row rule): a warm-up interval has
-    // no target at all, so `rowJudgment`/`buildSpmCell` are never even
-    // called here — this row is built straight from the machine actual,
-    // never through a `LogStep`.
-  };
-}
-
 /** Review finding 1: a `pm5`-sourced row whose own elapsed reading is
  *  below `MIN_MEASURABLE_ELAPSED_SECONDS` renders in its PRESCRIBED shape
  *  (§2E's unmeasured-row geometry) — not a measured row with blank
@@ -711,7 +656,6 @@ function monitorWorkRows(run: MonitorRun): SummaryRow[] {
     if (!isMonitorRowMeasurable(step)) {
       return {
         measured: false,
-        isWarmup: false,
         index,
         label: step.label,
         durationLabel:
@@ -736,7 +680,6 @@ function monitorWorkRows(run: MonitorRun): SummaryRow[] {
       step.targetSplit !== undefined ? fmtSplit(step.targetSplit) : undefined;
     return {
       measured: true,
-      isWarmup: false,
       index,
       label: step.label,
       timeLabel,
@@ -751,9 +694,7 @@ function monitorWorkRows(run: MonitorRun): SummaryRow[] {
 function buildMonitorModel(run: MonitorRun): SummaryModel {
   const avgSplit = monitorAvgSplit(run);
   const heroes = monitorHeroes(run, avgSplit);
-  const warmupRow = monitorWarmupRow(run);
-  const workRows = monitorWorkRows(run);
-  const rows = warmupRow !== null ? [warmupRow, ...workRows] : workRows;
+  const rows = monitorWorkRows(run);
 
   const iso =
     run.endedBy === "interrupted"
@@ -771,47 +712,6 @@ function buildMonitorModel(run: MonitorRun): SummaryModel {
 // ---------------------------------------------------------------------
 // Timer door
 // ---------------------------------------------------------------------
-
-/** The phone-timer engine's own warm-up phase, if this run has one
- *  (`session/engine.ts`'s `warmupPhases`, the ONE producer of `type:
- *  "warmup"` phases — see that module's header). Unlike the manual/monitor
- *  builders, `buildLogSteps` (`logDraft.ts`) never emits a `LogStep` for
- *  it at all (module header: "Warm-up and rest phases never become a
- *  LogStep"), so the caller's `steps: LogStep[]` genuinely cannot carry
- *  it — this reads `run.phases` directly, the one place it survives. A
- *  DISTANCE warm-up CAN be genuinely measured: `session/engine.ts`'s
- *  `nextDistance` is keyed by phase position, not phase TYPE, so a
- *  distance-kind warm-up phase can receive a real `PhaseActual` the same
- *  way any distance work phase does. */
-function timerWarmupRow(run: SessionRun): MeasuredRow | null {
-  const index = run.phases.findIndex((p) => p.type === "warmup");
-  if (index === -1) return null;
-  const actual = run.actuals[index];
-  // Review finding 1: a below-floor elapsed reading (a mis-tapped
-  // stopwatch button on this door's own genuinely-measurable distance
-  // warm-up) is treated identically to "no actual at all" — see
-  // `MIN_MEASURABLE_ELAPSED_SECONDS`'s own doc comment. This is also what
-  // closes the ORIGINAL unguarded `paceLabel: fmtSplit(actual.splitSeconds)`
-  // below: that line used to run unconditionally, with no lower bound at
-  // all.
-  if (
-    actual === undefined ||
-    actual.elapsedSeconds < MIN_MEASURABLE_ELAPSED_SECONDS
-  ) {
-    return { measured: true, isWarmup: true, label: "WARM-UP" };
-  }
-  return {
-    measured: true,
-    isWarmup: true,
-    label: "WARM-UP",
-    timeLabel: fmtDuration(actual.elapsedSeconds / 60),
-    paceLabel: fmtSplit(actual.splitSeconds),
-    // No targetLabel/spmCell/judged/onTarget — same reason as the monitor
-    // door's own warm-up row (§1: a warm-up has no target by definition;
-    // this row is built straight from `run.phases`/`run.actuals`, never
-    // through a `LogStep`, so `rowJudgment`/`buildSpmCell` never run here).
-  };
-}
 
 /** Wall-clock TIME (this module's header: R-D is monitor-only). `m:ss`
  *  precision, not rounded to the nearest minute the way the old
@@ -853,11 +753,7 @@ function timerMeasurableElapsedSeconds(step: LogStep): number | undefined {
  *  actualSeconds` doesn't exist on the phone-timer door (that field is
  *  pm5-only, `LogStep`'s own doc comment), which is why
  *  `timerMeasurableElapsedSeconds` reconstructs it rather than reading it
- *  straight off the step. The warm-up phase's own `LogStep` never reaches
- *  this function at all (`buildLogSteps` never emits one), so it is
- *  excluded from the average the same way R-C excludes it for the monitor
- *  door — a generalization of that rule's reasoning, not its letter (this
- *  module's own header). Feeds ONLY the AVG SPLIT hero now (`WorkingAverage`'s
+ *  straight off the step. Feeds ONLY the AVG SPLIT hero now (`WorkingAverage`'s
  *  own doc comment carries the history of what else used to read it). */
 function timerAvgSplit(steps: LogStep[]): WorkingAverage {
   const rows: { seconds: number; meters: number }[] = [];
@@ -878,7 +774,6 @@ function timerWorkRows(steps: LogStep[]): SummaryRow[] {
     if (elapsedSeconds === undefined) {
       return {
         measured: false,
-        isWarmup: false,
         index,
         label: step.label,
         durationLabel:
@@ -899,7 +794,6 @@ function timerWorkRows(steps: LogStep[]): SummaryRow[] {
       step.targetSplit !== undefined ? fmtSplit(step.targetSplit) : undefined;
     return {
       measured: true,
-      isWarmup: false,
       index,
       label: step.label,
       timeLabel: fmtDuration(elapsedSeconds / 60),
@@ -922,9 +816,7 @@ function buildTimerModel(run: SessionRun, steps: LogStep[]): SummaryModel {
     timeSeconds,
     // DISTANCE: this module's header — timer door has no machine total.
   };
-  const warmupRow = timerWarmupRow(run);
-  const workRows = timerWorkRows(steps);
-  const rows = warmupRow !== null ? [warmupRow, ...workRows] : workRows;
+  const rows = timerWorkRows(steps);
 
   const iso = run.completedAt ?? run.startedAt;
   const meta: SummaryMeta = {
@@ -946,7 +838,6 @@ function buildManualModel(steps: LogStep[], dateIso: string): SummaryModel {
   // door's rows are always prescribed-shaped and its caption always fires.
   const rows: SummaryRow[] = steps.map((step, i) => ({
     measured: false,
-    isWarmup: false,
     index: i + 1,
     label: step.label,
     durationLabel:
@@ -980,13 +871,10 @@ function buildManualModel(steps: LogStep[], dateIso: string): SummaryModel {
 // ---------------------------------------------------------------------
 
 /** R-E, verbatim: "TARGETS ONLY · NOTHING MEASURED appears only when NO
- *  row carries a measurement" — every row, warm-up included. Final-review
- *  FIX-2: `measured: true` alone is not a real reading — both
- *  `monitorWarmupRow` and `timerWarmupRow` return `{measured: true,
- *  isWarmup: true, label: "WARM-UP"}` with no `timeLabel`/`paceLabel` when
- *  the warm-up carries no reading (a lost boundary, or a TIME-kind warm-up
- *  that can never be measured at all). A row like that "carries" nothing;
- *  gate on an actual label, not the discriminant alone. */
+ *  row carries a measurement" — every row. Final-review FIX-2:
+ *  `measured: true` alone is not a real reading, since a measured-shaped
+ *  row can carry no `timeLabel`/`paceLabel` at all; gate on an actual
+ *  label, not the discriminant alone. */
 // Exported (from-the-log spec, Task 5): `storedSummary.ts`'s own caption
 // reuses this exact rule rather than a second copy — visibility change
 // only.

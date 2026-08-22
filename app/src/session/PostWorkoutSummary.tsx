@@ -143,14 +143,17 @@ function SpmCellSpan({
  *     (`judged.direction`), not re-derived from `deviationSeconds`'s own
  *     sign a second time. Neither fires when the row was never judged at
  *     all (the abstained-effort-row shape).
- *  Shared by BOTH branches of `IntervalRow` below (warm-up and regular):
- *  a warm-up row's own `targetLabel`/`spmCell`/`judged`/`onTarget` are
- *  always undefined by construction (§1's Warm-up row rule — neither
- *  `monitorWarmupRow` nor `timerWarmupRow` ever sets any of them), so
- *  every clause here is a documented no-op there, not a second code
- *  path. Never called for a `PrescribedRow` — that shape has none of
- *  these four fields at all (a different TypeScript type), so its own
- *  aria-label (below) is unchanged, plain, and needs no clause. */
+ *  Reached for every measured row in `IntervalRow` below, not only judged
+ *  ones: an unjudged row's own `targetLabel`/`spmCell`/`judged`/`onTarget`
+ *  are always undefined by construction (an EFFORT-ref step carries no
+ *  numeric target — neither `monitorWorkRows` nor `timerWorkRows` ever
+ *  sets any of them for such a row; before Phase WU this was specifically
+ *  the dedicated `monitorWarmupRow`/`timerWarmupRow` pair, since deleted,
+ *  §1's original Warm-up row rule), so every clause here is a documented
+ *  no-op there, not a second code path. Never called for a `PrescribedRow`
+ *  — that shape has none of these four fields at all (a different
+ *  TypeScript type), so its own aria-label (below) is unchanged, plain,
+ *  and needs no clause. */
 function rowJudgmentDescription(row: MeasuredRow): string {
   let out = "";
   if (row.targetLabel !== undefined) {
@@ -176,30 +179,6 @@ function rowJudgmentDescription(row: MeasuredRow): string {
 
 function IntervalRow({ row }: { row: SummaryRow }) {
   if (row.measured) {
-    if (row.isWarmup) {
-      return (
-        <li
-          className="summary-row summary-row-warmup"
-          aria-label={`Warm-up${row.timeLabel ? `, ${row.timeLabel}` : ""}${row.paceLabel ? ` at ${row.paceLabel} per 500` : ""}${rowJudgmentDescription(row)}`}
-        >
-          <span className="summary-row-index summary-row-warmup-label">
-            WARM-UP
-          </span>
-          <span className="summary-row-time">{row.timeLabel ?? ""}</span>
-          {/* §1's Warm-up row rule: "a warm-up has no target by
-              definition" — `row.targetLabel`/`row.spmCell` are always
-              undefined here (never set by monitorWarmupRow/timerWarmupRow),
-              so these render as the same empty placeholders a measured
-              row's own absent cells render, keeping this row's columns
-              aligned with judged sibling rows below it. */}
-          <span className="summary-row-target">{row.targetLabel ?? ""}</span>
-          <span className="summary-row-pace">{row.paceLabel ?? ""}</span>
-          <SpmCellSpan cell={row.spmCell} />
-          <span className="summary-row-bar-track" />
-          <span className="summary-row-dev" />
-        </li>
-      );
-    }
     const colorClass = judgedColorClass(row.judged?.direction);
     return (
       <li
@@ -220,8 +199,8 @@ function IntervalRow({ row }: { row: SummaryRow }) {
           // deviation bar) — a measured row with no `judged` (either
           // genuinely unjudged, OR on-target — Task 2's `rowJudgment`
           // encodes on-target as `judged` absent too, `onTarget: true`
-          // instead) gets the SAME empty track the warm-up row renders:
-          // no center tick, no fill, no color. Kept as an (empty)
+          // instead) gets the SAME empty track a warm-up row used to
+          // render: no center tick, no fill, no color. Kept as an (empty)
           // element, not omitted outright, so this row's columns still
           // line up with judged sibling rows sharing this list.
           <span className="summary-row-bar-track" />

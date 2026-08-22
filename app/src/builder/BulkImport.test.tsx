@@ -228,7 +228,7 @@ describe("BulkImport", () => {
 
     expect(
       await screen.findByText(
-        "2 warm-up lines dropped. Warm-ups are a setting now.",
+        "2 warm-up lines dropped. Add a warm-up as an ordinary first step instead.",
       ),
     ).toBeInTheDocument();
   });
@@ -254,10 +254,10 @@ describe("BulkImport", () => {
   });
 
   // Task 6's own brief: the warm-up-only-block parse error
-  // (domain/bulk.ts's "workout needs at least one step. Warm-ups are a
-  // setting now.") is a plain line-keyed BulkError, so it needs no special
-  // rendering — this pins that the existing generic errors.map already
-  // carries it through unchanged.
+  // (domain/bulk.ts's "workout needs at least one step. Add the warm-up as
+  // an ordinary first step.") is a plain line-keyed BulkError, so it needs
+  // no special rendering — this pins that the existing generic errors.map
+  // already carries it through unchanged.
   it("renders the warm-up-only-block error like any other line error", async () => {
     mockApi(
       () =>
@@ -268,7 +268,7 @@ describe("BulkImport", () => {
               {
                 line: 1,
                 message:
-                  "workout needs at least one step. Warm-ups are a setting now.",
+                  "workout needs at least one step. Add the warm-up as an ordinary first step.",
               },
             ],
             droppedWarmups: 1,
@@ -286,7 +286,7 @@ describe("BulkImport", () => {
 
     expect(
       await screen.findByText(
-        /workout needs at least one step\. Warm-ups are a setting now\./,
+        /workout needs at least one step\. Add the warm-up as an ordinary first step\./,
       ),
     ).toBeInTheDocument();
     expect(screen.getByText(/line 1/)).toBeInTheDocument();

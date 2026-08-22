@@ -49,33 +49,13 @@ async function setBaselines(page: Page): Promise<void> {
   }
 }
 
-/** Sets the warm-up preference via the real `PUT /api/prefs` route
- *  (2026-08-09 warmup-setting spec §2) — same real-networking reasoning as
- *  `setBaselines` above. Used by the captures whose whole point is to show
- *  the setting ON (the "countdown" screen's own next-phase line, the
- *  "you-warmup-on" capture — ConfirmTargets' own WARM-UP row died with the
- *  screen, fast-follow Task 4 — and, as of Phase LT spec 1 Task 3, the DISTANCE
- *  variant on "post-workout-summary" itself, so the mixed row list includes
- *  a genuinely-measured completed WARM-UP row for the first time), since
- *  the setting defaults OFF. */
-async function setWarmup(
-  page: Page,
-  warmup: (
-    { kind: "time"; minutes: number } | { kind: "distance"; meters: number }
-  ) & { restSeconds?: number },
-): Promise<void> {
-  const result = await page.evaluate(async (patch) => {
-    const res = await fetch("/api/prefs", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ warmup: patch }),
-    });
-    return { ok: res.ok, status: res.status, body: await res.text() };
-  }, warmup);
-  if (!result.ok) {
-    throw new Error(`warmup setup failed: ${result.status} ${result.body}`);
-  }
-}
+// Phase WU (2026-08-21) deleted `setWarmup` (used to PUT the warm-up
+// preference for the "countdown", "you-warmup-on" and "post-workout-summary"
+// captures) along with the setting it drove. The countdown and
+// post-workout-summary captures already author their easy/warm-up-shaped
+// piece as an ordinary first step instead (see those tests below);
+// "you-warmup-on" had no such substitute — there is no longer a screen
+// state to capture — so that test and its capture are gone too.
 
 /** Phase 6I Task 7: dismisses START HERE on Today via an in-page fetch —
  *  same real-networking reasoning as `setBaselines` above — so a screenshot
@@ -624,18 +604,21 @@ function buildInterruptedMonitorRun(workoutId: string): MonitorRun {
     id: workoutId,
     title: hoarfrost.title,
     type: hoarfrost.type as WorkoutType,
-    steps: [timeWork, distanceWork],
+    // Phase WU: interval 0 came from `buildRun`'s deleted warm-up argument.
+    // An authored 4' EASY step compiles to the identical target-less
+    // interval, so every `IntervalActual.index` here is unchanged.
+    steps: [
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 4 },
+        ref: { effort: "min" },
+      },
+      timeWork,
+      distanceWork,
+    ],
   });
   const started = startDraft(draft);
-  const built = buildRun(
-    started,
-    MONITOR_FIXTURE_BASELINES,
-    MONITOR_FIXED_NOW,
-    {
-      kind: "time",
-      minutes: 4,
-    },
-  );
+  const built = buildRun(started, MONITOR_FIXTURE_BASELINES, MONITOR_FIXED_NOW);
   const program = compileOrThrow(built.phases);
   const logSeed = buildLogSeed(built.phases, MONITOR_FIXTURE_BASELINES);
   const actuals: IntervalActual[] = [
@@ -1204,7 +1187,7 @@ test("releases", async ({ page }) => {
     page.getByRole("heading", { name: "Release notes" }),
   ).toBeVisible();
   await expect(page.locator(".news-release-version").first()).toContainText(
-    "v0.15.0",
+    "v0.16.0",
   );
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "releases.png"),
@@ -1238,10 +1221,6 @@ test("import", async ({ page }) => {
   });
 });
 
-// A fresh account's WARM-UP row reads its default OFF state (2026-08-09
-// warmup-setting spec §2: `null` is the column's default, off for
-// everyone) — no setup needed beyond baselines loading, unlike
-// "you-warmup-on" below.
 test("you", async ({ page }) => {
   await signInViaBackdoor(page, {
     email: "screenshots-you@e2e.test",
@@ -1251,38 +1230,16 @@ test("you", async ({ page }) => {
   // Same "LOADING…" race as /library — wait for the baseline card's real
   // content before capturing.
   await page.locator(".baseline-value").first().waitFor();
-  // Scoped by class, not accessible name: whole-branch review finding F's
-  // dedup fix means the meta slot holds the status value alone ("OFF"),
-  // not "WARM-UP · OFF" — the row's own title ("Warm-up") already says
-  // that word once.
-  await expect(
-    page.locator(".warmup-row-button .you-settings-row-meta"),
-  ).toHaveText("OFF");
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "you.png"),
   });
 });
 
-// The ON state's own house duration format (spec §3's own literal writes
-// the "WARM-UP · " prefix in; the shipped row doesn't, per finding F's
-// dedup fix — recorded where the row itself renders. `+ :30 REST` when
-// set — rendered here as `+ 0:30 REST`, block2-review F5) — "you.png"
-// above only ever shows the default OFF row.
-test("you-warmup-on", async ({ page }) => {
-  await signInViaBackdoor(page, {
-    email: "screenshots-you-warmup-on@e2e.test",
-    name: "Screenshot Tester",
-  });
-  await setWarmup(page, { kind: "time", minutes: 10, restSeconds: 30 });
-  await page.goto("/you");
-  await page.locator(".baseline-value").first().waitFor();
-  await expect(
-    page.locator(".warmup-row-button .you-settings-row-meta"),
-  ).toHaveText("10:00 + 0:30 REST");
-  await page.screenshot({
-    path: path.join(SCREENSHOTS_DIR, "you-warmup-on.png"),
-  });
-});
+// Phase WU (2026-08-21) deleted the WARM-UP row this file used to capture
+// twice: the default OFF state above (once part of "you", now the whole of
+// it) and the ON state below ("you-warmup-on", with its own duration-format
+// assertion). There is no longer a setting to be on or off, so only "you"
+// remains.
 
 test("you-staged", async ({ page }) => {
   await signInViaBackdoor(page, {
@@ -1429,18 +1386,19 @@ test("countdown", async ({ page }) => {
     name: "Screenshot Tester",
   });
   await setBaselines(page);
-  // A warm-up-first session — the warm-up preference turned ON (2026-08-09:
-  // no seeded/imported workout can carry a `wu` step any more, the setting
-  // is the ONLY producer of a warm-up phase) ahead of an ordinary two-step
-  // ladder. The countdown's own next-phase line reads the CURRENT (warm-up)
-  // phase's resolved label — "Easy" — the same never-a-dash word every
-  // warm-up phase resolves to.
-  await setWarmup(page, { kind: "time", minutes: 5 });
+  // An EASY-first session: the countdown's own next-phase line reads the
+  // CURRENT phase's resolved label, and an effort piece resolves to a word
+  // ("EASY") rather than a split — the never-a-dash case. Phase WU: this
+  // used to be the warm-up PREFERENCE turned on ahead of the ladder; the
+  // preference no longer produces a phase, so the easy piece is authored.
   await importBulk(
     page,
-    [`${title} | AT | medium | 3`, "w 4:00 6k @20 r1", "w 3:00 6k @18"].join(
-      "\n",
-    ),
+    [
+      `${title} | AT | medium | 3`,
+      "w 5:00 min",
+      "w 4:00 6k @20 r1",
+      "w 3:00 6k @18",
+    ].join("\n"),
   );
   await startFromLibrary(page, title);
   await expect(page.getByText("GET ON THE HANDLE")).toBeVisible();
@@ -1462,8 +1420,8 @@ test("timer", async ({ page }) => {
   // committed capture shows a real, populated dots row, STEP line, resolved
   // TARGET SPLIT/RATE cards, and a meaningful UP NEXT (the rest phase),
   // landing on the WORK phase itself (phase 0) — the brief's own "work
-  // phase, targets visible" case, not the warm-up "countdown.png" already
-  // shows.
+  // phase, targets visible" case, not the EASY-effort opener
+  // "countdown.png" already shows.
   await importBulk(
     page,
     [`${title} | AT | medium | 3`, "w 4:00 6k @20 r1.5", "w 4:00 6k @20"].join(
@@ -1510,93 +1468,21 @@ test("timer-landscape", async ({ page }) => {
   await cleanupByTitle(page, title);
 });
 
-/** THE PHONE TIMER, MID-WARM-UP (connected-revamp Task 4b, review I-2).
- *
- *  The wave's other warm-up captures are all connected-pane ones, where the
- *  warm-up fill is `--ink-4` under an ink work fill. THIS surface fills
- *  `--accent`, so its warm-up tone is `--ink-5` and sits only 1.97:1 from
- *  the unfilled track — the weakest contrast anywhere in the wave, and the
- *  one nobody had a picture of. `timer.png` cannot serve: its fixture is
- *  deliberately warm-up-less (that IS the no-warm-up byte-identity pin), so
- *  this is a separate state rather than a change to that one.
- *
- *  THE CLOCK IS REWOUND, NOT WAITED OUT. The bar has to be PARTIALLY filled
- *  — a fill at 0% would photograph nothing, and the phase would have to run
- *  for two and a half real minutes to reach the middle of a 5:00 warm-up.
- *  So the stored run's `phaseStartedAt` is moved 150 s into the past through
- *  the app's own record (`session/run.ts`'s `ergomatic.sessionRun`, the same
- *  reach `e2e/session.spec.ts:256-264` already makes into the draft) and the
- *  page reloaded, which is exactly the round-trip a rower's own reload
- *  takes. The `2:30` assertion below is what proves the rewind landed.
- *
- *  What the frame then holds: a 5:00 warm-up inside a 13:00 session, so the
- *  warm-up's span is 38.5% of the bar and the fill sits at 19.2% — half the
- *  warm-up rowed. Three zones, left to right: the warm-up's own fill, the
- *  unrowed remainder of its span in plain track, and the interval notch that
- *  ends it. */
-async function timerMidWarmup(page: Page, title: string): Promise<void> {
-  await setBaselines(page);
-  await setWarmup(page, { kind: "time", minutes: 5 });
-  await importBulk(
-    page,
-    [`${title} | AT | medium | 3`, "w 4:00 6k @20 r1", "w 3:00 6k @18"].join(
-      "\n",
-    ),
-  );
-  await startFromLibrary(page, title);
-  await page.getByRole("button", { name: "SKIP ›" }).click();
-  await expect(page).toHaveURL(/\/session\/run$/);
-  // Phases: warm-up 5:00, work 4:00, its rest 1:00, work 3:00 — four steps,
-  // three INTERVALS (the rest folds), so the bar draws two notches.
-  await expect(page.getByText(/^STEP 1 OF 4 · WARM-UP/)).toBeVisible();
-  await page.evaluate((elapsedMs) => {
-    const raw = localStorage.getItem("ergomatic.sessionRun");
-    if (raw === null) throw new Error("no stored run to rewind");
-    const run = JSON.parse(raw) as { phaseStartedAt: string };
-    run.phaseStartedAt = new Date(Date.now() - elapsedMs).toISOString();
-    localStorage.setItem("ergomatic.sessionRun", JSON.stringify(run));
-  }, 150_000);
-  await page.reload();
-  await expect(page.getByText(/^STEP 1 OF 4 · WARM-UP/)).toBeVisible();
-  // 5:00 warm-up, 2:30 rowed: the countdown proves the rewind took, and the
-  // bar is therefore 150/780 = 19.2% filled inside a 38.5% warm-up span.
-  await expect(page.locator(".timer-time")).toHaveText("2:30");
-}
-
-test("timer-warmup", async ({ page }) => {
-  const title = "Screenshot Timer Warmup Workout";
-  await signInViaBackdoor(page, {
-    email: "screenshots-timer-warmup@e2e.test",
-    name: "Screenshot Tester",
-  });
-  await timerMidWarmup(page, title);
-  await page.screenshot({
-    path: path.join(SCREENSHOTS_DIR, "timer-warmup.png"),
-  });
-  await cleanupByTitle(page, title);
-});
-
-test("timer-warmup-landscape", async ({ page }) => {
-  const title = "Screenshot Timer Warmup Landscape Workout";
-  await signInViaBackdoor(page, {
-    email: "screenshots-timer-warmup-landscape@e2e.test",
-    name: "Screenshot Tester",
-  });
-  await timerMidWarmup(page, title);
-  // The handoff's own landscape reference frame, matching "timer-landscape".
-  await page.setViewportSize({ width: 844, height: 420 });
-  await expect(page.locator(".timer-total-bar")).toBeVisible();
-  await page.screenshot({
-    path: path.join(SCREENSHOTS_DIR, "timer-warmup-landscape.png"),
-  });
-  await cleanupByTitle(page, title);
-});
+// PHASE WU deleted the two captures that stood here, `timer-warmup` and
+// `timer-warmup-landscape`, plus their shared `timerMidWarmup` helper. They
+// existed for ONE thing: the phone timer's lighter warm-up FILL
+// (`.timer-total-warmup`, `--ink-5` at 1.97:1 against the track — the
+// weakest contrast in the wave, and the reason it needed a picture at all).
+// That element, and the warm-up whose span it drew, are gone. The committed
+// `docs/screenshots/timer-warmup.png` and `timer-warmup-landscape.png` are
+// now orphaned and are Phase WU Task 4's to remove with the rest of the
+// capture set.
 
 /** Rewinds the CURRENT phase's own `phaseStartedAt` (`session/run.ts`'s
  *  `ergomatic.sessionRun`) so a real elapsed reading of exactly
  *  `elapsedSecondsValue` is on the stopwatch the instant NEXT is next
- *  clicked — the same reach `timerMidWarmup` above uses for its warm-up
- *  rewind, generalized here so a live JUDGED (or on-target) distance row
+ *  clicked — generalized from the same reach the deleted `timerMidWarmup`
+ *  helper used, so a live JUDGED (or on-target) distance row
  *  can be recorded without waiting out several minutes of real elapsed
  *  time. Reloads so the running Timer picks up the rewritten start; every
  *  call site re-asserts its STEP heading is back on screen before clicking
@@ -1627,11 +1513,13 @@ async function recordDistanceActual(
 // the SAME screen now, never two different ones.
 //
 // Phase LT spec 1, Task 3 (2026-08-18): now THREE phases, not two — a
-// DISTANCE warm-up (100m, `setWarmup`) is on ahead of the original
-// time-then-distance pair, giving this LIVE-door capture the one row
-// state `log-detail.png` (a stored, no-warm-up door) can never show at
-// all: a genuinely measured, completed WARM-UP row, sitting alongside the
-// new TARGET/SPM columns. The "0:03 @ 6k" TIME phase is UNCHANGED and
+// DISTANCE easy opener (100 m) is on ahead of the original
+// time-then-distance pair, giving this LIVE-door capture a genuinely
+// measured, completed opening row alongside the new TARGET/SPM columns.
+// (Phase WU: that opener was a DISTANCE WARM-UP set through the
+// preference; it is an authored `w 100m min` step now, and it renders as a
+// numbered row rather than the deleted unnumbered WARM-UP one.) The
+// "0:03 @ 6k" TIME phase is UNCHANGED and
 // stays a useful negative check: `timerWorkRows`'s own measurability gate
 // (`timerMeasurableElapsedSeconds`) recognizes ONLY `actualSource:
 // "stopwatch"`, never `"assumed"` (a TIME phase with no distance actual
@@ -1658,8 +1546,9 @@ async function recordDistanceActual(
 // already proved on the stored door, now proved live too. Six phases total
 // (was three): every "STEP N OF 3" below became "STEP N OF 6".
 test("post-workout-summary", async ({ page }) => {
-  // Three real-elapsed distance waits now (the warm-up below, plus the
-  // "100m max" work phase already in the fixture) push this comfortably
+  // Three real-elapsed distance waits now (the authored 100m easy opener
+  // below, plus the "100m max" work phase already in the fixture) push
+  // this comfortably
   // past Playwright's 30s default — same reasoning as
   // `e2e/connected.spec.ts`'s/`design.spec.ts`'s own `test.setTimeout`
   // calls for a multi-real-wait flow. The three new judged/on-target rows
@@ -1672,8 +1561,7 @@ test("post-workout-summary", async ({ page }) => {
     name: "Screenshot Tester",
   });
   await setBaselines(page);
-  await setWarmup(page, { kind: "distance", meters: 100 });
-  // Warm-up (100m, distance) — same real-elapsed-then-NEXT shape as the
+  // The 100 m easy opener — same real-elapsed-then-NEXT shape as the
   // "100m max" work phase below — then the tiny time-phase-then-distance-
   // phase pair (e2e/session.spec.ts's own completion test): the time
   // phase auto-advances in ~3s, then the distance phase's actual gets
@@ -1688,6 +1576,7 @@ test("post-workout-summary", async ({ page }) => {
     page,
     [
       `${title} | AN | easy | 1`,
+      "w 100m min",
       "w 0:03 6k",
       // Task 4's three new distance work phases — all against the SAME
       // "6k" ref (target 122.0 s/500m, `SCREENSHOT_BASELINES.k6Seconds`)
@@ -1702,11 +1591,10 @@ test("post-workout-summary", async ({ page }) => {
   await startFromLibrary(page, title);
   await page.getByRole("button", { name: "SKIP ›" }).click();
   await expect(page).toHaveURL(/\/session\/run$/);
-  await expect(page.getByText(/^STEP 1 OF 6 · WARM-UP/)).toBeVisible();
-  // A DISTANCE warm-up is priced too (`session/engine.ts`'s
-  // `warmupPhases`: `estimationSplit(baselines, {effort: "min"})`, "MIN"
-  // effort — SCREENSHOT_BASELINES' own k6Seconds 122.0 + 20 = 142.0
-  // s/500m), so it is JUST as suspect-bounded as any other distance
+  await expect(page.getByText(/^STEP 1 OF 6 · WORK · 100M/)).toBeVisible();
+  // A distance EFFORT phase is priced through `estimationSplit(baselines,
+  // {effort: "min"})` — SCREENSHOT_BASELINES' own k6Seconds 122.0 + 20 =
+  // 142.0 s/500m — so it is JUST as suspect-bounded as any other distance
   // phase (`isSuspectActual`, Timer.tsx): 100m prices at (100/500)×142.0
   // = 28.4s, non-suspect window 14.2s-56.8s. Landing NEXT around 20s in
   // (the same value, and the same "land centered" reasoning, as the
@@ -1763,10 +1651,12 @@ test("post-workout-summary", async ({ page }) => {
   await expect(page.getByRole("heading", { name: title })).toBeVisible();
   const rows = page.locator(".summary-row");
   await expect(rows).toHaveCount(6);
-  const warmupRow = page.locator(".summary-row-warmup");
-  await expect(warmupRow).toHaveCount(1);
-  await expect(warmupRow.locator(".summary-row-time")).not.toBeEmpty();
-  await expect(warmupRow.locator(".summary-row-pace")).not.toBeEmpty();
+  // Phase WU: `.summary-row-warmup` and its unnumbered label are gone. The
+  // opening 100 m piece is row 1, numbered, and still measured.
+  const openingRow = rows.first();
+  await expect(openingRow.locator(".summary-row-index")).toHaveText("1");
+  await expect(openingRow.locator(".summary-row-time")).not.toBeEmpty();
+  await expect(openingRow.locator(".summary-row-pace")).not.toBeEmpty();
   await expect(rows.last().locator(".summary-row-pace")).not.toBeEmpty();
   // JUDGED FASTER/SLOWER (Task 4, PM condition C1): the live door's first
   // ever committed judged rows — the actual `.summary-row-pace`/
@@ -3544,15 +3434,16 @@ const CONNECTED_STATES = [
   // suppressed, not merely absent because nothing was ever carried over.
   "connected-armed",
   "connected-pane-live",
-  // connected-revamp Task 4b (design spec §5b): the WARM-UP state, which had
-  // no committed picture of its own — every other live fixture is already
-  // past it. What it records: the caption with no ordinal, and the bar's
-  // three tones — the warm-up's leading span filling in ITS own tone as the
-  // rower rows it (`--ink-4` here, lighter than the ink work fill), the
-  // unrowed rest of that span in plain track, and the work fill beyond it
-  // (James, 2026-08-12: the bar must move while the rower is moving, and
-  // still read as visibly not-work).
-  "connected-pane-live-warmup",
+  // connected-revamp Task 4b (design spec §5b) originally added this as the
+  // WARM-UP state, the only live fixture caught mid-warm-up. Phase WU
+  // (2026-08-21) removed the concept the fixture depended on — no phase can
+  // be a warm-up any more — but the underlying frame is still the one no
+  // other fixture shows: interval 0, the opening piece, the single case
+  // where the session total equals the interval's own distance
+  // (`ConnectedSurface.screens.test.tsx`'s "pane B, the opening interval").
+  // Renamed rather than deleted for that reason; the file itself was
+  // regenerated against ordinary work-phase content, not warm-up content.
+  "connected-pane-live-opener",
   "connected-pane-live-nohr",
   "connected-paused",
   "connected-disconnected",

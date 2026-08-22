@@ -46,14 +46,6 @@
 // shorter table literal — so the identical fact never reads as two
 // different words depending on whether a rower is looking at a session
 // live or from the log.
-//
-// WARM-UP: stored `steps` never carries a warm-up row at all — neither
-// `buildMonitorLogSteps` nor `buildLogSteps` ever pushes one (module
-// header comments, `session/logDraft.ts`: "Warmup intervals produce NO
-// step" / "Warm-up and rest phases never become a LogStep"). §5C's own
-// text ("fed by stored steps") already implies this; this module's row
-// builder therefore never emits `isWarmup: true` — there is nothing in
-// the stored shape for it to derive one from.
 
 import { fmtDuration } from "../../domain/duration.js";
 import { fmtSplit } from "../../domain/format.js";
@@ -277,7 +269,6 @@ function buildRows(steps: StoredLogStep[]): SummaryRow[] {
     if (elapsed === undefined) {
       return {
         measured: false,
-        isWarmup: false,
         index,
         label: step.label,
         durationLabel:
@@ -299,7 +290,6 @@ function buildRows(steps: StoredLogStep[]): SummaryRow[] {
       step.targetSplit !== undefined ? fmtSplit(step.targetSplit) : undefined;
     return {
       measured: true,
-      isWarmup: false,
       index,
       label: step.label,
       timeLabel,

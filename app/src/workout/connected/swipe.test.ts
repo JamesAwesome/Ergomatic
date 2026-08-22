@@ -107,12 +107,20 @@ function gridRowsElement(): HTMLElement {
     id: "filling-low",
     title: w.title,
     type: w.type as WorkoutType,
-    steps: w.steps,
+    // Phase WU: the 8:00 opener was the rower's warm-up SETTING, passed as
+    // `buildRun`'s (now deleted) fourth argument. An authored 8' EASY step
+    // compiles to the identical interval, so the grid this test measures
+    // has the same rows it always had.
+    steps: [
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 8 },
+        ref: { effort: "min" },
+      },
+      ...w.steps,
+    ],
   });
-  const phases = buildRun(draft, baselines, t0, {
-    kind: "time",
-    minutes: 8,
-  }).phases;
+  const phases = buildRun(draft, baselines, t0).phases;
   const program = compileProgram(phases);
   if ("code" in program) {
     throw new Error(`fixture failed to compile: ${program.code}`);

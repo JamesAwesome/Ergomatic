@@ -225,13 +225,16 @@ export const preferences = pgTable("preferences", {
     .notNull()
     .default(["easy", "medium", "hard"]),
   timeCapMinutes: integer("time_cap_minutes").notNull().default(60),
-  // Phase 9's warmup-setting design (2026-08-09, §2): replaces the two
-  // columns above (warmup_minutes/warmup_override — the override was never
-  // consumed anywhere; minutes' one consumer, the Builder hint, is rewritten
-  // against this column). Nullable; null (the default) means OFF for every
-  // existing and new row alike, per James's ruling. Shape is
-  // `server/stores/preferences.ts`'s `WarmupSetting | null`, validated on
-  // PUT — this column carries whatever shape already passed that check.
+  // Phase 9's warmup-setting design (2026-08-09, §2) added this column,
+  // replacing the two columns above (warmup_minutes/warmup_override — the
+  // override was never consumed anywhere; minutes' one consumer, the
+  // Builder hint, was rewritten against this column). Phase WU
+  // (2026-08-21) removed the setting: nothing reads or writes this column
+  // any more. LEFT IN PLACE ON PURPOSE — spec §4: dropping it in the same
+  // release that stops reading it would break rollback (the server image
+  // a rollback restores still reads it, and `/api/health` is `select 1`,
+  // so a rollback would report healthy over a dead preferences path). The
+  // drop is an owed follow-up (ROADMAP), not forgotten.
   warmup: jsonb("warmup"),
   countdownSeconds: integer("countdown_seconds").notNull().default(10),
   paceToleranceSeconds: real("pace_tolerance_seconds").notNull().default(1),

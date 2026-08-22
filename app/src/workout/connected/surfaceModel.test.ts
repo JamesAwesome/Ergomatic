@@ -1,11 +1,11 @@
 // The connected surface's model, tested against a REAL seeded library
 // workout compiled through the real assembly (`buildDraft` -> `buildRun` ->
 // `compileProgram`) — the repo's realistic-fixture rule. "Filling Low" is
-// the same fixture `ConnectedInterstitial.test.tsx` uses: an 8:00 warm-up
-// then 4 × 2000 m with 3:00 rest between (retuned from 3 reps in Task 3,
-// 2026-08-10 library-rebalance, to reach its new 45-60 band), which gives
-// this file everything
-// it needs in one shape — a warm-up phase with no target, work phases with
+// the same fixture `ConnectedInterstitial.test.tsx` uses: 4 × 2000 m with
+// 3:00 rest between (retuned from 3 reps in Task 3, 2026-08-10
+// library-rebalance, to reach its new 45-60 band), with an 8:00 EASY opener
+// prepended, which gives this file everything
+// it needs in one shape — a leading phase with no numeric target, work phases with
 // a real resolved split and a pace ref, folded rest phases (so the
 // interval->phase walk has something real to walk), and a DISTANCE
 // interval (so `METERS LEFT` is exercised against a genuine program rather
@@ -28,7 +28,6 @@ import type {
 } from "../../../domain/monitor/types.js";
 import type { Baselines, Step, WorkoutType } from "../../../domain/types.js";
 import { ONBOARDING_TITLES } from "../../../domain/onboarding.js";
-import type { WarmupSetting } from "../../api/usePreferences";
 import { LIBRARY_WORKOUTS } from "../../../server/seed/library/index";
 import { ONBOARDING_LIBRARY_WORKOUTS } from "../../../server/seed/library/onboarding";
 import { buildDraft } from "../../session/draft";
@@ -56,24 +55,25 @@ const baselines: Baselines = { k2Seconds: 112, k6Seconds: 122 };
 const t0 = new Date("2026-08-07T09:00:00.000Z");
 const DEVICE = "PM5 432331249";
 
-// 2026-08-09's warmup setting: a seeded workout no longer carries a `wu`
-// step, so the warm-up interval every fixture below opens with now comes
-// from the rower's PREFERENCE — `buildRun`'s fourth argument, its one
-// producer (`src/session/engine.ts`'s `warmupPhases`). The minutes passed
-// per title are exactly what that workout's own `wu` row used to carry, so
+// WHERE THE LEADING INTERVAL COMES FROM, twice moved. A seeded workout
+// stopped carrying a `wu` step on 2026-08-09, after which every fixture's
+// opening interval came from the rower's warm-up PREFERENCE (`buildRun`'s
+// fourth argument). Phase WU removed that too, so it is an authored EASY
+// step now — `leadStep`, prepended to the workout's own steps. The
+// durations are exactly what each workout's `wu` row originally carried, so
 // every interval index, count and duration asserted in this file is
-// unchanged. The connected surface still has to render a warm-up interval
-// correctly; this is the shape it arrives in now.
-function libraryFixture(title: string, warmup: WarmupSetting | null) {
+// unchanged; what DOES change is that the leading interval is ordinary
+// work, so the captions number it and the grid gives it a `1`.
+function libraryFixture(title: string, leadStep: Step | null) {
   const w = LIBRARY_WORKOUTS.find((s) => s.title === title);
   if (!w) throw new Error(`missing library fixture: ${title}`);
   const draft = buildDraft({
     id: title.toLowerCase().replace(/\s+/g, "-"),
     title: w.title,
     type: w.type as WorkoutType,
-    steps: w.steps,
+    steps: leadStep ? [leadStep, ...w.steps] : w.steps,
   });
-  const phases = buildRun(draft, baselines, t0, warmup).phases;
+  const phases = buildRun(draft, baselines, t0).phases;
   const program = compileProgram(phases);
   if ("code" in program) {
     throw new Error(`fixture failed to compile: ${program.code}`);
@@ -81,32 +81,38 @@ function libraryFixture(title: string, warmup: WarmupSetting | null) {
   return { phases, program };
 }
 
-const FIXTURE = libraryFixture("Filling Low", { kind: "time", minutes: 8 });
+/** The 8:00 EASY opener, the authored step that replaced Phase WU's
+ *  deleted warm-up setting in this file's fixtures. Effort-ref, so the
+ *  compiler programs it with no target (`compileProgram` nulls an effort
+ *  phase's `targetSplit`) — the same target-less leading interval every
+ *  assertion in this file has always been written against. */
+const EASY_OPENER: Step = {
+  k: "w",
+  duration: { kind: "time", minutes: 8 },
+  ref: { effort: "min" },
+};
 
-/** THE SAME WORKOUT WITH THE WARM-UP PREFERENCE OFF — the shape MOST
- *  sessions have (the preference is off by default, `usePreferences`'s own
- *  null column), and therefore the shape design spec §5b must leave
- *  untouched. Four intervals, no warm-up, and every caption the plain
- *  `N OF M` it has always been. */
+const FIXTURE = libraryFixture("Filling Low", EASY_OPENER);
+
+/** THE SAME WORKOUT WITH NO LEADING INTERVAL — four intervals and nothing
+ *  in front of them. Kept (rather than folded into `FIXTURE`, which is now
+ *  structurally the same kind of program) because plenty of cases below
+ *  need a program whose interval 0 IS one of the 2000 m pieces. */
 const NO_WARMUP = libraryFixture("Filling Low", null);
 
-/** THE WARM-UP'S OWN TRAILING REST (connected-metrics design spec, States
- *  table row "Rest, before any work interval completes") — the ONE shape
- *  in this file where `state: "resting"` lands on `intervalIndex: 0`
- *  *with* a real REST phase behind it (`WarmupSetting.restSeconds`,
- *  `usePreferences.ts`; `engine.ts`'s `warmupPhases` is its one producer).
- *  Every other fixture's own warm-up (`FIXTURE` included) has no trailing
- *  rest at all — `phaseIndexForInterval(FIXTURE.phases, 0, true)` lands
- *  back on the warm-up phase ITSELF, never a rest one, because
- *  `warmupPhases` only pushes a rest phase when `restSeconds` is truthy —
- *  so this fixture is required, not a restyled duplicate of `FIXTURE`.
- *  Already proven reachable in production by "drops the ordinal for the
- *  warm-up's own trailing rest too" below, which builds the identical
- *  `{ kind: "time", minutes: 8, restSeconds: 60 }` combination inline. */
+/** A LEADING INTERVAL WITH ITS OWN TRAILING REST (connected-metrics design
+ *  spec, States table row "Rest, before any work interval completes") — the
+ *  ONE shape in this file where `state: "resting"` lands on
+ *  `intervalIndex: 0` *with* a real REST phase behind it. `FIXTURE`'s own
+ *  opener has no trailing rest at all, so
+ *  `phaseIndexForInterval(FIXTURE.phases, 0, true)` lands back on the
+ *  opening phase ITSELF and never on a rest one — which is why this fixture
+ *  is required, not a restyled duplicate. */
 const WARMUP_WITH_REST = libraryFixture("Filling Low", {
-  kind: "time",
-  minutes: 8,
-  restSeconds: 60,
+  k: "w",
+  duration: { kind: "time", minutes: 8 },
+  ref: { effort: "min" },
+  restMinutes: 1,
 });
 
 /** THE EFFORT CASE, which Filling Low does not have at all: every one of
@@ -138,15 +144,15 @@ const EFFORT_MAX = libraryFixture("Rear Flank", null);
  *  do with. */
 function phasesFrom(
   w: { title: string; type: WorkoutType; steps: Step[] },
-  warmup: WarmupSetting | null,
+  leadStep: Step | null,
 ): EnginePhase[] {
   const draft = buildDraft({
     id: w.title.toLowerCase().replace(/\s+/g, "-"),
     title: w.title,
     type: w.type,
-    steps: w.steps,
+    steps: leadStep ? [leadStep, ...w.steps] : w.steps,
   });
-  return buildRun(draft, baselines, t0, warmup).phases;
+  return buildRun(draft, baselines, t0).phases;
 }
 
 /** A single continuous time work phase, split-target, no rest and no
@@ -158,12 +164,13 @@ function phasesFrom(
  *  time workout in the library. */
 const OCCLUDED = libraryFixture("Occluded Front", null);
 
-/** The warm-up SETTING at `kind: "distance"` — every other fixture in this
- *  file only ever exercises the `kind: "time"` branch of `warmupPhases`
- *  (`engine.ts:82-97`); the "warmup+meters" table row needs the other one. */
+/** A DISTANCE-kind leading interval — every other fixture in this file
+ *  opens with a TIME-kind one, and the NEXT line's "work+meters" table row
+ *  needs a phase whose extent comes from `meters`. */
 const WARMUP_METERS = libraryFixture("Filling Low", {
-  kind: "distance",
-  meters: 2000,
+  k: "w",
+  duration: { kind: "distance", meters: 2000 },
+  ref: { effort: "min" },
 });
 
 /** The ONE real production shape with a distance work step at an EFFORT ref
@@ -237,11 +244,15 @@ function model(over: Partial<SurfaceModelInput> = {}) {
   });
 }
 
-/** The first WORK phase's own resolved split, read out of the fixture
- *  rather than hardcoded — the numbers this file compares against are the
- *  workout's, not invented ones. */
+/** The first SPLIT-REF work phase's own resolved split, read out of the
+ *  fixture rather than hardcoded — the numbers this file compares against
+ *  are the workout's, not invented ones.
+ *
+ *  Phase WU: the predicate used to be `type === "work"`, which worked only
+ *  because phase 0 was a warm-up. Phase 0 is the EASY opener now — also a
+ *  work phase — so this names what it actually wants. */
 function firstWorkPhase(): EnginePhase {
-  const p = FIXTURE.phases.find((x) => x.type === "work");
+  const p = FIXTURE.phases.find((x) => x.targetKind === "split");
   if (!p?.targetSplit || p.spm === undefined) {
     throw new Error("fixture has no split-and-rate work phase");
   }
@@ -249,7 +260,7 @@ function firstWorkPhase(): EnginePhase {
 }
 
 describe("the fixture is the shape this file claims", () => {
-  it("Filling Low compiles to a warm-up plus four distance intervals", () => {
+  it("Filling Low compiles to an easy time opener plus four distance intervals", () => {
     expect(FIXTURE.program.intervals).toHaveLength(5);
     expect(FIXTURE.program.intervals[0]!.kind).toBe("time");
     expect(FIXTURE.program.intervals[1]!.kind).toBe("distance");
@@ -261,7 +272,7 @@ describe("the fixture is the shape this file claims", () => {
 describe("phaseIndexForInterval: the inverse of compileProgram's rest folding", () => {
   it("interval 0 is the first non-rest phase", () => {
     expect(phaseIndexForInterval(FIXTURE.phases, 0, false)).toBe(0);
-    expect(FIXTURE.phases[0]!.type).toBe("warmup");
+    expect(FIXTURE.phases[0]!.targetKind).toBe("effort");
   });
 
   it("interval 1 skips the folded rest phases, not just one phase", () => {
@@ -650,20 +661,26 @@ describe("READY (design spec §2D): the armed branch of intervalLabelShort", () 
       status: "armed",
       frame: frame({ state: "armed", intervalIndex: 1 }),
     });
-    expect(m.intervalLabelShort).toBe("1 OF 4 · READY");
+    // Phase WU: `2 OF 5`, not `1 OF 4` — the same interval, renumbered
+    // because the program's opener is counted now (see "every interval is
+    // numbered").
+    expect(m.intervalLabelShort).toBe("2 OF 5 · READY");
     // Non-armed, the SAME interval: entirely unaffected by this task — the
     // ordinary `N OF M · WORK` formula, still exercised at this exact
     // index by the "live" describe block below, pinned again here so the
     // two branches sit side by side.
     const live = model({ frame: frame({ intervalIndex: 1 }) });
-    expect(live.intervalLabelShort).toBe("1 OF 4 · WORK");
+    expect(live.intervalLabelShort).toBe("2 OF 5 · WORK");
   });
 
-  it("armed on the WARM-UP (a realistic warm-up-bearing fixture) reads bare READY — no ordinal prefix", () => {
-    // FIXTURE (not NO_WARMUP): a real warm-up-bearing library program,
-    // armed at interval 0 — the only realistic armed case, since nothing
-    // has happened yet and the machine always starts at interval 0.
-    expect(FIXTURE.program.intervals[0]!.type).toBe("warmup");
+  it("armed on interval 0 reads its ordinal plus READY, the caption at the moment the rower sits down", () => {
+    // PHASE WU CHANGED THIS STRING. Interval 0 was the warm-up, and the
+    // armed caption withheld its ordinal for the same reason the live one
+    // did — it read the bare word `READY`. Interval 0 is a counted piece
+    // now, so the armed caption carries its number like any other.
+    // FIXTURE (not NO_WARMUP), armed at interval 0 — the only realistic
+    // armed case, since nothing has happened yet and the machine always
+    // starts at interval 0.
     const m = buildSurfaceModel({
       phases: FIXTURE.phases,
       program: FIXTURE.program,
@@ -677,8 +694,7 @@ describe("READY (design spec §2D): the armed branch of intervalLabelShort", () 
       deviceName: DEVICE,
       actuals: [],
     });
-    expect(m.intervalLabelShort).toBe("READY");
-    expect(m.intervalLabelShort).not.toMatch(/OF/);
+    expect(m.intervalLabelShort).toBe("1 OF 5 · READY");
   });
 });
 
@@ -687,15 +703,18 @@ describe("READY (design spec §2D): the armed branch of intervalLabelShort", () 
 // Task 5's grid header (`ConnectedSurface.tsx`'s `headerTrailing`) joins
 // this with `totalLeftDisplay` instead.
 describe("intervalOrdinalLabel: the ordinal without the phase word (design spec §3)", () => {
-  it("is the ordinal plus the work count when the interval is numbered", () => {
+  it("is the ordinal plus the interval count", () => {
     const m = model({ frame: frame({ intervalIndex: 1 }) });
-    expect(m.intervalOrdinalLabel).toBe("1 OF 4");
+    expect(m.intervalOrdinalLabel).toBe("2 OF 5"); // Phase WU: was "1 OF 4"
   });
 
-  it("is null on the warm-up — the same null rule intervalLabelShort applies", () => {
+  it("is present on interval 0 too — Phase WU left no unnumbered interval for it to be null on", () => {
+    // This case used to pin `null` for the warm-up. The only `null` left is
+    // an EMPTY program, which `compileProgram` cannot produce
+    // (`no-work`) — so the honest assertion is that a real program's first
+    // interval has an ordinal like every other.
     const m = model({ frame: frame({ intervalIndex: 0 }) });
-    expect(FIXTURE.phases[0]!.type).toBe("warmup");
-    expect(m.intervalOrdinalLabel).toBeNull();
+    expect(m.intervalOrdinalLabel).toBe("1 OF 5");
   });
 
   it("never disagrees with the caption's own ordinal, on the same call", () => {
@@ -766,17 +785,21 @@ describe('connectedNextText: exhaustive over Phase["type"] (Item B composition t
     );
   });
 
-  it("warm-up, distance -> WARM-UP {meters}m · Easy", () => {
-    // WARMUP_METERS: Filling Low with the warm-up preference at
-    // `kind: "distance", meters: 2000` — phases[0] is the warm-up.
+  it("work, meters, effort target -> WORK {meters}m · EASY", () => {
+    // PHASE WU CHANGED BOTH STRINGS IN THIS PAIR. `connectedNextText` had a
+    // `case "warmup"` arm that produced `WARM-UP 2000m · Easy` from a
+    // warm-up phase's own `label` ("Easy"). The union has no warm-up
+    // member, so the kind word is `WORK`, and the phase these fixtures
+    // build is an authored EASY effort step whose `label` is
+    // `effortWord`'s own uppercase `EASY`. The COMPOSITION is unchanged —
+    // still `${kind} ${extent} · ${label}` read straight off the phase.
     expect(connectedNextText(WARMUP_METERS.phases, -1)).toBe(
-      "WARM-UP 2000m · Easy",
+      "WORK 2000m · EASY",
     );
   });
 
-  it("warm-up, time -> WARM-UP {duration} · Easy", () => {
-    // FIXTURE's own 8' time warm-up — phases[0].
-    expect(connectedNextText(FIXTURE.phases, -1)).toBe("WARM-UP 8:00 · Easy");
+  it("work, time, effort target -> WORK {duration} · EASY", () => {
+    expect(connectedNextText(FIXTURE.phases, -1)).toBe("WORK 8:00 · EASY");
   });
 
   it("test -> TEST · All out (no extent fields exist on a test phase)", () => {
@@ -921,10 +944,11 @@ describe("elapsedSeconds: the model's own numeric elapsed (Task 3's progress bar
 describe("live", () => {
   it("names the machine's interval out of the program's own count", () => {
     const m = model({ frame: frame({ intervalIndex: 1 }) });
-    // §5b: the warm-up is interval 0 of the PROGRAM and no part of the count
-    // the rower keeps — this is the FIRST of Filling Low's four 2000 m reps.
-    expect(m.intervalLabel).toBe("INTERVAL 1 OF 4 · WORK");
-    expect(m.intervalLabelShort).toBe("1 OF 4 · WORK");
+    // Phase WU: this is the first of Filling Low's four 2000 m reps, and it
+    // is piece TWO of five now — the easy opener ahead of it is counted.
+    // The strings used to read `1 OF 4`.
+    expect(m.intervalLabel).toBe("INTERVAL 2 OF 5 · WORK");
+    expect(m.intervalLabelShort).toBe("2 OF 5 · WORK");
   });
 
   it("keeps the device's own advertised name, with no promise attached", () => {
@@ -1278,17 +1302,18 @@ describe("avg: the interval average and its rest verdict (connected-metrics desi
     expect(m.targetSplit.absent).toBe(true);
   });
 
-  // States table row 6: "Warm-up" — live average, plain ink, never judged
-  // (the standing rule: a warm-up must not read as a working interval).
-  it("warm-up: AVG shows live, plain ink, never judged", () => {
-    expect(FIXTURE.phases[0]!.type).toBe("warmup");
+  // States table row 6: an interval with no numeric target — live average,
+  // plain ink, never judged. (This row said "Warm-up" until Phase WU; the
+  // property is a target-less interval's, not a warm-up's.)
+  it("a target-less interval: AVG shows live, plain ink, never judged", () => {
+    expect(FIXTURE.phases[0]!.targetKind).toBe("effort");
     const m = model({
       frame: frame({ intervalIndex: 0, state: "rowing", splitAvgPace: 200 }),
     });
     expect(m.avg.display).toBe("3:20.0");
     expect(m.avg.judgement).toBe("within");
     expect(m.avg.absent).toBe(false);
-    expect(m.targetSplit.main).toBe("Easy");
+    expect(m.targetSplit.main).toBe("EASY"); // Phase WU: was the warm-up's "Easy"
     expect(m.targetSplit.absent).toBe(true);
   });
 
@@ -1350,16 +1375,54 @@ describe("avg: the interval average and its rest verdict (connected-metrics desi
     expect(m.targetSplit.absent).toBe(false);
   });
 
-  // States table row 5: "Rest, before any work interval completes" — the
-  // warm-up's own trailing rest. `WARMUP_WITH_REST` is the one fixture in
-  // this file where `state: "resting"` at `intervalIndex: 0` lands on a
-  // REAL rest phase (see that fixture's own doc comment). A nonzero,
-  // non-null wire value proves the suppression is about the MISSING
-  // completed work interval, not a coincidentally-absent reading.
-  it("rest before any interval completes (the warm-up's own trailing rest): AVG is absent, TGT stays as today", () => {
+  // States table row 5: "Rest, before any work interval completes".
+  //
+  // PHASE WU CHANGED WHAT THIS ROW'S FIXTURE HAS TO BE, and the row itself
+  // splits in two. It used to be reached by a WARM-UP's own trailing rest:
+  // the phase before the rest was `type: "warmup"`, `finishedWorkPhase`'s
+  // `phases[i-1]?.type === "work"` test failed, and AVG was suppressed. A
+  // leading easy piece IS work now, so that same session's rest has a
+  // completed work interval behind it and AVG shows — which is the correct
+  // reading, not a regression: the rower really did just finish a piece.
+  // The first case below pins that change; the second keeps the
+  // SUPPRESSION pinned, reached by the shape that still produces it (a
+  // rest whose predecessor is a "test" phase, so nothing WORK completed).
+  it("rest after the leading interval: AVG now SHOWS, because that interval is a completed work piece", () => {
     expect(WARMUP_WITH_REST.phases[1]!.type).toBe("rest");
     const m = buildSurfaceModel({
       phases: WARMUP_WITH_REST.phases,
+      program: WARMUP_WITH_REST.program,
+      status: "live",
+      frame: frame({ intervalIndex: 0, state: "resting", splitAvgPace: 200 }),
+      deviceName: DEVICE,
+      actuals: [],
+    });
+    // Shown, and plain ink: the finished opener is an EFFORT piece, so it
+    // has no numeric target to judge the average against.
+    expect(m.avg.display).toBe("3:20.0");
+    expect(m.avg.judgement).toBe("within");
+    expect(m.avg.absent).toBe(false);
+  });
+
+  it("rest before any WORK interval completes: AVG is absent, TGT stays as today", () => {
+    // A "test" phase followed by its rest — the surviving shape where
+    // `finishedWorkPhase` is genuinely undefined at a rest. A nonzero,
+    // non-null wire value proves the suppression is about the MISSING
+    // completed work interval, not a coincidentally-absent reading.
+    const phases: EnginePhase[] = [
+      { type: "test", label: "All out", originalIndex: 0 },
+      { type: "rest", seconds: 60, label: "Rest", originalIndex: 0 },
+      {
+        type: "work",
+        seconds: 240,
+        targetKind: "split",
+        targetSplit: 126,
+        label: "2:06.0",
+        originalIndex: 1,
+      },
+    ];
+    const m = buildSurfaceModel({
+      phases,
       program: WARMUP_WITH_REST.program,
       status: "live",
       frame: frame({ intervalIndex: 0, state: "resting", splitAvgPace: 200 }),
@@ -1403,9 +1466,11 @@ describe("avg: the interval average and its rest verdict (connected-metrics desi
       }),
     });
     // The known laundering trap this test guards against: `intervalLabel`
-    // DOES read as the warm-up here (the `?? 0` this task must not reuse
+    // DOES read as interval 0 here (the `?? 0` this task must not reuse
     // for AVG) — pinned so a reader sees the trap is real, not imagined.
-    expect(m.intervalLabel).toBe("WARM-UP");
+    // Phase WU: that caption was the bare `WARM-UP` before; interval 0 is a
+    // numbered piece now, which makes the laundering MORE visible, not less.
+    expect(m.intervalLabel).toBe("INTERVAL 1 OF 5 · WORK");
     expect(m.avg.display).toBe("—");
     expect(m.avg.judgement).toBe("within");
     expect(m.avg.absent).toBe(true);
@@ -1718,19 +1783,20 @@ describe("degenerate inputs", () => {
     // it too, not to special-case it away.)
     expect(m.pace.display).toBe("0:00.0");
     expect(m.pace.judgement).toBe("within");
-    expect(m.intervalLabel).toBe("WARM-UP");
+    expect(m.intervalLabel).toBe("INTERVAL 1 OF 5 · WORK");
   });
 
   it("clamps an interval index the machine ran past the program", () => {
     const m = model({ frame: frame({ intervalIndex: 99 }) });
     // The clamp is against the PROGRAM's own length (5 intervals), and the
-    // caption it produces is the last WORK piece's own number.
-    expect(m.intervalLabel).toBe("INTERVAL 4 OF 4 · WORK");
+    // caption it produces is the last piece's own number. Phase WU: `5 OF
+    // 5`, not `4 OF 4` — the denominator is the program's length now.
+    expect(m.intervalLabel).toBe("INTERVAL 5 OF 5 · WORK");
   });
 
   it("treats a null interval index as the first, never as a crash", () => {
     const m = model({ frame: frame({ intervalIndex: null }) });
-    expect(m.intervalLabel).toBe("WARM-UP");
+    expect(m.intervalLabel).toBe("INTERVAL 1 OF 5 · WORK");
   });
 
   it("never renders the `PM5` placeholder unless the picker gave us nothing", () => {
@@ -1769,7 +1835,9 @@ describe("degenerate inputs", () => {
     expect(m.targetSplitCaption).toBe("");
     expect(m.targetRate.main).toBe("—");
     expect(m.targetRate.absent).toBe(true);
-    expect(m.intervalLabel).toBe("INTERVAL 1 OF 4 · WORK");
+    // Phase WU: the caption reads off `FIXTURE.program` (passed above), so
+    // it renumbers with everything else — `2 OF 5`, not `1 OF 4`.
+    expect(m.intervalLabel).toBe("INTERVAL 2 OF 5 · WORK");
   });
 
   // `paceCaption`'s own "NO PACE TARGET" assertion retired with the field
@@ -1777,8 +1845,11 @@ describe("degenerate inputs", () => {
   // no-target state now speaks through `targetSplit.main` itself.
   it("the hero's target NAMES the phase when it carries no split target of its own", () => {
     const m = model({ frame: frame({ intervalIndex: 0 }) });
-    expect(FIXTURE.phases[0]!.type).toBe("warmup");
-    expect(m.targetSplit.main).toBe("Easy");
+    expect(FIXTURE.phases[0]!.targetKind).toBe("effort");
+    // Phase WU: the word is the EFFORT phase's own `EASY`, where it used to
+    // be the warm-up phase's `Easy`. Both come from the phase's `label`,
+    // read straight through — the rule is unchanged, the phase is not.
+    expect(m.targetSplit.main).toBe("EASY");
     expect(m.targetSplit.absent).toBe(true);
     // The caption is EMPTY, not "NO SPLIT TARGET": the word above it now
     // says the same thing, and the old caption would only repeat it.
@@ -1786,34 +1857,33 @@ describe("degenerate inputs", () => {
   });
 });
 
-// --- The warm-up says what it is (design spec §5b, ruling 12) --------------
+// --- Every interval is counted (design spec §5b, ruling 12, post-Phase-WU) -
 
-describe("the warm-up is flagged, never counted", () => {
-  it("numbers the WORK and refuses to number the warm-up", () => {
-    // The rule Task 5's grid reads for its `WU` row, exposed once here so
-    // the caption and the `#` column cannot drift apart.
+describe("every interval is numbered", () => {
+  it("numbers EVERY interval, the leading one included", () => {
+    // PHASE WU CHANGED THIS NUMBER. `ordinals` used to read
+    // `[null, 1, 2, 3, 4]` with `workCount: 4` — the warm-up was
+    // deliberately unnumbered and excluded from the denominator, which is
+    // what put `WU` in the grid's `#` cell and dropped the caption's
+    // ordinal. There is no warm-up, so the five intervals are five pieces.
     const n = intervalNumbering(FIXTURE.program.intervals);
     expect(FIXTURE.program.intervals).toHaveLength(5);
-    expect(n.ordinals).toStrictEqual([null, 1, 2, 3, 4]);
-    expect(n.workCount).toBe(4);
+    expect(n.ordinals).toStrictEqual([1, 2, 3, 4, 5]);
+    expect(n.workCount).toBe(5);
   });
 
-  it("numbers a warm-up-less session exactly as it always did", () => {
+  it("numbers a four-interval session exactly as it always did", () => {
     const n = intervalNumbering(NO_WARMUP.program.intervals);
     expect(n.ordinals).toStrictEqual([1, 2, 3, 4]);
     expect(n.workCount).toBe(4);
   });
 
-  it("counts a TEST piece as work — a warm-up is the only thing that is not", () => {
+  it("counts a TEST piece too — nothing is excluded from the numbering", () => {
+    // Phase WU: this list opened with a `type: "warmup"` interval and the
+    // expectation read `[null, 1, 2]` / `workCount: 2`, because the warm-up
+    // was the one thing the count skipped. It is gone, so the list is two
+    // intervals and both are numbered.
     const n = intervalNumbering([
-      {
-        type: "warmup",
-        kind: "time",
-        value: 480,
-        targetSplit: null,
-        displaySpm: null,
-        restSeconds: 0,
-      },
       {
         type: "test",
         kind: "time",
@@ -1831,45 +1901,51 @@ describe("the warm-up is flagged, never counted", () => {
         restSeconds: 0,
       },
     ]);
-    expect(n.ordinals).toStrictEqual([null, 1, 2]);
+    expect(n.ordinals).toStrictEqual([1, 2]);
     expect(n.workCount).toBe(2);
   });
 
-  it("says WARM-UP with no ordinal while the warm-up is running", () => {
-    // The defect this replaced: the rower warming up read `1 OF 5` on a
-    // workout they know as four pieces. The two exact strings forbid that
-    // outright; the `not.toMatch(/\d/)` and `not.toContain("OF")` trailers
-    // that used to follow could not fail once they passed (S0g).
+  it("numbers the FIRST interval 1 OF 5, the caption the rower reads while opening the session", () => {
+    // PHASE WU CHANGED THIS STRING, and it is the change the whole phase is
+    // about. Interval 0 used to be the warm-up: the caption read the bare
+    // word `WARM-UP`, with the ordinal deliberately withheld so a rower
+    // warming up would not read `1 OF 5` on a workout they know as four
+    // pieces. That workout IS five pieces now — the opener is one of them —
+    // so it reads `1 OF 5 · WORK` like any other.
     const m = model({ frame: frame({ intervalIndex: 0 }) });
-    expect(m.intervalLabelShort).toBe("WARM-UP");
-    expect(m.intervalLabel).toBe("WARM-UP");
+    expect(m.intervalLabelShort).toBe("1 OF 5 · WORK");
+    expect(m.intervalLabel).toBe("INTERVAL 1 OF 5 · WORK");
   });
 
-  it("starts the count at 1 on the first WORK piece, on a four-piece workout", () => {
+  it("counts every piece, denominator included, across the whole five-piece program", () => {
+    // PHASE WU CHANGED THESE STRINGS. They used to read `1 OF 4` ... `4 OF
+    // 4` for intervals 1..4 — the warm-up sat at index 0, uncounted, so the
+    // denominator was one short of the program's own length. Both halves
+    // move together: the pieces keep their positions and the denominator is
+    // the program's real length.
     const captions = [1, 2, 3, 4].map(
       (i) => model({ frame: frame({ intervalIndex: i }) }).intervalLabelShort,
     );
     expect(captions).toStrictEqual([
-      "1 OF 4 · WORK",
-      "2 OF 4 · WORK",
-      "3 OF 4 · WORK",
-      "4 OF 4 · WORK",
+      "2 OF 5 · WORK",
+      "3 OF 5 · WORK",
+      "4 OF 5 · WORK",
+      "5 OF 5 · WORK",
     ]);
-    // The denominator counts WORKING intervals only — the number the rower
-    // has in their head — and it is one short of the program's own length.
-    // The `every(... "OF 4")` / `some(... "OF 5")` trailers that used to
-    // follow are gone: both were implied by the exact four strings above
-    // (S0g), and `every` over an unpinned array is its own trap.
     expect(FIXTURE.program.intervals).toHaveLength(5);
   });
 
-  it("drops the ordinal for the warm-up's own trailing rest too", () => {
-    // The ordinal belongs to the INTERVAL and the word to the PHASE: resting
-    // inside the warm-up interval is still no part of the rower's count.
+  it("keeps the ordinal through a leading interval's own trailing rest", () => {
+    // PHASE WU CHANGED THIS STRING. The ordinal belongs to the INTERVAL and
+    // the word to the PHASE: resting inside interval 0 used to be resting
+    // inside the WARM-UP, which was no part of the rower's count, so this
+    // read the bare `REST`. Interval 0 is a counted piece now, so its rest
+    // carries its number.
     const withRest = libraryFixture("Filling Low", {
-      kind: "time",
-      minutes: 8,
-      restSeconds: 60,
+      k: "w",
+      duration: { kind: "time", minutes: 8 },
+      ref: { effort: "min" },
+      restMinutes: 1,
     });
     expect(withRest.phases[1]!.type).toBe("rest");
     const m = buildSurfaceModel({
@@ -1880,19 +1956,18 @@ describe("the warm-up is flagged, never counted", () => {
       deviceName: DEVICE,
       actuals: [],
     });
-    expect(m.intervalLabelShort).toBe("REST");
-    // …while a rest inside a WORK interval keeps its number.
+    expect(m.intervalLabelShort).toBe("1 OF 5 · REST");
+    // …and a rest inside a later interval keeps its own number too.
     const working = model({
       frame: frame({ intervalIndex: 1, state: "resting" }),
     });
-    expect(working.intervalLabelShort).toBe("1 OF 4 · REST");
+    expect(working.intervalLabelShort).toBe("2 OF 5 · REST");
   });
 
-  it("A SESSION WITH NO WARM-UP IS EXACTLY WHAT IT WAS", () => {
-    // The regression pin that matters most: most sessions have no warm-up,
-    // and this task touched the wire IR they all travel through. Every
-    // caption is the plain `N OF M` formula, over the program's own full
-    // length, and the bar has no span to tone.
+  it("A FOUR-INTERVAL SESSION IS EXACTLY WHAT IT WAS", () => {
+    // The regression pin that matters most: a program with no leading easy
+    // piece is untouched by any of this. Every caption is the plain
+    // `N OF M` formula, over the program's own full length.
     for (let i = 0; i < NO_WARMUP.program.intervals.length; i += 1) {
       const m = buildSurfaceModel({
         phases: NO_WARMUP.phases,
@@ -1908,27 +1983,19 @@ describe("the warm-up is flagged, never counted", () => {
       expect(m.intervalLabel).toBe(
         `INTERVAL ${i + 1} OF ${NO_WARMUP.program.intervals.length} · WORK`,
       );
-      expect(m.boundaries.warmupEndsAt).toBeNull();
     }
-    expect(NO_WARMUP.phases.some((p) => p.type === "warmup")).toBe(false);
     expect(NO_WARMUP.program.intervals).toHaveLength(4);
   });
 
-  it("marks the warm-up's span on the bar, ending where its notch is", () => {
-    const m = model({ frame: frame({ intervalIndex: 0 }) });
-    expect(m.boundaries.warmupEndsAt).toBe(480); // the 8:00 warm-up
-    expect(m.boundaries.warmupEndsAt).toBe(m.boundaries.seconds[0]);
-  });
-
-  it("NOTHING NEW on the live pane: a warm-up is never graded", () => {
+  it("NOTHING NEW on the live pane: a target-less interval is never graded", () => {
     // Design spec §5b's fourth row, confirmed by test rather than by change.
-    // A warm-up carries no target (`compileProgram` nulls it), so the
-    // named-but-greyed target and the judgement standing down are already
-    // correct — whatever the rower is actually pulling.
+    // An EFFORT interval carries no programmed target (`compileProgram`
+    // nulls it), so the named-but-greyed target and the judgement standing
+    // down are already correct — whatever the rower is actually pulling.
     const m = model({ frame: frame({ intervalIndex: 0, currentSplit: 95 }) });
-    expect(FIXTURE.program.intervals[0]!.type).toBe("warmup");
+    expect(FIXTURE.phases[0]!.targetKind).toBe("effort");
     expect(FIXTURE.program.intervals[0]!.targetSplit).toBeNull();
-    expect(m.targetSplit.main).toBe("Easy");
+    expect(m.targetSplit.main).toBe("EASY"); // Phase WU: was "Easy"
     expect(m.targetSplit.absent).toBe(true);
     expect(m.targetRate.main).toBe("Free");
     expect(m.targetRate.absent).toBe(true);
@@ -1976,20 +2043,17 @@ describe("boundaries: where the intervals actually are", () => {
     // of the string itself rather than hardcoded, so a change to either has
     // to change both.
     //
-    // §5b re-derives the relation without weakening it: the caption counts
-    // the WORK, and the spans are the work plus the warm-up's own toned
-    // chunk. So `spans - warmups === OF N`, which on a session with no
-    // warm-up is the identical `notches === OF N - 1` this test used to
-    // assert.
+    // Phase WU SIMPLIFIED this relation back to what it was before §5b.
+    // The caption used to count the WORK only while the spans counted the
+    // work PLUS the warm-up's own chunk, so the identity had to be written
+    // `spans - warmups === OF N`. With nothing excluded from the count, the
+    // caption's denominator and the span count are the same number again:
+    // `notches === OF N - 1`.
     const m = model();
     const ofN = Number(/ OF (\d+) /.exec(m.intervalLabelShort)![1]);
-    expect(ofN).toBe(4);
+    expect(ofN).toBe(5);
     const spans = m.boundaries.seconds.length + 1;
-    const warmups = FIXTURE.program.intervals.filter(
-      (i) => i.type === "warmup",
-    ).length;
-    expect(warmups).toBe(1);
-    expect(spans - warmups).toBe(ofN);
+    expect(spans).toBe(ofN);
 
     const bare = buildSurfaceModel({
       phases: NO_WARMUP.phases,
@@ -2089,7 +2153,6 @@ describe("boundaries: where the intervals actually are", () => {
     expect(m.boundaries).toStrictEqual({
       seconds: [],
       predictedFrom: null,
-      warmupEndsAt: null,
     });
   });
 
@@ -2227,7 +2290,11 @@ describe("the five fields die (CR2 spec 3 Tasks 4 and 5, spec §3 fate table)", 
 const SESSION_2_PROGRAM: WorkoutProgram = {
   intervals: [
     {
-      type: "warmup",
+      // Phase WU: transcribed `type: "warmup"` from the capture; the union
+      // has no such member now, so it reads `work`. The recorded tx bytes
+      // carry no warm-up concept at all (the PM5 has none), so the
+      // transcription is as faithful as it was.
+      type: "work",
       kind: "distance",
       value: 100,
       targetSplit: null,
@@ -2275,7 +2342,12 @@ const SESSION_2_PROGRAM: WorkoutProgram = {
  *  interleaved only where `restSeconds > 0`), re-declared per this file's
  *  own convention. */
 const SESSION_2_PHASES: EnginePhase[] = [
-  { type: "warmup", meters: 100, label: "Easy", originalIndex: -1 },
+  // Phase WU: was `{ type: "warmup", ..., originalIndex: -1 }`, where -1 was
+  // the deleted `WARMUP_ORIGINAL_INDEX` sentinel. An ordinary work phase
+  // needs a real index; 0 collides with the piece below, which is inert
+  // here (nothing this harness reads consults `originalIndex`) and keeps
+  // this array a verbatim mirror of the other files' copies.
+  { type: "work", meters: 100, label: "Easy", originalIndex: 0 },
   {
     type: "work",
     seconds: 60,

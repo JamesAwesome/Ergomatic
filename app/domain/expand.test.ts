@@ -336,51 +336,6 @@ describe("estimateMinutes with null baselines (Phase 6I: no-baseline onboarding)
   });
 });
 
-// Spec §8's property test: since "wu" left the Step union (2026-08-09, the
-// warmup-setting spec), `phases()` has no case left that can EVER emit a
-// `type: "warmup"` Phase from a Step[] input — the ONLY producer left is
-// `buildRun` (engine.ts), prepending a phase straight from the preference,
-// never through this function. Exercised against a realistic spread of
-// step shapes (every surviving kind, mixed refs, reps blocks, distance and
-// time durations) rather than one hand-picked case.
-describe("no Step[] input can produce a warmup phase (spec §8)", () => {
-  const LIBRARY_LIKE_FIXTURES: Step[][] = [
-    intervalLadder.steps,
-    distanceRepeats.steps,
-    [{ k: "test", label: "2k test" }],
-    [
-      {
-        k: "w",
-        duration: { kind: "time", minutes: 20 },
-        ref: { effort: "min" },
-      },
-      { k: "r", minutes: 3 },
-    ],
-    [
-      { k: "reps", count: 3 },
-      {
-        k: "w",
-        duration: { kind: "distance", meters: 500 },
-        ref: { effort: "max" },
-      },
-      { k: "r", minutes: 2 },
-    ],
-    [
-      {
-        k: "w",
-        duration: { kind: "time", minutes: 1 },
-        ref: { base: "6k", off: -2 },
-      },
-    ],
-  ];
-
-  it("no Step[] input can produce a warmup phase anymore", () => {
-    for (const steps of LIBRARY_LIKE_FIXTURES) {
-      expect(phases(steps, B).some((p) => p.type === "warmup")).toBe(false);
-    }
-  });
-});
-
 describe("phaseSeconds", () => {
   it("returns a time phase's fixed seconds", () => {
     expect(phaseSeconds({ seconds: 300 })).toBe(300);

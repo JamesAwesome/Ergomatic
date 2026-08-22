@@ -56,13 +56,13 @@ const baselines: Baselines = { k2Seconds: 112, k6Seconds: 122 };
 const t0 = new Date("2026-08-07T09:00:00.000Z");
 const DEVICE = "PM5 432331249";
 
-// 2026-08-09's warmup setting: a seeded workout no longer carries a `wu`
-// step, so the warm-up interval every fixture below opens with now comes
-// from the rower's PREFERENCE — `buildRun`'s fourth argument, its one
-// producer (`src/session/engine.ts`'s `warmupPhases`). The minutes passed
-// per title are exactly what that workout's own `wu` row used to carry, so
-// every interval index, count and duration asserted in this file is
-// unchanged. The connected surface still has to render a warm-up interval
+// Phase WU removed both the seeded `wu` step and the warm-up preference
+// that used to synthesize one. The interval every fixture below opens
+// with is now an ORDINARY authored first interval — see the `steps:`
+// array in `buildDraft` below, which builds it as a plain EASY step of
+// the same length the workout's own `wu` row used to carry, so every
+// interval index, count and duration asserted in this file is unchanged.
+// The connected surface still has to render that opening interval
 // correctly; this is the shape it arrives in now.
 function libraryFixture(
   title: string,
@@ -77,12 +77,19 @@ function libraryFixture(
     id: title.toLowerCase().replace(/ /g, "-"),
     title: w.title,
     type: w.type as WorkoutType,
-    steps: w.steps,
+    // Phase WU: the leading interval came from `buildRun`'s deleted warm-up
+    // argument. An authored EASY step of the same length compiles to the
+    // identical target-less interval, so every index and count here holds.
+    steps: [
+      {
+        k: "w",
+        duration: { kind: "time", minutes: warmupMinutes },
+        ref: { effort: "min" },
+      },
+      ...w.steps,
+    ],
   });
-  const phases = buildRun(draft, baselines, t0, {
-    kind: "time",
-    minutes: warmupMinutes,
-  }).phases;
+  const phases = buildRun(draft, baselines, t0).phases;
   const program = compileProgram(phases);
   if ("code" in program) {
     throw new Error(`fixture failed to compile: ${program.code}`);
@@ -114,7 +121,7 @@ function noWarmupFixture(title: string): {
     type: w.type as WorkoutType,
     steps: w.steps,
   });
-  const phases = buildRun(draft, baselines, t0, null).phases;
+  const phases = buildRun(draft, baselines, t0).phases;
   const program = compileProgram(phases);
   if ("code" in program) {
     throw new Error(`fixture failed to compile: ${program.code}`);
@@ -551,20 +558,29 @@ describe("screen fixtures for pnpm screenshots", () => {
     ).toMatchFileSnapshot("../../e2e/fixtures/connected-armed.html");
   });
 
-  /** THE WARM-UP, mid-way through Filling Low's 8:00 easy start (design spec
-   *  §5b). Every other fixture in this file photographs interval 1 — the
-   *  first 2000 m rep — so nothing had a picture of the state §5b's table is
-   *  actually about: the caption reading `WARM-UP` with no ordinal at all,
-   *  both target slots naming the phase instead of a number — `Easy` and
-   *  `Free`, greyed — with both heroes unjudged (a warm-up is
-   *  never graded), and TOTAL LEFT's bar part-way through the warm-up's own
-   *  span — filling in ITS tone as the rower rows it, with the unrowed rest
-   *  of the span still plain track (James, 2026-08-12: the bar moves while
-   *  the rower moves, and still reads as visibly not-work). The frame is set
-   *  8:00-warm-up-minus-3:32, so the fill sits inside the span rather than
-   *  at either end of it. A time warm-up counts DOWN, hence the time-kind
-   *  remaining. */
-  it("pane B, warming up", async () => {
+  /** Pane B, interval 0: Filling Low's 8:00 easy start, mid-way through.
+   *  Every other fixture in this file photographs interval 1 — the first
+   *  2000 m rep — so this is the only picture of interval 0's own quirk:
+   *  the session total equals the interval's own distance
+   *  (`sessionDistanceMeters` stated rather than inherited below, since
+   *  everywhere else the two differ — see `liveFrame`), and the frame is a
+   *  target-less time interval, hence the time-kind remaining rather than
+   *  a distance one. The frame is set 8:00-minus-3:32, so it lands inside
+   *  the interval rather than at either end.
+   *
+   *  Design spec §5b originally called this THE WARM-UP: the caption read
+   *  the bare word `WARM-UP` with no ordinal, and the bar gave the
+   *  warm-up's own span a third tone as the rower rowed it. Phase WU
+   *  (2026-08-21) removed the concept: the step is now an authored,
+   *  ordinary EASY-effort work step (`libraryFixture`'s own comment), so
+   *  the caption reads a numbered `1 OF 5 · WORK` and the progress bar has
+   *  only its usual two tones (active/upcoming). What did NOT change,
+   *  because an effort-ref phase has never carried a numeric target either:
+   *  both target slots still name the phase rather than a number (`EASY`,
+   *  `Free`), still greyed, and the pace hero is still unjudged — verified
+   *  against this fixture's own committed markup, not assumed carried
+   *  over. */
+  it("pane B, the opening interval", async () => {
     await expect(
       capture("live", {
         frame: {
@@ -572,8 +588,8 @@ describe("screen fixtures for pnpm screenshots", () => {
           elapsedSeconds: 268,
           distanceMeters: 942,
           // Equal to the raw value here, and stated rather than inherited:
-          // a warm-up is the FIRST interval, so the session total genuinely
-          // is this interval's own distance. Everywhere else the two differ
+          // this is the FIRST interval, so the session total genuinely is
+          // this interval's own distance. Everywhere else the two differ
           // (see `liveFrame`).
           sessionDistanceMeters: 942,
           currentSplit: 142.3,
@@ -582,7 +598,7 @@ describe("screen fixtures for pnpm screenshots", () => {
           intervalRemaining: { kind: "time", value: 212 },
         },
       }),
-    ).toMatchFileSnapshot("../../e2e/fixtures/connected-pane-live-warmup.html");
+    ).toMatchFileSnapshot("../../e2e/fixtures/connected-pane-live-opener.html");
   });
 
   it("pane B, no HR monitor", async () => {
@@ -608,9 +624,9 @@ describe("screen fixtures for pnpm screenshots", () => {
 
   // --- Task 7 ------------------------------------------------------------
 
-  /** Mid-session on Filling Low: interval 1 (the warm-up) behind, interval
-   *  2 (the first 2000 m rep) running, two more to come — one of each of
-   *  the handoff's three row states in one frame. */
+  /** Mid-session on Filling Low: interval 1 (the easy opener) behind,
+   *  interval 2 (the first 2000 m rep) running, two more to come — one of
+   *  each of the handoff's three row states in one frame. */
   it("pane C, the grid mid-session", async () => {
     await expect(
       capture("grid", { actuals: [actualFor(0, FIXTURE.program)] }),

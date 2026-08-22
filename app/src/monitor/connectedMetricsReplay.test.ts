@@ -85,7 +85,15 @@ const SESSIONS_DIR = import.meta.url
 const SESSION_2_PROGRAM: WorkoutProgram = {
   intervals: [
     {
-      type: "warmup",
+      // Phase WU: transcribed `type: "warmup"` from the capture; the union
+      // has no such member now, so it reads `work`. Everything else is
+      // byte-identical, `targetSplit: null` included — that null is what
+      // makes the replay reproduce the recorded tx bytes exactly, because
+      // `program.ts`'s warm-up arm only ever NULLED `targetSplit` and
+      // `commands.ts:183` sends the same `NO_TARGET_PACE_SECONDS = 0`
+      // sentinel for a target-less effort interval. `divergences` stays
+      // empty.
+      type: "work",
       kind: "distance",
       value: 100,
       targetSplit: null,
@@ -142,10 +150,14 @@ const SESSION_2_PROGRAM: WorkoutProgram = {
  *  "rest after a completed interval" test green, since Filling Low's own
  *  neighbouring work targets also coincide). The mutation IS caught, by a
  *  DIFFERENT existing test — `surfaceModel.test.ts`'s "rest before any
- *  interval completes (the warm-up's own trailing rest)" — via the
- *  suppression guard, not a differing value; see task-5-report.md. */
+ *  WORK interval completes" — via the suppression guard, not a differing
+ *  value; see task-5-report.md. */
 const CM_PHASES: EnginePhase[] = [
-  { type: "warmup", meters: 100, label: "Easy", originalIndex: -1 },
+  // Phase WU: was `{ type: "warmup", ..., originalIndex: -1 }`, where -1 was
+  // `engine.ts`'s deleted `WARMUP_ORIGINAL_INDEX` sentinel. An ordinary work
+  // phase needs a real index; 0 collides with the piece below, which is
+  // inert here (nothing this harness reads consults `originalIndex`).
+  { type: "work", meters: 100, label: "Easy", originalIndex: 0 },
   {
     type: "work",
     seconds: 60,

@@ -1,9 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
-import { phaseSeconds } from "../../domain/expand.js";
-import { estimationSplit } from "../../domain/pace.js";
 import type { Baselines, WorkoutType } from "../../domain/types.js";
-import type { WarmupSetting } from "../api/usePreferences";
 import { buildDraft, withNudge, type SessionDraft } from "./draft";
 import {
   buildRun,
@@ -43,13 +40,12 @@ import type { SessionRun } from "./run";
 //   reach its new 30-45 band; the phase COUNT stayed 3, only the seconds.)
 // - Fork Lightning (AN): the effort-ref fixture (ref: {effort: "max"}).
 //
-// 2026-08-09 (the warmup setting): none of these carries a warm-up any
-// more — `wu` left the `Step` union and the seeded library was stripped, so
-// every phase count/total below is WORK ONLY unless a test passes
-// `buildRun` an explicit `warmup` setting. The setting is OFF by default
-// for everyone, so "no fourth argument" is the honest default case, not an
-// omission. `buildRun and the warm-up setting` (below) is the suite that
-// owns the ON case.
+// 2026-08-09 (the warmup setting) stripped `wu` from the `Step` union and
+// from the seeded library; Phase WU then deleted `buildRun`'s own `warmup`
+// parameter and the `type: "warmup"` phase it prepended. Every phase count
+// and total below is therefore simply what the workout's steps expand to —
+// there is no longer any argument that could add a phase in front of them,
+// and the suite that used to own that ON case is gone with the parameter.
 function library(title: string) {
   const w = LIBRARY_WORKOUTS.find((s) => s.title === title);
   if (!w) throw new Error(`missing library fixture: ${title}`);
@@ -87,7 +83,7 @@ function diamondDustRun(now = t0): SessionRun {
 // phases (720/300/720/300). Diamond Dust held the catch-up walk's
 // "three finished phases, landing in the fourth" case while it was a
 // four-phase workout (its own 6' warm-up plus three 8' pieces); the
-// warm-up left with 2026-08-09's setting, so the walk re-anchors to a
+// warm-up left with 2026-08-09's `wu` removal, so the walk re-anchors to a
 // real workout that still has four time phases of its own.
 function hoarfrostRun(now = t0): SessionRun {
   const d = buildDraft(draftInputFor("Hoarfrost", `hf-${Math.random()}`));
@@ -98,10 +94,11 @@ describe("buildRun", () => {
   it("freezes phases from the draft's effective steps, attributing originalIndex across a reps-expanded distance workout with auto-inserted rest (Filling Low)", () => {
     const run = fillingLowRun();
     // Filling Low: reps(0), w(1){2000m @ 6k+4, restMinutes 3} x4 —
-    // 4 * (work + rest) = 8 phases. No warm-up: the setting is OFF here
-    // (no fourth argument), and the workout itself carries none any more.
+    // 4 * (work + rest) = 8 phases. Phase WU removed the `some(p => p.type
+    // === "warmup")` assertion that used to sit under this length check:
+    // `Phase["type"]` has no "warmup" member left, so the comparison no
+    // longer compiles and the compiler now enforces what it asserted.
     expect(run.phases).toHaveLength(8);
-    expect(run.phases.some((p) => p.type === "warmup")).toBe(false);
     expect(run.phases[0]).toMatchObject({
       type: "work",
       meters: 2000,
@@ -235,163 +232,12 @@ describe("buildRun", () => {
   });
 });
 
-// 2026-08-09's warmup-setting design §4: `buildRun` is the ONE producer of
-// `type: "warmup"` phases now that `wu` has left the `Step` union. Every
-// fixture below is a REAL library workout (Filling Low / Calm Sea) run
-// through the real `buildDraft` -> `buildRun` path, per the repo's
-// realistic-fixtures rule — the setting is the only thing that varies.
-describe("buildRun and the warm-up setting", () => {
-  function fillingLowDraft() {
-    return buildDraft(draftInputFor("Filling Low", "fl-warmup"));
-  }
-
-  it("prepends nothing when the setting is absent — the default for everyone", () => {
-    const d = fillingLowDraft();
-    expect(buildRun(d, baselines, t0)).toStrictEqual(
-      buildRun(d, baselines, t0, null),
-    );
-    expect(buildRun(d, baselines, t0, null).phases).toHaveLength(8);
-  });
-
-  it("prepends a time warm-up as the run's first phase, before every authored step (Filling Low)", () => {
-    const run = buildRun(fillingLowDraft(), baselines, t0, {
-      kind: "time",
-      minutes: 10,
-    });
-    expect(run.phases).toHaveLength(9);
-    expect(run.phases[0]).toStrictEqual({
-      type: "warmup",
-      seconds: 600,
-      label: "Easy",
-      originalIndex: -1,
-    });
-    // The workout's own phases follow, unshifted and unchanged: the same
-    // eight Filling Low produces with the setting OFF, in the same order.
-    expect(run.phases.slice(1)).toStrictEqual(
-      buildRun(fillingLowDraft(), baselines, t0).phases,
-    );
-  });
-
-  it("prepends the trailing rest SECOND, after the warm-up phase itself", () => {
-    const run = buildRun(fillingLowDraft(), baselines, t0, {
-      kind: "time",
-      minutes: 10,
-      restSeconds: 90,
-    });
-    // Order is the contract (design §4's numbered list): warm-up, then its
-    // rest. Reversed, `compileProgram` would reject every session the
-    // rower ever starts with `leading-rest`.
-    expect(run.phases.slice(0, 3).map((p) => p.type)).toStrictEqual([
-      "warmup",
-      "rest",
-      "work",
-    ]);
-    expect(run.phases[1]).toStrictEqual({
-      type: "rest",
-      seconds: 90,
-      label: "Rest",
-      originalIndex: -1,
-    });
-    expect(run.phases).toHaveLength(10);
-  });
-
-  it("emits no rest phase for a restSeconds of 0", () => {
-    const run = buildRun(fillingLowDraft(), baselines, t0, {
-      kind: "time",
-      minutes: 10,
-      restSeconds: 0,
-    });
-    expect(run.phases).toHaveLength(9);
-    expect(run.phases[1]!.type).toBe("work");
-  });
-
-  it("prices a distance warm-up with estimationSplit's own easy band, so phaseSeconds is finite (design §4)", () => {
-    const run = buildRun(fillingLowDraft(), baselines, t0, {
-      kind: "distance",
-      meters: 2000,
-    });
-    // The estimator is pinned to the SAME function `phases()`'s effort arm
-    // uses, at its easy band: `estimationSplit(baselines, {effort:"min"})`
-    // is `k6Seconds + 20` (domain/pace.ts:103) = 120 + 20 = 140.
-    const easy = estimationSplit(baselines, { effort: "min" });
-    expect(easy).toBe(140);
-    expect(run.phases[0]).toStrictEqual({
-      type: "warmup",
-      meters: 2000,
-      targetSplit: 140,
-      label: "Easy",
-      originalIndex: -1,
-    });
-    // The whole point of carrying the estimate: `phaseSeconds` can price
-    // the phase at all. (2000 / 500) * 140 = 560.
-    expect(phaseSeconds(run.phases[0]!)).toBe(560);
-    // And it is NOT a target the rower chose — no `targetKind`, so no
-    // screen reads it as a prescription (TimerTargets' own discriminant).
-    expect(run.phases[0]!.targetKind).toBeUndefined();
-  });
-
-  it("makes no estimate at all for a distance warm-up with null baselines (no fake number)", () => {
-    const d = buildDraft(draftInputFor("Fork Lightning", "fk-warmup"));
-    const run = buildRun(d, null, t0, { kind: "distance", meters: 2000 });
-    expect(run.phases[0]).toStrictEqual({
-      type: "warmup",
-      meters: 2000,
-      targetSplit: undefined,
-      label: "Easy",
-      originalIndex: -1,
-    });
-    expect(phaseSeconds(run.phases[0]!)).toBeNull();
-  });
-
-  it("prices the prepended warm-up into TOTAL LEFT, both kinds (Calm Sea)", () => {
-    const d = buildDraft(draftInputFor("Calm Sea", "cs-warmup"));
-    // Calm Sea alone: 10,000m @ 6k+12 -> (10000/500) * 132 = 2640s.
-    expect(totalRemainingSeconds(buildRun(d, baselines, t0), t0)).toBe(2640);
-    expect(
-      totalRemainingSeconds(
-        buildRun(d, baselines, t0, { kind: "time", minutes: 10 }),
-        t0,
-      ),
-    ).toBe(2640 + 600);
-    expect(
-      totalRemainingSeconds(
-        buildRun(d, baselines, t0, {
-          kind: "distance",
-          meters: 2000,
-          restSeconds: 90,
-        }),
-        t0,
-      ),
-    ).toBe(2640 + 560 + 90);
-  });
-
-  it("gives every warm-up phase an originalIndex of -1, leaving the authored steps' attribution untouched", () => {
-    const run = buildRun(fillingLowDraft(), baselines, t0, {
-      kind: "time",
-      minutes: 10,
-      restSeconds: 90,
-    });
-    // The setting is not an authored step, so it points at none.
-    expect(run.phases[0]!.originalIndex).toBe(-1);
-    expect(run.phases[1]!.originalIndex).toBe(-1);
-    // Filling Low's own eight phases still all trace to its "w" step at raw
-    // index 1 — the prepend must not shift attribution the way an inserted
-    // STEP would have.
-    for (const phase of run.phases.slice(2)) {
-      expect(phase.originalIndex).toBe(1);
-    }
-  });
-
-  it("cannot express a rest-only setting: every value names a kind and a duration", () => {
-    // A type-level assertion, deliberately: the design's §2 shape is an
-    // intersection of the kind union with an optional `restSeconds`, so
-    // "just give me 90 seconds of rest" is unrepresentable rather than
-    // silently accepted and dropped at runtime.
-    // @ts-expect-error a WarmupSetting with no kind is not assignable
-    const restOnly: WarmupSetting = { restSeconds: 90 };
-    expect(restOnly).toBeDefined();
-  });
-});
+// Phase WU deleted `buildRun`'s `warmup` parameter and the `warmupPhases`
+// producer behind it, so the suite that lived here — nine cases pinning the
+// prepended phase's shape, order, pricing and `originalIndex: -1` sentinel —
+// went with the code it tested. The one thing left after that — a
+// TYPE-level assertion about the `WarmupSetting` preference shape itself —
+// went with Task 3's removal of the type.
 
 describe("remainingSeconds", () => {
   it("returns the full phase duration at the instant a phase starts", () => {
@@ -483,8 +329,8 @@ describe("tick — the catch-up walk", () => {
   it("halts at a distance phase reached mid-walk, seeding its stopwatch baseline at the walk's arrival boundary (resilience 3, Filling Low rest -> 2000m)", () => {
     // Starts on Filling Low's first 3' REST phase (index 1) — the walk
     // needs a TIME phase to consume before it can arrive at a distance
-    // one, and since 2026-08-09's warmup setting this workout's own rest
-    // rows are the only time phases it has.
+    // one, and since `wu` left the Step union this workout's own rest rows
+    // are the only time phases it has.
     const run = { ...fillingLowRun(), index: 1 };
     const now = addSeconds(t0, 180 + 50); // 50s into the next distance phase
     const result = tick(run, now);

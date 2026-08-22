@@ -10,8 +10,11 @@ import PostWorkoutSummary, {
 } from "./PostWorkoutSummary";
 import type { SummaryModel } from "./summaryModel";
 
-// A realistic monitor-door-shaped model: a warm-up row plus two judged work
-// rows (one faster, one slower than the working average) — the same shape
+// A realistic monitor-door-shaped model: an unjudged opening row plus two
+// judged work rows (one faster, one slower than the working average). Phase
+// WU: the opener used to be the unnumbered `isWarmup: true` WARM-UP row; it
+// is a numbered row with no target now, which is the shape a measured
+// EFFORT piece produces. The same shape
 // `summaryModel.test.ts` (Task 4) proves `buildSummaryModel` produces from a
 // real committed monitor recording. Built as a literal here (not re-run
 // through `buildSummaryModel`) because this file's own job is the SCREEN's
@@ -28,15 +31,14 @@ function monitorModel(overrides: Partial<SummaryModel> = {}): SummaryModel {
     rows: [
       {
         measured: true,
-        isWarmup: true,
-        label: "WARM-UP",
+        index: 1,
+        label: "4:00 @ MIN",
         timeLabel: "4:00",
         paceLabel: "2:20.0",
       },
       {
         measured: true,
-        isWarmup: false,
-        index: 1,
+        index: 2,
         label: "6:00 @ 6k",
         timeLabel: "6:00",
         paceLabel: "2:05.0",
@@ -49,8 +51,7 @@ function monitorModel(overrides: Partial<SummaryModel> = {}): SummaryModel {
       },
       {
         measured: true,
-        isWarmup: false,
-        index: 2,
+        index: 3,
         label: "6:00 @ 6k",
         timeLabel: "6:20",
         paceLabel: "2:13.4",
@@ -73,7 +74,6 @@ function prescribedOnlyModel(): SummaryModel {
     rows: [
       {
         measured: false,
-        isWarmup: false,
         index: 1,
         label: "10:00 @ 6k +8",
         durationLabel: "10:00",
@@ -81,7 +81,6 @@ function prescribedOnlyModel(): SummaryModel {
       },
       {
         measured: false,
-        isWarmup: false,
         index: 2,
         label: "0:30 @ MAX",
         durationLabel: "0:30",
@@ -353,13 +352,18 @@ describe("PostWorkoutSummary — reflection card (§2D)", () => {
 });
 
 describe("PostWorkoutSummary — intervals (§2E)", () => {
-  it("renders the warm-up row labeled WARM-UP with no deviation bar or number", () => {
+  it("renders an unjudged measured row with its number and no deviation bar or ± number", () => {
+    // Phase WU: this used to look for `.summary-row-warmup` and the word
+    // `WARM-UP`. Both are gone with the row type — the class, the label
+    // and the unnumbered `#` cell. What survives is the behaviour that
+    // mattered: a measured row carrying no judgment renders no deviation
+    // figure, and it is numbered like every other row.
     renderSummary();
     const rows = screen.getAllByRole("listitem");
-    const warmup = rows.find((r) => r.className.includes("summary-row-warmup"));
-    expect(warmup).toBeDefined();
-    expect(within(warmup!).getByText("WARM-UP")).toBeInTheDocument();
-    expect(within(warmup!).queryByText(/^[+−]/)).not.toBeInTheDocument();
+    const opener = rows[0]!;
+    expect(opener.querySelector(".summary-row-index")?.textContent).toBe("1");
+    expect(within(opener).getByText("4:00")).toBeInTheDocument();
+    expect(within(opener).queryByText(/^[+−]/)).not.toBeInTheDocument();
   });
 
   it("renders a judged measured row's deviation label and shows the legend", () => {
@@ -383,7 +387,6 @@ describe("PostWorkoutSummary — intervals (§2E)", () => {
         rows: [
           {
             measured: true,
-            isWarmup: false,
             index: 1,
             label: "6:00 @ 6k",
             timeLabel: "6:00",
@@ -418,7 +421,6 @@ describe("PostWorkoutSummary — intervals (§2E)", () => {
         rows: [
           {
             measured: true,
-            isWarmup: false,
             index: 1,
             label: "6:00 @ 6k",
             timeLabel: "6:20",
@@ -454,17 +456,17 @@ describe("PostWorkoutSummary — intervals (§2E)", () => {
   // empty widget that reads as broken, visible on both committed connected
   // captures. §2B's own idiom ("any cell whose inputs are absent is
   // ABSENT") applied here, and §2E's warm-up-row precedent (measured,
-  // "UNJUDGED (no deviation bar...)") extended to any unjudged measured
-  // row: no tick, no fill — the SAME empty `.summary-row-bar-track` the
-  // warm-up row already renders (kept, not removed outright, so the
-  // column still lines up with judged sibling rows in the same list).
-  it("a lone measured row (judged undefined) renders no deviation bar — no tick, no fill, same empty track the warm-up row renders", () => {
+  // "UNJUDGED (no deviation bar...)" — that row type is gone with Phase
+  // WU, its rule is not) extended to any unjudged measured row: no tick,
+  // no fill, but the empty `.summary-row-bar-track` is kept rather than
+  // removed outright, so the column still lines up with judged sibling
+  // rows in the same list.
+  it("a lone measured row (judged undefined) renders no deviation bar — no tick, no fill, just the empty track", () => {
     renderSummary({
       model: monitorModel({
         rows: [
           {
             measured: true,
-            isWarmup: false,
             index: 1,
             label: "6:00 @ 6k",
             timeLabel: "6:00",
@@ -502,7 +504,6 @@ describe("PostWorkoutSummary — intervals (§2E)", () => {
         rows: [
           {
             measured: true,
-            isWarmup: false,
             index: 1,
             label: "6:00 @ 6k",
             timeLabel: "11:45",
@@ -571,7 +572,6 @@ describe("PostWorkoutSummary — TARGET + SPM cells, on-target plain ink (§1/§
         rows: [
           {
             measured: true,
-            isWarmup: false,
             index: 1,
             label: "6:00 @ 6k",
             timeLabel: "6:00",
@@ -593,7 +593,6 @@ describe("PostWorkoutSummary — TARGET + SPM cells, on-target plain ink (§1/§
         rows: [
           {
             measured: true,
-            isWarmup: false,
             index: 1,
             label: "6:00 @ 6k",
             timeLabel: "6:00",
@@ -615,7 +614,6 @@ describe("PostWorkoutSummary — TARGET + SPM cells, on-target plain ink (§1/§
         rows: [
           {
             measured: true,
-            isWarmup: false,
             index: 1,
             label: "6:00 @ 6k",
             timeLabel: "6:00",
@@ -639,7 +637,6 @@ describe("PostWorkoutSummary — TARGET + SPM cells, on-target plain ink (§1/§
         rows: [
           {
             measured: true,
-            isWarmup: false,
             index: 1,
             label: "6:00 @ 6k",
             timeLabel: "6:00",
@@ -661,7 +658,6 @@ describe("PostWorkoutSummary — TARGET + SPM cells, on-target plain ink (§1/§
         rows: [
           {
             measured: true,
-            isWarmup: false,
             index: 1,
             label: "6:00 @ 6k",
             timeLabel: "6:00",
@@ -684,7 +680,6 @@ describe("PostWorkoutSummary — TARGET + SPM cells, on-target plain ink (§1/§
         rows: [
           {
             measured: true,
-            isWarmup: false,
             index: 1,
             label: "6:00 @ 6k",
             timeLabel: "6:00",
@@ -710,7 +705,6 @@ describe("PostWorkoutSummary — TARGET + SPM cells, on-target plain ink (§1/§
         rows: [
           {
             measured: true,
-            isWarmup: false,
             index: 1,
             label: "6:00 @ 6k",
             timeLabel: "6:00",
@@ -759,7 +753,6 @@ describe("PostWorkoutSummary — TARGET + SPM cells, on-target plain ink (§1/§
           rows: [
             {
               measured: true,
-              isWarmup: false,
               index: 1,
               label: "6:00 @ 6k",
               timeLabel: "6:00",
@@ -787,7 +780,6 @@ describe("PostWorkoutSummary — TARGET + SPM cells, on-target plain ink (§1/§
           rows: [
             {
               measured: true,
-              isWarmup: false,
               index: 1,
               label: "6:00 @ 6k",
               timeLabel: "6:20",
@@ -815,7 +807,6 @@ describe("PostWorkoutSummary — TARGET + SPM cells, on-target plain ink (§1/§
           rows: [
             {
               measured: true,
-              isWarmup: false,
               index: 1,
               label: "6:00 @ 6k",
               timeLabel: "6:00",
@@ -838,7 +829,6 @@ describe("PostWorkoutSummary — TARGET + SPM cells, on-target plain ink (§1/§
           rows: [
             {
               measured: true,
-              isWarmup: false,
               index: 2,
               label: "100 m @ MAX",
               timeLabel: "0:21",

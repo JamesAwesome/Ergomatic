@@ -734,7 +734,7 @@ test.describe("new controls this phase introduced", () => {
       "0 created",
     );
     await expect(page.locator(".bulk-import-notice")).toHaveText(
-      "1 warm-up line dropped. Warm-ups are a setting now.",
+      "1 warm-up line dropped. Add a warm-up as an ordinary first step instead.",
     );
     // The `wu 5` on line 2 contributes NO entry here — the drop is not an
     // error. Only the bad ref on line 6 is.

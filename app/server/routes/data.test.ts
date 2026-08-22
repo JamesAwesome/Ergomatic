@@ -711,7 +711,8 @@ describe("POST /api/workouts/bulk", () => {
     expect(res.body.created).toHaveLength(0);
     expect(res.body.errors).toContainEqual(
       expect.objectContaining({
-        message: "workout needs at least one step. Warm-ups are a setting now.",
+        message:
+          "workout needs at least one step. Add the warm-up as an ordinary first step.",
       }),
     );
   });
@@ -2973,6 +2974,24 @@ describe("GET/PUT /api/prefs", () => {
     expect(stores.preferences.put).not.toHaveBeenCalled();
   });
 
+  // Phase WU exit criterion 6 (2026-08-21-warmup-removal-design.md §8):
+  // the removed setting is the one deliberate exception to "an unrecognized
+  // key is silently ignored" (the previous test, and `PATCH /api/logs/:id`'s
+  // own `held`-idiom comment, both document that as the route's general
+  // policy) — a stale `warmup` key gets a 400, not a silent no-op, so a
+  // not-yet-updated client finds out its write did nothing rather than
+  // believing it succeeded.
+  it("rejects a warmup key on PUT /api/prefs", async () => {
+    const stores = makeStores();
+    vi.spyOn(stores.preferences, "put");
+    const res = await asA(request(appFor(stores)).put("/api/prefs")).send({
+      warmup: null,
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.field).toBe("warmup");
+    expect(stores.preferences.put).not.toHaveBeenCalled();
+  });
+
   it("rejects an invalid difficulties entry with 400 + field", async () => {
     const res = await asA(request(appFor(makeStores())).put("/api/prefs")).send(
       {
@@ -2996,7 +3015,6 @@ describe("GET/PUT /api/prefs", () => {
       {
         difficulties: ["easy"],
         timeCapMinutes: 45,
-        warmup: { kind: "time", minutes: 12, restSeconds: 30 },
         countdownSeconds: 5,
         paceToleranceSeconds: 2,
         accentColor: "#123456",
@@ -3007,119 +3025,10 @@ describe("GET/PUT /api/prefs", () => {
     expect(res.body).toStrictEqual({
       difficulties: ["easy"],
       timeCapMinutes: 45,
-      warmup: { kind: "time", minutes: 12, restSeconds: 30 },
       countdownSeconds: 5,
       paceToleranceSeconds: 2,
       accentColor: "#123456",
       startHereDismissed: true,
-    });
-  });
-
-  describe("warmup (2026-08-09 design §2)", () => {
-    it("accepts a time-kind warmup with no rest", async () => {
-      const res = await asA(
-        request(appFor(makeStores())).put("/api/prefs"),
-      ).send({ warmup: { kind: "time", minutes: 10 } });
-      expect(res.status).toBe(200);
-      expect(res.body.warmup).toStrictEqual({ kind: "time", minutes: 10 });
-    });
-
-    it("accepts a distance-kind warmup with rest", async () => {
-      const res = await asA(
-        request(appFor(makeStores())).put("/api/prefs"),
-      ).send({ warmup: { kind: "distance", meters: 2000, restSeconds: 60 } });
-      expect(res.status).toBe(200);
-      expect(res.body.warmup).toStrictEqual({
-        kind: "distance",
-        meters: 2000,
-        restSeconds: 60,
-      });
-    });
-
-    it("GET round-trips a saved warmup", async () => {
-      const app = appFor(makeStores());
-      await asA(request(app).put("/api/prefs")).send({
-        warmup: { kind: "time", minutes: 5 },
-      });
-      const get = await asA(request(app).get("/api/prefs"));
-      expect(get.body.warmup).toStrictEqual({ kind: "time", minutes: 5 });
-    });
-
-    it("an explicit null clears a previously-set warmup (presence check, not !== undefined)", async () => {
-      const app = appFor(makeStores());
-      await asA(request(app).put("/api/prefs")).send({
-        warmup: { kind: "time", minutes: 5 },
-      });
-      const cleared = await asA(request(app).put("/api/prefs")).send({
-        warmup: null,
-      });
-      expect(cleared.status).toBe(200);
-      expect(cleared.body.warmup).toBeNull();
-      const get = await asA(request(app).get("/api/prefs"));
-      expect(get.body.warmup).toBeNull();
-    });
-
-    it("absent warmup key leaves an existing warmup untouched (absence != explicit null)", async () => {
-      const app = appFor(makeStores());
-      await asA(request(app).put("/api/prefs")).send({
-        warmup: { kind: "time", minutes: 5 },
-      });
-      const res = await asA(request(app).put("/api/prefs")).send({
-        accentColor: "#654321",
-      });
-      expect(res.status).toBe(200);
-      expect(res.body.warmup).toStrictEqual({ kind: "time", minutes: 5 });
-    });
-
-    it.each([
-      [{ kind: "time", minutes: 0 }, "below the 1-minute floor"],
-      [{ kind: "time", minutes: 31 }, "above the 30-minute ceiling"],
-      [{ kind: "time", minutes: 5.5 }, "not a whole minute"],
-      [{ kind: "distance", meters: 99 }, "below the 100 m floor"],
-      [{ kind: "distance", meters: 10001 }, "above the 10000 m ceiling"],
-      [{ kind: "distance", meters: 500.5 }, "not a whole meter"],
-      [
-        { kind: "time", minutes: 10, restSeconds: 4 },
-        "rest below the 5 s floor",
-      ],
-      [
-        { kind: "time", minutes: 10, restSeconds: 596 },
-        "rest above the 595 s (9:55) PM5 ceiling",
-      ],
-      [
-        { kind: "time", minutes: 10, restSeconds: 30.5 },
-        "rest not a whole second",
-      ],
-      [{ kind: "sprint", minutes: 10 }, "an unknown kind"],
-      [{ kind: "time", meters: 10 }, "wrong duration field for the kind"],
-      [
-        { kind: "time", minutes: 10, meters: 500 },
-        "both minutes and meters present (stray key beyond what time implies)",
-      ],
-      [{}, "no kind at all"],
-      ["off", "not an object"],
-    ])("rejects %j (%s) with 400 + field", async (bad, _why) => {
-      const res = await asA(
-        request(appFor(makeStores())).put("/api/prefs"),
-      ).send({ warmup: bad });
-      expect(res.status).toBe(400);
-      expect(res.body.field).toBe("warmup");
-    });
-
-    it("exactly 1 minute / 30 minutes / 100 m / 10000 m / 5 s rest / 595 s rest are the inclusive boundaries", async () => {
-      const app = appFor(makeStores());
-      for (const warmup of [
-        { kind: "time", minutes: 1 },
-        { kind: "time", minutes: 30 },
-        { kind: "distance", meters: 100 },
-        { kind: "distance", meters: 10000 },
-        { kind: "time", minutes: 10, restSeconds: 5 },
-        { kind: "time", minutes: 10, restSeconds: 595 },
-      ]) {
-        const res = await asA(request(app).put("/api/prefs")).send({ warmup });
-        expect(res.status).toBe(200);
-        expect(res.body.warmup).toStrictEqual(warmup);
-      }
     });
   });
 

@@ -106,20 +106,22 @@ import {
  *
  *  TWO SEPARATE FALLBACKS to `intervalLabelShort`, not one (task-5-review
  *  fix round — the first version of this function conflated them and
- *  shipped a regression). The unnumbered warm-up
- *  (`intervalOrdinalLabel === null`) is one: there is no ordinal to join
- *  `totalLeftDisplay` onto, so GRID shows the same `WARM-UP` word every
- *  other pane does. `model.status === "armed"` is the OTHER, and it is not
- *  implied by the first: with the warm-up preference off (a real, shipped
- *  default — `usePreferences`'s own null column), the FIRST interval at
- *  armed is already numbered (`intervalOrdinalLabel` is `"1 OF 4"`, not
- *  `null`), so the ordinal-null guard alone does not stop the countdown
- *  composition from firing before the erg has moved — the same shape of
- *  mistake `.claude/agent-briefing.md` names by name for a DIFFERENT
- *  invented state, one axis over: a RUNNING gold countdown at a rower who
- *  has taken no stroke. `intervalLabelShort` already has its own armed branch
- *  (`surfaceModel.ts`'s `readyLabel`) that reads `1 OF 4 · READY` for
- *  exactly this case — armed is checked FIRST, ahead of the ordinal
+ *  shipped a regression). A `null` ordinal (`intervalOrdinalLabel ===
+ *  null`) is one: there is no ordinal to join `totalLeftDisplay` onto.
+ *  Phase WU (2026-08-21) removed the unnumbered warm-up that used to be
+ *  the real case here — `intervalOrdinalLabel`'s own doc comment in
+ *  `surfaceModel.ts` now states it plainly: `null` means an EMPTY
+ *  program, the only case left that can produce it. `model.status ===
+ *  "armed"` is the OTHER fallback, and it is not implied by the first:
+ *  at armed, the first interval of an ordinary program already has an
+ *  ordinal (`intervalOrdinalLabel` is `"1 OF 4"`, not `null`), so the
+ *  ordinal-null guard alone would not stop the countdown composition
+ *  from firing before the erg has moved — the same shape of mistake
+ *  `.claude/agent-briefing.md` names by name for a DIFFERENT invented
+ *  state, one axis over: a RUNNING gold countdown at a rower who has
+ *  taken no stroke. `intervalLabelShort` already has its own armed
+ *  branch (`surfaceModel.ts`'s `readyLabel`) that reads `1 OF 4 · READY`
+ *  for exactly this case — armed is checked FIRST, ahead of the ordinal
  *  check, so GRID never reaches the countdown composition while armed,
  *  numbered interval or not. */
 function headerTrailing(model: SurfaceModel, pane: PaneId): ReactNode {

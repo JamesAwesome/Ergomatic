@@ -10,7 +10,7 @@
  *
  *  `kinds` is part of the pinned shape (Task 3's brief) but UNUSED by this
  *  render on purpose: the phone timer's own dot strip has never
- *  distinguished warm-up/work/rest visually (`.timer-dot-past/-current/
+ *  distinguished work from rest visually (`.timer-dot-past/-current/
  *  -future` are the only three classes `index.css` defines, keyed purely
  *  off position relative to `current`) — a byte-identical extraction cannot
  *  start painting dots by kind without changing that DOM. It's threaded
@@ -20,7 +20,7 @@
 export interface IntervalSegmentsProps {
   total: number;
   current: number;
-  kinds: ("work" | "rest" | "wu")[];
+  kinds: ("work" | "rest")[];
 }
 
 export default function IntervalSegments({

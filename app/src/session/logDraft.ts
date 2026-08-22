@@ -579,14 +579,24 @@ export function buildManualLogSteps(
  *  its own), so `seed.steps[i]` and `program.intervals[i]` name the SAME
  *  interval for every `i` — a later task's whole alignment contract.
  *
- *  `kind` is now REDUNDANT with `ProgramInterval.type`, which
- *  connected-revamp Task 4b (design spec §5b) added so the live surfaces
- *  could stop guessing at a warm-up. Kept rather than removed: this seed is
- *  PERSISTED (a stored `MonitorRun` written before that change still
- *  carries it and nothing else), and the alignment contract above is what
- *  makes the two agree index for index. A later pass may retire it; doing
- *  so is a stored-shape migration, not a comment sweep. */
+ *  `kind` KEEPS its `"warmup"` member after Phase WU, and that is
+ *  deliberate — this is the one warm-up union the removal does NOT delete.
+ *  `LogSeed` is PERSISTED inside a stored `MonitorRun`
+ *  (`src/monitor/monitorRun.ts`'s localStorage record), so a run written
+ *  before Phase WU still carries `kind: "warmup"` on its first step. The
+ *  reader in `buildMonitorLogSteps` below skips exactly those steps;
+ *  deleting the member would make that guard unwritable and silently add a
+ *  phantom warm-up row to what such a record SAVES.
+ *  It stays a LITERAL union rather than widening to `string`: widening
+ *  admits typos, erases the enumeration, and hides the owed cleanup from
+ *  the compiler. `buildLogSeed` below can no longer PRODUCE `"warmup"` —
+ *  no phase can be one — so the member is legacy-read-only from here.
+ *  Owed removal: ROADMAP Phase WU, at the first server-touching phase
+ *  after two tags have shipped. */
 export interface LogSeed {
+  /** `kind: "warmup"` is legacy-only — see this interface's own comment.
+   *  Nothing writes it any more; the reader in `buildMonitorLogSteps`
+   *  still honours it for records written before Phase WU. */
   steps: { label: string; kind: "warmup" | "work" }[];
   /** The PACES LOCKED panel's values (README.md §7's "PACES LOCKED AT 2K
    *  1:52.0 · 6K 2:02.0"), captured HERE because the monitor door has no
@@ -599,9 +609,9 @@ export interface LogSeed {
 }
 
 /** Builds a `MonitorRun`'s `logSeed`. Every non-rest phase produces exactly
- *  one seed step, in phase order (`kind: "warmup"` only for a `"warmup"`
- *  phase; every other non-rest phase — "work" and, defensively, "test" —
- *  seeds `"work"`).
+ *  one seed step, in phase order, and since Phase WU every one of them is
+ *  `kind: "work"` — no phase can be a warm-up any more, so this function
+ *  never writes the seed's legacy `"warmup"` value (see `LogSeed`).
  *
  *  Labels reuse this module's OWN `durationText`/`refPaceLabel` helpers —
  *  the SAME ones `buildManualLogSteps` composes its labels from — so a work
@@ -619,14 +629,6 @@ export interface LogSeed {
  *  `domain/expand.ts`'s `phases()` ever runs) — so there is no separate
  *  nudge fold to apply here the way `buildLogSteps`'s preferred (draft
  *  lookup) branch needs one.
- *
- *  A warmup phase gets a seed step too, even though `buildManualLogSteps`
- *  has no warmup case of its own to match (the manual door has never
- *  logged a warmup row) — the seed still needs one entry per non-rest phase
- *  so it stays the same length as `program.intervals` (this task's own
- *  alignment contract). Its label is never rendered by the log screen's
- *  step list (a later task's builder skips warmup intervals entirely,
- *  matching the manual door); it only has to be a real string.
  *
  *  A "test" phase (open-ended, no fixed time/distance) cannot actually
  *  reach this function in production — `compileProgram` refuses to compile
@@ -658,10 +660,6 @@ export function buildLogSeed(
   const paces: LogSeed["paces"] = {};
   for (const phase of phases) {
     if (phase.type === "rest") continue;
-    if (phase.type === "warmup") {
-      steps.push({ label: `${durationText(phase)} warm-up`, kind: "warmup" });
-      continue;
-    }
     if (phase.type === "test") {
       // Defensive only — see this function's own doc comment: `phase` has
       // no `seconds`/`meters` to run through `durationText`, and there is
@@ -770,8 +768,8 @@ export const MONITOR_SPM_MAX = 99;
  *  what `run.logSeed` (`buildLogSeed`'s own output, frozen at Connect)
  *  exists to supply; see this file's `LogSeed` doc comment for the
  *  alignment contract between `logSeed.steps` and `program.intervals`, and
- *  for why the seed's own `kind` stays even though
- *  `ProgramInterval.type` now carries the same warm-up fact.
+ *  for why the seed's own `kind` keeps its legacy `"warmup"` member after
+ *  Phase WU removed the concept everywhere else.
  *
  *  **Alignment / disqualification** (§3): `logSeed` missing, or
  *  `logSeed.steps.length !== program.intervals.length`, throws
@@ -779,9 +777,11 @@ export const MONITOR_SPM_MAX = 99;
  *  screen's job, not this function's, is to fall through to the manual
  *  door when that happens.
  *
- *  **Warmup intervals produce NO step** (§3, adversarial B2): shape parity
- *  with the manual door, which has never emitted a warmup row. A warmup's
- *  own program-interval position is still consumed while walking the two
+ *  **A LEGACY warmup seed step produces NO step** (§3, adversarial B2):
+ *  shape parity with the manual door, which has never emitted a warmup row.
+ *  Nothing writes `kind: "warmup"` since Phase WU, but a `MonitorRun`
+ *  stored before it still can, so the guard stays. Such a step's own
+ *  program-interval position is still consumed while walking the two
  *  parallel arrays (so later intervals keep their correct position), but no
  *  `LogStep` is pushed for it, and any actual matched to that position
  *  (§3's matching rule, next) never surfaces. Rest never gets its own
@@ -848,6 +848,12 @@ export function buildMonitorLogSteps(run: MonitorRun): LogStep[] {
   const out: LogStep[] = [];
   run.program.intervals.forEach((interval, i) => {
     const seedStep = seed.steps[i]!;
+    // KEEP (Phase WU). `LogSeed` is PERSISTED on a stored `MonitorRun`, so
+    // a record written before Phase WU still carries `kind: "warmup"`.
+    // Removing this guard adds a phantom warm-up row to what gets SAVED
+    // from such a record. Nothing produces the value any more
+    // (`buildLogSeed` above). Owed removal: ROADMAP Phase WU, at the first
+    // server-touching phase after two tags have shipped.
     if (seedStep.kind === "warmup") return;
     const step: LogStep = { label: seedStep.label };
     if (interval.targetSplit !== null) step.targetSplit = interval.targetSplit;

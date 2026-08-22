@@ -2,11 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useBaselines } from "../api/useBaselines";
-import { usePreferences } from "../api/usePreferences";
-import type { WarmupSetting } from "../api/usePreferences";
 import { useWorkouts } from "../api/useWorkouts";
 import { effortWord, resolveSplit } from "../../domain/pace.js";
-import { fmtDuration } from "../../domain/duration.js";
 import { fmtSplit } from "../../domain/format.js";
 import type { Baselines, PaceRef, WorkoutType } from "../../domain/types.js";
 import BackLink from "../shell/BackLink";
@@ -93,22 +90,6 @@ function pluralStep(n: number): string {
   return `${n} step${n === 1 ? "" : "s"}`;
 }
 
-// The Builder's warm-up hint line (spec §5: `+ <house-format> warm-up from
-// your preferences`, time or meters, plus the rest when set). Time uses the
-// house `fmtDuration` (domain/duration.ts); distance uses a lowercase "m"
-// (this is running prose, matching StepRow.tsx's own Detail-screen
-// convention for the same unit — ConfirmTargets.tsx's own structured
-// WARM-UP row used an uppercase "M" instead, before fast-follow Task 4
-// deleted it; that was a value-cell convention, not this sentence's).
-function warmupHintText(warmup: WarmupSetting): string {
-  const duration =
-    warmup.kind === "time" ? fmtDuration(warmup.minutes) : `${warmup.meters} m`;
-  const rest = warmup.restSeconds
-    ? ` + ${fmtDuration(warmup.restSeconds / 60)} rest`
-    : "";
-  return `+ ${duration} warm-up${rest} from your preferences`;
-}
-
 // Only a row-scoped error key (`row:<id>:<field>`) needs its owning card
 // expanded before a failed Save can focus it — `title`/`pain` are always
 // visible regardless of the accordion state. Matched against the same four
@@ -118,7 +99,6 @@ const ROW_ERROR_KEY = /^row:(.+):(?:dur|ref|spm|rest)$/;
 export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
   const baselinesState = useBaselines();
   const workoutsState = useWorkouts();
-  const preferencesState = usePreferences();
   const navigate = useNavigate();
   // Whatever origin THIS screen (new or edit) was itself entered from —
   // forwarded UNCHANGED onto the edit-mode back link below so a detail ->
@@ -580,24 +560,6 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
         </div>
         {errors.pain && <p className="field-error">{errors.pain}</p>}
       </div>
-
-      {preferencesState.state === "ready" &&
-        preferencesState.preferences.warmup && (
-          // Context only, never authored into the workout: `toSteps` never
-          // sees this value, so changing the preference later doesn't leave
-          // any saved workout stale (Phase 6's session flow prepends the
-          // actual warm-up when a workout is started). Rendered only once
-          // the preference has actually loaded AND is ON (spec §5: the
-          // hint is conditional on the setting, not just on the fetch
-          // having resolved) — while loading, on error, or OFF (`null`)
-          // this renders nothing rather than a placeholder number, since a
-          // wrong warm-up figure is worse than none. Placed above the step
-          // list rather than down by the totals: it reads as an implicit
-          // step 0, which is what actually happens at session start.
-          <p className="builder-warmup-line">
-            {warmupHintText(preferencesState.preferences.warmup)}
-          </p>
-        )}
 
       <div className="builder-steps">
         <div className="builder-steps-header">

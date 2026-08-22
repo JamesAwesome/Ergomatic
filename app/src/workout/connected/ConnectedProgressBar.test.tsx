@@ -38,7 +38,7 @@ function libraryFixture(title: string) {
     type: w.type as WorkoutType,
     steps: w.steps,
   });
-  const phases = buildRun(draft, baselines, t0, null).phases;
+  const phases = buildRun(draft, baselines, t0).phases;
   const program = compileProgram(phases);
   if ("code" in program) {
     throw new Error(`fixture failed to compile: ${program.code}`);
@@ -56,7 +56,6 @@ const FILLING_LOW_TOTAL = totalSessionSecondsOf(FILLING_LOW_PHASES);
 const THREE: import("../../session/intervalBoundaries").IntervalBoundaries = {
   seconds: [600, 720],
   predictedFrom: null,
-  warmupEndsAt: null,
 };
 const THREE_TOTAL = 780;
 
@@ -121,11 +120,7 @@ describe("buildSegments — duration and edges from a boundaries array", () => {
   });
 
   it("a single-interval session (no interior boundary) is one segment", () => {
-    const segs = buildSegments(
-      { seconds: [], predictedFrom: null, warmupEndsAt: null },
-      1200,
-      0,
-    );
+    const segs = buildSegments({ seconds: [], predictedFrom: null }, 1200, 0);
     expect(segs).toHaveLength(1);
     expect(segs[0]).toMatchObject({ start: 0, end: 1200, duration: 1200 });
   });
@@ -245,7 +240,7 @@ describe("ConnectedProgressBar — fallback mode (>16 boundaries, design spec §
     { length: MAX_NOTCH_BOUNDARIES + 1 },
     (_, i) => (i + 1) * 100,
   );
-  const boundaries = { seconds, predictedFrom: null, warmupEndsAt: null };
+  const boundaries = { seconds, predictedFrom: null };
   const total = (MAX_NOTCH_BOUNDARIES + 2) * 100; // 18 segments' worth
 
   it("draws no segments at all", () => {
@@ -296,7 +291,7 @@ describe("ConnectedProgressBar — fallback mode (>16 boundaries, design spec §
     const at = Array.from({ length: MAX_NOTCH_BOUNDARIES }, (_, i) => i + 1);
     render(
       <ConnectedProgressBar
-        boundaries={{ seconds: at, predictedFrom: null, warmupEndsAt: null }}
+        boundaries={{ seconds: at, predictedFrom: null }}
         totalSeconds={17}
         elapsedSeconds={0}
       />,

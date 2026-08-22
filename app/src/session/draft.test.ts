@@ -15,6 +15,7 @@ import {
   DRAFT_KEY,
   type SessionDraft,
 } from "./draft";
+import { buildRun } from "./engine";
 
 // Realistic fixtures, per repo convention: pull real library workouts
 // (app/server/seed/library/index.ts) rather than hand-built minimums.
@@ -541,15 +542,23 @@ describe("saveDraft / loadDraft / clearDraft", () => {
   });
 });
 
-describe("loadDraft's legacy wu strip (2026-08-09's warmup setting)", () => {
+describe("loadDraft and a pre-2026-08-09 draft that still carries a `wu` step", () => {
   beforeEach(() => localStorage.clear());
 
-  // No real seeded workout carries a `wu` step any more (Task 3 stripped
-  // all 302) — this hand-splices one onto a REAL library workout's own
-  // steps, the exact shape a draft snapshotted into localStorage before
-  // 2026-08-09 would still hold (`buildDraft`'s deep copy of a workout
-  // that used to open with `{k:"wu", minutes}`, back when Calm Sea's own
-  // seed still authored one).
+  // PHASE WU deleted `stripLegacyWarmups` and the three cases that pinned
+  // its mechanics (the splice itself, and the re-keying of
+  // `nudges`/`spmOverrides`/`removed` around the hole). The claim that made
+  // deleting it safe is that a surviving `wu` step is INERT, and this case
+  // proves that claim rather than restating it: the draft loads, the step
+  // is still there, and `buildRun` emits no phase for it because
+  // `effectiveSteps` gates on `k !== "w"` and `phases()`'s switch has no
+  // `wu` arm and no default. If either of those ever grows a `wu` path,
+  // this goes red.
+  //
+  // No real seeded workout carries a `wu` step any more (2026-08-09's Task
+  // 3 stripped all 302) — this hand-splices one onto a REAL library
+  // workout's own steps, the exact shape a draft snapshotted into
+  // localStorage before that date would still hold.
   function legacyDraftFor(title: string, id: string): SessionDraft {
     const d = buildDraft(draftInputFor(title, id));
     return {
@@ -558,63 +567,48 @@ describe("loadDraft's legacy wu strip (2026-08-09's warmup setting)", () => {
     };
   }
 
-  // Fast-follow Task 4: the strip is SILENT now — ConfirmTargets (the one
-  // screen that used to tell the rower anything changed, via its own
-  // `loadDraftWithNotice`) is gone, and `loadDraft` is the strip's only
-  // remaining caller. These pins cover the strip's own mechanics (still
-  // real, still one-time, still data hygiene for a pre-#71 draft), not a
-  // notice that no longer exists.
-  it("strips the legacy wu step and reindexes nudges/spmOverrides/removed to the surviving positions", () => {
+  it("loads it unchanged, produces no phase for it, and still attributes an index-keyed nudge ACROSS it", () => {
+    // INDEX ATTRIBUTION ACROSS THE HOLE is the half that matters, and the
+    // half the three deleted tests actually guarded. `stripLegacyWarmups`
+    // spliced the `wu` step out and RE-KEYED `nudges`/`spmOverrides`/
+    // `removed` around the gap; the claim that deleting it is safe is
+    // really the claim that nothing needs re-keying, because nothing is
+    // spliced. So this fixture keys both index-maps at position 1 — Calm
+    // Sea's own work step, sitting BEHIND the `wu` step at position 0 —
+    // and asserts the built phase carries them.
     const legacy = legacyDraftFor("Calm Sea", "id-legacy-1");
-    // Index 1 is Calm Sea's own (only) work step, post-splice — nudge, spm
-    // override and removal all name it, by its PRE-strip position, before
-    // the strip runs.
     const withState: SessionDraft = {
       ...legacy,
       nudges: { 1: -5 },
       spmOverrides: { 1: 24 },
-      removed: [1],
     };
     localStorage.setItem(DRAFT_KEY, JSON.stringify(withState));
 
     const draft = loadDraft();
-    expect(draft).not.toBeNull();
-    expect(draft!.steps).toStrictEqual(legacy.steps.slice(1));
-    expect(draft!.nudges).toStrictEqual({ 0: -5 });
-    expect(draft!.spmOverrides).toStrictEqual({ 0: 24 });
-    expect(draft!.removed).toStrictEqual([0]);
+    expect(draft).toStrictEqual(withState);
+    expect(draft!.steps.some((st) => (st.k as string) === "wu")).toBe(true);
 
-    // Persisted immediately (a one-time strip, not a re-strip on every
-    // read): the RAW stored value no longer carries a `wu` step, and a
-    // second load returns the exact same already-clean draft.
-    const rawAfter = JSON.parse(
-      localStorage.getItem(DRAFT_KEY)!,
-    ) as SessionDraft;
-    expect(rawAfter.steps.some((s) => (s.k as string) === "wu")).toBe(false);
-    expect(loadDraft()).toStrictEqual(draft);
-  });
-
-  it("drops a removed index that named ONLY the wu step itself, rather than mapping it onto a survivor", () => {
-    const legacy = legacyDraftFor("Calm Sea", "id-legacy-2");
-    const withState: SessionDraft = { ...legacy, removed: [0] };
-    localStorage.setItem(DRAFT_KEY, JSON.stringify(withState));
-
-    const draft = loadDraft();
-    expect(draft!.removed).toStrictEqual([]);
-  });
-
-  it("drops a nudge or spm override that named ONLY the wu step itself, rather than mapping it onto a survivor", () => {
-    const legacy = legacyDraftFor("Calm Sea", "id-legacy-2b");
-    const withState: SessionDraft = {
-      ...legacy,
-      nudges: { 0: 5 },
-      spmOverrides: { 0: 24 },
-    };
-    localStorage.setItem(DRAFT_KEY, JSON.stringify(withState));
-
-    const draft = loadDraft();
-    expect(draft!.nudges).toStrictEqual({});
-    expect(draft!.spmOverrides).toStrictEqual({});
+    // Calm Sea is a single 10000 m work step, so the ONLY phase this run
+    // can have is that step's. A `wu` arm anywhere downstream would add a
+    // second one.
+    const run = buildRun(
+      draft!,
+      { k2Seconds: 100, k6Seconds: 120 },
+      new Date(0),
+    );
+    expect(run.phases).toHaveLength(1);
+    const phase = run.phases[0]!;
+    expect(phase.meters).toBe(10000);
+    // `originalIndex` is the DRAFT position, unshifted — 1, behind the
+    // surviving `wu` step, not the 0 a splice would have re-keyed it to.
+    expect(phase.originalIndex).toBe(1);
+    // The nudge reached the target it was keyed against: Calm Sea is
+    // 6k+12, so 120 + 12 − 5 = 127, not the un-nudged 132 a mis-keyed
+    // fold would leave (`effectiveSteps` folds a nudge into `ref.off`).
+    expect(phase.targetSplit).toBe(127);
+    // …and so did the SPM override, the other index-keyed map: 24, not
+    // Calm Sea's own authored 20.
+    expect(phase.spm).toBe(24);
   });
 
   it("returns the exact same draft by value when there is nothing to strip", () => {

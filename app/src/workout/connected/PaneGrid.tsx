@@ -35,9 +35,9 @@
 // tokens (row height, `#` column width) the landscape media query steps.
 //
 // THE `#` CELL (design spec §5b, built by Task 4b's `intervalNumbering`):
-// `row.ordinal` is `null` for the warm-up, which renders `WU` — never a
-// number — and work numbering starts at 1 on the first work piece. This
-// component does not decide that; it reads `GridRow.ordinal` exactly as
+// numbering starts at 1 on the first piece. `row.ordinal` used to be `null`
+// for a warm-up row, which rendered `WU`; Phase WU removed that case. This
+// component does not decide the numbering; it reads `GridRow.ordinal` as
 // `surfaceModel.ts` computed it, so the `#` column and the shell header's
 // own `N OF M` (see `ConnectedSurface.tsx`) cannot disagree — they are the
 // same `intervalNumbering` call.
@@ -178,11 +178,10 @@ function Row({ row, ref }: { row: GridRow; ref?: React.Ref<HTMLDivElement> }) {
         {row.state === "active" && (
           <span className="connected-grid-marker" aria-hidden="true" />
         )}
-        {/* THE WU CELL (design spec §5b): `ordinal === null` is the warm-up,
-            and it is the ONLY row that ever reads `WU` — read straight off
-            `GridRow.ordinal`, never re-derived from `row.index` (see this
+        {/* THE `#` CELL (design spec §5b): read straight off
+            `GridRow.ordinal`, never re-derived from `row.index` (see that
             field's own doc comment on why). */}
-        {row.ordinal === null ? "WU" : row.ordinal}
+        {row.ordinal}
       </span>
       <span className={`connected-grid-time${countdownClass("time")}`}>
         {row.time}

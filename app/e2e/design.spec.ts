@@ -65,28 +65,6 @@ async function setBaselines(page: Page): Promise<void> {
   }
 }
 
-/** Sets the warm-up preference via the real `PUT /api/prefs` route
- *  (2026-08-09 warmup-setting spec §2) — same in-page-fetch idiom as
- *  `setBaselines` above, for a describe whose sweep needs the setting ON
- *  rather than its OFF default. */
-async function setWarmup(
-  page: Page,
-  warmup:
-    { kind: "time"; minutes: number } | { kind: "distance"; meters: number },
-): Promise<void> {
-  const result = await page.evaluate(async (patch) => {
-    const res = await fetch("/api/prefs", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ warmup: patch }),
-    });
-    return { ok: res.ok, status: res.status, body: await res.text() };
-  }, warmup);
-  if (!result.ok) {
-    throw new Error(`warmup setup failed: ${result.status} ${result.body}`);
-  }
-}
-
 /** Activates a preset plan via the real `PUT /api/plan` route (Plan.tsx's
  *  own `choose`) — this is what puts a genuine 84-row sequence behind
  *  Today's plan-driven suggestion and the Plan screen's active view. */
@@ -488,36 +466,61 @@ async function setCustomBaselines(
 // validation-design.md ("no pixel-diff gating; machines judge rules").
 
 async function assertTapTargets(page: Page): Promise<void> {
-  const elements = await page
-    .locator("a, button, [role=button], input, select")
-    .all();
-  for (const el of elements) {
-    if (!(await el.isVisible())) continue;
-    const className = await el.evaluate(
-      (node) => (node as HTMLElement).className,
-    );
-    // The one narrow, already-documented exception (docs/design/
-    // DEVIATIONS.md, "N/A — the handoff has no notion of a 'convenience'
-    // tap area..."): StepCard.tsx's collapsed `.step-card-line1` (326x18)
-    // and `.step-card-sub` (180x14) each duplicate the fully-compliant
-    // 48x44 EDIT cell's own onExpand action, in the same card, at less than
-    // 44x44 — WCAG 2.5.8's Equivalent Control exception covers exactly
-    // this. The project's own stricter, exception-free 44px rule still
-    // treats these as a genuine, accepted violation (per DEVIATIONS.md);
-    // excluding them here is that one recorded carve-out, not a general
-    // weakening of this sweep.
-    if (
-      typeof className === "string" &&
-      (className.includes("step-card-line1") ||
-        className.includes("step-card-sub"))
-    ) {
-      continue;
-    }
-    const box = await el.boundingBox();
-    const label = await el.evaluate((node) => node.outerHTML.slice(0, 120));
-    expect(box, `missing bounding box for: ${label}`).not.toBeNull();
-    expect(box!.width, `width < 44 for: ${label}`).toBeGreaterThanOrEqual(44);
-    expect(box!.height, `height < 44 for: ${label}`).toBeGreaterThanOrEqual(44);
+  // A single in-page $$eval pass: enumerate, filter and measure every
+  // candidate synchronously inside the browser, so no DOM change (a route
+  // transition unmounting the screen mid-sweep) can interleave between
+  // resolving an element and measuring it. The previous version issued
+  // three separate CDP round trips per element via re-querying Playwright
+  // locators (`.all()` + `isVisible()` + `evaluate()` + `boundingBox()`),
+  // any of which could land on a different node than the ones before it —
+  // see docs/superpowers/research/2026-08-22-e2e-readiness-gate-flake.md.
+  // A node that no longer exists by measurement time surfaced as a `null`
+  // bounding box misattributed to whatever unrelated element the next
+  // round trip happened to resolve, not a real violation. That failure
+  // mode cannot occur here: a node excluded by the visibility filter below
+  // (an empty client-rect list, i.e. detached or `display: none`) is never
+  // measured, so there is no "missing bounding box" case left to report.
+  const offenders = await page.$$eval(
+    "a, button, [role=button], input, select",
+    (nodes) =>
+      nodes
+        .filter((n) => {
+          const el = n as HTMLElement;
+          // Playwright's own isVisible(): non-empty box AND
+          // visibility !== hidden.
+          if (el.getClientRects().length === 0) return false;
+          if (getComputedStyle(el).visibility === "hidden") return false;
+          // The one narrow, already-documented exception (docs/design/
+          // DEVIATIONS.md, "N/A — the handoff has no notion of a
+          // 'convenience' tap area..."): StepCard.tsx's collapsed
+          // `.step-card-line1` (326x18) and `.step-card-sub` (180x14)
+          // each duplicate the fully-compliant 48x44 EDIT cell's own
+          // onExpand action, in the same card, at less than 44x44 —
+          // WCAG 2.5.8's Equivalent Control exception covers exactly
+          // this. The project's own stricter, exception-free 44px rule
+          // still treats these as a genuine, accepted violation (per
+          // DEVIATIONS.md); excluding them here is that one recorded
+          // carve-out, not a general weakening of this sweep.
+          const className = el.className;
+          return !(
+            typeof className === "string" &&
+            (className.includes("step-card-line1") ||
+              className.includes("step-card-sub"))
+          );
+        })
+        .map((n) => {
+          const r = (n as HTMLElement).getBoundingClientRect();
+          return {
+            width: r.width,
+            height: r.height,
+            label: n.outerHTML.slice(0, 120),
+          };
+        })
+        .filter((m) => m.width < 44 || m.height < 44),
+  );
+  for (const { width, height, label } of offenders) {
+    expect(width, `width < 44 for: ${label}`).toBeGreaterThanOrEqual(44);
+    expect(height, `height < 44 for: ${label}`).toBeGreaterThanOrEqual(44);
   }
 }
 
@@ -1900,18 +1903,23 @@ function buildInterruptedMonitorRun(workoutId: string): MonitorRun {
     id: workoutId,
     title: hoarfrost.title,
     type: hoarfrost.type as WorkoutType,
-    steps: [timeWork, distanceWork],
+    // Phase WU: interval 0 came from `buildRun`'s deleted warm-up argument.
+    // An authored 4' EASY step compiles to the identical target-less
+    // interval, so every `IntervalActual.index` below is unchanged. What
+    // DID change is that it now produces a logged, numbered summary row
+    // rather than the unnumbered WARM-UP row.
+    steps: [
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 4 },
+        ref: { effort: "min" },
+      },
+      timeWork,
+      distanceWork,
+    ],
   });
   const started = startDraft(draft);
-  const built = buildRun(
-    started,
-    MONITOR_FIXTURE_BASELINES,
-    MONITOR_FIXED_NOW,
-    {
-      kind: "time",
-      minutes: 4,
-    },
-  );
+  const built = buildRun(started, MONITOR_FIXTURE_BASELINES, MONITOR_FIXED_NOW);
   const program = compileOrThrow(built.phases);
   const logSeed = buildLogSeed(built.phases, MONITOR_FIXTURE_BASELINES);
   const actuals: IntervalActual[] = [
@@ -1957,7 +1965,7 @@ async function seedInterruptedMonitorRun(page: Page): Promise<void> {
 }
 
 // Task 6 (property sweep): a NORMALLY-completed (not interrupted) monitor
-// run with TWO measured work intervals plus a measured warm-up — the
+// run with TWO measured work intervals plus a measured opening piece — the
 // interrupted fixture above only ever carries one measured actual, so
 // `monitorAvgSplit`'s own `count >= 2` gate (finding 5) never lets a row
 // get JUDGED there. This is the fixture §2E's judged-color/deviation-bar/
@@ -1970,7 +1978,8 @@ async function seedInterruptedMonitorRun(page: Page): Promise<void> {
 // (LogSession.test.tsx) — never a hand-built minimum.
 //
 // Every number below is hand-verifiable, not merely "whatever the code
-// says": DISTANCE (R-B, Σ work+rest over ALL actuals incl. warm-up) =
+// says": DISTANCE (R-B, Σ work+rest over ALL actuals incl. the opening
+// piece) =
 // (600+0) + (2000+64) + (10000+0) = 12664 exactly — asserted as an EXACT
 // value below, since this sum is fully within this fixture's own control
 // (no restSeconds lookup involved). The two work intervals' own displayed
@@ -1995,8 +2004,8 @@ async function seedInterruptedMonitorRun(page: Page): Promise<void> {
 // TIME (R-D) sums `elapsedSeconds` (187+600+2400=3187) plus each
 // completed interval's own PROGRAMMED rest — interval 1's restSeconds=300
 // is independently verified by `buildInterruptedMonitorRun`'s own proven
-// "11:00" result (360+300=660) above; the warm-up's and interval 2's own
-// restSeconds are NOT independently known here (no committed capture
+// "11:00" result (360+300=660) above; the opening piece's and interval 2's
+// own restSeconds are NOT independently known here (no committed capture
 // pins them), so TIME is asserted structurally (`m:ss`, not a bare
 // rounded minute) rather than to an exact value — the honest scope this
 // module's own "CAN THROW"/"SCOPE DECISIONS" header asks every caller to
@@ -2008,11 +2017,11 @@ const MONITOR_COMPLETED_ACTUALS: IntervalActual[] = [
     distanceMeters: 600,
     // 500×187/600 = 155.8 (rounded to the wire's 0.1s resolution), not the
     // old unrelated 200 (PM final-PR gate, condition round, 2026-08-17): a
-    // real PM5 computes this warm-up row's own average pace FROM the same
+    // real PM5 computes this opening row's own average pace FROM the same
     // elapsed/distance the row also displays (identity a `fake.ts`-driven
     // capture caught contradicting its own hero, `log-monitor.png`). This
-    // row is UNJUDGED (a warm-up has no target by definition — §1's own
-    // rule, this fixture's own comment above), so the exact figure is not
+    // row is UNJUDGED (an EFFORT-ref step has no target by definition — §1's
+    // own rule, this fixture's own comment above), so the exact figure is not
     // load-bearing for the deviation math below — only its own internal
     // coherence is.
     avgSplit: 155.8,
@@ -2061,18 +2070,24 @@ function buildCompletedMonitorRun(workoutId: string): MonitorRun {
     id: workoutId,
     title: hoarfrost.title,
     type: hoarfrost.type as WorkoutType,
-    steps: [timeWork, distanceWork],
+    // Phase WU: interval 0 came from `buildRun`'s deleted warm-up argument.
+    // An authored 4' EASY step compiles to the identical target-less
+    // interval, so every `IntervalActual.index` below is unchanged. What
+    // DID change is that it now produces a logged, NUMBERED summary row
+    // rather than the unnumbered WARM-UP row — so this fixture's summary
+    // has three rows where it used to have a warm-up row plus two.
+    steps: [
+      {
+        k: "w",
+        duration: { kind: "time", minutes: 4 },
+        ref: { effort: "min" },
+      },
+      timeWork,
+      distanceWork,
+    ],
   });
   const started = startDraft(draft);
-  const built = buildRun(
-    started,
-    MONITOR_FIXTURE_BASELINES,
-    MONITOR_FIXED_NOW,
-    {
-      kind: "time",
-      minutes: 4,
-    },
-  );
+  const built = buildRun(started, MONITOR_FIXTURE_BASELINES, MONITOR_FIXED_NOW);
   const program = compileOrThrow(built.phases);
   const logSeed = buildLogSeed(built.phases, MONITOR_FIXTURE_BASELINES);
   return {
@@ -3036,30 +3051,10 @@ test.describe("builder screen", () => {
     expect(trChipBg).toBe("rgb(27, 26, 23)"); // --type-tr = --ink
   });
 
-  // Phase 5F Task 7: the warm-up line moved above the step list, reading as
-  // an implicit step 0 rather than a footnote down by the totals — a
-  // real-browser structural pin, since jsdom has no layout and can't tell
-  // "above" from "below". The line itself is conditional on the warm-up
-  // SETTING now (2026-08-09 warmup-setting spec §5), which defaults OFF —
-  // unlike every other test in this describe (left at the default, class
-  // (a)), warm-up IS this test's subject, so it turns the setting ON via
-  // the real preferences route, then reloads so Builder's own
-  // `usePreferences` mount refetches it (a fresh `page.goto` would also
-  // work; `reload` is scoped to this one test rather than moving into the
-  // shared beforeEach, which every other test in the describe doesn't
-  // need).
-  test("the warm-up line precedes the step list", async ({ page }) => {
-    await setWarmup(page, { kind: "time", minutes: 10 });
-    await page.reload();
-
-    const warmup = page.locator(".builder-warmup-line");
-    const steps = page.locator(".builder-steps");
-    await expect(warmup).toBeVisible();
-
-    const warmupBox = await warmup.boundingBox();
-    const stepsBox = await steps.boundingBox();
-    expect(warmupBox!.y).toBeLessThan(stepsBox!.y);
-  });
+  // PHASE WU deleted the test that stood here, "the warm-up line precedes
+  // the step list" — the Builder's `+ N warm-up from your preferences` hint
+  // and the `.builder-warmup-line` element it rendered are gone with the
+  // setting they promised.
 
   // Phase 5F Tasks 3/4: the DUR field used to open a decimal number pad
   // (`inputMode="decimal"`) that had no way to type a colon — a rower
@@ -4121,7 +4116,7 @@ test.describe("post-workout summary (session door, just finished)", () => {
     await page.getByRole("button", { name: "Finish session" }).click();
     await expect(page).toHaveURL(/\/session\/log$/);
     // §2A: the title renders bare, no "Log" prefix.
-    await expect(page.getByRole("heading", { name: title })).toBeVisible();
+    await expect(page.locator("h1.summary-title")).toHaveText(title);
   });
 
   test.afterEach(async ({ page }) => {
@@ -4388,7 +4383,7 @@ test.describe("post-workout summary (manual door)", () => {
     await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
     await page.getByRole("link", { name: "Log it after" }).click();
     await expect(page).toHaveURL(/\/library\/[^/]+\/log$/);
-    await expect(page.getByRole("heading", { name: title })).toBeVisible();
+    await expect(page.locator("h1.summary-title")).toHaveText(title);
   });
 
   test.afterEach(async ({ page }) => {
@@ -4554,7 +4549,7 @@ test.describe("post-workout summary — quiet diagnostics doors (review finding 
     });
     await page.getByRole("link", { name: "Log it after" }).click();
     await expect(page).toHaveURL(/\/library\/[^/]+\/log$/);
-    await expect(page.getByRole("heading", { name: title })).toBeVisible();
+    await expect(page.locator("h1.summary-title")).toHaveText(title);
   });
 
   test.afterEach(async ({ page }) => {
@@ -4630,7 +4625,7 @@ test.describe("post-workout summary (manual door, plan active — the save stack
     await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
     await page.getByRole("link", { name: "Log it after" }).click();
     await expect(page).toHaveURL(/\/library\/[^/]+\/log$/);
-    await expect(page.getByRole("heading", { name: title })).toBeVisible();
+    await expect(page.locator("h1.summary-title")).toHaveText(title);
   });
 
   test.afterEach(async ({ page }) => {
@@ -4725,7 +4720,7 @@ test.describe("post-workout summary (session door, multi-target — no hint)", (
     await expect(page.getByText("Finish this session?")).toBeVisible();
     await page.getByRole("button", { name: "Finish session" }).click();
     await expect(page).toHaveURL(/\/session\/log$/);
-    await expect(page.getByRole("heading", { name: title })).toBeVisible();
+    await expect(page.locator("h1.summary-title")).toHaveText(title);
   });
 
   test.afterEach(async ({ page }) => {
@@ -4768,7 +4763,7 @@ test.describe("post-workout summary (manual door, onboarding title + plan active
     );
     await page.getByRole("link", { name: "Log it after" }).click();
     await expect(page).toHaveURL(/\/library\/[^/]+\/log$/);
-    await expect(page.getByRole("heading", { name: "First 6k" })).toBeVisible();
+    await expect(page.locator("h1.summary-title")).toHaveText("First 6k");
   });
 
   test("every visible interactive element has a >=44x44 tap target", async ({
@@ -4858,11 +4853,11 @@ test.describe("post-workout summary (monitor door, completed — judged rows & m
     expect(value.endsWith(":00")).toBe(false);
   });
 
-  // R-B: Σ(work + rest distance) over ALL actuals incl. the warm-up —
+  // R-B: Σ(work + rest distance) over ALL actuals incl. the opening piece —
   // (600+0) + (2000+64) + (10000+0) = 12664 exactly, fully independent of
   // any restSeconds lookup (this row's own inputs are entirely this
   // fixture's own numbers).
-  test("§2B DISTANCE: R-B's machine-matching sum — work + rest distance, incl. the warm-up, whole meters", async ({
+  test("§2B DISTANCE: R-B's machine-matching sum — work + rest distance, incl. the opening piece, whole meters", async ({
     page,
   }) => {
     const value = await page
@@ -4878,9 +4873,9 @@ test.describe("post-workout summary (monitor door, completed — judged rows & m
   // target -> SLOWER; interval 2 (Calm Sea, avgSplit 120) deviates −12.0
   // from the SAME 132s target -> FASTER (Phase LT spec 1's re-baseline —
   // `buildCompletedMonitorRun`'s own doc comment has the full arithmetic).
-  // Rows render in `[warm-up, interval 1, interval 2]` order
-  // (`buildMonitorModel`: warmup row first, then `monitorWorkRows`'s own
-  // index order).
+  // Rows render in `[opening piece, interval 1, interval 2]` order — all
+  // three come from the SAME `monitorWorkRows` index order now; there is no
+  // separate warm-up-row branch to special-case any more (Phase WU).
   test("§2E judged colors: the slower row paints --judge-slower, the faster row paints --judge-faster, and the legend renders", async ({
     page,
   }) => {
@@ -4952,23 +4947,30 @@ test.describe("post-workout summary (monitor door, completed — judged rows & m
   });
 
   // R-C's own reconciliation row: rendered and measured, but never judged
-  // (no bar, no tick — Phase LT spec 1's re-baseline: a warm-up interval
-  // has no target by definition, so there is nothing to judge it against;
-  // `rowJudgment`, summaryModel.ts, never even reaches a warm-up row — it
-  // is built straight from the machine actual, never through the
-  // targetSplit/actualSource gate a work row goes through).
-  test("§2E warm-up row: labeled, measured, UNJUDGED — no bar, no tick", async ({
+  // (no bar, no tick — Phase LT spec 1's re-baseline: an EFFORT-ref
+  // interval has no target by definition, so there is nothing to judge it
+  // against; `rowJudgment`, summaryModel.ts, never reaches such a row
+  // through the targetSplit/actualSource gate a work row goes through —
+  // it is built straight from the machine actual). Before Phase WU this
+  // was the warm-up interval specifically; the rule and the row are the
+  // same, only the reason for reaching them changed (see the test's own
+  // comment below).
+  test("§2E opening row: numbered, measured, UNJUDGED — no bar, no tick", async ({
     page,
   }) => {
-    const warmupRow = page.locator(".summary-row-warmup");
-    await expect(warmupRow).toBeVisible();
-    await expect(warmupRow.locator(".summary-row-warmup-label")).toHaveText(
-      "WARM-UP",
-    );
-    await expect(warmupRow.locator(".summary-row-time")).not.toBeEmpty();
-    await expect(warmupRow.locator(".summary-row-pace")).not.toBeEmpty();
-    await expect(warmupRow.locator(".summary-row-bar")).toHaveCount(0);
-    await expect(warmupRow.locator(".summary-row-bar-tick")).toHaveCount(0);
+    // PHASE WU CHANGED WHAT THIS ROW IS. It was the unnumbered `WARM-UP`
+    // row — `.summary-row-warmup` / `.summary-row-warmup-label`, both
+    // deleted with the row type. Row 1 is an ordinary numbered row now, and
+    // it is still measured and still unjudged, because the fixture's
+    // opening piece is an EFFORT step and carries no target to judge
+    // against. Same rule, different reason for reaching it.
+    const openingRow = page.locator(".summary-row").first();
+    await expect(openingRow).toBeVisible();
+    await expect(openingRow.locator(".summary-row-index")).toHaveText("1");
+    await expect(openingRow.locator(".summary-row-time")).not.toBeEmpty();
+    await expect(openingRow.locator(".summary-row-pace")).not.toBeEmpty();
+    await expect(openingRow.locator(".summary-row-bar")).toHaveCount(0);
+    await expect(openingRow.locator(".summary-row-bar-tick")).toHaveCount(0);
   });
 
   // Task 4 (witness sweep): §2's own ruling, live — "the authored target
@@ -6339,7 +6341,7 @@ test.describe("connected screens (fake-driven)", () => {
       expect(status.fontSize).toBe("22px");
       expect(status.letterSpacing).toBeCloseTo(22 * 0.04, 1);
       expect(status.color).toBe(INK_RGB);
-      expect(status.text).toBe("1 OF 4 · WORK");
+      expect(status.text).toBe("2 OF 5 · WORK"); // Phase WU: was "1 OF 4 · WORK"
     });
 
     test("progress bar: 6px track, 3px gaps, done/active/upcoming colours (contrast logged)", async ({
@@ -6384,8 +6386,9 @@ test.describe("connected screens (fake-driven)", () => {
       // phase-exit pass: the unit test reads the inline style, so a CSS
       // `flex-grow: 1 !important` would equalize the bar while every test
       // stayed green — the computed value is what the browser actually
-      // lays out). The fixture's program is wu 480s + 4×684s; the computed
-      // flex-grow ratios must match those durations, not each other.
+      // lays out). The fixture's program is a 480s opener + 4×684s; the
+      // computed flex-grow ratios must match those durations, not each
+      // other.
       const grows = await page
         .locator(".connected-progress-seg")
         .evaluateAll((els) =>
@@ -6749,14 +6752,15 @@ test.describe("connected screens (fake-driven)", () => {
       expect(value.color).toBe(INK_RGB);
       // EST LEFT (Phase LL): no longer a straight session-clock subtraction
       // (was "39:48"). `connected-pane-live`'s fixture (`intervalIndex: 1`)
-      // lands on Filling Low's FIRST work phase (index 0 is the warm-up),
-      // so the estimate is warm-up(480) + this frame's own live term — the
-      // INTERVAL clock, 205.44 s, which is what the fixture's own 800 m at
-      // its own 2:08.4 average takes. (It read `828` until PR #144's fix
-      // round: that was the SESSION clock, warm-up included, in the raw
-      // half too — impossible, and it put this cell 8:00 low beside a bar
-      // painted two intervals past its own `1 OF 4` caption.) 480 + 205.44
-      // = 685.44; totalLeft = 3216 - 685.44 = 2530.56 s.
+      // lands on Filling Low's FIRST 2000 m rep (index 0 is the easy
+      // opener), so the estimate is opener(480) + this frame's own live
+      // term — the INTERVAL clock, 205.44 s, which is what the fixture's
+      // own 800 m at its own 2:08.4 average takes. (It read `828` until PR
+      // #144's fix round: that was the SESSION clock, the opener included,
+      // in the raw half too — impossible, and it put this cell 8:00 low
+      // beside a bar painted two intervals past its own caption.) 480 +
+      // 205.44 = 685.44; totalLeft = 3216 - 685.44 = 2530.56 s. The number
+      // is untouched by Phase WU; only the caption beside it renumbered.
       expect(value.text).toBe("42:11");
     });
 
@@ -7279,7 +7283,7 @@ test.describe("connected screens (fake-driven)", () => {
     test("nothing in the band's own up-next value reflows at the notched content width", async ({
       page,
     }) => {
-      await loadConnectedFixture(page, "connected-pane-live-warmup");
+      await loadConnectedFixture(page, "connected-pane-live-opener");
       await page.setViewportSize({ width: 844, height: 390 });
 
       const client = await page.context().newCDPSession(page);
@@ -7319,7 +7323,7 @@ test.describe("connected screens (fake-driven)", () => {
         page.getByRole("button", { name: "Grid pane" }),
       ).toHaveAttribute("aria-current", "page");
       const trailing = page.locator(".connected-line-trailing");
-      await expect(trailing).toContainText("1 OF 4");
+      await expect(trailing).toContainText("2 OF 5"); // Phase WU: was "1 OF 4"
       // EST LEFT (Phase LL): "42:11", not "39:48" — see the identical
       // `connected-pane-grid` fixture's own note in the LIVE band test
       // above ("bottom band: rule above...").
@@ -7412,7 +7416,9 @@ test.describe("connected screens (fake-driven)", () => {
       // solid `--rule-2` bottom border.
       const completed = page.locator(".connected-grid-completed");
       await expect(completed).toHaveCount(1);
-      await expect(completed.locator(".connected-grid-num")).toHaveText("WU");
+      // Phase WU: `1`, not `WU` — the leading interval is a numbered piece
+      // now, and the `#` column has no unnumbered case left at all.
+      await expect(completed.locator(".connected-grid-num")).toHaveText("1");
       const completedStyle = await completed.evaluate((el) => {
         const cs = getComputedStyle(el);
         return {
@@ -7511,8 +7517,10 @@ test.describe("connected screens (fake-driven)", () => {
         });
       expect(caption.fontSize).toBe("12px");
       expect(caption.color).toBe(INK_3_RGB);
+      // Phase WU renumbered every row: the leading easy piece is counted
+      // now, so Filling Low's four 2000 m reps are rows 2-5, not 1-4.
       expect(caption.text).toBe(
-        "3 MORE BELOW · ROWS 1, 2, 3, 4 ARE 2000 M PIECES · METERS COUNT DOWN",
+        "3 MORE BELOW · ROWS 2, 3, 4, 5 ARE 2000 M PIECES · METERS COUNT DOWN",
       );
     });
 
@@ -7785,7 +7793,7 @@ test.describe("connected screens (fake-driven)", () => {
     test("up-next: UP NEXT label mono 14 ink-3 over value mono 23 nowrap, then-less form, never wraps or overflows", async ({
       page,
     }) => {
-      await loadConnectedFixture(page, "connected-pane-live-warmup");
+      await loadConnectedFixture(page, "connected-pane-live-opener");
       const label = await page
         .locator(".connected-band-upnext-label")
         .evaluate((el) => {
@@ -8283,7 +8291,7 @@ test.describe("connected screens (fake-driven)", () => {
     const PROGRESS_ACTIVE_RGB_LOCAL = "rgb(138, 132, 120)";
     const fixtures = [
       "connected-pane-live",
-      "connected-pane-live-warmup",
+      "connected-pane-live-opener",
       "connected-pane-grid",
       "connected-pane-grid-long",
       "connected-armed",

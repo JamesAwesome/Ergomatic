@@ -24,7 +24,6 @@ import type { PlanKey, PlanStateStore } from "../stores/planState.js";
 import type {
   PreferencesRow,
   PreferencesStore,
-  WarmupSetting,
 } from "../stores/preferences.js";
 import type { TestHistoryStore } from "../stores/testHistory.js";
 import type { NewWorkoutInput, WorkoutsStore } from "../stores/workouts.js";
@@ -50,56 +49,6 @@ const HELD_RESULTS: HeldResult[] = ["held", "under", "over"];
 const THUMBS_VALUES: Thumbs[] = ["up", "down"];
 const PLAN_KEYS: PlanKey[] = ["sprint", "head"];
 const ACCENT_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
-// The warm-up setting's bounds (2026-08-09 design §2). NOTE: these are NOT
-// a reuse of domain/validate.ts's work-step duration bounds, despite the
-// spec's own framing — checked directly against that file: its time bound
-// (`wholeSecond(minutes, SECOND, 180)`) permits fractional, whole-SECOND-
-// precision minutes up to 180, and its distance bound (`int(meters, 100,
-// 42195)`) tops out at marathon distance; neither matches a warm-up's
-// integer-minutes-to-30 / integer-meters-to-10000 shape (only the distance
-// FLOOR of 100 happens to coincide). The rest ceiling (595s = 9:55) isn't in
-// domain/validate.ts at all — it's `domain/monitor/program.ts`'s
-// `MAX_REST_SECONDS`, confirmed against `docs/monitor/pm5-interface-notes.md`
-// Table 19. These bounds are therefore the plan's own literal values, not a
-// derived constant.
-const WARMUP_MINUTES_MIN = 1;
-const WARMUP_MINUTES_MAX = 30;
-const WARMUP_METERS_MIN = 100;
-const WARMUP_METERS_MAX = 10000;
-const WARMUP_REST_SECONDS_MIN = 5;
-const WARMUP_REST_SECONDS_MAX = 595;
-
-function isValidWarmup(v: unknown): v is WarmupSetting {
-  if (!isRec(v)) return false;
-  const durationOk =
-    (v.kind === "time" &&
-      typeof v.minutes === "number" &&
-      Number.isInteger(v.minutes) &&
-      v.minutes >= WARMUP_MINUTES_MIN &&
-      v.minutes <= WARMUP_MINUTES_MAX) ||
-    (v.kind === "distance" &&
-      typeof v.meters === "number" &&
-      Number.isInteger(v.meters) &&
-      v.meters >= WARMUP_METERS_MIN &&
-      v.meters <= WARMUP_METERS_MAX);
-  if (!durationOk) return false;
-  const restOk =
-    v.restSeconds === undefined ||
-    (typeof v.restSeconds === "number" &&
-      Number.isInteger(v.restSeconds) &&
-      v.restSeconds >= WARMUP_REST_SECONDS_MIN &&
-      v.restSeconds <= WARMUP_REST_SECONDS_MAX);
-  if (!restOk) return false;
-  // Reject stray keys (e.g. both `minutes` and `meters` present): only
-  // `kind`, the one duration field its kind implies, and an optional
-  // `restSeconds` are allowed.
-  const allowed = new Set([
-    "kind",
-    v.kind === "time" ? "minutes" : "meters",
-    "restSeconds",
-  ]);
-  return Object.keys(v).every((k) => allowed.has(k));
-}
 // Conservative slug shape, validated here rather than against the bundled
 // registry: client and server versions may skew mid-deploy, and an unknown
 // slug is harmless — it's ignored at display time.
@@ -889,9 +838,10 @@ export function createDataRouter({
     res.json(row);
   });
 
-  // The API's first UPDATE (spec §3). Every key is independently
-  // optional; presence is read with `in` (the `PUT /api/prefs` warmup
-  // precedent) so a key that's ABSENT never touches its column, while a
+  // The API's first UPDATE (spec §3). Every key is independently optional;
+  // presence is read with `in` (PUT /api/prefs's own `warmup` field used
+  // the identical idiom for the identical reason, before Phase WU removed
+  // the setting) so a key that's ABSENT never touches its column, while a
   // key that's PRESENT-and-null clears it. Unknown keys (anything other
   // than thumbs/held/pain/notes) are silently ignored, matching POST and
   // `PUT /api/prefs` — a 400 on an unknown key would give this API two
@@ -1263,31 +1213,20 @@ export function createDataRouter({
       }
       patch.timeCapMinutes = body.timeCapMinutes;
     }
-    // Presence check, not `!== undefined`: an explicit `warmup: null` in the
-    // body must CLEAR the setting, so "the key is absent" and "the key is
-    // present and null" have to read differently here — the only field on
-    // this route where that distinction matters (2026-08-09 design §2).
-    // NOT LOAD-BEARING AT RUNTIME, asked for twice (T2's own Finding 1;
-    // block2-review §3) and recorded a third time here: no test can
-    // actually discriminate `"warmup" in body` from `body.warmup !==
-    // undefined` through the real stack. `express.json()`'s `JSON.parse`
-    // can never produce a present key whose value is `undefined`, and the
-    // client can't produce one either (`usePreferences.ts`'s `save` sends
-    // `JSON.stringify(patch)`, which drops an `undefined`-valued key
-    // entirely) — so the two forms agree on every body a real request can
-    // ever carry. Kept as the more defensive form anyway, at zero cost;
-    // a future "simplification" to `!== undefined` would not fail any
-    // committed test, and that is expected, not a coverage gap.
+    // Phase WU exit criterion 6 (2026-08-21-warmup-removal-design.md §8):
+    // the ONE deliberate exception to this route's general "an unrecognized
+    // key is silently ignored" policy (stated below at the empty-patch
+    // guard, and matched by `PATCH /api/logs/:id`'s own `held`-idiom
+    // comment). The removed `warmup` setting used to be read here with a
+    // PRESENCE check (`"warmup" in body`, not `!== undefined`) because an
+    // explicit `warmup: null` had to CLEAR the setting while an absent key
+    // left it alone — that distinction no longer has anywhere to apply, but
+    // the key itself still gets a 400 rather than a silent no-op, so a
+    // not-yet-updated client finds out its write did nothing rather than
+    // believing it succeeded.
     if ("warmup" in body) {
-      if (body.warmup !== null && !isValidWarmup(body.warmup)) {
-        badRequest(
-          res,
-          "warmup must be null or a valid warm-up shape",
-          "warmup",
-        );
-        return;
-      }
-      patch.warmup = body.warmup as WarmupSetting | null;
+      badRequest(res, "warmup is no longer a preference", "warmup");
+      return;
     }
     if (body.countdownSeconds !== undefined) {
       if (
