@@ -451,14 +451,9 @@ test.describe("SOURCE filter", () => {
 });
 
 test.describe("TYPE + DIFFICULTY composition (chip row union intersected with the sheet)", () => {
-  // The two designated onboarding titles (domain/onboarding.ts's
-  // isOnboardingTitle) — real global rows, but Library.tsx's own rendered
-  // list excludes them (Phase 6I), so the independently-computed expected
-  // counts below have to exclude them too, or they'd disagree with what's
-  // actually on screen. Same literal titles onboarding.spec.ts already
-  // hardcodes for the identical reason.
-  const K6_TITLE = "6K Test";
-  const K2_TITLE = "2K Test";
+  // Phase 8A PR B (James's ruling, 2026-08-22): the Library list SHOWS
+  // the two tests now, so the independently-computed expected counts
+  // below include every workout the API returns — no exclusion.
 
   // Library-filter-unification round, Task 3 (spec's own Testing section:
   // "an e2e picking two types from the chip row plus a difficulty in the
@@ -482,31 +477,26 @@ test.describe("TYPE + DIFFICULTY composition (chip row union intersected with th
     // prove the app agrees with itself). Same in-page-`fetch` idiom this
     // file's own `cleanupByTitle`/baseline-reset helpers use (the api
     // container's Secure-cookie session makes `page.request` unusable here).
-    const counts = await page.evaluate(
-      async ({ k6Title, k2Title }) => {
-        const res = await fetch("/api/workouts");
-        const workouts = (await res.json()) as Array<{
-          title: string;
-          type: string;
-          difficulty: string;
-        }>;
-        const real = workouts.filter(
-          (w) => w.title !== k6Title && w.title !== k2Title,
-        );
-        const isUnionType = (w: { type: string }) =>
-          w.type === "O2" || w.type === "AT";
-        const total = real.length;
-        const unionCount = real.filter(isUnionType).length;
-        const difficultyCount = real.filter(
-          (w) => w.difficulty === "medium",
-        ).length;
-        const expected = real.filter(
-          (w) => isUnionType(w) && w.difficulty === "medium",
-        ).length;
-        return { total, unionCount, difficultyCount, expected };
-      },
-      { k6Title: K6_TITLE, k2Title: K2_TITLE },
-    );
+    const counts = await page.evaluate(async () => {
+      const res = await fetch("/api/workouts");
+      const workouts = (await res.json()) as Array<{
+        title: string;
+        type: string;
+        difficulty: string;
+      }>;
+      const real = workouts;
+      const isUnionType = (w: { type: string }) =>
+        w.type === "O2" || w.type === "AT";
+      const total = real.length;
+      const unionCount = real.filter(isUnionType).length;
+      const difficultyCount = real.filter(
+        (w) => w.difficulty === "medium",
+      ).length;
+      const expected = real.filter(
+        (w) => isUnionType(w) && w.difficulty === "medium",
+      ).length;
+      return { total, unionCount, difficultyCount, expected };
+    });
     // A real, non-trivial intersection against the actual seeded library —
     // not a degenerate 0-or-all case a broken union/intersection predicate
     // could still pass under.

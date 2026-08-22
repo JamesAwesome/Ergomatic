@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import { useWorkouts } from "../api/useWorkouts";
 import { useBaselines } from "../api/useBaselines";
 import { estimateMinutes } from "../../domain/expand.js";
-import { isOnboardingTitle } from "../../domain/onboarding.js";
 import type { Baselines, WorkoutType } from "../../domain/types.js";
 import {
   applyFilters,
@@ -256,21 +255,16 @@ export default function Library() {
         }
       : null;
 
-  // Controller addendum (Phase 6I Task 7, design spec's "invisible outside
-  // onboarding" rule): the two designated GLOBAL onboarding workouts never
-  // appear in the Library list or its counts — their detail routes stay
-  // reachable by id (BaselineCard's own Start, Today.tsx, which runs the
-  // session directly off a workout it already has in hand and never goes
-  // through this filtered array). Filtered once, up front, so
-  // `total`/`visible`/`draftCount` and the FILTER sheet's own live count
-  // all agree by construction rather than each re-deriving the exclusion.
-  // Final-review fix (2026-08-09): also require `isGlobal` — a rower's own
-  // CUSTOM workout that happens to collide with one of these titles is a
-  // real, ownable workout; excluding it by title alone orphaned it from
-  // the Library list with no way back.
-  const workouts = workoutsState.workouts.filter(
-    (w) => !(isOnboardingTitle(w.title) && w.isGlobal),
-  );
+  // Phase 8A PR B (James's ruling, 2026-08-22): the 6K Test and 2K Test
+  // are VISIBLE here — a rower can voluntarily re-test, so Phase 6I's
+  // "invisible outside onboarding" Library-list exclusion is gone. They
+  // carry no special badge and no special sort: seeded with sortOrder
+  // 301/302, they are simply the last two GLOBAL rows (ahead of any
+  // personal rows), findable through the ordinary AN/AT type filters like
+  // any other workout. Only the SUGGESTION-POOL exclusions survive
+  // (Today.tsx's `entries` and /api/today) — SHUFFLE's escape from a
+  // checkpoint depends on the tests sitting outside every pool.
+  const workouts = workoutsState.workouts;
 
   const total = workouts.length;
   const visible = applyFilters(workouts, filters, baselines);

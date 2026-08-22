@@ -125,7 +125,9 @@ test.describe("Phase 6I: Today onboarding — the fresh-user arc", () => {
     await expect(card.locator(".baselinecard-label")).toHaveText(
       "SUGGESTED · SETS YOUR BASELINE",
     );
-    await expect(card.locator(".baselinecard-title")).toHaveText(K6_TITLE);
+    await expect(card.locator(".baselinecard-title")).toHaveText(
+      "Your first 6k",
+    );
     await expect(card.locator(".baselinecard-duration")).toHaveText(
       "ABOUT 25 MIN",
     );
@@ -262,7 +264,9 @@ test.describe("Phase 6I: Today onboarding — the fresh-user arc", () => {
 
     // -- either-null: baseline entry is manual (You), never auto-captured
     //    from the log just saved — the card still offers the 6k, untouched.
-    await expect(page.locator(".baselinecard-title")).toHaveText(K6_TITLE);
+    await expect(page.locator(".baselinecard-title")).toHaveText(
+      "Your first 6k",
+    );
 
     // "set the 6k in You" (a real, partial API round trip — see
     // `setBaselines`'s own doc comment for why this file still uses the
@@ -270,7 +274,9 @@ test.describe("Phase 6I: Today onboarding — the fresh-user arc", () => {
     // the 2k now, no toggle.
     await setBaselines(page, { k6Seconds: 122 });
     await page.reload();
-    await expect(page.locator(".baselinecard-title")).toHaveText(K2_TITLE);
+    await expect(page.locator(".baselinecard-title")).toHaveText(
+      "Your first 2k",
+    );
     await expect(page.locator(".baselinecard-duration")).toHaveText(
       "ABOUT 8 MIN",
     );
@@ -419,7 +425,11 @@ test.describe("Phase 6I: designated-workout exclusion", () => {
     expect(seen.has(K2_TITLE)).toBe(false);
   });
 
-  test("Library's list omits the 6K Test and the 2K Test", async ({ page }) => {
+  // James's ruling (2026-08-22, Phase 8A PR B): the Library-list exclusion
+  // is GONE — a rower can voluntarily re-test, so both tests show as
+  // ordinary rows. Only the SUGGESTION-POOL exclusion (the SHUFFLE test
+  // above) survives.
+  test("Library's list SHOWS the 6K Test and the 2K Test", async ({ page }) => {
     await signInViaBackdoor(page, {
       email: `onboarding-exclusion-library-${RUN_ID}@e2e.test`,
       name: "Onboarding Exclusion Library",
@@ -428,10 +438,10 @@ test.describe("Phase 6I: designated-workout exclusion", () => {
     await expect(page.locator(".library-count")).toHaveText(/^\d+ WORKOUTS$/);
     await expect(
       page.locator(".workout-row", { hasText: K6_TITLE }),
-    ).toHaveCount(0);
+    ).toHaveCount(1);
     await expect(
       page.locator(".workout-row", { hasText: K2_TITLE }),
-    ).toHaveCount(0);
+    ).toHaveCount(1);
   });
 });
 
@@ -485,7 +495,9 @@ test.describe("the derivation offer is reachable through the real editor flow (t
     // completely separate screen/component reading the identical baselines
     // row) still offers the 2k, not "both set."
     await page.goto("/today");
-    await expect(page.locator(".baselinecard-title")).toHaveText(K2_TITLE);
+    await expect(page.locator(".baselinecard-title")).toHaveText(
+      "Your first 2k",
+    );
     await expect(page.locator(".baselinecard-chip")).toHaveText(
       "2K BASELINE · NOT SET · ROW IT HOW IT FEELS",
     );

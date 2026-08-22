@@ -398,7 +398,9 @@ describe("Today (plan mode)", () => {
       workouts: [ZEPHYR, ISOBAR, WARM_FRONT, TAILWIND, TEST_6K, TEST_2K],
     });
     await renderToday();
-    expect(screen.getByRole("heading", { name: "6K Test" })).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Your first 6k" }),
+    ).toBeVisible();
     expect(
       screen.queryByRole("heading", { name: "Stationary Front" }),
     ).not.toBeInTheDocument();
@@ -2738,7 +2740,11 @@ describe("Today (Phase 6I: START HERE + the no-baseline card)", () => {
     expect(
       await screen.findByText("SUGGESTED · SETS YOUR BASELINE"),
     ).toBeVisible();
-    expect(screen.getByRole("heading", { name: "6K Test" })).toBeVisible();
+    // James's ruling (2026-08-22): the card's heading is its own copy
+    // ("Your first 6k"), not the instrument title.
+    expect(
+      screen.getByRole("heading", { name: "Your first 6k" }),
+    ).toBeVisible();
     expect(screen.getByText("ABOUT 25 MIN")).toBeVisible();
     expect(
       screen.getByText("6K BASELINE · NOT SET · ROW IT HOW IT FEELS"),
@@ -2803,7 +2809,7 @@ describe("Today (Phase 6I: START HERE + the no-baseline card)", () => {
     await renderToday();
 
     expect(
-      await screen.findByRole("heading", { name: "2K Test" }),
+      await screen.findByRole("heading", { name: "Your first 2k" }),
     ).toBeVisible();
     expect(screen.getByText("ABOUT 8 MIN")).toBeVisible();
     expect(
@@ -2908,7 +2914,7 @@ describe("Today (Phase 6I: START HERE + the no-baseline card)", () => {
     await renderToday();
 
     expect(
-      await screen.findByRole("heading", { name: "6K Test" }),
+      await screen.findByRole("heading", { name: "Your first 6k" }),
     ).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "Start" }));
 
