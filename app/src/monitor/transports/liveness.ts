@@ -155,7 +155,11 @@ export const SILENCE_THRESHOLD_MS = 2500;
 export function withLiveness(
   inner: Transport,
   deps: LivenessDeps,
-): Transport & { snapshot(): LivenessSnapshot } {
+): Transport & {
+  snapshot(): LivenessSnapshot;
+  /** See this method's own doc comment on the returned object below. */
+  markSuspect(): void;
+} {
   const characteristics = new Map<string, LivenessCharacteristicStats>();
   const recentEvents: LivenessLifecycleEvent[] = [];
   let armed = false;
@@ -283,6 +287,42 @@ export function withLiveness(
         characteristics: Object.fromEntries(characteristics),
         recentEvents: recentEvents.slice(),
       };
+    },
+    /** Phase LL Task 2 REVIEW FIX (§2 mechanism 2). Routes an EXTERNAL
+     *  suspicion — an app-lifecycle resume, "we don't know what happened
+     *  while backgrounded" — THROUGH this decorator's own `armed`/`silent`
+     *  state machine, rather than around it.
+     *
+     *  Before this method existed, `useMonitorSession.ts`'s resume handler
+     *  called `update({ frameSilence: true })` directly, leaving `silent`
+     *  here at whatever it already was — `false`, for a stream that was
+     *  healthy right up until backgrounding. `noteStatusArrival`'s own
+     *  recovery branch only runs `if (silent)`, so the very next arriving
+     *  frame — however healthy — would never satisfy it, `deps.onRecovery()`
+     *  would never fire, and `frameSilence` would never clear again for the
+     *  rest of the session. Proven empirically before this fix: a resume
+     *  shorter than `SILENCE_THRESHOLD_MS` (a Control Center swipe, a
+     *  notification peek — routine, not an edge case) left the banner up
+     *  through 30 healthy frames over 15s.
+     *
+     *  This method IS the fix: it stops any watchdog timer currently
+     *  counting down (so it cannot ALSO mature later and double-report) and
+     *  sets `silent = true` directly. It does NOT itself call
+     *  `deps.onSilence` — the caller (`useMonitorSession.ts`) already has
+     *  its own honest reason to latch `frameSilence` and its own ring entry
+     *  to write; duplicating that here with a fabricated `ms` value would
+     *  be exactly the dishonest-diagnostic failure mode this file's own
+     *  header rules out ("NEVER fakes... a fact about OUR inbox, worded as
+     *  ours"). What this method buys is narrower and sufficient: the very
+     *  next 0x0031 arrival now takes `noteStatusArrival`'s EXISTING
+     *  `if (silent)` branch — the one and only place `deps.onRecovery()` is
+     *  ever called — so the hook's own hysteresis-gated retract fires
+     *  exactly as it would for a real silence. One source of truth for
+     *  "the stream is suspect" (`silent`), one path back out of it. */
+    markSuspect(): void {
+      stopTimer();
+      silent = true;
+      pushEvent("silence", "marked suspect externally (app-lifecycle resume)");
     },
   };
 }

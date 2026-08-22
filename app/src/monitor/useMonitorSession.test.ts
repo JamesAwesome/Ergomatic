@@ -37,7 +37,7 @@ import {
   type FakeScript,
   type FakeTimelineEvent,
 } from "./transports/fake";
-import type { LivenessDeps } from "./transports/liveness";
+import { withLiveness, type LivenessDeps } from "./transports/liveness";
 import {
   BANNER_RETRACT_HYSTERESIS_MS,
   defaultLivenessSchedule,
@@ -4584,6 +4584,18 @@ describe("Phase LL Task 2 mechanism 2: the app-lifecycle listener (background/re
       value: "visible",
       configurable: true,
     });
+    // `vi.doMock`'s module-factory override is NOT cleared by
+    // `resetModules()`/`restoreAllMocks()` (those affect the module
+    // REGISTRY and spy IMPLEMENTATIONS respectively, never a `doMock`
+    // factory) — without this, the NATIVE-arm test's own mock of
+    // `../adapters/appLifecycle` silently governs every OTHER test in
+    // this block that runs after it, since they all dynamically
+    // re-import `useMonitorSession.ts`. Caught by the REVIEWER'S PROBE
+    // test below failing only in file-order, never in isolation.
+    vi.doUnmock("../adapters/appLifecycle");
+    vi.resetModules();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
   });
 
   it("backgrounding alone does nothing — the risk is on RESUME, not on suspend", async () => {
@@ -4666,5 +4678,94 @@ describe("Phase LL Task 2 mechanism 2: the app-lifecycle listener (background/re
 
     vi.resetModules();
     vi.restoreAllMocks();
+  });
+
+  it("REVIEWER'S PROBE (review fix): a SHORT resume — shorter than SILENCE_THRESHOLD_MS, so the decorator's OWN watchdog timer never matures — still clears frameSilence after BANNER_RETRACT_HYSTERESIS_MS of healthy frames post-resume, because markSuspect() routes through the decorator instead of around it", async () => {
+    vi.useFakeTimers();
+    // 40 events, 500ms apart — the first arms the watchdog (Task 1's
+    // arming rule); the rest are the post-resume "healthy frames" the
+    // reviewer's own probe fed (30 over 15s).
+    const events: FakeTimelineEvent[] = [];
+    for (let i = 1; i <= 40; i += 1) {
+      events.push(
+        status(i * 500, { elapsedSeconds: i * 0.5, distanceMeters: i * 2 }),
+      );
+    }
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
+      events,
+    });
+    // Composes the REAL decorator around the fake — the same thing
+    // `defaultTransport` does in production — so this test reaches the
+    // REAL `markSuspect`/`silent`/`armed` state machine, not a bypass.
+    const mockDefaultTransport = vi.fn((deps: LivenessDeps) =>
+      withLiveness(fake, deps),
+    );
+    vi.doMock("../adapters/monitorTransport", () => ({
+      defaultTransport: mockDefaultTransport,
+    }));
+    vi.resetModules();
+
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+    const { result } = renderHook(() => freshUseMonitorSession());
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    // `fake.tick()` advances a VIRTUAL clock (frame delivery timing);
+    // `vi.advanceTimersByTime` advances the REAL/mocked wall clock the
+    // decorator's own watchdog AND the hook's hysteresis timer both run
+    // on (`defaultLivenessSchedule`, real `setTimeout`). In production
+    // these are the SAME clock (a real BLE notification arriving IS real
+    // wall-clock time) — every advance below moves them together so a
+    // "frame every 500ms" in this test means exactly that on BOTH clocks,
+    // never a burst of virtual frames against a frozen real clock (which
+    // would let the watchdog's own 2500ms timer mature independently and
+    // produce a spurious SECOND silence — a test-harness artifact, not a
+    // production one, caught while writing this test).
+    function healthyFrame(): void {
+      act(() => {
+        fake.tick(500);
+        vi.advanceTimersByTime(500);
+      });
+    }
+
+    // Arms the watchdog on the first 0x0031 (event #1).
+    healthyFrame();
+    expect(result.current.frameSilence).toBe(false);
+
+    // A SHORT resume: the decorator's own SILENCE_THRESHOLD_MS=2500ms
+    // timer never started counting down from a genuine gap, let alone
+    // matured — exactly the "Control Center swipe, not an edge case"
+    // scenario the review named.
+    act(() => {
+      setVisibility("hidden");
+      setVisibility("visible");
+    });
+    expect(result.current.frameSilence).toBe(true);
+
+    // The FIRST post-resume healthy frame: `noteStatusArrival` sees
+    // `silent === true` (set by `markSuspect`) and fires `onRecovery`,
+    // which schedules the hysteresis retract — but does not clear
+    // `frameSilence` itself.
+    healthyFrame();
+    expect(result.current.frameSilence).toBe(true);
+
+    // Well under the hysteresis window (5 more healthy frames = 2500ms
+    // more of real time, ~3000ms since recovery, far short of 10s) —
+    // still latched. Proves retraction is hysteresis-gated, not instant
+    // on the first post-resume frame.
+    for (let i = 0; i < 5; i += 1) healthyFrame();
+    expect(result.current.frameSilence).toBe(true);
+
+    // Enough further healthy frames to carry real elapsed time past the
+    // full BANNER_RETRACT_HYSTERESIS_MS window since the recovery frame
+    // above (25 more x 500ms = 12500ms, comfortably past 10s) — the
+    // reviewer's own probe, reproduced and now actually retracting.
+    for (let i = 0; i < 25; i += 1) healthyFrame();
+    expect(result.current.frameSilence).toBe(false);
   });
 });

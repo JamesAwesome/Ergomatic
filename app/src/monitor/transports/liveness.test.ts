@@ -235,6 +235,107 @@ describe("withLiveness: onSilence / onRecovery", () => {
   });
 });
 
+describe("withLiveness: markSuspect (Phase LL Task 2 review fix, §2 mechanism 2)", () => {
+  it("sets silent:true in the snapshot WITHOUT calling onSilence — the caller (useMonitorSession.ts) owns its own honest reason/ring entry", () => {
+    const { transport, notify } = stubTransport();
+    const timer = manualSchedule();
+    const onSilence = vi.fn();
+    const clock = manualClock();
+    const liveness = withLiveness(transport, {
+      now: clock.now,
+      schedule: timer.schedule,
+      onSilence,
+      onRecovery: vi.fn(),
+    });
+    liveness.subscribe(GENERAL_STATUS_UUID, () => {});
+    notify(GENERAL_STATUS_UUID, new Uint8Array()); // arms
+
+    liveness.markSuspect();
+
+    expect(liveness.snapshot().silent).toBe(true);
+    expect(onSilence).not.toHaveBeenCalled();
+  });
+
+  it("stops any watchdog timer already counting down — it cannot ALSO mature later and double-report", () => {
+    const { transport, notify } = stubTransport();
+    const timer = manualSchedule();
+    const clock = manualClock();
+    const liveness = withLiveness(transport, {
+      now: clock.now,
+      schedule: timer.schedule,
+      onSilence: vi.fn(),
+      onRecovery: vi.fn(),
+    });
+    liveness.subscribe(GENERAL_STATUS_UUID, () => {});
+    notify(GENERAL_STATUS_UUID, new Uint8Array()); // arms, schedules the watchdog
+    expect(timer.calls[0]!.cancelled).toBe(false);
+
+    liveness.markSuspect();
+
+    expect(timer.calls[0]!.cancelled).toBe(true);
+  });
+
+  it("THE FIX ITSELF: the very next 0x0031 after markSuspect() fires onRecovery exactly once and clears silent — the SAME branch a real timer-declared silence uses", () => {
+    const { transport, notify } = stubTransport();
+    const timer = manualSchedule();
+    const onRecovery = vi.fn();
+    const clock = manualClock();
+    const liveness = withLiveness(transport, {
+      now: clock.now,
+      schedule: timer.schedule,
+      onSilence: vi.fn(),
+      onRecovery,
+    });
+    liveness.subscribe(GENERAL_STATUS_UUID, () => {});
+    notify(GENERAL_STATUS_UUID, new Uint8Array()); // arms
+
+    liveness.markSuspect();
+    expect(onRecovery).not.toHaveBeenCalled();
+
+    notify(GENERAL_STATUS_UUID, new Uint8Array());
+
+    expect(onRecovery).toHaveBeenCalledOnce();
+    expect(liveness.snapshot().silent).toBe(false);
+    // A second frame must not re-fire recovery — same "only on the
+    // transition out of silence" contract as a real silence declaration.
+    notify(GENERAL_STATUS_UUID, new Uint8Array());
+    expect(onRecovery).toHaveBeenCalledOnce();
+  });
+
+  it("calling markSuspect() before the watchdog has ever armed does not throw, and does not fabricate a recovery on the FIRST real arrival (which is itself the arming event, not a recovery)", () => {
+    const { transport } = stubTransport();
+    const timer = manualSchedule();
+    const onRecovery = vi.fn();
+    const clock = manualClock();
+    const liveness = withLiveness(transport, {
+      now: clock.now,
+      schedule: timer.schedule,
+      onSilence: vi.fn(),
+      onRecovery,
+    });
+    expect(() => liveness.markSuspect()).not.toThrow();
+    expect(liveness.snapshot().armed).toBe(false);
+  });
+
+  it("a repeated markSuspect() call while already silent does not schedule a second watchdog cancellation cycle or throw", () => {
+    const { transport, notify } = stubTransport();
+    const timer = manualSchedule();
+    const clock = manualClock();
+    const liveness = withLiveness(transport, {
+      now: clock.now,
+      schedule: timer.schedule,
+      onSilence: vi.fn(),
+      onRecovery: vi.fn(),
+    });
+    liveness.subscribe(GENERAL_STATUS_UUID, () => {});
+    notify(GENERAL_STATUS_UUID, new Uint8Array());
+
+    liveness.markSuspect();
+    expect(() => liveness.markSuspect()).not.toThrow();
+    expect(liveness.snapshot().silent).toBe(true);
+  });
+});
+
 describe("withLiveness: disconnect stops the watchdog", () => {
   it("caller-initiated disconnect() cancels the pending timer — no posthumous silence report", async () => {
     const { transport, notify } = stubTransport();
