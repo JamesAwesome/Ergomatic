@@ -41,27 +41,33 @@
 //   distance-programmed interval, in which case this same field reports
 //   the INTERVAL'S GOAL, not distance actually rowed (confirmed PRIMARY,
 //   `src/monitor/driver.ts`'s own `recordTwdVerdict`: "500 m goal read
-//   against 13.4 m genuinely rowed, mid-row"). This task's own corpus
+//   against 13.4 m genuinely rowed, mid-row"; full mechanism, both
+//   captures, and the rest-window half of the finding are now written up
+//   in `docs/monitor/pm5-interface-notes.md` §20 item 25, the house
+//   convention's home for this class of wire fact). This task's own corpus
 //   derivation (`continuity.test.ts`) reproduced the exact shape live: one
-//   capture flickers 250 <-> 500 repeatedly, mid-interval, on a
-//   2x250m-shaped distance program — a false "reset" on every single
-//   simulated resume inside it. `check` below applies the IDENTICAL
-//   suppression `recordTwdVerdict` already ships (a distance-kind interval
-//   anywhere in the armed program), because it is the same wire fact, not
-//   a new one.
+//   capture flickers 0/250/500 (a boundary accumulator, never distance
+//   rowed), mid-interval, on a 2x250m-shaped distance program — a false
+//   "reset" on every single simulated resume inside it; a second capture
+//   (the mixed pyramid) shows the field frozen through every work bout and
+//   ticking only during rests, confirming the same mechanism a second,
+//   independent way. `check` below applies the IDENTICAL suppression
+//   `recordTwdVerdict` already ships (a distance-kind interval anywhere in
+//   the armed program), because it is the same wire fact, not a new one.
 //
 // On the residual, non-distance-goal corpus (the only stretches where this
 // field means "distance genuinely rowed"), the measurement is unambiguous:
 // **zero backward transitions across 1,026 simulated 30-second-gap pairs**
 // (`continuity.test.ts`'s own corpus-derivation block, the same
 // slide-a-gap-across-every-frame simulation shape the anchor pass used to
-// falsify RowTracer's elapsed bound). `CONTINUITY_BACKWARD_TOLERANCE_METERS`
-// is therefore the measured floor, not a guessed margin: a single
+// falsify RowTracer's elapsed bound). NO TOLERANCE IS NEEDED — a single
 // GATT-notified characteristic delivers in order (0x0031's own guarantee),
-// there is no rounding in a `readU24LE` whole-metre read to build a cushion
-// against, and nothing in 3,092 raw (pre-suppression) or 1,026
-// (post-suppression) simulated pairs ever showed the counter move backward
-// for a reason other than the distance-goal flicker above.
+// there is no rounding in a `readU24LE` whole-metre read to introduce
+// drift, and nothing in 3,092 raw (pre-suppression) or 1,026
+// (post-suppression) simulated pairs ever showed the counter move
+// backward for a reason other than the distance-goal flicker above.
+// `CONTINUITY_BACKWARD_TOLERANCE_METERS` is therefore `0`: that
+// measurement, not an engineered cushion.
 
 /** A single wire reading `check` below judges continuity from.
  *  `totalWorkDistanceMeters` is 0x0031's own Total Work Distance, exactly
@@ -84,13 +90,20 @@ export interface ContinuityReading {
 
 export type ContinuityVerdict = "continuation" | "reset";
 
-/** Measured, not guessed — see this file's own header comment for the full
- *  derivation and why zero is the honest floor here (a single-characteristic
+/** NO TOLERANCE IS NEEDED (measured, Task 4 review fix F5/Minor — reworded
+ *  from an earlier "measured floor"/"cushion" framing that implied a
+ *  margin was chosen; none was). Zero backward transitions were observed
+ *  across every non-distance-goal simulated resume in the corpus — see
+ *  this file's own header comment for the full derivation and why that
+ *  is the expected, not merely lucky, result (a single-characteristic
  *  GATT stream delivers in order; the field is an unscaled whole-metre
- *  integer with nothing to round). `continuity.test.ts`'s corpus-derivation
- *  block reproduces the underlying count (1,026 pairs, 0 violations) as a
- *  live CI gate — if a future capture ever needs headroom, that test is
- *  where the number moves, not here in isolation. */
+ *  integer with nothing to round). `0` is that measurement, not a
+ *  deliberately engineered slack value. `continuity.test.ts`'s
+ *  corpus-derivation block reproduces the underlying count (1,026 pairs,
+ *  0 violations) as a live CI gate — if a future capture ever shows a
+ *  genuine backward blip on a healthy resume, that test is where the
+ *  evidence for a nonzero value would first appear, not here in
+ *  isolation. */
 export const CONTINUITY_BACKWARD_TOLERANCE_METERS = 0;
 
 /**

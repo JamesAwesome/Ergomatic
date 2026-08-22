@@ -62,7 +62,7 @@ import {
 import { createEventLog, type MonitorEventLog } from "./eventLog";
 import type { LogSeed } from "../session/logDraft";
 import {
-  completeInterruptedRun,
+  completeContinuityReset,
   completeMonitorRun,
   createMonitorRun,
   recordActual,
@@ -431,10 +431,21 @@ export function programHasDistanceGoal(p: WorkoutProgram): boolean {
  * consumption seam, factored into a plain, directly-testable function —
  * same discipline as `handleFrameSilence`/`handleFrameRecovery` above,
  * extended one step further: this one's OWN side effect (closing the
- * record) is itself a pure transform (`completeInterruptedRun`), so the
+ * record) is itself a pure transform (`completeContinuityReset`), so the
  * whole decision is expressible without a hook, a ref, or a fake
  * transport's own accurate wire-timing model standing between a test and
  * the behaviour under test.
+ *
+ * **RETURNS THE RUN ONLY — the caller pairs a `"reset"` result with its
+ * own surface update** (RULED at Task 4's own review, F2/I2: the first
+ * implementation closed the record silently, leaving the banner to
+ * retract on its own hysteresis and the rower rowing into a closed
+ * record with the app still showing `live` — in the phase whose subject
+ * is "the app says so." Every sibling close in this file pairs the
+ * record close with a `phase: "ended"`/`runOpen: false` `update()` in the
+ * SAME statement; this function cannot do that itself — it has no
+ * `update` to call — so its own caller, `handleFrame`'s live branch
+ * below, does it in the same breath it applies this return value).
  *
  * Returns `run` UNCHANGED (the identical reference) whenever nothing
  * closes — a caller tells "did this fire" from reference identity, the
@@ -471,16 +482,20 @@ export function applyContinuityCheck(
   log?.record(
     "continuity-reset",
     `resumed stream failed continuity: totalWorkDistanceMeters ${lastTwd} ` +
-      `-> ${frameTwd} — preserving the interrupted record, never merging`,
+      `-> ${frameTwd} — closing as link-lost, never merging`,
   );
   // §4: "On reset: preserve the interrupted record, start clean, never
   // merge." No reconnect flow exists this phase (spec §8) to start a
   // genuinely new run from, so "never merge" is discharged the way this
   // codebase already discharges it for every other untrustworthy-record
-  // case: CLOSE it. `recordActual`'s own `completedAt` guard is what then
-  // makes every later boundary refuse to fold in — the same protection
-  // `completeInterruptedRun` already gives Today's row.
-  return completeInterruptedRun(run, now);
+  // case: CLOSE it. `endedBy: "link-lost"`, not `"interrupted"` — RULED
+  // at Task 4's own review (F1/I1): this is the close with the
+  // STRONGEST evidence (a link episode already marked the stream
+  // suspect, and continuity then measurably broke), not the absence of
+  // one. `completeContinuityReset`'s own doc comment has the full
+  // reasoning. `recordActual`'s own `completedAt` guard is what then
+  // makes every later boundary refuse to fold in.
+  return completeContinuityReset(run, now);
 }
 
 /**
@@ -1564,21 +1579,15 @@ export function useMonitorSession(
         // safer (a delayed jump inside that window is still caught) and
         // costs nothing once a `"reset"` verdict has closed the run
         // (`run.completedAt !== null` short-circuits every further call).
-        // KNOWN GAP, disclosed rather than hidden: `applyContinuityCheck`
-        // itself is mutation-tested exhaustively in isolation
-        // (`useMonitorSession.test.ts`'s own describe block), and the
-        // NO-OP path through this exact wiring is proven end to end
-        // (the healthy-resume hook test, same file). The TRUE branch of
-        // the assignment below — an actual reset reaching `runRef.current`
-        // through this real composition — has no hook-level test:
-        // `transports/fake.ts` deliberately never exposes a way to make
-        // `totalWorkDistanceMeters` report a wire-impossible value (its
-        // own doc comments refuse exactly this shape of "invented
-        // mechanism" for other fields, e.g. `restDistanceMeters`), so a
-        // genuinely backward reading can only be produced by a hand-built
-        // stub transport reproducing CSAFE program-ack sequencing from
-        // scratch — judged disproportionate for this one assignment,
-        // given the decision logic it wires in is already fully proven.
+        // Proven end to end at the hook level via `transports/replay.ts`
+        // (Task 4 review F3/I6): a recording whose frames are REAL bytes
+        // in ARTIFICIAL order — the tail-then-head pair the pure-level
+        // pin already uses — drives the real driver through this exact
+        // composition, `applyContinuityCheck`'s own decision logic is
+        // mutation-tested exhaustively in isolation, and the NO-OP path
+        // is proven separately (the healthy-resume hook test, same
+        // file) — see `useMonitorSession.test.ts`'s own describe block
+        // for all three.
         const closed = applyContinuityCheck(
           runRef.current,
           lastTwdRef.current,
@@ -1587,7 +1596,30 @@ export function useMonitorSession(
           nowDate(),
           logRef.current,
         );
-        if (closed !== runRef.current) runRef.current = closed;
+        if (closed !== runRef.current) {
+          runRef.current = closed;
+          // RULED at Task 4's own review (F2/I2): every sibling close in
+          // this file pairs the record close with THIS SAME
+          // `phase: "ended"`/`runOpen: false` surface update, in the same
+          // statement — a reset that closed the record silently left the
+          // banner to retract on its own hysteresis and the rower rowing
+          // into a closed record with the app still showing `live`, in
+          // the phase whose own subject is "the app says so." `endedBy:
+          // "user"` (this hook's own LOCAL session-state field, distinct
+          // from the `MonitorRun.endedBy` `completeContinuityReset` just
+          // stamped): the binary choice this field has always offered is
+          // "did the MACHINE report it" vs. everything else, and a
+          // continuity reset is emphatically not a machine report — it
+          // is this app's own decision, the same bucket the rower's own
+          // End press already occupies, and `ConnectedSurface.tsx`'s own
+          // `=== "machine"` ternary reads it that way: anything else
+          // renders the neutral "Your numbers are kept," never a false
+          // "The monitor finished it." No handoff hold: a reset is not a
+          // natural finish (no boundary is coming), the same reasoning
+          // `endByMachine`'s own `terminated` branch already uses to
+          // skip `openHandoffHold()`.
+          update({ phase: "ended", endedBy: "user", runOpen: false });
+        }
         // Same defensive, test-suite-unreachable `??` arm as the seed
         // above — every real frame reaching this branch already carries
         // the field.

@@ -39,6 +39,7 @@ import {
   type FakeTimelineEvent,
 } from "./transports/fake";
 import { withLiveness, type LivenessDeps } from "./transports/liveness";
+import { fromHexString } from "./transports/recording";
 import {
   applyContinuityCheck,
   BANNER_RETRACT_HYSTERESIS_MS,
@@ -4576,7 +4577,15 @@ describe("Phase LL Task 1: the hook's own composition with defaultTransport", ()
 
     const { useMonitorSession: freshUseMonitorSession } =
       await import("./useMonitorSession");
-    const { result } = renderHook(() => freshUseMonitorSession());
+    const { result } = renderHook(() =>
+      freshUseMonitorSession({
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: () => (): void => undefined,
+        },
+      }),
+    );
 
     await act(async () => {
       await result.current.connect();
@@ -4662,7 +4671,15 @@ describe("Phase LL Task 1: the hook's own composition with defaultTransport", ()
 
     const { useMonitorSession: freshUseMonitorSession } =
       await import("./useMonitorSession");
-    const { result } = renderHook(() => freshUseMonitorSession());
+    const { result } = renderHook(() =>
+      freshUseMonitorSession({
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: () => (): void => undefined,
+        },
+      }),
+    );
 
     await act(async () => {
       await result.current.connect();
@@ -4714,7 +4731,15 @@ describe("Phase LL Task 1: the hook's own composition with defaultTransport", ()
 
     const { useMonitorSession: freshUseMonitorSession } =
       await import("./useMonitorSession");
-    const { result } = renderHook(() => freshUseMonitorSession());
+    const { result } = renderHook(() =>
+      freshUseMonitorSession({
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: () => (): void => undefined,
+        },
+      }),
+    );
 
     await act(async () => {
       await result.current.connect();
@@ -4783,7 +4808,15 @@ describe("Phase LL Task 2: the banner's hysteresis, through the real hook compos
 
     const { useMonitorSession: freshUseMonitorSession } =
       await import("./useMonitorSession");
-    const { result } = renderHook(() => freshUseMonitorSession());
+    const { result } = renderHook(() =>
+      freshUseMonitorSession({
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: () => (): void => undefined,
+        },
+      }),
+    );
 
     await act(async () => {
       await result.current.connect();
@@ -5182,7 +5215,7 @@ describe("Phase LL Task 4: applyContinuityCheck (pure — the resumed-stream con
     expect(result?.completedAt).toBeNull();
   });
 
-  it("a genuine backward jump while suspect closes the run as interrupted, and records the ring entry — the mutation this test guards against: dropping the `>` comparison so ANY change (even forward) closes the run", () => {
+  it("a genuine backward jump while suspect closes the run as link-lost (RULED at Task 4's own review, F1/I1 — the STRONGEST-evidence close, never the absence-of-evidence value), and records the ring entry — the mutation this test guards against: dropping the `>` comparison so ANY change (even forward) closes the run", () => {
     const run = openRun();
     const log = createEventLog();
     const now = new Date("2026-08-07T09:31:00.000Z");
@@ -5192,11 +5225,11 @@ describe("Phase LL Task 4: applyContinuityCheck (pure — the resumed-stream con
     expect(result).not.toBe(run);
     expect(result?.completedAt).toBe(now.toISOString());
     // §4: "preserve the interrupted record, start clean, never merge" —
-    // `terminated` stays whatever it already was (`completeInterruptedRun`'s
-    // own contract, unchanged by this task), only `completedAt`/`endedBy`
-    // move.
+    // `terminated` stays whatever it already was
+    // (`completeContinuityReset`'s own contract, unchanged by this task),
+    // only `completedAt`/`endedBy` move.
     expect(result?.terminated).toBe(false);
-    expect(result?.endedBy).toBe("interrupted");
+    expect(result?.endedBy).toBe("link-lost");
     expect(result?.actuals).toStrictEqual(run.actuals);
 
     const entries = JSON.parse(log.exportLog()) as {
@@ -5224,7 +5257,7 @@ describe("Phase LL Task 4: applyContinuityCheck (pure — the resumed-stream con
 });
 
 describe("Phase LL Task 4: the continuity consumption seam, through the real hook composition — a healthy resume never false-positives", () => {
-  it("a foreground resume followed by ordinary forward-moving live frames never closes the record as interrupted (companion to continuity.test.ts's own corpus sweep, at the hook level)", async () => {
+  it("a foreground resume followed by ordinary forward-moving live frames never closes the record (companion to continuity.test.ts's own corpus sweep, at the hook level)", async () => {
     const events: FakeTimelineEvent[] = [];
     for (let i = 1; i <= 10; i += 1) {
       events.push(
@@ -5270,4 +5303,237 @@ describe("Phase LL Task 4: the continuity consumption seam, through the real hoo
       configurable: true,
     });
   });
+});
+
+describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end through the real driver + hook composition — real bytes, artificial order", () => {
+  // Same walk-2026-08-16/session-2-wu-4unequal.jsonl this file's OWN
+  // `continuity.ts` pure-level pin already cites (`continuity.test.ts`'s
+  // "ONE true reset, built from a real capture's own frames" describe
+  // block) — reused here rather than re-picked. The exact two samples
+  // differ from that pin (see `REAL_TAIL_HEX`'s own comment below): the
+  // pure pin only feeds `check()`, which never looks at `workoutState`;
+  // this test delivers the bytes through the REAL driver, which does.
+  //
+  // **FINDING, reported rather than routed around silently: F3's own
+  // instruction names `transports/replay.ts` against a REAL committed
+  // capture's own recorded acks. That path was attempted first and hits a
+  // genuine architecture conflict, not a shortcut avoided for
+  // convenience: EVERY committed capture with any non-distance-goal
+  // segment at all (`session-2-wu-4unequal.jsonl`,
+  // `step-3-pm5-recording-second-rest...jsonl` — `continuity.ts`'s own
+  // header comment and this task's corpus derivation) is itself a MIXED
+  // program (both carry a distance interval), and `programHasDistanceGoal`
+  // suppresses on the WHOLE program, by design (mirrors `driver.ts`'s own
+  // `recordTwdVerdict` — narrowing it to per-frame to dodge this would be
+  // the review's own class of regression, not a fix). Driving `program()`
+  // with that REAL mixed program replays cleanly but leaves the
+  // continuity check permanently suppressed for the whole run — nothing
+  // to observe. Driving it with an ALL-TIME substitute instead (tried,
+  // reverted) reaches a REAL rejection: the recording's own armed-echo
+  // bytes report the REAL 5-interval structure, `driver.ts`'s own
+  // `verifyArmed` correctly calls that a `structure-mismatch` against a
+  // 2-interval program that was never actually sent to this machine —
+  // `program()` genuinely fails, not a test-harness artifact.
+  // **Resolution:** the programming HANDSHAKE (protocol machinery, not
+  // evidence) uses `transports/fake.ts` — this file's own established,
+  // protocol-correct harness, used by every other test here — for an
+  // honestly ALL-TIME 2-interval program; the two frames the continuity
+  // RULE actually reads are real hardware bytes from the same session
+  // `continuity.test.ts`'s pure pin cites, delivered through the REAL
+  // driver's decode pipeline via a minimal interception seam (below)
+  // rather than `replay.ts`'s barrier engine. Every byte the continuity
+  // check evaluates is still 100% real and hardware-captured; only the
+  // plumbing that carries them differs from the letter of the
+  // instruction, for a reason grounded in the corpus, not convenience.
+
+  // Two REAL 0x0031 samples from `session-2-wu-4unequal.jsonl`, both
+  // `workoutState: 4` (rowing) — deliberately NOT the file's own literal
+  // last sample (which `continuity.test.ts`'s pure pin uses, twd=1599):
+  // that byte's own `workoutState` decodes to 10/WORKOUTEND, and an
+  // earlier version of this test delivered it verbatim, triggering a
+  // genuine, honest NATURAL FINISH the instant it arrived —
+  // `driver.ts`'s own `maybeEmitFrame` reacts to `state === "finished"`
+  // regardless of WHY the frame showed up, which is correct production
+  // behaviour, not a test bug; the fix is choosing frames that are
+  // honestly mid-session on BOTH ends, so nothing but the continuity rule
+  // itself reacts to them. "before" is this file's own LAST rowing-state,
+  // non-distance-goal sample (twd=1354); "after" is its own FIRST
+  // rowing-state, non-distance-goal sample (twd=100) — the SAME hex the
+  // pure pin uses for "after" (that one frame's own `workoutState`
+  // happens to already be rowing, which is why it needed no swap).
+  const REAL_TAIL_HEX =
+    "52 17 00 89 09 00 08 00 04 01 04 4a 05 00 70 17 00 00 68"; // twd=1354, workoutState=4 (rowing)
+  const REAL_HEAD_HEX =
+    "00 00 00 00 00 00 08 00 04 00 01 64 00 00 70 17 00 00 68"; // twd=100, workoutState=4 (rowing)
+
+  /** Delegates every `Transport` method to `inner` unchanged EXCEPT
+   *  `subscribe`, which additionally remembers each characteristic's own
+   *  live callback set — `deliverRaw` below is what lets this test push
+   *  the two real byte payloads above straight into the REAL driver's
+   *  decode pipeline, the same call shape a genuine BLE notification
+   *  arrives through (`characteristicId`, `Uint8Array`), without asking
+   *  `fake.ts` to model a wire-impossible reading (its own doc comments
+   *  already refuse to do that for other fields — this seam sits AT the
+   *  boundary those comments describe, not inside the fake itself). */
+  function interceptingTransport(
+    inner: Transport,
+  ): Transport & { deliverRaw(char: string, bytes: Uint8Array): void } {
+    const subs = new Map<string, Set<(bytes: Uint8Array) => void>>();
+    return {
+      ...inner,
+      subscribe(char: string, cb: (bytes: Uint8Array) => void) {
+        const off = inner.subscribe(char, cb);
+        let set = subs.get(char);
+        if (set === undefined) {
+          set = new Set();
+          subs.set(char, set);
+        }
+        set.add(cb);
+        return () => {
+          set!.delete(cb);
+          off();
+        };
+      },
+      deliverRaw(char: string, bytes: Uint8Array): void {
+        for (const cb of subs.get(char) ?? []) cb(bytes);
+      },
+    };
+  }
+
+  afterEach(() => {
+    vi.doUnmock("../adapters/monitorTransport");
+    vi.resetModules();
+    vi.restoreAllMocks();
+  });
+
+  it("closes as link-lost, tells the surface, and preserves the actuals — the F1/F2 ruling proven through the REAL driver + REAL hook composition, not just the pure function", async () => {
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
+      // One ordinary scripted rowing tick to open the run and reach
+      // `live` honestly — the fake's own protocol-correct model, exactly
+      // like every other test in this file. The REAL captured bytes
+      // (below) arrive AFTER this, as ordinary subsequent frame updates
+      // through the same decode pipeline, never as the frame that opens
+      // the run.
+      events: [status(100, { elapsedSeconds: 10, distanceMeters: 40 })],
+    });
+    const intercepting = interceptingTransport(fake);
+
+    // Same COMPOSITION-proving idiom as the REVIEWER'S PROBE test above:
+    // the REAL decorator, composed around this test's own transport, the
+    // same thing `defaultTransport` does in production — so `frameSilence`
+    // is the genuine production wiring, not a bypass.
+    const mockDefaultTransport = vi.fn((deps: LivenessDeps) =>
+      withLiveness(intercepting, deps),
+    );
+    vi.doMock("../adapters/monitorTransport", () => ({
+      defaultTransport: mockDefaultTransport,
+    }));
+    vi.resetModules();
+
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+    const { result } = renderHook(() =>
+      freshUseMonitorSession({
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: () => (): void => undefined,
+        },
+      }),
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+    await act(async () => {
+      let settled = false;
+      const pending = result.current
+        .program(TWO_INTERVALS, TWO_IDENTITY)
+        .finally(() => {
+          settled = true;
+        });
+      await flush();
+      for (let i = 0; i < 25 && !settled; i += 1) {
+        fake.tick(0);
+        await flush();
+      }
+      await pending;
+    });
+    act(() => {
+      fake.tick(100);
+    });
+    expect(result.current.phase).toBe("live");
+
+    // "before": the run's own first live frame (the fake's own scripted
+    // tick) already seeded `lastTwdRef` with an irrelevant value.
+    // Overwrite it with the capture's own real, later, still-rowing
+    // reading, delivered the SAME way any other frame is — through the
+    // driver's decode pipeline, not by poking a ref directly.
+    act(() => {
+      intercepting.deliverRaw(
+        GENERAL_STATUS_UUID,
+        fromHexString(REAL_TAIL_HEX),
+      );
+    });
+    expect(result.current.phase).toBe("live");
+
+    // The resume: app-lifecycle marks the stream suspect (Task 2's own
+    // mechanism), the identical trigger a real background/foreground gap
+    // fires.
+    act(() => {
+      Object.defineProperty(document, "visibilityState", {
+        value: "hidden",
+        configurable: true,
+      });
+      document.dispatchEvent(new Event("visibilitychange"));
+      Object.defineProperty(document, "visibilityState", {
+        value: "visible",
+        configurable: true,
+      });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    expect(result.current.frameSilence).toBe(true);
+
+    // "after": the capture's own real, EARLIER reading — a genuine
+    // backward jump on the SAME wire quantity, real bytes, artificial
+    // (replayed-out-of-order) position.
+    act(() => {
+      intercepting.deliverRaw(
+        GENERAL_STATUS_UUID,
+        fromHexString(REAL_HEAD_HEX),
+      );
+    });
+
+    expect(result.current.phase).toBe("ended");
+    // F2 (RULED at Task 4's own review): paired with the SAME surface
+    // update every other close uses.
+    expect(result.current.runOpen).toBe(false);
+    expect(result.current.endedBy).toBe("user");
+
+    // F1 (RULED at Task 4's own review): the STRONGEST-evidence close,
+    // never the absence-of-evidence value.
+    const stored = loadMonitorRun();
+    expect(stored?.completedAt).not.toBeNull();
+    expect(stored?.endedBy).toBe("link-lost");
+    // "preserve the interrupted record" — actuals banked before the
+    // reset are untouched (none banked yet in this short fixture, but the
+    // record itself — not a fresh one — is what's closed).
+    expect(stored?.workoutId).toBe(TWO_IDENTITY.workoutId);
+
+    const exported = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const resetEntry = exported.find((e) => e.kind === "continuity-reset");
+    expect(resetEntry).toBeDefined();
+    expect(resetEntry!.detail).toContain("1354");
+    expect(resetEntry!.detail).toContain("100");
+
+    Object.defineProperty(document, "visibilityState", {
+      value: "visible",
+      configurable: true,
+    });
+  }, 15000);
 });

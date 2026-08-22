@@ -137,9 +137,22 @@ describe("POST/GET /api/logs: endedBy round-trips through real Postgres, rejects
 
   it("rejects an unknown endedBy value with a field-named 400 — nothing is persisted", async () => {
     const bearer = await bearerToken();
+    const before = await request(app)
+      .get("/api/logs")
+      .set("Authorization", bearer);
+    const countBefore = before.body.length;
+
     const rejected = await post(bearer, "reconnected");
     expect(rejected.status).toBe(400);
     expect(rejected.body.field).toBe("endedBy");
+
+    // Task 4 review fix (F5, Minor): "nothing is persisted" proven by
+    // ROW COUNT, not merely inferred from the 400 status — a route that
+    // 400s AFTER a wayward insert would pass the status-only assertion.
+    const after = await request(app)
+      .get("/api/logs")
+      .set("Authorization", bearer);
+    expect(after.body.length).toBe(countBefore);
   });
 
   it("a link-lost close is distinguishable from a rower's own End in the stored row (exit criterion 5)", async () => {
