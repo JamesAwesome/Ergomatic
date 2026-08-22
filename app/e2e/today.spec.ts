@@ -1132,3 +1132,92 @@ test.describe("Today enhancements: the piece region", () => {
     await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
   });
 });
+
+/** Phase 8A: advances `plan_state.done_n` by `count` via real
+ *  plan-advancing `POST /api/logs` saves (the server default — no
+ *  `advancesPlan: false` here, unlike `neutralizeGlobalRecency` above,
+ *  which exists to NOT advance). Sequential on purpose: each save's bump
+ *  is the very state under test. */
+async function advancePlanBy(page: Page, count: number): Promise<void> {
+  const result = await page.evaluate(async (n) => {
+    for (let i = 0; i < n; i++) {
+      const res = await fetch("/api/logs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workoutId: null,
+          workoutTitle: `Checkpoint Advance ${i + 1}`,
+          workoutType: "O2",
+          held: "held",
+          pain: 1,
+          notes: null,
+          steps: [{ label: "Work" }],
+        }),
+      });
+      if (!res.ok) return { ok: false, status: res.status };
+    }
+    return { ok: true, status: 200 };
+  }, count);
+  if (!result.ok) {
+    throw new Error(`plan advance failed: ${result.status}`);
+  }
+}
+
+// Phase 8A Task 2: the plan checkpoint's whole loop against the REAL
+// seeded library and a real advanced plan — the prescribed 2k test pins
+// the card, a chip swap overrides it with the visible marker (and never
+// names the displaced workout), un-swapping restores it, and SHUFFLE
+// escapes into the day's own AN pool.
+test.describe("Today: the plan checkpoint prescription (Phase 8A)", () => {
+  test("session 7 pins First 2k; swap shows CHECKPOINT OVERRIDDEN; un-swap restores; SHUFFLE escapes", async ({
+    page,
+  }) => {
+    await signInViaBackdoor(page, {
+      email: "today-checkpoint@e2e.test",
+      name: "Today Checkpoint Tester",
+    });
+    await setBaselines(page, { k2Seconds: 100, k6Seconds: 120 });
+    await choosePlan(page, "sprint");
+    // Deterministic doneN for a reused account: zero it, then advance to
+    // exactly the sprint plan's first checkpoint (index 6 = session 7).
+    await resetPlanProgress(page);
+    await advancePlanBy(page, 6);
+
+    await page.goto("/today");
+    await expect(page.locator(".today-card")).toBeVisible();
+    await expect(page.locator(".today-plan-line")).toContainText(
+      "SESSION 7 OF 84 · AN",
+    );
+    await expect(page.locator(".today-card-title")).toHaveText("First 2k");
+    await expect(
+      page.getByText(
+        "Plan checkpoint: re-test your 2k and update your baseline.",
+      ),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "AN", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
+
+    // Swap: the prescription is overridden, visibly — and the marker does
+    // not name the displaced workout.
+    await page.getByRole("button", { name: "O2", exact: true }).click();
+    await expect(page.locator(".today-plan-line")).toContainText(
+      "AN → O2 · CHECKPOINT OVERRIDDEN",
+    );
+    await expect(page.locator(".today-card-title")).not.toHaveText("First 2k");
+    await expect(page.getByText("First 2k")).toHaveCount(0);
+
+    // Un-swap: the checkpoint returns, the marker goes.
+    await page.getByRole("button", { name: "AN", exact: true }).click();
+    await expect(page.locator(".today-plan-line")).not.toContainText(
+      "CHECKPOINT OVERRIDDEN",
+    );
+    await expect(page.locator(".today-card-title")).toHaveText("First 2k");
+
+    // SHUFFLE escapes into the day's own AN pool (the prescribed test is
+    // deliberately outside it).
+    await page.getByRole("button", { name: "SHUFFLE ↻" }).click();
+    await expect(page.locator(".today-card-title")).not.toHaveText("First 2k");
+    await expect(page.getByText(/YOUR PICK/)).toBeVisible();
+  });
+});

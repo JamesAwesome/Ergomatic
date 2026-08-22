@@ -15,6 +15,11 @@ import { estimateMinutes } from "../../domain/expand.js";
 import { suggest, suggestFreestyle } from "../../domain/suggest.js";
 import type { LibraryEntry, SuggestPrefs } from "../../domain/suggest.js";
 import {
+  planPrescription,
+  resolvePrescribed,
+} from "../../domain/prescription.js";
+import { PLANS } from "../../domain/plans.js";
+import {
   pieceList,
   peakIndex,
   workAndTotal,
@@ -192,6 +197,12 @@ function computeSuggestion(
   baselines: Baselines | null,
   todayCode: WorkoutType | null,
   pickOverride: string | null,
+  // Phase 8A: the plan day's resolved prescription, or null (no plan, no
+  // prescription authored for this index, an unresolvable ref, or a chip
+  // swap overriding it — TodayView owns all four of those decisions).
+  // Only the plan branch consumes it: freestyle has no plan day to carry
+  // a prescription at all.
+  prescribed: { entry: LibraryEntry; reason: string } | null,
 ) {
   const prefs: SuggestPrefs = {
     difficulties: filters.difficulties,
@@ -221,6 +232,7 @@ function computeSuggestion(
         library: entries,
         prefs,
         todayPickId: pickOverride ?? undefined,
+        prescribed,
       })
     : suggestFreestyle(entries, prefs, pickOverride ?? undefined);
 }
@@ -239,9 +251,20 @@ function poolCountFor(
   baselines: Baselines | null,
   todayCode: WorkoutType | null,
   pickOverride: string | null,
+  prescribed: { entry: LibraryEntry; reason: string } | null,
 ): number {
-  return computeSuggestion(draft, entries, baselines, todayCode, pickOverride)
-    .poolIds.length;
+  // `poolIds` keeps its pool meaning with a prescription pinned
+  // (suggest.ts's own contract), so the sheet's live count stays an
+  // honest count of the ESCAPE pool either way — the prescribed entry is
+  // never a pool member.
+  return computeSuggestion(
+    draft,
+    entries,
+    baselines,
+    todayCode,
+    pickOverride,
+    prescribed,
+  ).poolIds.length;
 }
 
 export default function Today() {
@@ -1054,12 +1077,50 @@ function TodayView({
   const todayCode: WorkoutType | null =
     prescribedCode !== null ? (overrides.swapType ?? prescribedCode) : null;
 
+  // Phase 8A: the plan day's own authored prescription (a checkpoint's
+  // designated test), computed CLIENT-SIDE from PLANS — it never crosses
+  // the wire (antagonist B2's wire contract; Plan.tsx's checkpoint mark
+  // does the same). Resolved against the UNFILTERED `library`, NOT
+  // `entries`: both suggestion pools deliberately exclude the onboarding
+  // titles, and the prescribed test is exactly such a title — the same
+  // unfiltered lookup BaselineCard's k6Workout/k2Workout below already
+  // use. An unresolvable ref degrades quietly to the ordinary pool
+  // suggestion (domain/prescription.ts's own contract; authored refs are
+  // guarded by prescription.test.ts's seed-resolution test instead).
+  const prescription =
+    plan.planKey !== null
+      ? planPrescription(PLANS[plan.planKey], plan.doneN)
+      : null;
+  const prescribedWorkout =
+    prescription !== null ? resolvePrescribed(prescription.ref, library) : null;
+  // James's chips ruling (2026-08-12): a chip swap OVERRIDES the
+  // prescription — the rower acting now wins — so the pin only rides into
+  // suggest() while no swap is active. The override renders a visible
+  // marker on the plan line below; because a swap escapes, the chips are
+  // the exit on a day where SHUFFLE is disabled (the empty-or-single-pool
+  // case the prescription bypass exists to serve).
+  const prescribed =
+    prescription !== null &&
+    prescribedWorkout !== null &&
+    overrides.swapType === null
+      ? {
+          entry: toLibraryEntry(prescribedWorkout, baselines),
+          reason: prescription.reason,
+        }
+      : null;
+  // Keyed on the RESOLVED workout, not the authored ref: if the ref never
+  // resolved, the rower never saw a checkpoint card, so a swap displaces
+  // nothing and the marker would assert an override that never happened.
+  const prescriptionOverridden =
+    prescribedWorkout !== null && overrides.swapType !== null;
+
   const suggestion = computeSuggestion(
     overrides,
     entries,
     baselines,
     todayCode,
     pickOverride,
+    prescribed,
   );
 
   // TodayFilterSheet's own live count — the SAME call above, run against
@@ -1070,6 +1131,7 @@ function TodayView({
     baselines,
     todayCode,
     pickOverride,
+    prescribed,
   );
 
   const filterTokens = todayFilterTokens(
@@ -1079,8 +1141,10 @@ function TodayView({
   );
 
   // The `?? null` is defensive, not reachable from this call site: `entries`
-  // (fed to `suggest`/`suggestFreestyle`) is `library.map(toLibraryEntry)`,
-  // a 1:1 id-preserving mapping, so any `recommendationId` those functions
+  // (fed to `suggest`/`suggestFreestyle`) is an id-preserving mapping of
+  // `library` rows, and the prescribed entry (Phase 8A, the one
+  // recommendation that can come from OUTSIDE `entries`) is resolved from
+  // the same `library` above — so any `recommendationId` those functions
   // return is provably one of `library`'s own ids. Kept rather than
   // asserted away in case that invariant ever changes.
   const recommended = suggestion.recommendationId
@@ -1158,6 +1222,14 @@ function TodayView({
               SESSION {plan.doneN + 1} OF {plan.sequence.length} ·{" "}
               {prescribedCode}
               {overrides.swapType !== null && ` → ${overrides.swapType}`}
+              {/* Phase 8A, stated design (DEVIATIONS row): the override
+                  marker rides the plan line's existing swap arrow — the
+                  arrow already records the swap, and the marker qualifies
+                  exactly that act. Same mono-status style as the rest of
+                  the line (no new colour, no new class). It says
+                  overridden and never names the displaced workout
+                  (James's ruling, 2026-08-12). */}
+              {prescriptionOverridden && " · CHECKPOINT OVERRIDDEN"}
             </p>
             {/* Type-swap chips: only meaningful with a plan active (there is
                 no "prescribed type" to swap away from in freestyle). Active

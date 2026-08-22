@@ -155,6 +155,24 @@ const PLAN_CHECKPOINT: PlanData = {
   sequence: buildSequence(6, "AN"),
 };
 
+// The head plan's own first checkpoint (Task 2): an AT day prescribing the
+// 6k test. Until PR B reclassifies the seed's First 6k (O2 -> AT), the
+// prescribed entry's own type does NOT match the day code — the pin must
+// hold anyway (a prescription bypasses every filter, the type match
+// included).
+const PLAN_HEAD_CHECKPOINT: PlanData = {
+  planKey: "head",
+  doneN: 6,
+  sequence: buildSequence(6, "AT"),
+};
+
+// Two REAL seeded AN workouts (an.ts) — the checkpoint-day pool the
+// prescribed 2k test deliberately sits outside of, so SHUFFLE has a real
+// same-type pool to escape into. Dust Whirl is the least recently done of
+// the two, so it is the deterministic first SHUFFLE landing.
+const SCUD_CLOUD = libraryEntry("Scud Cloud", "w-scudcloud", 5);
+const DUST_WHIRL = libraryEntry("Dust Whirl", "w-dustwhirl", 9);
+
 const FREESTYLE_PLAN: PlanData = { planKey: null, doneN: 0, sequence: [] };
 
 // Fixed, absolute timestamps (noon UTC — comfortably clear of any local
@@ -1520,6 +1538,122 @@ describe("Today (type-swap chips)", () => {
     // crashing or keeping the stale AT id.
     expect(screen.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
     expect(screen.queryByText(/YOUR PICK/)).not.toBeInTheDocument();
+  });
+});
+
+// Phase 8A Task 2: Today resolves the plan day's prescription against the
+// UNFILTERED library (the prescribed test is deliberately excluded from
+// `entries`' suggestion pool by the onboarding-title filter) and pins it
+// via suggest()'s prescribed branch. James's chips ruling (2026-08-12): a
+// chip swap OVERRIDES the prescription — the rower acting now wins — with
+// a visible marker that says overridden and never names the displaced
+// workout. Every fixture here is a real GLOBAL_LIBRARY_SEED member
+// (LIBRARY_WORKOUTS / ONBOARDING_LIBRARY_WORKOUTS), per recurring-failure
+// #3.
+describe("Today (plan checkpoint prescription)", () => {
+  it("pins the plan's own test from the UNFILTERED library, with its authored reason", async () => {
+    mockReady({
+      plan: PLAN_CHECKPOINT,
+      workouts: [ZEPHYR, SCUD_CLOUD, DUST_WHIRL, FIRST_2K, FIRST_6K],
+    });
+    await renderToday();
+    // First 2k is excluded from the suggestion pool (`entries`) by the
+    // onboarding-title filter — reaching the card at all proves the
+    // resolution ran against the unfiltered library.
+    expect(screen.getByRole("heading", { name: "First 2k" })).toBeVisible();
+    expect(
+      screen.getByText(
+        "Plan checkpoint: re-test your 2k and update your baseline.",
+      ),
+    ).toBeVisible();
+    expect(screen.getByText("SUGGESTED")).toBeVisible();
+    expect(cardLinkTo("w-first2k")).toBeDefined();
+  });
+
+  it("the head plan's checkpoint prescribes the 6k test, even while its seed type (O2) mismatches the AT day code", async () => {
+    mockReady({
+      plan: PLAN_HEAD_CHECKPOINT,
+      workouts: [ZEPHYR, ISOBAR, WARM_FRONT, FIRST_2K, FIRST_6K],
+    });
+    await renderToday();
+    expect(screen.getByRole("heading", { name: "First 6k" })).toBeVisible();
+    expect(
+      screen.getByText(
+        "Plan checkpoint: re-test your 6k and update your baseline.",
+      ),
+    ).toBeVisible();
+  });
+
+  it("an account with none of the day's own type still gets its checkpoint — SHUFFLE is disabled and the chips are the exit", async () => {
+    // The empty-pool case the prescription bypass exists to serve: no AN
+    // workout anywhere in the library, so the pool is empty and SHUFFLE
+    // (canShuffle = poolIds.length > 1) is dead. The chips must still
+    // provide the way out.
+    mockReady({
+      plan: PLAN_CHECKPOINT,
+      workouts: [ZEPHYR, FIRST_2K, FIRST_6K],
+    });
+    await renderToday();
+    expect(screen.getByRole("heading", { name: "First 2k" })).toBeVisible();
+    expect(screen.getByRole("button", { name: /shuffle/i })).toBeDisabled();
+
+    await userEvent.click(screen.getByRole("button", { name: "O2" }));
+
+    expect(screen.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
+    expect(
+      screen.getByText("SESSION 7 OF 84 · AN → O2 · CHECKPOINT OVERRIDDEN"),
+    ).toBeVisible();
+  });
+
+  it("a chip swap overrides the prescription with the visible marker; un-swapping restores the checkpoint", async () => {
+    mockReady({
+      plan: PLAN_CHECKPOINT,
+      workouts: [ZEPHYR, SCUD_CLOUD, DUST_WHIRL, FIRST_2K, FIRST_6K],
+    });
+    await renderToday();
+    expect(screen.getByRole("heading", { name: "First 2k" })).toBeVisible();
+    expect(screen.queryByText(/CHECKPOINT OVERRIDDEN/)).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "O2" }));
+
+    expect(
+      screen.getByText("SESSION 7 OF 84 · AN → O2 · CHECKPOINT OVERRIDDEN"),
+    ).toBeVisible();
+    // The marker says overridden; it does NOT name the displaced workout
+    // (James's ruling, 2026-08-12).
+    expect(screen.queryByText(/First 2k/)).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
+
+    await userEvent.click(screen.getByRole("button", { name: "AN" }));
+
+    expect(screen.queryByText(/CHECKPOINT OVERRIDDEN/)).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "First 2k" })).toBeVisible();
+  });
+
+  it("an ordinary swapped day shows the arrow but never the marker", async () => {
+    mockReady(); // PLAN_AT: sprint index 11, no prescription authored there
+    await renderToday();
+    await userEvent.click(screen.getByRole("button", { name: "O2" }));
+
+    expect(screen.getByText("SESSION 12 OF 84 · AT → O2")).toBeVisible();
+    expect(screen.queryByText(/CHECKPOINT OVERRIDDEN/)).not.toBeInTheDocument();
+  });
+
+  it("SHUFFLE escapes the checkpoint into the day's own type pool", async () => {
+    mockReady({
+      plan: PLAN_CHECKPOINT,
+      workouts: [ZEPHYR, SCUD_CLOUD, DUST_WHIRL, FIRST_2K, FIRST_6K],
+    });
+    await renderToday();
+    expect(screen.getByRole("heading", { name: "First 2k" })).toBeVisible();
+
+    await userEvent.click(screen.getByRole("button", { name: /shuffle/i }));
+
+    // The prescribed entry sits OUTSIDE poolIds, so the escape lands on
+    // the pool's own least-recently-done member (Dust Whirl, 9 days > 5),
+    // and the live pick beats the prescription (suggest.ts's own rule).
+    expect(screen.getByRole("heading", { name: "Dust Whirl" })).toBeVisible();
+    expect(screen.getByText(/YOUR PICK/)).toBeVisible();
   });
 });
 
