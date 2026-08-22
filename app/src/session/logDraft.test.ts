@@ -784,15 +784,15 @@ describe("buildLogSteps", () => {
 
 describe("buildLogSeed: the monitor run's frozen log identity (7C spec §2)", () => {
   it("accepts NULL baselines for an effort-only workout (6I rebase seam): seed carries the step, paces stay empty", () => {
-    // The real First 6k seed shape — ONE effort distance step, no lead-in
+    // The real 6K Test seed shape — ONE effort distance step, no lead-in
     // (2026-08-09's warmup setting took the `wu` step out of both
     // onboarding rows) — built through the real assembly, run with the
     // null baselines the loosened Connect guard now legitimately passes
     // downstream.
     const draft = buildDraft({
       id: "id-first6k-seed",
-      title: "First 6k",
-      type: "O2",
+      title: "6K Test",
+      type: "AT",
       steps: [
         {
           k: "w",

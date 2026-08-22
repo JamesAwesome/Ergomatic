@@ -314,7 +314,7 @@ describe("the band: up-next + EST LEFT (design spec §2A/§2C/§3)", () => {
 // THE UNPRICED-PHASE GUARD (EST LEFT design spec §4/§7 item 7, plan Step
 // 5): reuses `session/Timer.tsx`'s own `hasRemainingEstimate` — see
 // `SurfaceModel.hasRemainingEstimate`'s own doc comment for the exact
-// reasoning. A REAL, reachable connected shape: "First 2k" (the onboarding
+// reasoning. A REAL, reachable connected shape: "2K Test" (the onboarding
 // K2 test, 2000 m at MAX with no `spm`) run with NULL baselines — the same
 // `baselines: null` case `domain/expand.ts`'s own doc comment names for a
 // distance phase at an effort ref (`phases()`'s "case w" effort arm,
@@ -331,7 +331,7 @@ describe("the unpriced-phase guard (design spec §4/§7 item 7)", () => {
     const w = ONBOARDING_LIBRARY_WORKOUTS.find(
       (x) => x.title === ONBOARDING_TITLES.k2,
     );
-    if (!w) throw new Error("missing onboarding fixture: First 2k");
+    if (!w) throw new Error("missing onboarding fixture: 2K Test");
     const draft = buildDraft({
       id: "first-2k",
       title: w.title,

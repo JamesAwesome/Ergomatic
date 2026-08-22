@@ -7,6 +7,17 @@ import {
 
 type OnboardingDistance = "k6" | "k2";
 
+// James's ruling (2026-08-22, Phase 8A PR B): the card renders its OWN
+// friendlier heading instead of the raw instrument title — a brand-new
+// rower sees "Your first 6k", not "6K Test". The workout underneath IS
+// the designated global test row (the caller's lookup still keys on
+// ONBOARDING_TITLES), so Start runs exactly that workout; only the
+// card's h2 differs.
+const CARD_HEADING: Record<OnboardingDistance, string> = {
+  k6: "Your first 6k",
+  k2: "Your first 2k",
+};
+
 const CHIP_TEXT: Record<OnboardingDistance, string> = {
   k6: "6K BASELINE · NOT SET · ROW IT HOW IT FEELS",
   k2: "2K BASELINE · NOT SET · ROW IT HOW IT FEELS",
@@ -64,7 +75,7 @@ function BaselineCardBody({
         SUGGESTED · SETS YOUR BASELINE
       </span>
       <div className="baselinecard-top">
-        <h2 className="baselinecard-title">{workout.title}</h2>
+        <h2 className="baselinecard-title">{CARD_HEADING[distance]}</h2>
         <span className="baselinecard-duration">
           {ONBOARDING_DURATION_COPY[distance]}
         </span>

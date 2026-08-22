@@ -178,12 +178,12 @@ const WARMUP_METERS = libraryFixture("Filling Low", {
  *  work step" rule (see `onboarding.ts`'s header comment) means no fixture
  *  in `LIBRARY_WORKOUTS` itself can ever reach this branch; the two
  *  designated onboarding workouts are the sole documented exception, kept
- *  OUT of `LIBRARY_WORKOUTS` for exactly that reason. "First 2k" (AN, 2000m
+ *  OUT of `LIBRARY_WORKOUTS` for exactly that reason. "2K Test" (AN, 2000m
  *  at MAX, no spm) is the "work+meters+effort target" table row. */
 const ONBOARD_K2 = ONBOARDING_LIBRARY_WORKOUTS.find(
   (w) => w.title === ONBOARDING_TITLES.k2,
 );
-if (!ONBOARD_K2) throw new Error("missing onboarding fixture: First 2k");
+if (!ONBOARD_K2) throw new Error("missing onboarding fixture: 2K Test");
 const EFFORT_METERS_NO_SPM = phasesFrom(ONBOARD_K2, null);
 
 /** A bare "test" step (open-ended all-out — `k2Test`/`k6Test`'s own shape,
@@ -776,7 +776,7 @@ describe('connectedNextText: exhaustive over Phase["type"] (Item B composition t
   });
 
   it("work, distance, effort target, no spm -> WORK {meters}m · {label word}, no rate", () => {
-    // "First 2k" (onboarding): 2000m at MAX effort, no spm at all — the one
+    // "2K Test" (onboarding): 2000m at MAX effort, no spm at all — the one
     // real production shape with an effort target AND no spm (see
     // `EFFORT_METERS_NO_SPM`'s own comment). `effortWord("max")` is
     // `"ALL OUT"`.

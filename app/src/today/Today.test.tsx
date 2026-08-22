@@ -9,6 +9,7 @@ import {
   useParams,
 } from "react-router-dom";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
+import { ONBOARDING_TITLES } from "../../domain/onboarding.js";
 import { ONBOARDING_LIBRARY_WORKOUTS } from "../../server/seed/library/onboarding";
 import type { LibraryWorkout } from "../api/useWorkouts";
 import type { PlanData, PlanSequenceItem } from "../api/usePlan";
@@ -74,17 +75,17 @@ function onboardingLibraryEntry(title: string, id: string): LibraryWorkout {
   };
 }
 
-const FIRST_6K = onboardingLibraryEntry("First 6k", "w-first6k");
-const FIRST_2K = onboardingLibraryEntry("First 2k", "w-first2k");
+const TEST_6K = onboardingLibraryEntry(ONBOARDING_TITLES.k6, "w-test6k");
+const TEST_2K = onboardingLibraryEntry(ONBOARDING_TITLES.k2, "w-test2k");
 
 // Final-review fix: a CUSTOM (isGlobal: false) workout that happens to
 // collide with a designated onboarding title. The exclusion must key off
-// isGlobal too, not title alone — otherwise a rower's own "First 6k" build
+// isGlobal too, not title alone — otherwise a rower's own "6K Test" build
 // becomes an orphan (invisible everywhere, no UI path back). Built the way
 // the builder would (spread a real seed shape, same convention
 // PERSONAL_GRADIENT above already follows), not a hand-built minimum.
-const CUSTOM_FIRST_6K: LibraryWorkout = {
-  ...onboardingLibraryEntry("First 6k", "w-customfirst6k"),
+const CUSTOM_TEST_6K: LibraryWorkout = {
+  ...onboardingLibraryEntry(ONBOARDING_TITLES.k6, "w-customtest6k"),
   isGlobal: false,
 };
 
@@ -155,11 +156,12 @@ const PLAN_CHECKPOINT: PlanData = {
   sequence: buildSequence(6, "AN"),
 };
 
-// The head plan's own first checkpoint (Task 2): an AT day prescribing the
-// 6k test. Until PR B reclassifies the seed's First 6k (O2 -> AT), the
-// prescribed entry's own type does NOT match the day code — the pin must
-// hold anyway (a prescription bypasses every filter, the type match
-// included).
+// The head plan's own first checkpoint (Task 2): an AT day prescribing
+// the 6K Test. PR B reclassified the seed row to AT, so the prescribed
+// entry's own type now MATCHES the day code — the coherence pin below
+// asserts it (the bypass-every-filter property itself is pinned at the
+// domain level in suggest.test.ts, against a deliberately mismatched
+// entry).
 const PLAN_HEAD_CHECKPOINT: PlanData = {
   planKey: "head",
   doneN: 6,
@@ -393,10 +395,12 @@ describe("Today (plan mode)", () => {
   it("shows the no-baseline card, not the old suggestion card, when baselines are unset", async () => {
     mockReady({
       baselines: NO_BASELINES,
-      workouts: [ZEPHYR, ISOBAR, WARM_FRONT, TAILWIND, FIRST_6K, FIRST_2K],
+      workouts: [ZEPHYR, ISOBAR, WARM_FRONT, TAILWIND, TEST_6K, TEST_2K],
     });
     await renderToday();
-    expect(screen.getByRole("heading", { name: "First 6k" })).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Your first 6k" }),
+    ).toBeVisible();
     expect(
       screen.queryByRole("heading", { name: "Stationary Front" }),
     ).not.toBeInTheDocument();
@@ -1554,34 +1558,42 @@ describe("Today (plan checkpoint prescription)", () => {
   it("pins the plan's own test from the UNFILTERED library, with its authored reason", async () => {
     mockReady({
       plan: PLAN_CHECKPOINT,
-      workouts: [ZEPHYR, SCUD_CLOUD, DUST_WHIRL, FIRST_2K, FIRST_6K],
+      workouts: [ZEPHYR, SCUD_CLOUD, DUST_WHIRL, TEST_2K, TEST_6K],
     });
     await renderToday();
-    // First 2k is excluded from the suggestion pool (`entries`) by the
+    // The 2K Test is excluded from the suggestion pool (`entries`) by the
     // onboarding-title filter — reaching the card at all proves the
     // resolution ran against the unfiltered library.
-    expect(screen.getByRole("heading", { name: "First 2k" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "2K Test" })).toBeVisible();
     expect(
       screen.getByText(
         "Plan checkpoint: re-test your 2k and update your baseline.",
       ),
     ).toBeVisible();
     expect(screen.getByText("SUGGESTED")).toBeVisible();
-    expect(cardLinkTo("w-first2k")).toBeDefined();
+    expect(cardLinkTo("w-test2k")).toBeDefined();
   });
 
-  it("the head plan's checkpoint prescribes the 6k test, even while its seed type (O2) mismatches the AT day code", async () => {
+  it("the head plan's checkpoint prescribes the 6K Test, and its seed type (AT) now matches the AT day code — chip and card badge agree", async () => {
     mockReady({
       plan: PLAN_HEAD_CHECKPOINT,
-      workouts: [ZEPHYR, ISOBAR, WARM_FRONT, FIRST_2K, FIRST_6K],
+      workouts: [ZEPHYR, ISOBAR, WARM_FRONT, TEST_2K, TEST_6K],
     });
     await renderToday();
-    expect(screen.getByRole("heading", { name: "First 6k" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "6K Test" })).toBeVisible();
     expect(
       screen.getByText(
         "Plan checkpoint: re-test your 6k and update your baseline.",
       ),
     ).toBeVisible();
+    // PR B's reclassification (6K: O2 -> AT) dissolved PR A's pinned
+    // mismatch: the lit chip (the AT day code) and the card's own type
+    // badge now tell the same story, with no override marker in sight.
+    expect(screen.getByRole("button", { name: "AT" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.queryByText(/CHECKPOINT OVERRIDDEN/)).not.toBeInTheDocument();
   });
 
   it("an account with none of the day's own type still gets its checkpoint — SHUFFLE is disabled and the chips are the exit", async () => {
@@ -1591,10 +1603,10 @@ describe("Today (plan checkpoint prescription)", () => {
     // provide the way out.
     mockReady({
       plan: PLAN_CHECKPOINT,
-      workouts: [ZEPHYR, FIRST_2K, FIRST_6K],
+      workouts: [ZEPHYR, TEST_2K, TEST_6K],
     });
     await renderToday();
-    expect(screen.getByRole("heading", { name: "First 2k" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "2K Test" })).toBeVisible();
     expect(screen.getByRole("button", { name: /shuffle/i })).toBeDisabled();
 
     await userEvent.click(screen.getByRole("button", { name: "O2" }));
@@ -1608,10 +1620,10 @@ describe("Today (plan checkpoint prescription)", () => {
   it("a chip swap overrides the prescription with the visible marker; un-swapping restores the checkpoint", async () => {
     mockReady({
       plan: PLAN_CHECKPOINT,
-      workouts: [ZEPHYR, SCUD_CLOUD, DUST_WHIRL, FIRST_2K, FIRST_6K],
+      workouts: [ZEPHYR, SCUD_CLOUD, DUST_WHIRL, TEST_2K, TEST_6K],
     });
     await renderToday();
-    expect(screen.getByRole("heading", { name: "First 2k" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "2K Test" })).toBeVisible();
     expect(screen.queryByText(/CHECKPOINT OVERRIDDEN/)).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "O2" }));
@@ -1621,13 +1633,13 @@ describe("Today (plan checkpoint prescription)", () => {
     ).toBeVisible();
     // The marker says overridden; it does NOT name the displaced workout
     // (James's ruling, 2026-08-12).
-    expect(screen.queryByText(/First 2k/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/2K Test/)).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
 
     await userEvent.click(screen.getByRole("button", { name: "AN" }));
 
     expect(screen.queryByText(/CHECKPOINT OVERRIDDEN/)).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "First 2k" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "2K Test" })).toBeVisible();
   });
 
   it("an ordinary swapped day shows the arrow but never the marker", async () => {
@@ -1642,10 +1654,10 @@ describe("Today (plan checkpoint prescription)", () => {
   it("SHUFFLE escapes the checkpoint into the day's own type pool", async () => {
     mockReady({
       plan: PLAN_CHECKPOINT,
-      workouts: [ZEPHYR, SCUD_CLOUD, DUST_WHIRL, FIRST_2K, FIRST_6K],
+      workouts: [ZEPHYR, SCUD_CLOUD, DUST_WHIRL, TEST_2K, TEST_6K],
     });
     await renderToday();
-    expect(screen.getByRole("heading", { name: "First 2k" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "2K Test" })).toBeVisible();
 
     await userEvent.click(screen.getByRole("button", { name: /shuffle/i }));
 
@@ -2721,14 +2733,18 @@ describe("Today (Phase 6I: START HERE + the no-baseline card)", () => {
   it("both baselines missing: shows the no-baseline card (6k default) and hides the ENTIRE plan/suggestion apparatus", async () => {
     mockReady({
       baselines: NO_BASELINES,
-      workouts: [ZEPHYR, ISOBAR, WARM_FRONT, TAILWIND, FIRST_6K, FIRST_2K],
+      workouts: [ZEPHYR, ISOBAR, WARM_FRONT, TAILWIND, TEST_6K, TEST_2K],
     });
     await renderToday();
 
     expect(
       await screen.findByText("SUGGESTED · SETS YOUR BASELINE"),
     ).toBeVisible();
-    expect(screen.getByRole("heading", { name: "First 6k" })).toBeVisible();
+    // James's ruling (2026-08-22): the card's heading is its own copy
+    // ("Your first 6k"), not the instrument title.
+    expect(
+      screen.getByRole("heading", { name: "Your first 6k" }),
+    ).toBeVisible();
     expect(screen.getByText("ABOUT 25 MIN")).toBeVisible();
     expect(
       screen.getByText("6K BASELINE · NOT SET · ROW IT HOW IT FEELS"),
@@ -2760,7 +2776,7 @@ describe("Today (Phase 6I: START HERE + the no-baseline card)", () => {
     mockReady({
       plan: FREESTYLE_PLAN,
       baselines: NO_BASELINES,
-      workouts: [ZEPHYR, ISOBAR, WARM_FRONT, TAILWIND, FIRST_6K, FIRST_2K],
+      workouts: [ZEPHYR, ISOBAR, WARM_FRONT, TAILWIND, TEST_6K, TEST_2K],
     });
     await renderToday();
 
@@ -2788,12 +2804,12 @@ describe("Today (Phase 6I: START HERE + the no-baseline card)", () => {
   it("only the 2k missing: the card offers SETS YOUR 2K BASELINE only, no toggle", async () => {
     mockReady({
       baselines: ONLY_K6_BASELINE,
-      workouts: [ZEPHYR, ISOBAR, WARM_FRONT, TAILWIND, FIRST_6K, FIRST_2K],
+      workouts: [ZEPHYR, ISOBAR, WARM_FRONT, TAILWIND, TEST_6K, TEST_2K],
     });
     await renderToday();
 
     expect(
-      await screen.findByRole("heading", { name: "First 2k" }),
+      await screen.findByRole("heading", { name: "Your first 2k" }),
     ).toBeVisible();
     expect(screen.getByText("ABOUT 8 MIN")).toBeVisible();
     expect(
@@ -2803,7 +2819,7 @@ describe("Today (Phase 6I: START HERE + the no-baseline card)", () => {
 
   it("both baselines set: normal Today returns — plan apparatus back, no baseline card", async () => {
     mockReady({
-      workouts: [ZEPHYR, ISOBAR, WARM_FRONT, TAILWIND, FIRST_6K, FIRST_2K],
+      workouts: [ZEPHYR, ISOBAR, WARM_FRONT, TAILWIND, TEST_6K, TEST_2K],
     });
     await renderToday();
 
@@ -2816,13 +2832,13 @@ describe("Today (Phase 6I: START HERE + the no-baseline card)", () => {
 
   it("a veteran with real baselines is never SUGGESTED a designated onboarding workout, even shuffled through the whole pool", async () => {
     // Every non-onboarding fixture is O2/easy so the freestyle pool (no
-    // plan) is exactly {ZEPHYR, FIRST_6K, FIRST_2K} before exclusion —
+    // plan) is exactly {ZEPHYR, TEST_6K, TEST_2K} before exclusion —
     // small enough to shuffle through completely and assert the designated
     // titles never come up, real seed types (O2/AN) included on purpose so
     // this can't pass by accident of type mismatch alone.
     mockReady({
       plan: FREESTYLE_PLAN,
-      workouts: [ZEPHYR, { ...FIRST_6K, type: "O2" }, FIRST_2K],
+      workouts: [ZEPHYR, { ...TEST_6K, type: "O2" }, TEST_2K],
     });
     await renderToday();
 
@@ -2834,21 +2850,21 @@ describe("Today (Phase 6I: START HERE + the no-baseline card)", () => {
     await fireEvent.click(shuffle);
     expect(screen.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
     expect(
-      screen.queryByRole("heading", { name: "First 6k" }),
+      screen.queryByRole("heading", { name: "6K Test" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("heading", { name: "First 2k" }),
+      screen.queryByRole("heading", { name: "2K Test" }),
     ).not.toBeInTheDocument();
   });
 
   // Final-review fix: the exclusion must key off isGlobal, not title alone
-  // — a rower's own custom "First 6k" is a real, ownable workout, not a
+  // — a rower's own custom "6K Test" is a real, ownable workout, not a
   // stray collision with the seeded pair.
-  it('a CUSTOM workout named "First 6k" (title collision, isGlobal:false) stays suggestable — only the GLOBAL row is excluded', async () => {
-    // Global FIRST_6K forced to O2 (matching ZEPHYR/CUSTOM_FIRST_6K's type)
+  it('a CUSTOM workout named "6K Test" (title collision, isGlobal:false) stays suggestable — only the GLOBAL row is excluded', async () => {
+    // Global TEST_6K forced to O2 (matching ZEPHYR/CUSTOM_TEST_6K's type)
     // so all three would share a pool before exclusion — the custom one's
     // survival can't be an accident of type mismatch, same discipline the
-    // sibling test above uses. CUSTOM_FIRST_6K keeps its never-done
+    // sibling test above uses. CUSTOM_TEST_6K keeps its never-done
     // (lastDoneDaysAgo: null) fixture value, ranking it ahead of ZEPHYR (30
     // days ago) as the INITIAL recommendation, not merely pool membership —
     // proving the exclusion didn't also swallow it.
@@ -2856,19 +2872,19 @@ describe("Today (Phase 6I: START HERE + the no-baseline card)", () => {
       plan: FREESTYLE_PLAN,
       workouts: [
         ZEPHYR,
-        { ...FIRST_6K, type: "O2" },
-        { ...CUSTOM_FIRST_6K, type: "O2" },
+        { ...TEST_6K, type: "O2" },
+        { ...CUSTOM_TEST_6K, type: "O2" },
       ],
     });
     await renderToday();
 
     expect(
-      await screen.findByRole("heading", { name: "First 6k" }),
+      await screen.findByRole("heading", { name: "6K Test" }),
     ).toBeVisible();
 
     const shuffle = screen.getByRole("button", { name: "SHUFFLE ↻" });
-    // Two real pool members (Zephyr + the custom "First 6k"), not one — the
-    // global "First 6k" is excluded, the custom one isn't.
+    // Two real pool members (Zephyr + the custom "6K Test"), not one — the
+    // global "6K Test" is excluded, the custom one isn't.
     expect(shuffle).not.toBeDisabled();
     await fireEvent.click(shuffle);
     expect(screen.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
@@ -2880,32 +2896,32 @@ describe("Today (Phase 6I: START HERE + the no-baseline card)", () => {
   // the card's Start button builds a session draft keyed off that
   // specific workout's id, so a wrong pick would run the rower's own
   // custom workout under the "SETS YOUR BASELINE" banner.
-  it('the no-baseline card targets the GLOBAL "First 6k" even when a custom one with the same title sorts first', async () => {
+  it('the no-baseline card targets the GLOBAL "6K Test" even when a custom one with the same title sorts first', async () => {
     mockReady({
       baselines: NO_BASELINES,
       // The custom collision listed BEFORE the global row — proves the
       // card doesn't just take the FIRST title match.
       workouts: [
-        CUSTOM_FIRST_6K,
+        CUSTOM_TEST_6K,
         ZEPHYR,
         ISOBAR,
         WARM_FRONT,
         TAILWIND,
-        FIRST_6K,
-        FIRST_2K,
+        TEST_6K,
+        TEST_2K,
       ],
     });
     await renderToday();
 
     expect(
-      await screen.findByRole("heading", { name: "First 6k" }),
+      await screen.findByRole("heading", { name: "Your first 6k" }),
     ).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: "Start" }));
 
     const draft = JSON.parse(localStorage.getItem(DRAFT_KEY)!) as {
       workoutId: string;
     };
-    expect(draft.workoutId).toBe(FIRST_6K.id);
+    expect(draft.workoutId).toBe(TEST_6K.id);
   });
 });
 

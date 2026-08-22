@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import type { LibraryWorkout } from "../api/useWorkouts";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import { ONBOARDING_LIBRARY_WORKOUTS } from "../../server/seed/library/onboarding";
+import { ONBOARDING_TITLES } from "../../domain/onboarding.js";
 import type { Step, WorkoutType } from "../../domain/types.js";
 import { TYPE_WORDS } from "../components/typeWords";
 
@@ -105,8 +106,8 @@ function realLibraryEntry(title: string, id: string): LibraryWorkout {
   };
 }
 
-const FIRST_6K = onboardingLibraryEntry("First 6k", "w-first6k");
-const FIRST_2K = onboardingLibraryEntry("First 2k", "w-first2k");
+const TEST_6K = onboardingLibraryEntry(ONBOARDING_TITLES.k6, "w-test6k");
+const TEST_2K = onboardingLibraryEntry(ONBOARDING_TITLES.k2, "w-test2k");
 const SEA_FRET = realLibraryEntry("Sea Fret", "w-seafret");
 
 // Controller addendum, carried-forward subject E: the 3-workout WORKOUTS
@@ -143,12 +144,12 @@ const MULTI_TYPE_WORKOUTS: LibraryWorkout[] = [
 
 // Final-review fix: a CUSTOM (isGlobal: false) workout that happens to
 // collide with a designated onboarding title. The exclusion must key off
-// isGlobal too, not title alone — otherwise a rower's own "First 6k" build
+// isGlobal too, not title alone — otherwise a rower's own "6K Test" build
 // becomes an orphan (invisible everywhere, no UI path back). Built the way
 // the builder would (spread a real seed shape), same convention
 // CUSTOM_WORKOUT above already follows for a from-scratch personal row.
-const CUSTOM_FIRST_6K: LibraryWorkout = {
-  ...onboardingLibraryEntry("First 6k", "w-customfirst6k"),
+const CUSTOM_TEST_6K: LibraryWorkout = {
+  ...onboardingLibraryEntry(ONBOARDING_TITLES.k6, "w-customtest6k"),
   isGlobal: false,
 };
 
@@ -1459,43 +1460,49 @@ describe("Library", () => {
     });
   });
 
-  describe("designated onboarding workouts are invisible outside onboarding (controller addendum)", () => {
-    it("never renders First 6k/First 2k in the list, and excludes them from the count", async () => {
-      mockReady([SEA_FRET, FIRST_6K, FIRST_2K]);
+  describe("the two tests are VISIBLE in the list (James's ruling, 2026-08-22 — Phase 8A PR B)", () => {
+    // The Phase 6I Library-list exclusion is GONE: a rower can voluntarily
+    // re-test, so the 6K Test and 2K Test render as ordinary rows. Only
+    // the SUGGESTION-POOL exclusions survive (Today.tsx + /api/today) —
+    // SHUFFLE's escape depends on them.
+    it("renders the 6K Test and 2K Test in the list and counts them", async () => {
+      mockReady([SEA_FRET, TEST_6K, TEST_2K]);
       await renderLibrary();
 
-      expect(screen.getByText("1 WORKOUTS")).toBeInTheDocument();
+      expect(screen.getByText("3 WORKOUTS")).toBeInTheDocument();
       expect(screen.getByText("Sea Fret")).toBeInTheDocument();
-      expect(screen.queryByText("First 6k")).not.toBeInTheDocument();
-      expect(screen.queryByText("First 2k")).not.toBeInTheDocument();
-      expect(visibleHrefs()).toStrictEqual(["/library/w-seafret"]);
+      expect(screen.getByText("6K Test")).toBeInTheDocument();
+      expect(screen.getByText("2K Test")).toBeInTheDocument();
+      expect(visibleHrefs()).toStrictEqual([
+        "/library/w-seafret",
+        "/library/w-test6k",
+        "/library/w-test2k",
+      ]);
     });
 
-    it("excludes them from the FILTER sheet's own result count too", async () => {
-      mockReady([SEA_FRET, FIRST_6K, FIRST_2K]);
+    it("counts them in the FILTER sheet's own result count too", async () => {
+      mockReady([SEA_FRET, TEST_6K, TEST_2K]);
       await renderLibrary();
       await openSheet();
 
-      // Sea Fret is O2/easy — the sheet's default draft (everything
-      // selected) should count exactly the one non-onboarding row, not all
-      // three real global rows.
-      expect(screen.getByText("1 WORKOUT")).toBeVisible();
+      // All three rows count under the sheet's default draft (everything
+      // selected) — the old exclusion counted only Sea Fret here. Two
+      // matches by construction: the header count and the sheet's own
+      // live count agree at 3.
+      expect(screen.getAllByText("3 WORKOUTS")).toHaveLength(2);
     });
 
-    // Final-review fix: the exclusion must key off isGlobal, not title
-    // alone — a rower's own custom "First 6k" is a real, ownable workout,
-    // not a stray collision with the seeded pair.
-    it('a CUSTOM workout named "First 6k" (title collision, isGlobal:false) stays visible — only the GLOBAL row is excluded', async () => {
-      mockReady([SEA_FRET, FIRST_6K, FIRST_2K, CUSTOM_FIRST_6K]);
+    it("a CUSTOM workout colliding with a test title renders alongside the global row — no special-casing left", async () => {
+      mockReady([SEA_FRET, TEST_6K, TEST_2K, CUSTOM_TEST_6K]);
       await renderLibrary();
 
-      expect(screen.getByText("2 WORKOUTS")).toBeInTheDocument();
-      expect(screen.getByText("Sea Fret")).toBeInTheDocument();
-      expect(screen.queryByText("First 6k")).toBeInTheDocument();
-      expect(screen.queryByText("First 2k")).not.toBeInTheDocument();
+      expect(screen.getByText("4 WORKOUTS")).toBeInTheDocument();
+      expect(screen.getAllByText("6K Test")).toHaveLength(2);
       expect(visibleHrefs()).toStrictEqual([
         "/library/w-seafret",
-        "/library/w-customfirst6k",
+        "/library/w-test6k",
+        "/library/w-test2k",
+        "/library/w-customtest6k",
       ]);
     });
   });

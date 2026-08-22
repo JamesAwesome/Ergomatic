@@ -1358,3 +1358,56 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   un-released warm-up removal. Notes owe four clauses: warm-up removal, the
   checkpoint suggestion (naming session 7), the rename (old history says
   `First 2k`), and the open measurement loop (update your baseline on You).
+
+## Phase-close / final-PR gate, 2026-08-22 (Phase 8A PR B, the test rename)
+
+- **A rollback constraint created by a data migration has no home in this repo,
+  and `docs/RELEASING.md` is where it belongs.** PR #156's own best sentence —
+  rolling the API back past it against a post-rename DB is unrecoverable log-link
+  loss — lived only in the PR body, and `grep -i "rollback|roll back|revert"`
+  over `docs/RELEASING.md` returns ZERO: the file had no rollback section at all.
+  RF14 with the highest stakes yet. **Any PR that changes stored rows in place
+  states its downgrade cost in RELEASING.md, not in its own body.** (Fixed on
+  #156 at this gate: RELEASING.md now has a Rollback constraints section.)
+- **A phase's LAST PR is the roadmap's last chance, and both 8A PRs missed it.**
+  #155 touched ROADMAP only to fold the gates; #156 did not touch it at all, so
+  main would have carried "UNPARKED … execution still owes a verification
+  refresh" with six unchecked boxes over a finished phase. The pattern is
+  "roadmap outruns reality" inverted and it is cheaper to catch: **at every
+  phase-close gate, diff the phase's checkbox state against its merged PRs
+  before reading anything else.**
+- **"Notes owe N clauses" is only discharged when the clauses live in a file.**
+  Phase WU's clause did (`releaseNotes.ts:14-19`, provisional version stamped
+  with its own reconciliation comment — a good pattern, copy it); 8A's three
+  survived because the ROADMAP section says "8A's notes say so" in prose a close
+  gate reads. Both are acceptable homes. A PR body is not. Check WHICH before
+  calling the condition met.
+- **A phase whose payoff is six real saves deep needs the cost above the fold,
+  not in the notes only.** `advancePlanBy` (today.spec.ts:1141) posts six real
+  `POST /api/logs` — verified, no shortcut exists and none was smuggled in. The
+  same six are James's. A PR body that omits "how to see it" on a feature gated
+  behind six saves guarantees the reviewer concludes it did not ship.
+- **The rename's two installed-build windows close only when the BUILD lands,
+  not when the tag is cut.** Prod seeds at boot on every green push, so the DB
+  renames at MERGE; until the upload, installed v0.15.0 builds leak the two
+  tests into a veteran's pool and DELETE a no-baseline account's onboarding card
+  silently (`if (!workout) return null`). "Tag promptly" was the accepted
+  mitigation; the operative instruction is **upload the same day**. Generalise:
+  when a seed change lands at merge, the mitigation is the UPLOAD, not the tag.
+- **Exit criteria satisfied by COMPOSITION should be named, not counted as
+  proven.** 8A's "START runs it" has no test that clicks Start from the
+  checkpoint card — the card is `OPEN ›`, and library.spec proves detail→Start
+  separately. Two halves, no join. Accepted; recorded so the next gate does not
+  rediscover it as a hole.
+- **`phaseKindWord("test") → "TEST"` survives in `Timer.tsx` and is a DIFFERENT
+  union from the retired plan code.** Same-name-different-union, the briefing's
+  own trap. Do not "finish" the TEST retirement by deleting it.
+- **Release call, executed:** v0.16.0, MINOR. Ten merges over v0.15.0..#156;
+  eight need no note (zero files under `app/src/`, verified by
+  `git show --name-only`, not by title). Notes PR first, then the tag — the
+  v0.8.0/v0.9.0 precedent. API additive-only holds: `sequence[].code` keeps its
+  name and shape, only its VALUE SET narrows, and `"AN"`/`"AT"` were always
+  members of the old client's own union.
+- **Backlog: 71 unchecked, 23 triggered follow-ons** (72 at 8A open, 60 at WU
+  open, 37 at LL open). Checking 8A's six takes it to 65 — the first net
+  DECREASE recorded in this ledger.

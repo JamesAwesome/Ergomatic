@@ -232,8 +232,8 @@ describe("Plan (active plan — sequence rendering)", () => {
   // computed client-side from PLANS — the prescription never crosses the
   // wire; the fixture's `code` is a bare WorkoutType.
   it.each([
-    ["sprint", "AN", "FIRST 2K"],
-    ["head", "AT", "FIRST 6K"],
+    ["sprint", "AN", "2K TEST"],
+    ["head", "AT", "6K TEST"],
   ] as const)(
     "marks the three %s checkpoint rows with the prescribed title, typed %s, no TEST badge anywhere",
     async (planKey, checkpointType, prescribedTitle) => {

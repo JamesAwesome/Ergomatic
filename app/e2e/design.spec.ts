@@ -4742,7 +4742,7 @@ test.describe("post-workout summary (session door, multi-target — no hint)", (
 });
 
 // Task 6 (property sweep): §2F's "Onboarding" row — a real seeded global
-// onboarding workout ("First 6k", `domain/onboarding.ts`'s own
+// onboarding workout ("6K Test", `domain/onboarding.ts`'s own
 // `ONBOARDING_TITLES.k6`, needs no baselines at all per that module's own
 // doc comment), reached directly (never through Today's own dedicated
 // no-baseline card, which this file has no fixture for) via the exact
@@ -4762,14 +4762,12 @@ test.describe("post-workout summary (manual door, onboarding title + plan active
     });
     await choosePlan(page, "sprint");
     await resetPlanProgress(page);
-    const id = await libraryWorkoutId(page, "First 6k");
+    const id = await libraryWorkoutId(page, "6K Test");
     await page.goto(`/library/${id}`);
-    await expect(page.locator("h1.workout-detail-title")).toHaveText(
-      "First 6k",
-    );
+    await expect(page.locator("h1.workout-detail-title")).toHaveText("6K Test");
     await page.getByRole("link", { name: "Log it after" }).click();
     await expect(page).toHaveURL(/\/library\/[^/]+\/log$/);
-    await expect(page.locator("h1.summary-title")).toHaveText("First 6k");
+    await expect(page.locator("h1.summary-title")).toHaveText("6K Test");
   });
 
   test("every visible interactive element has a >=44x44 tap target", async ({

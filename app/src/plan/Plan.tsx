@@ -281,8 +281,8 @@ function PlanView({
                   crosses the wire). The affix is the PRESCRIBED WORKOUT'S
                   TITLE, uppercased to the row's mono voice (James,
                   2026-08-22: the checkpoint is the one day the plan names
-                  a specific workout, so the row says which — reads
-                  FIRST 2K now, 2K TEST after PR B's rename lands). */}
+                  a specific workout, so the row says which: 2K TEST /
+                  6K TEST). */}
               {activePreset.sessions[item.index]?.prescribe !== undefined && (
                 <span className="plan-row-checkpoint mono-status">
                   {activePreset.sessions[

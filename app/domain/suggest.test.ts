@@ -52,14 +52,14 @@ describe("suggest", () => {
   });
   // Phase 8A: a plan checkpoint pins its own designated workout. The
   // prescribed entry mirrors the REAL seed row a checkpoint resolves to
-  // (server/seed/library/onboarding.ts's 2k: type AN, easy, pain 2,
+  // (server/seed/library/onboarding.ts's 2K Test: type AN, hard, pain 5,
   // global) — not a hand-built minimum — and it is deliberately NOT a
   // library/pool member: both callers exclude onboarding titles from the
   // pool, and SHUFFLE's escape depends on it sitting outside poolIds.
   const k2Entry = w("k2-test", {
     type: "AN" as const,
-    difficulty: "easy" as const,
-    pain: 2,
+    difficulty: "hard" as const,
+    pain: 5,
     estMinutes: 8,
     lastDoneDaysAgo: null,
     isGlobal: true,
@@ -71,22 +71,44 @@ describe("suggest", () => {
     it("pins the prescribed entry with its authored reason, bypassing every preference filter", () => {
       // Every filter dimension is set to EXCLUDE the prescribed entry
       // (wrong difficulty, wrong duration bucket, wrong pain, wrong
-      // source) — a checkpoint is not a suggestion from a pool, so none
-      // of them may hide it.
+      // source — chosen against the REAL k2Entry above: hard/pain 5/
+      // ~8 min/global) — a checkpoint is not a suggestion from a pool, so
+      // none of them may hide it.
       const r = suggest({
         todayCode: "AN",
         prefs: {
-          difficulties: ["hard"],
+          difficulties: ["easy"],
           durations: ["45-60"],
-          painLevels: [5],
+          painLevels: [1],
           lastDone: "under21",
           source: "custom",
         },
-        library: [w("an1", { type: "AN", difficulty: "hard" })],
+        library: [w("an1", { type: "AN", difficulty: "easy" })],
         prescribed: { entry: k2Entry, reason: CHECKPOINT_REASON },
       });
       expect(r.recommendationId).toBe("k2-test");
       expect(r.reason).toBe(CHECKPOINT_REASON);
+    });
+
+    it("pins a prescribed entry whose TYPE mismatches todayCode — the type filter is bypassed like every other (8C's id-refs rely on this)", () => {
+      // A deliberately mismatched entry: an O2-typed prescription on an AT
+      // day (the pre-PR-B 6K seed shape). The pin must hold anyway — a
+      // checkpoint is not a pool member, so the day-code type match never
+      // applies to it.
+      const o2Entry = w("o2-prescribed", {
+        type: "O2" as const,
+        difficulty: "hard" as const,
+        isGlobal: true,
+      });
+      const r = suggest({
+        todayCode: "AT",
+        prefs: { difficulties: ["easy", "medium", "hard"] },
+        library: [w("at1", { type: "AT" })],
+        prescribed: { entry: o2Entry, reason: CHECKPOINT_REASON },
+      });
+      expect(r.recommendationId).toBe("o2-prescribed");
+      expect(r.reason).toBe(CHECKPOINT_REASON);
+      expect(r.poolIds).toStrictEqual(["at1"]);
     });
 
     it("keeps the prescribed entry OUT of poolIds, so SHUFFLE escapes into the day's own type pool", () => {

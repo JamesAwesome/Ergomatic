@@ -3,6 +3,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
+import { ONBOARDING_TITLES } from "../../domain/onboarding.js";
 import { ONBOARDING_LIBRARY_WORKOUTS } from "../../server/seed/library/onboarding";
 import type { Step, WorkoutType } from "../../domain/types.js";
 import { fmtDuration } from "../../domain/duration.js";
@@ -133,7 +134,7 @@ function buildSessionFixture(overrides: { type?: WorkoutType } = {}): {
   return { draft: started, run, workout };
 }
 
-// Phase 6I: the real "First 6k" seed workout (server/seed/library/
+// Phase 6I: the real "6K Test" seed workout (server/seed/library/
 // onboarding.ts) — effort ref, no baselines needed (domain/needsBaselines.ts)
 // — driven through the same buildDraft/startDraft/buildRun/saveRun pipeline
 // as `buildSessionFixture` above, `null` baselines rather than a real pair
@@ -142,7 +143,9 @@ function buildOnboardingSessionFixture(): {
   run: SessionRun;
   workout: LibraryWorkout;
 } {
-  const seed = ONBOARDING_LIBRARY_WORKOUTS.find((w) => w.title === "First 6k")!;
+  const seed = ONBOARDING_LIBRARY_WORKOUTS.find(
+    (w) => w.title === ONBOARDING_TITLES.k6,
+  )!;
   const draft = buildDraft({
     id: "id-first6k-fixture",
     title: seed.title,
@@ -388,13 +391,15 @@ function buildMonitorFixture(
   return { run, workout };
 }
 
-// Phase 6I close-out fold: the real "First 6k" seed workout — an
+// Phase 6I close-out fold: the real "6K Test" seed workout — an
 // effort-only workout (`needsBaselines()` reads false), unlike
 // `manualWorkoutFixture()`'s split-ref mix above.
 function onboardingManualWorkoutFixture(
   id = "id-first6k-manual",
 ): LibraryWorkout {
-  const seed = ONBOARDING_LIBRARY_WORKOUTS.find((w) => w.title === "First 6k")!;
+  const seed = ONBOARDING_LIBRARY_WORKOUTS.find(
+    (w) => w.title === ONBOARDING_TITLES.k6,
+  )!;
   return {
     id,
     title: seed.title,
@@ -1722,7 +1727,7 @@ describe("LogSession: the manual door (Task 3)", () => {
     await renderManualLog(workout.id);
 
     expect(
-      await screen.findByRole("heading", { name: "First 6k" }),
+      await screen.findByRole("heading", { name: "6K Test" }),
     ).toBeInTheDocument();
     expect(screen.queryByText("no target")).not.toBeInTheDocument();
     // The effort step's target renders empty (5G rule), the trailing dash
@@ -3700,7 +3705,7 @@ describe("LogSession: the save stack's plan position (§2F, replaces the outside
     const { workout } = buildOnboardingSessionFixture();
     mockWorkouts([workout]);
     await renderLog();
-    await screen.findByRole("heading", { name: "First 6k" });
+    await screen.findByRole("heading", { name: "6K Test" });
 
     const lead = screen.getByRole("button", { name: "Save without logging" });
     expect(lead.className).toContain("summary-save-lead");
@@ -3724,7 +3729,7 @@ describe("LogSession: the save stack's plan position (§2F, replaces the outside
     const { workout } = buildOnboardingSessionFixture();
     mockWorkouts([workout]);
     await renderLog();
-    await screen.findByRole("heading", { name: "First 6k" });
+    await screen.findByRole("heading", { name: "6K Test" });
 
     const lead = screen.getByRole("button", {
       name: "Log against plan · SESSION 4 OF 84",
