@@ -2460,6 +2460,13 @@ which bites this phase.** Full text in Phase WU's "What this phase taught":
    <pattern>` does the same for vitest. Working forms:
    `pnpm exec playwright test --grep` and `pnpm exec vitest run`. **Check
    the run count** — a full-suite count means the filter was eaten.
+   **SHARPENED at Phase LL's final re-review (2026-08-22): the "working
+   form" is itself unsafe for SINGLE FILES** — `pnpm exec vitest run
+   --project client <file>` runs the file OUTSIDE its jsdom environment in
+   this workspace (`localStorage` undefined, 89 false failures against a
+   green HEAD). Only the full-project run is trustworthy for client-env
+   files; a single-file red must be reproduced at project scope before
+   anyone "fixes" it.
 3. **A dispatched subagent's background waits die when it idles.** Every
    implementer brief must say gates run FOREGROUND and blocking; four
    rounds were lost to armed monitors that could never wake.
