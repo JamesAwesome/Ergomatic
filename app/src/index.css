@@ -2494,6 +2494,13 @@ button:disabled {
   flex-shrink: 0;
 }
 
+/* Phase 8A: the checkpoint mark that replaced the TEST badge — a small
+   mono affix after the type badge (`.mono-status` supplies font/colour;
+   a stated design for the seam task, reviewed by Task 2's design pass). */
+.plan-row-checkpoint {
+  flex-shrink: 0;
+}
+
 .plan-row-status {
   flex: 1;
   text-align: right;

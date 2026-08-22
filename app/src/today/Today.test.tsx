@@ -145,14 +145,14 @@ const PLAN_AT_NEXT: PlanData = {
   sequence: buildSequence(12, "AT"),
 };
 
-// A checkpoint day: prescribedCode is the literal "TEST" plan code, which
-// suggest.ts maps to TR's pool (matchType) — Today's own type chips mirror
-// that mapping (effectivePrescribed) so TR, not "TEST" itself, is the chip
-// that reads active absent a swap.
-const PLAN_TEST: PlanData = {
+// A checkpoint day (Phase 8A): the wire carries the day's REAL type — the
+// sprint plan's index-6 checkpoint is an AN day, and the "TEST" code (with
+// its TR stand-in mapping) is retired. Task 2 wires the prescription
+// itself into this screen; this fixture pins the wire-shape half.
+const PLAN_CHECKPOINT: PlanData = {
   planKey: "sprint",
-  doneN: 20,
-  sequence: buildSequence(20, "TEST"),
+  doneN: 6,
+  sequence: buildSequence(6, "AN"),
 };
 
 const FREESTYLE_PLAN: PlanData = { planKey: null, doneN: 0, sequence: [] };
@@ -1463,18 +1463,10 @@ describe("Today (type-swap chips)", () => {
     ).toBeVisible();
   });
 
-  it("on a TEST day, TR reads active by default and swapping shows TEST → <type>", async () => {
-    mockReady({ plan: PLAN_TEST });
+  it("on a checkpoint day, the day's own real type reads active — no TEST code, no TR stand-in", async () => {
+    mockReady({ plan: PLAN_CHECKPOINT });
     await renderToday();
-    expect(screen.getByText("SESSION 21 OF 84 · TEST")).toBeVisible();
-    expect(screen.getByRole("button", { name: "TR" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-
-    await userEvent.click(screen.getByRole("button", { name: "AN" }));
-
-    expect(screen.getByText("SESSION 21 OF 84 · TEST → AN")).toBeVisible();
+    expect(screen.getByText("SESSION 7 OF 84 · AN")).toBeVisible();
     expect(screen.getByRole("button", { name: "AN" })).toHaveAttribute(
       "aria-pressed",
       "true",
@@ -1483,21 +1475,7 @@ describe("Today (type-swap chips)", () => {
       "aria-pressed",
       "false",
     );
-  });
-
-  it("tapping TR on a TEST day un-swaps, since TR is the effective prescribed type for TEST", async () => {
-    mockReady({ plan: PLAN_TEST });
-    await renderToday();
-    await userEvent.click(screen.getByRole("button", { name: "AN" }));
-    expect(screen.getByText(/TEST → AN/)).toBeVisible();
-
-    await userEvent.click(screen.getByRole("button", { name: "TR" }));
-
-    expect(screen.getByText("SESSION 21 OF 84 · TEST")).toBeVisible();
-    expect(screen.getByRole("button", { name: "TR" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    expect(screen.queryByText(/TEST/)).not.toBeInTheDocument();
   });
 
   it("swapping to a type with nothing in the library shows the existing empty-pool card, with the sheet's own cells still interactive", async () => {
@@ -1577,10 +1555,10 @@ describe("Today (type descriptor word)", () => {
     expect(screen.getByText("COMFORTABLY HARD")).toBeInTheDocument();
   });
 
-  it("on a TEST day, shows TR's word by default (HARD INTERVALS) since TR is the effective type", async () => {
-    mockReady({ plan: PLAN_TEST });
+  it("on a checkpoint day, shows the day's own type's word (AN -> SPEED WORK)", async () => {
+    mockReady({ plan: PLAN_CHECKPOINT });
     await renderToday();
-    expect(screen.getByText("HARD INTERVALS")).toBeInTheDocument();
+    expect(screen.getByText("SPEED WORK")).toBeInTheDocument();
   });
 
   it("does not render in freestyle mode — there are no type-swap chips to reinforce", async () => {

@@ -26,7 +26,6 @@ import type {
   Step,
   WorkoutType,
 } from "../../domain/types.js";
-import type { PlanCode } from "../../domain/plans.js";
 import {
   ONBOARDING_TITLES,
   isOnboardingTitle,
@@ -191,7 +190,7 @@ function computeSuggestion(
   >,
   entries: LibraryEntry[],
   baselines: Baselines | null,
-  todayCode: PlanCode | null,
+  todayCode: WorkoutType | null,
   pickOverride: string | null,
 ) {
   const prefs: SuggestPrefs = {
@@ -238,7 +237,7 @@ function poolCountFor(
   >,
   entries: LibraryEntry[],
   baselines: Baselines | null,
-  todayCode: PlanCode | null,
+  todayCode: WorkoutType | null,
   pickOverride: string | null,
 ): number {
   return computeSuggestion(draft, entries, baselines, todayCode, pickOverride)
@@ -882,21 +881,9 @@ function TodayView({
   // chip below) — the plan line's first segment and the type chips' "which
   // one is the un-swap target" both read off this, never off the swapped
   // `todayCode`.
-  const prescribedCode: PlanCode | null =
+  const prescribedCode: WorkoutType | null =
     plan.planKey !== null ? (plan.sequence[plan.doneN]?.code ?? null) : null;
   const usesPlan = prescribedCode !== null;
-
-  // TEST maps to TR's pool exactly like suggest.ts's own `matchType`
-  // (domain/suggest.ts:93) — the type chips' "which chip is currently
-  // active absent a swap" and "which chip un-swaps" both need that same
-  // mapping client-side, so it's computed once here rather than duplicated
-  // at each call site below.
-  const effectivePrescribed: WorkoutType | null =
-    prescribedCode === null
-      ? null
-      : prescribedCode === "TEST"
-        ? "TR"
-        : prescribedCode;
 
   // Lazy initializer: read once at mount, exactly like WorkoutDetail.tsx's
   // nudge state — the `key` above already forces a remount (and thus a
@@ -926,15 +913,14 @@ function TodayView({
       },
   );
 
-  // The type the chips (and now the descriptor word below them) actually
-  // treat as selected: a swap if one is set, else whatever's effectively
-  // prescribed today (TR standing in on a TEST day) — the exact expression
-  // each TodayChip's own `active` prop already used inline, pulled out once
-  // so the new word row reads off the identical value rather than a second
-  // copy of the same ternary. Null only in freestyle (no plan, no chips, no
-  // word to show).
+  // The type the chips (and the descriptor word below them) actually
+  // treat as selected: a swap if one is set, else the plan's own call for
+  // today. Since Phase 8A a checkpoint day carries its REAL type here (the
+  // "TEST" code and its TR stand-in are retired), so no mapping sits
+  // between the wire's code and the chips. Null only in freestyle (no
+  // plan, no chips, no word to show).
   const effectiveType: WorkoutType | null =
-    overrides.swapType ?? effectivePrescribed;
+    overrides.swapType ?? prescribedCode;
 
   // Every chip handler below funnels through this: update the visible
   // state AND persist in the same call, so no chip tap is ever lost to a
@@ -945,13 +931,11 @@ function TodayView({
   }
 
   function handleTypeChip(type: WorkoutType) {
-    // Tapping the chip that matches what's already effectively prescribed
-    // (the plan's own call, or TR standing in for a TEST day) clears the
-    // swap rather than swapping to itself — the brief's "tapping the
-    // prescribed chip (or TR on a TEST day) sets swapType: null".
+    // Tapping the chip that matches the plan's own call for today clears
+    // the swap rather than swapping to itself.
     updateOverrides({
       ...overrides,
-      swapType: type === effectivePrescribed ? null : type,
+      swapType: type === prescribedCode ? null : type,
     });
   }
 
@@ -1065,10 +1049,9 @@ function TodayView({
     .filter((w) => !(isOnboardingTitle(w.title) && w.isGlobal))
     .map((w) => toLibraryEntry(w, baselines));
 
-  // The swapped-in type: a swap always names a real WorkoutType, which IS a
-  // PlanCode (WorkoutType is a subset of the PlanCode union), so this needs
-  // no cast to feed `suggest`'s `todayCode: PlanCode` parameter below.
-  const todayCode: PlanCode | null =
+  // The swapped-in type if one is set, else the plan's own call — what
+  // `suggest`'s `todayCode` actually receives below.
+  const todayCode: WorkoutType | null =
     prescribedCode !== null ? (overrides.swapType ?? prescribedCode) : null;
 
   const suggestion = computeSuggestion(
@@ -1178,9 +1161,9 @@ function TodayView({
             </p>
             {/* Type-swap chips: only meaningful with a plan active (there is
                 no "prescribed type" to swap away from in freestyle). Active
-                state reads `swapType ?? effectivePrescribed` — the un-swapped
+                state reads `swapType ?? prescribedCode` — the un-swapped
                 chip lights up whichever type the plan actually calls for
-                today (TR standing in on a TEST day), and tapping THAT chip
+                today, and tapping THAT chip
                 again clears the swap rather than swapping to itself
                 (handleTypeChip). Amendment (2026-08-04 PR #50 round), Task 2:
                 `.type-chip-grid` (index.css — renamed from `.today-type-

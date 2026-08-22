@@ -1,11 +1,21 @@
 import type { WorkoutType } from "./types.js";
+import type { Prescription } from "./prescription.js";
+import { ONBOARDING_TITLES } from "./onboarding.js";
 
-export type PlanCode = WorkoutType | "TEST";
+// Phase 8A: the "TEST" plan code retired. A plan day is a real workout
+// type that MAY carry authored data — the three checkpoints populate
+// `prescribe` today; a future authoring UI writes the same field, and a
+// DB-loaded plan satisfies the same interface (spec §3.1).
+export interface PlanDay {
+  type: WorkoutType;
+  /** Pre-suggested workout for this day, if any. AUTHORED DATA. */
+  prescribe?: Prescription;
+}
 
 export interface PlanPreset {
   key: "sprint" | "head";
   title: string;
-  sessions: PlanCode[]; // length 84
+  sessions: PlanDay[]; // length 84
 }
 
 // Start-of-block checkpoints: one per training third, at the close of that
@@ -13,13 +23,37 @@ export interface PlanPreset {
 // offset is the same in every third: index 6 of 0..27). Deliberately NOT
 // the intake handoff's 7/31/55 cadence — these plans use a 28-session
 // third, not a 24-session one.
-const TEST_INDICES = [6, 34, 62] as const;
+const CHECKPOINT_INDICES = [6, 34, 62] as const;
 
-/** Flattens 12 week-arrays (7 codes each = 84) and overwrites the
- *  checkpoint slots with 'TEST', keeping the total length at 84. */
-function buildSessions(weeks: WorkoutType[][]): PlanCode[] {
-  const flat: PlanCode[] = weeks.flat();
-  for (const i of TEST_INDICES) flat.splice(i, 1, "TEST");
+// Each plan pins its own instrument (rulings, 2026-08-12): the sprint plan
+// re-tests the 2k (AN — the ceiling every AN/TR pace resolves against),
+// the head plan the 6k (AT — the threshold every AT/O2 pace resolves
+// against). Refs are authored as ONBOARDING_TITLES constants, never string
+// literals, so the seam has zero dependency on the titles' later rename
+// (gate ruling, 2026-08-22). The reason ships WITH the prescription so no
+// consumer invents one.
+const SPRINT_CHECKPOINT: PlanDay = {
+  type: "AN",
+  prescribe: {
+    ref: { kind: "title", title: ONBOARDING_TITLES.k2, globalOnly: true },
+    reason: "Plan checkpoint: re-test your 2k and update your baseline.",
+  },
+};
+
+const HEAD_CHECKPOINT: PlanDay = {
+  type: "AT",
+  prescribe: {
+    ref: { kind: "title", title: ONBOARDING_TITLES.k6, globalOnly: true },
+    reason: "Plan checkpoint: re-test your 6k and update your baseline.",
+  },
+};
+
+/** Flattens 12 week-arrays (7 types each = 84) into PlanDays and overwrites
+ *  the checkpoint slots with the plan's own prescribed checkpoint day,
+ *  keeping the total length at 84. */
+function buildSessions(weeks: WorkoutType[][], checkpoint: PlanDay): PlanDay[] {
+  const flat: PlanDay[] = weeks.flat().map((type) => ({ type }));
+  for (const i of CHECKPOINT_INDICES) flat[i] = checkpoint;
   return flat;
 }
 
@@ -27,8 +61,9 @@ function buildSessions(weeks: WorkoutType[][]): PlanCode[] {
 // O2-forward philosophy: the aerobic base carries even sprint prep. A 2k
 // is still ~80% aerobic, so steady-state volume stays the single biggest
 // line item in every third — speed work is sharpened on top of it, never
-// swapped in for it. Type mix across the 81 non-TEST sessions is pinned:
-// O2 34, AT 23, TR 14, AN 10 (a strict O2 > AT > TR > AN pyramid).
+// swapped in for it. Type mix across all 84 sessions (the three
+// checkpoints are AN days re-testing the 2k) is pinned:
+// O2 34, AT 23, TR 14, AN 13 (a strict O2 > AT > TR > AN pyramid).
 // Base (weeks 1-4): almost all O2/AT — the engine gets built here. One
 // AN touch and a weekly TR rate session keep the fast-twitch honest.
 // Week 4 deloads to pure O2/AT (AN+TR drops to zero).
@@ -60,7 +95,8 @@ export const SPRINT_WEEKS: WorkoutType[][] = [
 // --- Head race (long-course, e.g. 5k/6k head-race format) preset ------
 // O2-forward philosophy, turned up: a head race is decided by the size
 // of the aerobic engine, so O2 alone is nearly half the plan. Type mix
-// across the 81 non-TEST sessions is pinned: O2 41, AT 21, TR 11, AN 8
+// across all 84 sessions (the three checkpoints are AT days re-testing
+// the 6k) is pinned: O2 41, AT 24, TR 11, AN 8
 // (a strict O2 > AT > TR > AN pyramid). Each third keeps its own
 // character rather than repeating one micro-cycle:
 // Base (weeks 1-4): O2-dominant capacity building — steady state nearly
@@ -94,11 +130,11 @@ export const PLANS: Record<"sprint" | "head", PlanPreset> = {
   sprint: {
     key: "sprint",
     title: "Sprint (2k) Prep",
-    sessions: buildSessions(SPRINT_WEEKS),
+    sessions: buildSessions(SPRINT_WEEKS, SPRINT_CHECKPOINT),
   },
   head: {
     key: "head",
     title: "Head Race Prep",
-    sessions: buildSessions(HEAD_WEEKS),
+    sessions: buildSessions(HEAD_WEEKS, HEAD_CHECKPOINT),
   },
 };

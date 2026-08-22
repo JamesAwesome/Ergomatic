@@ -3,9 +3,14 @@ import { parseBulk } from "../../domain/bulk.js";
 import { bucketsForCap } from "../../domain/duration.js";
 import { estimateMinutes } from "../../domain/expand.js";
 import { isOnboardingTitle } from "../../domain/onboarding.js";
-import { PLANS, type PlanCode } from "../../domain/plans.js";
+import { PLANS } from "../../domain/plans.js";
 import { suggest, type LibraryEntry } from "../../domain/suggest.js";
-import type { Baselines, Difficulty, Step } from "../../domain/types.js";
+import type {
+  Baselines,
+  Difficulty,
+  Step,
+  WorkoutType,
+} from "../../domain/types.js";
 import { validateWorkoutInput } from "../../domain/validate.js";
 import type { ArticleReadsStore } from "../stores/articleReads.js";
 import type { BaselinesStore } from "../stores/baselines.js";
@@ -1128,10 +1133,14 @@ export function createDataRouter({
     const row = await stores.planState.get(userId);
     const planKey = row?.planKey ?? null;
     const doneN = row?.doneN ?? 0;
+    // Wire contract (Phase 8A, antagonist B2): `code` KEEPS its name and
+    // stays a bare WorkoutType string — a checkpoint day serialises its
+    // real type, and the prescription never crosses the wire (installed
+    // builds blank the whole plan line on an unrecognised shape).
     const sequence = planKey
-      ? PLANS[planKey].sessions.map((code, index) => ({
+      ? PLANS[planKey].sessions.map((day, index) => ({
           index,
-          code,
+          code: day.type,
           status:
             index < doneN ? "done" : index === doneN ? "today" : "upcoming",
         }))
@@ -1359,7 +1368,8 @@ export function createDataRouter({
     const effectivePlanKey: PlanKey = planRow?.planKey ?? "sprint";
     const doneN = planRow?.doneN ?? 0;
     const sequence = PLANS[effectivePlanKey].sessions;
-    const todayCode: PlanCode = sequence[Math.min(doneN, sequence.length - 1)];
+    const todayCode: WorkoutType =
+      sequence[Math.min(doneN, sequence.length - 1)].type;
 
     const [prefs, workouts, lastDone] = await Promise.all([
       stores.preferences.get(userId),

@@ -1,5 +1,4 @@
 import type { Difficulty, WorkoutType } from "./types.js";
-import type { PlanCode } from "./plans.js";
 import { bucketFor, type DurationBucket } from "./duration.js";
 import { isRecent } from "./recency.js";
 
@@ -85,7 +84,7 @@ export interface SuggestPrefs {
 }
 
 export interface SuggestInput {
-  todayCode: PlanCode;
+  todayCode: WorkoutType;
   library: LibraryEntry[];
   prefs: SuggestPrefs;
   todayPickId?: string;
@@ -184,9 +183,8 @@ function passesSourceFilter(e: LibraryEntry, prefs: SuggestPrefs): boolean {
 
 export function suggest(input: SuggestInput): Suggestion {
   const { todayCode, library, prefs, todayPickId } = input;
-  const matchType: WorkoutType = todayCode === "TEST" ? "TR" : todayCode;
 
-  const typeMatched = library.filter((e) => e.type === matchType);
+  const typeMatched = library.filter((e) => e.type === todayCode);
   const filtered = typeMatched.filter(
     (e) =>
       prefs.difficulties.includes(e.difficulty) &&
@@ -204,7 +202,7 @@ export function suggest(input: SuggestInput): Suggestion {
   if (sorted.length === 0) {
     return {
       recommendationId: null,
-      reason: `No ${matchType} sessions in your library.`,
+      reason: `No ${todayCode} sessions in your library.`,
       poolIds: [],
       fellBack: false,
     };

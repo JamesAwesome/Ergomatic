@@ -95,7 +95,7 @@ export interface StoredLogStep {
 }
 
 /** `GET /api/logs/:id`'s full row (spec §3) — the from-the-log view's own
- *  fetch. `planKey` is a bare `string | null`, not `PlanCode`/`PlanKey`:
+ *  fetch. `planKey` is a bare `string | null`, not `PlanKey`:
  *  the `session_logs.plan_key` column carries no CHECK/enum constraint
  *  (unlike `plan_state.plan_key` — `server/db/schema.ts`'s own comment),
  *  deliberately, so a row saved under a plan this app's CURRENT `PLANS`

@@ -12,7 +12,6 @@ import type { IntervalActual } from "../../domain/monitor/types.js";
 import type { api } from "../api";
 import type { LibraryWorkout } from "../api/useWorkouts";
 import type { PlanData, PlanKey, PlanState } from "../api/usePlan";
-import type { PlanCode } from "../../domain/plans.js";
 import {
   buildDraft,
   clearDraft,
@@ -223,7 +222,7 @@ function activePlan(overrides: Partial<PlanData> = {}): PlanData {
   const doneN = 3;
   const sequence: PlanData["sequence"] = Array.from({ length: 84 }, (_, i) => ({
     index: i,
-    code: "O2" as PlanCode,
+    code: "O2",
     status: i < doneN ? "done" : i === doneN ? "today" : "upcoming",
   }));
   return { planKey, doneN, sequence, ...overrides };

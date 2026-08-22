@@ -50,18 +50,6 @@ describe("suggest", () => {
     });
     expect(r.poolIds).toStrictEqual(["fit"]);
   });
-  it("treats TEST as TR", () => {
-    const r = suggest({
-      todayCode: "TEST",
-      prefs: {
-        ...prefs,
-        difficulties: [...prefs.difficulties],
-        durations: [...prefs.durations],
-      },
-      library: [w("tr1", { type: "TR" }), w("at1")],
-    });
-    expect(r.recommendationId).toBe("tr1");
-  });
   it("falls back to the unfiltered type list when filters match nothing", () => {
     const r = suggest({
       todayCode: "AT",

@@ -114,9 +114,8 @@
      TR chip/badge filled with what was structurally "accent", quietly
      breaking the ui-fix round's own "accent means exactly four things,
      never selected/never a fifth type" rule for one type out of four. TR
-     now reads as ink everywhere, the same colour --type-test already used
-     (TypeBadge's `.type-badge` pairs it with --on-color text, the identical
-     17.1:1 pairing TEST badges already prove safe) — a deliberate,
+     now reads as ink everywhere (TypeBadge's `.type-badge` pairs it with
+     --on-color text, a 17.1:1 pairing) — a deliberate,
      app-wide repaint of every TR badge/chip (Library rows, LAST THREE,
      Plan, Today's type-swap chip, Builder's TYPE chip), not collateral.
 
@@ -130,7 +129,6 @@
      its own color, so the screen reads with one red and one blue, never
      two reds competing for the rower's eye. */
   --type-tr: var(--ink);
-  --type-test: #1b1a17;
   --on-color: #fffdf7;
   --pain-empty: #e0dacb;
 

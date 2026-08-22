@@ -9,9 +9,11 @@ import type { PlanData, PlanKey, PlanSequenceItem } from "../api/usePlan";
 // domain/plans.ts (not a 3-row hand stub), status derived exactly like
 // server/routes/data.ts's planResponse.
 function realSequence(planKey: PlanKey, doneN: number): PlanSequenceItem[] {
-  return PLANS[planKey].sessions.map((code, index) => ({
+  // Wire contract (Phase 8A): `code` is the day's real type — a checkpoint
+  // day's prescription never crosses the wire.
+  return PLANS[planKey].sessions.map((day, index) => ({
     index,
-    code,
+    code: day.type,
     status:
       index < doneN
         ? ("done" as const)
@@ -222,6 +224,45 @@ describe("Plan (active plan — sequence rendering)", () => {
     expect(lastUpcoming.getAttribute("aria-current")).toBeNull();
     expect(firstDone.getAttribute("aria-current")).toBeNull();
   });
+
+  // Phase 8A: the "TEST" badge retired with its plan code. A checkpoint
+  // row renders the day's REAL type via the shared TypeBadge plus a
+  // CHECKPOINT mark computed client-side from PLANS (the prescription
+  // never crosses the wire — the fixture's `code` is a bare WorkoutType).
+  it.each([
+    ["sprint", "AN"],
+    ["head", "AT"],
+  ] as const)(
+    "marks exactly the three %s checkpoint rows CHECKPOINT, typed %s, with no TEST badge anywhere",
+    async (planKey, checkpointType) => {
+      mockUsePlan({
+        state: "ready",
+        plan: {
+          planKey,
+          doneN: 0,
+          sequence: realSequence(planKey, 0),
+        },
+        choose: vi.fn(),
+        reset: vi.fn(),
+      });
+      await renderPlan();
+
+      const rows = document.querySelectorAll(".plan-row");
+      const marked = [...rows].flatMap((row, i) =>
+        row.querySelector(".plan-row-checkpoint") ? [i] : [],
+      );
+      expect(marked).toStrictEqual([6, 34, 62]);
+      for (const i of marked) {
+        expect(rows[i].querySelector(".plan-row-checkpoint")?.textContent).toBe(
+          "CHECKPOINT",
+        );
+        expect(rows[i].querySelector(".type-badge")?.textContent).toBe(
+          checkpointType,
+        );
+      }
+      expect(screen.queryByText("TEST")).not.toBeInTheDocument();
+    },
+  );
 
   it("scrolls rather than growing the page — the sequence has its own overflow container", async () => {
     mockUsePlan({
