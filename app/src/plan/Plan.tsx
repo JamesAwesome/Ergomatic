@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { PLANS } from "../../domain/plans.js";
-import type { PlanCode } from "../../domain/plans.js";
+import TypeBadge from "../components/TypeBadge";
 import { usePlan } from "../api/usePlan";
 import type { PlanData, PlanKey, PlanSequenceItem } from "../api/usePlan";
 import { usePlanLinks } from "./usePlanLinks";
@@ -18,29 +18,6 @@ const PLAN_BLURBS: Record<PlanKey, string> = {
   sprint: "2k prep: an O2 base with speed sharpened on top.",
   head: "6k prep: the biggest aerobic engine wins.",
 };
-
-// TypeBadge (src/components/TypeBadge.tsx) only maps WorkoutType, not the
-// "TEST" checkpoint code plans.ts also emits (PlanCode = WorkoutType |
-// "TEST") — a local map + tiny badge reusing the same `.type-badge` class
-// avoids widening that shared component's prop type for one screen.
-const CODE_COLOR_VAR: Record<PlanCode, string> = {
-  O2: "--type-o2",
-  AT: "--type-at",
-  AN: "--type-an",
-  TR: "--type-tr",
-  TEST: "--type-test",
-};
-
-function CodeBadge({ code }: { code: PlanCode }) {
-  return (
-    <span
-      className="type-badge"
-      style={{ background: `var(${CODE_COLOR_VAR[code]})` }}
-    >
-      {code}
-    </span>
-  );
-}
 
 const STATUS_GLYPH: Record<PlanSequenceItem["status"], string> = {
   done: "✓", // ✓
@@ -297,7 +274,22 @@ function PlanView({
               <span className="plan-row-index mono-status">
                 {item.index + 1}
               </span>
-              <CodeBadge code={item.code} />
+              <TypeBadge type={item.code} />
+              {/* Phase 8A: the "TEST" badge retired with its plan code — a
+                  checkpoint is now a real-type day carrying a prescription,
+                  computed CLIENT-SIDE from PLANS (the prescription never
+                  crosses the wire). The affix is the PRESCRIBED WORKOUT'S
+                  TITLE, uppercased to the row's mono voice (James,
+                  2026-08-22: the checkpoint is the one day the plan names
+                  a specific workout, so the row says which — reads
+                  FIRST 2K now, 2K TEST after PR B's rename lands). */}
+              {activePreset.sessions[item.index]?.prescribe !== undefined && (
+                <span className="plan-row-checkpoint mono-status">
+                  {activePreset.sessions[
+                    item.index
+                  ]!.prescribe!.ref.title.toUpperCase()}
+                </span>
+              )}
               <span className="plan-row-status" aria-hidden="true">
                 {STATUS_GLYPH[item.status]}
               </span>

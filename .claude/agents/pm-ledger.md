@@ -1292,3 +1292,69 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   can try, so a solo tag is a version number with no falsification value
   (the #140 ruling, applied in the other direction). MINOR clause, rides
   the tag carrying LL's brick fix.
+
+## Phase-open gate, 2026-08-22 (Phase 8A slate: plan checkpoints, unparked)
+
+- **A SEED TITLE is a cross-version contract, exactly like a nullable column.**
+  Prod deploys on every green push (`ci.yml:158-166`) and `seedGlobalLibrary`
+  runs at boot (`server/index.ts:48`), so a title rename hits the prod DB at
+  merge while installed iOS builds still carry the old literal compiled in
+  (`domain/onboarding.ts`). Three shipped behaviours key off it and all fail
+  SILENTLY: the Library exclusion leaks two rows, the suggestion pool can serve
+  a hidden workout, and `BaselineCard`'s exact-title lookup returns undefined so
+  `if (!workout) return null` deletes a no-baseline account's onboarding card
+  with no message. Generalises the 2026-08-17 PW ruling past columns: ask
+  which SHIPPED build reads this STRING. Ruling here (James, 2026-08-22): not
+  worth a compatibility tag (silent-but-narrow, internal TestFlight
+  auto-updates, and a shim tag would drag WU's un-released removal out early) —
+  the rename merges LAST in its phase and tags promptly. Cheap when the
+  ordering is decided at the gate; a fire otherwise.
+- **Author a title ref as the CONSTANT, never the literal.** The 8A plan pinned
+  "Titles are EXACTLY `6K Test`", which compile-couples the rename PR to the
+  seam PR and forces rename-first — the worst ordering for the break above.
+  `{ kind: "title", title: ONBOARDING_TITLES.k2 }` resolves on either value and
+  frees the ordering entirely.
+- **A phase that produces a measurement must name who records it.** 8A makes the
+  plan ask for a 2K test; `grep -rn "isTestResult" app/src` returns ZERO, so the
+  server's `test_history` append (`data.ts:601`) has no client producer and the
+  only baseline write is the You-screen editor, typed by hand. The checkpoint's
+  entire stated purpose — re-measuring the baselines every target resolves
+  against — is delivered by the NEXT phase. Ruling (James, 2026-08-22): the
+  baseline prompt goes next, BEFORE the calendar. **At a slate gate, trace the
+  phase's output to the code that stores it.**
+- **A predicate that means "onboarding" gets reused as "don't consume a plan
+  session", and a later phase inverts the case.** `isOnboardingTitle` drives
+  `PostWorkoutSummary`'s save-stack order (`:572-600`): on a checkpoint day 8A
+  would demote `Log against plan`, and the non-advancing save writes
+  plan_key/plan_index NULL while `doneN` stays put, re-serving the same
+  checkpoint. **When a phase makes an excluded row into prescribed content,
+  enumerate every consumer of its exclusion predicate, not just the exclusions.**
+- **The calendar's data prerequisite is half-shipped, and the half that is
+  missing is a product decision.** PW spec 2 delivered `plan_key`/`plan_index`
+  (schema.ts:170-178), so 8B's stamping bullet is DONE and its 2026-08-22
+  migration-coordination note describes work that no longer exists. But those
+  columns place DONE rows only: `plan_state` is `{planKey, doneN}`, `doneN`
+  advances per logged session with no calendar awareness, and
+  `docs/design/README.md:97` ("a sequence, not a weekday calendar") contradicts
+  `:315`'s month grid with greyed future days. **Ruling: the calendar gets a
+  BRAINSTORM whose first question is the date model, in parallel; a design pass
+  now would draw a screen whose TO DO half has no data.**
+- **`workout_title` is a save-time snapshot, so a rename breaks every
+  retrospective keyed to it.** The triggered follow-on said "did they take
+  their checkpoint" is "computable at any later date from the log's own
+  `workout_title`" — false the moment 8A renames. `plan_index ∈ {6,34,62}` is
+  the method now. Correct a follow-on's stated METHOD when a phase invalidates
+  it, not just its trigger.
+- **A phase whose payoff is gated behind six real saves cannot be demoed.**
+  `PUT /api/plan` accepts only `{planKey}` or `{reset}` (`data.ts:1146-1172`),
+  so `doneN` moves only via `POST /api/logs`. Reaching checkpoint index 6 costs
+  six saves for the e2e AND for James; log deletion decrements `doneN`
+  (`stores/logs.ts:475-494`), so it is reversible. Say the cost in the notes or
+  the feature reads as unshipped.
+- **Backlog: 72 unchecked, up from 60 at WU open** (37 at LL open, 24 on
+  2026-08-13); 23 triggered follow-ons, up from 15. #154 added ~15, five of them
+  8C's behind an explicit "no demand has been observed."
+- **Release call:** 8A rides a MINOR tag, 9 merges behind v0.15.0, carrying WU's
+  un-released warm-up removal. Notes owe four clauses: warm-up removal, the
+  checkpoint suggestion (naming session 7), the rename (old history says
+  `First 2k`), and the open measurement loop (update your baseline on You).

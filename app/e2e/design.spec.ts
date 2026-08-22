@@ -785,10 +785,9 @@ test.describe("library screen", () => {
   // this pins the resolved colour on a REAL `.type-badge` here, not just the
   // chip contexts (Today/Builder, asserted in their own describes) — the
   // same `.type-badge` class Library/Plan/Today's LAST THREE all share.
-  // `--on-color` text on `--ink` background measures 17.1:1, the identical
-  // pairing `--type-test` already used before this fix (TypeBadge.tsx sets
-  // a fixed `--on-color` label regardless of which type fills the
-  // background).
+  // `--on-color` text on `--ink` background measures 17.1:1
+  // (TypeBadge.tsx sets a fixed `--on-color` label regardless of which
+  // type fills the background).
   test("a TR type badge fills ink, not accent, with on-color text", async ({
     page,
   }) => {

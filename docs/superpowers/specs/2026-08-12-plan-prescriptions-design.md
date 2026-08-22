@@ -1,5 +1,52 @@
 # Plan prescriptions: a plan day can pre-suggest a specific workout
 
+> **EXECUTION ADDENDUM (2026-08-22, after the phase-open gates — read this
+> WITH the spec; it amends it).** The verification refresh, antagonist delta
+> pass, and PM slate gate ran 2026-08-22 (entries in both ledgers). Binding
+> amendments, in force over anything the 2026-08-12 text says:
+>
+> 1. **Save stack (blocking find, both gates independently):** `isOnboardingTitle`
+>    has a FIFTH consumer the spec never saw — `LogSession.tsx` feeds
+>    `PostWorkoutSummary`, where an onboarding title demotes `Log against plan`
+>    from the lead slot (6I's rule). On a checkpoint day that soft-locks the
+>    plan: the non-advancing save writes `plan_key`/`plan_index` NULL and
+>    `done_n` stays at 6. **James's ruling: `Log against plan` LEADS on a
+>    checkpoint day** — narrow the demotion to its actual 6I case, and derive
+>    the condition in the test instead of passing `isOnboarding` as a prop
+>    (`PostWorkoutSummary.test.tsx:883` pins the wrong behaviour and cannot go
+>    red on this change).
+> 2. **Wire contract:** `GET /api/plan`'s `sequence[].code` keeps its NAME and
+>    its BARE-STRING shape — checkpoint days serialise their real type. The
+>    prescription never crosses the wire in 8A; `Plan.tsx` computes the
+>    checkpoint mark client-side from `PLANS`. (Installed builds blank the
+>    whole plan line on an unrecognised shape.)
+> 3. **Refs are constants:** prescription title refs are authored as
+>    `ONBOARDING_TITLES.k2`/`.k6`, never the literal strings — PR A (the seam)
+>    then has zero dependency on PR B (the rename), which merges LAST, ALONE
+>    (triad: stored rows with log links), tag cut promptly (James accepted the
+>    installed-build window; no compatibility tag).
+> 4. **Rulings on the rename's blast radius (James, 2026-08-22):** the renamed
+>    tests become VISIBLE in the Library (exclusion narrows to suggestion
+>    pools); the no-baseline onboarding card gets its OWN copy instead of
+>    rendering the instrument name. Both land in PR B.
+> 5. **Already true in main (do not re-do):** the seed's 2K is ALREADY
+>    `type: "AN"` — remaining reclassification is 2K `easy/2 → hard/5`, 6K
+>    `O2/easy/2 → AT/hard/4`. `plan_key`/`plan_index` already exist on
+>    `session_logs` (PW, migration 0010).
+> 6. **Citation drift:** Today.tsx `prescribedCode → swapType` is now computed
+>    `:1072`, rendered `:1176-1177`; `canShuffle` `:1107`; the indexOf comment
+>    `:1133-1141`; data.ts `todayCode` derivation `:1362`, onboarding exclusion
+>    `:1375-1382`; seed.ts `seedGlobalLibrary` `:63-92` (`contentEqual`
+>    `:19-33` exact); DEVIATIONS `--type-test` row `:59`; suggest.ts
+>    `matchType` `:187`. `docs/design/README.md:99-100` records the checkpoint
+>    cadence as `7/31/55`, which is wrong against `plans.ts` (indices 6/34/62 =
+>    sessions 7/35/63) — reconcile it in Proof and pixels. Everything else in
+>    §6 was recounted and is exact; `--type-test` deletion is proven safe
+>    (`--type-tr` aliases `--ink`, not `--type-test`).
+> 7. **The rename map never fully retires:** `session_logs.workout_title` is a
+>    save-time snapshot — pre-rename logs keep `First 2k` forever, and any
+>    historical-title query needs both spellings permanently.
+
 > **STATUS (2026-08-22).** UNPARKED by James ("let's do it") — Phase 8A is
 > live work. Landed on main by the phase8-split PR. Still binding before
 > execution: a verification refresh of every file/line citation in this

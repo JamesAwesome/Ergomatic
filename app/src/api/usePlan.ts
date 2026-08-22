@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import type { PlanCode } from "../../domain/plans.js";
+import type { WorkoutType } from "../../domain/types.js";
 
 export type PlanKey = "sprint" | "head";
 
 export interface PlanSequenceItem {
   index: number;
-  code: PlanCode;
+  // Phase 8A wire contract: a bare WorkoutType string — a checkpoint day
+  // carries its REAL type here, and the prescription never crosses the
+  // wire (Plan.tsx computes the checkpoint mark client-side from PLANS).
+  code: WorkoutType;
   status: "done" | "today" | "upcoming";
 }
 

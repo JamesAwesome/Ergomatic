@@ -2829,7 +2829,7 @@ describe("GET/PUT /api/plan", () => {
     expect(res.body.sequence).toHaveLength(84);
     expect(res.body.sequence[0]).toStrictEqual({
       index: 0,
-      code: PLANS.sprint.sessions[0],
+      code: PLANS.sprint.sessions[0].type,
       status: "today",
     });
   });
@@ -3196,7 +3196,7 @@ describe("GET /api/today", () => {
     const res = await asA(request(app).get("/api/today"));
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({
-      todayCode: PLANS.sprint.sessions[0],
+      todayCode: PLANS.sprint.sessions[0].type,
       doneN: 0,
       planKey: null,
     });
@@ -3208,7 +3208,7 @@ describe("GET /api/today", () => {
       k2Seconds: 120,
       k6Seconds: 130,
     });
-    const todayCode = PLANS.sprint.sessions[0];
+    const todayCode = PLANS.sprint.sessions[0].type;
     const created = await asA(request(app).post("/api/workouts")).send(
       validWorkoutBody({
         type: todayCode as "AN" | "O2" | "AT" | "TR",
@@ -3237,7 +3237,7 @@ describe("GET /api/today", () => {
       k2Seconds: 120,
       k6Seconds: 130,
     });
-    const todayCode = PLANS.sprint.sessions[0];
+    const todayCode = PLANS.sprint.sessions[0].type;
     // Seeded via the same test-only seam data.test.ts's "global starter
     // library" block uses — no personal workout created at all here, so if
     // the global didn't show up in the pool, it could only be because
@@ -3268,7 +3268,7 @@ describe("GET /api/today", () => {
       k2Seconds: 120,
       k6Seconds: 130,
     });
-    const todayCode = PLANS.sprint.sessions[0] as "AN" | "O2" | "AT" | "TR";
+    const todayCode = PLANS.sprint.sessions[0].type;
     const onboarding = seedGlobalWorkout(stores, {
       sortOrder: 900,
       title: ONBOARDING_TITLES.k6,
@@ -3297,7 +3297,7 @@ describe("GET /api/today", () => {
       k2Seconds: 120,
       k6Seconds: 130,
     });
-    const todayCode = PLANS.sprint.sessions[0] as "AN" | "O2" | "AT" | "TR";
+    const todayCode = PLANS.sprint.sessions[0].type;
     const onboarding = seedGlobalWorkout(stores, {
       sortOrder: 900,
       title: ONBOARDING_TITLES.k6,
@@ -3323,7 +3323,7 @@ describe("GET /api/today", () => {
     });
     await asA(request(app).put("/api/plan")).send({ planKey: "head" });
     const res = await asA(request(app).get("/api/today"));
-    expect(res.body.todayCode).toBe(PLANS.head.sessions[0]);
+    expect(res.body.todayCode).toBe(PLANS.head.sessions[0].type);
     expect(res.body.planKey).toBe("head");
   });
 
@@ -3344,7 +3344,7 @@ describe("GET /api/today", () => {
       k2Seconds: 120,
       k6Seconds: 130,
     });
-    const todayCode = PLANS.sprint.sessions[0];
+    const todayCode = PLANS.sprint.sessions[0].type;
     const short = await asA(request(app).post("/api/workouts")).send(
       validWorkoutBody({
         title: "Well Under The Cap",

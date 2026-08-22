@@ -15,6 +15,11 @@ import { estimateMinutes } from "../../domain/expand.js";
 import { suggest, suggestFreestyle } from "../../domain/suggest.js";
 import type { LibraryEntry, SuggestPrefs } from "../../domain/suggest.js";
 import {
+  planPrescription,
+  resolvePrescribed,
+} from "../../domain/prescription.js";
+import { PLANS } from "../../domain/plans.js";
+import {
   pieceList,
   peakIndex,
   workAndTotal,
@@ -26,7 +31,6 @@ import type {
   Step,
   WorkoutType,
 } from "../../domain/types.js";
-import type { PlanCode } from "../../domain/plans.js";
 import {
   ONBOARDING_TITLES,
   isOnboardingTitle,
@@ -191,8 +195,14 @@ function computeSuggestion(
   >,
   entries: LibraryEntry[],
   baselines: Baselines | null,
-  todayCode: PlanCode | null,
+  todayCode: WorkoutType | null,
   pickOverride: string | null,
+  // Phase 8A: the plan day's resolved prescription, or null (no plan, no
+  // prescription authored for this index, an unresolvable ref, or a chip
+  // swap overriding it — TodayView owns all four of those decisions).
+  // Only the plan branch consumes it: freestyle has no plan day to carry
+  // a prescription at all.
+  prescribed: { entry: LibraryEntry; reason: string } | null,
 ) {
   const prefs: SuggestPrefs = {
     difficulties: filters.difficulties,
@@ -222,6 +232,7 @@ function computeSuggestion(
         library: entries,
         prefs,
         todayPickId: pickOverride ?? undefined,
+        prescribed,
       })
     : suggestFreestyle(entries, prefs, pickOverride ?? undefined);
 }
@@ -238,11 +249,22 @@ function poolCountFor(
   >,
   entries: LibraryEntry[],
   baselines: Baselines | null,
-  todayCode: PlanCode | null,
+  todayCode: WorkoutType | null,
   pickOverride: string | null,
+  prescribed: { entry: LibraryEntry; reason: string } | null,
 ): number {
-  return computeSuggestion(draft, entries, baselines, todayCode, pickOverride)
-    .poolIds.length;
+  // `poolIds` keeps its pool meaning with a prescription pinned
+  // (suggest.ts's own contract), so the sheet's live count stays an
+  // honest count of the ESCAPE pool either way — the prescribed entry is
+  // never a pool member.
+  return computeSuggestion(
+    draft,
+    entries,
+    baselines,
+    todayCode,
+    pickOverride,
+    prescribed,
+  ).poolIds.length;
 }
 
 export default function Today() {
@@ -882,21 +904,9 @@ function TodayView({
   // chip below) — the plan line's first segment and the type chips' "which
   // one is the un-swap target" both read off this, never off the swapped
   // `todayCode`.
-  const prescribedCode: PlanCode | null =
+  const prescribedCode: WorkoutType | null =
     plan.planKey !== null ? (plan.sequence[plan.doneN]?.code ?? null) : null;
   const usesPlan = prescribedCode !== null;
-
-  // TEST maps to TR's pool exactly like suggest.ts's own `matchType`
-  // (domain/suggest.ts:93) — the type chips' "which chip is currently
-  // active absent a swap" and "which chip un-swaps" both need that same
-  // mapping client-side, so it's computed once here rather than duplicated
-  // at each call site below.
-  const effectivePrescribed: WorkoutType | null =
-    prescribedCode === null
-      ? null
-      : prescribedCode === "TEST"
-        ? "TR"
-        : prescribedCode;
 
   // Lazy initializer: read once at mount, exactly like WorkoutDetail.tsx's
   // nudge state — the `key` above already forces a remount (and thus a
@@ -926,15 +936,14 @@ function TodayView({
       },
   );
 
-  // The type the chips (and now the descriptor word below them) actually
-  // treat as selected: a swap if one is set, else whatever's effectively
-  // prescribed today (TR standing in on a TEST day) — the exact expression
-  // each TodayChip's own `active` prop already used inline, pulled out once
-  // so the new word row reads off the identical value rather than a second
-  // copy of the same ternary. Null only in freestyle (no plan, no chips, no
-  // word to show).
+  // The type the chips (and the descriptor word below them) actually
+  // treat as selected: a swap if one is set, else the plan's own call for
+  // today. Since Phase 8A a checkpoint day carries its REAL type here (the
+  // "TEST" code and its TR stand-in are retired), so no mapping sits
+  // between the wire's code and the chips. Null only in freestyle (no
+  // plan, no chips, no word to show).
   const effectiveType: WorkoutType | null =
-    overrides.swapType ?? effectivePrescribed;
+    overrides.swapType ?? prescribedCode;
 
   // Every chip handler below funnels through this: update the visible
   // state AND persist in the same call, so no chip tap is ever lost to a
@@ -945,13 +954,11 @@ function TodayView({
   }
 
   function handleTypeChip(type: WorkoutType) {
-    // Tapping the chip that matches what's already effectively prescribed
-    // (the plan's own call, or TR standing in for a TEST day) clears the
-    // swap rather than swapping to itself — the brief's "tapping the
-    // prescribed chip (or TR on a TEST day) sets swapType: null".
+    // Tapping the chip that matches the plan's own call for today clears
+    // the swap rather than swapping to itself.
     updateOverrides({
       ...overrides,
-      swapType: type === effectivePrescribed ? null : type,
+      swapType: type === prescribedCode ? null : type,
     });
   }
 
@@ -1065,11 +1072,47 @@ function TodayView({
     .filter((w) => !(isOnboardingTitle(w.title) && w.isGlobal))
     .map((w) => toLibraryEntry(w, baselines));
 
-  // The swapped-in type: a swap always names a real WorkoutType, which IS a
-  // PlanCode (WorkoutType is a subset of the PlanCode union), so this needs
-  // no cast to feed `suggest`'s `todayCode: PlanCode` parameter below.
-  const todayCode: PlanCode | null =
+  // The swapped-in type if one is set, else the plan's own call — what
+  // `suggest`'s `todayCode` actually receives below.
+  const todayCode: WorkoutType | null =
     prescribedCode !== null ? (overrides.swapType ?? prescribedCode) : null;
+
+  // Phase 8A: the plan day's own authored prescription (a checkpoint's
+  // designated test), computed CLIENT-SIDE from PLANS — it never crosses
+  // the wire (antagonist B2's wire contract; Plan.tsx's checkpoint mark
+  // does the same). Resolved against the UNFILTERED `library`, NOT
+  // `entries`: both suggestion pools deliberately exclude the onboarding
+  // titles, and the prescribed test is exactly such a title — the same
+  // unfiltered lookup BaselineCard's k6Workout/k2Workout below already
+  // use. An unresolvable ref degrades quietly to the ordinary pool
+  // suggestion (domain/prescription.ts's own contract; authored refs are
+  // guarded by prescription.test.ts's seed-resolution test instead).
+  const prescription =
+    plan.planKey !== null
+      ? planPrescription(PLANS[plan.planKey], plan.doneN)
+      : null;
+  const prescribedWorkout =
+    prescription !== null ? resolvePrescribed(prescription.ref, library) : null;
+  // James's chips ruling (2026-08-12): a chip swap OVERRIDES the
+  // prescription — the rower acting now wins — so the pin only rides into
+  // suggest() while no swap is active. The override renders a visible
+  // marker on the plan line below; because a swap escapes, the chips are
+  // the exit on a day where SHUFFLE is disabled (the empty-or-single-pool
+  // case the prescription bypass exists to serve).
+  const prescribed =
+    prescription !== null &&
+    prescribedWorkout !== null &&
+    overrides.swapType === null
+      ? {
+          entry: toLibraryEntry(prescribedWorkout, baselines),
+          reason: prescription.reason,
+        }
+      : null;
+  // Keyed on the RESOLVED workout, not the authored ref: if the ref never
+  // resolved, the rower never saw a checkpoint card, so a swap displaces
+  // nothing and the marker would assert an override that never happened.
+  const prescriptionOverridden =
+    prescribedWorkout !== null && overrides.swapType !== null;
 
   const suggestion = computeSuggestion(
     overrides,
@@ -1077,6 +1120,7 @@ function TodayView({
     baselines,
     todayCode,
     pickOverride,
+    prescribed,
   );
 
   // TodayFilterSheet's own live count — the SAME call above, run against
@@ -1087,6 +1131,7 @@ function TodayView({
     baselines,
     todayCode,
     pickOverride,
+    prescribed,
   );
 
   const filterTokens = todayFilterTokens(
@@ -1096,8 +1141,10 @@ function TodayView({
   );
 
   // The `?? null` is defensive, not reachable from this call site: `entries`
-  // (fed to `suggest`/`suggestFreestyle`) is `library.map(toLibraryEntry)`,
-  // a 1:1 id-preserving mapping, so any `recommendationId` those functions
+  // (fed to `suggest`/`suggestFreestyle`) is an id-preserving mapping of
+  // `library` rows, and the prescribed entry (Phase 8A, the one
+  // recommendation that can come from OUTSIDE `entries`) is resolved from
+  // the same `library` above — so any `recommendationId` those functions
   // return is provably one of `library`'s own ids. Kept rather than
   // asserted away in case that invariant ever changes.
   const recommended = suggestion.recommendationId
@@ -1130,13 +1177,15 @@ function TodayView({
     // (canShuffle = poolIds.length > 1) already keeps a click from firing
     // this at all when the pool has 0 or 1 members.
     if (pool.length === 0) return;
-    // Defensive: suggest.ts's own invariant is poolIds.length > 0 iff
-    // recommendationId !== null (see `recommended`'s comment above), so
-    // past the guard above `recommendationId` is never actually null here.
+    // Since 8A a prescribed pin can hold `recommendationId` with the
+    // prescribed entry OUTSIDE `pool` (it is deliberately not a pool
+    // member — SHUFFLE's escape depends on that), so unlike pre-8A this
+    // fallback and the -1 arm below are both live paths, not defensive.
     const currentId = suggestion.recommendationId ?? pool[0];
     const currentIndex = pool.indexOf(currentId);
-    // Defensive: the same invariant means `currentId` is always one of
-    // `pool`'s own members, so `indexOf` never actually returns -1 here.
+    // On every checkpoint day the ROUTINE shuffle-escape path lands here
+    // with -1 (the pinned test is not in `pool`), stepping to `pool[0]`,
+    // the least-recently-done member. -1 is the escape, not an error.
     const nextIndex =
       currentIndex === -1 ? 0 : (currentIndex + 1) % pool.length;
     const nextId = pool[nextIndex];
@@ -1175,12 +1224,20 @@ function TodayView({
               SESSION {plan.doneN + 1} OF {plan.sequence.length} ·{" "}
               {prescribedCode}
               {overrides.swapType !== null && ` → ${overrides.swapType}`}
+              {/* Phase 8A, stated design (DEVIATIONS row): the override
+                  marker rides the plan line's existing swap arrow — the
+                  arrow already records the swap, and the marker qualifies
+                  exactly that act. Same mono-status style as the rest of
+                  the line (no new colour, no new class). It says
+                  overridden and never names the displaced workout
+                  (James's ruling, 2026-08-12). */}
+              {prescriptionOverridden && " · CHECKPOINT OVERRIDDEN"}
             </p>
             {/* Type-swap chips: only meaningful with a plan active (there is
                 no "prescribed type" to swap away from in freestyle). Active
-                state reads `swapType ?? effectivePrescribed` — the un-swapped
+                state reads `swapType ?? prescribedCode` — the un-swapped
                 chip lights up whichever type the plan actually calls for
-                today (TR standing in on a TEST day), and tapping THAT chip
+                today, and tapping THAT chip
                 again clears the swap rather than swapping to itself
                 (handleTypeChip). Amendment (2026-08-04 PR #50 round), Task 2:
                 `.type-chip-grid` (index.css — renamed from `.today-type-

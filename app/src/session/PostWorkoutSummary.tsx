@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 import { fmtSplit } from "../../domain/format.js";
+import { isOnboardingTitle } from "../../domain/onboarding.js";
+import type { Baselines } from "../../domain/types.js";
 import type { HeldResult, Thumbs } from "../api/useRecentLogs";
 import type { PlanData } from "../api/usePlan";
 import type { SeriesData } from "../monitor/seriesRecorder.js";
@@ -478,7 +480,16 @@ export interface PostWorkoutSummaryProps {
   notes: string;
   onNotes: (value: string) => void;
   plan: PlanData | null;
-  isOnboarding: boolean;
+  /** The ACCOUNT's current baselines — the combined pair, null when either
+   *  side is unset or the fetch hasn't resolved (the app-wide partial-pair
+   *  convention). Phase 8A (James's ruling 5, 2026-08-22): together with
+   *  `title` this DERIVES which save button leads — the component keys the
+   *  6I demotion on `isOnboardingTitle(title) && accountBaselines === null`
+   *  itself, so no caller (and no test) can assert the demotion without
+   *  supplying the real inputs it is derived from. Distinct from
+   *  `pacesOffCaption`'s locked paces: those are frozen at session start,
+   *  this is the account's live state at save time. */
+  accountBaselines: Baselines | null;
   saving: boolean;
   saveError: string | null;
   onLogAgainstPlan: () => void;
@@ -537,7 +548,7 @@ export default function PostWorkoutSummary({
   notes,
   onNotes,
   plan,
-  isOnboarding,
+  accountBaselines,
   saving,
   saveError,
   onLogAgainstPlan,
@@ -558,18 +569,28 @@ export default function PostWorkoutSummary({
       : "Log against plan";
 
   // §2F: no plan hides `Log against plan` outright (not disabled) and
-  // `Save without logging` leads alone; an onboarding title swaps which of
-  // the remaining two buttons leads (6I's "a baseline test must not
-  // silently consume plan session 1," now expressed as button order rather
-  // than a pre-toggled state). `lead`/`secondary` name the VISUAL slot
-  // (54px accent vs 48px outline), independent of which literal button
-  // text occupies it.
+  // `Save without logging` leads alone. Phase 8A (James's ruling 5,
+  // 2026-08-22) narrows 6I's demotion to its actual case: an
+  // onboarding-titled workout swaps which button leads ONLY while the
+  // account's baselines are null — that no-baseline population is who "a
+  // baseline test must not silently consume plan session 1" protects. A
+  // BASELINED rower rowing that same title is at a plan checkpoint
+  // (session 7/35/63 prescribes it), and demoting there soft-locks the
+  // plan: the lead save writes plan_key/plan_index NULL and done_n never
+  // advances past the checkpoint. Derived HERE from `title` +
+  // `accountBaselines`, never taken as a caller boolean — a prop-injected
+  // flag let a green test pin the wrong behaviour through any wiring
+  // change (PostWorkoutSummary.test.tsx:883, pre-8A). `lead`/`secondary`
+  // name the VISUAL slot (54px accent vs 48px outline), independent of
+  // which literal button text occupies it.
+  const demoteForOnboarding =
+    isOnboardingTitle(title) && accountBaselines === null;
   const saveWithoutLoggingButton = (
     <button
       key="save-without-logging"
       type="button"
       className={
-        plan === null || isOnboarding
+        plan === null || demoteForOnboarding
           ? "summary-save-lead"
           : "summary-save-secondary"
       }
@@ -585,7 +606,7 @@ export default function PostWorkoutSummary({
         key="log-against-plan"
         type="button"
         className={
-          isOnboarding ? "summary-save-secondary" : "summary-save-lead"
+          demoteForOnboarding ? "summary-save-secondary" : "summary-save-lead"
         }
         onClick={onLogAgainstPlan}
         disabled={saving}
@@ -596,7 +617,7 @@ export default function PostWorkoutSummary({
   const saveButtons =
     plan === null
       ? [saveWithoutLoggingButton]
-      : isOnboarding
+      : demoteForOnboarding
         ? [saveWithoutLoggingButton, logAgainstPlanButton]
         : [logAgainstPlanButton, saveWithoutLoggingButton];
 

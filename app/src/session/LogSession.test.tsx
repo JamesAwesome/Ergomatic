@@ -12,7 +12,6 @@ import type { IntervalActual } from "../../domain/monitor/types.js";
 import type { api } from "../api";
 import type { LibraryWorkout } from "../api/useWorkouts";
 import type { PlanData, PlanKey, PlanState } from "../api/usePlan";
-import type { PlanCode } from "../../domain/plans.js";
 import {
   buildDraft,
   clearDraft,
@@ -223,7 +222,7 @@ function activePlan(overrides: Partial<PlanData> = {}): PlanData {
   const doneN = 3;
   const sequence: PlanData["sequence"] = Array.from({ length: 84 }, (_, i) => ({
     index: i,
-    code: "O2" as PlanCode,
+    code: "O2",
     status: i < doneN ? "done" : i === doneN ? "today" : "upcoming",
   }));
   return { planKey, doneN, sequence, ...overrides };
@@ -3691,12 +3690,13 @@ describe("LogSession: the save stack's plan position (§2F, replaces the outside
     ).toContain("summary-save-secondary");
   });
 
-  // Phase 6I: the designated onboarding workout's own summary swaps which
-  // button leads — Save without logging leads, Log against plan demotes —
-  // rather than pre-toggling a state (spec: "a baseline test must not
-  // silently consume plan session 1").
-  it("Phase 6I: a designated onboarding workout's summary leads with Save without logging", async () => {
+  // Phase 6I, narrowed by Phase 8A (James's ruling 5, 2026-08-22): the
+  // demotion protects a NO-BASELINE account rowing its intro test — that
+  // population, not the title alone. Baselines resolved-null here, the
+  // condition's real second input.
+  it("Phase 6I: a designated onboarding workout on a NO-BASELINE account leads with Save without logging", async () => {
     mockPlan(readyPlanState(activePlan()));
+    mockBaselines({ k2Seconds: null, k6Seconds: null });
     const { workout } = buildOnboardingSessionFixture();
     mockWorkouts([workout]);
     await renderLog();
@@ -3708,6 +3708,31 @@ describe("LogSession: the save stack's plan position (§2F, replaces the outside
       name: /Log against plan/,
     });
     expect(secondary.className).toContain("summary-save-secondary");
+  });
+
+  // Phase 8A (James's ruling 5, 2026-08-22, the gates' blocking find): on
+  // a checkpoint day — a BASELINED rower whose plan prescribes the very
+  // test title 6I keyed on — `Log against plan` must LEAD, or the
+  // non-advancing lead save writes plan_key/plan_index NULL, done_n never
+  // passes 6, and Today re-serves the checkpoint forever (the soft-lock).
+  // The condition is DERIVED from the workout title + the account's real
+  // baselines state; this test builds both real inputs and cannot pass if
+  // the derivation breaks.
+  it("Phase 8A: a baselined rower's onboarding-titled checkpoint leads with Log against plan", async () => {
+    mockPlan(readyPlanState(activePlan()));
+    mockBaselines({ k2Seconds: 112, k6Seconds: 122 });
+    const { workout } = buildOnboardingSessionFixture();
+    mockWorkouts([workout]);
+    await renderLog();
+    await screen.findByRole("heading", { name: "First 6k" });
+
+    const lead = screen.getByRole("button", {
+      name: "Log against plan · SESSION 4 OF 84",
+    });
+    expect(lead.className).toContain("summary-save-lead");
+    expect(
+      screen.getByRole("button", { name: "Save without logging" }).className,
+    ).toContain("summary-save-secondary");
   });
 
   it("Phase 6I: an ordinary (non-onboarding) workout's summary still leads with Log against plan", async () => {
@@ -3941,8 +3966,8 @@ describe("LogSession: the save stack's plan position (§2F, replaces the outside
   // The reflection quintet (held/pain/thumbs/notes) survives a failed save
   // unchanged — proved elsewhere; here the concern is narrower: a failed
   // save must not reset which button LEADS (there is no state to reset —
-  // button order is a pure render-time computation from plan/isOnboarding,
-  // neither of which a failed save touches).
+  // button order is a pure render-time computation from plan/title/
+  // baselines, none of which a failed save touches).
   it("a failed save leaves the save stack's button order unchanged", async () => {
     mockPlan(readyPlanState(activePlan()));
     const { workout } = buildSessionFixture();

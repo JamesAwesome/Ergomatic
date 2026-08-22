@@ -230,7 +230,7 @@ accepted limit to spec, ROADMAP and notes alike. The clause reads roughly:
 interval if the link stuttered, or can show a rest as if you never stopped
 rowing, and there is no way to tell a good one from a bad one. Only traces
 recorded from this build on are trustworthy."* **(Round 4, C3: the original
-draft named fault 1 only — the interval gap. DEVIATIONS row 200 names two
+draft named fault 1 only — the interval gap. DEVIATIONS row 204 names two
 faults; a rower-facing clause covering half the corpus problem is worse than
 none, because it reads as complete. Both faults belong in the one clause,
 since both are the same "some old traces lie, silently" story to a tester.)**
