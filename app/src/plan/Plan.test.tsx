@@ -226,15 +226,17 @@ describe("Plan (active plan — sequence rendering)", () => {
   });
 
   // Phase 8A: the "TEST" badge retired with its plan code. A checkpoint
-  // row renders the day's REAL type via the shared TypeBadge plus a
-  // CHECKPOINT mark computed client-side from PLANS (the prescription
-  // never crosses the wire — the fixture's `code` is a bare WorkoutType).
+  // row renders the day's REAL type via the shared TypeBadge plus the
+  // PRESCRIBED WORKOUT'S TITLE (James, 2026-08-22: the checkpoint is the
+  // one day the plan names a specific workout, so the row says which),
+  // computed client-side from PLANS — the prescription never crosses the
+  // wire; the fixture's `code` is a bare WorkoutType.
   it.each([
-    ["sprint", "AN"],
-    ["head", "AT"],
+    ["sprint", "AN", "FIRST 2K"],
+    ["head", "AT", "FIRST 6K"],
   ] as const)(
-    "marks exactly the three %s checkpoint rows CHECKPOINT, typed %s, with no TEST badge anywhere",
-    async (planKey, checkpointType) => {
+    "marks the three %s checkpoint rows with the prescribed title, typed %s, no TEST badge anywhere",
+    async (planKey, checkpointType, prescribedTitle) => {
       mockUsePlan({
         state: "ready",
         plan: {
@@ -254,7 +256,7 @@ describe("Plan (active plan — sequence rendering)", () => {
       expect(marked).toStrictEqual([6, 34, 62]);
       for (const i of marked) {
         expect(rows[i].querySelector(".plan-row-checkpoint")?.textContent).toBe(
-          "CHECKPOINT",
+          prescribedTitle,
         );
         expect(rows[i].querySelector(".type-badge")?.textContent).toBe(
           checkpointType,

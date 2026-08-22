@@ -277,13 +277,17 @@ function PlanView({
               <TypeBadge type={item.code} />
               {/* Phase 8A: the "TEST" badge retired with its plan code — a
                   checkpoint is now a real-type day carrying a prescription,
-                  and the mark is computed CLIENT-SIDE from PLANS (the
-                  prescription never crosses the wire). Stated design for
-                  this task: a small mono CHECKPOINT affix after the badge;
-                  Task 2's design pass reviews it. */}
+                  computed CLIENT-SIDE from PLANS (the prescription never
+                  crosses the wire). The affix is the PRESCRIBED WORKOUT'S
+                  TITLE, uppercased to the row's mono voice (James,
+                  2026-08-22: the checkpoint is the one day the plan names
+                  a specific workout, so the row says which — reads
+                  FIRST 2K now, 2K TEST after PR B's rename lands). */}
               {activePreset.sessions[item.index]?.prescribe !== undefined && (
                 <span className="plan-row-checkpoint mono-status">
-                  CHECKPOINT
+                  {activePreset.sessions[
+                    item.index
+                  ]!.prescribe!.ref.title.toUpperCase()}
                 </span>
               )}
               <span className="plan-row-status" aria-hidden="true">
