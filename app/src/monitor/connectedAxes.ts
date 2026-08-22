@@ -103,6 +103,17 @@ export interface AxesInput {
    *  same gap: it cannot verify the `"up"` branch is reachable from real
    *  code either, only that the TYPE still allows it. */
   failureLeavesLinkUp: boolean | null;
+  /** Phase LL Task 2 (link-truth design spec §2a): mirrors
+   *  `useMonitorSession`'s `SessionState.frameSilence` at the instant of
+   *  derivation — `true` whenever the liveness watchdog has declared the
+   *  frame stream silent, or an app-lifecycle resume is treating it as
+   *  suspect, and the banner's own hysteresis has not yet retracted it.
+   *  **Not a new axis and not a new `SurfaceStatus` member** (spec §2a's
+   *  own correction of the first draft, which invented one): this ONLY
+   *  feeds `deriveLink`, which routes it onto the EXISTING `"lost"`
+   *  member — the same member `phase === "disconnected"` already
+   *  produces — so `LostBanner` needs no second treatment to know about. */
+  frameSilence: boolean;
 }
 
 function assertNever(value: never): never {
@@ -120,7 +131,7 @@ function assertNever(value: never): never {
 // otherwise, exactly the kind of gap recurring failure #2 warns about.
 
 export function deriveLink(input: AxesInput): LinkAxis {
-  const { phase, failureLeavesLinkUp } = input;
+  const { phase, failureLeavesLinkUp, frameSilence } = input;
   switch (phase) {
     case "idle":
       return "none";
@@ -136,7 +147,19 @@ export function deriveLink(input: AxesInput): LinkAxis {
       // live driver until something moves the phase off it. A frozen
       // session is `"live"` (task 5 — `"paused"` retired), so it needs no
       // case of its own here any more than it ever needed a SEPARATE one.
-      return "up";
+      //
+      // Phase LL Task 2 (§2a): `frameSilence` demotes exactly this group
+      // to `"lost"` — a driver that is technically still connected but
+      // whose frame stream has gone quiet past the watchdog's threshold
+      // (or an app-lifecycle resume treating it as suspect) is a link the
+      // rower cannot trust any more than a genuine `onDisconnect` would
+      // be, and both land on the identical `"lost"` -> `stale` ->
+      // `LostBanner` treatment (§2a: "one honest axis"). `picking` is
+      // deliberately excluded from this check (its own `"connecting"`
+      // case above never reaches here) — the watchdog cannot even be
+      // armed yet at that phase (Task 1's arming rule: first valid 0x0031
+      // AFTER connect).
+      return frameSilence ? "lost" : "up";
     case "failed":
       return failureLeavesLinkUp === true ? "up" : "lost";
     case "disconnected":

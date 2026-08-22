@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import {
   deriveActivity,
   deriveAxes,
+  deriveLink,
   deriveProgram,
   deriveSession,
   type AxesInput,
@@ -21,6 +22,7 @@ interface Row {
   frozen: boolean;
   runOpen: boolean;
   failureLeavesLinkUp: boolean | null;
+  frameSilence: boolean;
   expect: ConnectedAxes;
 }
 
@@ -35,6 +37,7 @@ const ROWS: Row[] = [
     frozen: false,
     runOpen: false,
     failureLeavesLinkUp: null,
+    frameSilence: false,
     expect: {
       link: "none",
       program: "none",
@@ -48,6 +51,7 @@ const ROWS: Row[] = [
     frozen: false,
     runOpen: false,
     failureLeavesLinkUp: null,
+    frameSilence: false,
     expect: {
       link: "connecting",
       program: "none",
@@ -61,6 +65,7 @@ const ROWS: Row[] = [
     frozen: false,
     runOpen: false,
     failureLeavesLinkUp: null,
+    frameSilence: false,
     expect: {
       link: "up",
       program: "none",
@@ -74,6 +79,7 @@ const ROWS: Row[] = [
     frozen: false,
     runOpen: false,
     failureLeavesLinkUp: null,
+    frameSilence: false,
     expect: {
       link: "up",
       program: "sending",
@@ -87,6 +93,7 @@ const ROWS: Row[] = [
     frozen: false,
     runOpen: false,
     failureLeavesLinkUp: null,
+    frameSilence: false,
     expect: {
       link: "up",
       program: "armed",
@@ -100,6 +107,7 @@ const ROWS: Row[] = [
     frozen: false,
     runOpen: false,
     failureLeavesLinkUp: null,
+    frameSilence: false,
     expect: {
       link: "lost",
       program: "failed",
@@ -113,6 +121,7 @@ const ROWS: Row[] = [
     frozen: false,
     runOpen: false,
     failureLeavesLinkUp: true,
+    frameSilence: false,
     expect: {
       link: "up",
       program: "failed",
@@ -126,6 +135,7 @@ const ROWS: Row[] = [
     frozen: false,
     runOpen: false,
     failureLeavesLinkUp: false,
+    frameSilence: false,
     expect: {
       link: "lost",
       program: "failed",
@@ -139,6 +149,7 @@ const ROWS: Row[] = [
     frozen: false,
     runOpen: true,
     failureLeavesLinkUp: null,
+    frameSilence: false,
     expect: {
       link: "up",
       program: "armed",
@@ -152,6 +163,7 @@ const ROWS: Row[] = [
     frozen: true,
     runOpen: true,
     failureLeavesLinkUp: null,
+    frameSilence: false,
     expect: {
       link: "up",
       program: "armed",
@@ -165,6 +177,7 @@ const ROWS: Row[] = [
     frozen: false,
     runOpen: true,
     failureLeavesLinkUp: null,
+    frameSilence: false,
     expect: {
       link: "lost",
       program: "none",
@@ -178,6 +191,7 @@ const ROWS: Row[] = [
     frozen: false,
     runOpen: false,
     failureLeavesLinkUp: null,
+    frameSilence: false,
     expect: {
       link: "lost",
       program: "none",
@@ -191,6 +205,7 @@ const ROWS: Row[] = [
     frozen: false,
     runOpen: true,
     failureLeavesLinkUp: null,
+    frameSilence: false,
     expect: {
       link: "up",
       program: "none",
@@ -203,9 +218,22 @@ const ROWS: Row[] = [
 describe("deriveAxes — the exhaustive table (spec §1 exit criterion 1)", () => {
   it.each(ROWS)(
     "$name",
-    ({ phase, frozen, runOpen, failureLeavesLinkUp, expect: want }) => {
+    ({
+      phase,
+      frozen,
+      runOpen,
+      failureLeavesLinkUp,
+      frameSilence,
+      expect: want,
+    }) => {
       expect(
-        deriveAxes({ phase, frozen, runOpen, failureLeavesLinkUp }),
+        deriveAxes({
+          phase,
+          frozen,
+          runOpen,
+          failureLeavesLinkUp,
+          frameSilence,
+        }),
       ).toStrictEqual(want);
     },
   );
@@ -240,6 +268,7 @@ describe("deriveAxes — the exhaustive table (spec §1 exit criterion 1)", () =
         frozen: false,
         runOpen: false,
         failureLeavesLinkUp: null,
+        frameSilence: false,
       }),
     ).toThrow(/unhandled ConnectedPhase/);
   });
@@ -265,6 +294,7 @@ describe("deriveAxes — the exhaustive table (spec §1 exit criterion 1)", () =
         frozen: false,
         runOpen: false,
         failureLeavesLinkUp: null,
+        frameSilence: false,
       }),
     ).toThrow(/unhandled ConnectedPhase/);
   });
@@ -276,7 +306,85 @@ describe("deriveAxes — the exhaustive table (spec §1 exit criterion 1)", () =
         frozen: false,
         runOpen: false,
         failureLeavesLinkUp: null,
+        frameSilence: false,
       }),
     ).toThrow(/unhandled ConnectedPhase/);
+  });
+});
+
+describe("deriveLink — frameSilence (Phase LL Task 2, design spec §2a)", () => {
+  it.each<AxesInput["phase"]>(["pairing", "programming", "ready", "live"])(
+    "%s: frameSilence:true demotes an otherwise-up link to lost",
+    (phase) => {
+      expect(
+        deriveLink({
+          phase,
+          frozen: false,
+          runOpen: true,
+          failureLeavesLinkUp: null,
+          frameSilence: true,
+        }),
+      ).toBe("lost");
+    },
+  );
+
+  it.each<AxesInput["phase"]>(["pairing", "programming", "ready", "live"])(
+    "%s: frameSilence:false leaves the link up, unchanged from before this task",
+    (phase) => {
+      expect(
+        deriveLink({
+          phase,
+          frozen: false,
+          runOpen: true,
+          failureLeavesLinkUp: null,
+          frameSilence: false,
+        }),
+      ).toBe("up");
+    },
+  );
+
+  it("disconnected: already lost regardless of frameSilence — no new information", () => {
+    expect(
+      deriveLink({
+        phase: "disconnected",
+        frozen: false,
+        runOpen: true,
+        failureLeavesLinkUp: null,
+        frameSilence: true,
+      }),
+    ).toBe("lost");
+  });
+
+  it("idle/picking: frameSilence has no effect — the watchdog cannot even be armed yet (Task 1's arming rule)", () => {
+    expect(
+      deriveLink({
+        phase: "idle",
+        frozen: false,
+        runOpen: false,
+        failureLeavesLinkUp: null,
+        frameSilence: true,
+      }),
+    ).toBe("none");
+    expect(
+      deriveLink({
+        phase: "picking",
+        frozen: false,
+        runOpen: false,
+        failureLeavesLinkUp: null,
+        frameSilence: true,
+      }),
+    ).toBe("connecting");
+  });
+
+  it("failed: frameSilence never overrides failureLeavesLinkUp — the failed case has its own, older ruling", () => {
+    expect(
+      deriveLink({
+        phase: "failed",
+        frozen: false,
+        runOpen: false,
+        failureLeavesLinkUp: true,
+        frameSilence: true,
+      }),
+    ).toBe("up");
   });
 });

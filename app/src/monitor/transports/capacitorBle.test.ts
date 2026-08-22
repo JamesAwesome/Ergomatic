@@ -42,6 +42,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // a leaked rejection FAILS the suite. Delete the attached handlers in
 // `raceScanTimeout` and these tests go red for that reason.
 const handlers = new Map<string, (id: string) => void>();
+// Phase LL Task 2 (§2 mechanism 1): `startEnabledNotifications` takes ONE
+// global callback (no device id — it is a Bluetooth-ADAPTER event, not a
+// per-peripheral one), so a single slot is enough; re-armed in
+// `beforeEach` alongside every other mock. `undefined` until `connect()`
+// has run at least once in a given test.
+let enabledChangedCb: ((value: boolean) => void) | undefined;
 
 vi.mock("@capacitor-community/bluetooth-le", () => ({
   BleClient: {
@@ -54,6 +60,8 @@ vi.mock("@capacitor-community/bluetooth-le", () => ({
     write: vi.fn(),
     startNotifications: vi.fn(),
     stopNotifications: vi.fn(),
+    startEnabledNotifications: vi.fn(),
+    stopEnabledNotifications: vi.fn(),
   },
   numbersToDataView: vi.fn(),
   toUint8Array: vi.fn(),
@@ -67,6 +75,7 @@ const {
   END_OF_WORKOUT_SUMMARY_UUID,
   GENERAL_STATUS_UUID,
   ROWING_SERVICE_UUID,
+  TRANSMIT_CHARACTERISTIC_UUID,
 } = await import("../../../domain/monitor/pm5/uuids.js");
 const { createCapacitorBleTransport } = await import("./capacitorBle");
 
@@ -102,6 +111,14 @@ beforeEach(() => {
   vi.mocked(BleClient.write).mockResolvedValue(undefined);
   vi.mocked(BleClient.startNotifications).mockResolvedValue(undefined);
   vi.mocked(BleClient.stopNotifications).mockResolvedValue(undefined);
+  enabledChangedCb = undefined;
+  vi.mocked(BleClient.startEnabledNotifications).mockImplementation(
+    (cb: (value: boolean) => void) => {
+      enabledChangedCb = cb;
+      return Promise.resolve();
+    },
+  );
+  vi.mocked(BleClient.stopEnabledNotifications).mockResolvedValue(undefined);
   vi.mocked(numbersToDataView).mockReturnValue(
     new DataView(new ArrayBuffer(0)),
   );
@@ -166,6 +183,105 @@ describe("createCapacitorBleTransport: onDisconnect contract (M-2)", () => {
     await expect(
       transport.write("whatever", new Uint8Array([1])),
     ).rejects.toThrow("before connect()");
+  });
+
+  it("Phase LL Task 2 mechanism 4: a caller-initiated disconnect for device X survives an OVERLAPPING connect() to a DIFFERENT device Y — attributed by device, not a global boolean window", async () => {
+    // Overrides the default `beforeEach` mock (which fires the disconnect
+    // handler SYNCHRONOUSLY, inside `BleClient.disconnect()` itself, which
+    // makes it impossible to observe a race with anything else): this
+    // transport's own real plugin callback for X arrives LATE, on its own
+    // schedule, independent of when `BleClient.disconnect()`'s promise
+    // settles — the scenario mechanism 4 exists for.
+    vi.mocked(BleClient.disconnect).mockResolvedValue(undefined);
+    const transport = createCapacitorBleTransport();
+    const drops: string[] = [];
+    transport.onDisconnect((reason) => drops.push(reason));
+
+    await transport.connect("device-x");
+    await transport.disconnect(); // arms pendingCallerDisconnects for X
+    // The transport itself has no single-flight guard (useMonitorSession's
+    // connectingRef/driverRef own that layer), so a reconnect to a
+    // DIFFERENT device before X's own plugin callback has reported back
+    // is real and reachable, not contrived.
+    await transport.connect("device-y");
+    // X's own deliberate disconnect callback finally reports back, late —
+    // after Y is already connected. A single SHARED boolean would have
+    // been reset to `false` by `connect("device-y")` (M-2's own original
+    // fix, which resets the flag on every fresh connect regardless of
+    // WHICH device), misattributing X's own deliberate hangup as a
+    // genuine drop — device-scoped attribution (`pendingCallerDisconnects`)
+    // swallows it correctly instead, because it was never touched by
+    // `connect("device-y")` at all.
+    handlers.get("device-x")?.("device-x");
+
+    expect(drops).toStrictEqual([]);
+  });
+});
+
+describe("Phase LL Task 2 mechanism 1: onEnabledChanged (§2, 'the cheapest fix in the phase')", () => {
+  it("registers startEnabledNotifications on every connect()", async () => {
+    const transport = createCapacitorBleTransport();
+    await transport.connect("pm5-1");
+    expect(BleClient.startEnabledNotifications).toHaveBeenCalledTimes(1);
+    expect(enabledChangedCb).toBeDefined();
+  });
+
+  it("Bluetooth reported disabled while connected fires onDisconnect — the SAME path a radio-initiated drop uses", async () => {
+    const transport = createCapacitorBleTransport();
+    const drops: string[] = [];
+    transport.onDisconnect((reason) => drops.push(reason));
+    await transport.connect("pm5-1");
+
+    enabledChangedCb?.(false);
+
+    expect(drops).toHaveLength(1);
+    expect(drops[0]).toContain("disabled");
+  });
+
+  it("Bluetooth reported ENABLED is a deliberate no-op — RECONNECT IS OUT", async () => {
+    const transport = createCapacitorBleTransport();
+    const drops: string[] = [];
+    transport.onDisconnect((reason) => drops.push(reason));
+    await transport.connect("pm5-1");
+
+    enabledChangedCb?.(true);
+
+    expect(drops).toStrictEqual([]);
+  });
+
+  it("a disabled report with no device connected does nothing (no connect() has run yet this test)", () => {
+    createCapacitorBleTransport();
+    // No connect() call — enabledChangedCb is never armed at all, so
+    // there is nothing to invoke; this pins that constructing a
+    // transport alone never touches BleClient.
+    expect(BleClient.startEnabledNotifications).not.toHaveBeenCalled();
+  });
+
+  it("a disabled report arriving MID caller-initiated disconnect() is swallowed — deviceId is already null by then", async () => {
+    const transport = createCapacitorBleTransport();
+    const drops: string[] = [];
+    transport.onDisconnect((reason) => drops.push(reason));
+    await transport.connect("pm5-1");
+    // `disconnect()` nulls `deviceId` SYNCHRONOUSLY, before its own single
+    // `await` — this test proves that ordering holds even while the
+    // `BleClient.disconnect()` call itself is still pending: an
+    // enabled-changed report landing in that window finds `deviceId`
+    // already `null` and is a no-op, the same as the "no device
+    // connected" test above but reached via a real in-flight disconnect
+    // rather than never having connected at all.
+    let settleDisconnect: (() => void) | undefined;
+    vi.mocked(BleClient.disconnect).mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          settleDisconnect = resolve;
+        }),
+    );
+    const disconnectPromise = transport.disconnect();
+    enabledChangedCb?.(false);
+    settleDisconnect?.();
+    await disconnectPromise;
+
+    expect(drops).toStrictEqual([]);
   });
 });
 
@@ -492,28 +608,58 @@ describe("ensureInitialized (spec §3.5, REVIEW B2)", () => {
   });
 });
 
-describe("subscribe hardening (spec §3.5)", () => {
-  it("a startNotifications rejection fires onDisconnect (M-2 guard untripped)", async () => {
+describe("subscribe hardening (spec §3.5) + Phase LL Task 2 mechanism 3 (per-characteristic criticality)", () => {
+  it("a CSAFE control (TRANSMIT_CHARACTERISTIC_UUID) rejection stays FATAL — fires onDisconnect exactly as before (the hang guard, PINNED)", async () => {
     vi.mocked(BleClient.startNotifications).mockRejectedValue(
       new Error("Service not found."),
     );
     const transport = createCapacitorBleTransport();
     const drops: string[] = [];
+    const degraded: Array<[string, string]> = [];
     transport.onDisconnect((reason) => drops.push(reason));
+    transport.onCharacteristicDegraded((id, message) =>
+      degraded.push([id, message]),
+    );
+    await transport.connect("d1");
+
+    transport.subscribe(TRANSMIT_CHARACTERISTIC_UUID, () => {});
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // A dead CSAFE subscription IS a dead link for this driver: CSAFE acks
+    // can never arrive, and silence is the ready-gate hang ruling 2 kills.
+    // This is the hang guard `driver.ts:1525`'s own comment names — it
+    // must survive mechanism 3's degrade split unchanged.
+    expect(drops).toHaveLength(1);
+    expect(drops[0]).toContain(TRANSMIT_CHARACTERISTIC_UUID);
+    expect(drops[0]).toContain("Service not found.");
+    expect(degraded).toStrictEqual([]);
+  });
+
+  it("a STATUS characteristic (GENERAL_STATUS_UUID) rejection DEGRADES — the session continues, no onDisconnect", async () => {
+    vi.mocked(BleClient.startNotifications).mockRejectedValue(
+      new Error("Service not found."),
+    );
+    const transport = createCapacitorBleTransport();
+    const drops: string[] = [];
+    const degraded: Array<[string, string]> = [];
+    transport.onDisconnect((reason) => drops.push(reason));
+    transport.onCharacteristicDegraded((id, message) =>
+      degraded.push([id, message]),
+    );
     await transport.connect("d1");
 
     transport.subscribe(GENERAL_STATUS_UUID, () => {});
     await Promise.resolve();
     await Promise.resolve();
 
-    // A dead subscription IS a dead link for this driver: CSAFE responses
-    // can never arrive, and silence is the ready-gate hang ruling 2 kills.
-    expect(drops).toHaveLength(1);
-    expect(drops[0]).toContain(GENERAL_STATUS_UUID);
-    expect(drops[0]).toContain("Service not found.");
+    expect(drops).toStrictEqual([]);
+    expect(degraded).toHaveLength(1);
+    expect(degraded[0]?.[0]).toBe(GENERAL_STATUS_UUID);
+    expect(degraded[0]?.[1]).toContain("Service not found.");
   });
 
-  it("a startNotifications rejection during a caller-initiated teardown is NOT fired", async () => {
+  it("a startNotifications rejection during a caller-initiated teardown is NOT fired, on EITHER path (critical or degraded)", async () => {
     let rejectSubscription: ((err: unknown) => void) | undefined;
     vi.mocked(BleClient.startNotifications).mockImplementation(
       () =>
@@ -527,7 +673,11 @@ describe("subscribe hardening (spec §3.5)", () => {
     vi.mocked(BleClient.disconnect).mockResolvedValue(undefined);
     const transport = createCapacitorBleTransport();
     const drops: string[] = [];
+    const degraded: Array<[string, string]> = [];
     transport.onDisconnect((reason) => drops.push(reason));
+    transport.onCharacteristicDegraded((id, message) =>
+      degraded.push([id, message]),
+    );
     await transport.connect("d1");
     transport.subscribe(GENERAL_STATUS_UUID, () => {});
 
@@ -537,6 +687,7 @@ describe("subscribe hardening (spec §3.5)", () => {
     await Promise.resolve();
 
     expect(drops).toStrictEqual([]);
+    expect(degraded).toStrictEqual([]);
     // The guard was CHECKED, not consumed: the real disconnect callback,
     // whenever it arrives, is still the one that clears it.
     handlers.get("d1")?.("d1");

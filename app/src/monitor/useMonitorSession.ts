@@ -70,7 +70,12 @@ import {
 } from "./monitorRun";
 import { createSeriesRecorder, type SeriesRecorder } from "./seriesRecorder";
 import { defaultTransport } from "../adapters/monitorTransport";
-import type { LivenessDeps, LivenessSnapshot } from "./transports/liveness";
+import { registerAppLifecycleListener } from "../adapters/appLifecycle";
+import type {
+  CancelFn,
+  LivenessDeps,
+  LivenessSnapshot,
+} from "./transports/liveness";
 
 /** The session state machine (design spec §2, verbatim, MINUS `"paused"` —
  *  connected-axes 2a, task 5). Every value here is reached by a REAL event
@@ -241,6 +246,26 @@ function hasLivenessSnapshot(
   return typeof (transport as { snapshot?: unknown }).snapshot === "function";
 }
 
+/** Phase LL Task 2 (§2 mechanism 3): does `transport` carry the
+ *  degraded-characteristic structural extension? Same idiom as
+ *  `hasLivenessSnapshot` immediately above — `capacitorBle.ts` and
+ *  `fake.ts` both expose it, `webBluetooth.ts` and every bare test
+ *  `Transport` do not, and `withLiveness` forwards it through unchanged
+ *  (`liveness.ts`'s own `...inner` spread — see that file's header for
+ *  why the spread exists). */
+function hasCharacteristicDegraded(
+  transport: Transport,
+): transport is Transport & {
+  onCharacteristicDegraded(
+    cb: (characteristicId: string, message: string) => void,
+  ): () => void;
+} {
+  return (
+    typeof (transport as { onCharacteristicDegraded?: unknown })
+      .onCharacteristicDegraded === "function"
+  );
+}
+
 /** Phase LL Task 1: this hook's own production `schedule` for the liveness
  *  decorator — a plain `setTimeout`/`clearTimeout` pair, the same shape
  *  every other `schedule` dep in this file already has. Hoisted to MODULE
@@ -284,6 +309,72 @@ export function recordLivenessSilence(
  *  reasoning as `recordLivenessSilence` above. */
 export function recordLivenessRecovery(log: MonitorEventLog | null): void {
   log?.record("liveness-recovery", "frame stream resumed");
+}
+
+/** Phase LL Task 2 (design spec §2a): how long the frame stream must run
+ *  CONTINUOUSLY healthy before the lost-link banner may retract, once
+ *  latched. MEASURED, not guessed — the SAME corpus `liveness.ts`'s own
+ *  `SILENCE_THRESHOLD_MS` cites: ~540 ms median (~508 ms mean,
+ *  `useMonitorSession.ts:537-539`'s own citation, "delivered on web")
+ *  inter-frame gap once a stream is genuinely running, so 10 s is ≈18
+ *  frames at the observed cadence, never a round number picked by eye.
+ *  "THE BANNER CANNOT BLINK" (spec §2a): `handleFrameRecovery` below does
+ *  NOT clear `frameSilence` the instant a single healthy frame arrives —
+ *  it starts this timer, and `handleFrameSilence` CANCELS the timer on
+ *  every fresh silence, so a silence/recovery/silence flicker inside the
+ *  window restarts the clock rather than letting a stale timer retract
+ *  the banner underneath a stream that has already gone bad again. */
+export const BANNER_RETRACT_HYSTERESIS_MS = 10_000;
+
+/** Phase LL Task 2's production `onSilence` body — wraps
+ *  `recordLivenessSilence` (unchanged, still the ring's own record) with
+ *  the two things that make the banner honest: it LATCHES `frameSilence`
+ *  immediately (the banner shows on the very first silence — the watchdog
+ *  itself already waited `SILENCE_THRESHOLD_MS`, nothing here adds a
+ *  second debounce on the way UP), and it cancels any pending retract
+ *  timer a PRIOR recovery had started. Takes `update`/`hysteresisCancel`
+ *  as plain values (never a ref dereferenced here — the same
+ *  `react-hooks/refs` reasoning `recordLivenessSilence`'s own doc comment
+ *  gives, extended to the cancel slot: the HOOK reads/writes
+ *  `hysteresisCancelRef.current` at the call site, this function only
+ *  ever sees whatever value that was at the instant it was invoked, and
+ *  it is invoked exclusively from a deferred `onSilence` callback, never
+ *  during render), so it stays directly testable the same way
+ *  `recordLivenessSilence` already is. */
+export function handleFrameSilence(
+  update: (patch: { frameSilence: boolean }) => void,
+  cancelHysteresis: (() => void) | null,
+  log: MonitorEventLog | null,
+  ms: number,
+): void {
+  cancelHysteresis?.();
+  update({ frameSilence: true });
+  recordLivenessSilence(log, ms);
+}
+
+/** Phase LL Task 2's production `onRecovery` body — the retract half.
+ *  `liveness.ts`'s own contract fires `onRecovery` ONCE, on the very next
+ *  0x0031 to arrive after a silence — this does not clear `frameSilence`
+ *  on that signal alone (the hysteresis, above). It starts a
+ *  `BANNER_RETRACT_HYSTERESIS_MS` timer on `schedule` — the SAME clock
+ *  the watchdog itself runs on (`livenessDepsRef.current.schedule`: real
+ *  `setTimeout` in production, `ReplayHandle.clock.schedule` under
+ *  replay) — and only if that timer runs to completion with no
+ *  intervening `handleFrameSilence` call does `frameSilence` clear.
+ *  Returns the new canceller so the caller can store it back onto the
+ *  ref it owns (this function never touches a ref itself, same reasoning
+ *  as `handleFrameSilence`). */
+export function handleFrameRecovery(
+  update: (patch: { frameSilence: boolean }) => void,
+  cancelHysteresis: (() => void) | null,
+  schedule: (fn: () => void, ms: number) => CancelFn,
+  log: MonitorEventLog | null,
+): CancelFn {
+  cancelHysteresis?.();
+  recordLivenessRecovery(log);
+  return schedule(() => {
+    update({ frameSilence: false });
+  }, BANNER_RETRACT_HYSTERESIS_MS);
 }
 
 /**
@@ -425,6 +516,11 @@ export interface MonitorSession {
    *  deliberately stays open, so `phase` alone cannot say. Consumed since
    *  task 2, the same call `frozen` is. */
   runOpen: boolean;
+  /** Mirrors `SessionState.frameSilence` (Phase LL Task 2). Published for
+   *  `connectedAxes.ts`'s `deriveLink` — routed through the EXISTING
+   *  `stale` `SurfaceStatus`, never a new one (spec §2a's own correction:
+   *  no new axis, no new word, no parallel path). */
+  frameSilence: boolean;
   /** Opens the platform's monitor chooser (`"picking"`), then connects (`"pairing"`) and
    *  builds the driver around the picked device's REAL advertised name.
    *  Assumes the Connect guard has already cleared (see this file's
@@ -741,6 +837,17 @@ interface SessionState {
    *  === null`), same reason. Updated at every site that opens or closes
    *  `runRef`'s record. */
   runOpen: boolean;
+  /** Phase LL Task 2 (design spec §2a): `true` whenever the frame stream
+   *  is currently being treated as suspect — the watchdog's own
+   *  `onSilence` (armed at the first 0x0031 after connect, tripped after
+   *  `SILENCE_THRESHOLD_MS` with no further arrival) or an app-lifecycle
+   *  resume (mechanism 2: no radio fault, the phone simply stopped
+   *  delivering frames while suspended). Latches on `handleFrameSilence`,
+   *  retracts only after `BANNER_RETRACT_HYSTERESIS_MS` of continuous
+   *  healthy frames (`handleFrameRecovery`) — never on a single frame.
+   *  Published for `connectedAxes.ts`'s `frameSilence` axis input, the
+   *  same publish-a-boolean shape `frozen`/`runOpen` already establish. */
+  frameSilence: boolean;
 }
 
 const INITIAL_STATE: SessionState = {
@@ -753,6 +860,7 @@ const INITIAL_STATE: SessionState = {
   handoffHeld: false,
   frozen: false,
   runOpen: false,
+  frameSilence: false,
 };
 
 /** Everything a rejected `program()` can throw, mapped onto the typed
@@ -956,17 +1064,52 @@ export function useMonitorSession(
    *  default composition gets ONE real `Date.now`/`setTimeout` pair for
    *  the whole hook's life, same as `defaultTransport`'s own production
    *  default would be built exactly once per real connect. */
-  const livenessDepsRef = useRef<LivenessDeps>({
-    now: () => Date.now(),
-    schedule: defaultLivenessSchedule,
-    onSilence: (ms) => recordLivenessSilence(logRef.current, ms),
-    onRecovery: () => recordLivenessRecovery(logRef.current),
-  });
-
   const update = useCallback((patch: Partial<SessionState>): void => {
     stateRef.current = { ...stateRef.current, ...patch };
     setState(stateRef.current);
   }, []);
+
+  /** Phase LL Task 2: the retract timer's own canceller, or `null` when
+   *  no hysteresis window is currently running (no silence has ever fired,
+   *  or the window already ran to completion and cleared `frameSilence`).
+   *  Owned entirely by the `onSilence`/`onRecovery` closures immediately
+   *  below — nothing else in this hook reads or writes it. */
+  const hysteresisCancelRef = useRef<CancelFn | null>(null);
+  /** Phase LL Task 2 mechanism 3: the degraded-characteristic
+   *  subscription's own unsubscribe, or `null` when the current transport
+   *  never exposed `onCharacteristicDegraded` (a bare test `Transport`,
+   *  the web arm — `capacitorBle.ts`/`fake.ts` are the only two that
+   *  carry it today). Overwritten (never accumulated) on each `connect()`,
+   *  same lifecycle `unsubscribeRef` already has. */
+  const degradedUnsubRef = useRef<(() => void) | null>(null);
+  /** Phase LL Task 2 mechanism 2: the app-lifecycle listener's own
+   *  unsubscribe, registered once per `connect()` (adapter layer only —
+   *  `registerAppLifecycleListener`'s own header). `null` before a
+   *  connect's registration has resolved, or after `teardown()` has run
+   *  it. */
+  const lifecycleUnsubRef = useRef<(() => void) | null>(null);
+
+  const livenessDepsRef = useRef<LivenessDeps>({
+    now: () => Date.now(),
+    schedule: defaultLivenessSchedule,
+    onSilence: (ms) => {
+      handleFrameSilence(
+        update,
+        hysteresisCancelRef.current,
+        logRef.current,
+        ms,
+      );
+      hysteresisCancelRef.current = null;
+    },
+    onRecovery: () => {
+      hysteresisCancelRef.current = handleFrameRecovery(
+        update,
+        hysteresisCancelRef.current,
+        defaultLivenessSchedule,
+        logRef.current,
+      );
+    },
+  });
 
   const nowDate = useCallback(
     (): Date => depsRef.current.now?.() ?? new Date(),
@@ -1589,6 +1732,15 @@ export function useMonitorSession(
       // unchanged).
       unsubscribeRef.current?.();
       unsubscribeRef.current = null;
+      // Phase LL Task 2: the degraded-characteristic and app-lifecycle
+      // listeners go with it — same "nothing left to watch for once we're
+      // on our way out" reasoning, and the same overwrite-not-accumulate
+      // discipline every other per-connect subscription in this file
+      // already follows.
+      degradedUnsubRef.current?.();
+      degradedUnsubRef.current = null;
+      lifecycleUnsubRef.current?.();
+      lifecycleUnsubRef.current = null;
       // STEP 4: DISCONNECT (terminate-then-disconnect for the "armed,
       // never pulled" case is unchanged by this task).
       if (driver === null) return;
@@ -1636,7 +1788,25 @@ export function useMonitorSession(
     // If cancel ever stops unmounting, this guard needs a cancellingRef.
     if (connectingRef.current || driverRef.current !== null) return;
     connectingRef.current = true;
-    update({ phase: "picking", error: null });
+    // Phase LL Task 2 review fix (task-1-report Minor, `useMonitorSession.
+    // ts:1665` at the time it was filed): `livenessRef.current` used to be
+    // set only after the `transport === null` check below, and never
+    // cleared — so a SECOND `connect()` that fails `transport-missing`
+    // (no transport ever resolved this attempt) left the PREVIOUS
+    // connection's liveness snapshot sitting in the ref, and `fail()`
+    // would attach it to a failure it has nothing to do with. Nulled here,
+    // at the very top of every attempt, before anything can fail — the
+    // same "a fresh connect() never inherits a stale PRIOR value" rule
+    // `capacitorBle.ts`'s own `pendingCallerDisconnects`/M-2 comment
+    // documents for its own per-attempt state. `frameSilence` resets the
+    // same way: a fresh attempt starts on a stream that has said nothing
+    // yet, never latched by whatever the last connection's watchdog saw.
+    livenessRef.current = null;
+    hysteresisCancelRef.current?.();
+    hysteresisCancelRef.current = null;
+    degradedUnsubRef.current = null;
+    lifecycleUnsubRef.current = null;
+    update({ phase: "picking", error: null, frameSilence: false });
     // Awaited unconditionally — the platform-conditional default
     // (`adapters/monitorTransport.ts`'s `defaultTransport`, ROADMAP CL item
     // 2) returns a `Promise` on the native arm (its own dynamic
@@ -1702,6 +1872,55 @@ export function useMonitorSession(
       unsubscribeRef.current = driver.events((event) =>
         handleEvent(event, driver),
       );
+      // Phase LL Task 2 mechanism 3 (§2): a STATUS-characteristic
+      // subscribe rejection degrades rather than ending the session — the
+      // CSAFE control characteristic's own rejection stays FATAL exactly
+      // as today, unchanged, via the existing `onDisconnect` path
+      // (`capacitorBle.ts`'s own `CRITICAL_CHARACTERISTICS`, the hang
+      // guard this task must not touch). The ring names the dead
+      // characteristic; the session and its driver never hear about it.
+      if (hasCharacteristicDegraded(transport)) {
+        degradedUnsubRef.current = transport.onCharacteristicDegraded(
+          (characteristicId, message) => {
+            log.record(
+              "characteristic-degraded",
+              `${characteristicId}: ${message}`,
+            );
+          },
+        );
+      }
+      // Phase LL Task 2 mechanism 2 (§2, "iOS backgrounding"): Info.plist
+      // declares no `UIBackgroundModes`, so nothing in this hook runs
+      // while the app is actually suspended — the risk is entirely on
+      // RESUME, where the very next frame this session sees might follow
+      // an arbitrary real-world gap. `registerAppLifecycleListener` is the
+      // adapter-layer seam (`src/adapters/appLifecycle.ts`); the platform
+      // conditional lives there, never here. §4's continuity rule (Task 4,
+      // not yet built by this phase) is what should ultimately arbitrate a
+      // resumed stream — until it exists, a resume reuses the SAME
+      // hysteresis a watchdog silence already goes through
+      // (`hysteresisCancelRef`): `frameSilence` latches immediately and
+      // only clears after `BANNER_RETRACT_HYSTERESIS_MS` of continuous
+      // healthy frames, so a resume can never blink the banner either.
+      // Flagged as an interim measure in this task's own report — Task 4
+      // inherits the seam, not a finished arbitration.
+      const lifecycleResult = registerAppLifecycleListener((event) => {
+        if (event !== "foreground") return;
+        hysteresisCancelRef.current?.();
+        hysteresisCancelRef.current = null;
+        update({ frameSilence: true });
+        log.record(
+          "app-lifecycle",
+          "resumed from background — stream treated as suspect",
+        );
+      });
+      if (lifecycleResult instanceof Promise) {
+        void lifecycleResult.then((unsub) => {
+          lifecycleUnsubRef.current = unsub;
+        });
+      } else {
+        lifecycleUnsubRef.current = lifecycleResult;
+      }
       // Stays `pairing` on purpose: connected is not programmed. The
       // interstitial's state 4 is exactly this moment, and its next step is
       // the caller's `program()` call, which owns the move to state 5.
@@ -1876,6 +2095,7 @@ export function useMonitorSession(
     handoffHeld: state.handoffHeld,
     frozen: state.frozen,
     runOpen: state.runOpen,
+    frameSilence: state.frameSilence,
     connect,
     program,
     endSession,

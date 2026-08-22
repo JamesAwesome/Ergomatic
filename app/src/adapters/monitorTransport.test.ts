@@ -252,4 +252,52 @@ describe("adapters/monitorTransport native arm", () => {
 
     expect(onSilence).toHaveBeenCalledExactlyOnceWith(SILENCE_THRESHOLD_MS);
   });
+
+  it("Phase LL Task 2 (§2 mechanism 3): a structural extension beyond the six core Transport methods (onCharacteristicDegraded) survives the withLiveness wrap unchanged — liveness.ts's own '...inner' spread, proven through the REAL composition, not the decorator in isolation", async () => {
+    vi.doMock("../platform", () => ({ isNative: () => true }));
+    const registered: Array<(id: string, message: string) => void> = [];
+    const nativeTransport = {
+      scan: vi.fn(async () => []),
+      connect: vi.fn(),
+      write: vi.fn(),
+      subscribe: vi.fn(() => () => undefined),
+      disconnect: vi.fn(),
+      onDisconnect: vi.fn(() => () => undefined),
+      onCharacteristicDegraded: vi.fn(
+        (cb: (id: string, message: string) => void) => {
+          registered.push(cb);
+          return () => undefined;
+        },
+      ),
+    };
+    vi.doMock("../monitor/transports/capacitorBle", () => ({
+      createCapacitorBleTransport: vi.fn(() => nativeTransport),
+    }));
+    vi.doMock("../monitor/transports/index", () => ({
+      resolveDefaultTransport: vi.fn(),
+    }));
+
+    const { defaultTransport } = await import("./monitorTransport");
+    const transport = await defaultTransport(stubDeps());
+
+    const extension = transport as unknown as {
+      onCharacteristicDegraded(
+        cb: (id: string, message: string) => void,
+      ): () => void;
+    };
+    expect(typeof extension.onCharacteristicDegraded).toBe("function");
+    const received: Array<[string, string]> = [];
+    extension.onCharacteristicDegraded((id, message) =>
+      received.push([id, message]),
+    );
+    // Proves the REGISTRATION reached the inner transport untouched (not
+    // a stub the wrapper swallowed) — the wrapper's own object literal
+    // never names this method, so without the `...inner` spread this
+    // call would be `undefined()` and the test would fail to even reach
+    // this line.
+    expect(nativeTransport.onCharacteristicDegraded).toHaveBeenCalledOnce();
+    expect(registered).toHaveLength(1);
+    registered[0]!("0x0032", "boom");
+    expect(received).toStrictEqual([["0x0032", "boom"]]);
+  });
 });

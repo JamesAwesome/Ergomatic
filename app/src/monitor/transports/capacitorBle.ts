@@ -221,21 +221,61 @@ function raceScanTimeout<T>(pipeline: Promise<T>): Promise<T> {
  * failing loudly beats a silent no-op.
  */
 
-export function createCapacitorBleTransport(): Transport {
+/** Phase LL Task 2 (§2, mechanism 3): the CSAFE control conversation's own
+ *  characteristic — `driver.ts:1525`'s `t.subscribe(TRANSMIT_CHARACTERISTIC_
+ *  UUID, ...)` is where every programming/terminate ACK arrives, and that
+ *  file's own comment on this file's subscribe-rejection routing names the
+ *  hang it exists to kill: "a dead CSAFE subscription means acks can never
+ *  arrive and the driver waits below its ready gate forever." A rejection
+ *  on THIS characteristic stays FATAL, exactly as it always has — routed
+ *  through `disconnectCb`, ending the session. Every OTHER characteristic
+ *  this file subscribes to (`SERVICE_OF`'s remaining keys — the five status
+ *  characteristics plus the two summary ones) is a status feed: losing one
+ *  degrades what the app can show, never the CSAFE conversation itself, so
+ *  a rejection there routes through `degradedCb` instead and the session
+ *  continues. `RECEIVE_CHARACTERISTIC_UUID` (the OTHER control
+ *  characteristic) is write-only from this app's side — `driver.ts` never
+ *  subscribes to it — so it never reaches `subscribe()` at all and needs no
+ *  entry here. */
+const CRITICAL_CHARACTERISTICS: ReadonlySet<string> = new Set([
+  TRANSMIT_CHARACTERISTIC_UUID,
+]);
+
+export function createCapacitorBleTransport(): Transport & {
+  /** See the returned object's own doc comment on this method. */
+  onCharacteristicDegraded(
+    cb: (characteristicId: string, message: string) => void,
+  ): () => void;
+} {
   let deviceId: string | null = null;
   let disconnectCb: ((reason: string) => void) | null = null;
-  // M-2 (final-review): `Transport.onDisconnect`'s own contract
-  // (types.ts:120-125) says it is "never fired by a caller-initiated
-  // disconnect()" — but `BleClient.disconnect()` below invokes the SAME
-  // `handleDisconnect` callback `connect()` registered for a genuine radio
-  // drop, and this file had NO guard against that before this fix, so
-  // every deliberate `disconnect()` call would ALSO fire `onDisconnect`,
-  // arming a driver's `reconnectPending` after a rower hung up on purpose.
-  // Set immediately before the caller-initiated `disconnect()` call,
-  // consumed (and reset) the first time the callback runs — a fresh
-  // `connect()` also resets it, so a stale `true` can never survive into a
-  // NEW connection's own genuine drop.
-  let callerInitiatedDisconnect = false;
+  // Phase LL Task 2 (§2, mechanism 3): the DEGRADED path's own callback —
+  // a structural `Transport` extension (`onCharacteristicDegraded`, not a
+  // core method: `useMonitorSession.ts`'s `hasCharacteristicDegraded`
+  // detects it the same way it already detects `snapshot()`), fired
+  // instead of `disconnectCb` for a non-critical characteristic's
+  // subscribe rejection. `null` until a caller registers one — every REAL
+  // caller does (`useMonitorSession.ts`'s own connect() wiring), a bare
+  // test `Transport` consumer simply never sees this method at all.
+  let degradedCb: ((characteristicId: string, message: string) => void) | null =
+    null;
+  // Phase LL Task 2 (§2, mechanism 4), REPLACING the single shared
+  // boolean M-2 originally fixed: "a genuine drop inside the
+  // `callerInitiatedDisconnect` window is swallowed as housekeeping...
+  // attribute by device+attempt, not by a global boolean window." A bare
+  // boolean has no memory of WHICH device it was set for — a stale flag
+  // (or a stale ABSENCE of one) can misattribute a drop that has nothing
+  // to do with the disconnect() call that last touched it, e.g. a
+  // genuine radio drop for device X racing a `connect()` to device Y that
+  // just reset the flag to `false` for an unrelated reason. This Set
+  // names exactly the peripheral id THIS transport itself told the
+  // plugin to hang up on; `handleDisconnect` consumes (deletes) only that
+  // id's own entry, so a drop reported for any OTHER id is never
+  // swallowed by housekeeping that was never about it. M-2's own
+  // guarantee survives unchanged: `connect()` still clears any stale
+  // entry for the id it is about to use, so a fresh connection never
+  // inherits a prior attempt's own flag.
+  const pendingCallerDisconnects = new Set<string>();
   let initPromise: Promise<void> | null = null;
 
   // NOT idempotent upstream (spec §3.5, REVIEW B2): every
@@ -294,11 +334,37 @@ export function createCapacitorBleTransport(): Transport {
   }
 
   function handleDisconnect(disconnectedId: string): void {
-    if (callerInitiatedDisconnect) {
-      callerInitiatedDisconnect = false;
-      return;
-    }
+    if (pendingCallerDisconnects.delete(disconnectedId)) return;
     disconnectCb?.(`capacitorBle: device ${disconnectedId} disconnected`);
+  }
+
+  /** Phase LL Task 2 (§2, mechanism 1 — "the cheapest fix in the phase").
+   *  Apple's own contract for a state drop below `poweredOn`, quoted
+   *  verbatim by the design spec: "A state with a value lower than
+   *  poweredOn implies that scanning has stopped, which in turn
+   *  disconnects any previously-connected peripherals." Bluetooth
+   *  toggling off IS exactly that state drop, so a reported `false` while
+   *  this transport holds a connection is a genuine link loss — routed
+   *  through the SAME `disconnectCb` a radio-initiated drop uses, never a
+   *  fabricated second event, and guarded by `pendingCallerDisconnects`
+   *  the identical way `handleDisconnect` is (a caller who is mid
+   *  `disconnect()` for this exact device does not also want an unrelated
+   *  "bluetooth disabled" report for it). Re-enabling Bluetooth (`true`)
+   *  reconnects nothing on its own — RECONNECT IS OUT, the phase's own
+   *  standing ruling — so this is a deliberate no-op on that half. */
+  function handleEnabledChanged(enabled: boolean): void {
+    // `deviceId === null` is the WHOLE caller-initiated-teardown guard
+    // here, not `pendingCallerDisconnects` — `disconnect()` nulls
+    // `deviceId` BEFORE its own single `await`, synchronously, so by the
+    // time any async callback (this one included) could possibly run,
+    // a disconnect already in flight has already cleared it. There is no
+    // window where this method could observe a non-null `deviceId` that
+    // `pendingCallerDisconnects` also names, so checking that set here
+    // would be dead code asserting a race that cannot occur.
+    if (enabled || deviceId === null) return;
+    disconnectCb?.(
+      "capacitorBle: Bluetooth disabled (onEnabledChanged reported false)",
+    );
   }
 
   return {
@@ -362,10 +428,11 @@ export function createCapacitorBleTransport(): Transport {
       // by test. No wrapper needed here; the UNBOUNDED gatt.connect()
       // hang the review documented is webBluetooth.ts's (spec §1
       // untouched this phase; filed as the R2 fast-follow).
-      // A fresh connection never inherits a stale flag from a PRIOR one
-      // (M-2's own comment on the variable above), nor stale subscribers
-      // (the fan-out registry's own comment).
-      callerInitiatedDisconnect = false;
+      // A fresh connection never inherits a stale entry from a PRIOR one
+      // (M-2/mechanism-4's own comment on `pendingCallerDisconnects`
+      // above), nor stale subscribers (the fan-out registry's own
+      // comment).
+      pendingCallerDisconnects.delete(id);
       subscribers.clear();
       // `connect()` no longer assumes `scan()` ran first (spec §3.5): a
       // reconnect path calls it cold. Memoized, so the normal
@@ -373,6 +440,19 @@ export function createCapacitorBleTransport(): Transport {
       await ensureInitialized();
       await BleClient.connect(id, handleDisconnect);
       deviceId = id;
+      // Phase LL Task 2 (§2, mechanism 1): registered on every `connect()`
+      // — safe to call repeatedly, the plugin's own `startEnabledNotifications`
+      // removes any prior listener before adding its replacement
+      // (`bleClient.js`'s `eventListeners.get(key)?.remove()`, the SAME
+      // single-listener-per-key pattern this file's own `subscribe()`
+      // comment already documents for `startNotifications`). Best-effort:
+      // this is a secondary detector, not the connection itself, so a
+      // rejection here (a platform that never resolves it, `startEnabled
+      // Notifications`'s own doc comment: "the callback will never be
+      // invoked" on web) must never fail `connect()`.
+      void BleClient.startEnabledNotifications(handleEnabledChanged).catch(
+        () => undefined,
+      );
     },
 
     // RECORDED DIVERGENCE (spec §1's non-goals): this is an ACKED write
@@ -428,30 +508,47 @@ export function createCapacitorBleTransport(): Transport {
         // Snapshot so an unsubscribe during fan-out can't mutate mid-walk.
         for (const fn of [...set]) fn(bytes);
       }).catch((err: unknown) => {
-        // A dead subscription IS a dead link for this driver: the plugin
-        // rejects on a missing service/characteristic
+        // A dead CSAFE subscription IS a dead link for this driver: the
+        // plugin rejects on a missing service/characteristic
         // (`Plugin.swift:544-565`), CSAFE responses can then never
         // arrive, and the silent alternative is the driver waiting below
         // its ready gate forever — the hang class ruling 2 exists to
-        // kill. Routing it through `onDisconnect` ends the session
-        // `link-failed` instead. The M-2 guard is CHECKED, not consumed:
-        // a subscription failure racing a deliberate teardown stays
-        // quiet, and the real disconnect callback still gets its flag.
-        // The plugin call exists only on the FIRST subscriber's path, so
-        // one failure fires one link-drop for every joined callback —
-        // which is the truth: they all share the dead subscription.
-        if (callerInitiatedDisconnect) return;
+        // kill. That guard SURVIVES, pinned to `CRITICAL_CHARACTERISTICS`
+        // only (Phase LL Task 2, §2 mechanism 3) — routed through
+        // `onDisconnect`, ending the session `link-failed`, exactly as it
+        // always has. Every OTHER characteristic's rejection DEGRADES
+        // instead (`degradedCb`): the session continues, and the caller
+        // (`useMonitorSession.ts`) names the dead characteristic in the
+        // ring rather than starving the series recorder for the rest of
+        // the session (the original defect this mechanism fixes —
+        // measured on replay: 197 of 419 samples lost). The
+        // `pendingCallerDisconnects` guard is CHECKED, not consumed, on
+        // BOTH paths: a subscription failure racing a deliberate teardown
+        // stays quiet either way, and the real disconnect callback still
+        // gets its own entry. The plugin call exists only on the FIRST
+        // subscriber's path, so one failure fires once for every joined
+        // callback — which is the truth: they all share the dead
+        // subscription.
+        // `id` — not the current `deviceId` — is the device THIS
+        // subscription was opened against (captured above, before any
+        // await): the correct attribution target even if a reconnect has
+        // already moved `deviceId` on by the time this rejection lands.
+        if (pendingCallerDisconnects.has(id)) return;
         const message = err instanceof Error ? err.message : String(err);
-        disconnectCb?.(
-          `capacitorBle: subscription to ${characteristicId} failed: ${message}`,
-        );
+        if (CRITICAL_CHARACTERISTICS.has(characteristicId)) {
+          disconnectCb?.(
+            `capacitorBle: subscription to ${characteristicId} failed: ${message}`,
+          );
+          return;
+        }
+        degradedCb?.(characteristicId, message);
       });
       return makeUnsubscribe(characteristicId, cb, id, service);
     },
 
     async disconnect(): Promise<void> {
       if (deviceId !== null) {
-        callerInitiatedDisconnect = true;
+        pendingCallerDisconnects.add(deviceId);
         const id = deviceId;
         // Nulled BEFORE the await so the queue invariant holds inside the
         // transport itself, not only via the hook's fresh-instance-per-
@@ -468,6 +565,22 @@ export function createCapacitorBleTransport(): Transport {
       disconnectCb = cb;
       return () => {
         if (disconnectCb === cb) disconnectCb = null;
+      };
+    },
+
+    /** Phase LL Task 2 (§2, mechanism 3). A STRUCTURAL extension, not a
+     *  core `Transport` method — the spec names the method set
+     *  "scan/connect/write/subscribe/disconnect/onDisconnect" verbatim
+     *  (`domain/monitor/types.ts`'s own header) and this is deliberately
+     *  outside it, the same way Task 1's `snapshot()` is. Fired for a
+     *  non-critical characteristic's subscribe rejection only — see the
+     *  `subscribe()` catch handler above for the routing decision. */
+    onCharacteristicDegraded(
+      cb: (characteristicId: string, message: string) => void,
+    ): () => void {
+      degradedCb = cb;
+      return () => {
+        if (degradedCb === cb) degradedCb = null;
       };
     },
   };

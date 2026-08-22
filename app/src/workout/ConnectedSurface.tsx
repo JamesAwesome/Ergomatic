@@ -424,6 +424,10 @@ export default function ConnectedSurface({
     frozen: session.frozen,
     runOpen: session.runOpen,
     failureLeavesLinkUp: null,
+    // Phase LL Task 2 (§2a): the one live consumer of this axis —
+    // `deriveLink` routes it onto the EXISTING `"lost"` member, which this
+    // component's own `status` ternary below already treats as `"stale"`.
+    frameSilence: session.frameSilence,
   });
   const status: SurfaceStatus =
     axes.link === "lost"
