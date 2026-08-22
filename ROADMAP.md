@@ -1431,7 +1431,7 @@ refresh + gate deltas and James's five rulings (same day):
   the checkpoint mark client-side from `PLANS`). Renaming or restructuring
   that field would blank the plan line on installed builds.
 - **Known-open on ship (PM):** the measurement loop — nothing records a test
-  result (`isTestResult` has zero client senders) and no baseline prompt
+  result (`isTestResult` has zero client senders) and no baseline prompt (now Phase BL)
   exists; 8A's notes say so and the next phase closes it. Checkpoints are 6
   real saves deep (`done_n` moves only via `POST /api/logs`; log deletion
   decrements, so a demo is reversible) — the release notes say that too. This section is the scoped-down phase-one slice of that draft after a
@@ -1468,12 +1468,52 @@ stack leads with `Log against plan` and the saved log carries `plan_key`/
 and `docs/design/README.md:99-100` (the wrong `7/31/55` cadence, real indices
 6/34/62 = sessions 7/35/63) is reconciled with the rest of the pixels.
 
+## Phase BL — Baselines: three doors in, one measurement out
+
+**Status:** SPEC WRITTEN 2026-08-22
+(`docs/superpowers/specs/2026-08-22-baseline-onboarding-design.md`,
+brainstormed live with James on the "Baseline Onboarding" design canvas —
+the canvas is the pixel reference). **This is the phase the 8A gate
+sequenced BEFORE the calendar**, re-brainstormed and widened the same day:
+it now covers how a baseline ENTERS the app, not just how a test updates
+it. Not started; takes the phase-open gates with the spec as the anchor
+target. TRIAD: a stored shape (baseline `source` provenance) and the
+origin of the app's most load-bearing numbers — full antagonist pass on
+the spec, PM final-PR gate on the PR that lands the shape.
+
+**Goal:** a no-baseline account reaches a working app through whichever
+door suits them, and a rowed test finally gets RECORDED instead of
+hand-typed.
+
+- [ ] **Baseline provenance** (`source`: `manual | estimated | tested`,
+      stored, NEVER shown; existing rows migrate to `manual`; additive
+      API). **Triad core — lands per the grouping rule's triad
+      exception.** **M**
+- [ ] **The three doors** replace the single-offer no-baseline card
+      (outcome-framed per James: recommend / I know it / row it; door 3
+      dual-distance, reusing the shipped BaselineCard toggle). **M**
+- [ ] **The questionnaire + estimate table**: two questions (experience,
+      cardio), NO age band (standing PII-minimization ruling), 16-cell
+      static lookup in `domain/` with per-row source citations from the
+      named C2-rankings research task. **M**
+- [ ] **The post-test prompt**: a completed test session offers its own
+      result as the new baseline (`tested`), sends `isTestResult` — the
+      first client producer for `test_history` — and never blocks or
+      auto-writes. Closes the loop 8A shipped open. **M**
+- [ ] **The You-screen re-test shortcut** (James, 2026-08-22): row the
+      6k / race the 2k next to the baseline fields on You, routing to
+      the same designated tests and landing in the same prompt. **S**
+
+**Exit:** the spec's draft exit criteria, refined at phase open — each
+door works end to end, the prompt closes the measurement loop, every
+baseline carries a source and no screen shows it.
+
 ## Phase 8B — Plan & Progress
 
 **Status:** Not started
 **Goal:** See where you are in the 84-session plan and whether you're getting faster.
 
-- [ ] Plan screen gains a month calendar with type marks, ALL/TO DO/DONE filters, and a legend (session rows: done sorted below upcoming; today highlighted) — layered onto the sequence list Phase 6A already built at `/plan`, not a new screen **BRAINSTORM DONE, SPEC WRITTEN (2026-08-22): `docs/superpowers/specs/2026-08-22-plan-calendar-design.md`** — James's three rulings: the grid is a RECORD (dates for done sessions only, future days empty, the sequence list stays the dateless future — this supersedes the earlier same-day projection phrasing); ALL logged sessions mark the grid, plan-linked ones distinct; date-keyed events ship LATER in their own phase (the mark system reserves them a class). Implementation still waits behind the baseline-prompt phase and takes the normal phase-open gates with this spec as the anchor target. Original ruling trail:**the calendar is a pure PROJECTION — the sequence runs forward from today, no plan day is ever tied to a stored date.** That resolves the design reference's self-contradiction (`README.md:97` vs `:315`): the TO DO half is arithmetic from `done_n`, no new data. **Brainstorm still owed before any spec, now with a named input: DATE-KEYED EVENT SUGGESTIONS** (James, same day: "trick or treat Trot") — a globally authored one-off surfaced on a specific calendar date, NOT part of the plan, but loggable against it (the log-against-plan half already exists via the post-workout save; the new invention is only the date-keyed producer and its surfacing on Today and/or the calendar). This is a THIRD producer kind (checkpoints are index-keyed, 8C's reservations are rower-authored, events are date-keyed + global) and it is the first real two-producers-one-day case — the brainstorm settles which one Today leads with on a collision (the triggered follow-on on the precedence resolver fires with it). — `plan_state` is `{plan_key, done_n}` with no calendar awareness, nothing schedules a future plan day to a date, and the design reference contradicts itself (`docs/design/README.md:97` "a sequence, not a weekday calendar" vs `:315`'s month grid with greyed future days). A design pass now would draw the TO DO half of a screen whose data cannot exist. The brainstorm may run in parallel with 8A's implementation.
+- [ ] Plan screen gains a month calendar with type marks, ALL/TO DO/DONE filters, and a legend (session rows: done sorted below upcoming; today highlighted) — layered onto the sequence list Phase 6A already built at `/plan`, not a new screen **BRAINSTORM DONE, SPEC WRITTEN (2026-08-22): `docs/superpowers/specs/2026-08-22-plan-calendar-design.md`** — James's three rulings: the grid is a RECORD (dates for done sessions only, future days empty, the sequence list stays the dateless future — this supersedes the earlier same-day projection phrasing); ALL logged sessions mark the grid, plan-linked ones distinct; date-keyed events ship LATER in their own phase (the mark system reserves them a class). Implementation still waits behind Phase BL (the baselines phase) and takes the normal phase-open gates with this spec as the anchor target. Original ruling trail:**the calendar is a pure PROJECTION — the sequence runs forward from today, no plan day is ever tied to a stored date.** That resolves the design reference's self-contradiction (`README.md:97` vs `:315`): the TO DO half is arithmetic from `done_n`, no new data. **Brainstorm still owed before any spec, now with a named input: DATE-KEYED EVENT SUGGESTIONS** (James, same day: "trick or treat Trot") — a globally authored one-off surfaced on a specific calendar date, NOT part of the plan, but loggable against it (the log-against-plan half already exists via the post-workout save; the new invention is only the date-keyed producer and its surfacing on Today and/or the calendar). This is a THIRD producer kind (checkpoints are index-keyed, 8C's reservations are rower-authored, events are date-keyed + global) and it is the first real two-producers-one-day case — the brainstorm settles which one Today leads with on a collision (the triggered follow-on on the precedence resolver fires with it). — `plan_state` is `{plan_key, done_n}` with no calendar awareness, nothing schedules a future plan day to a date, and the design reference contradicts itself (`docs/design/README.md:97` "a sequence, not a weekday calendar" vs `:315`'s month grid with greyed future days). A design pass now would draw the TO DO half of a screen whose data cannot exist. The brainstorm may run in parallel with 8A's implementation.
 - [x] ~~Stamp each log with the plan day it belonged to~~ — **already
       DELIVERED before this phase opened** (found at the 2026-08-22 phase-open
       gate): PW spec 2 shipped `plan_key`/`plan_index` on `session_logs`
