@@ -1673,6 +1673,17 @@ some of the bluetooth problems deserve their own phase with dedicated
 connection management research"). Phase-open PM gate run and folded — its
 verdict re-scoped the ask and is in `pm-ledger.md`.
 
+**NEXT AND UNBLOCKED as of 2026-08-22.** Phase WU shipped (#150), so every
+sequencing constraint that stood in front of this phase is discharged:
+nothing collides with it any more, and the PM gate's binding condition
+(that LL's brick spec be written in parallel with WU) is satisfied by
+starting it now. **This phase is the next work.** Its inputs are the
+"Spec inputs from the 2026-08-21 ecosystem review" subsection below —
+that is the delta a spec author starts from, on top of the research pass.
+**Read Phase WU's "What this phase taught (2026-08-22)" before writing any
+task briefs** — three of its lessons bite this phase directly, listed
+again at the end of the spec-inputs subsection.
+
 **This phase is the DISPOSAL of the triggered follow-on "Reconnect and
 background scan, five pieces", which is deleted in the same commit that
 creates this section.** Its stated trigger — "Capacitor BLE lands, or a
@@ -2264,6 +2275,24 @@ restoring an invariant that file's own comment already claims holds.
 Verified safe; nothing depends on re-initialisation. The harm is still
 unproven and it still does not explain the force-quit survival.
 
+**Three execution facts inherited from Phase WU (2026-08-22), each of
+which bites this phase.** Full text in Phase WU's "What this phase taught":
+
+1. **`app/e2e/` is NOT typechecked.** `tsconfig.app.json` covers only
+   `src`/`domain`/`scripts` and Playwright erases types, so a stale call
+   signature compiles and runs silently; a hand-rolled config over `e2e/`
+   surfaces 14 pre-existing errors. This phase's diagnosability tier is the
+   natural owner if it wants to fix it, and either way no LL brief may
+   claim "the compiler will catch it" about anything under `e2e/`.
+2. **pnpm swallows scoped-run flags in BOTH suites.** `pnpm e2e -- -g` runs
+   all 401 tests even double-dashed, and `pnpm test --project client --
+   <pattern>` does the same for vitest. Working forms:
+   `pnpm exec playwright test --grep` and `pnpm exec vitest run`. **Check
+   the run count** — a full-suite count means the filter was eaten.
+3. **A dispatched subagent's background waits die when it idles.** Every
+   implementer brief must say gates run FOREGROUND and blocking; four
+   rounds were lost to armed monitors that could never wake.
+
 **Two walk items this phase owns** (the rest are Phase RC's): **W5**,
 a Bluetooth power-cycle armed but not rowing, to settle whether
 `didDisconnectPeripheral` fires for our device and whether
@@ -2676,6 +2705,12 @@ starting now. The collision rule below bars concurrent IMPLEMENTATIONS,
 not specs. **If LL's spec lands before WU's implementation finishes, the
 order flips without further argument** — the brick is the item that makes
 James delete his app.
+
+> **SPENT 2026-08-22.** WU shipped (#150, main `1602248`). Everything in
+> this wave-1 argument and in the collision rule below is now HISTORY, kept
+> for the reasoning only. **Nothing blocks Phase LL**, and the parallel-spec
+> condition is discharged by starting LL's spec next. RC's own waves 0 and
+> 3-5 are unaffected and still stand.
 
 **Wave 2 — Phase LL** (A-2, A-4, the diagnosability tier), carrying
 **RC-7** inside A-2's spec by the review's own ruling, and carrying the
