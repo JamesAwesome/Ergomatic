@@ -398,8 +398,8 @@ logging deferred to 6B/6C.
       with done/today/upcoming status, scrolling in its own keyboard-
       focusable region rather than growing the page. This is the "TRAINING
       PLAN" management slice of the handoff's **You** screen (§10) and the
-      preset-selection half of Phase 8's own "Plan management" line,
-      delivered here instead because Today needed it; Phase 8 still owns
+      preset-selection half of Phase 8B's own "Plan management" line,
+      delivered here instead because Today needed it; Phase 8B still owns
       the month-calendar view and the ALL/TO DO/DONE filters
 - [x] Confirm targets (`/session/confirm`): duration/rest steppers (30 s
       grid; a distance step's own duration steps by 100 m instead), an SPM
@@ -946,11 +946,11 @@ Needs its own chart-spec design pass before implementation starts.
 - [ ] Time by type — a single stacked bar in the workout-type colours with
       a percentage legend
 
-**Amends Phase 8:** Phase 8's own Progress-screen bullet (2k/6k test-trend
+**Amends Phase 8B:** Phase 8B's own Progress-screen bullet (2k/6k test-trend
 bars, minutes/week stacked by type, type mix/last-30-days — currently one
 bullet covering all three chart groups) relocates onto You under this
 phase instead of shipping as its own screen, and is superseded once this
-phase starts. Phase 8's month-calendar bullet (on Plan, not Progress) and
+phase starts. Phase 8B's month-calendar bullet (on Plan, not Progress) and
 its test-history-list bullet (on You already) are untouched.
 
 **Exit:** A rower with at least two sessions of history sees real metres,
@@ -1385,17 +1385,78 @@ neither of which touches the transport.
 PM5 from a dev build on James's iPhone, and James gives the merge
 word.
 
-## Phase 8 — Plan & Progress
+## Phase 8A — Plan checkpoints (prescriptions, phase one: the plan suggests)
+
+**Status:** UNPARKED 2026-08-22 (James: "let's do it") — this is the next
+work for this session track, running in parallel with Phase LL/RC in another
+session; the collision surface was checked and is small (see the coordination
+note on 8B's `plan_key` item). Spec and plan drafted 2026-08-12 on `test-days`
+(`docs/superpowers/specs/2026-08-12-plan-prescriptions-design.md`); this PR
+lands those docs and this section on main. **Execution still owes a
+verification refresh first** (recurring failure 10): every file/line citation
+below is 2026-08-12-era and ~25 merges have landed since, including Phase WU's
+warm-up removal — re-verify each against current code before any task brief is
+written, and take the phase-open gates (PM slate, antagonist delta pass
+against codebase movement — the spec already survived two adversarial reads
+and a PM holistic review, so the anchor is a delta, said aloud here). This section is the scoped-down phase-one slice of that draft after a
+PM holistic review; the draft's §5 (wiring `GET /api/today`), §11b (the
+`suggested_title`/`suggestion_taken` capture task) and its `PrescriptionContext.date`
+field are deliberately NOT in it, and the review's file is the record of why.
+**Goal:** The three plan checkpoints suggest their own test instead of a random
+interval session, and the `"TEST"` plan code retires in favour of plan days that
+carry authored data.
+
+The prescriptions idea is phased: **8A is plan-suggested only** (a plan makes
+suggestions the rower is free to ignore), **8C is rower-authored** (a rower
+pre-plans their own routine), and the two questions behind "which days did I
+override, and what would the other suggestion have been" sit under Triggered
+follow-ons because they are two different features wearing one sentence.
+
+- [ ] **The `"TEST"` code retires.** `PlanDay { type, prescribe? }` replaces the `PlanCode = WorkoutType | "TEST"` union at every call site (`domain/plans.ts`, `server/routes/data.ts`, `src/api/usePlan.ts`, `src/session/LogSession.test.tsx`); each checkpoint index becomes a day of a real type carrying its own prescription (sprint: AN plus the 2K test, head: AT plus the 6K test). `Plan.tsx` drops `CODE_COLOR_VAR` and its local `CodeBadge` for the shared `TypeBadge`, keeps a visible checkpoint mark, and `--type-test` goes with its last consumer. Tallies move to sprint 34/23/14/13 and head 41/24/11/8, both keeping the pinned pyramid and the run/bias invariants. **M**
+- [ ] **The prescription's lookup, in `domain/`.** A ref (title plus `globalOnly`) and one shared resolver that finds the designated GLOBAL row and never a rower's own workout that happens to share the title. A test asserts every authored ref in `PLANS` resolves against `GLOBAL_LIBRARY_SEED`, so authored content naming a missing workout fails CI instead of degrading quietly. The ref keeps its `kind` discriminant: 8C must reference a rower's own workout by id, because titles are user-editable with no uniqueness constraint. **S**
+- [ ] **`suggest()` pins a prescribed entry.** Its reason is authored with it; every preference filter is bypassed (a checkpoint is not a suggestion from a pool); a live pick still wins; and the prescribed branch sits ABOVE the empty-pool early return, so an account with none of the day's own type still gets its checkpoint. **S**
+- [ ] **Today wires it, and the type-swap chips override it visibly.** The screen resolves the prescription against the UNFILTERED library. **James's ruling (2026-08-12):** the lit chip is the SUGGESTED workout's own type (AN on a sprint checkpoint, AT on a head one, not the `TEST → TR` stand-in that dies with this phase), and swapping to another chip OVERRIDES the prescription — the rower acting now is tier 1 by the ladder's own logic — with a visible marker that the suggestion has been overridden. The marker says overridden; it does NOT name the displaced workout (that stays ruled out, 2026-08-12). Today's plan line already renders `prescribedCode → swapType` when swapped (`Today.tsx:1050-1053`), so the design pass decides whether that arrow carries the marker or the card needs its own; either way it is a stated design with a DEVIATIONS row, not an inference. Consequence worth naming: because a swap escapes, the chips are the exit on a day where SHUFFLE is disabled (`canShuffle = poolIds.length > 1`, `Today.tsx:983`), which is the empty-or-single-pool case the prescription bypass exists to serve. **M**
+- [ ] **The rename, migrated.** `First 6k`/`First 2k` become `6K Test`/`2K Test` (a deliberate break from the library's poetic-name convention: these two are instruments, not sessions) and are reclassified honestly (2K: AN/hard/pain 5, 6K: AT/hard/pain 4). The seed converge gains a one-time legacy-title map applied BEFORE its delete pass, so an existing row is renamed in place and keeps its id: without it the converge deletes the old title and every log recorded against it loses its workout link. Note `contentEqual` (`seed.ts:19-33`) ignores title, so the rename needs its own write rather than leaning on the content-diff path. **M**
+- [ ] **Proof and pixels.** A plan advanced to its first checkpoint shows the test, can START it, and SHUFFLE escapes; the checkpoint card is captured with real data and looked at; `docs/design/README.md:106` (`TEST → treated as TR`) and `:139` (the `type TEST` colour row), plus the `DEVIATIONS.md` row citing `--type-test`, are all reconciled with what shipped. The Plan-screen checkpoint marker that replaces the TEST badge needs a stated design: retiring the token removes a visual distinction from a screen that has a high-fidelity reference. **S**
+
+**Exit:** On session 7 of the sprint plan the card reads `2K Test` with a
+checkpoint reason, START runs it, and SHUFFLE escapes to an ordinary AN session;
+the head plan shows the 6K where sprint shows the 2K; a rower whose library
+holds no AN workout still gets their checkpoint; and no `"TEST"` string survives
+in plan data, the Plan screen, or the token file.
+
+## Phase 8B — Plan & Progress
 
 **Status:** Not started
 **Goal:** See where you are in the 84-session plan and whether you're getting faster.
 
 - [ ] Plan screen gains a month calendar with type marks, ALL/TO DO/DONE filters, and a legend (session rows: done sorted below upcoming; today highlighted) — layered onto the sequence list Phase 6A already built at `/plan`, not a new screen
+- [ ] **Stamp each log with the plan day it belonged to** (`plan_key`, `done_n`, nullable, server-side only): the calendar needs it to place a row, and `createLogsStore.create` already reads and upserts `plan_state` inside the log's own transaction (`stores/logs.ts:94-118`), so it costs a migration and a handful of lines with no client, draft, or API-contract change. It is also what makes "did I take my checkpoint?" answerable at any later date, since a prescription is authored, deterministic data. **S** **Coordination (2026-08-22): Phase RC will re-quantify columns on this same table in a parallel session — both migrations are additive and non-conflicting, but sequence them explicitly rather than landing blind.**
 - [x] ~~Plan management: preset selection (2000 m sprint / 5–6 k head race), reset-to-session-1~~ — **delivered early in Phase 6A** (`/plan`'s preset cards, Reset, and Switch), since Today needed an active plan before this phase's own turn came up
 - [ ] ~~Progress screen: 2k/6k test trend bars (longer = slower, delta callout), minutes/week stacked by type, type mix, last-30-days~~ — **superseded by Phase 6J**: these three chart groups relocate onto You (Trend folded in, per the 2026-08-07 News tab handoff) instead of shipping as their own screen; this bullet stays struck-through rather than deleted so the supersession has a record
-- [ ] Test history list on **You**; test-type sessions prompt a baseline update
+- [ ] Test history list on **You**; test-type sessions prompt a baseline update. Sequencing: 8A is what makes a test session reachable from the plan at all, so it lands first.
 
 **Exit:** Logged sessions appear on the calendar and in every chart; a logged 2k test can update the 2k baseline through the staged-confirm flow.
+
+## Phase 8C — Rower-authored prescriptions (phase two: the rower suggests)
+
+**Status:** Not started. Unscoped: brainstorm before sizing.
+**Goal:** A rower can pre-plan their own routine, reserving a specific workout
+in advance, and the app suggests it when that day comes.
+
+- [ ] Brainstorm first. Open questions to settle there: is a reservation keyed to a DATE or to a plan session index (8A's producer is index-keyed, and `done_n` advances per logged session with no calendar awareness, so these are genuinely different features); does a reservation survive a plan switch or reset, both of which zero `done_n`; and what a rower sees on a day where their own reservation and a plan checkpoint both apply.
+- [ ] **The precedence hierarchy, re-decided against a real second producer.** The 2026-08-12 draft records "rower wins all → a theoretical date → plan prescription" with a displaced lower tier simply dropped. That was decided in a session with no reservations in it, and the losing case is a rower who reserves a workout on a checkpoint day and silently loses the measurement every other workout's targets resolve against. Revisit before building. **M**
+- [ ] Refs by id, not title, for anything the rower authored: titles are user-editable and `server/db/schema.ts` has no uniqueness constraint, so a rename would silently break a reservation. 8A's ref carries the `kind` discriminant for exactly this. **S**
+- [ ] The escape verb. A checkpoint is escaped by SHUFFLE, an ephemeral per-day pick that returns on reload. A reservation the rower made must be CANCELLED instead, which needs a persisted, server-side channel that `todayPick`'s localStorage record cannot provide. **M**
+- [ ] Multiple options for one day ("A or B"), if the brainstorm wants it.
+
+**Trigger:** James asks, or a second rower asks. **No demand has been observed** —
+this exists because James said in the 2026-08-12 session that he "may one day"
+want it, and the honest record is that the seam is prepared and the feature is
+not scheduled.
+
+**Exit:** A rower reserves a specific workout for a future day, sees it
+suggested when that day arrives, and can cancel it without shuffling.
 
 ## Phase 9 — Preferences & You completion
 
@@ -4585,6 +4646,9 @@ next phase. One line per round, newest first.
 - **Apple Health (HealthKit)**: when workout data should flow to Health — write rowing workouts (distance/duration/energy) from the iOS shell; needs entitlements + privacy strings; plugin choice re-verified at build time.
 - **Concept2 Logbook sync**: post-workout cloud import; only compelling if ErgData-during-row becomes a habit.
 - **Parametric workout generator**: "generate me a 45' AT workout" from the library's authoring rules — the differentiator a static book can't match. Trigger: after Phase 6 makes workouts rowable end-to-end. **Trigger FIRED** — Phase 6 (6A–6D) closed the full card→log loop, both doors, real completion; this is now eligible to schedule, not just a standing intention. Its structural-reference loading is now DONE: Phase 6E's offline pipeline produced `app/domain/generation/patterns.json` (per type×duration-band interval-shape frequencies, work:rest ratios, pace-offset distributions, spm bands, warm-up conventions, rep-count ranges — aggregates only, no titles/prose/per-workout rows, per the content policy), the exact fixture this generator would consume. Phase 6F's UI-fix round is done too, so nothing sits ahead of it in the queue any more — not started, but eligible to schedule now, not just eligible in principle.
+- **"Which days did I override, and what was the other suggestion?"** (James, 2026-08-12, during the plan-prescriptions design). Two different questions wearing one sentence. The CHECKPOINT half needs no new capture at all once Phase 8B stamps `plan_key`/`done_n` on each log: a prescription is authored, deterministic data, so "did they take their checkpoint?" is computable at any later date from the log's own `workout_title`. The FREE-FORM half — what the ordinary suggestion would have been on a day the rower shuffled away — is genuinely not backfillable, because `suggest()` depends on the account's preferences and every entry's recency at that instant. It is also NOT one column: the suggestion in force lives on Today, and reaching the save means a new field on the versioned `SessionDraft` localStorage record plus every `buildDraft` entry point that never sees Today at all (Library, WorkoutDetail, BaselineCard, the manual log door). Priced accordingly here rather than smuggled into a checkpoint phase as "two nullable columns." **Trigger:** James wants the retrospective screen, not the column. Then design the screen first, and let it say which of the two questions it is actually asking.
+- **A third prescription producer and a real precedence hierarchy** (James, 2026-08-12). Phase 8A ships one producer (the plan) called from one place, so precedence is a comment, not a mechanism. **Trigger:** a second producer becomes real (8C's reservations are the likely first). Then introduce the resolver that orders them, with an asserting test, and settle what a displaced tier does — see 8C's own re-decide item.
+- **Retire `LEGACY_TITLE_RENAMES`** (the 8A seed rename map). Permanent code the moment it lands. **Trigger:** every deployed environment has booted past the rename, so no row can still carry `First 6k`/`First 2k`.
 - **Library export/import (private JSON)**: household members share their own transcriptions. Trigger: second active rower asks for it.
 - **Auto-capture baselines from the onboarding log**: Phase 6I's no-baseline
   card ends with a manually-entered baseline (You → baseline editor) —
