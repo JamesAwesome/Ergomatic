@@ -6,6 +6,7 @@ import {
   WORKOUTSTATE_TERMINATE,
   WORKOUTSTATE_WORKOUTEND,
 } from "../../domain/monitor/pm5/parse.js";
+import { buildTerminate } from "../../domain/monitor/pm5/commands.js";
 import {
   ADDITIONAL_STATUS_1_UUID,
   GENERAL_STATUS_UUID,
@@ -2546,6 +2547,111 @@ describe("useMonitorSession: P3b — a failed program with a run open", () => {
       terminated: true,
     });
   });
+
+  // Review round (P3b's own hazard, named against `teardown()`'s existing
+  // pattern): `fail()`'s disposal must not race the terminate P3b just
+  // fired. `driver.terminate()` here is fire-and-forget from `program()`'s
+  // own catch — `fail()` used to disconnect in the SAME TICK regardless,
+  // with no ordering against it at all. Apple documents
+  // `cancelPeripheralConnection` as nonblocking with pending commands
+  // POSSIBLY NOT COMPLETING (CoreBluetooth reference,
+  // `CBCentralManager.cancelPeripheralConnection(_:)`), so an immediate
+  // disconnect can plausibly abort the terminate write in flight — leaving
+  // the erg ARMED with the just-rejected program, silently (DEVIATIONS row
+  // 63's own documented harm). `teardown()` in this same file already
+  // avoids exactly this shape (`driver.terminate().finally(() =>
+  // bestEffort(driver.disconnect()))`); this pins `fail()` to the same
+  // rule for the ONE path that fires a terminate of its own — P3b.
+  //
+  // A REAL race is unprovable (this is client-side JS, not CoreBluetooth),
+  // but the ORDERING is: a hand-rolled write() interceptor holds the
+  // TERMINATE frame's own write pending — indistinguishable, from
+  // `sendSequence`'s point of view, from a real slow radio — so
+  // `driver.terminate()` cannot settle until the test releases it. Byte
+  // match, not a call-count/order guess: the retry's own NAK'd program
+  // frames go through the REAL fake at full (same-microtask) speed, and
+  // only the frame matching `buildTerminate()`'s own bytes is intercepted.
+  it.each([["resolve", true] as const, ["reject", false] as const])(
+    "P3b: disconnect() waits for the in-flight terminate to settle before firing — %s case",
+    async (_label, shouldResolve) => {
+      const { result, fake, transport } = harness({
+        program: TWO_INTERVALS,
+        events: liveTimeline,
+      });
+      await connect(result);
+      await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+      tick(fake, 100);
+      expect(result.current.phase).toBe("live");
+      // Same P3b precondition as the suite above: the machine's own
+      // terminated report must not race in and close the run through the
+      // ordinary path before the NAK'd retry ever gets there.
+      transport.deaf = true;
+      fake.injectNak(0);
+
+      const terminateChunk = buildTerminate()[0]![0]!;
+      function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
+        return a.length === b.length && a.every((v, i) => v === b[i]);
+      }
+      // `buildTerminate()`'s own bytes are reused TWICE in this one retry:
+      // `program()`'s own leading "clear" step (its own doc comment —
+      // `driver.terminate()`'s doc comment on `program()` names it) is the
+      // FIRST occurrence, sent and acked normally before the NAK'd
+      // programming frame ever goes out; the catch's OWN `driver.terminate
+      // ()` call — the one this test is about — is the SECOND. A bare byte
+      // match alone cannot tell them apart; counting occurrences can.
+      let terminateWriteCount = 0;
+      const originalWrite = transport.write.bind(transport);
+      let settleHeldWrite: (() => void) | null = null;
+      transport.write = (
+        characteristicId: string,
+        bytes: Uint8Array,
+      ): Promise<void> => {
+        if (
+          characteristicId === RECEIVE_CHARACTERISTIC_UUID &&
+          bytesEqual(bytes, terminateChunk)
+        ) {
+          terminateWriteCount += 1;
+          if (terminateWriteCount === 2) {
+            return new Promise<void>((resolve, reject) => {
+              settleHeldWrite = () => {
+                if (shouldResolve) {
+                  originalWrite(characteristicId, bytes).then(resolve, reject);
+                } else {
+                  reject(new Error("simulated: write failed mid-terminate"));
+                }
+              };
+            });
+          }
+        }
+        return originalWrite(characteristicId, bytes);
+      };
+
+      let programming: Promise<void>;
+      await act(async () => {
+        programming = result.current.program(TWO_INTERVALS, TWO_IDENTITY);
+        await flush();
+      });
+
+      // `program()` itself never awaits the terminate it fires (it is
+      // fire-and-forget from that catch) — its own promise is already
+      // settled here, independent of the held write above.
+      expect(result.current.phase).toBe("failed");
+      expect(result.current.error?.reason).toBe("nak");
+      // THE PIN: the terminate write is still held — `driver.terminate()`
+      // cannot have settled — so disconnect() must not have fired yet.
+      expect(transport.disconnects).toBe(0);
+
+      await act(async () => {
+        settleHeldWrite?.();
+        await flush();
+      });
+
+      // Once the terminate settles — however it settles — the disposal's
+      // disconnect follows.
+      expect(transport.disconnects).toBe(1);
+      await programming!;
+    },
+  );
 });
 
 describe("useMonitorSession: cancel", () => {

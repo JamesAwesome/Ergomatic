@@ -1793,7 +1793,7 @@ export function useMonitorSession(
   );
 
   const fail = useCallback(
-    (error: ConnectedError): void => {
+    (error: ConnectedError, pendingTerminate?: Promise<void>): void => {
       // Phase LL Task 1, exit criterion 7: the ring gains the liveness
       // snapshot on FAILURE — the 2026-08-20 walk lost F-1's evidence
       // precisely because the ring's only door was downstream of the
@@ -1823,9 +1823,7 @@ export function useMonitorSession(
       // the same reason), then the transport itself goes down, then the
       // ref clears. `driver.disconnect()` is the SAME method `teardown()`
       // calls, hanging up the identical transport `connect()` built for
-      // this attempt — best-effort: a terminate this attempt may already
-      // have sent (`program()`'s own catch, guarded on `run !== null`) is
-      // independent and unaffected either way.
+      // this attempt.
       unsubscribeRef.current?.();
       unsubscribeRef.current = null;
       degradedUnsubRef.current?.();
@@ -1835,7 +1833,34 @@ export function useMonitorSession(
       const driver = driverRef.current;
       driverRef.current = null;
       if (driver !== null) {
-        bestEffort(driver.disconnect());
+        // REVIEW FIX (task-3 review, IMPORTANT): `pendingTerminate` is
+        // P3b's own in-flight terminate (`program()`'s catch, below,
+        // passes its own `driver.terminate()` call through here rather
+        // than firing it fire-and-forget on its own) — when present, the
+        // disconnect is CHAINED to run only once that promise settles,
+        // resolved OR rejected, never in the same tick. This was WRONG the
+        // first time this task shipped: disconnecting unconditionally,
+        // synchronously, raced a terminate this same failure may have just
+        // dispatched. `teardown()` a few hundred lines below already
+        // avoids exactly this shape for its own equivalent case
+        // (`bestEffort(driver.terminate().finally(() =>
+        // bestEffort(driver.disconnect())))`) — CoreBluetooth's own
+        // documented contract is why: `cancelPeripheralConnection(_:)`
+        // is nonblocking and "any pending commands ... may not complete"
+        // (Apple, `CBCentralManager` reference), so hanging up while the
+        // terminate write is still in flight can plausibly abort it —
+        // leaving the erg ARMED with the workout that was just rejected,
+        // silently (DEVIATIONS row 63's own documented harm). No terminate
+        // was fired: `pendingTerminate` is `undefined`, and the immediate
+        // disconnect below is correct exactly as before — there is
+        // nothing in flight for it to race.
+        if (pendingTerminate !== undefined) {
+          bestEffort(
+            pendingTerminate.finally(() => bestEffort(driver.disconnect())),
+          );
+        } else {
+          bestEffort(driver.disconnect());
+        }
       }
       // `deviceName: null` — the field Try Again's retry actually branches
       // on (`ConnectedInterstitial.tsx`) — clears in the SAME `update()`
@@ -2069,19 +2094,27 @@ export function useMonitorSession(
         // rejection surfaces, whatever was loaded is already torn down.
         // There is no reason for which keeping the run open is safe.
         const run = runRef.current;
+        // REVIEW FIX (task-3 review, IMPORTANT): captured, not fired via
+        // `bestEffort` here — `fail()` below is what chains the disposal's
+        // `disconnect()` to wait for this promise's own settlement (see
+        // its own doc comment). No `await` between this assignment and
+        // `fail(error, pendingTerminate)`: the SAME synchronous block
+        // attaches the handler before any microtask could observe an
+        // unhandled rejection, the identical timing discipline
+        // `raceScanTimeout` (`capacitorBle.ts`) already relies on.
+        let pendingTerminate: Promise<void> | undefined;
         if (run !== null && run.completedAt === null) {
           closeRecord(true);
           update({ runOpen: false });
-          // ...and leave the erg terminated rather than holding an orphan —
-          // best-effort, ignored on failure. EXCEPT on `disconnected`,
-          // where the link is gone and there is nothing to send a terminate
-          // over (spec: "no terminate is attempted; the record still
-          // closes").
+          // ...and leave the erg terminated rather than holding an orphan.
+          // EXCEPT on `disconnected`, where the link is gone and there is
+          // nothing to send a terminate over (spec: "no terminate is
+          // attempted; the record still closes").
           if (error.reason !== "disconnected") {
-            bestEffort(driver.terminate());
+            pendingTerminate = driver.terminate();
           }
         }
-        fail(error);
+        fail(error, pendingTerminate);
       }
     },
     [closeRecord, fail, update],
