@@ -2340,6 +2340,15 @@ that review also reconciles). No spec is written yet. This section exists
 so the work has a home the moment one is, and so its findings stop living
 in a report (recurring failure 14).
 
+**Asset on hand (James, 2026-08-22): a Concept2 Logbook DEVELOPMENT API
+key already exists in the repo-root `.env`, currently unused.** Presence
+verified (one matching line; the value itself deliberately never read or
+recorded anywhere). When this phase opens, the logbook half of its oracle
+work does not start from a registration queue — it starts from a key we
+already hold. `.env` is untracked, so the key must ALSO never appear in
+any committed file, fixture, or capture; the spec should name where it is
+allowed to live (real env only, same stance as `DATABASE_URL`).
+
 **What and why, in plain words.** We have never checked our rows against
 anything outside our own app. On 2026-08-21 a fourteen-agent adversarial
 review checked them against Concept2's published logbook schema, and the
