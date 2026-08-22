@@ -481,9 +481,11 @@ test.describe("the derivation offer is reachable through the real editor flow (t
 
     // The wire body itself — the exact assertion Finding 1 names — carries
     // ONLY the touched field. A fabricated k2Seconds here would mean the
-    // fix didn't actually reach the network layer.
+    // fix didn't actually reach the network layer. Since Phase BL PR A the
+    // touched field also carries its truthful provenance: a stepper nudge
+    // is a manual entry.
     await expect.poll(() => putBody).not.toBeNull();
-    expect(putBody).toStrictEqual({ k6Seconds: 122.5 });
+    expect(putBody).toStrictEqual({ k6Seconds: 122.5, k6Source: "manual" });
 
     // The offer becomes visible for 2k — reachable, at last, through the
     // real editor flow rather than a raw API seed.

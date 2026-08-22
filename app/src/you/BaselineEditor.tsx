@@ -198,20 +198,42 @@ function ReadyEditor({
     setSaving(true);
     try {
       // Task-review round, Finding 1 (BLOCKER): commit a side iff the rower
-      // TOUCHED it this session, or the server already has a real value
-      // for it — never an untouched, still-server-null side's fabricated
-      // seed. Without this, Apply always sent both fields (server/routes/
-      // data.ts's own per-field PUT loop would then happily write the seed
-      // as if it were real), so a fresh rower's very first Apply committed
-      // a fake baseline for the side they never rowed, and the derivation
-      // offer's own eligibility (server-null on one side) could never
-      // survive past that first save — unreachable through the real UI.
+      // TOUCHED it this session — never an untouched, still-server-null
+      // side's fabricated seed. Without this, Apply always sent both
+      // fields (server/routes/data.ts's own per-field PUT loop would then
+      // happily write the seed as if it were real), so a fresh rower's
+      // very first Apply committed a fake baseline for the side they never
+      // rowed, and the derivation offer's own eligibility (server-null on
+      // one side) could never survive past that first save — unreachable
+      // through the real UI.
+      //
+      // Tightened by Phase BL PR A (per-number provenance): Finding 1's
+      // fix also resent an untouched side whenever the server already had
+      // a real value — a harmless value-level no-op then, a lie now,
+      // because the server stamps any plain value write `manual` and
+      // would flip that field's stored tested/derived source. Untouched
+      // (draft === server value, guaranteed: every mutator sets `touched`
+      // in the same call that changes `draft`) now means absent from the
+      // body entirely.
+      //
+      // Each touched field carries its truthful source: `derived` iff it
+      // is the offer's own field still sitting at EXACTLY the offer's
+      // value — the same predicate DeriveSlot uses to show its
+      // "ESTIMATED" line, so what the rower sees and what gets stored
+      // agree — and `manual` for every other act (typed, nudged, or
+      // nudged away from an accepted estimate).
+      const sourceFor = (which: "k2" | "k6"): "manual" | "derived" =>
+        offer?.which === which && state.draft[which] === offer.value
+          ? "derived"
+          : "manual";
       const patch: BaselinesPatch = {};
-      if (state.touched.k2 || baselines.k2Seconds !== null) {
+      if (state.touched.k2) {
         patch.k2Seconds = state.draft.k2;
+        patch.k2Source = sourceFor("k2");
       }
-      if (state.touched.k6 || baselines.k6Seconds !== null) {
+      if (state.touched.k6) {
         patch.k6Seconds = state.draft.k6;
+        patch.k6Source = sourceFor("k6");
       }
       await save(patch);
       setState((s) => commit(s));
