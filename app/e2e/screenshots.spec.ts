@@ -842,6 +842,21 @@ test("library", async ({ page }) => {
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "library-range.png"),
   });
+
+  // Phase 8A PR B (James's ruling, 2026-08-22): the 6K Test and 2K Test
+  // are VISIBLE Library rows now — seeded at sortOrder 301/302, they sit
+  // at the tail of the global list, so this capture scrolls them into
+  // frame. Assert both rows and the 2K's honest classification line
+  // BEFORE shooting (recurring failure #7: prove the state, then shoot).
+  const test2kRow = page.locator(".workout-row").filter({ hasText: "2K Test" });
+  await test2kRow.scrollIntoViewIfNeeded();
+  await expect(test2kRow).toBeVisible();
+  await expect(
+    page.locator(".workout-row").filter({ hasText: "6K Test" }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "library-tests.png"),
+  });
   // Scroll back before the captures below: `scrollIntoViewIfNeeded` above
   // leaves the list mid-page, and `library-sheet.png` shot the scrolled
   // list behind its dialog the first time this ran. A capture that moves
