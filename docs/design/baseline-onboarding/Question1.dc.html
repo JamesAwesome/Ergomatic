@@ -1,0 +1,35 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+  <style>
+    body { margin: 0; background: #e8e4d9; font-family: "Archivo", system-ui, sans-serif; color: #1b1a17; }
+    a { color: #b5341f; } a:hover { color: #9c2c19; }
+  </style>
+</helmet>
+<div style="width: 390px; min-height: 700px; background: #f4f1e8; padding: 24px 20px 20px 20px; box-sizing: border-box; display: flex; flex-direction: column; gap: 16px">
+<div style="display: flex; justify-content: space-between; align-items: center"><span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; letter-spacing: 0.16em; color: #57544c">RECOMMEND MY BASELINE</span><div style="display: flex; gap: 6px"><span style="width: 6px; height: 6px; border-radius: 3px; background: #1b1a17"></span><span style="width: 6px; height: 6px; border-radius: 3px; background: #c9c3b2"></span><span style="width: 6px; height: 6px; border-radius: 3px; background: #c9c3b2"></span></div></div>
+<h1 style="margin: 0; font-family: 'Newsreader', Georgia, serif; font-size: 31px; font-weight: 500; line-height: 1.1">How much have you rowed?</h1>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="min-height: 48px; display: flex; align-items: center; background: #fffdf7; border: 1px solid #1b1a17; border-radius: 2px; padding: 0 14px; font-size: 15px; font-weight: 500; cursor: pointer">Never, or once or twice</div>
+<div style="min-height: 48px; display: flex; align-items: center; background: #fffdf7; border: 2px solid #b5341f; border-radius: 2px; padding: 0 14px; font-size: 15px; font-weight: 500; cursor: pointer">A little. I know the stroke</div>
+<div style="min-height: 48px; display: flex; align-items: center; background: #fffdf7; border: 1px solid #1b1a17; border-radius: 2px; padding: 0 14px; font-size: 15px; font-weight: 500; cursor: pointer">Regularly, on and off</div>
+<div style="min-height: 48px; display: flex; align-items: center; background: #fffdf7; border: 1px solid #1b1a17; border-radius: 2px; padding: 0 14px; font-size: 15px; font-weight: 500; cursor: pointer">A lot. I have raced or trained</div>
+</div>
+<div style="flex: 1"></div>
+<div style="min-height: 56px; display: flex; align-items: center; justify-content: center; background: #b5341f; border-radius: 2px; color: #fffdf7; font-size: 16px; font-weight: 600; cursor: pointer">Next</div>
+<div style="min-height: 44px; display: flex; align-items: center; justify-content: center; background: transparent; border: 1px solid #1b1a17; border-radius: 2px; color: #1b1a17; font-size: 15px; font-weight: 500; cursor: pointer">Back</div>
+</div></x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

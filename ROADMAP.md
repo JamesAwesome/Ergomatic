@@ -1470,16 +1470,27 @@ and `docs/design/README.md:99-100` (the wrong `7/31/55` cadence, real indices
 
 ## Phase BL — Baselines: three doors in, one measurement out
 
-**Status:** SPEC WRITTEN 2026-08-22
-(`docs/superpowers/specs/2026-08-22-baseline-onboarding-design.md`,
-brainstormed live with James on the "Baseline Onboarding" design canvas —
-the canvas is the pixel reference). **This is the phase the 8A gate
-sequenced BEFORE the calendar**, re-brainstormed and widened the same day:
-it now covers how a baseline ENTERS the app, not just how a test updates
-it. Not started; takes the phase-open gates with the spec as the anchor
-target. TRIAD: a stored shape (baseline `source` provenance) and the
-origin of the app's most load-bearing numbers — full antagonist pass on
-the spec, PM final-PR gate on the PR that lands the shape.
+**Status:** OPEN 2026-08-22 — phase-open gates RUN same day (antagonist
+anchor at full triad weight; PM slate gate GO-WITH-CONDITIONS), spec at
+REV 2 with every finding folded
+(`docs/superpowers/specs/2026-08-22-baseline-onboarding-design.md`; the
+canvas is COMMITTED at `docs/design/baseline-onboarding/`, live copy
+linked in the spec). Both gate ledger entries rode the rev-2 PR. James's
+rev-2 rulings: per-number provenance (`k2Source`/`k6Source`, four values
+incl. `derived`); decline still records the test (wire decouple in PR B);
+the derive OFFER answers door 3's single number and inconsistent tested
+writes; questionnaire answers TRANSIENT, never stored; a staged-confirm
+**Reset baseline setup** on You makes the doors re-enterable (the product
+answer to the gate's unreachable-doors finding). **PR shape: A (the
+shape, alone, triad) → B (prompt + shortcut + decouple) → C (doors +
+questionnaire + table + reset), with a STOP-POINT after B** — the phase
+may close and release on A+B if the table cannot meet its bounded
+criteria. **PR C opens only once Phase LL's spec exists** (James's
+sequencing ruling with teeth — LL runs in a parallel session).
+**Coordination:** LL's PR #160 mints drizzle 0012; whichever session
+merges second regenerates its migration index. James checks all 16 table
+cells, printed in PR C's body. TRIAD: PM final-PR gates on A (and C if
+the table ships).
 
 **Goal:** a no-baseline account reaches a working app through whichever
 door suits them, and a rowed test finally gets RECORDED instead of
@@ -1503,6 +1514,11 @@ hand-typed.
 - [ ] **The You-screen re-test shortcut** (James, 2026-08-22): row the
       6k / race the 2k next to the baseline fields on You, routing to
       the same designated tests and landing in the same prompt. **S**
+- [ ] **Reset baseline setup** (James, 2026-08-22, at the gate): a
+      staged-confirm action on You clearing both numbers and both
+      sources — the doors become re-enterable for ANY account, demos
+      included. Needs a deliberate clear operation (the PUT rejects
+      null today). Rides PR C. **S**
 
 **Exit:** the spec's draft exit criteria, refined at phase open — each
 door works end to end, the prompt closes the measurement loop, every
@@ -1524,7 +1540,7 @@ baseline carries a source and no screen shows it.
       briefly carried described work that no longer exists — struck same day.
 - [x] ~~Plan management: preset selection (2000 m sprint / 5–6 k head race), reset-to-session-1~~ — **delivered early in Phase 6A** (`/plan`'s preset cards, Reset, and Switch), since Today needed an active plan before this phase's own turn came up
 - [ ] ~~Progress screen: 2k/6k test trend bars (longer = slower, delta callout), minutes/week stacked by type, type mix, last-30-days~~ — **superseded by Phase 6J**: these three chart groups relocate onto You (Trend folded in, per the 2026-08-07 News tab handoff) instead of shipping as their own screen; this bullet stays struck-through rather than deleted so the supersession has a record
-- [ ] Test history list on **You**; test sessions prompt a baseline update. Sequencing: 8A is what makes a test session reachable from the plan at all, so it lands first — and **this bullet ships NEXT after 8A, before the calendar (James, 2026-08-22)**: 8A opens a measurement loop nothing closes (no client sends `isTestResult`; the only baseline write is hand-typed on You), and this is what closes it. Wording note from the same gate: after 8A there is no test TYPE — a test session is identified by title or by prescription (`plan_index ∈ {6,34,62}`), so this bullet's design pass must say which.
+- [ ] Test history list on **You** — the CONSUMER for the `test_history` rows Phase BL's prompt produces (BL creates the producer; until this ships the history has rows nobody can see, and release notes must not imply otherwise). **The prompt half of this bullet MOVED to Phase BL** (split at BL's phase-open gate, 2026-08-22 — one home per body of work; the old "staged-confirm flow" mechanism wording here is superseded by BL's post-save prompt). Identity note stands: a test session is identified by title (`ONBOARDING_TITLES`) or by prescription (`plan_index ∈ {6,34,62}`); this list's design pass says which it keys on.
 
 **Exit:** Logged sessions appear on the calendar and in every chart; a logged 2k test can update the 2k baseline through the staged-confirm flow.
 

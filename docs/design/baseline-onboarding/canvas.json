@@ -1,0 +1,95 @@
+{
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 700,
+      "title": "Doors, Option A (outcome)"
+    },
+    {
+      "file": "DoorsIdentity.dc.html",
+      "x": 470,
+      "y": 0,
+      "w": 390,
+      "h": 700,
+      "title": "Doors, Option B (identity)"
+    },
+    {
+      "file": "Question1.dc.html",
+      "x": 0,
+      "y": 820,
+      "w": 390,
+      "h": 700
+    },
+    {
+      "file": "Question2.dc.html",
+      "x": 470,
+      "y": 820,
+      "w": 390,
+      "h": 700
+    },
+    {
+      "file": "Recommendation.dc.html",
+      "x": 940,
+      "y": 820,
+      "w": 390,
+      "h": 700
+    },
+    {
+      "file": "Experienced.dc.html",
+      "x": 940,
+      "y": 0,
+      "w": 390,
+      "h": 700
+    },
+    {
+      "file": "RowPath.dc.html",
+      "x": 1410,
+      "y": 0,
+      "w": 390,
+      "h": 700
+    }
+  ],
+  "annotations": [
+    {
+      "id": "opt-a",
+      "x": 0,
+      "y": -150,
+      "w": 390,
+      "text": "Option A (recommended): doors framed by OUTCOME. Your note folded in: experienced rowers who want a recommendation fit through door 1, since the questionnaire asks about experience anyway."
+    },
+    {
+      "id": "flow-note",
+      "x": 0,
+      "y": 750,
+      "w": 500,
+      "text": "The advice path: two questions, then the recommendation. Question wording is draft; the split numbers are PLACEHOLDERS. The real estimate model comes from the spec's research pass (Concept2 logbook rankings). Whether age/sex join the questions is an open call: better estimates, but health-adjacent data and App Privacy weight."
+    },
+    {
+      "id": "exp-note",
+      "x": 940,
+      "y": -150,
+      "w": 390,
+      "text": "Door 2 reuses the You editor's fields, brought forward. Writes provenance manual."
+    },
+    {
+      "id": "row-note",
+      "x": 1410,
+      "y": -150,
+      "w": 390,
+      "text": "Door 3 (James, settled): relaxed 6k OR raced 2k, rower's choice. The shipped BaselineCard already carries this exact toggle, so the build reuses it. Option A chosen for the doors; Option B kept below as the record of the road not taken."
+    },
+    {
+      "id": "opt-b",
+      "x": 470,
+      "y": -150,
+      "w": 390,
+      "text": "Option B: identity framing. NOT CHOSEN (James, 2026-08-22). Kept for the record."
+    }
+  ],
+  "launch": {
+    "view": "canvas"
+  }
+}
