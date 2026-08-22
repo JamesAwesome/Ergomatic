@@ -466,36 +466,61 @@ async function setCustomBaselines(
 // validation-design.md ("no pixel-diff gating; machines judge rules").
 
 async function assertTapTargets(page: Page): Promise<void> {
-  const elements = await page
-    .locator("a, button, [role=button], input, select")
-    .all();
-  for (const el of elements) {
-    if (!(await el.isVisible())) continue;
-    const className = await el.evaluate(
-      (node) => (node as HTMLElement).className,
-    );
-    // The one narrow, already-documented exception (docs/design/
-    // DEVIATIONS.md, "N/A — the handoff has no notion of a 'convenience'
-    // tap area..."): StepCard.tsx's collapsed `.step-card-line1` (326x18)
-    // and `.step-card-sub` (180x14) each duplicate the fully-compliant
-    // 48x44 EDIT cell's own onExpand action, in the same card, at less than
-    // 44x44 — WCAG 2.5.8's Equivalent Control exception covers exactly
-    // this. The project's own stricter, exception-free 44px rule still
-    // treats these as a genuine, accepted violation (per DEVIATIONS.md);
-    // excluding them here is that one recorded carve-out, not a general
-    // weakening of this sweep.
-    if (
-      typeof className === "string" &&
-      (className.includes("step-card-line1") ||
-        className.includes("step-card-sub"))
-    ) {
-      continue;
-    }
-    const box = await el.boundingBox();
-    const label = await el.evaluate((node) => node.outerHTML.slice(0, 120));
-    expect(box, `missing bounding box for: ${label}`).not.toBeNull();
-    expect(box!.width, `width < 44 for: ${label}`).toBeGreaterThanOrEqual(44);
-    expect(box!.height, `height < 44 for: ${label}`).toBeGreaterThanOrEqual(44);
+  // A single in-page $$eval pass: enumerate, filter and measure every
+  // candidate synchronously inside the browser, so no DOM change (a route
+  // transition unmounting the screen mid-sweep) can interleave between
+  // resolving an element and measuring it. The previous version issued
+  // three separate CDP round trips per element via re-querying Playwright
+  // locators (`.all()` + `isVisible()` + `evaluate()` + `boundingBox()`),
+  // any of which could land on a different node than the ones before it —
+  // see .superpowers/sdd/2026-08-21-warmup-removal/flake-investigation.md.
+  // A node that no longer exists by measurement time surfaced as a `null`
+  // bounding box misattributed to whatever unrelated element the next
+  // round trip happened to resolve, not a real violation. That failure
+  // mode cannot occur here: a node excluded by the visibility filter below
+  // (an empty client-rect list, i.e. detached or `display: none`) is never
+  // measured, so there is no "missing bounding box" case left to report.
+  const offenders = await page.$$eval(
+    "a, button, [role=button], input, select",
+    (nodes) =>
+      nodes
+        .filter((n) => {
+          const el = n as HTMLElement;
+          // Playwright's own isVisible(): non-empty box AND
+          // visibility !== hidden.
+          if (el.getClientRects().length === 0) return false;
+          if (getComputedStyle(el).visibility === "hidden") return false;
+          // The one narrow, already-documented exception (docs/design/
+          // DEVIATIONS.md, "N/A — the handoff has no notion of a
+          // 'convenience' tap area..."): StepCard.tsx's collapsed
+          // `.step-card-line1` (326x18) and `.step-card-sub` (180x14)
+          // each duplicate the fully-compliant 48x44 EDIT cell's own
+          // onExpand action, in the same card, at less than 44x44 —
+          // WCAG 2.5.8's Equivalent Control exception covers exactly
+          // this. The project's own stricter, exception-free 44px rule
+          // still treats these as a genuine, accepted violation (per
+          // DEVIATIONS.md); excluding them here is that one recorded
+          // carve-out, not a general weakening of this sweep.
+          const className = el.className;
+          return !(
+            typeof className === "string" &&
+            (className.includes("step-card-line1") ||
+              className.includes("step-card-sub"))
+          );
+        })
+        .map((n) => {
+          const r = (n as HTMLElement).getBoundingClientRect();
+          return {
+            width: r.width,
+            height: r.height,
+            label: n.outerHTML.slice(0, 120),
+          };
+        })
+        .filter((m) => m.width < 44 || m.height < 44),
+  );
+  for (const { width, height, label } of offenders) {
+    expect(width, `width < 44 for: ${label}`).toBeGreaterThanOrEqual(44);
+    expect(height, `height < 44 for: ${label}`).toBeGreaterThanOrEqual(44);
   }
 }
 
@@ -4091,7 +4116,7 @@ test.describe("post-workout summary (session door, just finished)", () => {
     await page.getByRole("button", { name: "Finish session" }).click();
     await expect(page).toHaveURL(/\/session\/log$/);
     // §2A: the title renders bare, no "Log" prefix.
-    await expect(page.getByRole("heading", { name: title })).toBeVisible();
+    await expect(page.locator("h1.summary-title")).toHaveText(title);
   });
 
   test.afterEach(async ({ page }) => {
@@ -4358,7 +4383,7 @@ test.describe("post-workout summary (manual door)", () => {
     await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
     await page.getByRole("link", { name: "Log it after" }).click();
     await expect(page).toHaveURL(/\/library\/[^/]+\/log$/);
-    await expect(page.getByRole("heading", { name: title })).toBeVisible();
+    await expect(page.locator("h1.summary-title")).toHaveText(title);
   });
 
   test.afterEach(async ({ page }) => {
@@ -4524,7 +4549,7 @@ test.describe("post-workout summary — quiet diagnostics doors (review finding 
     });
     await page.getByRole("link", { name: "Log it after" }).click();
     await expect(page).toHaveURL(/\/library\/[^/]+\/log$/);
-    await expect(page.getByRole("heading", { name: title })).toBeVisible();
+    await expect(page.locator("h1.summary-title")).toHaveText(title);
   });
 
   test.afterEach(async ({ page }) => {
@@ -4600,7 +4625,7 @@ test.describe("post-workout summary (manual door, plan active — the save stack
     await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
     await page.getByRole("link", { name: "Log it after" }).click();
     await expect(page).toHaveURL(/\/library\/[^/]+\/log$/);
-    await expect(page.getByRole("heading", { name: title })).toBeVisible();
+    await expect(page.locator("h1.summary-title")).toHaveText(title);
   });
 
   test.afterEach(async ({ page }) => {
@@ -4695,7 +4720,7 @@ test.describe("post-workout summary (session door, multi-target — no hint)", (
     await expect(page.getByText("Finish this session?")).toBeVisible();
     await page.getByRole("button", { name: "Finish session" }).click();
     await expect(page).toHaveURL(/\/session\/log$/);
-    await expect(page.getByRole("heading", { name: title })).toBeVisible();
+    await expect(page.locator("h1.summary-title")).toHaveText(title);
   });
 
   test.afterEach(async ({ page }) => {
