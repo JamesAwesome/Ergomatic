@@ -235,16 +235,28 @@ describe("continuity.check: the corpus derivation — a 30s gap slid across ever
     expect(resets).toHaveLength(0);
   });
 
-  it("sanity: this sweep actually exercised a meaningful number of pairs across the corpus (not a silently-empty pass)", () => {
-    const totalPairs = CORPUS_FILES.reduce(
-      (sum, f) => sum + slideGap(loadTwdSamples(f), 30_000).length,
-      0,
-    );
-    // Measured: 3,092 raw pairs across the 6 captures before suppression
-    // (this count includes distance-goal pairs, which `check` suppresses
-    // internally rather than excluding from the sweep) — a floor well
-    // under that guards against the corpus shrinking silently while still
-    // proving the sweep is not vacuous.
+  it("sanity: this sweep actually exercised a meaningful number of NON-SUPPRESSED pairs across the corpus (not a silently-empty, or silently-all-suppressed, pass)", () => {
+    let totalPairs = 0;
+    let nonSuppressedPairs = 0;
+    for (const f of CORPUS_FILES) {
+      const results = slideGap(loadTwdSamples(f), 30_000);
+      totalPairs += results.length;
+      // Task 4 review fix (F5, Minor): the floor below is asserted
+      // against the pairs `check` actually COMPARES — neither reading
+      // distance-goal — not the raw total. The raw total (measured:
+      // 3,092) includes every distance-goal pair too, which `check`
+      // suppresses internally without ever reaching its backward-jump
+      // comparison; a sweep that regressed to 100% suppressed pairs
+      // would still pass a raw-total-only floor while proving nothing
+      // about the bound this file exists to validate.
+      nonSuppressedPairs += results.filter(
+        (r) => !r.before.reading.distanceGoal && !r.after.reading.distanceGoal,
+      ).length;
+    }
+    // Measured: 3,092 raw pairs, 1,026 non-distance-goal (the ones `check`
+    // actually evaluates) across the 6 captures — floors set well under
+    // each, guarding against either number shrinking silently.
     expect(totalPairs).toBeGreaterThan(1000);
+    expect(nonSuppressedPairs).toBeGreaterThan(500);
   });
 });

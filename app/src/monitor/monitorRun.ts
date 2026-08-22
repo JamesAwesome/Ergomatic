@@ -39,6 +39,14 @@ export const MONITOR_RUN_KEY = "ergomatic.monitorRun";
  * writer sets its value" a compiler-checked fact rather than a convention:
  * there is no way to close a run through that function without naming one
  * of these four.
+ *
+ * `"link-lost"` gains a SECOND producer at Task 4's own review (F1/I1):
+ * `completeContinuityReset` below writes it too, for a continuity reset —
+ * not through `completeMonitorRun` (a reset has no wire event to report
+ * either), but the VALUE is the same member of this same type: both
+ * producers are "the link is why this record stops here," learned two
+ * different ways. `MonitorRun.endedBy`'s own doc comment has the full
+ * writer table, all six.
  */
 export type CloseReason = "finished" | "rower" | "link-lost" | "program-failed";
 
@@ -105,28 +113,41 @@ export interface MonitorRun {
   /**
    * Phase LL Task 4 (design spec §4): WIDENS the field that already
    * existed here (`"interrupted"`, F6) — never a third overlapping flag
-   * beside `terminated`. `terminated` already losslessly distinguishes an
-   * honest WORKOUTEND from a PM5 TERMINATE (the machine's OWN report);
-   * `endedBy` answers a different, previously-unrecorded question: HOW
-   * the record came to be closed, from the record's own honest
-   * perspective. Every value is one its one writer HONESTLY KNOWS at
+   * beside `terminated`. **CORRECTED at Task 4's own review (I2):** this
+   * comment used to claim `terminated` "already losslessly distinguishes"
+   * an honest WORKOUTEND from a PM5 TERMINATE. FALSE, and was false
+   * before this phase — `endSession` has always written `terminated:
+   * true` on the End-button path too, so End-at-the-phone and
+   * Menu-at-the-erg store the identical `terminated: true`. `endedBy` is
+   * what actually carries that distinction now (`"rower"` either way —
+   * see below), an honest loss the spec accepts: no consumer needs the
+   * venue. Every `endedBy` value is one its one writer HONESTLY KNOWS at
    * close time (`CloseReason`'s own doc comment names each writer):
    *   - `"finished"` — machine WORKOUTEND (`endByMachine(false)`).
-   *   - `"rower"` — the rower ended it and the link was up: either the End
-   *     button with `linkGone === false`, or the machine's own TERMINATE
-   *     arriving over a live link (`endByMachine(true)`) — a TERMINATE
-   *     event is BY CONSTRUCTION link-up (it arrived), and the existing
-   *     "a MACHINE-TERMINATED ending" test's own words are "the rower
-   *     stopped the piece at the erg" — the same fact the End-button path
-   *     records, learned a different way (`useMonitorSession.ts` review
-   *     finding, Task 4).
-   *   - `"link-lost"` — the End button with `linkGone === true`.
+   *   - `"rower"` — the rower ended it: the End button with
+   *     `linkGone === false`, OR the machine's own TERMINATE arriving at
+   *     all (`endByMachine(true)`) — a TERMINATE event is BY
+   *     CONSTRUCTION link-up (it arrived), and a human at the PM5 menu is
+   *     the rower, same as a human at the End button (RULED at Task 4's
+   *     review, I2 — the first implementation reasoned this out as a
+   *     finding; the spec now states it directly, with the "open
+   *     assertion" that an inactivity auto-TERMINATE, if the PM5 ever
+   *     emits one, would make this label an assertion of agency rather
+   *     than an observation — unverified either way, walk question W8).
+   *   - `"link-lost"` — the End button with `linkGone === true`, OR a
+   *     continuity reset (`useMonitorSession.ts`'s `applyContinuityCheck`,
+   *     `completeContinuityReset` below) — RULED at Task 4's review
+   *     (F1/I1, correcting the first implementation's `"interrupted"`):
+   *     a reset is the close with the STRONGEST evidence of the two —
+   *     the stream was marked suspect by a link episode and then
+   *     MEASURABLY violated continuity — so it gets the same value the
+   *     other link-caused close already uses, never the "no evidence"
+   *     value.
    *   - `"program-failed"` — a failed `program()` closing a run still open
    *     (P3b).
-   *   - `"interrupted"` — UNCHANGED from its original meaning: closed later
-   *     through Today's row (F6), with NO evidence of a cause. Never
-   *     conflate this with the others: this is the ABSENCE of a story,
-   *     not a fifth story.
+   *   - `"interrupted"` — closed later through Today's row (F6), with NO
+   *     evidence of a cause. Never conflate this with the others: this is
+   *     the ABSENCE of a story, not a sixth story.
    * A run's own `completedAt`/`terminated` pair can be set with NO
    * `endedBy` at all only if some future writer forgets to pass one —
    * `completeMonitorRun`'s own `args.endedBy` is REQUIRED, not optional,
@@ -624,45 +645,81 @@ export function completeMonitorRun(
 }
 
 /**
- * F6's own door: closes a LIVE run the rower is ending through Today's row
- * rather than through a `workoutComplete`/`terminated` event the machine
- * itself sent (`completeMonitorRun` above is that path; this is the other
- * one — the phone lost the machine, or the rower simply walked away, and
- * nothing on the wire is ever going to say "finished" for this run again).
+ * The shared writer behind `completeInterruptedRun` and
+ * `completeContinuityReset` below: closes a LIVE run through a door that
+ * has NO `workoutComplete`/`terminated` event of its own to report
+ * (`completeMonitorRun` above is the wire-event path; every caller here
+ * is the other kind — nothing on the wire is ever going to say "finished"
+ * for this run again). Stamps `completedAt` from `now` and the caller's
+ * own `endedBy` together, the same "two fields move, together and only
+ * here" discipline `completeMonitorRun`'s own doc comment states for its
+ * pair.
  *
- * Stamps `completedAt` from `now` and `endedBy: "interrupted"` together,
- * the same "two fields move, together and only here" discipline
- * `completeMonitorRun`'s own doc comment states for its pair — a record
- * that says "finished" without saying it was interrupted is the shape a
- * later screen (F6's own Today card) cannot read.
- *
- * **`terminated` is deliberately left untouched.** It answers a DIFFERENT
- * question — HOW the machine itself reported the end (`WORKOUTEND` vs
- * `TERMINATE`, `MonitorRun.terminated`'s own comment) — and this call site
- * has no such report to make: nothing on the wire ever closed this run.
- * Leaving it at whatever it already was (always `false` for a still-live
- * run, since `completeMonitorRun` is the only writer that ever sets it
- * `true`, and that only fires on an event this path by definition never
- * received) keeps `terminated` meaning "what the machine said," full stop,
- * with `endedBy` free to carry the orthogonal "the rower said" story.
+ * **`terminated` is deliberately left untouched**, for both callers alike.
+ * It answers a DIFFERENT question — HOW THE MACHINE itself reported the
+ * end (`WORKOUTEND` vs `TERMINATE`, `MonitorRun.terminated`'s own
+ * comment) — and neither caller has such a report to make. Leaving it at
+ * whatever it already was (always `false` for a still-live run, since
+ * `completeMonitorRun` is the only writer that ever sets it `true`, and
+ * that only fires on an event this path by definition never received)
+ * keeps `terminated` meaning "what the machine said," full stop, with
+ * `endedBy` free to carry each door's own orthogonal story.
  *
  * Idempotent by the same rule `completeMonitorRun` uses: an already-closed
- * record is returned UNCHANGED and nothing is persisted. The check reads
- * the caller's in-memory argument, not storage, so the guarantee is
- * single-tab: Today has no live monitor hook, so within a tab the record
- * it captured at mount cannot have gained a machine completion since. A
- * second tab driving a live session is the pre-existing shared-storage
- * hazard family, same premise the Connect door's dead-run rule rests on.
+ * record is returned UNCHANGED and nothing is persisted.
  */
-export function completeInterruptedRun(run: MonitorRun, now: Date): MonitorRun {
+function completeWithoutWireEvidence(
+  run: MonitorRun,
+  now: Date,
+  endedBy: "interrupted" | "link-lost",
+): MonitorRun {
   if (run.completedAt !== null) return run;
   const next: MonitorRun = {
     ...run,
     completedAt: now.toISOString(),
-    endedBy: "interrupted",
+    endedBy,
   };
   saveMonitorRun(next);
   return next;
+}
+
+/**
+ * F6's own door: closes a LIVE run the rower is ending through Today's row
+ * — the phone lost the machine, or the rower simply walked away.
+ * `endedBy: "interrupted"` — ABSENCE of a story, not a cause (see
+ * `MonitorRun.endedBy`'s own doc comment on the distinction from every
+ * other `CloseReason`).
+ *
+ * The check reads the caller's in-memory argument, not storage, so the
+ * idempotence guarantee (`completeWithoutWireEvidence`'s own doc comment)
+ * is single-tab: Today has no live monitor hook, so within a tab the
+ * record it captured at mount cannot have gained a machine completion
+ * since. A second tab driving a live session is the pre-existing
+ * shared-storage hazard family, same premise the Connect door's dead-run
+ * rule rests on.
+ */
+export function completeInterruptedRun(run: MonitorRun, now: Date): MonitorRun {
+  return completeWithoutWireEvidence(run, now, "interrupted");
+}
+
+/**
+ * Phase LL Task 4's continuity door (design spec §4; RULED at the task's
+ * own review, F1/I1 — corrects the first implementation, which reused
+ * `completeInterruptedRun` and stamped `"interrupted"` here). A continuity
+ * reset is the OPPOSITE of an absent story: `useMonitorSession.ts`'s
+ * `applyContinuityCheck` only reaches this function once a stream the
+ * link already marked suspect has gone on to MEASURABLY violate
+ * continuity (`continuity.ts`'s own `check`) — two independent pieces of
+ * positive evidence that the link is what broke this run, not silence
+ * about a cause. `endedBy: "link-lost"` says exactly that, the same value
+ * the End-button-with-link-gone path already writes: both are "the link
+ * is why this record stops here," learned two different ways.
+ */
+export function completeContinuityReset(
+  run: MonitorRun,
+  now: Date,
+): MonitorRun {
+  return completeWithoutWireEvidence(run, now, "link-lost");
 }
 
 /**

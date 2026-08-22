@@ -267,8 +267,31 @@ and "I bailed at minute two" are indistinguishable in the record.
     unmapped in the first draft)
   - Today's row, closed later with no evidence → `interrupted` — which
     keeps its existing stored meaning: ABSENCE of evidence, not a cause.
-  The machine's own TERMINATE stays on `terminated: true`, which already
-  distinguishes it losslessly; `endedBy` never re-encodes it.
+  - **A continuity reset → `link-lost` (RULED at Task 4's review — the
+    sixth writer the table missed).** The first implementation stamped
+    `interrupted` on the one close with the STRONGEST evidence: the
+    stream was marked suspect by a link episode and then measurably
+    violated continuity. That is a story, not the absence of one, and the
+    writer knows it. **And the reset MUST tell the surface** — every
+    sibling close pairs the record close with the surface update; the
+    first implementation closed the record silently, leaving the banner
+    to retract, `recordActual` refusing every later boundary, and the
+    rower rowing into a closed record with the app showing normal — in
+    the phase whose subject is "the app says so". The reset pairs with
+    the same runOpen-false surface update as every other close. "Start
+    clean" remains unimplemented (no reconnect this phase), and now the
+    rower can SEE that, which is the honest half we can ship.
+  The machine's own TERMINATE maps to `endedBy: "rower"` — a human at the
+  PM5 menu is the rower — alongside `terminated: true`. **CORRECTED at
+  Task 4's review: this spec originally claimed `terminated: true` "already
+  distinguishes it losslessly", which is FALSE and was false before this
+  phase — `endSession` has always written `terminated: true` on the
+  End-button path too, so End-at-the-phone and Menu-at-the-erg store the
+  same tuple.** Accepted as an honest loss: both are the rower ending the
+  session, and no consumer needs the venue. **Open assertion, recorded:**
+  whether the PM5 ever emits TERMINATE on its own (an inactivity timeout)
+  is unverified in either direction; if it does, `"rower"` asserts agency
+  on the machine's behalf. Walk question W8.
   The server row gains the same field, additive-optional; old rows read as
   unknown, never backfilled. **This is the stored shape that makes the spec
   TRIAD.**
@@ -288,11 +311,24 @@ and "I bailed at minute two" are indistinguishable in the record.
   −4.35, −3.15 s, distance flat, four occurrences). The licence transfers;
   the constants only transfer if the field they read means the same thing,
   and ours does not.
-  The rule as adopted: keyed on quantities that are MONOTONIC across
-  boundaries on our wire — `totalWorkDistanceMeters` (0x0031 bytes 11-13)
-  going backward, or stroke count dropping — with thresholds derived from
-  the corpus in implementation and validated the same way the watchdog is
-  (no healthy capture's own resumes may trip it). On reset: preserve the
+  The rule as adopted: keyed on `totalWorkDistanceMeters` (0x0031 bytes
+  11-13) going backward. (Stroke count was the second intended bound and is
+  UNIMPLEMENTABLE: no cumulative stroke counter is decoded anywhere — 
+  verified against the parser and the fake-vs-parser audit; it would come
+  from 0x0035/0x0036, unsubscribed.) Thresholds derived from the corpus and
+  validated the same way the watchdog is (no healthy capture's own resumes
+  may trip it — measured: 1,026 non-distance-goal 30 s gap pairs, zero
+  backward).
+  **REACH, stated honestly rather than implied (Task 4 review I3):** TWD is
+  unusable on distance-goal intervals — the machine reports a boundary
+  accumulator there, not distance rowed (re-confirming Phase CM's own
+  `recordTwdVerdict` finding; now in `pm5-interface-notes.md`) — so the
+  check suppresses itself on ANY program containing a distance interval.
+  **In the committed corpus that is 5 of 6 sessions.** What ships is a
+  continuity guard for all-time programs plus the suppression's own ring
+  entry; a distance-capable bound (stroke count via 0x0035/0x0036, or a
+  rest-window-only TWD check) is a named follow-up, not an implied
+  capability. On reset: preserve the
   interrupted record, start clean, never merge silently — that verdict
   survives from RowTracer unchanged, and it is the half worth borrowing.
 
@@ -383,9 +419,14 @@ since leaving a falsified premise in shipped source is how premises regrow.
    and legacy `"interrupted"` rows read back unchanged. The banner's
    10 s retraction hysteresis is pinned by a test that fails if it can
    blink, and DEVIATIONS row 75 is reconciled in the same PR.
-6. The continuity rule rejects a stream violating any of its three bounds,
-   preserving the interrupted record and never merging — pinned against a
-   synthetic resume built from a real capture's frames.
+6. The continuity rule rejects a stream whose monotonic quantity goes
+   backward (one implementable bound — the criterion originally said
+   "three", inherited from RowTracer before the elapsed bound was killed
+   and the stroke bound proved undecoded), preserving the interrupted
+   record, never merging, telling the surface, and writing
+   `endedBy: "link-lost"` — pinned against a synthetic resume built from a
+   real capture's frames, INCLUDING at the hook level via a replay whose
+   frames are real bytes in artificial order.
 7. The ring carries timestamps and liveness numbers, is retrievable from the
    failure screen, and receives 0x0039/0x003A. Proven on the failure path,
    not the happy path.
