@@ -8616,6 +8616,43 @@ describe("createPm5Driver: summary-half receipt logging (fast-follow Task 1, des
     expect(halves[2]!.detail).toContain("0x003A");
     expect(halves[2]!.detail).toContain("run open");
   });
+
+  /** Mirrors `driver.ts`'s own module-private `toHex` byte-for-byte — the
+   *  established local-helper idiom this file already uses (Task 1
+   *  fix-3's own `hex()`, same file, same reasoning: no test-only export
+   *  of an internal formatting detail). */
+  function hex(bytes: Uint8Array): string {
+    return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join(" ");
+  }
+
+  it("Phase LL Task 1 (link-truth §1): 0x0039's ring entry now carries its own hex, not just the narrative line", () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    createPm5Driver(transport, log);
+
+    const bytes = new Uint8Array(20);
+    bytes.set([0xaa, 0xbb, 0xcc, 0xdd], 0);
+    transport.notify(END_OF_WORKOUT_SUMMARY_UUID, bytes);
+
+    const halves = log.entries().filter((e) => e.kind === "summary-half");
+    expect(halves).toHaveLength(1);
+    expect(halves[0]!.detail).toContain(`raw=${hex(bytes)}`);
+  });
+
+  it("Phase LL Task 1: 0x003A's ring entry now carries hex too — its own callback used to take NO bytes parameter at all, so this hex could never reach the ring by any path", () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    createPm5Driver(transport, log);
+
+    const bytes = new Uint8Array(19);
+    bytes.set([0x11, 0x22, 0x33], 0);
+    transport.notify(END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID, bytes);
+
+    const halves = log.entries().filter((e) => e.kind === "summary-half");
+    expect(halves).toHaveLength(1);
+    expect(halves[0]!.detail).toContain("0x003A");
+    expect(halves[0]!.detail).toContain(`raw=${hex(bytes)}`);
+  });
 });
 
 describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design spec §5, adversarial B2/B3/I4/I5)", () => {

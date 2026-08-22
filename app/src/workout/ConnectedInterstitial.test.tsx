@@ -133,6 +133,7 @@ function session(overrides: Partial<MonitorSession> = {}): MonitorSession {
     handoffHeld: false,
     frozen: false,
     runOpen: false,
+    frameSilence: false,
     connect: vi.fn().mockResolvedValue(undefined),
     program: vi.fn().mockResolvedValue(undefined),
     endSession: vi.fn().mockResolvedValue(undefined),
@@ -737,6 +738,108 @@ describe("state 6: failed — every ConnectedError rendered", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Phase LL Task 1 (link-truth design spec §1, exit criterion 7): THE RING
+// DOOR ON THE FAILURE SCREEN. The 2026-08-20 walk lost its most important
+// evidence because the ring was reachable only from `ConnectedSurface`'s
+// triple-tap — downstream of the failure that locked it. Proven here on the
+// `LINK-FAILED` render path itself (`renderFailureScreen`), never the happy
+// path.
+// ---------------------------------------------------------------------------
+
+describe("state 6: the ring door (Phase LL Task 1)", () => {
+  // A realistic exported-log-shaped string — the shape `eventLog.ts`'s own
+  // `record()` produces (recurring failure 3: fixtures emptier than
+  // production have hidden shipped defects twice already), including a
+  // `liveness-snapshot` entry the way `useMonitorSession.ts`'s `fail()`
+  // actually appends one.
+  const RING_JSON = JSON.stringify([
+    { seq: 0, atMs: 1000, kind: "connect", detail: "PM5 432331249" },
+    { seq: 1, atMs: 1010, kind: "subscribe", detail: "ce060031-..." },
+    {
+      seq: 2,
+      atMs: 4200,
+      kind: "liveness-snapshot",
+      detail: JSON.stringify({
+        atMs: 4200,
+        armed: false,
+        silent: false,
+        characteristics: {},
+        recentEvents: [],
+      }),
+    },
+  ]);
+
+  it("is present on the failure screen and reads the ring on open", async () => {
+    const exportLog = vi.fn().mockReturnValue(RING_JSON);
+    renderInterstitial({
+      phase: "failed",
+      deviceName: DEVICE_NAME,
+      exportLog,
+      error: connectedError({
+        reason: "link-failed",
+        detail: "The link to the monitor failed.",
+      }),
+    });
+
+    expect(exportLog).not.toHaveBeenCalled();
+    await userEvent.click(
+      screen.getByRole("button", { name: "View connection log" }),
+    );
+
+    expect(exportLog).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("Connection log")).toBeInTheDocument();
+    expect(screen.getByText(/· 3 EVENTS ·/)).toBeInTheDocument();
+    expect(screen.getByText(/LIVENESS-SNAPSHOT/)).toBeInTheDocument();
+  });
+
+  it("closes and can be reopened, re-reading the ring each time", async () => {
+    const exportLog = vi.fn().mockReturnValue(RING_JSON);
+    renderInterstitial({
+      phase: "failed",
+      error: connectedError({ reason: "link-failed", detail: "d" }),
+      exportLog,
+    });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "View connection log" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.queryByText("Connection log")).not.toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "View connection log" }),
+    );
+    expect(exportLog).toHaveBeenCalledTimes(2);
+  });
+
+  it("is also present on the disconnected-no-run branch, which shares this same render path", () => {
+    renderInterstitial({
+      phase: "disconnected",
+      runOpen: false,
+      exportLog: vi.fn().mockReturnValue(RING_JSON),
+    });
+
+    expect(
+      screen.getByRole("button", { name: "View connection log" }),
+    ).toBeInTheDocument();
+  });
+
+  it("says so, rather than nothing, when nothing was recorded before the failure", async () => {
+    renderInterstitial({
+      phase: "failed",
+      error: connectedError({ reason: "transport-missing", detail: "d" }),
+      exportLog: vi.fn().mockReturnValue("[]"),
+    });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "View connection log" }),
+    );
+
+    expect(screen.getByText("NOTHING RECORDED YET")).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Try again: inert unless phase === "failed"
 // ---------------------------------------------------------------------------
 
@@ -762,22 +865,6 @@ describe("Try again — inert unless phase === 'failed'", () => {
     expect(screen.getByRole("button", { name: "Try again" })).toBeEnabled();
   });
 
-  it("a device already known: Try again retries program(), not connect()", async () => {
-    const { session: s } = renderInterstitial({
-      phase: "failed",
-      deviceName: DEVICE_NAME,
-      error: connectedError({ reason: "nak", detail: "PM5 rejected frame 3" }),
-    });
-    // The mount effect already calls connect() once — clear it so the
-    // assertion below is unambiguous about the BUTTON PRESS's own call.
-    vi.mocked(s.connect).mockClear();
-
-    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
-
-    expect(s.program).toHaveBeenCalledWith(FIXTURE.program, FIXTURE.identity);
-    expect(s.connect).not.toHaveBeenCalled();
-  });
-
   it("no device ever known: Try again reopens the picker via connect()", async () => {
     const { session: s } = renderInterstitial({
       phase: "failed",
@@ -798,15 +885,40 @@ describe("Try again — inert unless phase === 'failed'", () => {
     expect(s.program).not.toHaveBeenCalled();
   });
 
+  // Phase LL Task 3 (§3), exit criterion 3: "no path from the failure
+  // state to program() without passing transport construction." `fail()`
+  // (`useMonitorSession.ts`) now clears `deviceName` on EVERY failure
+  // before this screen ever renders, so `phase: "failed"` with a non-null
+  // `deviceName` cannot happen from the real hook — but this component no
+  // longer has any conditional branch that WOULD call `program()` for such
+  // a state either way: `handleTryAgain` always calls `connect()`, full
+  // stop. Proven with the adversarial fixture (the "should never happen"
+  // state) precisely because a passing test here holds regardless of
+  // whether the hook's own invariant ever slips.
+  it("even a device somehow still on record: Try again ALWAYS goes through connect(), never program() directly", async () => {
+    const { session: s } = renderInterstitial({
+      phase: "failed",
+      deviceName: DEVICE_NAME,
+      error: connectedError({ reason: "nak", detail: "PM5 rejected frame 3" }),
+    });
+    vi.mocked(s.connect).mockClear();
+
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    expect(s.connect).toHaveBeenCalledTimes(1);
+    expect(s.program).not.toHaveBeenCalled();
+  });
+
   // The double-press race (this screen's own L-1-shaped guard): two clicks
   // landing before React's state update from the first has been observed
   // by this component must still produce exactly ONE retry attempt.
   it("a synchronous double click retries exactly once", async () => {
     const { session: s } = renderInterstitial({
       phase: "failed",
-      deviceName: DEVICE_NAME,
+      deviceName: null,
       error: connectedError({ reason: "nak", detail: "PM5 rejected frame 3" }),
     });
+    vi.mocked(s.connect).mockClear();
     const button = screen.getByRole("button", { name: "Try again" });
 
     act(() => {
@@ -814,7 +926,7 @@ describe("Try again — inert unless phase === 'failed'", () => {
       button.click();
     });
 
-    expect(s.program).toHaveBeenCalledTimes(1);
+    expect(s.connect).toHaveBeenCalledTimes(1);
   });
 });
 

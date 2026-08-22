@@ -6,9 +6,12 @@ import {
   WORKOUTSTATE_TERMINATE,
   WORKOUTSTATE_WORKOUTEND,
 } from "../../domain/monitor/pm5/parse.js";
+import { buildTerminate } from "../../domain/monitor/pm5/commands.js";
 import {
+  ADDITIONAL_STATUS_1_UUID,
   GENERAL_STATUS_UUID,
   RECEIVE_CHARACTERISTIC_UUID,
+  TRANSMIT_CHARACTERISTIC_UUID,
 } from "../../domain/monitor/pm5/uuids.js";
 import {
   compileProgram,
@@ -26,7 +29,7 @@ import { buildRun } from "../session/engine";
 import type { LogSeed } from "../session/logDraft";
 import { loadRun, saveRun, type SessionRun } from "../session/run";
 import { createEventLog } from "./eventLog";
-import { loadMonitorRun, MONITOR_RUN_KEY } from "./monitorRun";
+import { loadMonitorRun, MONITOR_RUN_KEY, type MonitorRun } from "./monitorRun";
 import { buildMonitorLogSteps } from "../session/logDraft";
 import { monitorModeRun } from "../session/LogSession";
 import {
@@ -35,10 +38,27 @@ import {
   type FakeScript,
   type FakeTimelineEvent,
 } from "./transports/fake";
+import { withLiveness, type LivenessDeps } from "./transports/liveness";
+import { fromHexString, parseRecording } from "./transports/recording";
 import {
+  parseGeneralStatus,
+  toMonitorState,
+} from "../../domain/monitor/pm5/parse.js";
+import { readFileSync } from "node:fs";
+import { gunzipSync } from "node:zlib";
+import {
+  applyContinuityCheck,
+  BANNER_RETRACT_HYSTERESIS_MS,
+  defaultLivenessSchedule,
+  handleFrameRecovery,
+  handleFrameSilence,
   isPausedRun,
   nextFreezeRun,
   nextRowingStreak,
+  PAUSED_FRAME_HOLD,
+  programHasDistanceGoal,
+  recordLivenessRecovery,
+  recordLivenessSilence,
   useMonitorSession,
   type ConnectedPhase,
   type FreezeRun,
@@ -1947,6 +1967,94 @@ describe("useMonitorSession: ending", () => {
     expect(loadMonitorRun()).toMatchObject({
       completedAt: t0.toISOString(),
       terminated: true,
+      // Phase LL Task 4 (design spec §4's writer table): "End button with
+      // the link up -> rower".
+      endedBy: "rower",
+    });
+  });
+
+  it("Phase LL Task 4: End after the link is gone stores endedBy link-lost, distinguishable from the rower's own End", async () => {
+    const { result, fake, transport } = harness({
+      program: TWO_INTERVALS,
+      events: timeline,
+    });
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+    tick(fake, 100);
+    expect(result.current.phase).toBe("live");
+    act(() => {
+      fake.injectDisconnect();
+    });
+    expect(result.current.phase).toBe("disconnected");
+    const before = transport.wireWrites;
+
+    await act(async () => {
+      await result.current.endSession();
+    });
+
+    expect(result.current.phase).toBe("ended");
+    // No terminate attempted — the link is gone (spec's C5 lose-and-degrade).
+    expect(transport.wireWrites).toBe(before);
+    expect(loadMonitorRun()).toMatchObject({
+      completedAt: t0.toISOString(),
+      terminated: true,
+      endedBy: "link-lost",
+    });
+  });
+
+  it("Phase LL Task 4: an honest WORKOUTEND stores endedBy finished", async () => {
+    const { result, fake } = harness({
+      program: TWO_INTERVALS,
+      events: [
+        status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+        status(200, {
+          workoutState: WORKOUTSTATE_WORKOUTEND,
+          elapsedSeconds: 60,
+          distanceMeters: 200,
+          spm: 0,
+          currentSplit: 0,
+        }),
+      ],
+    });
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+    tick(fake, 100);
+    tick(fake, 100);
+
+    expect(result.current.phase).toBe("ended");
+    expect(result.current.endedBy).toBe("machine");
+    expect(loadMonitorRun()).toMatchObject({
+      completedAt: t0.toISOString(),
+      terminated: false,
+      endedBy: "finished",
+    });
+  });
+
+  it("Phase LL Task 4: a machine TERMINATE (the rower stopped the piece at the erg, not through End) stores endedBy rower — a TERMINATE reaching this hook at all means the link was up", async () => {
+    const { result, fake } = harness({
+      program: TWO_INTERVALS,
+      events: [
+        status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+        status(200, {
+          workoutState: WORKOUTSTATE_TERMINATE,
+          elapsedSeconds: 40,
+          distanceMeters: 130,
+          spm: 0,
+          currentSplit: 0,
+        }),
+      ],
+    });
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+    tick(fake, 100);
+    tick(fake, 100);
+
+    expect(result.current.phase).toBe("ended");
+    expect(result.current.endedBy).toBe("machine");
+    expect(loadMonitorRun()).toMatchObject({
+      completedAt: t0.toISOString(),
+      terminated: true,
+      endedBy: "rower",
     });
   });
 
@@ -2169,6 +2277,99 @@ describe("useMonitorSession: ending", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Whole-branch review, BLOCKING B1 (RULED): `endSession`'s own `linkGone`
+// (`phase === "disconnected"` alone) predates Task 2, which widened what
+// "lost" means for the SCREEN (watchdog silence, an app-lifecycle resume)
+// while the record kept the old, narrower test — so a rower pressing End
+// under a LOST THE MONITOR banner stored `"rower"`, the exact conflation
+// `endedBy` exists to end. Design spec §4's invariant: "whatever fires the
+// banner defines the close." This reproduces the watchdog half (mechanism
+// 1/2's shape: `frameSilence` latches while `phase` stays `"live"`, never
+// `"disconnected"`) through the REAL liveness decorator composition (spec
+// §6: "tests must assert the COMPOSITION, not just the decorator"), same
+// `vi.doMock` + fresh-import idiom Task 1/2's own composition suites use.
+// ---------------------------------------------------------------------------
+
+describe('Whole-branch review B1: End under a watchdog-fired banner (phase still "live") stores endedBy link-lost', () => {
+  afterEach(() => {
+    vi.resetModules();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it("a suppressed stream trips the REAL watchdog, latching frameSilence while phase stays live — End then stores link-lost, not rower", async () => {
+    vi.useFakeTimers();
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
+      events: [status(100, { elapsedSeconds: 20, distanceMeters: 70 })],
+    });
+    // Composes the REAL decorator around the fake — the same thing
+    // `defaultTransport` does in production — so this reaches the REAL
+    // watchdog `setTimeout`, never a stub call to `onSilence`.
+    const mockDefaultTransport = vi.fn((deps: LivenessDeps) =>
+      withLiveness(fake, deps),
+    );
+    vi.doMock("../adapters/monitorTransport", () => ({
+      defaultTransport: mockDefaultTransport,
+    }));
+    vi.resetModules();
+
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+    const { result } = renderHook(() =>
+      freshUseMonitorSession({
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: () => (): void => undefined,
+        },
+      }),
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+    // Delivers the one scripted status (arms the watchdog on this, its
+    // first 0x0031) and moves both clocks together, same discipline the
+    // mechanism-2 "REVIEWER'S PROBE" test uses — `fake.tick` is a virtual
+    // script clock, `vi.advanceTimersByTime` is the decorator's own real
+    // one, and in production a BLE notification arriving IS real
+    // wall-clock time.
+    act(() => {
+      fake.tick(100);
+      vi.advanceTimersByTime(100);
+    });
+    expect(result.current.phase).toBe("live");
+    expect(result.current.frameSilence).toBe(false);
+
+    // No further frame is ever delivered — real time alone crosses the
+    // watchdog's 2500ms threshold. THE POINT: phase stays "live" through
+    // this whole span. It never becomes "disconnected" — this is
+    // mechanism 1/2's silent-freeze shape, not a radio drop.
+    act(() => {
+      vi.advanceTimersByTime(2600);
+    });
+    expect(result.current.frameSilence).toBe(true);
+    expect(result.current.phase).toBe("live");
+
+    await act(async () => {
+      await result.current.endSession();
+    });
+
+    expect(result.current.phase).toBe("ended");
+    // THE BUG (pre-fix): `linkGone` read only `phase === "disconnected"`,
+    // which is false here, so this stored `endedBy: "rower"` — the exact
+    // conflation the field exists to end, reintroduced by this phase's own
+    // left hand (spec §4's own account of the bug).
+    expect(loadMonitorRun()).toMatchObject({
+      endedBy: "link-lost",
+    });
+  });
+});
+
 describe("useMonitorSession: the double-fire pin", () => {
   it("two program() calls on the same tick produce ONE wire conversation", async () => {
     const { result, fake, transport } = harness({ program: TWO_INTERVALS });
@@ -2329,6 +2530,116 @@ describe("useMonitorSession: failures", () => {
     expect(result.current.error?.reason).toBe("link-failed");
     expect(result.current.error?.raw).toContain("no longer valid");
   });
+
+  // Phase LL Task 3 (§3), exit criterion 2. The 2026-08-20 walk's actual
+  // root cause, reproduced against TODAY's code and then closed: the
+  // review corrected the walk README's own diagnosis — `connect()`'s catch
+  // never cleared `driverRef`, and never did — so a failed `program()`
+  // left BOTH the driver ref AND `session.deviceName` (the field
+  // `ConnectedInterstitial.tsx`'s retry actually branches on) standing.
+  // Try Again then called `program()` again against the SAME dead driver
+  // forever: the LINK-FAILED loop that cost James a reinstall.
+  it("a failed program() disposes: deviceName clears, the transport goes down, and the driver ref is gone (no longer reachable by a further program())", async () => {
+    const { result, fake, transport } = harness({ program: TWO_INTERVALS });
+    await connect(result);
+    expect(result.current.deviceName).toBe(DEVICE_NAME);
+
+    // The same D6 link-failed reproduction the test above uses: the GATT
+    // handle dies, program() throws synchronously, `fail()` runs.
+    act(() => {
+      fake.injectDisconnect();
+    });
+    const disconnectsBefore = transport.disconnects;
+    await act(async () => {
+      await result.current.program(TWO_INTERVALS, TWO_IDENTITY);
+      await flush();
+    });
+    expect(result.current.phase).toBe("failed");
+    expect(result.current.error?.reason).toBe("link-failed");
+
+    // 1. `deviceName` cleared — the field Try Again's retry branches on.
+    expect(result.current.deviceName).toBeNull();
+    // 2. The transport is down — `driver.disconnect()` ran, which is this
+    // spy's own `disconnect()` wrapper on the SAME transport `connect()`
+    // built (not a second, unrelated transport instance).
+    expect(transport.disconnects).toBeGreaterThan(disconnectsBefore);
+
+    // 3. The driver ref is gone. Nothing exports it directly, so this is
+    // the FUNCTIONAL proof (this file's own established idiom, e.g. the
+    // "transport-missing" tests above): a further program() call against
+    // a cleared ref fails `transport-missing` immediately, rather than
+    // reaching the SAME stale, already-dead driver a second time (which
+    // today would repeat `link-failed` forever — the loop itself).
+    const writesBefore = transport.wireWrites;
+    await act(async () => {
+      await result.current.program(TWO_INTERVALS, TWO_IDENTITY);
+      await flush();
+    });
+    expect(result.current.error?.reason).toBe("transport-missing");
+    expect(transport.wireWrites).toBe(writesBefore);
+  });
+
+  // Phase LL Task 3 (§3, F-6): the already-connected guard's outcome is a
+  // structural extension on the transport (`capacitorBle.ts`'s own
+  // `describeLastScan()`, mirroring `onCharacteristicDegraded`/
+  // `markSuspect` immediately above it in this file) — `fake.ts` does not
+  // implement it (the guard is Apple-API-specific, pinned instead by
+  // `capacitorBle.test.ts`'s own mocked `BleClient`), so this is proven
+  // here with a bespoke `createTransport` override carrying it, the same
+  // pattern `hasLivenessSnapshot`'s own doc comment describes for a test
+  // transport that does NOT carry an extension.
+  it("when the transport names its last scan's outcome, connect() writes it to the ring", async () => {
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
+    });
+    const withOutcome: Transport & { describeLastScan(): string | null } = {
+      ...fake,
+      describeLastScan: () => "offered the already-held device; no picker",
+    };
+    const { result } = renderHook(() =>
+      useMonitorSession({ createTransport: () => withOutcome }),
+    );
+
+    await connect(result);
+
+    const entries: { kind: string; detail: string }[] = JSON.parse(
+      result.current.exportLog(),
+    );
+    expect(entries).toContainEqual(
+      expect.objectContaining({
+        kind: "already-connected-guard",
+        detail: "offered the already-held device; no picker",
+      }),
+    );
+  });
+
+  // `describeLastScan()`'s own doc comment (`capacitorBle.ts`): `null`
+  // before any `scan()` has run. Unreachable through the REAL transport
+  // (this hook always calls `scan()` before this log-wiring code runs),
+  // but the extension is structural, not a guarantee — a transport that
+  // carries the method yet has nothing to say must not write a ring entry
+  // with no `detail`.
+  it("the extension present but nothing to say yet (null): no ring entry, no throw", async () => {
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
+    });
+    const withNullOutcome: Transport & { describeLastScan(): string | null } = {
+      ...fake,
+      describeLastScan: () => null,
+    };
+    const { result } = renderHook(() =>
+      useMonitorSession({ createTransport: () => withNullOutcome }),
+    );
+
+    await connect(result);
+
+    const entries: { kind: string }[] = JSON.parse(result.current.exportLog());
+    expect(entries.some((e) => e.kind === "already-connected-guard")).toBe(
+      false,
+    );
+  });
 });
 
 describe("useMonitorSession: P3b — a failed program with a run open", () => {
@@ -2379,6 +2690,10 @@ describe("useMonitorSession: P3b — a failed program with a run open", () => {
     expect(loadMonitorRun()).toMatchObject({
       completedAt: t0.toISOString(),
       terminated: true,
+      // Phase LL Task 4 (design spec §4's writer table): "a failed
+      // program() closing an open run -> program-failed" — the
+      // previously-unmapped path.
+      endedBy: "program-failed",
     });
     // ...and the erg was left terminated rather than holding an orphan.
     // (The nak's own conversation plus this terminate; the count only has
@@ -2425,8 +2740,118 @@ describe("useMonitorSession: P3b — a failed program with a run open", () => {
     expect(loadMonitorRun()).toMatchObject({
       completedAt: t0.toISOString(),
       terminated: true,
+      // Phase LL Task 4: still `"program-failed"` even on the
+      // disconnected-rejection variant — the CLOSE REASON is "what closed
+      // this record" (a failed program with a run open), independent of
+      // whether a terminate could be attempted afterward.
+      endedBy: "program-failed",
     });
   });
+
+  // Review round (P3b's own hazard, named against `teardown()`'s existing
+  // pattern): `fail()`'s disposal must not race the terminate P3b just
+  // fired. `driver.terminate()` here is fire-and-forget from `program()`'s
+  // own catch — `fail()` used to disconnect in the SAME TICK regardless,
+  // with no ordering against it at all. Apple documents
+  // `cancelPeripheralConnection` as nonblocking with pending commands
+  // POSSIBLY NOT COMPLETING (CoreBluetooth reference,
+  // `CBCentralManager.cancelPeripheralConnection(_:)`), so an immediate
+  // disconnect can plausibly abort the terminate write in flight — leaving
+  // the erg ARMED with the just-rejected program, silently (DEVIATIONS row
+  // 63's own documented harm). `teardown()` in this same file already
+  // avoids exactly this shape (`driver.terminate().finally(() =>
+  // bestEffort(driver.disconnect()))`); this pins `fail()` to the same
+  // rule for the ONE path that fires a terminate of its own — P3b.
+  //
+  // A REAL race is unprovable (this is client-side JS, not CoreBluetooth),
+  // but the ORDERING is: a hand-rolled write() interceptor holds the
+  // TERMINATE frame's own write pending — indistinguishable, from
+  // `sendSequence`'s point of view, from a real slow radio — so
+  // `driver.terminate()` cannot settle until the test releases it. Byte
+  // match, not a call-count/order guess: the retry's own NAK'd program
+  // frames go through the REAL fake at full (same-microtask) speed, and
+  // only the frame matching `buildTerminate()`'s own bytes is intercepted.
+  it.each([["resolve", true] as const, ["reject", false] as const])(
+    "P3b: disconnect() waits for the in-flight terminate to settle before firing — %s case",
+    async (_label, shouldResolve) => {
+      const { result, fake, transport } = harness({
+        program: TWO_INTERVALS,
+        events: liveTimeline,
+      });
+      await connect(result);
+      await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+      tick(fake, 100);
+      expect(result.current.phase).toBe("live");
+      // Same P3b precondition as the suite above: the machine's own
+      // terminated report must not race in and close the run through the
+      // ordinary path before the NAK'd retry ever gets there.
+      transport.deaf = true;
+      fake.injectNak(0);
+
+      const terminateChunk = buildTerminate()[0]![0]!;
+      function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
+        return a.length === b.length && a.every((v, i) => v === b[i]);
+      }
+      // `buildTerminate()`'s own bytes are reused TWICE in this one retry:
+      // `program()`'s own leading "clear" step (its own doc comment —
+      // `driver.terminate()`'s doc comment on `program()` names it) is the
+      // FIRST occurrence, sent and acked normally before the NAK'd
+      // programming frame ever goes out; the catch's OWN `driver.terminate
+      // ()` call — the one this test is about — is the SECOND. A bare byte
+      // match alone cannot tell them apart; counting occurrences can.
+      let terminateWriteCount = 0;
+      const originalWrite = transport.write.bind(transport);
+      let settleHeldWrite: (() => void) | null = null;
+      transport.write = (
+        characteristicId: string,
+        bytes: Uint8Array,
+      ): Promise<void> => {
+        if (
+          characteristicId === RECEIVE_CHARACTERISTIC_UUID &&
+          bytesEqual(bytes, terminateChunk)
+        ) {
+          terminateWriteCount += 1;
+          if (terminateWriteCount === 2) {
+            return new Promise<void>((resolve, reject) => {
+              settleHeldWrite = () => {
+                if (shouldResolve) {
+                  originalWrite(characteristicId, bytes).then(resolve, reject);
+                } else {
+                  reject(new Error("simulated: write failed mid-terminate"));
+                }
+              };
+            });
+          }
+        }
+        return originalWrite(characteristicId, bytes);
+      };
+
+      let programming: Promise<void>;
+      await act(async () => {
+        programming = result.current.program(TWO_INTERVALS, TWO_IDENTITY);
+        await flush();
+      });
+
+      // `program()` itself never awaits the terminate it fires (it is
+      // fire-and-forget from that catch) — its own promise is already
+      // settled here, independent of the held write above.
+      expect(result.current.phase).toBe("failed");
+      expect(result.current.error?.reason).toBe("nak");
+      // THE PIN: the terminate write is still held — `driver.terminate()`
+      // cannot have settled — so disconnect() must not have fired yet.
+      expect(transport.disconnects).toBe(0);
+
+      await act(async () => {
+        settleHeldWrite?.();
+        await flush();
+      });
+
+      // Once the terminate settles — however it settles — the disposal's
+      // disconnect follows.
+      expect(transport.disconnects).toBe(1);
+      await programming!;
+    },
+  );
 });
 
 describe("useMonitorSession: cancel", () => {
@@ -3325,6 +3750,127 @@ describe("the paused derivation, replayed frame by frame from the record", () =>
   });
 });
 
+// ---------------------------------------------------------------------------
+// Phase LL minor 3 (design spec §2b, task-2-report.md's own finding):
+// §2b's suspected mechanism — a flywheel-gated work-interval open reading
+// as PAUSED because the clock is legally stationary before the first pull
+// — was investigated and FALSIFIED, not fixed: replaying the corpus
+// through `nextFreezeRun`/`isPausedRun` found zero PAUSED firings at any
+// post-rest work-interval start (the `distanceMeters<=0` guard already
+// excludes it structurally). No speculative fix shipped. That negative
+// result lived only in a task report until now — this pins it as a
+// committed regression, so a future change to the guard cannot silently
+// reopen the mechanism without a red test naming it.
+//
+// Corpus reader: the SAME 6 committed captures `liveness.test.ts`'s own
+// `CORPUS_FILES` sweeps (`step-1` excluded there for the identical reason
+// — a 2-line disconnect-only fragment with no 0x0031 at all). Decodes
+// 0x0031 (GENERAL_STATUS_UUID) ALONE, through the real `parseGeneralStatus`/
+// `toMonitorState` — never hand-rolled. That is deliberately sufficient:
+// `nextFreezeRun`'s outer guard (`state !== "rowing" || distanceMeters <=
+// 0`) is entirely a function of those two 0x0031 fields, which is exactly
+// the mechanism under test here. `currentSplit`/`spm` come from a
+// DIFFERENT characteristic (0x0032) this reader never touches, so
+// `freezeKey`'s other two components are held at a fixed placeholder
+// deliberately — real values could only make the key diverge MORE often
+// frame to frame (more resets), never less, so a placeholder cannot
+// manufacture a false-negative PAUSED firing the guard itself would have
+// prevented at the boundary this test actually probes.
+// ---------------------------------------------------------------------------
+
+const LL_CORPUS_FILES = [
+  "walk-2026-08-16/session-1-keystone-2x250r0.jsonl",
+  "walk-2026-08-16/session-2-wu-4unequal.jsonl",
+  "walk-2026-08-17/step-2-pm5-recording-1786973078979.jsonl",
+  "walk-2026-08-17/step-3-pm5-recording-second-rest-1786973713929.jsonl",
+  "walk-2026-08-17/step-4-pm5-recording-1786974067695.jsonl",
+  "walk-2026-08-18-metrics/pyramid-pm5-recording-1787090555458.jsonl.gz",
+];
+
+const LL_SESSIONS_DIR = import.meta.url
+  .replace(/^file:\/\//, "")
+  .replace(
+    /src\/monitor\/useMonitorSession\.test\.ts$/,
+    "../docs/monitor/sessions/",
+  );
+
+function loadCorpusFreezeFrames(fileName: string): MonitorFrame[] {
+  const path = `${LL_SESSIONS_DIR}${fileName}`;
+  const text = fileName.endsWith(".gz")
+    ? gunzipSync(readFileSync(path)).toString("utf8")
+    : readFileSync(path, "utf8");
+  const recording = parseRecording(text);
+  const frames: MonitorFrame[] = [];
+  for (const event of recording.events) {
+    if (!("dir" in event) || event.dir !== "rx") continue;
+    if (event.char !== GENERAL_STATUS_UUID) continue;
+    const bytes = fromHexString(event.hex);
+    const gs = parseGeneralStatus(bytes);
+    if ("error" in gs) continue;
+    frames.push(
+      frame({
+        distanceMeters: gs.distanceMeters,
+        state: toMonitorState(gs.workoutState),
+      }),
+    );
+  }
+  return frames;
+}
+
+describe("Phase LL minor 3: §2b's falsification, pinned as a committed regression — zero PAUSED firings at any post-rest work-interval start, across the full committed corpus", () => {
+  it.each(LL_CORPUS_FILES)(
+    "%s: every resting -> rowing transition stays clear of PAUSED through the guard's own window",
+    (fileName) => {
+      const frames = loadCorpusFreezeFrames(fileName);
+      expect(frames.length).toBeGreaterThan(0);
+      const { runs } = replay(frames);
+
+      // Every frame index where the decoded state transitions FROM
+      // resting TO rowing — a post-rest work-interval start, the exact
+      // boundary §2b's suspected mechanism would have to fire at.
+      const postRestStarts: number[] = [];
+      for (let i = 1; i < frames.length; i += 1) {
+        if (
+          frames[i - 1]!.state === "resting" &&
+          frames[i]!.state === "rowing"
+        ) {
+          postRestStarts.push(i);
+        }
+      }
+
+      for (const start of postRestStarts) {
+        // `PAUSED_FRAME_HOLD` frames is the guard's own window (plus a
+        // 2-frame margin) — the mutation this test guards against is
+        // dropping `nextFreezeRun`'s `distanceMeters <= 0` half of the
+        // guard, which would let the zero-distance flywheel-gated frames
+        // right after a rest start accumulating toward PAUSED instead of
+        // resetting on every one of them.
+        const windowEnd = Math.min(runs.length, start + PAUSED_FRAME_HOLD + 2);
+        for (let i = start; i < windowEnd; i += 1) {
+          expect(isPausedRun(runs[i]!)).toBe(false);
+        }
+      }
+    },
+  );
+
+  it("sanity: the corpus genuinely contains post-rest work-interval starts — a suite where this were 0 for every file would prove nothing", () => {
+    const total = LL_CORPUS_FILES.reduce((sum, fileName) => {
+      const frames = loadCorpusFreezeFrames(fileName);
+      let count = 0;
+      for (let i = 1; i < frames.length; i += 1) {
+        if (
+          frames[i - 1]!.state === "resting" &&
+          frames[i]!.state === "rowing"
+        ) {
+          count += 1;
+        }
+      }
+      return sum + count;
+    }, 0);
+    expect(total).toBeGreaterThan(0);
+  });
+});
+
 describe("nextRowingStreak: the rowingActive fallback's own counter", () => {
   it("a NON-ROWING frame resets outright — an armed or resting frame cannot lend its position to the next pull", () => {
     // The same discipline `nextFreezeRun` applies for the same reason: a
@@ -4072,4 +4618,1419 @@ describe("useMonitorSession: S6 — navigator.storage.persist() at first connect
     expect(persistEntries).toHaveLength(1);
     expect(persistEntries[0]!.detail).toContain("threw synchronously");
   });
+});
+
+// ---------------------------------------------------------------------------
+// Phase LL Task 1 (link-truth design spec §1): the hook's own production
+// liveness deps — `defaultLivenessSchedule`/`recordLivenessSilence`/
+// `recordLivenessRecovery`. Hoisted to module scope and exported
+// specifically so they are reachable WITHOUT driving the full `connect()`
+// -> real `defaultTransport` -> `withLiveness` -> an actual 0x0031 chain,
+// which every OTHER test in this file's own `createTransport` override
+// deliberately bypasses (`MonitorSessionDeps.createTransport`'s own doc
+// comment) — that bypass is exactly why these three needed their own
+// direct tests rather than relying on coverage from the rest of the file.
+// ---------------------------------------------------------------------------
+
+describe("Phase LL Task 1: the hook's own liveness deps", () => {
+  it("defaultLivenessSchedule fires fn after ms and its canceller stops it", () => {
+    vi.useFakeTimers();
+    try {
+      const fn = vi.fn();
+      const cancel = defaultLivenessSchedule(fn, 2500);
+
+      vi.advanceTimersByTime(2499);
+      expect(fn).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(fn).toHaveBeenCalledOnce();
+
+      // A second, independent instance — cancelling it must never fire.
+      const fn2 = vi.fn();
+      const cancel2 = defaultLivenessSchedule(fn2, 1000);
+      cancel2();
+      vi.advanceTimersByTime(1000);
+      expect(fn2).not.toHaveBeenCalled();
+      cancel(); // no-op post-fire, must not throw
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("recordLivenessSilence writes into the given log, and is a no-op against null", () => {
+    // No log yet (pre-connect) — a no-op, never a throw.
+    recordLivenessSilence(null, 2500);
+
+    const log = createEventLog();
+    recordLivenessSilence(log, 2500);
+
+    const entries = log.entries().filter((e) => e.kind === "liveness-silence");
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.detail).toBe("frame stream silent for 2500ms");
+  });
+
+  it("recordLivenessRecovery writes into the given log, and is a no-op against null", () => {
+    recordLivenessRecovery(null); // pre-connect: no-op
+
+    const log = createEventLog();
+    recordLivenessRecovery(log);
+
+    const entries = log.entries().filter((e) => e.kind === "liveness-recovery");
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.detail).toBe("frame stream resumed");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase LL Task 2 (§2a): `handleFrameSilence`/`handleFrameRecovery`, tested
+// as PURE FUNCTIONS — same reasoning `recordLivenessSilence`/
+// `recordLivenessRecovery` above already established (directly reachable
+// without driving `connect()` -> `defaultTransport` -> `withLiveness`).
+// These wrap that pair with the hysteresis; the full-hook composition test
+// further below proves the WIRING (`livenessDepsRef`'s own `onSilence`/
+// `onRecovery` closures) reaches `session.frameSilence`.
+// ---------------------------------------------------------------------------
+
+describe("Phase LL Task 2: handleFrameSilence/handleFrameRecovery (the hysteresis, pure)", () => {
+  it("handleFrameSilence latches frameSilence:true, cancels a pending retract timer, and records to the log", () => {
+    const patches: { frameSilence: boolean }[] = [];
+    const update = (p: { frameSilence: boolean }): void => {
+      patches.push(p);
+    };
+    const cancel = vi.fn();
+    const log = createEventLog();
+
+    handleFrameSilence(update, cancel, log, 2500);
+
+    expect(patches).toStrictEqual([{ frameSilence: true }]);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(log.entries().some((e) => e.kind === "liveness-silence")).toBe(true);
+  });
+
+  it("handleFrameSilence with no pending timer (cancel: null) does not throw", () => {
+    const update = vi.fn();
+    expect(() => handleFrameSilence(update, null, null, 2500)).not.toThrow();
+    expect(update).toHaveBeenCalledExactlyOnceWith({ frameSilence: true });
+  });
+
+  it("handleFrameRecovery does NOT clear frameSilence itself — it schedules a retract timer at BANNER_RETRACT_HYSTERESIS_MS and records to the log", () => {
+    const update = vi.fn();
+    const cancel = vi.fn();
+    const scheduled: { fn: () => void; ms: number }[] = [];
+    const schedule = (fn: () => void, ms: number): (() => void) => {
+      scheduled.push({ fn, ms });
+      return vi.fn();
+    };
+    const log = createEventLog();
+
+    handleFrameRecovery(update, cancel, schedule, log);
+
+    // THE BANNER CANNOT BLINK (spec §2a): recovery alone never calls
+    // `update` — only the timer, once it fires, does.
+    expect(update).not.toHaveBeenCalled();
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(scheduled).toHaveLength(1);
+    expect(scheduled[0]!.ms).toBe(BANNER_RETRACT_HYSTERESIS_MS);
+    expect(log.entries().some((e) => e.kind === "liveness-recovery")).toBe(
+      true,
+    );
+
+    // Firing the scheduled callback is what actually retracts the banner.
+    scheduled[0]!.fn();
+    expect(update).toHaveBeenCalledExactlyOnceWith({ frameSilence: false });
+  });
+
+  it("handleFrameRecovery cancels a PRIOR pending retract timer before scheduling a new one — a second recovery restarts the clock rather than stacking two", () => {
+    const update = vi.fn();
+    const priorCancel = vi.fn();
+    const schedule = vi.fn(() => vi.fn());
+
+    handleFrameRecovery(update, priorCancel, schedule, null);
+
+    expect(priorCancel).toHaveBeenCalledOnce();
+    expect(schedule).toHaveBeenCalledOnce();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase LL Task 1: THE HOOK'S OWN WIRING — proving `livenessDepsRef`'s
+// `onSilence`/`onRecovery` closures (built inside the hook, never passed
+// `logRef` itself — `react-hooks/refs` forbids that) really do write into
+// THIS session's log once one exists. Every other test in this file
+// overrides `MonitorSessionDeps.createTransport`, which bypasses
+// `defaultTransport` (and therefore `livenessDepsRef`) entirely — this is
+// the one test that does NOT, via the same `vi.doMock` + fresh-import
+// idiom `adapters/monitorTransport.test.ts` already established, so the
+// hook reaches its own real default and this test can capture exactly the
+// `LivenessDeps` object it built.
+// ---------------------------------------------------------------------------
+
+describe("Phase LL Task 1: the hook's own composition with defaultTransport", () => {
+  afterEach(() => {
+    vi.resetModules();
+    vi.restoreAllMocks();
+  });
+
+  it("passes real onSilence/onRecovery to defaultTransport, and they write into THIS session's own log", async () => {
+    const stubTransport: Transport = {
+      scan: vi.fn(async () => [{ id: "dev-1", name: DEVICE_NAME }]),
+      connect: vi.fn(async () => undefined),
+      write: vi.fn(async () => undefined),
+      subscribe: vi.fn(() => () => undefined),
+      disconnect: vi.fn(async () => undefined),
+      onDisconnect: vi.fn(() => () => undefined),
+    };
+    const mockDefaultTransport = vi.fn((_deps: LivenessDeps) => stubTransport);
+    vi.doMock("../adapters/monitorTransport", () => ({
+      defaultTransport: mockDefaultTransport,
+    }));
+    // The file's own STATIC `import { useMonitorSession } from
+    // "./useMonitorSession"` (top of file, used by every other test) has
+    // already loaded that module — and everything it statically imports,
+    // `defaultTransport` included — into Vitest's module cache before this
+    // test ever runs. `vi.doMock` only changes what a FUTURE resolution
+    // returns; without clearing the cache first, the dynamic `import()`
+    // below would just hand back the ALREADY-CACHED module, still bound to
+    // the real `defaultTransport`. `resetModules()` here (not just in
+    // `afterEach`) is what makes the re-import genuinely fresh — the same
+    // reason `adapters/monitorTransport.test.ts` resets before, not only
+    // after, though that file never had a competing static import to race.
+    vi.resetModules();
+
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+    const { result } = renderHook(() =>
+      freshUseMonitorSession({
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: () => (): void => undefined,
+        },
+      }),
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    // The hook really did reach `defaultTransport` — never `createTransport`
+    // (undefined here, the zero-argument production call every real screen
+    // makes) — and passed it a REAL `LivenessDeps`, not a stub.
+    expect(mockDefaultTransport).toHaveBeenCalledOnce();
+    const deps = mockDefaultTransport.mock.calls[0]![0];
+    expect(typeof deps.now).toBe("function");
+    expect(typeof deps.schedule).toBe("function");
+    expect(typeof deps.onSilence).toBe("function");
+    expect(typeof deps.onRecovery).toBe("function");
+
+    // `connect()` has resolved past `transport.connect()`, so this
+    // session's own log exists (`useMonitorSession.ts`'s own ordering:
+    // `createLog` runs right after `transport.connect()`). Invoking the
+    // EXACT closures the hook built (not a reimplementation) is what
+    // covers `livenessDepsRef`'s own `onSilence`/`onRecovery` lines.
+    deps.onSilence(2500);
+    deps.onRecovery();
+
+    const exported = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(
+      exported.some(
+        (e) =>
+          e.kind === "liveness-silence" &&
+          e.detail === "frame stream silent for 2500ms",
+      ),
+    ).toBe(true);
+    expect(
+      exported.some(
+        (e) =>
+          e.kind === "liveness-recovery" && e.detail === "frame stream resumed",
+      ),
+    ).toBe(true);
+  });
+
+  it("exit criterion 7: fail() appends the transport's own liveness snapshot to the ring — proven with a REAL snapshot-carrying transport, not a stub without one", async () => {
+    const snapshotValue = {
+      atMs: 4200,
+      armed: true,
+      silent: true,
+      characteristics: {},
+      recentEvents: [],
+    };
+    // A stub that DOES carry `snapshot()` — every real production
+    // transport does (`withLiveness`'s own return type), which is exactly
+    // what `hasLivenessSnapshot`'s structural check exists to detect.
+    //
+    // `subscribe` THROWS: `createPm5Driver`'s own constructor calls
+    // `t.subscribe(...)` synchronously, many times, right at construction
+    // (`driver.ts`'s `mergeStatus`/raw subscriptions) — so this throw
+    // propagates out of `connect()`'s own `try` block and lands in its
+    // `catch (err) { fail(mapRadioFailure(err)); ... }`, the SAME catch a
+    // real driver-construction failure would hit. Picked deliberately over
+    // `scan-dismissed`/a `connect()` throw: BOTH of those fail before
+    // `logRef.current` is ever assigned (device not yet picked, or
+    // `transport.connect()` not yet resolved) — the ring literally has
+    // nothing to append into yet, which would make this test pass whether
+    // or not the append logic is correct. Failing here, AFTER `logRef
+    // .current = log` (the line right before `createPm5Driver` runs), is
+    // what actually exercises the append.
+    const stubTransport: Transport & { snapshot(): unknown } = {
+      scan: vi.fn(async () => [{ id: "dev-1", name: DEVICE_NAME }]),
+      connect: vi.fn(async () => undefined),
+      write: vi.fn(async () => undefined),
+      subscribe: vi.fn(() => {
+        throw new Error("driver construction boom");
+      }),
+      disconnect: vi.fn(async () => undefined),
+      onDisconnect: vi.fn(() => () => undefined),
+      snapshot: vi.fn(() => snapshotValue),
+    };
+    vi.doMock("../adapters/monitorTransport", () => ({
+      defaultTransport: vi.fn(() => stubTransport),
+    }));
+    vi.resetModules();
+
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+    const { result } = renderHook(() =>
+      freshUseMonitorSession({
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: () => (): void => undefined,
+        },
+      }),
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    expect(result.current.phase).toBe("failed");
+    const exported = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const snapshotEntry = exported.find((e) => e.kind === "liveness-snapshot");
+    expect(snapshotEntry).toBeDefined();
+    expect(JSON.parse(snapshotEntry!.detail)).toStrictEqual(snapshotValue);
+  });
+
+  it("Phase LL Task 2 review fix (task-1-report Minor): a SECOND connect() that fails transport-missing does not carry the FIRST connection's liveness snapshot", async () => {
+    const snapshotValue = {
+      atMs: 4200,
+      armed: true,
+      silent: true,
+      characteristics: {},
+      recentEvents: [],
+    };
+    // Same construction-throw shape as the criterion-7 test above — fails
+    // AFTER `logRef.current = log` so the ring genuinely has something to
+    // append into.
+    const firstTransport: Transport & { snapshot(): unknown } = {
+      scan: vi.fn(async () => [{ id: "dev-1", name: DEVICE_NAME }]),
+      connect: vi.fn(async () => undefined),
+      write: vi.fn(async () => undefined),
+      subscribe: vi.fn(() => {
+        throw new Error("driver construction boom");
+      }),
+      disconnect: vi.fn(async () => undefined),
+      onDisconnect: vi.fn(() => () => undefined),
+      snapshot: vi.fn(() => snapshotValue),
+    };
+    const mockDefaultTransport = vi
+      .fn()
+      .mockReturnValueOnce(firstTransport)
+      // Second attempt: no transport resolves at all — `transport-missing`,
+      // exactly the path `fail()` reaches BEFORE `livenessRef.current` is
+      // ever reassigned this attempt.
+      .mockReturnValueOnce(null);
+    vi.doMock("../adapters/monitorTransport", () => ({
+      defaultTransport: mockDefaultTransport,
+    }));
+    vi.resetModules();
+
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+    const { result } = renderHook(() =>
+      freshUseMonitorSession({
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: () => (): void => undefined,
+        },
+      }),
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+    expect(result.current.phase).toBe("failed");
+    const afterFirst = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const countAfterFirst = afterFirst.filter(
+      (e) => e.kind === "liveness-snapshot",
+    ).length;
+    expect(countAfterFirst).toBe(1);
+
+    await act(async () => {
+      await result.current.connect();
+    });
+    expect(result.current.phase).toBe("failed");
+    expect(result.current.error?.reason).toBe("transport-missing");
+    const afterSecond = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const countAfterSecond = afterSecond.filter(
+      (e) => e.kind === "liveness-snapshot",
+    ).length;
+    // THE BUG: before the fix, `livenessRef.current` still held the FIRST
+    // transport's `snapshot()` (never cleared) — this second failure,
+    // which never resolved a transport at all, would ALSO append a
+    // `liveness-snapshot` entry describing the PREVIOUS connection's own
+    // diagnostics as if they belonged to this one.
+    expect(countAfterSecond).toBe(countAfterFirst);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase LL Task 2: THE BANNER CANNOT BLINK (§2a), proven through the FULL
+// hook composition — `livenessDepsRef`'s real `onSilence`/`onRecovery`
+// closures reaching `session.frameSilence`, not just the pure functions
+// above. Same `vi.doMock` + fresh-import idiom the Task 1 composition
+// describe block already established.
+// ---------------------------------------------------------------------------
+
+describe("Phase LL Task 2: the banner's hysteresis, through the real hook composition", () => {
+  afterEach(() => {
+    vi.resetModules();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it("silence latches frameSilence immediately; one healthy frame does NOT clear it; a second silence inside the window restarts the clock; only a full, uninterrupted 10s window retracts it", async () => {
+    vi.useFakeTimers();
+    const stubTransport: Transport = {
+      scan: vi.fn(async () => [{ id: "dev-1", name: DEVICE_NAME }]),
+      connect: vi.fn(async () => undefined),
+      write: vi.fn(async () => undefined),
+      subscribe: vi.fn(() => () => undefined),
+      disconnect: vi.fn(async () => undefined),
+      onDisconnect: vi.fn(() => () => undefined),
+    };
+    const mockDefaultTransport = vi.fn((_deps: LivenessDeps) => stubTransport);
+    vi.doMock("../adapters/monitorTransport", () => ({
+      defaultTransport: mockDefaultTransport,
+    }));
+    vi.resetModules();
+
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+    const { result } = renderHook(() =>
+      freshUseMonitorSession({
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: () => (): void => undefined,
+        },
+      }),
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+    const deps = mockDefaultTransport.mock.calls[0]![0];
+    expect(result.current.frameSilence).toBe(false);
+
+    act(() => {
+      deps.onSilence(2500);
+    });
+    expect(result.current.frameSilence).toBe(true);
+
+    // One healthy frame — the banner must NOT retract on this alone.
+    act(() => {
+      deps.onRecovery();
+    });
+    expect(result.current.frameSilence).toBe(true);
+
+    // Just under the hysteresis window: still latched.
+    act(() => {
+      vi.advanceTimersByTime(BANNER_RETRACT_HYSTERESIS_MS - 1);
+    });
+    expect(result.current.frameSilence).toBe(true);
+
+    // A SECOND silence inside the window restarts the clock — the whole
+    // window must run again, uninterrupted, from here.
+    act(() => {
+      deps.onSilence(2500);
+    });
+    act(() => {
+      deps.onRecovery();
+    });
+    act(() => {
+      vi.advanceTimersByTime(BANNER_RETRACT_HYSTERESIS_MS - 1);
+    });
+    expect(result.current.frameSilence).toBe(true);
+
+    // The full window, uninterrupted this time, finally retracts it.
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(result.current.frameSilence).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase LL Task 2 mechanism 3 (§2): the degraded-characteristic wiring,
+// through the fake — proving `useMonitorSession.ts`'s own
+// `hasCharacteristicDegraded`/`onCharacteristicDegraded` registration, not
+// just `capacitorBle.ts`'s routing (already pinned in
+// `capacitorBle.test.ts`). `harness()`'s fake carries the SAME structural
+// extension (`fake.ts`'s own `onCharacteristicDegraded`), reached through
+// `spyTransport`'s `...inner` spread exactly the way `liveness.ts`'s own
+// spread reaches it in production.
+// ---------------------------------------------------------------------------
+
+describe("Phase LL Task 2 mechanism 3: the degraded-characteristic wiring (useMonitorSession.ts's own half)", () => {
+  it("a non-critical characteristic's failSubscribe records a characteristic-degraded ring entry and leaves the session untouched", async () => {
+    const { result, fake } = harness({ program: TWO_INTERVALS });
+    await connect(result);
+    expect(result.current.phase).toBe("pairing");
+
+    act(() => {
+      fake.failSubscribe(ADDITIONAL_STATUS_1_UUID);
+    });
+
+    // The session continues — no phase change, no error.
+    expect(result.current.phase).toBe("pairing");
+    expect(result.current.error).toBeNull();
+    const exported = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const entry = exported.find((e) => e.kind === "characteristic-degraded");
+    expect(entry).toBeDefined();
+    expect(entry!.detail).toContain(ADDITIONAL_STATUS_1_UUID);
+  });
+
+  it("the CSAFE control characteristic's failSubscribe stays FATAL end to end, through the hook — the hang guard survives mechanism 3's split", async () => {
+    const { result, fake } = harness({ program: TWO_INTERVALS });
+    await connect(result);
+    expect(result.current.phase).toBe("pairing");
+
+    act(() => {
+      fake.failSubscribe(TRANSMIT_CHARACTERISTIC_UUID);
+    });
+
+    expect(result.current.phase).toBe("disconnected");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase LL Task 2 mechanism 2 (§2, "iOS backgrounding"): the app-lifecycle
+// listener's wiring — `harness()`'s own `createTransport` override still
+// reaches the REAL `registerAppLifecycleListener` (it is not part of
+// `MonitorSessionDeps`, by design — the same choice `requestStoragePersistence`
+// already made), so every test using `harness()` exercises the WEB arm
+// (jsdom's `isNative()` is always false); the native arm gets its own
+// `vi.doMock` composition test, same idiom as Task 1's own.
+// ---------------------------------------------------------------------------
+
+describe("Phase LL Task 2 mechanism 2: the app-lifecycle listener (background/resume)", () => {
+  function setVisibility(state: "visible" | "hidden"): void {
+    Object.defineProperty(document, "visibilityState", {
+      value: state,
+      configurable: true,
+    });
+    document.dispatchEvent(new Event("visibilitychange"));
+  }
+
+  afterEach(() => {
+    Object.defineProperty(document, "visibilityState", {
+      value: "visible",
+      configurable: true,
+    });
+    // `vi.doMock`'s module-factory override is NOT cleared by
+    // `resetModules()`/`restoreAllMocks()` (those affect the module
+    // REGISTRY and spy IMPLEMENTATIONS respectively, never a `doMock`
+    // factory) — without this, the NATIVE-arm test's own mock of
+    // `../adapters/appLifecycle` silently governs every OTHER test in
+    // this block that runs after it, since they all dynamically
+    // re-import `useMonitorSession.ts`. Caught by the REVIEWER'S PROBE
+    // test below failing only in file-order, never in isolation.
+    vi.doUnmock("../adapters/appLifecycle");
+    vi.resetModules();
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it("backgrounding alone does nothing — the risk is on RESUME, not on suspend", async () => {
+    const { result } = harness({ program: TWO_INTERVALS });
+    await connect(result);
+    expect(result.current.frameSilence).toBe(false);
+
+    act(() => {
+      setVisibility("hidden");
+    });
+
+    expect(result.current.frameSilence).toBe(false);
+  });
+
+  it("Phase LL minor 9 (RULED, spec amendment 2026-08-22): a WEB foreground resume does NOT treat the stream as suspect any more — lifecycle-suspect marking is native-only now, and harness() exercises the web arm (jsdom's isNative() is always false)", async () => {
+    const { result } = harness({ program: TWO_INTERVALS });
+    await connect(result);
+
+    act(() => {
+      setVisibility("hidden");
+      setVisibility("visible");
+    });
+
+    // THE BUG this ruling closes: before minor 9, this same web
+    // visibilitychange sequence latched `frameSilence:true` — a routine
+    // browser tab switch showed LOST THE MONITOR for 10s. The mutation
+    // this test guards against is `appLifecycle.ts`'s web branch falling
+    // back to `registerWebAppLifecycleListener`, which would flip this
+    // back to `true` and log an `app-lifecycle` ring entry again.
+    expect(result.current.frameSilence).toBe(false);
+    const exported = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(exported.some((e) => e.kind === "app-lifecycle")).toBe(false);
+  });
+
+  it("teardown does not throw on a post-unmount visibilitychange — the web arm's no-op unsubscribe (minor 9) is still a well-behaved callable, same contract shape a real listener's own teardown would need", async () => {
+    const { result, unmount } = harness({ program: TWO_INTERVALS });
+    await connect(result);
+    unmount();
+
+    expect(() => {
+      setVisibility("hidden");
+      setVisibility("visible");
+    }).not.toThrow();
+  });
+
+  it("NATIVE arm: registerAppLifecycleListener resolves via the async native path, and its unsubscribe reaches lifecycleUnsubRef (the Promise branch)", async () => {
+    const nativeUnsub = vi.fn();
+    let nativeCb: ((event: "background" | "foreground") => void) | undefined;
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener: vi.fn(
+        (cb: (event: "background" | "foreground") => void) => {
+          nativeCb = cb;
+          return Promise.resolve(nativeUnsub);
+        },
+      ),
+    }));
+    vi.resetModules();
+
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
+    });
+    const { result, unmount } = renderHook(() =>
+      freshUseMonitorSession({ createTransport: () => fake }),
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+    // The Promise resolved and its unsubscribe was stored — proven by
+    // teardown actually calling it.
+    await act(async () => {
+      unmount();
+      await Promise.resolve();
+    });
+    expect(nativeUnsub).toHaveBeenCalledOnce();
+    expect(nativeCb).toBeDefined();
+
+    vi.resetModules();
+    vi.restoreAllMocks();
+  });
+
+  it("REVIEWER'S PROBE (review fix), driven through the NATIVE dispatch (Phase LL minor 9: lifecycle-suspect marking is native-only, so a web visibilitychange can no longer drive this — this probe's own value was always about markSuspect()'s routing, not which platform triggered it, so it moves to the native arm): a SHORT resume — shorter than SILENCE_THRESHOLD_MS, so the decorator's OWN watchdog timer never matures — still clears frameSilence after BANNER_RETRACT_HYSTERESIS_MS of healthy frames post-resume, because markSuspect() routes through the decorator instead of around it", async () => {
+    vi.useFakeTimers();
+    // 40 events, 500ms apart — the first arms the watchdog (Task 1's
+    // arming rule); the rest are the post-resume "healthy frames" the
+    // reviewer's own probe fed (30 over 15s).
+    const events: FakeTimelineEvent[] = [];
+    for (let i = 1; i <= 40; i += 1) {
+      events.push(
+        status(i * 500, { elapsedSeconds: i * 0.5, distanceMeters: i * 2 }),
+      );
+    }
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
+      events,
+    });
+    // Composes the REAL decorator around the fake — the same thing
+    // `defaultTransport` does in production — so this test reaches the
+    // REAL `markSuspect`/`silent`/`armed` state machine, not a bypass.
+    const mockDefaultTransport = vi.fn((deps: LivenessDeps) =>
+      withLiveness(fake, deps),
+    );
+    vi.doMock("../adapters/monitorTransport", () => ({
+      defaultTransport: mockDefaultTransport,
+    }));
+    // NATIVE-shaped dispatch (same idiom as the "NATIVE arm" test above):
+    // captures the hook's own callback so this test can fire a
+    // "foreground" transition directly, without going through
+    // `document.visibilityState` at all — the web arm no longer reaches
+    // this code path (minor 9), so a real probe of the SHORT-resume
+    // clearing bug has to look like this now.
+    let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener: vi.fn(
+        (cb: (event: "background" | "foreground") => void) => {
+          lifecycleCb = cb;
+          return () => undefined;
+        },
+      ),
+    }));
+    vi.resetModules();
+
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+    const { result } = renderHook(() => freshUseMonitorSession());
+
+    await act(async () => {
+      await result.current.connect();
+    });
+
+    // `fake.tick()` advances a VIRTUAL clock (frame delivery timing);
+    // `vi.advanceTimersByTime` advances the REAL/mocked wall clock the
+    // decorator's own watchdog AND the hook's hysteresis timer both run
+    // on (`defaultLivenessSchedule`, real `setTimeout`). In production
+    // these are the SAME clock (a real BLE notification arriving IS real
+    // wall-clock time) — every advance below moves them together so a
+    // "frame every 500ms" in this test means exactly that on BOTH clocks,
+    // never a burst of virtual frames against a frozen real clock (which
+    // would let the watchdog's own 2500ms timer mature independently and
+    // produce a spurious SECOND silence — a test-harness artifact, not a
+    // production one, caught while writing this test).
+    function healthyFrame(): void {
+      act(() => {
+        fake.tick(500);
+        vi.advanceTimersByTime(500);
+      });
+    }
+
+    // Arms the watchdog on the first 0x0031 (event #1).
+    healthyFrame();
+    expect(result.current.frameSilence).toBe(false);
+
+    // A SHORT resume: the decorator's own SILENCE_THRESHOLD_MS=2500ms
+    // timer never started counting down from a genuine gap, let alone
+    // matured — exactly the "Control Center swipe, not an edge case"
+    // scenario the review named, now fired through the native dispatch.
+    expect(lifecycleCb).toBeDefined();
+    act(() => {
+      lifecycleCb!("background");
+      lifecycleCb!("foreground");
+    });
+    expect(result.current.frameSilence).toBe(true);
+
+    // The FIRST post-resume healthy frame: `noteStatusArrival` sees
+    // `silent === true` (set by `markSuspect`) and fires `onRecovery`,
+    // which schedules the hysteresis retract — but does not clear
+    // `frameSilence` itself.
+    healthyFrame();
+    expect(result.current.frameSilence).toBe(true);
+
+    // Well under the hysteresis window (5 more healthy frames = 2500ms
+    // more of real time, ~3000ms since recovery, far short of 10s) —
+    // still latched. Proves retraction is hysteresis-gated, not instant
+    // on the first post-resume frame.
+    for (let i = 0; i < 5; i += 1) healthyFrame();
+    expect(result.current.frameSilence).toBe(true);
+
+    // Enough further healthy frames to carry real elapsed time past the
+    // full BANNER_RETRACT_HYSTERESIS_MS window since the recovery frame
+    // above (25 more x 500ms = 12500ms, comfortably past 10s) — the
+    // reviewer's own probe, reproduced and now actually retracting.
+    for (let i = 0; i < 25; i += 1) healthyFrame();
+    expect(result.current.frameSilence).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Whole-branch review, minor 1: the native lifecycle unsub race. The
+// NATIVE arm's own `registerAppLifecycleListener` returns a `Promise`, so
+// its resolution can land AFTER `fail()`/`teardown()` already nulled
+// `lifecycleUnsubRef` for that attempt — a `.then()` with no cancellation
+// check would then blindly overwrite the ref, and if a LATER attempt had
+// already registered its own real listener by then, that write silently
+// replaces the new attempt's unsub with the stale one, leaking the new
+// listener forever. Driven with a CONTROLLABLE (deferred) promise per
+// attempt so this test can resolve them in the exact adversarial order —
+// same `vi.doMock("../adapters/appLifecycle")` idiom the "NATIVE arm" test
+// above uses, but with the resolution under this test's own control
+// instead of resolving eagerly.
+// ---------------------------------------------------------------------------
+
+describe("Whole-branch review minor 1: the native lifecycle unsub race, driven with a controllable promise", () => {
+  afterEach(() => {
+    vi.resetModules();
+    vi.restoreAllMocks();
+  });
+
+  function deferred<T>(): {
+    promise: Promise<T>;
+    resolve: (value: T) => void;
+  } {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  }
+
+  it("a STALE attempt's late-resolving promise unregisters itself instead of overwriting a LATER attempt's own real unsub", async () => {
+    const attempts: {
+      resolve: (unsub: () => void) => void;
+    }[] = [];
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener: vi.fn(() => {
+        const d = deferred<() => void>();
+        attempts.push(d);
+        return d.promise;
+      }),
+    }));
+    vi.resetModules();
+
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
+    });
+    const { result, unmount } = renderHook(() =>
+      freshUseMonitorSession({ createTransport: () => fake }),
+    );
+
+    // ATTEMPT 1: connects (registers its own pending native listener),
+    // then is cancelled — `cancel()` reaches `teardown()` synchronously
+    // for the pre-`programming` phase this lands in (no `driver.terminate
+    // ()` await in the way), which is where the token gets marked
+    // cancelled. The native promise itself is still unresolved.
+    await act(async () => {
+      await result.current.connect();
+    });
+    expect(attempts).toHaveLength(1);
+    await act(async () => {
+      await result.current.cancel();
+    });
+
+    // ATTEMPT 2: a fresh connect() on the SAME hook instance — legal once
+    // `cancel()`'s `teardown()` has nulled `driverRef` — registers its OWN
+    // pending native listener. Its promise stays unresolved too; `connect
+    // ()` never awaits it (`void lifecycleResult.then(...)`).
+    await act(async () => {
+      await result.current.connect();
+    });
+    expect(attempts).toHaveLength(2);
+
+    const unsub1 = vi.fn();
+    const unsub2 = vi.fn();
+
+    // THE ADVERSARIAL ORDER: attempt 1's stale promise resolves AFTER
+    // attempt 2 has already registered — exactly the race a real native
+    // `addListener` can produce (nothing orders two Promise resolutions
+    // against each other).
+    await act(async () => {
+      attempts[0]!.resolve(unsub1);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    // THE FIX'S OWN SIGNATURE: attempt 1's `unsub` is called IMMEDIATELY
+    // on its own late resolution (the cancellation branch calling it
+    // directly), never merely stored. Before the fix this assertion is
+    // false — `unsub1` is silently written into `lifecycleUnsubRef`
+    // instead, uncalled, and only invoked (wrongly) by a LATER teardown.
+    expect(unsub1).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      attempts[1]!.resolve(unsub2);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Final teardown (unmount) must reach attempt 2's REAL unsub — proof
+    // the ref was never clobbered by attempt 1's stale write. Before the
+    // fix, `lifecycleUnsubRef` ends up holding `unsub1` (the last write
+    // wins with no cancellation check), so `unsub2` is never called at
+    // all here — the leaked listener minor 1 describes.
+    unmount();
+    expect(unsub2).toHaveBeenCalledOnce();
+    // And `unsub1` was not invoked a second time by this teardown — it
+    // was already fully handled at its own resolution, above.
+    expect(unsub1).toHaveBeenCalledOnce();
+  });
+});
+
+describe("Phase LL Task 4: programHasDistanceGoal (pure)", () => {
+  it("false for an all-time program", () => {
+    expect(programHasDistanceGoal(TWO_INTERVALS)).toBe(false);
+  });
+
+  it("true whenever ANY interval is distance-kind, even in a mixed program", () => {
+    const mixed: WorkoutProgram = {
+      intervals: [
+        TWO_INTERVALS.intervals[0]!,
+        {
+          type: "work",
+          kind: "distance",
+          value: 500,
+          targetSplit: 120,
+          displaySpm: 22,
+          restSeconds: 0,
+        },
+      ],
+    };
+    expect(programHasDistanceGoal(mixed)).toBe(true);
+  });
+});
+
+describe("Phase LL Task 4: applyContinuityCheck (pure — the resumed-stream consumption seam)", () => {
+  const startedAt = t0.toISOString();
+
+  function openRun(overrides: Partial<MonitorRun> = {}): MonitorRun {
+    return {
+      v: 2,
+      workoutId: "w1",
+      title: "Continuity Fixture",
+      program: TWO_INTERVALS,
+      actuals: [],
+      deviceName: DEVICE_NAME,
+      startedAt,
+      completedAt: null,
+      terminated: false,
+      ...overrides,
+    };
+  }
+
+  it("not suspect: returns run UNCHANGED (same reference), whatever the readings say", () => {
+    const run = openRun();
+    const result = applyContinuityCheck(run, 1000, 5, false, t0, null);
+    expect(result).toBe(run);
+  });
+
+  it("no run open: null in, null out", () => {
+    expect(applyContinuityCheck(null, 1000, 5, true, t0, null)).toBeNull();
+  });
+
+  it("an already-closed run is returned UNCHANGED — never re-closed or re-stamped", () => {
+    const closed = openRun({
+      completedAt: new Date("2026-08-07T09:30:00.000Z").toISOString(),
+      endedBy: "finished",
+    });
+    const result = applyContinuityCheck(closed, 1000, 5, true, t0, null);
+    expect(result).toBe(closed);
+  });
+
+  it("no prior reading yet (lastTwd null): continuation, unchanged", () => {
+    const run = openRun();
+    expect(applyContinuityCheck(run, null, 5, true, t0, null)).toBe(run);
+  });
+
+  it("this frame carries no totalWorkDistanceMeters (frameTwd undefined): continuation, unchanged", () => {
+    const run = openRun();
+    expect(applyContinuityCheck(run, 1000, undefined, true, t0, null)).toBe(
+      run,
+    );
+  });
+
+  it("a forward or equal reading: continuation, unchanged, even while suspect", () => {
+    const run = openRun();
+    expect(applyContinuityCheck(run, 1000, 1000, true, t0, null)).toBe(run);
+    expect(applyContinuityCheck(run, 1000, 5000, true, t0, null)).toBe(run);
+  });
+
+  it("suppressed on a distance-goal program, even for a large backward jump", () => {
+    const distanceProgram: WorkoutProgram = {
+      intervals: [
+        {
+          type: "work",
+          kind: "distance",
+          value: 500,
+          targetSplit: 120,
+          displaySpm: 22,
+          restSeconds: 0,
+        },
+      ],
+    };
+    const run = openRun({ program: distanceProgram });
+    const result = applyContinuityCheck(run, 1599, 100, true, t0, null);
+    expect(result).toBe(run);
+    expect(result?.completedAt).toBeNull();
+  });
+
+  it("a genuine backward jump while suspect closes the run as link-lost (RULED at Task 4's own review, F1/I1 — the STRONGEST-evidence close, never the absence-of-evidence value), and records the ring entry — the mutation this test guards against: dropping the `>` comparison so ANY change (even forward) closes the run", () => {
+    const run = openRun();
+    const log = createEventLog();
+    const now = new Date("2026-08-07T09:31:00.000Z");
+
+    const result = applyContinuityCheck(run, 1599, 100, true, now, log);
+
+    expect(result).not.toBe(run);
+    expect(result?.completedAt).toBe(now.toISOString());
+    // §4: "preserve the interrupted record, start clean, never merge" —
+    // `terminated` stays whatever it already was
+    // (`completeContinuityReset`'s own contract, unchanged by this task),
+    // only `completedAt`/`endedBy` move.
+    expect(result?.terminated).toBe(false);
+    expect(result?.endedBy).toBe("link-lost");
+    expect(result?.actuals).toStrictEqual(run.actuals);
+
+    const entries = JSON.parse(log.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const resetEntry = entries.find((e) => e.kind === "continuity-reset");
+    expect(resetEntry).toBeDefined();
+    expect(resetEntry!.detail).toContain("1599");
+    expect(resetEntry!.detail).toContain("100");
+  });
+
+  it("a null log is tolerated — no throw, the close still happens", () => {
+    const run = openRun();
+    const result = applyContinuityCheck(run, 1599, 100, true, t0, null);
+    expect(result?.completedAt).not.toBeNull();
+  });
+
+  it("idempotent in practice: calling again against the NOW-CLOSED result is a no-op (the completedAt guard, not a second-check special case)", () => {
+    const run = openRun();
+    const once = applyContinuityCheck(run, 1599, 100, true, t0, null);
+    const twice = applyContinuityCheck(once, 100, 50, true, t0, null);
+    expect(twice).toBe(once);
+  });
+});
+
+describe("Phase LL Task 4: the continuity consumption seam, through the real hook composition — a healthy resume never false-positives", () => {
+  afterEach(() => {
+    vi.doUnmock("../adapters/appLifecycle");
+    vi.resetModules();
+    vi.restoreAllMocks();
+  });
+
+  it("a foreground resume followed by ordinary forward-moving live frames never closes the record (companion to continuity.test.ts's own corpus sweep, at the hook level)", async () => {
+    const events: FakeTimelineEvent[] = [];
+    for (let i = 1; i <= 10; i += 1) {
+      events.push(
+        status(i * 500, { elapsedSeconds: i * 0.5, distanceMeters: i * 2 }),
+      );
+    }
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
+      events,
+    });
+    // Phase LL minor 9: lifecycle-suspect marking is native-only now, so
+    // this test's own resume trigger has to look like the native dispatch
+    // (same idiom the "NATIVE arm"/REVIEWER'S PROBE tests use) rather than
+    // a web `visibilitychange` — `harness()`'s own web arm can no longer
+    // produce this transition at all.
+    let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener: vi.fn(
+        (cb: (event: "background" | "foreground") => void) => {
+          lifecycleCb = cb;
+          return () => undefined;
+        },
+      ),
+    }));
+    vi.resetModules();
+
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+    const { result } = renderHook(() =>
+      freshUseMonitorSession({ createTransport: () => fake }),
+    );
+
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+    tick(fake, 500);
+    expect(result.current.phase).toBe("live");
+
+    expect(lifecycleCb).toBeDefined();
+    act(() => {
+      lifecycleCb!("background");
+      lifecycleCb!("foreground");
+    });
+    expect(result.current.frameSilence).toBe(true);
+
+    // Ordinary forward-moving frames post-resume — the fake's own
+    // `totalWorkDistanceFor` model never reports backward on a healthy
+    // time-programmed session (`continuity.test.ts`'s corpus derivation
+    // proves this against real hardware captures; this proves the WIRING
+    // doesn't misfire against it either).
+    for (let i = 0; i < 8; i += 1) tick(fake, 500);
+
+    expect(result.current.phase).toBe("live");
+    expect(loadMonitorRun()?.completedAt).toBeNull();
+    expect(loadMonitorRun()?.endedBy).toBeUndefined();
+  });
+});
+
+describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end through the real driver + hook composition — real bytes, artificial order", () => {
+  // Same walk-2026-08-16/session-2-wu-4unequal.jsonl this file's OWN
+  // `continuity.ts` pure-level pin already cites (`continuity.test.ts`'s
+  // "ONE true reset, built from a real capture's own frames" describe
+  // block) — reused here rather than re-picked. The exact two samples
+  // differ from that pin (see `REAL_TAIL_HEX`'s own comment below): the
+  // pure pin only feeds `check()`, which never looks at `workoutState`;
+  // this test delivers the bytes through the REAL driver, which does.
+  //
+  // **FINDING, reported rather than routed around silently: F3's own
+  // instruction names `transports/replay.ts` against a REAL committed
+  // capture's own recorded acks. That path was attempted first and hits a
+  // genuine architecture conflict, not a shortcut avoided for
+  // convenience: EVERY committed capture with any non-distance-goal
+  // segment at all (`session-2-wu-4unequal.jsonl`,
+  // `step-3-pm5-recording-second-rest...jsonl` — `continuity.ts`'s own
+  // header comment and this task's corpus derivation) is itself a MIXED
+  // program (both carry a distance interval), and `programHasDistanceGoal`
+  // suppresses on the WHOLE program, by design (mirrors `driver.ts`'s own
+  // `recordTwdVerdict` — narrowing it to per-frame to dodge this would be
+  // the review's own class of regression, not a fix). Driving `program()`
+  // with that REAL mixed program replays cleanly but leaves the
+  // continuity check permanently suppressed for the whole run — nothing
+  // to observe. Driving it with an ALL-TIME substitute instead (tried,
+  // reverted) reaches a REAL rejection: the recording's own armed-echo
+  // bytes report the REAL 5-interval structure, `driver.ts`'s own
+  // `verifyArmed` correctly calls that a `structure-mismatch` against a
+  // 2-interval program that was never actually sent to this machine —
+  // `program()` genuinely fails, not a test-harness artifact.
+  // **Resolution:** the programming HANDSHAKE (protocol machinery, not
+  // evidence) uses `transports/fake.ts` — this file's own established,
+  // protocol-correct harness, used by every other test here — for an
+  // honestly ALL-TIME 2-interval program; the two frames the continuity
+  // RULE actually reads are real hardware bytes from the same session
+  // `continuity.test.ts`'s pure pin cites, delivered through the REAL
+  // driver's decode pipeline via a minimal interception seam (below)
+  // rather than `replay.ts`'s barrier engine. Every byte the continuity
+  // check evaluates is still 100% real and hardware-captured; only the
+  // plumbing that carries them differs from the letter of the
+  // instruction, for a reason grounded in the corpus, not convenience.
+
+  // Two REAL 0x0031 samples from `session-2-wu-4unequal.jsonl`, both
+  // `workoutState: 4` (rowing) — deliberately NOT the file's own literal
+  // last sample (which `continuity.test.ts`'s pure pin uses, twd=1599):
+  // that byte's own `workoutState` decodes to 10/WORKOUTEND, and an
+  // earlier version of this test delivered it verbatim, triggering a
+  // genuine, honest NATURAL FINISH the instant it arrived —
+  // `driver.ts`'s own `maybeEmitFrame` reacts to `state === "finished"`
+  // regardless of WHY the frame showed up, which is correct production
+  // behaviour, not a test bug; the fix is choosing frames that are
+  // honestly mid-session on BOTH ends, so nothing but the continuity rule
+  // itself reacts to them. "before" is this file's own LAST rowing-state,
+  // non-distance-goal sample (twd=1354); "after" is its own FIRST
+  // rowing-state, non-distance-goal sample (twd=100) — the SAME hex the
+  // pure pin uses for "after" (that one frame's own `workoutState`
+  // happens to already be rowing, which is why it needed no swap).
+  const REAL_TAIL_HEX =
+    "52 17 00 89 09 00 08 00 04 01 04 4a 05 00 70 17 00 00 68"; // twd=1354, workoutState=4 (rowing)
+  const REAL_HEAD_HEX =
+    "00 00 00 00 00 00 08 00 04 00 01 64 00 00 70 17 00 00 68"; // twd=100, workoutState=4 (rowing)
+
+  /** Delegates every `Transport` method to `inner` unchanged EXCEPT
+   *  `subscribe`, which additionally remembers each characteristic's own
+   *  live callback set — `deliverRaw` below is what lets this test push
+   *  the two real byte payloads above straight into the REAL driver's
+   *  decode pipeline, the same call shape a genuine BLE notification
+   *  arrives through (`characteristicId`, `Uint8Array`), without asking
+   *  `fake.ts` to model a wire-impossible reading (its own doc comments
+   *  already refuse to do that for other fields — this seam sits AT the
+   *  boundary those comments describe, not inside the fake itself). */
+  function interceptingTransport(
+    inner: Transport,
+  ): Transport & { deliverRaw(char: string, bytes: Uint8Array): void } {
+    const subs = new Map<string, Set<(bytes: Uint8Array) => void>>();
+    return {
+      ...inner,
+      subscribe(char: string, cb: (bytes: Uint8Array) => void) {
+        const off = inner.subscribe(char, cb);
+        let set = subs.get(char);
+        if (set === undefined) {
+          set = new Set();
+          subs.set(char, set);
+        }
+        set.add(cb);
+        return () => {
+          set!.delete(cb);
+          off();
+        };
+      },
+      deliverRaw(char: string, bytes: Uint8Array): void {
+        for (const cb of subs.get(char) ?? []) cb(bytes);
+      },
+    };
+  }
+
+  afterEach(() => {
+    vi.doUnmock("../adapters/monitorTransport");
+    vi.doUnmock("../adapters/appLifecycle");
+    vi.resetModules();
+    vi.restoreAllMocks();
+  });
+
+  it("closes as link-lost, tells the surface, and preserves the actuals — the F1/F2 ruling proven through the REAL driver + REAL hook composition, not just the pure function", async () => {
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
+      // One ordinary scripted rowing tick to open the run and reach
+      // `live` honestly — the fake's own protocol-correct model, exactly
+      // like every other test in this file. The REAL captured bytes
+      // (below) arrive AFTER this, as ordinary subsequent frame updates
+      // through the same decode pipeline, never as the frame that opens
+      // the run.
+      events: [status(100, { elapsedSeconds: 10, distanceMeters: 40 })],
+    });
+    const intercepting = interceptingTransport(fake);
+
+    // Same COMPOSITION-proving idiom as the REVIEWER'S PROBE test above:
+    // the REAL decorator, composed around this test's own transport, the
+    // same thing `defaultTransport` does in production — so `frameSilence`
+    // is the genuine production wiring, not a bypass.
+    const mockDefaultTransport = vi.fn((deps: LivenessDeps) =>
+      withLiveness(intercepting, deps),
+    );
+    vi.doMock("../adapters/monitorTransport", () => ({
+      defaultTransport: mockDefaultTransport,
+    }));
+    // Phase LL minor 9: lifecycle-suspect marking is native-only now — the
+    // resume trigger below has to look like the native dispatch, same as
+    // every other test in this file that used to rely on a web
+    // `visibilitychange`.
+    let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener: vi.fn(
+        (cb: (event: "background" | "foreground") => void) => {
+          lifecycleCb = cb;
+          return () => undefined;
+        },
+      ),
+    }));
+    vi.resetModules();
+
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+    const { result } = renderHook(() =>
+      freshUseMonitorSession({
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: () => (): void => undefined,
+        },
+      }),
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+    await act(async () => {
+      let settled = false;
+      const pending = result.current
+        .program(TWO_INTERVALS, TWO_IDENTITY)
+        .finally(() => {
+          settled = true;
+        });
+      await flush();
+      for (let i = 0; i < 25 && !settled; i += 1) {
+        fake.tick(0);
+        await flush();
+      }
+      await pending;
+    });
+    act(() => {
+      fake.tick(100);
+    });
+    expect(result.current.phase).toBe("live");
+
+    // "before": the run's own first live frame (the fake's own scripted
+    // tick) already seeded `lastTwdRef` with an irrelevant value.
+    // Overwrite it with the capture's own real, later, still-rowing
+    // reading, delivered the SAME way any other frame is — through the
+    // driver's decode pipeline, not by poking a ref directly.
+    act(() => {
+      intercepting.deliverRaw(
+        GENERAL_STATUS_UUID,
+        fromHexString(REAL_TAIL_HEX),
+      );
+    });
+    expect(result.current.phase).toBe("live");
+
+    // The resume: app-lifecycle marks the stream suspect (Task 2's own
+    // mechanism, native-only per minor 9), the identical trigger a real
+    // background/foreground gap fires.
+    expect(lifecycleCb).toBeDefined();
+    act(() => {
+      lifecycleCb!("background");
+      lifecycleCb!("foreground");
+    });
+    expect(result.current.frameSilence).toBe(true);
+
+    // "after": the capture's own real, EARLIER reading — a genuine
+    // backward jump on the SAME wire quantity, real bytes, artificial
+    // (replayed-out-of-order) position.
+    act(() => {
+      intercepting.deliverRaw(
+        GENERAL_STATUS_UUID,
+        fromHexString(REAL_HEAD_HEX),
+      );
+    });
+
+    expect(result.current.phase).toBe("ended");
+    // F2 (RULED at Task 4's own review): paired with the SAME surface
+    // update every other close uses.
+    expect(result.current.runOpen).toBe(false);
+    expect(result.current.endedBy).toBe("user");
+
+    // F1 (RULED at Task 4's own review): the STRONGEST-evidence close,
+    // never the absence-of-evidence value.
+    const stored = loadMonitorRun();
+    expect(stored?.completedAt).not.toBeNull();
+    expect(stored?.endedBy).toBe("link-lost");
+    // "preserve the interrupted record" — actuals banked before the
+    // reset are untouched (none banked yet in this short fixture, but the
+    // record itself — not a fresh one — is what's closed).
+    expect(stored?.workoutId).toBe(TWO_IDENTITY.workoutId);
+
+    const exported = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const resetEntry = exported.find((e) => e.kind === "continuity-reset");
+    expect(resetEntry).toBeDefined();
+    expect(resetEntry!.detail).toContain("1354");
+    expect(resetEntry!.detail).toContain("100");
+  }, 15000);
+
+  // -------------------------------------------------------------------
+  // Whole-branch review minor 2: the continuity reset was closing the
+  // record through `completeContinuityReset` directly — a pure transform
+  // that never touches `withSeries`/`stopSeriesFlush`/the recorder at
+  // all — instead of the SAME folding path every other close in this file
+  // uses (`closeRecord`'s own three steps). Up to 30s of trace could be
+  // lost on the one close whose whole point is preserving the record
+  // ("preserve the interrupted record" — §4's own words), and the flush
+  // timer kept running into a record that could never accept another
+  // write. Same fixture shape as the test above (real driver + real hook
+  // composition), plus a `seriesFlushSchedule` so the timer's own
+  // cancellation is directly observable too.
+  // -------------------------------------------------------------------
+  it("minor 2: a continuity reset folds the recorder's trace into the closed record and cancels the flush timer — the SAME three steps closeRecord already does for every other close", async () => {
+    const flushTimer = manualInterval();
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
+      // Two ordinary scripted frames, crossing a whole-second bucket
+      // (elapsed 10 -> 30), so the recorder banks TWO samples before the
+      // reset — a trivial one-sample fixture could pass even with the
+      // fold silently dropped, if the recorder's own "always has at
+      // least one sample" guarantee papered over it.
+      events: [
+        status(100, { elapsedSeconds: 10, distanceMeters: 40 }),
+        status(200, { elapsedSeconds: 30, distanceMeters: 100 }),
+      ],
+    });
+    const intercepting = interceptingTransport(fake);
+    const mockDefaultTransport = vi.fn((deps: LivenessDeps) =>
+      withLiveness(intercepting, deps),
+    );
+    vi.doMock("../adapters/monitorTransport", () => ({
+      defaultTransport: mockDefaultTransport,
+    }));
+    let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener: vi.fn(
+        (cb: (event: "background" | "foreground") => void) => {
+          lifecycleCb = cb;
+          return () => undefined;
+        },
+      ),
+    }));
+    vi.resetModules();
+
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+    const { result } = renderHook(() =>
+      freshUseMonitorSession({
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: () => (): void => undefined,
+        },
+        seriesFlushSchedule: flushTimer.schedule,
+      }),
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+    await act(async () => {
+      let settled = false;
+      const pending = result.current
+        .program(TWO_INTERVALS, TWO_IDENTITY)
+        .finally(() => {
+          settled = true;
+        });
+      await flush();
+      for (let i = 0; i < 25 && !settled; i += 1) {
+        fake.tick(0);
+        await flush();
+      }
+      await pending;
+    });
+    act(() => {
+      fake.tick(100);
+    });
+    act(() => {
+      fake.tick(100);
+    });
+    expect(result.current.phase).toBe("live");
+    // Two whole-second buckets banked (10 -> 30) — the recorder has more
+    // than the trivial "always at least one" sample before the reset.
+    expect(flushTimer.calls).toHaveLength(1);
+    expect(flushTimer.calls[0]!.cancelled).toBe(false);
+
+    act(() => {
+      intercepting.deliverRaw(
+        GENERAL_STATUS_UUID,
+        fromHexString(REAL_TAIL_HEX),
+      );
+    });
+    expect(lifecycleCb).toBeDefined();
+    act(() => {
+      lifecycleCb!("background");
+      lifecycleCb!("foreground");
+    });
+    expect(result.current.frameSilence).toBe(true);
+
+    act(() => {
+      intercepting.deliverRaw(
+        GENERAL_STATUS_UUID,
+        fromHexString(REAL_HEAD_HEX),
+      );
+    });
+    expect(result.current.phase).toBe("ended");
+
+    const stored = loadMonitorRun();
+    expect(stored?.endedBy).toBe("link-lost");
+    // THE FIX: the trace banked before the reset survives the close — the
+    // mutation this guards against is `handleFrame`'s live branch writing
+    // `closed` straight into `runRef.current` without folding
+    // `withSeries` first, which leaves `series` `undefined` here.
+    expect(stored?.series?.samples.length).toBeGreaterThan(1);
+    // THE FLUSH TIMER: cancelled by the SAME `stopSeriesFlush()` call
+    // `closeRecord` already makes for every other close — before the fix
+    // this timer kept running (registered, uncancelled) into a record
+    // that could never accept another write.
+    expect(flushTimer.calls[0]!.cancelled).toBe(true);
+  }, 15000);
 });

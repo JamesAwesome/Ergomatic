@@ -2261,3 +2261,81 @@ targetSplit:null}` reproduces the recorded tx exactly and `divergences` stays
   `0012_amused_wild_child.sql`. Whichever merges second regenerates.
   **Technique: `gh pr diff <n> --name-only | grep drizzle` across every open
   PR is a ten-second check — run it at SPEC time, not implement time.**
+### 2026-08-22 — Phase LL anchor pass (link-truth spec, TRIAD)
+
+- **CLAIM: "no committed capture trips a 2500 ms frame-silence watchdog while healthy" (spec §7 criterion 1). FALSE as written — 6 of 6.**
+  Believed because the in-stream gap distribution is comfortable (3442 gaps, max 810.3 ms, 3.09x margin) and nobody
+  asked when the watchdog ARMS. Every capture is silent for **3775-4454 ms** between the last `subscribe` and the
+  first 0x0031 — no 0x0031, no 0x0032, no 0x0033; the first inbound byte is the CSAFE ack on 0x0022.
+  **Technique: decode the corpus OUTSIDE the app and tabulate gaps per workout state, including the window BEFORE
+  the first frame.** Every prior gap analysis in this repo started at frame 1, which is precisely where the defect
+  hides. Second-order: arming at the sample-rate write leaves only a 404 ms margin (2096 vs 2500) — measure both
+  candidate arming points, not one.
+- **CLAIM: RowTracer's continuity constants (elapsed back >2 s, distance back >5 m, strokes dropped) guard a resume.
+  FALSE on our wire — they reject 12.7%-26.0% of healthy 30 s interruptions.**
+  Believed because the rule is MIT, battle-shaped and cited to a real file. But 0x0031's elapsed is a PER-INTERVAL
+  clock: the corpus contains 8 boundary resets (-29 s to -188 s, -98 m to -715 m) and **4 mid-rest re-bases with no
+  boundary at all** (-5.97, -5.90, -4.35, -3.15 s, distance flat).
+  **Technique: simulate the rule's own scenario over the corpus rather than eyeballing its constants** — slide the
+  spec's own 30 s gap across every frame of every capture and count rejections. A borrowed rule's LICENCE transfers;
+  its constants only transfer if the field it reads means the same thing. Ask what quantity the borrowed rule assumes
+  is monotonic.
+- **CLAIM: a finish hold can exit early on workout state 12 or a 0x0039 arrival. Unsupported both ways.**
+  State 12: **zero occurrences** in the whole byte corpus. 0x0039: **zero occurrences** in any byte capture, and the
+  one ring observation (`walk-2026-08-15/session-c` seq 34) shows it arriving BEFORE the terminal frame — the same
+  arrives-first shape the spec had just corrected for the final split. A spec can fix a premise in one paragraph and
+  re-commit it in the next.
+  **Technique: before trusting an early-exit condition, grep the corpus for the event and check its SIGN relative to
+  the trigger.** Confirm the recorder can see it so absence is evidence, not a blind spot.
+- **CLAIM: a new "stale link axis" that recovers. Unimplementable as described, and the word is taken.**
+  `surfaceModel.ts:66` already has `SurfaceStatus = "stale"`, meaning "the link is LOST" (`staleFor`'s own comment),
+  and it already drives `LostBanner`. `connectedAxes.ts:122` `deriveLink` is a PURE FUNCTION OF PHASE — no input a
+  watchdog can push. A retracting LOST THE MONITOR banner is also the reconnecting UI DEVIATIONS 75 forbids.
+  **Technique: before adding a state, grep the target module for the WORD — the union-name trap works on additions,
+  not just deletions — and read the function that PRODUCES the axis, not the type that names it.**
+- **CLAIM: "failure disposes" makes the LINK-FAILED loop unrepresentable. It moves it.**
+  `ConnectedInterstitial.tsx:298-313` branches on `session.deviceName`, NOT on `driverRef`, and its own comment says
+  nothing but `cancel()` clears it. Null the driver and leave the name and Try Again re-enters `program()`, which
+  instant-fails `transport-missing` (`useMonitorSession.ts:1603-1610`).
+  **Technique: for any "this loop becomes unrepresentable" claim, find the CONDITIONAL that chooses the loop's next
+  step and check the spec names that exact field.** Nulling a ref the branch does not read changes nothing.
+- **CLAIM (correct conclusion, wrong citation): Apple says CBPeripherals go invalid on Bluetooth power-off.**
+  Apple's `centralManagerDidUpdateState(_:)` says invalidation happens "**if the state moves below poweredOff**" —
+  and poweredOff is 4, poweredOn is 5, so poweredOff is not below itself. The sentence that DOES apply is stronger
+  and was not quoted: below poweredOn, scanning stops, "which in turn disconnects any previously-connected
+  peripherals."
+  **Technique: when a doc quote contains an ordinal comparison, resolve the ordinals.** "Below X" is a fact about an
+  enum's raw values, not a synonym for X.
+- **CLAIM: whether `retrieveConnectedPeripherals` finds an unadvertised-service PM5 is an open probe. Wrong question.**
+  Apple, verbatim: peripherals "currently connected to the system and that **contain** any of the services specified".
+  Advertising governs `startScan`; containment governs this API. The repo's hard-won "0x0030 is not advertised" lesson
+  (`capacitorBle.ts:330-337`) does not transfer, and reading it across cost the spec a real design decision.
+  **Technique: when reusing an in-repo lesson about one API on a different API, fetch the second API's own contract.**
+  Apple's docs are JS-rendered and defeat WebFetch — the `developer.apple.com/tutorials/data/documentation/....json`
+  endpoint returns abstract, parameters, return value and discussion as text. Use it.
+- **CLAIM: 2500 ms is "~25x the native ~100 ms cadence". The 100 ms is a REQUEST we already know is not honoured.**
+  `useMonitorSession.ts:537-539`: "the driver requests 100 ms sampling but the record shows ~500 ms delivered (the
+  sample-rate write is fire-and-forget and its outcome is swallowed)". Measured mean with that write already sent:
+  508.3 ms.
+  **Technique: a cadence in a derivation is a MEASUREMENT or it is nothing — grep the repo for the number's own
+  provenance before it ships inside a constant's comment.**
+- **ORACLE BLINDNESS, new shape: the mechanism is placed at a layer the test harnesses' clocks do not reach.**
+  `replay.ts` binds its virtual clock as `DriverOptions.now/schedule` (the DRIVER's), `fake.ts` is tick-driven, and
+  `replay.ts:205`'s barrier timeout is a REAL `setTimeout` — so `vi.useFakeTimers()` over a replay hangs the barrier.
+  A wall-clock watchdog in a TRANSPORT decorator is unprovable by either harness.
+  **Technique: for any new time-based mechanism, name the layer it sits at and check that layer receives an injected
+  clock — before writing the exit criterion that assumes it can be tested.** (`ReplayHandle.clock` is public; binding
+  it to the decorator makes the corpus a real CI gate.)
+- **STANDING FACT worth inheriting: every committed byte capture is `transport: "web"`.** Zero native captures exist,
+  by construction (no native diagnostics seam). Any "validated against the corpus" claim about native behaviour is
+  necessary-and-not-sufficient, and should say so in the criterion rather than in a footnote.
+- **Held under attack (Phase LL vetted ground):** 2500 ms once the stream runs (3442 gaps, 0 over, worst 810.3 ms in
+  INTERVALREST); rests and armed-not-rowing are NOT quiet periods (states 3 and 0 both notify at 540 ms median);
+  0x0031/0x0032/0x0033 arrive in exact lockstep so keying on 0x0031 alone loses nothing; all four §2 mechanisms
+  verify at their cited lines; both finish-race measurement sets reproduce to the digit (disconnect at 21.7/24.1/
+  30.6/107.3 ms after the terminal frame; 0x0037 at -179.9/+90.2/-89.7/+7.6 ms); `terminated: true` really is written
+  by both the link-gone and the rower-quit path while the server row carries neither flag; `link-lost` vs
+  `ended-by-rower` IS knowable at write time (`linkGone`, `useMonitorSession.ts:1651`); two decorators is right
+  because `defaultTransport()`'s `import()` sits behind a RUNTIME check; the `initialize()` memo hoist is safe but
+  does not survive `webView.reload()`.
+

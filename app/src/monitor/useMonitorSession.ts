@@ -62,14 +62,23 @@ import {
 import { createEventLog, type MonitorEventLog } from "./eventLog";
 import type { LogSeed } from "../session/logDraft";
 import {
+  completeContinuityReset,
   completeMonitorRun,
   createMonitorRun,
   recordActual,
   saveMonitorRun,
+  type CloseReason,
   type MonitorRun,
 } from "./monitorRun";
+import { check as checkContinuity } from "./continuity";
 import { createSeriesRecorder, type SeriesRecorder } from "./seriesRecorder";
 import { defaultTransport } from "../adapters/monitorTransport";
+import { registerAppLifecycleListener } from "../adapters/appLifecycle";
+import type {
+  CancelFn,
+  LivenessDeps,
+  LivenessSnapshot,
+} from "./transports/liveness";
 
 /** The session state machine (design spec §2, verbatim, MINUS `"paused"` —
  *  connected-axes 2a, task 5). Every value here is reached by a REAL event
@@ -227,6 +236,268 @@ function bestEffort(work: Promise<unknown>): void {
   void work.catch(() => undefined);
 }
 
+/** Phase LL Task 1: does `transport` carry a liveness `snapshot()`? Every
+ *  REAL production transport does — `defaultTransport` composes
+ *  `withLiveness` on both platform arms (`adapters/monitorTransport.ts`) —
+ *  but a test's own `MonitorSessionDeps.createTransport` override
+ *  typically hands back a bare `Transport`, and `fail()` below must not
+ *  assume the method exists. A structural check, not an `instanceof`: the
+ *  wrapped object is a plain closure return, not a class instance. */
+function hasLivenessSnapshot(
+  transport: Transport,
+): transport is Transport & { snapshot(): LivenessSnapshot } {
+  return typeof (transport as { snapshot?: unknown }).snapshot === "function";
+}
+
+/** Phase LL Task 2 (§2 mechanism 3): does `transport` carry the
+ *  degraded-characteristic structural extension? Same idiom as
+ *  `hasLivenessSnapshot` immediately above — `capacitorBle.ts` and
+ *  `fake.ts` both expose it, `webBluetooth.ts` and every bare test
+ *  `Transport` do not, and `withLiveness` forwards it through unchanged
+ *  (`liveness.ts`'s own `...inner` spread — see that file's header for
+ *  why the spread exists). */
+function hasCharacteristicDegraded(
+  transport: Transport,
+): transport is Transport & {
+  onCharacteristicDegraded(
+    cb: (characteristicId: string, message: string) => void,
+  ): () => void;
+} {
+  return (
+    typeof (transport as { onCharacteristicDegraded?: unknown })
+      .onCharacteristicDegraded === "function"
+  );
+}
+
+/** Phase LL Task 2 REVIEW FIX (§2 mechanism 2): does `transport` carry the
+ *  liveness decorator's own `markSuspect()`? Same structural idiom as
+ *  `hasLivenessSnapshot`/`hasCharacteristicDegraded` above — every REAL
+ *  production transport does (`withLiveness`'s own return type), a bare
+ *  test `Transport` typically does not, and that is a no-op, never a
+ *  throw. See `liveness.ts`'s own doc comment on `markSuspect` for why
+ *  going around it (setting `frameSilence` directly, with no way back)
+ *  was the bug this check exists to prevent from recurring. */
+function hasMarkSuspect(
+  transport: Transport,
+): transport is Transport & { markSuspect(): void } {
+  return (
+    typeof (transport as { markSuspect?: unknown }).markSuspect === "function"
+  );
+}
+
+/** Phase LL Task 3 (§3, F-6): does `transport` carry the already-connected
+ *  guard's own outcome-naming extension? Same structural idiom as the
+ *  three checks above — `capacitorBle.ts` exposes it (its own
+ *  `describeLastScan()` doc comment), `webBluetooth.ts`/`fake.ts`/every
+ *  bare test `Transport` do not (the guard is Apple-API-specific — there
+ *  is nothing for the web arm or the fake to implement), and
+ *  `withLiveness` forwards it through unchanged via its own `...inner`
+ *  spread. */
+function hasDescribeLastScan(
+  transport: Transport,
+): transport is Transport & { describeLastScan(): string | null } {
+  return (
+    typeof (transport as { describeLastScan?: unknown }).describeLastScan ===
+    "function"
+  );
+}
+
+/** Phase LL Task 1: this hook's own production `schedule` for the liveness
+ *  decorator — a plain `setTimeout`/`clearTimeout` pair, the same shape
+ *  every other `schedule` dep in this file already has. Hoisted to MODULE
+ *  scope, not a closure built inside the hook, for one reason: it is a
+ *  pure function with nothing to close over, and a top-level function is
+ *  directly unit-testable (`useMonitorSession.test.ts` calls it with a
+ *  fake `fn`/real timers) without building a whole hook instance — the
+ *  ONLY way to reach it otherwise is the full `connect()` -> real
+ *  `defaultTransport` -> `withLiveness` -> an actual 0x0031 arrival chain,
+ *  which every existing test's own `createTransport` override deliberately
+ *  bypasses (this file's own `MonitorSessionDeps.createTransport` doc
+ *  comment). */
+export function defaultLivenessSchedule(
+  fn: () => void,
+  ms: number,
+): () => void {
+  const id = setTimeout(fn, ms);
+  return () => clearTimeout(id);
+}
+
+/** Phase LL Task 1: this hook's own production `onSilence` body, factored
+ *  out to a PLAIN VALUE (`MonitorEventLog | null`), never a ref — passing
+ *  `logRef` itself into a function reachable during render trips
+ *  `react-hooks/refs` ("Passing a ref to a function may read its value
+ *  during render"), even though this one only closes over it for later.
+ *  Taking the already-dereferenced log instead sidesteps that rule
+ *  entirely and stays directly testable: `useMonitorSession.test.ts` calls
+ *  this with a real `createEventLog()` instance, no ref needed. The hook
+ *  itself still reads `logRef.current` AT CALL TIME — `livenessDepsRef`'s
+ *  own `onSilence: (ms) => recordLivenessSilence(logRef.current, ms)`
+ *  below reads it inside a deferred arrow, not during render, same as
+ *  every other ref read in this file. */
+export function recordLivenessSilence(
+  log: MonitorEventLog | null,
+  ms: number,
+): void {
+  log?.record("liveness-silence", `frame stream silent for ${ms}ms`);
+}
+
+/** Phase LL Task 1: this hook's own production `onRecovery` body — same
+ *  reasoning as `recordLivenessSilence` above. */
+export function recordLivenessRecovery(log: MonitorEventLog | null): void {
+  log?.record("liveness-recovery", "frame stream resumed");
+}
+
+/** Phase LL Task 2 (design spec §2a): how long the frame stream must run
+ *  CONTINUOUSLY healthy before the lost-link banner may retract, once
+ *  latched. MEASURED, not guessed — the SAME corpus `liveness.ts`'s own
+ *  `SILENCE_THRESHOLD_MS` cites: ~540 ms median (~508 ms mean,
+ *  `useMonitorSession.ts:537-539`'s own citation, "delivered on web")
+ *  inter-frame gap once a stream is genuinely running, so 10 s is ≈18
+ *  frames at the observed cadence, never a round number picked by eye.
+ *  "THE BANNER CANNOT BLINK" (spec §2a): `handleFrameRecovery` below does
+ *  NOT clear `frameSilence` the instant a single healthy frame arrives —
+ *  it starts this timer, and `handleFrameSilence` CANCELS the timer on
+ *  every fresh silence, so a silence/recovery/silence flicker inside the
+ *  window restarts the clock rather than letting a stale timer retract
+ *  the banner underneath a stream that has already gone bad again. */
+export const BANNER_RETRACT_HYSTERESIS_MS = 10_000;
+
+/** Phase LL Task 2's production `onSilence` body — wraps
+ *  `recordLivenessSilence` (unchanged, still the ring's own record) with
+ *  the two things that make the banner honest: it LATCHES `frameSilence`
+ *  immediately (the banner shows on the very first silence — the watchdog
+ *  itself already waited `SILENCE_THRESHOLD_MS`, nothing here adds a
+ *  second debounce on the way UP), and it cancels any pending retract
+ *  timer a PRIOR recovery had started. Takes `update`/`hysteresisCancel`
+ *  as plain values (never a ref dereferenced here — the same
+ *  `react-hooks/refs` reasoning `recordLivenessSilence`'s own doc comment
+ *  gives, extended to the cancel slot: the HOOK reads/writes
+ *  `hysteresisCancelRef.current` at the call site, this function only
+ *  ever sees whatever value that was at the instant it was invoked, and
+ *  it is invoked exclusively from a deferred `onSilence` callback, never
+ *  during render), so it stays directly testable the same way
+ *  `recordLivenessSilence` already is. */
+export function handleFrameSilence(
+  update: (patch: { frameSilence: boolean }) => void,
+  cancelHysteresis: (() => void) | null,
+  log: MonitorEventLog | null,
+  ms: number,
+): void {
+  cancelHysteresis?.();
+  update({ frameSilence: true });
+  recordLivenessSilence(log, ms);
+}
+
+/** Phase LL Task 2's production `onRecovery` body — the retract half.
+ *  `liveness.ts`'s own contract fires `onRecovery` ONCE, on the very next
+ *  0x0031 to arrive after a silence — this does not clear `frameSilence`
+ *  on that signal alone (the hysteresis, above). It starts a
+ *  `BANNER_RETRACT_HYSTERESIS_MS` timer on `schedule` — the SAME clock
+ *  the watchdog itself runs on (`livenessDepsRef.current.schedule`: real
+ *  `setTimeout` in production, `ReplayHandle.clock.schedule` under
+ *  replay) — and only if that timer runs to completion with no
+ *  intervening `handleFrameSilence` call does `frameSilence` clear.
+ *  Returns the new canceller so the caller can store it back onto the
+ *  ref it owns (this function never touches a ref itself, same reasoning
+ *  as `handleFrameSilence`). */
+export function handleFrameRecovery(
+  update: (patch: { frameSilence: boolean }) => void,
+  cancelHysteresis: (() => void) | null,
+  schedule: (fn: () => void, ms: number) => CancelFn,
+  log: MonitorEventLog | null,
+): CancelFn {
+  cancelHysteresis?.();
+  recordLivenessRecovery(log);
+  return schedule(() => {
+    update({ frameSilence: false });
+  }, BANNER_RETRACT_HYSTERESIS_MS);
+}
+
+/** Phase LL Task 4 (design spec §4's continuity rule): true whenever `p`
+ *  contains ANY distance-kind interval — the exact predicate
+ *  `src/monitor/driver.ts`'s own `recordTwdVerdict` already computes for
+ *  the identical reason (`continuity.ts`'s own header comment has the full
+ *  wire citation: a distance-goal interval makes 0x0031's Total Work
+ *  Distance report the interval's GOAL, not distance rowed, so a
+ *  continuity check keyed on that field must not run inside one). Factored
+ *  out, plain-value, directly testable — same discipline as
+ *  `handleFrameSilence`/`handleFrameRecovery` above. */
+export function programHasDistanceGoal(p: WorkoutProgram): boolean {
+  return p.intervals.some((i) => i.kind === "distance");
+}
+
+/**
+ * Phase LL Task 4 (design spec §4's continuity rule): the resumed-stream
+ * consumption seam, factored into a plain, directly-testable function —
+ * same discipline as `handleFrameSilence`/`handleFrameRecovery` above,
+ * extended one step further: this one's OWN side effect (closing the
+ * record) is itself a pure transform (`completeContinuityReset`), so the
+ * whole decision is expressible without a hook, a ref, or a fake
+ * transport's own accurate wire-timing model standing between a test and
+ * the behaviour under test.
+ *
+ * **RETURNS THE RUN ONLY — the caller pairs a `"reset"` result with its
+ * own surface update** (RULED at Task 4's own review, F2/I2: the first
+ * implementation closed the record silently, leaving the banner to
+ * retract on its own hysteresis and the rower rowing into a closed
+ * record with the app still showing `live` — in the phase whose subject
+ * is "the app says so." Every sibling close in this file pairs the
+ * record close with a `phase: "ended"`/`runOpen: false` `update()` in the
+ * SAME statement; this function cannot do that itself — it has no
+ * `update` to call — so its own caller, `handleFrame`'s live branch
+ * below, does it in the same breath it applies this return value).
+ *
+ * Returns `run` UNCHANGED (the identical reference) whenever nothing
+ * closes — a caller tells "did this fire" from reference identity, the
+ * same idiom `withSeries` above already uses. Four reasons nothing
+ * closes, all short-circuited before `continuity.ts`'s own `check` is
+ * even called: the stream isn't currently suspect (`frameSilence` false —
+ * this is what makes re-invoking this function every live frame free);
+ * there is no run, or it is already closed (nothing left to protect —
+ * `recordActual`'s own guard already covers a closed run, this is belt
+ * and braces at the SOURCE of the close instead); there is no prior
+ * reading to compare against (`lastTwd === null`, the very first live
+ * frame of a run); or this particular frame carries no
+ * `totalWorkDistanceMeters` at all (`frameTwd === undefined` — an older
+ * `MonitorFrame` construction path, `domain/monitor/types.ts`'s own
+ * additive-optional doc comment on that field).
+ */
+export function applyContinuityCheck(
+  run: MonitorRun | null,
+  lastTwd: number | null,
+  frameTwd: number | undefined,
+  frameSilence: boolean,
+  now: Date,
+  log: MonitorEventLog | null,
+): MonitorRun | null {
+  if (!frameSilence) return run;
+  if (run === null || run.completedAt !== null) return run;
+  if (lastTwd === null || frameTwd === undefined) return run;
+  const distanceGoal = programHasDistanceGoal(run.program);
+  const verdict = checkContinuity(
+    { totalWorkDistanceMeters: lastTwd, distanceGoal },
+    { totalWorkDistanceMeters: frameTwd, distanceGoal },
+  );
+  if (verdict !== "reset") return run;
+  log?.record(
+    "continuity-reset",
+    `resumed stream failed continuity: totalWorkDistanceMeters ${lastTwd} ` +
+      `-> ${frameTwd} — closing as link-lost, never merging`,
+  );
+  // §4: "On reset: preserve the interrupted record, start clean, never
+  // merge." No reconnect flow exists this phase (spec §8) to start a
+  // genuinely new run from, so "never merge" is discharged the way this
+  // codebase already discharges it for every other untrustworthy-record
+  // case: CLOSE it. `endedBy: "link-lost"`, not `"interrupted"` — RULED
+  // at Task 4's own review (F1/I1): this is the close with the
+  // STRONGEST evidence (a link episode already marked the stream
+  // suspect, and continuity then measurably broke), not the absence of
+  // one. `completeContinuityReset`'s own doc comment has the full
+  // reasoning. `recordActual`'s own `completedAt` guard is what then
+  // makes every later boundary refuse to fold in.
+  return completeContinuityReset(run, now);
+}
+
 /**
  * Phase LT spec 2, Task 2 (design spec §4, S6). Requests persistent storage
  * once per successful connect — free either way, and this hook is
@@ -366,6 +637,11 @@ export interface MonitorSession {
    *  deliberately stays open, so `phase` alone cannot say. Consumed since
    *  task 2, the same call `frozen` is. */
   runOpen: boolean;
+  /** Mirrors `SessionState.frameSilence` (Phase LL Task 2). Published for
+   *  `connectedAxes.ts`'s `deriveLink` — routed through the EXISTING
+   *  `stale` `SurfaceStatus`, never a new one (spec §2a's own correction:
+   *  no new axis, no new word, no parallel path). */
+  frameSilence: boolean;
   /** Opens the platform's monitor chooser (`"picking"`), then connects (`"pairing"`) and
    *  builds the driver around the picked device's REAL advertised name.
    *  Assumes the Connect guard has already cleared (see this file's
@@ -682,6 +958,17 @@ interface SessionState {
    *  === null`), same reason. Updated at every site that opens or closes
    *  `runRef`'s record. */
   runOpen: boolean;
+  /** Phase LL Task 2 (design spec §2a): `true` whenever the frame stream
+   *  is currently being treated as suspect — the watchdog's own
+   *  `onSilence` (armed at the first 0x0031 after connect, tripped after
+   *  `SILENCE_THRESHOLD_MS` with no further arrival) or an app-lifecycle
+   *  resume (mechanism 2: no radio fault, the phone simply stopped
+   *  delivering frames while suspended). Latches on `handleFrameSilence`,
+   *  retracts only after `BANNER_RETRACT_HYSTERESIS_MS` of continuous
+   *  healthy frames (`handleFrameRecovery`) — never on a single frame.
+   *  Published for `connectedAxes.ts`'s `frameSilence` axis input, the
+   *  same publish-a-boolean shape `frozen`/`runOpen` already establish. */
+  frameSilence: boolean;
 }
 
 const INITIAL_STATE: SessionState = {
@@ -694,6 +981,7 @@ const INITIAL_STATE: SessionState = {
   handoffHeld: false,
   frozen: false,
   runOpen: false,
+  frameSilence: false,
 };
 
 /** Everything a rejected `program()` can throw, mapped onto the typed
@@ -847,6 +1135,15 @@ export function useMonitorSession(
    *  ever written while the phase is `ready`; once the session is live it is
    *  dead weight until the next `cancel()` clears it. */
   const rowingStreakRef = useRef<RowingStreak | null>(null);
+  /** Phase LL Task 4 (design spec §4's continuity rule): the last live
+   *  frame's own `totalWorkDistanceMeters`, tracked independently of
+   *  `state.frame` so a value survives exactly the instant the stream goes
+   *  suspect (nothing overwrites this ref while frames aren't arriving).
+   *  `null` before this run's first live frame, or once `cancel()` clears
+   *  it for the next one — never re-derived from `state.frame` directly,
+   *  the same "own it in a ref" discipline `freezeRef`/`rowingStreakRef`
+   *  already use for per-run tracking a render cycle must not lose. */
+  const lastTwdRef = useRef<number | null>(null);
   /** One `connect()` at a time — a second press while the monitor chooser is open
    *  must not open a second one. */
   const connectingRef = useRef(false);
@@ -861,11 +1158,106 @@ export function useMonitorSession(
    *  or `null` when none is running — no run open, or the run has already
    *  closed. Mirrors `handoffHoldRef`'s own "canceller or null" shape. */
   const seriesFlushCancelRef = useRef<(() => void) | null>(null);
-
+  /** Phase LL Task 1 (link-truth design spec §1): whatever `connect()`'s
+   *  own transport resolved to, IF it carries a liveness `snapshot()` —
+   *  every REAL path does (`defaultTransport` composes `withLiveness` on
+   *  both platform arms), a test's own `MonitorSessionDeps.createTransport`
+   *  override typically does not, and that is fine: `fail()` below reads
+   *  this optionally, exactly the way it already treats every other
+   *  optional diagnostic. Set the instant `connect()`'s transport resolves
+   *  (before `scan()`/`connect()` can fail), so a failure mid-pairing still
+   *  gets whatever the decorator had already seen. Never explicitly
+   *  cleared — the next `connect()` simply overwrites it, same lifecycle
+   *  `logRef` already has (that ref's own comment explains why nothing
+   *  here nulls a diagnostic ref on teardown). */
+  const livenessRef = useRef<{ snapshot(): LivenessSnapshot } | null>(null);
+  /** This hook's OWN numeric clock (Phase LL Task 1) — NOT
+   *  `MonitorSessionDeps.now` (that one returns a `Date`, for the record's
+   *  ISO stamps only) and NOT `MonitorSessionDeps.schedule` (that one is
+   *  reserved for `FINISH_HANDOFF_HOLD_MS`, deliberately kept separate from
+   *  the series-flush schedule for the same reason — a call-count-sensitive
+   *  test suite already exists against it, `useMonitorSession.test.ts`'s
+   *  own `manualSchedule()`). The liveness decorator needs its OWN
+   *  monotonic-ms clock, matching `DriverOptions.now`/`ReplayClock`'s own
+   *  shape (`liveness.ts`'s header: the injected clock is not optional) —
+   *  a THIRD schedule seam, not a reuse of either existing one, so this
+   *  file's own tests never have to account for a watchdog timer they
+   *  never asked for. `onSilence`/`onRecovery` are thin arrows that read
+   *  `logRef.current` AT CALL TIME (never during render — `recordLiveness
+   *  Silence`/`recordLivenessRecovery`'s own doc comments explain why they
+   *  take the dereferenced log rather than the ref itself) because the
+   *  transport — and
+   *  this liveness wrapper around it — is built BEFORE `connect()` ever
+   *  creates the log (`createTransport` runs first; `createLog` runs only
+   *  after `transport.connect()` resolves, below). A plain `useRef`
+   *  initialiser, never rebuilt: every test that reaches this file's own
+   *  default composition gets ONE real `Date.now`/`setTimeout` pair for
+   *  the whole hook's life, same as `defaultTransport`'s own production
+   *  default would be built exactly once per real connect. */
   const update = useCallback((patch: Partial<SessionState>): void => {
     stateRef.current = { ...stateRef.current, ...patch };
     setState(stateRef.current);
   }, []);
+
+  /** Phase LL Task 2: the retract timer's own canceller, or `null` when
+   *  no hysteresis window is currently running (no silence has ever fired,
+   *  or the window already ran to completion and cleared `frameSilence`).
+   *  Owned entirely by the `onSilence`/`onRecovery` closures immediately
+   *  below — nothing else in this hook reads or writes it. */
+  const hysteresisCancelRef = useRef<CancelFn | null>(null);
+  /** Phase LL Task 2 mechanism 3: the degraded-characteristic
+   *  subscription's own unsubscribe, or `null` when the current transport
+   *  never exposed `onCharacteristicDegraded` (a bare test `Transport`,
+   *  the web arm — `capacitorBle.ts`/`fake.ts` are the only two that
+   *  carry it today). Overwritten (never accumulated) on each `connect()`,
+   *  same lifecycle `unsubscribeRef` already has. */
+  const degradedUnsubRef = useRef<(() => void) | null>(null);
+  /** Phase LL Task 2 mechanism 2: the app-lifecycle listener's own
+   *  unsubscribe, registered once per `connect()` (adapter layer only —
+   *  `registerAppLifecycleListener`'s own header). `null` before a
+   *  connect's registration has resolved, or after `teardown()` has run
+   *  it. */
+  const lifecycleUnsubRef = useRef<(() => void) | null>(null);
+  /** Whole-branch review minor 1 (the native lifecycle unsub race): the
+   *  NATIVE arm's own `registerAppLifecycleListener` returns a `Promise`
+   *  (`registerNativeAppLifecycleListener`'s own async `addListener`), so
+   *  its resolution can land AFTER `fail()`/`teardown()` has already run
+   *  and nulled `lifecycleUnsubRef` for THIS attempt — without a token,
+   *  the `.then()` below would blindly overwrite the ref regardless, and
+   *  if a NEW `connect()` had already registered its OWN real listener by
+   *  then, that write silently REPLACES the new attempt's unsub with the
+   *  stale one: teardown from then on calls the wrong function, and the
+   *  new listener is never unregistered — leaked permanently into every
+   *  later session on this hook instance. One token object per attempt,
+   *  captured by that attempt's own `.then()` closure (never read back off
+   *  this ref by a LATER attempt's closure, which closes over its own
+   *  token) — `fail()`/`teardown()` flip `.cancelled` on whichever token is
+   *  current at the moment they run, which is always this attempt's own:
+   *  `connect()` is single-flight (`connectingRef`), so at most one
+   *  attempt is ever open. */
+  const lifecycleAttemptRef = useRef<{ cancelled: boolean } | null>(null);
+
+  const livenessDepsRef = useRef<LivenessDeps>({
+    now: () => Date.now(),
+    schedule: defaultLivenessSchedule,
+    onSilence: (ms) => {
+      handleFrameSilence(
+        update,
+        hysteresisCancelRef.current,
+        logRef.current,
+        ms,
+      );
+      hysteresisCancelRef.current = null;
+    },
+    onRecovery: () => {
+      hysteresisCancelRef.current = handleFrameRecovery(
+        update,
+        hysteresisCancelRef.current,
+        defaultLivenessSchedule,
+        logRef.current,
+      );
+    },
+  });
 
   const nowDate = useCallback(
     (): Date => depsRef.current.now?.() ?? new Date(),
@@ -944,15 +1336,24 @@ export function useMonitorSession(
    *  finish-grace actual that reaches `handleEvent` after this runs must
    *  find no recorder to attach anything from, which is what makes "the
    *  series does not grow" after close true by construction rather than by
-   *  a second guard duplicating this one. */
+   *  a second guard duplicating this one.
+   *
+   *  **Phase LL Task 4 (design spec §4): `endedBy` is now a REQUIRED
+   *  second argument.** Every one of this function's three call sites
+   *  passes the one `CloseReason` its own writer honestly knows — see
+   *  each call site's own comment for which, and `CloseReason`'s own doc
+   *  comment (`monitorRun.ts`) for the full table. There is deliberately
+   *  no default: a close that could omit the reason would silently
+   *  recreate the exact `terminated: true` conflation this task exists to
+   *  end. */
   const closeRecord = useCallback(
-    (terminated: boolean): void => {
+    (terminated: boolean, endedBy: CloseReason): void => {
       const run = runRef.current;
       if (run === null || run.completedAt !== null) return;
       const withFinalSeries = withSeries(run);
       runRef.current = completeMonitorRun(
         withFinalSeries,
-        { terminated },
+        { terminated, endedBy },
         nowDate(),
       );
       stopSeriesFlush();
@@ -1142,6 +1543,20 @@ export function useMonitorSession(
           startSeriesFlush();
           const freeze = nextFreezeRun(null, frame);
           freezeRef.current = freeze;
+          // Phase LL Task 4: seed the continuity baseline from this run's
+          // very first live frame — the "live" branch below only ever
+          // compares against a PRIOR frame of THIS run, never a stale
+          // reading a previous run left behind (`cancel()` clears this ref
+          // too, but the very first frame of a fresh run reaches this
+          // branch, not that one, so it needs its own seed here). The `??
+          // null` arm is defensive, not reachable from this file's own
+          // test suite: every REAL frame construction
+          // (`toMonitorFrame`/`driver.ts`'s own spread-through) always
+          // sets this field — only a `MonitorFrame` a future caller built
+          // BARE (bypassing both) could ever omit it, the same "additive-
+          // optional, coverage-exempt fallback" shape `domain/monitor/
+          // types.ts`'s own doc comment on this field already names.
+          lastTwdRef.current = frame.totalWorkDistanceMeters ?? null;
           update({
             frame,
             phase: "live",
@@ -1168,6 +1583,94 @@ export function useMonitorSession(
         // freeze naturally produces no samples of its own, the same "zero
         // for free" the recorder's rest handling already relies on).
         seriesRecorderRef.current?.onFrame(frame);
+        // Phase LL Task 4 (design spec §4's continuity rule; Task 2's own
+        // consumption seam, `useMonitorSession.ts`'s app-lifecycle/
+        // watchdog comments above: "§4's continuity rule ... is what
+        // should ultimately arbitrate a resumed stream"). Runs whenever
+        // the banner currently considers the stream suspect
+        // (`frameSilence`) — covers BOTH suspect sources (a genuine
+        // watchdog silence and an app-lifecycle resume both latch
+        // `frameSilence` the identical way, so both resume through this
+        // same check). Deliberately NOT gated to "only the very first
+        // frame after suspicion": `applyContinuityCheck` re-checking every
+        // frame until the hysteresis retracts the banner is strictly
+        // safer (a delayed jump inside that window is still caught) and
+        // costs nothing once a `"reset"` verdict has closed the run
+        // (`run.completedAt !== null` short-circuits every further call).
+        // Proven end to end at the hook level via `transports/replay.ts`
+        // (Task 4 review F3/I6): a recording whose frames are REAL bytes
+        // in ARTIFICIAL order — the tail-then-head pair the pure-level
+        // pin already uses — drives the real driver through this exact
+        // composition, `applyContinuityCheck`'s own decision logic is
+        // mutation-tested exhaustively in isolation, and the NO-OP path
+        // is proven separately (the healthy-resume hook test, same
+        // file) — see `useMonitorSession.test.ts`'s own describe block
+        // for all three.
+        const closed = applyContinuityCheck(
+          runRef.current,
+          lastTwdRef.current,
+          frame.totalWorkDistanceMeters,
+          stateRef.current.frameSilence,
+          nowDate(),
+          logRef.current,
+        );
+        // `closed !== null` narrows for TS (`applyContinuityCheck`'s own
+        // general signature returns `MonitorRun | null`, echoing its
+        // input) — never actually reachable as null here: the only way
+        // this branch's other half (`closed !== runRef.current`) is true
+        // is a genuine `completeContinuityReset` result, which is always
+        // a full `MonitorRun`.
+        if (closed !== null && closed !== runRef.current) {
+          // Whole-branch review minor 2: fold the recorder's own trace
+          // into the just-closed record — the SAME `withSeries` step
+          // `closeRecord` always takes before a completion write, applied
+          // here too rather than skipped. Without this, `completeContinuityReset`
+          // (a pure transform with no access to the recorder) persists a
+          // record with no `series` at all — up to 30s of trace lost on
+          // the one close whose whole point is "preserve the interrupted
+          // record." `applyContinuityCheck`'s own "same reference" no-op
+          // contract is read off the UNFOLDED `closed` above, on purpose:
+          // `withSeries` always returns a NEW object when a snapshot
+          // exists, so comparing against ITS result here would make every
+          // live frame with recorder data look like a fresh reset.
+          const withFinalSeries = withSeries(closed);
+          runRef.current = withFinalSeries;
+          if (withFinalSeries !== closed) saveMonitorRun(withFinalSeries);
+          // Same two steps `closeRecord` always takes after its own
+          // completion write: the 30s flush timer would otherwise keep
+          // firing into a record that can never accept another write, and
+          // the recorder itself would keep running with nothing left to
+          // read its snapshots.
+          stopSeriesFlush();
+          seriesRecorderRef.current?.stop();
+          seriesRecorderRef.current = null;
+          // RULED at Task 4's own review (F2/I2): every sibling close in
+          // this file pairs the record close with THIS SAME
+          // `phase: "ended"`/`runOpen: false` surface update, in the same
+          // statement — a reset that closed the record silently left the
+          // banner to retract on its own hysteresis and the rower rowing
+          // into a closed record with the app still showing `live`, in
+          // the phase whose own subject is "the app says so." `endedBy:
+          // "user"` (this hook's own LOCAL session-state field, distinct
+          // from the `MonitorRun.endedBy` `completeContinuityReset` just
+          // stamped): the binary choice this field has always offered is
+          // "did the MACHINE report it" vs. everything else, and a
+          // continuity reset is emphatically not a machine report — it
+          // is this app's own decision, the same bucket the rower's own
+          // End press already occupies, and `ConnectedSurface.tsx`'s own
+          // `=== "machine"` ternary reads it that way: anything else
+          // renders the neutral "Your numbers are kept," never a false
+          // "The monitor finished it." No handoff hold: a reset is not a
+          // natural finish (no boundary is coming), the same reasoning
+          // `endByMachine`'s own `terminated` branch already uses to
+          // skip `openHandoffHold()`.
+          update({ phase: "ended", endedBy: "user", runOpen: false });
+        }
+        // Same defensive, test-suite-unreachable `??` arm as the seed
+        // above — every real frame reaching this branch already carries
+        // the field.
+        lastTwdRef.current =
+          frame.totalWorkDistanceMeters ?? lastTwdRef.current;
         const freeze = nextFreezeRun(freezeRef.current, frame);
         freezeRef.current = freeze;
         update({ frame, frozen: isPausedRun(freeze) });
@@ -1179,7 +1682,7 @@ export function useMonitorSession(
       // transport) but no phase moves on it.
       update({ frame });
     },
-    [nowDate, update, startSeriesFlush],
+    [nowDate, update, startSeriesFlush, withSeries, stopSeriesFlush],
   );
 
   /** A terminal event from the machine: `workoutComplete` (an honest
@@ -1201,7 +1704,21 @@ export function useMonitorSession(
       // Idempotence against End: `endSession()` sets `ended` before it ever
       // awaits, so a terminal event racing its `terminate()` finds this.
       if (stateRef.current.phase === "ended") return;
-      closeRecord(terminated);
+      // Phase LL Task 4 (design spec §4's writer table): `terminated` here
+      // is ALSO which `CloseReason` applies — `false` is an honest
+      // WORKOUTEND (`"finished"`); `true` is a TERMINATE, and a TERMINATE
+      // reaching this hook at all is, by construction, link-up (the frame
+      // arrived) — the same fact the End button's `linkGone === false`
+      // branch records, learned a different way. FINDING (task-4 brief did
+      // not name this call site explicitly; the spec's own writer table
+      // lists only "machine WORKOUTEND -> finished" — this reading is the
+      // honest extension, not a guess: the existing test for this exact
+      // path is titled "a MACHINE-TERMINATED ending" and its own comment
+      // says "the rower stopped the piece at the erg", the identical fact
+      // `"rower"` already means for the End-button path). See
+      // `MonitorRun.endedBy`'s own doc comment (`monitorRun.ts`) for the
+      // full table.
+      closeRecord(terminated, terminated ? "rower" : "finished");
       // THE HAND-OFF HOLD (walk day 2). Only a natural FINISH opens one: a
       // `terminated` close opens no finish grace in the driver either
       // (CSAFE-DEF footnote 12 — the Split/Interval Number is unstable when
@@ -1488,6 +2005,22 @@ export function useMonitorSession(
       // unchanged).
       unsubscribeRef.current?.();
       unsubscribeRef.current = null;
+      // Phase LL Task 2: the degraded-characteristic and app-lifecycle
+      // listeners go with it — same "nothing left to watch for once we're
+      // on our way out" reasoning, and the same overwrite-not-accumulate
+      // discipline every other per-connect subscription in this file
+      // already follows.
+      degradedUnsubRef.current?.();
+      degradedUnsubRef.current = null;
+      // Minor 1: cancel THIS attempt's token before nulling the ref — a
+      // still-pending native promise's own `.then()` checks it and
+      // unregisters itself instead of overwriting a later attempt's real
+      // unsub (see the ref's own doc comment).
+      if (lifecycleAttemptRef.current !== null) {
+        lifecycleAttemptRef.current.cancelled = true;
+      }
+      lifecycleUnsubRef.current?.();
+      lifecycleUnsubRef.current = null;
       // STEP 4: DISCONNECT (terminate-then-disconnect for the "armed,
       // never pulled" case is unchanged by this task).
       if (driver === null) return;
@@ -1507,7 +2040,86 @@ export function useMonitorSession(
   );
 
   const fail = useCallback(
-    (error: ConnectedError): void => update({ phase: "failed", error }),
+    (error: ConnectedError, pendingTerminate?: Promise<void>): void => {
+      // Phase LL Task 1, exit criterion 7: the ring gains the liveness
+      // snapshot on FAILURE — the 2026-08-20 walk lost F-1's evidence
+      // precisely because the ring's only door was downstream of the
+      // failure that locked it (`ConnectedInterstitial.tsx`'s own
+      // failure-screen door, this task's other half). `livenessRef` is
+      // `null` before any transport has ever resolved (a `defaultTransport`
+      // rejection, unreachable today) and its `snapshot()` is undefined
+      // whenever a test's own `createTransport` override built a bare
+      // `Transport` — either way this is a no-op, never a throw.
+      const snapshot = livenessRef.current?.snapshot();
+      if (snapshot !== undefined) {
+        logRef.current?.record("liveness-snapshot", JSON.stringify(snapshot));
+      }
+      // Phase LL Task 3 (§3): FAILURE DISPOSES — the walk's actual root
+      // cause (2026-08-20, James deleted and reinstalled the app). The
+      // anchor pass corrected the walk README's own diagnosis: `connect()`
+      // 's catch never cleared `driverRef` (it never did), and
+      // `ConnectedInterstitial.tsx:298-313`'s retry branches on
+      // `session.deviceName`, which nothing but `cancel()` used to clear —
+      // so a version of this that touched only `driverRef`/the transport
+      // would REPLACE the LINK-FAILED loop with an INSTANT-FAIL loop
+      // (`program()` against a null driver fails `transport-missing`
+      // immediately, never reaching a fresh scan). All three go together,
+      // in order, BEFORE the `update()` below renders the failure screen:
+      // listeners unsubscribe first (nothing left to hear from a driver
+      // about to be disconnected — same ordering `teardown()` uses, for
+      // the same reason), then the transport itself goes down, then the
+      // ref clears. `driver.disconnect()` is the SAME method `teardown()`
+      // calls, hanging up the identical transport `connect()` built for
+      // this attempt.
+      unsubscribeRef.current?.();
+      unsubscribeRef.current = null;
+      degradedUnsubRef.current?.();
+      degradedUnsubRef.current = null;
+      // Minor 1: same cancellation as `teardown()`'s own — see
+      // `lifecycleAttemptRef`'s doc comment.
+      if (lifecycleAttemptRef.current !== null) {
+        lifecycleAttemptRef.current.cancelled = true;
+      }
+      lifecycleUnsubRef.current?.();
+      lifecycleUnsubRef.current = null;
+      const driver = driverRef.current;
+      driverRef.current = null;
+      if (driver !== null) {
+        // REVIEW FIX (task-3 review, IMPORTANT): `pendingTerminate` is
+        // P3b's own in-flight terminate (`program()`'s catch, below,
+        // passes its own `driver.terminate()` call through here rather
+        // than firing it fire-and-forget on its own) — when present, the
+        // disconnect is CHAINED to run only once that promise settles,
+        // resolved OR rejected, never in the same tick. This was WRONG the
+        // first time this task shipped: disconnecting unconditionally,
+        // synchronously, raced a terminate this same failure may have just
+        // dispatched. `teardown()` a few hundred lines below already
+        // avoids exactly this shape for its own equivalent case
+        // (`bestEffort(driver.terminate().finally(() =>
+        // bestEffort(driver.disconnect())))`) — CoreBluetooth's own
+        // documented contract is why: `cancelPeripheralConnection(_:)`
+        // is nonblocking and "any pending commands ... may not complete"
+        // (Apple, `CBCentralManager` reference), so hanging up while the
+        // terminate write is still in flight can plausibly abort it —
+        // leaving the erg ARMED with the workout that was just rejected,
+        // silently (DEVIATIONS row 63's own documented harm). No terminate
+        // was fired: `pendingTerminate` is `undefined`, and the immediate
+        // disconnect below is correct exactly as before — there is
+        // nothing in flight for it to race.
+        if (pendingTerminate !== undefined) {
+          bestEffort(
+            pendingTerminate.finally(() => bestEffort(driver.disconnect())),
+          );
+        } else {
+          bestEffort(driver.disconnect());
+        }
+      }
+      // `deviceName: null` — the field Try Again's retry actually branches
+      // on (`ConnectedInterstitial.tsx`) — clears in the SAME `update()`
+      // as the phase flip, so the failure screen never paints with a
+      // device name a disposed driver can no longer back up.
+      update({ phase: "failed", error, deviceName: null });
+    },
     [update],
   );
 
@@ -1520,7 +2132,25 @@ export function useMonitorSession(
     // If cancel ever stops unmounting, this guard needs a cancellingRef.
     if (connectingRef.current || driverRef.current !== null) return;
     connectingRef.current = true;
-    update({ phase: "picking", error: null });
+    // Phase LL Task 2 review fix (task-1-report Minor, `useMonitorSession.
+    // ts:1665` at the time it was filed): `livenessRef.current` used to be
+    // set only after the `transport === null` check below, and never
+    // cleared — so a SECOND `connect()` that fails `transport-missing`
+    // (no transport ever resolved this attempt) left the PREVIOUS
+    // connection's liveness snapshot sitting in the ref, and `fail()`
+    // would attach it to a failure it has nothing to do with. Nulled here,
+    // at the very top of every attempt, before anything can fail — the
+    // same "a fresh connect() never inherits a stale PRIOR value" rule
+    // `capacitorBle.ts`'s own `pendingCallerDisconnects`/M-2 comment
+    // documents for its own per-attempt state. `frameSilence` resets the
+    // same way: a fresh attempt starts on a stream that has said nothing
+    // yet, never latched by whatever the last connection's watchdog saw.
+    livenessRef.current = null;
+    hysteresisCancelRef.current?.();
+    hysteresisCancelRef.current = null;
+    degradedUnsubRef.current = null;
+    lifecycleUnsubRef.current = null;
+    update({ phase: "picking", error: null, frameSilence: false });
     // Awaited unconditionally — the platform-conditional default
     // (`adapters/monitorTransport.ts`'s `defaultTransport`, ROADMAP CL item
     // 2) returns a `Promise` on the native arm (its own dynamic
@@ -1531,7 +2161,8 @@ export function useMonitorSession(
     // `createTransport` override) resolves on the same tick, so `await`
     // costs nothing observable there.
     const transport = await (
-      depsRef.current.createTransport ?? defaultTransport
+      depsRef.current.createTransport ??
+      (() => defaultTransport(livenessDepsRef.current))
     )();
     if (transport === null) {
       connectingRef.current = false;
@@ -1541,6 +2172,11 @@ export function useMonitorSession(
       });
       return;
     }
+    // Phase LL Task 1: captured whether or not scan/connect/program ever
+    // succeeds — `fail()` reads this optionally, so a failure at ANY later
+    // step (scan dismissed, a radio throw, a program rejection) still has
+    // whatever the decorator had already observed by then.
+    livenessRef.current = hasLivenessSnapshot(transport) ? transport : null;
     try {
       // The platform's chooser (browser chrome on web, the plugin's
       // in-process sheet on iOS). One result or none either way — the app
@@ -1557,12 +2193,35 @@ export function useMonitorSession(
       }
       update({ phase: "pairing" });
       await transport.connect(device.id);
-      const log = (depsRef.current.createLog ?? createEventLog)();
+      // Phase LL Task 1: the log's own `atMs` clock is the SAME `now` the
+      // liveness decorator uses (`livenessDepsRef.current.now`) — one
+      // clock, so a `liveness-silence`/`liveness-snapshot` entry's `atMs`
+      // and the `LivenessSnapshot.atMs` it carries read off the identical
+      // source, never two independent `Date.now()` calls that could drift
+      // a millisecond apart for no reason.
+      const log = (
+        depsRef.current.createLog ??
+        (() => createEventLog(undefined, livenessDepsRef.current.now))
+      )();
       logRef.current = log;
       // S6: once per connect, straight into this session's own ring —
       // see `requestStoragePersistence`'s own doc comment for the full
       // reasoning.
       requestStoragePersistence(log);
+      // Phase LL Task 3 (§3, F-6), "say so in the ring": the
+      // already-connected guard has no log to write to at `scan()` time
+      // (this session's log did not exist yet — it is created here, only
+      // once a device is actually found) — so its outcome is read back
+      // NOW, from the transport's own `describeLastScan()`, the instant a
+      // log exists. `null` only when the transport carries no such
+      // extension (every non-Capacitor transport), never for a real
+      // native connect that reached this line.
+      if (hasDescribeLastScan(transport)) {
+        const outcome = transport.describeLastScan();
+        if (outcome !== null) {
+          log.record("already-connected-guard", outcome);
+        }
+      }
       const driver = createPm5Driver(transport, log, {
         ...depsRef.current.driverOptions,
         deviceName: device.name,
@@ -1571,6 +2230,82 @@ export function useMonitorSession(
       unsubscribeRef.current = driver.events((event) =>
         handleEvent(event, driver),
       );
+      // Phase LL Task 2 mechanism 3 (§2): a STATUS-characteristic
+      // subscribe rejection degrades rather than ending the session — the
+      // CSAFE control characteristic's own rejection stays FATAL exactly
+      // as today, unchanged, via the existing `onDisconnect` path
+      // (`capacitorBle.ts`'s own `CRITICAL_CHARACTERISTICS`, the hang
+      // guard this task must not touch). The ring names the dead
+      // characteristic; the session and its driver never hear about it.
+      if (hasCharacteristicDegraded(transport)) {
+        degradedUnsubRef.current = transport.onCharacteristicDegraded(
+          (characteristicId, message) => {
+            log.record(
+              "characteristic-degraded",
+              `${characteristicId}: ${message}`,
+            );
+          },
+        );
+      }
+      // Phase LL Task 2 mechanism 2 (§2, "iOS backgrounding"): Info.plist
+      // declares no `UIBackgroundModes`, so nothing in this hook runs
+      // while the app is actually suspended — the risk is entirely on
+      // RESUME, where the very next frame this session sees might follow
+      // an arbitrary real-world gap. `registerAppLifecycleListener` is the
+      // adapter-layer seam (`src/adapters/appLifecycle.ts`); the platform
+      // conditional lives there, never here. §4's continuity rule (Task 4,
+      // not yet built by this phase) is what should ultimately arbitrate a
+      // resumed stream — until it exists, a resume LATCHES `frameSilence`
+      // immediately, same as any other silence, but the CLEARING path is
+      // real, not a claim: `transport.markSuspect()` (guarded by
+      // `hasMarkSuspect`) sets the liveness decorator's OWN internal
+      // `silent` flag, so the very next healthy 0x0031 arrival takes the
+      // decorator's EXISTING recovery branch and calls `deps.onRecovery()`
+      // — the SAME `handleFrameRecovery`/`BANNER_RETRACT_HYSTERESIS_MS`
+      // path a real watchdog silence goes through.
+      //
+      // REVIEW FIX (this was wrong the first time this task shipped):
+      // calling `update({ frameSilence: true })` directly here, with
+      // nothing touching the decorator's own `silent` flag, left `silent`
+      // at `false` for any pre-background stream that had been healthy —
+      // so `noteStatusArrival`'s `if (silent)` branch never matched on
+      // resume, `onRecovery` never fired, and `frameSilence` never cleared
+      // again for the rest of the session on any resume shorter than
+      // `SILENCE_THRESHOLD_MS` (a Control Center swipe, a notification
+      // peek — routine, not an edge case; reproduced empirically: 30
+      // healthy frames over 15s, banner still up). `markSuspect()` is what
+      // closes that gap — see its own doc comment in `liveness.ts`.
+      // Minor 1: a fresh token for THIS attempt, checked (not read back off
+      // the ref) by the `.then()` below — see `lifecycleAttemptRef`'s own
+      // doc comment for the race this closes.
+      const lifecycleAttempt = { cancelled: false };
+      lifecycleAttemptRef.current = lifecycleAttempt;
+      const lifecycleResult = registerAppLifecycleListener((event) => {
+        if (event !== "foreground") return;
+        hysteresisCancelRef.current?.();
+        hysteresisCancelRef.current = null;
+        update({ frameSilence: true });
+        log.record(
+          "app-lifecycle",
+          "resumed from background — stream treated as suspect",
+        );
+        if (hasMarkSuspect(transport)) transport.markSuspect();
+      });
+      if (lifecycleResult instanceof Promise) {
+        void lifecycleResult.then((unsub) => {
+          if (lifecycleAttempt.cancelled) {
+            // `fail()`/`teardown()` already ran for this attempt before the
+            // native promise settled — the ref may already belong to a
+            // LATER attempt's own real listener. Unregister this one
+            // directly rather than writing it anywhere.
+            unsub();
+            return;
+          }
+          lifecycleUnsubRef.current = unsub;
+        });
+      } else {
+        lifecycleUnsubRef.current = lifecycleResult;
+      }
       // Stays `pairing` on purpose: connected is not programmed. The
       // interstitial's state 4 is exactly this moment, and its next step is
       // the caller's `program()` call, which owns the move to state 5.
@@ -1624,19 +2359,29 @@ export function useMonitorSession(
         // rejection surfaces, whatever was loaded is already torn down.
         // There is no reason for which keeping the run open is safe.
         const run = runRef.current;
+        // REVIEW FIX (task-3 review, IMPORTANT): captured, not fired via
+        // `bestEffort` here — `fail()` below is what chains the disposal's
+        // `disconnect()` to wait for this promise's own settlement (see
+        // its own doc comment). No `await` between this assignment and
+        // `fail(error, pendingTerminate)`: the SAME synchronous block
+        // attaches the handler before any microtask could observe an
+        // unhandled rejection, the identical timing discipline
+        // `raceScanTimeout` (`capacitorBle.ts`) already relies on.
+        let pendingTerminate: Promise<void> | undefined;
         if (run !== null && run.completedAt === null) {
-          closeRecord(true);
+          // Phase LL Task 4 (design spec §4's writer table): "a failed
+          // program() closing an open run -> program-failed".
+          closeRecord(true, "program-failed");
           update({ runOpen: false });
-          // ...and leave the erg terminated rather than holding an orphan —
-          // best-effort, ignored on failure. EXCEPT on `disconnected`,
-          // where the link is gone and there is nothing to send a terminate
-          // over (spec: "no terminate is attempted; the record still
-          // closes").
+          // ...and leave the erg terminated rather than holding an orphan.
+          // EXCEPT on `disconnected`, where the link is gone and there is
+          // nothing to send a terminate over (spec: "no terminate is
+          // attempted; the record still closes").
           if (error.reason !== "disconnected") {
-            bestEffort(driver.terminate());
+            pendingTerminate = driver.terminate();
           }
         }
-        fail(error);
+        fail(error, pendingTerminate);
       }
     },
     [closeRecord, fail, update],
@@ -1650,11 +2395,25 @@ export function useMonitorSession(
     if (phase === "ended") return;
     // The link is gone: no terminate to attempt, but the record still
     // closes and is still loggable (spec's C5 lose-and-degrade).
-    const linkGone = phase === "disconnected";
+    //
+    // WHOLE-BRANCH REVIEW B1 (RULED): `phase === "disconnected"` ALONE
+    // predates Task 2, which widened what "lost" means for the SCREEN —
+    // the watchdog and the app-lifecycle resume both latch `frameSilence`
+    // with `phase` still `"live"` (a suppressed stream is not a torn-down
+    // connection). Without the `frameSilence` half, a rower pressing End
+    // under a LOST THE MONITOR banner stored `"rower"` — the exact
+    // conflation `endedBy` exists to end, reintroduced by this phase's own
+    // left hand. Spec §4's invariant, stated once: whatever fires the
+    // banner (§2a's three: disconnect, enabled-off, frame silence past
+    // threshold) defines the close.
+    const linkGone = phase === "disconnected" || stateRef.current.frameSilence;
     // Close BEFORE awaiting anything: `terminate()` makes the machine
     // report `terminated`, which comes straight back as an event, and this
     // is what makes that event a no-op instead of a second ending.
-    closeRecord(true);
+    // Phase LL Task 4 (design spec §4's writer table): reuses `linkGone`
+    // computed one line above — never recomputed — "End with the link up
+    // -> rower", "End with the link gone -> link-lost".
+    closeRecord(true, linkGone ? "link-lost" : "rower");
     update({ phase: "ended", endedBy: "user", runOpen: false });
     const driver = driverRef.current;
     if (driver === null || linkGone) return;
@@ -1719,6 +2478,10 @@ export function useMonitorSession(
     identityRef.current = NO_IDENTITY;
     freezeRef.current = NO_FREEZE;
     rowingStreakRef.current = null;
+    // Phase LL Task 4: same per-run lifecycle as `freezeRef`/
+    // `rowingStreakRef` above — a stale reading from THIS run must never
+    // seed the next one's continuity baseline.
+    lastTwdRef.current = null;
     runRef.current = null;
     update(INITIAL_STATE);
   }, [teardown, update]);
@@ -1745,6 +2508,7 @@ export function useMonitorSession(
     handoffHeld: state.handoffHeld,
     frozen: state.frozen,
     runOpen: state.runOpen,
+    frameSilence: state.frameSilence,
     connect,
     program,
     endSession,

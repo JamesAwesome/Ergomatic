@@ -2429,15 +2429,31 @@ export function createPm5Driver(
    * Mirrors `noteBoundaryHalf`'s own log site and voice deliberately
    * (`split-half`'s "characteristic ... received (run open/closed,
    * state=...)" shape) so the stash reads the same way for both pairs.
+   *
+   * `bytes` (Phase LL Task 1, link-truth design spec §1: "not even their
+   * hex could reach it, and 0x003A's callback takes no bytes parameter at
+   * all") — the RING now gets the raw hex for both halves, mirroring
+   * `mergeStatus`'s own full-hex logging for 0x0037/0x0038 (that
+   * function's own comment: "boundary-rare, so they cannot flood the
+   * ring"). 0x0039/0x003A are rarer still — once per workout end, with an
+   * occasional HRM re-fire — so the same no-flood argument applies with
+   * more room to spare. This does NOT change what gates on the bytes:
+   * `noteSummary` below still decodes 0x0039 alone, and 0x003A's bytes are
+   * observability only, exactly as this function's own header already
+   * says — the ring simply now has them for whoever settles the summary
+   * premises next.
    */
-  function noteSummaryHalf(characteristic: "0x0039" | "0x003A"): void {
+  function noteSummaryHalf(
+    characteristic: "0x0039" | "0x003A",
+    bytes: Uint8Array,
+  ): void {
     const label =
       characteristic === "0x0039"
         ? "end-of-workout summary"
         : "end-of-workout additional summary";
     log.record(
       "summary-half",
-      `${characteristic} ${label} received (run ${runIsOpen() ? "open" : "closed"}, state=${toMonitorFrame(raw as RawPm5Status).state})`,
+      `${characteristic} ${label} received (run ${runIsOpen() ? "open" : "closed"}, state=${toMonitorFrame(raw as RawPm5Status).state}) raw=${toHex(bytes)}`,
     );
   }
 
@@ -3647,11 +3663,14 @@ export function createPm5Driver(
   // show that the bytes arrived even when the verdict below is that they
   // change nothing.
   t.subscribe(END_OF_WORKOUT_SUMMARY_UUID, (bytes) => {
-    noteSummaryHalf("0x0039");
+    noteSummaryHalf("0x0039", bytes);
     noteSummary(bytes);
   });
-  t.subscribe(END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID, () => {
-    noteSummaryHalf("0x003A");
+  // `bytes` (Phase LL Task 1): this callback used to take NO parameter at
+  // all — 0x003A's own hex could never reach the ring no matter what
+  // (`noteSummaryHalf`'s own updated doc comment has the full reasoning).
+  t.subscribe(END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID, (bytes) => {
+    noteSummaryHalf("0x003A", bytes);
   });
 
   // `terminate()`'s settle-wait tick pulse (design spec §7, interface-

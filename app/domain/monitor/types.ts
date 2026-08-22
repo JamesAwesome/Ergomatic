@@ -176,6 +176,20 @@ export interface MonitorFrame {
   //   not the rower pulls (C4/H1). "finished" = WORKOUTEND;
   //   "terminated" = TERMINATE — distinct, because 7C must tell
   //   "logged 12 of 12" from "abandoned at 8" (H2).
+  /** Phase LL Task 4 (design spec §4's continuity rule): 0x0031's own Total
+   *  Work Distance (`pm5/parse.ts`'s `GeneralStatus.totalWorkDistanceMeters`,
+   *  offset 11, whole metres, unscaled) — an absolute, session-wide reading
+   *  `src/monitor/continuity.ts`'s `check` keys a resumed stream's honesty
+   *  on, UNLIKE `distanceMeters` above (which is per-interval and legally
+   *  resets at every boundary, walk 4). Additive-optional, same convention
+   *  as `MonitorRun.endedBy?`/`series?` elsewhere in this task's own diff:
+   *  every real constructor of this type (`toMonitorFrame` below,
+   *  `src/monitor/driver.ts`'s own spread-through of it) always sets it;
+   *  `undefined` only for the many pre-existing test fixtures across this
+   *  codebase that build a bare `MonitorFrame` literal without it — kept
+   *  optional specifically so this task's addition does not force every one
+   *  of those literals to grow a field their own test has no opinion on. */
+  totalWorkDistanceMeters?: number;
 }
 
 export interface IntervalActual {
@@ -427,8 +441,22 @@ export interface Transport {
    *  which arrives via `onDisconnect` instead. */
   disconnect(): Promise<void>;
   /** Registers a callback for an UNEXPECTED link drop (radio out of range,
-   *  the phone's Bluetooth stack resetting, iOS backgrounding — see the
-   *  design spec §4's iOS note) — never fired by a caller-initiated
-   *  `disconnect()`. Returns an unsubscribe function. */
+   *  the phone's Bluetooth stack resetting, a reported Bluetooth-disabled
+   *  event) — never fired by a caller-initiated `disconnect()`. Returns
+   *  an unsubscribe function.
+   *
+   *  **CORRECTED (Phase LL Task 2, link-truth design spec §2 mechanism
+   *  2):** this comment used to name "iOS backgrounding" among the
+   *  causes of an unexpected `onDisconnect` — false. `Info.plist`
+   *  declares no `UIBackgroundModes`, so the app's whole JS runtime
+   *  simply SUSPENDS while backgrounded; nothing in this codebase
+   *  observes CoreBluetooth actually tearing the link down for that
+   *  reason specifically, and whether `didDisconnectPeripheral` even
+   *  fires for a backgrounded app is INFERENCE, not measured (Apple
+   *  documents only the connect/cancel cases — walk item W5). Backgrounding
+   *  is instead detected at the ADAPTER layer (`src/adapters/
+   *  appLifecycle.ts`) and handled by treating the frame stream as
+   *  suspect on resume (`useMonitorSession.ts`'s own `frameSilence`) —
+   *  a SEPARATE mechanism from this callback, never a producer of it. */
   onDisconnect(cb: (reason: string) => void): () => void;
 }

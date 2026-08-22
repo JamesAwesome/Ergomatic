@@ -4440,6 +4440,48 @@ inversion above (also §20 item 17) settled it half of the way; the
 adjudication. The deciding walk row (4 unequal intervals) is queued on the
 spec-2 walk list, `docs/monitor/sessions/walk-2026-08-15/README.md`.
 
+**25. Total Work Distance (offsets 11-13) is a BOUNDARY ACCUMULATOR on a
+distance-goal interval, not a live rowed-distance reading — and on a
+time-goal interval it is frozen through the whole work bout and only ticks
+during the trailing rest.** First found by Phase CM (`recordTwdVerdict`,
+`src/monitor/driver.ts`, "500 m goal read against 13.4 m genuinely rowed,
+mid-row"); re-confirmed and given its mechanism by Phase LL Task 4's review
+(2026-08-22), against two more captures:
+- `docs/monitor/sessions/walk-2026-08-17/step-2-pm5-recording-1786973078979.jsonl`,
+  a 2x250m: mid the FIRST 250 (elapsed 12.32 s, distance 9.7 m genuinely
+  rowed, `workoutState: 5`/rowing), this field reads `500` — the SECOND
+  interval's own goal, not the first's, and not anything rowed yet. Over
+  the interval's own span the field is observed at exactly three values —
+  `0`, `250`, `500` — each a WHOLE-PROGRAM position, not a distance: `0`
+  before the piece starts, `250` for the interval actually being rowed,
+  `500` once the machine has already committed to the NEXT interval's own
+  goal, all before a single metre of interval 2 is rowed. It is the
+  machine's own running total of INTENDED work, stepped at each interval
+  boundary, not an odometer of metres actually pulled.
+- `docs/monitor/sessions/walk-2026-08-18-metrics/pyramid-pm5-recording-1787090555458.jsonl.gz`
+  (a mixed pyramid, every interval distance-goal): the field changes value
+  on 41 of 1085 status ticks in the capture, and every one of those 41
+  ticks reads `workoutState: 3` (resting) at the moment of the change — it
+  is frozen for the entire work bout of every interval and only advances
+  while the machine is in its trailing rest, confirming the "rest-window"
+  half of the mechanism independently of the step-2 capture's own
+  boundary-jump evidence.
+**Official docs:** SILENT on both halves. The BLE doc's table (§10) gives
+only the scale (whole metres) and the name, which reads as a live,
+monotonic rowed-distance total — the assumption both the original Phase CM
+defect and this task's own first-draft continuity rule (`docs/superpowers/
+specs/2026-08-22-link-truth-design.md` §4) made before the corpus corrected
+it.
+**Evidence:** `src/monitor/driver.ts`'s `recordTwdVerdict` (Phase CM,
+`distanceGoal` suppression: `workoutDurationType === 128` OR the armed
+program contains a distance interval); `src/monitor/continuity.ts`'s own
+header comment and `continuity.test.ts`'s corpus-derivation describe block
+(Phase LL Task 4), which reproduces both captures' own numbers as a live
+CI gate. Consequence for anything that reads this field going forward:
+never trust it as "metres rowed" on a distance-goal interval, and never
+trust it as "live" (vs. "as of the last rest boundary") on ANY interval
+kind — the identical suppression this task's own continuity rule applies.
+
 Other readings owed by the next hardware row are listed at the end of §18's
 2026-08-08 entry.
 

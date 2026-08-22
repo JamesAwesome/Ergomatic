@@ -1476,3 +1476,80 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   never stored; self-reported cardio frequency would otherwise be this
   repo's first Health-and-Fitness field, and no privacy declaration exists
   yet anywhere (Phase PROD owes it).
+## Final-PR gate, 2026-08-22 (Phase LL link-truth, PR #160 — TRIAD: stored shape + when live numbers freeze)
+
+- **When a PR body and the branch's own source comment disagree about a
+  CAUSE, the comment is the record and the body is the defect.** #160's
+  bullet 2 told James his phone needed a reinstall because of a stale
+  `driverRef` the disposal fix now clears. `capacitorBle.ts:441-445` says
+  the opposite in the guard's own words ("a FORCE-QUIT brick is NOT
+  covered — iOS releases the link when the OWNING APP dies"), the spec says
+  "still unexplained", and the walk record says force-quitting did not
+  help — which alone refutes it, since a fresh process cannot carry the
+  stale field. The implementer was scrupulous in the code and the PR body
+  overclaimed on top of it. **At every gate, read the headline's causal
+  claims back against the source comments of the files that implement
+  them** — the honest sentence is usually already written, one level down.
+- **A checkbox whose own TITLE is the exit criterion must not be checked
+  before the exit runs.** ROADMAP's "Recovery — a way back that is not
+  deleting the app" went `[x] SHIPPED` while exit clause (b) ("Try Again
+  … without deleting the app", real PM5, real phone, Release build) was
+  untouched and the shipped guard explicitly disclaims the case. Retitle
+  the item to what shipped, or leave it unchecked — a `[x]` is the only
+  thing a future session reads, and this is how a fired trigger becomes a
+  permanent follow-on. Sibling of the PAUSED lesson, inside the phase that
+  exists because of it.
+- **A phase whose exit is entirely hardware-gated must rewrite its STATUS
+  paragraph in the implementation PR, not the close PR.** #160 flipped four
+  in-scope items to `[x]` and left the header reading "NEXT AND UNBLOCKED
+  … This phase is the next work". Post-merge that is wrong in both
+  directions at once. The state to write is explicit: *implementation
+  merged in #N; phase OPEN on clauses (a)-(e) + W5-W8 + 9a; owner: the
+  next erg visit.* (Two prior phases closed with no ROADMAP section at
+  all; this is the same failure wearing a checkmark.)
+- **Coupling the banner to the stored close reason couples a FALSE
+  POSITIVE to a FALSE RECORD.** LL's B1 ruling ("whatever fires the banner
+  defines the close") is right, and its consequence was written nowhere: a
+  spurious watchdog fire plus an End press inside the 10 s hysteresis
+  stores `endedBy: "link-lost"` on a healthy row — a wrong value in the
+  field that exists to end that exact conflation. The threshold is set
+  from web-only data with native unmeasured (the walk's own 9a). **When a
+  surface signal is promoted to a stored fact, ask what a false positive
+  writes, and put it on the walk card.**
+- **An "accepted limit" precedent set inside a phase binds the rest of that
+  phase.** LL's own EST LEFT fix put three accepted limits in DEVIATIONS
+  four days earlier; the continuity guard's suppression on any
+  distance-bearing program (5 of 6 corpus sessions) went to the spec only,
+  and `grep "continuity" ROADMAP.md` finds neither the limit nor its named
+  follow-up. RF14's seventh gate in eight.
+- **The "reads aloud in 30 seconds" rule is now 0-for-9 and two PM gates
+  have declined to enforce it** (#140 at 325 words, #160 at 311). A rule
+  with no enforcement record is not a rule. **This is James's to re-set or
+  retire — it belongs in CLAUDE.md, not here** — and until he does, gates
+  should stop spending a paragraph on it. Recommendation on the table:
+  150 words / 60 s, and replace the clock with "outcome line plus six
+  bullets, no mechanism nouns above the fold."
+- **The empty-check-rollup trap, third occurrence, first one with a
+  semantic overlap underneath it.** #160 reached its TRIAD gate
+  `CONFLICTING`/`DIRTY` with zero checks; the ledger conflict was the
+  visible cause and `app/server/routes/data.ts` (+22/-6 from Phase 8A on
+  main) was the one that mattered — the same file the stored-shape change
+  edits. Migration indices were clean (main 0011, LL 0012). `gh pr view
+  --json mergeable,statusCheckRollup` stays the first command; the second
+  is `git log <base>..origin/main -- <the files the PR touches>`.
+- **Release call:** tag **v0.17.0 MINOR** on merge. Not optional
+  bookkeeping — exit clauses (a)-(d) specify a Release build and
+  `ios:release` derives from the tag, so **the tag is the walk
+  instrument**. Range `v0.16.0..main`; #158/#159 are docs (zero files
+  under `app/src/`, verified by `--name-only`, not by title). Carries the
+  fourth armed clause (a lost link now says so; a lost-link ending is
+  recorded as such), written against the corrected facts, not the PR
+  body's. **Cohort stays at ONE**: the 2026-08-20 threshold was criterion
+  (b)'s existence, (b) is walk-gated, and delete-and-reinstall is still
+  the workaround and still destructive. Making a silent loss visible is
+  not the same as making it survivable.
+- **Backlog: base 60 unchecked -> 56 on the branch (main ~66 post-merge,
+  inflated by #154-#159's new sections).** First net-NEGATIVE delta in the
+  recorded series (24 -> 30 -> 35 -> 37 -> 60). LL closed four items by
+  executing them and filed a walk card rather than a phase. Worth naming
+  after five gates of the opposite.

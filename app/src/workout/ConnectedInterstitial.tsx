@@ -24,6 +24,8 @@ import type { WorkoutProgram } from "../../domain/monitor/program.js";
 import type { Baselines } from "../../domain/types.js";
 import { canOpenAppSettings, openAppSettings } from "../adapters/appSettings";
 import { deriveAxes } from "../monitor/connectedAxes";
+import ConnectionLogSheet from "./connected/ConnectionLogSheet";
+import { DASH } from "./connected/surfaceModel";
 import {
   useMonitorSession,
   type ConnectedError,
@@ -240,6 +242,22 @@ export default function ConnectedInterstitial({
   // Try Again), so the SAME device re-pairing later fires it again.
   const programmedForDeviceRef = useRef<string | null>(null);
 
+  // Phase LL Task 1 (link-truth design spec §1, exit criterion 7): THE
+  // RING DOOR ON THE FAILURE SCREEN. `ConnectedSurface.tsx`'s own
+  // diagnostics sheet (triple-tap a pager target) is only reachable from
+  // `live`/`disconnected`/`ended` — every state downstream of a session
+  // actually starting. The 2026-08-20 walk's F-1 finding was lost
+  // precisely because THIS screen, `"failed"` (state 6), had no door at
+  // all: whatever the liveness decorator and the ring had already
+  // recorded about a connect/program failure was unreachable the instant
+  // it mattered most. A plain button rather than the triple-tap gesture
+  // `ConnectedSurface` uses — this screen already has explicit buttons
+  // for everything else (Try again, Row on the phone timer instead,
+  // Cancel), and a failure screen is exactly the moment a rower is
+  // looking for a way to see more, not a gesture to discover.
+  const [logOpen, setLogOpen] = useState(false);
+  const logOpener = useRef<HTMLElement | null>(null);
+
   // Keep-awake spans the WHOLE connected flow: on at mount, off at
   // unmount — the same lifetime idiom Countdown/Timer use, absent here
   // since 7B because the flow was desktop-born. On a phone the rower's
@@ -254,8 +272,13 @@ export default function ConnectedInterstitial({
 
   // Mount-once: opens the monitor chooser the instant this screen exists. Not
   // gated on `session.phase` — this hook's own initial phase is always
-  // "idle", and Try Again below calls `connect()`/`program()` directly
-  // rather than relying on this effect firing again.
+  // "idle", and Try Again below (`handleTryAgain`) calls `connect()`
+  // directly rather than relying on this effect firing again. CORRECTED
+  // (whole-branch review, minor 7 — this comment used to say "connect()/
+  // program() directly"): Try Again never calls `program()` itself any
+  // more (Phase LL Task 3, `handleTryAgain`'s own comment) — only
+  // `connect()`; `program()` fires from the separate "pairing" phase
+  // effect below, once a real device is found.
   useEffect(() => {
     void session.connect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -295,23 +318,27 @@ export default function ConnectedInterstitial({
     onRowInstead();
   }
 
+  // Phase LL Task 3 (§3), exit criterion 3: "no path from the failure state
+  // to program() without passing transport construction." This USED to
+  // branch on `session.deviceName` — "a device already on record means the
+  // link is still up, so only the PROGRAM needs retrying" — which was
+  // wrong twice over: `useMonitorSession.ts`'s `fail()` never actually
+  // cleared `driverRef` (the walk README's own diagnosis, corrected at the
+  // anchor pass), so a "still up" link was usually a DEAD one, and
+  // retrying `program()` against it reproduced the exact LINK-FAILED loop
+  // that cost James a reinstall on 2026-08-20. `fail()` now disposes
+  // completely on every failure — transport down, driver ref cleared,
+  // `deviceName` cleared — so `session.deviceName` is ALWAYS `null` by the
+  // time this screen can render `canRetry`. Try Again therefore always
+  // goes through `connect()`: a genuinely fresh scan/connect, with
+  // `program()` reached only via the "pairing" effect above, itself only
+  // reachable once a real device is found. No branch here calls
+  // `program()` directly any more — the structural half of the guarantee,
+  // not merely a consequence of the hook's own invariant holding.
   function handleTryAgain(): void {
     if (!canRetry || retryingRef.current) return;
     retryingRef.current = true;
-    // A device name already on record means `connect()` already built a
-    // driver for this attempt (`useMonitorSession.ts`: `deviceName` is set
-    // in the same synchronous block as `driverRef.current = driver`, and
-    // nothing clears it short of `cancel()`, which this screen never calls
-    // on a failure) — so the link is still up and only the PROGRAM needs
-    // retrying. No device name means the failure happened before a driver
-    // existed (transport-missing, bluetooth-off, scan-dismissed,
-    // permission-denied, or a link failure during connect() itself), so
-    // retrying means reopening the monitor chooser from scratch.
-    const attempt =
-      session.deviceName !== null
-        ? session.program(program, identity)
-        : session.connect();
-    void attempt.finally(() => {
+    void session.connect().finally(() => {
       retryingRef.current = false;
     });
   }
@@ -496,10 +523,51 @@ export default function ConnectedInterstitial({
           >
             Row on the phone timer instead
           </button>
+          {/* THE RING DOOR (this file's own header comment on
+              `logOpen`/`logOpener` has the full reasoning: the walk's own
+              lost-evidence finding, and why this is a plain button rather
+              than `ConnectedSurface`'s triple-tap). `.button-l2`, same
+              class every other secondary action on this screen already
+              uses — no new visual weight for a diagnostics escape hatch.
+              BEFORE Cancel, on purpose: Cancel is this screen's own exit
+              and stays the LAST action (pinned by
+              `ConnectedInterstitial.test.tsx`'s "Cancel is present and
+              last"). */}
+          <button
+            type="button"
+            className="button-l2"
+            onClick={(e) => {
+              // Imperative capture, not a JSX `ref` prop — same idiom
+              // `ConnectedSurface.tsx`'s own triple-tap handler uses for
+              // this exact ref (`logOpener.current = target`): `SheetShell`
+              // restores focus to whatever opened it on dismiss, and this
+              // is the one element that should get it back.
+              logOpener.current = e.currentTarget;
+              setLogOpen(true);
+            }}
+          >
+            View connection log
+          </button>
           <button type="button" className="button-l2" onClick={handleCancel}>
             Cancel
           </button>
         </div>
+        {logOpen && (
+          <ConnectionLogSheet
+            deviceCaption={session.deviceName ?? "CONNECT"}
+            // No live session clock exists on this screen — `"failed"` is
+            // reached only from `picking`/`pairing`/`programming`, all
+            // strictly before `live` (`fail()`'s only call sites,
+            // `useMonitorSession.ts`). `DASH`, the house's own
+            // "genuinely unknowable" placeholder every other connected
+            // pane already uses for exactly this case.
+            elapsedDisplay={DASH}
+            readLog={session.exportLog}
+            program={program}
+            opener={logOpener}
+            onClose={() => setLogOpen(false)}
+          />
+        )}
       </main>
     );
   }
@@ -566,6 +634,12 @@ export default function ConnectedInterstitial({
     // above, so `deriveLink`'s `"failed"` case never runs off this call
     // (M-1, `AxesInput.failureLeavesLinkUp`'s own doc comment).
     failureLeavesLinkUp: null,
+    // Phase LL Task 2 (§2a): threaded for completeness — this call site's
+    // own branch below reads `axes.session`, never `axes.link`, so
+    // `frameSilence` has no effect on what this component renders (it
+    // matters at `ConnectedSurface.tsx`'s own call, which does read
+    // `axes.link`).
+    frameSilence: session.frameSilence,
   });
   if (session.phase === "disconnected" && axes.session === "none") {
     return renderFailureScreen(LINK_LOST_NO_RUN_ERROR);

@@ -617,6 +617,55 @@ export interface FakeControls {
    * twice (`Set`, not an array).
    */
   subscriptionCount(): number;
+
+  /**
+   * Phase LL Task 2 (§2, mechanism 1). Models the PLUGIN'S OWN documented
+   * contract — `@capacitor-community/bluetooth-le`'s `bleClient.d.ts`:
+   * "Register a callback function that will be invoked when Bluetooth is
+   * enabled (true) or disabled (false)" — never observed wire bytes,
+   * because there are none to observe: `onEnabledChanged` is an
+   * ADAPTER-level Bluetooth-stack event, not a GATT notification (the
+   * Rest Time lesson, applied honestly: model the CALLBACK, not bytes
+   * that were never produced). `setEnabled(false)` fires the SAME
+   * `disconnectCb` an unexpected drop uses — Apple's own contract quoted
+   * in the design spec: powering off "disconnects any
+   * previously-connected peripherals" — and marks the link down exactly
+   * like `injectDisconnect()` (subsequent writes reject, matching D6).
+   * `setEnabled(true)` is a deliberate no-op: RECONNECT IS OUT, this
+   * phase's own standing ruling, and `capacitorBle.ts`'s own
+   * `handleEnabledChanged` makes the identical choice.
+   */
+  setEnabled(enabled: boolean): void;
+  /**
+   * Phase LL Task 2 (§2, mechanism 3). Simulates the SAME
+   * subscribe-rejection decision `capacitorBle.ts` makes for a real
+   * plugin rejection — again a plugin-level Promise rejection, not a wire
+   * frame, so there are no bytes to model here either. `characteristicId`
+   * naming the CSAFE control characteristic (`TRANSMIT_CHARACTERISTIC_UUID`)
+   * fires `disconnectCb` (FATAL, the hang guard, unchanged); any other
+   * characteristic fires the degraded callback instead (the session
+   * continues). One-shot in effect only in the sense that nothing about
+   * this fake's OWN state changes — a caller wanting a second failure
+   * calls this again.
+   */
+  failSubscribe(characteristicId: string): void;
+  /**
+   * Phase LL Task 2 (§2a, the watchdog's own proof obligation — "a fake
+   * that cannot produce the failure cannot prove the detector"). Silently
+   * drops every notification this fake would otherwise deliver (any
+   * characteristic) while `virtualClock` sits in `[fromTick, toTick)` —
+   * `tick()` still advances the clock and the machine's own bookkeeping
+   * normally (mirroring `injectDisconnect()`'s own "the PM keeps rowing
+   * regardless of the phone's radio" reasoning), only the NOTIFICATION is
+   * withheld, which is exactly the fact a liveness watchdog composed
+   * around this transport (`withLiveness`, real `adapters/
+   * monitorTransport.ts` composition) has to be able to observe: frames
+   * simply stop ARRIVING, nothing about the link itself changes. Distinct
+   * from `injectDisconnect()`: writes keep succeeding through a
+   * suppression window (the machine has not disconnected), and no
+   * `disconnectCb` fires.
+   */
+  suppressFrames(fromTick: number, toTick: number): void;
 }
 
 function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
@@ -953,9 +1002,19 @@ function armedBundle(
   );
 }
 
-export function createFakeTransport(
-  script: FakeScript,
-): Transport & FakeControls {
+export function createFakeTransport(script: FakeScript): Transport &
+  FakeControls & {
+    /** Phase LL Task 2 (§2, mechanism 3) — the SAME structural `Transport`
+     *  extension `capacitorBle.ts` carries (see that file's own doc
+     *  comment): deliberately outside `Transport`'s core method set, so
+     *  it lives here rather than in `FakeControls` (a TEST's own
+     *  vocabulary) — this is what a real caller (`useMonitorSession.ts`'s
+     *  `hasCharacteristicDegraded`) reaches, the identical seam it
+     *  reaches on `capacitorBle.ts`. */
+    onCharacteristicDegraded(
+      cb: (characteristicId: string, message: string) => void,
+    ): () => void;
+  } {
   const programSequence = buildProgrammingSequence(script.program);
   // Flattened purely for the byte-for-byte chunk assertion below (each
   // individual `write()` call checked against the next expected chunk,
@@ -1174,6 +1233,24 @@ export function createFakeTransport(
 
   let linkDown = false;
   let disconnectCb: ((reason: string) => void) | null = null;
+  // Phase LL Task 2 (§2, mechanism 3's fake-side half): the SAME
+  // structural extension `capacitorBle.ts` carries — see that file's own
+  // doc comment on `onCharacteristicDegraded` for why this is deliberately
+  // outside `Transport`'s core method set.
+  let degradedCb: ((characteristicId: string, message: string) => void) | null =
+    null;
+  // Phase LL Task 2: `notify()`'s own suppression window
+  // (`FakeControls.suppressFrames`) — `null` when nothing is suppressed.
+  // Ticks (`virtualClock`) IN [from, to) are silently dropped at the
+  // notify chokepoint, the SAME spot `injectDisconnect`'s own `!linkDown`
+  // check already gates delivery at (`deliverStatus`/`deliverBoundary`
+  // below) — this is a second, independent, TIME-BOUNDED gate on the
+  // identical fan-out call, not a variant of `linkDown` (writes must keep
+  // succeeding through a suppression window; the machine has not
+  // disconnected, its notifications are simply not being DELIVERED, the
+  // exact "our inbox, not the erg" distinction `liveness.ts`'s own header
+  // states for what a silence declaration means).
+  let suppressWindow: { fromTick: number; toTick: number } | null = null;
   const notifyCbs = new Map<string, Set<(bytes: Uint8Array) => void>>();
   // `FakeControls.delayWrites`'s live value — `0` (instant, same-microtask
   // settlement) until a test opts in. Read by `settleWrite` below, the one
@@ -1263,6 +1340,13 @@ export function createFakeTransport(
   const incoming = reassemble();
 
   function notify(uuid: string, bytes: Uint8Array): void {
+    if (
+      suppressWindow !== null &&
+      virtualClock >= suppressWindow.fromTick &&
+      virtualClock < suppressWindow.toTick
+    ) {
+      return;
+    }
     for (const cb of notifyCbs.get(uuid) ?? []) cb(bytes);
   }
 
@@ -2103,6 +2187,15 @@ export function createFakeTransport(
       };
     },
 
+    onCharacteristicDegraded(
+      cb: (characteristicId: string, message: string) => void,
+    ): () => void {
+      degradedCb = cb;
+      return () => {
+        if (degradedCb === cb) degradedCb = null;
+      };
+    },
+
     tick(ms: number): void {
       virtualClock += ms;
       // Fix-round 1, F1: the FIRST armed report goes out BEFORE any due
@@ -2142,6 +2235,26 @@ export function createFakeTransport(
     injectDisconnect(): void {
       linkDown = true;
       disconnectCb?.("fake transport: injected disconnect");
+    },
+    setEnabled(enabled: boolean): void {
+      if (enabled) return;
+      linkDown = true;
+      disconnectCb?.("fake transport: bluetooth disabled (setEnabled(false))");
+    },
+    failSubscribe(characteristicId: string): void {
+      if (characteristicId === TRANSMIT_CHARACTERISTIC_UUID) {
+        disconnectCb?.(
+          `fake transport: subscription to ${characteristicId} failed`,
+        );
+        return;
+      }
+      degradedCb?.(
+        characteristicId,
+        `fake transport: subscription to ${characteristicId} failed`,
+      );
+    },
+    suppressFrames(fromTick: number, toTick: number): void {
+      suppressWindow = { fromTick, toTick };
     },
     /**
      * The END-OF-WORKOUT SUMMARY (0x0039) the PM5 sends once a workout has

@@ -19,8 +19,12 @@
 //     are never tinted; only what actually happened gets judged".
 //  2. **Stale beats everything.** `judgeActual`'s own precedence already
 //     returns `"stale"` ahead of any comparison; `staleFor` below is the
-//     single place that decides WHEN a reading is stale (the disconnected
-//     phase, and only that), so no cell can opt out of the greying.
+//     single place that decides WHEN a reading is stale (the link is lost —
+//     a real `disconnected` phase, OR frame silence past the watchdog's
+//     threshold, both routed through `connectedAxes.ts`'s `deriveLink` onto
+//     the same `"stale"` status since Phase LL Task 2/§2a — never a
+//     `disconnected` phase alone any more), so no cell can opt out of the
+//     greying.
 //
 // This module is pure: no React, no clock, no storage. `MonitorFrame` in,
 // display strings out.

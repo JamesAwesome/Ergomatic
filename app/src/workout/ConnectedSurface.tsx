@@ -41,12 +41,21 @@
 //    capture). This bullet used to read "the ended state needs no live
 //    radio. Nothing on it reads a frame; the next screen is the log, which
 //    reads the closed `MonitorRun` record," and that is the exact premise
-//    the walk falsified: at a natural finish the PM5 sends the final
-//    interval's split pair ~1 ms AFTER the frame that ends the workout, so
-//    for that ~1 ms the ended state needs both the radio and the driver
-//    subscription, and the record the log screen reads is not finished
-//    until the pair lands. Hanging up on the `ended` render cost the rower
-//    the measurement ("0 OF 1 INTERVALS MEASURED" over a rowed-out piece).
+//    the walk falsified: CORRECTED (Phase LL §5, the finish-line race's
+//    measured inputs) — the first draft's "~1 ms after" was never measured
+//    and was false. Across the recorded finishes the final interval's split
+//    pair lands anywhere from 179.9 ms BEFORE to 90.2 ms AFTER the frame
+//    that ends the workout (the sign varies capture to capture), and
+//    disconnect itself follows the terminal frame by 21.7-107.3 ms. So the
+//    ended state needs both the radio and the driver subscription for that
+//    whole window, not a fixed ~1 ms, and the record the log screen reads
+//    is not finished until the split lands — which is sometimes before this
+//    render and sometimes after it. Hanging up on the `ended` render cost
+//    the rower the measurement ("0 OF 1 INTERVALS MEASURED" over a
+//    rowed-out piece). (Phase LL §5 cut the "hold the radio past the
+//    terminal frame" design that would have used this window — the
+//    corpus's zero occurrences of state 12 or 0x0039 killed it — and moved
+//    it to Phase RC; this file keeps only the honest comment fix.)
 //    The hang-up is now deferred behind `session.handoffHeld`, below: it is
 //    the HAND-OFF that waits, never the rower, who sees this frame the
 //    instant the machine finishes.
@@ -424,6 +433,10 @@ export default function ConnectedSurface({
     frozen: session.frozen,
     runOpen: session.runOpen,
     failureLeavesLinkUp: null,
+    // Phase LL Task 2 (§2a): the one live consumer of this axis —
+    // `deriveLink` routes it onto the EXISTING `"lost"` member, which this
+    // component's own `status` ternary below already treats as `"stale"`.
+    frameSilence: session.frameSilence,
   });
   const status: SurfaceStatus =
     axes.link === "lost"

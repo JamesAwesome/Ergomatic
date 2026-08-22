@@ -771,3 +771,171 @@ describe("migration 0011: the series column", () => {
     expect(after.series).toStrictEqual(series);
   });
 });
+
+// Whole-branch review minor 6: migration 0012 had no upgrade test of its
+// own, unlike 0010/0011 above — the design spec's exit criterion 5
+// ("legacy `\"interrupted\"` rows read back unchanged", "round-trips
+// POST->GET") was proven at the API-route level (server integration
+// tests) but never against a REAL pre-0012 table the way 0010/0011 both
+// are here. Same pre/post-migration shape as both: a legacy row is seeded
+// against a migrations folder capped at 0011, then the real (full)
+// migrate() applies 0012 and both cases below read shared state built
+// once in beforeAll.
+describe("migration 0012: the ended_by column", () => {
+  let container: StartedPostgreSqlContainer;
+  let pool: pg.Pool;
+  let db: Db;
+  let tempDir: string;
+  let preMigrationRowId: string;
+
+  const PRE_0012_TAGS = [
+    "0000_skinny_silver_fox",
+    "0001_tan_thunderball",
+    "0002_rare_khan",
+    "0003_spicy_firedrake",
+    "0004_slippery_starjammers",
+    "0005_fine_radioactive_man",
+    "0006_windy_wendell_vaughn",
+    "0007_shallow_kang",
+    "0008_strip_wu_steps",
+    "0009_brief_kingpin",
+    "0010_familiar_maddog",
+    "0011_futuristic_roxanne_simpson",
+  ];
+
+  beforeAll(async () => {
+    container = await new PostgreSqlContainer("postgres:18.4").start();
+    ({ pool, db } = createDb(container.getConnectionUri()));
+
+    // A migrations folder containing only 0000-0011, so migrate() below
+    // cannot possibly apply 0012 — the legacy row (no ended_by column at
+    // all, and no "ended_by" enum type) gets seeded against exactly the
+    // schema a real v0.14.0 deploy would have.
+    tempDir = await mkdtemp(path.join(tmpdir(), "drizzle-pre-0012-"));
+    await mkdir(path.join(tempDir, "meta"));
+    for (const [i, tag] of PRE_0012_TAGS.entries()) {
+      const idx = String(i).padStart(4, "0");
+      await copyFile(
+        path.join("drizzle", `${tag}.sql`),
+        path.join(tempDir, `${tag}.sql`),
+      );
+      await copyFile(
+        path.join("drizzle", "meta", `${idx}_snapshot.json`),
+        path.join(tempDir, "meta", `${idx}_snapshot.json`),
+      );
+    }
+    const journal = JSON.parse(
+      await readFile(path.join("drizzle", "meta", "_journal.json"), "utf-8"),
+    ) as { entries: { idx: number }[] };
+    await writeFile(
+      path.join(tempDir, "meta", "_journal.json"),
+      JSON.stringify({
+        ...journal,
+        entries: journal.entries.filter((e) => e.idx <= 11),
+      }),
+    );
+    await migrate(db, { migrationsFolder: tempDir });
+
+    const [u] = await db
+      .insert(users)
+      .values({
+        googleSub: "pre-0012-user",
+        email: "pre-0012@migrate.test",
+        name: "Pre 0012",
+      })
+      .returning();
+
+    // Seeded against the PRE-0012 schema (no ended_by column at all) —
+    // raw SQL, same reason 0010/0011's own blocks above use it: the typed
+    // `sessionLogs` insert builder already declares `endedBy` in this
+    // file's TS schema, and that statement would 500 against the real
+    // pre-0012 table. Must run before the full migrate() call below.
+    const inserted = await db.execute<{ id: string }>(
+      sql`insert into "session_logs"
+          ("user_id", "workout_title", "workout_type", "held", "pain", "steps")
+          values (${u.id}, 'Pre-0012 session', 'AT', 'held', 2, '[]'::jsonb)
+          returning "id"`,
+    );
+    preMigrationRowId = inserted.rows[0]!.id;
+
+    // The real, full folder — only 0012 is new here (0000-0011's hashes
+    // already match what ran against tempDir above), so this is the
+    // moment `CREATE TYPE "ended_by"` + the ADD COLUMN statement fire.
+    // Runs once, shared by every `it` below.
+    await migrate(db, { migrationsFolder: "drizzle" });
+  });
+
+  afterAll(async () => {
+    await pool.end().catch(() => {});
+    await container.stop().catch(() => {});
+  });
+
+  it("reads a pre-0012 row's existing fields unchanged, and ended_by as null, after 0012 applies (spec exit criterion 5: legacy rows read back unchanged)", async () => {
+    const [after] = await db
+      .select()
+      .from(sessionLogs)
+      .where(eq(sessionLogs.id, preMigrationRowId));
+    expect(after.held).toBe("held");
+    expect(after.pain).toBe(2);
+    expect(after.endedBy).toBeNull();
+  });
+
+  it("accepts a NEW row with each ended_by value round-tripping exactly, once 0012 has applied — including the legacy 'interrupted' value the widened union carries forward unchanged", async () => {
+    const [u] = await db
+      .insert(users)
+      .values({
+        googleSub: "post-0012-user",
+        email: "post-0012@migrate.test",
+        name: "Post 0012",
+      })
+      .returning();
+
+    const values = [
+      "finished",
+      "rower",
+      "link-lost",
+      "program-failed",
+      "interrupted",
+    ] as const;
+
+    for (const endedBy of values) {
+      const [row] = await db
+        .insert(sessionLogs)
+        .values({
+          userId: u.id,
+          workoutTitle: `ended_by ${endedBy}`,
+          workoutType: "AT",
+          held: null,
+          pain: null,
+          steps: [],
+          endedBy,
+        })
+        .returning();
+
+      const [after] = await db
+        .select()
+        .from(sessionLogs)
+        .where(eq(sessionLogs.id, row.id));
+      expect(after.endedBy).toBe(endedBy);
+    }
+  });
+
+  it("rejects an unknown ended_by value — the enum, not application code, is the gate", async () => {
+    const [u] = await db
+      .insert(users)
+      .values({
+        googleSub: "post-0012-reject-user",
+        email: "post-0012-reject@migrate.test",
+        name: "Post 0012 Reject",
+      })
+      .returning();
+
+    await expect(
+      db.execute(
+        sql`insert into "session_logs"
+            ("user_id", "workout_title", "workout_type", "held", "pain", "steps", "ended_by")
+            values (${u.id}, 'Bad ended_by', 'AT', 'held', 2, '[]'::jsonb, 'reconnecting')`,
+      ),
+    ).rejects.toThrow();
+  });
+});

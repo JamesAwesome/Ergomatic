@@ -352,6 +352,12 @@ function recordPostSacrifice(status: number): void {
       entries.length > 0 ? entries[entries.length - 1]!.seq + 1 : 0;
     entries.push({
       seq: nextSeq,
+      // Phase LL Task 1: every OTHER writer onto this ring stamps `atMs`
+      // now (`eventLog.ts`'s own `record()`); this second, independent
+      // writer (this function's own header comment on why it exists at
+      // all) matches that shape rather than leaving its one entry the
+      // only unstamped one in a stash that is otherwise consistent.
+      atMs: Date.now(),
       kind: "post-sacrifice",
       detail: `series dropped from POST /api/logs after status ${status}`,
     });
@@ -403,6 +409,17 @@ interface LogFormFields {
   // re-derived here). Undefined here means `JSON.stringify` drops the key
   // entirely below, exactly like an absent `deviceName` already does.
   series?: SeriesData;
+  // Phase LL Task 4 (design spec §4): the monitor mode's third addition,
+  // same optional-key idiom as `deviceName`/`series` above — spread
+  // straight from `monitorRun.endedBy` (undefined for the never-widened
+  // v1/v2 record shape, or a record no writer has closed through the new
+  // paths yet). Undefined here means `JSON.stringify` drops the key
+  // entirely below, exactly like an absent `deviceName` already does; the
+  // server's own `endedByError` (`routes/data.ts`) accepts absent, so
+  // this never blocks a save. Typed off `MonitorRun` itself rather than
+  // re-declaring the union here — one definition, `monitorRun.ts`'s own
+  // `CloseReason | "interrupted"`.
+  endedBy?: MonitorRun["endedBy"];
 }
 
 /** Fix round 1 (whole-branch review, I1): the two doors' `handleSave` were
@@ -1164,6 +1181,7 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
           timeSeconds: model.heroes.timeSeconds,
           distanceMeters: model.heroes.distanceMeters,
           series: monitorRun.series,
+          endedBy: monitorRun.endedBy,
         },
         opts,
       );

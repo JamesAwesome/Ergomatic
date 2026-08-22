@@ -1840,16 +1840,10 @@ some of the bluetooth problems deserve their own phase with dedicated
 connection management research"). Phase-open PM gate run and folded — its
 verdict re-scoped the ask and is in `pm-ledger.md`.
 
-**NEXT AND UNBLOCKED as of 2026-08-22.** Phase WU shipped (#150), so every
-sequencing constraint that stood in front of this phase is discharged:
-nothing collides with it any more, and the PM gate's binding condition
-(that LL's brick spec be written in parallel with WU) is satisfied by
-starting it now. **This phase is the next work.** Its inputs are the
-"Spec inputs from the 2026-08-21 ecosystem review" subsection below —
-that is the delta a spec author starts from, on top of the research pass.
-**Read Phase WU's "What this phase taught (2026-08-22)" before writing any
-task briefs** — three of its lessons bite this phase directly, listed
-again at the end of the spec-inputs subsection.
+**Implementation merged in #160. The phase stays OPEN on its exit walk**
+(clauses a-e, W5-W8, W9, 9a). Owner: James's next erg visit, run through
+`/hardware-walk`. The "Release posture" paragraph's cohort-of-one rule
+STANDS until clause (b) exists.
 
 **This phase is the DISPOSAL of the triggered follow-on "Reconnect and
 background scan, five pieces", which is deleted in the same commit that
@@ -2173,6 +2167,10 @@ WebKit's throttling, so it does not rescue the JS half.
       integer per run makes era detection trivial RETROACTIVELY — absent
       `v` IS the pre-fix marker, cheap only while the corpus is one
       rower's two days old.
+      **A FOURTH clause is now owed too (Phase LL, whole-branch review,
+      exit criterion 10):** a lost link now says so, and a lost-link
+      ending is recorded as such. Same "greppable home" reasoning as the
+      other three — whoever cuts the next tag owes all four.
 - [x] **BEFORE trace-truth task 3 (the time axis): its exit criterion 7 is
       currently UNSATISFIABLE on the flagship capture, and the reason is
       structural** (PM gate, 2026-08-20). Criterion 7 asks that the axis's
@@ -2262,7 +2260,7 @@ WebKit's throttling, so it does not rescue the JS half.
       / 19.8% / 25.4% / 25.1% / 9.9%. The bar is proportional to work plus
       rest and the unequal rests are what make it uneven. Recorded because
       it will look wrong again to the next person who sees it.
-- [ ] **Detection — make the banner that already exists actually fire.**
+- [x] **Detection — make the banner that already exists actually fire.** SHIPPED (Task 2, this branch): all four mechanisms + the hysteresis lifecycle.
       `1 OF 3 · READY` is structurally impossible once
       `phase === "disconnected"` (`surfaceModel.ts:787`), so its
       persistence proves the phase never moved. The app's only lost-link
@@ -2271,7 +2269,7 @@ WebKit's throttling, so it does not rescue the JS half.
       anywhere**. The `LOST THE MONITOR` treatment is already designed and
       shipped (DEVIATIONS row 75) — this is not a design job, it is
       making a shipped thing reachable. **M**
-- [ ] **Recovery — a way back that is not deleting the app.**
+- [x] **Recovery — a failed attempt no longer poisons the next one.** SHIPPED (Task 3): failure disposes (transport, driver, deviceName); the already-connected guard (F-6 only — the force-quit brick is NOT covered and remains unexplained); the memo hoist. Clause (b) — "without deleting the app" on real hardware — stays with the exit walk.
       `program()`'s catch never disconnects the transport (contrast
       `connect()`'s catch, `useMonitorSession.ts:1607`), and
       `handleTryAgain` (`ConnectedInterstitial.tsx:311-313`) reprograms
@@ -2282,13 +2280,13 @@ WebKit's throttling, so it does not rescue the JS half.
       fresh transport per attempt, so a forgotten-but-live connection
       against a single-central PM5 is exactly the failure shape observed.
       **M**
-- [ ] **Diagnosability — move the diagnostic out from behind the door the
-      bug locks.** `MONITOR LOG · COPY` lives on the log screen
+- [x] **Diagnosability — move the diagnostic out from behind the door the
+      bug locks.** SHIPPED (Task 1): liveness decorator both arms, timestamped ring readable from the failure screen, 0x0039/0x003A routed. `MONITOR LOG · COPY` lives on the log screen
       (`LogSession.tsx:668`), reachable only after a session finishes,
       which is downstream of the failure under study. It belongs on the
       failure and connected surfaces too. This is what made both walk
       findings evidence-poor, and it scopes any fix. **S**
-- [ ] **Re-reason the failed-`program()`-leaves-a-run-open item.**
+- [x] **Re-reason the failed-`program()`-leaves-a-run-open item.** RESOLVED (Tasks 3+4): a failed program now disposes fully AND closes any open run with `endedBy: "program-failed"` — the parked P3b decision is superseded by construction; the terminate-then-disconnect ordering carries teardown's own chain.
       `driver.ts`'s `program()` replaces `activeRun` only after
       `sendPrepare()`/`sendSequence()`/`verifyArmed()` all resolve, so a
       throw part-way leaves the previous run open, still normalising the
@@ -2386,7 +2384,16 @@ What to build, in the phase's own sequence: subscribe
 reported trigger); add a status-arrival watchdog at the transport seam
 keyed on 0x0031 only, threshold **2500 ms — about 3x our worst recorded
 web gap (810 ms) and about 25x the native 100 ms cadence, and the
-constant's comment should say BOTH numbers**; give it a DISARM rule for
+constant's comment should say BOTH numbers**. **CORRECTED 2026-08-22
+(Phase LL anchor pass): the "25x native 100 ms cadence" half is FALSE.**
+100 ms is a REQUEST the record already shows is not honoured —
+`liveness.ts:121-127` measured ~508 ms mean delivered on web once the
+sample-rate write is sent (the write itself is fire-and-forget and its
+outcome is swallowed); native's own inter-frame gap distribution is
+UNMEASURED (spec exit criterion 9a, a walk deliverable). The shipped
+comment states the measured web margin (3.09x, 810.3 ms worst of 3,442
+gaps) and says native is unmeasured — it does not carry a native cadence
+number, because there isn't one to carry. Give it a DISARM rule for
 workout states 10/11 and the finish hand-off window or it fires across
 every normal finish and races the boundary the hold protects; drive a
 `stale` link axis that recovers on the next valid frame rather than
@@ -2456,17 +2463,58 @@ which bites this phase.** Full text in Phase WU's "What this phase taught":
    <pattern>` does the same for vitest. Working forms:
    `pnpm exec playwright test --grep` and `pnpm exec vitest run`. **Check
    the run count** — a full-suite count means the filter was eaten.
+   **SHARPENED at Phase LL's final re-review (2026-08-22): the "working
+   form" is itself unsafe for SINGLE FILES** — `pnpm exec vitest run
+   --project client <file>` runs the file OUTSIDE its jsdom environment in
+   this workspace (`localStorage` undefined, 89 false failures against a
+   green HEAD). Only the full-project run is trustworthy for client-env
+   files; a single-file red must be reproduced at project scope before
+   anyone "fixes" it.
 3. **A dispatched subagent's background waits die when it idles.** Every
    implementer brief must say gates run FOREGROUND and blocking; four
    rounds were lost to armed monitors that could never wake.
 
-**Two walk items this phase owns** (the rest are Phase RC's): **W5**,
-a Bluetooth power-cycle armed but not rowing, to settle whether
-`didDisconnectPeripheral` fires for our device and whether
-`onEnabledChanged` would have caught it; and **W6**, background the app
-for 30 s mid-piece, to settle whether a backlog of BLE events drains on
-resume (Apple documents queuing; depth unknown) or the row simply loses
-the span.
+**THE PHASE'S WALK CARD (Task 5, 2026-08-22)** — five questions plus one
+deliverable, each stated so the walk can go red:
+
+- **W5** — Bluetooth power-cycle, armed but not rowing: does
+  `didDisconnectPeripheral` fire for our device (INFERENCE either way —
+  Apple documents only connect/cancel), and does the now-subscribed
+  `onEnabledChanged` catch it as designed?
+- **W6** — background the app 30 s mid-piece: does a backlog of BLE events
+  drain on resume (Apple documents queuing; depth unknown), and does the
+  continuity guard pass the healthy resume (its corpus-derived bound says
+  it must)?
+- **W7** — navigate the PM5's own menu mid-session: does the wire go
+  quiet? If yes, that is a legitimate quiet period the watchdog's disarm
+  list does not cover and the 2500 ms threshold fires falsely — the one
+  disarm unknown the corpus cannot answer.
+- **W8** — leave an armed/live session untouched: does the PM5 ever emit
+  TERMINATE on its own (an inactivity timeout)? `endedBy: "rower"` on the
+  TERMINATE path asserts agency on the machine's behalf if it does.
+- **W9** — `getConnectedDevices` may be SYSTEM-scoped: a phone where
+  ErgData holds a DIFFERENT PM5 could be offered the wrong erg with no
+  picker. One tap at the walk settles it.
+- **9a (deliverable)** — the native inter-frame gap distribution from the
+  liveness decorator's own snapshot, read off the ring on a real phone:
+  the corpus's web-only numbers (worst 810.3 ms) are necessary, not
+  sufficient, for the 2500 ms threshold on the platform it exists for.
+- **Capture ask that costs nothing extra:** the ring now survives to the
+  failure screen — if the row-to-resume FLASH (§2b, mechanism unexplained,
+  corpus hypothesis falsified) appears during any piece, copy the
+  connection log immediately after; the timestamped frames around that
+  moment name the real mechanism.
+- **WARNING — watch for false banners specifically:** a spurious watchdog
+  fire plus End inside the 10 s hysteresis stores `endedBy: "link-lost"`
+  on a healthy row. The threshold is web-derived (2500 ms); native is
+  unmeasured (see 9a). A false LOST banner during the walk is itself a
+  finding, not just an inconvenience to work around.
+- **The negative result is committed, not just reported:** a regression
+  test (`useMonitorSession.test.ts`, "Phase LL minor 3") replays all 6
+  corpus captures through the real `nextFreezeRun`/`isPausedRun` and pins
+  zero PAUSED firings at any post-rest work-interval start, so a future
+  change to the guard cannot silently reopen the falsified mechanism
+  without a red test naming it.
 
 **Exit — written so it can go red.** Clause (e) added 2026-08-20 at the PM
 gate's finding that four of this phase's items had no exit clause; the
@@ -2506,6 +2554,15 @@ review of 2026-08-21 (`docs/monitor/pm5-ble-ecosystem-review.md`, which
 that review also reconciles). No spec is written yet. This section exists
 so the work has a home the moment one is, and so its findings stop living
 in a report (recurring failure 14).
+
+**Asset on hand (James, 2026-08-22): a Concept2 Logbook DEVELOPMENT API
+key already exists in the repo-root `.env`, currently unused.** Presence
+verified (one matching line; the value itself deliberately never read or
+recorded anywhere). When this phase opens, the logbook half of its oracle
+work does not start from a registration queue — it starts from a key we
+already hold. `.env` is untracked, so the key must ALSO never appear in
+any committed file, fixture, or capture; the spec should name where it is
+allowed to live (real env only, same stance as `DATABASE_URL`).
 
 **What and why, in plain words.** We have never checked our rows against
 anything outside our own app. On 2026-08-21 a fourteen-agent adversarial
@@ -4780,7 +4837,19 @@ program.ts` hardcodes PM5 Table 19 limits (`MIN_TIME_SECONDS = 20`,
   monitor integration becomes real. Then: add a programming-limits channel
   to `MonitorCapabilities`, move the four constants there per-monitor, and
   template the six `CompileError` messages instead of hardcoding "PM5".
-- **Remove the `PULL TO RESUME` block** (James, 2026-08-17: "we never got
+- **Remove the `PULL TO RESUME` block** — CROSS-NOTE 2026-08-22: James
+  also observed the band FLASHING for a split second at flywheel-gated
+  work-interval starts (fully extended at the catch when the interval
+  opens). **§2b's suspected mechanism was FALSIFIED, not fixed:** Task 2
+  replayed all 6 committed captures through the real driver and found zero
+  PAUSED firings at any post-rest work-interval start — the existing
+  `distanceMeters<=0` guard already excludes that case, so there was
+  nothing to suppress and no speculative fix shipped. The flash's real
+  mechanism is still unexplained; the walk card's capture ask (Task 5)
+  is the way it gets settled — copy the connection log immediately if it
+  recurs during a walk. The removal this entry wants remains separate and
+  is strengthened by the report regardless of cause.
+  Original entry: **Remove the `PULL TO RESUME` block** (James, 2026-08-17: "we never got
   rid of the pull to resume screen"): the stale-state band on
   `ConnectedSurface.tsx` (~line 584) still renders its inverted ink field
   when strokes stop mid-piece. CR2 2a task 5 only re-worded and un-occluded

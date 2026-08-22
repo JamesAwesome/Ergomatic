@@ -1404,6 +1404,127 @@ describe("createFakeTransport: disconnect / reconnect", () => {
   });
 });
 
+describe("createFakeTransport: setEnabled (Phase LL Task 2, §2 mechanism 1)", () => {
+  it("setEnabled(false) fires onDisconnect and marks the link down (subsequent writes reject, matching D6)", async () => {
+    const fake = createFakeTransport({ program: PROGRAM });
+    const cb = vi.fn();
+    fake.onDisconnect(cb);
+
+    fake.setEnabled(false);
+
+    expect(cb).toHaveBeenCalledTimes(1);
+    expect(cb.mock.calls[0]![0]).toContain("disabled");
+    await expect(
+      fake.write(RECEIVE_CHARACTERISTIC_UUID, new Uint8Array([1])),
+    ).rejects.toThrow("no longer valid");
+  });
+
+  it("setEnabled(true) is a deliberate no-op — RECONNECT IS OUT", async () => {
+    const fake = createFakeTransport({ program: PROGRAM });
+    const cb = vi.fn();
+    fake.onDisconnect(cb);
+
+    fake.setEnabled(true);
+
+    expect(cb).not.toHaveBeenCalled();
+  });
+});
+
+describe("createFakeTransport: failSubscribe (Phase LL Task 2, §2 mechanism 3)", () => {
+  it("the CSAFE control characteristic (TRANSMIT_CHARACTERISTIC_UUID) fires onDisconnect — FATAL, mirroring capacitorBle.ts's own criticality split", () => {
+    const fake = createFakeTransport({ program: PROGRAM });
+    const drops = vi.fn();
+    const degraded = vi.fn();
+    fake.onDisconnect(drops);
+    fake.onCharacteristicDegraded(degraded);
+
+    fake.failSubscribe(TRANSMIT_CHARACTERISTIC_UUID);
+
+    expect(drops).toHaveBeenCalledTimes(1);
+    expect(drops.mock.calls[0]![0]).toContain(TRANSMIT_CHARACTERISTIC_UUID);
+    expect(degraded).not.toHaveBeenCalled();
+  });
+
+  it("a status characteristic (GENERAL_STATUS_UUID) fires the degraded callback instead — the session's own concern, not this fake's, decides what happens next", () => {
+    const fake = createFakeTransport({ program: PROGRAM });
+    const drops = vi.fn();
+    const degraded = vi.fn();
+    fake.onDisconnect(drops);
+    fake.onCharacteristicDegraded(degraded);
+
+    fake.failSubscribe(GENERAL_STATUS_UUID);
+
+    expect(degraded).toHaveBeenCalledTimes(1);
+    expect(degraded.mock.calls[0]![0]).toBe(GENERAL_STATUS_UUID);
+    expect(drops).not.toHaveBeenCalled();
+  });
+
+  it("unsubscribing onCharacteristicDegraded stops the callback from firing", () => {
+    const fake = createFakeTransport({ program: PROGRAM });
+    const degraded = vi.fn();
+    const unsubscribe = fake.onCharacteristicDegraded(degraded);
+    unsubscribe();
+
+    fake.failSubscribe(ADDITIONAL_STATUS_1_UUID);
+
+    expect(degraded).not.toHaveBeenCalled();
+  });
+});
+
+describe("createFakeTransport: suppressFrames (Phase LL Task 2, §2a — proving the watchdog against the fake)", () => {
+  it("drops notifications while virtualClock sits in [fromTick, toTick), and resumes delivering once past toTick", async () => {
+    const fake = createFakeTransport({
+      program: PROGRAM,
+      events: TIMELINE_EVENTS,
+    });
+    await programIt(fake, PROGRAM);
+    const generals: Uint8Array[] = [];
+    const splits: Uint8Array[] = [];
+    fake.subscribe(GENERAL_STATUS_UUID, (b) => generals.push(b));
+    fake.subscribe(SPLIT_INTERVAL_DATA_UUID, (b) => splits.push(b));
+
+    // TIMELINE_EVENTS carries a status at 1000ms and a boundary at 2000ms
+    // (established by the surrounding tests in this file, e.g.
+    // "completeReconnect flushes the latest cached status" above).
+    fake.suppressFrames(0, 2500);
+    fake.tick(1000); // the 1000ms status is due, but suppressed
+    expect(generals).toHaveLength(0);
+    fake.tick(1000); // the 2000ms boundary is due, also suppressed
+    expect(splits).toHaveLength(0);
+
+    // Past toTick: the suppression window has closed. Nothing else is
+    // scheduled on this timeline past 2000ms, so a manually-injected
+    // frame (delivered RIGHT NOW, regardless of the script) is what
+    // proves the gate itself has lifted, not a coincidence of timing.
+    fake.tick(1000); // virtualClock now 3000, past toTick=2500
+    fake.injectGarbledFrame();
+    expect(generals.length).toBeGreaterThan(0);
+  });
+
+  it("writes keep succeeding through a suppression window — distinct from injectDisconnect (the machine has not disconnected)", async () => {
+    const fake = createFakeTransport({ program: PROGRAM });
+    fake.suppressFrames(0, 100_000);
+    await expect(
+      fake.write(SAMPLE_RATE_UUID, new Uint8Array([1])),
+    ).resolves.toBeUndefined();
+  });
+
+  it("onDisconnect never fires from a suppression window alone", async () => {
+    const fake = createFakeTransport({
+      program: PROGRAM,
+      events: TIMELINE_EVENTS,
+    });
+    await programIt(fake, PROGRAM);
+    const drops = vi.fn();
+    fake.onDisconnect(drops);
+
+    fake.suppressFrames(0, 10_000);
+    fake.tick(3000);
+
+    expect(drops).not.toHaveBeenCalled();
+  });
+});
+
 describe("createFakeTransport: injectGarbledFrame", () => {
   it("delivers a too-short General Status notification immediately", async () => {
     const fake = createFakeTransport({ program: PROGRAM });

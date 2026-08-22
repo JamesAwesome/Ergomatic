@@ -71,11 +71,15 @@ export function parseLogEntries(raw: string): MonitorLogEntry[] {
 }
 
 /** One line of the list. The mockup's leading column is a session-relative
- *  TIMESTAMP; the log does not have one and deliberately never will —
- *  `eventLog.ts` orders by a monotonic `seq` precisely because two entries
- *  recorded in the same microtask would carry an identical `Date.now()` and
- *  lose their order. So the sequence number is what leads, zero-padded so
- *  the kinds stay in a column. Recorded in DEVIATIONS. */
+ *  TIMESTAMP; this deliberately still leads with SEQUENCE instead
+ *  (`entry.seq`, zero-padded so the kinds stay in a column) — NOT because
+ *  the log has no clock any more (Phase LL Task 1 gave every entry an
+ *  `atMs`, `eventLog.ts`'s own header has the full reasoning), but because
+ *  `seq` stays the ORDERING authority: two entries recorded in the same
+ *  microtask can carry an identical `atMs` and lose their relative order,
+ *  which `seq` never does. `atMs` still rides along in the exported JSON
+ *  (`COPY LOG` carries it) for whoever needs a wall-clock cross-reference;
+ *  this dense mono list just doesn't print it. Recorded in DEVIATIONS. */
 // eslint-disable-next-line react-refresh/only-export-components
 export function logLine(entry: MonitorLogEntry): string {
   const seq = String(entry.seq).padStart(4, "0");
