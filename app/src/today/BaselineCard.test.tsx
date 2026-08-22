@@ -25,8 +25,8 @@ function onboardingWorkout(title: string, id: string): StartableWorkout {
   return { id, title: w.title, type: w.type, steps: w.steps };
 }
 
-const K6_WORKOUT = onboardingWorkout("First 6k", "id-first-6k");
-const K2_WORKOUT = onboardingWorkout("First 2k", "id-first-2k");
+const K6_WORKOUT = onboardingWorkout("6K Test", "id-test-6k");
+const K2_WORKOUT = onboardingWorkout("2K Test", "id-test-2k");
 
 // A completed-but-unlogged run for K6_WORKOUT — same fixture shape as
 // WorkoutDetail.test.tsx's own `completedRunFor` (a JSON round-trip via
@@ -90,7 +90,7 @@ describe("BaselineCard", () => {
     renderCard({ k6Missing: true, k2Missing: true });
 
     expect(screen.getByText("SUGGESTED · SETS YOUR BASELINE")).toBeVisible();
-    expect(screen.getByRole("heading", { name: "First 6k" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "6K Test" })).toBeVisible();
     expect(screen.getByText("ABOUT 25 MIN")).toBeVisible();
     expect(
       screen.getByText("6K BASELINE · NOT SET · ROW IT HOW IT FEELS"),
@@ -103,7 +103,7 @@ describe("BaselineCard", () => {
     renderCard({ k6Missing: true, k2Missing: true });
 
     await userEvent.click(screen.getByRole("button", { name: "2K INSTEAD" }));
-    expect(screen.getByRole("heading", { name: "First 2k" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "2K Test" })).toBeVisible();
     expect(screen.getByText("ABOUT 8 MIN")).toBeVisible();
     expect(
       screen.getByText("2K BASELINE · NOT SET · ROW IT HOW IT FEELS"),
@@ -111,14 +111,14 @@ describe("BaselineCard", () => {
 
     const back = screen.getByRole("button", { name: "6K INSTEAD" });
     await userEvent.click(back);
-    expect(screen.getByRole("heading", { name: "First 6k" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "6K Test" })).toBeVisible();
     expect(screen.getByRole("button", { name: "2K INSTEAD" })).toBeVisible();
   });
 
   it("only the 6k missing (2k already set): offers only the 6k, no toggle at all", () => {
     renderCard({ k6Missing: true, k2Missing: false });
 
-    expect(screen.getByRole("heading", { name: "First 6k" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "6K Test" })).toBeVisible();
     expect(
       screen.queryByRole("button", { name: /INSTEAD/ }),
     ).not.toBeInTheDocument();
@@ -127,7 +127,7 @@ describe("BaselineCard", () => {
   it("only the 2k missing (6k already set): offers only the 2k, no toggle at all", () => {
     renderCard({ k6Missing: false, k2Missing: true });
 
-    expect(screen.getByRole("heading", { name: "First 2k" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "2K Test" })).toBeVisible();
     expect(
       screen.queryByRole("button", { name: /INSTEAD/ }),
     ).not.toBeInTheDocument();

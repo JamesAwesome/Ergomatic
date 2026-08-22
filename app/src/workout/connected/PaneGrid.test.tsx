@@ -637,14 +637,14 @@ describe("the shell header's composed GRID trailing (design spec §2B)", () => {
   // sees nothing on LIVE saw a confident gold countdown on GRID, built on
   // the documented hole. One guard, both sites.
   it("hides the GRID countdown too when the remainder is unpriced — LIVE and GRID cannot disagree about whether an estimate exists", () => {
-    // "First 2k" with NULL baselines: one distance phase at an effort ref
+    // "2K Test" with NULL baselines: one distance phase at an effort ref
     // that `estimationSplit` cannot price, so `phaseSeconds` returns null
     // for the only phase there is — the same fixture `PaneLive.test.tsx`'s
     // own unpriced-guard describe builds, for the same reason.
     const w = ONBOARDING_LIBRARY_WORKOUTS.find(
       (x) => x.title === ONBOARDING_TITLES.k2,
     );
-    if (!w) throw new Error("missing onboarding fixture: First 2k");
+    if (!w) throw new Error("missing onboarding fixture: 2K Test");
     const draft = buildDraft({
       id: "first-2k",
       title: w.title,

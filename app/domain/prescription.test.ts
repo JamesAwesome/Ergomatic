@@ -35,16 +35,16 @@ describe("resolvePrescribed", () => {
   it("finds the designated GLOBAL row, never a rower's own workout sharing the title", () => {
     // The custom collision is listed FIRST so a naive first-title-match
     // would return the wrong row.
-    const rows = [custom("First 2k"), global("First 2k")];
-    expect(resolvePrescribed(ref("First 2k"), rows)).toBe(rows[1]);
+    const rows = [custom("2K Test"), global("2K Test")];
+    expect(resolvePrescribed(ref("2K Test"), rows)).toBe(rows[1]);
   });
 
   it("returns null when only a rower's own same-titled workout exists (globalOnly refs never fall back to it)", () => {
-    expect(resolvePrescribed(ref("First 2k"), [custom("First 2k")])).toBeNull();
+    expect(resolvePrescribed(ref("2K Test"), [custom("2K Test")])).toBeNull();
   });
 
   it("returns null when nothing carries the title at all", () => {
-    expect(resolvePrescribed(ref("Missing"), [global("First 2k")])).toBeNull();
+    expect(resolvePrescribed(ref("Missing"), [global("2K Test")])).toBeNull();
   });
 
   it("a non-globalOnly ref may resolve to a rower's own row (8C's future shape)", () => {

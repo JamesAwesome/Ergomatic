@@ -457,8 +457,8 @@ test.describe("TYPE + DIFFICULTY composition (chip row union intersected with th
   // counts below have to exclude them too, or they'd disagree with what's
   // actually on screen. Same literal titles onboarding.spec.ts already
   // hardcodes for the identical reason.
-  const K6_TITLE = "First 6k";
-  const K2_TITLE = "First 2k";
+  const K6_TITLE = "6K Test";
+  const K2_TITLE = "2K Test";
 
   // Library-filter-unification round, Task 3 (spec's own Testing section:
   // "an e2e picking two types from the chip row plus a difficulty in the

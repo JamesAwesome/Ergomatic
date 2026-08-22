@@ -9,8 +9,8 @@ import { LIBRARY_WORKOUTS } from "../server/seed/library/index.js";
 describe("onboarding constants", () => {
   it("fixes the two designated workout titles", () => {
     expect(ONBOARDING_TITLES).toStrictEqual({
-      k6: "First 6k",
-      k2: "First 2k",
+      k6: "6K Test",
+      k2: "2K Test",
     });
   });
 
@@ -36,6 +36,7 @@ describe("isOnboardingTitle", () => {
 
   it("is false for an arbitrary/empty string", () => {
     expect(isOnboardingTitle("")).toBe(false);
-    expect(isOnboardingTitle("First 6k ")).toBe(false); // no fuzzy trim/match
+    expect(isOnboardingTitle("6K Test ")).toBe(false); // no fuzzy trim/match
+    expect(isOnboardingTitle("First 6k")).toBe(false); // the legacy title is NOT recognized post-rename
   });
 });

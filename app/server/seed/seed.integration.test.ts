@@ -12,7 +12,10 @@ import { createWorkoutsStore, type WorkoutsStore } from "../stores/workouts.js";
 import { createLogsStore, type LogsStore } from "../stores/logs.js";
 import { seedGlobalLibrary, SEED_LOCK_KEY } from "./seed.js";
 import { GLOBAL_LIBRARY_SEED, LIBRARY_WORKOUTS } from "./library/index.js";
-import { ONBOARDING_TITLES } from "../../domain/onboarding.js";
+import {
+  ONBOARDING_TITLES,
+  isOnboardingTitle,
+} from "../../domain/onboarding.js";
 import warmupsBefore from "../../scripts/library-warmups-before.json";
 
 describe("seedGlobalLibrary against real Postgres", () => {
@@ -455,5 +458,132 @@ describe("seedGlobalLibrary against real Postgres", () => {
     );
     expect(survivors).toHaveLength(1);
     expect(survivors[0]!.id).toBe(target.id); // the earlier (original) row wins
+  });
+
+  // ------------------------------------------------------------------
+  // Phase 8A PR B: the legacy-title rename pre-pass (LEGACY_TITLE_RENAMES).
+  // A deployed DB carries "First 6k"/"First 2k" rows that pre-rename logs
+  // point at via session_logs.workout_id (ON DELETE SET NULL). Without the
+  // pre-pass, the converge sees those titles as unknown, deletes them, and
+  // every such log loses its workout link. The literal legacy titles below
+  // are frozen history — this is the ONE place old titles legitimately
+  // survive in tests, because these tests exercise the legacy-rename path
+  // itself.
+  //
+  // The OLD rows exactly as a pre-rename deploy seeded them (frozen
+  // pre-8A-PR-B shape: title, classification, steps, sortOrder).
+  const LEGACY_ONBOARDING_ROWS = [
+    {
+      sortOrder: 301,
+      title: "First 6k",
+      type: "O2",
+      difficulty: "easy",
+      pain: 2,
+      source: "starter" as const,
+      steps: [
+        {
+          k: "w",
+          duration: { kind: "distance", meters: 6000 },
+          ref: { effort: "min" },
+        },
+      ],
+    },
+    {
+      sortOrder: 302,
+      title: "First 2k",
+      type: "AN",
+      difficulty: "easy",
+      pain: 2,
+      source: "starter" as const,
+      steps: [
+        {
+          k: "w",
+          duration: { kind: "distance", meters: 2000 },
+          ref: { effort: "max" },
+        },
+      ],
+    },
+  ] as unknown as Parameters<WorkoutsStore["createMany"]>[1];
+
+  it("renames legacy-titled onboarding rows IN PLACE: same id, log link intact, new title, new classification — and a second boot is idempotent", async () => {
+    await db.delete(workouts);
+    const [oldK6, oldK2] = await wk.createMany(null, LEGACY_ONBOARDING_ROWS);
+
+    const user = await users.createUser({
+      googleSub: "legacy-rename",
+      email: "legacy-rename@x.com",
+      name: "Legacy Rename",
+    });
+    // A pre-rename log against the old 2k — workout_title is a save-time
+    // snapshot and keeps the old spelling forever; only workout_id must
+    // survive the rename.
+    const logId = await createLogFor(user.id, oldK2!.id, "First 2k", "AN");
+
+    await seedGlobalLibrary(db);
+
+    const globals = await wk.listGlobals();
+    expect(globals).toHaveLength(GLOBAL_LIBRARY_SEED.length);
+    const titles = new Set(globals.map((g) => g.title));
+    expect(titles.has("First 6k")).toBe(false);
+    expect(titles.has("First 2k")).toBe(false);
+
+    // Renamed IN PLACE — the ids the pre-rename rows carried survive.
+    const k6After = globals.find((g) => g.title === ONBOARDING_TITLES.k6)!;
+    const k2After = globals.find((g) => g.title === ONBOARDING_TITLES.k2)!;
+    expect(k6After.id).toBe(oldK6!.id);
+    expect(k2After.id).toBe(oldK2!.id);
+
+    // The log recorded against "First 2k" still resolves to its workout.
+    const logRow = await findLog(user.id, logId);
+    expect(logRow!.workoutId).toBe(oldK2!.id);
+
+    // The rename pre-pass lands BEFORE listGlobals(), so the converge sees
+    // the row under its NEW title and the ordinary content-diff path
+    // applies the reclassification (2K: AN/hard/5, 6K: AT/hard/4) — a
+    // rename that left the old classification in place fails here.
+    expect(k2After).toMatchObject({ type: "AN", difficulty: "hard", pain: 5 });
+    expect(k6After).toMatchObject({ type: "AT", difficulty: "hard", pain: 4 });
+
+    // Second boot: idempotent — no dupes, no deletes, no writes.
+    const stampBefore = new Map(
+      (await wk.listGlobals()).map((g) => [g.id, g.updatedAt.getTime()]),
+    );
+    await seedGlobalLibrary(db);
+    const globals2 = await wk.listGlobals();
+    expect(globals2).toHaveLength(GLOBAL_LIBRARY_SEED.length);
+    expect(globals2.filter((g) => isOnboardingTitle(g.title))).toHaveLength(2);
+    for (const g of globals2)
+      expect(g.updatedAt.getTime()).toBe(stampBefore.get(g.id));
+  });
+
+  // Defensive guard: if a global row already carries the NEW title (never
+  // produced by this seed's own history, but cheap to be wrong about), the
+  // pre-pass must NOT rename the legacy row on top of it — that would mint
+  // a duplicate title and hand the dedup pass a coin-flip over which row
+  // keeps its log links. Instead the legacy row is left for the converge's
+  // ordinary unknown-title delete (its links null, matching what any
+  // unknown title gets).
+  it("skips the rename when a global row already holds the new title (no duplicate-title carnage)", async () => {
+    await db.delete(workouts);
+    const [oldK2] = await wk.createMany(null, [LEGACY_ONBOARDING_ROWS[1]!]);
+    // A pre-existing global already under the NEW title.
+    const newEntry = GLOBAL_LIBRARY_SEED.find(
+      (w) => w.title === ONBOARDING_TITLES.k2,
+    )!;
+    const [existingNew] = await wk.createMany(null, [
+      { ...newEntry, source: "starter" as const },
+    ]);
+
+    await seedGlobalLibrary(db);
+
+    const survivors = (await wk.listGlobals()).filter(
+      (g) => g.title === ONBOARDING_TITLES.k2,
+    );
+    expect(survivors).toHaveLength(1);
+    expect(survivors[0]!.id).toBe(existingNew!.id);
+    // The legacy row went through the ordinary delete path, not a rename.
+    expect((await wk.listGlobals()).some((g) => g.id === oldK2!.id)).toBe(
+      false,
+    );
   });
 });

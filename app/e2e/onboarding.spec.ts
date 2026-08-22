@@ -25,8 +25,8 @@ import { RUN_ID, signInViaBackdoor } from "./helpers";
 // ONBOARDING_TITLES) — hardcoded here rather than imported, matching every
 // other e2e file's own precedent of literal strings rather than reaching
 // into `domain/` from a Playwright spec.
-const K6_TITLE = "First 6k";
-const K2_TITLE = "First 2k";
+const K6_TITLE = "6K Test";
+const K2_TITLE = "2K Test";
 
 /** Partial-safe: `PUT /api/baselines` accepts either field independently
  *  (server/routes/data.ts's own per-field loop), which is exactly what
@@ -191,7 +191,7 @@ test.describe("Phase 6I: Today onboarding — the fresh-user arc", () => {
     await expect(page.locator(".timer-name")).toHaveText(K6_TITLE);
 
     // No warm-up (the setting defaults OFF — this arc never turns it on,
-    // and First 6k's own seed steps carry no `wu` any more since
+    // and the 6K Test's own seed steps carry no `wu` any more since
     // 2026-08-09's warmup-setting spec stripped it): the distance work
     // phase is the ONLY phase, STEP 1 OF 1 — the exact case
     // `hasRemainingEstimate` exists for. The TARGET SPLIT card shows the
@@ -394,7 +394,7 @@ test.describe("Phase 6I: Today onboarding — the fresh-user arc", () => {
 // both baselines set (the arc proves the no-baseline PATH; this proves the
 // two designated workouts stay invisible once a rower is past it).
 test.describe("Phase 6I: designated-workout exclusion", () => {
-  test("a baselines-set veteran's SHUFFLE pool never surfaces First 6k or First 2k", async ({
+  test("a baselines-set veteran's SHUFFLE pool never surfaces the 6K Test or the 2K Test", async ({
     page,
   }) => {
     await signInViaBackdoor(page, {
@@ -419,7 +419,7 @@ test.describe("Phase 6I: designated-workout exclusion", () => {
     expect(seen.has(K2_TITLE)).toBe(false);
   });
 
-  test("Library's list omits First 6k and First 2k", async ({ page }) => {
+  test("Library's list omits the 6K Test and the 2K Test", async ({ page }) => {
     await signInViaBackdoor(page, {
       email: `onboarding-exclusion-library-${RUN_ID}@e2e.test`,
       name: "Onboarding Exclusion Library",

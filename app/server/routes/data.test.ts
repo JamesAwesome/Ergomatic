@@ -3260,7 +3260,7 @@ describe("GET /api/today", () => {
   // route 422s before ever reaching the suggestion pool for a brand-new
   // account (the only account these workouts are actually FOR), so the
   // only account this exclusion can be observed against is a returning one
-  // that happens to still have "First 6k" in its library.
+  // that happens to still have "6K Test" in its library.
   it("excludes the designated onboarding workout from the pool/recommendation, even at a matching type", async () => {
     const stores = makeStores();
     const app = appFor(stores);
@@ -3285,7 +3285,7 @@ describe("GET /api/today", () => {
   });
 
   // Final-review fix: the exclusion must key off isGlobal, not title alone
-  // — a rower's own custom workout that happens to be named "First 6k"
+  // — a rower's own custom workout that happens to be named "6K Test"
   // (the POST route's own "personal workout sharing a global's title" case,
   // pinned above) is a real, ownable workout, not a stray collision with
   // the seeded pair. Excluding it by title alone would orphan it from

@@ -52,14 +52,14 @@ describe("suggest", () => {
   });
   // Phase 8A: a plan checkpoint pins its own designated workout. The
   // prescribed entry mirrors the REAL seed row a checkpoint resolves to
-  // (server/seed/library/onboarding.ts's 2k: type AN, easy, pain 2,
+  // (server/seed/library/onboarding.ts's 2K Test: type AN, hard, pain 5,
   // global) — not a hand-built minimum — and it is deliberately NOT a
   // library/pool member: both callers exclude onboarding titles from the
   // pool, and SHUFFLE's escape depends on it sitting outside poolIds.
   const k2Entry = w("k2-test", {
     type: "AN" as const,
-    difficulty: "easy" as const,
-    pain: 2,
+    difficulty: "hard" as const,
+    pain: 5,
     estMinutes: 8,
     lastDoneDaysAgo: null,
     isGlobal: true,
@@ -71,18 +71,19 @@ describe("suggest", () => {
     it("pins the prescribed entry with its authored reason, bypassing every preference filter", () => {
       // Every filter dimension is set to EXCLUDE the prescribed entry
       // (wrong difficulty, wrong duration bucket, wrong pain, wrong
-      // source) — a checkpoint is not a suggestion from a pool, so none
-      // of them may hide it.
+      // source — chosen against the REAL k2Entry above: hard/pain 5/
+      // ~8 min/global) — a checkpoint is not a suggestion from a pool, so
+      // none of them may hide it.
       const r = suggest({
         todayCode: "AN",
         prefs: {
-          difficulties: ["hard"],
+          difficulties: ["easy"],
           durations: ["45-60"],
-          painLevels: [5],
+          painLevels: [1],
           lastDone: "under21",
           source: "custom",
         },
-        library: [w("an1", { type: "AN", difficulty: "hard" })],
+        library: [w("an1", { type: "AN", difficulty: "easy" })],
         prescribed: { entry: k2Entry, reason: CHECKPOINT_REASON },
       });
       expect(r.recommendationId).toBe("k2-test");

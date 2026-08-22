@@ -1164,12 +1164,12 @@ async function advancePlanBy(page: Page, count: number): Promise<void> {
 }
 
 // Phase 8A Task 2: the plan checkpoint's whole loop against the REAL
-// seeded library and a real advanced plan — the prescribed 2k test pins
+// seeded library and a real advanced plan — the prescribed 2K Test pins
 // the card, a chip swap overrides it with the visible marker (and never
 // names the displaced workout), un-swapping restores it, and SHUFFLE
 // escapes into the day's own AN pool.
 test.describe("Today: the plan checkpoint prescription (Phase 8A)", () => {
-  test("session 7 pins First 2k; swap shows CHECKPOINT OVERRIDDEN; un-swap restores; SHUFFLE escapes", async ({
+  test("session 7 pins the 2K Test; swap shows CHECKPOINT OVERRIDDEN; un-swap restores; SHUFFLE escapes", async ({
     page,
   }) => {
     await signInViaBackdoor(page, {
@@ -1188,7 +1188,7 @@ test.describe("Today: the plan checkpoint prescription (Phase 8A)", () => {
     await expect(page.locator(".today-plan-line")).toContainText(
       "SESSION 7 OF 84 · AN",
     );
-    await expect(page.locator(".today-card-title")).toHaveText("First 2k");
+    await expect(page.locator(".today-card-title")).toHaveText("2K Test");
     await expect(
       page.getByText(
         "Plan checkpoint: re-test your 2k and update your baseline.",
@@ -1204,20 +1204,20 @@ test.describe("Today: the plan checkpoint prescription (Phase 8A)", () => {
     await expect(page.locator(".today-plan-line")).toContainText(
       "AN → O2 · CHECKPOINT OVERRIDDEN",
     );
-    await expect(page.locator(".today-card-title")).not.toHaveText("First 2k");
-    await expect(page.getByText("First 2k")).toHaveCount(0);
+    await expect(page.locator(".today-card-title")).not.toHaveText("2K Test");
+    await expect(page.getByText("2K Test")).toHaveCount(0);
 
     // Un-swap: the checkpoint returns, the marker goes.
     await page.getByRole("button", { name: "AN", exact: true }).click();
     await expect(page.locator(".today-plan-line")).not.toContainText(
       "CHECKPOINT OVERRIDDEN",
     );
-    await expect(page.locator(".today-card-title")).toHaveText("First 2k");
+    await expect(page.locator(".today-card-title")).toHaveText("2K Test");
 
     // SHUFFLE escapes into the day's own AN pool (the prescribed test is
     // deliberately outside it).
     await page.getByRole("button", { name: "SHUFFLE ↻" }).click();
-    await expect(page.locator(".today-card-title")).not.toHaveText("First 2k");
+    await expect(page.locator(".today-card-title")).not.toHaveText("2K Test");
     await expect(page.getByText(/YOUR PICK/)).toBeVisible();
   });
 });

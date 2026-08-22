@@ -1,4 +1,5 @@
-import { and, asc, eq, inArray, isNull, or } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, notExists, or } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import type { Db } from "../db/index.js";
 import { workouts } from "../db/schema.js";
 import type { WorkoutInput } from "../../domain/types.js";
@@ -171,6 +172,42 @@ export function createWorkoutsStore(db: Db) {
         .select({ id: workouts.id })
         .from(workouts)
         .where(isNull(workouts.userId));
+      return rows.length;
+    },
+
+    // Seed-converge only (Phase 8A PR B, the legacy-title pre-pass in
+    // app/server/seed/seed.ts): renames every GLOBAL row carrying
+    // `fromTitle` to `toTitle` IN PLACE — same id, so
+    // session_logs.workout_id links (ON DELETE SET NULL) survive where a
+    // delete+insert would null them. Guarded by NOT EXISTS on the target
+    // title: if a global row already holds `toTitle`, renaming would mint
+    // a duplicate title and hand the converge's dedup pass a coin-flip
+    // over which row keeps its log links — the legacy row is left for the
+    // converge's ordinary unknown-title delete instead. `user_id IS NULL`
+    // scoping makes personal rows structurally unreachable, same
+    // technique as updateGlobal below. Returns how many rows renamed
+    // (0 on every boot after the first — the pre-pass is idempotent).
+    async renameGlobalByTitle(
+      fromTitle: string,
+      toTitle: string,
+    ): Promise<number> {
+      const target = alias(workouts, "target_title_row");
+      const rows = await db
+        .update(workouts)
+        .set({ title: toTitle, updatedAt: new Date() })
+        .where(
+          and(
+            isNull(workouts.userId),
+            eq(workouts.title, fromTitle),
+            notExists(
+              db
+                .select({ id: target.id })
+                .from(target)
+                .where(and(isNull(target.userId), eq(target.title, toTitle))),
+            ),
+          ),
+        )
+        .returning({ id: workouts.id });
       return rows.length;
     },
 

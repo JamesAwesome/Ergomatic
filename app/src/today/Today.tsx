@@ -1062,7 +1062,7 @@ function TodayView({
   // Phase 6I: the two designated onboarding workouts are never a real
   // suggestion once a rower has real baselines — "invisible outside
   // onboarding" (design spec, no-baseline card's own Mechanics section). A
-  // veteran with both baselines set must never see "First 6k"/"First 2k"
+  // veteran with both baselines set must never see "6K Test"/"2K Test"
   // in SUGGESTED or SHUFFLE's pool. Final-review fix (2026-08-09): the
   // exclusion must key off `isGlobal` too, not title alone — a rower's own
   // CUSTOM workout that happens to collide with one of these titles is a

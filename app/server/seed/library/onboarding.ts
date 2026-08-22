@@ -17,9 +17,15 @@ import { ONBOARDING_TITLES } from "../../../domain/onboarding.js";
 export const ONBOARDING_LIBRARY_WORKOUTS: WorkoutInput[] = [
   {
     title: ONBOARDING_TITLES.k6,
-    type: "O2",
-    difficulty: "easy",
-    pain: 2,
+    // Classified honestly (Phase 8A PR B): a 6K test rides the anaerobic
+    // threshold — AT/hard/pain 4, matching the head plan's AT checkpoint
+    // day. Was O2/easy/2 until 2026-08-22; session_logs.workout_type is a
+    // save-time snapshot, so 6K history legitimately splits across O2
+    // (pre-rename rows) and AT (new rows) — accepted at the phase gate,
+    // do not "fix" it.
+    type: "AT",
+    difficulty: "hard",
+    pain: 4,
     steps: [
       {
         k: "w",
@@ -30,9 +36,12 @@ export const ONBOARDING_LIBRARY_WORKOUTS: WorkoutInput[] = [
   },
   {
     title: ONBOARDING_TITLES.k2,
+    // Classified honestly (Phase 8A PR B): a 2K test is an all-out
+    // anaerobic effort — AN/hard/pain 5, matching the sprint plan's AN
+    // checkpoint day. Was AN/easy/2 until 2026-08-22.
     type: "AN",
-    difficulty: "easy",
-    pain: 2,
+    difficulty: "hard",
+    pain: 5,
     steps: [
       {
         k: "w",

@@ -2,16 +2,21 @@
 // (Today, screen 2b) offers a brand-new account: a single distance work
 // step at an effort ref, so they run with no baselines at all (see
 // `needsBaselines.ts`). Titles are fixed constants — the ONLY identity the
-// rest of the app uses to recognize them (suggestion-pool exclusion,
-// Library-list exclusion, the card's own lookup) — so a rename anywhere
-// can't silently strand a reference. Kept in `domain/` rather than beside
+// rest of the app uses to recognize them (suggestion-pool exclusion, the
+// card's own lookup, the plan's checkpoint prescription refs) — so a
+// rename anywhere can't silently strand a reference. The names are a
+// DELIBERATE break from the library's poetic-name convention (Phase 8A
+// PR B): these two are instruments, not sessions. They were "First 6k"/
+// "First 2k" until 2026-08-22; the seed renames deployed rows in place
+// via LEGACY_TITLE_RENAMES (server/seed/seed.ts) so pre-rename logs keep
+// their workout link. Kept in `domain/` rather than beside
 // the seed data itself because both the client (the card, the exclusion
 // filters) and the server (`/api/today`'s exclusion, the seed's own
 // fixed-title workouts) need the SAME constant, and domain is the one
 // layer both already import.
 export const ONBOARDING_TITLES = {
-  k6: "First 6k",
-  k2: "First 2k",
+  k6: "6K Test",
+  k2: "2K Test",
 } as const;
 
 // `estimateMinutes` cannot produce a real number without baselines (see

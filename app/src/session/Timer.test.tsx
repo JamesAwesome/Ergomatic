@@ -153,7 +153,7 @@ function onboardingShapedRun(): SessionRun {
 function onboardingShapedDraft(): SessionDraft {
   return buildDraft({
     id: "id-onboarding-shaped",
-    title: "First 6k",
+    title: "6K Test",
     type: "O2",
     steps: [
       {

@@ -380,7 +380,7 @@ test("today-checkpoint", async ({ page }) => {
   await expect(page.locator(".today-plan-line")).toContainText(
     "SESSION 7 OF 84 · AN",
   );
-  await expect(page.locator(".today-card-title")).toHaveText("First 2k");
+  await expect(page.locator(".today-card-title")).toHaveText("2K Test");
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "today-checkpoint.png"),
   });
@@ -390,7 +390,7 @@ test("today-checkpoint", async ({ page }) => {
   await expect(page.locator(".today-plan-line")).toContainText(
     "AN → O2 · CHECKPOINT OVERRIDDEN",
   );
-  await expect(page.locator(".today-card-title")).not.toHaveText("First 2k");
+  await expect(page.locator(".today-card-title")).not.toHaveText("2K Test");
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "today-checkpoint-overridden.png"),
   });
