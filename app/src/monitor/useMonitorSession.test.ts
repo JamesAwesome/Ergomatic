@@ -2338,6 +2338,116 @@ describe("useMonitorSession: failures", () => {
     expect(result.current.error?.reason).toBe("link-failed");
     expect(result.current.error?.raw).toContain("no longer valid");
   });
+
+  // Phase LL Task 3 (§3), exit criterion 2. The 2026-08-20 walk's actual
+  // root cause, reproduced against TODAY's code and then closed: the
+  // review corrected the walk README's own diagnosis — `connect()`'s catch
+  // never cleared `driverRef`, and never did — so a failed `program()`
+  // left BOTH the driver ref AND `session.deviceName` (the field
+  // `ConnectedInterstitial.tsx`'s retry actually branches on) standing.
+  // Try Again then called `program()` again against the SAME dead driver
+  // forever: the LINK-FAILED loop that cost James a reinstall.
+  it("a failed program() disposes: deviceName clears, the transport goes down, and the driver ref is gone (no longer reachable by a further program())", async () => {
+    const { result, fake, transport } = harness({ program: TWO_INTERVALS });
+    await connect(result);
+    expect(result.current.deviceName).toBe(DEVICE_NAME);
+
+    // The same D6 link-failed reproduction the test above uses: the GATT
+    // handle dies, program() throws synchronously, `fail()` runs.
+    act(() => {
+      fake.injectDisconnect();
+    });
+    const disconnectsBefore = transport.disconnects;
+    await act(async () => {
+      await result.current.program(TWO_INTERVALS, TWO_IDENTITY);
+      await flush();
+    });
+    expect(result.current.phase).toBe("failed");
+    expect(result.current.error?.reason).toBe("link-failed");
+
+    // 1. `deviceName` cleared — the field Try Again's retry branches on.
+    expect(result.current.deviceName).toBeNull();
+    // 2. The transport is down — `driver.disconnect()` ran, which is this
+    // spy's own `disconnect()` wrapper on the SAME transport `connect()`
+    // built (not a second, unrelated transport instance).
+    expect(transport.disconnects).toBeGreaterThan(disconnectsBefore);
+
+    // 3. The driver ref is gone. Nothing exports it directly, so this is
+    // the FUNCTIONAL proof (this file's own established idiom, e.g. the
+    // "transport-missing" tests above): a further program() call against
+    // a cleared ref fails `transport-missing` immediately, rather than
+    // reaching the SAME stale, already-dead driver a second time (which
+    // today would repeat `link-failed` forever — the loop itself).
+    const writesBefore = transport.wireWrites;
+    await act(async () => {
+      await result.current.program(TWO_INTERVALS, TWO_IDENTITY);
+      await flush();
+    });
+    expect(result.current.error?.reason).toBe("transport-missing");
+    expect(transport.wireWrites).toBe(writesBefore);
+  });
+
+  // Phase LL Task 3 (§3, F-6): the already-connected guard's outcome is a
+  // structural extension on the transport (`capacitorBle.ts`'s own
+  // `describeLastScan()`, mirroring `onCharacteristicDegraded`/
+  // `markSuspect` immediately above it in this file) — `fake.ts` does not
+  // implement it (the guard is Apple-API-specific, pinned instead by
+  // `capacitorBle.test.ts`'s own mocked `BleClient`), so this is proven
+  // here with a bespoke `createTransport` override carrying it, the same
+  // pattern `hasLivenessSnapshot`'s own doc comment describes for a test
+  // transport that does NOT carry an extension.
+  it("when the transport names its last scan's outcome, connect() writes it to the ring", async () => {
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
+    });
+    const withOutcome: Transport & { describeLastScan(): string | null } = {
+      ...fake,
+      describeLastScan: () => "offered the already-held device; no picker",
+    };
+    const { result } = renderHook(() =>
+      useMonitorSession({ createTransport: () => withOutcome }),
+    );
+
+    await connect(result);
+
+    const entries: { kind: string; detail: string }[] = JSON.parse(
+      result.current.exportLog(),
+    );
+    expect(entries).toContainEqual(
+      expect.objectContaining({
+        kind: "already-connected-guard",
+        detail: "offered the already-held device; no picker",
+      }),
+    );
+  });
+
+  // `describeLastScan()`'s own doc comment (`capacitorBle.ts`): `null`
+  // before any `scan()` has run. Unreachable through the REAL transport
+  // (this hook always calls `scan()` before this log-wiring code runs),
+  // but the extension is structural, not a guarantee — a transport that
+  // carries the method yet has nothing to say must not write a ring entry
+  // with no `detail`.
+  it("the extension present but nothing to say yet (null): no ring entry, no throw", async () => {
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
+    });
+    const withNullOutcome: Transport & { describeLastScan(): string | null } = {
+      ...fake,
+      describeLastScan: () => null,
+    };
+    const { result } = renderHook(() =>
+      useMonitorSession({ createTransport: () => withNullOutcome }),
+    );
+
+    await connect(result);
+
+    const entries: { kind: string }[] = JSON.parse(result.current.exportLog());
+    expect(entries.some((e) => e.kind === "already-connected-guard")).toBe(
+      false,
+    );
+  });
 });
 
 describe("useMonitorSession: P3b — a failed program with a run open", () => {

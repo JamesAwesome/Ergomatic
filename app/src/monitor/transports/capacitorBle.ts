@@ -241,13 +241,49 @@ const CRITICAL_CHARACTERISTICS: ReadonlySet<string> = new Set([
   TRANSMIT_CHARACTERISTIC_UUID,
 ]);
 
+// Phase LL Task 3 (§3): THE MEMO HOIST. Was a `let` inside
+// `createCapacitorBleTransport()`'s own closure — reset to `null` on every
+// call, so every fresh instance (every `connect()` attempt this file's own
+// caller makes, per `useMonitorSession.ts`'s "a fresh connect() never
+// inherits a stale prior value" pattern) re-ran `BleClient.initialize()`.
+// Hoisted here, above any one instance, restores the invariant
+// `ensureInitialized`'s own comment already claims: the plugin reuses the
+// same `Device`/callback map across attempts, so re-initializing on every
+// attempt was already wrong, just unproven harmful (a mocked `BleClient`
+// cannot see a `CBCentralManager` swap — this file's own header, item 1).
+// **The caveat, kept verbatim (task-3 brief): this does NOT survive
+// `webView.reload()` — a full page reload rebuilds the whole module graph,
+// this variable included — and it does NOT claim to explain the
+// force-quit brick (iOS releases the link when the OWNING APP dies; no
+// module-scope JS variable survives that either way).**
+let initPromise: Promise<void> | null = null;
+
 export function createCapacitorBleTransport(): Transport & {
   /** See the returned object's own doc comment on this method. */
   onCharacteristicDegraded(
     cb: (characteristicId: string, message: string) => void,
   ): () => void;
+  /** Phase LL Task 3 (§3, F-6), "say so in the ring": names the OUTCOME of
+   *  this transport's own most recent `scan()` call — whether the
+   *  already-connected guard offered a device iOS already held (no picker
+   *  ever opened) or found nothing and degraded to today's flow (the
+   *  picker ran as it always has). `null` before any `scan()` has run.
+   *  A structural extension, not a core `Transport` method — same idiom as
+   *  `onCharacteristicDegraded`/`liveness.ts`'s `markSuspect`, forwarded
+   *  through `withLiveness`'s own `...inner` spread unchanged.
+   *  `useMonitorSession.ts`'s own `hasDescribeLastScan` check reads this
+   *  once a connection's log exists (after `transport.connect()`
+   *  succeeds) and records it — the guard itself has no log to write to at
+   *  `scan()` time, since a session's log is not created until a device is
+   *  actually found (`connect()`'s own ordering). NOT part of the file
+   *  list's original three named files; called out as a finding per the
+   *  task-3 brief's own "no new exported surface is expected... unless
+   *  necessary" instruction. */
+  describeLastScan(): string | null;
 } {
   let deviceId: string | null = null;
+  // See `describeLastScan()`'s own doc comment above.
+  let lastScanOutcome: string | null = null;
   let disconnectCb: ((reason: string) => void) | null = null;
   // Phase LL Task 2 (§2, mechanism 3): the DEGRADED path's own callback —
   // a structural `Transport` extension (`onCharacteristicDegraded`, not a
@@ -276,7 +312,6 @@ export function createCapacitorBleTransport(): Transport & {
   // entry for the id it is about to use, so a fresh connection never
   // inherits a prior attempt's own flag.
   const pendingCallerDisconnects = new Set<string>();
-  let initPromise: Promise<void> | null = null;
 
   // NOT idempotent upstream (spec §3.5, REVIEW B2): every
   // `BleClient.initialize()` constructs a new `DeviceManager`
@@ -284,12 +319,15 @@ export function createCapacitorBleTransport(): Transport & {
   // (`DeviceManager.swift:35-41`), so a scan->connect double-init hands
   // the picked `CBPeripheral` to a central that never discovered it —
   // cross-central use CoreBluetooth does not define. Memoize the
-  // in-flight/settled success; CLEAR the memo on rejection so a
-  // denied-then-re-allowed rower gets a fresh prompt path instead of a
-  // cached refusal. A mocked `BleClient` cannot catch a regression here
-  // (it hides the manager swap entirely) — this comment, the spec §, and
-  // the review checklist are where the requirement lives; the test suite
-  // can only pin the call COUNT.
+  // in-flight/settled success — `initPromise` is now MODULE scope (Phase
+  // LL Task 3, this file's own header on that variable), so this covers
+  // every transport instance ever built in this page's lifetime, not only
+  // this one; CLEAR the memo on rejection so a denied-then-re-allowed
+  // rower gets a fresh prompt path instead of a cached refusal. A mocked
+  // `BleClient` cannot catch a regression here (it hides the manager swap
+  // entirely) — this comment, the spec §, and the review checklist are
+  // where the requirement lives; the test suite can only pin the call
+  // COUNT.
   function ensureInitialized(): Promise<void> {
     initPromise ??= BleClient.initialize().catch((err: unknown) => {
       initPromise = null;
@@ -389,6 +427,37 @@ export function createCapacitorBleTransport(): Transport & {
       // detector this path has.
       const pipeline = (async (): Promise<DiscoveredMonitor[]> => {
         await ensureInitialized();
+        // Phase LL Task 3 (§3, F-6): THE ALREADY-CONNECTED GUARD, before
+        // any picker ever opens. Apple's `retrieveConnectedPeripherals(
+        // withServices:)` — what the plugin's `getConnectedDevices` calls
+        // on iOS — filters on services the peripheral CONTAINS, not
+        // advertises. That is the OPPOSITE of `requestDevice`'s own
+        // "0x0030 is not advertised" rule two comments below, and the
+        // anchor pass names this explicitly: the scan lesson does NOT
+        // transfer here. The plugin also requires a non-empty services
+        // array (the d.ts's own doc: "If no service is specified, no
+        // devices will be returned"), so both are named, not one.
+        // Real unknowns, recorded rather than assumed away: whether this
+        // resolves before a fresh `CBCentralManager` reaches `.poweredOn`,
+        // and that a FORCE-QUIT brick is NOT covered — iOS releases the
+        // link when the OWNING APP dies, so there is nothing left for this
+        // query to find in that case. This guard answers F-6's "offered
+        // Connect while already connected" only.
+        const held = await BleClient.getConnectedDevices([
+          ROWING_SERVICE_UUID,
+          CONTROL_SERVICE_UUID,
+        ]);
+        const heldDevice = held[0];
+        if (heldDevice !== undefined) {
+          // OFFER it directly — never a second connect against a machine
+          // that may already be held. The picker (and the setDisplayStrings
+          // that precedes it) never runs at all; this SHORT-CIRCUITS the
+          // sheet, which is the one path this file's own queue-invariant
+          // comment above says must never race a BleClient call.
+          lastScanOutcome = "offered the already-held device; no picker";
+          return [{ id: heldDevice.deviceId, name: heldDevice.name ?? "PM5" }];
+        }
+        lastScanOutcome = "no already-connected device; scanned normally";
         if (!(await BleClient.isEnabled())) {
           throw new BluetoothOffError("Bluetooth is powered off.");
         }
@@ -582,6 +651,11 @@ export function createCapacitorBleTransport(): Transport & {
       return () => {
         if (degradedCb === cb) degradedCb = null;
       };
+    },
+
+    // See this method's own doc comment on the return type above.
+    describeLastScan(): string | null {
+      return lastScanOutcome;
     },
   };
 }

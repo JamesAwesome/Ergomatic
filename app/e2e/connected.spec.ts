@@ -950,6 +950,73 @@ test.describe("Phase 7B Task 8: the connected walk, fake-driven — landscape (8
   });
 });
 
+// Phase LL Task 3 (link-truth design spec §3), exit criteria 2/3, in a real
+// browser: a `program()` that fails mid-send must DISPOSE (transport down,
+// driver ref gone, `deviceName` cleared — the field the retry actually
+// branches on) so Try Again reaches a genuinely FRESH scan/connect/program,
+// not the same dead driver reporting the same failure forever (the
+// LINK-FAILED loop that cost James a reinstall, 2026-08-20). The witness:
+// induce the exact link-loss `useMonitorSession.test.ts`'s own unit
+// reproduction uses (`injectDisconnect()`, D6) while a real program() is
+// genuinely in flight, then prove the SECOND attempt — a brand new fake
+// instance `transports/index.ts` builds fresh on every `connect()` — is
+// unaffected by the first's own dead link and completes normally.
+test.describe("Phase LL Task 3: recovery — a failed program() disposes, and Try Again genuinely reconnects", () => {
+  test("program() fails mid-send (link lost), the failure screen shows the disposal, and Try Again reaches a fresh connect/program that completes", async ({
+    page,
+  }) => {
+    const title = `Connected Walk Retry ${RUN_ID}`;
+    const deviceName = "PM5 555000111";
+
+    await injectFakeMonitor(page, deviceName);
+    await signInViaBackdoor(page, {
+      email: `connected-walk-retry-${RUN_ID}@e2e.test`,
+      name: "Connected Walk Tester",
+    });
+    await setBaselines(page);
+    await importBulk(page, BULK_TEXT(title));
+    await page.locator(".workout-row").filter({ hasText: title }).click();
+    await expect(page.locator("h1.workout-detail-title")).toHaveText(title);
+
+    const sendingLine = page.locator(".connected-serif-line", {
+      hasText: "Sending the workout",
+    });
+    const readyLine = page.locator(".connected-serif-line", {
+      hasText: "Ready when you pull",
+    });
+
+    await page.getByRole("button", { name: "Connect" }).click();
+    // State 5 — the FIRST attempt's driver is genuinely mid-program by the
+    // time this is visible (`walkToReady`'s own comment on why
+    // `delayWritesMs` makes this an observable, real state).
+    await expect(sendingLine).toBeVisible({ timeout: 15_000 });
+
+    await page.evaluate(() => {
+      window.__pm5FakeControls__?.injectDisconnect();
+    });
+
+    const tryAgain = page.getByRole("button", { name: "Try again" });
+    await expect(tryAgain).toBeEnabled({ timeout: 15_000 });
+    // Exit criterion 2, rendered: `deviceName` is cleared before this
+    // screen paints, so the status label falls back to the generic
+    // "CONNECT" rather than still naming the device the dead driver was
+    // holding (`renderFailureScreen`'s own `session.deviceName ?? "CONNECT"`).
+    await expect(page.locator(".connected-status-label")).toHaveText("CONNECT");
+
+    await tryAgain.click();
+
+    // A FRESH scan/connect/program: `window.__pm5FakeScript__` carries no
+    // scripted failure of its own, so this second attempt's own brand-new
+    // fake instance (`transports/index.ts` builds one per `connect()`
+    // call) is not the disconnected one above and completes normally —
+    // proof the loop is closed, not merely that the state cleared.
+    await expect(sendingLine).toBeVisible({ timeout: 15_000 });
+    await expect(readyLine).toBeVisible({ timeout: 15_000 });
+
+    await cleanupByTitle(page, title);
+  });
+});
+
 // =========================================================================
 // Series capture spec (2026-08-19), Task 4 — S3's REAL forced-quota leg
 // (§4 S3: "the e2e probe fills storage to force a REAL QuotaExceededError
