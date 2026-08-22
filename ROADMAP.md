@@ -4370,6 +4370,35 @@ next phase. One line per round, newest first.
 
 ## Triggered follow-ons (not scheduled — each has an explicit trigger)
 
+- **A READ IS LOST IF YOU LEAVE AN ARTICLE BEFORE ITS READ-STATE GET
+  LANDS** (found 2026-08-21 by the flake hunt, by REPRODUCING the flake
+  rather than re-running it). **This is an app bug, not a test bug, and
+  the test that catches it is right.**
+  `Reader.tsx`'s mark-read effect fires only when
+  `reads.state === "ready"` — deliberately, so it has a `markRead` to
+  call. But an article's PROSE IS STATIC and renders instantly, while the
+  read state waits on a network GET. So the whole screen can be up and
+  readable while `reads` is still loading, and a rower who taps BACK in
+  that window unmounts the Reader before `markRead` is ever called. **The
+  read is silently dropped — permanently.** Reproduced under load: the
+  News unread count held `7 UNREAD` against an expected `6` across 13
+  polls over a full 5 s timeout, i.e. it never converged, because nothing
+  was ever written.
+  **The existing barrier does not cover this.** `useArticleReads.ts`'s
+  read-after-write barrier (2026-08-12) fixes the OPPOSITE direction — a
+  new screen's GET overtaking an in-flight PUT — and its own comment
+  records that same lesson ("the test was right, the app was racing").
+  It cannot help when no PUT is ever issued.
+  **NOT fast path** — the failure mode is a lost record, which the fast
+  path explicitly excludes. Wants a spec: the honest fix is probably to
+  mark on unmount as well as on ready, or to issue the write from a
+  layer that outlives the screen, and either choice needs the
+  does-it-exist question asked of the offline/failed-PUT case.
+  **Until it is fixed, `news.spec.ts:140` will flake under load — and it
+  SHOULD. Do not make that test wait the app's race away; that would
+  delete the only thing telling us about this.** **Trigger:** next News
+  or article-reads work, or sooner if a tester reports a read not
+  sticking. **M**
 - **An e2e fixture that exercises a REST** — spec
   `2026-08-20-est-left-design.md`'s exit criterion 6, recorded HALF MET
   rather than reworded. The fake reports Rest Time honestly and

@@ -125,8 +125,15 @@ jobs:
       - name: Run Playwright (flows + design)
         working-directory: app
         run: pnpm exec playwright test --project=chromium
+      # `always()`, NOT `failure()` (flake hunt, 2026-08-21). With
+      # `retries: 1`, a test that fails once and passes on retry leaves the
+      # JOB green — so `failure()` was false and the report was never
+      # uploaded. The trace WAS captured (`trace: "on-first-retry"`) and
+      # then discarded. A hard failure kept its evidence; a FLAKE, the only
+      # case that needs it, never did. That is why every sighting for
+      # months resolved to "passed on re-run" with nothing to look at.
       - name: Upload Playwright report
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: playwright-report

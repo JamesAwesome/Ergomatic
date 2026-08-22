@@ -99,11 +99,28 @@ export async function stableBoundingBox(
       next !== null &&
       prev.y === next.y &&
       prev.x === next.x &&
-      prev.height === next.height
+      prev.height === next.height &&
+      // WIDTH was missing until the 2026-08-21 flake hunt: a box still
+      // animating its width counted as "settled", which is exactly the
+      // case `design.spec.ts`'s TYPE-word test exists for (swapping in a
+      // differently-WIDE word).
+      prev.width === next.width
     ) {
       return next;
     }
     prev = next;
   }
-  return prev;
+  // A TIMEOUT MUST BE LOUD (flake hunt, 2026-08-21). This used to
+  // `return prev` — an UNSTABLE box — with no signal at all, so a helper
+  // whose entire contract is "a settled box" could hand back an unsettled
+  // one and the caller would assert on it. The failure then surfaced as a
+  // mystery off-by-a-few-pixels mismatch with nothing pointing here.
+  // Measured during the hunt: it never actually fired across ~1,200 test
+  // executions, so this costs nothing today and removes a silent-wrong-
+  // answer path. Same family as recurring failure 4 — a helper that cannot
+  // fail cannot be trusted when it succeeds.
+  throw new Error(
+    `stableBoundingBox: never settled in 20 animation frames (last=${JSON.stringify(prev)}). ` +
+      `The element is still moving — either it genuinely animates, or the caller measured before layout settled.`,
+  );
 }
