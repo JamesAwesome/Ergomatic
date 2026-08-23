@@ -97,21 +97,23 @@ export function commit(s: DraftState): DraftState {
  *  `draft[x] !== committed[x]` implies `touched[x]` always — `touched`
  *  alone is the complete, simpler answer to "is anything pending."
  *  Accepted edge (re-review round): nudging a field away and back to its
- *  EXACT original value leaves it `touched` (an act, not a net change), so
- *  Apply can fire a resend of an unchanged value — judged fine, not worth
- *  a "did anything actually move" check of its own. Since Phase BL PR A
- *  that resend is no longer value-idempotent in PROVENANCE: a touched
- *  field ships with a source, so an away-and-back nudge to the exact
- *  stored number, Applied, demotes a stored tested/derived source to
- *  manual — with zero visible ConfirmLines. That stance (an act on the
- *  field is a manual re-assertion of its number) is PR A's OWN decision,
- *  not a spec ruling: the demotion runs conservative (it downgrades to
- *  the least-claiming value, never fabricates a measurement) and
- *  provenance has zero consumers until `tested` exists. James RULED
- *  (2026-08-22): provenance is ORIGIN, not act — PR B replaces this
- *  with the value-identity predicate (stamp only when the value
- *  actually changed) alongside `tested`. Named here so nobody reads
- *  the interim behaviour as a bug or as settled. */
+ *  EXACT original value leaves it `touched` (an act, not a net change),
+ *  so the confirm card renders with zero visible ConfirmLines and a live
+ *  Apply/Discard pair. What Apply DOES with that state changed in Phase
+ *  BL PR B — THE ORIGIN PREDICATE (James's ruling, 2026-08-22:
+ *  provenance is ORIGIN, not act — a source describes where the NUMBER
+ *  came from, so an unchanged value keeps its stamp): `BaselineEditor`'s
+ *  Apply now sends a touched field only when its value actually differs
+ *  from the SERVER's (or the server side is null), and an Apply where
+ *  nothing changed makes no network call at all — it just settles the
+ *  card via `commit`. `touched` itself deliberately keeps tracking the
+ *  ACT (this module is pure display-session state and Finding 3's fix
+ *  still needs act-tracking for confirm-card visibility); the
+ *  value-identity comparison lives at the one place that owns the server
+ *  truth, `BaselineEditor.tsx`'s own handleApply. PR A's interim
+ *  behaviour (a touched-but-unmoved field resent with `manual`, silently
+ *  demoting a stored tested/derived source) is GONE, not merely
+ *  documented. */
 export function isDirty(s: DraftState): boolean {
   return s.touched.k2 || s.touched.k6;
 }

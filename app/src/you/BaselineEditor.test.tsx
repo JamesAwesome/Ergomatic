@@ -438,16 +438,20 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
       expect(screen.queryByText(/^2k .* → /)).not.toBeInTheDocument();
     });
 
-    // Re-review round (PR #66), accepted edge: `touched` tracks the ACT of
-    // nudging, not a net value change (deliberate — see Finding 3, which
-    // needs exactly this property for a derived value that lands back on
-    // the seed). Nudging away and back to the EXACT original value leaves
-    // `touched` true, so the confirm card still renders (Apply/Discard
-    // live) even though both ConfirmLines suppress themselves (from===to
-    // for every field) — a confirm card with zero visible lines. Apply
-    // still fires: an idempotent resend of the unchanged values, never an
-    // error or a silently-skipped no-op.
-    it("Apply is an idempotent resend when nudged back to the original value — the confirm card can render with zero ConfirmLines but live Apply/Discard (accepted edge)", async () => {
+    // Phase BL PR B — THE ORIGIN PREDICATE (James's ruling, 2026-08-22:
+    // provenance is ORIGIN, not act — a source describes where the NUMBER
+    // came from, so an unchanged value keeps its stamp). PR A shipped the
+    // conservative interim: a touched field always rode with `manual`, so
+    // an away-and-back nudge, Applied, silently demoted a stored
+    // tested/derived source with zero visible ConfirmLines. Now a touched
+    // field ships ONLY when its value actually differs from the server's
+    // (`draft !== server value`, or the server side is null); an
+    // unchanged field is omitted from the body entirely — PR A's own
+    // untouched rule, extended to the touched-but-unmoved case. The
+    // confirm card still renders for the act (Apply/Discard live, zero
+    // ConfirmLines), and Apply with nothing changed makes NO network call
+    // at all: it just settles the card.
+    it("an away-and-back nudge, Applied, sends NOTHING — an unchanged number keeps its stored source (ORIGIN ruling)", async () => {
       const save = mockReady({ k2Seconds: 112, k6Seconds: 122 });
       await renderEditor();
 
@@ -463,8 +467,49 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
         screen.getByRole("button", { name: /apply baselines/i }),
       );
 
-      // Both sides are set, so no offer exists — a nudge-away-and-back is
-      // a manual act on the field, and only that field rides (PR A).
+      // No wire call: the value never moved, so its provenance must not
+      // either — and the confirm card settles as if applied.
+      expect(save).not.toHaveBeenCalled();
+      expect(
+        screen.queryByRole("button", { name: /apply baselines/i }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("an away-and-back k2 beside a genuinely-moved k6 sends ONLY the k6 — value identity is per field", async () => {
+      const save = mockReady({ k2Seconds: 112, k6Seconds: 122 });
+      await renderEditor();
+
+      await userEvent.click(screen.getByRole("button", { name: "2k faster" }));
+      await userEvent.click(screen.getByRole("button", { name: "2k slower" }));
+      await userEvent.click(screen.getByRole("button", { name: "6k slower" }));
+
+      await userEvent.click(
+        screen.getByRole("button", { name: /apply baselines/i }),
+      );
+
+      expect(save).toHaveBeenCalledWith({
+        k6Seconds: 122.5,
+        k6Source: "manual",
+      });
+    });
+
+    // The predicate compares against the SERVER value, never the local
+    // seed: on a server-null side the displayed number is a fabricated
+    // seed (the "never a bare dash" rule), so returning to it via
+    // away-and-back is still a REAL change from null — omitting it here
+    // would make a rower's deliberate first entry silently unsavable at
+    // exactly the seed value (Finding 3's ghost, back in a new costume).
+    it("on a server-null side, nudging away and back to the SEED still saves it — null to a number IS a change", async () => {
+      const save = mockReady({ k2Seconds: null, k6Seconds: null });
+      await renderEditor();
+
+      await userEvent.click(screen.getByRole("button", { name: "2k faster" }));
+      await userEvent.click(screen.getByRole("button", { name: "2k slower" }));
+
+      await userEvent.click(
+        screen.getByRole("button", { name: /apply baselines/i }),
+      );
+
       expect(save).toHaveBeenCalledWith({ k2Seconds: 112, k2Source: "manual" });
     });
   });
