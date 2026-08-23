@@ -1,4 +1,5 @@
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
+import BackLink from "../shell/BackLink";
 import {
   ONBOARDING_DURATION_COPY,
   ONBOARDING_TITLES,
@@ -36,7 +37,6 @@ import { useWorkouts } from "../api/useWorkouts";
  *  under this banner; domain/onboarding.ts's rule). A missing row hides
  *  its card (defensive; the server seeds both unconditionally). */
 export default function RowToFind() {
-  const navigate = useNavigate();
   const workoutsState = useWorkouts();
   // F2 (triad review): the 2k chip's "NOT SET ·" segment renders only
   // when the 2k actually IS unset — both cards render regardless of a
@@ -84,6 +84,7 @@ export default function RowToFind() {
 
   return (
     <main className="screen onb-screen">
+      <BackLink fallback="/today" />
       <span className="mono-status">ROW TO FIND MY BASELINE</span>
       <h1 className="screen-title onb-title">Pick your distance</h1>
       <p className="onb-body">
@@ -137,15 +138,6 @@ export default function RowToFind() {
           </Link>
         </div>
       )}
-      <div className="onb-foot">
-        <button
-          type="button"
-          className="button-outline onb-back"
-          onClick={() => navigate("/today")}
-        >
-          Back
-        </button>
-      </div>
     </main>
   );
 }

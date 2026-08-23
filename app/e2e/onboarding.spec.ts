@@ -496,19 +496,21 @@ test.describe("the derivation offer is reachable through the real editor flow (t
     });
 
     await page.goto("/you");
-    await page.locator(".baseline-value").first().waitFor();
-    await page.getByRole("button", { name: "6k slower" }).click();
+    await page.locator(".baseline-input").first().waitFor();
+    // Option T: touch the 6k side by TYPING into its field — digits fill
+    // right to left, "230" -> 2:30 = 150s.
+    const k6Field = page.getByRole("textbox", { name: "6k split" });
+    await k6Field.click();
+    await k6Field.pressSequentially("230");
     await page.getByRole("button", { name: "Apply baselines" }).click();
 
     // The wire body itself — the exact assertion Finding 1 names — carries
     // ONLY the touched field. A fabricated k2Seconds here would mean the
     // fix didn't actually reach the network layer. Since Phase BL PR A the
-    // touched field also carries its truthful provenance: a stepper nudge
-    // is a manual entry.
+    // touched field also carries its truthful provenance: a typed entry
+    // is a manual one.
     await expect.poll(() => putBody).not.toBeNull();
-    // 152.5 = SEED_K6 (152, the estimate table's modal cell since PR C's
-    // constants reconciliation) + one 0.5 nudge.
-    expect(putBody).toStrictEqual({ k6Seconds: 152.5, k6Source: "manual" });
+    expect(putBody).toStrictEqual({ k6Seconds: 150, k6Source: "manual" });
 
     // The offer becomes visible for 2k — reachable, at last, through the
     // real editor flow rather than a raw API seed.
@@ -537,13 +539,13 @@ test.describe("the derivation offer is reachable through the real editor flow (t
     // the offer sets BOTH baselines, which removes the doors card the
     // assertions above depend on.
     await page.goto("/you");
-    await page.locator(".baseline-value").first().waitFor();
+    await page.locator(".baseline-input").first().waitFor();
     putBody = null;
     await page.getByRole("button", { name: "ESTIMATE FROM 6K (−7s)" }).click();
     await page.getByRole("button", { name: "Apply baselines" }).click();
     await expect.poll(() => putBody).not.toBeNull();
-    // deriveK2FromK6(152.5) = 145.5.
-    expect(putBody).toStrictEqual({ k2Seconds: 145.5, k2Source: "derived" });
+    // deriveK2FromK6(150) = 143.
+    expect(putBody).toStrictEqual({ k2Seconds: 143, k2Source: "derived" });
   });
 });
 
@@ -653,19 +655,23 @@ test.describe("Phase BL PR C: door 1 (recommend), door 2 (know), and Reset", () 
       page.getByRole("heading", { name: "Enter your splits" }),
     ).toBeVisible();
 
-    // Save is disabled until something is entered — the untouched seed
+    // Save is disabled until something is typed — the untouched seed
     // pair must never be writable by a bare Save.
     await expect(
       page.getByRole("button", { name: "Save baseline" }),
     ).toBeDisabled();
 
-    await page.getByRole("button", { name: "2k faster" }).click();
+    // Option T: tap the field, type the digits — "158" -> 1:58 = 118s
+    // (the exact entry whose 27-tap stepper cost prompted the change).
+    const know2k = page.getByRole("textbox", { name: "2k split" });
+    await know2k.click();
+    await know2k.pressSequentially("158");
     await page.getByRole("button", { name: "Save baseline" }).click();
     await expect(page).toHaveURL(/\/today$/);
 
-    // SEED_K2 (145) - 0.5, manual — and only that side.
+    // The typed 1:58, manual — and only that side.
     await expect.poll(() => putBody).not.toBeNull();
-    expect(putBody).toStrictEqual({ k2Seconds: 144.5, k2Source: "manual" });
+    expect(putBody).toStrictEqual({ k2Seconds: 118, k2Source: "manual" });
 
     // A partial pair is still an incomplete pair: the doors render again
     // (the superset ruling), all three of them.
@@ -715,7 +721,9 @@ test.describe("Phase BL PR C: door 1 (recommend), door 2 (know), and Reset", () 
 
     // The editor re-seeds from the now-empty server state (the modal-cell
     // seeds, not the cleared 100/120).
-    await expect(page.locator(".baseline-value").first()).toHaveText("2:25.0");
+    await expect(page.getByRole("textbox", { name: "2k split" })).toHaveValue(
+      "2:25.0",
+    );
 
     // The server pair is truly the no-row shape...
     const cleared = await page.evaluate(async () => {

@@ -584,7 +584,11 @@ test("onboarding-door-know", async ({ page }) => {
     name: "Screenshot Tester",
   });
   await page.goto("/onboarding/know");
-  await expect(page.getByText("2:25.0")).toBeVisible();
+  // The typed fields (Option T) rest on the seed pair — input VALUES now,
+  // not text nodes.
+  await expect(page.getByRole("textbox", { name: "2k split" })).toHaveValue(
+    "2:25.0",
+  );
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "onboarding-door-know.png"),
   });
@@ -618,7 +622,9 @@ test("you-reset-armed", async ({ page }) => {
     });
   });
   await page.goto("/you");
-  await expect(page.locator(".baseline-value").first()).toHaveText("1:58.0");
+  await expect(page.getByRole("textbox", { name: "2k split" })).toHaveValue(
+    "1:58.0",
+  );
   await page.getByRole("button", { name: "Reset baseline setup" }).click();
   await expect(
     page.getByText(/This clears both baseline splits/),
@@ -1385,7 +1391,7 @@ test("you", async ({ page }) => {
   // screen since James's 2026-08-22 feedback): the re-test shortcut below
   // the card rides the separate workouts fetch, so wait for it too or
   // the capture races it out of frame.
-  await page.locator(".baseline-value").first().waitFor();
+  await page.locator(".baseline-input").first().waitFor();
   await page.getByRole("link", { name: "RACE THE 2K" }).waitFor();
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "you.png"),
@@ -1432,17 +1438,15 @@ test("you-staged", async ({ page }) => {
   });
   await setBaselines(page);
   await page.goto("/you");
-  await page.locator(".baseline-value").first().waitFor();
-  // Press the 2k "slower" stepper a few times (0.5 s/step) to dirty the
-  // draft without touching `committed` — this is the whole point of the
-  // staged editor: nothing re-paces until Apply. Three presses from the
-  // 112.0 s seed land the confirm block at "2k 1:52.0 → 1:53.5", which
-  // "you.png" never shows because it captures the empty/seeded state
-  // before any draft edits.
-  const slower = page.getByRole("button", { name: "2k slower" });
-  await slower.click();
-  await slower.click();
-  await slower.click();
+  await page.locator(".baseline-input").first().waitFor();
+  // Type into the 2k field (Option T) to dirty the draft without touching
+  // `committed` — this is the whole point of the staged editor: nothing
+  // re-paces until Apply. "153" from the 112 s (1:52.0) stored value lands
+  // the confirm block at "2k 1:52.0 → 1:53.0", which "you.png" never shows
+  // because it captures the empty/seeded state before any draft edits.
+  const staged2k = page.getByRole("textbox", { name: "2k split" });
+  await staged2k.click();
+  await staged2k.pressSequentially("153");
   await page.getByRole("button", { name: "Apply baselines" }).waitFor();
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "you-staged.png"),
@@ -1463,8 +1467,10 @@ test("you-derive-offer", async ({ page }) => {
     name: "Screenshot Tester",
   });
   await page.goto("/you");
-  await page.locator(".baseline-value").first().waitFor();
-  await page.getByRole("button", { name: "6k slower" }).click();
+  await page.locator(".baseline-input").first().waitFor();
+  const offer6k = page.getByRole("textbox", { name: "6k split" });
+  await offer6k.click();
+  await offer6k.pressSequentially("230");
   await page.getByRole("button", { name: "Apply baselines" }).click();
   await page.getByRole("button", { name: "ESTIMATE FROM 6K (−7s)" }).waitFor();
   await page.screenshot({
@@ -1485,11 +1491,13 @@ test("you-derive-offer-accepted", async ({ page }) => {
     name: "Screenshot Tester",
   });
   await page.goto("/you");
-  await page.locator(".baseline-value").first().waitFor();
-  await page.getByRole("button", { name: "6k slower" }).click();
+  await page.locator(".baseline-input").first().waitFor();
+  const accepted6k = page.getByRole("textbox", { name: "6k split" });
+  await accepted6k.click();
+  await accepted6k.pressSequentially("230");
   await page.getByRole("button", { name: "Apply baselines" }).click();
   await page.getByRole("button", { name: "ESTIMATE FROM 6K (−7s)" }).click();
-  await page.getByText("ESTIMATED — ADJUST WITH ± BELOW").waitFor();
+  await page.getByText("ESTIMATED · TYPE TO ADJUST").waitFor();
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "you-derive-offer-accepted.png"),
   });
@@ -1508,8 +1516,10 @@ test("you-derive-offer-6k", async ({ page }) => {
     name: "Screenshot Tester",
   });
   await page.goto("/you");
-  await page.locator(".baseline-value").first().waitFor();
-  await page.getByRole("button", { name: "2k slower" }).click();
+  await page.locator(".baseline-input").first().waitFor();
+  const mirror2k = page.getByRole("textbox", { name: "2k split" });
+  await mirror2k.click();
+  await mirror2k.pressSequentially("218");
   await page.getByRole("button", { name: "Apply baselines" }).click();
   await page.getByRole("button", { name: "ESTIMATE FROM 2K (+7s)" }).waitFor();
   await page.screenshot({

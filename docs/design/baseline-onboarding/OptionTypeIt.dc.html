@@ -1,0 +1,33 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500&family=Archivo:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+  <style>
+    body { margin: 0; background: #e8e4d9; font-family: "Archivo", system-ui, sans-serif; color: #1b1a17; }
+    a { color: #b5341f; } a:hover { color: #9c2c19; }
+  </style>
+</helmet>
+<div style="width: 390px; min-height: 700px; background: #f4f1e8; padding: 24px 20px 20px 20px; box-sizing: border-box; display: flex; flex-direction: column; gap: 16px">
+<a style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; letter-spacing: 0.08em; color: #57544c; text-decoration: none; align-self: flex-start; min-height: 44px; display: inline-flex; align-items: center">&#8592; BACK</a>
+<span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; letter-spacing: 0.16em; color: #57544c">I KNOW MY BASELINE · OPTION T: TYPE IT</span>
+<h1 style="margin: 0; font-family: 'Newsreader', Georgia, serif; font-size: 31px; font-weight: 500; line-height: 1.1">Enter your splits</h1>
+<p style="margin: 0; font-size: 14px; color: #3f3c35; line-height: 1.45">Tap a field and type the digits. 152 becomes 1:52. Close enough is fine.</p>
+<div style="display: flex; flex-direction: column; gap: 6px"><span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; letter-spacing: 0.16em; color: #57544c">2K BASELINE</span><div style="display: flex; align-items: center; justify-content: space-between; min-height: 56px; background: #fffdf7; border: 2px solid #b5341f; border-radius: 2px; padding: 0 14px"><span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 28px">1:5<span style="display: inline-block; width: 2px; height: 30px; background: #b5341f; vertical-align: middle; margin-left: 2px"></span></span><span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; color: #6f6a5f">/500m</span></div></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; letter-spacing: 0.16em; color: #57544c">6K BASELINE</span><div style="display: flex; align-items: center; justify-content: space-between; min-height: 56px; background: #fffdf7; border: 1px solid #1b1a17; border-radius: 2px; padding: 0 14px"><span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 28px">2:03.5</span><span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; color: #6f6a5f">/500m</span></div></div>
+<p style="margin: 0; font-size: 12px; color: #6f6a5f; line-height: 1.5">Same right-to-left digit entry the builder already uses (ClockInput). Numeric keypad on iOS. Two seconds per field, no new mechanism, keyboard accessible for free.</p>
+<div style="flex: 1"></div>
+<div style="min-height: 56px; display: flex; align-items: center; justify-content: center; background: #b5341f; border-radius: 2px; color: #fffdf7; font-size: 16px; font-weight: 600; cursor: pointer">Save baseline</div>
+</div></x-dc>
+<script data-dc-script data-props='{}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

@@ -116,8 +116,11 @@ describe("You", () => {
       vi.stubGlobal("fetch", fetchMock);
       renderYou();
 
-      // The editor's first mount fetched and shows the stored pair.
-      expect(await screen.findByText("1:58.0")).toBeInTheDocument();
+      // The editor's first mount fetched and shows the stored pair (the
+      // typed field's resting value since Option T).
+      expect(
+        await screen.findByRole("textbox", { name: "2k split" }),
+      ).toHaveValue("1:58.0");
       const baselineGets = () =>
         calls.filter((c) => c.url === "/api/baselines" && c.method === "GET")
           .length;

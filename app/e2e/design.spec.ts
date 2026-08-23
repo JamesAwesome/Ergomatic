@@ -3549,7 +3549,7 @@ test.describe("you screen", () => {
     await assertNoA11yViolations(page);
   });
 
-  test("body background and a baseline value match the token palette", async ({
+  test("body background and a baseline field's value ink match the token palette", async ({
     page,
   }) => {
     const bodyBg = await page.evaluate(
@@ -3557,8 +3557,10 @@ test.describe("you screen", () => {
     );
     expect(bodyBg).toBe("rgb(244, 241, 232)"); // --page
 
+    // The typed field (Option T) keeps the accent value ink the old
+    // `.baseline-value` span carried — 5.94:1 on --surface, measured.
     const baselineValueColor = await page
-      .locator(".baseline-value")
+      .locator(".baseline-input")
       .first()
       .evaluate((el) => getComputedStyle(el).color);
     expect(baselineValueColor).toBe("rgb(181, 52, 31)"); // --accent
@@ -3625,7 +3627,7 @@ test.describe("you screen with the derivation offer visible (task review round, 
     expect(before).not.toBeNull();
 
     await page.getByRole("button", { name: "ESTIMATE FROM 6K (−7s)" }).click();
-    await page.getByText("ESTIMATED — ADJUST WITH ± BELOW").waitFor();
+    await page.getByText("ESTIMATED · TYPE TO ADJUST").waitFor();
 
     const after = await stableBoundingBox(slot);
     expect(after).not.toBeNull();
@@ -3637,7 +3639,7 @@ test.describe("you screen with the derivation offer visible (task review round, 
     page,
   }) => {
     await page.getByRole("button", { name: "ESTIMATE FROM 6K (−7s)" }).click();
-    const done = page.getByText("ESTIMATED — ADJUST WITH ± BELOW");
+    const done = page.getByText("ESTIMATED · TYPE TO ADJUST");
     await done.waitFor();
 
     const color = await done.evaluate((el) => getComputedStyle(el).color);

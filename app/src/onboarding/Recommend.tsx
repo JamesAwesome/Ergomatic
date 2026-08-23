@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import BackLink from "../shell/BackLink";
 import { useBaselines, type BaselinesPatch } from "../api/useBaselines";
 import {
   K2_K6_OFFSET_SECONDS,
@@ -143,6 +144,21 @@ function ReadyRecommend({
     const answered = isFirst ? experience !== null : cardio !== null;
     return (
       <main className="screen onb-screen">
+        {/* Top-left BACK, the app's `.back-link` convention (James's
+            2026-08-23 feedback round: the bottom Back broke the house
+            idiom). Destinations unchanged: Q1 exits to Today, Q2 returns
+            to Q1 with the answer kept (transient STATE, not widget). */}
+        {isFirst ? (
+          <BackLink fallback="/today" />
+        ) : (
+          <button
+            type="button"
+            className="back-link"
+            onClick={() => setStep("experience")}
+          >
+            ← BACK
+          </button>
+        )}
         <div className="onb-header">
           <span className="mono-status">RECOMMEND MY BASELINE</span>
           <StepDots filled={isFirst ? 1 : 2} />
@@ -171,15 +187,6 @@ function ReadyRecommend({
             onClick={() => setStep(isFirst ? "cardio" : "offer")}
           >
             Next
-          </button>
-          <button
-            type="button"
-            className="button-outline onb-back"
-            onClick={() =>
-              isFirst ? navigate("/today") : setStep("experience")
-            }
-          >
-            Back
           </button>
         </div>
       </main>
@@ -254,6 +261,16 @@ function ReadyRecommend({
     };
     return (
       <main className="screen onb-screen">
+        {/* This screen used to have no Back at all (the only exits were
+            accept or adjust); the top-left convention gives it one, back
+            to the cardio question with both answers kept. */}
+        <button
+          type="button"
+          className="back-link"
+          onClick={() => setStep("cardio")}
+        >
+          ← BACK
+        </button>
         <div className="onb-header">
           <span className="mono-status">RECOMMEND MY BASELINE</span>
           <StepDots filled={3} />
@@ -284,7 +301,7 @@ function ReadyRecommend({
           </button>
           <button
             type="button"
-            className="button-outline onb-back"
+            className="button-outline onb-secondary"
             disabled={saving}
             onClick={() => setStep("adjust")}
           >
@@ -370,6 +387,9 @@ function AdjustStep({
 
   return (
     <main className="screen onb-screen">
+      <button type="button" className="back-link" onClick={onBack}>
+        ← BACK
+      </button>
       <div className="onb-header">
         <span className="mono-status">RECOMMEND MY BASELINE</span>
         <StepDots filled={3} />
@@ -396,14 +416,6 @@ function AdjustStep({
           onClick={handleSave}
         >
           Save baseline
-        </button>
-        <button
-          type="button"
-          className="button-outline onb-back"
-          disabled={saving}
-          onClick={onBack}
-        >
-          Back
         </button>
       </div>
     </main>

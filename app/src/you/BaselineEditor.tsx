@@ -7,6 +7,7 @@ import {
   deriveK6FromK2,
 } from "../../domain/deriveBaseline.js";
 import { MOST_COMMON_ESTIMATE } from "../../domain/estimateBaseline.js";
+import SplitInput from "./SplitInput";
 import {
   MAX_SPLIT,
   MIN_SPLIT,
@@ -14,7 +15,6 @@ import {
   discard,
   initDraft,
   isDirty,
-  nudge,
   setDraft,
   type DraftState,
 } from "./baselineDraft";
@@ -27,17 +27,18 @@ import {
 // offer's 7s). They are the estimate table's own most-common cell
 // (2:25 / 2:32), so the table, the derive offer and the editor's seeds
 // are ONE family — agreement pinned by domain/estimateBaseline.test.ts.
-// Used only to seed a brand-new rower's draft so the ± buttons and Apply
-// have something sensible to work from; Apply still writes real numbers
-// back to the API.
+// Used only to seed a brand-new rower's draft so the typed fields and
+// Apply have something sensible to display and work from; Apply still
+// writes real numbers back to the API.
 const SEED_K2 = MOST_COMMON_ESTIMATE.k2Seconds;
 const SEED_K6 = MOST_COMMON_ESTIMATE.k6Seconds;
 
-/** Exported for Phase BL PR C's onboarding editors (door 2's "I know my
- *  baseline" screen and door 1's "Adjust the numbers first" step): the
- *  editor's real field row — label, mono split, ± steppers — reused
- *  rather than re-drawn (the spec's "reuse the editor's real components
- *  where clean"). */
+/** The stepper row — label, mono split, ± buttons. Since Option T (James,
+ *  2026-08-23) this serves ONLY door 1's "Adjust the numbers first" step
+ *  (`onboarding/Recommend.tsx`), which keeps its steppers on purpose: the
+ *  rower is nudging an offered number, not entering one. Both true
+ *  split-ENTRY surfaces (this editor's own rows and door 2) type instead
+ *  (`SplitInput`). */
 export function BaselineRow({
   label,
   seconds,
@@ -167,7 +168,7 @@ function DeriveSlot({
           {label}
         </button>
       ) : draftValue === offer.value ? (
-        <p className="baseline-derive-done">ESTIMATED — ADJUST WITH ± BELOW</p>
+        <p className="baseline-derive-done">ESTIMATED · TYPE TO ADJUST</p>
       ) : null}
     </div>
   );
@@ -281,15 +282,19 @@ function ReadyEditor({
     <div className="baselines-card">
       {seeded && (
         <p className="baseline-prompt">
-          No baselines yet. These are starting points to adjust with ± below.
+          No baselines yet. These are starting points. Tap a field and type your
+          own.
         </p>
       )}
-      <BaselineRow
-        label="2k"
-        seconds={state.draft.k2}
-        onFaster={() => setState((s) => nudge(s, "k2", -1))}
-        onSlower={() => setState((s) => nudge(s, "k2", 1))}
-      />
+      <div className="baseline-row">
+        <span className="baseline-label">2k</span>
+        <SplitInput
+          label="2k"
+          seconds={state.draft.k2}
+          onType={(v) => setState((s) => setDraft(s, "k2", v))}
+          className="baseline-input"
+        />
+      </div>
       {offer?.which === "k2" && (
         <DeriveSlot
           offer={offer}
@@ -298,12 +303,15 @@ function ReadyEditor({
           onFill={handleFillFromOffer}
         />
       )}
-      <BaselineRow
-        label="6k"
-        seconds={state.draft.k6}
-        onFaster={() => setState((s) => nudge(s, "k6", -1))}
-        onSlower={() => setState((s) => nudge(s, "k6", 1))}
-      />
+      <div className="baseline-row">
+        <span className="baseline-label">6k</span>
+        <SplitInput
+          label="6k"
+          seconds={state.draft.k6}
+          onType={(v) => setState((s) => setDraft(s, "k6", v))}
+          className="baseline-input"
+        />
+      </div>
       {offer?.which === "k6" && (
         <DeriveSlot
           offer={offer}

@@ -50,6 +50,30 @@
       "y": 0,
       "w": 390,
       "h": 700
+    },
+    {
+      "file": "OptionTypeIt.dc.html",
+      "x": 0,
+      "y": 1640,
+      "w": 390,
+      "h": 700,
+      "title": "Entry Option T (type it)"
+    },
+    {
+      "file": "OptionWheel.dc.html",
+      "x": 470,
+      "y": 1640,
+      "w": 390,
+      "h": 700,
+      "title": "Entry Option W (wheel)"
+    },
+    {
+      "file": "OptionSteppers.dc.html",
+      "x": 940,
+      "y": 1640,
+      "w": 390,
+      "h": 700,
+      "title": "Entry Option S (steppers+)"
     }
   ],
   "annotations": [
@@ -87,6 +111,13 @@
       "y": -150,
       "w": 390,
       "text": "Option B: identity framing. NOT CHOSEN (James, 2026-08-22). Kept for the record."
+    },
+    {
+      "id": "entry-note",
+      "x": 0,
+      "y": 1470,
+      "w": 560,
+      "text": "James's v0.19.0 feedback (2026-08-23): entering 1:58 from the 2:25 seed took 27 taps per field, with accidental text selection. Three directions, all with the app's top-left BACK restored (the designer call: bottom Back broke the house convention; top-left is where every other screen puts it). Recommendation: T as the primary control (the builder's shipped ClockInput pattern, two seconds per field, zero new mechanism), with S's coarse taps as the adjust affordance where a stepper already exists (the recommendation screen's adjust step). W is the most native-feeling and the most expensive to own on web; keep it in the pocket for a native-polish pass."
     }
   ],
   "launch": {

@@ -47,12 +47,26 @@
    is a navigation Link styled with Today's `.today-unlogged-discard`
    idiom, which is itself already covered below via the bare `button`
    selector for its ORIGINAL button usage; this entry is only needed for
-   the Link usage. */
+   the Link usage. The baseline/onboarding value displays and labels
+   (split-entry round, 2026-08-23 — James: rapid-tapping the old steppers
+   kept selecting the value text): `span.baseline-value` is qualified like
+   `span.stepper-value` (the adjust step's stepper-adjacent display span —
+   the typed `.split-input` fields are real inputs and stay selectable),
+   and `.baseline-label`/`.onb-field-label`/`.onb-field-unit`/
+   `.onb-offer-label`/`.onb-offer-value` are the labels and static values
+   sitting flush against tappable fields and steppers on the same
+   surfaces. */
 button,
 [role="radio"],
 .chip,
 .workout-row,
 span.stepper-value,
+span.baseline-value,
+.baseline-label,
+.onb-field-label,
+.onb-field-unit,
+.onb-offer-label,
+.onb-offer-value,
 .pace-ref-display,
 .back-link,
 .reader-close,
@@ -1203,6 +1217,24 @@ button:disabled {
   text-decoration: none;
 }
 
+/* The onboarding flow's within-flow BACKs (Recommend's Q2/offer/adjust
+   steps) are STATE transitions, not navigations, so they render as real
+   <button>s sharing the `.back-link` look — this strips the UA button
+   chrome the anchors never had. `.onb-screen`'s flex column would
+   otherwise stretch the control full width (align-items defaults to
+   stretch), turning a corner control into an invisible page-wide tap
+   strip — hence the align-self. */
+button.back-link {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+.onb-screen .back-link {
+  align-self: flex-start;
+}
+
 .workout-detail-meta {
   display: flex;
   align-items: center;
@@ -1429,6 +1461,51 @@ button:disabled {
   line-height: 1;
   cursor: pointer;
   color: var(--ink);
+}
+
+/* -- Option T typed split entry (SplitInput.tsx, 2026-08-23) ----------
+   Both split-ENTRY surfaces type now (the You editor's rows and door 2's
+   /onboarding/know); the recommendation flow's adjust step keeps the
+   stepper family above. Base metrics here; each surface's own class
+   (`.baseline-input`, `.onb-field-input`) shapes the box it sits in.
+   Accent value ink like the `.baseline-value` span it replaces —
+   #b5341f on --surface computes 5.94:1, clearing AA at any size. The
+   ink border is what says "tappable field" where the steppers used to.
+   font-size never below 16px (the iOS focus-zoom guard at the top of
+   this file). */
+.split-input {
+  min-height: var(--tap);
+  border: 1px solid var(--ink);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 16px;
+  text-align: center;
+}
+
+/* Focus ring: border swaps to accent and a 1px inset outline doubles it
+   to the canvas's 2px treatment without any layout shift. */
+.split-input:focus {
+  border-color: var(--accent);
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+/* The pre-focus value shown while the cleared field waits for digits.
+   ink-4 on --surface: 5.29:1 (the shared ::placeholder computation in
+   the stepper section). opacity 1 overrides Firefox's default fade. */
+.split-input::placeholder {
+  color: var(--ink-4);
+  opacity: 1;
+}
+
+/* The You editor's row field — fills the space between the "2k"/"6k"
+   label and the card edge where the value span + steppers used to sit. */
+.baseline-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 24px;
 }
 
 /* ui-notes round, item 2 — the derivation OFFER. `.button-l3` already
@@ -8240,6 +8317,58 @@ section:not(.news-pinned) .news-row:last-of-type {
   line-height: 1.45;
 }
 
+/* Door 2's typed split fields (canvas OptionTypeIt): mono label over a
+   boxed field — the box owns the chrome (border, focus ring) so the
+   input inside can sit flush beside its /500m unit; `.onb-field-input`
+   strips the `.split-input` base box accordingly. */
+.onb-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.onb-field-label {
+  letter-spacing: 0.16em;
+}
+
+.onb-field-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 56px;
+  background: var(--surface);
+  border: 1px solid var(--ink);
+  border-radius: var(--radius);
+  padding: 0 14px;
+}
+
+.onb-field-box:focus-within {
+  border-color: var(--accent);
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.onb-field-input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  font-size: 28px;
+  text-align: left;
+  padding: 0;
+}
+
+/* The ring lives on the box (:focus-within above), not the input. */
+.onb-field-input:focus {
+  outline: none;
+}
+
+.onb-field-unit {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
 /* Door 3's two distance cards (canvas RowPath): the old BaselineCard's
    ANATOMY — label / title + duration / dashed chip / lead action — as new
    UI, with Start an L1-styled LINK to the test's detail screen (pure
@@ -8361,7 +8490,11 @@ section:not(.news-pinned) .news-row:last-of-type {
   gap: 10px;
 }
 
-.onb-back {
+/* The foot's secondary ACTION (the offer step's "Adjust the numbers
+   first") — full width under the lead. Named `.onb-back` until the
+   2026-08-23 back-at-top round moved every flow Back to the top-left
+   `.back-link` idiom; this class survives only for real second actions. */
+.onb-secondary {
   width: 100%;
 }
 
