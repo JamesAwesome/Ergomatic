@@ -2589,3 +2589,69 @@ targetSplit:null}` reproduces the recorded tx exactly and `divergences` stays
   PM5's own screen field-for-field, the exit-2 shape pin (68.6 s / 250 m), and
   the one-shot post-close `acceptableFinalBoundary` exception being the ONLY
   post-close writer.
+
+### Phase RC delta pass — the revised storage spine (2026-08-23)
+
+- **CLAIM: "the existing reconcile path consumes the buffered summary at
+  close."** FALSE on both sides at once, for two different reasons.
+  **Technique: read the consumer's FIRST branch, and then find out when the
+  consumer actually runs.** `reconcileSummary`'s first branch is `split-won`
+  and its own log string says the held 0x0039 is "discarded unread" — and the
+  final split arrived before disconnect in 5 of 5 committed finishes, so that
+  branch is the only one production has ever taken. Separately, the deadline
+  never waits its 3 s: `useMonitorSession`'s teardown STEP 1 calls
+  `driver.reconcile()`, which drains it SYNCHRONOUSLY 21–107 ms after the
+  terminal. **Lesson: a deferral that adds 2 s of listening is worthless if
+  the thing that would consume the data was drained at t=0. Ask when the
+  consumer runs, not just whether it exists.**
+- **CLAIM: "0x003F's bytes are ours to store" (a spec built on a capture that
+  contains them).** FALSE for production. **Technique: grep the UUID for its
+  non-test callers.** `LOGGED_WORKOUT_UUID`'s only non-test subscriber is
+  `holdOpen.ts` — the dev instrument `dist-grep.sh` exists to prove is absent
+  from real builds — and `capacitorBle.ts`'s characteristic→service map has no
+  entry for it at all, so the iOS surface cannot subscribe it even if the
+  driver asked. The keystone capture has 0x003F ONLY because the instrument
+  subscribed it. **A field present in a capture is not a field the app can
+  receive: check which code path put it in the capture.**
+- **CLAIM: "a corpus sweep shows zero backward interval-count readings on
+  healthy resumes, including the leftover-numbers re-arm."** FALSE, and its
+  falsifier is the exact shape the claim named. **Technique: sweep every
+  consecutive pair, not the interesting ones.** One backward transition in
+  3,695 pairs: `walk-2026-08-16/session-2` seq 24→29, count 3→0 at
+  workoutState 0 — the leftover register. It cannot false-convict today, but
+  only because `applyContinuityCheck` short-circuits on `run === null` and
+  the record opens on the first LIVE rowing frame — a safety argument living
+  in a different file from the bound. **When the reason a bad reading is
+  harmless lives elsewhere, pin it elsewhere.**
+- **CLAIM: "settle the 0- vs 1-based interval-count base before shipping the
+  bound."** UNNECESSARY. **Technique: ask whether the mechanism is invariant
+  to the question.** `after < before` on a raw counter is invariant under any
+  constant offset, so the base cannot change a single verdict. A gate the
+  design is provably indifferent to is spend, not rigour. (The sweep answers
+  it for free anyway: 0-based, forward-attributed.)
+- **CLAIM: "the corpus sweep proves the guard convicts nothing healthy."**
+  The sweep measures a DIFFERENT RULE from the one production runs.
+  **Technique: compare the test's predicate to the caller's predicate, field
+  by field.** `continuity.test.ts` derives `distanceGoal` from the wire's
+  per-sample `workoutDurationType === 128`; production derives it from
+  `programHasDistanceGoal(run.program)` — the armed program, constant for the
+  session. Under the production predicate essentially the whole committed
+  corpus is suppressed, and the one backward count reading sits exactly where
+  the two predicates disagree. **Oracle blindness does not only mean "the
+  fixture cannot reach the code"; it also means "the fixture reaches it
+  through a different door."**
+- **NEW WIRE FACT, PROVEN (8 boundaries, 5 captures):** 0x0033's Interval
+  Count increments at the START of a rest and the matching 0x0037 arrives at
+  its END — a 29.8 s lead on r30 programs, 59.7 s on r60 — while on r0
+  programs it LAGS the 0x0037 by 0.28–0.72 s. **Technique: put the two
+  characteristics on one timeline with the state byte, instead of reading
+  each alone.** It also corroborates the end-during-rest bound from a second
+  field.
+- **SURVIVED my attack:** the burst geometry re-derived independently
+  (+269.6 / +307.8 ms, hash bytes `27d8f36e e152555b`); BURST_LINGER_MS=2000
+  against a worst modelled late-side arrival of terminal +398 ms; "final
+  interval" being determinable at receive time from data the driver already
+  holds; `run.summaryInGrace` surviving a pre-close write to the deadline;
+  two additive-optional `MonitorRun` fields being safe in both directions
+  (`isMonitorRun` has no unknown-key check, no `v` bump); and PR 1 needing no
+  server change at all.

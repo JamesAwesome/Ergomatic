@@ -68,48 +68,95 @@ original window mechanism, approved "Yes" 2026-08-23).
 ## 2. PR 1 — accept the burst, both sides of the race
 
 **Early side (the gate bug — 3 of 5 finishes).** A 0x0039 arriving while
-a natural finish is in progress is the machine's own finish
-announcement. The summary-accept gate opens during an open run's FINAL
-interval (the program's last interval, work or its trailing state) —
-`noteSummary` buffers it instead of discarding, and the existing
-reconcile path consumes it at close. No new timing machinery: the data
-was already delivered; we stop refusing it.
+an open run is in its FINAL interval is buffered (`noteSummary`), not
+discarded. Two delta-pass corrections shape the consumer:
 
-**Late side (the hangup — 2 of 5).** Teardown's unsubscribe+disconnect
-defers by `BURST_LINGER_MS = 2000` after the natural-finish terminal
-UNLESS the burst was already received (early side ⇒ zero added latency).
-The deferral lives at the HOOK/transport seam — the same seam the
-hold-open instrument proved (the antagonist refuted a driver-level
-window: teardown unsubscribes at STEP 3 before disconnecting at STEP 4,
-and the driver's `schedule` doc holds "exactly ONE deadline" with
-`FINISH_GRACE_MS`/`FINISH_HANDOFF_HOLD_MS` already coupled). The ring
-stash ordering is corrected the same way `holdOpen.ts` corrected it:
-whatever arrives during the linger reaches the stash.
+- **The split-won branch stops discarding.** `reconcileSummary`'s first
+  branch (`driver.ts:2983-2987`) — the ONLY branch production has ever
+  taken, since the final split arrived before disconnect in 5 of 5
+  committed finishes — currently logs the held summary "discarded
+  unread". It now consumes the summary FOR OBSERVATIONS (totals + hash)
+  even when the split won; `deriveFinalIntervalFromSummary` stays
+  no-split-only, so its undiscriminated premise 2 (rest-inclusive vs
+  work-only) remains fenced behind a condition that has never occurred
+  at a real erg — stated, not assumed cosmetic.
+- **Single-interval blindness, stated:** a 1-interval program is always
+  in its final interval, so the gate buffers any 0x0039 whenever it
+  arrives. A spurious mid-row 0x0039 COULD NOT HAVE BEEN OBSERVED by
+  this corpus (every session but one was deaf before one could arrive —
+  the B3 evidence shape); buffering is bounded either way (observations
+  land only at close, through the guarded writer below).
 
-**What the burst yields, and the new writer that holds it.** A new
-**post-close observation writer** — TRIAD-weight, named here as such —
-appends write-once observation fields to the just-closed record:
-`summaryTotals` (0x0039's work-only elapsed/distance, numbers-only) and
-`verificationBytes` (0x003F raw). It can ONLY append these two fields,
-only once, only to a record closed by natural finish in the same
-session, and it never mutates any existing field — the record's own
-numbers, `endedBy`, and every close decision are byte-identical with or
-without it. (Display consumes nothing from these fields in this spec;
-they are oracle/RC-10 material.)
+**Late side (the hangup — 2 of 5).** At a natural-finish terminal where
+the burst has NOT yet arrived, teardown defers THREE of its steps to
+`BURST_LINGER_MS = 2000` (or earlier, on burst completion): the
+synchronous `driver.reconcile()` drain (today STEP 1 — draining at t=0
+would consume the deadline before the burst lands, the delta pass's A3),
+the unsubscribe, and the disconnect. Everything else (navigation,
+closeRecord, wake-lock release) proceeds at t=0 as today. Consequences,
+each stated and guarded:
 
-- **Terminate/END paths untouched** (unknown burst status, §1).
-- **Watchdog:** the liveness decorator runs through the linger; a link
-  death inside it just ends the linger early. No banner post-close (LL
-  surface rules stand).
+- **A SECOND ring stash runs at linger end** (the `holdOpen.ts` pattern:
+  its own ring + injected stash — not a reorder), because STEP 2's
+  snapshot at t=0 would otherwise lose every burst-era entry, and that
+  stash is the only readout exit 7 has. STEP 2's doc comment is
+  rewritten in the same PR.
+- **The listener deliberately outlives the unmounted component** for up
+  to 2 s — that is how the burst is heard. The post-close doors it can
+  reach are guarded: the observation writer (below) re-reads
+  `MONITOR_RUN_KEY` and SKIPS if the stored record is gone or is not
+  this run (the `clearMonitorRun()` resurrection race —
+  `LogSession.tsx:1162/1372/1569`, `Today.tsx:631`); the pre-existing
+  `acceptableFinalBoundary` door gets the same re-read guard, since the
+  linger widens its window ~20–100×.
+- **The wake lock is already released at unmount** and no
+  `UIBackgroundModes` exist — the linger is the first mechanism
+  expecting delivery after the lock drops. Fine at 2 s in-foreground;
+  stated so nobody discovers it.
+- **A link death inside the linger ends the LISTENING half early; the
+  deferred `disconnect()` still owns the hangup** (the disconnected
+  branch cannot issue it — `driverRef` is already null by then).
+- `BURST_LINGER_MS = 2000` holds at ~5.0× the modelled worst case
+  (398 ms: late-side first element +90.2 ms plus the burst span
+  +307.8 ms), structurally bounded at one burst span because our
+  terminal cannot precede the machine's own flip. **n = 1 caveat
+  carried:** the burst-span offsets come from the only 0x0039/0x003F
+  ever captured, on a 2-interval piece.
+
+**0x003F gets a PRODUCTION subscriber (delta-pass B3 — without this,
+`verificationBytes` is unobtainable):** the driver's subscribe list
+gains `LOGGED_WORKOUT_UUID` in the NON-CRITICAL class (LL's degrade
+semantics — absent-on-firmware must not fail a connect), and
+`capacitorBle.ts`'s characteristic→service map gains its entry (the
+native map has none today; `webBluetooth.ts:118` already does). The
+keystone's 0x003F frames came from the dev instrument's subscription —
+a replay proves decode, not production reachability; the fake proves
+the plumbing.
+
+**The post-close observation writer** — TRIAD-weight, and **PR 1 is
+thereby a localStorage stored-shape change, said plainly** (delta C-ii):
+it appends two write-once fields, `summaryTotals` (0x0039's work-only
+numbers) and `verificationBytes` (0x003F raw), to a record closed by
+natural finish. Write-once and identity are enforced ON THE RUN, not
+"the session" (delta C-i — `program()` can open a second run in one hook
+instance): the writer keys on the record's own `startedAt` identity and
+skips if fields exist or identity mismatches. Safety of the shape
+change, cited not implied: `isMonitorRun` is a positive conjunction with
+no unknown-key check (`monitorRun.ts:290-335`, the file's own comment),
+`v` stays 2, no migration, records round-trip both directions. No server
+change (delta C-iii, attacked and held: `MonitorRun` never crosses the
+wire).
+
+- **Terminate/END paths untouched** (burst status UNKNOWN, §1).
+- **Watchdog:** liveness runs through the linger; no banner post-close.
 - **RC-7 rides here:** the synthesized-final fallback (never yet fired
-  at the erg, kept as the fallback it is) stops writing
+  at a real erg; kept as fallback) stops writing
   `restDistanceMeters: 0` and omits instead.
 - **Fake support (RC-8's first half):** the fake gains a natural-finish
-  burst — final 0x0037/38 then 0x0039/3A/3F with work-only totals
-  derived from its script — emitted through its existing scripted-event
-  machinery (`atMs`-relative, honoring the wall-clock-free contract: the
-  wrapper's clock drives it like everything else). Both race orderings
-  are scriptable, because both are real.
+  burst — final 0x0037/38 then 0x0039/3A/3F, work-only totals from its
+  script, BOTH race orderings scriptable (both are real), emitted
+  through the existing wrapper-clock machinery (wall-clock-free contract
+  intact).
 
 ## 3. PR 2 — RC-1: work and rest stored separately (TRIAD: stored shape)
 
@@ -147,30 +194,54 @@ they are oracle/RC-10 material.)
 ## 4. PR 3 — F2b: the interval-count bound (TRIAD: when the guard closes records)
 
 - The guard gains 0x0033's RAW interval count as an ADDITIONAL bound —
-  read pre-`toProgramIndex` (unclamped, never nulled by state), carried
-  on the reading like the other axes: `after.intervalCount <
+  read pre-`toProgramIndex` (unclamped, never nulled), a NEW
+  additive-optional `MonitorFrame` field (the `totalWorkDistanceMeters`
+  precedent; this reverses `driver.ts:1824-1830`'s "the raw value
+  survives only in the event log" contract — named as work, with the
+  DEVIATIONS row reconciled, delta D6). `ContinuityReading`'s
+  same-frame doc comment is rewritten honestly: the count axis comes
+  from the most recent 0x0033, a different characteristic than the
+  0x0031 axes, carried with the reading. `after.intervalCount <
   before.intervalCount` ⇒ `"reset"`. The F2a three-axis signature stays
   unchanged as the other bound.
-- **Honest capability statement:** on a 1-interval program the count
-  never advances, the bound is inert, and the guard is exactly F2a —
-  never worse, better wherever intervals exist. This closes F2a's §2b
-  blind window on multi-interval programs (a mid-gap reset drops the
-  count backward even when per-interval clocks read forward); the
-  under-count scenario from F2a's §2b must convict in the exit tests on
-  a multi-interval fixture.
-- **Settled before shipped:** the §15 #1 base ambiguity (0- vs 1-based)
-  against captures; a corpus sweep (all committed recordings — the rings
-  are structurally blind to this field and are NOT exit evidence here)
-  showing zero backward readings on healthy resumes, including
-  boundary-straddling pairs (count legitimately increments across a gap
-  ⇒ continuation) and the terminal-out-of-run re-arm shape (ring-3 seq
-  6-8's leftover-numbers connect — swept from recordings of the same
-  shape).
-- **The distance-goal suppression is re-examined for THIS bound only:**
-  if the sweep shows the raw count stable across distance-goal
-  boundaries, the new bound runs even where the TWD signature is
-  suppressed — the guard's first coverage on distance programs. If not,
-  the suppression covers both and the spec records why.
+- **Honest capability statement (delta D3):** the count reads 0 through
+  interval 1 of EVERY program (0-based, forward-attributed — settled
+  free by the sweep), so the bound is inert through the whole first
+  interval and on 1-interval programs — 78.3% of 30 s-gap pairs across
+  the corpus see no count change at all. Where it IS live
+  (multi-interval, past interval 1) it closes exactly F2a's §2b blind
+  window, and it is never worse than F2a anywhere.
+- **True-positive power is SYNTHETIC-ONLY and the spec says so (delta
+  D5):** no committed recording contains an interruption episode, and
+  the rings carry no interval count — exit 6's conviction runs on a
+  constructed multi-interval fixture, and with all suppression removed
+  the F2a signature convicts zero times in 3,316 corpus pairs, so this
+  bound is the only live conviction path the corpus can even exercise.
+- **The corpus's ONE backward count reading is in the spec, with its
+  safety argument localized (delta D2):** session-2 seq 24→29 (count
+  3→0, the leftover-register connect shape) — harmless in production
+  ONLY because `applyContinuityCheck` short-circuits on `run === null`;
+  a test pins that exact shape THROUGH the production path, so the
+  safety stops living in a different file by accident.
+- **The base ambiguity needs NO settling for this bound (delta D4):**
+  `after < before` is invariant under any constant offset. §15 #1 gets
+  the 0-based/forward-attributed note for free; it is not a gate.
+- **Suppression, decided with both eyes open (delta D5):** the sweep
+  supports lifting it for the count bound (the count held constant
+  across BOTH real backward-TWD glitches, step-2 500→250 and pyramid
+  1347→1047), and the one backward count sits inside the suppressed
+  region but PRE-RUN, where production never runs the check. The lift
+  ships ONLY IF the sweep is clean under BOTH `distanceGoal` predicates
+  — the wire's per-sample `durationType===128` AND production's
+  `programHasDistanceGoal(run.program)` (two different rules; the
+  existing CI sweep measures only the first — delta D5's
+  oracle-blindness catch) — with both results recorded. Otherwise the
+  count bound stays under F2a's suppression and the spec records why.
+- **New wire fact documented in `pm5-interface-notes.md` in this PR
+  (delta D1):** the count increments at REST ONSET — 29.8 s (r30) and
+  59.7 s (r60) ahead of that interval's own 0x0037, lagging it only
+  0.28–0.72 s on r0 — independently corroborating §3's end-during-rest
+  bound.
 
 ## 5. Out of scope, said aloud
 
@@ -182,15 +253,22 @@ they are oracle/RC-10 material.)
 
 ## 6. Exit criteria — written so they can go red
 
-1. Fake-driven, BOTH race orderings: a burst-first finish folds 0x0039
-   (the gate no longer discards it) and a terminal-first finish captures
-   the burst inside the linger; both store `summaryTotals` +
-   `verificationBytes` as write-once observations on a record whose
-   every pre-existing field is byte-identical to a no-burst run.
+1. Fake-driven, BOTH race orderings: a burst-first finish consumes the
+   summary for observations even though the split won (the branch that
+   used to log "discarded unread"), and a terminal-first finish captures
+   the burst inside the linger with the deferred reconcile drain; both
+   store `summaryTotals` + `verificationBytes` as write-once
+   observations keyed on the run's identity, on a record whose every
+   pre-existing field is byte-identical to a no-burst run — and a
+   post-linger write against a CLEARED `MONITOR_RUN_KEY` is skipped
+   (the resurrection race, pinned).
 2. Committed-capture replay (2026-08-23 keystone): the burst-first race
-   is replayed end-to-end; the record carries summaryTotals 500.0 m
-   work-only and the hash bytes `27d8f36e e152555b`; the final interval
-   is the real 0x0037's (68.6 s / 250 m shape).
+   replayed end-to-end; the record carries summaryTotals 500.0 m and
+   the hash bytes `27d8f36e e152555b`; the final interval is the real
+   0x0037's (68.6 s / 250 m shape). The replay proves DECODE and fold;
+   production 0x003F reachability is proven separately by the driver
+   subscription's own tests on both arms (the capture's 0x003F came
+   from the instrument's subscription).
 3. A post-RC-1 record stores work and rest separately; the display-sum
    pin includes a case where `round(Σ(w+r)) ≠ round(Σw)+round(Σr)` and
    asserts the former.
@@ -200,13 +278,17 @@ they are oracle/RC-10 material.)
 5. The fake's corrected fields each match a committed capture value; the
    `ergMachineType` fix covers both fake sites and the three fixtures.
 6. F2b: the F2a §2b under-count scenario convicts on a multi-interval
-   fixture via the count bound; the corpus sweep (recordings only) shows
-   zero false convictions; base ambiguity settled and cited.
+   SYNTHETIC fixture via the count bound (stated as synthetic — no real
+   interruption recording exists); the corpus sweep (recordings only)
+   shows zero false convictions under BOTH distanceGoal predicates,
+   results recorded; the session-2 seq 24→29 backward-count shape is
+   pinned through the production path (run === null ⇒ no conviction).
 7. On a real PM5 (next walk, production build, one keystone-shaped piece
    WITH a rest — so work-only discriminates): the log's stored summary
    totals match the PM5 memory screen's work-only row, and the stored
    final interval matches its interval row — the first production row
-   the machine itself confirms.
+   the machine itself confirms. The readout is the ring's SECOND stash
+   (the linger-end stash; without it the walk sees nothing — delta B1).
 
 ## 7. Gates and sequencing
 
