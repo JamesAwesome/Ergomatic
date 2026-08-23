@@ -5,6 +5,15 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.19.1 (2026-08-23): PR #175 only — James's same-day feedback on
+    // v0.19.0's baseline entry. Range v0.19.0..main = that one merge.
+    version: "v0.19.1",
+    date: "2026-08-23",
+    items: [
+      "Entering a baseline is typing now, not tapping: tap the field and type the digits, 158 becomes 1:58, with the number keypad. Works on the setup door and the You editor. Back moved to the top left like everywhere else, and tapping quickly no longer selects text by accident.",
+    ],
+  },
+  {
     // v0.19.0 (2026-08-23): Phase BL closes. Range v0.18.1..main = #167
     // (RC spec 1 — owes the spm-banding clause WITH the no-backfill
     // sentence, pre-stated at its gate; RC-4's decode has no product
