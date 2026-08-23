@@ -344,19 +344,19 @@ test.describe("baseline changes propagate to a workout's detail targets", () => 
     expect(before).toMatch(/\d/);
 
     await page.goto("/you");
-    // Nudge BOTH splits: the first target's pace ref could be based on
-    // either 2k or 6k, and this test asserts the end-to-end wiring (a
-    // baseline change reaches the detail screen), not which ref a given
-    // step happens to use — see docs/TESTING.md's pyramid on e2e's scope.
-    const NUDGES = 6; // 6 * 0.5s step (you/baselineDraft.ts's STEP) = +3s
-    for (const base of ["2k", "6k"] as const) {
-      const slower = page.getByRole("button", {
-        name: `${base} slower`,
-        exact: true,
-      });
-      for (let i = 0; i < NUDGES; i++) {
-        await slower.click();
-      }
+    // Retype BOTH splits (Option T typed fields): the first target's pace
+    // ref could be based on either 2k or 6k, and this test asserts the
+    // end-to-end wiring (a baseline change reaches the detail screen), not
+    // which ref a given step happens to use — see docs/TESTING.md's
+    // pyramid on e2e's scope. The seeded pair is 100/110 (beforeEach);
+    // +3s each: "143" -> 1:43 = 103s, "153" -> 1:53 = 113s.
+    for (const [base, digits] of [
+      ["2k", "143"],
+      ["6k", "153"],
+    ] as const) {
+      const field = page.getByRole("textbox", { name: `${base} split` });
+      await field.click();
+      await field.pressSequentially(digits);
     }
     await page
       .getByRole("button", { name: "Apply baselines", exact: true })
