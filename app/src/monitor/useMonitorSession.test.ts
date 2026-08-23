@@ -29,7 +29,12 @@ import { buildRun } from "../session/engine";
 import type { LogSeed } from "../session/logDraft";
 import { loadRun, saveRun, type SessionRun } from "../session/run";
 import { createEventLog } from "./eventLog";
-import { loadMonitorRun, MONITOR_RUN_KEY, type MonitorRun } from "./monitorRun";
+import {
+  clearMonitorRun,
+  loadMonitorRun,
+  MONITOR_RUN_KEY,
+  type MonitorRun,
+} from "./monitorRun";
 import { buildMonitorLogSteps } from "../session/logDraft";
 import { monitorModeRun } from "../session/LogSession";
 import {
@@ -49,6 +54,7 @@ import { gunzipSync } from "node:zlib";
 import {
   applyContinuityCheck,
   BANNER_RETRACT_HYSTERESIS_MS,
+  BURST_LINGER_MS,
   defaultLivenessSchedule,
   handleFrameRecovery,
   handleFrameSilence,
@@ -309,6 +315,15 @@ function harness(
         prepareSettleTicks: 0,
         schedule: () => (): void => undefined,
       },
+      // TIMER HYGIENE, the identical reasoning one field up (storage-spine
+      // design spec §2's late side, Task 3): `teardown` now arms its own
+      // `BURST_LINGER_MS` timer at a natural-finish unmount whose burst has
+      // not yet landed, and most tests here reach exactly that unmount
+      // without caring about the burst at all. This default stub means the
+      // linger's timer is scheduled but never fires in any test that does
+      // not supply its own `burstLingerSchedule` — STEPS 1/3/4 simply stay
+      // deferred forever, which no assertion in those tests depends on.
+      burstLingerSchedule: () => (): void => undefined,
       ...deps,
     }),
   );
@@ -401,6 +416,90 @@ async function programAndArm(
 function tick(fake: FakeControls, ms: number): void {
   act(() => {
     fake.tick(ms);
+  });
+}
+
+/** A hand-driven stand-in for `setTimeout`, so a one-shot `schedule` dep
+ *  (the hand-off hold's backstop, the burst linger, either driver-level
+ *  timer test files inject) is a thing a test FIRES rather than waits
+ *  for. Records every schedule so a test can assert the delay and whether
+ *  it was cancelled. Hoisted to module scope (originally local to "the
+ *  ended hand-off" describe block) so storage-spine design spec §2's own
+ *  teardown tests can reuse it without a second hand-rolled copy. */
+function manualSchedule() {
+  const calls: { ms: number; fire: () => void; cancelled: boolean }[] = [];
+  return {
+    calls,
+    schedule: (cb: () => void, ms: number): (() => void) => {
+      const call = { ms, fire: cb, cancelled: false };
+      calls.push(call);
+      return () => {
+        call.cancelled = true;
+      };
+    },
+    /** The most recent, still-live timer. */
+    pending(): { ms: number; fire: () => void; cancelled: boolean } | null {
+      const live = calls.filter((c) => !c.cancelled);
+      return live[live.length - 1] ?? null;
+    },
+  };
+}
+
+/** The walk's own piece: one 1:00 interval, rowed out. Hoisted to module
+ *  scope (originally local to "the ended hand-off" describe block) so
+ *  storage-spine design spec §2's own teardown tests share the identical
+ *  fixture rather than a near-duplicate. */
+const ONE_INTERVAL: WorkoutProgram = {
+  intervals: [
+    {
+      type: "work",
+      kind: "time",
+      value: 60,
+      targetSplit: 120,
+      displaySpm: 22,
+      restSeconds: 0,
+    },
+  ],
+};
+/** A seed whose one WORK step aligns with `ONE_INTERVAL`'s one interval —
+ *  `TEST_SEED`'s placeholder is a warm-up, and `buildMonitorLogSteps`
+ *  skips warm-ups, so a run seeded with it has no log step for the
+ *  measured interval to land in. */
+const ONE_IDENTITY: RunIdentity = {
+  workoutId: "walk-day-2",
+  title: "1:00",
+  logSeed: {
+    steps: [{ label: "1:00 at 2k+4", kind: "work" }],
+    paces: { k2: 112 },
+  },
+};
+
+/** `ONE_INTERVAL`'s own final (and only) boundary, as the fake puts it on
+ *  the wire. */
+function finalBoundary(atMs: number): FakeTimelineEvent {
+  return {
+    atMs,
+    kind: "boundary",
+    actual: {
+      index: 0,
+      elapsedSeconds: 60,
+      distanceMeters: 200,
+      avgSpm: 24,
+      avgHeartRateBpm: 142,
+      restDistanceMeters: 0,
+    },
+    cumulativeElapsedSeconds: 60,
+    cumulativeDistanceMeters: 200,
+  };
+}
+
+function finishedAt(atMs: number): FakeTimelineEvent {
+  return status(atMs, {
+    workoutState: WORKOUTSTATE_WORKOUTEND,
+    elapsedSeconds: 60,
+    distanceMeters: 200,
+    spm: 0,
+    currentSplit: 0,
   });
 }
 
@@ -1308,84 +1407,6 @@ describe("useMonitorSession: the happy walk, on a real library workout", () => {
 // ---------------------------------------------------------------------------
 
 describe("useMonitorSession: the ended hand-off waits for the last split (walk day 2)", () => {
-  /** The walk's own piece: one 1:00 interval, rowed out. */
-  const ONE_INTERVAL: WorkoutProgram = {
-    intervals: [
-      {
-        type: "work",
-        kind: "time",
-        value: 60,
-        targetSplit: 120,
-        displaySpm: 22,
-        restSeconds: 0,
-      },
-    ],
-  };
-  /** A seed whose one WORK step aligns with the program's one interval —
-   *  `TEST_SEED`'s placeholder is a warm-up, and `buildMonitorLogSteps`
-   *  skips warm-ups, so a run seeded with it has no log step for the
-   *  measured interval to land in. The whole point of this block is what
-   *  the log screen ends up showing, so its fixture has to be able to show
-   *  something. */
-  const ONE_IDENTITY: RunIdentity = {
-    workoutId: "walk-day-2",
-    title: "1:00",
-    logSeed: {
-      steps: [{ label: "1:00 at 2k+4", kind: "work" }],
-      paces: { k2: 112 },
-    },
-  };
-
-  /** The final interval's own boundary, as the fake puts it on the wire. */
-  function finalBoundary(atMs: number): FakeTimelineEvent {
-    return {
-      atMs,
-      kind: "boundary",
-      actual: {
-        index: 0,
-        elapsedSeconds: 60,
-        distanceMeters: 200,
-        avgSpm: 24,
-        avgHeartRateBpm: 142,
-        restDistanceMeters: 0,
-      },
-      cumulativeElapsedSeconds: 60,
-      cumulativeDistanceMeters: 200,
-    };
-  }
-
-  function finishedAt(atMs: number): FakeTimelineEvent {
-    return status(atMs, {
-      workoutState: WORKOUTSTATE_WORKOUTEND,
-      elapsedSeconds: 60,
-      distanceMeters: 200,
-      spm: 0,
-      currentSplit: 0,
-    });
-  }
-
-  /** A hand-driven stand-in for `setTimeout`, so the hold's backstop is a
-   *  thing a test FIRES rather than waits for. Records every schedule so a
-   *  test can assert the delay and whether it was cancelled. */
-  function manualSchedule() {
-    const calls: { ms: number; fire: () => void; cancelled: boolean }[] = [];
-    return {
-      calls,
-      schedule: (cb: () => void, ms: number): (() => void) => {
-        const call = { ms, fire: cb, cancelled: false };
-        calls.push(call);
-        return () => {
-          call.cancelled = true;
-        };
-      },
-      /** The most recent, still-live timer. */
-      pending(): { ms: number; fire: () => void; cancelled: boolean } | null {
-        const live = calls.filter((c) => !c.cancelled);
-        return live[live.length - 1] ?? null;
-      },
-    };
-  }
-
   it("THE WALK DAY 3 SEQUENCE, replayed: finished -> the PM's own repeat ticks -> the split -> recorded, with the hand-off held across all of it", async () => {
     // The device stash, event for event (2026-08-11, PM5 432331249): the
     // terminal frame, the machine's own repeat `finished` samples, THEN the
@@ -1690,8 +1711,9 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     expect(result.current.endedBy).toBe("machine");
   });
 
-  it("unmounting during the hold cancels its backstop — no timer outlives the session", async () => {
+  it("unmounting during the hold cancels its backstop — no timer outlives the burst linger (storage-spine design spec §2, Task 3: this natural finish never hears a burst, so the deferred release is what finally cancels it)", async () => {
     const timer = manualSchedule();
+    const burstTimer = manualSchedule();
     const { result, fake, unmount } = harness(
       {
         program: ONE_INTERVAL,
@@ -1700,7 +1722,7 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
           finishedAt(200),
         ],
       },
-      { schedule: timer.schedule },
+      { schedule: timer.schedule, burstLingerSchedule: burstTimer.schedule },
     );
 
     await connect(result);
@@ -1711,13 +1733,28 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
 
     unmount();
 
+    // Task 3: the backstop is NOT cancelled synchronously any more — this
+    // run's `summaryTotals` is still unset (no burst ever arrives in this
+    // script), so teardown defers STEP 1 — and `releaseHandoff("teardown")`
+    // stays glued to it (the same glue that keeps a genuine fill's
+    // "final-boundary" reason from being pre-empted) — to the burst
+    // linger's own timeout instead.
     expect(timer.calls).toHaveLength(1);
+    expect(timer.calls[0]!.cancelled).toBe(false);
+    expect(burstTimer.pending()?.ms).toBe(BURST_LINGER_MS);
+
+    // The linger's own cap elapses — no burst ever came — and NOW the
+    // backstop is cancelled, no timer left outliving the session.
+    act(() => {
+      burstTimer.pending()!.fire();
+    });
     expect(timer.calls[0]!.cancelled).toBe(true);
-    // ...and it says so IN THE STASH: the release runs as teardown's first
-    // statement, above the export, so a session torn down mid-hold leaves a
-    // trace that accounts for the hold instead of one that just stops
-    // (review M-1). This is the ordering, asserted through the artifact the
-    // operator actually reads at the erg.
+
+    // ...and it says so IN THE STASH: the release runs as the deferred
+    // path's first statement, above the (second) export, so a session torn
+    // down mid-hold leaves a trace that accounts for the hold instead of
+    // one that just stops (review M-1). This is the ordering, asserted
+    // through the artifact the operator actually reads at the erg.
     const stashed = sessionStorage.getItem("ergomatic:last-rowed-log") ?? "[]";
     const kinds = (JSON.parse(stashed) as { kind: string; detail: string }[])
       .filter((e) => e.kind.startsWith("handoff"))
@@ -1907,15 +1944,18 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     ).toContain("final-boundary");
   });
 
-  it("Task 7, THE ORDERING PIN: a reconcile that fires at TEARDOWN — before its own 3000ms deadline — lands in the STASH SNAPSHOT itself, not merely the in-memory ring (§22's own recorded trap: an entry written after the stash is taken dies with the tab)", async () => {
+  it("Task 7, THE ORDERING PIN, UPDATED FOR THE BURST LINGER (storage-spine design spec §2, Task 3): a reconcile that fires at DEFERRAL END — not at teardown itself any more — still lands in the SECOND STASH SNAPSHOT, not merely the in-memory ring (§22's own recorded trap: an entry written after a stash is taken dies with the tab)", async () => {
     // Same shape as "THE DROPPED SPLIT, END TO END" above, but the rower
-    // leaves BEFORE the driver's own deadline ever fires — the exact window
-    // the twin defect lost: `disconnect()` used to just cancel the pending
-    // reconcile, and even after draining it, the hook's OLD order
-    // (unsubscribe, then disconnect) would have emitted the drain into an
-    // empty listener set.
+    // leaves BEFORE the driver's own deadline ever fires. Before Task 3
+    // this was the exact window the twin defect lost — `disconnect()` used
+    // to just cancel the pending reconcile — and teardown's own immediate
+    // `driver.reconcile()` call closed it. Task 3 now DEFERS that call for
+    // exactly this shape (a natural finish whose burst has not landed):
+    // the fix this test pins is real, but it now fires at the burst
+    // linger's own deferral end, not synchronously inside `unmount()`.
     const timer = manualSchedule();
     const driverTimer = manualSchedule();
+    const burstTimer = manualSchedule();
     let driverMs = 0;
     const { result, fake, unmount } = harness(
       {
@@ -1927,6 +1967,7 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
       },
       {
         schedule: timer.schedule,
+        burstLingerSchedule: burstTimer.schedule,
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
@@ -1953,13 +1994,31 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     expect(driverTimer.pending()?.ms).toBe(3000);
     expect(result.current.actuals).toHaveLength(0);
 
-    // The rower leaves. Teardown must reconcile BEFORE it stashes: if it
-    // stashed first, this snapshot would be serialized before the fill
-    // ever reached the ring, and every assertion below would fail even
-    // though the in-memory ring (unreachable from this test, and unread by
-    // design — the RING is not the artifact that survives the tab) had
-    // gone on to record it a line later.
+    // The rower leaves. STEPS 1/3/4 do NOT run synchronously here any
+    // more — the record is naturally-finished with no burst observation
+    // recorded yet, so teardown defers and arms its own `BURST_LINGER_MS`
+    // timer instead.
     unmount();
+    expect(burstTimer.pending()?.ms).toBe(BURST_LINGER_MS);
+    expect(driverTimer.pending()).not.toBeNull(); // not yet consumed
+
+    // The FIRST stash (teardown's own STEP 2, still at t=0) cannot see the
+    // fill — nothing has drained it yet.
+    const firstStash = JSON.parse(
+      sessionStorage.getItem("ergomatic:last-monitor-log")!,
+    ) as { kind: string; detail: string }[];
+    expect(firstStash.some((e) => e.kind === "summary-reconciled")).toBe(false);
+
+    // The linger's own deadline elapses. Teardown must reconcile BEFORE it
+    // takes the SECOND stash: if it stashed first, that snapshot would be
+    // serialized before the fill ever reached the ring, and every
+    // assertion below would fail even though the in-memory ring
+    // (unreachable from this test, and unread by design — the RING is not
+    // the artifact that survives the tab) had gone on to record it a line
+    // later.
+    act(() => {
+      burstTimer.pending()!.fire();
+    });
 
     const stashed = sessionStorage.getItem("ergomatic:last-monitor-log");
     expect(stashed).not.toBeNull();
@@ -1972,9 +2031,289 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
     expect(
       entries.find((e) => e.kind === "handoff-released")?.detail,
     ).toContain("final-boundary");
-    // The deadline was CONSUMED at teardown, not left dangling — the same
-    // timer-hygiene bar every other test in this file holds `teardown` to.
+    // The deadline was CONSUMED at deferral end, not left dangling — the
+    // same timer-hygiene bar every other test in this file holds
+    // `teardown` to.
     expect(driverTimer.pending()).toBeNull();
+  });
+});
+
+describe("useMonitorSession: teardown — the burst linger (storage-spine design spec §2, PR 1 Task 3)", () => {
+  it("(a) LATE SIDE: the burst arrives inside the linger, after the terminal — observations are stored, the SECOND stash carries the burst-era ring entries, and disconnect happens at burst completion, not at the full BURST_LINGER_MS", async () => {
+    const driverTimer = manualSchedule();
+    const burstTimer = manualSchedule();
+    const driverMs = 0;
+    const { result, fake, transport, unmount } = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [
+          status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+          finalBoundary(150),
+          finishedAt(200),
+        ],
+      },
+      {
+        burstLingerSchedule: burstTimer.schedule,
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          now: () => driverMs,
+          schedule: driverTimer.schedule,
+        },
+      },
+    );
+
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    tick(fake, 100);
+    tick(fake, 100);
+
+    // The split already landed (before the terminal) — nothing missing,
+    // so the hand-off hold never opens. `armSummaryReconcile` is still
+    // armed regardless (§2's own "any design must serve both sides").
+    expect(result.current.phase).toBe("ended");
+    expect(result.current.handoffHeld).toBe(false);
+    expect(result.current.actuals).toHaveLength(1);
+    expect(driverTimer.pending()?.ms).toBe(3000);
+
+    unmount();
+
+    // Naturally-finished, no burst recorded yet: teardown defers instead
+    // of draining immediately.
+    expect(burstTimer.pending()?.ms).toBe(BURST_LINGER_MS);
+    expect(transport.disconnects).toBe(0);
+    expect(loadMonitorRun()?.summaryTotals).toBeUndefined();
+
+    // The burst arrives — AFTER our own terminal (the late side, §1's "2
+    // of 5") — and is held (`graceIsOpen`: the driver's run is closed, the
+    // grace has not elapsed).
+    act(() => {
+      fake.deliverSummary({ elapsedSeconds: 60, meters: 200 });
+    });
+    expect(loadMonitorRun()?.summaryTotals).toBeUndefined(); // still just held
+
+    // The grace's own deadline resolves it (fired by hand, matching
+    // driver.test.ts's own idiom for "the deadline elapsed" — not a
+    // literal 3000ms wait): split-won, with a summary now held, folds it
+    // as an observation (Task 1/2's "the split-won branch stops
+    // discarding").
+    act(() => {
+      driverTimer.pending()!.fire();
+    });
+
+    // BURST COMPLETION, not the full cap: the deferred STEPS 1/3/4 ran the
+    // instant the burst's own event reached `handleEvent`, well inside
+    // `BURST_LINGER_MS` — disconnect already happened, and the linger's
+    // own timer is cancelled, not left dangling.
+    expect(transport.disconnects).toBe(1);
+    expect(burstTimer.pending()).toBeNull();
+
+    const stored = loadMonitorRun();
+    expect(stored?.summaryTotals).toStrictEqual({
+      workElapsedSeconds: 60,
+      workDistanceMeters: 200,
+    });
+
+    // THE SECOND STASH: the ring entries the drain itself produced,
+    // unreachable from the FIRST (t=0) stash taken before any of this
+    // happened.
+    const stashed = sessionStorage.getItem("ergomatic:last-monitor-log");
+    expect(stashed).not.toBeNull();
+    const entries = JSON.parse(stashed!) as { kind: string; detail: string }[];
+    expect(entries.some((e) => e.kind === "summary-half")).toBe(true);
+    const verdict = entries.find((e) => e.kind === "summary-reconciled");
+    expect(verdict?.detail).toContain("split-won");
+  });
+
+  it("(b) EARLY SIDE: the burst arrives before the terminal and is already reconciled by the time this screen unmounts — NO added latency (disconnect timing unchanged from today's pin), observations still stored", async () => {
+    const driverTimer = manualSchedule();
+    const burstTimer = manualSchedule();
+    let driverMs = 0;
+    const { result, fake, transport, unmount } = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [
+          status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+          finishedAt(200),
+        ],
+      },
+      {
+        burstLingerSchedule: burstTimer.schedule,
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          now: () => driverMs,
+          schedule: driverTimer.schedule,
+        },
+      },
+    );
+
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    tick(fake, 100);
+
+    // The burst beats OUR terminal transition (§1's own "3 of 5"): 0x0039
+    // arrives while the driver still considers the run open, in its one
+    // (therefore final) interval.
+    act(() => {
+      fake.deliverSummary({ elapsedSeconds: 62.5, meters: 214 });
+    });
+
+    // Now the terminal — no split ever arrives for this program, so the
+    // hand-off hold opens.
+    tick(fake, 100);
+    expect(result.current.phase).toBe("ended");
+    expect(result.current.handoffHeld).toBe(true);
+
+    // The grace's own deadline resolves WHILE STILL MOUNTED — the hold's
+    // whole reason to exist is to keep this screen up long enough for
+    // exactly this. No split ever came, so the no-split path synthesizes
+    // the final interval from the burst's own totals.
+    driverMs = 3000;
+    act(() => {
+      driverTimer.pending()!.fire();
+    });
+    expect(result.current.actuals).toHaveLength(1);
+    expect(result.current.handoffHeld).toBe(false);
+    expect(loadMonitorRun()?.summaryTotals).toStrictEqual({
+      workElapsedSeconds: 62.5,
+      workDistanceMeters: 214,
+    });
+
+    // By the time this screen unmounts, the burst is ALREADY recorded —
+    // teardown takes the IMMEDIATE path, no linger, no added latency.
+    unmount();
+
+    expect(burstTimer.calls).toHaveLength(0);
+    expect(transport.disconnects).toBe(1);
+  });
+
+  it("(c) NO BURST: disconnect happens at exactly BURST_LINGER_MS, and the record stays byte-identical to today's (no summaryTotals/verificationBytes field at all)", async () => {
+    const burstTimer = manualSchedule();
+    const { result, fake, transport, unmount } = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [
+          status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+          finishedAt(200),
+        ],
+      },
+      { burstLingerSchedule: burstTimer.schedule },
+    );
+
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    tick(fake, 100);
+    tick(fake, 100);
+    expect(result.current.phase).toBe("ended");
+    expect(result.current.handoffHeld).toBe(true);
+
+    unmount();
+    expect(burstTimer.pending()?.ms).toBe(BURST_LINGER_MS);
+    expect(transport.disconnects).toBe(0);
+
+    // Nothing ever arrives. The linger's own cap is what finally decides
+    // it — this hook's own `driverOptions.schedule` default (the harness's
+    // no-op stub) never fires the driver's OWN grace on its own, so this
+    // pins the burst linger's timer as the ONLY thing moving this forward.
+    act(() => {
+      burstTimer.pending()!.fire();
+    });
+
+    expect(transport.disconnects).toBe(1);
+    const stored = loadMonitorRun();
+    expect(stored).not.toBeNull();
+    expect(stored).not.toHaveProperty("summaryTotals");
+    expect(stored).not.toHaveProperty("verificationBytes");
+  });
+
+  it("(d) THE RESURRECTION RACE: MONITOR_RUN_KEY is cleared during the linger — the burst's own appendSummaryObservations declines, and nothing reappears in storage", async () => {
+    const driverTimer = manualSchedule();
+    const burstTimer = manualSchedule();
+    const driverMs = 0;
+    const { result, fake, unmount } = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [
+          status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+          finalBoundary(150),
+          finishedAt(200),
+        ],
+      },
+      {
+        burstLingerSchedule: burstTimer.schedule,
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          now: () => driverMs,
+          schedule: driverTimer.schedule,
+        },
+      },
+    );
+
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    tick(fake, 100);
+    tick(fake, 100);
+    expect(result.current.phase).toBe("ended");
+    expect(loadMonitorRun()).not.toBeNull();
+
+    unmount();
+    expect(burstTimer.pending()?.ms).toBe(BURST_LINGER_MS);
+
+    // THE ROWER DISCARDS OR LOGS THIS RUN from another screen, entirely
+    // independent of this (unmounted) hook instance — `LogSession.tsx`/
+    // `Today.tsx`'s own clear sites, cited in the spec.
+    clearMonitorRun();
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+
+    // THEN the burst arrives.
+    act(() => {
+      fake.deliverSummary({ elapsedSeconds: 60, meters: 200 });
+    });
+    act(() => {
+      driverTimer.pending()!.fire();
+    });
+
+    // `appendSummaryObservations` re-reads storage fresh and finds nothing
+    // to append to — it declines silently, and nothing reappears.
+    expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
+  });
+
+  it("(e) TERMINATE teardown is byte-identical to today's — no linger, pinned at minimum", async () => {
+    const burstTimer = manualSchedule();
+    const { result, fake, transport, unmount } = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [
+          status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+          status(200, {
+            workoutState: WORKOUTSTATE_TERMINATE,
+            elapsedSeconds: 40,
+            distanceMeters: 130,
+            spm: 0,
+            currentSplit: 0,
+          }),
+        ],
+      },
+      { burstLingerSchedule: burstTimer.schedule },
+    );
+
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    tick(fake, 100);
+    tick(fake, 100);
+    expect(result.current.phase).toBe("ended");
+    expect(result.current.endedBy).toBe("machine");
+    expect(loadMonitorRun()?.endedBy).toBe("rower"); // TERMINATE, not finished
+
+    unmount();
+
+    // No natural finish, so no linger ever arms — the immediate path ran,
+    // exactly as it always has.
+    expect(burstTimer.calls).toHaveLength(0);
+    expect(transport.disconnects).toBe(1);
+    expect(loadMonitorRun()).not.toHaveProperty("summaryTotals");
   });
 });
 

@@ -590,6 +590,61 @@ describe("recordActual: actuals accumulate only while the run is open (Phase 7A-
     expect(after.terminated).toBe(false);
   });
 
+  it("storage-spine design spec §2's late side (Task 3): a finish-grace actual arriving after MONITOR_RUN_KEY was cleared out from under it — the resurrection race — is refused, not resurrected", () => {
+    // `useMonitorSession.ts`'s deferred teardown is the caller old enough
+    // for this to matter: a `run` object it decided was acceptable BEFORE
+    // the burst linger started can now be handed to `recordActual` up to
+    // `BURST_LINGER_MS` later, after the rower discarded or logged the
+    // run from a screen that has no idea this stale object still exists.
+    const closed: MonitorRun = {
+      ...freshMonitorRun(),
+      completedAt: new Date("2026-08-05T12:20:00.000Z").toISOString(),
+    };
+    // Deliberately NOT saved to storage — storage holds nothing for this
+    // run at write time, exactly the `clearMonitorRun()` shape.
+    expect(loadMonitorRun()).toBeNull();
+
+    const after = recordActual(closed, finalActual, { finalBoundary: true });
+
+    expect(after).toBe(closed);
+    expect(after.actuals).toStrictEqual([]);
+    // Nothing resurrected: storage is still empty, not a record this
+    // caller's stale copy just wrote back into existence.
+    expect(loadMonitorRun()).toBeNull();
+  });
+
+  it("...and the identical refusal when storage now holds a DIFFERENT run — the finish-grace actual never lands on somebody else's record", () => {
+    const closed: MonitorRun = {
+      ...freshMonitorRun(),
+      completedAt: new Date("2026-08-05T12:20:00.000Z").toISOString(),
+    };
+    const unrelated: MonitorRun = {
+      ...freshMonitorRun(),
+      startedAt: "2026-08-05T13:00:00.000Z",
+    };
+    saveMonitorRun(unrelated);
+
+    const after = recordActual(closed, finalActual, { finalBoundary: true });
+
+    expect(after).toBe(closed);
+    expect(after.actuals).toStrictEqual([]);
+    expect(loadMonitorRun()).toStrictEqual(viaJson(unrelated));
+  });
+
+  it("...but the ORDINARY case is unaffected: storage still holding this exact run accepts the finish-grace actual same as always", () => {
+    const closed: MonitorRun = {
+      ...freshMonitorRun(),
+      completedAt: new Date("2026-08-05T12:20:00.000Z").toISOString(),
+    };
+    saveMonitorRun(closed);
+
+    const after = recordActual(closed, finalActual, { finalBoundary: true });
+
+    expect(after).not.toBe(closed);
+    expect(after.actuals).toStrictEqual([finalActual]);
+    expect(loadMonitorRun()).toStrictEqual(viaJson(after));
+  });
+
   it("...but ONE of them: a second flagged actual naming a DIFFERENT interval is refused, not filed", () => {
     // CONSUMED-ONCE, re-derived at the record layer (review M-3). The driver
     // clears its own grace after the first boundary, so two flagged actuals
