@@ -550,9 +550,16 @@ test("onboarding-door-question", async ({ page }) => {
     name: "Screenshot Tester",
   });
   await page.goto("/onboarding/recommend");
+  // Tapping an answer auto-advances (2026-08-23), so the selected-state
+  // question screen — the capture's whole point — is reached by going
+  // BACK to it with the answer kept. Same pixels as before the change.
   await page
     .getByRole("radio", { name: "A little. I know the stroke" })
     .click();
+  await page.getByRole("button", { name: "← BACK" }).click();
+  await expect(
+    page.getByRole("radio", { name: "A little. I know the stroke" }),
+  ).toHaveAttribute("aria-checked", "true");
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "onboarding-door-question.png"),
   });
@@ -564,14 +571,13 @@ test("onboarding-door-recommendation", async ({ page }) => {
     name: "Screenshot Tester",
   });
   await page.goto("/onboarding/recommend");
+  // Answer taps auto-advance through both questions (2026-08-23).
   await page
     .getByRole("radio", { name: "A little. I know the stroke" })
     .click();
-  await page.getByRole("button", { name: "Next" }).click();
   await page
     .getByRole("radio", { name: "Active once or twice a week" })
     .click();
-  await page.getByRole("button", { name: "Next" }).click();
   await expect(page.getByText("2:25.0")).toBeVisible();
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "onboarding-door-recommendation.png"),

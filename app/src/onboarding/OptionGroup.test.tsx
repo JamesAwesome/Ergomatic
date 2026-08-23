@@ -145,4 +145,94 @@ describe("OptionGroup", () => {
     await userEvent.keyboard("{Enter}");
     expect(onChange).toHaveBeenCalledWith("never");
   });
+
+  // James's auto-advance feedback (2026-08-23): picking an option should
+  // carry the rower forward. The seam is a separate CONFIRM callback so
+  // the roving-tabindex contract above survives untouched — arrows move
+  // selection, and only a deliberate activation (tap/click, Enter, Space)
+  // confirms. Wiring advance into onChange instead would make arrowing
+  // yank a keyboard user through the questionnaire; the arrow test below
+  // is the one that goes red if anyone does.
+  describe("confirm (the auto-advance seam)", () => {
+    function renderWithConfirm(
+      value: (typeof OPTIONS)[number]["value"] | null = null,
+    ) {
+      const onChange = vi.fn();
+      const onConfirm = vi.fn();
+      render(
+        <OptionGroup
+          options={OPTIONS}
+          value={value}
+          onChange={onChange}
+          onConfirm={onConfirm}
+          ariaLabel="How much have you rowed?"
+        />,
+      );
+      return { onChange, onConfirm };
+    }
+
+    it("a pointer click selects AND confirms the option, selection first", async () => {
+      const order: string[] = [];
+      const onChange = vi.fn(() => order.push("change"));
+      const onConfirm = vi.fn(() => order.push("confirm"));
+      render(
+        <OptionGroup
+          options={OPTIONS}
+          value={null}
+          onChange={onChange}
+          onConfirm={onConfirm}
+          ariaLabel="How much have you rowed?"
+        />,
+      );
+      await userEvent.click(
+        screen.getByRole("radio", { name: "A little. I know the stroke" }),
+      );
+      expect(onChange).toHaveBeenCalledExactlyOnceWith("a-little");
+      expect(onConfirm).toHaveBeenCalledExactlyOnceWith("a-little");
+      expect(order).toStrictEqual(["change", "confirm"]);
+    });
+
+    it("clicking the already-selected option confirms it again (the re-entry tap)", async () => {
+      const { onConfirm } = renderWithConfirm("a-little");
+      await userEvent.click(
+        screen.getByRole("radio", { name: "A little. I know the stroke" }),
+      );
+      expect(onConfirm).toHaveBeenCalledExactlyOnceWith("a-little");
+    });
+
+    it("LOAD-BEARING: arrow keys move selection WITHOUT confirming — arrowing must never advance", async () => {
+      const { onChange, onConfirm } = renderWithConfirm("never");
+      screen.getByRole("radio", { name: "Never, or once or twice" }).focus();
+      await userEvent.keyboard("{ArrowRight}");
+      await userEvent.keyboard("{ArrowDown}");
+      await userEvent.keyboard("{ArrowLeft}");
+      await userEvent.keyboard("{ArrowUp}");
+      expect(onChange).toHaveBeenCalledTimes(4);
+      expect(onConfirm).not.toHaveBeenCalled();
+    });
+
+    it("Enter on the focused option confirms it", async () => {
+      const { onConfirm } = renderWithConfirm("a-little");
+      screen
+        .getByRole("radio", { name: "A little. I know the stroke" })
+        .focus();
+      await userEvent.keyboard("{Enter}");
+      expect(onConfirm).toHaveBeenCalledExactlyOnceWith("a-little");
+    });
+
+    it("Space on the focused option confirms it", async () => {
+      const { onConfirm } = renderWithConfirm("regularly");
+      screen.getByRole("radio", { name: "Regularly, on and off" }).focus();
+      await userEvent.keyboard(" ");
+      expect(onConfirm).toHaveBeenCalledExactlyOnceWith("regularly");
+    });
+
+    it("without an onConfirm the control still selects on click (the prop is optional)", async () => {
+      const onChange = renderGroup();
+      await userEvent.click(
+        screen.getByRole("radio", { name: "Regularly, on and off" }),
+      );
+      expect(onChange).toHaveBeenCalledExactlyOnceWith("regularly");
+    });
+  });
 });

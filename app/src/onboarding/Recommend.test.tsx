@@ -41,15 +41,16 @@ afterEach(() => {
   vi.doUnmock("../api/useBaselines");
 });
 
-/** Drives the two questions to the recommendation screen. */
+/** Drives the two questions to the recommendation screen. Since James's
+ *  auto-advance feedback (2026-08-23) a tap on an answer carries the flow
+ *  forward by itself — no Next taps (the button remains, for keyboard
+ *  users and the Back re-entry case; its own tests below exercise it). */
 async function answerBoth(
   experience = "A little. I know the stroke",
   cardio = "Active once or twice a week",
 ) {
   await userEvent.click(screen.getByRole("radio", { name: experience }));
-  await userEvent.click(screen.getByRole("button", { name: "Next" }));
   await userEvent.click(screen.getByRole("radio", { name: cardio }));
-  await userEvent.click(screen.getByRole("button", { name: "Next" }));
 }
 
 describe("Recommend (door 1)", () => {
@@ -60,10 +61,130 @@ describe("Recommend (door 1)", () => {
       screen.getByRole("heading", { name: "How much have you rowed?" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
-    await userEvent.click(
-      screen.getByRole("radio", { name: "Never, or once or twice" }),
-    );
+    // Arrow-select (keyboard): the answer lands WITHOUT advancing, so
+    // Next enables in place.
+    screen.getByRole("radio", { name: "Never, or once or twice" }).focus();
+    await userEvent.keyboard("{ArrowRight}");
+    expect(
+      screen.getByRole("heading", { name: "How much have you rowed?" }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
+  });
+
+  // James's auto-advance feedback (2026-08-23): picking an answer with a
+  // tap carries the rower forward by itself — Q1 -> Q2 -> the
+  // recommendation — immediately (no dwell timer: the house style has no
+  // animation, and the filled step dot on the next screen IS the
+  // feedback). The Next button stays for the keyboard/SR path and the
+  // Back re-entry case.
+  describe("auto-advance on pointer selection", () => {
+    it("tapping an experience answer advances to the cardio question by itself", async () => {
+      mockReady();
+      await renderRecommend();
+      await userEvent.click(
+        screen.getByRole("radio", { name: "A little. I know the stroke" }),
+      );
+      expect(
+        screen.getByRole("heading", { name: "How is your cardio right now?" }),
+      ).toBeInTheDocument();
+    });
+
+    it("tapping a cardio answer advances to the recommendation by itself", async () => {
+      mockReady();
+      await renderRecommend();
+      await userEvent.click(
+        screen.getByRole("radio", { name: "A little. I know the stroke" }),
+      );
+      await userEvent.click(
+        screen.getByRole("radio", { name: "Active once or twice a week" }),
+      );
+      expect(
+        screen.getByRole("heading", { name: "Your starting baseline" }),
+      ).toBeInTheDocument();
+      expect(screen.getByText("2:25.0")).toBeInTheDocument();
+      expect(screen.getByText("2:32.0")).toBeInTheDocument();
+    });
+
+    it("the auto-advanced answer survives Back — same transient-STATE pin as the Next path", async () => {
+      mockReady();
+      await renderRecommend();
+      await userEvent.click(
+        screen.getByRole("radio", { name: "Regularly, on and off" }),
+      );
+      await userEvent.click(screen.getByRole("button", { name: "← BACK" }));
+      expect(
+        screen.getByRole("radio", { name: "Regularly, on and off" }),
+      ).toHaveAttribute("aria-checked", "true");
+      expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
+    });
+
+    it("LOAD-BEARING: arrowing through the options never advances — the roving-tabindex contract stands", async () => {
+      mockReady();
+      await renderRecommend();
+      screen.getByRole("radio", { name: "Never, or once or twice" }).focus();
+      await userEvent.keyboard("{ArrowRight}");
+      await userEvent.keyboard("{ArrowDown}");
+      await userEvent.keyboard("{ArrowUp}");
+      // Still on Q1, with the arrowed-to answer selected.
+      expect(
+        screen.getByRole("heading", { name: "How much have you rowed?" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("radio", { name: "A little. I know the stroke" }),
+      ).toHaveAttribute("aria-checked", "true");
+    });
+
+    it("Enter on the arrow-selected option confirms it and advances", async () => {
+      mockReady();
+      await renderRecommend();
+      screen.getByRole("radio", { name: "Never, or once or twice" }).focus();
+      await userEvent.keyboard("{ArrowRight}");
+      await userEvent.keyboard("{Enter}");
+      expect(
+        screen.getByRole("heading", { name: "How is your cardio right now?" }),
+      ).toBeInTheDocument();
+    });
+
+    it("Space on the arrow-selected option also confirms and advances", async () => {
+      mockReady();
+      await renderRecommend();
+      screen.getByRole("radio", { name: "Never, or once or twice" }).focus();
+      await userEvent.keyboard("{ArrowDown}");
+      await userEvent.keyboard(" ");
+      expect(
+        screen.getByRole("heading", { name: "How is your cardio right now?" }),
+      ).toBeInTheDocument();
+    });
+
+    it("Q2's Next advances an arrow-selected cardio answer to the recommendation (the button's other arm)", async () => {
+      mockReady();
+      await renderRecommend();
+      await userEvent.click(
+        screen.getByRole("radio", { name: "A little. I know the stroke" }),
+      );
+      screen.getByRole("radio", { name: "Just getting started" }).focus();
+      await userEvent.keyboard("{ArrowRight}");
+      expect(
+        screen.getByRole("heading", { name: "How is your cardio right now?" }),
+      ).toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: "Next" }));
+      expect(
+        screen.getByRole("heading", { name: "Your starting baseline" }),
+      ).toBeInTheDocument();
+    });
+
+    it("re-entry after Back: Next still advances the already-selected answer (the button's own path)", async () => {
+      mockReady();
+      await renderRecommend();
+      await userEvent.click(
+        screen.getByRole("radio", { name: "A little. I know the stroke" }),
+      );
+      await userEvent.click(screen.getByRole("button", { name: "← BACK" }));
+      await userEvent.click(screen.getByRole("button", { name: "Next" }));
+      expect(
+        screen.getByRole("heading", { name: "How is your cardio right now?" }),
+      ).toBeInTheDocument();
+    });
   });
 
   it("the top-left back link on the first question returns to Today", async () => {
@@ -79,7 +200,6 @@ describe("Recommend (door 1)", () => {
     await userEvent.click(
       screen.getByRole("radio", { name: "Regularly, on and off" }),
     );
-    await userEvent.click(screen.getByRole("button", { name: "Next" }));
     expect(
       screen.getByRole("heading", { name: "How is your cardio right now?" }),
     ).toBeInTheDocument();

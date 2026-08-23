@@ -582,7 +582,9 @@ test.describe("Phase BL PR C: door 1 (recommend), door 2 (know), and Reset", () 
     await page.getByRole("link", { name: /Recommend my baseline/ }).click();
     await expect(page).toHaveURL(/\/onboarding\/recommend$/);
 
-    // Q1 (canvas Question1): Next is disabled until an answer exists.
+    // Q1 (canvas Question1): Next is disabled until an answer exists,
+    // and tapping an answer auto-advances by itself (James's 2026-08-23
+    // feedback) — no Next tap.
     await expect(
       page.getByRole("heading", { name: "How much have you rowed?" }),
     ).toBeVisible();
@@ -590,16 +592,28 @@ test.describe("Phase BL PR C: door 1 (recommend), door 2 (know), and Reset", () 
     await page
       .getByRole("radio", { name: "A little. I know the stroke" })
       .click();
-    await page.getByRole("button", { name: "Next" }).click();
 
-    // Q2 (canvas Question2).
+    // Q2 (canvas Question2) — reached without touching Next. Go BACK
+    // once: the answer survives (transient state), and Next — which
+    // stays for the keyboard path and exactly this re-entry case — is
+    // enabled and advances the already-selected answer. This is the
+    // flow's one explicit Next exercise, kept so the button stays
+    // covered end to end.
     await expect(
       page.getByRole("heading", { name: "How is your cardio right now?" }),
     ).toBeVisible();
+    await page.getByRole("button", { name: "← BACK" }).click();
+    await expect(
+      page.getByRole("radio", { name: "A little. I know the stroke" }),
+    ).toHaveAttribute("aria-checked", "true");
+    await page.getByRole("button", { name: "Next" }).click();
+    await expect(
+      page.getByRole("heading", { name: "How is your cardio right now?" }),
+    ).toBeVisible();
+    // Q2's answer tap auto-advances to the recommendation.
     await page
       .getByRole("radio", { name: "Active once or twice a week" })
       .click();
-    await page.getByRole("button", { name: "Next" }).click();
 
     // The recommendation (canvas Recommendation): a-little x 1-2-week is
     // the table's modal cell, 145/152 -> 2:25.0 and 2:32.0 — recompute by
