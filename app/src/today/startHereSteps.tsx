@@ -32,9 +32,13 @@ export interface StartHereStep {
 
 // eslint-disable-next-line react-refresh/only-export-components
 export const START_HERE_STEPS: StartHereStep[] = [
+  // Phase BL PR C: step 1 tells the three-door truth. The old copy ("Row
+  // 6k once. That is your baseline.") described a write that never
+  // happened before PR B's post-save offer, and only one of three doors
+  // after it.
   {
     slug: "your-first-row",
-    copy: "Row 6k once. That is your baseline.",
+    copy: "Set your baseline: answer questions, type it in, or row a test.",
     minutes: 2,
   },
   {

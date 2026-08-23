@@ -8361,17 +8361,17 @@ async function dismissStartHere(page: Page): Promise<void> {
   }
 }
 
-test.describe("today screen (Phase 6I: fresh user — START HERE block + no-baseline card)", () => {
+test.describe("today screen (Phase BL PR C: fresh user — START HERE block + the three-door card)", () => {
   test.beforeEach(async ({ page }) => {
     // A genuinely fresh account (no baselines row at all): the state a
     // real brand-new sign-in lands on, not a fixture layered on top of one
-    // — both the block and the card only exist in this state.
+    // — both the block and the doors card only exist in this state.
     await signInViaBackdoor(page, {
       email: "design-onboarding-today@e2e.test",
       name: "Design Onboarding Today Tester",
     });
     await page.goto("/today");
-    await expect(page.locator(".baselinecard")).toBeVisible();
+    await expect(page.locator(".doorscard")).toBeVisible();
   });
 
   test("every visible interactive element has a >=44x44 tap target", async ({
@@ -8384,25 +8384,21 @@ test.describe("today screen (Phase 6I: fresh user — START HERE block + no-base
     await assertNoA11yViolations(page);
   });
 
-  // The dashed `--rule-3` chip (`.baselinecard-chip`, "6K BASELINE · NOT
-  // SET · ROW IT HOW IT FEELS") is the one small mono label this phase
-  // adds outside News's own already-swept row grammar — measured here
-  // rather than assumed identical to an already-passing --ink-3 pairing
-  // elsewhere, per the standing "compute the ratio, don't judge by eye"
-  // rule. The chip itself paints no background of its own (only a dashed
-  // border) — its real background is `.baselinecard`'s own `--surface`
-  // fill, read directly off that ancestor rather than restated as a hex,
-  // same idiom as the News read-row contrast test above.
-  test("the dashed chip's --ink-3 text clears 4.5:1 against the card's own --surface background", async ({
+  // The door sub-copy is the smallest new text this card adds (13px sans
+  // ink-3 on the door's own --surface fill) — measured rather than assumed
+  // identical to an already-passing --ink-3 pairing elsewhere, per the
+  // standing "compute the ratio, don't judge by eye" rule.
+  test("a door's sub-copy --ink-3 text clears 4.5:1 against the door's own --surface background", async ({
     page,
   }) => {
-    const chip = page.locator(".baselinecard-chip");
-    const chipColor = await chip.evaluate((el) => getComputedStyle(el).color);
-    const cardBg = await page
-      .locator(".baselinecard")
+    const sub = page.locator(".doorscard-door-sub").first();
+    const subColor = await sub.evaluate((el) => getComputedStyle(el).color);
+    const doorBg = await page
+      .locator(".doorscard-door")
+      .first()
       .evaluate((el) => getComputedStyle(el).backgroundColor);
-    expect(chipColor).toBe("rgb(87, 84, 76)"); // --ink-3
-    expect(cardBg).toBe("rgb(255, 253, 247)"); // --surface
+    expect(subColor).toBe("rgb(87, 84, 76)"); // --ink-3
+    expect(doorBg).toBe("rgb(255, 253, 247)"); // --surface
 
     const ratio = await page.evaluate(
       ({ fg, bg }) => {
@@ -8424,13 +8420,95 @@ test.describe("today screen (Phase 6I: fresh user — START HERE block + no-base
         const darker = Math.min(la, lb);
         return (lighter + 0.05) / (darker + 0.05);
       },
-      { fg: chipColor, bg: cardBg },
+      { fg: subColor, bg: doorBg },
     );
-    // Measured, not assumed: --ink-3 on --surface computes 7.432:1 (the
-    // identical pairing/ratio the News read-row contrast test above
-    // already established for the same two tokens) — comfortably past the
-    // 4.5:1 AA floor.
+    // Measured, not assumed: --ink-3 on --surface computes 7.432:1 —
+    // comfortably past the 4.5:1 AA floor.
     expect(ratio).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+// Phase BL PR C: the three door flow screens themselves (new screens
+// register here — TESTING.md §8's "a new screen with no entry here is a
+// screen the rules aren't checking"). Each gets the two machine-checkable
+// sweeps in its fullest state; the questionnaire additionally sweeps with
+// an option SELECTED (the accent-border checked state is this flow's own
+// new visual vocabulary).
+test.describe("onboarding door flows (Phase BL PR C)", () => {
+  test.beforeEach(async ({ page }) => {
+    await signInViaBackdoor(page, {
+      email: "design-onboarding-doors@e2e.test",
+      name: "Design Onboarding Doors Tester",
+    });
+  });
+
+  test("door 1's question screen: tap targets and zero WCAG violations, with an option selected", async ({
+    page,
+  }) => {
+    await page.goto("/onboarding/recommend");
+    await expect(
+      page.getByRole("heading", { name: "How much have you rowed?" }),
+    ).toBeVisible();
+    await page
+      .getByRole("radio", { name: "A little. I know the stroke" })
+      .click();
+    await assertTapTargets(page);
+    await assertNoA11yViolations(page);
+  });
+
+  test("door 1's recommendation screen: tap targets and zero WCAG violations", async ({
+    page,
+  }) => {
+    await page.goto("/onboarding/recommend");
+    await page
+      .getByRole("radio", { name: "A little. I know the stroke" })
+      .click();
+    await page.getByRole("button", { name: "Next" }).click();
+    await page
+      .getByRole("radio", { name: "Active once or twice a week" })
+      .click();
+    await page.getByRole("button", { name: "Next" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Your starting baseline" }),
+    ).toBeVisible();
+    await assertTapTargets(page);
+    await assertNoA11yViolations(page);
+  });
+
+  test("door 2's editor screen: tap targets and zero WCAG violations", async ({
+    page,
+  }) => {
+    await page.goto("/onboarding/know");
+    await expect(
+      page.getByRole("heading", { name: "Enter your splits" }),
+    ).toBeVisible();
+    await assertTapTargets(page);
+    await assertNoA11yViolations(page);
+  });
+
+  test("door 3's distance screen: tap targets and zero WCAG violations", async ({
+    page,
+  }) => {
+    await page.goto("/onboarding/row");
+    await expect(
+      page.getByRole("heading", { name: "Pick your distance" }),
+    ).toBeVisible();
+    await assertTapTargets(page);
+    await assertNoA11yViolations(page);
+  });
+
+  test("no mono label ≤11px paints at --ink-4 on any door flow screen", async ({
+    page,
+  }) => {
+    for (const path of [
+      "/onboarding/recommend",
+      "/onboarding/know",
+      "/onboarding/row",
+    ]) {
+      await page.goto(path);
+      await expect(page.locator(".onb-screen")).toBeVisible();
+      await assertNoFailingInk4Labels(page);
+    }
   });
 });
 

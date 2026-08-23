@@ -109,37 +109,47 @@ describe("article body components", () => {
     ).toBeInTheDocument();
   });
 
-  it("YourFirstRowBody renders with distinctive text (Phase 6I Task 6)", () => {
+  it("YourFirstRowBody tells the three-door truth (Phase BL PR C): three ways in, and the post-save offer does the writing", () => {
     render(<YourFirstRowBody />);
+    expect(screen.getByText(/Today offers three doors in/)).toBeInTheDocument();
+    // The write is the OFFER's, post-save — the pre-BL "enter it under
+    // You" instruction (a shipped lie about an automatic write that never
+    // existed, then a manual chore) is gone.
     expect(
       screen.getByText(
-        /the average split you can hold for six thousand metres/,
+        /the app offers your measured\s+average split as the new baseline/,
       ),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(/your average split is on the summary screen and/),
-    ).toBeInTheDocument();
+    expect(screen.queryByText(/Enter it under You/)).not.toBeInTheDocument();
   });
 
-  // ui-notes round, item 3: the "Prefer the short test?" paragraph is
-  // REPLACED in full — word-exact per the brief, James reviews the diff.
-  // Pinned here so a future edit can't silently drift back toward the old
-  // "the app wants both eventually" white lie the brief's root-cause names.
-  it("YourFirstRowBody's replaced 'Prefer the short test?' paragraph names the derivation offer and the honest unset option (ui-notes round, item 3)", () => {
+  it("YourFirstRowBody carries the strong-and-steady 6k framing (James's ruling) with the not-breakneck reminder, and the all-out 2k", () => {
+    render(<YourFirstRowBody />);
+    expect(
+      screen.getByText(/a strong, steady 6k, or an all-out 2k/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/not supposed to go at\s+breakneck speed/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/relaxed/i)).not.toBeInTheDocument();
+  });
+
+  // ui-notes round, item 3's honesty survives the PR C rewrite: the
+  // derivation is an OFFER, leaving a side unset stays legitimate, and
+  // the both-eventually sentence keeps its word-exact form.
+  it("YourFirstRowBody still names the derivation offer, the honest unset option, and that declining records the test", () => {
     render(<YourFirstRowBody />);
     expect(
       screen.getByText(
-        /The app uses both baselines eventually: short, sharp workouts key off your 2k, longer ones off your 6k\./,
+        /The\s+app uses both baselines eventually: short, sharp workouts key off\s+your 2k, longer ones off your 6k\./,
       ),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(
-        /After\s+your first row, the baselines editor can estimate the one you haven't/,
-      ),
+      screen.getByText(/leave that side unset\s+and row the real test/),
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        /or\s+you can leave it unset and row the real test when you're ready\./,
+        /Decline the offer and\s+nothing is lost: the test is still recorded/,
       ),
     ).toBeInTheDocument();
   });
