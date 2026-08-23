@@ -1,19 +1,27 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import {
+  MemoryRouter,
+  Route,
+  Routes,
+  useLocation,
+  useParams,
+} from "react-router-dom";
 import { ONBOARDING_TITLES } from "../../domain/onboarding.js";
 import { ONBOARDING_LIBRARY_WORKOUTS } from "../../server/seed/library/onboarding";
 import type { LibraryWorkout } from "../api/useWorkouts";
-import { buildDraft, loadDraft, saveDraft, startDraft } from "../session/draft";
-import { buildRun } from "../session/engine";
-import { loadRun, saveRun } from "../session/run";
+import { loadDraft } from "../session/draft";
+import { loadRun } from "../session/run";
 
-// Phase BL PR B (baseline-onboarding spec rev 2, "The You-screen re-test
-// shortcut"): row the 6k / race the 2k beside the baseline fields,
-// reusing useStartWorkout's start guards — NOT BaselineCard (the card
-// refuses to render for a both-set account; the You screen must offer the
-// shortcut to exactly that account).
+// Phase BL PR B, reshaped by James's tester feedback (2026-08-22): the
+// shortcut NAVIGATES to the designated test's detail screen — the one
+// offering Connect / Start Timer / Log it after — instead of launching
+// the timer directly ("It should take me to the connect/start timer/log
+// it after screen"). The start guards did not vanish: every start path
+// on the detail screen carries them (useStartWorkout's replaceStage for
+// Start Timer, ConnectAction's connectGuardStage for Connect), so the
+// shortcut itself is two plain links that write NOTHING.
 
 // The two REAL designated seed workouts as the library rows the You
 // screen would fetch.
@@ -44,12 +52,28 @@ function mockWorkouts(
   vi.doMock("../api/useWorkouts", () => ({ useWorkouts: () => state }));
 }
 
+// Probe standing in for WorkoutDetail: renders the routed :id AND the
+// carried location.state.from, so one assertion pins BOTH the target
+// route and the origin state BackLink will read there.
+function DetailProbe() {
+  const { id } = useParams();
+  const from = (useLocation().state as { from?: unknown } | null)?.from;
+  return (
+    <p>
+      DETAIL {id} from={String(from)}
+    </p>
+  );
+}
+
 async function renderShortcut() {
   const { default: RetestShortcut } = await import("./RetestShortcut");
   return render(
     <MemoryRouter initialEntries={["/you"]}>
       <Routes>
         <Route path="/you" element={<RetestShortcut />} />
+        <Route path="/library/:id" element={<DetailProbe />} />
+        {/* The OLD destination — kept routed so a regression that starts
+            the timer again shows up as this marker, not a router 404. */}
         <Route path="/session/countdown" element={<p>COUNTDOWN SCREEN</p>} />
       </Routes>
     </MemoryRouter>,
@@ -62,7 +86,7 @@ beforeEach(() => {
 });
 
 describe("RetestShortcut", () => {
-  it("offers both tests when the two designated global rows exist", async () => {
+  it("offers both tests as links to each designated test's detail screen, with no caption prose", async () => {
     mockWorkouts({
       state: "ready",
       workouts: [
@@ -71,102 +95,57 @@ describe("RetestShortcut", () => {
       ],
     });
     await renderShortcut();
-    expect(
-      screen.getByRole("button", { name: "ROW THE 6K" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "RACE THE 2K" }),
-    ).toBeInTheDocument();
-  });
-
-  it("one tap starts the 6K Test for real: draft saved, countdown reached", async () => {
-    mockWorkouts({
-      state: "ready",
-      workouts: [
-        seedWorkout(ONBOARDING_TITLES.k6),
-        seedWorkout(ONBOARDING_TITLES.k2),
-      ],
-    });
-    await renderShortcut();
-    await userEvent.click(screen.getByRole("button", { name: "ROW THE 6K" }));
-
-    expect(await screen.findByText("COUNTDOWN SCREEN")).toBeInTheDocument();
-    const draft = loadDraft();
-    expect(draft).not.toBeNull();
-    expect(draft!.title).toBe(ONBOARDING_TITLES.k6);
-    expect(draft!.startedAt).not.toBeNull();
-  });
-
-  it("racing the 2k starts the 2K Test, not the 6k", async () => {
-    mockWorkouts({
-      state: "ready",
-      workouts: [
-        seedWorkout(ONBOARDING_TITLES.k6),
-        seedWorkout(ONBOARDING_TITLES.k2),
-      ],
-    });
-    await renderShortcut();
-    await userEvent.click(screen.getByRole("button", { name: "RACE THE 2K" }));
-    expect(await screen.findByText("COUNTDOWN SCREEN")).toBeInTheDocument();
-    expect(loadDraft()!.title).toBe(ONBOARDING_TITLES.k2);
-  });
-
-  // useStartWorkout's own F5 data-loss guard, proven to actually be wired
-  // through this surface — the whole reason the spec says "reuses
-  // useStartWorkout's start guards", not a bare navigate-and-start.
-  it("an unlogged completed session stages the replace confirm; Cancel keeps it, Replace clears it and starts", async () => {
-    mockWorkouts({
-      state: "ready",
-      workouts: [
-        seedWorkout(ONBOARDING_TITLES.k6),
-        seedWorkout(ONBOARDING_TITLES.k2),
-      ],
-    });
-    // A REAL completed-but-unlogged run built through the real pipeline.
-    const seed = ONBOARDING_LIBRARY_WORKOUTS.find(
-      (w) => w.title === ONBOARDING_TITLES.k2,
-    )!;
-    const started = startDraft(
-      buildDraft({
-        id: "id-unlogged",
-        title: seed.title,
-        type: seed.type,
-        steps: seed.steps,
-      }),
+    expect(screen.getByRole("link", { name: "ROW THE 6K" })).toHaveAttribute(
+      "href",
+      "/library/id-6k-test",
     );
-    saveDraft(started);
-    const built = buildRun(started, null, new Date("2026-08-22T10:00:00Z"));
-    saveRun({
-      ...built,
-      index: built.phases.length,
-      completedAt: "2026-08-22T10:08:00.000Z",
-      actuals: {},
-    });
-
-    await renderShortcut();
-    await userEvent.click(screen.getByRole("button", { name: "ROW THE 6K" }));
-    expect(
-      screen.getByText(
-        "You have an unlogged session. Starting a new one discards it.",
-      ),
-    ).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(loadRun()).not.toBeNull();
-    expect(
-      screen.getByRole("button", { name: "ROW THE 6K" }),
-    ).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("button", { name: "ROW THE 6K" }));
-    await userEvent.click(
-      screen.getByRole("button", { name: "Replace session" }),
+    expect(screen.getByRole("link", { name: "RACE THE 2K" })).toHaveAttribute(
+      "href",
+      "/library/id-2k-test",
     );
-    expect(await screen.findByText("COUNTDOWN SCREEN")).toBeInTheDocument();
+    // James's feedback: "we don't need the prose above it. The buttons
+    // speak for themselves." No caption, no leftover button role.
+    expect(screen.queryByText(/RE-TEST/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("tapping ROW THE 6K lands on the detail screen carrying from=/you, and starts nothing", async () => {
+    mockWorkouts({
+      state: "ready",
+      workouts: [
+        seedWorkout(ONBOARDING_TITLES.k6),
+        seedWorkout(ONBOARDING_TITLES.k2),
+      ],
+    });
+    await renderShortcut();
+    await userEvent.click(screen.getByRole("link", { name: "ROW THE 6K" }));
+
+    expect(
+      await screen.findByText("DETAIL id-6k-test from=/you"),
+    ).toBeInTheDocument();
+    // Never the timer: the tap is a navigation, not a start — no draft,
+    // no run, no countdown.
+    expect(screen.queryByText("COUNTDOWN SCREEN")).not.toBeInTheDocument();
+    expect(loadDraft()).toBeNull();
     expect(loadRun()).toBeNull();
-    expect(loadDraft()!.title).toBe(ONBOARDING_TITLES.k6);
   });
 
-  // domain/onboarding.ts's own identity rule, again: a rower's custom row
+  it("RACE THE 2K targets the 2k test's detail, not the 6k's", async () => {
+    mockWorkouts({
+      state: "ready",
+      workouts: [
+        seedWorkout(ONBOARDING_TITLES.k6),
+        seedWorkout(ONBOARDING_TITLES.k2),
+      ],
+    });
+    await renderShortcut();
+    await userEvent.click(screen.getByRole("link", { name: "RACE THE 2K" }));
+    expect(
+      await screen.findByText("DETAIL id-2k-test from=/you"),
+    ).toBeInTheDocument();
+  });
+
+  // domain/onboarding.ts's own identity rule: a rower's custom row
   // sharing the title is not the designated test and gets no shortcut.
   it("ignores a rower's own custom workout that shares a test title", async () => {
     mockWorkouts({
@@ -178,10 +157,10 @@ describe("RetestShortcut", () => {
     });
     await renderShortcut();
     expect(
-      screen.getByRole("button", { name: "ROW THE 6K" }),
+      screen.getByRole("link", { name: "ROW THE 6K" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "RACE THE 2K" }),
+      screen.queryByRole("link", { name: "RACE THE 2K" }),
     ).not.toBeInTheDocument();
   });
 
@@ -196,9 +175,7 @@ describe("RetestShortcut", () => {
     const second = await renderShortcut();
     expect(second.container.querySelector(".retest")).toBeNull();
   });
-});
 
-describe("RetestShortcut coverage of the remaining guard arms", () => {
   it("renders nothing at all when NEITHER designated global row exists — custom same-title rows don't count", async () => {
     mockWorkouts({
       state: "ready",
@@ -209,34 +186,5 @@ describe("RetestShortcut coverage of the remaining guard arms", () => {
     });
     const { container } = await renderShortcut();
     expect(container.querySelector(".retest")).toBeNull();
-  });
-
-  it("a merely-started (not finished) draft stages the in-progress copy, not the unlogged one", async () => {
-    mockWorkouts({
-      state: "ready",
-      workouts: [
-        seedWorkout(ONBOARDING_TITLES.k6),
-        seedWorkout(ONBOARDING_TITLES.k2),
-      ],
-    });
-    const seed = ONBOARDING_LIBRARY_WORKOUTS.find(
-      (w) => w.title === ONBOARDING_TITLES.k6,
-    )!;
-    saveDraft(
-      startDraft(
-        buildDraft({
-          id: "id-inprogress",
-          title: seed.title,
-          type: seed.type,
-          steps: seed.steps,
-        }),
-      ),
-    );
-
-    await renderShortcut();
-    await userEvent.click(screen.getByRole("button", { name: "RACE THE 2K" }));
-    expect(
-      screen.getByText("A session is in progress. Replace it?"),
-    ).toBeInTheDocument();
   });
 });

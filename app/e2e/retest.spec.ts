@@ -1,10 +1,14 @@
 import { test, expect } from "@playwright/test";
 import { RUN_ID, signInViaBackdoor } from "./helpers";
 
-// Phase BL PR B — the You-screen re-test shortcut and the post-test
-// prompt, against the real stack: one tap from the baseline fields
-// reaches each designated test's start, and completing one lands in the
-// post-save offer whose accepted numbers then appear in the You editor.
+// Phase BL PR B's You-screen re-test shortcut, reshaped by James's tester
+// feedback (2026-08-22), against the real stack: one tap from the
+// baseline fields lands on the designated test's DETAIL screen — the one
+// offering Connect / Start Timer / Log it after — never straight into the
+// timer, and BACK from there returns to You. Completing a test (started
+// from that detail screen, the only start the shortcut leads to now)
+// still lands in the post-save offer whose accepted numbers then appear
+// in the You editor.
 //
 // Titles are literal strings, matching every other e2e file's precedent
 // of not reaching into `domain/` from a Playwright spec.
@@ -12,7 +16,7 @@ const K6_TITLE = "6K Test";
 const K2_TITLE = "2K Test";
 
 test.describe("Phase BL: the You re-test shortcut", () => {
-  test("one tap on ROW THE 6K reaches the 6k test's start", async ({
+  test("ROW THE 6K lands on the 6k test's detail — Connect / Start Timer / Log it after — and BACK returns to You", async ({
     page,
   }) => {
     await signInViaBackdoor(page, {
@@ -20,15 +24,31 @@ test.describe("Phase BL: the You re-test shortcut", () => {
       name: "Retest Rower",
     });
     await page.goto("/you");
-    await page.getByRole("button", { name: "ROW THE 6K" }).click();
-    await expect(page).toHaveURL(/\/session\/countdown$/);
-    await page.getByRole("button", { name: "SKIP ›" }).click();
-    await expect(page).toHaveURL(/\/session\/run$/);
-    // The designated 6k genuinely started, not some other workout.
-    await expect(page.locator(".timer-name")).toHaveText(K6_TITLE);
+    await page.getByRole("link", { name: "ROW THE 6K" }).click();
+
+    // The detail screen, not the timer (the feedback verbatim: "It should
+    // take me to the connect/start timer/log it after screen").
+    await expect(page).toHaveURL(/\/library\/[^/]+$/);
+    await expect(page.locator("h1.workout-detail-title")).toHaveText(K6_TITLE);
+    await expect(page.getByRole("button", { name: "Connect" })).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Start Timer" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "Log it after" }),
+    ).toBeVisible();
+
+    // Feedback item 4, rendered for real: the 6K's step row reads the
+    // all-out vocabulary now, never the easy word the old min ref showed.
+    await expect(page.locator(".step-row-range")).toHaveText("ALL OUT");
+
+    // Feedback item 2: BACK reads the carried from:"/you", not the
+    // /library fallback.
+    await page.getByRole("link", { name: "← BACK" }).click();
+    await expect(page).toHaveURL(/\/you$/);
   });
 
-  test("one tap on RACE THE 2K reaches the 2k test's start, and completing it lands in the post-test prompt", async ({
+  test("RACE THE 2K reaches the 2k test's detail, and completing it from there lands in the post-test prompt", async ({
     page,
   }) => {
     await signInViaBackdoor(page, {
@@ -36,7 +56,9 @@ test.describe("Phase BL: the You re-test shortcut", () => {
       name: "Retest Racer",
     });
     await page.goto("/you");
-    await page.getByRole("button", { name: "RACE THE 2K" }).click();
+    await page.getByRole("link", { name: "RACE THE 2K" }).click();
+    await expect(page.locator("h1.workout-detail-title")).toHaveText(K2_TITLE);
+    await page.getByRole("button", { name: "Start Timer" }).click();
     await expect(page).toHaveURL(/\/session\/countdown$/);
     await page.getByRole("button", { name: "SKIP ›" }).click();
     await expect(page).toHaveURL(/\/session\/run$/);
@@ -100,7 +122,8 @@ test.describe("Phase BL: the You re-test shortcut", () => {
       name: "Retest Decliner",
     });
     await page.goto("/you");
-    await page.getByRole("button", { name: "RACE THE 2K" }).click();
+    await page.getByRole("link", { name: "RACE THE 2K" }).click();
+    await page.getByRole("button", { name: "Start Timer" }).click();
     await page.getByRole("button", { name: "SKIP ›" }).click();
     await expect(page.locator(".timer-name")).toHaveText(K2_TITLE);
     await page.clock.install();

@@ -38,7 +38,10 @@ describe("ONBOARDING_LIBRARY_WORKOUTS", () => {
     }
   });
 
-  it("the 6K Test is a 6000m min-effort row; the 2K Test is a 2000m max-effort row", () => {
+  // James's tester feedback (2026-08-22): "the 6k test says 'min' as the
+  // rate. It's still max, it's still all out." Both designated tests are
+  // all-out efforts — max, matching the 2K, never the easy `min` word.
+  it("the 6K Test and the 2K Test are BOTH max-effort rows (6000m and 2000m)", () => {
     const k6 = ONBOARDING_LIBRARY_WORKOUTS.find(
       (w) => w.title === ONBOARDING_TITLES.k6,
     )!;
@@ -49,7 +52,7 @@ describe("ONBOARDING_LIBRARY_WORKOUTS", () => {
     const k2Work = k2.steps.find((s) => s.k === "w")!;
     expect(k6Work).toMatchObject({
       duration: { kind: "distance", meters: 6000 },
-      ref: { effort: "min" },
+      ref: { effort: "max" },
     });
     expect(k2Work).toMatchObject({
       duration: { kind: "distance", meters: 2000 },

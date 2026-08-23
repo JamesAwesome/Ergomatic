@@ -1239,8 +1239,11 @@ test("releases", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "Release notes" }),
   ).toBeVisible();
+  // Bumped alongside each notes PR — #166 shipped the v0.18.0 entry
+  // without bumping this pin, which broke `pnpm screenshots` on main
+  // (caught 2026-08-23; e2e doesn't run this project, so nothing gated it).
   await expect(page.locator(".news-release-version").first()).toContainText(
-    "v0.17.0",
+    "v0.18.0",
   );
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "releases.png"),
@@ -1281,11 +1284,12 @@ test("you", async ({ page }) => {
   });
   await page.goto("/you");
   // Same "LOADING…" race as /library — wait for the baseline card's real
-  // content before capturing. Phase BL PR B: the re-test shortcut below
+  // content before capturing. Phase BL PR B (links to each test's detail
+  // screen since James's 2026-08-22 feedback): the re-test shortcut below
   // the card rides the separate workouts fetch, so wait for it too or
   // the capture races it out of frame.
   await page.locator(".baseline-value").first().waitFor();
-  await page.getByRole("button", { name: "RACE THE 2K" }).waitFor();
+  await page.getByRole("link", { name: "RACE THE 2K" }).waitFor();
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "you.png"),
   });
@@ -1301,7 +1305,10 @@ test("post-test-prompt", async ({ page }) => {
     name: "Screenshot Tester",
   });
   await page.goto("/you");
-  await page.getByRole("button", { name: "RACE THE 2K" }).click();
+  // The shortcut navigates to the detail screen now (James's 2026-08-22
+  // feedback); the start the prompt needs happens there.
+  await page.getByRole("link", { name: "RACE THE 2K" }).click();
+  await page.getByRole("button", { name: "Start Timer" }).click();
   await page.getByRole("button", { name: "SKIP ›" }).click();
   await expect(page).toHaveURL(/\/session\/run$/);
   await page.clock.install();

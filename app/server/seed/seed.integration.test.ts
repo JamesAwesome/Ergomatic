@@ -369,6 +369,58 @@ describe("seedGlobalLibrary against real Postgres", () => {
     expect(logRow!.workoutId).toBe(oldRow!.id); // link intact, not nulled
   });
 
+  // James's tester feedback (2026-08-22): the 6K Test's effort ref moved
+  // min -> max ("It's still max, it's still all out"). A deployed DB still
+  // carries the OLD min-ref shape; the SAME content-addressed converge the
+  // warmup strip proved (`contentEqual`'s isDeepStrictEqual over steps,
+  // seed.ts's update-in-place arm) must swap the ref on boot — same row
+  // id, log link intact — never a delete+insert that would null history.
+  it("converges a deployed old-shape 6K Test (min ref) to the max ref on boot: same row id, log link intact", async () => {
+    await db.delete(workouts);
+    const k6 = GLOBAL_LIBRARY_SEED.find(
+      (w) => w.title === ONBOARDING_TITLES.k6,
+    )!;
+    // The pre-2026-08-22 shape, raw-inserted to stand in for a row seeded
+    // by an older deploy — bypassing seedGlobalLibrary entirely.
+    const oldSteps = [
+      {
+        k: "w",
+        duration: { kind: "distance", meters: 6000 },
+        ref: { effort: "min" },
+      },
+    ];
+    const [oldRow] = await wk.createMany(null, [
+      {
+        sortOrder: k6.sortOrder,
+        title: k6.title,
+        type: k6.type,
+        difficulty: k6.difficulty,
+        pain: k6.pain,
+        source: "starter" as const,
+        steps: oldSteps as unknown as typeof k6.steps,
+      },
+    ]);
+
+    const user = await users.createUser({
+      googleSub: "converge-6k-max",
+      email: "converge-6k-max@x.com",
+      name: "Converge 6K Max",
+    });
+    const logId = await createLogFor(user.id, oldRow!.id, k6.title, k6.type);
+
+    await seedGlobalLibrary(db);
+
+    const after = (await wk.listGlobals()).find((g) => g.title === k6.title)!;
+    expect(after.id).toBe(oldRow!.id); // converge-in-place, not delete+insert
+    expect(after.steps).toStrictEqual(k6.steps);
+    expect(
+      (after.steps as Array<{ ref?: { effort?: string } }>)[0]!.ref,
+    ).toStrictEqual({ effort: "max" });
+
+    const logRow = await findLog(user.id, logId);
+    expect(logRow!.workoutId).toBe(oldRow!.id); // link intact, not nulled
+  });
+
   it("deletes a dropped title (its log link nulls) and inserts a new one", async () => {
     await seedGlobalLibrary(db);
     const victim = (await wk.listGlobals())[0]!;
