@@ -3559,6 +3559,19 @@ scope):
   builder screen neither diff touched). Both passed on re-run; it has
   a pattern now and wants a tracked fix rather than another per-task
   footnote.
+- **Phase BL's `retest.spec.ts` post-test-prompt flake** (found at
+  #167's post-rebase gate, 2026-08-23): under full-suite load the
+  "Set your 2k baseline?" heading misses its 5 s `toBeVisible` window
+  — the page shows Today with the prompt never rendered. Two runs
+  failed differently (`:31`+`:95`, then `:95` alone), 4/4 green in
+  isolation; the error-context artifact is the capture, not a re-run
+  disposal. Owner: Phase BL (the flow is theirs; #167's diff has no
+  file in the path).
+- **`log-monitor`/`log-monitor-landscape` captures are scroll-unstable**:
+  `scrollTraceChartIntoFrame` lands differently run to run, so these
+  two PNGs churn on every screenshots pass (#167 saw both directions
+  in one day). Until the scroll is pinned, treat a diff in these two
+  as noise unless the chart CONTENT changed.
 
 **Exit:** James's erg look, on his iPhone against a real PM5, one
 item at a time —
