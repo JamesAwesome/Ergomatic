@@ -8872,3 +8872,35 @@ section:not(.news-pinned) .news-row:last-of-type {
   font-size: 9px;
   fill: var(--ink-3);
 }
+
+/* Phase BL PR B — the post-test prompt (PostTestPrompt.tsx). Renders only
+   after a successful save of a designated test (post-save is binding,
+   spec M6), replacing the summary screen wholesale, so it reuses the
+   screen scaffold plus the baselines vocabulary: mono caption ink
+   (--ink-3 on --page, 7.29:1), the measured value in accent mono at the
+   editor's own 32px, and the shared button-primary/button-outline pair
+   (52px min-height, clearing the 44px floor). */
+.posttest-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.posttest-value {
+  font-family: var(--font-mono);
+  font-size: 32px;
+  color: var(--accent);
+  margin: 8px 0 0;
+}
+
+.posttest-caption {
+  margin: 0;
+}
+
+.posttest-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+  max-width: 420px;
+}

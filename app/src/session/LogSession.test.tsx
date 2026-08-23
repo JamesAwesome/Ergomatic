@@ -4052,3 +4052,301 @@ describe("LogSession: the save stack's plan position (§2F, replaces the outside
     ).toContain("summary-save-lead");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Phase BL PR B (baseline-onboarding spec rev 2, "The post-test prompt"):
+// after a SUCCESSFUL save of a designated test with a measurable, complete
+// result, the door renders the post-save offer instead of navigating, and
+// fires the test-history record keyed to the log the 201 just minted —
+// accept or decline, the record happens (James's ruling; the decouple is
+// commit 1's POST /api/test-history). Everything here drives the REAL
+// doors end to end with the REAL seed test workouts.
+// ---------------------------------------------------------------------------
+
+// The real "2K Test" seed workout driven through the timer pipeline to a
+// COMPLETED run with a realistic measured stopwatch actual: 2000m at
+// 118.4 s/500m -> elapsed 473.6s (an all-out ~1:58 pace, inside the
+// storable 60..240 band — unlike the e2e fast-forward arcs' 35 s/500m,
+// which the band deliberately rejects).
+function buildK2TestSessionFixture(): {
+  run: SessionRun;
+  workout: LibraryWorkout;
+} {
+  const seed = ONBOARDING_LIBRARY_WORKOUTS.find(
+    (w) => w.title === ONBOARDING_TITLES.k2,
+  )!;
+  const draft = buildDraft({
+    id: "id-2ktest-fixture",
+    title: seed.title,
+    type: seed.type,
+    steps: seed.steps,
+  });
+  const started = startDraft(draft);
+  saveDraft(started);
+  const built = buildRun(started, null, FIXED_NOW);
+  const run: SessionRun = {
+    ...built,
+    index: built.phases.length,
+    completedAt: new Date(FIXED_NOW.getTime() + 8 * 60 * 1000).toISOString(),
+    actuals: {
+      0: {
+        elapsedSeconds: 473.6,
+        splitSeconds: 118.4,
+        actualSource: "stopwatch",
+      },
+    },
+  };
+  saveRun(run);
+  const workout: LibraryWorkout = {
+    id: "id-2ktest-fixture",
+    title: seed.title,
+    type: seed.type,
+    difficulty: seed.difficulty,
+    pain: seed.pain,
+    steps: started.steps,
+    isGlobal: true,
+    lastDoneDaysAgo: null,
+  };
+  return { run, workout };
+}
+
+const K2_MONITOR_WORKOUT_ID = "3b241101-e2bb-4255-8caf-4136c566a962";
+
+// The real "2K Test" seed workout as a COMPLETED MonitorRun — the
+// connected door's shape, same buildDraft -> buildRun -> compileProgram ->
+// buildLogSeed pipeline as buildMonitorFixture above, with the machine's
+// own close reason parameterized: "finished" is WORKOUTEND (the programmed
+// distance is complete); anything else is not proven complete.
+function buildK2TestMonitorFixture(endedBy: MonitorRun["endedBy"]): {
+  run: MonitorRun;
+  workout: LibraryWorkout;
+} {
+  const seed = ONBOARDING_LIBRARY_WORKOUTS.find(
+    (w) => w.title === ONBOARDING_TITLES.k2,
+  )!;
+  const draft = buildDraft({
+    id: K2_MONITOR_WORKOUT_ID,
+    title: seed.title,
+    type: seed.type,
+    steps: seed.steps,
+  });
+  const started = startDraft(draft);
+  const built = buildRun(started, null, FIXED_NOW);
+  const program = compileOrThrow(built.phases);
+  const logSeed = buildLogSeed(built.phases, null);
+  const run: MonitorRun = {
+    v: 2,
+    workoutId: K2_MONITOR_WORKOUT_ID,
+    title: seed.title,
+    program,
+    logSeed,
+    actuals: [
+      {
+        index: 0,
+        elapsedSeconds: 473.6,
+        distanceMeters: 2000,
+        avgSplit: 118.4,
+        avgSpm: 30,
+        avgHeartRateBpm: 168,
+        restDistanceMeters: 0,
+      },
+    ],
+    deviceName: "PM5 432331249 Row",
+    startedAt: FIXED_NOW.toISOString(),
+    completedAt: new Date(FIXED_NOW.getTime() + 8 * 60 * 1000).toISOString(),
+    terminated: endedBy !== "finished",
+    ...(endedBy !== undefined ? { endedBy } : {}),
+  };
+  const workout: LibraryWorkout = {
+    id: K2_MONITOR_WORKOUT_ID,
+    title: seed.title,
+    type: seed.type,
+    difficulty: seed.difficulty,
+    pain: seed.pain,
+    steps: started.steps,
+    isGlobal: true,
+    lastDoneDaysAgo: null,
+  };
+  return { run, workout };
+}
+
+function promptAwareApi() {
+  return mockApi((path) => {
+    if (path === "/api/logs") {
+      return new Response(JSON.stringify({ id: SAVED_LOG_ID }), {
+        status: 201,
+      });
+    }
+    if (path === "/api/test-history") {
+      return new Response(JSON.stringify({ id: "th-1" }), { status: 201 });
+    }
+    // The prompt's own PUT /api/baselines accepts.
+    return new Response(JSON.stringify({ k2Seconds: 118.4, k6Seconds: null }), {
+      status: 200,
+    });
+  });
+}
+
+const SAVED_LOG_ID = "f47ac10b-58cc-4372-a567-0e02b2c3d479";
+
+describe("LogSession: the post-test prompt (Phase BL PR B)", () => {
+  it("a completed 2K Test timer save shows the offer instead of navigating, and records to test history keyed to the saved log", async () => {
+    const { workout } = buildK2TestSessionFixture();
+    mockWorkouts([workout]);
+    mockBaselines({ k2Seconds: null, k6Seconds: null });
+    const apiFn = promptAwareApi();
+    await renderLog();
+    await screen.findByRole("heading", { name: "2K Test" });
+
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+
+    // The prompt, not Today.
+    expect(
+      await screen.findByRole("heading", { name: "Set your 2k baseline?" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("TODAY SCREEN")).not.toBeInTheDocument();
+    expect(screen.getByText("1:58.4")).toBeInTheDocument();
+
+    // Recording fired exactly once, BEFORE any prompt answer, keyed to
+    // the id the 201 minted — accept or decline changes nothing about it.
+    const recordCalls = apiFn.mock.calls.filter(
+      ([path]) => path === "/api/test-history",
+    );
+    expect(recordCalls).toHaveLength(1);
+    expect(
+      JSON.parse((recordCalls[0]![1] as RequestInit).body as string),
+    ).toStrictEqual({
+      distance: "2k",
+      splitSeconds: 118.4,
+      logId: SAVED_LOG_ID,
+    });
+
+    // The save itself behaved exactly as before: records cleared.
+    expect(loadDraft()).toBeNull();
+    expect(loadRun()).toBeNull();
+  });
+
+  it("declining lands on Today with the baseline untouched — recording already happened", async () => {
+    const { workout } = buildK2TestSessionFixture();
+    mockWorkouts([workout]);
+    mockBaselines({ k2Seconds: null, k6Seconds: null });
+    const apiFn = promptAwareApi();
+    await renderLog();
+    await screen.findByRole("heading", { name: "2K Test" });
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+    await screen.findByRole("heading", { name: "Set your 2k baseline?" });
+
+    await userEvent.click(screen.getByRole("button", { name: "Not now" }));
+
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+    expect(
+      apiFn.mock.calls.filter(([path]) => path === "/api/baselines"),
+    ).toHaveLength(0);
+  });
+
+  it("accepting writes tested, then the derive offer writes the counterpart as derived — the full loop from the door", async () => {
+    const { workout } = buildK2TestSessionFixture();
+    mockWorkouts([workout]);
+    mockBaselines({ k2Seconds: null, k6Seconds: null });
+    const apiFn = promptAwareApi();
+    await renderLog();
+    await screen.findByRole("heading", { name: "2K Test" });
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+    await screen.findByRole("heading", { name: "Set your 2k baseline?" });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Set 2k baseline" }),
+    );
+    await screen.findByRole("heading", { name: "Also set your 6k?" });
+    await userEvent.click(
+      screen.getByRole("button", { name: "Set 6k estimate" }),
+    );
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+
+    const baselinePuts = apiFn.mock.calls
+      .filter(([path]) => path === "/api/baselines")
+      .map(([, init]) =>
+        JSON.parse((init as RequestInit).body as string),
+      ) as Record<string, unknown>[];
+    expect(baselinePuts).toStrictEqual([
+      { k2Seconds: 118.4, k2Source: "tested" },
+      { k6Seconds: 125.4, k6Source: "derived" },
+    ]);
+  });
+
+  it("a FINISHED 2K Test monitor save shows the offer from the connected door too", async () => {
+    const { run, workout } = buildK2TestMonitorFixture("finished");
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines({ k2Seconds: null, k6Seconds: null });
+    const apiFn = promptAwareApi();
+    await renderManualLog(K2_MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "2K Test" });
+
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+
+    expect(
+      await screen.findByRole("heading", { name: "Set your 2k baseline?" }),
+    ).toBeInTheDocument();
+    expect(loadMonitorRun()).toBeNull();
+    expect(
+      apiFn.mock.calls.filter(([path]) => path === "/api/test-history"),
+    ).toHaveLength(1);
+  });
+
+  // The COMPLETENESS GUARD at door level (spec M2, binding): an
+  // interrupted run measured a real average split over PART of the
+  // programmed distance — offering it as a 2k baseline would store a
+  // wrong number wearing a tested source. No offer, no record.
+  it("an INTERRUPTED 2K Test monitor save navigates straight to Today — no offer, no record", async () => {
+    const { run, workout } = buildK2TestMonitorFixture("interrupted");
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines({ k2Seconds: null, k6Seconds: null });
+    const apiFn = promptAwareApi();
+    await renderManualLog(K2_MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "2K Test" });
+
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Set your 2k baseline?" }),
+    ).not.toBeInTheDocument();
+    expect(
+      apiFn.mock.calls.filter(([path]) => path === "/api/test-history"),
+    ).toHaveLength(0);
+  });
+
+  // WHERE THE NUMBER COMES FROM (spec M1): a manual log produces no
+  // heroes at all (buildManualModel), so a hand-logged "2K Test" never
+  // prompts — the You editor stays the honest path for a remembered
+  // number.
+  it("a MANUAL 2K Test log never prompts and never records — there is no measured number", async () => {
+    const seed = ONBOARDING_LIBRARY_WORKOUTS.find(
+      (w) => w.title === ONBOARDING_TITLES.k2,
+    )!;
+    const workout: LibraryWorkout = {
+      id: "id-2ktest-manual",
+      title: seed.title,
+      type: seed.type,
+      difficulty: seed.difficulty,
+      pain: seed.pain,
+      steps: seed.steps,
+      isGlobal: true,
+      lastDoneDaysAgo: null,
+    };
+    mockWorkouts([workout]);
+    mockBaselines({ k2Seconds: null, k6Seconds: null });
+    const apiFn = promptAwareApi();
+    await renderManualLog("id-2ktest-manual");
+    await screen.findByRole("heading", { name: "2K Test" });
+
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+    expect(
+      apiFn.mock.calls.filter(([path]) => path === "/api/test-history"),
+    ).toHaveLength(0);
+  });
+});

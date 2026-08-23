@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Link,
   Navigate,
@@ -42,6 +42,9 @@ import { useStagedDiscard } from "./useStagedDiscard";
 import BackLink from "../shell/BackLink";
 import PostWorkoutSummary, { singleTargetHint } from "./PostWorkoutSummary";
 import { buildSummaryModel, type SummaryModel } from "./summaryModel";
+import { postTestOffer, type PostTestOffer } from "./postTestOffer";
+import PostTestPrompt from "./PostTestPrompt";
+import { recordTestResult } from "../api/testHistory";
 
 /** PACES LOCKED panel (README.md §7's own literal example: "PACES LOCKED AT
  *  2K 1:52.0 · 6K 2:02.0"). UNVERIFIED judgment call (Task 2 brief flagged
@@ -462,7 +465,7 @@ interface LogFormFields {
  *  off the wire entirely (proving the server's own `?? true` default, same
  *  as before); `{ advancesPlan: false }` is what `Save without logging`
  *  passes. */
-function useLogForm(onSaved: () => void) {
+function useLogForm(onSaved: (logId: string | null) => void) {
   const [held, setHeld] = useState<HeldResult | null>(null);
   const [pain, setPain] = useState<number | null>(null);
   // Post-workout-summary spec (2026-08-17), §3: `thumbs` joins the
@@ -567,7 +570,21 @@ function useLogForm(onSaved: () => void) {
         // Only ever fires on a genuine 201 — a failed save (network error,
         // a real validation 400, a 500) leaves the caller's own records
         // intact so the rower can retry without redoing anything.
-        onSaved();
+        //
+        // Phase BL PR B: the 201's own body carries the created log's id
+        // ({ id } — data.ts's POST response), which the post-test
+        // recording needs as its idempotency key. Parsed defensively:
+        // an unreadable body degrades to null (the door then skips the
+        // record call but still offers — the offer never depended on
+        // the id), never to a failed save.
+        let logId: string | null = null;
+        try {
+          const parsed = (await res.json()) as { id?: unknown };
+          if (typeof parsed.id === "string") logId = parsed.id;
+        } catch {
+          logId = null;
+        }
+        onSaved(logId);
         return;
       }
       setSaveError("Couldn't save this session. Try again.");
@@ -718,6 +735,22 @@ function SessionDoorLog() {
   // below reads null, the identical value a genuinely-unset account has.
   const baselinesState = useBaselines();
 
+  // Phase BL PR B: non-null from the moment a save of a designated test
+  // with a measurable, complete result succeeds — the render below then
+  // shows the post-save offer INSTEAD of navigating (post-save only is
+  // binding, spec M6: mounting the offer above the save stack would swap
+  // the two save buttons under the rower's thumb). The `run` state var is
+  // read-once at mount, so the `run === null` redirect guard above stays
+  // false even though `clearRun()` has already emptied storage.
+  const [postSaveOffer, setPostSaveOffer] = useState<PostTestOffer | null>(
+    null,
+  );
+  // The offer travels from `handleSave` (which sets it right before
+  // `submit`) into the shared onSaved callback via this ref — the same
+  // idiom `ManualDoorLog`'s two branches use, and the lint-clean
+  // alternative to closing over a const declared later in this body.
+  const pendingOfferRef = useRef<PostTestOffer | null>(null);
+
   // Only ever clears the draft/run records on a genuine 201 (`onSaved`
   // fires after that, never on a failed save) — a network error, a real
   // validation 400, or a 500 leaves both intact so the rower can retry
@@ -734,10 +767,26 @@ function SessionDoorLog() {
     saving,
     saveError,
     submit,
-  } = useLogForm(() => {
+  } = useLogForm((logId) => {
     clearDraft();
     clearRun();
-    navigate("/today");
+    const offer = pendingOfferRef.current;
+    if (offer !== null) {
+      // James's ruling (spec rev 2): every designated-test session with a
+      // measurable result records — accept OR decline — so the record
+      // fires HERE, before the prompt can even render, keyed to the log
+      // the 201 minted. Fire-and-forget: recording never blocks the flow.
+      if (logId !== null) {
+        recordTestResult({
+          distance: offer.distance,
+          splitSeconds: offer.splitSeconds,
+          logId,
+        });
+      }
+      setPostSaveOffer(offer);
+    } else {
+      navigate("/today");
+    }
   });
   // Task 3 (ui-fix round): the two-button `.baseline-confirm` side panel
   // this discard used to open is gone — replaced by the shared
@@ -863,11 +912,47 @@ function SessionDoorLog() {
     run: activeRun,
     steps: logSteps,
   });
+
+  // Phase BL PR B: is this session a designated test whose measured
+  // result earns the post-save offer? All four conditions live in
+  // postTestOffer.ts. Identity needs the GLOBAL row (title alone is not
+  // identity — domain/onboarding.ts's own rule), so while the library is
+  // still loading at save time this honestly reads "not the designated
+  // test" and the save navigates exactly as before. Completeness on this
+  // door is `isComplete(run)` — already guaranteed by the redirect guard
+  // above, passed explicitly so the offer's own rule doesn't silently
+  // depend on a guard elsewhere. The phone-timer has no distance oracle:
+  // advancing through every phase IS this door's definition of having
+  // rowed the programmed distance (the suspect-actual panel and the
+  // 60..240 band are what push back on an implausible advance).
+  const offer = postTestOffer({
+    workoutTitle: activeRun.title,
+    workoutIsGlobal: libraryWorkout?.isGlobal ?? false,
+    avgSplitSeconds: model.heroes.avgSplitSeconds,
+    completedFullDistance: isComplete(activeRun),
+  });
+
+  if (postSaveOffer !== null) {
+    return (
+      <PostTestPrompt
+        offer={postSaveOffer}
+        stored={
+          baselinesState.state === "ready" ? baselinesState.baselines : null
+        }
+        onDone={() => navigate("/today")}
+      />
+    );
+  }
+
   // Fix round 1 (I1): the body-assembly and 400-retry logic that used to
   // live in this door's own `handleSave` now lives once, in `useLogForm`'s
   // `submit` above — this is only what genuinely differs for this door:
   // WHERE the workout identity/steps come from (the frozen `SessionRun`).
   function handleSave(opts: { advancesPlan?: boolean } = {}) {
+    // Phase BL PR B: stamp the offer (or its absence) for the onSaved
+    // callback above — set at the tap, so it always reflects the render
+    // the rower actually saved from.
+    pendingOfferRef.current = offer;
     return submit(
       {
         workoutId: activeRun.workoutId,
@@ -1024,6 +1109,18 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
   // top, so a subsequent BACK skips straight past this route entirely
   // (landing on whatever came before it, e.g. the workout's detail screen)
   // rather than re-mounting this form.
+  // Phase BL PR B: the two branches below (monitor mode and plain manual)
+  // share this one `useLogForm` call, so the branch-local offer travels
+  // through a ref each save handler sets right before `submit` — the
+  // monitor branch computes a real offer from its own model; the plain
+  // manual branch pins null (a manual log has no measured number,
+  // `buildManualModel` returns no heroes — spec M1, and the You editor
+  // stays the honest path for a remembered one).
+  const pendingOfferRef = useRef<PostTestOffer | null>(null);
+  const [postSaveOffer, setPostSaveOffer] = useState<PostTestOffer | null>(
+    null,
+  );
+
   const {
     held,
     setHeld,
@@ -1036,9 +1133,26 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
     saving,
     saveError,
     submit,
-  } = useLogForm(() => {
+  } = useLogForm((logId) => {
     if (monitorRun !== null) clearMonitorRun();
-    navigate("/today", { replace: true });
+    const offer = pendingOfferRef.current;
+    if (offer !== null) {
+      // James's ruling (spec rev 2): the record fires on the SAVE, before
+      // the prompt renders — accept or decline changes nothing about it.
+      if (logId !== null) {
+        recordTestResult({
+          distance: offer.distance,
+          splitSeconds: offer.splitSeconds,
+          logId,
+        });
+      }
+      // The prompt renders in place (below, ahead of both branches); its
+      // onDone performs this same replace-navigation, so the BACK
+      // dup-save guard survives the detour.
+      setPostSaveOffer(offer);
+    } else {
+      navigate("/today", { replace: true });
+    }
   });
 
   // Fix round 2 (whole-branch review, M1/M2): `planState` no longer joins
@@ -1128,6 +1242,22 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
     );
   }
 
+  // Phase BL PR B: once a designated-test save has landed, the offer
+  // replaces BOTH branches' forms (the monitor record is already cleared,
+  // and re-rendering a fillable form behind the prompt would resurrect
+  // the double-save hazard the replace-navigation guard exists for).
+  if (postSaveOffer !== null) {
+    return (
+      <PostTestPrompt
+        offer={postSaveOffer}
+        stored={
+          baselinesState.state === "ready" ? baselinesState.baselines : null
+        }
+        onDone={() => navigate("/today", { replace: true })}
+      />
+    );
+  }
+
   if (monitorRun !== null) {
     // 7C spec §4: the monitor mode's own render — `buildMonitorLogSteps`
     // never throws here (`monitorModeRun` already proved it wouldn't, by
@@ -1169,8 +1299,23 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
       }
       throw err;
     }
-    const handleMonitorSave = (opts: { advancesPlan?: boolean } = {}) =>
-      submit(
+    // Phase BL PR B: the connected door's own offer. Completeness (spec
+    // M2, binding) is the machine's own WORKOUTEND — `endedBy ===
+    // "finished"` is the only close reason that proves the programmed
+    // distance completed ("rower"/"link-lost"/"program-failed"/
+    // "interrupted"/absent all mean it did not, or cannot be shown to
+    // have), so an interrupted run's real-but-partial average split is
+    // never offered as a full-distance test result.
+    const monitorOffer = postTestOffer({
+      workoutTitle: activeWorkout.title,
+      workoutIsGlobal: activeWorkout.isGlobal,
+      avgSplitSeconds: model.heroes.avgSplitSeconds,
+      completedFullDistance: monitorRun.endedBy === "finished",
+    });
+
+    const handleMonitorSave = (opts: { advancesPlan?: boolean } = {}) => {
+      pendingOfferRef.current = monitorOffer;
+      return submit(
         {
           workoutId: activeWorkout.id,
           workoutTitle: activeWorkout.title,
@@ -1185,6 +1330,7 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
         },
         opts,
       );
+    };
 
     // Same two-tap shape as `SessionDoorLog`'s own `handleDiscardClick`
     // (spec §4: "in the session door's idiom") — deliberately does NOT
@@ -1350,6 +1496,12 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
   // there is no `clearDraft`/`clearRun` in this door's own `onSaved` at all
   // (wired above), since this door never touched either to begin with.
   function handleSave(opts: { advancesPlan?: boolean } = {}) {
+    // Phase BL PR B: never an offer from a by-hand entry — a manual log
+    // has no measured number at all (spec M1; `buildManualModel` returns
+    // no heroes), so a hand-logged "2K Test" saves and navigates exactly
+    // as any other manual log. Pinned explicitly so a stale ref from an
+    // earlier monitor-branch render can never leak into this branch.
+    pendingOfferRef.current = null;
     return submit(
       {
         workoutId: activeWorkout.id,
