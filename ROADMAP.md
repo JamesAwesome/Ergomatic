@@ -2545,7 +2545,9 @@ deliverable, each stated so the walk can go red:
 - **W7** — navigate the PM5's own menu mid-session: does the wire go
   quiet? If yes, that is a legitimate quiet period the watchdog's disarm
   list does not cover and the 2500 ms threshold fires falsely — the one
-  disarm unknown the corpus cannot answer.
+  disarm unknown the corpus cannot answer. (Stays on the PHONE leg of
+  Phase RC's combined walk — RC's own distance-shaped item was renamed
+  W10 to stop the collision; see Phase RC's walk card, spec §6.)
 - **W8** — leave an armed/live session untouched: does the PM5 ever emit
   TERMINATE on its own (an inactivity timeout)? `endedBy: "rower"` on the
   TERMINATE path asserts agency on the machine's behalf if it does.
@@ -2606,11 +2608,16 @@ criterion (b) exists.
 
 ## Phase RC — The row Concept2 would recognise
 
-**Status:** NOT OPENED. Named, scoped and evidenced by the ecosystem
-review of 2026-08-21 (`docs/monitor/pm5-ble-ecosystem-review.md`, which
-that review also reconciles). No spec is written yet. This section exists
-so the work has a home the moment one is, and so its findings stop living
-in a report (recurring failure 14).
+**Status:** OPENED 2026-08-22 (James: evidence-first). Spec 1 is
+`docs/superpowers/specs/2026-08-22-held-open-finish-design.md`: the
+dev-only hold-open instrument (defer the finish disconnect 90 s, subscribe
+0x003F raw), wave-0 fixes RC-4 and RC-6, and the COMBINED walk (Phase LL's
+exit clauses on the current stock TestFlight phone build (v0.18.0+;
+re-check the latest tag at walk time) + RC's W1-W4 on the laptop seam, one
+erg session). RC-1/RC-8 are specced AFTER the walk, with evidence in
+hand. Named, scoped and evidenced by the ecosystem review of 2026-08-21
+(`docs/monitor/pm5-ble-ecosystem-review.md`, which that review also
+reconciles).
 
 **Asset on hand (James, 2026-08-22): a Concept2 Logbook DEVELOPMENT API
 key already exists in the repo-root `.env`, currently unused.** Presence
@@ -2723,7 +2730,8 @@ that needs no erg, and it can run in a test.
       Caveat: `avgPaceSecondsPer500m`'s /10 scale rests on the same
       document that was wrong about Last Split Time two pages earlier and
       has never decoded a real byte — DOC-ONLY until a capture lands.
-- [ ] **RC-4 — Last Split Time is 0.01 s/lsb, not 0.1.** TRIAD, S,
+- [x] **RC-4 — Last Split Time is 0.01 s/lsb, not 0.1.** Settled by
+      replay, see `parse.test.ts` (seq 1195). TRIAD, S,
       **settled without an erg.** Both C2 documents print 0.1, four
       times. Nine capture pairs say 0.01 (0x0033's u24LE@14 is the exact
       hundredths value whose truncation to tenths is 0x0037's split
@@ -2749,15 +2757,13 @@ that needs no erg, and it can run in a test.
       below:** Concept2 has no average-split field, so this is a rower
       question with its own answer, and aligning DISTANCE and TIME with C2
       can widen the contradiction rather than close it.
-- [ ] **RC-6 — Band `spm` and drop zero `p` in the stored series.**
-      TRIAD, S. `seriesRecorder.ts:230` writes `spm: f.spm ?? 0` unbanded
-      while the sibling `hr` two lines below is banded 20..254. The PM5
-      demonstrably emits 64 and 101 spm in coherent aligned frames at
-      boundaries; **two stored samples in the committed step-2 capture
-      would carry 64.** Also store no `p: 0` — 8 samples on session-2 and
-      2 on pyramid carry a zero pace, which C2's `stroke_data.p` has no
-      concept of and our own live surface refuses one layer up
-      (`surfaceModel.ts:586`).
+- [x] ~~RC-6 — Band `spm` and drop zero `p` in the stored series.~~ —
+      **NARROWED, `spm` half SHIPPED** (2026-08-22, held-open-finish spec
+      1 task 5). `seriesRecorder.ts` now bands `spm` to 10..60 inclusive,
+      same 0-sentinel shape `hr` already used — kills both the
+      first-stroke estimator's 64 and the boundary transition's 101. The
+      `p: 0` half moved to RC-11's own spec (the stroke-data reframe
+      owns what `p` means).
 - [ ] **RC-7 — Stop writing `restDistanceMeters: 0` into the synthesized
       final interval** (`driver.ts:3037`), which the code's own comment
       already calls "a real gap". Unreachable today because no 0x0039
@@ -2789,14 +2795,25 @@ that needs no erg, and it can run in a test.
       `export/{csv,fit,tcx}` back, and diff it against what we stored.
       **Two gates on a POST that the numeric work does not cover:**
       `weight_class` is REQUIRED for a rower and we store nothing
-      (product decision, one field); per-interval `rest_time` is REQUIRED
+      — RULED (James, 2026-08-22, phase open): a binary H/L field asked
+      ONLY at Concept2 link time (the OAuth grant), never at onboarding;
+      C2's own profile cannot supply it (PRIMARY: `GET /users/me` has no
+      weight field; `weight_class` lives on results only, "Required if
+      type is rower... H or L"). Optional nicety: prefill from the
+      user's latest logged result if their history has one; per-interval `rest_time` is REQUIRED
       and we decode it at `parse.ts:236` then drop it (RC-1 closes this).
       Also unresolved and worth settling before we post in anger: if
       James runs ErgData too, success means our row and ErgData's row are
       the SAME row under C2's dedup. Whether that merges, rejects or
       duplicates is **not established by the review** and decides whether
       this is leverage or a fight over ownership of the row.
-- [ ] **RC-11 — The stroke-data reframe, which is three-way not two.**
+- [ ] **RC-11 — The stroke-data reframe, which is three-way not two —
+      AND owner of RC-6's deferred `p: 0` half (narrowed off at the
+      phase-open gates, 2026-08-22):** whether stored samples stop
+      carrying `p: 0` for no-reading strokes is settled HERE, at
+      serialization design time — `traceModel.ts` guards on `!== 0` and
+      the server validator requires the field, so any change is a
+      reader+validator+shape change, not a recorder one-liner.
       C2's `stroke_data[].t` restarts at 0 PER INTERVAL; ours is
       cumulative across the session. Worse, our series clock is a THIRD
       quantity — work plus however much of the trailing rest the wire
@@ -2815,8 +2832,10 @@ that needs no erg, and it can run in a test.
       rest-exclusive; ORM's writer independently agrees).
       `pm5-interface-notes.md:4393` says 0x0037's work-only status is
       "still open" while `state-architecture-review.md:1310` says PROVEN
-      — the review is right. §20 items 17 and 24 are contradicted by the
-      captures that settle RC-4. `driver.ts:2094-2099` says "no capture
+      — the review is right. ~~§20 items 17 and 24 are contradicted by
+      the captures that settle RC-4.~~ **DONE, folded into RC-4's PR** —
+      both items rewritten to the 0.01 s/lsb, dimension-conditional
+      semantic. `driver.ts:2094-2099` says "no capture
       or existing test evidences" state 9; one committed two days later
       does. `types.ts:429-433` claims `onDisconnect` covers the Bluetooth
       stack resetting and iOS backgrounding — it covers neither.
@@ -2904,9 +2923,57 @@ item** and W3/W4 ride the same piece.
   whether 0x003F fires on our firmware, when, and which byte order the
   monitor prints (CSAFE says byte 0 = MSB, the BLE table says "Lo" — the
   two documents disagree). **The only route to the verification branch.**
-- **W7** — a distance-shaped summary (3x300 m r30, held open 90 s), only
+- **W10** — a distance-shaped summary (3x300 m r30, held open 90 s), only
   if W2 shows 0x0039 arriving at all. Extends the cumulative/rest-exclusive
-  settlement, which rests on one TIME piece.
+  settlement, which rests on one TIME piece. **Renamed from W7** (spec
+  §6, 2026-08-22): two items on the combined walk were both called W7 —
+  this one and Phase LL's, which keeps the name because it stays on the
+  PHONE leg, where its watchdog-false-fire question is actually
+  observable.
+
+**Arming the hold-open instrument (final-review I3 — the card never said
+HOW before this fix):** W2/W3/W4/W10 all need it armed. On the laptop, in
+Chrome DevTools' console, BEFORE the finish (the chip is a one-shot per
+session — arming after the finish is too late):
+
+1. `window.__pm5HoldOpen__.arm()` — confirm it took: the "HOLD-OPEN ARMED"
+   chip appears next to the connection line. If `window.__pm5HoldOpen__`
+   is `undefined`, the build was not run with the fake-monitor gate open
+   (`pnpm dev`, or `VITE_ENABLE_FAKE_MONITOR=1`) — see `transports/index.ts`.
+2. Finish the piece normally. `window.__pm5HoldOpen__.status()` reports
+   `{ state: "holding", msRemaining }` for the next 90 s.
+3. `window.__pm5HoldOpen__.ring()` reads the live trace at any point during
+   the hold — every notification the PM5 sent, plus lifecycle markers
+   (`0x003f subscribe-issued`, and — if the firmware lacks 0x003F —
+   `0x003f subscribe-failed <message>`; a `subscribe-issued` entry with NO
+   later `subscribe-failed` and no `0x003f` notification lines means the
+   subscribe went through cleanly and the firmware genuinely sent nothing,
+   the W4 negative). `hold-start` marks the armed→holding transition;
+   `hold-released`/`hold-expired`/`link-drop-*` entries mark how the
+   window ended.
+4. Once the hold ends (release, the 90 s timer, or the PM5 hanging up
+   first), the ring is stashed into sessionStorage. On the Log screen that
+   follows, **MONITOR LOG · COPY reads this live** (final-review I2) — it
+   will include the held-open window, not just the pre-hold trace.
+5. **Reconnecting for a later item (W10, or a retry after "Try Again")?**
+   `window.__pm5HoldOpen__.release()` first if a hold is still in flight —
+   a stale decorator's own 90 s timer can otherwise hang up the NEW link
+   out from under it (final-review M2).
+
+**Protocol rules the combined walk plan must carry (spec §6, both
+gates):**
+
+- **Priority order: W1 → W2/W3/W4 (one piece) → the phone leg (LL's
+  clause (b) pinned above the cut line within it) → W10.** The budget
+  can run out; it must not run out before W2. Everything below W10 is
+  cuttable without a second thought.
+- **One link at a time:** the laptop disconnects (hold released) before
+  the phone connects. Whether the PM5 accepts two centrals is an open
+  question this ROADMAP contradicts itself on elsewhere ("the PM5 is
+  single-central HAS NO SOURCE" versus a later line asserting
+  single-central as settled) — the walk SETTLES it as a deliberate
+  probe after all other evidence is gathered, never discovers it
+  mid-evidence.
 
 **Not worth a walk:** re-observing 0x0037's work-only semantics (settled
 twice from committed bytes) or the state-9 frame (captured 2026-08-18).
@@ -2961,8 +3028,9 @@ sentence:
 
 **Wave 0 — unblocked today, no collisions with anything.** RC-4 (the
 Last Split 10x, which also fixes its mirror in `statusFrames.ts`) and
-RC-6 (band `spm`, drop zero `p` — `seriesRecorder.ts`). Neither file is
-touched by WU or LL. These can go now and need nothing from anyone.
+RC-6 (band `spm` — `seriesRecorder.ts` — **SHIPPED**; the `drop zero p`
+half narrowed off to RC-11). Neither file is touched by WU or LL. These
+can go now and need nothing from anyone.
 
 **Wave 1 — Phase WU. REWRITTEN 2026-08-21 at the PM gate: all three of
 this wave's original reasons were falsified and it now stands on a
@@ -3491,6 +3559,19 @@ scope):
   builder screen neither diff touched). Both passed on re-run; it has
   a pattern now and wants a tracked fix rather than another per-task
   footnote.
+- **Phase BL's `retest.spec.ts` post-test-prompt flake** (found at
+  #167's post-rebase gate, 2026-08-23): under full-suite load the
+  "Set your 2k baseline?" heading misses its 5 s `toBeVisible` window
+  — the page shows Today with the prompt never rendered. Two runs
+  failed differently (`:31`+`:95`, then `:95` alone), 4/4 green in
+  isolation; the error-context artifact is the capture, not a re-run
+  disposal. Owner: Phase BL (the flow is theirs; #167's diff has no
+  file in the path).
+- **`log-monitor`/`log-monitor-landscape` captures are scroll-unstable**:
+  `scrollTraceChartIntoFrame` lands differently run to run, so these
+  two PNGs churn on every screenshots pass (#167 saw both directions
+  in one day). Until the scroll is pinned, treat a diff in these two
+  as noise unless the chart CONTENT changed.
 
 **Exit:** James's erg look, on his iPhone against a real PM5, one
 item at a time —

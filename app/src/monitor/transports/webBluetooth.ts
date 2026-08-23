@@ -29,6 +29,7 @@ import {
   END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID,
   END_OF_WORKOUT_SUMMARY_UUID,
   GENERAL_STATUS_UUID,
+  LOGGED_WORKOUT_UUID,
   RECEIVE_CHARACTERISTIC_UUID,
   ROWING_SERVICE_UUID,
   SAMPLE_RATE_UUID,
@@ -112,6 +113,9 @@ const SERVICE_OF: Readonly<Record<string, string>> = {
   [ADDITIONAL_SPLIT_INTERVAL_DATA_UUID]: ROWING_SERVICE_UUID,
   [END_OF_WORKOUT_SUMMARY_UUID]: ROWING_SERVICE_UUID,
   [END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID]: ROWING_SERVICE_UUID,
+  // Phase RC spec 1, Task 2 (design spec §3): 0x003F is in the C2 rowing
+  // service 0x0030 too, same as the pair above.
+  [LOGGED_WORKOUT_UUID]: ROWING_SERVICE_UUID,
 };
 
 function serviceFor(characteristicId: string): string {
@@ -192,11 +196,37 @@ function toBytes(value: DataView): Uint8Array {
  * lives on), so a caller passing any other id fails loudly rather than
  * silently reconnecting to the wrong device.
  */
-export function createWebBluetoothTransport(): Transport {
+export function createWebBluetoothTransport(): Transport & {
+  /** C1 fix (final-review): `subscribe()`'s GATT lookup is async
+   *  (`getCharacteristic` below) and `Transport.subscribe` must still
+   *  return its unsubscribe closure SYNCHRONOUSLY — so a rejection there
+   *  (a firmware missing the characteristic, most namably 0x003F for the
+   *  hold-open instrument) used to vanish into a `void`ed promise with no
+   *  attached `.catch()` at all: not a throw, not a rejection any caller
+   *  could observe, just silence identical to a firmware that has the
+   *  characteristic and never sends on it. This is the same structural
+   *  `Transport` extension `capacitorBle.ts` already exposes for the
+   *  native arm (`onCharacteristicDegraded`) — added here so a rejection
+   *  on THIS arm is observable too, fanned out to every registered
+   *  listener (a `Set`, not `capacitorBle.ts`'s single-slot pattern —
+   *  deliberately, so `useMonitorSession.ts`'s own driver-level
+   *  registration and a second caller like `holdOpen.ts`'s instrument can
+   *  both register without one silently overwriting the other). */
+  onCharacteristicDegraded(
+    cb: (characteristicId: string, message: string) => void,
+  ): () => void;
+} {
   let device: BluetoothDevice | null = null;
   let server: BluetoothRemoteGATTServer | null = null;
   let disconnectCb: ((reason: string) => void) | null = null;
   const characteristics = new Map<string, BluetoothRemoteGATTCharacteristic>();
+  // C1 fix (final-review): every listener registered via
+  // `onCharacteristicDegraded` below, fired for ANY characteristic's
+  // subscribe rejection — see that method's own doc comment for why this
+  // is a fan-out `Set`, not a single overwritable slot.
+  const degradedCbs = new Set<
+    (characteristicId: string, message: string) => void
+  >();
   // M-2 (final-review): `Transport.onDisconnect`'s own contract
   // (types.ts:120-125) says it is "never fired by a caller-initiated
   // disconnect()" — but `server.disconnect()` below fires
@@ -342,12 +372,30 @@ export function createWebBluetoothTransport(): Transport {
       // gives: GATT characteristic resolution is async, but `Transport.
       // subscribe`'s signature must return the unsubscribe closure
       // synchronously.
-      void getCharacteristic(characteristicId).then((characteristic) => {
-        if (cancelled) return;
-        subscribed = characteristic;
-        characteristic.addEventListener("characteristicvaluechanged", listener);
-        void characteristic.startNotifications();
-      });
+      //
+      // C1 fix (final-review): the `.catch()` below is the whole fix — its
+      // ABSENCE before this change is exactly what made a rejection here
+      // (a firmware lacking `characteristicId`) indistinguishable from a
+      // firmware that has it and simply never sends. `cancelled` is
+      // checked the same way the `.then()` above already does: a caller
+      // who unsubscribed before the lookup settled gets no degraded
+      // report either — it asked to stop hearing about this
+      // characteristic, failure included.
+      void getCharacteristic(characteristicId)
+        .then((characteristic) => {
+          if (cancelled) return;
+          subscribed = characteristic;
+          characteristic.addEventListener(
+            "characteristicvaluechanged",
+            listener,
+          );
+          void characteristic.startNotifications();
+        })
+        .catch((err: unknown) => {
+          if (cancelled) return;
+          const message = err instanceof Error ? err.message : String(err);
+          for (const cb of degradedCbs) cb(characteristicId, message);
+        });
       return () => {
         cancelled = true;
         if (subscribed) {
@@ -374,6 +422,17 @@ export function createWebBluetoothTransport(): Transport {
       disconnectCb = cb;
       return () => {
         if (disconnectCb === cb) disconnectCb = null;
+      };
+    },
+
+    // C1 fix (final-review): see the returned object's own doc comment
+    // above for why this is a fan-out `Set` rather than a single slot.
+    onCharacteristicDegraded(
+      cb: (characteristicId: string, message: string) => void,
+    ): () => void {
+      degradedCbs.add(cb);
+      return () => {
+        degradedCbs.delete(cb);
       };
     },
   };

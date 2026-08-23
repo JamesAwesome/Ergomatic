@@ -69,3 +69,16 @@ export const END_OF_WORKOUT_SUMMARY_UUID = pm5Uuid(0x0039);
  *  bytes — carries what would not fit in 0x0039's own 20-byte ceiling
  *  (interface-notes.md §23, BLE doc p.22). */
 export const END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID = pm5Uuid(0x003a);
+/** C2 rowing logged workout characteristic — the BLE spec's own name for
+ *  it, PRIMARY (Phase RC spec 1 §1); named for what the document calls
+ *  it, NOT "verification": that its hash IS the logbook's own
+ *  `verification_code` is INFERENCE, untested
+ *  (docs/superpowers/specs/2026-08-22-held-open-finish-design.md §1).
+ *  Firmware-gated to nine disjoint bands, and this PM5's firmware version
+ *  has never been recorded — whether 0x003F can even exist on this
+ *  monitor is open (same spec, walk item W1). Byte order is disputed
+ *  WITHIN the BLE spec itself (the characteristic table reads `(Lo)`-
+ *  first; CSAFE 0x72 reads "Byte 0: Hash (MSB)") — no decode logic lives
+ *  here or anywhere this constant is consumed; raw bytes only, until a
+ *  hardware walk settles which. */
+export const LOGGED_WORKOUT_UUID = pm5Uuid(0x003f);

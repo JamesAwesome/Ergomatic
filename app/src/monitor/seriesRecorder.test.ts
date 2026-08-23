@@ -665,6 +665,95 @@ describe("createSeriesRecorder — hr presence (§1's Shape row: absent, never p
   });
 });
 
+// ---------------------------------------------------------------------
+// RC-6, narrowed (phase-open gates): the `p: 0` half of the original
+// finding moved to RC-11's own spec; this half bands `spm` the same way
+// `hr` above is already banded — same sibling field, same "drop the
+// out-of-band reading to the sentinel, never the whole sample" shape,
+// two lines up in `seriesRecorder.ts`. Two DIFFERENT wire artifacts, not
+// one: a first-stroke estimator transient (64 spm, committed capture
+// `docs/monitor/sessions/walk-2026-08-17/step-2-pm5-recording-
+// 1786973078979.jsonl`, seq 829/832/835/838 — 13 s into interval 1, NOT
+// a boundary; the PM5's own spm estimator on a single elapsed stroke)
+// and a workout-end boundary transition (101 spm, committed capture
+// `docs/monitor/sessions/walk-2026-08-18-metrics/pyramid-pm5-recording-
+// 1787090555458.jsonl.gz`, seq 3274/3277, straddling the interval-end
+// reset). Both are real, coherent, aligned wire readings — not parse
+// noise — so this bands at the SAME layer `hr` already does rather than
+// trying to detect either mechanism.
+// ---------------------------------------------------------------------
+
+describe("createSeriesRecorder — spm banding (RC-6, narrowed: 10..60 spm, out-of-band to the 0 sentinel)", () => {
+  function frame(over: Partial<MonitorFrame> = {}): MonitorFrame {
+    return {
+      elapsedSeconds: 1,
+      distanceMeters: 5,
+      sessionElapsedSeconds: 1,
+      sessionDistanceMeters: 5,
+      currentSplit: 120,
+      spm: 24,
+      heartRateBpm: null,
+      rowingActive: true,
+      splitAvgPace: null,
+      restSeconds: 0,
+      intervalIndex: null,
+      intervalRemaining: null,
+      intervalAccrued: null,
+      state: "rowing",
+      ...over,
+    };
+  }
+
+  it("first-stroke transient: spm 64 (step-2 seq 829/832/835/838, 13s into interval 1 — NOT a boundary) records spm 0", () => {
+    const rec = createSeriesRecorder();
+    rec.onFrame(frame({ spm: 64 }));
+    const sample = rec.snapshot()!.samples[0]!;
+    expect(sample.spm).toBe(0);
+  });
+
+  it("boundary transition: spm 101 (pyramid seq 3274/3277, straddling the workout-end reset) records spm 0", () => {
+    const rec = createSeriesRecorder();
+    rec.onFrame(frame({ spm: 101 }));
+    const sample = rec.snapshot()!.samples[0]!;
+    expect(sample.spm).toBe(0);
+  });
+
+  it("band floor: spm 10 (the band's own floor) is kept exactly", () => {
+    const rec = createSeriesRecorder();
+    rec.onFrame(frame({ spm: 10 }));
+    const sample = rec.snapshot()!.samples[0]!;
+    expect(sample.spm).toBe(10);
+  });
+
+  it("band ceiling: spm 60 (the band's own ceiling) is kept exactly", () => {
+    const rec = createSeriesRecorder();
+    rec.onFrame(frame({ spm: 60 }));
+    const sample = rec.snapshot()!.samples[0]!;
+    expect(sample.spm).toBe(60);
+  });
+
+  it("typical value: spm 24 (a normal cadence) is kept exactly", () => {
+    const rec = createSeriesRecorder();
+    rec.onFrame(frame({ spm: 24 }));
+    const sample = rec.snapshot()!.samples[0]!;
+    expect(sample.spm).toBe(24);
+  });
+
+  it("just below the floor: spm 9 records spm 0", () => {
+    const rec = createSeriesRecorder();
+    rec.onFrame(frame({ spm: 9 }));
+    const sample = rec.snapshot()!.samples[0]!;
+    expect(sample.spm).toBe(0);
+  });
+
+  it("just above the ceiling: spm 61 records spm 0", () => {
+    const rec = createSeriesRecorder();
+    rec.onFrame(frame({ spm: 61 }));
+    const sample = rec.snapshot()!.samples[0]!;
+    expect(sample.spm).toBe(0);
+  });
+});
+
 describe("createSeriesRecorder — the rest of the contract", () => {
   function frame(over: Partial<MonitorFrame> = {}): MonitorFrame {
     return {
