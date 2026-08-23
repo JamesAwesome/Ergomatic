@@ -5,6 +5,22 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.20.0 (2026-08-23): the cohort-unlock pair. Range v0.19.1..main =
+    // #174 (F2a, the continuity guard) + #177 (Try again + the LINK LOST
+    // surface) — both accounted, nothing else in the range. Written per
+    // the #174 PM gate: F2a's clause carries BOTH directions (fewer false
+    // closes AND the merge that can silently under-count until F2b), and
+    // the LINK LOST clause discharges v0.17.0's corrected "that surface
+    // is coming" promise. Tagging this discharges the F3 tag tripwire.
+    version: "v0.20.0",
+    date: "2026-08-23",
+    items: [
+      "Glancing at your phone mid-row can no longer cost you the session. The app used to sometimes end a healthy row as link-lost right after you came back to it, on one bad reading from the monitor; it now demands the full signature of a real monitor reset before it closes anything. The honest flip side: if the monitor genuinely resets during a long gap, the app may now keep rowing into the same record and the total can come up short until a deeper fix lands. We chose losing metres over losing rows.",
+      "Try again on the connection-failed screen now works after the link dies mid-session, not just after a failed first connect. One tap runs the whole path again: fresh connection, workout re-sent, back to READY. Before this, that button could sit there looking tappable and do nothing.",
+      "Your log now says which sessions the link killed: LINK LOST appears on the session detail, so a row the app lost is never confused with a row you chose to end. This is the surface promised in the v0.17.0 correction.",
+    ],
+  },
+  {
     // v0.19.1 (2026-08-23): PR #175 only — James's same-day feedback on
     // v0.19.0's baseline entry. Range v0.19.0..main = that one merge.
     version: "v0.19.1",
