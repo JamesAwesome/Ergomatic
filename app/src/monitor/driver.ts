@@ -2585,6 +2585,15 @@ export function createPm5Driver(
           return;
         }
       }
+      // TWO LOSS MODES FUNNEL INTO THIS FALLBACK, both losing the burst's
+      // observations here (bounded: never worse than before this task) —
+      // 0x0033 never having arrived yet for this run (`status.intervalCount`
+      // undefined, `toProgramIndex` returns `null`), and the likelier one in
+      // practice, a STALE `intervalCount` (defined but still naming a PRIOR
+      // interval, `currentIndex !== lastIndex`): the burst's own
+      // ~142-449ms window (§1) can sit entirely inside 0x0033's own sample
+      // gap. PR 3/F2b's interval-count work is what sharpens this field
+      // enough to close that gap.
       // Every OTHER reason lands here and they are all the same answer: no
       // natural finish of ours is currently waiting on a final interval,
       // and this run (if any) is not observably in its last one either.
