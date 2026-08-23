@@ -2793,7 +2793,12 @@ that needs no erg, and it can run in a test.
       `export/{csv,fit,tcx}` back, and diff it against what we stored.
       **Two gates on a POST that the numeric work does not cover:**
       `weight_class` is REQUIRED for a rower and we store nothing
-      (product decision, one field); per-interval `rest_time` is REQUIRED
+      — RULED (James, 2026-08-22, phase open): a binary H/L field asked
+      ONLY at Concept2 link time (the OAuth grant), never at onboarding;
+      C2's own profile cannot supply it (PRIMARY: `GET /users/me` has no
+      weight field; `weight_class` lives on results only, "Required if
+      type is rower... H or L"). Optional nicety: prefill from the
+      user's latest logged result if their history has one; per-interval `rest_time` is REQUIRED
       and we decode it at `parse.ts:236` then drop it (RC-1 closes this).
       Also unresolved and worth settling before we post in anger: if
       James runs ErgData too, success means our row and ErgData's row are
