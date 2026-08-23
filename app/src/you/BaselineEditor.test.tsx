@@ -22,17 +22,28 @@ async function renderEditor() {
   return render(<BaselineEditor />);
 }
 
+/** Types digits into a split field the way a rower does — tap, keypad,
+ *  digits right to left (Option T). Never prop injection: the provenance
+ *  pins below are all re-derived through this real typed path. */
+async function typeSplit(name: "2k split" | "6k split", digits: string) {
+  await userEvent.type(screen.getByRole("textbox", { name }), digits);
+}
+
 afterEach(() => {
   vi.resetModules();
   vi.doUnmock("../api/useBaselines");
 });
 
 describe("BaselineEditor", () => {
-  it("renders both baselines as formatted mono splits", async () => {
+  it("renders both baselines as typed fields resting on their formatted mono splits", async () => {
     mockReady();
     await renderEditor();
-    expect(screen.getByText("1:52.0")).toBeInTheDocument();
-    expect(screen.getByText("2:02.0")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "2k split" })).toHaveValue(
+      "1:52.0",
+    );
+    expect(screen.getByRole("textbox", { name: "6k split" })).toHaveValue(
+      "2:02.0",
+    );
   });
 
   it("shows no confirm block while the draft is clean", async () => {
@@ -44,50 +55,50 @@ describe("BaselineEditor", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("stages a nudge into a confirm block without saving", async () => {
+  it("stages a typed entry into a confirm block without saving", async () => {
     const save = mockReady();
     await renderEditor();
-    await userEvent.click(screen.getByRole("button", { name: "2k faster" }));
-    expect(screen.getByText("2k 1:52.0 → 1:51.5")).toBeInTheDocument();
+    await typeSplit("2k split", "151");
+    expect(screen.getByText("2k 1:52.0 → 1:51.0")).toBeInTheDocument();
     expect(save).not.toHaveBeenCalled();
   });
 
-  // Pre-existing gap this round's own per-file coverage check found
-  // (recurring-failure #2): only "2k faster" and "6k slower" were ever
-  // exercised anywhere in this file — the other two stepper directions
-  // never had a test of their own.
-  it("the other two stepper directions also nudge (2k slower, 6k faster)", async () => {
+  // Both fields are independent real inputs (the old file pinned all four
+  // stepper directions for the same reason — each side's own path).
+  it("the 6k field types too, staging its own confirm line beside the 2k's", async () => {
     mockReady();
     await renderEditor();
-    await userEvent.click(screen.getByRole("button", { name: "2k slower" }));
-    expect(screen.getByText("2k 1:52.0 → 1:52.5")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "6k faster" }));
-    expect(screen.getByText("6k 2:02.0 → 2:01.5")).toBeInTheDocument();
+    await typeSplit("2k split", "153");
+    expect(screen.getByText("2k 1:52.0 → 1:53.0")).toBeInTheDocument();
+    await typeSplit("6k split", "201");
+    expect(screen.getByText("6k 2:02.0 → 2:01.0")).toBeInTheDocument();
   });
 
   it("discard removes the confirm block and restores the displayed value", async () => {
     mockReady();
     await renderEditor();
-    await userEvent.click(screen.getByRole("button", { name: "2k faster" }));
-    expect(screen.getByText("2k 1:52.0 → 1:51.5")).toBeInTheDocument();
+    await typeSplit("2k split", "151");
+    expect(screen.getByText("2k 1:52.0 → 1:51.0")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: /discard/i }));
 
     expect(screen.queryByText(/→/)).not.toBeInTheDocument();
-    expect(screen.getByText("1:52.0")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "2k split" })).toHaveValue(
+      "1:52.0",
+    );
   });
 
-  it("applying saves the touched field exactly once, stamped manual, and settles the confirm block", async () => {
+  it("applying saves the typed field exactly once, stamped manual, and settles the confirm block", async () => {
     const save = mockReady();
     await renderEditor();
-    await userEvent.click(screen.getByRole("button", { name: "2k faster" }));
+    await typeSplit("2k split", "151");
 
     await userEvent.click(
       screen.getByRole("button", { name: /apply baselines/i }),
     );
 
     expect(save).toHaveBeenCalledTimes(1);
-    expect(save).toHaveBeenCalledWith({ k2Seconds: 111.5, k2Source: "manual" });
+    expect(save).toHaveBeenCalledWith({ k2Seconds: 111, k2Source: "manual" });
     expect(screen.queryByText(/→/)).not.toBeInTheDocument();
   });
 
@@ -99,8 +110,12 @@ describe("BaselineEditor", () => {
     // The seeds are the estimate table's most-common cell (2:25 / 2:32),
     // not the old club-rower 112/122 pair — the PR C constants
     // reconciliation; domain/estimateBaseline.test.ts pins the derivation.
-    expect(screen.getByText("2:25.0")).toBeInTheDocument();
-    expect(screen.getByText("2:32.0")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "2k split" })).toHaveValue(
+      "2:25.0",
+    );
+    expect(screen.getByRole("textbox", { name: "6k split" })).toHaveValue(
+      "2:32.0",
+    );
     // Neither side is a known real value here (both null) — deriving one
     // from the other would mean deriving from a made-up seed, so the offer
     // must not appear at all (ui-notes round, item 2's "exactly one side
@@ -109,20 +124,20 @@ describe("BaselineEditor", () => {
       screen.queryByRole("button", { name: /ESTIMATE FROM/i }),
     ).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "6k slower" }));
+    await typeSplit("6k split", "233");
     await userEvent.click(
       screen.getByRole("button", { name: /apply baselines/i }),
     );
 
     // Task review round, Finding 1 (BLOCKER): Apply must send ONLY the
     // TOUCHED field — k2 was never acted on and is still server-null, so
-    // sending a fabricated k2Seconds:112 here would silently manufacture a
+    // sending a fabricated k2Seconds:145 here would silently manufacture a
     // 2k baseline the rower never rowed and never asked for. This is the
     // exact fresh-both-null-user case Finding 1's test list names.
     // Phase BL PR A: the touched field now also carries its truthful
-    // provenance — a stepper edit is a manual entry.
+    // provenance — a typed edit is a manual entry ("233" -> 2:33 = 153s).
     expect(save).toHaveBeenCalledTimes(1);
-    expect(save).toHaveBeenCalledWith({ k6Seconds: 152.5, k6Source: "manual" });
+    expect(save).toHaveBeenCalledWith({ k6Seconds: 153, k6Source: "manual" });
   });
 
   it("keeps the draft and surfaces an error when save is rejected", async () => {
@@ -131,13 +146,13 @@ describe("BaselineEditor", () => {
     });
     mockReady(BASELINES, save);
     await renderEditor();
-    await userEvent.click(screen.getByRole("button", { name: "2k faster" }));
+    await typeSplit("2k split", "151");
 
     await userEvent.click(
       screen.getByRole("button", { name: /apply baselines/i }),
     );
 
-    expect(screen.getByText("2k 1:52.0 → 1:51.5")).toBeInTheDocument();
+    expect(screen.getByText("2k 1:52.0 → 1:51.0")).toBeInTheDocument();
     expect(screen.getByText(/couldn.t save/i)).toBeInTheDocument();
   });
 
@@ -228,19 +243,21 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
 
     expect(screen.queryByText(/→/)).not.toBeInTheDocument();
     // The SEED_K2 starting point (145 -> 2:25.0), never the derived 1:55.0.
-    expect(screen.getByText("2:25.0")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "2k split" })).toHaveValue(
+      "2:25.0",
+    );
   });
 
-  it("the filled value is an ordinary draft edit: a stepper still adjusts it afterward", async () => {
+  it("the filled value is an ordinary draft edit: typing still adjusts it afterward", async () => {
     mockReady({ k2Seconds: null, k6Seconds: 122 });
     await renderEditor();
 
     await userEvent.click(
       screen.getByRole("button", { name: "ESTIMATE FROM 6K (−7s)" }),
     );
-    await userEvent.click(screen.getByRole("button", { name: "2k faster" }));
+    await typeSplit("2k split", "154");
 
-    expect(screen.getByText("2k 2:25.0 → 1:54.5")).toBeInTheDocument();
+    expect(screen.getByText("2k 2:25.0 → 1:54.0")).toBeInTheDocument();
   });
 
   it("Apply round-trips the derived value through the real save path, stamped derived — the case the per-number provenance ruling exists for", async () => {
@@ -264,13 +281,13 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
 
   // THE binding client case from PR A's brief: one save carrying both a
   // typed number and an accepted derivation, each with its own truthful
-  // source — derived from real editor interaction (a stepper click and
-  // the offer button), never prop injection.
-  it("one Apply carrying a nudged 6k and an accepted 2k derivation stamps manual and derived respectively", async () => {
+  // source — derived from real editor interaction (typed digits and the
+  // offer button), never prop injection.
+  it("one Apply carrying a typed 6k and an accepted 2k derivation stamps manual and derived respectively", async () => {
     const save = mockReady({ k2Seconds: null, k6Seconds: 122 });
     await renderEditor();
 
-    await userEvent.click(screen.getByRole("button", { name: "6k slower" }));
+    await typeSplit("6k split", "204");
     await userEvent.click(
       screen.getByRole("button", { name: "ESTIMATE FROM 6K (−7s)" }),
     );
@@ -278,31 +295,33 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
       screen.getByRole("button", { name: /apply baselines/i }),
     );
 
+    // The offer derives from the SERVER's 122 (-7 = 115), not the typed
+    // draft; the typed 6k ("204" -> 124s) is the rower's own manual entry.
     expect(save).toHaveBeenCalledExactlyOnceWith({
       k2Seconds: 115,
       k2Source: "derived",
-      k6Seconds: 122.5,
+      k6Seconds: 124,
       k6Source: "manual",
     });
   });
 
-  it("nudging AFTER accepting the offer demotes the field to manual — the saved number is the rower's, not the derivation's", async () => {
+  it("typing AFTER accepting the offer demotes the field to manual — the saved number is the rower's, not the derivation's", async () => {
     const save = mockReady({ k2Seconds: null, k6Seconds: 122 });
     await renderEditor();
 
     await userEvent.click(
       screen.getByRole("button", { name: "ESTIMATE FROM 6K (−7s)" }),
     );
-    await userEvent.click(screen.getByRole("button", { name: "2k faster" }));
+    await typeSplit("2k split", "154");
     await userEvent.click(
       screen.getByRole("button", { name: /apply baselines/i }),
     );
 
-    // 115 - 0.5: no longer the derived value, and the on-screen
+    // "154" -> 114s: no longer the derived 115, and the on-screen
     // "ESTIMATED" line hides itself at the same predicate — what the
     // rower sees and what gets stored agree.
     expect(save).toHaveBeenCalledExactlyOnceWith({
-      k2Seconds: 114.5,
+      k2Seconds: 114,
       k2Source: "manual",
     });
   });
@@ -319,17 +338,17 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
   // baselineProvenance.integration.test.ts).
   describe("Apply commits only touched fields (Finding 1, tightened by PR A provenance)", () => {
     it("touching only one already-real side sends ONLY it — resending the untouched side would flip its stored source to manual", async () => {
-      // Both start real (BASELINES-shaped): touching 2k, leaving 6k alone.
+      // Both start real (BASELINES-shaped): typing in 2k, leaving 6k alone.
       const save = mockReady({ k2Seconds: 112, k6Seconds: 122 });
       await renderEditor();
 
-      await userEvent.click(screen.getByRole("button", { name: "2k faster" }));
+      await typeSplit("2k split", "151");
       await userEvent.click(
         screen.getByRole("button", { name: /apply baselines/i }),
       );
 
       expect(save).toHaveBeenCalledWith({
-        k2Seconds: 111.5,
+        k2Seconds: 111,
         k2Source: "manual",
       });
       expect(save).not.toHaveBeenCalledWith(
@@ -346,13 +365,13 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
       const save = mockReady({ k2Seconds: 112, k6Seconds: 122 });
       await renderEditor();
 
-      await userEvent.click(screen.getByRole("button", { name: "6k faster" }));
+      await typeSplit("6k split", "201");
       await userEvent.click(
         screen.getByRole("button", { name: /apply baselines/i }),
       );
 
       expect(save).toHaveBeenCalledWith({
-        k6Seconds: 121.5,
+        k6Seconds: 121,
         k6Source: "manual",
       });
       expect(save).not.toHaveBeenCalledWith(
@@ -370,13 +389,13 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
       const save = mockReady({ k2Seconds: null, k6Seconds: null });
       await renderEditor();
 
-      await userEvent.click(screen.getByRole("button", { name: "6k faster" }));
+      await typeSplit("6k split", "231");
       await userEvent.click(
         screen.getByRole("button", { name: /apply baselines/i }),
       );
 
       expect(save).toHaveBeenCalledWith({
-        k6Seconds: 151.5,
+        k6Seconds: 151,
         k6Source: "manual",
       });
       expect(save).not.toHaveBeenCalledWith(
@@ -392,13 +411,13 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
       const save = mockReady({ k2Seconds: null, k6Seconds: null });
       await renderEditor();
 
-      await userEvent.click(screen.getByRole("button", { name: "2k faster" }));
+      await typeSplit("2k split", "224");
       await userEvent.click(
         screen.getByRole("button", { name: /apply baselines/i }),
       );
 
       expect(save).toHaveBeenCalledWith({
-        k2Seconds: 144.5,
+        k2Seconds: 144,
         k2Source: "manual",
       });
       expect(save).not.toHaveBeenCalledWith(
@@ -434,11 +453,11 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
       mockReady({ k2Seconds: null, k6Seconds: null });
       await renderEditor();
 
-      await userEvent.click(screen.getByRole("button", { name: "6k slower" }));
+      await typeSplit("6k split", "233");
 
       // The 6k line names the real edit; no 2k line exists anywhere on
       // screen, even though 2k is ALSO displayed (at its seed) elsewhere.
-      expect(screen.getByText("6k 2:32.0 → 2:32.5")).toBeInTheDocument();
+      expect(screen.getByText("6k 2:32.0 → 2:33.0")).toBeInTheDocument();
       expect(screen.queryByText(/^2k .* → /)).not.toBeInTheDocument();
     });
 
@@ -455,12 +474,13 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
     // confirm card still renders for the act (Apply/Discard live, zero
     // ConfirmLines), and Apply with nothing changed makes NO network call
     // at all: it just settles the card.
-    it("an away-and-back nudge, Applied, sends NOTHING — an unchanged number keeps its stored source (ORIGIN ruling)", async () => {
+    it("retyping the server's own value, Applied, sends NOTHING — an unchanged number keeps its stored source (ORIGIN ruling)", async () => {
       const save = mockReady({ k2Seconds: 112, k6Seconds: 122 });
       await renderEditor();
 
-      await userEvent.click(screen.getByRole("button", { name: "2k faster" }));
-      await userEvent.click(screen.getByRole("button", { name: "2k slower" }));
+      // The rower types the number the server already holds ("152" ->
+      // 112, exactly k2Seconds) — the typed path's own away-and-back.
+      await typeSplit("2k split", "152");
 
       expect(
         screen.getByRole("button", { name: /apply baselines/i }),
@@ -479,20 +499,19 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
       ).not.toBeInTheDocument();
     });
 
-    it("an away-and-back k2 beside a genuinely-moved k6 sends ONLY the k6 — value identity is per field", async () => {
+    it("a retyped-identical k2 beside a genuinely-moved k6 sends ONLY the k6 — value identity is per field", async () => {
       const save = mockReady({ k2Seconds: 112, k6Seconds: 122 });
       await renderEditor();
 
-      await userEvent.click(screen.getByRole("button", { name: "2k faster" }));
-      await userEvent.click(screen.getByRole("button", { name: "2k slower" }));
-      await userEvent.click(screen.getByRole("button", { name: "6k slower" }));
+      await typeSplit("2k split", "152");
+      await typeSplit("6k split", "203");
 
       await userEvent.click(
         screen.getByRole("button", { name: /apply baselines/i }),
       );
 
       expect(save).toHaveBeenCalledWith({
-        k6Seconds: 122.5,
+        k6Seconds: 123,
         k6Source: "manual",
       });
     });
@@ -503,12 +522,14 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
     // away-and-back is still a REAL change from null — omitting it here
     // would make a rower's deliberate first entry silently unsavable at
     // exactly the seed value (Finding 3's ghost, back in a new costume).
-    it("on a server-null side, nudging away and back to the SEED still saves it — null to a number IS a change", async () => {
+    it("on a server-null side, typing exactly the SEED value still saves it — null to a number IS a change", async () => {
       const save = mockReady({ k2Seconds: null, k6Seconds: null });
       await renderEditor();
 
-      await userEvent.click(screen.getByRole("button", { name: "2k faster" }));
-      await userEvent.click(screen.getByRole("button", { name: "2k slower" }));
+      // "225" -> 145, the displayed seed's own value: the predicate
+      // compares against the SERVER (null), never the local seed, so this
+      // deliberate first entry must save (Finding 3's ghost otherwise).
+      await typeSplit("2k split", "225");
 
       await userEvent.click(
         screen.getByRole("button", { name: /apply baselines/i }),
@@ -520,13 +541,13 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
 
   // Review finding (task review, PR #66): the offer used to key ONLY on the
   // raw `baselines` prop, ignoring the draft entirely — so a rower who had
-  // already hand-nudged the seeded, still-server-null field away from
+  // already edited the seeded, still-server-null field away from
   // SEED_K2/SEED_K6 (their own implicit decline) still saw the offer, and
   // tapping it would have silently overwritten that manual adjustment.
-  // Nudging the target field now counts as declining: the offer disappears
-  // the moment its own field moves off the untouched seed, with no path
-  // back to it short of a reload (a fresh, unmodified draft).
-  describe("nudging the target field is declining (task review fix)", () => {
+  // Typing in the target field now counts as declining: the offer
+  // disappears the moment its own field is touched, with no path back to
+  // it short of a reload (a fresh, unmodified draft).
+  describe("typing in the target field is declining (task review fix)", () => {
     it("is visible while the target (empty) field still sits at its untouched seed", async () => {
       mockReady({ k2Seconds: null, k6Seconds: 122 });
       await renderEditor();
@@ -536,26 +557,27 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
       ).toBeInTheDocument();
     });
 
-    it("disappears the instant the rower nudges the target field themselves", async () => {
+    it("disappears the instant the rower types in the target field themselves", async () => {
       mockReady({ k2Seconds: null, k6Seconds: 122 });
       await renderEditor();
 
-      // 2k is the empty/target side here (k2Seconds is null) — nudge IT,
-      // not the already-known 6k side.
-      await userEvent.click(screen.getByRole("button", { name: "2k faster" }));
+      // 2k is the empty/target side here (k2Seconds is null) — type in
+      // IT, not the already-known 6k side. A single digit is already an
+      // act (touched commits per keystroke).
+      await typeSplit("2k split", "2");
 
       expect(
         screen.queryByRole("button", { name: /ESTIMATE FROM/i }),
       ).not.toBeInTheDocument();
     });
 
-    it("stays gone after nudging away — no click path remains that could still overwrite the manual value", async () => {
+    it("stays gone after typing — no click path remains that could still overwrite the manual value", async () => {
       const save = mockReady({ k2Seconds: null, k6Seconds: 122 });
       await renderEditor();
 
-      await userEvent.click(screen.getByRole("button", { name: "2k faster" }));
-      // The nudge itself is the only edit made — 145 - 0.5 = 144.5s = 2:24.5.
-      expect(screen.getByText("2k 2:25.0 → 2:24.5")).toBeInTheDocument();
+      await typeSplit("2k split", "224");
+      // The typed entry is the only edit made — "224" -> 2:24 = 144s.
+      expect(screen.getByText("2k 2:25.0 → 2:24.0")).toBeInTheDocument();
       // No offer button exists anywhere to click, so there is no remaining
       // path to the overwrite the finding describes — asserted by absence
       // (docs/TESTING.md's own "invoke it and assert the consequence" rule
@@ -567,24 +589,24 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
       await userEvent.click(
         screen.getByRole("button", { name: /apply baselines/i }),
       );
-      // The rower's own manual nudge survives untouched — never silently
+      // The rower's own typed entry survives untouched — never silently
       // replaced by a derived estimate — and it is stamped manual: the
-      // nudged value is NOT the offer's (111.5 ≠ 115), so no derived
-      // label can attach to it. The untouched, already-real 6k stays out
-      // of the body (PR A).
+      // typed value is NOT the offer's (144 ≠ 115), so no derived label
+      // can attach to it. The untouched, already-real 6k stays out of
+      // the body (PR A).
       expect(save).toHaveBeenCalledWith({
-        k2Seconds: 144.5,
+        k2Seconds: 144,
         k2Source: "manual",
       });
     });
 
-    it("nudging the OTHER (already-known) side does not hide the offer — only the target field's own movement counts as declining it", async () => {
+    it("typing in the OTHER (already-known) side does not hide the offer — only the target field's own touch counts as declining it", async () => {
       mockReady({ k2Seconds: null, k6Seconds: 122 });
       await renderEditor();
 
-      // 6k is the already-known side; nudging it is unrelated to the 2k
-      // offer's own decline condition.
-      await userEvent.click(screen.getByRole("button", { name: "6k slower" }));
+      // 6k is the already-known side; typing there is unrelated to the
+      // 2k offer's own decline condition.
+      await typeSplit("6k split", "203");
 
       expect(
         screen.getByRole("button", { name: "ESTIMATE FROM 6K (−7s)" }),
@@ -596,11 +618,11 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
     // parameterized, so a mutation isolated to ONE branch of `deriveOffer`
     // (they're two separate `if` blocks, not a shared helper) still fails
     // exactly one describe block, not both by accident.
-    it("also disappears on the 6k side when the rower nudges the target field themselves", async () => {
+    it("also disappears on the 6k side when the rower types in the target field themselves", async () => {
       mockReady({ k2Seconds: 130, k6Seconds: null });
       await renderEditor();
 
-      await userEvent.click(screen.getByRole("button", { name: "6k slower" }));
+      await typeSplit("6k split", "2");
 
       expect(
         screen.queryByRole("button", { name: /ESTIMATE FROM/i }),
@@ -610,7 +632,8 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
 
   // Task review round, Finding 2 (ship-risk): accepting the offer used to
   // unmount the button under the rower's own finger — a 56px collapse that
-  // slides the 6k steppers up into the tap band (an iOS ghost-tap hazard).
+  // slid the row below up into the tap band (an iOS ghost-tap hazard,
+  // found in the stepper era and just as real for the typed fields).
   // The slot now reserves its own height; only its CHILD content swaps.
   describe("the offer slot reserves its height across accept (task review Finding 2, ship-risk)", () => {
     it("the slot's own container element persists (never unmounted) across accepting the offer", async () => {
@@ -630,7 +653,7 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
       // the layout even for a single frame.
       expect(slotAfter).toBe(slotBefore);
       expect(
-        screen.getByText("ESTIMATED — ADJUST WITH ± BELOW"),
+        screen.getByText("ESTIMATED · TYPE TO ADJUST"),
       ).toBeInTheDocument();
       expect(
         screen.queryByRole("button", { name: /ESTIMATE FROM/i }),
@@ -645,10 +668,10 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
         screen.getByRole("button", { name: "ESTIMATE FROM 6K (−7s)" }),
       );
       expect(
-        screen.getByText("ESTIMATED — ADJUST WITH ± BELOW"),
+        screen.getByText("ESTIMATED · TYPE TO ADJUST"),
       ).toBeInTheDocument();
 
-      await userEvent.click(screen.getByRole("button", { name: "2k faster" }));
+      await typeSplit("2k split", "154");
 
       // No longer exactly the derived value, so the "ESTIMATED" claim would
       // be false — hidden, but the slot itself is still in the DOM (same

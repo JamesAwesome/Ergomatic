@@ -241,7 +241,7 @@ describe("RowToFind (door 3)", () => {
     expect(screen.queryByText(/NOT SET/)).not.toBeInTheDocument();
   });
 
-  it("Back returns to Today", async () => {
+  it("the top-left back link returns to Today", async () => {
     mockBaselines();
     mockWorkouts({
       state: "ready",
@@ -251,7 +251,7 @@ describe("RowToFind (door 3)", () => {
       ],
     });
     await renderRow();
-    await userEvent.click(screen.getByRole("button", { name: "Back" }));
+    await userEvent.click(screen.getByRole("link", { name: "← BACK" }));
     expect(screen.getByText("TODAY SCREEN")).toBeInTheDocument();
   });
 

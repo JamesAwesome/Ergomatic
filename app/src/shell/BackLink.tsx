@@ -51,14 +51,27 @@ export function resolveBackTarget(state: unknown, fallback: string): string {
 export default function BackLink({
   fallback = DEFAULT_FALLBACK,
   label = "← BACK",
+  disabled = false,
 }: {
   fallback?: string;
   label?: string;
+  /** Renders the link inert (`aria-disabled` + a swallowed click) — the
+   *  link-variant twin of a `<button disabled>`. Screens whose primary
+   *  action saves over the wire pass their in-flight flag here (split-entry
+   *  review F2, 2026-08-23): the bottom Back buttons this idiom replaced
+   *  carried `disabled={saving}`, and a mid-PUT escape would strand the
+   *  save's error on a screen that can't render it. */
+  disabled?: boolean;
 } = {}) {
   const location = useLocation();
   const target = resolveBackTarget(location.state, fallback);
   return (
-    <Link to={target} className="back-link">
+    <Link
+      to={target}
+      className="back-link"
+      aria-disabled={disabled || undefined}
+      onClick={disabled ? (event) => event.preventDefault() : undefined}
+    >
       {label}
     </Link>
   );

@@ -3,10 +3,13 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-// Phase BL PR C — door 2 (canvas Experienced): the editor's fields as an
-// onboarding screen. Every write is `manual` (this door means "the rower
-// knows the number"), and the editor's own untouched-field discipline
-// holds: seeds are display scaffolding, never a saved claim.
+// Phase BL PR C — door 2 (canvas Experienced, Option T since James's
+// 2026-08-23 feedback: typed entry replaced the 27-taps-per-field
+// steppers). Every write is `manual` (this door means "the rower knows the
+// number"), and the editor's own untouched-field discipline holds: seeds
+// are display scaffolding, never a saved claim. All interactions here are
+// REAL typing (user-event), never prop injection — the provenance pins are
+// re-derived through the typed path.
 
 function mockState(state: unknown) {
   vi.doMock("../api/useBaselines", () => ({ useBaselines: () => state }));
@@ -40,56 +43,60 @@ afterEach(() => {
   vi.doUnmock("../api/useBaselines");
 });
 
+const field = (name: "2k split" | "6k split") =>
+  screen.getByRole("textbox", { name });
+
 describe("KnowBaseline (door 2)", () => {
-  it("renders the canvas heading and both fields prefilled with the seed pair (the table's modal cell)", async () => {
+  it("renders the canvas heading and both typed fields prefilled with the seed pair (the table's modal cell)", async () => {
     mockReady();
     await renderKnow();
     expect(
       screen.getByRole("heading", { name: "Enter your splits" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/Average 500m splits from a recent 2k and 6k/),
+      screen.getByText(/Tap a field and type the digits/),
     ).toBeInTheDocument();
-    expect(screen.getByText("2:25.0")).toBeInTheDocument();
-    expect(screen.getByText("2:32.0")).toBeInTheDocument();
+    expect(field("2k split")).toHaveValue("2:25.0");
+    expect(field("6k split")).toHaveValue("2:32.0");
   });
 
-  it("Save is disabled until a field is actually entered — tapping Save must never write the untouched seeds", async () => {
+  it("Save is disabled until a field is actually typed in — tapping Save must never write the untouched seeds", async () => {
     mockReady();
     await renderKnow();
     expect(
       screen.getByRole("button", { name: "Save baseline" }),
     ).toBeDisabled();
-    await userEvent.click(screen.getByRole("button", { name: "2k faster" }));
+    await userEvent.type(field("2k split"), "158");
     expect(screen.getByRole("button", { name: "Save baseline" })).toBeEnabled();
   });
 
-  it("saves ONLY the entered side, stamped manual, and lands on Today — the untouched side is never fabricated", async () => {
+  it("saves ONLY the typed side, stamped manual, and lands on Today — the untouched side is never fabricated", async () => {
     const save = mockReady();
     await renderKnow();
-    await userEvent.click(screen.getByRole("button", { name: "2k faster" }));
+    await userEvent.type(field("2k split"), "158");
     await userEvent.click(
       screen.getByRole("button", { name: "Save baseline" }),
     );
+    // 158 typed digits-right-to-left = 1:58 = 118s whole seconds.
     expect(save).toHaveBeenCalledExactlyOnceWith({
-      k2Seconds: 144.5,
+      k2Seconds: 118,
       k2Source: "manual",
     });
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
   });
 
-  it("both sides entered saves both, each manual", async () => {
+  it("both sides typed saves both, each manual", async () => {
     const save = mockReady();
     await renderKnow();
-    await userEvent.click(screen.getByRole("button", { name: "2k faster" }));
-    await userEvent.click(screen.getByRole("button", { name: "6k slower" }));
+    await userEvent.type(field("2k split"), "158");
+    await userEvent.type(field("6k split"), "207");
     await userEvent.click(
       screen.getByRole("button", { name: "Save baseline" }),
     );
     expect(save).toHaveBeenCalledExactlyOnceWith({
-      k2Seconds: 144.5,
+      k2Seconds: 118,
       k2Source: "manual",
-      k6Seconds: 152.5,
+      k6Seconds: 127,
       k6Source: "manual",
     });
   });
@@ -98,23 +105,24 @@ describe("KnowBaseline (door 2)", () => {
     const save = mockReady({ k2Seconds: null, k6Seconds: 130 });
     await renderKnow();
     // The rower's own 130 (2:10.0), not the seed 152 (2:32.0).
-    expect(screen.getByText("2:10.0")).toBeInTheDocument();
-    expect(screen.queryByText("2:32.0")).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "2k faster" }));
+    expect(field("6k split")).toHaveValue("2:10.0");
+    await userEvent.type(field("2k split"), "158");
     await userEvent.click(
       screen.getByRole("button", { name: "Save baseline" }),
     );
     expect(save).toHaveBeenCalledExactlyOnceWith({
-      k2Seconds: 144.5,
+      k2Seconds: 118,
       k2Source: "manual",
     });
   });
 
-  it("a touched side whose value ends exactly at the server's sends nothing for it (ORIGIN rule) and still exits", async () => {
+  it("a typed value that lands exactly on the server's sends nothing for it (ORIGIN rule) and still exits", async () => {
     const save = mockReady({ k2Seconds: 120, k6Seconds: 130 });
     await renderKnow();
-    await userEvent.click(screen.getByRole("button", { name: "2k faster" }));
-    await userEvent.click(screen.getByRole("button", { name: "2k slower" }));
+    // Retyping the server's own 2:00 — touched, but the VALUE never
+    // changed, so the body must stay empty (a resend would stamp `manual`
+    // over whatever source the stored number honestly carries).
+    await userEvent.type(field("2k split"), "200");
     await userEvent.click(
       screen.getByRole("button", { name: "Save baseline" }),
     );
@@ -128,7 +136,7 @@ describe("KnowBaseline (door 2)", () => {
     });
     mockReady({ k2Seconds: null, k6Seconds: null }, save);
     await renderKnow();
-    await userEvent.click(screen.getByRole("button", { name: "2k faster" }));
+    await userEvent.type(field("2k split"), "158");
     await userEvent.click(
       screen.getByRole("button", { name: "Save baseline" }),
     );
@@ -138,12 +146,41 @@ describe("KnowBaseline (door 2)", () => {
     expect(screen.queryByText("TODAY SCREEN")).not.toBeInTheDocument();
   });
 
-  it("Back returns to Today without writing", async () => {
+  it("the top-left back link returns to Today without writing", async () => {
     const save = mockReady();
     await renderKnow();
-    await userEvent.click(screen.getByRole("button", { name: "Back" }));
+    await userEvent.click(screen.getByRole("link", { name: "← BACK" }));
     expect(save).not.toHaveBeenCalled();
     expect(screen.getByText("TODAY SCREEN")).toBeInTheDocument();
+  });
+
+  // Review F2 (split-entry round): the removed bottom Back carried
+  // `disabled={saving}`; the top back link keeps that parity as an inert
+  // (aria-disabled) link — a mid-PUT escape would strand the save's error.
+  it("the back link is inert while the save is in flight — no mid-PUT escape to Today", async () => {
+    let resolveSave!: () => void;
+    const save = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveSave = resolve;
+        }),
+    );
+    mockReady({ k2Seconds: null, k6Seconds: null }, save);
+    await renderKnow();
+    await userEvent.type(field("2k split"), "158");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save baseline" }),
+    );
+    expect(save).toHaveBeenCalledTimes(1);
+
+    const back = screen.getByRole("link", { name: "← BACK" });
+    expect(back).toHaveAttribute("aria-disabled", "true");
+    await userEvent.click(back);
+    // The click navigated nowhere — still door 2, mid-save.
+    expect(screen.queryByText("TODAY SCREEN")).not.toBeInTheDocument();
+
+    resolveSave();
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
   });
 
   it("shows loading and error states like every baselines consumer", async () => {
@@ -163,15 +200,15 @@ describe("KnowBaseline (door 2)", () => {
     expect(retry).toHaveBeenCalled();
   });
 
-  it("the 6k faster stepper works too (both directions per field are real inputs)", async () => {
+  it("the 6k field alone is a real input too (each side commits independently)", async () => {
     const save = mockReady();
     await renderKnow();
-    await userEvent.click(screen.getByRole("button", { name: "6k faster" }));
+    await userEvent.type(field("6k split"), "215");
     await userEvent.click(
       screen.getByRole("button", { name: "Save baseline" }),
     );
     expect(save).toHaveBeenCalledExactlyOnceWith({
-      k6Seconds: 151.5,
+      k6Seconds: 135,
       k6Source: "manual",
     });
   });

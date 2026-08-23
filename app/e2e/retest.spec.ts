@@ -110,8 +110,12 @@ test.describe("Phase BL: the You re-test shortcut", () => {
     // EXACTLY the two values the prompt displayed — recompute by eye:
     // derived is measured + 7s, and both render at fmtSplit's tenth.
     await page.goto("/you");
-    await expect(page.locator(".baseline-value").first()).toHaveText(measured);
-    await expect(page.locator(".baseline-value").nth(1)).toHaveText(derived);
+    await expect(page.getByRole("textbox", { name: "2k split" })).toHaveValue(
+      measured,
+    );
+    await expect(page.getByRole("textbox", { name: "6k split" })).toHaveValue(
+      derived,
+    );
   });
 
   test("declining the offer keeps the baselines untouched", async ({

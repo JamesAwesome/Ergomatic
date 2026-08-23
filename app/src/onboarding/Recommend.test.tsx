@@ -66,10 +66,10 @@ describe("Recommend (door 1)", () => {
     expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
   });
 
-  it("Back on the first question returns to Today", async () => {
+  it("the top-left back link on the first question returns to Today", async () => {
     mockReady();
     await renderRecommend();
-    await userEvent.click(screen.getByRole("button", { name: "Back" }));
+    await userEvent.click(screen.getByRole("link", { name: "← BACK" }));
     expect(screen.getByText("TODAY SCREEN")).toBeInTheDocument();
   });
 
@@ -85,7 +85,7 @@ describe("Recommend (door 1)", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
 
-    await userEvent.click(screen.getByRole("button", { name: "Back" }));
+    await userEvent.click(screen.getByRole("button", { name: "← BACK" }));
     expect(
       screen.getByRole("heading", { name: "How much have you rowed?" }),
     ).toBeInTheDocument();
@@ -402,18 +402,97 @@ describe("Recommend (door 1)", () => {
       });
     });
 
-    it("Back returns to the recommendation screen", async () => {
+    it("the top-left back returns to the recommendation screen", async () => {
       mockReady();
       await renderRecommend();
       await answerBoth();
       await userEvent.click(
         screen.getByRole("button", { name: "Adjust the numbers first" }),
       );
-      await userEvent.click(screen.getByRole("button", { name: "Back" }));
+      await userEvent.click(screen.getByRole("button", { name: "← BACK" }));
       expect(
         screen.getByRole("heading", { name: "Your starting baseline" }),
       ).toBeInTheDocument();
     });
+
+    // New with the back-at-top convention round (2026-08-23): the offer
+    // screen used to have NO Back at all — its only exits were accept or
+    // adjust. The top-left back returns to the cardio question with both
+    // answers kept (the same transient-STATE round trip Q2 -> Q1 pins).
+    it("the offer screen's top-left back returns to the cardio question with the answer kept", async () => {
+      mockReady();
+      await renderRecommend();
+      await answerBoth();
+      await userEvent.click(screen.getByRole("button", { name: "← BACK" }));
+      expect(
+        screen.getByRole("heading", { name: "How is your cardio right now?" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("radio", { name: "Active once or twice a week" }),
+      ).toHaveAttribute("aria-checked", "true");
+      expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
+    });
+  });
+
+  // Review F2 (split-entry round): the removed bottom Backs carried
+  // `disabled={saving}`; the top back controls keep that parity. A mid-PUT
+  // escape would strand the save's error on a step that can't render it.
+  it("the offer screen's BACK is disabled while the save is in flight — no mid-PUT escape", async () => {
+    let resolveSave!: () => void;
+    const save = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveSave = resolve;
+        }),
+    );
+    mockReady({ k2Seconds: null, k6Seconds: null }, save);
+    await renderRecommend();
+    await answerBoth();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Use this baseline" }),
+    );
+    expect(save).toHaveBeenCalledTimes(1);
+
+    const back = screen.getByRole("button", { name: "← BACK" });
+    expect(back).toBeDisabled();
+    await userEvent.click(back);
+    // Still the offer screen — the click went nowhere.
+    expect(
+      screen.getByRole("heading", { name: "Your starting baseline" }),
+    ).toBeInTheDocument();
+
+    resolveSave();
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+  });
+
+  it("the adjust step's BACK is disabled while the save is in flight", async () => {
+    let resolveSave!: () => void;
+    const save = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveSave = resolve;
+        }),
+    );
+    mockReady({ k2Seconds: null, k6Seconds: null }, save);
+    await renderRecommend();
+    await answerBoth();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Adjust the numbers first" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save baseline" }),
+    );
+    expect(save).toHaveBeenCalledTimes(1);
+
+    const back = screen.getByRole("button", { name: "← BACK" });
+    expect(back).toBeDisabled();
+    await userEvent.click(back);
+    expect(
+      screen.getByRole("heading", { name: "Adjust your starting baseline" }),
+    ).toBeInTheDocument();
+
+    resolveSave();
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
   });
 
   it("both numbers already set (a raced device / stale deep link): accept writes NOTHING and simply leaves", async () => {

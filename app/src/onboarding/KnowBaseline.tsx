@@ -2,26 +2,28 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useBaselines, type BaselinesPatch } from "../api/useBaselines";
 import { MOST_COMMON_ESTIMATE } from "../../domain/estimateBaseline.js";
-import { BaselineRow } from "../you/BaselineEditor";
+import BackLink from "../shell/BackLink";
+import SplitInput from "../you/SplitInput";
 import {
   initDraft,
   isDirty,
-  nudge,
+  setDraft,
   type DraftState,
 } from "../you/baselineDraft";
 
-/** Door 2 — "I know my baseline" (canvas Experienced): the editor's
- *  fields brought forward as an onboarding screen. Same components
- *  (BaselineRow, the draft machinery) and the same send discipline as
- *  the You editor: a field rides the body iff the rower TOUCHED it and
- *  its value differs from the server's — an untouched side's displayed
- *  seed is display scaffolding, never a saved claim (Finding 1's rule;
- *  writing the seeds because the rower tapped Save would fabricate a
- *  baseline for a distance they never entered). Save is therefore
- *  disabled until something is actually entered — the one deliberate
- *  divergence from the static canvas, which cannot draw disabled
- *  states (DEVIATIONS row). Every write here is `manual`: this door's
- *  whole meaning is "the rower knows the number".
+/** Door 2 — "I know my baseline" (canvas Experienced, Option T since
+ *  James's 2026-08-23 feedback): typed split entry — tap a field, the
+ *  numeric keypad opens, digits fill right to left (152 -> 1:52) — in
+ *  place of the steppers that took 27 taps to reach 1:58 from the 2:25
+ *  seed. Same draft machinery and the same send discipline as the You
+ *  editor: a field rides the body iff the rower TOUCHED it and its value
+ *  differs from the server's — an untouched side's displayed seed is
+ *  display scaffolding, never a saved claim (Finding 1's rule), and a
+ *  retyped identical value keeps its stored source (the ORIGIN ruling:
+ *  provenance describes where the NUMBER came from, so an unchanged value
+ *  keeps its stamp). Save is therefore disabled until something is
+ *  actually typed. Every write here is `manual`: this door's whole
+ *  meaning is "the rower knows the number".
  *
  *  A partial pair prefills the known side with the SERVER value (shown
  *  as-is; untouched it stays out of the body, so the doors' superset
@@ -74,23 +76,40 @@ function ReadyKnow({
 
   return (
     <main className="screen onb-screen">
+      <BackLink fallback="/today" disabled={saving} />
       <span className="mono-status">I KNOW MY BASELINE</span>
       <h1 className="screen-title onb-title">Enter your splits</h1>
       <p className="onb-body">
-        Average 500m splits from a recent 2k and 6k. Close enough is fine.
+        Tap a field and type the digits. 152 becomes 1:52. Close enough is fine.
       </p>
-      <BaselineRow
-        label="2k"
-        seconds={state.draft.k2}
-        onFaster={() => setState((s) => nudge(s, "k2", -1))}
-        onSlower={() => setState((s) => nudge(s, "k2", 1))}
-      />
-      <BaselineRow
-        label="6k"
-        seconds={state.draft.k6}
-        onFaster={() => setState((s) => nudge(s, "k6", -1))}
-        onSlower={() => setState((s) => nudge(s, "k6", 1))}
-      />
+      <div className="onb-field">
+        <span className="onb-field-label mono-status">2K BASELINE</span>
+        <div className="onb-field-box">
+          <SplitInput
+            label="2k"
+            seconds={state.draft.k2}
+            onType={(v) => setState((s) => setDraft(s, "k2", v))}
+            className="onb-field-input"
+          />
+          <span className="onb-field-unit" aria-hidden="true">
+            /500m
+          </span>
+        </div>
+      </div>
+      <div className="onb-field">
+        <span className="onb-field-label mono-status">6K BASELINE</span>
+        <div className="onb-field-box">
+          <SplitInput
+            label="6k"
+            seconds={state.draft.k6}
+            onType={(v) => setState((s) => setDraft(s, "k6", v))}
+            className="onb-field-input"
+          />
+          <span className="onb-field-unit" aria-hidden="true">
+            /500m
+          </span>
+        </div>
+      </div>
       {error && <p className="baseline-error">{error}</p>}
       <div className="onb-foot">
         <button
@@ -100,14 +119,6 @@ function ReadyKnow({
           onClick={() => void handleSave()}
         >
           Save baseline
-        </button>
-        <button
-          type="button"
-          className="button-outline onb-back"
-          disabled={saving}
-          onClick={() => navigate("/today")}
-        >
-          Back
         </button>
       </div>
     </main>

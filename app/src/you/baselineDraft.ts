@@ -1,7 +1,9 @@
 /** Staged editor state for the two baseline splits (docs/design/README.md
- * §Domain model → Baselines). The ± buttons only ever touch `draft`; nothing
- * re-paces until `commit` folds `draft` into `committed` (called after a
- * successful save). Pure, framework-free — no React here.
+ * §Domain model → Baselines). Every edit control — the typed `SplitInput`
+ * fields (Option T, 2026-08-23) and the recommendation adjust step's ±
+ * buttons — only ever touches `draft`; nothing re-paces until `commit`
+ * folds `draft` into `committed` (called after a successful save). Pure,
+ * framework-free — no React here.
  *
  * `touched` (task review round, Finding 1, BLOCKER): per-field, whether the
  * ROWER acted on that side this session — a stepper nudge, a typed entry,
@@ -53,11 +55,12 @@ export function nudge(
 }
 
 /** Sets one side of the DRAFT directly to `value` (clamped to the same
- *  MIN_SPLIT/MAX_SPLIT bounds `nudge` enforces) — the derivation offer's own
+ *  MIN_SPLIT/MAX_SPLIT bounds `nudge` enforces) — the derivation offer's
  *  write (ui-notes round, item 2, `domain/deriveBaseline.ts`'s two
- *  functions produce `value`). An ordinary draft edit like `nudge`: only
- *  `commit` (after the rower's own Apply) ever writes past `draft`, and the
- *  ± steppers keep working on whatever this fills in. */
+ *  functions produce `value`) AND, since Option T, every typed keystroke
+ *  (`SplitInput`'s parsed whole seconds). An ordinary draft edit like
+ *  `nudge`: only `commit` (after the rower's own Apply) ever writes past
+ *  `draft`, and further typing keeps working on whatever this fills in. */
 export function setDraft(
   s: DraftState,
   which: "k2" | "k6",
