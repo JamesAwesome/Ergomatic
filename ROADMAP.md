@@ -1725,15 +1725,16 @@ it, which is why none of these have blocked anything so far. The moment a
 build goes to EXTERNAL TestFlight or the App Store, they all bind at once.
 Nothing here should be discovered at submission time.
 
-- [ ] **F1 from Phase LL's exit walk (2026-08-23): the failure screen's
+- [x] **F1 from Phase LL's exit walk (2026-08-23): the failure screen's
       Try again is DEAD after a mid-session BT-off** — the failure
       disposal tears down the per-session `onEnabledChanged` listener, so
       the enabled-true event has no ear (sharper repro: an attempt STARTED
       with BT off keeps a working button — the bug is localised to the
       disposal). PROD's exit is an empty-phone install reaching a logged
       row UNAIDED; a dead button with no feedback defeats "unaided"
-      directly. Until fixed, the cohort note carries "if Try again does
-      nothing, tap Cancel then Connect" (Release posture, Phase LL).
+      directly. **FIXED (cohort-unlock PR, 2026-08-23):** `canRetry` now
+      also covers `session.phase === "disconnected"`, so Try again reaches
+      `connect()` from exactly the state the walk found it dead in.
 - [ ] **App icon redraw** (was a triggered follow-on). Replace the
       AI-generated icon with a clean SVG. What is actually wrong with it,
       checked against the asset itself
@@ -2273,7 +2274,15 @@ WebKit's throttling, so it does not rescue the JS half.
       shipped note claims the history "can tell the difference" — either
       the surface ships before the next tag and its clause says so, or
       the next tag's notes carry the honest "not yet" (the false half of
-      the v0.17.0 note is struck in the same PR as this clause).** **New
+      the v0.17.0 note is struck in the same PR as this clause).**
+      **Branch taken (cohort-unlock PR, 2026-08-23): the surface ships —
+      `FromTheLog.tsx`'s detail header now renders `LINK LOST · the app
+      lost the monitor before the end` for a stored `endedBy:
+      "link-lost"` row. The v0.17.0 note's false half was already struck
+      in an earlier PR (`src/news/content/releaseNotes.ts`'s v0.17.0
+      entry carries the "Corrected 2026-08-23" parenthetical). The
+      clause's own NOTES TEXT — the v0.20.0 entry saying the surface now
+      exists — is still owed at the tag, not written here.** **New
       condition, this gate:** the phone→server trace leg must be
       WITNESSED before the tag
       that announces the trace fix ships, or the notes say plainly that
@@ -2720,7 +2729,9 @@ on a NEW condition with its own discharge test: F2a is merged (PR #174,
 the continuity guard no longer convicts on a single uncorroborated TWD
 reading — a tester must not silently lose a measured row), AND either F1
 is fixed or the tester note carries "if Try again does nothing, tap
-Cancel then Connect".**
+Cancel then Connect". **F1 fixed (this PR, cohort-unlock, 2026-08-23) —
+the second arm's disjunction resolves to the fixed branch; the cohort
+note's fallback wording is no longer needed.**
 
 ## Phase RC — The row Concept2 would recognise
 

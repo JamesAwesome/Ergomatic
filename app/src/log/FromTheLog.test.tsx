@@ -336,6 +336,43 @@ describe("FromTheLog — ready state rendering", () => {
   });
 });
 
+// Cohort-unlock spec (2026-08-23), §2: the detail header's marked line —
+// `storedRow()` (this file's own fullest fixture, reused rather than a
+// fresh minimal stub, recurring failure 3) with `endedBy` set is the
+// realistic payload; the finished case proves ABSENCE, not merely that a
+// different value renders differently.
+describe("FromTheLog — cohort-unlock §2 link-lost line", () => {
+  it("renders the marked line in the detail header for a link-lost session", async () => {
+    mockApi(
+      () =>
+        new Response(JSON.stringify(storedRow({ endedBy: "link-lost" })), {
+          status: 200,
+        }),
+    );
+    await renderFromTheLog();
+    expect(
+      await screen.findByText(
+        "LINK LOST · the app lost the monitor before the end",
+      ),
+    ).toBeVisible();
+  });
+
+  it("renders nothing new for a finished session", async () => {
+    mockApi(
+      () =>
+        new Response(JSON.stringify(storedRow({ endedBy: "finished" })), {
+          status: 200,
+        }),
+    );
+    await renderFromTheLog();
+    await screen.findByRole("heading", { name: "Sea Fret" });
+    expect(
+      screen.queryByText("LINK LOST · the app lost the monitor before the end"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/^LINK LOST/)).not.toBeInTheDocument();
+  });
+});
+
 describe("FromTheLog — §4 N6 edit", () => {
   it("Edit swaps the read-back for the reflection card, pre-filled from the stored row", async () => {
     mockApi(

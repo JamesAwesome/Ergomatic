@@ -349,6 +349,18 @@ export default function FromTheLog() {
       {row !== null && view !== null && (
         <>
           <SummaryMetaBlock title={row.workoutTitle} meta={view.meta} />
+          {/* Cohort-unlock spec (2026-08-23), §2: the detail header's own
+              marked line, `endedBy === "link-lost"` only — every other
+              value (including absent/null) renders nothing here.
+              `.summary-meta` reused verbatim (no new CSS rule): it's the
+              same header's own existing secondary-line class, already
+              contrast-audited (`index.css`'s own ink-3-on-surface
+              comments), so this line reads as this header's own text
+              rather than inventing a second visual register for one
+              sentence. */}
+          {view.linkLostLine !== undefined && (
+            <p className="summary-meta">{view.linkLostLine}</p>
+          )}
           <SummaryHeroesBlock heroes={view.heroes} />
 
           {/* Fix round ❌1: the handoff's own §3 "Section order" table
