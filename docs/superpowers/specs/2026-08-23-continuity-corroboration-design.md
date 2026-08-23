@@ -25,11 +25,15 @@ RC-1's spec. TRIAD: this changes when records close. Approved shape
 - A real reset's shape: a fresh/reset monitor reads elapsed 0, distance
   0, TWD 0 (every post-reset connect in the corpus; e.g. ring-phone-4
   seq 6-8). All three fall together.
-- Legal boundaries: TWD HOLDS while elapsed/distance reset
-  (keystone seq 305→310: elapsed 69.75→0.50, distance 248.5→1.9,
-  TWD 0→250) — which is exactly why TWD was chosen as the key; a
-  boundary cannot fake the three-axis signature on a non-distance
-  program.
+- Legal boundaries: TWD holds or grows while elapsed/distance reset.
+  **The three real NON-DISTANCE boundaries in the corpus** (antagonist
+  pass, 2026-08-23 — the keystone is a distance program and 100%
+  suppressed, so it evidences nothing here): step-3 recording seq
+  411→416 and 953→956, session-2 recording seq 776→781 — TWD backward at
+  none of them, and zero triple-backward readings across 3,637 slid
+  pairs at seven gap lengths. "Never observed in 3,637 wire pairs" is
+  the claim — not "cannot"; ring-phone-2's own 81→0 remains the one
+  unexplained backward TWD on a time program (walk F5).
 
 ## 2. Design
 
@@ -58,6 +62,20 @@ RC-1's spec. TRIAD: this changes when records close. Approved shape
   path, and the surface update are UNCHANGED — only the conviction
   predicate narrows.
 
+## 2b. The stated cost (TRIAD-weight, accepted)
+
+Narrowing the predicate LOSES a conviction the old rule made: a real
+reset during a gap that began EARLY in an interval can leave elapsed and
+distance reading forward afterward (per-interval clocks restart from 0
+and can exceed low before-values by the time the next reading lands), so
+the records MERGE instead of closing — blind for roughly 14% of a 180 s
+interval at a 30 s gap, growing with gap length (~64% at two minutes).
+This is accepted deliberately: the old rule bought that coverage by
+killing healthy rows (the walk's F2), a merged post-reset stream is
+visible garbage where a killed healthy row is silent loss, and F2b's
+re-key (RC-1) closes the blind window properly. The spec says this out
+loud so nobody later reads the narrowing as free.
+
 ## 3. Rejected alternatives (attacked at brainstorm)
 
 - **Persistence (N confirming frames):** refuted by the walk's own
@@ -74,14 +92,31 @@ RC-1's spec. TRIAD: this changes when records close. Approved shape
 2. A full reset still convicts: before = a mid-work reading (from
    ring-phone-2 seq 30), after = a post-reset armed reading (zeros, from
    ring-phone-4 seq 7-8 shape) → `"reset"`.
-3. The keystone boundary stays a continuation (TWD holds while
-   elapsed/distance reset — seq 305→310 values).
-4. The distance-goal suppression still suppresses (existing corpus test
-   retargeted, not weakened — the 0/250/500 flicker capture).
-5. `continuity.test.ts`'s corpus-derivation gate re-run under the new
-   predicate: zero convictions across all healthy simulated resumes,
-   INCLUDING the previously-outside-corpus time-program captures from
-   walk-2026-08-23.
+3. The three real NON-DISTANCE boundaries stay continuations under the
+   new predicate: replay pairs straddling step-3 seq 411→416, step-3 seq
+   953→956, and session-2 seq 776→781 (the keystone is a distance
+   program — it belongs to test 5's suppression case, not here).
+4. **Per-clause mutation pins (the tests that CAN go red):** three
+   constructed pairs, each with exactly ONE axis backward and two
+   advancing → all `"continuation"`; plus one pair with exactly TWO
+   backward → `"continuation"`; plus the all-three-backward pair →
+   `"reset"`. Deleting ANY single clause from the conjunction must turn
+   at least one of these red (verified by self-mutation in the
+   implementing task — the walk's two real pairs alone pin only the TWD
+   clause).
+5. The distance-goal suppression still suppresses, and NOT vacuously: a
+   distance-goal pair constructed with ALL THREE axes backward (the
+   0/250/500 flicker shape at a boundary) returns `"continuation"`
+   BECAUSE of the suppression — a test that goes red if the suppression
+   line is deleted. All existing suppression fixtures and the corpus
+   sweep are updated with REAL elapsed/distance values from their source
+   frames, never defaulted zeros (a zeroed fixture makes every
+   suppression test pass with or without the suppression — antagonist
+   pass, blocking 5).
+6. `continuity.test.ts`'s corpus-derivation gate re-run under the new
+   predicate with real-valued readings on all three axes: zero
+   convictions across all healthy simulated resumes (the 1,026-pair
+   regression floor).
 
 ## 5. Also riding this PR
 
@@ -97,9 +132,13 @@ RC-1's spec. TRIAD: this changes when records close. Approved shape
 1. Replaying ring-phone-2's convicting pair returns `"continuation"`,
    cited by file+seq in the test name.
 2. Replaying a genuine reset pair returns `"reset"`.
-3. The corpus gate (1,026+ pairs) passes with zero healthy convictions
-   under the new predicate, now including the 2026-08-23 time-program
-   captures.
+3. The corpus gate (1,026 non-distance-goal pairs) passes with zero
+   healthy convictions under the new predicate. (It CANNOT go red for
+   this change alone — a conjunctive narrowing of an already-zero
+   predicate — so it is a regression floor, not this spec's proof; the
+   per-clause pins in §4 are the tests that can. The 2026-08-23 walk
+   added NO new wire captures on time programs — the phone rings are
+   event logs, not recordings — so the corpus count stays 1,026.)
 4. The cohort discharge condition's first arm (Release posture, Phase
    LL) is satisfiable: this PR's merge makes "F2a is merged" true.
 
