@@ -1938,3 +1938,50 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
 - **Backlog: third consecutive net-negative delta** (63 main → 61 branch).
 - **The 30-second rule is 0-for-11.** Still James's to re-set or retire in
   CLAUDE.md.
+## Final-PR gate, 2026-08-23 (Phase RC, F2a PR #174 — TRIAD: when a rowing record closes)
+
+- **When a branch's own antagonist ledger says "cannot is the wrong word", the
+  PR body may not use the word.** #174's spec, its `continuity.ts` header and
+  its antagonist entry all carry the residual honestly (ring-phone-2's 81→0 is
+  unexplained; "never observed in 3,637 wire pairs" is the claim, not "cannot").
+  The tester bullet said "backgrounding can no longer cost you the row."
+  **Mechanical check, cheap enough to run every time: grep the branch's own
+  spec/ledger diff for its stated caveat, then grep the body for it.** Second
+  consecutive gate on the #167 "read line one as a stranger would" shape.
+- **"Early in an interval" was carrying 64%.** The #165 numeric-band precedent
+  generalises past eligibility to any band of BLINDNESS: F2a's narrowing loses
+  detection for ~14% of a 180 s interval at a 30 s gap, ~64% at two minutes, and
+  the body used the word "early". **A qualitative adverb standing in for a
+  measured percentage is a magnitude overclaim; put the number above the fold —
+  with its provenance label (these were modelled, not swept).**
+- **A branch name is a WORSE citation than a PR number, and the fix for one
+  produced the other.** #174 deliberately replaced a not-yet-existing PR number
+  in ROADMAP with "branch rc-f2a" — but teardown deletes branches and #174 is
+  permanent. **Once the PR exists, its number replaces the branch name in the
+  same PR.** RF16's dangling-citation corollary in a new costume.
+- **The status-paragraph check has now fired three gates running (#165, #167,
+  #174).** Phase RC's Status still read pre-walk after the walk ran and its
+  record merged. The step promoted at #165 works; it is the *fixing* that keeps
+  not happening. Consider it a standing condition on any PR that ticks a box in
+  a phase whose status it does not touch.
+- **The right way to hand a traded-away property to a successor spec, worth
+  copying:** F2a's under-count risk landed in FOUR places — the body above the
+  fold, the spec §2b, `continuity.ts`'s header, and **inside RC-1's own ROADMAP
+  item body**, which is the only one F2b's author will actually read. This is
+  the counter-example to the "it lived only in the PR body" finding (RF14) that
+  five of the last six gates had to rescue. Cite it when a PR defers a risk.
+- **Release call: NO TAG; rides the next MINOR with F3**, per the LL-close
+  pre-statement. `v0.19.0..main` was empty, so waiting bundles nothing. Notes
+  owe BOTH directions — fewer false closes AND a merge that can silently
+  under-count. **Tripwire recorded so the hold is not filing-as-deferral: if F3
+  has not landed within two merges, F2a tags alone as a PATCH.** A
+  record-destruction fix reaches a cohort of one only through the tag.
+- **Backlog: 65 at merge-base -> 65 on the branch (217 checked); main
+  independently 61.** Branch-neutral: F2a ticked, one item filed — and filed
+  because James assigned it an owner the same day, which is the distinction the
+  filing-as-deferral pattern turns on.
+- **The 30-second rule is 0-for-11** (#174 at 278 words). Five gates have now
+  declined to enforce it. Recorded observation, not another paragraph: line one
+  named the outcome and every bullet answered "so what?" — the rule is measuring
+  length where it means decodability. Still James's to re-set or retire, still
+  belongs in CLAUDE.md.

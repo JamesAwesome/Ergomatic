@@ -2671,7 +2671,7 @@ walk's three findings, filed as LL follow-ups:**
   path broken. Fix is SPLIT: F2a (defuse via corroboration, Phase RC
   before RC-1) and F2b (re-key, inside RC-1/RC-8).
   `ring-phone-2-background-continuity-kill.json` is the capture.
-  **F2a defuse SHIPPED (the 2026-08-23 continuity-corroboration PR, branch rc-f2a); F2b remains open in RC-1.**
+  **F2a defuse SHIPPED (PR #174); F2b remains open in RC-1.**
 - **F3 (small UI) — `endedBy: "link-lost"` is stored and consumed
   (`completedFullDistance`) but rendered NOWHERE** — the log detail shows
   no marking; v0.17.0's notes over-promised the surface. One line on the
@@ -2708,7 +2708,7 @@ and `ergomatic.sessionDraft`, costing an unlogged session and any
 in-progress draft. **The original hold ("until criterion (b) exists") is
 DISCHARGED (close gate, 2026-08-23): the destructive workaround is dead —
 Cancel → Connect recovers without deletion. The cohort stays at ONE TESTER
-on a NEW condition with its own discharge test: F2a is merged (the 2026-08-23 continuity-corroboration PR,
+on a NEW condition with its own discharge test: F2a is merged (PR #174,
 the continuity guard no longer convicts on a single uncorroborated TWD
 reading — a tester must not silently lose a measured row), AND either F1
 is fixed or the tester note carries "if Try again does nothing, tap
@@ -2716,16 +2716,18 @@ Cancel then Connect".**
 
 ## Phase RC — The row Concept2 would recognise
 
-**Status:** OPENED 2026-08-22 (James: evidence-first). Spec 1 is
-`docs/superpowers/specs/2026-08-22-held-open-finish-design.md`: the
-dev-only hold-open instrument (defer the finish disconnect 90 s, subscribe
-0x003F raw), wave-0 fixes RC-4 and RC-6, and the COMBINED walk (Phase LL's
-exit clauses on the current stock TestFlight phone build (v0.18.0+;
-re-check the latest tag at walk time) + RC's W1-W4 on the laptop seam, one
-erg session). RC-1/RC-8 are specced AFTER the walk, with evidence in
-hand. Named, scoped and evidenced by the ecosystem review of 2026-08-21
-(`docs/monitor/pm5-ble-ecosystem-review.md`, which that review also
-reconciles).
+**Status:** OPEN, mid-phase (updated 2026-08-23 at #174's PM gate).
+Spec 1 (the held-open finish instrument + RC-4/RC-6) MERGED as #167; the
+COMBINED walk RAN 2026-08-23 and answered every wire question YES
+(record: `docs/monitor/sessions/walk-2026-08-23/` — summary burst exists,
+0x003F fires on firmware 459.069, byte order settled, no seconds on the
+wire; see "Walk items this phase owns" ANSWERED block). F2a (the
+continuity defuse inherited from Phase LL's close) is PR #174. NEXT: the
+RC-1/RC-8 storage-spine spec, with the walk's evidence in hand and F2b +
+the warm-up question + the F5 TWD caveat all bound into it. Originally
+opened 2026-08-22 (James: evidence-first); named, scoped and evidenced by
+the ecosystem review of 2026-08-21
+(`docs/monitor/pm5-ble-ecosystem-review.md`).
 
 **Asset on hand (James, 2026-08-22): a Concept2 Logbook DEVELOPMENT API
 key already exists in the repo-root `.env`, currently unused.** Presence
