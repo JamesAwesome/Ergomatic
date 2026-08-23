@@ -681,11 +681,16 @@ export function createDataRouter({
 
     await stores.baselines.put(req.user!.id, patch);
 
-    // NOTE (Phase BL PR A): isTestResult deliberately does NOT imply a
-    // `tested` source — sources are explicit-only on this wire, so PR B's
-    // post-test prompt sends `k2Source`/`k6Source: "tested"` beside the
-    // flag. This flag still has zero client senders (gate-verified,
-    // spec rev 2); it only appends test history.
+    // NOTE (Phase BL PR A, wording corrected in PR B): isTestResult
+    // deliberately does NOT imply a `tested` source — sources are
+    // explicit-only on this wire. PR B's post-test prompt ended up never
+    // sending this flag at all (rev 2's decouple ruling): its accept is a
+    // plain `k2Source`/`k6Source: "tested"` PUT, and recording rides the
+    // sibling POST /api/test-history below, fired at save time so a
+    // DECLINE records too. This flag therefore still has zero client
+    // senders and is kept only as additive wire compatibility; it only
+    // appends test history — keyless, so without the sibling route's
+    // idempotency.
     if (body.isTestResult === true) {
       if (patch.k2Seconds !== undefined) {
         await stores.testHistory.append(req.user!.id, {

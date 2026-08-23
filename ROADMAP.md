@@ -1532,13 +1532,27 @@ hand-typed.
       cardio), NO age band (standing PII-minimization ruling), 16-cell
       static lookup in `domain/` with per-row source citations from the
       named C2-rankings research task. **M**
-- [ ] **The post-test prompt**: a completed test session offers its own
-      result as the new baseline (`tested`), sends `isTestResult` — the
-      first client producer for `test_history` — and never blocks or
-      auto-writes. Closes the loop 8A shipped open. **M**
-- [ ] **The You-screen re-test shortcut** (James, 2026-08-22): row the
-      6k / race the 2k next to the baseline fields on You, routing to
-      the same designated tests and landing in the same prompt. **S**
+- [x] **The post-test prompt** (PR B): a completed test session offers
+      its own result as the new baseline (`tested`) post-save, and never
+      blocks or auto-writes; accept can then offer the derived
+      counterpart (`derived`). Closes the loop 8A shipped open. The
+      "sends `isTestResult`" wording this bullet opened with was
+      superseded by rev 2's decouple ruling before any code existed:
+      recording rides the sibling `POST /api/test-history` (fired on the
+      SAVE, keyed to the log id, idempotent via `test_history.
+      session_log_id` — migration 0014), so decline records too, and
+      `isTestResult` still has zero client senders. New with PR B, both
+      binding: the COMPLETENESS guard (monitor `endedBy === "finished"`
+      only; timer `isComplete`; split inside the storable 60..240 band)
+      and the ORIGIN predicate in the You editor (a touched field ships
+      only when its value actually changed — an away-and-back nudge no
+      longer demotes a stored source; an all-unchanged Apply makes no
+      wire call). **M**
+- [x] **The You-screen re-test shortcut** (James, 2026-08-22; PR B): row
+      the 6k / race the 2k next to the baseline fields on You, routing to
+      the same designated GLOBAL tests through `useStartWorkout`'s full
+      guard set and landing in the same prompt. DEVIATIONS row 121 is the
+      stated design (no handoff mock exists). **S**
 - [ ] **Reset baseline setup** (James, 2026-08-22, at the gate): a
       staged-confirm action on You clearing both numbers and both
       sources — the doors become re-enterable for ANY account, demos
