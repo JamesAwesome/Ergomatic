@@ -2439,3 +2439,97 @@ targetSplit:null}` reproduces the recorded tx exactly and `divergences` stays
   **Technique that settled both:** decode the committed captures with a throwaway script
   rather than reasoning about them. `docs/monitor/sessions/*.jsonl(.gz)` are raw wire hex and
   a fifteen-line decoder answers in seconds what a spec argues about for pages.
+
+## Spec-stage pass, 2026-08-23 (Phase RC, F2a — the continuity guard's three-axis conviction)
+
+- **"A boundary cannot fake the three-axis reset signature on a non-distance
+  program — see keystone seq 305→310, TWD 0→250 while elapsed/distance
+  reset."** The conclusion holds; the citation proves nothing about it. Byte
+  17 of both cited frames is `0x80` = 128, the distance-goal identifier: the
+  keystone is a 2×250 m DISTANCE program, all 254 of its frames are
+  suppressed, and it contributes **zero** non-suppressed pairs to the corpus
+  gate. The claim's real evidence is three boundaries the spec never cited
+  (`walk-2026-08-17/step-3` seq 411→416 TWD 0→160 and seq 953→956 TWD
+  373→373; `walk-2026-08-16/session-2` seq 776→781 TWD 360→360). **Technique:
+  when a claim is scoped to a program shape / mode / platform, decode the
+  cited frame's own MODE BYTE before accepting it as evidence.** A capture
+  can carry exactly the right numbers and still live in the regime the claim
+  excludes.
+
+- **"The corpus gate (1,026 pairs) passing under the new predicate is
+  evidence the new predicate is safe."** Vacuous by construction: the new
+  rule is a conjunctive NARROWING of the old one, and the old one already
+  scored zero. Measured at seven gap lengths (5/15/30/60/120/180/300 s):
+  old-rule resets 0, new-rule resets 0, every time. The gate cannot go red
+  for the change it is gating. **Technique: for any "the existing gate still
+  passes" criterion, ask whether the change could have made it fail. If the
+  new predicate is a subset of the old, the answer is no, and the criterion
+  is a non-regression pin wearing an exit criterion's clothes.**
+
+- **"The 2026-08-23 walk's time-program captures can be added to the corpus."**
+  There are none. The walk's only `pm5-recording/v1` file is the keystone
+  (100 % `durationType 128`); the time-program evidence lives in the phone
+  RINGS, which are event logs `parseRecording` cannot read. Adding the
+  keystone leaves the non-suppressed pair count at exactly 1,026 —
+  unchanged. **Technique: before writing "add capture X to the corpus",
+  decode X and count the pairs it contributes to the population the gate
+  actually evaluates.** A capture can be added, parsed, and contribute
+  nothing.
+
+- **A conjunctive predicate needs one falsifying test PER CLAUSE, and a
+  spec's test list will not have them.** F2a's five proposed tests, self-
+  mutated clause by clause, pin only the TWD clause: delete the elapsed
+  clause or the distance clause and every proposed test stays green, because
+  the two real-capture pairs each have TWO axes moving forward, so either
+  survivor saves the verdict. **Technique: tabulate mutation × test for each
+  conjunct before approving a test list. An AND of N clauses needs N pairs in
+  which exactly one clause is the sole reason for the verdict** — and if the
+  record contains no such pair, say SYNTHETIC out loud rather than skipping
+  the pin.
+
+- **Making a test fixture's new field REQUIRED can silently disarm the
+  guard the fixture was written to test.** `ContinuityReading` gaining
+  required `elapsedSeconds`/`distanceMeters` makes every existing suppression
+  fixture default them to 0 — and `0 < 0` is false, so all three suppression
+  tests return "continuation" whether or not the suppression line still
+  exists, and the 1,026-pair corpus sweep returns "continuation" trivially.
+  **Technique: when a predicate gains a conjunct, re-run every EXISTING test
+  of the OTHER conjuncts against a deleted-clause mutant. A default value of
+  0 for a new axis is a permanent false in a strict comparison.**
+
+- **The axis that earns its place was not the one the spec argued for.** In
+  all six mid-rest elapsed re-bases in the corpus (−3.15 s to −5.97 s, no
+  boundary), `distanceMeters` holds or ADVANCES — so the distance clause, not
+  the TWD clause, is what makes the documented re-base safe. **Technique:
+  for each clause of a new conjunctive guard, find the recorded event that
+  clause alone defuses. The one you cannot find an event for is the one to
+  question.**
+
+- **A conjunction over PER-INTERVAL axes makes detection depend on where in
+  the interval the reading fell.** F2a loses a real conviction the old rule
+  made: a monitor reset during a background gap that began early in an
+  interval leaves the post-reset elapsed/distance ABOVE the pre-gap
+  per-interval values, so two of three clauses read forward and the records
+  merge silently. Blind for roughly the first `gap` seconds of each interval
+  — ~14 % of a 180 s interval at a 30 s gap, ~64 % at a 2-minute gap, i.e.
+  detection degrades exactly as the gap grows. **Technique: before ANDing a
+  new axis into a guard, ask what that axis is measured RELATIVE TO. A
+  per-interval quantity compared across a gap is not comparing the same
+  origin at both ends.**
+
+- **Attacked and NOT broken:** the predicate itself. Zero triple-backward
+  pairs in 3,637 slid pairs across seven captures at seven gap lengths and at
+  all 11 boundaries in the record; TWD decreases exactly twice in the entire
+  wire corpus, both on distance-goal frames and both mid-interval; `0 → 0`
+  is a continuation under strict `<`; the decode is order-preserving so the
+  zero tolerance is not flappy; and the stale-backlog attack is closed at the
+  code (one frame per 0x0031, `elapsed`/`distance` from that same 0x0031's
+  decode, no buffer or reorder in `capacitorBle.ts`, `lastTwd` updated every
+  live frame so pairs are always consecutive). **Probe validated before
+  trusting it: my independent decoder reproduces the repo's own published
+  1,026 non-distance-goal pairs exactly.** The one residual is honest and
+  unclosable from the record: the mechanism behind `ring-phone-2`'s 81→0 is
+  unexplained (the walk's own F5 says so), it is the only backward TWD
+  reading on a time program ever observed, and nothing proves it cannot land
+  on the `before` side of a boundary. "Cannot" is the wrong word; "never
+  observed in 3,637 wire pairs" is the right one.
