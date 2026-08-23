@@ -5,6 +5,16 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.18.1 (2026-08-23): PR #168 only — James's same-day feedback on
+    // v0.18.0's shortcut, plus the 6K Test's honest effort. Range
+    // v0.18.0..main = that one merge; RF15 discharged by inspection.
+    version: "v0.18.1",
+    date: "2026-08-23",
+    items: [
+      "The You tab's re-test buttons now open the workout screen first, so you choose Connect, Start Timer, or Log it after, and BACK returns to You. And the 6K Test now says what it is: MAX, all out, everywhere it appears. Its time estimate got honest too.",
+    ],
+  },
+  {
     // v0.18.0 (2026-08-22): Phase BL PRs A+B (#164 stored shape, no note
     // owed — pre-stated at its gate; #165 the tester-visible half). Range
     // v0.17.0..main enumerated at PR B's PM gate: exactly those two
