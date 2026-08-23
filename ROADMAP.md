@@ -2754,15 +2754,13 @@ that needs no erg, and it can run in a test.
       below:** Concept2 has no average-split field, so this is a rower
       question with its own answer, and aligning DISTANCE and TIME with C2
       can widen the contradiction rather than close it.
-- [ ] **RC-6 — Band `spm` and drop zero `p` in the stored series.**
-      TRIAD, S. `seriesRecorder.ts:230` writes `spm: f.spm ?? 0` unbanded
-      while the sibling `hr` two lines below is banded 20..254. The PM5
-      demonstrably emits 64 and 101 spm in coherent aligned frames at
-      boundaries; **two stored samples in the committed step-2 capture
-      would carry 64.** Also store no `p: 0` — 8 samples on session-2 and
-      2 on pyramid carry a zero pace, which C2's `stroke_data.p` has no
-      concept of and our own live surface refuses one layer up
-      (`surfaceModel.ts:586`).
+- [x] ~~RC-6 — Band `spm` and drop zero `p` in the stored series.~~ —
+      **NARROWED, `spm` half SHIPPED** (2026-08-22, held-open-finish spec
+      1 task 5). `seriesRecorder.ts` now bands `spm` to 10..60 inclusive,
+      same 0-sentinel shape `hr` already used — kills both the
+      first-stroke estimator's 64 and the boundary transition's 101. The
+      `p: 0` half moved to RC-11's own spec (the stroke-data reframe
+      owns what `p` means).
 - [ ] **RC-7 — Stop writing `restDistanceMeters: 0` into the synthesized
       final interval** (`driver.ts:3037`), which the code's own comment
       already calls "a real gap". Unreachable today because no 0x0039
@@ -2973,8 +2971,9 @@ sentence:
 
 **Wave 0 — unblocked today, no collisions with anything.** RC-4 (the
 Last Split 10x, which also fixes its mirror in `statusFrames.ts`) and
-RC-6 (band `spm`, drop zero `p` — `seriesRecorder.ts`). Neither file is
-touched by WU or LL. These can go now and need nothing from anyone.
+RC-6 (band `spm` — `seriesRecorder.ts` — **SHIPPED**; the `drop zero p`
+half narrowed off to RC-11). Neither file is touched by WU or LL. These
+can go now and need nothing from anyone.
 
 **Wave 1 — Phase WU. REWRITTEN 2026-08-21 at the PM gate: all three of
 this wave's original reasons were falsified and it now stands on a

@@ -94,6 +94,25 @@ export const SERIES_SAMPLE_CAP = 14_400;
 const HR_MIN = 20;
 const HR_MAX = 254;
 
+/** RC-6, narrowed (phase-open gates: the `p: 0` half of the original
+ *  finding moved to RC-11's own spec). Two DIFFERENT PM5 artifacts land
+ *  in this same 0..N spm range and are neither of them a real stroke
+ *  rate: a first-stroke estimator transient (64 spm, committed capture
+ *  `docs/monitor/sessions/walk-2026-08-17/step-2-pm5-recording-
+ *  1786973078979.jsonl`, seq 829/832/835/838 — 13 s into interval 1, NOT
+ *  a boundary; the PM5's own spm estimator running on a single elapsed
+ *  stroke) and a workout-end boundary transition (101 spm, committed
+ *  capture `docs/monitor/sessions/walk-2026-08-18-metrics/pyramid-pm5-
+ *  recording-1787090555458.jsonl.gz`, seq 3274/3277, straddling the
+ *  interval-end reset). Both are real, coherent, aligned wire readings —
+ *  not parse noise — so this bands `spm` to the EXISTING `0` sentinel at
+ *  construction, the same layer and the same "drop the out-of-band
+ *  reading, never the whole sample" shape `hr` above already uses (never
+ *  an absent field: the chart guards on `!== 0` and the server validator
+ *  requires the key). Band edges 10 and 60 are inclusive. */
+const SPM_MIN = 10;
+const SPM_MAX = 60;
+
 /** C2 logbook stroke-object shape (§1's Shape row, memo Q3, PRIMARY):
  *  cumulative tenths of a second, cumulative decimeters, tenths of a
  *  second per 500m, whole strokes/min. `hr` is ABSENT (never
@@ -227,7 +246,11 @@ export function createSeriesRecorder(): SeriesRecorder {
       t: Math.round(workClockSeconds * 10),
       d: Math.round(workClockMeters * 10),
       p: Math.round((f.currentSplit ?? 0) * 10),
-      spm: f.spm ?? 0,
+      // RC-6, narrowed: banded to the 10..60 spm range (inclusive) at
+      // the SAME sentinel every reader already honours — `null` (no AS1
+      // seen yet) and either out-of-band artifact above both collapse to
+      // the existing `0`, never an absent field.
+      spm: f.spm !== null && f.spm >= SPM_MIN && f.spm <= SPM_MAX ? f.spm : 0,
       // `hr`'s readonly-optional shape (L2's freeze) means it must be
       // decided at construction, never assigned after — the spread of an
       // empty object contributes no key at all when there is no belt
