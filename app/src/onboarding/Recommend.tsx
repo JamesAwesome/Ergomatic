@@ -267,6 +267,7 @@ function ReadyRecommend({
         <button
           type="button"
           className="back-link"
+          disabled={saving}
           onClick={() => setStep("cardio")}
         >
           ← BACK
@@ -387,7 +388,12 @@ function AdjustStep({
 
   return (
     <main className="screen onb-screen">
-      <button type="button" className="back-link" onClick={onBack}>
+      <button
+        type="button"
+        className="back-link"
+        disabled={saving}
+        onClick={onBack}
+      >
         ← BACK
       </button>
       <div className="onb-header">

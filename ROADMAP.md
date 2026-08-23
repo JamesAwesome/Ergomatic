@@ -1604,6 +1604,14 @@ hand-typed.
       nothing stale; additive, old clients unaffected, proven against
       real Postgres. **S**
 
+- [ ] **Queued follow-up (split-entry review F1, 2026-08-23; single
+      file, rides the next PR touching door 2):** door 2 can Save
+      mid-entry and ship the clamped partial — type "1", tap Save, and
+      60s rides the wire with only a blur-beat of display to announce
+      it. The You editor's identical path is announced by its
+      ConfirmLine before Apply; door 2 has no confirm, so the fix
+      belongs there (`src/onboarding/KnowBaseline.tsx`). **S**
+
 **Exit:** the spec's draft exit criteria, refined at phase open — each
 door works end to end, the prompt closes the measurement loop, every
 baseline carries a source and no screen shows it.

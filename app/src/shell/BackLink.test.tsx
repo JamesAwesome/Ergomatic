@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import userEvent from "@testing-library/user-event";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import BackLink, { isSafeInAppPath, resolveBackTarget } from "./BackLink";
 
 function renderAt(state: unknown, fallback?: string) {
@@ -61,6 +62,34 @@ describe("BackLink", () => {
     expect(screen.getByRole("link", { name: "← BACK" })).toHaveAttribute(
       "href",
       "/plan",
+    );
+  });
+
+  // Split-entry review F2: the link-variant twin of a disabled button —
+  // clicking an aria-disabled BackLink must not navigate (the consequence,
+  // not the attribute alone).
+  it("disabled renders aria-disabled and a click navigates nowhere", async () => {
+    render(
+      <MemoryRouter initialEntries={["/library/w1"]}>
+        <Routes>
+          <Route
+            path="/library/w1"
+            element={<BackLink fallback="/today" disabled />}
+          />
+          <Route path="/today" element={<p>TODAY SCREEN</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    const link = screen.getByRole("link", { name: "← BACK" });
+    expect(link).toHaveAttribute("aria-disabled", "true");
+    await userEvent.click(link);
+    expect(screen.queryByText("TODAY SCREEN")).not.toBeInTheDocument();
+  });
+
+  it("the default (enabled) link carries no aria-disabled at all", () => {
+    renderAt(undefined);
+    expect(screen.getByRole("link", { name: "← BACK" })).not.toHaveAttribute(
+      "aria-disabled",
     );
   });
 });

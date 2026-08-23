@@ -154,6 +154,35 @@ describe("KnowBaseline (door 2)", () => {
     expect(screen.getByText("TODAY SCREEN")).toBeInTheDocument();
   });
 
+  // Review F2 (split-entry round): the removed bottom Back carried
+  // `disabled={saving}`; the top back link keeps that parity as an inert
+  // (aria-disabled) link — a mid-PUT escape would strand the save's error.
+  it("the back link is inert while the save is in flight — no mid-PUT escape to Today", async () => {
+    let resolveSave!: () => void;
+    const save = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveSave = resolve;
+        }),
+    );
+    mockReady({ k2Seconds: null, k6Seconds: null }, save);
+    await renderKnow();
+    await userEvent.type(field("2k split"), "158");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save baseline" }),
+    );
+    expect(save).toHaveBeenCalledTimes(1);
+
+    const back = screen.getByRole("link", { name: "← BACK" });
+    expect(back).toHaveAttribute("aria-disabled", "true");
+    await userEvent.click(back);
+    // The click navigated nowhere — still door 2, mid-save.
+    expect(screen.queryByText("TODAY SCREEN")).not.toBeInTheDocument();
+
+    resolveSave();
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+  });
+
   it("shows loading and error states like every baselines consumer", async () => {
     mockState({ state: "loading" });
     await renderKnow();

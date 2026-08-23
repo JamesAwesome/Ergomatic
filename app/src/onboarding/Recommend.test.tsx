@@ -434,6 +434,67 @@ describe("Recommend (door 1)", () => {
     });
   });
 
+  // Review F2 (split-entry round): the removed bottom Backs carried
+  // `disabled={saving}`; the top back controls keep that parity. A mid-PUT
+  // escape would strand the save's error on a step that can't render it.
+  it("the offer screen's BACK is disabled while the save is in flight — no mid-PUT escape", async () => {
+    let resolveSave!: () => void;
+    const save = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveSave = resolve;
+        }),
+    );
+    mockReady({ k2Seconds: null, k6Seconds: null }, save);
+    await renderRecommend();
+    await answerBoth();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Use this baseline" }),
+    );
+    expect(save).toHaveBeenCalledTimes(1);
+
+    const back = screen.getByRole("button", { name: "← BACK" });
+    expect(back).toBeDisabled();
+    await userEvent.click(back);
+    // Still the offer screen — the click went nowhere.
+    expect(
+      screen.getByRole("heading", { name: "Your starting baseline" }),
+    ).toBeInTheDocument();
+
+    resolveSave();
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+  });
+
+  it("the adjust step's BACK is disabled while the save is in flight", async () => {
+    let resolveSave!: () => void;
+    const save = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveSave = resolve;
+        }),
+    );
+    mockReady({ k2Seconds: null, k6Seconds: null }, save);
+    await renderRecommend();
+    await answerBoth();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Adjust the numbers first" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save baseline" }),
+    );
+    expect(save).toHaveBeenCalledTimes(1);
+
+    const back = screen.getByRole("button", { name: "← BACK" });
+    expect(back).toBeDisabled();
+    await userEvent.click(back);
+    expect(
+      screen.getByRole("heading", { name: "Adjust your starting baseline" }),
+    ).toBeInTheDocument();
+
+    resolveSave();
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+  });
+
   it("both numbers already set (a raced device / stale deep link): accept writes NOTHING and simply leaves", async () => {
     const save = mockReady({ k2Seconds: 120, k6Seconds: 130 });
     await renderRecommend();

@@ -76,7 +76,7 @@ function ReadyKnow({
 
   return (
     <main className="screen onb-screen">
-      <BackLink fallback="/today" />
+      <BackLink fallback="/today" disabled={saving} />
       <span className="mono-status">I KNOW MY BASELINE</span>
       <h1 className="screen-title onb-title">Enter your splits</h1>
       <p className="onb-body">

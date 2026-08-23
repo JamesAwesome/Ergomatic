@@ -126,6 +126,23 @@ describe("SplitInput (typed split entry)", () => {
     expect(field).toHaveValue("4:00.0");
   });
 
+  // Review F3 (split-entry round): the discriminating mutant is
+  // `onType(parsed ?? 0)` — committing a zero for an empty buffer. Every
+  // other empty-buffer path in this file first commits a real partial
+  // (so the mutant's clamp-to-60 collides with the honest clamp-to-60 and
+  // survives); THIS sequence retypes the server's own value, then
+  // select-all -> delete, so the real code rests at 1:52.0 while the
+  // mutant's zero-commit clamps the draft to 1:00.0.
+  it("select-all -> delete -> blur rests at the value the field held — an emptied buffer never commits a zero", async () => {
+    render(<Harness initial={112} />);
+    const field = screen.getByRole("textbox", { name: "2k split" });
+    await userEvent.type(field, "152");
+    await userEvent.clear(field);
+    expect(field).toHaveValue("");
+    await userEvent.tab();
+    expect(field).toHaveValue("1:52.0");
+  });
+
   it("backspacing to empty commits nothing further — the draft keeps the last parsed keystroke, clamped and visible, never a fabricated zero", async () => {
     render(<Harness initial={145} />);
     const field = screen.getByRole("textbox", { name: "2k split" });

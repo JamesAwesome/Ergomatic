@@ -1235,6 +1235,17 @@ button.back-link {
   align-self: flex-start;
 }
 
+/* In-flight-save parity (split-entry review F2): the bottom Backs these
+   controls replaced carried `disabled={saving}`. The button variant
+   disables natively; the link variant goes `aria-disabled` with its click
+   swallowed (BackLink.tsx). Disabled controls are exempt from the AA
+   contrast floor; --ink-4 still reads. */
+button.back-link:disabled,
+.back-link[aria-disabled="true"] {
+  color: var(--ink-4);
+  cursor: default;
+}
+
 .workout-detail-meta {
   display: flex;
   align-items: center;
