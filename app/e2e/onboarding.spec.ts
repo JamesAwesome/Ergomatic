@@ -481,9 +481,11 @@ test.describe("the derivation offer is reachable through the real editor flow (t
 
     // The wire body itself — the exact assertion Finding 1 names — carries
     // ONLY the touched field. A fabricated k2Seconds here would mean the
-    // fix didn't actually reach the network layer.
+    // fix didn't actually reach the network layer. Since Phase BL PR A the
+    // touched field also carries its truthful provenance: a stepper nudge
+    // is a manual entry.
     await expect.poll(() => putBody).not.toBeNull();
-    expect(putBody).toStrictEqual({ k6Seconds: 122.5 });
+    expect(putBody).toStrictEqual({ k6Seconds: 122.5, k6Source: "manual" });
 
     // The offer becomes visible for 2k — reachable, at last, through the
     // real editor flow rather than a raw API seed.
@@ -501,5 +503,23 @@ test.describe("the derivation offer is reachable through the real editor flow (t
     await expect(page.locator(".baselinecard-chip")).toHaveText(
       "2K BASELINE · NOT SET · ROW IT HOW IT FEELS",
     );
+
+    // PR A's PM gate (C3): the one case the provenance ruling exists for,
+    // proven END TO END — the client PRODUCES `derived` and the server
+    // stores it. Client tests pin the component (mocked save) and the
+    // integration tests pin the route (hand-sent source); this is the only
+    // run where the two sides must agree on the value's NAME — the client
+    // re-declares the enum as string literals (`src/api/useBaselines.ts`,
+    // no compile-time link to the pgEnum), so a rename on either side is
+    // caught HERE, not by a type. Runs LAST in this test because accepting
+    // the offer sets BOTH baselines, which removes the no-baseline card
+    // the assertions above depend on.
+    await page.goto("/you");
+    await page.locator(".baseline-value").first().waitFor();
+    putBody = null;
+    await page.getByRole("button", { name: "ESTIMATE FROM 6K (−7s)" }).click();
+    await page.getByRole("button", { name: "Apply baselines" }).click();
+    await expect.poll(() => putBody).not.toBeNull();
+    expect(putBody).toStrictEqual({ k2Seconds: 115.5, k2Source: "derived" });
   });
 });

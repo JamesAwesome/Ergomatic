@@ -7,7 +7,7 @@ import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { and, eq } from "drizzle-orm";
 import type pg from "pg";
 import { createDb, type Db } from "../db/index.js";
-import { articleReads, preferences } from "../db/schema.js";
+import { articleReads, baselines, preferences } from "../db/schema.js";
 import { createUserStore } from "../auth/users.js";
 import { createArticleReadsStore } from "./articleReads.js";
 import { createBaselinesStore } from "./baselines.js";
@@ -89,6 +89,37 @@ describe("domain stores against real Postgres", () => {
       await s.put(userB, { k2Seconds: 999 });
       const a = await s.get(userA);
       expect(a?.k2Seconds).not.toBe(999);
+    });
+
+    // Phase BL PR A: the store is a dumb per-key patch — it writes exactly
+    // the keys it is handed and nothing else (the route owns the
+    // manual-defaulting policy). Read back raw via the schema, because
+    // get() deliberately projects the source columns off (lean-GET).
+    it("writes a source only when the patch names it, and an absent key touches neither number nor source", async () => {
+      const s = store();
+      // A fresh user, so the first put below genuinely exercises the
+      // INSERT path (userA/userB already have rows from the cases above).
+      const fresh = await createUserStore(db).createUser({
+        googleSub: "store-user-provenance",
+        email: "provenance@stores.test",
+        name: "P",
+      });
+      const uid = fresh.id;
+      const raw = async () =>
+        (await db.select().from(baselines).where(eq(baselines.userId, uid)))[0];
+
+      await s.put(uid, { k2Seconds: 118, k2Source: "tested" });
+      let row = await raw();
+      expect(row.k2Source).toBe("tested");
+      // Insert path: the unnamed side's source comes from the DB default.
+      expect(row.k6Source).toBe("manual");
+
+      // Update path: a patch naming only k6 leaves k2's source alone.
+      await s.put(uid, { k6Seconds: 127, k6Source: "derived" });
+      row = await raw();
+      expect(row.k2Source).toBe("tested");
+      expect(row.k6Source).toBe("derived");
+      expect(row.k2Seconds).toBe(118);
     });
   });
 

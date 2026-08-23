@@ -98,8 +98,20 @@ export function commit(s: DraftState): DraftState {
  *  alone is the complete, simpler answer to "is anything pending."
  *  Accepted edge (re-review round): nudging a field away and back to its
  *  EXACT original value leaves it `touched` (an act, not a net change), so
- *  Apply can fire an idempotent resend of an unchanged value — judged
- *  fine, not worth a "did anything actually move" check of its own. */
+ *  Apply can fire a resend of an unchanged value — judged fine, not worth
+ *  a "did anything actually move" check of its own. Since Phase BL PR A
+ *  that resend is no longer value-idempotent in PROVENANCE: a touched
+ *  field ships with a source, so an away-and-back nudge to the exact
+ *  stored number, Applied, demotes a stored tested/derived source to
+ *  manual — with zero visible ConfirmLines. That stance (an act on the
+ *  field is a manual re-assertion of its number) is PR A's OWN decision,
+ *  not a spec ruling: the demotion runs conservative (it downgrades to
+ *  the least-claiming value, never fabricates a measurement) and
+ *  provenance has zero consumers until `tested` exists. James RULED
+ *  (2026-08-22): provenance is ORIGIN, not act — PR B replaces this
+ *  with the value-identity predicate (stamp only when the value
+ *  actually changed) alongside `tested`. Named here so nobody reads
+ *  the interim behaviour as a bug or as settled. */
 export function isDirty(s: DraftState): boolean {
   return s.touched.k2 || s.touched.k6;
 }

@@ -77,7 +77,7 @@ describe("BaselineEditor", () => {
     expect(screen.getByText("1:52.0")).toBeInTheDocument();
   });
 
-  it("applying saves the full draft exactly once and settles the confirm block", async () => {
+  it("applying saves the touched field exactly once, stamped manual, and settles the confirm block", async () => {
     const save = mockReady();
     await renderEditor();
     await userEvent.click(screen.getByRole("button", { name: "2k faster" }));
@@ -87,7 +87,7 @@ describe("BaselineEditor", () => {
     );
 
     expect(save).toHaveBeenCalledTimes(1);
-    expect(save).toHaveBeenCalledWith({ k2Seconds: 111.5, k6Seconds: 122 });
+    expect(save).toHaveBeenCalledWith({ k2Seconds: 111.5, k2Source: "manual" });
     expect(screen.queryByText(/→/)).not.toBeInTheDocument();
   });
 
@@ -116,8 +116,10 @@ describe("BaselineEditor", () => {
     // sending a fabricated k2Seconds:112 here would silently manufacture a
     // 2k baseline the rower never rowed and never asked for. This is the
     // exact fresh-both-null-user case Finding 1's test list names.
+    // Phase BL PR A: the touched field now also carries its truthful
+    // provenance — a stepper edit is a manual entry.
     expect(save).toHaveBeenCalledTimes(1);
-    expect(save).toHaveBeenCalledWith({ k6Seconds: 122.5 });
+    expect(save).toHaveBeenCalledWith({ k6Seconds: 122.5, k6Source: "manual" });
   });
 
   it("keeps the draft and surfaces an error when save is rejected", async () => {
@@ -238,7 +240,7 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
     expect(screen.getByText("2k 1:52.0 → 1:54.5")).toBeInTheDocument();
   });
 
-  it("Apply round-trips the derived value through the real save path", async () => {
+  it("Apply round-trips the derived value through the real save path, stamped derived — the case the per-number provenance ruling exists for", async () => {
     const save = mockReady({ k2Seconds: null, k6Seconds: 122 });
     await renderEditor();
 
@@ -249,20 +251,72 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
       screen.getByRole("button", { name: /apply baselines/i }),
     );
 
+    // Phase BL PR A: the accepted offer is a DERIVATION, not a manual
+    // entry (rev 1 of the spec would have mislabeled exactly this write),
+    // and the untouched, already-real 6k stays out of the body entirely
+    // so its own stored source cannot be flipped by a write it wasn't in.
     expect(save).toHaveBeenCalledTimes(1);
-    expect(save).toHaveBeenCalledWith({ k2Seconds: 115, k6Seconds: 122 });
+    expect(save).toHaveBeenCalledWith({ k2Seconds: 115, k2Source: "derived" });
   });
 
-  // Task review round, Finding 1 (BLOCKER) — the core fix, pinned directly:
-  // Apply commits a side iff it was touched OR the server already has a
-  // real value for it; an untouched, still-server-null side is never
-  // fabricated onto the wire just because the draft needs SOME number to
-  // display.
-  describe("Apply commits only touched (or already-real) fields (task review Finding 1)", () => {
-    it("touching only the known-real side still sends both — the untouched side is ALREADY real, not fabricated", async () => {
+  // THE binding client case from PR A's brief: one save carrying both a
+  // typed number and an accepted derivation, each with its own truthful
+  // source — derived from real editor interaction (a stepper click and
+  // the offer button), never prop injection.
+  it("one Apply carrying a nudged 6k and an accepted 2k derivation stamps manual and derived respectively", async () => {
+    const save = mockReady({ k2Seconds: null, k6Seconds: 122 });
+    await renderEditor();
+
+    await userEvent.click(screen.getByRole("button", { name: "6k slower" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "ESTIMATE FROM 6K (−7s)" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: /apply baselines/i }),
+    );
+
+    expect(save).toHaveBeenCalledExactlyOnceWith({
+      k2Seconds: 115,
+      k2Source: "derived",
+      k6Seconds: 122.5,
+      k6Source: "manual",
+    });
+  });
+
+  it("nudging AFTER accepting the offer demotes the field to manual — the saved number is the rower's, not the derivation's", async () => {
+    const save = mockReady({ k2Seconds: null, k6Seconds: 122 });
+    await renderEditor();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "ESTIMATE FROM 6K (−7s)" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "2k faster" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: /apply baselines/i }),
+    );
+
+    // 115 - 0.5: no longer the derived value, and the on-screen
+    // "ESTIMATED" line hides itself at the same predicate — what the
+    // rower sees and what gets stored agree.
+    expect(save).toHaveBeenCalledExactlyOnceWith({
+      k2Seconds: 114.5,
+      k2Source: "manual",
+    });
+  });
+
+  // Task review round, Finding 1 (BLOCKER), tightened by Phase BL PR A:
+  // Apply commits a side iff the rower TOUCHED it this session — full
+  // stop. Finding 1's original fix also resent an untouched side whenever
+  // the server already had a real value (a harmless value-level no-op);
+  // provenance makes that resend a LIE, because a value write stamps
+  // k2Source/k6Source "manual" and would flip a stored tested/derived
+  // source on a field the rower never went near. Untouched now means
+  // absent from the body, which is what keeps its stored source alive
+  // (the server's per-field patch semantics — see
+  // baselineProvenance.integration.test.ts).
+  describe("Apply commits only touched fields (Finding 1, tightened by PR A provenance)", () => {
+    it("touching only one already-real side sends ONLY it — resending the untouched side would flip its stored source to manual", async () => {
       // Both start real (BASELINES-shaped): touching 2k, leaving 6k alone.
-      // 6k is included not because it's touched but because it was already
-      // a real baseline before this session even started.
       const save = mockReady({ k2Seconds: 112, k6Seconds: 122 });
       await renderEditor();
 
@@ -271,7 +325,39 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
         screen.getByRole("button", { name: /apply baselines/i }),
       );
 
-      expect(save).toHaveBeenCalledWith({ k2Seconds: 111.5, k6Seconds: 122 });
+      expect(save).toHaveBeenCalledWith({
+        k2Seconds: 111.5,
+        k2Source: "manual",
+      });
+      expect(save).not.toHaveBeenCalledWith(
+        expect.objectContaining({ k6Seconds: expect.anything() }),
+      );
+    });
+
+    // The MIRRORED side (triad review, low finding): the resend ban is two
+    // independent per-field checks, and the case above only pins the k6
+    // arm — re-adding `|| baselines.k2Seconds !== null` to the k2 arm
+    // left every test green until this one existed. Same shape, sides
+    // swapped: k2 is the already-real untouched field this time.
+    it("touching only 6k leaves an already-real, untouched k2 out of the body — resending it would flip its stored source to manual", async () => {
+      const save = mockReady({ k2Seconds: 112, k6Seconds: 122 });
+      await renderEditor();
+
+      await userEvent.click(screen.getByRole("button", { name: "6k faster" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: /apply baselines/i }),
+      );
+
+      expect(save).toHaveBeenCalledWith({
+        k6Seconds: 121.5,
+        k6Source: "manual",
+      });
+      expect(save).not.toHaveBeenCalledWith(
+        expect.objectContaining({ k2Seconds: expect.anything() }),
+      );
+      expect(save).not.toHaveBeenCalledWith(
+        expect.objectContaining({ k2Source: expect.anything() }),
+      );
     });
 
     it("an untouched, still-null 2k is never fabricated: nudging only 6k, Apply omits k2Seconds entirely", async () => {
@@ -286,7 +372,10 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
         screen.getByRole("button", { name: /apply baselines/i }),
       );
 
-      expect(save).toHaveBeenCalledWith({ k6Seconds: 121.5 });
+      expect(save).toHaveBeenCalledWith({
+        k6Seconds: 121.5,
+        k6Source: "manual",
+      });
       expect(save).not.toHaveBeenCalledWith(
         expect.objectContaining({ k2Seconds: expect.anything() }),
       );
@@ -305,7 +394,10 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
         screen.getByRole("button", { name: /apply baselines/i }),
       );
 
-      expect(save).toHaveBeenCalledWith({ k2Seconds: 111.5 });
+      expect(save).toHaveBeenCalledWith({
+        k2Seconds: 111.5,
+        k2Source: "manual",
+      });
       expect(save).not.toHaveBeenCalledWith(
         expect.objectContaining({ k6Seconds: expect.anything() }),
       );
@@ -326,7 +418,12 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
         screen.getByRole("button", { name: /apply baselines/i }),
       );
 
-      expect(save).toHaveBeenCalledWith({ k2Seconds: 112, k6Seconds: 119 });
+      // Untouched 6k stays out of the body (PR A); the accepted offer is
+      // a derivation even when it lands exactly on the seed value.
+      expect(save).toHaveBeenCalledWith({
+        k2Seconds: 112,
+        k2Source: "derived",
+      });
     });
 
     it("the confirm block previews ONLY the field(s) actually being committed — a rower never sees an untouched value listed as changing", async () => {
@@ -366,7 +463,9 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
         screen.getByRole("button", { name: /apply baselines/i }),
       );
 
-      expect(save).toHaveBeenCalledWith({ k2Seconds: 112, k6Seconds: 122 });
+      // Both sides are set, so no offer exists — a nudge-away-and-back is
+      // a manual act on the field, and only that field rides (PR A).
+      expect(save).toHaveBeenCalledWith({ k2Seconds: 112, k2Source: "manual" });
     });
   });
 
@@ -420,8 +519,14 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
         screen.getByRole("button", { name: /apply baselines/i }),
       );
       // The rower's own manual nudge survives untouched — never silently
-      // replaced by a derived estimate.
-      expect(save).toHaveBeenCalledWith({ k2Seconds: 111.5, k6Seconds: 122 });
+      // replaced by a derived estimate — and it is stamped manual: the
+      // nudged value is NOT the offer's (111.5 ≠ 115), so no derived
+      // label can attach to it. The untouched, already-real 6k stays out
+      // of the body (PR A).
+      expect(save).toHaveBeenCalledWith({
+        k2Seconds: 111.5,
+        k2Source: "manual",
+      });
     });
 
     it("nudging the OTHER (already-known) side does not hide the offer — only the target field's own movement counts as declining it", async () => {

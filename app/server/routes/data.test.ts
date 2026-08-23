@@ -215,6 +215,89 @@ describe("GET/PUT /api/baselines", () => {
     const history = await stores.testHistory.list(userA.id);
     expect(history.map((h) => h.distance).sort()).toStrictEqual(["2k", "6k"]);
   });
+
+  // Phase BL PR A (baseline-onboarding spec 2026-08-22 rev 2, "The stored
+  // shape"): each numeric field may arrive with its own source; the route
+  // validates sources against the enum and defaults a value-only write to
+  // "manual" (an old client's plain write IS a manual entry). The store's
+  // per-patch-key semantics (an absent field touches nothing in Postgres)
+  // are proven in baselineProvenance.integration.test.ts — these cases pin
+  // the route's own translation and validation seam.
+  describe("per-field provenance on the wire (Phase BL PR A)", () => {
+    it.each(["k2Source", "k6Source"] as const)(
+      "rejects a %s outside the enum with 400 + field — a pass-through would store 'banana'",
+      async (sourceField) => {
+        const stores = makeStores();
+        const put = vi.spyOn(stores.baselines, "put");
+        const seconds = sourceField === "k2Source" ? "k2Seconds" : "k6Seconds";
+        const res = await asA(
+          request(appFor(stores)).put("/api/baselines"),
+        ).send({ [seconds]: 120, [sourceField]: "banana" });
+        expect(res.status).toBe(400);
+        expect(res.body.field).toBe(sourceField);
+        expect(put).not.toHaveBeenCalled();
+      },
+    );
+
+    it("rejects a non-string source the same way (no coercion path)", async () => {
+      const res = await asA(
+        request(appFor(makeStores())).put("/api/baselines"),
+      ).send({ k2Seconds: 120, k2Source: 5 });
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe("k2Source");
+    });
+
+    it("rejects a source arriving without its own number — provenance describes a write, not a wish", async () => {
+      const stores = makeStores();
+      const put = vi.spyOn(stores.baselines, "put");
+      const res = await asA(request(appFor(stores)).put("/api/baselines")).send(
+        { k2Source: "tested" },
+      );
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe("k2Source");
+      expect(put).not.toHaveBeenCalled();
+    });
+
+    it("defaults an old client's plain write to manual for exactly the field it writes — the absent field gets no source key at all", async () => {
+      const stores = makeStores();
+      const put = vi.spyOn(stores.baselines, "put");
+      await asA(request(appFor(stores)).put("/api/baselines")).send({
+        k2Seconds: 120,
+      });
+      expect(put).toHaveBeenCalledExactlyOnceWith("user-a", {
+        k2Seconds: 120,
+        k2Source: "manual",
+      });
+    });
+
+    it("passes an explicit source through beside its number, still defaulting the other present field to manual", async () => {
+      const stores = makeStores();
+      const put = vi.spyOn(stores.baselines, "put");
+      await asA(request(appFor(stores)).put("/api/baselines")).send({
+        k2Seconds: 118,
+        k2Source: "tested",
+        k6Seconds: 127,
+      });
+      expect(put).toHaveBeenCalledExactlyOnceWith("user-a", {
+        k2Seconds: 118,
+        k2Source: "tested",
+        k6Seconds: 127,
+        k6Source: "manual",
+      });
+    });
+
+    it("keeps sources out of GET and the PUT echo — provenance is stored, never served (lean-GET decision, PR A)", async () => {
+      const stores = makeStores();
+      const app = appFor(stores);
+      const put = await asA(request(app).put("/api/baselines")).send({
+        k2Seconds: 118,
+        k2Source: "derived",
+      });
+      expect(put.body).toStrictEqual({ k2Seconds: 118, k6Seconds: null });
+      const get = await asA(request(app).get("/api/baselines"));
+      expect(get.body).toStrictEqual({ k2Seconds: 118, k6Seconds: null });
+    });
+  });
 });
 
 describe("workouts CRUD", () => {
