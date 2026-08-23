@@ -468,11 +468,20 @@ export default function ConnectedInterstitial({
    *  disabled by construction — documented here as "belt-and-braces" —
    *  which was wrong: it was the walk's F1 (2026-08-23), a rower with a
    *  mid-session Bluetooth drop finding Try again dead exactly where they
-   *  needed it. `canRetry` now covers both phases (cohort-unlock spec §1),
-   *  so this button is live at both call sites; the retry path from
-   *  `disconnected` runs `session.connect()` after Phase LL's full
-   *  disposal — the identical Cancel → Connect path the walk PROVED works
-   *  from this exact state, minus the navigation. */
+   *  needed it. `canRetry` now covers both phases (cohort-unlock spec §1).
+   *  Enabling the button alone was NOT enough (fix round 1, CRITICAL): a
+   *  raw `disconnected` event used to leave `driverRef` populated with the
+   *  dead driver forever, and `connect()`'s own opening guard
+   *  (`driverRef.current !== null`) silently no-op'd every tap — the
+   *  button looked alive and did nothing. `useMonitorSession.ts`'s
+   *  `disconnected` event handler now disposes the driver itself
+   *  (unsubscribe, null `driverRef`, hang up the transport best-effort —
+   *  the same steps `fail()` takes, minus clearing `deviceName`, which the
+   *  disconnected-WITH-run surface's LOST header still needs) the moment
+   *  the link drops, before this button can ever render enabled. THAT is
+   *  what makes the walk's Cancel → Connect evidence transfer: both paths
+   *  now dispose before `connect()` runs, not because the two paths were
+   *  ever literally the same call. */
   function renderFailureScreen(error: ConnectedError | null) {
     return (
       <main className="screen connected-interstitial">

@@ -1908,6 +1908,43 @@ export function useMonitorSession(
         // A link that dies inside the hold is precisely what the backstop
         // (`FINISH_HANDOFF_HOLD_MS`) is for, and its own test proves it.
         if (stateRef.current.phase === "ended") return;
+        // F1 fix-round-1 (cohort-unlock spec §1 review, CRITICAL): a raw
+        // phase-level disconnect used to leave `driverRef` populated with
+        // the now-dead driver forever — nothing but `teardown()`/`fail()`/
+        // `cancel()` ever cleared it, so `connect()`'s own opening guard
+        // (`if (connectingRef.current || driverRef.current !== null)
+        // return;`) silently no-op'd a retry from this exact state: Try
+        // Again looked alive and did nothing. This mirrors `fail()`'s own
+        // disposal block (above) — unsubscribe, cancel the in-flight
+        // lifecycle attempt if any, drop the lifecycle unsub, null
+        // `driverRef`, hang up the transport best-effort — with two
+        // deliberate differences: `deviceName` is NOT cleared (the
+        // disconnected-WITH-run surface renders its LOST header from
+        // `session.deviceName`, "PM5 … · LOST" — blanking it here would
+        // break that screen, which this event can also precede), and the
+        // phase/error `update()` stays exactly what it already was
+        // (`"disconnected"`, no `ConnectedError` — this is not a failure,
+        // it's the link falling over on its own). No `pendingTerminate` to
+        // chain here unlike `fail()`'s call from `program()`'s catch: this
+        // handler is not the caller of any in-flight `driver.terminate()`
+        // — the transport's own `onDisconnect` (`driver.ts`) already
+        // settled every pending wire promise (ack/verify/settle/prepare-
+        // settle) before `emit`ting this event, so there is nothing here
+        // to await before hanging up.
+        unsubscribeRef.current?.();
+        unsubscribeRef.current = null;
+        degradedUnsubRef.current?.();
+        degradedUnsubRef.current = null;
+        if (lifecycleAttemptRef.current !== null) {
+          lifecycleAttemptRef.current.cancelled = true;
+        }
+        lifecycleUnsubRef.current?.();
+        lifecycleUnsubRef.current = null;
+        const droppedDriver = driverRef.current;
+        driverRef.current = null;
+        if (droppedDriver !== null) {
+          bestEffort(droppedDriver.disconnect());
+        }
         update({ phase: "disconnected" });
       }
       // `reconnected` is deliberately unhandled: auto-reconnect is descoped

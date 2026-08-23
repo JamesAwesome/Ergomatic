@@ -330,6 +330,43 @@ async function connect(result: Session): Promise<void> {
   });
 }
 
+/** F1 fix round 1: `injectDisconnect()` now disposes `driverRef` itself
+ *  (the CRITICAL fix), so it can no longer reproduce D6's "a write against
+ *  a dead GATT handle throws untyped" — `program()` finds `driverRef`
+ *  already null and reports `transport-missing` before any write is
+ *  attempted (see the F1 tests above). This wraps a real fake transport
+ *  with a `write()` that throws the identical D6 message directly,
+ *  independent of `linkDown`/disconnect — the file's own established
+ *  idiom for a scenario the fake's public API cannot otherwise produce
+ *  (`withOutcome`, `stubRadio`, below). Keeps `mapProgramFailure`'s
+ *  untyped-throw branch and `fail()`'s own disposal semantics covered by
+ *  their own mechanism, decoupled from the disconnected-event disposal
+ *  this fix round adds. A minimal counter, not the full `spyTransport`
+ *  (which requires a `FakeControls` this bare `Transport` no longer
+ *  carries), for the one assertion (test 2) that needs to see `fail()`'s
+ *  own `driver.disconnect()` reach the transport. */
+function deadHandleTransport(fake: Transport): Transport & {
+  disconnects: number;
+  writeAttempts: number;
+} {
+  const spy = {
+    ...fake,
+    disconnects: 0,
+    writeAttempts: 0,
+    async write(): Promise<void> {
+      spy.writeAttempts += 1;
+      throw new Error(
+        "fake transport: InvalidStateError: Characteristic 0000002a-0000-1000-8000-00805f9b34fb is no longer valid. Remember to retrieve the characteristic again after reconnecting.",
+      );
+    },
+    async disconnect(): Promise<void> {
+      spy.disconnects += 1;
+      return fake.disconnect();
+    },
+  };
+  return spy;
+}
+
 /** One complete `program()` through the hook, driven to whatever end it
  *  reaches (armed, or a typed failure — the hook's `program()` never
  *  rejects; it maps).
@@ -2509,16 +2546,33 @@ describe("useMonitorSession: failures", () => {
   });
 
   it("an untyped throw out of program() is still typed by the time a screen sees it", async () => {
-    const { result, fake } = harness({ program: TWO_INTERVALS });
-    await connect(result);
-
     // D6: while the link is down every cached GATT handle is dead and a
     // write on one throws — `sendSequence` does not wrap that, so a raw
-    // Error escapes `program()`. The record is not open yet, so no P3b
+    // Error escapes `program()`. Reproduced directly on `write()`
+    // (`deadHandleTransport`, F1 fix round 1's own doc comment) rather
+    // than via `injectDisconnect()`: that path now disposes `driverRef`
+    // itself (the CRITICAL fix — see the F1 tests above), so it reaches
+    // `transport-missing` before any write is even attempted, and can no
+    // longer produce THIS mapping. The record is not open yet, so no P3b
     // close is involved; this is purely the mapping.
-    act(() => {
-      fake.injectDisconnect();
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
     });
+    const transport = deadHandleTransport(fake);
+    const { result } = renderHook(() =>
+      useMonitorSession({
+        createTransport: () => transport,
+        now: () => t0,
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: () => (): void => undefined,
+        },
+      }),
+    );
+    await connect(result);
+
     await act(async () => {
       await result.current.program(TWO_INTERVALS, TWO_IDENTITY);
       await flush();
@@ -2539,16 +2593,34 @@ describe("useMonitorSession: failures", () => {
   // `ConnectedInterstitial.tsx`'s retry actually branches on) standing.
   // Try Again then called `program()` again against the SAME dead driver
   // forever: the LINK-FAILED loop that cost James a reinstall.
+  //
+  // F1 fix round 1: reproduced via `deadHandleTransport` (see the test
+  // above), not `injectDisconnect()` — that path disposes `driverRef`
+  // itself now, which is a DIFFERENT disposal (this test's subject is
+  // `fail()`'s own, Phase LL Task 3, unchanged by this fix round; the F1
+  // tests above cover the disconnected-event one).
   it("a failed program() disposes: deviceName clears, the transport goes down, and the driver ref is gone (no longer reachable by a further program())", async () => {
-    const { result, fake, transport } = harness({ program: TWO_INTERVALS });
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
+    });
+    const transport = deadHandleTransport(fake);
+    const { result } = renderHook(() =>
+      useMonitorSession({
+        createTransport: () => transport,
+        now: () => t0,
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: () => (): void => undefined,
+        },
+      }),
+    );
     await connect(result);
     expect(result.current.deviceName).toBe(DEVICE_NAME);
 
     // The same D6 link-failed reproduction the test above uses: the GATT
     // handle dies, program() throws synchronously, `fail()` runs.
-    act(() => {
-      fake.injectDisconnect();
-    });
     const disconnectsBefore = transport.disconnects;
     await act(async () => {
       await result.current.program(TWO_INTERVALS, TWO_IDENTITY);
@@ -2570,13 +2642,13 @@ describe("useMonitorSession: failures", () => {
     // a cleared ref fails `transport-missing` immediately, rather than
     // reaching the SAME stale, already-dead driver a second time (which
     // today would repeat `link-failed` forever — the loop itself).
-    const writesBefore = transport.wireWrites;
+    const writeAttemptsBefore = transport.writeAttempts;
     await act(async () => {
       await result.current.program(TWO_INTERVALS, TWO_IDENTITY);
       await flush();
     });
     expect(result.current.error?.reason).toBe("transport-missing");
-    expect(transport.wireWrites).toBe(writesBefore);
+    expect(transport.writeAttempts).toBe(writeAttemptsBefore);
   });
 
   // Phase LL Task 3 (§3, F-6): the already-connected guard's outcome is a
@@ -3166,6 +3238,67 @@ describe("useMonitorSession: the seams and their defaults", () => {
     });
 
     expect(result.current.phase).toBe("ended");
+  });
+
+  // F1 fix round 1 (cohort-unlock spec §1 review, CRITICAL): before this
+  // fix, `disconnected` left `driverRef` populated with the dead driver
+  // forever — nothing but `teardown()`/`fail()`/`cancel()` ever cleared
+  // it — so `connect()`'s own opening guard (`driverRef.current !==
+  // null`) silently no-op'd a retry from this exact state. The component
+  // side (`ConnectedInterstitial.test.tsx`) proves the button renders
+  // enabled and taps `connect()` once; this proves that call is not a
+  // no-op — a real second scan/connect/driver happens, the same as the
+  // walk's own Cancel -> Connect recovery.
+  it("F1: connect() again after a disconnected event reaches a genuinely fresh scan, not a driverRef !== null no-op", async () => {
+    const { result, fake, transport } = harness({
+      program: TWO_INTERVALS,
+      events: [status(100, { elapsedSeconds: 20, distanceMeters: 70 })],
+    });
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+    tick(fake, 100);
+    expect(result.current.phase).toBe("live");
+    expect(transport.scans).toBe(1);
+
+    act(() => {
+      fake.injectDisconnect();
+    });
+    expect(result.current.phase).toBe("disconnected");
+    // The disposal itself: the dead driver's `disconnect()` reaches the
+    // transport — proof the fix actually clears `driverRef`, not merely
+    // that a later `connect()` happens to work despite it.
+    expect(transport.disconnects).toBe(1);
+
+    await connect(result);
+
+    // Before this fix: `connect()`'s `driverRef.current !== null` guard
+    // returned immediately, `transport.scans` stayed at 1, and `phase`
+    // stayed stuck at `"disconnected"` forever — exactly the walk's dead
+    // button, at the hook layer.
+    expect(transport.scans).toBe(2);
+    expect(result.current.phase).toBe("pairing");
+  });
+
+  it("F1: deviceName survives the disconnected-event disposal — the LOST header's own data", async () => {
+    const { result, fake } = harness({
+      program: TWO_INTERVALS,
+      events: [status(100, { elapsedSeconds: 20, distanceMeters: 70 })],
+    });
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+    tick(fake, 100);
+    expect(result.current.deviceName).toBe(DEVICE_NAME);
+
+    act(() => {
+      fake.injectDisconnect();
+    });
+
+    // Unlike `fail()`, which clears `deviceName` in the same `update()` as
+    // its phase flip, the disconnected-event disposal must NOT: the
+    // disconnected-WITH-run surface renders its LOST header
+    // ("PM5 … · LOST") straight from `session.deviceName`.
+    expect(result.current.phase).toBe("disconnected");
+    expect(result.current.deviceName).toBe(DEVICE_NAME);
   });
 
   it("a radio that refuses to hang up does not take the unmount down with it", async () => {
