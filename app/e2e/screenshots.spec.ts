@@ -524,6 +524,15 @@ test("today-onboarding", async ({ page }) => {
   // loading-suppression fallback instead of the real "0 OF 4 READ" a fresh
   // account actually shows once both have loaded.
   await expect(page.locator(".starthere-label")).toContainText("READ");
+  // Scroll the WHOLE doors card into frame first: the third door — the
+  // one carrying the strong-and-steady ruling's sub-copy — sits below
+  // the 844px fold under the START HERE block, and a capture that
+  // scrolls past the feature is recurring-failure #7's exact shape.
+  // (fullPage was tried and rejected: the fixed tab bar paints over
+  // door 3 mid-page. START HERE's own copy is on record in today.png.)
+  await page
+    .getByRole("link", { name: /Row to find my baseline/ })
+    .evaluate((el) => el.scrollIntoView({ block: "center" }));
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "today-onboarding.png"),
   });
