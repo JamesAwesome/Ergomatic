@@ -4,6 +4,7 @@ import { signOut as authSignOut } from "./adapters/auth";
 import { useArticleReads } from "./api/useArticleReads";
 import { startHereReadCount } from "./today/startHereSteps";
 import BaselineEditor from "./you/BaselineEditor";
+import RetestShortcut from "./you/RetestShortcut";
 
 function initials(name: string): string {
   return name
@@ -49,6 +50,11 @@ export default function You({
       </section>
       <h2 className="section-heading">BASELINES</h2>
       <BaselineEditor />
+      {/* Phase BL PR B: row the 6k / race the 2k, one tap from the
+          numbers to the session that measures them — the shortcut's own
+          doc comment (you/RetestShortcut.tsx) covers identity and the
+          reused start guards. */}
+      <RetestShortcut />
       {/* Task 7 (design spec §"Learning the app on You"): the mock's other
           settings rows (PRE-WORKOUT COUNTDOWN, PACE TOLERANCE, ACCENT
           COLOR) are filler (DEVIATIONS.md/handoff README §7) and are

@@ -8904,3 +8904,32 @@ section:not(.news-pinned) .news-row:last-of-type {
   margin-top: 16px;
   max-width: 420px;
 }
+
+/* Phase BL PR B — the You-screen re-test shortcut (RetestShortcut.tsx),
+   directly under the baselines card. Two compact L3 buttons (48px, over
+   the 44px floor); a staged replace confirm reuses .baseline-confirm
+   wholesale and takes the full row width so its two 44px actions never
+   squeeze into a half column. Caption is the shared .mono-status ink
+   (--ink-3 on --page, 7.29:1). */
+.retest {
+  margin-top: 12px;
+}
+
+.retest-caption {
+  margin: 0 0 8px;
+}
+
+.retest-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.retest-item {
+  flex: 1 1 0;
+  min-width: 140px;
+}
+
+.retest-item-staged {
+  flex-basis: 100%;
+}
