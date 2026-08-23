@@ -69,8 +69,8 @@ export function buildDraft(w: {
  *  draft) is gone (fast-follow spec §3). `withNudge` takes a cumulative
  *  DELTA against a zeroed draft, so applying the whole stored preview
  *  value once (WorkoutDetail's own live `nudges` state, or `{}` for a
- *  caller with no preview surface, e.g. BaselineCard) reproduces the exact
- *  cumulative nudge the preview showed. Moved here from
+ *  caller with no preview surface — BaselineCard was one until BL PR C
+ *  deleted it) reproduces the exact cumulative nudge the preview showed. Moved here from
  *  `workout/WorkoutDetail.tsx` (previously the Connect door's own local
  *  helper) so `useStartWorkout.ts` — a second, sibling caller — can share
  *  the one implementation rather than growing a duplicate. */

@@ -162,7 +162,7 @@ describe("Recommend (door 1)", () => {
   // exists server-side is shown AS the rower's own, and the accept writes
   // exactly the fields the rower saw offered — the missing side only.
   describe("an already-set number is never overwritten (M8)", () => {
-    it("shows the rower's own 6k (not the table's) marked YOURS, and offers the estimate only for the missing 2k", async () => {
+    it("shows the rower's own 6k (not the table's) marked YOURS, and the missing 2k as a derivation from it", async () => {
       mockReady({ k2Seconds: null, k6Seconds: 130 });
       await renderRecommend();
       await answerBoth();
@@ -170,34 +170,75 @@ describe("Recommend (door 1)", () => {
       expect(screen.getByText("2:10.0")).toBeInTheDocument();
       expect(screen.queryByText("2:32.0")).not.toBeInTheDocument();
       expect(screen.getByText("6K BASELINE · YOURS")).toBeInTheDocument();
-      // The missing 2k side still shows the cell's estimate.
-      expect(screen.getByText("2:25.0")).toBeInTheDocument();
+      // F1: the missing 2k shows 130 - 7 = 123 (2:03.0), labeled as the
+      // derivation it is — never the table's cell.
+      expect(screen.getByText("2:03.0")).toBeInTheDocument();
+      expect(
+        screen.getByText("2K BASELINE · FROM YOUR 6K (−7s)"),
+      ).toBeInTheDocument();
     });
 
-    it("the accept writes ONLY the missing side, stamped estimated", async () => {
+    // F1, James's ruling (triad review, 2026-08-23): beside an EXISTING
+    // number, the missing side fills FROM THAT NUMBER via the shipped
+    // derivation (±K2_K6_OFFSET_SECONDS), written `derived` — the
+    // rower's own number is better evidence than two survey answers,
+    // and the pair is consistent by construction. The table only fills
+    // the both-missing case.
+    it("F1 RULING: stored k6=130, questionnaire answered -> the accept writes k2=123 `derived` (from the rower's own 6k), never the table's cell", async () => {
+      const save = mockReady({ k2Seconds: null, k6Seconds: 130 });
+      await renderRecommend();
+      await answerBoth();
+      // The offer screen shows the DERIVED value for the missing side
+      // (130 - 7 = 123 = 2:03.0), labeled in the DeriveSlot vocabulary
+      // so the rower sees what they are consenting to.
+      expect(screen.getByText("2:03.0")).toBeInTheDocument();
+      expect(
+        screen.getByText("2K BASELINE · FROM YOUR 6K (−7s)"),
+      ).toBeInTheDocument();
+      // The table's cell for this answer pair (145 = 2:25.0) is NOT shown.
+      expect(screen.queryByText("2:25.0")).not.toBeInTheDocument();
+
+      await userEvent.click(
+        screen.getByRole("button", { name: "Use this baseline" }),
+      );
+      expect(save).toHaveBeenCalledExactlyOnceWith({
+        k2Seconds: 123,
+        k2Source: "derived",
+      });
+    });
+
+    it("the accept's body carries NO key for the existing side at all (M8's wire shape)", async () => {
       const save = mockReady({ k2Seconds: null, k6Seconds: 130 });
       await renderRecommend();
       await answerBoth();
       await userEvent.click(
         screen.getByRole("button", { name: "Use this baseline" }),
       );
-      expect(save).toHaveBeenCalledExactlyOnceWith({
-        k2Seconds: 145,
-        k2Source: "estimated",
-      });
+      expect(save).toHaveBeenCalledTimes(1);
+      expect(save).not.toHaveBeenCalledWith(
+        expect.objectContaining({ k6Seconds: expect.anything() }),
+      );
+      expect(save).not.toHaveBeenCalledWith(
+        expect.objectContaining({ k6Source: expect.anything() }),
+      );
     });
 
-    it("mirrored: an already-set 2k stays out of the body; only the 6k estimate is written", async () => {
+    it("mirrored: an already-set 2k stays out of the body; the 6k fills as 2k + 7 = 127, `derived` (F1)", async () => {
       const save = mockReady({ k2Seconds: 120, k6Seconds: null });
       await renderRecommend();
       await answerBoth();
       expect(screen.getByText("2K BASELINE · YOURS")).toBeInTheDocument();
+      expect(
+        screen.getByText("6K BASELINE · FROM YOUR 2K (+7s)"),
+      ).toBeInTheDocument();
+      // 120 + 7 = 127 = 2:07.0.
+      expect(screen.getByText("2:07.0")).toBeInTheDocument();
       await userEvent.click(
         screen.getByRole("button", { name: "Use this baseline" }),
       );
       expect(save).toHaveBeenCalledExactlyOnceWith({
-        k6Seconds: 152,
-        k6Source: "estimated",
+        k6Seconds: 127,
+        k6Source: "derived",
       });
     });
   });
@@ -265,21 +306,58 @@ describe("Recommend (door 1)", () => {
       });
     });
 
-    it("an already-set side prefils with the SERVER value and, untouched, stays out of the body (M8 holds here too)", async () => {
+    it("an already-set side prefils with the SERVER value and, untouched, stays out of the body; the missing side saves its derived fill (M8 + F1)", async () => {
       const save = mockReady({ k2Seconds: null, k6Seconds: 130 });
       await renderRecommend();
       await answerBoth();
       await userEvent.click(
         screen.getByRole("button", { name: "Adjust the numbers first" }),
       );
-      // Prefilled with the rower's own 130 (2:10.0), not the cell's 152.
+      // Prefilled with the rower's own 130 (2:10.0) and the derived 123
+      // (2:03.0) — never the cell's numbers.
       expect(screen.getByText("2:10.0")).toBeInTheDocument();
+      expect(screen.getByText("2:03.0")).toBeInTheDocument();
       await userEvent.click(
         screen.getByRole("button", { name: "Save baseline" }),
       );
       expect(save).toHaveBeenCalledExactlyOnceWith({
-        k2Seconds: 145,
-        k2Source: "estimated",
+        k2Seconds: 123,
+        k2Source: "derived",
+      });
+    });
+
+    it("adjust: a derived fill nudged away and back saves `derived` still — the fill's own value-identity predicate", async () => {
+      const save = mockReady({ k2Seconds: null, k6Seconds: 130 });
+      await renderRecommend();
+      await answerBoth();
+      await userEvent.click(
+        screen.getByRole("button", { name: "Adjust the numbers first" }),
+      );
+      await userEvent.click(screen.getByRole("button", { name: "2k faster" }));
+      await userEvent.click(screen.getByRole("button", { name: "2k slower" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: "Save baseline" }),
+      );
+      expect(save).toHaveBeenCalledExactlyOnceWith({
+        k2Seconds: 123,
+        k2Source: "derived",
+      });
+    });
+
+    it("adjust: a derived fill the rower MOVES saves manual — the number is theirs now", async () => {
+      const save = mockReady({ k2Seconds: null, k6Seconds: 130 });
+      await renderRecommend();
+      await answerBoth();
+      await userEvent.click(
+        screen.getByRole("button", { name: "Adjust the numbers first" }),
+      );
+      await userEvent.click(screen.getByRole("button", { name: "2k faster" }));
+      await userEvent.click(
+        screen.getByRole("button", { name: "Save baseline" }),
+      );
+      expect(save).toHaveBeenCalledExactlyOnceWith({
+        k2Seconds: 122.5,
+        k2Source: "manual",
       });
     });
 
@@ -294,11 +372,33 @@ describe("Recommend (door 1)", () => {
       await userEvent.click(
         screen.getByRole("button", { name: "Save baseline" }),
       );
+      // The moved 6k saves manual; the untouched 2k still saves its
+      // derived fill (derived from the STORED 130, the number the fill
+      // was offered from).
+      expect(save).toHaveBeenCalledExactlyOnceWith({
+        k2Seconds: 123,
+        k2Source: "derived",
+        k6Seconds: 130.5,
+        k6Source: "manual",
+      });
+    });
+
+    it("falls back to the table cell (`estimated`) when the derivation would leave the storable band", async () => {
+      // A stored 6k of 62s/500m derives k2 = 55 < MIN_SPLIT — the You
+      // editor accepts the full band, so this state is storable even
+      // though this flow never writes it. The fill degrades to the
+      // table's cell, honestly re-tagged.
+      const save = mockReady({ k2Seconds: null, k6Seconds: 62 });
+      await renderRecommend();
+      await answerBoth();
+      expect(screen.getByText("2:25.0")).toBeInTheDocument();
+      expect(screen.queryByText(/FROM YOUR 6K/)).not.toBeInTheDocument();
+      await userEvent.click(
+        screen.getByRole("button", { name: "Use this baseline" }),
+      );
       expect(save).toHaveBeenCalledExactlyOnceWith({
         k2Seconds: 145,
         k2Source: "estimated",
-        k6Seconds: 130.5,
-        k6Source: "manual",
       });
     });
 
@@ -341,11 +441,14 @@ describe("Recommend (door 1)", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "Save baseline" }),
     );
+    // The untouched missing 6k saves its F1 fill: derived from the
+    // STORED 120 (the offer the rower saw), even though the 2k moved
+    // afterward.
     expect(save).toHaveBeenCalledExactlyOnceWith({
       k2Seconds: 120.5,
       k2Source: "manual",
-      k6Seconds: 152,
-      k6Source: "estimated",
+      k6Seconds: 127,
+      k6Source: "derived",
     });
   });
 

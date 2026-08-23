@@ -7,9 +7,11 @@ import { clearMonitorRun, loadMonitorRun } from "../monitor/monitorRun";
 
 /** The shape `startSession`/`handleStart` actually need from a workout —
  *  structurally compatible with `useWorkouts.ts`'s `LibraryWorkout` (this
- *  screen's own caller) without importing it, so a future second caller
- *  (Phase 6I's `BaselineCard`, per the spec) can hand this a designated
- *  onboarding workout without needing a full `LibraryWorkout` record. */
+ *  screen's own caller) without importing it, so any second caller can
+ *  hand this a designated onboarding workout without needing a full
+ *  `LibraryWorkout` record. (Phase 6I's BaselineCard was that second
+ *  caller until Phase BL PR C replaced it with the pure-navigation doors
+ *  card; today WorkoutDetail is the only caller, and the seam stays.) */
 export interface StartableWorkout {
   id: string;
   title: string;
@@ -51,19 +53,20 @@ export interface UseStartWorkoutResult {
 }
 
 /** WorkoutDetail's own start-guard flow (7B/6B-era `handleStart`/
- *  `startSession`), extracted verbatim so a second caller (Phase 6I's
- *  no-baseline `BaselineCard`, per the design spec) gets the SAME
- *  unlogged-run staged confirm, live-MonitorRun confirm, draft build/save,
- *  and cross-clears — a bare navigate-and-start would reintroduce the F5
- *  data-loss class this flow exists to prevent. Deliberately NOT extended
+ *  `startSession`), extracted verbatim so any second caller (Phase 6I's
+ *  BaselineCard then; none today — BL PR C's doors card only navigates)
+ *  gets the SAME unlogged-run staged confirm, live-MonitorRun confirm,
+ *  draft build/save, and cross-clears — a bare navigate-and-start would
+ *  reintroduce the F5 data-loss class this flow exists to prevent. Deliberately NOT extended
  *  to cover WorkoutDetail's OWN Connect/nudge paths (`handleConnectProceed`,
  *  `handleRowInstead`) — those stay in WorkoutDetail.tsx, out of this task's
  *  scope.
  *
  *  `nudges` (fast-follow spec §3, entry 1): the caller's own live preview
  *  nudge state, baked into the draft via `buildNudgedDraft` — WorkoutDetail
- *  passes its card's real state, BaselineCard passes `{}` (no preview
- *  surface there). Closing over the CURRENT `nudges` value on every render
+ *  passes its card's real state; a caller with no preview surface passes
+ *  `{}` (BaselineCard did, before BL PR C deleted it). Closing over the
+ *  CURRENT `nudges` value on every render
  *  is deliberate, not a bug: a fresh closure captures whatever the caller's
  *  own state holds at the moment Start is actually pressed, the same way
  *  every other per-render event handler in this codebase already works. */

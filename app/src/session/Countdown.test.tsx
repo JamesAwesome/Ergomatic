@@ -254,7 +254,8 @@ describe("Countdown", () => {
   // reach Countdown with `resolvedBaselines === null` for a SPLIT-REF draft
   // is a direct/deep navigation that skipped that guard entirely. Rather
   // than build a run against a dummy pair, Countdown bounces to /today —
-  // where BaselineCard, the no-baselines door, lives. Regression pin: this
+  // where the three-door onboarding card (BL PR C; BaselineCard before
+  // it) lives. Regression pin: this
   // must stay true even though the identical predicate now lets an
   // effort-only draft (the test above) through.
   it("still redirects to /today without building a run for a SPLIT-REF workout when baselines are ready but unset", async () => {

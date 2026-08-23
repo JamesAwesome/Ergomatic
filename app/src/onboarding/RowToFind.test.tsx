@@ -44,6 +44,33 @@ function mockWorkouts(
   vi.doMock("../api/useWorkouts", () => ({ useWorkouts: () => state }));
 }
 
+// F2: the 2k chip's NOT SET segment keys on the real pair state. Default
+// every test to the doors' normal case (both missing) unless it says
+// otherwise.
+function mockBaselines(
+  baselines: { k2Seconds: number | null; k6Seconds: number | null } = {
+    k2Seconds: null,
+    k6Seconds: null,
+  },
+) {
+  vi.doMock("../api/useBaselines", () => ({
+    useBaselines: () => ({
+      state: "ready",
+      baselines,
+      save: vi.fn(async () => {}),
+    }),
+  }));
+}
+
+function mockBaselinesUnready(state: "loading" | "error") {
+  vi.doMock("../api/useBaselines", () => ({
+    useBaselines: () =>
+      state === "loading"
+        ? { state: "loading" }
+        : { state: "error", retry: vi.fn() },
+  }));
+}
+
 // Probe standing in for WorkoutDetail: renders the routed :id AND the
 // carried location.state.from (RetestShortcut.test.tsx's idiom).
 function DetailProbe() {
@@ -72,10 +99,12 @@ async function renderRow() {
 afterEach(() => {
   vi.resetModules();
   vi.doUnmock("../api/useWorkouts");
+  vi.doUnmock("../api/useBaselines");
 });
 
 describe("RowToFind (door 3)", () => {
   it("renders both distance cards with the ruled copy: strong-and-steady 6k (not-a-sprint chip), all-out 2k", async () => {
+    mockBaselines();
     mockWorkouts({
       state: "ready",
       workouts: [
@@ -103,6 +132,7 @@ describe("RowToFind (door 3)", () => {
   });
 
   it("the 6k Start navigates to the designated GLOBAL row's detail with from=/onboarding/row", async () => {
+    mockBaselines();
     mockWorkouts({
       state: "ready",
       workouts: [
@@ -119,6 +149,7 @@ describe("RowToFind (door 3)", () => {
   });
 
   it("the 2k Start navigates to the 2K Test's detail the same way", async () => {
+    mockBaselines();
     mockWorkouts({
       state: "ready",
       workouts: [
@@ -135,6 +166,7 @@ describe("RowToFind (door 3)", () => {
   });
 
   it("targets the GLOBAL row, never a rower's own same-titled custom workout listed first", async () => {
+    mockBaselines();
     mockWorkouts({
       state: "ready",
       workouts: [
@@ -155,6 +187,7 @@ describe("RowToFind (door 3)", () => {
   });
 
   it("a missing designated row hides its card only (defensive)", async () => {
+    mockBaselines();
     mockWorkouts({
       state: "ready",
       workouts: [seedWorkout(ONBOARDING_TITLES.k2)],
@@ -166,7 +199,50 @@ describe("RowToFind (door 3)", () => {
     expect(screen.getByText("Race a 2k")).toBeInTheDocument();
   });
 
+  // F2 (triad review): NOT SET only when true.
+  it("drops the 2k chip's NOT SET segment when the 2k is actually set (partial pair, superset render)", async () => {
+    mockBaselines({ k2Seconds: 118, k6Seconds: null });
+    mockWorkouts({
+      state: "ready",
+      workouts: [
+        seedWorkout(ONBOARDING_TITLES.k6),
+        seedWorkout(ONBOARDING_TITLES.k2),
+      ],
+    });
+    await renderRow();
+    expect(
+      screen.getByText("2K BASELINE · ALL OUT, EMPTY THE TANK"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/NOT SET/)).not.toBeInTheDocument();
+  });
+
+  it("keeps NOT SET on the doors' normal both-missing case", async () => {
+    mockBaselines({ k2Seconds: null, k6Seconds: null });
+    mockWorkouts({
+      state: "ready",
+      workouts: [seedWorkout(ONBOARDING_TITLES.k2)],
+    });
+    await renderRow();
+    expect(
+      screen.getByText("2K BASELINE · NOT SET · ALL OUT, EMPTY THE TANK"),
+    ).toBeInTheDocument();
+  });
+
+  it("omits the NOT SET claim while the pair is unknown (baselines still loading) — omitting a claim is not a claim", async () => {
+    mockBaselinesUnready("loading");
+    mockWorkouts({
+      state: "ready",
+      workouts: [seedWorkout(ONBOARDING_TITLES.k2)],
+    });
+    await renderRow();
+    expect(
+      screen.getByText("2K BASELINE · ALL OUT, EMPTY THE TANK"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/NOT SET/)).not.toBeInTheDocument();
+  });
+
   it("Back returns to Today", async () => {
+    mockBaselines();
     mockWorkouts({
       state: "ready",
       workouts: [
@@ -180,6 +256,7 @@ describe("RowToFind (door 3)", () => {
   });
 
   it("shows loading, and an error state with retry (a full screen owes one, unlike the You shortcut)", async () => {
+    mockBaselines();
     mockWorkouts({ state: "loading" });
     await renderRow();
     expect(screen.getByText("LOADING…")).toBeInTheDocument();
@@ -187,6 +264,7 @@ describe("RowToFind (door 3)", () => {
     vi.resetModules();
 
     const retry = vi.fn();
+    mockBaselines();
     mockWorkouts({ state: "error", retry });
     await renderRow();
     expect(

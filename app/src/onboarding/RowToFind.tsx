@@ -3,6 +3,7 @@ import {
   ONBOARDING_DURATION_COPY,
   ONBOARDING_TITLES,
 } from "../../domain/onboarding.js";
+import { useBaselines } from "../api/useBaselines";
 import { useWorkouts } from "../api/useWorkouts";
 
 /** Door 3 — "Row to find my baseline" (canvas RowPath): the distance
@@ -37,6 +38,19 @@ import { useWorkouts } from "../api/useWorkouts";
 export default function RowToFind() {
   const navigate = useNavigate();
   const workoutsState = useWorkouts();
+  // F2 (triad review): the 2k chip's "NOT SET ·" segment renders only
+  // when the 2k actually IS unset — both cards render regardless of a
+  // partial pair (the superset ruling), so on an account whose 2k is the
+  // SET side the canvas's unconditional copy would assert a plain lie.
+  // The claim is made only when KNOWN true (baselines ready and null);
+  // loading/error simply omit it — the screen never blocks on this
+  // fetch, and omitting a claim is not a claim. The 6k chip carries no
+  // set-state segment at all since the strong-and-steady ruling, so
+  // there is no sibling to condition.
+  const baselinesState = useBaselines();
+  const k2Unset =
+    baselinesState.state === "ready" &&
+    baselinesState.baselines.k2Seconds === null;
 
   if (workoutsState.state === "loading") {
     return (
@@ -110,7 +124,9 @@ export default function RowToFind() {
             </span>
           </div>
           <span className="onb-chip mono-status">
-            2K BASELINE · NOT SET · ALL OUT, EMPTY THE TANK
+            {k2Unset
+              ? "2K BASELINE · NOT SET · ALL OUT, EMPTY THE TANK"
+              : "2K BASELINE · ALL OUT, EMPTY THE TANK"}
           </span>
           <Link
             to={`/library/${k2.id}`}

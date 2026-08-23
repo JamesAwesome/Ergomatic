@@ -1,15 +1,25 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useBaselines, type BaselinesPatch } from "../api/useBaselines";
+import {
+  K2_K6_OFFSET_SECONDS,
+  deriveK2FromK6,
+  deriveK6FromK2,
+} from "../../domain/deriveBaseline.js";
 import { fmtSplit } from "../../domain/format.js";
 import {
   estimateFor,
-  type BaselineEstimate,
   type Cardio,
   type Experience,
 } from "../../domain/estimateBaseline.js";
 import { BaselineRow } from "../you/BaselineEditor";
-import { initDraft, nudge, type DraftState } from "../you/baselineDraft";
+import {
+  MAX_SPLIT,
+  MIN_SPLIT,
+  initDraft,
+  nudge,
+  type DraftState,
+} from "../you/baselineDraft";
 import OptionGroup from "./OptionGroup";
 
 // Canvas Question1 — the four experience options, verbatim. The VALUES are
@@ -36,6 +46,14 @@ const HONESTY_CHIP =
 
 type Step = "experience" | "cardio" | "offer" | "adjust";
 
+/** A missing side's offered fill: the table's cell (`estimated`, the
+ *  both-missing case) or a derivation from the rower's own stored
+ *  counterpart (`derived`, F1's ruling). */
+interface Fill {
+  value: number;
+  source: "estimated" | "derived";
+}
+
 /** The canvas's three mono step dots (Question1/Question2/Recommendation):
  *  filled up to the current step. Decorative — the visually-hidden text
  *  carries the same fact for a screen reader. The adjust step keeps 3/3
@@ -56,21 +74,26 @@ function StepDots({ filled }: { filled: 1 | 2 | 3 }) {
 /** One recommendation row (canvas Recommendation): mono eyebrow label,
  *  mono-large split with a /500m suffix. `yours` marks a number that
  *  already exists server-side — M8: it is shown AS the rower's own, never
- *  replaced by the table's cell (no canvas artboard draws this partial
- *  state; the ` · YOURS` suffix is the stated design, DEVIATIONS row). */
+ *  replaced or rewritten (no canvas artboard draws this partial state;
+ *  the ` · YOURS` suffix is the stated design, DEVIATIONS row).
+ *  `suffix` labels a derived fill in the DeriveSlot vocabulary
+ *  ("FROM YOUR 6K (−7s)") so the rower sees exactly what they are
+ *  consenting to write. */
 function OfferRow({
   label,
   seconds,
   yours,
+  suffix,
 }: {
   label: "2K BASELINE" | "6K BASELINE";
   seconds: number;
   yours: boolean;
+  suffix?: string;
 }) {
   return (
     <div className="onb-offer-row">
       <span className="onb-offer-label mono-status">
-        {yours ? `${label} · YOURS` : label}
+        {yours ? `${label} · YOURS` : suffix ? `${label} · ${suffix}` : label}
       </span>
       <span className="onb-offer-value">
         {fmtSplit(seconds)}
@@ -167,30 +190,65 @@ function ReadyRecommend({
   // chosen, and Back never clears one).
   const cell = estimateFor(experience!, cardio!);
   // M8, binding: a number that already exists server-side is the rower's
-  // own — shown as such, never replaced by the table's cell, and never
-  // written by the accept. The offer per side is the server value where
-  // one exists, the estimate where none does.
+  // own — shown as such, never replaced, and never written by the accept.
+  //
+  // The missing side's FILL (F1, James's ruling at the triad review,
+  // 2026-08-23): beside an existing number, the fill comes FROM THAT
+  // NUMBER via the shipped derivation (±K2_K6_OFFSET_SECONDS), written
+  // `derived` — the rower's own number is better evidence than two
+  // survey answers, and the pair is consistent by construction. Only the
+  // both-missing case uses the table (`estimated`, both sides). Should a
+  // derivation ever leave the storable band (needs a stored split within
+  // 7s of the 60/240 edges — unreachable from this flow's own writes,
+  // but the You editor accepts the full band), the fill falls back to
+  // the table's cell, honestly re-tagged `estimated`.
   const k2Existing = baselines.k2Seconds !== null;
   const k6Existing = baselines.k6Seconds !== null;
-  const offered = {
-    k2: baselines.k2Seconds ?? cell.k2Seconds,
-    k6: baselines.k6Seconds ?? cell.k6Seconds,
+  const inBand = (v: number) => v >= MIN_SPLIT && v <= MAX_SPLIT;
+  const fillFor = (which: "k2" | "k6"): Fill => {
+    const counterpart =
+      which === "k2" ? baselines.k6Seconds : baselines.k2Seconds;
+    if (counterpart !== null) {
+      const derived =
+        which === "k2"
+          ? deriveK2FromK6(counterpart)
+          : deriveK6FromK2(counterpart);
+      if (inBand(derived)) return { value: derived, source: "derived" };
+    }
+    return {
+      value: which === "k2" ? cell.k2Seconds : cell.k6Seconds,
+      source: "estimated",
+    };
   };
+  const fills = { k2: fillFor("k2"), k6: fillFor("k6") };
+  const offered = {
+    k2: baselines.k2Seconds ?? fills.k2.value,
+    k6: baselines.k6Seconds ?? fills.k6.value,
+  };
+  // The DeriveSlot vocabulary, so what the rower sees and what gets
+  // stored agree (the editor's own "ESTIMATE FROM 6K (−7s)" family).
+  const derivedSuffix = (which: "k2" | "k6"): string | undefined =>
+    fills[which].source === "derived"
+      ? which === "k2"
+        ? `FROM YOUR 6K (−${K2_K6_OFFSET_SECONDS}s)`
+        : `FROM YOUR 2K (+${K2_K6_OFFSET_SECONDS}s)`
+      : undefined;
 
   if (step === "offer") {
     const handleUse = () => {
-      // Exactly the fields the rower saw OFFERED as estimates — an
-      // existing number stays out of the body entirely (M8). Both
+      // Exactly the fields the rower saw OFFERED, with the source they
+      // saw labeled (table -> estimated, derived-from-yours -> derived) —
+      // an existing number stays out of the body entirely (M8). Both
       // missing is the doors' normal case; both existing (reachable only
       // by racing another device) degrades to a plain navigate.
       const patch: BaselinesPatch = {};
       if (!k2Existing) {
-        patch.k2Seconds = cell.k2Seconds;
-        patch.k2Source = "estimated";
+        patch.k2Seconds = fills.k2.value;
+        patch.k2Source = fills.k2.source;
       }
       if (!k6Existing) {
-        patch.k6Seconds = cell.k6Seconds;
-        patch.k6Source = "estimated";
+        patch.k6Seconds = fills.k6.value;
+        patch.k6Source = fills.k6.source;
       }
       void doSave(patch);
     };
@@ -201,8 +259,18 @@ function ReadyRecommend({
           <StepDots filled={3} />
         </div>
         <h1 className="screen-title onb-title">Your starting baseline</h1>
-        <OfferRow label="2K BASELINE" seconds={offered.k2} yours={k2Existing} />
-        <OfferRow label="6K BASELINE" seconds={offered.k6} yours={k6Existing} />
+        <OfferRow
+          label="2K BASELINE"
+          seconds={offered.k2}
+          yours={k2Existing}
+          suffix={derivedSuffix("k2")}
+        />
+        <OfferRow
+          label="6K BASELINE"
+          seconds={offered.k6}
+          yours={k6Existing}
+          suffix={derivedSuffix("k6")}
+        />
         <span className="onb-chip mono-status">{HONESTY_CHIP}</span>
         {error && <p className="baseline-error">{error}</p>}
         <div className="onb-foot">
@@ -231,7 +299,7 @@ function ReadyRecommend({
     <AdjustStep
       key="adjust"
       baselines={baselines}
-      cell={cell}
+      fills={fills}
       prefill={offered}
       saving={saving}
       error={error}
@@ -249,18 +317,19 @@ function ReadyRecommend({
  *  THE PREFILL-PROVENANCE ANSWER, walked against the ORIGIN ruling
  *  (provenance describes where the NUMBER came from, never the act):
  *  - a server-null side always rides the body (this flow exists to fill
- *    it); its source is `estimated` while its value IS the table's cell —
- *    tapping Save is consent to write, not authorship — and `manual` the
- *    moment the rower moved it somewhere else. The exact analogue of the
- *    editor's own DeriveSlot predicate (offer-value -> derived,
- *    adjusted -> manual), including away-and-back landing on the cell
- *    value: that is the table's number again, so `estimated` stands.
+ *    it); its source is the FILL's own (`estimated` for a table cell,
+ *    `derived` for an F1 derivation from the rower's stored counterpart)
+ *    while its value still equals that fill — tapping Save is consent to
+ *    write, not authorship — and `manual` the moment the rower moved it
+ *    somewhere else. The exact analogue of the editor's own DeriveSlot
+ *    predicate, including away-and-back landing on the fill value: that
+ *    is the fill's number again, so its source stands.
  *  - a server-set side (M8) prefills with the SERVER value and stays out
  *    of the body unless the rower actually moved it — then it is a
  *    deliberate manual replacement. */
 function AdjustStep({
   baselines,
-  cell,
+  fills,
   prefill,
   saving,
   error,
@@ -268,7 +337,7 @@ function AdjustStep({
   onBack,
 }: {
   baselines: { k2Seconds: number | null; k6Seconds: number | null };
-  cell: BaselineEstimate;
+  fills: { k2: Fill; k6: Fill };
   prefill: { k2: number; k6: number };
   saving: boolean;
   error: string | null;
@@ -281,7 +350,6 @@ function AdjustStep({
 
   const handleSave = () => {
     const patch: BaselinesPatch = {};
-    const estimateValue = { k2: cell.k2Seconds, k6: cell.k6Seconds };
     for (const which of ["k2", "k6"] as const) {
       const server = which === "k2" ? baselines.k2Seconds : baselines.k6Seconds;
       const draft = state.draft[which];
@@ -289,7 +357,7 @@ function AdjustStep({
         // Always written: filling this side is what the flow is FOR.
         patch[which === "k2" ? "k2Seconds" : "k6Seconds"] = draft;
         patch[which === "k2" ? "k2Source" : "k6Source"] =
-          draft === estimateValue[which] ? "estimated" : "manual";
+          draft === fills[which].value ? fills[which].source : "manual";
       } else if (draft !== server) {
         patch[which === "k2" ? "k2Seconds" : "k6Seconds"] = draft;
         patch[which === "k2" ? "k2Source" : "k6Source"] = "manual";

@@ -16,10 +16,13 @@
  *    Torokhtiy, "What Is Good Rowing Pace",
  *    https://torokhtiy.com/blogs/guides/what-is-a-good-rowing-pace
  *    gives beginners 2:30-2:45).
- *  - A beginner 2K around 2:00-2:15/500m or slower is normal (SECONDARY:
- *    aggregated beginner guides, e.g. ErgMonkey
- *    https://ergmonkey.com/2025/01/beginners-guide-to-reading-rowing-performance-charts/
- *    and RowingCrazy https://www.rowingcrazy.com/what-is-a-good-rowing-pace/ ).
+ *  - A beginner 2K of 2:00/500m or slower (men) / 2:15 or slower (women)
+ *    is a normal start (SECONDARY: ErgMonkey alone,
+ *    https://ergmonkey.com/2025/01/beginners-guide-to-reading-rowing-performance-charts/ ).
+ *    Torokhtiy separately places INTERMEDIATE rowers at 2:00-2:30
+ *    (SECONDARY, same guide as above); RowingCrazy gives only the
+ *    2:30-3:00 initial band and no beginner-2K number — attributed
+ *    per source, not bundled (triad review F5).
  *  - Concept2's own blog ("500m Split. What does it mean?",
  *    https://www.concept2.com/blog/500m-split-what-does-it-mean ) anchors
  *    2:00/500m as the pace of a competitive ~8:00 2K goal — i.e. genuinely
@@ -97,8 +100,9 @@ export const RECREATIONAL_FAST_END_SECONDS = 135;
  *    beginner anchor and the recreational fast end; technique familiarity
  *    is worth roughly one 5s step per level, same as a cardio level.
  *  - "a-lot" (raced or trained, possibly lapsed): the recreational fast
- *    end, SECONDARY (the ~2:00-2:15 "solid beginner-to-intermediate"
- *    band's slow edge, conservatively); the one exempt cell (2:10) is
+ *    end, SECONDARY (inside Torokhtiy's 2:00-2:30 intermediate band and
+ *    at ErgMonkey's beginner-women 2:15 mark, conservatively — per-source
+ *    per the header); the one exempt cell (2:10) is
  *    INFERENCE with the stated conservative bias — a returning trained
  *    rower's real 2k is likely faster, and the first test corrects it. */
 export const ESTIMATE_TABLE: Record<
@@ -146,8 +150,8 @@ export const ESTIMATE_TABLE: Record<
     starting: { k2Seconds: 140, k6Seconds: 147 },
     // 2:20 / 2:27 — INFERENCE.
     "1-2-week": { k2Seconds: 140, k6Seconds: 147 },
-    // 2:15 / 2:22 — SECONDARY (the recreational fast end itself; the
-    // ~2:00-2:15 beginner-to-intermediate band's slow edge).
+    // 2:15 / 2:22 — SECONDARY (the recreational fast end itself; inside
+    // Torokhtiy's 2:00-2:30 intermediate band, at ErgMonkey's 2:15 mark).
     "most-days": { k2Seconds: 135, k6Seconds: 142 },
     // 2:10 / 2:17 — INFERENCE, the ONE cell allowed past the band
     // (experience=a-lot AND cardio=training-hard, the spec's own
