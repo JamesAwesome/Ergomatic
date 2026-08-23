@@ -4894,6 +4894,17 @@ next phase. One line per round, newest first.
 - **"Which days did I override, and what was the other suggestion?"** (James, 2026-08-12, during the plan-prescriptions design). Two different questions wearing one sentence. The CHECKPOINT half needs no new capture at all once Phase 8B stamps `plan_key`/`done_n` on each log: a prescription is authored, deterministic data — though NOT from the log's own `workout_title` as this entry originally said: `workout_title` is a save-time snapshot, pre-rename logs carry `First 2k` forever, and the sound method is `plan_index ∈ {6,34,62}` via the columns PW already shipped (corrected at the 2026-08-22 gate). The FREE-FORM half — what the ordinary suggestion would have been on a day the rower shuffled away — is genuinely not backfillable, because `suggest()` depends on the account's preferences and every entry's recency at that instant. It is also NOT one column: the suggestion in force lives on Today, and reaching the save means a new field on the versioned `SessionDraft` localStorage record plus every `buildDraft` entry point that never sees Today at all (Library, WorkoutDetail, BaselineCard, the manual log door). Priced accordingly here rather than smuggled into a checkpoint phase as "two nullable columns." **Trigger:** James wants the retrospective screen, not the column. Then design the screen first, and let it say which of the two questions it is actually asking.
 - **A third prescription producer and a real precedence hierarchy** (James, 2026-08-12). Phase 8A ships one producer (the plan) called from one place, so precedence is a comment, not a mechanism. **Trigger:** a second producer becomes real (8C's reservations are the likely first). Then introduce the resolver that orders them, with an asserting test, and settle what a displaced tier does — see 8C's own re-decide item.
 - **Retire `LEGACY_TITLE_RENAMES`** (the 8A seed rename map). Permanent code the moment it lands. **Trigger:** every deployed environment has booted past the rename, so no WORKOUTS row can still carry `First 6k`/`First 2k`. Scope corrected at the 2026-08-22 gate: `session_logs.workout_title` is a save-time snapshot and keeps the old spelling FOREVER — the trigger is about the workouts table only, and any query over historical log titles needs both spellings permanently.
+- **Row without a baseline set** (James, 2026-08-23, during BL PR C): a
+  no-baseline account can currently browse and row effort-ref workouts, but
+  split-ref workouts gate on `needsBaselines` and lose their targets — James
+  wants EVERY workout rowable with no baseline: targets simply absent, and
+  the set-your-baseline reminder surfaced the way the no-baseline state
+  does today. Interaction worth holding: this deliberately softens the
+  "half-functional limbo" his option-C ruling rejected at the doors
+  brainstorm — the doors stay the fast path to a FULLY working app (targets,
+  suggestions, estimates), but nobody is ever blocked from just rowing.
+  Touches `needsBaselines` gating, the timer/judge target-less rendering,
+  and the reminder's surface. **Trigger:** James schedules it.
 - **Library export/import (private JSON)**: household members share their own transcriptions. Trigger: second active rower asks for it.
 - **Auto-capture baselines from the onboarding log**: Phase 6I's no-baseline
   card ends with a manually-entered baseline (You → baseline editor) —
