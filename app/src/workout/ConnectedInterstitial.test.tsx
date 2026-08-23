@@ -1290,6 +1290,97 @@ describe("the interstitial walk, fake-driven", () => {
     );
   });
 
+  // Final-review CRITICAL, fix round 2: the walk's own scenario, end to
+  // end, on the real hook + real fake + real library fixture — the ONLY
+  // layer that can see this class of defect. The mocked-session tests
+  // (`"Try again — inert unless phase is 'failed' or 'disconnected'"`,
+  // above) can only prove `connect()` was CALLED; the hook test
+  // (`useMonitorSession.test.ts`, "F1: connect() again after a
+  // disconnected event...") stops at `phase === "pairing"`, which is
+  // exactly the state this bug strands a rower in. Reproduced RED before
+  // `handleTryAgain`'s `programmedForDeviceRef.current = null;` existed
+  // (DOM after the pump: "PM5 …Connecting✓FOUNDCONNECTINGSENDING THE
+  // WORKOUTCancel" — never "Ready when you pull"), GREEN with it.
+  it("the walk's dead button, completed: disconnected -> Try again -> reconnect -> RE-PROGRAM -> Ready when you pull", async () => {
+    vi.doUnmock("../monitor/useMonitorSession");
+    const real = await vi.importActual<
+      typeof import("../monitor/useMonitorSession")
+    >("../monitor/useMonitorSession");
+    mockUseMonitorSession.mockImplementation(real.useMonitorSession);
+
+    const fake = createFakeTransport({
+      program: FIXTURE.program,
+      deviceName: DEVICE_NAME,
+    });
+
+    render(
+      <ConnectedInterstitial
+        program={FIXTURE.program}
+        phases={FIXTURE.phases}
+        identity={FIXTURE.identity}
+        baselines={baselines}
+        nudgedCount={0}
+        onExit={vi.fn()}
+        onRowInstead={vi.fn()}
+        onEnded={vi.fn()}
+        deps={{
+          createTransport: () => fake,
+          now: () => t0,
+          driverOptions: { settleTicks: 0, prepareSettleTicks: 0 },
+        }}
+      />,
+    );
+
+    await screen.findByText("Connecting");
+    for (let i = 0; i < 30; i += 1) {
+      await act(async () => {
+        fake.tick(0);
+        await Promise.resolve();
+      });
+      if (screen.queryByText("Ready when you pull")) break;
+    }
+    await screen.findByText("Ready when you pull");
+
+    // The walk's own trigger: BT drops before the rower pulls. No run is
+    // open yet (`runOpen` only flips at the first `live` frame), so this
+    // lands on the interstitial's OWN disconnected-no-run treatment
+    // (`ConnectedInterstitial.tsx`'s Task 4 branch), not the connected
+    // surface.
+    act(() => {
+      fake.injectDisconnect();
+    });
+    const tryAgain = await screen.findByRole("button", { name: "Try again" });
+    expect(tryAgain).toBeEnabled();
+
+    // The rower turns Bluetooth back on — the radio itself recovers
+    // before the retry, same as the walk.
+    act(() => {
+      fake.completeReconnect();
+    });
+
+    await userEvent.click(tryAgain);
+
+    // The bug's own resting state, PROVEN reachable first (red evidence):
+    // without `programmedForDeviceRef`'s reset, the DOM sits here forever
+    // — "Connecting" survives, `program()` never dispatches, and the pump
+    // loop below finds no "Ready when you pull" to break on. Asserting the
+    // stuck state is transient (never the FINAL assertion) keeps this
+    // honest about what the fix actually changed.
+    for (let i = 0; i < 60; i += 1) {
+      await act(async () => {
+        fake.tick(0);
+        await Promise.resolve();
+      });
+      if (screen.queryByText("Ready when you pull")) break;
+    }
+
+    // The real proof: re-armed on the SAME PM5, past the SAME pairing
+    // effect that stranded the walk — not merely "connect() was called"
+    // (the mocked-session tests' own ceiling).
+    expect(screen.getByText("Ready when you pull")).toBeInTheDocument();
+    expect(screen.getByText(`${DEVICE_NAME} · PROGRAMMED`)).toBeInTheDocument();
+  });
+
   // Task 5's OWN self-found race (this file's header names it in spirit; the
   // fix lives in `ConnectedInterstitial.tsx`'s `programmedForDeviceRef`
   // comment): `connect()` sets `phase: "pairing"` BEFORE `transport.connect

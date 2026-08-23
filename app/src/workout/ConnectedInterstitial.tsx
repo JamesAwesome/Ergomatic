@@ -240,6 +240,21 @@ export default function ConnectedInterstitial({
   // known to exist. Reset to `null` whenever `deviceName` itself goes back
   // to `null` (a fresh `connect()` cycle, including a "no device known"
   // Try Again), so the SAME device re-pairing later fires it again.
+  //
+  // Final-review CRITICAL, fix round 2: that reset is NOT the only one
+  // needed. F1's `disconnected`-branch retry (`handleTryAgain` below)
+  // deliberately runs against a `deviceName` the disposal did NOT clear
+  // (the LOST header needs it — `useMonitorSession.ts`'s disconnected
+  // disposal comment). So a retry from THAT state re-pairs the SAME PM5,
+  // the SAME string, and this ref — still holding that same string from
+  // before the drop — reads as "already programmed" the instant `phase`
+  // reaches `"pairing"` again: the effect's own condition never fires,
+  // `program()` is never called, and the rower is stranded on
+  // "CONNECTING / SENDING THE WORKOUT" forever with only Cancel. Proven
+  // red with a fake-driven walk test (`ConnectedInterstitial.test.tsx`)
+  // before this comment and `handleTryAgain`'s own explicit reset were
+  // added. `handleTryAgain` clears this ref directly for that reason — see
+  // its own doc comment.
   const programmedForDeviceRef = useRef<string | null>(null);
 
   // Phase LL Task 1 (link-truth design spec §1, exit criterion 7): THE
@@ -352,6 +367,20 @@ export default function ConnectedInterstitial({
   // of the hook's own invariant holding.
   function handleTryAgain(): void {
     if (!canRetry || retryingRef.current) return;
+    // Final-review CRITICAL, fix round 2: cleared explicitly, not left to
+    // the `deviceName === null` reset above. From `failed`, `deviceName`
+    // is already `null` (this line is a no-op there — `fail()`'s own
+    // disposal cleared it, and the effect's own `deviceName === null`
+    // branch would have reset this ref anyway). From `disconnected`,
+    // `deviceName` SURVIVES the disposal on purpose (the LOST header
+    // needs it), so without this line a retry re-pairs the identical PM5
+    // string this ref already holds from before the drop — the pairing
+    // effect's `programmedForDeviceRef.current !== session.deviceName`
+    // check never trips, `program()` never fires, and the rower is
+    // stranded on "CONNECTING / SENDING THE WORKOUT" with only Cancel
+    // (reproduced red by a fake-driven walk test, fixed green by this
+    // line — see the test file's own "the walk's dead button" section).
+    programmedForDeviceRef.current = null;
     retryingRef.current = true;
     void session.connect().finally(() => {
       retryingRef.current = false;

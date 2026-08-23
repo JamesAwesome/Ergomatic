@@ -354,10 +354,16 @@ export default function FromTheLog() {
               value (including absent/null) renders nothing here.
               `.summary-meta` reused verbatim (no new CSS rule): it's the
               same header's own existing secondary-line class, already
-              contrast-audited (`index.css`'s own ink-3-on-surface
-              comments), so this line reads as this header's own text
-              rather than inventing a second visual register for one
-              sentence. */}
+              contrast-audited — this screen is `.overlay-screen`, whose
+              background is `--page` (`index.css`'s own `.overlay-screen`
+              rule), and `.summary-meta` is `--ink-3` (`index.css`'s own
+              `.summary-meta` rule); `--ink-3` on `--page` measures 6.69:1
+              (`index.css`'s own draft-restore-notice comment computes
+              this exact pairing), clear of the 4.5:1 AA floor — NOT the
+              7.43:1 `--ink-3`-on-`--surface` figure (a different
+              background this screen never paints on), so this line reads
+              as this header's own text rather than inventing a second
+              visual register for one sentence. */}
           {view.linkLostLine !== undefined && (
             <p className="summary-meta">{view.linkLostLine}</p>
           )}

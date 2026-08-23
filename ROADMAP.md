@@ -1726,15 +1726,29 @@ build goes to EXTERNAL TestFlight or the App Store, they all bind at once.
 Nothing here should be discovered at submission time.
 
 - [x] **F1 from Phase LL's exit walk (2026-08-23): the failure screen's
-      Try again is DEAD after a mid-session BT-off** — the failure
-      disposal tears down the per-session `onEnabledChanged` listener, so
-      the enabled-true event has no ear (sharper repro: an attempt STARTED
-      with BT off keeps a working button — the bug is localised to the
-      disposal). PROD's exit is an empty-phone install reaching a logged
-      row UNAIDED; a dead button with no feedback defeats "unaided"
-      directly. **FIXED (cohort-unlock PR, 2026-08-23):** `canRetry` now
-      also covers `session.phase === "disconnected"`, so Try again reaches
-      `connect()` from exactly the state the walk found it dead in.
+      Try again is DEAD after a mid-session BT-off** — three compounding
+      defects, not the walk's own filed listener theory (struck below: the
+      review proved it irrelevant — `canRetry` never reads enabled state,
+      so a torn-down `onEnabledChanged` was never in the causal chain).
+      PROD's exit is an empty-phone install reaching a logged row UNAIDED;
+      a dead button with no feedback defeats "unaided" directly. **FIXED
+      (cohort-unlock PR, 2026-08-23, two fix rounds):** (1) `canRetry` was
+      `phase === "failed"` only, so the `disconnected`-no-run branch
+      rendered the button disabled by construction — widened to also cover
+      `session.phase === "disconnected"`. (2) Enabling it alone was not
+      enough: the `disconnected` event handler never disposed the driver,
+      so `connect()`'s own `driverRef.current !== null` guard silently
+      no-op'd every tap — fixed by disposing (unsubscribe, null
+      `driverRef`, hang up the transport) inside the handler itself,
+      deliberately WITHOUT clearing `deviceName` (the disconnected-WITH-
+      run surface's LOST header needs it). (3) That deliberate choice then
+      broke re-programming: `programmedForDeviceRef` only resets when
+      `deviceName` goes `null`, which this disposal no longer does, so a
+      retry connected to the same PM5 but the pairing effect saw
+      "already programmed" and never called `program()` — the rower
+      landed stuck on CONNECTING/SENDING THE WORKOUT with only Cancel,
+      caught by a fake-driven walk test before merge and fixed by
+      resetting that ref explicitly in `handleTryAgain`.
 - [ ] **App icon redraw** (was a triggered follow-on). Replace the
       AI-generated icon with a clean SVG. What is actually wrong with it,
       checked against the asset itself
@@ -2667,11 +2681,23 @@ does NOT bound it; watchdog margin ~2.0× today, no false fire; native
 per-frame distribution still unmeasured); §2b flash not observed. **The
 walk's three findings, filed as LL follow-ups:**
 
-- **F1 (medium) — Try again never revives after a MID-SESSION BT-off:** the
-  failure disposal tears down the per-session `onEnabledChanged` listener,
-  so the enabled-true event has no ear; the button stays dead. Sharper
-  repro: an attempt STARTED with BT off fails and keeps a live, working
-  Try again — the dead state is disposal-specific. Cancel → Connect works.
+- **F1 (medium) — Try again never revives after a MID-SESSION BT-off.
+  ROOT CAUSE CORRECTED at the cohort-unlock spec's own review (2026-08-23):
+  the filed "the failure disposal tears down the per-session
+  `onEnabledChanged` listener, so the enabled-true event has no ear" is
+  FALSE — `canRetry` never reads enabled state, so a torn-down listener was
+  never in the causal chain.** True mechanism (three compounding defects,
+  all fixed by the cohort-unlock PR): `canRetry` was `phase === "failed"`
+  only, so the disconnected-no-run branch rendered Try again disabled by
+  construction; the disconnected event handler never disposed the driver,
+  so even an enabled button's `connect()` silently no-op'd against a
+  `driverRef` still holding the dead driver; and once both of those were
+  fixed, the retry connected but never re-programmed, because
+  `programmedForDeviceRef` only resets when `deviceName` goes `null` and
+  the disconnected disposal deliberately preserves it (the LOST header
+  needs it) — caught by a fake-driven walk test before merge. See the
+  ticked item above for the fix. Cancel → Connect works and was the only
+  live escape hatch before this PR.
 - **F2 (SERIOUS, TRIAD-weight — it closes records) — the continuity guard
   convicts on a NON-MONOTONIC key. ROOT CAUSE CORRECTED at the close gate
   (2026-08-23): the filed "iOS resume produced a transient zeroed-TWD
@@ -2693,6 +2719,17 @@ walk's three findings, filed as LL follow-ups:**
   (`completedFullDistance`) but rendered NOWHERE** — the log detail shows
   no marking; v0.17.0's notes over-promised the surface. One line on the
   log detail closes it.
+- **F4 (tiny, deferred — evidence-capture gap only, not a merge blocker) —
+  the `disconnected` event handler records no liveness-snapshot where
+  `fail()` does.** Filed at the cohort-unlock PR's final review
+  (2026-08-23): `fail()` writes one to the ring because Phase LL exit
+  criterion 7 is about FAILURE; a raw link drop correctly writes no
+  `ConnectedError` and so takes no snapshot either — but that means a
+  disconnected-branch retry's own ring has one fewer data point than a
+  failed-branch one for a future walk to read. No known stale-attachment
+  risk today (the review traced `livenessRef`'s only consumer, `fail()`,
+  and it is unreachable from the disconnected-no-run path). Worth a
+  snapshot call for the next hardware walk's diagnosability, not urgent.
 
 **Exit — written so it can go red.** Clause (e) added 2026-08-20 at the PM
 gate's finding that four of this phase's items had no exit clause; the
