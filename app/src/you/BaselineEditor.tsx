@@ -6,6 +6,7 @@ import {
   deriveK2FromK6,
   deriveK6FromK2,
 } from "../../domain/deriveBaseline.js";
+import { MOST_COMMON_ESTIMATE } from "../../domain/estimateBaseline.js";
 import {
   MAX_SPLIT,
   MIN_SPLIT,
@@ -18,12 +19,19 @@ import {
   type DraftState,
 } from "./baselineDraft";
 
-// Handoff reference values (docs/design/README.md §Domain model → Baselines):
-// 112.0 s/500m for 2k, 122.0 s/500m for 6k. Used only to seed a brand-new
-// rower's draft so the ± buttons and Apply have something sensible to work
-// from; Apply still writes real numbers back to the API.
-const SEED_K2 = 112;
-const SEED_K6 = 122;
+// Phase BL PR C — the constants reconciliation (baseline-onboarding spec
+// rev 2, "Existing producers of the same numbers"): the seeds are no
+// longer a second hand-typed answer to "what does a rower we know nothing
+// about row" (the old 112/122 pair was a club rower's 2k, shipped as
+// every new rower's prefill, with a 10s gap disagreeing with the derive
+// offer's 7s). They are the estimate table's own most-common cell
+// (2:25 / 2:32), so the table, the derive offer and the editor's seeds
+// are ONE family — agreement pinned by domain/estimateBaseline.test.ts.
+// Used only to seed a brand-new rower's draft so the ± buttons and Apply
+// have something sensible to work from; Apply still writes real numbers
+// back to the API.
+const SEED_K2 = MOST_COMMON_ESTIMATE.k2Seconds;
+const SEED_K6 = MOST_COMMON_ESTIMATE.k6Seconds;
 
 function BaselineRow({
   label,

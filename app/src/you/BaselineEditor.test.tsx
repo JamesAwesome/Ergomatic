@@ -96,8 +96,11 @@ describe("BaselineEditor", () => {
     await renderEditor();
 
     expect(screen.getByText(/starting point/i)).toBeInTheDocument();
-    expect(screen.getByText("1:52.0")).toBeInTheDocument();
-    expect(screen.getByText("2:02.0")).toBeInTheDocument();
+    // The seeds are the estimate table's most-common cell (2:25 / 2:32),
+    // not the old club-rower 112/122 pair — the PR C constants
+    // reconciliation; domain/estimateBaseline.test.ts pins the derivation.
+    expect(screen.getByText("2:25.0")).toBeInTheDocument();
+    expect(screen.getByText("2:32.0")).toBeInTheDocument();
     // Neither side is a known real value here (both null) — deriving one
     // from the other would mean deriving from a made-up seed, so the offer
     // must not appear at all (ui-notes round, item 2's "exactly one side
@@ -119,7 +122,7 @@ describe("BaselineEditor", () => {
     // Phase BL PR A: the touched field now also carries its truthful
     // provenance — a stepper edit is a manual entry.
     expect(save).toHaveBeenCalledTimes(1);
-    expect(save).toHaveBeenCalledWith({ k6Seconds: 122.5, k6Source: "manual" });
+    expect(save).toHaveBeenCalledWith({ k6Seconds: 152.5, k6Source: "manual" });
   });
 
   it("keeps the draft and surfaces an error when save is rejected", async () => {
@@ -214,8 +217,8 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
     );
 
     // 122 - 7 = 115s/500m = 1:55.0, replacing the SEED_K2 starting point
-    // (112 = 1:52.0) the confirm line's "from" side still names.
-    expect(screen.getByText("2k 1:52.0 → 1:55.0")).toBeInTheDocument();
+    // (145 = 2:25.0) the confirm line's "from" side still names.
+    expect(screen.getByText("2k 2:25.0 → 1:55.0")).toBeInTheDocument();
     expect(save).not.toHaveBeenCalled();
   });
 
@@ -224,8 +227,8 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
     await renderEditor();
 
     expect(screen.queryByText(/→/)).not.toBeInTheDocument();
-    // The SEED_K2 starting point (112 -> 1:52.0), never the derived 1:55.0.
-    expect(screen.getByText("1:52.0")).toBeInTheDocument();
+    // The SEED_K2 starting point (145 -> 2:25.0), never the derived 1:55.0.
+    expect(screen.getByText("2:25.0")).toBeInTheDocument();
   });
 
   it("the filled value is an ordinary draft edit: a stepper still adjusts it afterward", async () => {
@@ -237,7 +240,7 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
     );
     await userEvent.click(screen.getByRole("button", { name: "2k faster" }));
 
-    expect(screen.getByText("2k 1:52.0 → 1:54.5")).toBeInTheDocument();
+    expect(screen.getByText("2k 2:25.0 → 1:54.5")).toBeInTheDocument();
   });
 
   it("Apply round-trips the derived value through the real save path, stamped derived — the case the per-number provenance ruling exists for", async () => {
@@ -373,7 +376,7 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
       );
 
       expect(save).toHaveBeenCalledWith({
-        k6Seconds: 121.5,
+        k6Seconds: 151.5,
         k6Source: "manual",
       });
       expect(save).not.toHaveBeenCalledWith(
@@ -395,7 +398,7 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
       );
 
       expect(save).toHaveBeenCalledWith({
-        k2Seconds: 111.5,
+        k2Seconds: 144.5,
         k2Source: "manual",
       });
       expect(save).not.toHaveBeenCalledWith(
@@ -406,9 +409,10 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
     // Finding 3, dissolved by Finding 1's fix: a filled value that happens
     // to equal the seed must still be Applyable — `touched` (not a value
     // comparison) is what Apply keys on.
-    it("pins Finding 3's exact case: k6=119 derives k2=112 (=SEED_K2) — Apply still commits it", async () => {
-      // deriveK2FromK6(119) = 119 - 7 = 112, identical to SEED_K2.
-      const save = mockReady({ k2Seconds: null, k6Seconds: 119 });
+    it("pins Finding 3's exact case: k6=152 derives k2=145 (=SEED_K2) — Apply still commits it", async () => {
+      // deriveK2FromK6(152) = 152 - 7 = 145, identical to SEED_K2 (the
+      // estimate table's most-common cell).
+      const save = mockReady({ k2Seconds: null, k6Seconds: 152 });
       await renderEditor();
 
       await userEvent.click(
@@ -421,7 +425,7 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
       // Untouched 6k stays out of the body (PR A); the accepted offer is
       // a derivation even when it lands exactly on the seed value.
       expect(save).toHaveBeenCalledWith({
-        k2Seconds: 112,
+        k2Seconds: 145,
         k2Source: "derived",
       });
     });
@@ -434,7 +438,7 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
 
       // The 6k line names the real edit; no 2k line exists anywhere on
       // screen, even though 2k is ALSO displayed (at its seed) elsewhere.
-      expect(screen.getByText("6k 2:02.0 → 2:02.5")).toBeInTheDocument();
+      expect(screen.getByText("6k 2:32.0 → 2:32.5")).toBeInTheDocument();
       expect(screen.queryByText(/^2k .* → /)).not.toBeInTheDocument();
     });
 
@@ -510,7 +514,7 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
         screen.getByRole("button", { name: /apply baselines/i }),
       );
 
-      expect(save).toHaveBeenCalledWith({ k2Seconds: 112, k2Source: "manual" });
+      expect(save).toHaveBeenCalledWith({ k2Seconds: 145, k2Source: "manual" });
     });
   });
 
@@ -550,8 +554,8 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
       await renderEditor();
 
       await userEvent.click(screen.getByRole("button", { name: "2k faster" }));
-      // The nudge itself is the only edit made — 112 - 0.5 = 111.5s = 1:51.5.
-      expect(screen.getByText("2k 1:52.0 → 1:51.5")).toBeInTheDocument();
+      // The nudge itself is the only edit made — 145 - 0.5 = 144.5s = 2:24.5.
+      expect(screen.getByText("2k 2:25.0 → 2:24.5")).toBeInTheDocument();
       // No offer button exists anywhere to click, so there is no remaining
       // path to the overwrite the finding describes — asserted by absence
       // (docs/TESTING.md's own "invoke it and assert the consequence" rule
@@ -569,7 +573,7 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
       // label can attach to it. The untouched, already-real 6k stays out
       // of the body (PR A).
       expect(save).toHaveBeenCalledWith({
-        k2Seconds: 111.5,
+        k2Seconds: 144.5,
         k2Source: "manual",
       });
     });
