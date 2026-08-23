@@ -33,7 +33,12 @@ import {
 const SEED_K2 = MOST_COMMON_ESTIMATE.k2Seconds;
 const SEED_K6 = MOST_COMMON_ESTIMATE.k6Seconds;
 
-function BaselineRow({
+/** Exported for Phase BL PR C's onboarding editors (door 2's "I know my
+ *  baseline" screen and door 1's "Adjust the numbers first" step): the
+ *  editor's real field row — label, mono split, ± steppers — reused
+ *  rather than re-drawn (the spec's "reuse the editor's real components
+ *  where clean"). */
+export function BaselineRow({
   label,
   seconds,
   onFaster,

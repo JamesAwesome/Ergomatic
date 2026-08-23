@@ -12,6 +12,7 @@ import FromTheLog from "../log/FromTheLog";
 import HistoryList from "../log/HistoryList";
 import Library from "../library/Library";
 import News from "../news/News";
+import Recommend from "../onboarding/Recommend";
 import Reader from "../news/Reader";
 import Releases from "../news/Releases";
 import Plan from "../plan/Plan";
@@ -41,6 +42,12 @@ const HIDDEN_TABBAR_PREFIXES = [
   // natural continuation past /session/complete, not an ordinary tabbed
   // screen a rower would navigate to directly.
   "/session/log",
+  // Phase BL PR C: the three onboarding doors' flow screens (canvas
+  // Question1/Question2/Recommendation/Experienced/RowPath draw no tab
+  // bar — a setup flow, entered from Today's doors card and exited by
+  // its own Back/lead buttons, not a tabbed destination). Prefix-checked
+  // like the rest, so all three door routes opt out together.
+  "/onboarding",
 ];
 
 // Pure and exported for direct testing, same pattern as ClockInput.tsx's
@@ -172,6 +179,9 @@ export default function AppRoutes({
         <Route path="/news/releases" element={<Releases />} />
         <Route path="/news/:slug" element={<Reader />} />
         <Route path="/plan" element={<Plan />} />
+        {/* Phase BL PR C — door 1 (Recommend my baseline). Doors 2 and 3
+            register beside it as they land. */}
+        <Route path="/onboarding/recommend" element={<Recommend />} />
         <Route path="/session/confirm" element={<ConfirmRedirect />} />
         <Route path="/session/countdown" element={<Countdown />} />
         <Route path="/session/run" element={<Timer />} />
