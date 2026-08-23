@@ -840,10 +840,12 @@ describe("state 6: the ring door (Phase LL Task 1)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Try again: inert unless phase === "failed"
+// Try again: inert unless phase is "failed" or "disconnected" (F1, the
+// cohort-unlock spec §1 — the second call site's disabled button was the
+// 2026-08-23 walk's dead-button finding, not belt-and-braces)
 // ---------------------------------------------------------------------------
 
-describe("Try again — inert unless phase === 'failed'", () => {
+describe("Try again — inert unless phase is 'failed' or 'disconnected'", () => {
   it.each(["pairing", "programming", "ready"] as const)(
     "does not render at all during phase %s",
     (phase) => {
@@ -917,6 +919,44 @@ describe("Try again — inert unless phase === 'failed'", () => {
       phase: "failed",
       deviceName: null,
       error: connectedError({ reason: "nak", detail: "PM5 rejected frame 3" }),
+    });
+    vi.mocked(s.connect).mockClear();
+    const button = screen.getByRole("button", { name: "Try again" });
+
+    act(() => {
+      button.click();
+      button.click();
+    });
+
+    expect(s.connect).toHaveBeenCalledTimes(1);
+  });
+
+  // F1 (cohort-unlock spec §1): the walk's own scenario — a mid-session
+  // Bluetooth drop lands on `disconnected` with no run open, the SECOND
+  // call site of `renderFailureScreen` (`:644-646`), not the `failed`
+  // phase the tests above pin. Before this fix `canRetry` only read
+  // `phase === "failed"`, so the button rendered but never worked here.
+  it("the walk's dead button: disconnected with no open run renders Try again ENABLED, and a tap reaches connect()", async () => {
+    const { session: s } = renderInterstitial({
+      phase: "disconnected",
+      deviceName: DEVICE_NAME,
+      runOpen: false,
+    });
+    vi.mocked(s.connect).mockClear();
+
+    const button = screen.getByRole("button", { name: "Try again" });
+    expect(button).toBeEnabled();
+
+    await userEvent.click(button);
+
+    expect(s.connect).toHaveBeenCalledTimes(1);
+  });
+
+  it("double-tap still guarded from the disconnected branch", async () => {
+    const { session: s } = renderInterstitial({
+      phase: "disconnected",
+      deviceName: DEVICE_NAME,
+      runOpen: false,
     });
     vi.mocked(s.connect).mockClear();
     const button = screen.getByRole("button", { name: "Try again" });
@@ -1126,10 +1166,12 @@ describe("phase disconnected — the fall-through this task closes", () => {
         "End whatever is showing on the monitor, then try again.",
       ),
     ).not.toBeInTheDocument();
-    // Try again stays disabled here (`canRetry` is `phase === "failed"`,
-    // and this is `"disconnected"`) — Row on the phone timer instead and
-    // Cancel are the two live escape hatches.
-    expect(screen.getByRole("button", { name: "Try again" })).toBeDisabled();
+    // Try again is enabled here too (F1, cohort-unlock spec §1: `canRetry`
+    // covers `"disconnected"` as well as `"failed"` — the "Try again —
+    // inert unless..." describe block above pins the connect() wiring for
+    // this exact fixture) — Row on the phone timer instead and Cancel are
+    // the other two live escape hatches.
+    expect(screen.getByRole("button", { name: "Try again" })).toBeEnabled();
     expect(
       screen.getByRole("button", { name: "Row on the phone timer instead" }),
     ).toBeEnabled();
@@ -1147,6 +1189,13 @@ describe("phase disconnected — the fall-through this task closes", () => {
     ).toBeInTheDocument();
     expect(
       screen.queryByText("The link to the monitor failed."),
+    ).not.toBeInTheDocument();
+    // F1 (cohort-unlock spec §1): the widened `canRetry` predicate never
+    // gets a chance to matter here — this branch hands off to the surface
+    // before `renderFailureScreen` is ever called, so no Try again button
+    // exists at all from this state.
+    expect(
+      screen.queryByRole("button", { name: "Try again" }),
     ).not.toBeInTheDocument();
   });
 
@@ -1239,6 +1288,97 @@ describe("the interstitial walk, fake-driven", () => {
       "aria-current",
       "page",
     );
+  });
+
+  // Final-review CRITICAL, fix round 2: the walk's own scenario, end to
+  // end, on the real hook + real fake + real library fixture — the ONLY
+  // layer that can see this class of defect. The mocked-session tests
+  // (`"Try again — inert unless phase is 'failed' or 'disconnected'"`,
+  // above) can only prove `connect()` was CALLED; the hook test
+  // (`useMonitorSession.test.ts`, "F1: connect() again after a
+  // disconnected event...") stops at `phase === "pairing"`, which is
+  // exactly the state this bug strands a rower in. Reproduced RED before
+  // `handleTryAgain`'s `programmedForDeviceRef.current = null;` existed
+  // (DOM after the pump: "PM5 …Connecting✓FOUNDCONNECTINGSENDING THE
+  // WORKOUTCancel" — never "Ready when you pull"), GREEN with it.
+  it("the walk's dead button, completed: disconnected -> Try again -> reconnect -> RE-PROGRAM -> Ready when you pull", async () => {
+    vi.doUnmock("../monitor/useMonitorSession");
+    const real = await vi.importActual<
+      typeof import("../monitor/useMonitorSession")
+    >("../monitor/useMonitorSession");
+    mockUseMonitorSession.mockImplementation(real.useMonitorSession);
+
+    const fake = createFakeTransport({
+      program: FIXTURE.program,
+      deviceName: DEVICE_NAME,
+    });
+
+    render(
+      <ConnectedInterstitial
+        program={FIXTURE.program}
+        phases={FIXTURE.phases}
+        identity={FIXTURE.identity}
+        baselines={baselines}
+        nudgedCount={0}
+        onExit={vi.fn()}
+        onRowInstead={vi.fn()}
+        onEnded={vi.fn()}
+        deps={{
+          createTransport: () => fake,
+          now: () => t0,
+          driverOptions: { settleTicks: 0, prepareSettleTicks: 0 },
+        }}
+      />,
+    );
+
+    await screen.findByText("Connecting");
+    for (let i = 0; i < 30; i += 1) {
+      await act(async () => {
+        fake.tick(0);
+        await Promise.resolve();
+      });
+      if (screen.queryByText("Ready when you pull")) break;
+    }
+    await screen.findByText("Ready when you pull");
+
+    // The walk's own trigger: BT drops before the rower pulls. No run is
+    // open yet (`runOpen` only flips at the first `live` frame), so this
+    // lands on the interstitial's OWN disconnected-no-run treatment
+    // (`ConnectedInterstitial.tsx`'s Task 4 branch), not the connected
+    // surface.
+    act(() => {
+      fake.injectDisconnect();
+    });
+    const tryAgain = await screen.findByRole("button", { name: "Try again" });
+    expect(tryAgain).toBeEnabled();
+
+    // The rower turns Bluetooth back on — the radio itself recovers
+    // before the retry, same as the walk.
+    act(() => {
+      fake.completeReconnect();
+    });
+
+    await userEvent.click(tryAgain);
+
+    // The bug's own resting state, PROVEN reachable first (red evidence):
+    // without `programmedForDeviceRef`'s reset, the DOM sits here forever
+    // — "Connecting" survives, `program()` never dispatches, and the pump
+    // loop below finds no "Ready when you pull" to break on. Asserting the
+    // stuck state is transient (never the FINAL assertion) keeps this
+    // honest about what the fix actually changed.
+    for (let i = 0; i < 60; i += 1) {
+      await act(async () => {
+        fake.tick(0);
+        await Promise.resolve();
+      });
+      if (screen.queryByText("Ready when you pull")) break;
+    }
+
+    // The real proof: re-armed on the SAME PM5, past the SAME pairing
+    // effect that stranded the walk — not merely "connect() was called"
+    // (the mocked-session tests' own ceiling).
+    expect(screen.getByText("Ready when you pull")).toBeInTheDocument();
+    expect(screen.getByText(`${DEVICE_NAME} · PROGRAMMED`)).toBeInTheDocument();
   });
 
   // Task 5's OWN self-found race (this file's header names it in spirit; the

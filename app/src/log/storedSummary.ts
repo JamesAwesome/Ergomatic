@@ -52,6 +52,7 @@ import { fmtSplit } from "../../domain/format.js";
 import { PLANS } from "../../domain/plans.js";
 import type { WorkoutType } from "../../domain/types.js";
 import type { HeldResult, Thumbs } from "../api/useRecentLogs";
+import type { CloseReason } from "../monitor/monitorRun";
 import type { SeriesData } from "../monitor/seriesRecorder.js";
 import { formatLogDate } from "../session/logDraft";
 import {
@@ -132,6 +133,20 @@ export interface StoredLog {
   // OR `null` series identically (nothing to draw), so this screen never
   // has to tell the two apart itself.
   series?: SeriesData | null;
+  // Cohort-unlock spec (2026-08-23), §2: the honest close reason the
+  // route already returns — `server/stores/logs.ts`'s `get()`/`list()`
+  // have selected this column since Phase LL Task 4 (`endedBy.
+  // integration.test.ts` already pins the GET round-trip); this task is
+  // the first to actually READ it client-side. Mirrors `MonitorRun.
+  // endedBy`'s own widened union (`CloseReason | "interrupted"`) rather
+  // than a third hand-copied literal union — see that field's doc
+  // comment for the five values. Optional AND nullable, same convention
+  // as `deviceName`/`thumbs` above: explicit null is the common case (a
+  // phone-timer/manual log, or any row predating Phase LL Task 4);
+  // absent covers a response that never included the key at all (this
+  // repo's own defensive posture for every optional field here, even
+  // though `stores.logs.get()` always selects the column now).
+  endedBy?: (CloseReason | "interrupted") | null;
 }
 
 /** §5D: the read-back's own three pieces. `empty` is the "all four null"
@@ -158,6 +173,12 @@ export interface StoredSummaryView {
    *  `planIndex` non-null — `create()`'s own invariant, `stores/logs.ts`,
    *  keeps them null together). */
   planFooter?: string;
+  /** Cohort-unlock spec (2026-08-23), §2: the exact marked line, present
+   *  only when `row.endedBy === "link-lost"` — every other `endedBy`
+   *  value (including the other four real ones and absent/null) renders
+   *  nothing here; this spec is the lost-link surface, not an `endedBy`
+   *  taxonomy display (spec's own line). */
+  linkLostLine?: string;
 }
 
 // §5A: `deviceName` when stored; else `TIMER` when any stored step carries
@@ -380,6 +401,23 @@ function buildPlanFooter(row: StoredLog): string | undefined {
     : `Logged to ${title} · ${session}`;
 }
 
+// Cohort-unlock spec (2026-08-23), §2: the copy is verbatim from the
+// spec — plain words, no promise the gap was filled (the house "LL copy
+// rule"), middle dot never an em-dash (house style, lint-checked for
+// copy). Named as its own constant so the exact string is pinned once,
+// not re-typed at both this builder and the FromTheLog test that asserts
+// it renders.
+const LINK_LOST_LINE = "LINK LOST · the app lost the monitor before the end";
+
+// §2: "no other endedBy values render anything." A plain equality check
+// against the one value this spec owns — never a negation of the other
+// four (which would silently start rendering the line for any FUTURE
+// sixth value the union might grow, exactly the taxonomy-display this
+// spec explicitly declines to be).
+function buildLinkLostLine(row: StoredLog): string | undefined {
+  return row.endedBy === "link-lost" ? LINK_LOST_LINE : undefined;
+}
+
 /** The from-the-log view's own pure model — §5's property table,
  *  property by property (see each `build*` helper above for its own
  *  citation). Never throws: unlike `buildSummaryModel`'s monitor door,
@@ -392,6 +430,7 @@ export function buildStoredSummary(row: StoredLog): StoredSummaryView {
   const rows = buildRows(row.steps);
   const caption = targetsOnlyCaption(rows);
   const readBack = buildReadBack(row);
+  const linkLostLine = buildLinkLostLine(row);
   const planFooter = buildPlanFooter(row);
-  return { meta, heroes, rows, caption, readBack, planFooter };
+  return { meta, heroes, rows, caption, readBack, planFooter, linkLostLine };
 }

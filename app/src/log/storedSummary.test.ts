@@ -593,3 +593,49 @@ describe("buildStoredSummary — targets-only caption", () => {
     expect(measured.caption).toBeUndefined();
   });
 });
+
+// Cohort-unlock spec (2026-08-23), §2: `linkLostLine` is present, with
+// the exact copy, for `endedBy === "link-lost"` alone — every other
+// value (including the other four real ones, and absent/null) renders
+// nothing here, proven by exact equality against several distinct
+// non-link-lost values rather than a single negative case (spec's own
+// "no endedBy taxonomy display" line — a check that merely negated
+// "link-lost" would already satisfy that, but a check that instead
+// negated "finished" would not, and only a multi-value probe tells the
+// two apart).
+describe("buildStoredSummary — cohort-unlock §2 link-lost line", () => {
+  it("carries the exact marked line for a link-lost close, against a realistic stored payload", () => {
+    const view = buildStoredSummary(
+      baseRow({
+        endedBy: "link-lost",
+        deviceName: "PM5 432331249",
+        steps: [
+          {
+            label: "6:00 @ 6k",
+            actualSplit: 125,
+            actualSource: "stopwatch",
+            meters: 1500,
+          },
+        ],
+        avgSplitSeconds: 125,
+        timeSeconds: 300,
+        distanceMeters: 1500,
+      }),
+    );
+    expect(view.linkLostLine).toBe(
+      "LINK LOST · the app lost the monitor before the end",
+    );
+  });
+
+  it.each([
+    ["finished", "finished"],
+    ["rower", "rower"],
+    ["program-failed", "program-failed"],
+    ["interrupted", "interrupted"],
+    ["null", null],
+    ["absent", undefined],
+  ] as const)("omits the line for endedBy=%s", (_label, endedBy) => {
+    const view = buildStoredSummary(baseRow({ endedBy }));
+    expect(view.linkLostLine).toBeUndefined();
+  });
+});

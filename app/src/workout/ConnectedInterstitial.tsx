@@ -240,6 +240,21 @@ export default function ConnectedInterstitial({
   // known to exist. Reset to `null` whenever `deviceName` itself goes back
   // to `null` (a fresh `connect()` cycle, including a "no device known"
   // Try Again), so the SAME device re-pairing later fires it again.
+  //
+  // Final-review CRITICAL, fix round 2: that reset is NOT the only one
+  // needed. F1's `disconnected`-branch retry (`handleTryAgain` below)
+  // deliberately runs against a `deviceName` the disposal did NOT clear
+  // (the LOST header needs it — `useMonitorSession.ts`'s disconnected
+  // disposal comment). So a retry from THAT state re-pairs the SAME PM5,
+  // the SAME string, and this ref — still holding that same string from
+  // before the drop — reads as "already programmed" the instant `phase`
+  // reaches `"pairing"` again: the effect's own condition never fires,
+  // `program()` is never called, and the rower is stranded on
+  // "CONNECTING / SENDING THE WORKOUT" forever with only Cancel. Proven
+  // red with a fake-driven walk test (`ConnectedInterstitial.test.tsx`)
+  // before this comment and `handleTryAgain`'s own explicit reset were
+  // added. `handleTryAgain` clears this ref directly for that reason — see
+  // its own doc comment.
   const programmedForDeviceRef = useRef<string | null>(null);
 
   // Phase LL Task 1 (link-truth design spec §1, exit criterion 7): THE
@@ -306,7 +321,16 @@ export default function ConnectedInterstitial({
     if (session.deviceName !== null) saveLastDevice(session.deviceName);
   }, [session.deviceName]);
 
-  const canRetry = session.phase === "failed";
+  // F1 (cohort-unlock spec §1): `disconnected` joins `failed` here. The
+  // failure JSX below has two call sites — `failed` (always had a working
+  // retry) and the `disconnected`-no-run branch (`:644-646`), which reused
+  // the same element with the button disabled by construction. A
+  // mid-session Bluetooth drop lands in the SECOND branch, and the
+  // 2026-08-23 walk found the button dead there. `disconnected`-WITH-run
+  // never reaches this JSX at all (the surface owns it, verified by the
+  // routing test below), so this predicate never fires mid-row.
+  const canRetry =
+    session.phase === "failed" || session.phase === "disconnected";
 
   function handleCancel(): void {
     void session.cancel();
@@ -328,15 +352,35 @@ export default function ConnectedInterstitial({
   // retrying `program()` against it reproduced the exact LINK-FAILED loop
   // that cost James a reinstall on 2026-08-20. `fail()` now disposes
   // completely on every failure — transport down, driver ref cleared,
-  // `deviceName` cleared — so `session.deviceName` is ALWAYS `null` by the
-  // time this screen can render `canRetry`. Try Again therefore always
-  // goes through `connect()`: a genuinely fresh scan/connect, with
-  // `program()` reached only via the "pairing" effect above, itself only
-  // reachable once a real device is found. No branch here calls
-  // `program()` directly any more — the structural half of the guarantee,
-  // not merely a consequence of the hook's own invariant holding.
+  // `deviceName` cleared — so `session.deviceName` is ALWAYS `null` when
+  // `canRetry` fires from the `failed` phase specifically. (F1,
+  // cohort-unlock spec §1: `canRetry` also fires from `disconnected`,
+  // where the drop is a raw phase-level event that never goes through
+  // `fail()` — `deviceName` can still be set there, same as it is at the
+  // routing test's own fixture below. That doesn't reopen the branch this
+  // guarantee closes: `handleTryAgain` has no conditional on `deviceName`
+  // at all, from either phase.) Try Again therefore always goes through
+  // `connect()`: a genuinely fresh scan/connect, with `program()` reached
+  // only via the "pairing" effect above, itself only reachable once a
+  // real device is found. No branch here calls `program()` directly any
+  // more — the structural half of the guarantee, not merely a consequence
+  // of the hook's own invariant holding.
   function handleTryAgain(): void {
     if (!canRetry || retryingRef.current) return;
+    // Final-review CRITICAL, fix round 2: cleared explicitly, not left to
+    // the `deviceName === null` reset above. From `failed`, `deviceName`
+    // is already `null` (this line is a no-op there — `fail()`'s own
+    // disposal cleared it, and the effect's own `deviceName === null`
+    // branch would have reset this ref anyway). From `disconnected`,
+    // `deviceName` SURVIVES the disposal on purpose (the LOST header
+    // needs it), so without this line a retry re-pairs the identical PM5
+    // string this ref already holds from before the drop — the pairing
+    // effect's `programmedForDeviceRef.current !== session.deviceName`
+    // check never trips, `program()` never fires, and the rower is
+    // stranded on "CONNECTING / SENDING THE WORKOUT" with only Cancel
+    // (reproduced red by a fake-driven walk test, fixed green by this
+    // line — see the test file's own "the walk's dead button" section).
+    programmedForDeviceRef.current = null;
     retryingRef.current = true;
     void session.connect().finally(() => {
       retryingRef.current = false;
@@ -446,15 +490,27 @@ export default function ConnectedInterstitial({
     );
   }
 
-  /** State 6's element, now shared with the new `disconnected`-no-run
-   *  branch below (Task 4, connected-axes 2a) rather than duplicated —
-   *  reusing the JSX is what makes reusing its COPY honest too. `disabled=
-   *  {!canRetry}` is no longer unreachable-by-construction the way the old
-   *  LOW-7 note (task-5 review) had it: `canRetry` is still `phase ===
-   *  "failed"`, so this button really is always enabled at THIS call site,
-   *  but the second call site (`disconnected`, no run open) renders the
-   *  same element with `canRetry` `false` — belt-and-braces there is load-
-   *  bearing now, not merely defensive. */
+  /** State 6's element, shared with the `disconnected`-no-run branch below
+   *  (Task 4, connected-axes 2a) rather than duplicated — reusing the JSX
+   *  is what makes reusing its COPY honest too. `disabled={!canRetry}` at
+   *  the second call site (`disconnected`, no run open) used to be
+   *  disabled by construction — documented here as "belt-and-braces" —
+   *  which was wrong: it was the walk's F1 (2026-08-23), a rower with a
+   *  mid-session Bluetooth drop finding Try again dead exactly where they
+   *  needed it. `canRetry` now covers both phases (cohort-unlock spec §1).
+   *  Enabling the button alone was NOT enough (fix round 1, CRITICAL): a
+   *  raw `disconnected` event used to leave `driverRef` populated with the
+   *  dead driver forever, and `connect()`'s own opening guard
+   *  (`driverRef.current !== null`) silently no-op'd every tap — the
+   *  button looked alive and did nothing. `useMonitorSession.ts`'s
+   *  `disconnected` event handler now disposes the driver itself
+   *  (unsubscribe, null `driverRef`, hang up the transport best-effort —
+   *  the same steps `fail()` takes, minus clearing `deviceName`, which the
+   *  disconnected-WITH-run surface's LOST header still needs) the moment
+   *  the link drops, before this button can ever render enabled. THAT is
+   *  what makes the walk's Cancel → Connect evidence transfer: both paths
+   *  now dispose before `connect()` runs, not because the two paths were
+   *  ever literally the same call. */
   function renderFailureScreen(error: ConnectedError | null) {
     return (
       <main className="screen connected-interstitial">
