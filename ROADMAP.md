@@ -1562,10 +1562,15 @@ hand-typed.
       longer demotes a stored source; an all-unchanged Apply makes no
       wire call). **M**
 - [x] **The You-screen re-test shortcut** (James, 2026-08-22; PR B): row
-      the 6k / race the 2k next to the baseline fields on You, routing to
-      the same designated GLOBAL tests through `useStartWorkout`'s full
-      guard set and landing in the same prompt. DEVIATIONS row 121 is the
-      stated design (no handoff mock exists). **S**
+      the 6k / race the 2k next to the baseline fields on You. Reshaped
+      by James's tester feedback (2026-08-22, post-v0.18.0): the buttons
+      are now links to each designated GLOBAL test's DETAIL screen
+      (Connect / Start Timer / Log it after) with BACK returning to You,
+      no caption; the start guards fire on the detail's own paths. The
+      same feedback fixed the 6K Test's effort ref min -> max ("it's
+      still all out") — deployed rows converge in place on boot.
+      DEVIATIONS row 121 is the stated design (no handoff mock exists).
+      **S**
 - [ ] **Reset baseline setup** (James, 2026-08-22, at the gate): a
       staged-confirm action on You clearing both numbers and both
       sources — the doors become re-enterable for ANY account, demos

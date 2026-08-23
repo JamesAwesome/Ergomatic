@@ -1740,7 +1740,9 @@ describe("LogSession: the manual door (Task 3)", () => {
       document.querySelectorAll<HTMLElement>(".summary-row"),
     );
     expect(rows).toHaveLength(1);
-    expect(within(rows[0]!).getByText("MIN")).toBeInTheDocument();
+    // MAX since James's 2026-08-22 correction of the 6K's effort ref
+    // (server/seed/library/onboarding.ts) — the fixture is the REAL seed.
+    expect(within(rows[0]!).getByText("MAX")).toBeInTheDocument();
     expect(rows[0]!.querySelector(".summary-row-target")?.textContent).toBe("");
     expect(rows[0]!.querySelector(".summary-row-dash")?.textContent).toBe("—");
     // No PACES OFF caption — an effort-only workout references neither

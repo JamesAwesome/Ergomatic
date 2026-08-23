@@ -784,7 +784,7 @@ describe("buildLogSteps", () => {
 
 describe("buildLogSeed: the monitor run's frozen log identity (7C spec §2)", () => {
   it("accepts NULL baselines for an effort-only workout (6I rebase seam): seed carries the step, paces stay empty", () => {
-    // The real 6K Test seed shape — ONE effort distance step, no lead-in
+    // The PRE-2026-08-23 6K Test seed shape (live seed is now effort max; min kept because this test exercises the ref-indifferent null-baseline path) — ONE effort distance step, no lead-in
     // (2026-08-09's warmup setting took the `wu` step out of both
     // onboarding rows) — built through the real assembly, run with the
     // null baselines the loosened Connect guard now legitimately passes

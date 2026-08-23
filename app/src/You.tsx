@@ -50,10 +50,12 @@ export default function You({
       </section>
       <h2 className="section-heading">BASELINES</h2>
       <BaselineEditor />
-      {/* Phase BL PR B: row the 6k / race the 2k, one tap from the
-          numbers to the session that measures them — the shortcut's own
-          doc comment (you/RetestShortcut.tsx) covers identity and the
-          reused start guards. */}
+      {/* Phase BL PR B, reshaped by James's tester feedback (2026-08-22):
+          row the 6k / race the 2k, one tap from the numbers to each
+          designated test's DETAIL screen (Connect / Start Timer / Log it
+          after) — the shortcut's own doc comment (you/RetestShortcut.tsx)
+          covers identity, the from:"/you" back chain, and where the
+          start guards live now. */}
       <RetestShortcut />
       {/* Task 7 (design spec §"Learning the app on You"): the mock's other
           settings rows (PRE-WORKOUT COUNTDOWN, PACE TOLERANCE, ACCENT

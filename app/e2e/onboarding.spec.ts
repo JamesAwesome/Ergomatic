@@ -197,7 +197,9 @@ test.describe("Phase 6I: Today onboarding — the fresh-user arc", () => {
     // 2026-08-09's warmup-setting spec stripped it): the distance work
     // phase is the ONLY phase, STEP 1 OF 1 — the exact case
     // `hasRemainingEstimate` exists for. The TARGET SPLIT card shows the
-    // effort word ("EASY" — {effort:"min"}), never a resolved number, and
+    // effort word ("ALL OUT" — {effort:"max"}, James's 2026-08-22
+    // correction: a 6K test is all out, never easy), never a resolved
+    // number, and
     // TOTAL LEFT/the phase progress bar are both gone entirely rather than
     // frozen at 0:00/0%.
     await expect(page.getByText(/^STEP 1 OF 1/)).toBeVisible();
@@ -205,7 +207,7 @@ test.describe("Phase 6I: Today onboarding — the fresh-user arc", () => {
     await expect(targetCard.locator(".timer-card-label")).toHaveText(
       "TARGET SPLIT",
     );
-    await expect(targetCard.locator(".timer-card-value")).toHaveText("EASY");
+    await expect(targetCard.locator(".timer-card-value")).toHaveText("ALL OUT");
     await expect(page.getByText("TOTAL LEFT")).toHaveCount(0);
     await expect(page.locator(".timer-phase-bar")).toHaveCount(0);
 

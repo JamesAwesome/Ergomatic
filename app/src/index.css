@@ -8905,31 +8905,21 @@ section:not(.news-pinned) .news-row:last-of-type {
   max-width: 420px;
 }
 
-/* Phase BL PR B — the You-screen re-test shortcut (RetestShortcut.tsx),
-   directly under the baselines card. Two compact L3 buttons (48px, over
-   the 44px floor); a staged replace confirm reuses .baseline-confirm
-   wholesale and takes the full row width so its two 44px actions never
-   squeeze into a half column. Caption is the shared .mono-status ink
-   (--ink-3 on --page, 6.69:1 computed). */
+/* Phase BL PR B, reshaped by James's tester feedback (2026-08-22) — the
+   You-screen re-test shortcut (RetestShortcut.tsx), directly under the
+   baselines card: two compact L3 links (48px via .button-l3, over the
+   44px floor) straight to each designated test's detail screen. No
+   caption ("the buttons speak for themselves") and no staged-confirm
+   wrapper any more — the links start nothing, so the .baseline-confirm
+   reuse and the full-width staged item died with the in-place start. */
 .retest {
   margin-top: 12px;
-}
-
-.retest-caption {
-  margin: 0 0 8px;
-}
-
-.retest-row {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
 }
 
-.retest-item {
+.retest-button {
   flex: 1 1 0;
   min-width: 140px;
-}
-
-.retest-item-staged {
-  flex-basis: 100%;
 }
