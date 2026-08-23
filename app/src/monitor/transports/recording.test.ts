@@ -240,3 +240,64 @@ describe("createRecordingTransport", () => {
     expect(parsed.events).toStrictEqual(tap.events());
   });
 });
+
+// C1 fix (final-review): `holdOpen.ts` composes OUTSIDE this tap
+// (`createHoldOpenTransport(tap.transport, …)`, `transports/index.ts`'s own
+// composition) and needs to reach `webBluetooth.ts`'s NEW
+// `onCharacteristicDegraded` structural extension THROUGH `tap.transport` —
+// without the `...inner` spread this tap's own transport object now opens
+// with (same idiom `liveness.ts` already established), that extension would
+// be silently dropped here, one layer under `holdOpen.ts`'s own
+// `hasCharacteristicDegraded(inner)` check, and the C1 fix would never
+// reach the web arm it exists for.
+describe("createRecordingTransport: structural extensions pass through unchanged", () => {
+  it("a structural extension on inner (onCharacteristicDegraded) is reachable on tap.transport, forwarded via the ...inner spread", () => {
+    const inner = stubInner();
+    // A mutable holder object rather than a bare reassigned `let` — the
+    // captured reference below is what proves this is the REAL
+    // underlying callback, not a stub that merely type-checks.
+    const captured: {
+      cb: ((characteristicId: string, message: string) => void) | null;
+    } = { cb: null };
+    const innerWithExtension = {
+      ...inner.transport,
+      onCharacteristicDegraded(
+        cb: (characteristicId: string, message: string) => void,
+      ) {
+        captured.cb = cb;
+        return () => {
+          if (captured.cb === cb) captured.cb = null;
+        };
+      },
+    };
+
+    const tap = createRecordingTransport(innerWithExtension);
+    const forwarded = tap.transport as typeof innerWithExtension;
+
+    expect(typeof forwarded.onCharacteristicDegraded).toBe("function");
+    const seen: [string, string][] = [];
+    forwarded.onCharacteristicDegraded((characteristicId, message) =>
+      seen.push([characteristicId, message]),
+    );
+    // Firing through the captured reference reaches the listener
+    // registered through `tap.transport` — proof the spread forwarded the
+    // SAME function, not a copy.
+    captured.cb?.("ce06003f-...", "NotFoundError");
+    expect(seen).toStrictEqual([["ce06003f-...", "NotFoundError"]]);
+  });
+
+  it("the six explicit methods still OVERRIDE the spread — subscribe() is the tap's own multiplexing version, not inner's raw one", () => {
+    const inner = stubInner();
+    const tap = createRecordingTransport(inner.transport);
+    const cb1 = () => undefined;
+    const cb2 = () => undefined;
+
+    tap.transport.subscribe("0031", cb1);
+    tap.transport.subscribe("0031", cb2);
+
+    // The tap's own fan-out behaviour (one inner subscription, many outer
+    // callbacks) — if the spread had somehow won over the explicit method,
+    // this would double-subscribe on `inner` instead.
+    expect(inner.innerSubscriberCount("0031")).toBe(1);
+  });
+});

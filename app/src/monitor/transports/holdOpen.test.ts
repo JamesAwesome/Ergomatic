@@ -104,7 +104,15 @@ function testClock() {
   };
 }
 
-const CHAR = "ce060030-43e5-11e4-916c-0800200c9a66"; // 0x0031, arbitrary for this suite
+const CHAR = "ce060030-43e5-11e4-916c-0800200c9a66"; // 0x0030 (the rowing service UUID), arbitrary for this suite — not 0x0031, see M7
+
+/** C1 fix (final-review): `arm()` now pushes this synchronously, before
+ *  the deferred subscribe call even runs — always `+0s` (armedAtMs is set
+ *  in the same synchronous tick) and present whenever `arm()` proceeds at
+ *  all (not a no-op re-arm), regardless of what the deferred subscribe
+ *  later does. Every test below that arms the instrument and inspects
+ *  `ring()` now sees this as the first entry. */
+const SUBSCRIBE_ISSUED = "+0s 0x003f subscribe-issued";
 
 /** A DECOUPLED clock/schedule pair — mirrors `liveness.test.ts`'s own
  *  `manualClock()`/`manualSchedule()` idiom, unlike `testClock()` above
@@ -325,14 +333,20 @@ describe("createHoldOpenTransport: notification tee", () => {
     controls.arm();
 
     stub.notify(CHAR, new Uint8Array([0xde, 0xad]));
-    expect(controls.ring()).toStrictEqual([`+0s ${CHAR} de ad`]);
+    expect(controls.ring()).toStrictEqual([
+      SUBSCRIBE_ISSUED,
+      `+0s ${CHAR} de ad`,
+    ]);
 
     await transport.disconnect(); // -> holding
     clock.advance(3_000);
     stub.notify(CHAR, new Uint8Array([0xbe, 0xef]));
 
     expect(controls.ring()).toStrictEqual([
+      SUBSCRIBE_ISSUED,
       `+0s ${CHAR} de ad`,
+      // I4 fix: the armed→holding transition's own lifecycle entry.
+      "+0s hold-start",
       `+3s ${CHAR} be ef`,
     ]);
     // The wrapped callback still receives every notification unchanged.
@@ -353,7 +367,7 @@ describe("createHoldOpenTransport: notification tee", () => {
     clock.advance(2_900); // floor(2.9) = 2, ceil(2.9) = 3 — the two disagree
     stub.notify(CHAR, new Uint8Array([0x01]));
 
-    expect(controls.ring()).toStrictEqual([`+2s ${CHAR} 01`]);
+    expect(controls.ring()).toStrictEqual([SUBSCRIBE_ISSUED, `+2s ${CHAR} 01`]);
   });
 
   it("disarmed notifications are NOT recorded — the ring stops growing once release() returns to disarmed", async () => {
@@ -416,7 +430,16 @@ describe("createHoldOpenTransport: inner.onDisconnect during hold", () => {
 });
 
 describe("createHoldOpenTransport: inner.onDisconnect outside a hold", () => {
-  it("firing while merely armed (disconnect() never called) forwards the reason but does not stash — there is no hold to claim", async () => {
+  // I5 fix (final-review): this test used to pin the OLD, buggy behaviour
+  // verbatim ("does not stash — there is no hold to claim", state left
+  // "armed" — the report's own citation, "untouched by this path"). A
+  // link drop while merely armed left the instrument armed forever, so
+  // the NEXT teardown's disconnect() would transition armed→holding on a
+  // radio that was already gone — a 90s window that could record
+  // nothing, reported as "holding" with a counting-down msRemaining.
+  // Rewritten to pin the FIX: this is now a terminal path in its own
+  // right, exactly like release()/expiry/link-drop-during-hold.
+  it("firing while merely armed (disconnect() never called) forwards the reason, disarms immediately, stashes, and records link-drop-while-armed — so the NEXT teardown's disconnect() passes straight through instead of holding a dead link", async () => {
     const stub = stubTransport();
     const clock = testClock();
     const stash = vi.fn();
@@ -428,12 +451,23 @@ describe("createHoldOpenTransport: inner.onDisconnect outside a hold", () => {
     const seen = vi.fn();
     transport.onDisconnect(seen);
     controls.arm();
+    clock.advance(1_000);
 
     stub.fireOnDisconnect("radio-dropped");
 
     expect(seen).toHaveBeenCalledExactlyOnceWith("radio-dropped");
-    expect(stash).not.toHaveBeenCalled();
-    expect(controls.status().state).toBe("armed"); // untouched by this path
+    expect(controls.status()).toStrictEqual({
+      state: "disarmed",
+      msRemaining: null,
+    });
+    expect(stash).toHaveBeenCalledOnce();
+    expect(controls.ring()).toContain("+1s link-drop-while-armed");
+
+    // Proof the fix actually protects the NEXT teardown: disconnect() now
+    // passes straight through instead of scheduling a 90s hold over a
+    // radio that is already gone.
+    await transport.disconnect();
+    expect(stub.disconnectCalls).toBe(1);
   });
 
   it("firing while disarmed (never armed at all) forwards the reason and does not stash", () => {
@@ -455,8 +489,13 @@ describe("createHoldOpenTransport: inner.onDisconnect outside a hold", () => {
   });
 });
 
-describe("createHoldOpenTransport: stash(text) format and once-per-window guarantee", () => {
-  it("stashes a header line followed by the ring entries, joined by newlines", async () => {
+describe("createHoldOpenTransport: stash(lines) format and once-per-window guarantee", () => {
+  // I1 fix (final-review): `stash` used to receive one pre-joined string
+  // (`[header, ...ring].join("\n")`), which corrupted the JSON stash key
+  // it gets appended to. It now receives the header plus every ring entry
+  // as a plain ARRAY — the caller decides how to turn that into whatever
+  // shape its own stash key expects (see `index.ts`'s own callback).
+  it("stashes an array: the header line followed by the ring entries in order, never pre-joined", async () => {
     const stub = stubTransport();
     const clock = testClock();
     const stash = vi.fn();
@@ -474,13 +513,21 @@ describe("createHoldOpenTransport: stash(text) format and once-per-window guaran
 
     await controls.release();
 
-    expect(stash).toHaveBeenCalledExactlyOnceWith(
-      [
-        "--- hold-open window (instrument) ---",
-        `+0s ${CHAR} 01`,
-        `+1s ${CHAR} 02`,
-      ].join("\n"),
-    );
+    expect(stash).toHaveBeenCalledExactlyOnceWith([
+      "--- hold-open window (instrument) ---",
+      SUBSCRIBE_ISSUED,
+      `+0s ${CHAR} 01`,
+      // I4 fix: the armed→holding transition's own lifecycle entry (a
+      // fourth, beyond the report's "three" — release/expiry/link-drop —
+      // added because it is the same one-line shape and pins exactly
+      // WHEN the hold began relative to arm()).
+      "+0s hold-start",
+      `+1s ${CHAR} 02`,
+      // I4 fix: release()'s own lifecycle entry, part of the stashed
+      // array too — the artifact this instrument produces, not just the
+      // live ring().
+      "+1s hold-released",
+    ]);
   });
 });
 
@@ -541,7 +588,7 @@ describe("createHoldOpenTransport: arm() is one-shot", () => {
 
     controls.arm(); // second call — must be a no-op
 
-    expect(controls.ring()).toStrictEqual([`+5s ${CHAR} 01`]);
+    expect(controls.ring()).toStrictEqual([SUBSCRIBE_ISSUED, `+5s ${CHAR} 01`]);
   });
 
   it("arm() after a completed hold does nothing — the transport stays disarmed", async () => {
@@ -606,7 +653,10 @@ describe("createHoldOpenTransport: 0x003F subscribed at arm", () => {
     clock.advance(4_000);
     stub.notify(LOGGED_WORKOUT_UUID, new Uint8Array([0xfa, 0xce]));
 
-    expect(controls.ring()).toStrictEqual([`+4s ${LOGGED_WORKOUT_UUID} fa ce`]);
+    expect(controls.ring()).toStrictEqual([
+      SUBSCRIBE_ISSUED,
+      `+4s ${LOGGED_WORKOUT_UUID} fa ce`,
+    ]);
   });
 
   it("a rejecting inner subscribe records a subscribe-failed ring entry naming the error, and does NOT reject arm() or kill the hold", async () => {
@@ -629,6 +679,7 @@ describe("createHoldOpenTransport: 0x003F subscribed at arm", () => {
     await Promise.resolve();
 
     expect(controls.ring()).toStrictEqual([
+      SUBSCRIBE_ISSUED,
       "+0s 0x003f subscribe-failed NotFoundError",
     ]);
 
@@ -655,8 +706,208 @@ describe("createHoldOpenTransport: 0x003F subscribed at arm", () => {
     await Promise.resolve();
 
     expect(controls.ring()).toStrictEqual([
+      SUBSCRIBE_ISSUED,
       "+0s 0x003f subscribe-failed plain-string-failure",
     ]);
+  });
+});
+
+// C1 fix (final-review): a stub whose `subscribe()` NEVER throws
+// synchronously and NEVER rejects a Promise either — the exact shape
+// `webBluetooth.ts`'s real `subscribe()` has (its GATT lookup runs inside a
+// `void`ed internal `.then()` chain), unlike `stubTransport()`'s own
+// `subscribeThrows` above, which models `capacitorBle.ts`'s synchronous
+// throw instead. `fireAsyncDegrade()` is the only way this stub can ever
+// report a failure — proving that the OLD code (the `.catch()` on the
+// deferred `Promise.resolve().then(() => inner.subscribe(...))` chain
+// alone) could never have observed it, since nothing here ever rejects
+// that chain.
+function stubTransportAsyncDegrade(): {
+  disconnectCalls: number;
+  fireAsyncDegrade(characteristicId: string, message: string): void;
+  transport: Transport & {
+    onCharacteristicDegraded(
+      cb: (characteristicId: string, message: string) => void,
+    ): () => void;
+  };
+} {
+  const subs = new Map<string, Set<(bytes: Uint8Array) => void>>();
+  let disconnectCalls = 0;
+  let degradedCb: ((characteristicId: string, message: string) => void) | null =
+    null;
+
+  return {
+    get disconnectCalls() {
+      return disconnectCalls;
+    },
+    fireAsyncDegrade(characteristicId: string, message: string): void {
+      degradedCb?.(characteristicId, message);
+    },
+    transport: {
+      async scan() {
+        return [{ id: "dev-1", name: "PM5 1" }];
+      },
+      async connect() {
+        // no-op
+      },
+      async write() {
+        // no-op
+      },
+      subscribe(char, cb) {
+        let set = subs.get(char);
+        if (!set) {
+          set = new Set();
+          subs.set(char, set);
+        }
+        set.add(cb);
+        return () => {
+          subs.get(char)?.delete(cb);
+        };
+      },
+      async disconnect() {
+        disconnectCalls += 1;
+      },
+      onDisconnect() {
+        return () => undefined;
+      },
+      onCharacteristicDegraded(cb) {
+        degradedCb = cb;
+        return () => {
+          if (degradedCb === cb) degradedCb = null;
+        };
+      },
+    },
+  };
+}
+
+describe("createHoldOpenTransport: 0x003F failure observable on the web arm (C1, final-review)", () => {
+  it("an ASYNC subscribe rejection — never a synchronous throw, the shape webBluetooth.ts's real subscribe() actually produces — lands in the ring as subscribe-failed via onCharacteristicDegraded, a path the deferred .catch() alone structurally cannot see", async () => {
+    const stub = stubTransportAsyncDegrade();
+    const clock = testClock();
+    const { controls } = createHoldOpenTransport(stub.transport, {
+      now: clock.now,
+      schedule: clock.schedule,
+      stash: vi.fn(),
+    });
+
+    controls.arm();
+    await Promise.resolve(); // let the deferred (never-throwing) subscribe register first
+
+    // Before C1: nothing was listening for this, so this call would have
+    // gone into the void — the exact "absent on this firmware" vs
+    // "present but silent" gap W4 exists to close.
+    stub.fireAsyncDegrade(
+      LOGGED_WORKOUT_UUID,
+      "NotFoundError: No Characteristics matching UUID ce06003f-... found",
+    );
+
+    expect(controls.ring()).toStrictEqual([
+      SUBSCRIBE_ISSUED,
+      "+0s 0x003f subscribe-failed NotFoundError: No Characteristics matching UUID ce06003f-... found",
+    ]);
+  });
+
+  it("a degraded report for a DIFFERENT characteristic is ignored — only 0x003F's own failure lands in this ring (useMonitorSession.ts's own listener owns every other characteristic)", async () => {
+    const stub = stubTransportAsyncDegrade();
+    const clock = testClock();
+    const { controls } = createHoldOpenTransport(stub.transport, {
+      now: clock.now,
+      schedule: clock.schedule,
+      stash: vi.fn(),
+    });
+
+    controls.arm();
+    await Promise.resolve();
+
+    stub.fireAsyncDegrade(CHAR, "unrelated characteristic's own failure");
+
+    expect(controls.ring()).toStrictEqual([SUBSCRIBE_ISSUED]);
+  });
+
+  it("a degraded report arriving AFTER release() (disarmed again) is not recorded — mirrors the notification tee's own armed/holding gate", async () => {
+    const stub = stubTransportAsyncDegrade();
+    const clock = testClock();
+    const { transport, controls } = createHoldOpenTransport(stub.transport, {
+      now: clock.now,
+      schedule: clock.schedule,
+      stash: vi.fn(),
+    });
+
+    controls.arm();
+    await Promise.resolve();
+    await transport.disconnect(); // -> holding
+    await controls.release(); // -> disarmed
+    const ringAfterRelease = controls.ring();
+
+    stub.fireAsyncDegrade(LOGGED_WORKOUT_UUID, "late failure");
+
+    expect(controls.ring()).toStrictEqual(ringAfterRelease);
+  });
+});
+
+// I4 fix (final-review): "the ring contains notification lines and nothing
+// else: no entry for the release, the expiry, or the PM5 hanging up" — a
+// 90s window that captured no notifications used to be indistinguishable
+// from one whose own lifecycle never ran at all, and exit criterion 5's
+// negative ("the PM5 genuinely sent nothing") had no artifact to prove it.
+// Three one-line ringPush calls, one per terminal path, fix it (a fourth,
+// `hold-start` at the armed→holding transition, is the same shape and
+// pins WHEN the hold began, not just how it ended — pinned by the
+// stash(lines) test above) — pinned individually below (release()'s own
+// entry is also exercised end-to-end by the stash(lines) test above).
+describe("createHoldOpenTransport: lifecycle events in the ring (I4, final-review)", () => {
+  it("release() records a hold-released ring entry, timestamped against the arm clock", async () => {
+    const stub = stubTransport();
+    const clock = testClock();
+    const { transport, controls } = createHoldOpenTransport(stub.transport, {
+      now: clock.now,
+      schedule: clock.schedule,
+      stash: vi.fn(),
+    });
+    controls.arm();
+    await transport.disconnect();
+    clock.advance(5_000);
+
+    await controls.release();
+
+    expect(controls.ring()).toContain("+5s hold-released");
+  });
+
+  it("expiry at HOLD_OPEN_MS records a hold-expired ring entry", async () => {
+    const stub = stubTransport();
+    const clock = testClock();
+    const { transport, controls } = createHoldOpenTransport(stub.transport, {
+      now: clock.now,
+      schedule: clock.schedule,
+      stash: vi.fn(),
+    });
+    controls.arm();
+    await transport.disconnect();
+
+    clock.advance(HOLD_OPEN_MS);
+    await Promise.resolve(); // let the expiry's async tail settle
+
+    expect(controls.ring()).toContain(
+      `+${Math.floor(HOLD_OPEN_MS / 1000)}s hold-expired`,
+    );
+  });
+
+  it("the PM5 hanging up first DURING a hold records a link-drop-during-hold ring entry", async () => {
+    const stub = stubTransport();
+    const clock = testClock();
+    const { transport, controls } = createHoldOpenTransport(stub.transport, {
+      now: clock.now,
+      schedule: clock.schedule,
+      stash: vi.fn(),
+    });
+    transport.onDisconnect(() => undefined); // registers inner.onDisconnect
+    controls.arm();
+    await transport.disconnect(); // -> holding
+    clock.advance(2_000);
+
+    stub.fireOnDisconnect("radio-dropped");
+
+    expect(controls.ring()).toContain("+2s link-drop-during-hold");
   });
 });
 

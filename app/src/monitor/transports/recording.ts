@@ -132,6 +132,21 @@ export function createRecordingTransport(
   const innerUnsubscribe = new Map<string, () => void>();
 
   const transport: Transport = {
+    // C1 fix (final-review): `...inner` FIRST, same idiom `liveness.ts`
+    // already established (that file's own comment on this exact pattern)
+    // — so a structural extension beyond the six core `Transport` methods
+    // this file names explicitly (`webBluetooth.ts`'s new
+    // `onCharacteristicDegraded`, `capacitorBle.ts`'s pre-existing one)
+    // passes through UNCHANGED to whatever composes over THIS tap
+    // (`holdOpen.ts`'s decorator, one layer up). Without this spread,
+    // `holdOpen.ts`'s own `hasCharacteristicDegraded(inner)` check would
+    // never see it — `inner` there IS this tap's `transport`, not the raw
+    // web transport underneath it — and the C1 fix would silently not
+    // reach the web arm this instrument actually runs on. The six
+    // explicit methods below still OVERRIDE the spread (object literal:
+    // later keys win), so every one of them keeps exactly its own
+    // recording behaviour.
+    ...inner,
     async scan() {
       const devices = await inner.scan();
       record({ kind: "scan", devices });

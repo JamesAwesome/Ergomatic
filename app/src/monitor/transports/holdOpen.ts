@@ -47,10 +47,17 @@ export interface HoldOpenDeps {
    *  `LivenessDeps.schedule`/`DriverOptions.schedule` elsewhere in this
    *  codebase. Returns the canceller. */
   schedule(fn: () => void, ms: number): () => void;
-  /** Called exactly once per hold window (Task 3 injects a
-   *  `sessionStorage` append) with the header line plus every ring entry
-   *  captured since `arm()`, newline-joined. */
-  stash(text: string): void;
+  /** Called exactly once per hold window (Task 3 injects a `sessionStorage`
+   *  append) with the header line plus every ring entry captured since
+   *  `arm()`, IN ORDER — as an ARRAY, never pre-joined into a single
+   *  string (final-review I1: the caller's own stash key holds
+   *  `exportLog()` JSON, an array of `MonitorLogEntry` objects; joining
+   *  these into one text blob and appending it corrupted that JSON for
+   *  every downstream reader, including the in-app diagnostic this ring
+   *  exists to feed and the hardware-walk tooling that ingests the same
+   *  key). This module stays agnostic of `MonitorLogEntry`'s shape on
+   *  purpose — the caller decides how each line becomes a stored entry. */
+  stash(lines: string[]): void;
 }
 
 export type HoldOpenState = "disarmed" | "armed" | "holding";
@@ -74,7 +81,29 @@ function toHex(bytes: Uint8Array): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join(" ");
 }
 
+// KEPT VERBATIM as a string literal (final-review, "Production absence"
+// table): `scripts/dist-grep.sh` greps a production `dist/client` build for
+// this exact text as its own proof that `holdOpen.ts` never ships in a real
+// deploy — changing or removing it would silently defang that needle.
 const STASH_HEADER = "--- hold-open window (instrument) ---";
+
+/** C1 fix (final-review): does `t` carry the degraded-characteristic
+ *  structural extension `webBluetooth.ts` now exposes (same idiom as
+ *  `useMonitorSession.ts`'s own `hasCharacteristicDegraded` and
+ *  `capacitorBle.ts`'s pre-existing `onCharacteristicDegraded`)? `inner`
+ *  here is always `recording.ts`'s tap, which forwards it through from
+ *  whichever real transport it wraps via its own `...inner` spread — a
+ *  bare test `Transport` typically does not implement it. */
+function hasCharacteristicDegraded(t: Transport): t is Transport & {
+  onCharacteristicDegraded(
+    cb: (characteristicId: string, message: string) => void,
+  ): () => void;
+} {
+  return (
+    typeof (t as { onCharacteristicDegraded?: unknown })
+      .onCharacteristicDegraded === "function"
+  );
+}
 
 export function createHoldOpenTransport(
   inner: Transport,
@@ -88,7 +117,7 @@ export function createHoldOpenTransport(
   let ring: string[] = [];
 
   function stashRing(): void {
-    deps.stash([STASH_HEADER, ...ring].join("\n"));
+    deps.stash([STASH_HEADER, ...ring]);
   }
 
   function sinceArm(): number {
@@ -142,6 +171,15 @@ export function createHoldOpenTransport(
     state = "armed";
     armedAtMs = deps.now();
     ring = [];
+    // C1 fix (final-review): a POSITIVE trace that arm() actually asked
+    // for the subscription — pushed synchronously, unconditional of
+    // whatever the deferred call below turns out to do. Before this, a
+    // successful-but-silent subscribe and a subscribe that never
+    // happened at all (a code bug, this instrument never wired up) left
+    // an identical empty ring; now the ring's very first line proves the
+    // request was made, and the QUESTION W4 exists to answer — "did the
+    // PM5 send anything back?" — is legible from whatever comes after it.
+    ringPush(`+${sinceArm()}s 0x003f subscribe-issued`);
     // THE INSTRUMENT's OWN SUBSCRIBE (Phase RC spec 1 §3) — 0x003F is
     // not on the driver's shared subscribe list (adding it there would
     // put it on the native arm too; this decorator is dev/web-only), so
@@ -158,12 +196,23 @@ export function createHoldOpenTransport(
     // id" (capacitorBle.ts:218-221) — exactly the shape a firmware
     // lacking 0x003F, or a `SERVICE_OF` map missing an entry for it,
     // produces on the native transport this decorator can be composed
-    // over. `Promise.resolve(inner.subscribe(...))` evaluates
-    // `inner.subscribe(...)` before `Promise.resolve` is even called, so
-    // a synchronous throw there would propagate straight out of `arm()`
-    // uncaught — the opposite of "does not reject arm() or kill the
-    // hold". Deferring the call into the `.then()` turns that same throw
-    // into a rejection this `.catch()` actually observes.
+    // over (it never does — this decorator is dev/web-only, per its own
+    // header — but the safety net is cheap to keep). Deferring the call
+    // into the `.then()` turns that throw into a rejection this
+    // `.catch()` actually observes.
+    //
+    // **C1 fix, the load-bearing half (final-review): this `.catch()`
+    // alone is NOT the fix.** `webBluetooth.subscribe` — the only arm
+    // this instrument ever actually runs on — never throws synchronously
+    // AND never rejects a Promise either: its GATT lookup runs inside a
+    // `void`ed internal `.then()` chain with no attached `.catch()`
+    // (`webBluetooth.ts`'s own `subscribe()`), so a firmware without
+    // 0x003F on the web arm produced no ring entry at all before this
+    // fix — "absent" and "silent" read identically, exactly the gap W4
+    // exists to close. `webBluetooth.ts` now routes that internal
+    // rejection through `onCharacteristicDegraded`, the same structural
+    // `Transport` extension `capacitorBle.ts` already exposes for the
+    // native arm — wired below.
     Promise.resolve()
       .then(() =>
         inner.subscribe(LOGGED_WORKOUT_UUID, tee(LOGGED_WORKOUT_UUID)),
@@ -173,10 +222,41 @@ export function createHoldOpenTransport(
           `+${sinceArm()}s 0x003f subscribe-failed ${e instanceof Error ? e.name : String(e)}`,
         );
       });
+    // C1 fix, continued: the web arm's OWN failure seam. `inner` here is
+    // `recording.ts`'s tap, which forwards this structural extension
+    // through unchanged from whichever real transport it wraps (that
+    // file's own `...inner` spread, matching `liveness.ts`'s established
+    // idiom) — so when `inner` is ultimately `webBluetooth.ts`'s real
+    // transport, this reaches its `onCharacteristicDegraded` and hears
+    // the async rejection the `.catch()` above structurally cannot. Only
+    // 0x003F's own failure is recorded here — `useMonitorSession.ts`
+    // separately registers its own listener (its `hasCharacteristicDegraded`
+    // wiring) for every OTHER characteristic's degradation, and the two
+    // do not collide: `webBluetooth.ts`'s implementation fans out to every
+    // registered listener rather than the single-slot pattern
+    // `capacitorBle.ts` uses, specifically so this instrument's own
+    // registration can never silently steal the driver's.
+    if (hasCharacteristicDegraded(inner)) {
+      inner.onCharacteristicDegraded((characteristicId, message) => {
+        if (
+          characteristicId === LOGGED_WORKOUT_UUID &&
+          (state === "armed" || state === "holding")
+        ) {
+          ringPush(`+${sinceArm()}s 0x003f subscribe-failed ${message}`);
+        }
+      });
+    }
   }
 
   async function release(): Promise<void> {
     if (!claimHold()) return;
+    // I4 fix (final-review): one of the three terminal-path lifecycle
+    // entries the report's own "three one-line ringPush calls" fix names
+    // — without it, a 90s window that captured no notifications was
+    // indistinguishable from one whose release/expiry/link-drop never
+    // ran at all, and exit criterion 5's negative ("the PM5 genuinely
+    // sent nothing") had no way to prove the window actually closed.
+    ringPush(`+${sinceArm()}s hold-released`);
     try {
       await inner.disconnect();
     } finally {
@@ -222,8 +302,13 @@ export function createHoldOpenTransport(
       if (state === "armed") {
         state = "holding";
         holdStartMs = deps.now();
+        ringPush(`+${sinceArm()}s hold-start`);
         cancelTimer = deps.schedule(() => {
           claimHold(); // always succeeds here — see claimHold()'s own doc
+          // I4 fix: the second of the three terminal-path lifecycle
+          // entries — see release()'s own comment on why an empty ring
+          // cannot otherwise tell "genuinely silent" from "never ran".
+          ringPush(`+${sinceArm()}s hold-expired`);
           void (async () => {
             try {
               await inner.disconnect();
@@ -239,9 +324,28 @@ export function createHoldOpenTransport(
     },
     onDisconnect(cb) {
       return inner.onDisconnect((reason) => {
-        // The PM5 hung up first — `inner` is already gone, so there is
-        // no `inner.disconnect()` to call here, unlike release()/expiry.
-        if (claimHold()) {
+        // I5 fix (final-review): a link drop while merely ARMED (not yet
+        // holding — no `disconnect()` has been called yet) used to leave
+        // `state` at `"armed"` forever, because `claimHold()` only claims
+        // FROM `"holding"`. The NEXT `disconnect()` call — the teardown
+        // that follows this very drop — would then transition
+        // armed→holding on a transport that is already dead:
+        // `status()` would report a counting-down `msRemaining` for a
+        // radio that's gone, and the ring would only stash 90s later for
+        // a window that can record nothing. Treated here as a terminal
+        // path in its own right, exactly like the three `claimHold()`
+        // triggers: disarm immediately, ring the event, stash what
+        // there is (typically nothing beyond "armed"/"subscribe-issued").
+        if (state === "armed") {
+          state = "disarmed";
+          ringPush(`+${sinceArm()}s link-drop-while-armed`);
+          stashRing();
+        } else if (claimHold()) {
+          // The PM5 hung up first while HOLDING — `inner` is already
+          // gone, so there is no `inner.disconnect()` to call here,
+          // unlike release()/expiry. I4 fix: the third of the three
+          // terminal-path lifecycle entries.
+          ringPush(`+${sinceArm()}s link-drop-during-hold`);
           stashRing();
         }
         cb(reason);
