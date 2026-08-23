@@ -5496,7 +5496,7 @@ describe("Phase LL Task 4: programHasDistanceGoal (pure)", () => {
   });
 });
 
-describe("Phase LL Task 4: applyContinuityCheck (pure — the resumed-stream consumption seam)", () => {
+describe("Phase LL Task 4: applyContinuityCheck (pure — the resumed-stream consumption seam), widened to three axes by F2a", () => {
   const startedAt = t0.toISOString();
 
   function openRun(overrides: Partial<MonitorRun> = {}): MonitorRun {
@@ -5514,14 +5514,39 @@ describe("Phase LL Task 4: applyContinuityCheck (pure — the resumed-stream con
     };
   }
 
+  /** A "prior reading" snapshot — the shape `lastContinuityRef` now
+   *  carries in `useMonitorSession.ts`. */
+  const LAST = {
+    totalWorkDistanceMeters: 1599,
+    elapsedSeconds: 120,
+    distanceMeters: 400,
+  };
+
+  /** All three axes backward against `LAST` — the genuine reset
+   *  signature (`continuity.ts`'s own `check`). */
+  const RESET_FRAME = frame({
+    totalWorkDistanceMeters: 100,
+    elapsedSeconds: 10,
+    distanceMeters: 40,
+  });
+
   it("not suspect: returns run UNCHANGED (same reference), whatever the readings say", () => {
     const run = openRun();
-    const result = applyContinuityCheck(run, 1000, 5, false, t0, null);
+    const result = applyContinuityCheck(
+      run,
+      LAST,
+      RESET_FRAME,
+      false,
+      t0,
+      null,
+    );
     expect(result).toBe(run);
   });
 
   it("no run open: null in, null out", () => {
-    expect(applyContinuityCheck(null, 1000, 5, true, t0, null)).toBeNull();
+    expect(
+      applyContinuityCheck(null, LAST, RESET_FRAME, true, t0, null),
+    ).toBeNull();
   });
 
   it("an already-closed run is returned UNCHANGED — never re-closed or re-stamped", () => {
@@ -5529,29 +5554,73 @@ describe("Phase LL Task 4: applyContinuityCheck (pure — the resumed-stream con
       completedAt: new Date("2026-08-07T09:30:00.000Z").toISOString(),
       endedBy: "finished",
     });
-    const result = applyContinuityCheck(closed, 1000, 5, true, t0, null);
+    const result = applyContinuityCheck(
+      closed,
+      LAST,
+      RESET_FRAME,
+      true,
+      t0,
+      null,
+    );
     expect(result).toBe(closed);
   });
 
-  it("no prior reading yet (lastTwd null): continuation, unchanged", () => {
+  it("no prior reading yet (last null): continuation, unchanged", () => {
     const run = openRun();
-    expect(applyContinuityCheck(run, null, 5, true, t0, null)).toBe(run);
-  });
-
-  it("this frame carries no totalWorkDistanceMeters (frameTwd undefined): continuation, unchanged", () => {
-    const run = openRun();
-    expect(applyContinuityCheck(run, 1000, undefined, true, t0, null)).toBe(
+    expect(applyContinuityCheck(run, null, RESET_FRAME, true, t0, null)).toBe(
       run,
     );
   });
 
-  it("a forward or equal reading: continuation, unchanged, even while suspect", () => {
+  it("this frame carries no totalWorkDistanceMeters (frame.totalWorkDistanceMeters undefined): continuation, unchanged", () => {
     const run = openRun();
-    expect(applyContinuityCheck(run, 1000, 1000, true, t0, null)).toBe(run);
-    expect(applyContinuityCheck(run, 1000, 5000, true, t0, null)).toBe(run);
+    const noTwdFrame = frame({ elapsedSeconds: 10, distanceMeters: 40 });
+    expect(applyContinuityCheck(run, LAST, noTwdFrame, true, t0, null)).toBe(
+      run,
+    );
   });
 
-  it("suppressed on a distance-goal program, even for a large backward jump", () => {
+  it("a forward or equal reading on every axis: continuation, unchanged, even while suspect", () => {
+    const run = openRun();
+    const equalFrame = frame({ ...LAST });
+    const forwardFrame = frame({
+      totalWorkDistanceMeters: 5000,
+      elapsedSeconds: 200,
+      distanceMeters: 900,
+    });
+    expect(applyContinuityCheck(run, LAST, equalFrame, true, t0, null)).toBe(
+      run,
+    );
+    expect(applyContinuityCheck(run, LAST, forwardFrame, true, t0, null)).toBe(
+      run,
+    );
+  });
+
+  it("F2a: TWD alone backward while elapsed AND distance both advance — continuation, unchanged (the ring-phone-2 false-kill shape, at the pure level)", () => {
+    const run = openRun();
+    const twdOnlyBackward = frame({
+      totalWorkDistanceMeters: LAST.totalWorkDistanceMeters - 1,
+      elapsedSeconds: LAST.elapsedSeconds + 5,
+      distanceMeters: LAST.distanceMeters + 10,
+    });
+    expect(
+      applyContinuityCheck(run, LAST, twdOnlyBackward, true, t0, null),
+    ).toBe(run);
+  });
+
+  it("two of three axes backward, one forward: still continuation — the conjunction requires ALL three", () => {
+    const run = openRun();
+    const twoOfThreeBackward = frame({
+      totalWorkDistanceMeters: LAST.totalWorkDistanceMeters - 1,
+      elapsedSeconds: LAST.elapsedSeconds - 1,
+      distanceMeters: LAST.distanceMeters + 10,
+    });
+    expect(
+      applyContinuityCheck(run, LAST, twoOfThreeBackward, true, t0, null),
+    ).toBe(run);
+  });
+
+  it("suppressed on a distance-goal program, even for a genuine three-axis backward jump", () => {
     const distanceProgram: WorkoutProgram = {
       intervals: [
         {
@@ -5565,17 +5634,17 @@ describe("Phase LL Task 4: applyContinuityCheck (pure — the resumed-stream con
       ],
     };
     const run = openRun({ program: distanceProgram });
-    const result = applyContinuityCheck(run, 1599, 100, true, t0, null);
+    const result = applyContinuityCheck(run, LAST, RESET_FRAME, true, t0, null);
     expect(result).toBe(run);
     expect(result?.completedAt).toBeNull();
   });
 
-  it("a genuine backward jump while suspect closes the run as link-lost (RULED at Task 4's own review, F1/I1 — the STRONGEST-evidence close, never the absence-of-evidence value), and records the ring entry — the mutation this test guards against: dropping the `>` comparison so ANY change (even forward) closes the run", () => {
+  it("a genuine backward jump on all three axes while suspect closes the run as link-lost (RULED at Task 4's own review, F1/I1 — the STRONGEST-evidence close, never the absence-of-evidence value), and records the ring entry naming all three axes — the mutation this test guards against: dropping any one of the three `<` comparisons so a partial change closes the run", () => {
     const run = openRun();
     const log = createEventLog();
     const now = new Date("2026-08-07T09:31:00.000Z");
 
-    const result = applyContinuityCheck(run, 1599, 100, true, now, log);
+    const result = applyContinuityCheck(run, LAST, RESET_FRAME, true, now, log);
 
     expect(result).not.toBe(run);
     expect(result?.completedAt).toBe(now.toISOString());
@@ -5593,20 +5662,32 @@ describe("Phase LL Task 4: applyContinuityCheck (pure — the resumed-stream con
     }[];
     const resetEntry = entries.find((e) => e.kind === "continuity-reset");
     expect(resetEntry).toBeDefined();
-    expect(resetEntry!.detail).toContain("1599");
-    expect(resetEntry!.detail).toContain("100");
+    expect(resetEntry!.detail).toContain("twd 1599 -> 100");
+    expect(resetEntry!.detail).toContain("elapsed 120 -> 10");
+    expect(resetEntry!.detail).toContain("distance 400 -> 40");
   });
 
   it("a null log is tolerated — no throw, the close still happens", () => {
     const run = openRun();
-    const result = applyContinuityCheck(run, 1599, 100, true, t0, null);
+    const result = applyContinuityCheck(run, LAST, RESET_FRAME, true, t0, null);
     expect(result?.completedAt).not.toBeNull();
   });
 
   it("idempotent in practice: calling again against the NOW-CLOSED result is a no-op (the completedAt guard, not a second-check special case)", () => {
     const run = openRun();
-    const once = applyContinuityCheck(run, 1599, 100, true, t0, null);
-    const twice = applyContinuityCheck(once, 100, 50, true, t0, null);
+    const once = applyContinuityCheck(run, LAST, RESET_FRAME, true, t0, null);
+    const twice = applyContinuityCheck(
+      once,
+      { totalWorkDistanceMeters: 100, elapsedSeconds: 10, distanceMeters: 40 },
+      frame({
+        totalWorkDistanceMeters: 50,
+        elapsedSeconds: 5,
+        distanceMeters: 20,
+      }),
+      true,
+      t0,
+      null,
+    );
     expect(twice).toBe(once);
   });
 });
@@ -5738,6 +5819,25 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
   const REAL_HEAD_HEX =
     "00 00 00 00 00 00 08 00 04 00 01 64 00 00 70 17 00 00 68"; // twd=100, workoutState=4 (rowing)
 
+  // F2a (design spec 2026-08-23-continuity-corroboration §4 tests 1-2, at
+  // the hook level): three synthetic 0x0031 payloads encoding the EXACT
+  // decoded readings `docs/monitor/sessions/walk-2026-08-23/ring-phone-2-
+  // background-continuity-kill.json` reports at seq 30/33 (also quoted in
+  // `continuity.ts`'s own F2a header comment) — that capture is a decoded
+  // `MonitorEventLog` export, not a raw-byte recording like
+  // `session-2-wu-4unequal.jsonl` above, so there are no captured bytes to
+  // replay verbatim; these bytes are HAND-ENCODED from its own numbers
+  // (elapsed*100/distance*10/twd whole-metres per `parse.ts`'s own
+  // `parseGeneralStatus`, `workoutState=4`/`durationRaw=18000`/
+  // `durationType=0` copied straight off the capture's own log lines),
+  // not a claim that these are the machine's original bytes.
+  const RING_PHONE_2_BEFORE_HEX =
+    "eb 15 00 2c 03 00 08 00 04 01 04 51 00 00 50 46 00 00 68"; // twd=81, elapsed=56.11, distance=81.2 (seq 30)
+  const RING_PHONE_2_AFTER_HEALTHY_HEX =
+    "2d 17 00 41 03 00 08 00 04 01 04 00 00 00 50 46 00 00 68"; // twd=0, elapsed=59.33, distance=83.3 (seq 33 — TWD alone backward)
+  const RING_PHONE_2_AFTER_FULL_RESET_HEX =
+    "00 00 00 00 00 00 08 00 04 01 04 00 00 00 50 46 00 00 68"; // zeros on all three — the genuine-reset counterfactual
+
   /** Delegates every `Transport` method to `inner` unchanged EXCEPT
    *  `subscribe`, which additionally remembers each characteristic's own
    *  live callback set — `deliverRaw` below is what lets this test push
@@ -5853,7 +5953,7 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
     expect(result.current.phase).toBe("live");
 
     // "before": the run's own first live frame (the fake's own scripted
-    // tick) already seeded `lastTwdRef` with an irrelevant value.
+    // tick) already seeded `lastContinuityRef` with an irrelevant value.
     // Overwrite it with the capture's own real, later, still-rowing
     // reading, delivered the SAME way any other frame is — through the
     // driver's decode pipeline, not by poking a ref directly.
@@ -5909,6 +6009,220 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
     expect(resetEntry).toBeDefined();
     expect(resetEntry!.detail).toContain("1354");
     expect(resetEntry!.detail).toContain("100");
+  }, 15000);
+
+  // -------------------------------------------------------------------
+  // F2a (design spec 2026-08-23-continuity-corroboration §2, §4 tests
+  // 1-2): the ring-phone-2 false kill, replayed through the real hook
+  // composition end to end. Before Task 2's wiring, `applyContinuityCheck`
+  // only ever tracked ONE axis (`lastTwd`/`frameTwd`), so this exact
+  // shape — TWD alone backward, elapsed and distance both genuinely
+  // advancing, the stream never stopped rowing — convicted and closed a
+  // healthy row. `continuity.ts`'s three-axis `check` alone can't prove
+  // the WIRING passes real per-frame elapsed/distance through instead of
+  // reusing the TWD scalar for all three axes (Task 1's own bridge did
+  // exactly that and would still convict this shape) — only a replay at
+  // this level can.
+  // -------------------------------------------------------------------
+  it("F2a: TWD alone going backward while elapsed and distance both advance no longer convicts — the ring-phone-2 false kill stays open", async () => {
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
+      events: [status(100, { elapsedSeconds: 10, distanceMeters: 40 })],
+    });
+    const intercepting = interceptingTransport(fake);
+    const mockDefaultTransport = vi.fn((deps: LivenessDeps) =>
+      withLiveness(intercepting, deps),
+    );
+    vi.doMock("../adapters/monitorTransport", () => ({
+      defaultTransport: mockDefaultTransport,
+    }));
+    let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener: vi.fn(
+        (cb: (event: "background" | "foreground") => void) => {
+          lifecycleCb = cb;
+          return () => undefined;
+        },
+      ),
+    }));
+    vi.resetModules();
+
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+    const { result } = renderHook(() =>
+      freshUseMonitorSession({
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: () => (): void => undefined,
+        },
+      }),
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+    await act(async () => {
+      let settled = false;
+      const pending = result.current
+        .program(TWO_INTERVALS, TWO_IDENTITY)
+        .finally(() => {
+          settled = true;
+        });
+      await flush();
+      for (let i = 0; i < 25 && !settled; i += 1) {
+        fake.tick(0);
+        await flush();
+      }
+      await pending;
+    });
+    act(() => {
+      fake.tick(100);
+    });
+    expect(result.current.phase).toBe("live");
+
+    // "before": the capture's own healthy reading (twd=81, elapsed=56.11,
+    // distance=81.2, seq 30 — `RING_PHONE_2_BEFORE_HEX`'s own comment).
+    act(() => {
+      intercepting.deliverRaw(
+        GENERAL_STATUS_UUID,
+        fromHexString(RING_PHONE_2_BEFORE_HEX),
+      );
+    });
+    expect(result.current.phase).toBe("live");
+
+    expect(lifecycleCb).toBeDefined();
+    act(() => {
+      lifecycleCb!("background");
+      lifecycleCb!("foreground");
+    });
+    expect(result.current.frameSilence).toBe(true);
+
+    // "after": the capture's own seq 33 reading — TWD backward
+    // (81 -> 0) alone; elapsed (56.11 -> 59.33) and distance
+    // (81.2 -> 83.3) both genuinely advance. This is the exact
+    // shape that closed a rowing stream mid-pull before F2a.
+    act(() => {
+      intercepting.deliverRaw(
+        GENERAL_STATUS_UUID,
+        fromHexString(RING_PHONE_2_AFTER_HEALTHY_HEX),
+      );
+    });
+
+    expect(result.current.phase).toBe("live");
+    expect(loadMonitorRun()?.completedAt).toBeNull();
+    expect(loadMonitorRun()?.endedBy).toBeUndefined();
+    const exported = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+    }[];
+    expect(exported.find((e) => e.kind === "continuity-reset")).toBeUndefined();
+  }, 15000);
+
+  it("F2a: a genuine full-reset signature (zeros on all three axes) still convicts, and the ring entry now names all three axes", async () => {
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
+      events: [status(100, { elapsedSeconds: 10, distanceMeters: 40 })],
+    });
+    const intercepting = interceptingTransport(fake);
+    const mockDefaultTransport = vi.fn((deps: LivenessDeps) =>
+      withLiveness(intercepting, deps),
+    );
+    vi.doMock("../adapters/monitorTransport", () => ({
+      defaultTransport: mockDefaultTransport,
+    }));
+    let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener: vi.fn(
+        (cb: (event: "background" | "foreground") => void) => {
+          lifecycleCb = cb;
+          return () => undefined;
+        },
+      ),
+    }));
+    vi.resetModules();
+
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+    const { result } = renderHook(() =>
+      freshUseMonitorSession({
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: () => (): void => undefined,
+        },
+      }),
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+    await act(async () => {
+      let settled = false;
+      const pending = result.current
+        .program(TWO_INTERVALS, TWO_IDENTITY)
+        .finally(() => {
+          settled = true;
+        });
+      await flush();
+      for (let i = 0; i < 25 && !settled; i += 1) {
+        fake.tick(0);
+        await flush();
+      }
+      await pending;
+    });
+    act(() => {
+      fake.tick(100);
+    });
+    expect(result.current.phase).toBe("live");
+
+    act(() => {
+      intercepting.deliverRaw(
+        GENERAL_STATUS_UUID,
+        fromHexString(RING_PHONE_2_BEFORE_HEX),
+      );
+    });
+    expect(result.current.phase).toBe("live");
+
+    expect(lifecycleCb).toBeDefined();
+    act(() => {
+      lifecycleCb!("background");
+      lifecycleCb!("foreground");
+    });
+    expect(result.current.frameSilence).toBe(true);
+
+    // The genuine-reset counterfactual: all three axes read lower —
+    // zeros against real progress, the reset signature `continuity.ts`'s
+    // own `check` still convicts.
+    act(() => {
+      intercepting.deliverRaw(
+        GENERAL_STATUS_UUID,
+        fromHexString(RING_PHONE_2_AFTER_FULL_RESET_HEX),
+      );
+    });
+
+    expect(result.current.phase).toBe("ended");
+    expect(result.current.runOpen).toBe(false);
+    expect(result.current.endedBy).toBe("user");
+
+    const stored = loadMonitorRun();
+    expect(stored?.completedAt).not.toBeNull();
+    expect(stored?.endedBy).toBe("link-lost");
+
+    const exported = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const resetEntry = exported.find((e) => e.kind === "continuity-reset");
+    expect(resetEntry).toBeDefined();
+    // The ring entry now names all three axes, not TWD alone (Task 1's
+    // bridge only ever logged `totalWorkDistanceMeters` — the mutation
+    // this guards against is dropping the elapsed/distance clauses from
+    // the log message).
+    expect(resetEntry!.detail).toContain("twd 81 -> 0");
+    expect(resetEntry!.detail).toContain("elapsed 56.11 -> 0");
+    expect(resetEntry!.detail).toContain("distance 81.2 -> 0");
   }, 15000);
 
   // -------------------------------------------------------------------

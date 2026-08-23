@@ -456,60 +456,60 @@ export function programHasDistanceGoal(p: WorkoutProgram): boolean {
  * there is no run, or it is already closed (nothing left to protect —
  * `recordActual`'s own guard already covers a closed run, this is belt
  * and braces at the SOURCE of the close instead); there is no prior
- * reading to compare against (`lastTwd === null`, the very first live
+ * reading to compare against (`last === null`, the very first live
  * frame of a run); or this particular frame carries no
- * `totalWorkDistanceMeters` at all (`frameTwd === undefined` — an older
- * `MonitorFrame` construction path, `domain/monitor/types.ts`'s own
- * additive-optional doc comment on that field).
+ * `totalWorkDistanceMeters` at all (`frame.totalWorkDistanceMeters ===
+ * undefined` — an older `MonitorFrame` construction path,
+ * `domain/monitor/types.ts`'s own additive-optional doc comment on that
+ * field).
+ *
+ * F2a (Task 2 of 2, design spec 2026-08-23-continuity-corroboration §2):
+ * `last` and `frame` each carry all THREE axes `continuity.ts`'s own
+ * `check` now conjoins — `totalWorkDistanceMeters`, `elapsedSeconds`, and
+ * `distanceMeters` — read straight off the SAME `MonitorFrame` reading in
+ * both cases (the caller's `lastContinuityRef` snapshot for `last`, this
+ * frame itself for `frame`), never fabricated from one scalar the way
+ * Task 1's bridge did.
  */
 export function applyContinuityCheck(
   run: MonitorRun | null,
-  lastTwd: number | null,
-  frameTwd: number | undefined,
+  last: {
+    totalWorkDistanceMeters: number;
+    elapsedSeconds: number;
+    distanceMeters: number;
+  } | null,
+  frame: MonitorFrame,
   frameSilence: boolean,
   now: Date,
   log: MonitorEventLog | null,
 ): MonitorRun | null {
   if (!frameSilence) return run;
   if (run === null || run.completedAt !== null) return run;
-  if (lastTwd === null || frameTwd === undefined) return run;
+  if (last === null || frame.totalWorkDistanceMeters === undefined) {
+    return run;
+  }
   const distanceGoal = programHasDistanceGoal(run.program);
-  // F2a BRIDGE (Task 1 of 2 — flagged, not a real fix; Task 2 owns
-  // replacing this): `ContinuityReading` now requires `elapsedSeconds`/
-  // `distanceMeters` alongside `totalWorkDistanceMeters` (continuity.ts's
-  // own header comment), but this function only ever tracked a single
-  // `lastTwd`/`frameTwd` scalar pair — no per-axis elapsed/distance
-  // reading has ever been threaded through this call, so there is no REAL
-  // frame value available here to fill the two new axes honestly. Reusing
-  // the ONE real quantity already in scope (the TWD pair itself) for all
-  // three axes keeps this call site's OBSERVABLE behavior identical to
-  // before this task (a reset fires exactly when TWD alone goes backward,
-  // matching every existing test above) rather than fabricating
-  // independent forward/backward motion this function cannot actually
-  // observe. It does NOT implement the F2a three-axis corroboration at
-  // this call site — that requires tracking real per-frame elapsed/
-  // distance the same way `lastTwd` already tracks TWD, which is Task 2's
-  // own change (design spec 2026-08-23-continuity-corroboration §2: "only
-  // the conviction predicate narrows").
   const verdict = checkContinuity(
     {
-      totalWorkDistanceMeters: lastTwd,
-      elapsedSeconds: lastTwd,
-      distanceMeters: lastTwd,
+      totalWorkDistanceMeters: last.totalWorkDistanceMeters,
+      elapsedSeconds: last.elapsedSeconds,
+      distanceMeters: last.distanceMeters,
       distanceGoal,
     },
     {
-      totalWorkDistanceMeters: frameTwd,
-      elapsedSeconds: frameTwd,
-      distanceMeters: frameTwd,
+      totalWorkDistanceMeters: frame.totalWorkDistanceMeters,
+      elapsedSeconds: frame.elapsedSeconds,
+      distanceMeters: frame.distanceMeters,
       distanceGoal,
     },
   );
   if (verdict !== "reset") return run;
   log?.record(
     "continuity-reset",
-    `resumed stream failed continuity: totalWorkDistanceMeters ${lastTwd} ` +
-      `-> ${frameTwd} — closing as link-lost, never merging`,
+    `resumed stream failed continuity: twd ${last.totalWorkDistanceMeters} ` +
+      `-> ${frame.totalWorkDistanceMeters} elapsed ${last.elapsedSeconds} ` +
+      `-> ${frame.elapsedSeconds} distance ${last.distanceMeters} -> ` +
+      `${frame.distanceMeters} — closing as link-lost, never merging`,
   );
   // §4: "On reset: preserve the interrupted record, start clean, never
   // merge." No reconnect flow exists this phase (spec §8) to start a
@@ -1162,15 +1162,23 @@ export function useMonitorSession(
    *  ever written while the phase is `ready`; once the session is live it is
    *  dead weight until the next `cancel()` clears it. */
   const rowingStreakRef = useRef<RowingStreak | null>(null);
-  /** Phase LL Task 4 (design spec §4's continuity rule): the last live
-   *  frame's own `totalWorkDistanceMeters`, tracked independently of
-   *  `state.frame` so a value survives exactly the instant the stream goes
-   *  suspect (nothing overwrites this ref while frames aren't arriving).
-   *  `null` before this run's first live frame, or once `cancel()` clears
-   *  it for the next one — never re-derived from `state.frame` directly,
-   *  the same "own it in a ref" discipline `freezeRef`/`rowingStreakRef`
-   *  already use for per-run tracking a render cycle must not lose. */
-  const lastTwdRef = useRef<number | null>(null);
+  /** Phase LL Task 4 (design spec §4's continuity rule), widened to all
+   *  three axes by F2a (design spec 2026-08-23-continuity-corroboration
+   *  §2): the last live frame's own `totalWorkDistanceMeters`,
+   *  `elapsedSeconds`, and `distanceMeters` together — the exact reading
+   *  `continuity.ts`'s `ContinuityReading` conjoins — tracked
+   *  independently of `state.frame` so a value survives exactly the
+   *  instant the stream goes suspect (nothing overwrites this ref while
+   *  frames aren't arriving). `null` before this run's first live frame,
+   *  or once `cancel()` clears it for the next one — never re-derived
+   *  from `state.frame` directly, the same "own it in a ref" discipline
+   *  `freezeRef`/`rowingStreakRef` already use for per-run tracking a
+   *  render cycle must not lose. */
+  const lastContinuityRef = useRef<{
+    totalWorkDistanceMeters: number;
+    elapsedSeconds: number;
+    distanceMeters: number;
+  } | null>(null);
   /** One `connect()` at a time — a second press while the monitor chooser is open
    *  must not open a second one. */
   const connectingRef = useRef(false);
@@ -1575,15 +1583,23 @@ export function useMonitorSession(
           // compares against a PRIOR frame of THIS run, never a stale
           // reading a previous run left behind (`cancel()` clears this ref
           // too, but the very first frame of a fresh run reaches this
-          // branch, not that one, so it needs its own seed here). The `??
-          // null` arm is defensive, not reachable from this file's own
-          // test suite: every REAL frame construction
-          // (`toMonitorFrame`/`driver.ts`'s own spread-through) always
-          // sets this field — only a `MonitorFrame` a future caller built
-          // BARE (bypassing both) could ever omit it, the same "additive-
-          // optional, coverage-exempt fallback" shape `domain/monitor/
-          // types.ts`'s own doc comment on this field already names.
-          lastTwdRef.current = frame.totalWorkDistanceMeters ?? null;
+          // branch, not that one, so it needs its own seed here). F2a
+          // widened the snapshot to all three axes; the `undefined` arm
+          // is defensive, not reachable from this file's own test suite:
+          // every REAL frame construction (`toMonitorFrame`/`driver.ts`'s
+          // own spread-through) always sets `totalWorkDistanceMeters` —
+          // only a `MonitorFrame` a future caller built BARE (bypassing
+          // both) could ever omit it, the same "additive-optional,
+          // coverage-exempt fallback" shape `domain/monitor/types.ts`'s
+          // own doc comment on this field already names.
+          lastContinuityRef.current =
+            frame.totalWorkDistanceMeters === undefined
+              ? null
+              : {
+                  totalWorkDistanceMeters: frame.totalWorkDistanceMeters,
+                  elapsedSeconds: frame.elapsedSeconds,
+                  distanceMeters: frame.distanceMeters,
+                };
           update({
             frame,
             phase: "live",
@@ -1635,8 +1651,8 @@ export function useMonitorSession(
         // for all three.
         const closed = applyContinuityCheck(
           runRef.current,
-          lastTwdRef.current,
-          frame.totalWorkDistanceMeters,
+          lastContinuityRef.current,
+          frame,
           stateRef.current.frameSilence,
           nowDate(),
           logRef.current,
@@ -1693,11 +1709,17 @@ export function useMonitorSession(
           // skip `openHandoffHold()`.
           update({ phase: "ended", endedBy: "user", runOpen: false });
         }
-        // Same defensive, test-suite-unreachable `??` arm as the seed
+        // Same defensive, test-suite-unreachable fallback arm as the seed
         // above — every real frame reaching this branch already carries
         // the field.
-        lastTwdRef.current =
-          frame.totalWorkDistanceMeters ?? lastTwdRef.current;
+        lastContinuityRef.current =
+          frame.totalWorkDistanceMeters === undefined
+            ? lastContinuityRef.current
+            : {
+                totalWorkDistanceMeters: frame.totalWorkDistanceMeters,
+                elapsedSeconds: frame.elapsedSeconds,
+                distanceMeters: frame.distanceMeters,
+              };
         const freeze = nextFreezeRun(freezeRef.current, frame);
         freezeRef.current = freeze;
         update({ frame, frozen: isPausedRun(freeze) });
@@ -2508,7 +2530,7 @@ export function useMonitorSession(
     // Phase LL Task 4: same per-run lifecycle as `freezeRef`/
     // `rowingStreakRef` above — a stale reading from THIS run must never
     // seed the next one's continuity baseline.
-    lastTwdRef.current = null;
+    lastContinuityRef.current = null;
     runRef.current = null;
     update(INITIAL_STATE);
   }, [teardown, update]);

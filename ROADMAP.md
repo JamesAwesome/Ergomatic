@@ -1821,6 +1821,11 @@ Nothing here should be discovered at submission time.
         **never authoritative for a `100dvh` question**, which is
         precisely half of what the connected-surface occlusion check
         tests. **S**
+- [ ] **app/e2e/ is not typechecked** (James, 2026-08-23 — owner assigned;
+      previously a trap note): tsconfig.app.json covers only
+      src/domain/scripts and Playwright erases types; a hand-rolled config
+      over e2e/ surfaced 14 pre-existing errors when last tried. Fix the
+      errors, wire the config into pnpm typecheck.
 - [ ] **Let a build flag reach the fake transport on NATIVE.** One line
       in `src/adapters/monitorTransport.ts`, and it is the difference
       between "the simulator can never see a connected screen" and "every
@@ -2666,6 +2671,7 @@ walk's three findings, filed as LL follow-ups:**
   path broken. Fix is SPLIT: F2a (defuse via corroboration, Phase RC
   before RC-1) and F2b (re-key, inside RC-1/RC-8).
   `ring-phone-2-background-continuity-kill.json` is the capture.
+  **F2a defuse SHIPPED (PR pending); F2b remains open in RC-1.**
 - **F3 (small UI) — `endedBy: "link-lost"` is stored and consumed
   (`completedFullDistance`) but rendered NOWHERE** — the log detail shows
   no marking; v0.17.0's notes over-promised the surface. One line on the
@@ -2702,8 +2708,8 @@ and `ergomatic.sessionDraft`, costing an unlogged session and any
 in-progress draft. **The original hold ("until criterion (b) exists") is
 DISCHARGED (close gate, 2026-08-23): the destructive workaround is dead —
 Cancel → Connect recovers without deletion. The cohort stays at ONE TESTER
-on a NEW condition with its own discharge test: F2a is merged (the
-continuity guard no longer convicts on a single uncorroborated TWD
+on a NEW condition with its own discharge test: F2a is merged (PR #,
+the continuity guard no longer convicts on a single uncorroborated TWD
 reading — a tester must not silently lose a measured row), AND either F1
 is fixed or the tester note carries "if Try again does nothing, tap
 Cancel then Connect".**
@@ -2793,7 +2799,7 @@ that needs no erg, and it can run in a test.
 
 ### The work
 
-- [ ] **F2a — DEFUSE the continuity guard's single-reading conviction
+- [x] **F2a — DEFUSE the continuity guard's single-reading conviction
       (from Phase LL's exit walk, 2026-08-23). TRIAD (changes when records
       close), full cycle, spec first, LANDS ALONE, sequenced BEFORE
       RC-1.** The guard convicts on one backward TWD reading even when the
@@ -2802,6 +2808,7 @@ that needs no erg, and it can run in a test.
       record. This is a BOUND, not a key — the correct key is F2b's,
       inside RC-1. Evidence: the six-row TWD table in the LL walk card's
       corrected F2 and `walk-2026-08-23/ring-phone-2-background-continuity-kill.json`.
+      **Shipped, see `continuity.ts` + spec 2026-08-23-continuity-corroboration.**
 - [ ] **RC-1 — Store WORK and REST separately, per interval and per
       session.** TRIAD (stored shape + a number's meaning). Nothing else
       moves reconciliation. Add `restSeconds` and `type` to
