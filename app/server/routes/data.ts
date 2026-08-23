@@ -705,6 +705,64 @@ export function createDataRouter({
     res.json(row ?? { k2Seconds: null, k6Seconds: null });
   });
 
+  // -- test history -----------------------------------------------------
+
+  // Phase BL PR B (baseline-onboarding spec rev 2, "Recording
+  // (decoupled)", James's ruling): every designated-test session with a
+  // measurable result records to test_history — accept OR decline; the
+  // post-test prompt governs only the baseline write. This sibling
+  // endpoint is the decouple: the client fires it once, right after the
+  // log save succeeds, and it never touches baselines. `logId` (the log
+  // row the split was measured in, owned by the caller) doubles as the
+  // idempotency key — the store returns the original row for a keyed
+  // repeat instead of appending a delta-0 duplicate. The old coupled path
+  // (`isTestResult` above, zero client senders) is untouched: additive
+  // wire, old clients unaffected. splitSeconds shares the baselines
+  // band deliberately — a split this route can store is exactly one the
+  // baseline write it accompanies could store, one definition of a
+  // plausible split across the feature.
+  router.post("/api/test-history", async (req, res) => {
+    const body = isRec(req.body) ? req.body : {};
+    const { distance, splitSeconds, logId } = body;
+    if (distance !== "2k" && distance !== "6k") {
+      badRequest(res, 'distance must be "2k" or "6k"', "distance");
+      return;
+    }
+    if (
+      typeof splitSeconds !== "number" ||
+      !Number.isFinite(splitSeconds) ||
+      splitSeconds < MIN_SPLIT_SECONDS ||
+      splitSeconds > MAX_SPLIT_SECONDS
+    ) {
+      badRequest(
+        res,
+        `splitSeconds must be between ${MIN_SPLIT_SECONDS} and ${MAX_SPLIT_SECONDS}`,
+        "splitSeconds",
+      );
+      return;
+    }
+    if (typeof logId !== "string" || !UUID_RE.test(logId)) {
+      badRequest(res, "logId must be a valid id", "logId");
+      return;
+    }
+    // Ownership, not just existence — same reasoning as POST /api/logs'
+    // workoutId check: a foreign logId would otherwise let one account
+    // key (and dedupe) history against another account's log row.
+    const owned = await stores.logs.get(req.user!.id, logId);
+    if (!owned) {
+      badRequest(res, "logId does not exist", "logId");
+      return;
+    }
+    const row = await stores.testHistory.append(req.user!.id, {
+      distance,
+      splitSeconds,
+      sessionLogId: logId,
+    });
+    // 201 with the row's id on the dedupe path too (same id both times):
+    // the caller can't tell a retry from a first fire, which is the point.
+    res.status(201).json({ id: row.id });
+  });
+
   // -- workouts ---------------------------------------------------------
 
   router.get("/api/workouts", async (req, res) => {
