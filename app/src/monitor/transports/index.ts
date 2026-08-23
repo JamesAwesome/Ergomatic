@@ -78,6 +78,10 @@
 
 import type { WorkoutProgram } from "../../../domain/monitor/program.js";
 import type { Transport } from "../../../domain/monitor/types.js";
+// I1 fix (final-review): type-only — the stash callback below builds
+// `MonitorLogEntry` objects to keep the stash keys valid `exportLog()`
+// JSON; see that callback's own comment.
+import type { MonitorLogEntry } from "../eventLog.js";
 import { createWebBluetoothTransport } from "./webBluetooth";
 
 // `FakeScript`/`FakeControls` are TYPE-ONLY imports: they cost nothing at
@@ -330,7 +334,23 @@ export function resolveDefaultTransport():
               const id = setTimeout(fn, ms);
               return () => clearTimeout(id);
             },
-            stash: (text) => {
+            // I1 fix (final-review): both stash keys hold `exportLog()`
+            // JSON — a `MonitorLogEntry[]` array (`eventLog.ts`'s own
+            // contract, "`exportLog()` is that same copy,
+            // JSON-serialized") — never a free-form text blob. The OLD
+            // version appended `prior + "\n" + text`, which corrupted that
+            // JSON for every downstream reader: `LogSession.tsx`'s own
+            // `recordPostSacrifice` (`JSON.parse` inside a `try`/`catch` —
+            // a corrupted key silently disarms it for the rest of the
+            // tab, recurring failure 13's corollary) and the
+            // hardware-walk tooling that pastes this same key straight
+            // into a committed `*-ring.json` (every ring in the corpus is
+            // a JSON array). Each `lines` entry becomes its OWN
+            // well-formed `MonitorLogEntry`, appended onto the existing
+            // array — the same pattern `LogSession.tsx`'s own
+            // `recordPostSacrifice` already uses as a second, independent
+            // writer onto this exact stash.
+            stash: (lines) => {
               // APPENDS only to a key teardown already wrote (teardown
               // stashes BEFORE the deferred disconnect — Phase RC spec 1
               // §2) — a session that never rowed leaves
@@ -341,9 +361,29 @@ export function resolveDefaultTransport():
                 "ergomatic:last-rowed-log",
               ]) {
                 const prior = sessionStorage.getItem(key);
-                if (prior !== null) {
-                  sessionStorage.setItem(key, prior + "\n" + text);
+                if (prior === null) continue;
+                let entries: MonitorLogEntry[];
+                try {
+                  entries = JSON.parse(prior) as MonitorLogEntry[];
+                } catch {
+                  // A malformed prior value (e.g. an older build's
+                  // pre-JSON stash still sitting in this tab) — best-
+                  // effort diagnostics, never throw out of the
+                  // instrument's own teardown path.
+                  continue;
                 }
+                let nextSeq =
+                  entries.length > 0 ? entries[entries.length - 1]!.seq + 1 : 0;
+                for (const line of lines) {
+                  entries.push({
+                    seq: nextSeq,
+                    atMs: Date.now(),
+                    kind: "hold-open",
+                    detail: line,
+                  });
+                  nextSeq += 1;
+                }
+                sessionStorage.setItem(key, JSON.stringify(entries));
               }
             },
           });

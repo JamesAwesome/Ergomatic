@@ -6,6 +6,10 @@ import {
 } from "../../../domain/monitor/pm5/uuids.js";
 import type { WorkoutProgram } from "../../../domain/monitor/program.js";
 import type { Transport } from "../../../domain/monitor/types.js";
+// I1 fix (final-review): a REALISTIC fixture for the stash-append test
+// below — the real writer this stash key holds in production, not a
+// hand-built string.
+import { createEventLog } from "../eventLog.js";
 import { autoTicking, resolveDefaultTransport } from "./index";
 import { HOLD_OPEN_MS } from "./holdOpen";
 import { createWebBluetoothTransport } from "./webBluetooth";
@@ -45,8 +49,17 @@ function stubBluetooth(bt: object): () => void {
  *  `createWebBluetoothTransport()` would otherwise build — this file's
  *  tests are about transport SELECTION and the recording-tap wiring, never
  *  about `webBluetooth.ts`'s own GATT behaviour (that module is excluded
- *  from the coverage gate for exactly that reason, see its own header). */
-function stubWebTransport(): Transport {
+ *  from the coverage gate for exactly that reason, see its own header).
+ *
+ *  Includes `onCharacteristicDegraded` (C1, final-review) — `mockReturnValue`
+ *  is typed against `createWebBluetoothTransport()`'s own real return type,
+ *  which now carries this structural extension, so a stub missing it fails
+ *  `pnpm typecheck` rather than just being unrealistic. */
+function stubWebTransport(): Transport & {
+  onCharacteristicDegraded(
+    cb: (characteristicId: string, message: string) => void,
+  ): () => void;
+} {
   return {
     scan: () => Promise.resolve([]),
     connect: () => Promise.resolve(),
@@ -54,6 +67,7 @@ function stubWebTransport(): Transport {
     subscribe: () => () => undefined,
     disconnect: () => Promise.resolve(),
     onDisconnect: () => () => undefined,
+    onCharacteristicDegraded: () => () => undefined,
   };
 }
 
@@ -370,11 +384,25 @@ describe("resolveDefaultTransport", () => {
     }
   });
 
-  it("the hold-open stash appends to a pre-existing sessionStorage key and leaves an absent key absent", async () => {
+  // I1 fix (final-review): this test used the fixture
+  // `"prior monitor lines"` — a plain string, never what production
+  // actually stores there. Both stash keys hold `exportLog()` JSON in
+  // production (`eventLog.ts`'s own contract), and the OLD stash callback
+  // appended `prior + "\n" + text` onto it, corrupting that JSON for every
+  // downstream reader — a defect this test's own unrealistic fixture could
+  // never have caught (recurring failure 3, exactly, per the report). The
+  // fixture now seeds a REAL `createEventLog().exportLog()` — a JSON array
+  // — and asserts `JSON.parse` still succeeds afterward and gained the
+  // hold-open window as proper `MonitorLogEntry` objects.
+  it("the hold-open stash appends to a pre-existing sessionStorage key AS VALID JSON — never corrupts the exportLog() array it appends onto", async () => {
     const restore = stubBluetooth({});
     vi.mocked(createWebBluetoothTransport).mockReturnValue(stubWebTransport());
 
-    sessionStorage.setItem("ergomatic:last-monitor-log", "prior monitor lines");
+    const seedLog = createEventLog();
+    seedLog.record("connect", "dev-1");
+    seedLog.record("status", "0031 00 01");
+    const seededJson = seedLog.exportLog();
+    sessionStorage.setItem("ergomatic:last-monitor-log", seededJson);
     expect(sessionStorage.getItem("ergomatic:last-rowed-log")).toBeNull();
 
     const transport = await resolveDefaultTransport();
@@ -384,13 +412,84 @@ describe("resolveDefaultTransport", () => {
 
     const monitorLog = sessionStorage.getItem("ergomatic:last-monitor-log");
     expect(monitorLog).not.toBeNull();
-    // APPENDS to the prior content — never replaces it.
-    expect(monitorLog!.startsWith("prior monitor lines\n")).toBe(true);
-    expect(monitorLog).toContain("hold-open window (instrument)");
+    // THE FIX, proven the way recurring failure 12 demands: parse it, not
+    // just "contains a substring" — this line alone goes red under the OLD
+    // `prior + "\n" + text` implementation (a SyntaxError, not a mismatch).
+    const entries = JSON.parse(monitorLog!) as {
+      seq: number;
+      kind: string;
+      detail: string;
+    }[];
+    const seeded = JSON.parse(seededJson) as {
+      seq: number;
+      kind: string;
+      detail: string;
+    }[];
+    // APPENDS to the prior entries — never replaces or drops them.
+    expect(entries.slice(0, seeded.length)).toStrictEqual(seeded);
+    // The hold-open window landed as real entries, not a lost/silent
+    // no-op — the header text still appears, now as an entry's own
+    // `detail` field, not a string blob.
+    const appended = entries.slice(seeded.length);
+    expect(appended.length).toBeGreaterThan(0);
+    expect(appended.every((e) => e.kind === "hold-open")).toBe(true);
+    expect(
+      appended.some((e) => e.detail.includes("hold-open window (instrument)")),
+    ).toBe(true);
+    // seq stays monotonic across the two writers — recordPostSacrifice's
+    // own contract, extended here.
+    for (let i = 1; i < entries.length; i++) {
+      expect(entries[i]!.seq).toBe(entries[i - 1]!.seq + 1);
+    }
     // A session that never rowed has no "ergomatic:last-rowed-log" key —
     // appending only when the key already exists means this stash never
     // invents one.
     expect(sessionStorage.getItem("ergomatic:last-rowed-log")).toBeNull();
+
+    restore();
+  });
+
+  it("an EMPTY prior exportLog() array (a session whose live log never recorded anything) still gets appended, starting from seq 0", async () => {
+    const restore = stubBluetooth({});
+    vi.mocked(createWebBluetoothTransport).mockReturnValue(stubWebTransport());
+
+    const emptyLog = createEventLog();
+    sessionStorage.setItem("ergomatic:last-monitor-log", emptyLog.exportLog());
+    expect(emptyLog.exportLog()).toBe("[]");
+
+    const transport = await resolveDefaultTransport();
+    window.__pm5HoldOpen__!.arm();
+    await transport!.disconnect();
+    await window.__pm5HoldOpen__!.release();
+
+    const entries = JSON.parse(
+      sessionStorage.getItem("ergomatic:last-monitor-log")!,
+    ) as { seq: number }[];
+    expect(entries.length).toBeGreaterThan(0);
+    expect(entries[0]!.seq).toBe(0);
+
+    restore();
+  });
+
+  it("a MALFORMED prior value (e.g. an older build's pre-JSON stash) is left untouched, never overwritten with a partial/garbage write", async () => {
+    const restore = stubBluetooth({});
+    vi.mocked(createWebBluetoothTransport).mockReturnValue(stubWebTransport());
+
+    // Not valid JSON — the exact shape a pre-fix build's own stash left
+    // behind (`prior + "\n" + text`), or any other corruption.
+    const malformed = "prior monitor lines\nnot json at all";
+    sessionStorage.setItem("ergomatic:last-monitor-log", malformed);
+
+    const transport = await resolveDefaultTransport();
+    window.__pm5HoldOpen__!.arm();
+    await transport!.disconnect();
+    await window.__pm5HoldOpen__!.release();
+
+    // Best-effort diagnostics, never a crash and never a further-corrupted
+    // write over a value this stash callback cannot safely parse.
+    expect(sessionStorage.getItem("ergomatic:last-monitor-log")).toBe(
+      malformed,
+    );
 
     restore();
   });
