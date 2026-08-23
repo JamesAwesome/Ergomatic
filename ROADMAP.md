@@ -1470,7 +1470,7 @@ and `docs/design/README.md:99-100` (the wrong `7/31/55` cadence, real indices
 
 ## Phase BL — Baselines: three doors in, one measurement out
 
-**Status:** COMPLETE pending release (v0.19.0) — all four slate items
+**Status:** COMPLETE pending release (v0.19.0). **James signed off the 16 cells 2026-08-23:** the slow anchor stands, 2:10 is the right ceiling, and the two question screens stay FOR NOW with testers as the validators (the delete-the-screens simplification stays available if they don't earn their place). — all four slate items
 delivered: **PR A #164, PR B #165, PR C #172** (opened 2026-08-23; the
 old PR-C-opens-only-once-LL's-spec-exists precondition was verified
 satisfied — LL's spec merged to main 2026-08-22, before PR C opened).

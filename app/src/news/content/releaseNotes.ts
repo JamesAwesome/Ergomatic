@@ -5,6 +5,24 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.19.0 (2026-08-23): Phase BL closes. Range v0.18.1..main = #167
+    // (RC spec 1 — owes the spm-banding clause WITH the no-backfill
+    // sentence, pre-stated at its gate; RC-4's decode has no product
+    // consumer, no note, also pre-stated), #170 (docs, none), #171 (LL
+    // close docs — its user-facing change was STRIKING v0.17.0's
+    // over-promise, no new note), #172 (the doors — three clauses), plus
+    // this notes PR. Deliberately NOT said: anything implying the test
+    // history is visible (8B owns the list; #171 landed to strike
+    // exactly that class of over-promise).
+    version: "v0.19.0",
+    date: "2026-08-23",
+    items: [
+      "Three ways in on a new account: answer two quick questions for a recommended baseline, type your splits if you know them, or row a test. Whichever door you take, the app ends up speaking in your numbers. The questionnaire's answers are never stored or sent anywhere.",
+      "Reset baseline setup, on the You tab: clears both baselines so you can start over (or see the new setup doors on an existing account). No undo, and workouts with pace targets can't be started until you set a baseline again.",
+      "Live rate readings now band to plausible values: a stray spike like 101 strokes per minute no longer reaches the chart. Existing logs keep any old spikes; the fix applies to new rowing only.",
+    ],
+  },
+  {
     // v0.18.1 (2026-08-23): PR #168 only — James's same-day feedback on
     // v0.18.0's shortcut, plus the 6K Test's honest effort. Range
     // v0.18.0..main = that one merge; RF15 discharged by inspection.
