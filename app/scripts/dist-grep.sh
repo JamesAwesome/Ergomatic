@@ -51,6 +51,33 @@
 #   layer under the SAME `fakeMonitorEnabled` condition as `fake.ts` above —
 #   this string appearing in a production build means that gate failed the
 #   same way the `fake transport` check's would.
+# - `hold-open window (instrument)` — a substring of `STASH_HEADER`
+#   (`src/monitor/transports/holdOpen.ts`, `"--- hold-open window
+#   (instrument) ---"`), the literal every stashed hold-open ring carries
+#   verbatim. `holdOpen.ts` is reached only through `transports/index.ts`'s
+#   OWN dynamic `import("./holdOpen")`, one gate layer under the SAME
+#   `fakeMonitorEnabled` condition as `fake.ts`/`recording.ts` above — this
+#   string appearing in a production build means that gate failed the same
+#   way the `fake transport`/`pm5-recording` checks' would.
+#
+#   **NOT `__pm5HoldOpen__` (the global's own bare property name) — a
+#   correction of the brief this task was handed, recorded here rather
+#   than silently worked around.** The brief's own premise was that this
+#   identifier never appears in a production bundle; it does, on every
+#   build, with no plant needed: `ConnectionLine.tsx`'s dev-only chip
+#   reads `window.__pm5HoldOpen__?.status()` UNCONDITIONALLY (guarded only
+#   by a runtime `typeof window`/optional-chain check, never by
+#   `fakeMonitorEnabled`) so it can render in a dev build without also
+#   shipping the fake-injection gate to the component layer — exactly the
+#   same shape `ConnectionLogSheet.tsx`'s existing, unguarded
+#   `window.__pm5Recording__` read already has (`grep -o
+#   ".\{80\}__pm5Recording__.\{80\}" dist/client/assets/index-*.js`, this
+#   task's own verification, shows `td(){let[e]=(0,_.useState)(()=>window
+#   .__pm5Recording__??null)...` — a live, shipped read of that exact bare
+#   name), which is presumably WHY the pre-existing needle set already
+#   checks `pm5-recording` (the runtime module's own content) rather than
+#   `__pm5Recording__` (the always-present property name) — this needle
+#   follows that same precedent rather than inventing a new one.
 #
 # Usage: `bash scripts/dist-grep.sh` from `app/`, AFTER `pnpm build` has
 # populated `dist/client`. Exits non-zero (and prints every match) the
@@ -64,7 +91,7 @@ if [ ! -d "$DIST" ]; then
   exit 1
 fi
 
-NEEDLES=("fake transport" "PM5 lab (dev harness" "PM5_BRIDGE_PORT" "pm5-recording")
+NEEDLES=("fake transport" "PM5 lab (dev harness" "PM5_BRIDGE_PORT" "pm5-recording" "hold-open window (instrument)")
 FAILED=0
 
 for needle in "${NEEDLES[@]}"; do

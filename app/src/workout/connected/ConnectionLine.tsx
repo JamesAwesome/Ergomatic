@@ -21,11 +21,46 @@
 // wrap ONLY the status onto a new line (`order`/`flex-basis: 100%` on
 // `.connected-line-trailing`, `index.css`'s own header comment has the
 // mechanism) while landscape keeps every child on the original single
-// 44px row, unchanged — and it means this component now renders only what
-// its name says: the connection mark and the device caption, nothing else.
+// 44px row, unchanged — and it means this component renders only what its
+// name says: the connection mark and the device caption, plus ONE
+// dev-only exception below.
+//
+// THE "HOLD-OPEN ARMED" CHIP (Phase RC spec 1 Task 3). A third,
+// conditional child: `window.__pm5HoldOpen__` is a dev instrument
+// (`transports/index.ts`'s own `declare global` comment on that field has
+// the full contract) that only ever gets SET inside the same
+// `fakeMonitorEnabled` gate `recording.ts`'s tap lives behind — a real
+// deploy's build never sets it, so this chip never renders there either,
+// which is why no committed e2e/screenshots capture shows it (nothing in
+// either suite calls `arm()`). The 1s poll below, not a subscribed
+// callback, matches `holdOpen.ts`'s own shape: `status()` is a plain
+// synchronous read with no change-notification of its own, the same
+// reason `Timer.tsx`'s repaint loop polls on an interval rather than
+// subscribing to a session object that has no event to fire. Only
+// `"armed"` renders the chip — `"holding"`'s own readout is `status()`/
+// `ring()` on the console (spec §3), not a second chip state, because the
+// connected screen unmounts at finish, before a hold can ever reach
+// `"holding"` while this component is still mounted to show it.
+import { useEffect, useState } from "react";
 import type { SurfaceModel } from "./surfaceModel";
 
+const HOLD_OPEN_POLL_MS = 1000;
+
 export default function ConnectionLine({ model }: { model: SurfaceModel }) {
+  const [holdOpenArmed, setHoldOpenArmed] = useState(false);
+
+  useEffect(() => {
+    function poll(): void {
+      setHoldOpenArmed(
+        typeof window !== "undefined" &&
+          window.__pm5HoldOpen__?.status().state === "armed",
+      );
+    }
+    poll();
+    const id = setInterval(poll, HOLD_OPEN_POLL_MS);
+    return () => clearInterval(id);
+  }, []);
+
   return (
     <div className="connected-line">
       <span
@@ -37,6 +72,7 @@ export default function ConnectionLine({ model }: { model: SurfaceModel }) {
         aria-hidden="true"
       />
       <span className="connected-line-device">{model.deviceCaption}</span>
+      {holdOpenArmed && <span className="hold-open-chip">HOLD-OPEN ARMED</span>}
     </div>
   );
 }

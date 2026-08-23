@@ -7,6 +7,7 @@ import {
 import type { WorkoutProgram } from "../../../domain/monitor/program.js";
 import type { Transport } from "../../../domain/monitor/types.js";
 import { autoTicking, resolveDefaultTransport } from "./index";
+import { HOLD_OPEN_MS } from "./holdOpen";
 import { createWebBluetoothTransport } from "./webBluetooth";
 
 // `createWebBluetoothTransport` is mocked for the whole file (hoisted, per
@@ -78,8 +79,10 @@ describe("resolveDefaultTransport", () => {
     delete window.__pm5FakeScript__;
     delete window.__pm5FakeControls__;
     delete window.__pm5Recording__;
+    delete window.__pm5HoldOpen__;
     delete (navigator as { bluetooth?: unknown }).bluetooth;
     vi.mocked(createWebBluetoothTransport).mockReset();
+    sessionStorage.clear();
   });
 
   it("returns null when there is no fake script and no navigator.bluetooth (jsdom's own baseline — no Web Bluetooth API exists here)", async () => {
@@ -322,6 +325,72 @@ describe("resolveDefaultTransport", () => {
     // downloading loses it.
     expect(window.__pm5Recording__!.eventCount()).toBe(1);
     expect(firstSeam.eventCount()).toBe(1);
+
+    restore();
+  });
+
+  // -------------------------------------------------------------------
+  // Hold-open wiring (Phase RC spec 1 Task 3) — the decorator composes
+  // OUTSIDE the recording tap (`holdOpen(tap.transport)`) so the tap keeps
+  // recording raw bytes during the hold; `window.__pm5HoldOpen__` is the
+  // seam's own controls handle, set only inside the same
+  // `fakeMonitorEnabled` gate the tap itself lives behind.
+  // -------------------------------------------------------------------
+
+  it("defers the wrapped transport's real disconnect() once window.__pm5HoldOpen__.arm() is called — disconnect() itself still resolves immediately", async () => {
+    vi.useFakeTimers();
+    try {
+      const restore = stubBluetooth({});
+      const innerDisconnect = vi.fn().mockResolvedValue(undefined);
+      vi.mocked(createWebBluetoothTransport).mockReturnValue({
+        ...stubWebTransport(),
+        disconnect: innerDisconnect,
+      });
+
+      const transport = await resolveDefaultTransport();
+      expect(window.__pm5HoldOpen__).toBeDefined();
+      window.__pm5HoldOpen__!.arm();
+      expect(window.__pm5HoldOpen__!.status().state).toBe("armed");
+
+      // Resolves immediately — a caller like `bestEffort(driver.disconnect())`
+      // must never hang on the held-open window.
+      await transport!.disconnect();
+      expect(window.__pm5HoldOpen__!.status().state).toBe("holding");
+      // ...but the REAL disconnect to the wrapped web transport has not
+      // fired yet — it is deferred by HOLD_OPEN_MS.
+      expect(innerDisconnect).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(HOLD_OPEN_MS);
+      expect(innerDisconnect).toHaveBeenCalledTimes(1);
+      expect(window.__pm5HoldOpen__!.status().state).toBe("disarmed");
+
+      restore();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("the hold-open stash appends to a pre-existing sessionStorage key and leaves an absent key absent", async () => {
+    const restore = stubBluetooth({});
+    vi.mocked(createWebBluetoothTransport).mockReturnValue(stubWebTransport());
+
+    sessionStorage.setItem("ergomatic:last-monitor-log", "prior monitor lines");
+    expect(sessionStorage.getItem("ergomatic:last-rowed-log")).toBeNull();
+
+    const transport = await resolveDefaultTransport();
+    window.__pm5HoldOpen__!.arm();
+    await transport!.disconnect(); // -> holding
+    await window.__pm5HoldOpen__!.release(); // ends the hold now, stashes the ring
+
+    const monitorLog = sessionStorage.getItem("ergomatic:last-monitor-log");
+    expect(monitorLog).not.toBeNull();
+    // APPENDS to the prior content — never replaces it.
+    expect(monitorLog!.startsWith("prior monitor lines\n")).toBe(true);
+    expect(monitorLog).toContain("hold-open window (instrument)");
+    // A session that never rowed has no "ergomatic:last-rowed-log" key —
+    // appending only when the key already exists means this stash never
+    // invents one.
+    expect(sessionStorage.getItem("ergomatic:last-rowed-log")).toBeNull();
 
     restore();
   });

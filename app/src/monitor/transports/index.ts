@@ -85,6 +85,11 @@ import { createWebBluetoothTransport } from "./webBluetooth";
 // `fake.ts`'s runtime code into any bundle — only the dynamic
 // `import("./fake")` below does that, and only when it actually executes.
 import type { FakeControls, FakeScript } from "./fake";
+// Same TYPE-ONLY contract as `FakeControls`/`FakeScript` above, for the
+// same reason: the runtime `createHoldOpenTransport` is only ever reached
+// through the dynamic `import("./holdOpen")` below, ONE layer under the
+// SAME `fakeMonitorEnabled` gate as `recording.ts`.
+import type { HoldOpenControls } from "./holdOpen";
 
 /** `FakeScript` plus one field that belongs to the INJECTION SEAM, not to
  *  `fake.ts`'s own hardware-modeling contract — which is why it is declared
@@ -164,6 +169,29 @@ declare global {
        *  shape the committed hardware captures already have. */
       download(program?: WorkoutProgram): Promise<void>;
     };
+    /** Set by THIS file, the instant it wraps the same real-web-transport
+     *  tap (`__pm5Recording__`, above) in a `holdOpen.ts` decorator —
+     *  never by product code, and never read by it either, except
+     *  `ConnectionLine.tsx`'s dev-only "HOLD-OPEN ARMED" chip, which reads
+     *  it through a `typeof window` guard and renders nothing when it is
+     *  absent (Phase RC spec 1 Task 3). `undefined` on every path except
+     *  this same `fakeMonitorEnabled` gate the tap itself lives behind, so
+     *  a real deploy's build never sets it either — `scripts/dist-grep.sh`'s
+     *  `__pm5HoldOpen__` needle is that file's own proof `holdOpen.ts`
+     *  never ships in a production chunk, the same argument the sibling
+     *  `pm5-recording` needle already makes one layer under it. The
+     *  decorator composes OUTSIDE the recording tap
+     *  (`createHoldOpenTransport(tap.transport, …)`, not the other way
+     *  round) so the tap keeps recording raw bytes for the whole held-open
+     *  window, not just up to the moment `arm()` fires. See
+     *  `holdOpen.ts`'s own header for what `arm()`/`release()`/`status()`/
+     *  `ring()` do; `resolveDefaultTransport` below never calls `arm()`
+     *  itself — only a dev console (or, eventually, a dev-only control)
+     *  reaching through this global does. Overwrite-on-reconnect: same
+     *  rule as `__pm5Recording__` above — a fresh `resolveDefaultTransport()`
+     *  call replaces this global with a brand-new decorator instance,
+     *  latest session wins. */
+    __pm5HoldOpen__?: HoldOpenControls;
   }
 }
 
@@ -269,8 +297,16 @@ export function resolveDefaultTransport():
     // folds away with the gate in a real deploy's build.
     const real = navigator.bluetooth ? createWebBluetoothTransport() : null;
     if (real) {
-      return import("./recording").then(
-        ({ createRecordingTransport, downloadRecording }) => {
+      // Same dynamic-`import()` fold-away argument as `recording.ts`
+      // above, for `holdOpen.ts` too — `Promise.all` rather than a second
+      // `.then()` chained off the first import purely so both modules
+      // load concurrently; either shape folds away identically in a real
+      // deploy's build (this file's header).
+      return Promise.all([import("./recording"), import("./holdOpen")]).then(
+        ([
+          { createRecordingTransport, downloadRecording },
+          { createHoldOpenTransport },
+        ]) => {
           const tap = createRecordingTransport(real);
           window.__pm5Recording__ = {
             lines: tap.lines,
@@ -283,7 +319,36 @@ export function resolveDefaultTransport():
             // `recording.ts` itself, dynamically or otherwise).
             download: (program) => downloadRecording(tap, program),
           };
-          return tap.transport;
+          // The decorator composes OUTSIDE the tap (`tap.transport`, not
+          // `real` directly) so the tap keeps recording raw bytes for the
+          // whole held-open window, not just up to the moment `arm()`
+          // fires — see the `declare global` comment on
+          // `__pm5HoldOpen__` above for the rest of the contract.
+          const held = createHoldOpenTransport(tap.transport, {
+            now: () => Date.now(),
+            schedule: (fn, ms) => {
+              const id = setTimeout(fn, ms);
+              return () => clearTimeout(id);
+            },
+            stash: (text) => {
+              // APPENDS only to a key teardown already wrote (teardown
+              // stashes BEFORE the deferred disconnect — Phase RC spec 1
+              // §2) — a session that never rowed leaves
+              // "ergomatic:last-rowed-log" untouched rather than inventing
+              // a rowed-log entry for a session that has none.
+              for (const key of [
+                "ergomatic:last-monitor-log",
+                "ergomatic:last-rowed-log",
+              ]) {
+                const prior = sessionStorage.getItem(key);
+                if (prior !== null) {
+                  sessionStorage.setItem(key, prior + "\n" + text);
+                }
+              }
+            },
+          });
+          window.__pm5HoldOpen__ = held.controls;
+          return held.transport;
         },
       );
     }
