@@ -19,6 +19,7 @@ import {
   completeMonitorRun,
   completeInterruptedRun,
   interruptedTotalSeconds,
+  appendSummaryObservations,
   anyLiveSession,
   connectGuardStage,
   MONITOR_RUN_KEY,
@@ -1440,5 +1441,149 @@ describe("S4: the worst-case series serializes fast enough for a 30s flush caden
       elapsedMs,
       `Parse-side perf probe: JSON.parse of a ${SERIES_SAMPLE_CAP}-sample MonitorRun took ${elapsedMs.toFixed(2)}ms`,
     ).toBeLessThan(100);
+  });
+});
+
+describe("appendSummaryObservations: the post-close observation writer (PR 1, design spec §2)", () => {
+  beforeEach(() => localStorage.clear());
+
+  const finishedAt = new Date("2026-08-05T12:41:00.000Z");
+  const totals = { workElapsedSeconds: 452, workDistanceMeters: 2000 };
+  const verificationBytes: readonly number[] = [0x27, 0xd8, 0xf3, 0x6e];
+
+  // A realistic naturally-finished record — a v2 run (the shape a real
+  // burst always lands on, `createMonitorRun`'s own "every run this
+  // function builds is stamped v: 2" comment) with a real actual, closed
+  // through the actual completion writer rather than a hand-built
+  // `completedAt`/`endedBy` pair.
+  function naturallyClosedRun(): MonitorRun {
+    const run: MonitorRun = {
+      ...freshMonitorRun(),
+      v: 2,
+      logSeed: TEST_SEED,
+      actuals: [actual1],
+    };
+    return completeMonitorRun(
+      run,
+      { terminated: false, endedBy: "finished" },
+      finishedAt,
+    );
+  }
+
+  it("writes summaryTotals and verificationBytes onto a naturally-closed record, preserving every other field byte-for-byte", () => {
+    const closed = naturallyClosedRun();
+
+    const after = appendSummaryObservations(closed.startedAt, {
+      totals,
+      verificationBytes,
+    });
+
+    expect(after).toStrictEqual({
+      ...closed,
+      summaryTotals: totals,
+      verificationBytes,
+    });
+    expect(loadMonitorRun()).toStrictEqual(viaJson(after));
+  });
+
+  it("folds totals alone when the burst produced no 0x003F bytes — verificationBytes is independently optional", () => {
+    const closed = naturallyClosedRun();
+
+    const after = appendSummaryObservations(closed.startedAt, { totals });
+
+    expect(after?.summaryTotals).toStrictEqual(totals);
+    expect(after?.verificationBytes).toBeUndefined();
+    expect(loadMonitorRun()?.verificationBytes).toBeUndefined();
+  });
+
+  it("returns null, writing nothing, when MONITOR_RUN_KEY is empty — the clearMonitorRun() resurrection race", () => {
+    const closed = naturallyClosedRun();
+    clearMonitorRun();
+
+    const after = appendSummaryObservations(closed.startedAt, { totals });
+
+    expect(after).toBeNull();
+    expect(loadMonitorRun()).toBeNull();
+  });
+
+  it("returns null when the stored run's startedAt does not match — a second program() re-arm overwrote it", () => {
+    const closed = naturallyClosedRun();
+    const burstStartedAt = closed.startedAt;
+    // A second program() call re-armed the hook with an unrelated run
+    // under the same key AFTER this burst's own run had already closed —
+    // the burst is now late against a record that isn't its own.
+    const rearmed: MonitorRun = {
+      ...freshMonitorRun(),
+      v: 2,
+      logSeed: TEST_SEED,
+      startedAt: "2026-08-05T13:00:00.000Z",
+    };
+    const other = completeMonitorRun(
+      rearmed,
+      { terminated: false, endedBy: "finished" },
+      finishedAt,
+    );
+
+    const after = appendSummaryObservations(burstStartedAt, { totals });
+
+    expect(after).toBeNull();
+    expect(loadMonitorRun()).toStrictEqual(viaJson(other));
+  });
+
+  it("returns null when the stored run is still live — completedAt === null", () => {
+    const run: MonitorRun = { ...freshMonitorRun(), v: 2, logSeed: TEST_SEED };
+    saveMonitorRun(run);
+
+    const after = appendSummaryObservations(run.startedAt, { totals });
+
+    expect(after).toBeNull();
+    expect(loadMonitorRun()?.summaryTotals).toBeUndefined();
+  });
+
+  it('returns null when the stored run closed some other way than a natural finish — endedBy !== "finished"', () => {
+    const run: MonitorRun = { ...freshMonitorRun(), v: 2, logSeed: TEST_SEED };
+    const done = completeMonitorRun(
+      run,
+      { terminated: true, endedBy: "rower" },
+      finishedAt,
+    );
+
+    const after = appendSummaryObservations(done.startedAt, { totals });
+
+    expect(after).toBeNull();
+    expect(loadMonitorRun()?.summaryTotals).toBeUndefined();
+  });
+
+  it("returns null when summaryTotals already exists — write-once, even for a second burst's own numbers", () => {
+    const closed = naturallyClosedRun();
+    const first = appendSummaryObservations(closed.startedAt, { totals });
+    expect(first?.summaryTotals).toStrictEqual(totals);
+
+    const differentTotals = {
+      workElapsedSeconds: 999,
+      workDistanceMeters: 9999,
+    };
+    const second = appendSummaryObservations(closed.startedAt, {
+      totals: differentTotals,
+    });
+
+    expect(second).toBeNull();
+    expect(loadMonitorRun()?.summaryTotals).toStrictEqual(totals);
+  });
+
+  it("round-trips a record carrying observations through isMonitorRun — v stays 2, no migration", () => {
+    const closed = naturallyClosedRun();
+
+    const after = appendSummaryObservations(closed.startedAt, {
+      totals,
+      verificationBytes,
+    });
+    expect(after).not.toBeNull();
+
+    const loaded = loadMonitorRun();
+
+    expect(loaded).not.toBeNull();
+    expect(loaded?.v).toBe(2);
+    expect(loaded).toStrictEqual(viaJson(after));
   });
 });
