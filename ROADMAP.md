@@ -2671,7 +2671,7 @@ walk's three findings, filed as LL follow-ups:**
   path broken. Fix is SPLIT: F2a (defuse via corroboration, Phase RC
   before RC-1) and F2b (re-key, inside RC-1/RC-8).
   `ring-phone-2-background-continuity-kill.json` is the capture.
-  **F2a defuse SHIPPED (PR pending); F2b remains open in RC-1.**
+  **F2a defuse SHIPPED (the 2026-08-23 continuity-corroboration PR, branch rc-f2a); F2b remains open in RC-1.**
 - **F3 (small UI) — `endedBy: "link-lost"` is stored and consumed
   (`completedFullDistance`) but rendered NOWHERE** — the log detail shows
   no marking; v0.17.0's notes over-promised the surface. One line on the
@@ -2708,7 +2708,7 @@ and `ergomatic.sessionDraft`, costing an unlogged session and any
 in-progress draft. **The original hold ("until criterion (b) exists") is
 DISCHARGED (close gate, 2026-08-23): the destructive workaround is dead —
 Cancel → Connect recovers without deletion. The cohort stays at ONE TESTER
-on a NEW condition with its own discharge test: F2a is merged (PR #,
+on a NEW condition with its own discharge test: F2a is merged (the 2026-08-23 continuity-corroboration PR,
 the continuity guard no longer convicts on a single uncorroborated TWD
 reading — a tester must not silently lose a measured row), AND either F1
 is fixed or the tester note carries "if Try again does nothing, tap
