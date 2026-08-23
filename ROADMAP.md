@@ -1690,6 +1690,15 @@ it, which is why none of these have blocked anything so far. The moment a
 build goes to EXTERNAL TestFlight or the App Store, they all bind at once.
 Nothing here should be discovered at submission time.
 
+- [ ] **F1 from Phase LL's exit walk (2026-08-23): the failure screen's
+      Try again is DEAD after a mid-session BT-off** — the failure
+      disposal tears down the per-session `onEnabledChanged` listener, so
+      the enabled-true event has no ear (sharper repro: an attempt STARTED
+      with BT off keeps a working button — the bug is localised to the
+      disposal). PROD's exit is an empty-phone install reaching a logged
+      row UNAIDED; a dead button with no feedback defeats "unaided"
+      directly. Until fixed, the cohort note carries "if Try again does
+      nothing, tap Cancel then Connect" (Release posture, Phase LL).
 - [ ] **App icon redraw** (was a triggered follow-on). Replace the
       AI-generated icon with a clean SVG. What is actually wrong with it,
       checked against the asset itself
@@ -2166,8 +2175,14 @@ WebKit's throttling, so it does not rescue the JS half.
       across the boundary and "the very next frame reset[s] `elapsed` to 0"
       — §19.1's correction at `:3290` calls it "the one and only
       elapsed-reset-while-rowing in the whole log" ([S2] D4, 2026-08-06).
-      **What is genuinely open is whether DISTANCE resets at a work→work
-      boundary**, which neither passage states. It matters: if it does not,
+      **ANSWERED 2026-08-23, from the keystone capture nobody had read
+      (close-gate condition 3): DISTANCE DOES reset at a zero-rest
+      work→work boundary** —
+      `walk-2026-08-23/keystone-pm5-recording-1787491974452.jsonl.gz`
+      seq 305→310: elapsed 69.75→0.50, distance 248.5→1.9, rowingState 1
+      throughout, TWD 0→250. The feared over-report does not exist. No
+      rowing owed; this box is checked by a committed file. (The original
+      open question, kept for the record:) It matters: if it does not,
       the new accumulator silently OVER-reports on zero-rest boundaries —
       direction-flipped from the bug just fixed, and a shape the old
       edge-triggered code would have got right. Not exotic either:
@@ -2183,9 +2198,14 @@ WebKit's throttling, so it does not rescue the JS half.
       breaking the trace line** — lost when three tests built on an invalid
       four-session capture were removed (PR #140). **Owner BOUND to Phase
       LL's exit walk** (PM gate, 2026-08-20): the deliverable is a CAPTURE,
-      and captures come from walks, not from tasks — and this phase's own
-      exit walk produces a genuine >3 s gap as a matter of course. Sits
-      beside exit clause (e) so the phase can go red on it. **S**
+      and captures come from walks, not from tasks. **UN-BOUND from the
+      exit walk (close gate, 2026-08-23): the walk structurally could not
+      produce it** — `adapters/monitorTransport.ts:70` composes the
+      recorder on the WEB arm only, so the laptop leg had the recorder and
+      no gaps and the phone leg had the gaps and no recorder. New home: a
+      deliberate web-leg capture (background the Chrome tab mid-piece at
+      any future lab session), or extend the recorder to the native arm
+      first. Sits beside exit clause (e) so it cannot silently vanish. **S**
 - [ ] **BEFORE the next tag: three owed clauses plus a version-marker
       ruling** (PM gate, round 4 of the Task 2 PR review, 2026-08-20;
       third clause added by the EST LEFT task, 2026-08-20).
@@ -2207,7 +2227,13 @@ WebKit's throttling, so it does not rescue the JS half.
       behavior, not the label. **Still open — Task 3 (the axis) landed
       2026-08-20 and the EST LEFT fix landed 2026-08-20, so this item is
       now fully armed: all three clauses' subject matter exists in
-      shipped code, and whoever cuts v0.15.0 owes all three.** **New
+      shipped code, and whoever cuts v0.15.0 owes all three.** **Clause
+      (4), added at Phase LL's close gate (2026-08-23, finding F3): the
+      link-lost ending is STORED but rendered NOWHERE, and v0.17.0's
+      shipped note claims the history "can tell the difference" — either
+      the surface ships before the next tag and its clause says so, or
+      the next tag's notes carry the honest "not yet" (the false half of
+      the v0.17.0 note is struck in the same PR as this clause).** **New
       condition, this gate:** the phone→server trace leg must be
       WITNESSED before the tag
       that announces the trace fix ships, or the notes say plainly that
@@ -2576,8 +2602,12 @@ deliverable, each stated so the walk can go red:
   without a red test naming it.
 
 **WALKED 2026-08-23 — record: `docs/monitor/sessions/walk-2026-08-23/`.**
-Clauses (a) both variants, (c), (d) PASS; (b) PASS IN SUBSTANCE (Cancel →
-Connect recovers, no deletion — the brick is dead) with finding F1; (e)
+Clauses (a) both variants, (c), (d) PASS; (b) SPLIT at the gate
+(2026-08-23 PM close): its destructive-workaround half — "without deleting
+the app" — is DISCHARGED (Cancel → Connect recovers; the brick is dead);
+its "Try Again reaches a fresh connect" half is NOT MET (F1: the button is
+dead after a mid-session BT-off). No compound clause absorbs a failing
+half into a passing one; (e)
 carried by the shipped suites plus finding F2's counterexample. W5
 off-direction ✓ (on-direction is F1); W6 ✓ with F2; W7 dissolved (PM5 Menu
 mid-workout TERMINATES — state 11 on the wire — no quiet period exists, no
@@ -2594,12 +2624,20 @@ walk's three findings, filed as LL follow-ups:**
   repro: an attempt STARTED with BT off fails and keeps a live, working
   Try again — the dead state is disposal-specific. Cancel → Connect works.
 - **F2 (SERIOUS, TRIAD-weight — it closes records) — the continuity guard
-  kills a healthy row on iOS background-resume:** a transient
-  `machineTotal=0` frame arrives ~3 s after resume (81 m → 0 while
-  elapsed/distance advance), the guard reads monitor-reset, closes the
-  record link-lost, and the rower loses their measured intervals mid-pull.
-  The guard's bound is corpus(web)-derived; iOS resume was outside the
-  corpus. Any fix changes when records close → full cycle, spec first.
+  convicts on a NON-MONOTONIC key. ROOT CAUSE CORRECTED at the close gate
+  (2026-08-23): the filed "iOS resume produced a transient zeroed-TWD
+  frame" is FALSE and the walk's own files disprove it.** The day's TWD
+  readings: keystone (web) 0 across an entire 248.5 m interval then 250
+  after the boundary; ring-3 0 at 94.6 m and 0 at 33.1 m (with its own
+  `divergence` entry); ring-2 0 at 83.3 m post-resume — **five zeros
+  against ring-2's single 81 at 56.1 s. Zero is the field's normal
+  behaviour that day; the 81 is the outlier, and nothing here is
+  iOS-specific** (the web capture shows the same zeros). The convicting
+  frame had elapsed AND distance advancing while TWD went 81 → 0 — a real
+  monitor reset zeroes all three. A successor spec that inherits the "iOS
+  was outside the corpus" wording will special-case iOS and leave the web
+  path broken. Fix is SPLIT: F2a (defuse via corroboration, Phase RC
+  before RC-1) and F2b (re-key, inside RC-1/RC-8).
   `ring-phone-2-background-continuity-kill.json` is the capture.
 - **F3 (small UI) — `endedBy: "link-lost"` is stored and consumed
   (`completedFullDistance`) but rendered NOWHERE** — the log detail shows
@@ -2634,8 +2672,14 @@ arm is unchanged since v0.10.0, so a rollback ships the same bug minus
 five notes clauses. Not pulled. **But the delete-and-reinstall workaround
 is DESTRUCTIVE** — it wipes `ergomatic.monitorRun`, `ergomatic.sessionRun`
 and `ergomatic.sessionDraft`, costing an unlogged session and any
-in-progress draft. It must not be handed to any tester but James until
-criterion (b) exists.
+in-progress draft. **The original hold ("until criterion (b) exists") is
+DISCHARGED (close gate, 2026-08-23): the destructive workaround is dead —
+Cancel → Connect recovers without deletion. The cohort stays at ONE TESTER
+on a NEW condition with its own discharge test: F2a is merged (the
+continuity guard no longer convicts on a single uncorroborated TWD
+reading — a tester must not silently lose a measured row), AND either F1
+is fixed or the tester note carries "if Try again does nothing, tap
+Cancel then Connect".**
 
 ## Phase RC — The row Concept2 would recognise
 
@@ -2722,6 +2766,15 @@ that needs no erg, and it can run in a test.
 
 ### The work
 
+- [ ] **F2a — DEFUSE the continuity guard's single-reading conviction
+      (from Phase LL's exit walk, 2026-08-23). TRIAD (changes when records
+      close), full cycle, spec first, LANDS ALONE, sequenced BEFORE
+      RC-1.** The guard convicts on one backward TWD reading even when the
+      SAME frame's elapsed and distance are advancing; a real monitor
+      reset zeroes all three. Require corroboration before closing a
+      record. This is a BOUND, not a key — the correct key is F2b's,
+      inside RC-1. Evidence: the six-row TWD table in the LL walk card's
+      corrected F2 and `walk-2026-08-23/ring-phone-2-background-continuity-kill.json`.
 - [ ] **RC-1 — Store WORK and REST separately, per interval and per
       session.** TRIAD (stored shape + a number's meaning). Nothing else
       moves reconciliation. Add `restSeconds` and `type` to
@@ -2740,7 +2793,12 @@ that needs no erg, and it can run in a test.
       question** (see "The warm-up question" below): whether a warm-up is
       compiled into the same PM5 piece as the working intervals is a
       compiler change, it decides what a rower's Concept2 totals read, and
-      RC-1's spec is where it lands.
+      RC-1's spec is where it lands. **And carries F2b (Phase LL walk,
+      2026-08-23): re-key the continuity guard off TWD entirely** — the
+      walk proved TWD non-monotonic and inconsistent on time intervals
+      (five zeros against one 81 in one day; the LL walk card's corrected
+      F2 has the table). The spec inherits the CORRECTED root cause,
+      never the filed "iOS was outside the corpus" wording.
 - [ ] **RC-2 — Decode Log Entry Date/Time; log it beside our wall clock;
       store nothing yet.** Format settled from two projects and checked
       arithmetically: date `uint16` = month | day<<4 | (year-2000)<<9;

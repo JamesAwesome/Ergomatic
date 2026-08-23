@@ -71,10 +71,14 @@ canonical copy.
   (seq 29-32), then seq 33 carries a frame with `machineTotal=0` while
   elapsed/distance advanced (81 m → 0 at 59.3 s) and seq 34 closes the
   record as link-lost. The rower saw normal numbers, pulled, and landed on
-  an end screen with NOTHING MEASURED. The guard's corpus-derived "healthy
-  resumes never go backward" bound is web-derived; iOS resume produces a
-  transient zeroed-TWD frame the corpus never contained. TWD's own
-  semantics are also now suspect as a continuity key on native (see F5).
+  an end screen with NOTHING MEASURED. **ROOT CAUSE
+  CORRECTED at the 2026-08-23 close gate: this walk's own files show
+  TWD=0 is the field's NORMAL reading that day (five zeros incl. the web
+  capture's flat 0 across a 248.5 m interval) and the 81 is the outlier —
+  nothing iOS-specific. The defect is convicting on a non-monotonic key
+  from a single uncorroborated reading** (elapsed and distance were
+  ADVANCING in the convicting frame; a real reset zeroes all three). See
+  ROADMAP's LL walk card (corrected F2) and RC's F2a/F2b items.
 - **F3 — `endedBy: "link-lost"` is stored but rendered nowhere.** The saved
   session's log detail shows no lost-link marking (verified on-device and by
   grep: no component renders the value). v0.17.0's notes claim "your
