@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Worktree `.claude/worktrees/rc-f2a`, branch `rc-f2a`. `git rev-parse --show-toplevel` before every commit. `export PATH="$HOME/.local/share/nvm/v26.5.0/bin:$PATH"` in every shell (hooks block on Node 25).
-- TDD: failing test first. Gates FOREGROUND. Vitest at PROJECT scope only (`pnpm exec vitest run --project client`; single-FILE runs escape jsdom — check the "Test Files" count).
+- TDD: failing test first. Gates FOREGROUND. Vitest at PROJECT scope only (`pnpm test --project client`; single-FILE runs escape jsdom — check the "Test Files" count). **NOT `pnpm exec vitest run` (final-review LOW-2, 2026-08-23): that form bypasses `package.json`'s own `NODE_OPTIONS=--no-experimental-webstorage`, and on this repo's Node 26, Node's experimental WebStorage shadows jsdom's `localStorage` — 29 failed files / 1,153 failed tests that have nothing to do with the diff.**
 - Conviction predicate, verbatim from the spec: `"reset"` ONLY when `after.totalWorkDistanceMeters < before.totalWorkDistanceMeters && after.elapsedSeconds < before.elapsedSeconds && after.distanceMeters < before.distanceMeters` — strict `<` on all three, zero tolerance, and the distance-goal suppression short-circuits FIRST, unchanged.
 - NO fixture may carry defaulted zeros for the new fields — every reading in every test uses real values from its source frame (a zeroed fixture makes the suppression tests vacuous; antagonist blocking 5).
 - The walk's real pairs pin only the TWD clause — the per-clause pins in Task 1 are the tests that CAN go red; the implementing task self-mutates each clause and shows the kill.
@@ -102,7 +102,7 @@ describe("continuity.check: the three-axis full-reset signature (F2a, spec 2026-
 });
 ```
 
-- [ ] **Step 2: Verify failures at project scope** — `pnpm exec vitest run --project client`. The new describe fails to COMPILE first (missing required fields on existing fixtures elsewhere in the file) — that compile error is part of the point: fix every existing `ContinuityReading` fixture in the file with REAL values from its source frames (the corpus block decodes 0x0031 already — thread its decoded `elapsedSeconds`/`distanceMeters` through; never default zeros). Then the behavior tests fail against the old single-axis `check`.
+- [ ] **Step 2: Verify failures at project scope** — `pnpm test --project client`. The new describe fails to COMPILE first (missing required fields on existing fixtures elsewhere in the file) — that compile error is part of the point: fix every existing `ContinuityReading` fixture in the file with REAL values from its source frames (the corpus block decodes 0x0031 already — thread its decoded `elapsedSeconds`/`distanceMeters` through; never default zeros). Then the behavior tests fail against the old single-axis `check`.
 - [ ] **Step 3: Implement** — add the two required fields to `ContinuityReading`; rewrite `check`'s body:
 
 ```ts

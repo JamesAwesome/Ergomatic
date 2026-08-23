@@ -2832,7 +2832,13 @@ that needs no erg, and it can run in a test.
       walk proved TWD non-monotonic and inconsistent on time intervals
       (five zeros against one 81 in one day; the LL walk card's corrected
       F2 has the table). The spec inherits the CORRECTED root cause,
-      never the filed "iOS was outside the corpus" wording.
+      never the filed "iOS was outside the corpus" wording. **Owed risk
+      from F2a's own trade (final-review MEDIUM-1, 2026-08-23): a record
+      F2a now MERGES instead of closing can SILENTLY UNDER-COUNT, not
+      read as visibly wrong — `driver.ts`'s per-interval session register
+      max-merges post-reset metres against the pre-reset value (300 m
+      rowed + a reset + 200 m more stores ≈300 m, not 500 m) — so RC-1's
+      re-key spec must not assume a merged record announces itself.**
 - [ ] **RC-2 — Decode Log Entry Date/Time; log it beside our wall clock;
       store nothing yet.** Format settled from two projects and checked
       arithmetically: date `uint16` = month | day<<4 | (year-2000)<<9;

@@ -52,9 +52,9 @@ describe("continuity.check: the pure predicate", () => {
     ).toBe("continuation");
   });
 
-  it("suppressed when the AFTER reading is on a distance-goal interval, even if before is not", () => {
+  it("suppressed when the AFTER reading is on a distance-goal interval, even if before is not — TWD, elapsed AND distance all backward too", () => {
     expect(
-      check(reading(1, 0.5, 1.9, false), reading(500, 69.75, 248.5, true)),
+      check(reading(500, 69.75, 248.5, false), reading(1, 0.5, 1.9, true)),
     ).toBe("continuation");
   });
 

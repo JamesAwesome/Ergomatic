@@ -71,10 +71,22 @@ and can exceed low before-values by the time the next reading lands), so
 the records MERGE instead of closing — blind for roughly 14% of a 180 s
 interval at a 30 s gap, growing with gap length (~64% at two minutes).
 This is accepted deliberately: the old rule bought that coverage by
-killing healthy rows (the walk's F2), a merged post-reset stream is
-visible garbage where a killed healthy row is silent loss, and F2b's
-re-key (RC-1) closes the blind window properly. The spec says this out
-loud so nobody later reads the narrowing as free.
+killing healthy rows (the walk's F2). **Correction (final-review
+MEDIUM-1, 2026-08-23): the merge is NOT "visible garbage" — an earlier
+draft of this section said so, unsourced, and it reads backwards against
+`driver.ts:2107-2119`.** The session totals `useMonitorSession.ts` stores
+are not a running sum of frames; they are a per-interval register
+(`session.seen`) merged by `Math.max` per key. After a genuine reset the
+machine re-enters interval 0 — a key the register already holds — so
+post-reset metres are absorbed by the max-merge until they exceed the
+pre-reset value: 300 m rowed, a reset, 200 m more rowed stores ≈300 m,
+not 500 m, and nothing about that number looks broken. The merge trades
+one silent-loss failure mode (a killed healthy row) for a DIFFERENT
+silent-under-count failure mode, not for a visible one. F2b's re-key
+(RC-1) is still what closes the blind window properly, and RC-1's own
+ROADMAP entry now carries this under-count risk explicitly. The spec
+says this out loud so nobody later reads the narrowing as free, or reads
+the merge as self-evidently safer than it is.
 
 ## 3. Rejected alternatives (attacked at brainstorm)
 

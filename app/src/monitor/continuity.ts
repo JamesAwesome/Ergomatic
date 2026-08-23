@@ -108,11 +108,21 @@
 // of closing: blind for roughly 14% of a 180 s interval at a 30 s gap,
 // growing to ~64% at two minutes. Accepted because the old rule bought
 // that coverage by killing healthy rows (this file's own F2a fix is the
-// receipt), a merged post-reset stream is visible garbage on the record
-// where a killed healthy row was silent loss, and the proper fix — a
-// re-key off TWD entirely, so no per-axis conjunction is needed at all —
-// is F2b's, inside RC-1's spec. This file's predicate is a bound
-// tightened, not the fix.
+// receipt) — but the trade is NOT "visible garbage instead of silent
+// loss" as an earlier draft of this comment claimed (final-review
+// MEDIUM-1, 2026-08-23): `driver.ts`'s own per-interval session register
+// (`session.seen`, max-merged per key, `driver.ts:2107-2119`) means a
+// merged post-reset stream reads as a PLAUSIBLE, not obviously broken,
+// number. After a genuine reset the machine re-enters interval 0, an
+// `activeKey` the register already holds, so post-reset metres are
+// absorbed by `Math.max` against the pre-reset maximum until they exceed
+// it — 300 m rowed, a reset, 200 m more rowed stores ≈300 m, not 500 m,
+// silently. The merge trades one silent-loss failure mode (a killed
+// healthy row) for a DIFFERENT silent-under-count failure mode, not for a
+// visible one. The proper fix — a re-key off TWD entirely, so no
+// per-axis conjunction is needed at all — is F2b's, inside RC-1's spec,
+// which now carries this under-count risk explicitly (ROADMAP). This
+// file's predicate is a bound tightened, not the fix.
 //
 // The distance-goal suppression below is UNCHANGED and still load-
 // bearing, not superseded by the three-axis signature: at a
