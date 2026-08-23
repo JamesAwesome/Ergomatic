@@ -50,11 +50,20 @@ export default function ConnectionLine({ model }: { model: SurfaceModel }) {
   const [holdOpenArmed, setHoldOpenArmed] = useState(false);
 
   useEffect(() => {
+    // M3 fix (final-review): a real deploy's `window.__pm5HoldOpen__` is
+    // ALWAYS `undefined` (this component's own header — it is set only
+    // inside the same `fakeMonitorEnabled` gate the instrument lives
+    // behind) and it is assigned at transport resolution, BEFORE this
+    // component ever mounts — so a production session polled it once a
+    // second for the entire life of every connected session for a value
+    // that could never change. Bailing out before `setInterval` costs
+    // nothing there and changes nothing for a dev/e2e session where the
+    // global genuinely exists.
+    if (typeof window === "undefined" || window.__pm5HoldOpen__ === undefined) {
+      return;
+    }
     function poll(): void {
-      setHoldOpenArmed(
-        typeof window !== "undefined" &&
-          window.__pm5HoldOpen__?.status().state === "armed",
-      );
+      setHoldOpenArmed(window.__pm5HoldOpen__?.status().state === "armed");
     }
     poll();
     const id = setInterval(poll, HOLD_OPEN_POLL_MS);

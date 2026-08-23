@@ -138,4 +138,28 @@ describe("ConnectionLine — the dev-only HOLD-OPEN ARMED chip", () => {
     render(<ConnectionLine model={MODEL} />);
     expect(screen.getByText(DEVICE)).toBeInTheDocument();
   });
+
+  // M3 fix (final-review): a real deploy's `window.__pm5HoldOpen__` is
+  // ALWAYS undefined — before this fix, every connected session still ran
+  // a 1s `setInterval` for its entire life polling a value that could
+  // never change. `vi.getTimerCount()` proves no timer gets scheduled at
+  // all in that case, not just that the rendered output happens to be the
+  // same either way.
+  it("schedules NO interval timer when window.__pm5HoldOpen__ is absent — the production case", () => {
+    vi.useFakeTimers();
+    expect(window.__pm5HoldOpen__).toBeUndefined();
+
+    render(<ConnectionLine model={MODEL} />);
+
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("DOES schedule the interval timer when window.__pm5HoldOpen__ is present — the dev/e2e case this early-return must not break", () => {
+    vi.useFakeTimers();
+    window.__pm5HoldOpen__ = stubHoldOpenControls("disarmed");
+
+    render(<ConnectionLine model={MODEL} />);
+
+    expect(vi.getTimerCount()).toBe(1);
+  });
 });
