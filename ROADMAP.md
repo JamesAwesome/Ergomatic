@@ -1470,9 +1470,13 @@ and `docs/design/README.md:99-100` (the wrong `7/31/55` cadence, real indices
 
 ## Phase BL — Baselines: three doors in, one measurement out
 
-**Status:** OPEN 2026-08-22 — phase-open gates RUN same day (antagonist
-anchor at full triad weight; PM slate gate GO-WITH-CONDITIONS), spec at
-REV 2 with every finding folded
+**Status:** COMPLETE pending release (v0.19.0) — all four slate items
+delivered: **PR A #164, PR B #165, PR C #172** (opened 2026-08-23; the
+old PR-C-opens-only-once-LL's-spec-exists precondition was verified
+satisfied — LL's spec merged to main 2026-08-22, before PR C opened).
+Phase opened 2026-08-22 with same-day gates (antagonist anchor at full
+triad weight; PM slate gate GO-WITH-CONDITIONS), spec at REV 2 with
+every finding folded
 (`docs/superpowers/specs/2026-08-22-baseline-onboarding-design.md`; the
 canvas is COMMITTED at `docs/design/baseline-onboarding/`, live copy
 linked in the spec). Both gate ledger entries rode the rev-2 PR. James's
@@ -1483,10 +1487,9 @@ writes; questionnaire answers TRANSIENT, never stored; a staged-confirm
 **Reset baseline setup** on You makes the doors re-enterable (the product
 answer to the gate's unreachable-doors finding). **PR shape: A (the
 shape, alone, triad) → B (prompt + shortcut + decouple) → C (doors +
-questionnaire + table + reset), with a STOP-POINT after B** — the phase
-may close and release on A+B if the table cannot meet its bounded
-criteria. **PR C opens only once Phase LL's spec exists** (James's
-sequencing ruling with teeth — LL runs in a parallel session).
+questionnaire + table + reset).** The stop-point conditional this
+paragraph used to carry dissolved with PR C: the table met its bounded
+criteria, so the phase did not close on A+B.
 **PR A LANDED via #164** (the provenance shape: `k2Source`/`k6Source`
 pgEnum, migration 0013 regenerated after LL's 0012 merged mid-flight;
 editor writes `manual` typed / `derived` accepted-offer; untouched
@@ -1521,14 +1524,13 @@ first has real cost.
 (3) SOURCE-BESIDE-NULL — the source columns are NOT NULL with defaults
 while the numbers are nullable, so `k6Seconds: NULL, k6Source: 'manual'`
 is a real row state; every consumer keys on the NUMBER being non-null
-first. **The PR-C-waits-on-LL's-spec condition is DISCHARGED** —
-`docs/superpowers/specs/2026-08-22-link-truth-design.md` is on main.
-**Release correction: BL's tag is v0.18.0** (LL's notes PR claimed
-v0.17.0 first); PR A itself owes no note (nothing tester-visible —
-that accounting line is written here in advance per RF15). James checks all 16 table
-cells, printed in PR C's body. TRIAD: PM final-PR gates ran on A (#164)
-and B (#165, for 0014's unpredicted stored shape); C gets one too if
-the table ships.
+first. **Releases: A+B shipped as v0.18.0/v0.18.1** (the earlier
+"BL's tag is v0.17.0" claim in LL's notes PR was corrected); PR A
+itself owed no note (nothing tester-visible — that accounting line was
+written here in advance per RF15); **PR C releases as v0.19.0**. James
+checks all 16 table cells, printed in PR C's body. TRIAD: PM final-PR
+gates ran on A (#164), B (#165, for 0014's unpredicted stored shape),
+and C (#172 — PASS-WITH-CONDITIONS, conditions landed on the branch).
 
 **Goal:** a no-baseline account reaches a working app through whichever
 door suits them, and a rowed test finally gets RECORDED instead of

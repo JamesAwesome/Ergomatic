@@ -39,7 +39,10 @@ import { NotationBody } from "./bodies/notation";
 // (2026-08-23): your-first-row rewritten for the three doors (the single
 // "row 6k and it sets your baseline" story was a shipped lie — nothing
 // wrote a baseline until PR B's post-save offer) — recounted at 288
-// words, ceil(288/180)=2, minutes unchanged.
+// words, ceil(288/180)=2, minutes unchanged. Same day, PM gate C4:
+// baselines' closing paragraph now describes the post-save OFFER doing
+// the writing (the "enter it under You" chore is gone) — recounted at
+// 506 words (body + aside), ceil(506/180)=3, minutes unchanged.
 export const ARTICLES: NewsArticle[] = [
   {
     slug: "workout-types",

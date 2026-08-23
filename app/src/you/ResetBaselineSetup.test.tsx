@@ -28,9 +28,14 @@ describe("ResetBaselineSetup", () => {
       screen.getByRole("button", { name: "Reset baseline setup" }),
     );
 
-    // The confirm block says plainly what it does (destructive copy rule).
+    // The confirm block says plainly what it does (destructive copy rule)
+    // AND what the rower loses the ability to DO (PM final gate C5: the
+    // capability clause — split-target workouts can't be started until a
+    // baseline is set again).
     expect(
-      screen.getByText(/This clears both baseline splits/),
+      screen.getByText(
+        /This clears both baseline splits\. Workouts with pace targets lose\s+them and can't be started until you set a baseline again\. Today\s+offers the setup doors\./,
+      ),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
     expect(fetchSpy).not.toHaveBeenCalled();

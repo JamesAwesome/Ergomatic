@@ -57,9 +57,11 @@ export function BaselinesBody() {
 
       <p>
         Don't overthink the first one. An honest, unheroic 6k this week beats a
-        perfect one someday. When you've rowed it, enter your average split
-        under You, and every workout in the library starts speaking in your
-        numbers. Re-test whenever workouts have felt noticeably easier or harder
+        perfect one someday. When you finish and save a test, the app offers
+        your measured average split as the baseline: accept it and it's set, and
+        every workout in the library starts speaking in your numbers. The editor
+        on the You tab is still there whenever you'd rather type a number in by
+        hand. Re-test whenever workouts have felt noticeably easier or harder
         than their forecasts for a couple of weeks.
       </p>
     </>

@@ -58,6 +58,25 @@ describe("article body components", () => {
   // ui-notes round, item 3: the two-baselines paragraph gains one sentence
   // pointing at the derivation offer (item 2) — word-exact per the brief,
   // James reviews the diff.
+  // PM final gate C4 (Phase BL PR C): the closing paragraph used to
+  // instruct "enter your average split under You" — the pre-BL manual
+  // chore. It now describes the post-save OFFER doing the writing, with
+  // the You editor kept as the hand-typed path.
+  it("BaselinesBody's closing paragraph says the app OFFERS the measured split post-save, and keeps the You editor as the hand-typed path (C4)", () => {
+    render(<BaselinesBody />);
+    expect(
+      screen.getByText(
+        /the app offers\s+your measured average split as the baseline: accept it and it's set/,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/whenever you'd rather type a\s+number in by hand/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/enter your average split\s+under You/),
+    ).not.toBeInTheDocument();
+  });
+
   it("BaselinesBody's two-baselines paragraph names the derivation offer (ui-notes round, item 3)", () => {
     render(<BaselinesBody />);
     expect(
