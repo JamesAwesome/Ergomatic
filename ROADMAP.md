@@ -2612,7 +2612,8 @@ criterion (b) exists.
 `docs/superpowers/specs/2026-08-22-held-open-finish-design.md`: the
 dev-only hold-open instrument (defer the finish disconnect 90 s, subscribe
 0x003F raw), wave-0 fixes RC-4 and RC-6, and the COMBINED walk (Phase LL's
-exit clauses on stock v0.17.0 phone + RC's W1-W4 on the laptop seam, one
+exit clauses on the current stock TestFlight phone build (v0.18.0+;
+re-check the latest tag at walk time) + RC's W1-W4 on the laptop seam, one
 erg session). RC-1/RC-8 are specced AFTER the walk, with evidence in
 hand. Named, scoped and evidenced by the ecosystem review of 2026-08-21
 (`docs/monitor/pm5-ble-ecosystem-review.md`, which that review also
@@ -2806,7 +2807,13 @@ that needs no erg, and it can run in a test.
       the SAME row under C2's dedup. Whether that merges, rejects or
       duplicates is **not established by the review** and decides whether
       this is leverage or a fight over ownership of the row.
-- [ ] **RC-11 — The stroke-data reframe, which is three-way not two.**
+- [ ] **RC-11 — The stroke-data reframe, which is three-way not two —
+      AND owner of RC-6's deferred `p: 0` half (narrowed off at the
+      phase-open gates, 2026-08-22):** whether stored samples stop
+      carrying `p: 0` for no-reading strokes is settled HERE, at
+      serialization design time — `traceModel.ts` guards on `!== 0` and
+      the server validator requires the field, so any change is a
+      reader+validator+shape change, not a recorder one-liner.
       C2's `stroke_data[].t` restarts at 0 PER INTERVAL; ours is
       cumulative across the session. Worse, our series clock is a THIRD
       quantity — work plus however much of the trailing rest the wire

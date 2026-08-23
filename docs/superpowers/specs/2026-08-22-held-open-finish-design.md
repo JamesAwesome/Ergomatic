@@ -19,7 +19,9 @@ Ruled during brainstorming (James, 2026-08-22):
   spine waits for the walk.
 - **Laptop dev seam, not product code.** The hold-open is a dev/web-only
   instrument. No product close semantics change, no second TestFlight;
-  the phone runs stock v0.17.0 for LL's exit clauses.
+  the phone runs the current stock TestFlight build for LL's exit
+  clauses (v0.18.0+ — a tag landing between spec and walk supersedes any
+  pin; check `git tag --sort=-creatordate | head -1` at walk time).
 
 ## 1. Research record
 
@@ -221,7 +223,9 @@ piece list, capture asks) is composed and approved at the erg per the
 hardware-walk skill; this section fixes only WHAT the walk must answer
 and WHICH device answers it.
 
-**Phone (stock v0.17.0, build 717) — Phase LL's exit:** clauses (a)–(e)
+**Phone (current stock TestFlight build — v0.18.0 or later; re-check the
+latest tag at walk time, and note v0.18.0 put Phase BL's post-test prompt
+in the finish path this card describes) — Phase LL's exit:** clauses (a)–(e)
 (link killed pre-stroke and mid-piece says so within bound; Try Again
 works without deleting the app; ring retrievable from the failure
 screen; DEVIATIONS row if iOS residue is unfixable; trace-across-gap

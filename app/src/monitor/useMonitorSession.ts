@@ -1207,9 +1207,9 @@ export function useMonitorSession(
   const hysteresisCancelRef = useRef<CancelFn | null>(null);
   /** Phase LL Task 2 mechanism 3: the degraded-characteristic
    *  subscription's own unsubscribe, or `null` when the current transport
-   *  never exposed `onCharacteristicDegraded` (a bare test `Transport`,
-   *  the web arm — `capacitorBle.ts`/`fake.ts` are the only two that
-   *  carry it today). Overwritten (never accumulated) on each `connect()`,
+   *  never exposed `onCharacteristicDegraded` (a bare test
+   *  `Transport` — `capacitorBle.ts`, `fake.ts` AND the web arm all
+   *  carry it now; the web arm gained its fan-out at PR #167's C1 fix). Overwritten (never accumulated) on each `connect()`,
    *  same lifecycle `unsubscribeRef` already has. */
   const degradedUnsubRef = useRef<(() => void) | null>(null);
   /** Phase LL Task 2 mechanism 2: the app-lifecycle listener's own
