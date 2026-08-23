@@ -2575,6 +2575,37 @@ deliverable, each stated so the walk can go red:
   change to the guard cannot silently reopen the falsified mechanism
   without a red test naming it.
 
+**WALKED 2026-08-23 — record: `docs/monitor/sessions/walk-2026-08-23/`.**
+Clauses (a) both variants, (c), (d) PASS; (b) PASS IN SUBSTANCE (Cancel →
+Connect recovers, no deletion — the brick is dead) with finding F1; (e)
+carried by the shipped suites plus finding F2's counterexample. W5
+off-direction ✓ (on-direction is F1); W6 ✓ with F2; W7 dissolved (PM5 Menu
+mid-workout TERMINATES — state 11 on the wire — no quiet period exists, no
+disarm needed); W8 unobserved (longest armed idle ~90 s, low priority); W9
+guard ran clean every attempt (cross-app scenario untestable); 9a partial
+(web cadence measured — median 990 ms, worst 1260 ms, corpus-worst 810.3 ms
+does NOT bound it; watchdog margin ~2.0× today, no false fire; native
+per-frame distribution still unmeasured); §2b flash not observed. **The
+walk's three findings, filed as LL follow-ups:**
+
+- **F1 (medium) — Try again never revives after a MID-SESSION BT-off:** the
+  failure disposal tears down the per-session `onEnabledChanged` listener,
+  so the enabled-true event has no ear; the button stays dead. Sharper
+  repro: an attempt STARTED with BT off fails and keeps a live, working
+  Try again — the dead state is disposal-specific. Cancel → Connect works.
+- **F2 (SERIOUS, TRIAD-weight — it closes records) — the continuity guard
+  kills a healthy row on iOS background-resume:** a transient
+  `machineTotal=0` frame arrives ~3 s after resume (81 m → 0 while
+  elapsed/distance advance), the guard reads monitor-reset, closes the
+  record link-lost, and the rower loses their measured intervals mid-pull.
+  The guard's bound is corpus(web)-derived; iOS resume was outside the
+  corpus. Any fix changes when records close → full cycle, spec first.
+  `ring-phone-2-background-continuity-kill.json` is the capture.
+- **F3 (small UI) — `endedBy: "link-lost"` is stored and consumed
+  (`completedFullDistance`) but rendered NOWHERE** — the log detail shows
+  no marking; v0.17.0's notes over-promised the surface. One line on the
+  log detail closes it.
+
 **Exit — written so it can go red.** Clause (e) added 2026-08-20 at the PM
 gate's finding that four of this phase's items had no exit clause; the
 trace-truth spec carries its own nine criteria and (e) is the phase-level
@@ -2977,6 +3008,28 @@ gates):**
 
 **Not worth a walk:** re-observing 0x0037's work-only semantics (settled
 twice from committed bytes) or the state-9 frame (captured 2026-08-18).
+
+**ANSWERED 2026-08-23 — record: `docs/monitor/sessions/walk-2026-08-23/`,
+one keystone piece with PR #167's hold-open instrument.** W1: firmware
+459.069 (serial 432331249, hw 134) — and empirically inside an emitting
+band. W2: **the summary path EXISTS** — 0x0037/38/39/3A/3F all arrive
+within ~310 ms of the finish; the pre-LL 21.7–107.3 ms hangup was cutting
+inside the burst, so the "0x0039 never fires" corpus fact was OUR deafness,
+not the machine's silence; state 12 (WORKOUTLOGGED) observed for the first
+time; recovery-HR re-fire not observed (no belt worn). W3: date/time
+bit-packing CONFIRMED against the memory screen (8/23/2026, 09:28) and the
+wire carries NO SECONDS — RC-2's tolerance question is now a hard fact.
+W4: **0x003F fires, at the finish, and the byte order is settled — two
+little-endian u32 words** (`27 d8 f3 6e | e1 52 55 5b` = the PM5's own
+`6EF3-D827 5B55-52E1`); the BLE table's "(Lo)" reading wins, CSAFE 0x72's
+"MSB" describes its own framing. W10 answered in substance (the keystone
+IS a distance program; its 0x0039 read work-only 500.0 m exactly).
+Two-centrals: **a connected PM5 stops advertising** — settles the
+single-central contradiction empirically. **RC-1 caveat from the walk
+(F5):** TWD read 0 through 11 s of interval 1 (boundary-accumulator-like)
+but 81 m at 56 s mid-interval on another run — its semantics on time
+intervals are INCONSISTENT across today's captures; RC-1's spec must not
+assume either reading. RC-2/RC-3/the verification branch are UNBLOCKED.
 
 ### Not now, each with its reason
 
