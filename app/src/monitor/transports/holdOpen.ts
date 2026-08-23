@@ -29,6 +29,7 @@
 // per session (Task 3), not a rearmable trap; a second workout's teardown
 // in the same session disconnects normally.
 
+import { LOGGED_WORKOUT_UUID } from "../../../domain/monitor/pm5/uuids.js";
 import type { Transport } from "../../../domain/monitor/types.js";
 
 /** How long a caller-initiated `disconnect()` is held open once armed,
@@ -90,6 +91,26 @@ export function createHoldOpenTransport(
     deps.stash([STASH_HEADER, ...ring].join("\n"));
   }
 
+  function sinceArm(): number {
+    return Math.floor((deps.now() - armedAtMs) / 1000);
+  }
+
+  function ringPush(entry: string): void {
+    ring.push(entry);
+  }
+
+  /** Builds a notification callback that records into the ring — shared
+   *  by every characteristic's `subscribe()`, so 0x003F (below) tees
+   *  identically to whatever the caller subscribed above it, rather than
+   *  duplicating this gate a second time. */
+  function tee(characteristicId: string): (bytes: Uint8Array) => void {
+    return (bytes) => {
+      if (state === "armed" || state === "holding") {
+        ringPush(`+${sinceArm()}s ${characteristicId} ${toHex(bytes)}`);
+      }
+    };
+  }
+
   /** Synchronously claims the (at most one, ever — see `arm()`) hold for
    *  whichever caller wins the race between release(), expiry, and the
    *  PM5 hanging up first — flips `state` to `"disarmed"` and cancels the
@@ -121,6 +142,37 @@ export function createHoldOpenTransport(
     state = "armed";
     armedAtMs = deps.now();
     ring = [];
+    // THE INSTRUMENT's OWN SUBSCRIBE (Phase RC spec 1 §3) — 0x003F is
+    // not on the driver's shared subscribe list (adding it there would
+    // put it on the native arm too; this decorator is dev/web-only), so
+    // arm() is where it starts. The unsubscribe handle is deliberately
+    // dropped: the link is about to die by design, same as every other
+    // characteristic this decorator never calls unsubscribe() on itself.
+    //
+    // Deferred one microtask (`Promise.resolve().then(...)`) rather than
+    // `Promise.resolve(inner.subscribe(...))` verbatim: `Transport.
+    // subscribe` returns `() => void` SYNCHRONOUSLY per its own type
+    // (domain/monitor/types.ts) and never a Promise, and
+    // `capacitorBle.ts` documents that its `subscribe()` "throw[s]
+    // synchronously (via `serviceFor`) on an unrecognized characteristic
+    // id" (capacitorBle.ts:218-221) — exactly the shape a firmware
+    // lacking 0x003F, or a `SERVICE_OF` map missing an entry for it,
+    // produces on the native transport this decorator can be composed
+    // over. `Promise.resolve(inner.subscribe(...))` evaluates
+    // `inner.subscribe(...)` before `Promise.resolve` is even called, so
+    // a synchronous throw there would propagate straight out of `arm()`
+    // uncaught — the opposite of "does not reject arm() or kill the
+    // hold". Deferring the call into the `.then()` turns that same throw
+    // into a rejection this `.catch()` actually observes.
+    Promise.resolve()
+      .then(() =>
+        inner.subscribe(LOGGED_WORKOUT_UUID, tee(LOGGED_WORKOUT_UUID)),
+      )
+      .catch((e: unknown) => {
+        ringPush(
+          `+${sinceArm()}s 0x003f subscribe-failed ${e instanceof Error ? e.name : String(e)}`,
+        );
+      });
   }
 
   async function release(): Promise<void> {
@@ -157,11 +209,9 @@ export function createHoldOpenTransport(
       return inner.write(characteristicId, bytes);
     },
     subscribe(characteristicId, cb) {
+      const teeFor = tee(characteristicId);
       return inner.subscribe(characteristicId, (bytes) => {
-        if (state === "armed" || state === "holding") {
-          const secondsSinceArm = Math.floor((deps.now() - armedAtMs) / 1000);
-          ring.push(`+${secondsSinceArm}s ${characteristicId} ${toHex(bytes)}`);
-        }
+        teeFor(bytes);
         cb(bytes);
       });
     },

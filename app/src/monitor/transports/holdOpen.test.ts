@@ -8,13 +8,25 @@
 // the clock built exactly as the task brief specifies (`testClock()`).
 
 import { describe, expect, it, vi } from "vitest";
+import { LOGGED_WORKOUT_UUID } from "../../../domain/monitor/pm5/uuids.js";
 import type { Transport } from "../../../domain/monitor/types.js";
 import { createHoldOpenTransport, HOLD_OPEN_MS } from "./holdOpen";
 
 /** A minimal, fully controllable `Transport` — mirrors `liveness.test.ts`'s
  *  own `stubTransport()`: a bare seam to drive `createHoldOpenTransport`
- *  against directly, not a PM5 behavioural model. */
-function stubTransport() {
+ *  against directly, not a PM5 behavioural model.
+ *
+ *  `subscribeThrows`, when given, is consulted on every `subscribe()` call
+ *  — a truthy return for a characteristic id makes `subscribe()` throw
+ *  that value SYNCHRONOUSLY, mirroring `capacitorBle.ts`'s own documented
+ *  contract ("`write`/`subscribe` both throw synchronously (via
+ *  `serviceFor`) on an unrecognized characteristic id",
+ *  `capacitorBle.ts:218-221`) — the real shape a rejecting `subscribe()`
+ *  takes on this codebase's native transport, since `Transport.subscribe`
+ *  itself returns synchronously and never a `Promise`. */
+function stubTransport(opts?: {
+  subscribeThrows?: (characteristicId: string) => unknown;
+}) {
   const subs = new Map<string, Set<(bytes: Uint8Array) => void>>();
   const disconnectCbs = new Set<(reason: string) => void>();
   let disconnectCalls = 0;
@@ -42,6 +54,8 @@ function stubTransport() {
         // no-op
       },
       subscribe(char, cb) {
+        const failure = opts?.subscribeThrows?.(char);
+        if (failure !== undefined) throw failure;
         let set = subs.get(char);
         if (!set) {
           set = new Set();
@@ -550,6 +564,99 @@ describe("createHoldOpenTransport: arm() is one-shot", () => {
     // passes straight through instead of deferring again.
     await transport.disconnect();
     expect(stub.disconnectCalls).toBe(2); // once from the completed hold, once just now
+  });
+});
+
+// Phase RC spec 1, Task 2 (design spec §3): the instrument's own subscribe
+// to 0x003F (the "logged workout" characteristic) — armed alongside the
+// hold itself, not the driver's shared subscribe list, so it never touches
+// the native arm. "Absent on this firmware" (a recorded `subscribe-failed`)
+// must read differently from "present but silent" (no entry at all).
+describe("createHoldOpenTransport: 0x003F subscribed at arm", () => {
+  it("arm() subscribes LOGGED_WORKOUT_UUID on the inner transport", async () => {
+    const stub = stubTransport();
+    const clock = testClock();
+    const subscribeSpy = vi.spyOn(stub.transport, "subscribe");
+    const { controls } = createHoldOpenTransport(stub.transport, {
+      now: clock.now,
+      schedule: clock.schedule,
+      stash: vi.fn(),
+    });
+
+    controls.arm();
+    await Promise.resolve(); // subscribe() is deferred one microtask — see arm()'s own comment
+
+    expect(subscribeSpy).toHaveBeenCalledWith(
+      LOGGED_WORKOUT_UUID,
+      expect.any(Function),
+    );
+  });
+
+  it("0x003F notifications tee into the ring exactly like any other subscribed characteristic", async () => {
+    const stub = stubTransport();
+    const clock = testClock();
+    const { controls } = createHoldOpenTransport(stub.transport, {
+      now: clock.now,
+      schedule: clock.schedule,
+      stash: vi.fn(),
+    });
+
+    controls.arm();
+    await Promise.resolve(); // let the deferred subscribe register first
+    clock.advance(4_000);
+    stub.notify(LOGGED_WORKOUT_UUID, new Uint8Array([0xfa, 0xce]));
+
+    expect(controls.ring()).toStrictEqual([`+4s ${LOGGED_WORKOUT_UUID} fa ce`]);
+  });
+
+  it("a rejecting inner subscribe records a subscribe-failed ring entry naming the error, and does NOT reject arm() or kill the hold", async () => {
+    const failure = new Error("no such characteristic");
+    failure.name = "NotFoundError";
+    const stub = stubTransport({
+      subscribeThrows: (char) =>
+        char === LOGGED_WORKOUT_UUID ? failure : undefined,
+    });
+    const clock = testClock();
+    const { transport, controls } = createHoldOpenTransport(stub.transport, {
+      now: clock.now,
+      schedule: clock.schedule,
+      stash: vi.fn(),
+    });
+
+    expect(() => controls.arm()).not.toThrow();
+    // Let the deferred subscribe-and-catch tail settle.
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(controls.ring()).toStrictEqual([
+      "+0s 0x003f subscribe-failed NotFoundError",
+    ]);
+
+    // Does not kill the hold: disconnect() still defers normally afterward.
+    await expect(transport.disconnect()).resolves.toBeUndefined();
+    expect(stub.disconnectCalls).toBe(0);
+    expect(controls.status().state).toBe("holding");
+  });
+
+  it("a rejecting inner subscribe with a non-Error failure records String(e), not a crash", async () => {
+    const stub = stubTransport({
+      subscribeThrows: (char) =>
+        char === LOGGED_WORKOUT_UUID ? "plain-string-failure" : undefined,
+    });
+    const clock = testClock();
+    const { controls } = createHoldOpenTransport(stub.transport, {
+      now: clock.now,
+      schedule: clock.schedule,
+      stash: vi.fn(),
+    });
+
+    controls.arm();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(controls.ring()).toStrictEqual([
+      "+0s 0x003f subscribe-failed plain-string-failure",
+    ]);
   });
 });
 

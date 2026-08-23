@@ -5,6 +5,7 @@ import {
   DEVICE_INFO_SERVICE_UUID,
   END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID,
   END_OF_WORKOUT_SUMMARY_UUID,
+  LOGGED_WORKOUT_UUID,
   RECEIVE_CHARACTERISTIC_UUID,
   ROWING_SERVICE_UUID,
 } from "../../../domain/monitor/pm5/uuids.js";
@@ -371,6 +372,31 @@ describe("createWebBluetoothTransport: 0x0039/0x003A join SERVICE_OF (fast-follo
       );
     },
   );
+});
+
+// Phase RC spec 1, Task 2: 0x003F (LOGGED_WORKOUT_UUID, the "C2 rowing
+// logged workout characteristic") joins SERVICE_OF too — same membership
+// pin as the 0x0039/0x003A block above, via write() rather than
+// subscribe() for the same reason that block's own comment gives (a
+// missing entry surfaces as an awaited REJECTION here, not a silently
+// dead fire-and-forget subscription).
+describe("createWebBluetoothTransport: 0x003F joins SERVICE_OF (Phase RC spec 1 Task 2)", () => {
+  it("write() to LOGGED_WORKOUT_UUID resolves against the rowing service (0x0030), the same service 0x0039 maps to", async () => {
+    const device = new FakeDevice("pm5-9", "PM5 999");
+    installFakeBluetooth(device);
+    const transport = createWebBluetoothTransport();
+
+    await transport.scan();
+    await transport.connect(device.id);
+
+    await expect(
+      transport.write(LOGGED_WORKOUT_UUID, Uint8Array.from([1])),
+    ).resolves.toBeUndefined();
+
+    expect(device.gatt.getPrimaryService).toHaveBeenCalledWith(
+      ROWING_SERVICE_UUID,
+    );
+  });
 });
 
 /** Helper to capture promise outcomes for assertion after the event loop
