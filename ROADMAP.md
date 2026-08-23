@@ -1496,7 +1496,10 @@ recording decouple (`POST /api/test-history`, decline records, keyed
 idempotent via migration 0014's `test_history.session_log_id` — an
 UNPREDICTED stored shape that took the full triad treatment including
 its own PM final-PR gate), the You re-test shortcut, and the ORIGIN
-predicate in the editor. **The phase now stands AT ITS STOP-POINT:**
+predicate in the editor. James's R1 ruling (2026-08-22): the phone-timer door RECORDS too — losing
+a genuine unconnected test is worse than carrying a removable bogus row;
+the remove/void verb gates 8B's list (binding, in 8B's own bullet).
+**The phase now stands AT ITS STOP-POINT:**
 doors, questionnaire + 16-cell table, and Reset baseline setup are
 unstarted as PR C — the phase may close and release on A+B if the
 table cannot meet its bounded criteria. `estimated` remains the one
