@@ -81,6 +81,15 @@ export function createTestHistoryStore(db: Db) {
         .returning();
       if (row) return row;
 
+      /* v8 ignore start -- the lost-race arm: reachable only when two
+         concurrent keyed appends both miss the pre-check and Postgres
+         resolves the UNIQUE conflict for one of them, which a sequential
+         test cannot produce on demand. The pre-check (covered) and the
+         constraint itself (covered via the double-fire integration test)
+         carry the guarantee; this arm only decides what the LOSER
+         returns. The throw is defensive: a cross-user conflict is
+         unreachable through the route (logId ownership is checked) and
+         must fail loudly rather than return another user's row. */
       // Lost the race: the winner's row is the record for this log.
       const [winner] = await db
         .select()
@@ -102,6 +111,7 @@ export function createTestHistoryStore(db: Db) {
         );
       }
       return winner;
+      /* v8 ignore stop */
     },
   };
 }

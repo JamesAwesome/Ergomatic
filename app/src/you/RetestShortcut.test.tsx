@@ -197,3 +197,46 @@ describe("RetestShortcut", () => {
     expect(second.container.querySelector(".retest")).toBeNull();
   });
 });
+
+describe("RetestShortcut coverage of the remaining guard arms", () => {
+  it("renders nothing at all when NEITHER designated global row exists — custom same-title rows don't count", async () => {
+    mockWorkouts({
+      state: "ready",
+      workouts: [
+        seedWorkout(ONBOARDING_TITLES.k6, { isGlobal: false }),
+        seedWorkout(ONBOARDING_TITLES.k2, { isGlobal: false }),
+      ],
+    });
+    const { container } = await renderShortcut();
+    expect(container.querySelector(".retest")).toBeNull();
+  });
+
+  it("a merely-started (not finished) draft stages the in-progress copy, not the unlogged one", async () => {
+    mockWorkouts({
+      state: "ready",
+      workouts: [
+        seedWorkout(ONBOARDING_TITLES.k6),
+        seedWorkout(ONBOARDING_TITLES.k2),
+      ],
+    });
+    const seed = ONBOARDING_LIBRARY_WORKOUTS.find(
+      (w) => w.title === ONBOARDING_TITLES.k6,
+    )!;
+    saveDraft(
+      startDraft(
+        buildDraft({
+          id: "id-inprogress",
+          title: seed.title,
+          type: seed.type,
+          steps: seed.steps,
+        }),
+      ),
+    );
+
+    await renderShortcut();
+    await userEvent.click(screen.getByRole("button", { name: "RACE THE 2K" }));
+    expect(
+      screen.getByText("A session is in progress. Replace it?"),
+    ).toBeInTheDocument();
+  });
+});

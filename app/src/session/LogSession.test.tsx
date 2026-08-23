@@ -4350,3 +4350,43 @@ describe("LogSession: the post-test prompt (Phase BL PR B)", () => {
     ).toHaveLength(0);
   });
 });
+
+describe("LogSession: the post-test prompt's degrade arms (Phase BL PR B)", () => {
+  it("an unparseable 201 body still shows the offer — only the record call (which needs the id) is skipped", async () => {
+    const { workout } = buildK2TestSessionFixture();
+    mockWorkouts([workout]);
+    mockBaselines({ k2Seconds: null, k6Seconds: null });
+    const apiFn = mockApi((path) => {
+      if (path === "/api/logs") {
+        return new Response("not json at all", { status: 201 });
+      }
+      return new Response("{}", { status: 200 });
+    });
+    await renderLog();
+    await screen.findByRole("heading", { name: "2K Test" });
+
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+
+    expect(
+      await screen.findByRole("heading", { name: "Set your 2k baseline?" }),
+    ).toBeInTheDocument();
+    expect(
+      apiFn.mock.calls.filter(([path]) => path === "/api/test-history"),
+    ).toHaveLength(0);
+  });
+
+  it("declining from the monitor door lands on Today via the replace navigation", async () => {
+    const { run, workout } = buildK2TestMonitorFixture("finished");
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines({ k2Seconds: null, k6Seconds: null });
+    promptAwareApi();
+    await renderManualLog(K2_MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "2K Test" });
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+    await screen.findByRole("heading", { name: "Set your 2k baseline?" });
+
+    await userEvent.click(screen.getByRole("button", { name: "Not now" }));
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+  });
+});

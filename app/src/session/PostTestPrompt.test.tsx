@@ -226,3 +226,67 @@ describe("PostTestPrompt", () => {
     expect(apiFn).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("PostTestPrompt: the 6k-test mirror of the derive stage", () => {
+  it("after a 6k accept, the derived 2k counterpart writes k2Seconds/derived — the mirror wire shape", async () => {
+    const apiFn = mockApi(ok);
+    const onDone = vi.fn();
+    await renderPrompt({
+      offer: { distance: "6k", splitSeconds: 130 },
+      stored: { k2Seconds: null, k6Seconds: null },
+      onDone,
+    });
+    await userEvent.click(
+      screen.getByRole("button", { name: "Set 6k baseline" }),
+    );
+    expect(
+      screen.getByRole("heading", { name: "Also set your 2k?" }),
+    ).toBeInTheDocument();
+    // The -7s caption names the direction, same idiom as the editor's
+    // own offer button.
+    expect(
+      screen.getByText("ESTIMATED FROM YOUR 6K (\u22127s)"),
+    ).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Set 2k estimate" }),
+    );
+    expect(onDone).toHaveBeenCalledTimes(1);
+    expect(parsedBodies(apiFn)[1]!.body).toStrictEqual({
+      k2Seconds: 123,
+      k2Source: "derived",
+    });
+  });
+});
+
+describe("PostTestPrompt: the derived stage's own failure arm", () => {
+  it("a failed derived write keeps the second offer on screen with the error — Skip still exits", async () => {
+    let calls = 0;
+    mockApi(() => {
+      calls += 1;
+      // First PUT (tested) succeeds; second (derived) fails.
+      return calls === 1 ? ok() : new Response("nope", { status: 500 });
+    });
+    const onDone = vi.fn();
+    await renderPrompt({
+      offer: { distance: "2k", splitSeconds: 118.4 },
+      stored: { k2Seconds: null, k6Seconds: null },
+      onDone,
+    });
+    await userEvent.click(
+      screen.getByRole("button", { name: "Set 2k baseline" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Set 6k estimate" }),
+    );
+    expect(
+      screen.getByText("Couldn't save your baseline. Try again."),
+    ).toBeInTheDocument();
+    expect(onDone).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("heading", { name: "Also set your 6k?" }),
+    ).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Skip" }));
+    expect(onDone).toHaveBeenCalledTimes(1);
+  });
+});
