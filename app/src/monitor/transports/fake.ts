@@ -276,7 +276,20 @@ export interface FakeBoundaryEvent {
   // this boundary carries). `boundaryBundle` now derives the wire byte
   // itself; see its own comment for the identity and the zero-distance
   // guard.
-  actual: Omit<IntervalActual, "index" | "avgSplit"> & { index: number };
+  // `restDistanceMeters` is re-narrowed back to required here (storage-
+  // spine design spec §2, RC-7): `IntervalActual.restDistanceMeters` went
+  // additive-optional so the driver's synthesized-final fallback can OMIT
+  // a quantity it never measured, but every script authoring a boundary
+  // through this type still speaks for a REAL 0x0037 the fake will
+  // encode — `boundaryBundle` below writes `intervalRestDistanceMeters`
+  // straight onto the wire (`statusFrames.ts`'s builder input, itself
+  // required, matching the real characteristic), so an omitted value here
+  // would have to be defaulted somewhere, silently disagreeing with a
+  // script that meant to author 0.
+  actual: Omit<IntervalActual, "index" | "avgSplit" | "restDistanceMeters"> & {
+    index: number;
+    restDistanceMeters: number;
+  };
   cumulativeElapsedSeconds: number;
   cumulativeDistanceMeters: number;
 }

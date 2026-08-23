@@ -94,6 +94,7 @@ import {
   END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID,
   END_OF_WORKOUT_SUMMARY_UUID,
   GENERAL_STATUS_UUID,
+  LOGGED_WORKOUT_UUID,
   RECEIVE_CHARACTERISTIC_UUID,
   SAMPLE_RATE_UUID,
   SPLIT_INTERVAL_DATA_UUID,
@@ -1009,10 +1010,33 @@ export function createPm5Driver(
      *
      *  The LATEST one wins while the window is open (a second 0x0039 inside
      *  3 s is the machine refining its own reading, not a different
-     *  workout). A 0x0039 arriving outside the window is never stored at
-     *  all — it is logged `out-of-window` and dropped, which is what makes
-     *  the ~1-minute HRM re-fire inert (ecosystem review:420-422). */
+     *  workout). A 0x0039 arriving outside the window is USUALLY never
+     *  stored at all — it is logged `out-of-window` and dropped, which is
+     *  what makes the ~1-minute HRM re-fire inert (ecosystem review:
+     *  420-422). **CORRECTED (storage-spine design spec §2, early side):**
+     *  the one exception is a 0x0039 arriving while this run is still
+     *  OPEN and already in its FINAL interval — the burst can beat our
+     *  own terminal transition (§1's PRIMARY research: 3 of 5 committed
+     *  finishes). That case is buffered here too, through this SAME field
+     *  (`noteSummary`'s own gate), so the natural close this driver
+     *  eventually observes reconciles it exactly like an ordinary
+     *  in-grace arrival — no separate storage. */
     summaryInGrace: WorkoutSummary | null;
+    /** 0x003F's raw, undecoded bytes — the most recent one received while
+     *  THIS run was the active run (storage-spine design spec §2, delta-
+     *  pass B3). No decode logic lives here or in `pm5/parse.ts`: the
+     *  characteristic's own byte order is disputed in the BLE spec itself
+     *  (`uuids.ts`'s own doc comment), so this driver carries bytes only.
+     *  `null` until (and unless) 0x003F ever arrives for this run — most
+     *  runs today will never populate it, since nothing yet keeps the
+     *  transport subscribed past a fast teardown (the LATE side, a
+     *  separate task); this field and its production subscriber are the
+     *  plumbing that the fake proves end to end, ahead of the late-side
+     *  fix that makes it reliable on real hardware too. Folded onto the
+     *  `summary-observations` event (`reconcileSummary`) as
+     *  `verificationBytes`, omitted entirely when still `null` — the same
+     *  additive-optional shape `IntervalActual.restDistanceMeters` uses. */
+    verificationBytes: readonly number[] | null;
     /** Has a boundary already CLAIMED this run's finish grace? (fix round
      *  1, review Minor-2.) Set wherever `finishGraceUntil` is consumed —
      *  the split path's vouched emit and the summary gate's own fill —
@@ -2520,8 +2544,50 @@ export function createPm5Driver(
       return;
     }
     if (!graceIsOpen(run)) {
-      // Every reason lands here and they are all the same answer: no
-      // natural finish of ours is currently waiting on a final interval.
+      // CORRECTED (storage-spine design spec §2, early side — the antagonist
+      // pass's own PRIMARY research): this used to be true without
+      // exception: "no natural finish of ours is currently waiting on a
+      // final interval." It no longer is. §1's keystone capture read the
+      // burst BEATING our own terminal transition in 3 of 5 committed
+      // finishes (0x0039 at t=172129.5, our terminal at t=172309.3) — the
+      // machine has already flipped to WORKOUTLOGGED while this driver
+      // still considers the run open, because `maybeEmitFrame` has not yet
+      // seen the general-status frame that would tell it so. A 0x0039
+      // landing in that exact gap is NOT the re-fire and not a stray
+      // out-of-run reading: it is this run's own finish, one notification
+      // early instead of late. The one condition that can tell that case
+      // apart from an ordinary mid-row 0x0039 is checked first, below.
+      if (!run.closed) {
+        const lastIndex = run.program.intervals.length - 1;
+        const status = raw as RawPm5Status;
+        const currentIndex = toProgramIndex(
+          status.intervalCount,
+          toMonitorFrame(status).state,
+          run.program.intervals.length,
+        );
+        // `currentIndex === lastIndex` is the ONLY signal available here
+        // that this run is in its final interval right now — the same
+        // computation `maybeEmitFrame` does for `frame.intervalIndex`,
+        // read off the same merged `raw`. `lastIndex >= 0` guards the
+        // no-intervals program `reconcileSummary` itself guards
+        // (unreachable via `compileProgram`'s own no-work check, kept for
+        // the same reason that guard is). A single-interval program is
+        // ALWAYS in its final interval the instant it opens (§2's own
+        // "single-interval blindness" note) — buffering here is bounded
+        // either way, since nothing FILES until the natural close this
+        // driver eventually observes for itself.
+        if (lastIndex >= 0 && currentIndex === lastIndex) {
+          log.record(
+            "summary-reconciled",
+            `buffered — 0x0039 arrived while this run is still open, already reporting its final interval (index ${currentIndex} of ${run.program.intervals.length}); held for this run's own natural close (storage-spine design spec §2, early side)`,
+          );
+          run.summaryInGrace = summary;
+          return;
+        }
+      }
+      // Every OTHER reason lands here and they are all the same answer: no
+      // natural finish of ours is currently waiting on a final interval,
+      // and this run (if any) is not observably in its last one either.
       // The one that will actually happen at the erg is the re-fire —
       // 0x0039 notifies a SECOND time roughly a minute after the workout
       // ends when an HRM is paired (`pm5-ble-ecosystem-review.md:420-422`),
@@ -2936,6 +3002,32 @@ export function createPm5Driver(
   }
 
   /**
+   * Builds the `summary-observations` event (storage-spine design spec
+   * §2): 0x0039's own work-only totals, plus 0x003F's raw bytes if this
+   * run ever heard one. The ONLY thing that varies between
+   * `reconcileSummary`'s two callers below is `totals` — `verificationBytes`
+   * always reads off `run` itself, never a caller's local, so a stray
+   * 0x003F arriving anywhere between `program()` and this call is picked
+   * up identically by whichever branch fires. Omits the key outright when
+   * `null` (never `verificationBytes: undefined`) — the same
+   * additive-optional shape `IntervalActual.restDistanceMeters` uses,
+   * and the shape `Object.keys`/`JSON.stringify` treat as "absent",
+   * unlike an explicit `undefined` value.
+   */
+  function summaryObservationsEvent(
+    run: NonNullable<typeof activeRun>,
+    totals: { workElapsedSeconds: number; workDistanceMeters: number },
+  ): MonitorEvent {
+    return run.verificationBytes === null
+      ? { kind: "summary-observations", totals }
+      : {
+          kind: "summary-observations",
+          totals,
+          verificationBytes: run.verificationBytes,
+        };
+  }
+
+  /**
    * THE RECONCILE (fast-follow Task 2, design spec §5) — fired once, by the
    * deadline `armSummaryReconcile` set, at the instant the finish grace
    * closed. It answers one question in the trace, whatever it decides:
@@ -2965,6 +3057,17 @@ export function createPm5Driver(
    * `summary-reconciled` entry is this boundary's own provenance, and a
    * stash that claimed a split had landed would be lying about the one
    * thing this whole gate exists to make honest.
+   *
+   * **`summary-observations` (storage-spine design spec §2, PR 1):** BOTH
+   * branches below now also fold 0x0039's totals onto the run as an
+   * OBSERVATION, separate from whatever `IntervalActual` they file — even
+   * `split-won`, which used to discard a held summary unread (review I4's
+   * ruling was always about the ACTUAL, never about whether the totals
+   * were worth keeping at all: a split is authoritative for what the
+   * interval measured, not for what the machine itself said the whole
+   * workout summed to). Emitted AT MOST ONCE per run, since this whole
+   * function runs at most once per run (`armSummaryReconcile` arms a
+   * single deadline; `pendingSummaryReconcile`'s own doc comment).
    */
   function reconcileSummary(run: NonNullable<typeof activeRun>): void {
     const lastIndex = run.program.intervals.length - 1;
@@ -2980,10 +3083,20 @@ export function createPm5Driver(
     // the cost of its absence is a fabricated interval in a rower's log.
     if (lastIndex < 0) return;
     if (run.recordedActuals.has(lastIndex)) {
+      const held = run.summaryInGrace;
       log.record(
         "summary-reconciled",
-        `split-won — interval ${lastIndex} was already recorded when the ${FINISH_GRACE_MS}ms finish grace closed${run.summaryInGrace === null ? ' (no 0x0039 was being held — one may still have ARRIVED and been refused storage; check for an out-of-window entry above before reading this as "the summary never came")' : " (a 0x0039 was held and is discarded unread: the split is authoritative, review I4)"}`,
+        `split-won — interval ${lastIndex} was already recorded when the ${FINISH_GRACE_MS}ms finish grace closed${held === null ? ' (no 0x0039 was being held — one may still have ARRIVED and been refused storage; check for an out-of-window entry above before reading this as "the summary never came")' : " (a 0x0039 was held; its totals are recorded as observations alongside the split — the split stays authoritative for the interval ACTUAL, review I4)"}`,
       );
+      if (held !== null) {
+        run.summaryInGrace = null;
+        emit(
+          summaryObservationsEvent(run, {
+            workElapsedSeconds: held.elapsedSeconds,
+            workDistanceMeters: held.meters,
+          }),
+        );
+      }
       return;
     }
     const summary = run.summaryInGrace;
@@ -3044,13 +3157,20 @@ export function createPm5Driver(
       avgHeartRateBpm: null,
       // 0x0039 (the summary this fallback derives from) carries no
       // PER-INTERVAL rest distance field of its own — that number only ever
-      // arrives on the 0x0037 this branch exists BECAUSE it was lost. `0`
-      // here is not a wire reading, it is "unrecoverable by this path": if
-      // the final interval had a trailing rest, the summary-reconciled
-      // DISTANCE hero undercounts it by exactly that many metres, same as
-      // this function's own documented elapsed-time gap two lines up (§23
-      // walk item 4) — a real gap, not a migration this field could close.
-      restDistanceMeters: 0,
+      // arrives on the 0x0037 this branch exists BECAUSE it was lost.
+      // **OMITTED, not `0` (RC-7, storage-spine design spec §2):** `0`
+      // used to sit here, and it was a claim this path has no wire reading
+      // to back — indistinguishable from a genuine rest-free interval to
+      // every reader that trusted the type's old "always a number"
+      // promise. `restDistanceMeters` is additive-optional now
+      // (`domain/monitor/types.ts`); every existing consumer already reads
+      // it `?? 0` for the OTHER reason optional-in-practice was already
+      // true (an old persisted record). If the final interval had a
+      // trailing rest, the summary-reconciled DISTANCE hero still
+      // undercounts it by exactly that many metres, same as this
+      // function's own documented elapsed-time gap two lines up (§23 walk
+      // item 4) — a real gap, now stated as an absence instead of
+      // papered over with a number that looks measured.
     };
     run.actuals += 1;
     run.recordedActuals.set(lastIndex, {
@@ -3070,6 +3190,17 @@ export function createPm5Driver(
       `filled-from-summary — the final split never arrived, so interval ${lastIndex} is synthesized from 0x0039: elapsed=${derived.elapsedSeconds}s distance=${derived.distanceMeters}m (${derived.how}). Avg split/spm/HR are OMITTED (null): 0x0039's averages are the whole workout's, not this interval's (design spec §5, B3)`,
     );
     emit({ kind: "intervalComplete", actual, finalBoundary: true });
+    // The OBSERVATION rides separately from the ACTUAL above (storage-spine
+    // design spec §2): `summary`'s own elapsed/distance are 0x0039's
+    // work-only totals, exactly as received — never `derived`'s numbers,
+    // which have already had `deriveFinalIntervalFromSummary`'s premises
+    // (priors subtracted, possibly a rest allowance) applied to them.
+    emit(
+      summaryObservationsEvent(run, {
+        workElapsedSeconds: summary.elapsedSeconds,
+        workDistanceMeters: summary.meters,
+      }),
+    );
   }
 
   /**
@@ -3671,6 +3802,27 @@ export function createPm5Driver(
   // (`noteSummaryHalf`'s own updated doc comment has the full reasoning).
   t.subscribe(END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID, (bytes) => {
     noteSummaryHalf("0x003A", bytes);
+  });
+
+  // 0x003F, the PRODUCTION subscriber (storage-spine design spec §2,
+  // delta-pass B3): raw bytes only, same as the two above — no decode
+  // lives here (`uuids.ts`'s own doc comment: the byte order is disputed
+  // WITHIN the BLE spec itself, unsettled until a hardware walk reads
+  // it). Non-critical by omission: this UUID is not in either transport's
+  // `CRITICAL_CHARACTERISTICS` set, so a subscribe rejection here degrades
+  // (`onCharacteristicDegraded` — LL's existing mechanism, unchanged by
+  // this task) rather than ending the session, exactly like the two
+  // summary characteristics above. Attributed to whichever run is open AT
+  // RECEIPT, same as `noteSummary`'s own `activeRun` read — `null` (no
+  // run open) simply leaves nothing to attribute it to, since a bare
+  // reading with no workout of ours to belong to is not evidence about
+  // any run's finish.
+  t.subscribe(LOGGED_WORKOUT_UUID, (bytes) => {
+    log.record(
+      "verification-received",
+      `0x003F received (run ${runIsOpen() ? "open" : "closed"}, state=${toMonitorFrame(raw as RawPm5Status).state}) raw=${toHex(bytes)}`,
+    );
+    if (activeRun !== null) activeRun.verificationBytes = Array.from(bytes);
   });
 
   // `terminate()`'s settle-wait tick pulse (design spec §7, interface-
@@ -4519,6 +4671,7 @@ export function createPm5Driver(
           finishGraceUntil: null,
           summaryInGrace: null,
           graceClaimed: false,
+          verificationBytes: null,
         };
         log.record("armed", `programmed ${p.intervals.length} interval(s)`);
         emit({ kind: "armed" });

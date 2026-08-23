@@ -36,6 +36,7 @@ import {
   END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID,
   END_OF_WORKOUT_SUMMARY_UUID,
   GENERAL_STATUS_UUID,
+  LOGGED_WORKOUT_UUID,
   RECEIVE_CHARACTERISTIC_UUID,
   ROWING_SERVICE_UUID,
   SAMPLE_RATE_UUID,
@@ -65,6 +66,11 @@ const SERVICE_OF: Readonly<Record<string, string>> = {
   [ADDITIONAL_SPLIT_INTERVAL_DATA_UUID]: ROWING_SERVICE_UUID,
   [END_OF_WORKOUT_SUMMARY_UUID]: ROWING_SERVICE_UUID,
   [END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID]: ROWING_SERVICE_UUID,
+  // Storage-spine design spec §2, delta-pass B3: 0x003F is in the C2
+  // rowing service 0x0030 too, same as the pair above — mirrors
+  // `webBluetooth.ts`'s own entry (Phase RC spec 1 Task 2), which this
+  // native map never had until now.
+  [LOGGED_WORKOUT_UUID]: ROWING_SERVICE_UUID,
 };
 
 function serviceFor(characteristicId: string): string {
@@ -230,10 +236,11 @@ function raceScanTimeout<T>(pipeline: Promise<T>): Promise<T> {
  *  on THIS characteristic stays FATAL, exactly as it always has — routed
  *  through `disconnectCb`, ending the session. Every OTHER characteristic
  *  this file subscribes to (`SERVICE_OF`'s remaining keys — the five status
- *  characteristics plus the two summary ones) is a status feed: losing one
- *  degrades what the app can show, never the CSAFE conversation itself, so
- *  a rejection there routes through `degradedCb` instead and the session
- *  continues. `RECEIVE_CHARACTERISTIC_UUID` (the OTHER control
+ *  characteristics, the two summary ones, and 0x003F since storage-spine
+ *  design spec §2) is a status feed: losing one degrades what the app can
+ *  show, never the CSAFE conversation itself, so a rejection there routes
+ *  through `degradedCb` instead and the session continues.
+ *  `RECEIVE_CHARACTERISTIC_UUID` (the OTHER control
  *  characteristic) is write-only from this app's side — `driver.ts` never
  *  subscribes to it — so it never reaches `subscribe()` at all and needs no
  *  entry here. */

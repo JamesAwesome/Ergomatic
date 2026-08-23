@@ -1846,8 +1846,11 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
       avgSplit: null,
       avgSpm: null,
       avgHeartRateBpm: null,
-      restDistanceMeters: 0,
     });
+    // RC-7 (storage-spine design spec §2): the synthesized-final fallback
+    // OMITS `restDistanceMeters` rather than asserting the wire's own
+    // "no rest" `0` for a quantity it never measured.
+    expect(result.current.actuals[0]).not.toHaveProperty("restDistanceMeters");
     expect(loadMonitorRun()?.actuals).toHaveLength(1);
     // ...and the hand-off is free, on the fill rather than on its backstop.
     expect(result.current.handoffHeld).toBe(false);

@@ -75,6 +75,7 @@ const {
   END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID,
   END_OF_WORKOUT_SUMMARY_UUID,
   GENERAL_STATUS_UUID,
+  LOGGED_WORKOUT_UUID,
   ROWING_SERVICE_UUID,
   TRANSMIT_CHARACTERISTIC_UUID,
 } = await import("../../../domain/monitor/pm5/uuids.js");
@@ -1008,4 +1009,52 @@ describe("createCapacitorBleTransport: 0x0039/0x003A join SERVICE_OF (fast-follo
       );
     },
   );
+});
+
+// Storage-spine design spec §2 (delta-pass B3): 0x003F joins THIS file's
+// `SERVICE_OF` too — `webBluetooth.ts` already got its own entry under an
+// earlier task (Phase RC spec 1 Task 2, that file's own test below this
+// one's twin) and this native map had none until now. Same membership pin,
+// via write() for the same reason the 0x0039/0x003A block above gives (a
+// missing entry throws synchronously here, unlike the web transport's
+// async/void-discarded equivalent).
+describe("createCapacitorBleTransport: 0x003F joins SERVICE_OF (storage-spine design spec §2)", () => {
+  it("write() to LOGGED_WORKOUT_UUID resolves against the rowing service, not 'no known service'", async () => {
+    const transport = createCapacitorBleTransport();
+    await transport.connect("d1");
+
+    await expect(
+      transport.write(LOGGED_WORKOUT_UUID, Uint8Array.from([1])),
+    ).resolves.toBeUndefined();
+
+    expect(BleClient.write).toHaveBeenCalledWith(
+      "d1",
+      ROWING_SERVICE_UUID,
+      LOGGED_WORKOUT_UUID,
+      expect.anything(),
+    );
+  });
+
+  it("a subscribe() rejection on LOGGED_WORKOUT_UUID DEGRADES — the session continues, no onDisconnect (it is NOT in CRITICAL_CHARACTERISTICS)", async () => {
+    vi.mocked(BleClient.startNotifications).mockRejectedValue(
+      new Error("Service not found."),
+    );
+    const transport = createCapacitorBleTransport();
+    const drops: string[] = [];
+    const degraded: Array<[string, string]> = [];
+    transport.onDisconnect((reason) => drops.push(reason));
+    transport.onCharacteristicDegraded((id, message) =>
+      degraded.push([id, message]),
+    );
+    await transport.connect("d1");
+
+    transport.subscribe(LOGGED_WORKOUT_UUID, () => {});
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(drops).toStrictEqual([]);
+    expect(degraded).toHaveLength(1);
+    expect(degraded[0]![0]).toBe(LOGGED_WORKOUT_UUID);
+    expect(degraded[0]![1]).toContain("Service not found.");
+  });
 });

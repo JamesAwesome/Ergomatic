@@ -372,8 +372,11 @@ describe("buildSummaryModel — DISTANCE (R-B), the machine's own number, extern
 
   it("old-shape record: restDistanceMeters undefined at runtime (a MonitorRun.actuals entry written before task 2's field existed) contributes 0, never crashes or NaNs (task 2's `?? 0` contract — this is the first consumer)", () => {
     const oldActual = { ...work1 } as IntervalActual;
-    // @ts-expect-error — simulating a pre-field persisted record: the type
-    // says `number`, the stored JSON genuinely lacks the key.
+    // Simulating a pre-field persisted record: `restDistanceMeters` went
+    // additive-optional (storage-spine design spec §2, RC-7 — it used to
+    // be `number`, and `delete` here needed a `@ts-expect-error`), so the
+    // stored JSON genuinely lacking the key is now honest at the type
+    // level too, not just at runtime.
     delete oldActual.restDistanceMeters;
     const run = monitorRun({
       program: { intervals: [interval({ kind: "distance", value: 250 })] },

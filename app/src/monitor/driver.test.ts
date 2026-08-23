@@ -23,6 +23,7 @@ import {
   END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID,
   END_OF_WORKOUT_SUMMARY_UUID,
   GENERAL_STATUS_UUID,
+  LOGGED_WORKOUT_UUID,
   RECEIVE_CHARACTERISTIC_UUID,
   SAMPLE_RATE_UUID,
   SPLIT_INTERVAL_DATA_UUID,
@@ -30,6 +31,7 @@ import {
 } from "../../domain/monitor/pm5/uuids.js";
 import {
   buildAdditionalSplitIntervalDataBytes,
+  buildAdditionalStatus2Bytes,
   buildEndOfWorkoutSummaryBytes,
   buildGeneralStatusBytes,
   buildSplitIntervalDataBytes,
@@ -414,6 +416,25 @@ function generalStatusIn(
     workoutDurationRaw: 0,
     workoutDurationType: 0,
     dragFactor: 130,
+  });
+}
+
+/** A 0x0033 (Additional Status 2) payload naming ONLY the Interval Count
+ *  (storage-spine design spec §2, early side) — the byte `noteSummary`'s
+ *  new final-interval gate reads via `toProgramIndex`, merged into `raw`
+ *  the same way `generalStatusIn`'s 0x0031 payloads are. Every other field
+ *  is zeroed; nothing downstream of this gate reads them. */
+function additionalStatus2In(intervalCount: number): Uint8Array {
+  return buildAdditionalStatus2Bytes({
+    elapsedSeconds: 0,
+    intervalCount,
+    averagePowerWatts: 0,
+    totalCalories: 0,
+    splitAvgPace: 0,
+    splitAvgPowerWatts: 0,
+    splitAvgCalories: 0,
+    lastSplitTimeSeconds: 0,
+    lastSplitDistanceMeters: 0,
   });
 }
 
@@ -8530,17 +8551,18 @@ describe("createPm5Driver: the fake's own terminate re-base does not double the 
 });
 
 describe("createPm5Driver: construction-time subscriptions (fast-follow Task 1, design spec §5)", () => {
-  it("subscribes 0x0039 AND 0x003A alongside every existing characteristic — the full pinned list", () => {
+  it("subscribes 0x0039, 0x003A AND NOW 0x003F alongside every existing characteristic — the full pinned list", () => {
     const transport = stubTransport();
     createPm5Driver(transport, createEventLog());
 
     // Every characteristic this driver has ever subscribed at
     // construction — TRANSMIT (ack stream), the four status
-    // characteristics, the two split-boundary halves, and now the two
-    // summary halves. SAMPLE_RATE_UUID is written, never subscribed, so
-    // it does not belong here. A removal of either new UUID from this
-    // list is exactly the regression this pin exists to catch — see the
-    // task report's self-mutation evidence.
+    // characteristics, the two split-boundary halves, the two summary
+    // halves, and now 0x003F (storage-spine design spec §2, delta-pass
+    // B3). SAMPLE_RATE_UUID is written, never subscribed, so it does not
+    // belong here. A removal of any of these three from this list is
+    // exactly the regression this pin exists to catch — see the task
+    // report's self-mutation evidence.
     expect(transport.subscribedUuids().sort()).toStrictEqual(
       [
         TRANSMIT_CHARACTERISTIC_UUID,
@@ -8551,6 +8573,7 @@ describe("createPm5Driver: construction-time subscriptions (fast-follow Task 1, 
         ADDITIONAL_SPLIT_INTERVAL_DATA_UUID,
         END_OF_WORKOUT_SUMMARY_UUID,
         END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID,
+        LOGGED_WORKOUT_UUID,
       ].sort(),
     );
   });
@@ -8588,6 +8611,36 @@ describe("createPm5Driver: summary-half receipt logging (fast-follow Task 1, des
     const halves = log.entries().filter((e) => e.kind === "summary-half");
     expect(halves).toHaveLength(1);
     expect(halves[0]!.detail).toContain("0x003A");
+  });
+
+  it("0x003F receipt logs verification-received with 'run closed' before any program() ever ran, and stores nothing (no run to attribute it to)", () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    createPm5Driver(transport, log);
+
+    transport.notify(LOGGED_WORKOUT_UUID, Uint8Array.from([0xaa, 0xbb]));
+
+    const entries = log
+      .entries()
+      .filter((e) => e.kind === "verification-received");
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.detail).toContain("0x003F");
+    expect(entries[0]!.detail).toContain("run closed");
+  });
+
+  it("0x003F receipt logs 'run open' while a program is armed", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+    await programViaStub(driver, transport, MINIMAL_PROGRAM);
+
+    transport.notify(LOGGED_WORKOUT_UUID, Uint8Array.from([0xaa, 0xbb]));
+
+    const entries = log
+      .entries()
+      .filter((e) => e.kind === "verification-received");
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.detail).toContain("run open");
   });
 
   it("logs 'run open' while a program is armed, and both a re-fire and 0x003A never touch the count or content of the OTHER characteristic's own entries", async () => {
@@ -8668,6 +8721,33 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
 
   const ONE_INTERVAL_PROGRAM: WorkoutProgram = {
     intervals: [
+      {
+        type: "work",
+        kind: "time",
+        value: 60,
+        targetSplit: 120,
+        displaySpm: 22,
+        restSeconds: 0,
+      },
+    ],
+  };
+
+  /** Storage-spine design spec §2 (early side): a 2-interval program so
+   *  "still open, not YET in the final interval" and "still open, in its
+   *  final interval already" are two genuinely different, observable
+   *  machine states — `ONE_INTERVAL_PROGRAM` above cannot tell them apart
+   *  (every tick of a 1-interval program IS its final one, the spec's own
+   *  "single-interval blindness" note). */
+  const TWO_INTERVAL_PROGRAM: WorkoutProgram = {
+    intervals: [
+      {
+        type: "work",
+        kind: "time",
+        value: 60,
+        targetSplit: 120,
+        displaySpm: 22,
+        restSeconds: 30,
+      },
       {
         type: "work",
         kind: "time",
@@ -8849,7 +8929,21 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     });
     expect(verdicts(g.log)).toHaveLength(1);
     expect(verdicts(g.log)[0]!.detail).toContain("split-won");
-    expect(verdicts(g.log)[0]!.detail).toContain("discarded unread");
+    // CORRECTED (storage-spine design spec §2, PR 1): the split still wins
+    // the ACTUAL — review I4's ruling above is untouched — but a held
+    // 0x0039 is no longer thrown away. `"discarded unread"` is GONE from
+    // this branch's own log line, and the totals it used to describe as
+    // lost now ride a `summary-observations` event instead.
+    expect(verdicts(g.log)[0]!.detail).not.toContain("discarded unread");
+    expect(verdicts(g.log)[0]!.detail).toContain("recorded as observations");
+    expect(
+      g.events.filter((e) => e.kind === "summary-observations"),
+    ).toStrictEqual([
+      {
+        kind: "summary-observations",
+        totals: { workElapsedSeconds: 999, workDistanceMeters: 9999 },
+      },
+    ]);
   });
 
   it("(b) THE DROPPED SPLIT: no split ever arrives, and at the 3000ms deadline the summary fills the final interval from its own totals", async () => {
@@ -9326,6 +9420,20 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     expect(actual.avgSpm).not.toBe(0);
   });
 
+  it("(g2) RC-7 (storage-spine design spec §2): the synthesized final interval OMITS restDistanceMeters entirely — never a wire-looking `0` for a quantity this path has no reading of", async () => {
+    const g = primedGate();
+    await rowToFinish(g);
+    g.clock.advance(400);
+    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(62.5, 214));
+    g.clock.advance(2600);
+    g.timer.pending()!.fire();
+
+    const only = boundaries(g.events)[0]!;
+    const actual = (only as { actual: IntervalActual }).actual;
+    expect("restDistanceMeters" in actual).toBe(false);
+    expect(actual.restDistanceMeters).toBeUndefined();
+  });
+
   it("THE DEADLINE IS A CLOCK, NOT A TICK COUNT: the machine's own repeat finished frames never trigger the fill early", async () => {
     // The walk-day-3 lesson, one layer over (interface-notes.md §22 item 5):
     // a reconcile keyed to the PM's status cadence is a reconcile keyed to
@@ -9362,9 +9470,17 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     expect(verdicts(g.log)[0]!.detail).toContain("no 0x0039");
   });
 
-  it("A SUMMARY ARRIVING WHILE THE RUN IS STILL OPEN is out-of-window too — the gate is armed by the natural finish, never by a characteristic", async () => {
+  it("A SUMMARY ARRIVING WHILE THE RUN IS STILL OPEN, and NOT YET in its final interval, is out-of-window — the gate is armed by the natural finish or by the run's own final interval, never by a bare characteristic", async () => {
+    // CORRECTED by storage-spine design spec §2 (early side): this test
+    // used to program `ONE_INTERVAL_PROGRAM`, whose every tick is
+    // trivially "the final interval" (§2's own "single-interval
+    // blindness" note) — so it could never actually distinguish "still
+    // open" from "still open AND in the final interval", and now asserts
+    // the WRONG thing for that case (see the buffering test right below).
+    // A 2-interval program held on interval 0 is the genuine negative.
     const g = primedGate();
-    await programViaStub(g.driver, g.transport, ONE_INTERVAL_PROGRAM);
+    await programViaStub(g.driver, g.transport, TWO_INTERVAL_PROGRAM);
+    g.transport.notify(ADDITIONAL_STATUS_2_UUID, additionalStatus2In(0));
     g.transport.notify(
       GENERAL_STATUS_UUID,
       generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 30, 100),
@@ -9374,6 +9490,227 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     expect(verdicts(g.log)).toHaveLength(1);
     expect(verdicts(g.log)[0]!.detail).toContain("out-of-window");
     expect(g.timer.calls).toHaveLength(0);
+    expect(
+      g.events.filter((e) => e.kind === "summary-observations"),
+    ).toHaveLength(0);
+  });
+
+  it("(a) storage-spine design spec §2 EARLY SIDE, single-interval case: a 0x0039 arriving while an open run is ALREADY in its (only, therefore final) interval is buffered — no out-of-window/discard log — and the natural close still emits summary-observations with the decoded totals", async () => {
+    const g = primedGate();
+    await programViaStub(g.driver, g.transport, ONE_INTERVAL_PROGRAM);
+    g.transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 30, 100),
+    );
+    // The burst beats OUR terminal transition: 0x0039 arrives while this
+    // driver still considers the run open.
+    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(30, 100));
+
+    const details = verdicts(g.log).map((e) => e.detail);
+    expect(details).toHaveLength(1);
+    expect(details[0]).toContain("buffered");
+    expect(details.some((d) => d.includes("out-of-window"))).toBe(false);
+    expect(details.some((d) => d.includes("discard"))).toBe(false);
+    // No grace has opened yet — our own terminal transition has not
+    // happened — so nothing is armed. This is a HOLD, not a fill.
+    expect(g.timer.calls).toHaveLength(0);
+    expect(boundaries(g.events)).toHaveLength(0);
+    expect(
+      g.events.filter((e) => e.kind === "summary-observations"),
+    ).toHaveLength(0);
+
+    // OUR terminal transition arrives; the final split never does — the
+    // buffered summary reconciles the ordinary way once the grace closes.
+    g.transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_WORKOUTEND, 30, 100),
+    );
+    g.timer.pending()!.fire();
+
+    expect(
+      g.events.filter((e) => e.kind === "summary-observations"),
+    ).toStrictEqual([
+      {
+        kind: "summary-observations",
+        totals: { workElapsedSeconds: 30, workDistanceMeters: 100 },
+      },
+    ]);
+  });
+
+  it("(a2) storage-spine design spec §2 EARLY SIDE, multi-interval case: the identical buffering, driven on a 2-interval program held in its FINAL interval — a mid-row interval never buffers", async () => {
+    const g = primedGate();
+    await programViaStub(g.driver, g.transport, TWO_INTERVAL_PROGRAM);
+
+    // Interval 0 rows and completes the ordinary way — the status frame
+    // establishing `lastActiveState: "rowing"` MUST precede the split
+    // (`seaFretWithTwoPriorsRecorded`'s own established pattern), or
+    // `toActualIndex` has no machine state to normalize the boundary
+    // against and the actual files with `index: null` instead.
+    g.transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 60, 200),
+    );
+    g.transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 60, 200));
+    g.transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 24));
+    expect(boundaries(g.events)).toHaveLength(1);
+
+    // Interval 1 (the final one) is under way per the machine's own 0x0033
+    // — but OUR terminal transition (the WORKOUTEND 0x0031 frame) has not
+    // arrived yet. This is the exact race §1's keystone capture read:
+    // 0x0039 at t=172129.5, our terminal at t=172309.3, 142-449ms apart.
+    g.transport.notify(ADDITIONAL_STATUS_2_UUID, additionalStatus2In(1));
+    g.transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 90, 300),
+    );
+    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(150, 500));
+
+    const details = verdicts(g.log).map((e) => e.detail);
+    expect(details.some((d) => d.includes("buffered"))).toBe(true);
+    expect(details.some((d) => d.includes("out-of-window"))).toBe(false);
+    expect(g.timer.calls).toHaveLength(0);
+
+    // OUR terminal transition; the final split never arrives, so the
+    // no-split (filled-from-summary) path derives interval 1 and folds
+    // the SAME buffered summary onto the run as an observation — using
+    // 0x0039's own totals (150/500) UNTRANSFORMED, not the derived actual
+    // (which subtracts interval 0's priors down to 90/300).
+    g.transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_WORKOUTEND, 150, 500),
+    );
+    g.timer.pending()!.fire();
+
+    expect(boundaries(g.events)).toHaveLength(2);
+    expect(
+      g.events.filter((e) => e.kind === "summary-observations"),
+    ).toStrictEqual([
+      {
+        kind: "summary-observations",
+        totals: { workElapsedSeconds: 150, workDistanceMeters: 500 },
+      },
+    ]);
+  });
+
+  it("(b) storage-spine design spec §2: the split-won path (final 0x0037 arrives, then 0x0039, then OUR terminal) emits summary-observations instead of logging 'discarded unread' — the exact keystone ordering (§1)", async () => {
+    const g = primedGate();
+    await programViaStub(g.driver, g.transport, TWO_INTERVAL_PROGRAM);
+
+    // Interval 0, the ordinary way.
+    g.transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 60, 200),
+    );
+    g.transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 60, 200));
+    g.transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 24));
+
+    // Interval 1's REAL final split arrives FIRST (5 of 5 committed
+    // finishes, §1) — an ordinary in-run boundary, recorded normally.
+    g.transport.notify(ADDITIONAL_STATUS_2_UUID, additionalStatus2In(1));
+    g.transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 90, 300),
+    );
+    g.transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(2, 90, 300));
+    g.transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(2, 26));
+    expect(boundaries(g.events)).toHaveLength(2);
+
+    // THEN 0x0039 — the run is still open (the machine has already
+    // committed the log; OUR terminal has not arrived), so it buffers via
+    // the SAME early-side gate, whether or not a split already won.
+    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(150, 500));
+    expect(verdicts(g.log).some((e) => e.detail.includes("buffered"))).toBe(
+      true,
+    );
+
+    // THEN our terminal transition, opening the grace; the deadline finds
+    // interval 1 already recorded (split-won).
+    g.transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_WORKOUTEND, 150, 500),
+    );
+    g.timer.pending()!.fire();
+
+    const splitWon = verdicts(g.log).find((e) =>
+      e.detail.startsWith("split-won"),
+    )!;
+    expect(splitWon.detail).not.toContain("discarded unread");
+    expect(splitWon.detail).toContain("recorded as observations");
+    // No THIRD boundary — split-won never files an actual off the summary.
+    expect(boundaries(g.events)).toHaveLength(2);
+    expect(
+      g.events.filter((e) => e.kind === "summary-observations"),
+    ).toStrictEqual([
+      {
+        kind: "summary-observations",
+        totals: { workElapsedSeconds: 150, workDistanceMeters: 500 },
+      },
+    ]);
+  });
+
+  it("(d) 0x003F's raw bytes ride the summary-observations event when this run heard one during it", async () => {
+    const g = primedGate();
+    await rowToFinish(g);
+    const verificationBytes = Uint8Array.from([
+      0x27, 0xd8, 0xf3, 0x6e, 0xe1, 0x52, 0x55, 0x5b,
+    ]);
+    g.transport.notify(LOGGED_WORKOUT_UUID, verificationBytes);
+    g.clock.advance(400);
+    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(62.5, 214));
+    g.clock.advance(2600);
+    g.timer.pending()!.fire();
+
+    const observations = g.events.find(
+      (e) => e.kind === "summary-observations",
+    );
+    expect(observations).toStrictEqual({
+      kind: "summary-observations",
+      totals: { workElapsedSeconds: 62.5, workDistanceMeters: 214 },
+      verificationBytes: Array.from(verificationBytes),
+    });
+  });
+
+  it("(d2) verificationBytes is OMITTED, not present-and-undefined, when no 0x003F ever arrived this run", async () => {
+    const g = primedGate();
+    await rowToFinish(g);
+    g.clock.advance(400);
+    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(62.5, 214));
+    g.clock.advance(2600);
+    g.timer.pending()!.fire();
+
+    const observations = g.events.find(
+      (e) => e.kind === "summary-observations",
+    )!;
+    expect("verificationBytes" in observations).toBe(false);
+  });
+
+  it("(e) storage-spine design spec §2, NATURAL-FINISH-ONLY: a TERMINATE after an early-side buffer fires no summary-observations event — the bytes are simply abandoned, never filed off a run that never naturally finished", async () => {
+    const g = primedGate();
+    await programViaStub(g.driver, g.transport, ONE_INTERVAL_PROGRAM);
+    g.transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 30, 100),
+    );
+    // EARLY SIDE: buffered while the run is still open, in its final
+    // (only) interval.
+    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(30, 100));
+    expect(verdicts(g.log).some((e) => e.detail.includes("buffered"))).toBe(
+      true,
+    );
+
+    // The machine's own terminate report — not a natural finish. No grace
+    // ever opens (footnote 12), `armSummaryReconcile` never arms, and
+    // `reconcileSummary` — the ONLY place a `summary-observations` event
+    // is built — never runs for this run again.
+    g.transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_TERMINATE, 40, 130),
+    );
+    expect(g.events.filter((e) => e.kind === "terminated")).toHaveLength(1);
+    expect(g.timer.calls).toHaveLength(0);
+    expect(
+      g.events.filter((e) => e.kind === "summary-observations"),
+    ).toHaveLength(0);
   });
 
   it("A SUMMARY PAST THE 3000ms WINDOW is not stored: the deadline finds nothing and declines", async () => {
