@@ -5,6 +5,26 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // Phase LL (#160), the link-truth build. Range v0.17.0 = v0.16.0..main:
+    // #158/#159/#161 are docs (zero files under app/src, verified
+    // --name-only), #160 is the sole note-worthy merge. One clause, per
+    // the PM gate: written against the CORRECTED facts — the banner and
+    // the honest close — never the reinstall claim the gate struck down
+    // (the force-quit brick's mechanism is still unexplained and the walk
+    // is where we find out; saying otherwise here would promise a fix
+    // nobody has witnessed). The cohort stays at one tester until the
+    // walk proves Try Again on real hardware, so this note's audience is
+    // literally James.
+    version: "v0.17.0",
+    date: "2026-08-22",
+    items: [
+      "If the Bluetooth link dies mid-row, the app now says so, within a few seconds: LOST THE MONITOR appears, the live numbers visibly freeze instead of pretending, and the banner stays up until the stream has been genuinely healthy for ten seconds, so it cannot flicker at you. This covers the ways a link dies silently: switching Bluetooth off and on, a phone call taking the app to the background, and drops the app used to swallow.",
+      "A session the link killed is recorded as exactly that. Ending a session under the lost banner stores it as link-lost, not as you giving up: your history can finally tell the difference between the app losing your row and you stopping early.",
+      "A failed connection attempt no longer poisons the next one. Try Again genuinely starts over, and the app asks your phone what it is already connected to before offering to connect again.",
+      "There is a connection log now, one tap from the failure screen, with timestamps. If something goes wrong at the erg, copying that log is the single most useful thing you can send.",
+    ],
+  },
+  {
     // v0.16.0 is REAL as of 2026-08-22: Phase 8A's tag (PRs #155/#156),
     // which also carries Phase WU's warm-up removal — WU's "rides the
     // next tag" ruling is satisfied by 8A's tag arriving first, not by
