@@ -5,6 +5,23 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.18.0 (2026-08-22): Phase BL PRs A+B (#164 stored shape, no note
+    // owed — pre-stated at its gate; #165 the tester-visible half). Range
+    // v0.17.0..main enumerated at PR B's PM gate: exactly those two
+    // merges. The phase stands at its stop-point; the doors/questionnaire
+    // ship later as their own release. Item order is rower-priority: the
+    // closed loop leads (v0.16.0's own note promised it), the shortcut
+    // second, the permanence caveat third — worded so the missing list
+    // (8B) and the missing remove verb read as coming, not as bugs.
+    version: "v0.18.0",
+    date: "2026-08-22",
+    items: [
+      "The loop is closed: finish a 2K Test or 6K Test with the monitor connected or the phone timer running, and after saving, the app offers your measured split as the new baseline. One tap sets it; Not now leaves your numbers alone. Hand-typed logs still do not count: nothing was measured. Expect it to take real rowing, the offer only appears for a plausible split over the full distance.",
+      "Re-test from the You tab: two buttons under your baselines, ROW THE 6K and RACE THE 2K, one tap from your numbers, no plan progress needed. If your other baseline is missing after a test, or your new result disagrees with it, the app offers an estimate and says exactly what it would replace.",
+      "Every test you finish is recorded either way, accept or not. There is nowhere to see that history yet and no way to remove an entry, both are coming with the history list.",
+    ],
+  },
+  {
     // Phase LL (#160), the link-truth build. Range v0.17.0 = v0.16.0..main:
     // #158/#159/#161 are docs (zero files under app/src, verified
     // --name-only), #160 is the sole note-worthy merge. One clause, per
