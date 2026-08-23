@@ -2715,10 +2715,11 @@ walk's three findings, filed as LL follow-ups:**
   before RC-1) and F2b (re-key, inside RC-1/RC-8).
   `ring-phone-2-background-continuity-kill.json` is the capture.
   **F2a defuse SHIPPED (PR #174); F2b remains open in RC-1.**
-- **F3 (small UI) — `endedBy: "link-lost"` is stored and consumed
-  (`completedFullDistance`) but rendered NOWHERE** — the log detail shows
-  no marking; v0.17.0's notes over-promised the surface. One line on the
-  log detail closes it.
+- **F3 (small UI) — RESOLVED in the cohort-unlock PR (2026-08-23):**
+  the log detail now renders `LINK LOST · the app lost the monitor
+  before the end` for `endedBy: "link-lost"` sessions (FromTheLog.tsx;
+  the GET had carried the field since #160). The v0.20.0 notes clause
+  remains owed at the tag (the owed-clauses item tracks it).
 - **F4 (tiny, deferred — evidence-capture gap only, not a merge blocker) —
   the `disconnected` event handler records no liveness-snapshot where
   `fail()` does.** Filed at the cohort-unlock PR's final review
