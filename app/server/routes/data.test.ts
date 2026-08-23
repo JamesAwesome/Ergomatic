@@ -128,6 +128,7 @@ describe("data router: auth guard", () => {
     ["get", "/api/prefs"],
     ["put", "/api/prefs"],
     ["get", "/api/test-history"],
+    ["post", "/api/test-history"],
     ["get", "/api/today"],
   ];
 
