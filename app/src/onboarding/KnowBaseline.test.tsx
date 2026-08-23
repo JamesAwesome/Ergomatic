@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -147,6 +147,12 @@ describe("KnowBaseline (door 2)", () => {
   });
 
   it("shows loading and error states like every baselines consumer", async () => {
+    mockState({ state: "loading" });
+    await renderKnow();
+    expect(screen.getByText("LOADING…")).toBeInTheDocument();
+    cleanup();
+    vi.resetModules();
+
     const retry = vi.fn();
     mockState({ state: "error", retry });
     await renderKnow();
@@ -155,5 +161,18 @@ describe("KnowBaseline (door 2)", () => {
     ).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /retry/i }));
     expect(retry).toHaveBeenCalled();
+  });
+
+  it("the 6k faster stepper works too (both directions per field are real inputs)", async () => {
+    const save = mockReady();
+    await renderKnow();
+    await userEvent.click(screen.getByRole("button", { name: "6k faster" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save baseline" }),
+    );
+    expect(save).toHaveBeenCalledExactlyOnceWith({
+      k6Seconds: 151.5,
+      k6Source: "manual",
+    });
   });
 });

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   MemoryRouter,
@@ -180,6 +180,12 @@ describe("RowToFind (door 3)", () => {
   });
 
   it("shows loading, and an error state with retry (a full screen owes one, unlike the You shortcut)", async () => {
+    mockWorkouts({ state: "loading" });
+    await renderRow();
+    expect(screen.getByText("LOADING…")).toBeInTheDocument();
+    cleanup();
+    vi.resetModules();
+
     const retry = vi.fn();
     mockWorkouts({ state: "error", retry });
     await renderRow();

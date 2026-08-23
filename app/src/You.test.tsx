@@ -89,6 +89,56 @@ describe("You", () => {
     await vi.waitFor(() => expect(onSignedOut).toHaveBeenCalledOnce());
   });
 
+  describe("Reset baseline setup wiring (Phase BL PR C)", () => {
+    // The full staged-confirm behavior lives in ResetBaselineSetup's own
+    // test; this pins You's OWN contribution — a successful reset remounts
+    // the editor so it refetches the now-empty server state instead of
+    // keeping the cleared numbers on screen.
+    it("a confirmed reset makes the baseline editor refetch (remount via the generation key)", async () => {
+      const calls: { url: string; method: string }[] = [];
+      const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+        const method = init?.method ?? "GET";
+        calls.push({ url, method });
+        if (url === "/api/baselines" && method === "DELETE") {
+          return new Response(
+            JSON.stringify({ k2Seconds: null, k6Seconds: null }),
+            { status: 200 },
+          );
+        }
+        if (url === "/api/baselines") {
+          return new Response(
+            JSON.stringify({ k2Seconds: 118, k6Seconds: 127 }),
+            { status: 200 },
+          );
+        }
+        return new Response(JSON.stringify([]), { status: 200 });
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      renderYou();
+
+      // The editor's first mount fetched and shows the stored pair.
+      expect(await screen.findByText("1:58.0")).toBeInTheDocument();
+      const baselineGets = () =>
+        calls.filter((c) => c.url === "/api/baselines" && c.method === "GET")
+          .length;
+      expect(baselineGets()).toBe(1);
+
+      await userEvent.click(
+        screen.getByRole("button", { name: "Reset baseline setup" }),
+      );
+      await userEvent.click(
+        screen.getByRole("button", { name: "Reset baseline setup" }),
+      );
+
+      // The DELETE went out AND the remounted editor re-fetched — the
+      // consequence, not the callback's existence (TESTING.md §3).
+      await vi.waitFor(() => expect(baselineGets()).toBe(2));
+      expect(
+        calls.some((c) => c.url === "/api/baselines" && c.method === "DELETE"),
+      ).toBe(true);
+    });
+  });
+
   describe("SETTINGS · Learning the app row (Task 7)", () => {
     it("shows a SETTINGS section heading and a Learning the app row linking to /you/learning", () => {
       renderYou();

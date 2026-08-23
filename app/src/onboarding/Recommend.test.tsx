@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -316,7 +316,65 @@ describe("Recommend (door 1)", () => {
     });
   });
 
+  it("both numbers already set (a raced device / stale deep link): accept writes NOTHING and simply leaves", async () => {
+    const save = mockReady({ k2Seconds: 120, k6Seconds: 130 });
+    await renderRecommend();
+    await answerBoth();
+    // Both shown as the rower's own.
+    expect(screen.getByText("2K BASELINE · YOURS")).toBeInTheDocument();
+    expect(screen.getByText("6K BASELINE · YOURS")).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Use this baseline" }),
+    );
+    expect(save).not.toHaveBeenCalled();
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+  });
+
+  it("adjust: a server-set 2k the rower moves saves manual too (the per-field predicate is symmetric)", async () => {
+    const save = mockReady({ k2Seconds: 120, k6Seconds: null });
+    await renderRecommend();
+    await answerBoth();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Adjust the numbers first" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "2k slower" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save baseline" }),
+    );
+    expect(save).toHaveBeenCalledExactlyOnceWith({
+      k2Seconds: 120.5,
+      k2Source: "manual",
+      k6Seconds: 152,
+      k6Source: "estimated",
+    });
+  });
+
+  it("adjust: a save failure surfaces on the adjust screen and stays put", async () => {
+    const save = vi.fn(async () => {
+      throw new Error("failed to save baselines");
+    });
+    mockReady({ k2Seconds: null, k6Seconds: null }, save);
+    await renderRecommend();
+    await answerBoth();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Adjust the numbers first" }),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save baseline" }),
+    );
+    expect(
+      await screen.findByText(/Couldn't save your baselines/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("TODAY SCREEN")).not.toBeInTheDocument();
+  });
+
   it("shows a loading state and an error state with retry, like every baselines consumer", async () => {
+    mockState({ state: "loading" });
+    await renderRecommend();
+    expect(screen.getByText("LOADING…")).toBeInTheDocument();
+    cleanup();
+    vi.resetModules();
+
     const retry = vi.fn();
     mockState({ state: "error", retry });
     await renderRecommend();
@@ -325,5 +383,25 @@ describe("Recommend (door 1)", () => {
     ).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /retry/i }));
     expect(retry).toHaveBeenCalled();
+  });
+
+  it("the adjust step's 6k steppers both work (faster then slower nets back to the estimate — still estimated)", async () => {
+    const save = mockReady();
+    await renderRecommend();
+    await answerBoth();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Adjust the numbers first" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "6k faster" }));
+    await userEvent.click(screen.getByRole("button", { name: "6k slower" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save baseline" }),
+    );
+    expect(save).toHaveBeenCalledExactlyOnceWith({
+      k2Seconds: 145,
+      k2Source: "estimated",
+      k6Seconds: 152,
+      k6Source: "estimated",
+    });
   });
 });
