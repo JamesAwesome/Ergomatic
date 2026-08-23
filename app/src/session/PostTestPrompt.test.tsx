@@ -167,21 +167,44 @@ describe("PostTestPrompt", () => {
     });
   });
 
-  it("an inconsistent stored counterpart (k2 >= k6 after the accept) earns the derive offer too", async () => {
-    mockApi(ok);
+  // PM final-PR gate C2 (2026-08-22): the inconsistent case OVERWRITES a
+  // real stored number (possibly a tested one) with the ±7s estimate, so
+  // its copy must say REPLACE and show the number being replaced — the
+  // missing-side arm's "Also set" would hide the overwrite entirely.
+  it("an inconsistent stored counterpart earns the REPLACE copy — the stored value shown, the word replace said", async () => {
+    const apiFn = mockApi(ok);
+    const onDone = vi.fn();
     await renderPrompt({
       // Accepted 2k of 126 against a stored 6k of 125: inverted pair.
       offer: { distance: "2k", splitSeconds: 126 },
       stored: { k2Seconds: null, k6Seconds: 125 },
-      onDone: vi.fn(),
+      onDone,
     });
     await userEvent.click(
       screen.getByRole("button", { name: "Set 2k baseline" }),
     );
     expect(
-      screen.getByRole("heading", { name: "Also set your 6k?" }),
+      screen.getByRole("heading", { name: "Replace your 6k?" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("CURRENTLY 2:05.0 · THIS ESTIMATE 2:13.0"),
     ).toBeInTheDocument();
     expect(screen.getByText("2:13.0")).toBeInTheDocument();
+    // The missing-side copy must NOT render here.
+    expect(
+      screen.queryByRole("heading", { name: "Also set your 6k?" }),
+    ).not.toBeInTheDocument();
+
+    // Accepting the replace still writes ONLY the counterpart side —
+    // the fresh tested 2k is never touched by the derive write.
+    await userEvent.click(
+      screen.getByRole("button", { name: "Replace 6k baseline" }),
+    );
+    expect(onDone).toHaveBeenCalledTimes(1);
+    expect(parsedBodies(apiFn)[1]!.body).toStrictEqual({
+      k6Seconds: 133,
+      k6Source: "derived",
+    });
   });
 
   it("unknown stored baselines (the fetch never resolved) still allow the tested accept, just never a second offer", async () => {

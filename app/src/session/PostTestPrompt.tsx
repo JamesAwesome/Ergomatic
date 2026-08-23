@@ -98,6 +98,20 @@ export default function PostTestPrompt({
     onDone();
   }
 
+  // PM final-PR gate C2 (2026-08-22): the counterpart stage has TWO
+  // honest shapes, not one. Missing side -> "Also set" (nothing is
+  // lost by accepting). Stored-but-inconsistent side -> the accept
+  // OVERWRITES a real number (possibly a tested one) with the ±7s
+  // estimate, so the copy says REPLACE and shows the number being
+  // replaced — render-only branching; the wire body is identical and
+  // still touches only the counterpart side.
+  const replacingValue =
+    stage === "counterpart" && stored !== null
+      ? counterpart!.distance === "2k"
+        ? stored.k2Seconds
+        : stored.k6Seconds
+      : null;
+
   const savedLine =
     stage === "primary"
       ? "SESSION SAVED"
@@ -105,15 +119,25 @@ export default function PostTestPrompt({
   const heading =
     stage === "primary"
       ? `Set your ${side} baseline?`
-      : `Also set your ${side}?`;
+      : replacingValue !== null
+        ? `Replace your ${side}?`
+        : `Also set your ${side}?`;
   const caption =
     stage === "primary"
       ? "AVG SPLIT · MEASURED THIS SESSION"
-      : offer.distance === "2k"
-        ? `ESTIMATED FROM YOUR 2K (+${K2_K6_OFFSET_SECONDS}s)`
-        : `ESTIMATED FROM YOUR 6K (−${K2_K6_OFFSET_SECONDS}s)`;
+      : replacingValue !== null
+        ? `CURRENTLY ${fmtSplit(replacingValue)} · THIS ESTIMATE ${fmtSplit(
+            active.splitSeconds,
+          )}`
+        : offer.distance === "2k"
+          ? `ESTIMATED FROM YOUR 2K (+${K2_K6_OFFSET_SECONDS}s)`
+          : `ESTIMATED FROM YOUR 6K (−${K2_K6_OFFSET_SECONDS}s)`;
   const acceptLabel =
-    stage === "primary" ? `Set ${side} baseline` : `Set ${side} estimate`;
+    stage === "primary"
+      ? `Set ${side} baseline`
+      : replacingValue !== null
+        ? `Replace ${side} baseline`
+        : `Set ${side} estimate`;
   const declineLabel = stage === "primary" ? "Not now" : "Skip";
   const handleAccept =
     stage === "primary" ? handleAcceptTested : handleAcceptDerived;
