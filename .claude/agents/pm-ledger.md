@@ -1553,3 +1553,64 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   recorded series (24 -> 30 -> 35 -> 37 -> 60). LL closed four items by
   executing them and filed a walk card rather than a phase. Worth naming
   after five gates of the opposite.
+
+## Final-PR gate, 2026-08-22 (Phase BL PR B, #165 — TRIAD twice: `tested` provenance + an unpredicted stored shape)
+
+- **A completeness guard is only as strong as its weakest DOOR, and a PR body
+  generalises across doors that a source comment carefully separates.** #165's
+  "no offer from an abandoned run (didn't cover the distance)" is true of the
+  monitor door (`endedBy === "finished"`, the machine's own WORKOUTEND) and
+  FALSE of the phone-timer door, where completeness is the rower's own tap and
+  `timerAvgSplit` divides by the PRESCRIBED metres. Bail out of a 2K at six
+  minutes, tap Finish, and a 1:30 "test result" is offered and permanently
+  recorded. `postTestOffer.ts` says this plainly in its own doc comment — the
+  honest sentence was already written one level down, for the second gate
+  running. **When a guard's answer differs per code path, the PR body states
+  the weakest path, not the union.** James's ruling (same day): record both
+  doors anyway — losing a genuine phone-timer test is worse than carrying a
+  removable bogus one — and the remove/void verb is a GATING condition on 8B's
+  list, not a design input.
+- **The #121 precedent fired and nobody cited it.** "Browsable + immutable +
+  no DELETE = permanent … the next spec that adds stored numbers should answer
+  'how does a rower correct or remove this?' BEFORE it ships." #165 IS that
+  spec: `test_history` rows are written without consent (the decouple ruling,
+  correct), survive log deletion by design (FK SET NULL), have no delete
+  route, and anchor the next test's `deltaSeconds`. The review filed it as an
+  8B design *input*, which is the deferral the precedent refuses. **A gate's
+  job includes grepping this ledger for a precedent the PR's own class already
+  triggered.** Discharged via James's R1 ruling above.
+- **A phase's STATUS paragraph went stale in an implementation PR again —
+  second consecutive gate.** Promote to a mechanical first step: at every
+  final-PR gate, `git diff origin/main...HEAD -- ROADMAP.md` and check the
+  STATUS PARAGRAPH, not just the checkboxes.
+- **A second offer that can OVERWRITE must not use the copy of a first offer
+  that fills a gap.** `counterpartOffer` fires both when the other side is
+  MISSING and when it is INCONSISTENT; one copy rendered for both, showing
+  neither the stored value nor the word replace. Consent that cannot see what
+  it gives up is not consent. **Branch the copy wherever one control has a
+  create arm and a destroy arm.** (Fixed on #165 at this gate: the replace arm
+  now shows CURRENTLY vs THIS ESTIMATE.)
+- **The demo cost of a band-gated feature is the band, not the flow.** The
+  60..240 s/500m plausibility band means the prompt cannot be seen in under
+  FOUR MINUTES of real rowing on the 2K (twelve on the 6K); tapping through
+  produces nothing, silently. 8A's six-saves lesson in a new costume. **When
+  eligibility is a numeric band, compute the minimum wall-clock to satisfy it
+  and put that number above the fold.**
+- **The mechanics of an unpredicted stored shape can be adjudicated by the
+  triad code review; the SEMANTICS still need James.** 0014's FK/UNIQUE/race
+  net were re-proved against real Postgres both directions — an antagonist
+  pass was SKIPPED with that reason spoken. What no code review can settle is
+  who may erase a client-asserted number. **Split the question at the gate:
+  shape → the review; meaning and erasure → the ruling.**
+- **A stored baseline minted from a machine number finally has a non-mirror
+  oracle.** `monitorAvgSplit` averages WORK intervals only and the 2K Test is
+  a single distance interval with no rest — the same quantity the PM5's
+  end-of-piece average pace displays, by construction (RF11's corollary
+  satisfied). One photograph at the LL exit walk checks it.
+- **Release call:** v0.18.0 MINOR on A+B, range `v0.17.0..main` = #164 + #165;
+  #164 owes no note, pre-stated at PR A's gate (RF15 discharged in ADVANCE — a
+  pattern worth copying). Three clauses: the loop v0.16.0's notes promised is
+  closed; the You shortcut (no plan progress needed); "recorded either way,
+  nowhere to see it yet, and not yet removable." RELEASING.md needs no new
+  rollback floor — 0014 is additive, no backfill, no seed rename; checked so
+  the next stored-shape gate does not re-derive it.
