@@ -191,17 +191,18 @@ test("/news/releases lists every version, newest first", async ({ page }) => {
   await expect(versions.nth(0)).toContainText("v0.18.0");
   await expect(versions.nth(1)).toContainText("v0.17.0");
   await expect(versions.nth(2)).toContainText("v0.16.0");
-  await expect(versions.nth(3)).toContainText("v0.14.0");
-  await expect(versions.nth(4)).toContainText("v0.13.0");
-  await expect(versions.nth(5)).toContainText("v0.12.0");
-  await expect(versions.nth(6)).toContainText("v0.11.0");
-  await expect(versions.nth(7)).toContainText("v0.10.0");
-  await expect(versions.nth(8)).toContainText("v0.9.0");
-  await expect(versions.nth(9)).toContainText("v0.8.0");
-  await expect(versions.nth(10)).toContainText("v0.7.0");
-  await expect(versions.nth(11)).toContainText("v0.5.1");
-  await expect(versions.nth(12)).toContainText("v0.5.0");
-  await expect(versions.nth(13)).toContainText("v0.4.0");
+  await expect(versions.nth(3)).toContainText("v0.15.0");
+  await expect(versions.nth(4)).toContainText("v0.14.0");
+  await expect(versions.nth(5)).toContainText("v0.13.0");
+  await expect(versions.nth(6)).toContainText("v0.12.0");
+  await expect(versions.nth(7)).toContainText("v0.11.0");
+  await expect(versions.nth(8)).toContainText("v0.10.0");
+  await expect(versions.nth(9)).toContainText("v0.9.0");
+  await expect(versions.nth(10)).toContainText("v0.8.0");
+  await expect(versions.nth(11)).toContainText("v0.7.0");
+  await expect(versions.nth(12)).toContainText("v0.5.1");
+  await expect(versions.nth(13)).toContainText("v0.5.0");
+  await expect(versions.nth(14)).toContainText("v0.4.0");
 });
 
 test("item 1 / round 4: opening an article from a scrolled News feed lands the reader at the top of its OWN scroller, and ← BACK now restores News's own scroll position (CL item: News scroll memory)", async ({
