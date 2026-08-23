@@ -474,9 +474,36 @@ export function applyContinuityCheck(
   if (run === null || run.completedAt !== null) return run;
   if (lastTwd === null || frameTwd === undefined) return run;
   const distanceGoal = programHasDistanceGoal(run.program);
+  // F2a BRIDGE (Task 1 of 2 — flagged, not a real fix; Task 2 owns
+  // replacing this): `ContinuityReading` now requires `elapsedSeconds`/
+  // `distanceMeters` alongside `totalWorkDistanceMeters` (continuity.ts's
+  // own header comment), but this function only ever tracked a single
+  // `lastTwd`/`frameTwd` scalar pair — no per-axis elapsed/distance
+  // reading has ever been threaded through this call, so there is no REAL
+  // frame value available here to fill the two new axes honestly. Reusing
+  // the ONE real quantity already in scope (the TWD pair itself) for all
+  // three axes keeps this call site's OBSERVABLE behavior identical to
+  // before this task (a reset fires exactly when TWD alone goes backward,
+  // matching every existing test above) rather than fabricating
+  // independent forward/backward motion this function cannot actually
+  // observe. It does NOT implement the F2a three-axis corroboration at
+  // this call site — that requires tracking real per-frame elapsed/
+  // distance the same way `lastTwd` already tracks TWD, which is Task 2's
+  // own change (design spec 2026-08-23-continuity-corroboration §2: "only
+  // the conviction predicate narrows").
   const verdict = checkContinuity(
-    { totalWorkDistanceMeters: lastTwd, distanceGoal },
-    { totalWorkDistanceMeters: frameTwd, distanceGoal },
+    {
+      totalWorkDistanceMeters: lastTwd,
+      elapsedSeconds: lastTwd,
+      distanceMeters: lastTwd,
+      distanceGoal,
+    },
+    {
+      totalWorkDistanceMeters: frameTwd,
+      elapsedSeconds: frameTwd,
+      distanceMeters: frameTwd,
+      distanceGoal,
+    },
   );
   if (verdict !== "reset") return run;
   log?.record(

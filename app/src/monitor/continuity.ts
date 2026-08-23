@@ -56,25 +56,105 @@
 //   the armed program), because it is the same wire fact, not a new one.
 //
 // On the residual, non-distance-goal corpus (the only stretches where this
-// field means "distance genuinely rowed"), the measurement is unambiguous:
-// **zero backward transitions across 1,026 simulated 30-second-gap pairs**
-// (`continuity.test.ts`'s own corpus-derivation block, the same
-// slide-a-gap-across-every-frame simulation shape the anchor pass used to
-// falsify RowTracer's elapsed bound). NO TOLERANCE IS NEEDED — a single
-// GATT-notified characteristic delivers in order (0x0031's own guarantee),
-// there is no rounding in a `readU24LE` whole-metre read to introduce
-// drift, and nothing in 3,092 raw (pre-suppression) or 1,026
-// (post-suppression) simulated pairs ever showed the counter move
-// backward for a reason other than the distance-goal flicker above.
-// `CONTINUITY_BACKWARD_TOLERANCE_METERS` is therefore `0`: that
-// measurement, not an engineered cushion.
+// field means "distance genuinely rowed"), the measurement was
+// unambiguous: **zero backward transitions across 1,026 simulated
+// 30-second-gap pairs** (`continuity.test.ts`'s own corpus-derivation
+// block, the same slide-a-gap-across-every-frame simulation shape the
+// anchor pass used to falsify RowTracer's elapsed bound). NO TOLERANCE WAS
+// NEEDED — a single GATT-notified characteristic delivers in order
+// (0x0031's own guarantee), there is no rounding in a `readU24LE`
+// whole-metre read to introduce drift, and nothing in 3,092 raw
+// (pre-suppression) or 1,026 (post-suppression) simulated pairs ever
+// showed the counter move backward for a reason other than the
+// distance-goal flicker above. That measurement is why a single backward
+// TWD reading, alone, was trusted as a conviction — and F2a below is the
+// record of that trust being wrong.
+//
+// ============================================================================
+// F2a (2026-08-23): a single backward TWD reading is NO LONGER a
+// conviction on its own — one flaky reading closed a HEALTHY row mid-pull
+// (`docs/monitor/sessions/walk-2026-08-23/ring-phone-2-background-
+// continuity-kill.json` seq 30->33->34: TWD 81->0 while elapsed
+// 56.11s->59.33s and distance 81.2m->83.3m BOTH ADVANCE, workoutState 4
+// throughout — the stream never stopped rowing). The six-row TWD table
+// (ROADMAP, Phase LL walk card, corrected F2) shows this was not a rare
+// fluke: five zero readings — including a WEB capture's flat 0 across a
+// 248.5 m interval — against one 81, on time-programmed intervals, in one
+// day. Zero is this field's NORMAL reading there; the 81 was the outlier,
+// and nothing about the shape is iOS-specific.
+//
+// `check` below now requires the FULL reset signature a genuine monitor
+// reset actually produces, not one axis of it: TWD, elapsed, AND distance
+// all strictly backward IN THE SAME READING. Every post-reset connect in
+// the corpus reads zeros on all three together (e.g.
+// `ring-phone-4-btoff-midpiece.json` seq 6-8: elapsed=0, distance=0,
+// machineTotal=0m). A legal boundary, by contrast, holds or grows TWD
+// while elapsed/distance reset — confirmed against the three real
+// NON-DISTANCE boundaries this corpus contains (the keystone capture is a
+// distance program and belongs to the suppression case below, not here):
+// step-3 recording seq 411->416 (twd 0->160, elapsed 59.77->0, distance
+// 159.3->0), step-3 recording seq 953->956 (twd 373->373, elapsed
+// 60->0, distance 213.7->0), and session-2 recording seq 776->781 (twd
+// 360->360, elapsed 69.63->0.31, distance 260.1->1.1) — TWD backward at
+// NONE of them. Only a genuine reset backs all three up at once.
+//
+// **§2b's traded-away cost (design spec 2026-08-23-continuity-
+// corroboration §2b, TRIAD-weight, accepted deliberately, not free):**
+// narrowing from one axis to three LOSES a conviction the old rule made —
+// a real reset during a gap that began EARLY in an interval can leave
+// elapsed and distance both reading FORWARD again by the time the next
+// reading lands (per-interval clocks restart from 0 and can outrun a low
+// before-value before the next sample), so that record now MERGES instead
+// of closing: blind for roughly 14% of a 180 s interval at a 30 s gap,
+// growing to ~64% at two minutes. Accepted because the old rule bought
+// that coverage by killing healthy rows (this file's own F2a fix is the
+// receipt), a merged post-reset stream is visible garbage on the record
+// where a killed healthy row was silent loss, and the proper fix — a
+// re-key off TWD entirely, so no per-axis conjunction is needed at all —
+// is F2b's, inside RC-1's spec. This file's predicate is a bound
+// tightened, not the fix.
+//
+// The distance-goal suppression below is UNCHANGED and still load-
+// bearing, not superseded by the three-axis signature: at a
+// distance-programmed boundary TWD, elapsed, AND distance can ALL go
+// backward together (the same 0/250/500 TWD flicker, paired with the
+// interval's own elapsed/distance reset), so the three-axis signature
+// alone would false-convict there too. The suppression guards that
+// program shape; the signature guards the rest; neither replaces the
+// other.
+//
+// **The corpus claim is an observation, not a proof — stated that way on
+// purpose:** the design spec's own antagonist pass (§1) measured zero
+// triple-backward (all three axes) readings across 3,637 slid pairs at
+// seven gap lengths. This file's own corpus-derivation block (below)
+// re-runs the equivalent check at a single 30 s gap as a live CI gate
+// (1,026 non-distance-goal pairs, the regression floor — it cannot go red
+// for this narrowing alone, since the old single-axis bound already found
+// zero backward TWD there and the new predicate only convicts on a
+// STRICT SUBSET of what the old one did). "Never observed in 3,637 wire
+// pairs" is the claim — not "cannot": ring-phone-2's own 81->0 TWD-only
+// backward reading remains the one unexplained backward TWD reading this
+// codebase has captured on a time program (walk F5), and nothing here
+// claims to explain it away, only to stop convicting a healthy row on it
+// alone.
+// ============================================================================
 
-/** A single wire reading `check` below judges continuity from.
+/** A single wire reading `check` below judges continuity from. All four
+ *  fields come off the SAME `MonitorFrame`/frame-derived reading — never
+ *  re-decoded, never resampled from a different moment.
  *  `totalWorkDistanceMeters` is 0x0031's own Total Work Distance, exactly
  *  as `domain/monitor/pm5/parse.ts`'s `GeneralStatus.totalWorkDistanceMeters`
  *  decodes it (offset 11, whole metres, unscaled) — a caller reads this off
  *  a `MonitorFrame`'s own `totalWorkDistanceMeters` (additive-optional,
  *  `domain/monitor/types.ts`), never re-decodes bytes itself.
+ *  `elapsedSeconds` and `distanceMeters` are the SAME `GeneralStatus`
+ *  frame's own Elapsed Time and Distance fields (offsets 0 and 3, both
+ *  0.01/0.1-scaled per `parse.ts`) — the two axes the F2a fix (this file's
+ *  own header comment) adds to corroborate `totalWorkDistanceMeters`
+ *  before convicting a reset, precisely BECAUSE elapsed alone was already
+ *  rejected as a standalone bound (the header comment's own first bullet:
+ *  it legally jumps backward at every boundary) — it is trustworthy only
+ *  in CONJUNCTION with the other two, never on its own.
  *  `distanceGoal` is NOT a wire field — it is the caller's own answer to
  *  "does the armed program contain a distance-kind interval", the exact
  *  predicate `driver.ts`'s `recordTwdVerdict` already computes
@@ -85,54 +165,44 @@
  *  assumed to cover both. */
 export interface ContinuityReading {
   totalWorkDistanceMeters: number;
+  elapsedSeconds: number;
+  distanceMeters: number;
   distanceGoal: boolean;
 }
 
 export type ContinuityVerdict = "continuation" | "reset";
 
-/** NO TOLERANCE IS NEEDED (measured, Task 4 review fix F5/Minor — reworded
- *  from an earlier "measured floor"/"cushion" framing that implied a
- *  margin was chosen; none was). Zero backward transitions were observed
- *  across every non-distance-goal simulated resume in the corpus — see
- *  this file's own header comment for the full derivation and why that
- *  is the expected, not merely lucky, result (a single-characteristic
- *  GATT stream delivers in order; the field is an unscaled whole-metre
- *  integer with nothing to round). `0` is that measurement, not a
- *  deliberately engineered slack value. `continuity.test.ts`'s
- *  corpus-derivation block reproduces the underlying count (1,026 pairs,
- *  0 violations) as a live CI gate — if a future capture ever shows a
- *  genuine backward blip on a healthy resume, that test is where the
- *  evidence for a nonzero value would first appear, not here in
- *  isolation. */
-export const CONTINUITY_BACKWARD_TOLERANCE_METERS = 0;
-
 /**
  * Judges whether `after` is an honest continuation of `before`, or a reset
- * (design spec §4: "keyed on quantities that are MONOTONIC across
- * boundaries on our wire — `totalWorkDistanceMeters` ... going backward").
+ * (F2a, design spec 2026-08-23-continuity-corroboration §2: "conviction
+ * takes a full-reset signature, not one reading").
  *
  * Suppressed (always `"continuation"`) whenever EITHER reading was taken
  * while a distance-goal interval was armed — see this file's own header
  * comment for why that suppression is required, not optional, on this
- * particular field. This is the ONLY bound this function implements: the
- * spec's other candidate ("stroke count dropping") has no wire field to
- * read on this codebase's decode surface (this file's own header comment)
- * and is not silently approximated by anything else here.
+ * particular field, and why it survives the F2a change unchanged.
  *
- * A forward jump — of ANY size, including one covering a genuine multi-
- * minute background gap — is always `"continuation"`: only a reading that
- * goes BACKWARD, past the measured tolerance, is a `"reset"`. This is what
- * makes the rule safe for an honest long resume (the counter simply grew a
- * lot while the stream was suspect) while still catching a genuine
- * discontinuity (the counter reads LOWER than it did before).
+ * Convicts `"reset"` ONLY when ALL THREE axes are strictly backward in the
+ * same reading — `totalWorkDistanceMeters`, `elapsedSeconds`, AND
+ * `distanceMeters` each read LOWER in `after` than in `before`. No
+ * tolerance on any axis: the reset signature this predicate looks for is
+ * zeros against real progress, nothing marginal is being discriminated
+ * (design spec §2), and the corpus measurement backing the old single-axis
+ * tolerance (this file's own header comment) never needed one either. A
+ * forward or unchanged reading on ANY one of the three axes is always
+ * `"continuation"` — this is what makes the predicate safe against a
+ * flaky single-field reading (the F2a false kill: TWD backward alone,
+ * elapsed and distance both advancing) while still catching a genuine
+ * discontinuity, where a reset monitor reads all three lower at once.
  */
 export function check(
   before: ContinuityReading,
   after: ContinuityReading,
 ): ContinuityVerdict {
   if (before.distanceGoal || after.distanceGoal) return "continuation";
-  const backward =
-    before.totalWorkDistanceMeters - after.totalWorkDistanceMeters;
-  if (backward > CONTINUITY_BACKWARD_TOLERANCE_METERS) return "reset";
-  return "continuation";
+  const resetSignature =
+    after.totalWorkDistanceMeters < before.totalWorkDistanceMeters &&
+    after.elapsedSeconds < before.elapsedSeconds &&
+    after.distanceMeters < before.distanceMeters;
+  return resetSignature ? "reset" : "continuation";
 }
