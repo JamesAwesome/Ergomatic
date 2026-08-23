@@ -2533,3 +2533,59 @@ targetSplit:null}` reproduces the recorded tx exactly and `divergences` stays
   reading on a time program ever observed, and nothing proves it cannot land
   on the `before` side of a boundary. "Cannot" is the wrong word; "never
   observed in 3,637 wire pairs" is the right one.
+
+### Phase RC anchor pass — the storage spine (2026-08-23)
+
+- **CLAIM: "we hang up inside the burst window, so hold the link open."**
+  Believed because four captures measure the disconnect 21.7–107.3 ms after
+  the terminal 0x0031, every one before the 0x0039. FALSE as a complete
+  diagnosis. **Technique: decode the finish ordering, not just the finish
+  latency.** Extracting the 0x0031 state byte (offset 8) alongside every
+  0x0037/0x0039/0x003F timestamp showed the terminal is not a fixed point:
+  the machine's burst is ~310 ms after IT finishes, our terminal is the next
+  status sample (0–1260 ms later), so the race goes both ways — split-before-
+  terminal in 3 of 5 natural finishes, and on the 2026-08-23 keystone the
+  ENTIRE burst (0x0037, 0x0039, 0x003F) preceded our terminal by 449/180/142
+  ms. The 0x0039 was received with the link up and refused by our own gate
+  (`driver.ts:2522`, `graceIsOpen`). A window armed on the terminal folds
+  nothing there. **Lesson: when a spec says "we were too late", check whether
+  the event was actually EARLY.**
+- **CLAIM: "a terminate produces no burst — proven absent (ring-3)."**
+  FALSE as evidence. **Technique: count the ring's last entry.** ring-3 ends
+  AT the terminal (seq 28 of 29) because teardown stashes the ring
+  immediately — it stops ~310 ms before any burst could arrive. The same walk
+  README argues "the app was deaf by construction, not the machine silent"
+  about 0x0039 and then accepts the identical absence as proof one paragraph
+  later. **Absence in an artifact that ends at the event proves nothing about
+  what follows the event.**
+- **CLAIM: "the interval number is 0x0031's own field, already decoded,
+  monotonic 1,2,3."** FALSE three times. **Technique: read the parser's
+  return statement, not the field's name.** `parseGeneralStatus` decodes all
+  19 bytes of 0x0031 and there is no interval number in it (only
+  `intervalType`, an enum). The count is 0x0033's; it is 0-based and
+  forward-attributed (§20 item 15); and the value a consumer actually reads
+  is `toProgramIndex` output — CLAMPED to [0, N-1] and NULL outside
+  rowing/resting, so on a 1-interval program the proposed key is a constant.
+  Measured 78.3% unchanged across the corpus's own 30 s-gap simulation, vs a
+  TWD key with zero backward readings in 1,026 pairs.
+- **CLAIM: "0x0039's totals are work-only (500.0 m on the keystone)."**
+  Over-claimed. **Technique: check whether the fixture can DISCRIMINATE the
+  hypotheses.** The keystone is 2×250 m r0 — zero rest on both 0x0037s and
+  `r:00` on the memory screen — so work-only and work-plus-rest predict the
+  same 500.0 m. The one premise the storage split exists to settle is
+  untouched by the capture cited as settling it. Recurring failure #11's
+  addendum, one level up: an oracle whose quantity is undetermined is not an
+  oracle.
+- **CLAIM: "a driver-level window keeps the link up long enough to fold."**
+  FALSE structurally. **Technique: read the teardown's step order.**
+  `useMonitorSession`'s teardown unsubscribes (STEP 3) before disconnecting
+  (STEP 4) and stashes the ring (STEP 2) before both — so a post-teardown
+  window emits into an empty listener set and logs into a stash already
+  written. The receipt is `holdOpen.ts`'s own `stash()` dependency: the
+  instrument needed one precisely because the hook's export had already
+  happened. **A window that outlives its listeners is not a window.**
+- **SURVIVED my attack:** the four disconnect measurements (reproduced to the
+  tenth), the burst offsets (+269.6 / +307.8 ms), 0x0039's decode against the
+  PM5's own screen field-for-field, the exit-2 shape pin (68.6 s / 250 m), and
+  the one-shot post-close `acceptableFinalBoundary` exception being the ONLY
+  post-close writer.
