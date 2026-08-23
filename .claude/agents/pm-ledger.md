@@ -1807,3 +1807,79 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   have declined to enforce it. Still James's to re-set or retire, still
   belongs in CLAUDE.md. Gates should keep spending one line on it, not a
   paragraph.
+
+## Phase-close gate, 2026-08-23 (Phase LL: the link can be lost — walked, closed with conditions)
+
+- **"PASS IN SUBSTANCE" is where a compound exit clause goes to be laundered.**
+  LL's (b) read "Try Again reaches a fresh connect and programs successfully
+  **without deleting the app**" — two claims joined by "without". The walk met
+  the second (Cancel -> Connect, no reinstall) and failed the first (F1: the
+  button is dead after a mid-session BT-off), and the verdict block absorbed
+  the failure into the pass. **Ruling: SPLIT a compound clause at its gate and
+  give each half its own verdict.** The tell is a verdict containing a
+  concessive ("...with finding F1", "in substance"). Same file already carried
+  a written warning against fudging a criterion at its own gate (ROADMAP:2245)
+  — we wrote it in August and did it in August.
+- **Discharging a clause silently discharges every rule that cited it.** The
+  cohort-of-one hold was written as "until criterion (b) exists". (b) now
+  exists in the half that rule cared about, so the hold was self-discharging
+  the moment the walk passed — while a NEW and worse reason to hold (F2 losing
+  a healthy row) had just been found. **When a gate's cited criterion is met
+  but the gate should stand, re-found it on the new criterion in the same
+  edit, with its own discharge test.** Otherwise the next reader is correct
+  and the cohort grows into an unfixed bug.
+- **An oracle that reads zero five times out of six is not "transiently
+  zeroing".** F2 was filed as "iOS resume produces a transient machineTotal=0
+  frame outside the web corpus". Every TWD reading committed that day: laptop
+  web DISTANCE capture 0 across 248.5 m; ring-3 0 at 94.6 m and 0 at 33.1 m
+  (with its own `divergence` entry); ring-2 0 at 83.3 m; ring-2 **81** at
+  81.2 m. Five zeros, one non-zero — the 81 is the outlier and the behaviour
+  is not iOS-specific. **At a close, recompute a finding's premise from the
+  walk's own committed artefacts before it becomes a successor spec's
+  starting assumption.** RF11's sibling: we did compare against the machine,
+  and then narrated the comparison backwards.
+- **Compose the findings before assigning severities.** LL's walk filed F4
+  (web cadence worst 1260 ms vs a 2500 ms watchdog, margin 2.0x not 3.09x) as
+  informational and F2 as SERIOUS-but-background-only. `applyContinuityCheck`
+  gates on `frameSilence`, not on backgrounding: F4 arms F2. **Ask of every
+  pair of findings in one walk whether one is the other's trigger** — the
+  blast radius, not the severity label, is what sets the cohort gate.
+- **A guard that convicts on one field while two fields in the same frame
+  contradict it can be defused without new knowledge.** F2's convicting frame
+  had elapsed 56.1->59.3 and distance 81.2->83.3 advancing while TWD went
+  81->0. A monitor reset resets everything. **Corollary for sequencing: split
+  a blocked fix into DEFUSE (cheap, now, no new knowledge) and KEY-IT-RIGHT
+  (rides the phase that owns the semantics).** "It rides RC-1" was right for
+  the permanent fix and would have left a record-destroying bug live for a
+  whole phase.
+- **Bind a capture deliverable to a walk LEG, never to "the walk".** The >3 s
+  wire-gap witness (bound to LL's exit walk at the 2026-08-20 gate) was
+  unobtainable: `adapters/monitorTransport.ts:70` composes the byte recorder
+  on the WEB arm only, so the laptop leg has the recorder and no gap while the
+  phone leg has the gaps and logs events, not frames. Fourth occurrence of
+  "the medium cannot answer the question" (CR2-close; LL's own W7 was the
+  third). **At any gate that assigns a capture: name the leg, and name the
+  code path that writes the file.**
+- **A walk answers questions nobody asked it.** ROADMAP's open DISTANCE
+  question (does distance reset at a zero-rest work->work boundary?) was
+  settled by the keystone the same walk committed — seq 305->310: elapsed
+  69.75->0.50, distance 248.5->1.9, rowingState 1 throughout, TWD 0->250. It
+  sat unread in the record while the item stayed `- [ ]` and nominally owed an
+  erg session. **At a phase close, re-read every open item BOUND to that walk
+  against the walk's artefacts, not against its README.**
+- **A release note is a live surface, not an archive.** v0.17.0's "your
+  history can finally tell the difference" (releaseNotes.ts:49) shipped a
+  capability with no surface (F3: `endedBy` stored, its only consumer a
+  boolean in LogSession.tsx:1338, rendered nowhere) and re-ships it every time
+  the Releases screen opens under v0.18.1. **Strike the false half now** —
+  the honest "not yet" form (v0.16.0 item 3) is the house pattern, and the
+  standing rule that notes must let the cohort falsify them cannot be met by a
+  clause describing a screen that does not exist.
+- **Backlog: 67 unchecked at v0.17.0 -> 63 on main; 66 once F1/F2a/F2b/F3 get
+  checkboxes.** Third consecutive net-negative delta.
+- **Release call: NO TAG on the close-out** (ROADMAP/ledger prose plus a
+  one-string notes correction, fast path). F3's surface + F2a's defusing tag
+  together as a MINOR, and their notes must name the DIRECTION of the change
+  to when a record closes.
+- **The 30-second rule is 0-for-10.** Still James's to re-set or retire, still
+  belongs in CLAUDE.md.

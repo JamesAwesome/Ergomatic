@@ -46,7 +46,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     date: "2026-08-22",
     items: [
       "If the Bluetooth link dies mid-row, the app now says so, within a few seconds: LOST THE MONITOR appears, the live numbers visibly freeze instead of pretending, and the banner stays up until the stream has been genuinely healthy for ten seconds, so it cannot flicker at you. This covers the ways a link dies silently: switching Bluetooth off and on, a phone call taking the app to the background, and drops the app used to swallow.",
-      "A session the link killed is recorded as exactly that. Ending a session under the lost banner stores it as link-lost, not as you giving up: your history can finally tell the difference between the app losing your row and you stopping early.",
+      "A session the link killed is recorded as exactly that. Ending a session under the lost banner stores it as link-lost, not as you giving up. (Corrected 2026-08-23: the record knows the difference; the history screen does not show it yet. That surface is coming.)",
       "A failed connection attempt no longer poisons the next one. Try Again genuinely starts over, and the app asks your phone what it is already connected to before offering to connect again.",
       "There is a connection log now, one tap from the failure screen, with timestamps. If something goes wrong at the erg, copying that log is the single most useful thing you can send.",
     ],
