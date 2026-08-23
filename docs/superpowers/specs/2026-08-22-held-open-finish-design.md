@@ -114,11 +114,29 @@ hang-up.
   identifier needle was unsatisfiable by this spec's own chip design.
   The e2e-flavored build's inclusion is EXPECTED, so the probe runs
   against the plain production build.
-- **Interaction with Phase LL's watchdog, stated:** after the record
-  closes, the liveness decorator's silence callback has no surface to
-  fire on (the session is over); the held-open link's frames route to
-  ring + tap only. The instrument must not re-open the record, must not
-  write to the store, and must not change `endedBy` — it observes.
+- **Interaction with Phase LL's watchdog, corrected (final-review M1 —
+  the sentence this replaces claimed the watchdog "cannot fire" during a
+  hold "because the record closed"; it can, and does not, for a different
+  reason).** `liveness.ts` wraps `holdOpen` from the OUTSIDE
+  (`adapters/monitorTransport.ts`'s composition order), so every 0x0031
+  arrival during a hold still runs `noteStatusArrival()` → `rearmTimer()`
+  — the record closing changes nothing about the watchdog's own timer.
+  On the shipped path this is harmless for two reasons that ARE real: the
+  hook that owns the watchdog's `setState` is already unmounted by the
+  time a hold even starts (teardown, where `arm()`/the hold begin, runs
+  after the screen has moved on), so React 19 no-ops any late update; and
+  the REAL disconnect that eventually fires (release/expiry) triggers the
+  watchdog's own `link-drop` path, which cancels its timer the same way
+  any other disconnect does. The one path where this is NOT free: if a
+  caller keeps the hook mounted across its own `disconnect()` call (this
+  branch's `useMonitorSession.ts` has exactly one, `fail()`, rendering the
+  failure screen) and the operator arms a hold there, a silence mid-hold
+  can raise the lost-link banner over a link the instrument is
+  deliberately keeping open — dev/web-only, so not blocking, but the
+  protection is "the screen already unmounted" and "the real disconnect's
+  own `link-drop` cancels the timer", never "the record closed". The
+  instrument must not re-open the record, must not write to the store,
+  and must not change `endedBy` — it observes.
 
 **What the held-open window records:** every notification on every
 already-subscribed characteristic (0x0031–0x003A) plus 0x003F (below),
@@ -150,9 +168,12 @@ in 90 s, that negative is committed as a finding too.
 
 TRIAD (a number's meaning). Settled without an erg: nine capture pairs
 (0x0033's u24LE@14 is the exact hundredths value whose truncation to
-tenths is 0x0037's split time), the PM5's own memory screen
-(7476 → 1:14.7, `walk-2026-08-17/README.md:14`), and ORM agree against
-both C2 documents' printed 0.1 (wrong four times).
+tenths is 0x0037's split time), the PM5's own memory screen (M4 fix,
+final-review — corrected citation: `walk-2026-08-17/README.md:14` reads
+"PM5 memory interval 2 = 1:14.7 matches wire 74.71s exactly", binding the
+screen reading to Elapsed Time/0x0037's 747 tenths, never to 0x0033's own
+`7476`), and ORM agree against both C2 documents' printed 0.1 (wrong four
+times).
 
 - `domain/monitor/pm5/parse.ts:203`: `readU24LE(bytes, 14) / 10` → `/ 100`.
 - `domain/monitor/pm5/statusFrames.ts:222` (the fake's encoder mirrors

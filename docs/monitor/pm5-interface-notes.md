@@ -4278,8 +4278,11 @@ DIMENSION-CONDITIONAL, never a countdown checkpoint at any scale.**
 Settled without a new erg session: nine capture pairs (0x0033's u24LE@14
 is the exact hundredths value whose truncation to tenths equals 0x0037's
 already-established Split/Interval Time) and the PM5's own memory screen
-(raw `7476` → displayed `1:14.7`, `walk-2026-08-17/README.md:14`) agree
-against both documents' printed 0.1. `parse.ts` had divided by 10 instead
+(M4 fix, final-review — corrected citation: the README line
+`walk-2026-08-17/README.md:14` reads "PM5 memory interval 2 = 1:14.7
+matches wire 74.71s exactly", binding the screen reading to Elapsed
+Time/0x0037's 747 tenths, never to 0x0033's own `7476`) agree against
+both documents' printed 0.1. `parse.ts` had divided by 10 instead
 of 100 since CR2 spec 2a Task 6; `statusFrames.ts`'s fake encoder mirrored
 the identical error, so no round trip could ever have caught it — pinned
 instead by a REPLAY against committed capture bytes (`parse.test.ts`,

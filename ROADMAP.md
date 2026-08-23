@@ -2924,6 +2924,35 @@ item** and W3/W4 ride the same piece.
   PHONE leg, where its watchdog-false-fire question is actually
   observable.
 
+**Arming the hold-open instrument (final-review I3 — the card never said
+HOW before this fix):** W2/W3/W4/W10 all need it armed. On the laptop, in
+Chrome DevTools' console, BEFORE the finish (the chip is a one-shot per
+session — arming after the finish is too late):
+
+1. `window.__pm5HoldOpen__.arm()` — confirm it took: the "HOLD-OPEN ARMED"
+   chip appears next to the connection line. If `window.__pm5HoldOpen__`
+   is `undefined`, the build was not run with the fake-monitor gate open
+   (`pnpm dev`, or `VITE_ENABLE_FAKE_MONITOR=1`) — see `transports/index.ts`.
+2. Finish the piece normally. `window.__pm5HoldOpen__.status()` reports
+   `{ state: "holding", msRemaining }` for the next 90 s.
+3. `window.__pm5HoldOpen__.ring()` reads the live trace at any point during
+   the hold — every notification the PM5 sent, plus lifecycle markers
+   (`0x003f subscribe-issued`, and — if the firmware lacks 0x003F —
+   `0x003f subscribe-failed <message>`; a `subscribe-issued` entry with NO
+   later `subscribe-failed` and no `0x003f` notification lines means the
+   subscribe went through cleanly and the firmware genuinely sent nothing,
+   the W4 negative). `hold-start` marks the armed→holding transition;
+   `hold-released`/`hold-expired`/`link-drop-*` entries mark how the
+   window ended.
+4. Once the hold ends (release, the 90 s timer, or the PM5 hanging up
+   first), the ring is stashed into sessionStorage. On the Log screen that
+   follows, **MONITOR LOG · COPY reads this live** (final-review I2) — it
+   will include the held-open window, not just the pre-hold trace.
+5. **Reconnecting for a later item (W10, or a retry after "Try Again")?**
+   `window.__pm5HoldOpen__.release()` first if a hold is still in flight —
+   a stale decorator's own 90 s timer can otherwise hang up the NEW link
+   out from under it (final-review M2).
+
 **Protocol rules the combined walk plan must carry (spec §6, both
 gates):**
 
