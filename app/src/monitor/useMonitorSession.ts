@@ -2264,11 +2264,25 @@ export function useMonitorSession(
           // STEPS 1/3/4 just wrote to the ring — the drain's own verdict
           // entry, the disconnect's own entries, and the burst's own
           // `summary-observations`/`record-actual` entries if it arrived
-          // during the wait. Same keys, overwrite: this snapshot strictly
-          // contains everything the first one did, plus whatever landed
-          // since. This is the walk's own readout door (exit criterion 7:
-          // "the ring's SECOND stash ... without it the walk sees
-          // nothing").
+          // during the wait. Same keys, overwrite.
+          //
+          // NOT A SUPERSET, and said so precisely (review fix round 1,
+          // MEDIUM finding — the earlier wording here claimed "strictly
+          // contains everything the first one did", which `eventLog.ts`'s
+          // own 500-entry ring makes false in general): this is the ring's
+          // CURRENT window at drain time, its most recent `capacity`
+          // entries. The burst-era entries this second stash exists FOR
+          // are guaranteed present — they are, by construction, among the
+          // most recent — but if enough OTHER entries were recorded
+          // between the first stash and this one to push the ring past its
+          // cap, whatever was oldest in the FIRST stash can have already
+          // been evicted from the ring before this snapshot was ever
+          // taken. On the `BURST_LINGER_MS`-bounded window this task adds,
+          // that eviction needs several hundred OTHER entries logged in
+          // under two seconds to happen at all — bounded, not impossible —
+          // and this is the walk's own readout door regardless (exit
+          // criterion 7: "the ring's SECOND stash ... without it the walk
+          // sees nothing").
           stash();
         };
         lingerFinishRef.current = finish;

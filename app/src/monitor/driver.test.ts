@@ -8916,10 +8916,15 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
 
     g.clock.advance(300);
     g.transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 60, 200));
+    // Review fix round 1, HIGH finding: `maybeReconcileImmediately` fires
+    // the INSTANT this second notification completes the split-won
+    // precondition (the summary was already held above) — the deadline is
+    // consumed HERE, not at some later `g.clock.advance`/`g.timer.pending()
+    // .fire()` a test would otherwise have to drive by hand. `g.timer
+    // .pending()` is `null` past this line; asserting that is the pin for
+    // "drains exactly once, at completion, not at the fallback deadline".
     g.transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 24));
-
-    g.clock.advance(2500);
-    g.timer.pending()!.fire();
+    expect(g.timer.pending()).toBeNull();
 
     // The SPLIT's numbers, including the averages only it carries.
     expect(boundaries(g.events)).toHaveLength(1);
@@ -9623,13 +9628,19 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
       true,
     );
 
-    // THEN our terminal transition, opening the grace; the deadline finds
-    // interval 1 already recorded (split-won).
+    // THEN our terminal transition, opening the grace. Review fix round 1,
+    // HIGH finding: `maybeReconcileImmediately` (armed right after this
+    // frame's own `workoutComplete` emit) finds interval 1 already
+    // recorded AND the summary already held — both halves of split-won's
+    // own precondition are already true — so the drain fires HERE,
+    // synchronously with this notification, not at the 3000ms deadline. No
+    // `g.timer.pending()!.fire()` needed; the pin for that is
+    // `g.timer.pending()` reading `null` past this line.
     g.transport.notify(
       GENERAL_STATUS_UUID,
       generalStatusIn(WORKOUTSTATE_WORKOUTEND, 150, 500),
     );
-    g.timer.pending()!.fire();
+    expect(g.timer.pending()).toBeNull();
 
     const splitWon = verdicts(g.log).find((e) =>
       e.detail.startsWith("split-won"),

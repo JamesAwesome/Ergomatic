@@ -2039,10 +2039,20 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
 });
 
 describe("useMonitorSession: teardown — the burst linger (storage-spine design spec §2, PR 1 Task 3)", () => {
-  it("(a) LATE SIDE: the burst arrives inside the linger, after the terminal — observations are stored, the SECOND stash carries the burst-era ring entries, and disconnect happens at burst completion, not at the full BURST_LINGER_MS", async () => {
+  it("(a) LATE SIDE, PRODUCTION TIMING: driver grace 3000ms, linger 2000ms, the burst arrives at +400ms after the terminal — observations stored, disconnect at burst completion (~400ms, the EARLY EXIT — never the 2000ms cap), the driver's own deadline drained exactly once and never left to double-fire", async () => {
+    // Review fix round 1, HIGH finding: `BURST_LINGER_MS` (2000) is
+    // strictly SHORTER than `FINISH_GRACE_MS` (3000) — on REAL production
+    // timing the linger's own cap would always win the race against the
+    // driver's un-forced deadline, so the "early exit on burst completion"
+    // branch could never fire for a genuinely late-arriving burst unless
+    // the driver itself reconciles as soon as its inputs are complete
+    // (`driver.ts`'s `maybeReconcileImmediately`). This test no longer
+    // manually fires the driver's own timer out of the real 3000>2000
+    // order — `driverTimer` here exists ONLY to prove the real deadline
+    // gets drained (cancelled, not left pending to double-fire later).
     const driverTimer = manualSchedule();
     const burstTimer = manualSchedule();
-    const driverMs = 0;
+    let driverMs = 0;
     const { result, fake, transport, unmount } = harness(
       {
         program: ONE_INTERVAL,
@@ -2070,7 +2080,9 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
 
     // The split already landed (before the terminal) — nothing missing,
     // so the hand-off hold never opens. `armSummaryReconcile` is still
-    // armed regardless (§2's own "any design must serve both sides").
+    // armed regardless (§2's own "any design must serve both sides"), at
+    // its real 3000ms — `maybeReconcileImmediately`'s own arm-time call
+    // site is a no-op here since no summary is held yet.
     expect(result.current.phase).toBe("ended");
     expect(result.current.handoffHeld).toBe(false);
     expect(result.current.actuals).toHaveLength(1);
@@ -2084,28 +2096,26 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
     expect(transport.disconnects).toBe(0);
     expect(loadMonitorRun()?.summaryTotals).toBeUndefined();
 
-    // The burst arrives — AFTER our own terminal (the late side, §1's "2
-    // of 5") — and is held (`graceIsOpen`: the driver's run is closed, the
-    // grace has not elapsed).
+    // The burst arrives at +400ms — AFTER our own terminal (the late side,
+    // §1's "2 of 5") and well inside BOTH the driver's 3000ms grace and
+    // the hook's 2000ms linger. `noteSummary`'s late-side branch holds it
+    // AND finds the split already recorded — evidence is now COMPLETE —
+    // so `maybeReconcileImmediately` drains synchronously, right here, at
+    // ~400ms: no manual timer fire of any kind.
+    driverMs = 400;
     act(() => {
       fake.deliverSummary({ elapsedSeconds: 60, meters: 200 });
     });
-    expect(loadMonitorRun()?.summaryTotals).toBeUndefined(); // still just held
 
-    // The grace's own deadline resolves it (fired by hand, matching
-    // driver.test.ts's own idiom for "the deadline elapsed" — not a
-    // literal 3000ms wait): split-won, with a summary now held, folds it
-    // as an observation (Task 1/2's "the split-won branch stops
-    // discarding").
-    act(() => {
-      driverTimer.pending()!.fire();
-    });
-
-    // BURST COMPLETION, not the full cap: the deferred STEPS 1/3/4 ran the
-    // instant the burst's own event reached `handleEvent`, well inside
-    // `BURST_LINGER_MS` — disconnect already happened, and the linger's
-    // own timer is cancelled, not left dangling.
+    // THE EARLY EXIT IS REAL: disconnect already happened, at burst
+    // completion (~400ms) — nowhere near the 2000ms cap — and BOTH timers
+    // that could have fired later are settled, not dangling: the driver's
+    // own 3000ms deadline was drained (once, not merely cancelled and
+    // silently forgotten — `drainSummaryReconcile`'s own idempotency is
+    // what makes a stray second call here harmless, and there is no
+    // second call), and the hook's own 2000ms linger cap is cancelled.
     expect(transport.disconnects).toBe(1);
+    expect(driverTimer.pending()).toBeNull();
     expect(burstTimer.pending()).toBeNull();
 
     const stored = loadMonitorRun();
@@ -2113,6 +2123,17 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
       workElapsedSeconds: 60,
       workDistanceMeters: 200,
     });
+
+    // DRAINED EXACTLY ONCE: one verdict, one observation — not two, which
+    // is what a double-fire (the deadline ALSO elapsing later, or a stray
+    // second drain call) would have produced.
+    const verdicts = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(
+      verdicts.filter((e) => e.kind === "summary-reconciled"),
+    ).toHaveLength(1);
 
     // THE SECOND STASH: the ring entries the drain itself produced,
     // unreachable from the FIRST (t=0) stash taken before any of this
@@ -2123,6 +2144,144 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
     expect(entries.some((e) => e.kind === "summary-half")).toBe(true);
     const verdict = entries.find((e) => e.kind === "summary-reconciled");
     expect(verdict?.detail).toContain("split-won");
+  });
+
+  it("(a-cap) LATE SIDE, PRODUCTION TIMING, NOTHING EVER ARRIVES: the driver's own 3000ms deadline would elapse LONG after the hook's 2000ms linger cap — the cap drains first, and the deadline never gets the chance to double-fire", async () => {
+    // The other half of the reviewer's required pairing: BURST_LINGER_MS
+    // (2000) beats FINISH_GRACE_MS (3000) when NOTHING ever arrives to
+    // complete the evidence early, so the linger's own timeout is what
+    // decides it — and the driver's own deadline, still pending at that
+    // moment, must come out SETTLED (drained), never left alive to fire a
+    // second, later reconcile against a driver that has already
+    // disconnected.
+    const driverTimer = manualSchedule();
+    const burstTimer = manualSchedule();
+    const { result, fake, transport, unmount } = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [
+          status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+          finishedAt(200),
+        ],
+      },
+      {
+        burstLingerSchedule: burstTimer.schedule,
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: driverTimer.schedule,
+        },
+      },
+    );
+
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    tick(fake, 100);
+    tick(fake, 100);
+    expect(result.current.phase).toBe("ended");
+    expect(driverTimer.pending()?.ms).toBe(3000);
+
+    unmount();
+    expect(burstTimer.pending()?.ms).toBe(BURST_LINGER_MS);
+    expect(transport.disconnects).toBe(0);
+
+    // The hook's own 2000ms cap elapses — strictly BEFORE the driver's own
+    // 3000ms deadline ever would, on real production timing.
+    act(() => {
+      burstTimer.pending()!.fire();
+    });
+
+    expect(transport.disconnects).toBe(1);
+    // SETTLED, NOT DANGLING: the drain the cap triggered (`teardown`'s own
+    // `driver.reconcile()`) consumed the driver's own pending deadline —
+    // it is not still sitting there waiting for a 3000ms that, on real
+    // hardware, would arrive 1000ms after this driver has already hung up.
+    expect(driverTimer.pending()).toBeNull();
+    expect(loadMonitorRun()).not.toHaveProperty("summaryTotals");
+
+    // NO DOUBLE-FIRE: exactly one verdict in the trace, whatever it says —
+    // not two, which is what the deadline ALSO firing later would have
+    // produced.
+    const entries = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    expect(entries.filter((e) => e.kind === "summary-reconciled")).toHaveLength(
+      1,
+    );
+  });
+
+  it("(a-ring) RING PRESSURE (review fix round 1, MEDIUM finding): at the eventLog's 500-entry cap, the second stash gains the burst-era entries but is NOT a strict superset of the first — whatever was oldest at first-stash time is evicted by the time the second one is taken", async () => {
+    // The comment this test pins was rewritten from a false claim (the
+    // second stash "strictly contains everything the first one did") to
+    // an honest one: it is the ring's CURRENT window at drain time, and a
+    // ring at capacity evicts its oldest entry for every new one recorded
+    // — burst-era entries are guaranteed present (they are the newest),
+    // but nothing else is.
+    const log = createEventLog(500, () => 0);
+    for (let i = 0; i < 500; i += 1) log.record("filler", `junk-${i}`);
+
+    const burstTimer = manualSchedule();
+    const { result, fake, unmount } = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [
+          status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+          finalBoundary(150),
+          finishedAt(200),
+        ],
+      },
+      { createLog: () => log, burstLingerSchedule: burstTimer.schedule },
+    );
+
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    tick(fake, 100);
+    tick(fake, 100);
+    expect(result.current.phase).toBe("ended");
+
+    unmount();
+    expect(burstTimer.pending()?.ms).toBe(BURST_LINGER_MS);
+
+    const firstStash = JSON.parse(
+      sessionStorage.getItem("ergomatic:last-monitor-log")!,
+    ) as { seq: number; kind: string; detail: string }[];
+    // The ring was pre-filled to its exact cap, so it is STILL at cap here
+    // (every real entry logged since — connect, program, arm, the two
+    // status ticks, teardown's own first stash) evicted one filler entry
+    // one-for-one). The oldest entry THIS stash can see is what a later
+    // stash's eviction will be measured against.
+    expect(firstStash).toHaveLength(500);
+    const oldestAtFirstStash = firstStash[0]!;
+
+    // The burst arrives — split already recorded, so it drains immediately
+    // (review fix round 1's own HIGH-finding fix) and logs at least one
+    // NEW entry (`summary-half`, `summary-reconciled`), each of which
+    // evicts one more of the ring's oldest entries.
+    act(() => {
+      fake.deliverSummary({ elapsedSeconds: 60, meters: 200 });
+    });
+
+    const secondStash = JSON.parse(
+      sessionStorage.getItem("ergomatic:last-monitor-log")!,
+    ) as { seq: number; kind: string; detail: string }[];
+    expect(secondStash).toHaveLength(500);
+
+    // GUARANTEED PRESENT: the burst-era entries this second stash exists
+    // FOR really are in it.
+    expect(secondStash.some((e) => e.kind === "summary-half")).toBe(true);
+    expect(
+      secondStash.some(
+        (e) =>
+          e.kind === "summary-reconciled" && e.detail.includes("split-won"),
+      ),
+    ).toBe(true);
+
+    // NOT A SUPERSET: what was oldest in the FIRST stash is gone from the
+    // SECOND — the exact claim the old comment wrongly denied.
+    expect(secondStash.some((e) => e.seq === oldestAtFirstStash.seq)).toBe(
+      false,
+    );
   });
 
   it("(b) EARLY SIDE: the burst arrives before the terminal and is already reconciled by the time this screen unmounts — NO added latency (disconnect timing unchanged from today's pin), observations still stored", async () => {
@@ -2267,13 +2426,17 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
     clearMonitorRun();
     expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
 
-    // THEN the burst arrives.
+    // THEN the burst arrives — and drains SYNCHRONOUSLY right here
+    // (`driver.ts`'s `maybeReconcileImmediately`: the split was already
+    // recorded via `finalBoundary(150)`, so evidence completes the
+    // instant this notification lands; review fix round 1's HIGH finding
+    // is what makes a separate `driverTimer.pending()!.fire()` step both
+    // unnecessary and, since nothing is left pending after the drain,
+    // impossible — there is no manual step between arrival and decline).
     act(() => {
       fake.deliverSummary({ elapsedSeconds: 60, meters: 200 });
     });
-    act(() => {
-      driverTimer.pending()!.fire();
-    });
+    expect(driverTimer.pending()).toBeNull();
 
     // `appendSummaryObservations` re-reads storage fresh and finds nothing
     // to append to — it declines silently, and nothing reappears.

@@ -2362,6 +2362,16 @@ export function createPm5Driver(
       armSummaryReconcile(activeRun!);
       log.record("terminal", "finished");
       emit({ kind: "workoutComplete" });
+      // Review fix round 1, HIGH finding: fired AFTER the emit above, not
+      // before — `workoutComplete` is what the hook's own `closeRecord`
+      // runs off of, and a `summary-observations` event synchronously
+      // emitted BEFORE that would reach `appendSummaryObservations` while
+      // the hook's own record still reads `completedAt: null`, declining
+      // permanently (decline #3, `monitorRun.ts`'s own doc comment) on
+      // exactly the run this call exists to serve fastest. Covers the
+      // PURE early side: split and summary both already in hand by the
+      // moment our own terminal transition happens.
+      maybeReconcileImmediately(activeRun!);
     } else {
       log.record("terminal", "terminated");
       emit({ kind: "terminated" });
@@ -2609,6 +2619,14 @@ export function createPm5Driver(
       return;
     }
     run.summaryInGrace = summary;
+    // Review fix round 1, HIGH finding: the LATE side's own immediate
+    // trigger — this summary just arrived AFTER our own terminal
+    // transition, while the final split had already landed earlier (this
+    // function's own `graceIsOpen` branch means the run is closed and the
+    // grace has not yet elapsed). If the split is the one still missing,
+    // this is a genuine no-op (`maybeReconcileImmediately`'s own guard) —
+    // the deadline stays the fallback, unchanged.
+    maybeReconcileImmediately(run);
   }
 
   /**
@@ -2887,6 +2905,47 @@ export function createPm5Driver(
       // closed and non-null.
       if (activeRun !== null) reconcileSummary(activeRun);
     }
+  }
+
+  /**
+   * FIRES THE MOMENT THIS RUN'S EVIDENCE IS ACTUALLY COMPLETE, rather than
+   * always waiting out `FINISH_GRACE_MS` on a run that already has
+   * everything `reconcileSummary`'s split-won branch needs (task-3 review
+   * fix round 1, HIGH finding). `useMonitorSession.ts`'s `BURST_LINGER_MS`
+   * is 2000ms — strictly SHORTER than `FINISH_GRACE_MS`'s 3000ms — so
+   * before this fix a burst landing at, say, 400ms after the terminal was
+   * unreachable by anything but the hook's own linger cap force-draining
+   * at 2000ms: the "burst completion" early exit that cap exists to allow
+   * could never fire on real timing, because nothing between 0ms and
+   * 3000ms ever called `reconcileSummary` early. This closes that gap AT
+   * THE SOURCE.
+   *
+   * "Complete" means EXACTLY the split-won branch's own precondition — the
+   * final interval's actual is recorded (`recordedActuals.has(lastIndex)`)
+   * AND a summary is currently held (`summaryInGrace !== null`) — and
+   * NEVER fires on the summary-alone shape (a split still possibly in
+   * flight, within grace): firing then would reproduce the exact bug this
+   * whole design exists to fix, consuming the deadline before evidence
+   * that is still legitimately on its way has a chance to arrive. That
+   * shape keeps waiting for `FINISH_GRACE_MS`, unchanged — the deadline
+   * remains the fallback for genuinely incomplete inputs (the no-split
+   * path `deriveFinalIntervalFromSummary` serves, never observed at a
+   * real erg per §1, but kept).
+   *
+   * `drainSummaryReconcile` is the mechanism, not a duplicate of its
+   * logic: it is already idempotent (Task 7's own F7 rule — a no-op once
+   * `pendingSummaryReconcile` is `null`) and already cancels the real
+   * timer before calling `reconcileSummary`, so calling this from more
+   * than one of ITS three production call sites below costs nothing on a
+   * run that settles the other way, and guarantees `reconcileSummary`
+   * still runs AT MOST ONCE per run whichever site fires it.
+   */
+  function maybeReconcileImmediately(run: NonNullable<typeof activeRun>): void {
+    const lastIndex = run.program.intervals.length - 1;
+    if (lastIndex < 0) return;
+    if (!run.recordedActuals.has(lastIndex)) return;
+    if (run.summaryInGrace === null) return;
+    drainSummaryReconcile();
   }
 
   /**
@@ -3417,6 +3476,16 @@ export function createPm5Driver(
         ? { kind: "intervalComplete", actual }
         : { kind: "intervalComplete", actual, finalBoundary: true },
     );
+    // Review fix round 1, HIGH finding: the LATE side's other direction —
+    // this boundary is the finish-grace one (`graceIndex !== null`), and a
+    // summary may already be held from an earlier arrival. Fired AFTER the
+    // `intervalComplete` emit above so the hook's own record has already
+    // filed this actual (`recordActual`'s own finish-grace door) before
+    // any observation write is attempted — the same "cause event first"
+    // ordering the arm-time call site uses. A genuine no-op
+    // (`maybeReconcileImmediately`'s own guard) whenever no summary is
+    // held yet; the deadline stays the fallback, unchanged.
+    if (graceIndex !== null) maybeReconcileImmediately(activeRun!);
 
     // Fix-round MED-2 (UNCHANGED by this task, deliberately still comparing
     // RAW values): 0x0033's Interval Count (tracked in the machine's own
