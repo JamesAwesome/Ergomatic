@@ -106,10 +106,12 @@ export function commit(s: DraftState): DraftState {
  *  manual — with zero visible ConfirmLines. That stance (an act on the
  *  field is a manual re-assertion of its number) is PR A's OWN decision,
  *  not a spec ruling: the demotion runs conservative (it downgrades to
- *  the least-claiming value, never fabricates a measurement), provenance
- *  has zero consumers until `tested` exists, and the PM gate referred
- *  the act-vs-origin question to James for re-opening at PR B's gate.
- *  Named here so nobody reads it back as a bug OR as settled. */
+ *  the least-claiming value, never fabricates a measurement) and
+ *  provenance has zero consumers until `tested` exists. James RULED
+ *  (2026-08-22): provenance is ORIGIN, not act — PR B replaces this
+ *  with the value-identity predicate (stamp only when the value
+ *  actually changed) alongside `tested`. Named here so nobody reads
+ *  the interim behaviour as a bug or as settled. */
 export function isDirty(s: DraftState): boolean {
   return s.touched.k2 || s.touched.k6;
 }

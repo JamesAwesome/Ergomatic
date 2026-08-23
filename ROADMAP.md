@@ -1498,8 +1498,12 @@ as plain writes, demoting a newer build's `derived`/`tested` source on
 a field its rower never touched; inherent to the additive wire, and PR
 B holds it when reasoning about `tested` longevity. (2) AWAY-AND-BACK —
 a stepper nudge with zero net change, Applied, stamps `manual` over a
-stored source with nothing visible; PR A's own conservative decision,
-act-vs-origin referred to James and re-opened at PR B's gate.
+stored source with nothing visible; PR A shipped that conservatively,
+and James RULED same day: provenance is ORIGIN, not act — a source
+describes where the NUMBER came from, so an unchanged value keeps its
+stamp. **PR B implements the value-identity predicate (stamp only when
+the value actually changed) alongside `tested`**, where the ruling
+first has real cost.
 (3) SOURCE-BESIDE-NULL — the source columns are NOT NULL with defaults
 while the numbers are nullable, so `k6Seconds: NULL, k6Source: 'manual'`
 is a real row state; every consumer keys on the NUMBER being non-null
