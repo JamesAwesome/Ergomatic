@@ -186,7 +186,7 @@ describe("createHoldOpenTransport: armed disconnect defers", () => {
     });
   });
 
-  it("a second disconnect() call while already holding is a no-op — resolves immediately without a second scheduled timer", async () => {
+  it("a second disconnect() call while already holding is a no-op — resolves immediately, does not reset the hold's own deadline, and does not double-disconnect", async () => {
     const stub = stubTransport();
     const clock = testClock();
     const { transport, controls } = createHoldOpenTransport(stub.transport, {
@@ -195,15 +195,25 @@ describe("createHoldOpenTransport: armed disconnect defers", () => {
       stash: vi.fn(),
     });
     controls.arm();
-    await transport.disconnect(); // -> holding, real timer scheduled
+    await transport.disconnect(); // -> holding, real timer scheduled for T+HOLD_OPEN_MS
 
+    clock.advance(1_000);
     await expect(transport.disconnect()).resolves.toBeUndefined();
 
     expect(stub.disconnectCalls).toBe(0);
-    expect(controls.status().state).toBe("holding");
-    clock.advance(HOLD_OPEN_MS);
-    // Exactly one real disconnect fires — a stray second timer would have
-    // fired it twice.
+    // THE LOAD-BEARING ASSERTION: a buggy re-entry into the scheduling
+    // branch here would reset `holdStartMs` to THIS call's time (t=1000),
+    // reporting a fresh 90000ms remaining. It must instead still be
+    // anchored to the FIRST call's own deadline (t=0 + HOLD_OPEN_MS), so
+    // only HOLD_OPEN_MS - 1000 remains. A `disconnectCalls` count alone
+    // cannot catch a redundant re-schedule here: whichever of two timers
+    // targeting the same underlying hold fires first ends up cancelling
+    // the other through the shared `cancelTimer` slot regardless of which
+    // was "real" — msRemaining is the one signal a stray reschedule can't
+    // hide from.
+    expect(controls.status().msRemaining).toBe(HOLD_OPEN_MS - 1_000);
+
+    clock.advance(HOLD_OPEN_MS - 1_000); // reaches the FIRST timer's own deadline
     expect(stub.disconnectCalls).toBe(1);
   });
 

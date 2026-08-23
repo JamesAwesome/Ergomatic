@@ -95,14 +95,18 @@ export function createHoldOpenTransport(
    *  PM5 hanging up first — flips `state` to `"disarmed"` and cancels the
    *  timer BEFORE any `await`, so a second trigger arriving before the
    *  first finishes its own async tail (e.g. `inner.disconnect()`) sees
-   *  `state !== "holding"` and backs off instead of double-acting.
-   *  Returns `false` when there was no hold to claim — the ONLY caller
-   *  that can observe that is a second `release()` (or a `release()`
-   *  called outside a hold at all); the scheduled expiry callback below
-   *  never needs this check itself, because `deps.schedule`'s own
-   *  returned canceller (called here, on every successful claim) is
-   *  trusted to prevent a cancelled callback from firing at all — the
-   *  same trust `liveness.ts`'s `stopTimer`/`rearmTimer` place in it. */
+   *  `state !== "holding"` and backs off instead of double-acting. THE
+   *  ONE GATE all three triggers (release(), the scheduled expiry
+   *  callback, and the onDisconnect handler) share — none of them
+   *  re-implements this body inline, so a future edit here applies to
+   *  all three automatically. Returns `false` when there was no hold to
+   *  claim; the expiry callback below calls this unconditionally and
+   *  ignores the return, because `deps.schedule`'s own returned
+   *  canceller (called here, on every successful claim) is trusted to
+   *  prevent a cancelled callback from firing at all — the same trust
+   *  `liveness.ts`'s `stopTimer`/`rearmTimer` place in it — so a `false`
+   *  return there would indicate the trust was misplaced, not a normal
+   *  outcome to branch on. */
   function claimHold(): boolean {
     if (state !== "holding") return false;
     cancelTimer?.();
@@ -169,8 +173,7 @@ export function createHoldOpenTransport(
         state = "holding";
         holdStartMs = deps.now();
         cancelTimer = deps.schedule(() => {
-          cancelTimer = null;
-          state = "disarmed";
+          claimHold(); // always succeeds here — see claimHold()'s own doc
           void (async () => {
             try {
               await inner.disconnect();
