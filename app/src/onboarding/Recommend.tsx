@@ -164,11 +164,20 @@ function ReadyRecommend({
           <StepDots filled={isFirst ? 1 : 2} />
         </div>
         <h1 className="screen-title onb-title">{question}</h1>
+        {/* Confirming an answer (tap, or Enter/Space) advances by itself
+            (James's auto-advance feedback, 2026-08-23) — immediately, no
+            dwell timer (house style: no animation; the next screen's
+            filled step dot is the feedback). Arrow keys only move the
+            selection (OptionGroup's contract), so a keyboard user is
+            never yanked forward mid-browse; for them the answer enables
+            Next, which stays as the explicit path — and as the Back
+            re-entry path, where the answer is already selected. */}
         {isFirst ? (
           <OptionGroup
             options={EXPERIENCE_OPTIONS}
             value={experience}
             onChange={setExperience}
+            onConfirm={() => setStep("cardio")}
             ariaLabel={question}
           />
         ) : (
@@ -176,6 +185,7 @@ function ReadyRecommend({
             options={CARDIO_OPTIONS}
             value={cardio}
             onChange={setCardio}
+            onConfirm={() => setStep("offer")}
             ariaLabel={question}
           />
         )}

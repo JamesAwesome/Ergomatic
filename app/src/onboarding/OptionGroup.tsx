@@ -14,16 +14,26 @@ import { useRef, type KeyboardEvent } from "react";
  *  Generic over the option value union so each questionnaire screen's
  *  answer state stays typed to `domain/estimateBaseline.ts`'s own keys —
  *  the answers themselves are TRANSIENT component state in the caller
- *  (the minimal-PII ruling: never persisted, never sent). */
+ *  (the minimal-PII ruling: never persisted, never sent).
+ *
+ *  `onConfirm` (James's auto-advance feedback, 2026-08-23) fires on a
+ *  deliberate ACTIVATION — tap/click, or Enter/Space on the focused
+ *  option (both reach the button's native click) — after `onChange`.
+ *  Arrow keys move selection and NEVER confirm: wiring advance into
+ *  `onChange` instead would yank a keyboard user forward on every
+ *  arrow press, which is exactly the roving-tabindex contract this
+ *  control exists to keep. */
 export default function OptionGroup<V extends string>({
   options,
   value,
   onChange,
+  onConfirm,
   ariaLabel,
 }: {
   options: readonly { value: V; label: string }[];
   value: V | null;
   onChange: (next: V) => void;
+  onConfirm?: (next: V) => void;
   ariaLabel: string;
 }) {
   const optionRefs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -72,7 +82,13 @@ export default function OptionGroup<V extends string>({
             aria-checked={checked}
             className="onb-option"
             tabIndex={tabStop ? 0 : -1}
-            onClick={() => onChange(option.value)}
+            onClick={() => {
+              // Click is the ACTIVATION path: a pointer tap, or Enter/
+              // Space on the focused option (the button's native click).
+              // Arrow moves go through handleKeyDown and never land here.
+              onChange(option.value);
+              onConfirm?.(option.value);
+            }}
             onKeyDown={(event) => handleKeyDown(event, index)}
           >
             {option.label}

@@ -8451,9 +8451,15 @@ test.describe("onboarding door flows (Phase BL PR C)", () => {
     await expect(
       page.getByRole("heading", { name: "How much have you rowed?" }),
     ).toBeVisible();
+    // Tapping an answer auto-advances (2026-08-23); the selected-state
+    // question screen is reached by going BACK to it, answer kept.
     await page
       .getByRole("radio", { name: "A little. I know the stroke" })
       .click();
+    await page.getByRole("button", { name: "← BACK" }).click();
+    await expect(
+      page.getByRole("radio", { name: "A little. I know the stroke" }),
+    ).toHaveAttribute("aria-checked", "true");
     await assertTapTargets(page);
     await assertNoA11yViolations(page);
   });
@@ -8462,14 +8468,13 @@ test.describe("onboarding door flows (Phase BL PR C)", () => {
     page,
   }) => {
     await page.goto("/onboarding/recommend");
+    // Answer taps auto-advance through both questions (2026-08-23).
     await page
       .getByRole("radio", { name: "A little. I know the stroke" })
       .click();
-    await page.getByRole("button", { name: "Next" }).click();
     await page
       .getByRole("radio", { name: "Active once or twice a week" })
       .click();
-    await page.getByRole("button", { name: "Next" }).click();
     await expect(
       page.getByRole("heading", { name: "Your starting baseline" }),
     ).toBeVisible();
