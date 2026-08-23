@@ -2545,7 +2545,9 @@ deliverable, each stated so the walk can go red:
 - **W7** — navigate the PM5's own menu mid-session: does the wire go
   quiet? If yes, that is a legitimate quiet period the watchdog's disarm
   list does not cover and the 2500 ms threshold fires falsely — the one
-  disarm unknown the corpus cannot answer.
+  disarm unknown the corpus cannot answer. (Stays on the PHONE leg of
+  Phase RC's combined walk — RC's own distance-shaped item was renamed
+  W10 to stop the collision; see Phase RC's walk card, spec §6.)
 - **W8** — leave an armed/live session untouched: does the PM5 ever emit
   TERMINATE on its own (an inactivity timeout)? `endedBy: "rower"` on the
   TERMINATE path asserts agency on the machine's behalf if it does.
@@ -2914,9 +2916,28 @@ item** and W3/W4 ride the same piece.
   whether 0x003F fires on our firmware, when, and which byte order the
   monitor prints (CSAFE says byte 0 = MSB, the BLE table says "Lo" — the
   two documents disagree). **The only route to the verification branch.**
-- **W7** — a distance-shaped summary (3x300 m r30, held open 90 s), only
+- **W10** — a distance-shaped summary (3x300 m r30, held open 90 s), only
   if W2 shows 0x0039 arriving at all. Extends the cumulative/rest-exclusive
-  settlement, which rests on one TIME piece.
+  settlement, which rests on one TIME piece. **Renamed from W7** (spec
+  §6, 2026-08-22): two items on the combined walk were both called W7 —
+  this one and Phase LL's, which keeps the name because it stays on the
+  PHONE leg, where its watchdog-false-fire question is actually
+  observable.
+
+**Protocol rules the combined walk plan must carry (spec §6, both
+gates):**
+
+- **Priority order: W1 → W2/W3/W4 (one piece) → the phone leg (LL's
+  clause (b) pinned above the cut line within it) → W10.** The budget
+  can run out; it must not run out before W2. Everything below W10 is
+  cuttable without a second thought.
+- **One link at a time:** the laptop disconnects (hold released) before
+  the phone connects. Whether the PM5 accepts two centrals is an open
+  question this ROADMAP contradicts itself on elsewhere ("the PM5 is
+  single-central HAS NO SOURCE" versus a later line asserting
+  single-central as settled) — the walk SETTLES it as a deliberate
+  probe after all other evidence is gathered, never discovers it
+  mid-evidence.
 
 **Not worth a walk:** re-observing 0x0037's work-only semantics (settled
 twice from committed bytes) or the state-9 frame (captured 2026-08-18).
