@@ -897,6 +897,87 @@ describe("LogSession: the monitor log's quiet door (7B iteration)", () => {
     ).toBeInTheDocument();
     sessionStorage.removeItem("ergomatic:last-rowed-log");
   });
+
+  // I2 fix (final-review): the hold-open instrument (Phase RC spec 1)
+  // appends to this SAME key up to 90s AFTER this screen has already
+  // mounted (the finish hand-off navigates here well before the window
+  // closes) — the OLD `useState` lazy initializer captured the stash ONCE
+  // at mount, so this button could never surface a hold's appended
+  // window. Simulates exactly that: the stash mutates AFTER mount, BEFORE
+  // the click.
+  it("a stash that changes AFTER mount (the hold-open window landing late) is still what gets copied — the button reads live, not the mount-time snapshot", async () => {
+    const mountTimeStash = JSON.stringify([
+      { seq: 0, kind: "write", detail: "f1" },
+    ]);
+    sessionStorage.setItem("ergomatic:last-rowed-log", mountTimeStash);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+    const { workout } = buildSessionFixture();
+    mockWorkouts([workout]);
+    await renderLog();
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    const row = screen.getByRole("button", { name: "MONITOR LOG · COPY" });
+
+    // The hold-open window lands AFTER this screen mounted — the exact
+    // shape `holdOpen.ts`'s own `release()`/expiry stash produces, up to
+    // HOLD_OPEN_MS after the finish hand-off already navigated here.
+    const withHoldOpenWindow = JSON.stringify([
+      { seq: 0, kind: "write", detail: "f1" },
+      {
+        seq: 1,
+        kind: "hold-open",
+        detail: "--- hold-open window (instrument) ---",
+      },
+      { seq: 2, kind: "hold-open", detail: "+4s ce06003f-... fa ce" },
+    ]);
+    sessionStorage.setItem("ergomatic:last-rowed-log", withHoldOpenWindow);
+
+    await userEvent.click(row);
+
+    // THE FIX: copies the LATE value, not the mount-time one.
+    expect(writeText).toHaveBeenCalledWith(withHoldOpenWindow);
+    expect(writeText).not.toHaveBeenCalledWith(mountTimeStash);
+    sessionStorage.removeItem("ergomatic:last-rowed-log");
+  });
+
+  // I2 fix, the fallback branch: if sessionStorage becomes unreadable
+  // BETWEEN mount and click (private-mode Safari revoking access
+  // mid-session, same class `ConnectedInterstitial.test.tsx`'s own
+  // "getItem failure" test covers elsewhere), the click handler must not
+  // throw or copy `null` — it falls back to the mount-time snapshot,
+  // never worse than the pre-I2-fix behaviour.
+  it("a live read that THROWS at click time falls back to the mount-time stash, never crashes or copies null", async () => {
+    const stash = JSON.stringify([{ seq: 0, kind: "write", detail: "f1" }]);
+    sessionStorage.setItem("ergomatic:last-rowed-log", stash);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+    const { workout } = buildSessionFixture();
+    mockWorkouts([workout]);
+    await renderLog();
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    const row = screen.getByRole("button", { name: "MONITOR LOG · COPY" });
+    // Mount already happened (and read successfully) above — only the
+    // CLICK-time read throws.
+    const getItemSpy = vi
+      .spyOn(Storage.prototype, "getItem")
+      .mockImplementation(() => {
+        throw new Error("sessionStorage unavailable");
+      });
+
+    await userEvent.click(row);
+
+    expect(writeText).toHaveBeenCalledWith(stash);
+    getItemSpy.mockRestore();
+    sessionStorage.removeItem("ergomatic:last-rowed-log");
+  });
 });
 
 // The recording's quiet door (walk-2026-08-16 close-out). The walk proved

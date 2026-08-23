@@ -182,7 +182,7 @@ describe("parseAdditionalStatus2 (0x0033, 20 bytes, interface-notes.md §10)", (
       ...u16le(9000), // Split/Int Avg Pace, 0.01 sec/lsb -> 90.00s
       ...u16le(190), // Split/Int Avg Power, whole watts
       ...u16le(50), // Split/Int Avg Calories, whole cals
-      ...u24le(1234), // Last Split Time, 0.1 sec/lsb -> 123.4s
+      ...u24le(1234), // Last Split Time, 0.01 sec/lsb -> 12.34s (RC-4)
       ...u24le(500), // Last Split Distance, whole meters
     ]);
     expect(bytes).toHaveLength(20);
@@ -195,9 +195,22 @@ describe("parseAdditionalStatus2 (0x0033, 20 bytes, interface-notes.md §10)", (
       splitAvgPace: 9000 / 100,
       splitAvgPowerWatts: 190,
       splitAvgCalories: 50,
-      lastSplitTimeSeconds: 1234 / 10,
+      lastSplitTimeSeconds: 1234 / 100,
       lastSplitDistanceMeters: 500,
     });
+  });
+
+  it("decodes a REAL Last Split Time off a committed corpus frame — walk-2026-08-17 step-2 (2x250m keystone), seq 1195, verbatim raw bytes (docs/monitor/sessions/walk-2026-08-17/step-2-pm5-recording-1786973078979.jsonl, char 0x0033): '2f 1d 00 02 69 00 0f 00 64 3a 69 00 0f 00 34 1d 00 00 00 00' — the SAME frame's Elapsed Time and Last Split Time differ by 0.05s (74.71 vs 74.76); RC-4, never assert them equal", () => {
+    const bytes = Uint8Array.from([
+      0x2f, 0x1d, 0x00, 0x02, 0x69, 0x00, 0x0f, 0x00, 0x64, 0x3a, 0x69, 0x00,
+      0x0f, 0x00, 0x34, 0x1d, 0x00, 0x00, 0x00, 0x00,
+    ]);
+    expect(bytes).toHaveLength(20);
+
+    const decoded = expectDecoded(parseAdditionalStatus2(bytes));
+    expect(decoded.elapsedSeconds).toBe(74.71);
+    expect(decoded.lastSplitTimeSeconds).toBe(74.76);
+    expect(decoded.elapsedSeconds).not.toBe(decoded.lastSplitTimeSeconds);
   });
 });
 

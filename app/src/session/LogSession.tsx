@@ -676,7 +676,20 @@ function RecordingDownloadRow() {
  *  the operator has always wanted the log and never had it. Deliberately
  *  whisper-quiet: absent entirely unless a rowed stash exists in this
  *  tab, one mono caption line below the actions, no layout the manual
- *  path ever sees. */
+ *  path ever sees.
+ *
+ *  I2 fix (final-review): the button used to copy `stash` — a value read
+ *  ONCE at mount via `useState`'s lazy initializer. The hold-open
+ *  instrument (Phase RC spec 1) appends to this SAME key on
+ *  release/expiry, up to 90s AFTER this screen has already mounted (the
+ *  finish hand-off navigates here well before that window closes) — so
+ *  the mount-time snapshot could never contain the held-open window, and
+ *  exit criterion 1's claim that this button "shows the window" was false
+ *  as shipped. `stash` now only gates whether the row renders at all (a
+ *  session that never rowed has no key at mount and none ever
+ *  materializes later either — that part of the mount-time read is still
+ *  correct); the CLICK handler re-reads the key fresh, so a hold that
+ *  finished after mount is included. */
 function MonitorLogRow() {
   const [stash] = useState<string | null>(() => {
     try {
@@ -692,8 +705,20 @@ function MonitorLogRow() {
       type="button"
       className="log-monitor-diag"
       onClick={() => {
+        // I2 fix: read live, not the mount-time closure — see this
+        // component's own doc comment for why the mount-time value can be
+        // stale by up to HOLD_OPEN_MS. Falls back to the mount-time
+        // `stash` only if sessionStorage has become unreadable between
+        // mount and click (extremely unlikely, but never worse than the
+        // pre-fix behaviour).
+        let latest: string | null;
+        try {
+          latest = sessionStorage.getItem("ergomatic:last-rowed-log");
+        } catch {
+          latest = null;
+        }
         void navigator.clipboard
-          .writeText(stash)
+          .writeText(latest ?? stash)
           .then(() => setCopied("copied"))
           .catch(() => setCopied("failed"));
       }}

@@ -2339,3 +2339,103 @@ targetSplit:null}` reproduces the recorded tx exactly and `divergences` stays
   because `defaultTransport()`'s `import()` sits behind a RUNTIME check; the `initialize()` memo hoist is safe but
   does not survive `webView.reload()`.
 
+
+## Anchor pass, 2026-08-22 (Phase RC open: the held-open finish spec + decomposition)
+
+- **"The hold-open instrument goes where the tap seam already lives — the DEV/web arm of
+  `adapters/monitorTransport.ts`."** False on both halves, and that file's own doc comment
+  says so: the byte recorder is deliberately NOT composed there, it lives behind
+  `transports/index.ts`'s BUILD-TIME-foldable `fakeMonitorEnabled` gate, and the adapter's
+  only conditional is a runtime `isNative()` Rollup cannot fold. Worse, `import.meta.env.DEV`
+  is FALSE on the walk lab: `walk-lab.sh` boots the compose stack and `compose.e2e.yml:39`
+  sets `VITE_ENABLE_FAKE_MONITOR=1` as a build arg on a PRODUCTION build — a DEV-only gate
+  would have handed James a console variable that does not exist at the erg.
+  **Technique:** when a spec says "follow the precedent of X", open X's install site and read
+  the gate EXPRESSION, not the prose about it — then follow the flag into the file that
+  builds the thing the operator will actually run (`compose.e2e.yml`, not `package.json`).
+
+- **"Failure to subscribe 0x003F degrades — Phase LL's non-critical class."** False on the web
+  arm, which is the arm the spec targeted. `webBluetooth.ts`'s `subscribe()` is
+  `void getCharacteristic(...).then(...)` with NO `.catch()`; the degrade class
+  (`onCharacteristicDegraded`, CRITICAL_CHARACTERISTICS routing) exists only in
+  `capacitorBle.ts`. A missing characteristic is a silent unhandled rejection — which makes
+  "absent on this firmware" and "present but never fires" INDISTINGUISHABLE in every artifact
+  the walk collects, gutting the walk item that existed to tell them apart.
+  **Technique:** for any "it degrades gracefully" claim, grep the callback's name across
+  `src/` and check WHICH TRANSPORT ARM defines it. Then ask the oracle question: after this
+  failure, what does the evidence look like, and is it distinguishable from success?
+
+- **"`Sample.p`/`spm` can become optional — readers already handle absent fields on `hr`'s
+  precedent."** False. `traceModel.ts:161,164` guard those two fields on `!== 0` (the stored
+  trace's sentinel rule), not on `!== undefined` like `hr`; an absent `p` yields
+  `undefined !== 0 === true` and pushes NaN into the chart. And `server/routes/data.ts`'s
+  `validateSeriesSample` REQUIRES both and rebuilds the sample from an explicit
+  `{ t, d, p, spm }` list, so omitting either 400s the whole POST — the "shape unchanged"
+  claim was wrong on both sides of the API.
+  **Technique:** "field X becomes optional" is a claim about every READER of X. Grep the field
+  and open each guard: a codebase can have two different absence idioms (`!== undefined` and a
+  `0` sentinel) side by side in one interface, and the precedent you cite may be the other one.
+  Then check the SERVER validator — a client-side optional is an API change.
+
+- **"The ring and the recording both capture the held-open window."** False for the ring.
+  `useMonitorSession.ts`'s teardown serialises `exportLog()` into sessionStorage at STEP 2,
+  BEFORE the disconnect at STEP 4 — its own comment says an entry written after that line
+  "would never reach sessionStorage at all" — and `LogSession.tsx:666`'s `MONITOR LOG · COPY`
+  reads exactly that key. Deferring only the last step leaves the ring capturing into a
+  snapshot nobody can retrieve, so the exit criterion could go green on zero evidence.
+  **Technique:** for any "we will observe X" criterion, trace the DOOR the operator will use
+  to read the observation, and check it is downstream of the observation in wall-clock order.
+  Capture and retrieval are different questions.
+
+- **"The PM5 emits 64/101 spm in coherent frames AT BOUNDARIES."** Half false: 101 is a
+  boundary artifact (pyramid seq 3273→3276, wState 5→10 at 300 m), but 64 is a FIRST-STROKE
+  transient (step-2 seq 828, elapsed 13.4 s, 12 m, rowState 0→1) — nowhere near a boundary.
+  Two producers wearing one name.
+  **Technique:** before accepting a stated mechanism for an artifact, dump the surrounding
+  frames and read the state bytes. Filtering the corpus for the VALUE takes a minute and
+  routinely shows the story attached to it is a composite of two different events.
+
+- **ANTAGONIST'S OWN REVERSAL, recorded on purpose: "0x003F's byte order is not really
+  disputed — that's a CSAFE-command convention confused for a BLE payload."** I ruled the
+  spec's claim down on that reasoning, then opened both rows of the PDF. The dispute is REAL
+  and it is Concept2 contradicting ITSELF in one file: the BLE attribute table prints the
+  Logged Workout Hash `(Lo)`-first, and `CSAFE_PM_GET_CURRENT_WORKOUT` (0x72) in the same
+  document prints `Byte 0: Hash (MSB)`. The spec was right and I was about to cost it a walk
+  item. **Technique:** an antagonist's "this is a category error, not a contradiction" is
+  itself a claim, and it gets the same evidence bar — extract the PDF and grep for BOTH rows
+  before downgrading someone else's uncertainty. A wrongly-closed question is more expensive
+  than a wrongly-open one, because nobody reopens it.
+
+- **"The PM5's own memory screen agrees: 7476 → 1:14.7 (`walk-2026-08-17/README.md:14`)."**
+  The cited line actually reads "PM5 memory interval 2 = 1:14.7 matches wire **74.71s**
+  exactly" — a different field (0x0031/0x0033 `elapsedSeconds`, confirmed in
+  `step-2-ring.json` seq 35-37). The screen's 0.1 s resolution cannot separate 74.71 from
+  74.76, so it rules out `/10` but evidences nothing about 7476. The claim survived because
+  the RIGHT answer (`/100`) was reached by other evidence.
+  **Technique:** the briefing's §-citation rule, applied to walk READMEs too — paste the cited
+  sentence beside the claim. A correct conclusion resting on a mis-cited premise is still a
+  defect, because the next spec inherits the premise, not the conclusion.
+
+- **"0x003F is the verification-code characteristic, and it's in the BLE Interface
+  Definition."** Both wrong in a way that would have dangled the phase's first citation.
+  Concept2 calls it the **"C2 rowing logged workout characteristic"** (15 bytes, NOTIFY,
+  8-byte *Logged Workout Hash* + log address + size + erg model type); "Workout Verification
+  State" is a byte in the DIFFERENT characteristic 0x003E. And the BLE Interface Definition
+  **Rev 1.30 — the revision this repo holds and every `uuids.ts` constant cites** — has no
+  0x003F at all; its rowing table ends at 0x003D. Concept2 folded the BLE attribute tables
+  into the CSAFE Communication Definition and stopped publishing a standalone BLE PDF.
+  **Technique:** before citing "the doc", check the REVISION we actually hold contains the
+  thing. `pm5-interface-notes.md:13-14` records both revisions and their page counts — a
+  ten-second check that stops a house-style citation from pointing at a page that does not
+  exist. Corollary: extracting the PDF (`pdftotext -layout` + grep for the handle) answers
+  name, owning service, payload, and firmware bands in one pass, and is cheaper than any
+  amount of arguing from the community's naming.
+
+- **HELD under attack, worth recording as ground:** RC-4's nine capture pairs are real — I
+  re-derived all nine from the committed bytes independently of the review that asserted them
+  (`floor(0x0033.u24LE@14 / 10) === 0x0037.u24LE@6`, four files). And the 500-entry ring
+  cannot overflow during a 90 s hold: real sessions use 41-56 entries because the ring is
+  event-driven, not per-frame.
+  **Technique that settled both:** decode the committed captures with a throwaway script
+  rather than reasoning about them. `docs/monitor/sessions/*.jsonl(.gz)` are raw wire hex and
+  a fifteen-line decoder answers in seconds what a spec argues about for pages.

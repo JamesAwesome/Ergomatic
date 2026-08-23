@@ -200,7 +200,7 @@ export function parseAdditionalStatus2(
     splitAvgPace: readU16LE(bytes, 8) / 100,
     splitAvgPowerWatts: readU16LE(bytes, 10),
     splitAvgCalories: readU16LE(bytes, 12),
-    lastSplitTimeSeconds: readU24LE(bytes, 14) / 10,
+    lastSplitTimeSeconds: readU24LE(bytes, 14) / 100,
     lastSplitDistanceMeters: readU24LE(bytes, 17),
   };
 }

@@ -1614,6 +1614,275 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   nowhere to see it yet, and not yet removable." RELEASING.md needs no new
   rollback floor — 0014 is additive, no backfill, no seed rename; checked so
   the next stored-shape gate does not re-derive it.
+## Phase-open gate, 2026-08-22 (Phase RC slate: the held-open finish, evidence-first)
+
+- **A dev instrument that "keeps capturing" can still be unreadable, because
+  the EXPORT ran first.** RC's hold-open defers `driver.disconnect()`
+  (teardown Step 4) while the ring's only stash — `exportLog()` →
+  `sessionStorage["ergomatic:last-rowed-log"]` — is Step 2, and its own doc
+  comment says "an entry written to the ring after this line would never reach
+  sessionStorage at all." `LogSession.tsx:666` reads exactly that key, so the
+  whole 90 s hold window would have been invisible to `MONITOR LOG · COPY`.
+  The transport-layer recording tap survives (it sits below the driver;
+  `unsubscribeRef` is the HOOK's driver-event listener, not a characteristic
+  unsubscribe) — but its own delivery path is the one #100's gate flagged as
+  ungated. **For any instrument that extends a session's life past teardown,
+  trace the EVIDENCE's export path, not the capture path, and ask which of the
+  two teardown does first.** Sibling finding: the "ARMED" chip lived on the
+  connected screen, which unmounts on finish ("the ended hand-off frame
+  navigates away on its first render") — so the `holding` state, the only one
+  the operator must not disturb, had no readout at all.
+- **"Shape unchanged" in a section header that changes the shape is worth one
+  grep of the readers.** RC-6 made `Sample.p` (and, unstated, `spm`) optional.
+  Named footprint: one file. Measured: four — `seriesRecorder.ts`'s required
+  fields, `server/routes/data.ts:502-522` which REJECTS the save on an absent
+  `p`/`spm`, `stores/logs.ts`'s type, and `traceModel.ts:161,165`, whose
+  `if (s.p !== 0)` turns an absent field into `undefined/10` = **NaN** on two
+  shipped screens. The 2026-08-17 PW nullable ruling generalises past columns
+  to OPTIONAL FIELDS: ask which installed build reads it.
+- **When the reader already honours a sentinel, "drop the field" is the more
+  expensive fix, not the cleaner one.** `traceModel` already excludes `p: 0`
+  and `spm: 0`, so RC-6's `p` half buys nothing observable and its only motive
+  (C2's `stroke_data.p` rejects zero pace) is a wave-5 SERIALIZATION concern
+  that will filter the payload anyway. The `spm` half is real and
+  rower-visible — `s.spm !== 0` means the wire's 64/101 artifacts ARE drawn
+  today, compressing the rate chart's real band — and banding them to the
+  existing 0 sentinel fixes it in one line with no type, server, reader or
+  cross-version cost. **Before making a stored field optional, check whether
+  the consumer that wants absence exists yet, and whether a sentinel the
+  readers already drop gets you there.**
+- **TRIAD classification is not blast radius, and the grouping question should
+  be asked on the second.** RC-4 (Last Split 10x) is TRIAD by definition and
+  `grep -rn "lastSplitTimeSeconds" src domain server` finds parser + fake
+  encoder + tests, **zero consumers** — it belongs in the instrument's PR.
+  RC-6, classed "TRIAD-adjacent", reaches a server route, a stored type and a
+  shipped chart, AND collides with `server/routes/data.ts` which Phase BL's
+  #164 just edited with PRs B/C still coming. **Split by what a reviewer must
+  hold at once and by what main is contending, never by the TRIAD label.**
+- **An exit clause whose evidence may never arrive needs the negative branch
+  its sibling already has.** RC's clause (e) closes the 0x003F branch on the
+  record if it never fires; clause (b) (decode the log entry date/time) has no
+  such escape, and its data lives in 0x0039, which the phase's own W2 may show
+  silent forever. The review's `:386` records a rival hypothesis the spec does
+  not repeat — end-of-workout messages "can be DROPPED entirely" — so a 90 s
+  silence does not discriminate "we hang up early" from "this firmware drops
+  them." **At a phase open, read each exit clause against the walk result that
+  would make it unmeetable, and give it (e)'s shape.** (The obvious
+  contingency, ErgData's CSAFE 0x6A log pull, is already correctly closed by
+  review row (j): the commands are public, the field layouts are not.)
+- **A combined two-phase walk needs a written CUT ORDER and a contention
+  protocol before it is scheduled.** 17 items, ~4200 m, two unbounded (W8 is
+  an inactivity timeout of unknown duration; W9 as written needs a SECOND
+  ERG). Ruled order, keep-from-the-top: W1 (2 min, gates the whole
+  verification branch) → W2+W3+W4 on one keystone piece → LL (a)/(b)/(c), the
+  brick → LL (a) pre-stroke + W5 → 9a → LL (e); cut line; then W6, W9, W8,
+  W7-distance. **Clause (b) must never fall below the cut line — it is the
+  cohort-of-one gate.** And nothing anywhere in `pm5-interface-notes.md` or
+  the ecosystem review says whether two centrals may hold one PM5: legs run
+  strictly sequentially, idle app fully closed, and a failed connect is
+  presumed contention before it is presumed a defect.
+- **Two walk items named W7, and one routed to a medium that cannot answer
+  half of it.** LL's W7 (PM5 menu mid-session) and RC's W7 (3x300 r30 held
+  open) collide by name; and §6 sent LL's W7 to the LAPTOP, where the
+  wire-quiet half is answerable but the "does the 2500 ms watchdog
+  false-fire" half is not — native is unmeasured, which is why 9a exists.
+  The CR2-close medium rule, third occurrence.
+- **The phase's headline prize depends on a PII field the standing ruling
+  starts from NO.** The verification-code branch — ROADMAP's "whole point of
+  the phase" — requires POSTING a row, which requires `weight_class`
+  (REQUIRED, we store nothing). Told at open rather than at wave 5, with two
+  zero-code moves: settle whether it can be transient upload-time rather than
+  stored (BL's questionnaire precedent), and read C2's docs on whether an
+  ErgData duplicate merges, rejects or duplicates — ROADMAP concedes this
+  "decides whether this is leverage or a fight over ownership of the row."
+- **The phase's only rower-visible defect is correctly sequenced late and
+  should be DECIDED early.** RC-5 (three stored heroes contradicting by 24.3
+  and 39.9 s/500 m) implements after RC-1 for good reason — RC-1 changes two
+  of the three. But the product decision needs no walk and no code, and RC-1's
+  storage design should be informed by it. **Separate a deferred
+  IMPLEMENTATION from a deferred DECISION at every slate gate; the second is
+  usually free and usually upstream of the first.**
+- **Release call: NO tag on spec 1.** Dev-only instrument, 0x003F with no
+  consumer, RC-4 with no consumer — nothing a tester can falsify (#140's
+  rule). The walk needs no new build either: LL's clauses bind to a Release
+  build and v0.17.0 build 717 already is it. Un-released stack: ONE merge
+  (#164, BL PR A); next tag v0.18.0 MINOR and it is **BL's** — note the BL
+  open-gate entry above recommends v0.17.0, which LL spent the same day, the
+  CS-close staleness rule recurring inside 48 hours. If RC-6 ships the `spm`
+  banding it earns a notes clause: the rate line visibly loses its 64/101
+  spikes and the fix is write-forward-only.
+- **Backlog: 67 unchecked, 212 checked, 10 triggered follow-ons** (70 at BL
+  open, 71 at 8A close, 60 at WU open, 37 at LL open, 24 on 2026-08-13).
+  Second consecutive net decrease. RC's twelve items were filed 2026-08-21 and
+  spec 1 works them the next day — executed, not filed. **Roadmap presence
+  PASS**: the Status header flipped in the same commit as the spec (`425a0f2`),
+  the first phase open in this ledger with no RF17 absence to report.
+
+## Final-PR gate, 2026-08-23 (Phase RC spec 1, PR #167 — TRIAD twice: a 10x decode flip + stored series content)
+
+- **The empty-check-rollup trap, fourth occurrence — and the mechanism is
+  now established, so stop re-observing it.** `.github/workflows/ci.yml` is
+  `on: pull_request`, and a `pull_request` run is built against
+  `refs/pull/N/merge`. **GitHub never creates that ref for a CONFLICTING PR,
+  so a DIRTY PR gets no CI run at all** — and `statusCheckRollup: []` is
+  indistinguishable from "queued". #167 reached its TRIAD gate with zero runs
+  ever. `gh pr view --json mergeable,statusCheckRollup` stays the first
+  command; when the rollup is empty, `mergeable: CONFLICTING` is the
+  explanation, not a coincidence.
+- **At a conflicting PR, the AUTO-MERGES are the risk, not the conflict.**
+  #167's only textual conflict was `pm-ledger.md` (noise). The three files
+  that auto-merged clean — `LogSession.tsx` (+170 on main from #165),
+  its test (+338), `index.css` (+61) — are where the branch's gate evidence
+  silently stopped applying. Mechanical step: `git diff --stat
+  $(git merge-base HEAD origin/main)..origin/main` and intersect with the
+  PR's own file list; then require e2e AND screenshots on the merged tree,
+  never the pre-merge numbers in the body.
+- **A tagged release invalidates every walk card that pins a build.**
+  #167's card pinned "stock v0.17.0, build 717" in three places while
+  v0.18.0 had been tagged the previous day — and v0.18.0 puts a NEW SCREEN
+  (BL's post-test prompt) in the finish path the card describes. Generalises
+  RF13: **at any gate touching a walk card, `git tag --sort=-creatordate |
+  head -1` and check every version the card names.** The product argument,
+  not just the bookkeeping one: proving a phase's exit on a build no tester
+  runs proves it on a build nobody has.
+- **A struck-through `[x]` is where a narrowed-off half goes to die.** RC-6
+  shipped its `spm` half and deferred `p: 0` "to RC-11's own spec" — inside
+  RC-6's own now-checked, struck line. RC-11's item body says nothing about
+  `p`. Nobody re-reads a checked parent. **When a gate narrows an item, the
+  surviving half is written into the RECEIVING item's body in the same
+  commit, and the gate greps the receiver to prove it landed.**
+- **A stored-numbers change owes its NO-BACKFILL sentence, and owes it to
+  James specifically.** RC-6 bands `spm` at construction, so old sessions
+  keep their 64/101 forever. His first move on merge is to open an existing
+  log to check the fix, and see the spike still there. **Any change to what
+  gets stored states, above the fold, what happens to what is already
+  stored** — even when the answer is "nothing, by design".
+- **"Needed no evidence" and "needed no erg" are not the same sentence.**
+  #167's line one told James its two TRIAD number changes "needed no
+  evidence." It meant no hardware. On a PR whose whole case is a corpus of
+  committed bytes, the opening sentence said the opposite of the branch.
+  Read line one as a stranger would.
+- **Overriding a vendor PRIMARY is a bigger claim than fixing a bug, and
+  must be presented as one.** RC-4 flips Last Split Time /10 -> /100 against
+  **both C2 documents, which print 0.1 s/lsb four times**, on the strength
+  of nine capture pairs. The body framed it as an ordinary decode bug; the
+  branch's own `uuids.ts` says the document "was wrong about Last Split Time
+  two pages earlier". **When a change contradicts a cited primary source,
+  the contradiction goes above the fold** — that is the fact a reviewer
+  needs to decide, and burying it makes an override read as a typo fix.
+  (Containment checked so the next gate need not: `avgPaceSecondsPer500m`
+  rests on the same suspect document with the same untested `/10`, and has
+  zero product consumers — the doc being wrong twice costs a rower nothing
+  today.)
+- **The free measurement goes first.** RC built a 2,200-line hold-open
+  instrument to observe 0x003F, then scheduled W1 — photograph the firmware
+  version screen, two minutes, no rowing — inside the same walk. W1 decides
+  whether 0x003F can exist on this monitor at all. The instrument earns
+  itself anyway (0x0039 has delivered zero notifications across five natural
+  finishes; the whole summary-fallback subsystem is dead code at the erg,
+  and only not-hanging-up can test it), so the build order was not wrong —
+  but **the ordering was free and would have reshaped a walk whose rowing
+  budget is the binding constraint.** At a phase-open gate, ask which
+  evidence costs nothing and whether it is scheduled before or after the
+  thing it gates.
+- **RF13 passed for once, and the check that made it pass is worth copying:**
+  the walk card's arm instructions were traced to the branch that serves them
+  (`compose.e2e.yml:39` sets `VITE_ENABLE_FAKE_MONITOR=1` as a build ARG ->
+  `transports/index.ts:281`'s gate -> `window.__pm5HoldOpen__` exists at
+  `http://127.0.0.1:$APP_PORT`). Phase CS's identical-shaped instruction was
+  never traced and was impossible. **Follow the flag to the branch that
+  consumes it** is a two-command check, and it is the difference.
+- **Release call: NO TAG; rides the next MINOR.** The instrument cannot reach
+  a TestFlight rower under any flag (`adapters/monitorTransport.ts` takes the
+  Capacitor arm before `resolveDefaultTransport`), RC-4 has zero product
+  consumers, RC-6 is imperceptible until a NEW connected session, and v0.18.0
+  shipped the previous day. The walk needs the LAB (`walk-lab.sh` + the
+  compose stack), not a phone build. Owes exactly one note clause when it
+  rides — RC-6's, with the no-backfill sentence attached — pre-stated at this
+  gate per the #164 precedent.
+- **Backlog: 67 unchecked at merge-base -> 65 on the branch** (RC-4 and RC-6
+  closed by execution, zero new items filed; main independently at 65).
+  Second consecutive net-negative delta after five gates of the opposite.
+- **The 30-second rule is now 0-for-10** (#167 at 315 words) and four gates
+  have declined to enforce it. Still James's to re-set or retire, still
+  belongs in CLAUDE.md. Gates should keep spending one line on it, not a
+  paragraph.
+
+## Phase-close gate, 2026-08-23 (Phase LL: the link can be lost — walked, closed with conditions)
+
+- **"PASS IN SUBSTANCE" is where a compound exit clause goes to be laundered.**
+  LL's (b) read "Try Again reaches a fresh connect and programs successfully
+  **without deleting the app**" — two claims joined by "without". The walk met
+  the second (Cancel -> Connect, no reinstall) and failed the first (F1: the
+  button is dead after a mid-session BT-off), and the verdict block absorbed
+  the failure into the pass. **Ruling: SPLIT a compound clause at its gate and
+  give each half its own verdict.** The tell is a verdict containing a
+  concessive ("...with finding F1", "in substance"). Same file already carried
+  a written warning against fudging a criterion at its own gate (ROADMAP:2245)
+  — we wrote it in August and did it in August.
+- **Discharging a clause silently discharges every rule that cited it.** The
+  cohort-of-one hold was written as "until criterion (b) exists". (b) now
+  exists in the half that rule cared about, so the hold was self-discharging
+  the moment the walk passed — while a NEW and worse reason to hold (F2 losing
+  a healthy row) had just been found. **When a gate's cited criterion is met
+  but the gate should stand, re-found it on the new criterion in the same
+  edit, with its own discharge test.** Otherwise the next reader is correct
+  and the cohort grows into an unfixed bug.
+- **An oracle that reads zero five times out of six is not "transiently
+  zeroing".** F2 was filed as "iOS resume produces a transient machineTotal=0
+  frame outside the web corpus". Every TWD reading committed that day: laptop
+  web DISTANCE capture 0 across 248.5 m; ring-3 0 at 94.6 m and 0 at 33.1 m
+  (with its own `divergence` entry); ring-2 0 at 83.3 m; ring-2 **81** at
+  81.2 m. Five zeros, one non-zero — the 81 is the outlier and the behaviour
+  is not iOS-specific. **At a close, recompute a finding's premise from the
+  walk's own committed artefacts before it becomes a successor spec's
+  starting assumption.** RF11's sibling: we did compare against the machine,
+  and then narrated the comparison backwards.
+- **Compose the findings before assigning severities.** LL's walk filed F4
+  (web cadence worst 1260 ms vs a 2500 ms watchdog, margin 2.0x not 3.09x) as
+  informational and F2 as SERIOUS-but-background-only. `applyContinuityCheck`
+  gates on `frameSilence`, not on backgrounding: F4 arms F2. **Ask of every
+  pair of findings in one walk whether one is the other's trigger** — the
+  blast radius, not the severity label, is what sets the cohort gate.
+- **A guard that convicts on one field while two fields in the same frame
+  contradict it can be defused without new knowledge.** F2's convicting frame
+  had elapsed 56.1->59.3 and distance 81.2->83.3 advancing while TWD went
+  81->0. A monitor reset resets everything. **Corollary for sequencing: split
+  a blocked fix into DEFUSE (cheap, now, no new knowledge) and KEY-IT-RIGHT
+  (rides the phase that owns the semantics).** "It rides RC-1" was right for
+  the permanent fix and would have left a record-destroying bug live for a
+  whole phase.
+- **Bind a capture deliverable to a walk LEG, never to "the walk".** The >3 s
+  wire-gap witness (bound to LL's exit walk at the 2026-08-20 gate) was
+  unobtainable: `adapters/monitorTransport.ts:70` composes the byte recorder
+  on the WEB arm only, so the laptop leg has the recorder and no gap while the
+  phone leg has the gaps and logs events, not frames. Fourth occurrence of
+  "the medium cannot answer the question" (CR2-close; LL's own W7 was the
+  third). **At any gate that assigns a capture: name the leg, and name the
+  code path that writes the file.**
+- **A walk answers questions nobody asked it.** ROADMAP's open DISTANCE
+  question (does distance reset at a zero-rest work->work boundary?) was
+  settled by the keystone the same walk committed — seq 305->310: elapsed
+  69.75->0.50, distance 248.5->1.9, rowingState 1 throughout, TWD 0->250. It
+  sat unread in the record while the item stayed `- [ ]` and nominally owed an
+  erg session. **At a phase close, re-read every open item BOUND to that walk
+  against the walk's artefacts, not against its README.**
+- **A release note is a live surface, not an archive.** v0.17.0's "your
+  history can finally tell the difference" (releaseNotes.ts:49) shipped a
+  capability with no surface (F3: `endedBy` stored, its only consumer a
+  boolean in LogSession.tsx:1338, rendered nowhere) and re-ships it every time
+  the Releases screen opens under v0.18.1. **Strike the false half now** —
+  the honest "not yet" form (v0.16.0 item 3) is the house pattern, and the
+  standing rule that notes must let the cohort falsify them cannot be met by a
+  clause describing a screen that does not exist.
+- **Backlog: 67 unchecked at v0.17.0 -> 63 on main; 66 once F1/F2a/F2b/F3 get
+  checkboxes.** Third consecutive net-negative delta.
+- **Release call: NO TAG on the close-out** (ROADMAP/ledger prose plus a
+  one-string notes correction, fast path). F3's surface + F2a's defusing tag
+  together as a MINOR, and their notes must name the DIRECTION of the change
+  to when a record closes.
+- **The 30-second rule is 0-for-10.** Still James's to re-set or retire, still
+  belongs in CLAUDE.md.
 
 ## Final-PR gate + phase close, 2026-08-23 (Phase BL PR C, #172 — TRIAD: the table mints every target's anchor + a destructive DELETE)
 

@@ -5809,6 +5809,38 @@ section:not(.news-pinned) .news-row:last-of-type {
   color: var(--ink-2);
 }
 
+/* Dev-only "HOLD-OPEN ARMED" chip (Phase RC spec 1 Task 3,
+   `ConnectionLine.tsx`'s own header has the full contract) — the ONE
+   exception to that component rendering only the mark and the device
+   caption, and it never appears in a real deploy: nothing arms
+   `window.__pm5HoldOpen__` outside a dev/e2e build, and no committed
+   capture calls `arm()`, so no screenshot in `docs/screenshots/` changes
+   because this rule exists.
+
+   Reuses `--marker` ("GOLD MEANS LOOK HERE, NEVER YOU ARE BEHIND",
+   tokens.css's own comment on that token) rather than inventing a new
+   colour or reaching for `--accent` (reserved for its own four things,
+   `index.css`'s "accent means exactly four things" rule) — a chip whose
+   entire job is "notice this" is exactly what `--marker` already means.
+   Sized and spaced like its `.connected-line-device` sibling (same mono
+   family, `--c-size-control`, 0.1em tracking) so the two read as one
+   caption row, not two competing type treatments.
+
+   Contrast, computed (not eyeballed) against `--page` (#f4f1e8, `body`'s
+   own background — the worst-case surface this header ever paints over):
+   --marker #7d5510 on #f4f1e8 = 5.85:1, clearing the 4.5:1 WCAG AA floor
+   with room to spare (tokens.css's own comment on `--marker` already
+   states this figure for the identical pair; recomputed here rather than
+   taken on faith, per this repo's own "never judge contrast by eye"
+   rule). */
+.hold-open-chip {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--c-size-control);
+  letter-spacing: 0.1em;
+  color: var(--marker);
+}
+
 /* `--c-size-status` (22/21 landscape/portrait) — CR2 spec 3 Task 6 closes
    the holdout `tokens.test.ts` named explicitly (Task 5's own comment
    there: "if a later task wires it, this test's own failure is the prompt

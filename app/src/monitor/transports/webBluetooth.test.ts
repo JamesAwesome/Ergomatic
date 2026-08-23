@@ -5,6 +5,7 @@ import {
   DEVICE_INFO_SERVICE_UUID,
   END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID,
   END_OF_WORKOUT_SUMMARY_UUID,
+  LOGGED_WORKOUT_UUID,
   RECEIVE_CHARACTERISTIC_UUID,
   ROWING_SERVICE_UUID,
 } from "../../../domain/monitor/pm5/uuids.js";
@@ -371,6 +372,166 @@ describe("createWebBluetoothTransport: 0x0039/0x003A join SERVICE_OF (fast-follo
       );
     },
   );
+});
+
+// Phase RC spec 1, Task 2: 0x003F (LOGGED_WORKOUT_UUID, the "C2 rowing
+// logged workout characteristic") joins SERVICE_OF too — same membership
+// pin as the 0x0039/0x003A block above, via write() rather than
+// subscribe() for the same reason that block's own comment gives (a
+// missing entry surfaces as an awaited REJECTION here, not a silently
+// dead fire-and-forget subscription).
+describe("createWebBluetoothTransport: 0x003F joins SERVICE_OF (Phase RC spec 1 Task 2)", () => {
+  it("write() to LOGGED_WORKOUT_UUID resolves against the rowing service (0x0030), the same service 0x0039 maps to", async () => {
+    const device = new FakeDevice("pm5-9", "PM5 999");
+    installFakeBluetooth(device);
+    const transport = createWebBluetoothTransport();
+
+    await transport.scan();
+    await transport.connect(device.id);
+
+    await expect(
+      transport.write(LOGGED_WORKOUT_UUID, Uint8Array.from([1])),
+    ).resolves.toBeUndefined();
+
+    expect(device.gatt.getPrimaryService).toHaveBeenCalledWith(
+      ROWING_SERVICE_UUID,
+    );
+  });
+});
+
+/** Drains every pending microtask, regardless of how many hops the chain
+ *  under test needs — a fixed number of `await Promise.resolve()` calls is
+ *  fragile against a chain this deep (`getCharacteristic`'s own two
+ *  `await`s, plus the `.then().catch()` this fix adds each add a hop), so
+ *  this parks behind a real macrotask instead: by the time `setTimeout`'s
+ *  callback runs, the JS engine has necessarily drained the ENTIRE
+ *  microtask queue first, however many links the promise chain has. */
+function flushMicrotasks(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+// C1 fix (final-review): `subscribe()`'s GATT lookup is async
+// (`getCharacteristic`), and `Transport.subscribe` must return its
+// unsubscribe closure SYNCHRONOUSLY — before this fix, a rejection here
+// (a firmware missing the characteristic, e.g. the hold-open instrument's
+// 0x003F) went into a `void`ed promise with no `.catch()` at all: not a
+// throw, not an observable rejection, identical to a firmware that HAS the
+// characteristic and simply never sends. `getPrimaryService` is overridden
+// per test below to make a NAMED characteristic's own `getCharacteristic`
+// reject — the real shape Chrome throws (`DOMException`/`NotFoundError`)
+// when a service exists but the requested characteristic does not.
+describe("createWebBluetoothTransport: subscribe() rejection is observable via onCharacteristicDegraded (C1, final-review)", () => {
+  function installRejectingCharacteristic(
+    device: FakeDevice,
+    rejectId: string,
+    error: Error,
+  ): void {
+    device.gatt.getPrimaryService = vi.fn(
+      async (
+        service: string,
+      ): Promise<{
+        getCharacteristic(id: string): Promise<FakeCharacteristic>;
+      }> => {
+        if (!device.gatt.connected) {
+          throw new Error(
+            `FakeGattServer: getPrimaryService(${service}) while disconnected`,
+          );
+        }
+        return {
+          getCharacteristic: (id: string) => {
+            if (id === rejectId) return Promise.reject(error);
+            const characteristic = new FakeCharacteristic(id);
+            device.gatt.issued.push(characteristic);
+            return Promise.resolve(characteristic);
+          },
+        };
+      },
+    );
+  }
+
+  it("a subscribe() whose GATT lookup rejects notifies onCharacteristicDegraded instead of disappearing into a void'd promise — the exact gap C1 names", async () => {
+    const device = new FakeDevice("pm5-c1-1", "PM5 C1 1");
+    installFakeBluetooth(device);
+    const notFound = new Error(
+      "No Characteristics matching UUID ce06003f-... found in Service.",
+    );
+    notFound.name = "NotFoundError";
+    installRejectingCharacteristic(device, LOGGED_WORKOUT_UUID, notFound);
+    const transport = createWebBluetoothTransport();
+
+    await transport.scan();
+    await transport.connect(device.id);
+    const degraded = vi.fn();
+    transport.onCharacteristicDegraded(degraded);
+
+    transport.subscribe(LOGGED_WORKOUT_UUID, () => {
+      throw new Error("must never fire — the lookup rejected");
+    });
+    await flushMicrotasks();
+
+    expect(degraded).toHaveBeenCalledExactlyOnceWith(
+      LOGGED_WORKOUT_UUID,
+      notFound.message,
+    );
+  });
+
+  it("a successful subscribe() never fires onCharacteristicDegraded", async () => {
+    const device = new FakeDevice("pm5-c1-2", "PM5 C1 2");
+    installFakeBluetooth(device);
+    const transport = createWebBluetoothTransport();
+
+    await transport.scan();
+    await transport.connect(device.id);
+    const degraded = vi.fn();
+    transport.onCharacteristicDegraded(degraded);
+
+    transport.subscribe(LOGGED_WORKOUT_UUID, () => undefined);
+    await flushMicrotasks();
+
+    expect(degraded).not.toHaveBeenCalled();
+  });
+
+  it("TWO independently registered listeners BOTH fire — a fan-out, not capacitorBle.ts's single overwritable slot (so useMonitorSession.ts's own driver-level registration and holdOpen.ts's instrument can coexist)", async () => {
+    const device = new FakeDevice("pm5-c1-3", "PM5 C1 3");
+    installFakeBluetooth(device);
+    const failure = new Error("gone");
+    installRejectingCharacteristic(device, LOGGED_WORKOUT_UUID, failure);
+    const transport = createWebBluetoothTransport();
+
+    await transport.scan();
+    await transport.connect(device.id);
+    const first = vi.fn();
+    const second = vi.fn();
+    transport.onCharacteristicDegraded(first);
+    transport.onCharacteristicDegraded(second);
+
+    transport.subscribe(LOGGED_WORKOUT_UUID, () => undefined);
+    await flushMicrotasks();
+
+    expect(first).toHaveBeenCalledExactlyOnceWith(LOGGED_WORKOUT_UUID, "gone");
+    expect(second).toHaveBeenCalledExactlyOnceWith(LOGGED_WORKOUT_UUID, "gone");
+  });
+
+  it("unsubscribing BEFORE the GATT lookup settles suppresses the degraded report — the caller asked to stop hearing about this characteristic, failure included", async () => {
+    const device = new FakeDevice("pm5-c1-4", "PM5 C1 4");
+    installFakeBluetooth(device);
+    installRejectingCharacteristic(device, LOGGED_WORKOUT_UUID, new Error("x"));
+    const transport = createWebBluetoothTransport();
+
+    await transport.scan();
+    await transport.connect(device.id);
+    const degraded = vi.fn();
+    transport.onCharacteristicDegraded(degraded);
+
+    const unsubscribe = transport.subscribe(
+      LOGGED_WORKOUT_UUID,
+      () => undefined,
+    );
+    unsubscribe(); // before any microtask has let the rejection land
+    await flushMicrotasks();
+
+    expect(degraded).not.toHaveBeenCalled();
+  });
 });
 
 /** Helper to capture promise outcomes for assertion after the event loop

@@ -1717,6 +1717,15 @@ it, which is why none of these have blocked anything so far. The moment a
 build goes to EXTERNAL TestFlight or the App Store, they all bind at once.
 Nothing here should be discovered at submission time.
 
+- [ ] **F1 from Phase LL's exit walk (2026-08-23): the failure screen's
+      Try again is DEAD after a mid-session BT-off** — the failure
+      disposal tears down the per-session `onEnabledChanged` listener, so
+      the enabled-true event has no ear (sharper repro: an attempt STARTED
+      with BT off keeps a working button — the bug is localised to the
+      disposal). PROD's exit is an empty-phone install reaching a logged
+      row UNAIDED; a dead button with no feedback defeats "unaided"
+      directly. Until fixed, the cohort note carries "if Try again does
+      nothing, tap Cancel then Connect" (Release posture, Phase LL).
 - [ ] **App icon redraw** (was a triggered follow-on). Replace the
       AI-generated icon with a clean SVG. What is actually wrong with it,
       checked against the asset itself
@@ -2193,8 +2202,14 @@ WebKit's throttling, so it does not rescue the JS half.
       across the boundary and "the very next frame reset[s] `elapsed` to 0"
       — §19.1's correction at `:3290` calls it "the one and only
       elapsed-reset-while-rowing in the whole log" ([S2] D4, 2026-08-06).
-      **What is genuinely open is whether DISTANCE resets at a work→work
-      boundary**, which neither passage states. It matters: if it does not,
+      **ANSWERED 2026-08-23, from the keystone capture nobody had read
+      (close-gate condition 3): DISTANCE DOES reset at a zero-rest
+      work→work boundary** —
+      `walk-2026-08-23/keystone-pm5-recording-1787491974452.jsonl.gz`
+      seq 305→310: elapsed 69.75→0.50, distance 248.5→1.9, rowingState 1
+      throughout, TWD 0→250. The feared over-report does not exist. No
+      rowing owed; this box is checked by a committed file. (The original
+      open question, kept for the record:) It matters: if it does not,
       the new accumulator silently OVER-reports on zero-rest boundaries —
       direction-flipped from the bug just fixed, and a shape the old
       edge-triggered code would have got right. Not exotic either:
@@ -2210,9 +2225,14 @@ WebKit's throttling, so it does not rescue the JS half.
       breaking the trace line** — lost when three tests built on an invalid
       four-session capture were removed (PR #140). **Owner BOUND to Phase
       LL's exit walk** (PM gate, 2026-08-20): the deliverable is a CAPTURE,
-      and captures come from walks, not from tasks — and this phase's own
-      exit walk produces a genuine >3 s gap as a matter of course. Sits
-      beside exit clause (e) so the phase can go red on it. **S**
+      and captures come from walks, not from tasks. **UN-BOUND from the
+      exit walk (close gate, 2026-08-23): the walk structurally could not
+      produce it** — `adapters/monitorTransport.ts:70` composes the
+      recorder on the WEB arm only, so the laptop leg had the recorder and
+      no gaps and the phone leg had the gaps and no recorder. New home: a
+      deliberate web-leg capture (background the Chrome tab mid-piece at
+      any future lab session), or extend the recorder to the native arm
+      first. Sits beside exit clause (e) so it cannot silently vanish. **S**
 - [ ] **BEFORE the next tag: three owed clauses plus a version-marker
       ruling** (PM gate, round 4 of the Task 2 PR review, 2026-08-20;
       third clause added by the EST LEFT task, 2026-08-20).
@@ -2234,7 +2254,13 @@ WebKit's throttling, so it does not rescue the JS half.
       behavior, not the label. **Still open — Task 3 (the axis) landed
       2026-08-20 and the EST LEFT fix landed 2026-08-20, so this item is
       now fully armed: all three clauses' subject matter exists in
-      shipped code, and whoever cuts v0.15.0 owes all three.** **New
+      shipped code, and whoever cuts v0.15.0 owes all three.** **Clause
+      (4), added at Phase LL's close gate (2026-08-23, finding F3): the
+      link-lost ending is STORED but rendered NOWHERE, and v0.17.0's
+      shipped note claims the history "can tell the difference" — either
+      the surface ships before the next tag and its clause says so, or
+      the next tag's notes carry the honest "not yet" (the false half of
+      the v0.17.0 note is struck in the same PR as this clause).** **New
       condition, this gate:** the phone→server trace leg must be
       WITNESSED before the tag
       that announces the trace fix ships, or the notes say plainly that
@@ -2572,7 +2598,9 @@ deliverable, each stated so the walk can go red:
 - **W7** — navigate the PM5's own menu mid-session: does the wire go
   quiet? If yes, that is a legitimate quiet period the watchdog's disarm
   list does not cover and the 2500 ms threshold fires falsely — the one
-  disarm unknown the corpus cannot answer.
+  disarm unknown the corpus cannot answer. (Stays on the PHONE leg of
+  Phase RC's combined walk — RC's own distance-shaped item was renamed
+  W10 to stop the collision; see Phase RC's walk card, spec §6.)
 - **W8** — leave an armed/live session untouched: does the PM5 ever emit
   TERMINATE on its own (an inactivity timeout)? `endedBy: "rower"` on the
   TERMINATE path asserts agency on the machine's behalf if it does.
@@ -2599,6 +2627,49 @@ deliverable, each stated so the walk can go red:
   zero PAUSED firings at any post-rest work-interval start, so a future
   change to the guard cannot silently reopen the falsified mechanism
   without a red test naming it.
+
+**WALKED 2026-08-23 — record: `docs/monitor/sessions/walk-2026-08-23/`.**
+Clauses (a) both variants, (c), (d) PASS; (b) SPLIT at the gate
+(2026-08-23 PM close): its destructive-workaround half — "without deleting
+the app" — is DISCHARGED (Cancel → Connect recovers; the brick is dead);
+its "Try Again reaches a fresh connect" half is NOT MET (F1: the button is
+dead after a mid-session BT-off). No compound clause absorbs a failing
+half into a passing one; (e)
+carried by the shipped suites plus finding F2's counterexample. W5
+off-direction ✓ (on-direction is F1); W6 ✓ with F2; W7 dissolved (PM5 Menu
+mid-workout TERMINATES — state 11 on the wire — no quiet period exists, no
+disarm needed); W8 unobserved (longest armed idle ~90 s, low priority); W9
+guard ran clean every attempt (cross-app scenario untestable); 9a partial
+(web cadence measured — median 990 ms, worst 1260 ms, corpus-worst 810.3 ms
+does NOT bound it; watchdog margin ~2.0× today, no false fire; native
+per-frame distribution still unmeasured); §2b flash not observed. **The
+walk's three findings, filed as LL follow-ups:**
+
+- **F1 (medium) — Try again never revives after a MID-SESSION BT-off:** the
+  failure disposal tears down the per-session `onEnabledChanged` listener,
+  so the enabled-true event has no ear; the button stays dead. Sharper
+  repro: an attempt STARTED with BT off fails and keeps a live, working
+  Try again — the dead state is disposal-specific. Cancel → Connect works.
+- **F2 (SERIOUS, TRIAD-weight — it closes records) — the continuity guard
+  convicts on a NON-MONOTONIC key. ROOT CAUSE CORRECTED at the close gate
+  (2026-08-23): the filed "iOS resume produced a transient zeroed-TWD
+  frame" is FALSE and the walk's own files disprove it.** The day's TWD
+  readings: keystone (web) 0 across an entire 248.5 m interval then 250
+  after the boundary; ring-3 0 at 94.6 m and 0 at 33.1 m (with its own
+  `divergence` entry); ring-2 0 at 83.3 m post-resume — **five zeros
+  against ring-2's single 81 at 56.1 s. Zero is the field's normal
+  behaviour that day; the 81 is the outlier, and nothing here is
+  iOS-specific** (the web capture shows the same zeros). The convicting
+  frame had elapsed AND distance advancing while TWD went 81 → 0 — a real
+  monitor reset zeroes all three. A successor spec that inherits the "iOS
+  was outside the corpus" wording will special-case iOS and leave the web
+  path broken. Fix is SPLIT: F2a (defuse via corroboration, Phase RC
+  before RC-1) and F2b (re-key, inside RC-1/RC-8).
+  `ring-phone-2-background-continuity-kill.json` is the capture.
+- **F3 (small UI) — `endedBy: "link-lost"` is stored and consumed
+  (`completedFullDistance`) but rendered NOWHERE** — the log detail shows
+  no marking; v0.17.0's notes over-promised the surface. One line on the
+  log detail closes it.
 
 **Exit — written so it can go red.** Clause (e) added 2026-08-20 at the PM
 gate's finding that four of this phase's items had no exit clause; the
@@ -2628,16 +2699,27 @@ arm is unchanged since v0.10.0, so a rollback ships the same bug minus
 five notes clauses. Not pulled. **But the delete-and-reinstall workaround
 is DESTRUCTIVE** — it wipes `ergomatic.monitorRun`, `ergomatic.sessionRun`
 and `ergomatic.sessionDraft`, costing an unlogged session and any
-in-progress draft. It must not be handed to any tester but James until
-criterion (b) exists.
+in-progress draft. **The original hold ("until criterion (b) exists") is
+DISCHARGED (close gate, 2026-08-23): the destructive workaround is dead —
+Cancel → Connect recovers without deletion. The cohort stays at ONE TESTER
+on a NEW condition with its own discharge test: F2a is merged (the
+continuity guard no longer convicts on a single uncorroborated TWD
+reading — a tester must not silently lose a measured row), AND either F1
+is fixed or the tester note carries "if Try again does nothing, tap
+Cancel then Connect".**
 
 ## Phase RC — The row Concept2 would recognise
 
-**Status:** NOT OPENED. Named, scoped and evidenced by the ecosystem
-review of 2026-08-21 (`docs/monitor/pm5-ble-ecosystem-review.md`, which
-that review also reconciles). No spec is written yet. This section exists
-so the work has a home the moment one is, and so its findings stop living
-in a report (recurring failure 14).
+**Status:** OPENED 2026-08-22 (James: evidence-first). Spec 1 is
+`docs/superpowers/specs/2026-08-22-held-open-finish-design.md`: the
+dev-only hold-open instrument (defer the finish disconnect 90 s, subscribe
+0x003F raw), wave-0 fixes RC-4 and RC-6, and the COMBINED walk (Phase LL's
+exit clauses on the current stock TestFlight phone build (v0.18.0+;
+re-check the latest tag at walk time) + RC's W1-W4 on the laptop seam, one
+erg session). RC-1/RC-8 are specced AFTER the walk, with evidence in
+hand. Named, scoped and evidenced by the ecosystem review of 2026-08-21
+(`docs/monitor/pm5-ble-ecosystem-review.md`, which that review also
+reconciles).
 
 **Asset on hand (James, 2026-08-22): a Concept2 Logbook DEVELOPMENT API
 key already exists in the repo-root `.env`, currently unused.** Presence
@@ -2711,6 +2793,15 @@ that needs no erg, and it can run in a test.
 
 ### The work
 
+- [ ] **F2a — DEFUSE the continuity guard's single-reading conviction
+      (from Phase LL's exit walk, 2026-08-23). TRIAD (changes when records
+      close), full cycle, spec first, LANDS ALONE, sequenced BEFORE
+      RC-1.** The guard convicts on one backward TWD reading even when the
+      SAME frame's elapsed and distance are advancing; a real monitor
+      reset zeroes all three. Require corroboration before closing a
+      record. This is a BOUND, not a key — the correct key is F2b's,
+      inside RC-1. Evidence: the six-row TWD table in the LL walk card's
+      corrected F2 and `walk-2026-08-23/ring-phone-2-background-continuity-kill.json`.
 - [ ] **RC-1 — Store WORK and REST separately, per interval and per
       session.** TRIAD (stored shape + a number's meaning). Nothing else
       moves reconciliation. Add `restSeconds` and `type` to
@@ -2729,7 +2820,12 @@ that needs no erg, and it can run in a test.
       question** (see "The warm-up question" below): whether a warm-up is
       compiled into the same PM5 piece as the working intervals is a
       compiler change, it decides what a rower's Concept2 totals read, and
-      RC-1's spec is where it lands.
+      RC-1's spec is where it lands. **And carries F2b (Phase LL walk,
+      2026-08-23): re-key the continuity guard off TWD entirely** — the
+      walk proved TWD non-monotonic and inconsistent on time intervals
+      (five zeros against one 81 in one day; the LL walk card's corrected
+      F2 has the table). The spec inherits the CORRECTED root cause,
+      never the filed "iOS was outside the corpus" wording.
 - [ ] **RC-2 — Decode Log Entry Date/Time; log it beside our wall clock;
       store nothing yet.** Format settled from two projects and checked
       arithmetically: date `uint16` = month | day<<4 | (year-2000)<<9;
@@ -2750,7 +2846,8 @@ that needs no erg, and it can run in a test.
       Caveat: `avgPaceSecondsPer500m`'s /10 scale rests on the same
       document that was wrong about Last Split Time two pages earlier and
       has never decoded a real byte — DOC-ONLY until a capture lands.
-- [ ] **RC-4 — Last Split Time is 0.01 s/lsb, not 0.1.** TRIAD, S,
+- [x] **RC-4 — Last Split Time is 0.01 s/lsb, not 0.1.** Settled by
+      replay, see `parse.test.ts` (seq 1195). TRIAD, S,
       **settled without an erg.** Both C2 documents print 0.1, four
       times. Nine capture pairs say 0.01 (0x0033's u24LE@14 is the exact
       hundredths value whose truncation to tenths is 0x0037's split
@@ -2776,15 +2873,13 @@ that needs no erg, and it can run in a test.
       below:** Concept2 has no average-split field, so this is a rower
       question with its own answer, and aligning DISTANCE and TIME with C2
       can widen the contradiction rather than close it.
-- [ ] **RC-6 — Band `spm` and drop zero `p` in the stored series.**
-      TRIAD, S. `seriesRecorder.ts:230` writes `spm: f.spm ?? 0` unbanded
-      while the sibling `hr` two lines below is banded 20..254. The PM5
-      demonstrably emits 64 and 101 spm in coherent aligned frames at
-      boundaries; **two stored samples in the committed step-2 capture
-      would carry 64.** Also store no `p: 0` — 8 samples on session-2 and
-      2 on pyramid carry a zero pace, which C2's `stroke_data.p` has no
-      concept of and our own live surface refuses one layer up
-      (`surfaceModel.ts:586`).
+- [x] ~~RC-6 — Band `spm` and drop zero `p` in the stored series.~~ —
+      **NARROWED, `spm` half SHIPPED** (2026-08-22, held-open-finish spec
+      1 task 5). `seriesRecorder.ts` now bands `spm` to 10..60 inclusive,
+      same 0-sentinel shape `hr` already used — kills both the
+      first-stroke estimator's 64 and the boundary transition's 101. The
+      `p: 0` half moved to RC-11's own spec (the stroke-data reframe
+      owns what `p` means).
 - [ ] **RC-7 — Stop writing `restDistanceMeters: 0` into the synthesized
       final interval** (`driver.ts:3037`), which the code's own comment
       already calls "a real gap". Unreachable today because no 0x0039
@@ -2816,14 +2911,25 @@ that needs no erg, and it can run in a test.
       `export/{csv,fit,tcx}` back, and diff it against what we stored.
       **Two gates on a POST that the numeric work does not cover:**
       `weight_class` is REQUIRED for a rower and we store nothing
-      (product decision, one field); per-interval `rest_time` is REQUIRED
+      — RULED (James, 2026-08-22, phase open): a binary H/L field asked
+      ONLY at Concept2 link time (the OAuth grant), never at onboarding;
+      C2's own profile cannot supply it (PRIMARY: `GET /users/me` has no
+      weight field; `weight_class` lives on results only, "Required if
+      type is rower... H or L"). Optional nicety: prefill from the
+      user's latest logged result if their history has one; per-interval `rest_time` is REQUIRED
       and we decode it at `parse.ts:236` then drop it (RC-1 closes this).
       Also unresolved and worth settling before we post in anger: if
       James runs ErgData too, success means our row and ErgData's row are
       the SAME row under C2's dedup. Whether that merges, rejects or
       duplicates is **not established by the review** and decides whether
       this is leverage or a fight over ownership of the row.
-- [ ] **RC-11 — The stroke-data reframe, which is three-way not two.**
+- [ ] **RC-11 — The stroke-data reframe, which is three-way not two —
+      AND owner of RC-6's deferred `p: 0` half (narrowed off at the
+      phase-open gates, 2026-08-22):** whether stored samples stop
+      carrying `p: 0` for no-reading strokes is settled HERE, at
+      serialization design time — `traceModel.ts` guards on `!== 0` and
+      the server validator requires the field, so any change is a
+      reader+validator+shape change, not a recorder one-liner.
       C2's `stroke_data[].t` restarts at 0 PER INTERVAL; ours is
       cumulative across the session. Worse, our series clock is a THIRD
       quantity — work plus however much of the trailing rest the wire
@@ -2842,8 +2948,10 @@ that needs no erg, and it can run in a test.
       rest-exclusive; ORM's writer independently agrees).
       `pm5-interface-notes.md:4393` says 0x0037's work-only status is
       "still open" while `state-architecture-review.md:1310` says PROVEN
-      — the review is right. §20 items 17 and 24 are contradicted by the
-      captures that settle RC-4. `driver.ts:2094-2099` says "no capture
+      — the review is right. ~~§20 items 17 and 24 are contradicted by
+      the captures that settle RC-4.~~ **DONE, folded into RC-4's PR** —
+      both items rewritten to the 0.01 s/lsb, dimension-conditional
+      semantic. `driver.ts:2094-2099` says "no capture
       or existing test evidences" state 9; one committed two days later
       does. `types.ts:429-433` claims `onDisconnect` covers the Bluetooth
       stack resetting and iOS backgrounding — it covers neither.
@@ -2931,12 +3039,82 @@ item** and W3/W4 ride the same piece.
   whether 0x003F fires on our firmware, when, and which byte order the
   monitor prints (CSAFE says byte 0 = MSB, the BLE table says "Lo" — the
   two documents disagree). **The only route to the verification branch.**
-- **W7** — a distance-shaped summary (3x300 m r30, held open 90 s), only
+- **W10** — a distance-shaped summary (3x300 m r30, held open 90 s), only
   if W2 shows 0x0039 arriving at all. Extends the cumulative/rest-exclusive
-  settlement, which rests on one TIME piece.
+  settlement, which rests on one TIME piece. **Renamed from W7** (spec
+  §6, 2026-08-22): two items on the combined walk were both called W7 —
+  this one and Phase LL's, which keeps the name because it stays on the
+  PHONE leg, where its watchdog-false-fire question is actually
+  observable.
+
+**Arming the hold-open instrument (final-review I3 — the card never said
+HOW before this fix):** W2/W3/W4/W10 all need it armed. On the laptop, in
+Chrome DevTools' console, BEFORE the finish (the chip is a one-shot per
+session — arming after the finish is too late):
+
+1. `window.__pm5HoldOpen__.arm()` — confirm it took: the "HOLD-OPEN ARMED"
+   chip appears next to the connection line. If `window.__pm5HoldOpen__`
+   is `undefined`, the build was not run with the fake-monitor gate open
+   (`pnpm dev`, or `VITE_ENABLE_FAKE_MONITOR=1`) — see `transports/index.ts`.
+2. Finish the piece normally. `window.__pm5HoldOpen__.status()` reports
+   `{ state: "holding", msRemaining }` for the next 90 s.
+3. `window.__pm5HoldOpen__.ring()` reads the live trace at any point during
+   the hold — every notification the PM5 sent, plus lifecycle markers
+   (`0x003f subscribe-issued`, and — if the firmware lacks 0x003F —
+   `0x003f subscribe-failed <message>`; a `subscribe-issued` entry with NO
+   later `subscribe-failed` and no `0x003f` notification lines means the
+   subscribe went through cleanly and the firmware genuinely sent nothing,
+   the W4 negative). `hold-start` marks the armed→holding transition;
+   `hold-released`/`hold-expired`/`link-drop-*` entries mark how the
+   window ended.
+4. Once the hold ends (release, the 90 s timer, or the PM5 hanging up
+   first), the ring is stashed into sessionStorage. On the Log screen that
+   follows, **MONITOR LOG · COPY reads this live** (final-review I2) — it
+   will include the held-open window, not just the pre-hold trace.
+5. **Reconnecting for a later item (W10, or a retry after "Try Again")?**
+   `window.__pm5HoldOpen__.release()` first if a hold is still in flight —
+   a stale decorator's own 90 s timer can otherwise hang up the NEW link
+   out from under it (final-review M2).
+
+**Protocol rules the combined walk plan must carry (spec §6, both
+gates):**
+
+- **Priority order: W1 → W2/W3/W4 (one piece) → the phone leg (LL's
+  clause (b) pinned above the cut line within it) → W10.** The budget
+  can run out; it must not run out before W2. Everything below W10 is
+  cuttable without a second thought.
+- **One link at a time:** the laptop disconnects (hold released) before
+  the phone connects. Whether the PM5 accepts two centrals is an open
+  question this ROADMAP contradicts itself on elsewhere ("the PM5 is
+  single-central HAS NO SOURCE" versus a later line asserting
+  single-central as settled) — the walk SETTLES it as a deliberate
+  probe after all other evidence is gathered, never discovers it
+  mid-evidence.
 
 **Not worth a walk:** re-observing 0x0037's work-only semantics (settled
 twice from committed bytes) or the state-9 frame (captured 2026-08-18).
+
+**ANSWERED 2026-08-23 — record: `docs/monitor/sessions/walk-2026-08-23/`,
+one keystone piece with PR #167's hold-open instrument.** W1: firmware
+459.069 (serial 432331249, hw 134) — and empirically inside an emitting
+band. W2: **the summary path EXISTS** — 0x0037/38/39/3A/3F all arrive
+within ~310 ms of the finish; the pre-LL 21.7–107.3 ms hangup was cutting
+inside the burst, so the "0x0039 never fires" corpus fact was OUR deafness,
+not the machine's silence; state 12 (WORKOUTLOGGED) observed for the first
+time; recovery-HR re-fire not observed (no belt worn). W3: date/time
+bit-packing CONFIRMED against the memory screen (8/23/2026, 09:28) and the
+wire carries NO SECONDS — RC-2's tolerance question is now a hard fact.
+W4: **0x003F fires, at the finish, and the byte order is settled — two
+little-endian u32 words** (`27 d8 f3 6e | e1 52 55 5b` = the PM5's own
+`6EF3-D827 5B55-52E1`); the BLE table's "(Lo)" reading wins, CSAFE 0x72's
+"MSB" describes its own framing. W10 answered in substance (the keystone
+IS a distance program; its 0x0039 read work-only 500.0 m exactly).
+Two-centrals: **a connected PM5 stops advertising** — settles the
+single-central contradiction empirically. **RC-1 caveat from the walk
+(F5):** TWD read 0 through 11 s of interval 1 (boundary-accumulator-like)
+but 81 m at 56 s mid-interval on another run — its semantics on time
+intervals are INCONSISTENT across today's captures; RC-1's spec must not
+assume either reading. RC-2/RC-3/the verification branch are UNBLOCKED.
 
 ### Not now, each with its reason
 
@@ -2988,8 +3166,9 @@ sentence:
 
 **Wave 0 — unblocked today, no collisions with anything.** RC-4 (the
 Last Split 10x, which also fixes its mirror in `statusFrames.ts`) and
-RC-6 (band `spm`, drop zero `p` — `seriesRecorder.ts`). Neither file is
-touched by WU or LL. These can go now and need nothing from anyone.
+RC-6 (band `spm` — `seriesRecorder.ts` — **SHIPPED**; the `drop zero p`
+half narrowed off to RC-11). Neither file is touched by WU or LL. These
+can go now and need nothing from anyone.
 
 **Wave 1 — Phase WU. REWRITTEN 2026-08-21 at the PM gate: all three of
 this wave's original reasons were falsified and it now stands on a
@@ -3518,6 +3697,19 @@ scope):
   builder screen neither diff touched). Both passed on re-run; it has
   a pattern now and wants a tracked fix rather than another per-task
   footnote.
+- **Phase BL's `retest.spec.ts` post-test-prompt flake** (found at
+  #167's post-rebase gate, 2026-08-23): under full-suite load the
+  "Set your 2k baseline?" heading misses its 5 s `toBeVisible` window
+  — the page shows Today with the prompt never rendered. Two runs
+  failed differently (`:31`+`:95`, then `:95` alone), 4/4 green in
+  isolation; the error-context artifact is the capture, not a re-run
+  disposal. Owner: Phase BL (the flow is theirs; #167's diff has no
+  file in the path).
+- **`log-monitor`/`log-monitor-landscape` captures are scroll-unstable**:
+  `scrollTraceChartIntoFrame` lands differently run to run, so these
+  two PNGs churn on every screenshots pass (#167 saw both directions
+  in one day). Until the scroll is pinned, treat a diff in these two
+  as noise unless the chart CONTENT changed.
 
 **Exit:** James's erg look, on his iPhone against a real PM5, one
 item at a time —
