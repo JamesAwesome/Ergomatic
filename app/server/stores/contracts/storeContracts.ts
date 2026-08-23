@@ -1450,6 +1450,78 @@ export function describeStoreContracts(
         expect(otherDistance.deltaSeconds).toBeNull();
       });
 
+      // Phase BL PR B (baseline-onboarding spec rev 2, "Recording
+      // (decoupled)"): the client fires the record call once per saved
+      // designated-test session, keyed by the log row it belongs to. The
+      // store has no other dedupe and computes deltaSeconds off the
+      // previous same-distance row, so WITHOUT this key a double-fire (a
+      // client retry after a timeout whose first request actually landed,
+      // a remount re-firing) writes a second row whose delta is 0 — a
+      // fabricated "no change since last test" data point in the app's
+      // most load-bearing series.
+      it("a second append carrying the same sessionLogId returns the original row — never a delta-0 duplicate", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        const { id: logId } = await stores.logs.create(userId, logInput());
+
+        const first = await stores.testHistory.append(userId, {
+          distance: "2k" as TestDistance,
+          splitSeconds: 118,
+          sessionLogId: logId,
+        });
+        const second = await stores.testHistory.append(userId, {
+          distance: "2k" as TestDistance,
+          splitSeconds: 118,
+          sessionLogId: logId,
+        });
+
+        expect(second.id).toBe(first.id);
+        expect(second.deltaSeconds).toBeNull();
+        expect(await stores.testHistory.list(userId)).toHaveLength(1);
+      });
+
+      it("appends keyed to two different logs still chain deltas in sequence", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        const { id: logA } = await stores.logs.create(userId, logInput());
+        const { id: logB } = await stores.logs.create(userId, logInput());
+
+        const first = await stores.testHistory.append(userId, {
+          distance: "6k" as TestDistance,
+          splitSeconds: 130,
+          sessionLogId: logA,
+        });
+        expect(first.deltaSeconds).toBeNull();
+
+        const second = await stores.testHistory.append(userId, {
+          distance: "6k" as TestDistance,
+          splitSeconds: 125,
+          sessionLogId: logB,
+        });
+        expect(second.deltaSeconds).toBe(-5);
+        expect(await stores.testHistory.list(userId)).toHaveLength(2);
+      });
+
+      // Documents the boundary, not an aspiration: dedupe requires the
+      // key. The legacy coupled path (PUT /api/baselines + isTestResult,
+      // zero client senders) appends keyless and keeps its historical
+      // behaviour — including that a repeated identical append writes a
+      // delta-0 row. Only the keyed path is idempotent.
+      it("appends WITHOUT a sessionLogId never dedupe (the legacy keyless path keeps its behaviour)", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        await stores.testHistory.append(userId, {
+          distance: "2k" as TestDistance,
+          splitSeconds: 118,
+        });
+        const second = await stores.testHistory.append(userId, {
+          distance: "2k" as TestDistance,
+          splitSeconds: 118,
+        });
+        expect(second.deltaSeconds).toBe(0);
+        expect(await stores.testHistory.list(userId)).toHaveLength(2);
+      });
+
       it("list is scoped per user", async () => {
         const stores = await makeStores();
         const userA = await stores.makeUser();

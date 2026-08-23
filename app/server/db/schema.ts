@@ -303,6 +303,21 @@ export const testHistory = pgTable(
     loggedAt: timestamp("logged_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    // Phase BL PR B (baseline-onboarding spec rev 2, "Recording
+    // (decoupled)"): the saved session log this test result was measured
+    // in — the IDEMPOTENCY KEY for POST /api/test-history's client-fired
+    // record call. UNIQUE (Postgres NULLS DISTINCT, so the legacy keyless
+    // rows — every row written before migration 0014, plus anything the
+    // zero-sender isTestResult path might ever append — coexist freely);
+    // a double-fire's second insert conflicts here instead of writing a
+    // delta-0 duplicate. ON DELETE SET NULL, not CASCADE: test history is
+    // its own record of what the rower measured, and deleting the log row
+    // (which un-counts plan progress) must not silently rewrite the test
+    // trend 8B will render. Nullable and additive — no backfill; a
+    // pre-0014 row simply has no link.
+    sessionLogId: uuid("session_log_id")
+      .references(() => sessionLogs.id, { onDelete: "set null" })
+      .unique(),
   },
   (t) => [index("test_history_user_id_idx").on(t.userId)],
 );

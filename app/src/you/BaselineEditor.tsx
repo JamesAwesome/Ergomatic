@@ -212,30 +212,50 @@ function ReadyEditor({
       // a real value — a harmless value-level no-op then, a lie now,
       // because the server stamps any plain value write `manual` and
       // would flip that field's stored tested/derived source. Untouched
-      // (draft === server value, guaranteed: every mutator sets `touched`
-      // in the same call that changes `draft`) now means absent from the
-      // body entirely.
+      // means absent from the body entirely.
       //
-      // Each touched field carries its truthful source: `derived` iff it
+      // Tightened AGAIN by Phase BL PR B — THE ORIGIN PREDICATE (James's
+      // ruling, 2026-08-22: provenance is ORIGIN, not act — a source
+      // describes where the NUMBER came from, so an unchanged value keeps
+      // its stamp). PR A's cut still resent a TOUCHED field whose value
+      // ended exactly where the server already had it (the away-and-back
+      // nudge), stamping `manual` over a stored tested/derived source
+      // with zero visible ConfirmLines. A field now rides the body iff
+      // the rower touched it AND its value actually differs from the
+      // SERVER's — the raw nullable `baselines` prop, never `committed`
+      // (a server-null side's committed is a fabricated display seed, so
+      // landing back on the seed is still a real null-to-number change
+      // that must save). An Apply where nothing actually changed makes
+      // no network call at all: it just settles the confirm card.
+      //
+      // Each riding field carries its truthful source: `derived` iff it
       // is the offer's own field still sitting at EXACTLY the offer's
       // value — the same predicate DeriveSlot uses to show its
       // "ESTIMATED" line, so what the rower sees and what gets stored
-      // agree — and `manual` for every other act (typed, nudged, or
-      // nudged away from an accepted estimate).
+      // agree (a value that changed by definition, since the offer only
+      // exists for a server-null side) — and `manual` for every other
+      // real change.
       const sourceFor = (which: "k2" | "k6"): "manual" | "derived" =>
         offer?.which === which && state.draft[which] === offer.value
           ? "derived"
           : "manual";
+      const changed = (which: "k2" | "k6"): boolean => {
+        const server =
+          which === "k2" ? baselines.k2Seconds : baselines.k6Seconds;
+        return server === null || state.draft[which] !== server;
+      };
       const patch: BaselinesPatch = {};
-      if (state.touched.k2) {
+      if (state.touched.k2 && changed("k2")) {
         patch.k2Seconds = state.draft.k2;
         patch.k2Source = sourceFor("k2");
       }
-      if (state.touched.k6) {
+      if (state.touched.k6 && changed("k6")) {
         patch.k6Seconds = state.draft.k6;
         patch.k6Source = sourceFor("k6");
       }
-      await save(patch);
+      if (Object.keys(patch).length > 0) {
+        await save(patch);
+      }
       setState((s) => commit(s));
     } catch {
       setError("Couldn't save your baselines. Try again.");

@@ -631,6 +631,7 @@ function makeFakeTestHistoryStore(): TestHistoryStore {
       distance: "2k" | "6k";
       splitSeconds: number;
       deltaSeconds: number | null;
+      sessionLogId: string | null;
     }>
   >();
   return {
@@ -639,9 +640,24 @@ function makeFakeTestHistoryStore(): TestHistoryStore {
     },
     async append(
       userId: string,
-      input: { distance: "2k" | "6k"; splitSeconds: number },
+      input: {
+        distance: "2k" | "6k";
+        splitSeconds: number;
+        sessionLogId?: string;
+      },
     ) {
       const rows = byUser.get(userId) ?? [];
+      // Phase BL PR B: mirrors the real store's sessionLogId idempotency
+      // (stores/testHistory.ts — pre-check plus the column's UNIQUE
+      // constraint): a keyed repeat returns the ORIGINAL row; keyless
+      // appends keep the historical no-dedupe behaviour. The contract
+      // suite pins both arms against both backends.
+      if (input.sessionLogId !== undefined) {
+        const existing = rows.find(
+          (r) => r.sessionLogId === input.sessionLogId,
+        );
+        if (existing) return existing;
+      }
       const previous = [...rows]
         .reverse()
         .find((r) => r.distance === input.distance);
@@ -652,6 +668,7 @@ function makeFakeTestHistoryStore(): TestHistoryStore {
         deltaSeconds: previous
           ? input.splitSeconds - previous.splitSeconds
           : null,
+        sessionLogId: input.sessionLogId ?? null,
       };
       rows.push(row);
       byUser.set(userId, rows);

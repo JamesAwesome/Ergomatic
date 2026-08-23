@@ -1,0 +1,3 @@
+ALTER TABLE "test_history" ADD COLUMN "session_log_id" uuid;--> statement-breakpoint
+ALTER TABLE "test_history" ADD CONSTRAINT "test_history_session_log_id_session_logs_id_fk" FOREIGN KEY ("session_log_id") REFERENCES "public"."session_logs"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "test_history" ADD CONSTRAINT "test_history_session_log_id_unique" UNIQUE("session_log_id");

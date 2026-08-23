@@ -1490,8 +1490,20 @@ sequencing ruling with teeth — LL runs in a parallel session).
 **PR A LANDED via #164** (the provenance shape: `k2Source`/`k6Source`
 pgEnum, migration 0013 regenerated after LL's 0012 merged mid-flight;
 editor writes `manual` typed / `derived` accepted-offer; untouched
-fields no longer resend). PRs B and C still owe the other two enum
-values their writers (`tested`, `estimated`). **Three durable facts
+fields no longer resend). **PR B LANDED via #165** — the `tested` and
+`derived` writers (the post-save prompt and its counterpart offer), the
+recording decouple (`POST /api/test-history`, decline records, keyed
+idempotent via migration 0014's `test_history.session_log_id` — an
+UNPREDICTED stored shape that took the full triad treatment including
+its own PM final-PR gate), the You re-test shortcut, and the ORIGIN
+predicate in the editor. James's R1 ruling (2026-08-22): the phone-timer door RECORDS too — losing
+a genuine unconnected test is worse than carrying a removable bogus row;
+the remove/void verb gates 8B's list (binding, in 8B's own bullet).
+**The phase now stands AT ITS STOP-POINT:**
+doors, questionnaire + 16-cell table, and Reset baseline setup are
+unstarted as PR C — the phase may close and release on A+B if the
+table cannot meet its bounded criteria. `estimated` remains the one
+enum value with no writer until PR C. **Three durable facts
 every later consumer of provenance must know (PR #164's gate):**
 (1) VERSION SKEW — a pre-#164 client's Apply resends untouched fields
 as plain writes, demoting a newer build's `derived`/`tested` source on
@@ -1512,8 +1524,9 @@ first. **The PR-C-waits-on-LL's-spec condition is DISCHARGED** —
 **Release correction: BL's tag is v0.18.0** (LL's notes PR claimed
 v0.17.0 first); PR A itself owes no note (nothing tester-visible —
 that accounting line is written here in advance per RF15). James checks all 16 table
-cells, printed in PR C's body. TRIAD: PM final-PR gates on A (and C if
-the table ships).
+cells, printed in PR C's body. TRIAD: PM final-PR gates ran on A (#164)
+and B (#165, for 0014's unpredicted stored shape); C gets one too if
+the table ships.
 
 **Goal:** a no-baseline account reaches a working app through whichever
 door suits them, and a rowed test finally gets RECORDED instead of
@@ -1532,13 +1545,27 @@ hand-typed.
       cardio), NO age band (standing PII-minimization ruling), 16-cell
       static lookup in `domain/` with per-row source citations from the
       named C2-rankings research task. **M**
-- [ ] **The post-test prompt**: a completed test session offers its own
-      result as the new baseline (`tested`), sends `isTestResult` — the
-      first client producer for `test_history` — and never blocks or
-      auto-writes. Closes the loop 8A shipped open. **M**
-- [ ] **The You-screen re-test shortcut** (James, 2026-08-22): row the
-      6k / race the 2k next to the baseline fields on You, routing to
-      the same designated tests and landing in the same prompt. **S**
+- [x] **The post-test prompt** (PR B): a completed test session offers
+      its own result as the new baseline (`tested`) post-save, and never
+      blocks or auto-writes; accept can then offer the derived
+      counterpart (`derived`). Closes the loop 8A shipped open. The
+      "sends `isTestResult`" wording this bullet opened with was
+      superseded by rev 2's decouple ruling before any code existed:
+      recording rides the sibling `POST /api/test-history` (fired on the
+      SAVE, keyed to the log id, idempotent via `test_history.
+      session_log_id` — migration 0014), so decline records too, and
+      `isTestResult` still has zero client senders. New with PR B, both
+      binding: the COMPLETENESS guard (monitor `endedBy === "finished"`
+      only; timer `isComplete`; split inside the storable 60..240 band)
+      and the ORIGIN predicate in the You editor (a touched field ships
+      only when its value actually changed — an away-and-back nudge no
+      longer demotes a stored source; an all-unchanged Apply makes no
+      wire call). **M**
+- [x] **The You-screen re-test shortcut** (James, 2026-08-22; PR B): row
+      the 6k / race the 2k next to the baseline fields on You, routing to
+      the same designated GLOBAL tests through `useStartWorkout`'s full
+      guard set and landing in the same prompt. DEVIATIONS row 121 is the
+      stated design (no handoff mock exists). **S**
 - [ ] **Reset baseline setup** (James, 2026-08-22, at the gate): a
       staged-confirm action on You clearing both numbers and both
       sources — the doors become re-enterable for ANY account, demos
@@ -1565,7 +1592,7 @@ baseline carries a source and no screen shows it.
       briefly carried described work that no longer exists — struck same day.
 - [x] ~~Plan management: preset selection (2000 m sprint / 5–6 k head race), reset-to-session-1~~ — **delivered early in Phase 6A** (`/plan`'s preset cards, Reset, and Switch), since Today needed an active plan before this phase's own turn came up
 - [ ] ~~Progress screen: 2k/6k test trend bars (longer = slower, delta callout), minutes/week stacked by type, type mix, last-30-days~~ — **superseded by Phase 6J**: these three chart groups relocate onto You (Trend folded in, per the 2026-08-07 News tab handoff) instead of shipping as their own screen; this bullet stays struck-through rather than deleted so the supersession has a record
-- [ ] Test history list on **You** — the CONSUMER for the `test_history` rows Phase BL's prompt produces (BL creates the producer; until this ships the history has rows nobody can see, and release notes must not imply otherwise). **The prompt half of this bullet MOVED to Phase BL** (split at BL's phase-open gate, 2026-08-22 — one home per body of work; the old "staged-confirm flow" mechanism wording here is superseded by BL's post-save prompt). Identity note stands: a test session is identified by title (`ONBOARDING_TITLES`) or by prescription (`plan_index ∈ {6,34,62}`); this list's design pass says which it keys on.
+- [ ] Test history list on **You** — the CONSUMER for the `test_history` rows Phase BL's prompt produces (BL creates the producer; until this ships the history has rows nobody can see, and release notes must not imply otherwise). **The prompt half of this bullet MOVED to Phase BL** (split at BL's phase-open gate, 2026-08-22 — one home per body of work; the old "staged-confirm flow" mechanism wording here is superseded by BL's post-save prompt). Identity note stands: a test session is identified by title (`ONBOARDING_TITLES`) or by prescription (`plan_index ∈ {6,34,62}`); this list's design pass says which it keys on. **Named input from PR B's review (2026-08-22): the table is rower-APPEND-ONLY by composition** — decline records (ruling), rows outlive log deletion (FK SET NULL, deliberate), and no delete API exists — so a test the rower considers invalid is permanent, anchors the next delta, and this list renders it with no removal path. **BINDING (PM final-PR gate on #165, 2026-08-22): the list does NOT ship without a remove/void answer, decided at its design pass** — the same precedent PR #121's final-PR gate set for the stored heroes (pm-ledger, 2026-08-18: a spec that adds stored numbers answers "how does a rower correct or remove this?" BEFORE it ships, not after). "It stays append-only, and here is why" is an acceptable answer; silence is not. **Second input: the semantic cross-check** — POST /api/test-history is ownership-checked but takes client-asserted distance/split; when history becomes visible, assert the linked log's own workoutTitle/avgSplitSeconds agree (makes the FK semantic, not merely referential).
 
 **Exit:** Logged sessions appear on the calendar and in every chart; a logged 2k test can update the 2k baseline through the staged-confirm flow.
 

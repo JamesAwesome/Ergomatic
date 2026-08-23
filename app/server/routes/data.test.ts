@@ -128,6 +128,7 @@ describe("data router: auth guard", () => {
     ["get", "/api/prefs"],
     ["put", "/api/prefs"],
     ["get", "/api/test-history"],
+    ["post", "/api/test-history"],
     ["get", "/api/today"],
   ];
 
@@ -297,6 +298,130 @@ describe("GET/PUT /api/baselines", () => {
       const get = await asA(request(app).get("/api/baselines"));
       expect(get.body).toStrictEqual({ k2Seconds: 118, k6Seconds: null });
     });
+  });
+});
+
+// Phase BL PR B (baseline-onboarding spec rev 2, "Recording (decoupled)",
+// James's ruling): every designated-test session with a measurable result
+// records to test_history — accept OR decline — so recording must be
+// reachable WITHOUT any baseline write. This sibling endpoint is that
+// decouple: it appends history keyed to the saved log row (the idempotency
+// key) and never touches baselines. The old coupled path (isTestResult on
+// PUT /api/baselines, zero client senders) is untouched above.
+describe("POST /api/test-history (Phase BL PR B: the recording decouple)", () => {
+  const validLogBody = () => ({
+    workoutId: null,
+    workoutTitle: "2K Test",
+    workoutType: "AN",
+    held: null,
+    pain: null,
+    notes: null,
+    steps: [
+      {
+        label: "2000m @ MAX",
+        actualSplit: 118,
+        actualSource: "stopwatch",
+      },
+    ],
+  });
+
+  async function createLog(app: ReturnType<typeof appFor>): Promise<string> {
+    const created = await asA(request(app).post("/api/logs")).send(
+      validLogBody(),
+    );
+    expect(created.status).toBe(201);
+    return created.body.id as string;
+  }
+
+  it("records a test result without touching baselines at all — the decouple itself", async () => {
+    const stores = makeStores();
+    const app = appFor(stores);
+    const logId = await createLog(app);
+
+    const res = await asA(request(app).post("/api/test-history")).send({
+      distance: "2k",
+      splitSeconds: 118.4,
+      logId,
+    });
+    expect(res.status).toBe(201);
+    expect(typeof res.body.id).toBe("string");
+
+    const history = await stores.testHistory.list(userA.id);
+    expect(history).toHaveLength(1);
+    expect(history[0]).toMatchObject({
+      distance: "2k",
+      splitSeconds: 118.4,
+      deltaSeconds: null,
+    });
+    // The whole point: no baseline write happened.
+    expect(await stores.baselines.get(userA.id)).toBeNull();
+  });
+
+  it("a double-fire with the same logId keeps ONE row and returns the same id — never a delta-0 duplicate", async () => {
+    const stores = makeStores();
+    const app = appFor(stores);
+    const logId = await createLog(app);
+    const body = { distance: "2k", splitSeconds: 118.4, logId };
+
+    const first = await asA(request(app).post("/api/test-history")).send(body);
+    const second = await asA(request(app).post("/api/test-history")).send(body);
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+    expect(second.body.id).toBe(first.body.id);
+
+    const history = await stores.testHistory.list(userA.id);
+    expect(history).toHaveLength(1);
+    expect(history[0]!.deltaSeconds).toBeNull();
+  });
+
+  it("rejects a distance outside the enum, naming the field", async () => {
+    const app = appFor(makeStores());
+    const res = await asA(request(app).post("/api/test-history")).send({
+      distance: "5k",
+      splitSeconds: 118,
+      logId: "3b241101-e2bb-4255-8caf-4136c566a962",
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.field).toBe("distance");
+  });
+
+  it("rejects a splitSeconds outside the baseline band (60..240), naming the field", async () => {
+    const app = appFor(makeStores());
+    for (const splitSeconds of [59.9, 240.1, "118"]) {
+      const res = await asA(request(app).post("/api/test-history")).send({
+        distance: "2k",
+        splitSeconds,
+        logId: "3b241101-e2bb-4255-8caf-4136c566a962",
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe("splitSeconds");
+    }
+  });
+
+  it("rejects a malformed logId, naming the field", async () => {
+    const app = appFor(makeStores());
+    const res = await asA(request(app).post("/api/test-history")).send({
+      distance: "2k",
+      splitSeconds: 118,
+      logId: "not-a-uuid",
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.field).toBe("logId");
+  });
+
+  it("rejects a logId belonging to another user — ownership is checked, not just existence", async () => {
+    const stores = makeStores();
+    const app = appFor(stores);
+    const logId = await createLog(app); // created by user A
+
+    const res = await asB(request(app).post("/api/test-history")).send({
+      distance: "2k",
+      splitSeconds: 118,
+      logId,
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.field).toBe("logId");
+    expect(await stores.testHistory.list(userB.id)).toHaveLength(0);
   });
 });
 

@@ -1281,10 +1281,37 @@ test("you", async ({ page }) => {
   });
   await page.goto("/you");
   // Same "LOADING…" race as /library — wait for the baseline card's real
-  // content before capturing.
+  // content before capturing. Phase BL PR B: the re-test shortcut below
+  // the card rides the separate workouts fetch, so wait for it too or
+  // the capture races it out of frame.
   await page.locator(".baseline-value").first().waitFor();
+  await page.getByRole("button", { name: "RACE THE 2K" }).waitFor();
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "you.png"),
+  });
+});
+
+// Phase BL PR B — the post-test prompt, reached the only way it can be:
+// through a REAL completed 2K Test (the You shortcut's own start, the
+// timer, a realistic 8-minute clock fast-forward, the save). Captured at
+// its primary stage: the measured split offered as the 2k baseline.
+test("post-test-prompt", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-post-test-prompt@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await page.goto("/you");
+  await page.getByRole("button", { name: "RACE THE 2K" }).click();
+  await page.getByRole("button", { name: "SKIP ›" }).click();
+  await expect(page).toHaveURL(/\/session\/run$/);
+  await page.clock.install();
+  await page.clock.fastForward("08:00");
+  await page.getByRole("button", { name: "NEXT →" }).click();
+  await page.getByRole("button", { name: "Finish session" }).click();
+  await page.getByRole("button", { name: "Save without logging" }).click();
+  await page.getByRole("heading", { name: "Set your 2k baseline?" }).waitFor();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "post-test-prompt.png"),
   });
 });
 
