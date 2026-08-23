@@ -309,8 +309,9 @@ export default function Countdown() {
     // + caption, the needsBaselines guard relocated from ConfirmTargets'
     // old footer), so the only way to land here with this true is a
     // direct/deep navigation to /session/countdown that skipped that guard
-    // entirely. Bouncing to /today (where BaselineCard — the no-baselines
-    // door — lives) rather than building a run against a dummy pair, same
+    // entirely. Bouncing to /today (where the three-door onboarding card
+    // — the no-baselines entry — lives) rather than building a run against
+    // a dummy pair, same
     // as the shim's own "no draft" arm. An effort-only draft never reaches
     // this branch, even with `resolvedBaselines === null` — see the build
     // effect's own identical gate above, and `blocksWithoutBaselines`'s own

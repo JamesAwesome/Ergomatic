@@ -12,7 +12,9 @@ import FromTheLog from "../log/FromTheLog";
 import HistoryList from "../log/HistoryList";
 import Library from "../library/Library";
 import News from "../news/News";
+import KnowBaseline from "../onboarding/KnowBaseline";
 import Recommend from "../onboarding/Recommend";
+import RowToFind from "../onboarding/RowToFind";
 import Reader from "../news/Reader";
 import Releases from "../news/Releases";
 import Plan from "../plan/Plan";
@@ -179,9 +181,11 @@ export default function AppRoutes({
         <Route path="/news/releases" element={<Releases />} />
         <Route path="/news/:slug" element={<Reader />} />
         <Route path="/plan" element={<Plan />} />
-        {/* Phase BL PR C — door 1 (Recommend my baseline). Doors 2 and 3
-            register beside it as they land. */}
+        {/* Phase BL PR C — the three onboarding doors (Today's DoorsCard
+            links here; the /onboarding prefix hides the tab bar above). */}
         <Route path="/onboarding/recommend" element={<Recommend />} />
+        <Route path="/onboarding/know" element={<KnowBaseline />} />
+        <Route path="/onboarding/row" element={<RowToFind />} />
         <Route path="/session/confirm" element={<ConfirmRedirect />} />
         <Route path="/session/countdown" element={<Countdown />} />
         <Route path="/session/run" element={<Timer />} />

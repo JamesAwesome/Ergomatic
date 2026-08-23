@@ -58,8 +58,8 @@ const TAILWIND = libraryEntry("Pressure Ridge", "w-tailwind", 15);
 
 // Phase 6I: the two designated onboarding workouts, real seed shape
 // (server/seed/library/onboarding.ts) rather than a hand-built minimum —
-// BaselineCard's own lookup (Today.tsx) keys off the exact title constants
-// these carry.
+// the suggestion-pool exclusion (Today.tsx) keys off the exact title
+// constants these carry.
 function onboardingLibraryEntry(title: string, id: string): LibraryWorkout {
   const w = ONBOARDING_LIBRARY_WORKOUTS.find((s) => s.title === title);
   if (!w) throw new Error(`missing onboarding fixture: ${title}`);
@@ -103,8 +103,10 @@ const STALE_FRONT = libraryEntry("Barometric Low", "w-stalefront", 25);
 
 const BASELINES = { k2Seconds: 112, k6Seconds: 122 };
 const NO_BASELINES = { k2Seconds: null, k6Seconds: null };
-// Phase 6I: one baseline set, one missing — the "exactly one null" branch
-// (BaselineCard offers only the missing distance, no toggle).
+// One baseline set, one missing — an incomplete PAIR, which since Phase
+// BL PR C renders the same three-door card the both-null state does (the
+// doors are the superset re-entry; the old BaselineCard's only-missing-
+// distance branch died with it).
 const ONLY_K6_BASELINE = { k2Seconds: null, k6Seconds: 122 };
 // `startHereDismissed: true` is this file's own default (NOT the server's
 // real default, which is `false` — server/stores/preferences.ts) so the
@@ -385,21 +387,20 @@ describe("Today (plan mode)", () => {
     expect(screen.getByText("10′")).toBeVisible();
   });
 
-  // Phase 6I: baselines unset used to still render the suggestion card
-  // (a bare-dash duration, per the old test this replaces) — the design
-  // spec's no-baseline card now takes over that state entirely instead.
-  // Full branch coverage (both-null/one-null/plan-apparatus-hiding/
-  // exclusion-from-suggestion) lives in the dedicated describe block below;
-  // this just updates the pre-existing "baselines unset" expectation so it
-  // no longer asserts the retired behavior.
-  it("shows the no-baseline card, not the old suggestion card, when baselines are unset", async () => {
+  // Phase 6I established that baselines-unset never renders the suggestion
+  // card (a bare-dash duration, per the older test this replaced); Phase
+  // BL PR C swaps the single-offer BaselineCard for the three-door card in
+  // that same slot. Full branch coverage (both-null/partial/plan-apparatus-
+  // hiding/exclusion-from-suggestion) lives in the dedicated describe
+  // block below.
+  it("shows the three-door card, not the suggestion card, when baselines are unset", async () => {
     mockReady({
       baselines: NO_BASELINES,
       workouts: [ZEPHYR, ISOBAR, WARM_FRONT, TAILWIND, TEST_6K, TEST_2K],
     });
     await renderToday();
     expect(
-      screen.getByRole("heading", { name: "Your first 6k" }),
+      screen.getByRole("heading", { name: "How do you want to start?" }),
     ).toBeVisible();
     expect(
       screen.queryByRole("heading", { name: "Stationary Front" }),
@@ -2730,26 +2731,28 @@ describe("Today (Phase 6I: START HERE + the no-baseline card)", () => {
     });
   });
 
-  it("both baselines missing: shows the no-baseline card (6k default) and hides the ENTIRE plan/suggestion apparatus", async () => {
+  it("both baselines missing: shows the three-door card and hides the ENTIRE plan/suggestion apparatus", async () => {
     mockReady({
       baselines: NO_BASELINES,
       workouts: [ZEPHYR, ISOBAR, WARM_FRONT, TAILWIND, TEST_6K, TEST_2K],
     });
     await renderToday();
 
+    expect(await screen.findByText("SET UP YOUR BASELINE")).toBeVisible();
     expect(
-      await screen.findByText("SUGGESTED · SETS YOUR BASELINE"),
+      screen.getByRole("heading", { name: "How do you want to start?" }),
     ).toBeVisible();
-    // James's ruling (2026-08-22): the card's heading is its own copy
-    // ("Your first 6k"), not the instrument title.
+    // The three doors, outcome-framed (James's ruling), each a Link into
+    // its own flow — the card itself starts nothing.
     expect(
-      screen.getByRole("heading", { name: "Your first 6k" }),
-    ).toBeVisible();
-    expect(screen.getByText("ABOUT 25 MIN")).toBeVisible();
+      screen.getByRole("link", { name: /Recommend my baseline/ }),
+    ).toHaveAttribute("href", "/onboarding/recommend");
     expect(
-      screen.getByText("6K BASELINE · NOT SET · ROW IT HOW IT FEELS"),
-    ).toBeVisible();
-    expect(screen.getByRole("button", { name: "2K INSTEAD" })).toBeVisible();
+      screen.getByRole("link", { name: /I know my baseline/ }),
+    ).toHaveAttribute("href", "/onboarding/know");
+    expect(
+      screen.getByRole("link", { name: /Row to find my baseline/ }),
+    ).toHaveAttribute("href", "/onboarding/row");
 
     // Plan apparatus, gone entirely — not merely the suggestion card.
     expect(screen.queryByText(/SESSION \d+ OF \d+/)).not.toBeInTheDocument();
@@ -2767,10 +2770,10 @@ describe("Today (Phase 6I: START HERE + the no-baseline card)", () => {
   it("Task 5 minor (fold): freestyle mode (no plan) with both baselines missing ALSO hides the freestyle line and its /plan link, not just the plan-mode apparatus", async () => {
     // The existing "hides the ENTIRE plan/suggestion apparatus" test above
     // exercises this file's DEFAULT plan fixture (an active plan) — it never
-    // covered the OTHER branch `!needsBaselineCard` gates (Today.tsx's own
+    // covered the OTHER branch `!needsDoors` gates (Today.tsx's own
     // freestyle variant, `.today-plan-line-freestyle`, "shows a freestyle
     // line with a link to /plan" per the describe block above). Both
-    // branches share the identical `{!needsBaselineCard && (...)}` guard, so
+    // branches share the identical `{!needsDoors && (...)}` guard, so
     // this pins that the freestyle side of it is ALSO gone, not merely
     // untested-but-coincidentally-fine.
     mockReady({
@@ -2780,9 +2783,7 @@ describe("Today (Phase 6I: START HERE + the no-baseline card)", () => {
     });
     await renderToday();
 
-    expect(
-      await screen.findByText("SUGGESTED · SETS YOUR BASELINE"),
-    ).toBeVisible();
+    expect(await screen.findByText("SET UP YOUR BASELINE")).toBeVisible();
 
     // The freestyle line and its own /plan link — gone entirely, same as
     // the plan-mode apparatus in the sibling test.
@@ -2801,23 +2802,30 @@ describe("Today (Phase 6I: START HERE + the no-baseline card)", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("only the 2k missing: the card offers SETS YOUR 2K BASELINE only, no toggle", async () => {
+  it("a partial pair (only the 2k missing) renders the SAME three-door card — the doors are the superset re-entry", async () => {
+    // Phase BL PR C: the doors card shows whenever the PAIR is incomplete
+    // (spec ruling — a superset of the old card's states), and all three
+    // doors render; door 1's own recommendation screen is what protects
+    // the existing number (M8, Recommend.test.tsx), not a hidden door.
     mockReady({
       baselines: ONLY_K6_BASELINE,
       workouts: [ZEPHYR, ISOBAR, WARM_FRONT, TAILWIND, TEST_6K, TEST_2K],
     });
     await renderToday();
 
+    expect(await screen.findByText("SET UP YOUR BASELINE")).toBeVisible();
     expect(
-      await screen.findByRole("heading", { name: "Your first 2k" }),
+      screen.getByRole("link", { name: /Recommend my baseline/ }),
     ).toBeVisible();
-    expect(screen.getByText("ABOUT 8 MIN")).toBeVisible();
     expect(
-      screen.queryByRole("button", { name: /INSTEAD/ }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("link", { name: /I know my baseline/ }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: /Row to find my baseline/ }),
+    ).toBeVisible();
   });
 
-  it("both baselines set: normal Today returns — plan apparatus back, no baseline card", async () => {
+  it("both baselines set: normal Today returns — plan apparatus back, no doors card", async () => {
     mockReady({
       workouts: [ZEPHYR, ISOBAR, WARM_FRONT, TAILWIND, TEST_6K, TEST_2K],
     });
@@ -2825,9 +2833,7 @@ describe("Today (Phase 6I: START HERE + the no-baseline card)", () => {
 
     expect(await screen.findByText("SESSION 12 OF 84 · AT")).toBeVisible();
     expect(screen.getByRole("button", { name: "FILTER ⌄" })).toBeVisible();
-    expect(
-      screen.queryByText("SUGGESTED · SETS YOUR BASELINE"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText("SET UP YOUR BASELINE")).not.toBeInTheDocument();
   });
 
   it("a veteran with real baselines is never SUGGESTED a designated onboarding workout, even shuffled through the whole pool", async () => {
@@ -2888,40 +2894,6 @@ describe("Today (Phase 6I: START HERE + the no-baseline card)", () => {
     expect(shuffle).not.toBeDisabled();
     await fireEvent.click(shuffle);
     expect(screen.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
-  });
-
-  // Final-review fix: the no-baseline card's own k6/k2 lookups (Today.tsx,
-  // looked up from the UNFILTERED library) must also prefer the GLOBAL row
-  // when a title collision exists, not just whichever `.find` hits first —
-  // the card's Start button builds a session draft keyed off that
-  // specific workout's id, so a wrong pick would run the rower's own
-  // custom workout under the "SETS YOUR BASELINE" banner.
-  it('the no-baseline card targets the GLOBAL "6K Test" even when a custom one with the same title sorts first', async () => {
-    mockReady({
-      baselines: NO_BASELINES,
-      // The custom collision listed BEFORE the global row — proves the
-      // card doesn't just take the FIRST title match.
-      workouts: [
-        CUSTOM_TEST_6K,
-        ZEPHYR,
-        ISOBAR,
-        WARM_FRONT,
-        TAILWIND,
-        TEST_6K,
-        TEST_2K,
-      ],
-    });
-    await renderToday();
-
-    expect(
-      await screen.findByRole("heading", { name: "Your first 6k" }),
-    ).toBeVisible();
-    await userEvent.click(screen.getByRole("button", { name: "Start" }));
-
-    const draft = JSON.parse(localStorage.getItem(DRAFT_KEY)!) as {
-      workoutId: string;
-    };
-    expect(draft.workoutId).toBe(TEST_6K.id);
   });
 });
 

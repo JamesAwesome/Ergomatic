@@ -190,8 +190,9 @@ function WorkoutDetailView({
   // SAME error slot below because it's the identical message class, never
   // both truthy at once in practice (one screen, one attempt at a time).
   const [rowInsteadError, setRowInsteadError] = useState<string | null>(null);
-  // Phase 6I Task 4 — extracted into `session/useStartWorkout.ts` so a second
-  // caller (the no-baseline `BaselineCard`, per the design spec) gets the
+  // Phase 6I Task 4 — extracted into `session/useStartWorkout.ts` so any
+  // second caller (Phase 6I's BaselineCard then; nothing today — Phase BL
+  // PR C's doors card is pure navigation) gets the
   // SAME unlogged-run staged confirm, live-MonitorRun confirm, draft
   // build/save, and cross-clears, rather than a duplicated (or skipped) copy
   // that would reintroduce the F5 data-loss class. The hook's own doc

@@ -232,9 +232,10 @@ button:disabled {
    Log this session, and every other screen's own single L1 action).
    Fast-follow spec §4: WorkoutDetail's own primary is no longer this class
    — Connect (`.button-connect`, immediately below) took the L1 geometry
-   and the screen's single-primary slot; Start Timer moved to L2. BaselineCard
-   keeps a genuine `.button-l1` Start (spec §3 entry 3: its own baseline
-   workout is effort-only by construction, no Connect door, no guard). */
+   and the screen's single-primary slot; Start Timer moved to L2. The
+   onboarding door flows (Phase BL PR C, `.onb-*` below) use it for their
+   lead actions, including RowToFind's Start — an L1-styled Link that only
+   navigates to the test's detail screen, where the real guards live. */
 .button-l1 {
   min-height: 56px;
   background: var(--accent);
@@ -8077,69 +8078,6 @@ section:not(.news-pinned) .news-row:last-of-type {
   color: var(--ink-3);
 }
 
-/* Phase 6I — the no-baseline SETS YOUR BASELINE card (BaselineCard.tsx,
-   design spec screen 2b). Same card shell as `.today-card` (surface fill,
-   ink border, 2px radius) but its own class: unlike `.today-card` this is
-   never itself a `<Link>` (its children carry their own controls —
-   START/2K INSTEAD — per the spec, this card is on Today, where START
-   lives). */
-.baselinecard {
-  display: flex;
-  flex-direction: column;
-  gap: 13px;
-  background: var(--surface);
-  border: 1px solid var(--ink);
-  border-radius: var(--radius);
-  padding: 14px 14px 16px;
-  margin-bottom: 16px;
-}
-
-.baselinecard-label {
-  font-size: 10px;
-  letter-spacing: 0.16em;
-  color: var(--ink-3);
-}
-
-.baselinecard-top {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-/* Sans, not `.today-card-title`'s own serif — matches the design mock's
-   own literal choice for this card specifically (Archivo/19px/500, not
-   Newsreader/26px), a plain typographic detail the task's binding
-   behaviors never override. */
-.baselinecard-title {
-  margin: 0;
-  font-family: var(--font-sans);
-  font-size: 19px;
-  font-weight: 500;
-}
-
-.baselinecard-duration {
-  font-family: var(--font-mono);
-  font-size: 14px;
-  color: var(--accent);
-  white-space: nowrap;
-}
-
-/* The dashed chip: "means nothing here yet" (handoff) — `--rule-3`,
-   dashed, per the task's own instruction. One element carrying the whole
-   "6K BASELINE · NOT SET · ROW IT HOW IT FEELS" string (not the mock's
-   split pill-plus-caption pair), so the wording is one text node a test
-   (or a screen reader) reads as one sentence. */
-.baselinecard-chip {
-  display: block;
-  border: 1px dashed var(--rule-3);
-  border-radius: var(--radius);
-  padding: 6px 8px;
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  color: var(--ink-3);
-}
-
 /* -- Phase BL PR C: the onboarding door flows (canvas Question1/Question2/
    Recommendation/Experienced/RowPath — docs/design/baseline-onboarding/).
    Full-viewport setup screens (no tab bar; AppRoutes hides it for the
@@ -8258,6 +8196,128 @@ section:not(.news-pinned) .news-row:last-of-type {
   font-size: 10px;
   letter-spacing: 0.08em;
   line-height: 1.5;
+}
+
+/* Plain body copy on the flow screens and the doors card (canvas: 14px
+   sans, ink-2 on the page/surface — ink-2 on page 9.74:1, on surface
+   10.81:1, both computed). */
+.onb-body {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink-2);
+  line-height: 1.45;
+}
+
+/* Door 3's two distance cards (canvas RowPath): the old BaselineCard's
+   ANATOMY — label / title + duration / dashed chip / lead action — as new
+   UI, with Start an L1-styled LINK to the test's detail screen (pure
+   navigation; the guards live there). */
+.onb-rowcard {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  background: var(--surface);
+  border: 1px solid var(--ink);
+  border-radius: var(--radius);
+  padding: 14px 14px 16px;
+}
+
+.onb-rowcard-label {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+}
+
+.onb-rowcard-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.onb-rowcard-title {
+  font-family: var(--font-sans);
+  font-size: 19px;
+  font-weight: 500;
+}
+
+.onb-rowcard-duration {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.onb-rowcard-start {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  border-radius: var(--radius);
+}
+
+/* -- The three-door card on Today (canvas Main; today/DoorsCard.tsx) —
+   replaces the deleted .baselinecard family in Today's no-baseline slot.
+   Contrast: door titles ink on surface 17.11:1, door sub-copy ink-3 on
+   surface 7.43:1, heading ink on page 15.41:1, eyebrow ink-3 on page
+   6.69:1 (all computed, >=4.5:1). */
+.doorscard {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.doorscard-label {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+}
+
+.doorscard-title {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 31px;
+  font-weight: 500;
+  line-height: 1.1;
+}
+
+.doorscard-body {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink-2);
+  line-height: 1.45;
+}
+
+.doorscard-doors {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.doorscard-door {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--surface);
+  border: 1px solid var(--ink);
+  border-radius: var(--radius);
+  padding: 14px 14px 16px;
+  text-decoration: none;
+  color: var(--ink);
+}
+
+.doorscard-door:hover {
+  background: var(--surface-sunken);
+}
+
+.doorscard-door-title {
+  font-family: var(--font-sans);
+  font-size: 17px;
+  font-weight: 500;
+}
+
+.doorscard-door-sub {
+  font-size: 13px;
+  color: var(--ink-3);
 }
 
 /* The flow's footer pair: lead + Back, pinned to the screen's foot by the
