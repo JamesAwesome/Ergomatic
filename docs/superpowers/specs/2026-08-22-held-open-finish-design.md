@@ -104,9 +104,15 @@ hang-up.
   (`compose.e2e.yml:39` sets `VITE_ENABLE_FAKE_MONITOR=1`; a DEV-only
   gate hands the operator a console variable that does not exist at the
   erg). Native never sees it. Real production bundles must not contain
-  it: settled by `pnpm build` + string grep for `__pm5HoldOpen__` over
-  `dist/`, both directions (recurring failure 12), as a committed test —
-  and the e2e-flavored build's inclusion is EXPECTED, so the probe runs
+  the instrument MODULE: settled by `pnpm build` + string grep over
+  `dist/`, both directions (recurring failure 12) — the needle is
+  `holdOpen.ts`'s own stash-header string literal
+  (`"hold-open window (instrument)"`), NOT the `__pm5HoldOpen__`
+  identifier, which legitimately ships in every bundle via the chip's
+  optional-chained read (same accepted shape as `__pm5Recording__` in
+  `ConnectionLogSheet.tsx`). Corrected at Task 3's review: the original
+  identifier needle was unsatisfiable by this spec's own chip design.
+  The e2e-flavored build's inclusion is EXPECTED, so the probe runs
   against the plain production build.
 - **Interaction with Phase LL's watchdog, stated:** after the record
   closes, the liveness decorator's silence callback has no surface to
@@ -279,8 +285,11 @@ either way).
 3. A replayed stored series carries no out-of-band `spm` (the exact
    samples that today carry `64` are named in the test and carry the
    `0` sentinel after the fix).
-4. `pnpm build` + grep proves `__pm5HoldOpen__` absent from `dist/` in a
-   probe that has been shown to go red (plant, detect, remove).
+4. `pnpm build` + grep proves the hold-open MODULE absent from `dist/`
+   (needle: the `"hold-open window (instrument)"` stash-header literal —
+   the `__pm5HoldOpen__` identifier ships legitimately via the chip's
+   guarded read) in a probe that has been shown to go red (plant,
+   detect, remove).
 5. The combined walk's questions are answered on the record — including
    any negative (0x0039 silent through 90 s is a committed finding, and
    closes the verification branch's "reachable in principle" to
