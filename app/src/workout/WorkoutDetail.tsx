@@ -190,8 +190,9 @@ function WorkoutDetailView({
   // SAME error slot below because it's the identical message class, never
   // both truthy at once in practice (one screen, one attempt at a time).
   const [rowInsteadError, setRowInsteadError] = useState<string | null>(null);
-  // Phase 6I Task 4 — extracted into `session/useStartWorkout.ts` so a second
-  // caller (the no-baseline `BaselineCard`, per the design spec) gets the
+  // Phase 6I Task 4 — extracted into `session/useStartWorkout.ts` so any
+  // second caller (Phase 6I's BaselineCard then; nothing today — Phase BL
+  // PR C's doors card is pure navigation) gets the
   // SAME unlogged-run staged confirm, live-MonitorRun confirm, draft
   // build/save, and cross-clears, rather than a duplicated (or skipped) copy
   // that would reintroduce the F5 data-loss class. The hook's own doc
@@ -345,10 +346,11 @@ function WorkoutDetailView({
   // per-workout predicate (`needsBaselines`, the single predicate every
   // coupled guard site in this file already shares: the manual-door Link
   // just below, and Connect's own `handleConnectProceed` gate above). Start
-  // renders disabled with a caption instead of a click handler; BaselineCard
-  // carries NO equivalent guard at all (spec §3 entry 3) — its own workout
-  // is effort-only by construction, so `needsBaselines` never reads true for
-  // it and the exemption is structural, not a second code path to maintain.
+  // renders disabled with a caption instead of a click handler. (The old
+  // no-baseline BaselineCard carried no equivalent guard — its workout was
+  // effort-only by construction; BL PR C's doors card starts nothing at
+  // all, so the designated tests now reach Start only through THIS screen,
+  // where the same structural exemption holds: they are effort-only.)
   const startBlocked = baselines === null && needsBaselines(workout.steps);
 
   // Clamps the RESOLVED split (baseline + off + nudge), not the raw nudge

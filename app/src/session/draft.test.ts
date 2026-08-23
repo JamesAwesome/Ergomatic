@@ -382,7 +382,7 @@ describe("buildNudgedDraft", () => {
     expect(draft.nudges).toStrictEqual({});
   });
 
-  it("an empty nudge map ({} — BaselineCard's own call, which has no preview surface) builds an un-nudged draft", () => {
+  it("an empty nudge map ({} — a caller with no preview surface) builds an un-nudged draft", () => {
     const input = draftInputFor("Calm Sea", "id-nudged-4");
 
     const draft = buildNudgedDraft(input, {});

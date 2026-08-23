@@ -142,6 +142,52 @@ export function describeStoreContracts(
           k6Seconds: null,
         });
       });
+
+      // Phase BL PR C — Reset baseline setup's clear operation: the row
+      // goes away WHOLE (numbers and sources together — clear() deletes
+      // the row, so there is no half-cleared state where sources outlive
+      // their numbers), returning the account to the true no-baseline
+      // shape every consumer reads as "doors again".
+      it("clear removes the whole row: get returns null again, and a later put starts fresh", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        await stores.baselines.put(userId, {
+          k2Seconds: 420,
+          k2Source: "tested",
+          k6Seconds: 1500,
+          k6Source: "derived",
+        });
+        await stores.baselines.clear(userId);
+        expect(await stores.baselines.get(userId)).toBeNull();
+        // Old write paths are unaffected: a fresh put after the clear
+        // behaves exactly like a first-ever put.
+        await stores.baselines.put(userId, { k6Seconds: 900 });
+        expect(await stores.baselines.get(userId)).toStrictEqual({
+          k2Seconds: null,
+          k6Seconds: 900,
+        });
+      });
+
+      it("clear is a no-op for a user with no row", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        await stores.baselines.clear(userId);
+        expect(await stores.baselines.get(userId)).toBeNull();
+      });
+
+      it("clear is userId-scoped: another user's row survives", async () => {
+        const stores = await makeStores();
+        const userA = await stores.makeUser();
+        const userB = await stores.makeUser();
+        await stores.baselines.put(userA, { k2Seconds: 420 });
+        await stores.baselines.put(userB, { k2Seconds: 421 });
+        await stores.baselines.clear(userA);
+        expect(await stores.baselines.get(userA)).toBeNull();
+        expect(await stores.baselines.get(userB)).toStrictEqual({
+          k2Seconds: 421,
+          k6Seconds: null,
+        });
+      });
     });
 
     describe("preferences", () => {

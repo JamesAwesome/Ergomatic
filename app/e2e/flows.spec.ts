@@ -49,7 +49,8 @@ test.describe("backdoor sign-in", () => {
     // live on /you (You.tsx), not on the landing route.
     await expect(page.getByRole("heading", { name: "Today" })).toBeVisible();
     // `exact: true` (Phase 6I): a never-dismissed START HERE block's own
-    // step-1 row ("Row 6k once. That is your baseline.") contains "your",
+    // step-1 row ("Set your baseline: answer questions, type it in, or row a
+    // test." — Phase BL PR C's three-door truth) contains "your",
     // a case-insensitive substring match for "YOU" — without `exact`, a
     // fresh backdoor user (who has never dismissed the block) makes this
     // locator ambiguous once that block has mounted. The nav tab's own

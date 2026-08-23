@@ -40,6 +40,17 @@ export function createBaselinesStore(db: Db) {
       return { k2Seconds: row.k2Seconds, k6Seconds: row.k6Seconds };
     },
 
+    /** Phase BL PR C — Reset baseline setup's clear: deletes the row
+     *  outright, numbers AND sources together (SOURCE-BESIDE-NULL means a
+     *  row with nulled numbers would still carry source values; deleting
+     *  the row is the one shape every consumer already reads as the true
+     *  no-baseline state, and GET's `row ?? nulls` fallback serves the
+     *  no-row shape unchanged). A deliberate operation with its own verb —
+     *  PUT still rejects null on purpose. */
+    async clear(userId: string): Promise<void> {
+      await db.delete(baselines).where(eq(baselines.userId, userId));
+    },
+
     async put(userId: string, patch: BaselinesPatch): Promise<void> {
       await db
         .insert(baselines)

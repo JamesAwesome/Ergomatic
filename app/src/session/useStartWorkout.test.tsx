@@ -121,7 +121,7 @@ describe("useStartWorkout", () => {
     expect(draft!.nudges).toStrictEqual({ 0: 2 });
   });
 
-  it("an empty nudge map ({} — BaselineCard's own call, no preview surface) saves an un-nudged draft", async () => {
+  it("an empty nudge map ({} — a caller with no preview surface) saves an un-nudged draft", async () => {
     const { result } = renderHook(() => useStartWorkout(WORKOUT, {}), {
       wrapper,
     });

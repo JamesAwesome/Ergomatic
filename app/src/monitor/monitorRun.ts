@@ -847,7 +847,9 @@ function monitorRunState(): RecordState {
  * by deep link (`/session/confirm` — a redirect shim as of fast-follow
  * Task 4, `AppRoutes.tsx`'s `ConfirmRedirect` — or `/session/countdown`
  * directly) or from any of Start's own rewired entry points
- * (`WorkoutDetail.tsx`, `BaselineCard.tsx`, both via `useStartWorkout.ts`).
+ * (`WorkoutDetail.tsx` and `you/RetestShortcut`-style detail entries, via
+ * `useStartWorkout.ts`; the old no-baseline BaselineCard was one until
+ * Phase BL PR C replaced it with the pure-navigation doors card).
  * A rower who takes that route mid-connected-session leaves both records
  * live. Nothing is destroyed by it, and no clear was
  * added at Countdown on purpose (that would be a new unguarded destruction

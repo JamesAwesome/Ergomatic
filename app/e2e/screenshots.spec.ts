@@ -505,29 +505,126 @@ test("today-rolled", async ({ page }) => {
   await cleanupByTitle(page, title);
 });
 
-// Phase 6I Task 8: the fresh-user state "today.png" above never shows —
-// that capture deliberately sets baselines first (line ~234) so it can
-// exercise FILTER/SHUFFLE. This is the OTHER state a brand-new account
-// actually lands on: no baselines row at all, the dismissible START HERE
-// block above everything, and the no-baseline SETS YOUR BASELINE card in
-// place of the normal suggestion apparatus — the phase's own new screen,
-// and the one screenshot obligation this phase adds that isn't a re-capture
-// of something that already existed.
+// Phase 6I Task 8, re-captured for Phase BL PR C: the fresh-user state
+// "today.png" above never shows — that capture deliberately sets
+// baselines first so it can exercise FILTER/SHUFFLE. This is the OTHER
+// state a brand-new account actually lands on: no baselines row at all,
+// the dismissible START HERE block above everything, and the THREE-DOOR
+// card (canvas Main) in place of the normal suggestion apparatus.
 test("today-onboarding", async ({ page }) => {
   await signInViaBackdoor(page, {
     email: "screenshots-today-onboarding@e2e.test",
     name: "Screenshot Tester",
   });
   await page.goto("/today");
-  await page.locator(".baselinecard").waitFor();
+  await page.locator(".doorscard").waitFor();
   // The header's own "N OF 4 READ" count resolves from a separate fetch
   // (`useArticleReads`) than the card's — waiting on the card alone raced
   // it on this test's own first run, capturing the bare "START HERE"
   // loading-suppression fallback instead of the real "0 OF 4 READ" a fresh
   // account actually shows once both have loaded.
   await expect(page.locator(".starthere-label")).toContainText("READ");
+  // Scroll the WHOLE doors card into frame first: the third door — the
+  // one carrying the strong-and-steady ruling's sub-copy — sits below
+  // the 844px fold under the START HERE block, and a capture that
+  // scrolls past the feature is recurring-failure #7's exact shape.
+  // (fullPage was tried and rejected: the fixed tab bar paints over
+  // door 3 mid-page. START HERE's own copy is on record in today.png.)
+  await page
+    .getByRole("link", { name: /Row to find my baseline/ })
+    .evaluate((el) => el.scrollIntoView({ block: "center" }));
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "today-onboarding.png"),
+  });
+});
+
+// Phase BL PR C: the door flow screens (canvas Question1/Recommendation/
+// Experienced/RowPath), each in its fullest real state — the
+// questionnaire with an option genuinely selected, the recommendation
+// carrying the table's own numbers for that answer pair (2:25.0/2:32.0,
+// the modal cell — recompute against domain/estimateBaseline.ts when
+// reading the capture), and Reset's ARMED confirm on You.
+test("onboarding-door-question", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-door-question@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await page.goto("/onboarding/recommend");
+  await page
+    .getByRole("radio", { name: "A little. I know the stroke" })
+    .click();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "onboarding-door-question.png"),
+  });
+});
+
+test("onboarding-door-recommendation", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-door-recommendation@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await page.goto("/onboarding/recommend");
+  await page
+    .getByRole("radio", { name: "A little. I know the stroke" })
+    .click();
+  await page.getByRole("button", { name: "Next" }).click();
+  await page
+    .getByRole("radio", { name: "Active once or twice a week" })
+    .click();
+  await page.getByRole("button", { name: "Next" }).click();
+  await expect(page.getByText("2:25.0")).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "onboarding-door-recommendation.png"),
+  });
+});
+
+test("onboarding-door-know", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-door-know@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await page.goto("/onboarding/know");
+  await expect(page.getByText("2:25.0")).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "onboarding-door-know.png"),
+  });
+});
+
+test("onboarding-door-row", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-door-row@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await page.goto("/onboarding/row");
+  await expect(page.getByText("Row a strong, steady 6k")).toBeVisible();
+  await expect(page.getByText("Race a 2k")).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "onboarding-door-row.png"),
+  });
+});
+
+test("you-reset-armed", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-you-reset@e2e.test",
+    name: "Screenshot Tester",
+  });
+  // A SET pair, so the screen shows real numbers above the destructive
+  // confirm it is about to clear (recurring-failure #7: seed real data).
+  await page.evaluate(async () => {
+    await fetch("/api/baselines", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ k2Seconds: 118, k6Seconds: 127 }),
+    });
+  });
+  await page.goto("/you");
+  await expect(page.locator(".baseline-value").first()).toHaveText("1:58.0");
+  await page.getByRole("button", { name: "Reset baseline setup" }).click();
+  await expect(
+    page.getByText(/This clears both baseline splits/),
+  ).toBeVisible();
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "you-reset-armed.png"),
   });
 });
 

@@ -710,6 +710,21 @@ export function createDataRouter({
     res.json(row ?? { k2Seconds: null, k6Seconds: null });
   });
 
+  // Phase BL PR C — Reset baseline setup (spec rev 2's "Reset onboarding"
+  // ruling): a DELIBERATE clear operation with its own verb, additive to
+  // the wire (old clients never send it and are unaffected; PUT still
+  // rejects null on purpose — a relaxed validator could make null
+  // writable by accident, and the isTestResult block above relies on the
+  // numbers being real). Deletes the row whole, numbers AND sources
+  // together, returning the account to the true no-baseline state — the
+  // exact shape GET serves for a never-set account, echoed back here so
+  // the client sees what any consumer will now read. Destructive on
+  // purpose; the client stages a confirm before calling it.
+  router.delete("/api/baselines", async (req, res) => {
+    await stores.baselines.clear(req.user!.id);
+    res.json({ k2Seconds: null, k6Seconds: null });
+  });
+
   // -- test history -----------------------------------------------------
 
   // Phase BL PR B (baseline-onboarding spec rev 2, "Recording

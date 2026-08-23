@@ -113,6 +113,7 @@ describe("data router: auth guard", () => {
   const routes: Array<[string, string]> = [
     ["get", "/api/baselines"],
     ["put", "/api/baselines"],
+    ["delete", "/api/baselines"],
     ["get", "/api/workouts"],
     ["post", "/api/workouts"],
     ["get", "/api/workouts/x"],
@@ -147,6 +148,65 @@ describe("data router: no-store", () => {
   it("inherits Cache-Control: no-store when composed the way app.ts composes it", async () => {
     const res = await asA(request(appFor(makeStores())).get("/api/baselines"));
     expect(res.headers["cache-control"]).toBe("no-store");
+  });
+});
+
+describe("DELETE /api/baselines (Phase BL PR C — Reset baseline setup)", () => {
+  it("clears a set pair back to the no-row shape, and echoes it", async () => {
+    const stores = makeStores();
+    const app = appFor(stores);
+    await asA(request(app).put("/api/baselines")).send({
+      k2Seconds: 100,
+      k2Source: "tested",
+      k6Seconds: 120,
+      k6Source: "derived",
+    });
+    const del = await asA(request(app).delete("/api/baselines"));
+    expect(del.status).toBe(200);
+    expect(del.body).toStrictEqual({ k2Seconds: null, k6Seconds: null });
+    const get = await asA(request(app).get("/api/baselines"));
+    expect(get.body).toStrictEqual({ k2Seconds: null, k6Seconds: null });
+  });
+
+  it("clears the STORE row itself (numbers and sources go together), not just the response", async () => {
+    const stores = makeStores();
+    const app = appFor(stores);
+    await asA(request(app).put("/api/baselines")).send({
+      k2Seconds: 100,
+      k2Source: "tested",
+    });
+    await asA(request(app).delete("/api/baselines"));
+    // The store's own truth, not the route's echo: no row at all — the
+    // exact state a brand-new account has, which is what makes the doors
+    // render again.
+    expect(await stores.baselines.get("user-a")).toBeNull();
+  });
+
+  it("is a 200 no-op for an account that never set baselines", async () => {
+    const res = await asA(
+      request(appFor(makeStores())).delete("/api/baselines"),
+    );
+    expect(res.status).toBe(200);
+    expect(res.body).toStrictEqual({ k2Seconds: null, k6Seconds: null });
+  });
+
+  it("old clients are unaffected: PUT still 400s on null — the clear has its own verb, not a relaxed validator", async () => {
+    const res = await asA(
+      request(appFor(makeStores())).put("/api/baselines"),
+    ).send({
+      k2Seconds: null,
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("a PUT after the clear starts fresh, exactly like a first-ever write", async () => {
+    const stores = makeStores();
+    const app = appFor(stores);
+    await asA(request(app).put("/api/baselines")).send({ k2Seconds: 100 });
+    await asA(request(app).delete("/api/baselines"));
+    await asA(request(app).put("/api/baselines")).send({ k6Seconds: 130 });
+    const get = await asA(request(app).get("/api/baselines"));
+    expect(get.body).toStrictEqual({ k2Seconds: null, k6Seconds: 130 });
   });
 });
 

@@ -31,10 +31,7 @@ import type {
   Step,
   WorkoutType,
 } from "../../domain/types.js";
-import {
-  ONBOARDING_TITLES,
-  isOnboardingTitle,
-} from "../../domain/onboarding.js";
+import { isOnboardingTitle } from "../../domain/onboarding.js";
 import { clearDraft, loadDraft } from "../session/draft";
 import { loadRun, type SessionRun } from "../session/run";
 import {
@@ -45,7 +42,7 @@ import {
 } from "../monitor/monitorRun";
 import { useStagedDiscard } from "../session/useStagedDiscard";
 import StartHere from "./StartHere";
-import BaselineCard from "./BaselineCard";
+import DoorsCard from "./DoorsCard";
 import { loadTodayPick, saveTodayPick, todayDateString } from "./todayPick";
 import {
   loadTodayOverrides,
@@ -438,8 +435,6 @@ export default function Today() {
       key={`${planState.plan.planKey}-${planState.plan.doneN}`}
       library={workoutsState.workouts}
       baselines={baselines}
-      k6Missing={baselinesState.baselines.k6Seconds === null}
-      k2Missing={baselinesState.baselines.k2Seconds === null}
       preferences={preferencesState.preferences}
       onDismissStartHere={() =>
         preferencesState.save({ startHereDismissed: true })
@@ -866,8 +861,6 @@ function PieceRegion({
 function TodayView({
   library,
   baselines,
-  k6Missing,
-  k2Missing,
   preferences,
   onDismissStartHere,
   plan,
@@ -876,14 +869,12 @@ function TodayView({
   monitorRun,
 }: {
   library: LibraryWorkout[];
+  // Null the moment EITHER side is null (the app-wide partial-pair
+  // convention) — which is exactly the doors card's own render condition
+  // (Phase BL PR C: an incomplete PAIR re-enters onboarding; the old
+  // per-side k6Missing/k2Missing props died with BaselineCard's
+  // either-null branching).
   baselines: Baselines | null;
-  // Phase 6I: individual nullability, kept alongside the already-combined
-  // `baselines` above (null the moment EITHER is null, per the app-wide
-  // partial-pair convention) — BaselineCard's either-null branching needs
-  // to know WHICH one(s) are missing, information the combined value alone
-  // has already thrown away.
-  k6Missing: boolean;
-  k2Missing: boolean;
   preferences: PreferencesData;
   onDismissStartHere: () => void;
   plan: PlanData;
@@ -1082,9 +1073,9 @@ function TodayView({
   // the wire (antagonist B2's wire contract; Plan.tsx's checkpoint mark
   // does the same). Resolved against the UNFILTERED `library`, NOT
   // `entries`: both suggestion pools deliberately exclude the onboarding
-  // titles, and the prescribed test is exactly such a title — the same
-  // unfiltered lookup BaselineCard's k6Workout/k2Workout below already
-  // use. An unresolvable ref degrades quietly to the ordinary pool
+  // titles, and the prescribed test is exactly such a title (the same
+  // reason door 3's RowToFind.tsx looks its rows up unfiltered too).
+  // An unresolvable ref degrades quietly to the ordinary pool
   // suggestion (domain/prescription.ts's own contract; authored refs are
   // guarded by prescription.test.ts's seed-resolution test instead).
   const prescription =
@@ -1153,23 +1144,13 @@ function TodayView({
 
   const canShuffle = suggestion.poolIds.length > 1;
 
-  // Phase 6I: BaselineCard's own two possible targets, looked up from the
-  // UNFILTERED `library` (unlike `entries` above, which drops them from
-  // suggestion pools on purpose) — the card needs to find exactly these
-  // two by title. `undefined` is the defensive "not seeded yet" case
-  // BaselineCard itself documents; never expected once the server has run
-  // its onboarding seed (Phase 6I Task 3). Final-review fix (2026-08-09):
-  // also require `isGlobal` — a colliding CUSTOM workout with the same
-  // title must never be the one the card starts (it would run the
-  // rower's own workout under the "SETS YOUR BASELINE" banner instead of
-  // the designated global one).
-  const k6Workout = library.find(
-    (w) => w.title === ONBOARDING_TITLES.k6 && w.isGlobal,
-  );
-  const k2Workout = library.find(
-    (w) => w.title === ONBOARDING_TITLES.k2 && w.isGlobal,
-  );
-  const needsBaselineCard = baselines === null;
+  // Phase BL PR C: the doors card render condition — the PAIR is
+  // incomplete (`baselines` is null the moment either side is, see the
+  // prop comment above). The old BaselineCard's k6Workout/k2Workout
+  // lookups died with it: the doors card is pure navigation, and door 3's
+  // own screen (onboarding/RowToFind.tsx) does the designated-row lookup
+  // where it is actually needed.
+  const needsDoors = baselines === null;
 
   function handleShuffle() {
     const pool = suggestion.poolIds;
@@ -1210,14 +1191,12 @@ function TodayView({
       {!preferences.startHereDismissed && (
         <StartHere onDismiss={onDismissStartHere} />
       )}
-      {/* Phase 6I: the whole plan/freestyle line, type-swap chips and
-          descriptor word are "plan apparatus" (spec's own words) — hidden
-          entirely while the no-baseline card shows, matching the design
-          mock's screen 2b exactly (no plan line of any kind renders there,
-          not even the freestyle variant): "there is no suggestion to
-          filter or swap" applies whether or not a plan happens to be
-          active underneath. */}
-      {!needsBaselineCard &&
+      {/* Phase 6I (condition carried into BL PR C's doors): the whole
+          plan/freestyle line, type-swap chips and descriptor word are
+          "plan apparatus" (spec's own words) — hidden entirely while the
+          doors card shows: "there is no suggestion to filter or swap"
+          applies whether or not a plan happens to be active underneath. */}
+      {!needsDoors &&
         (usesPlan ? (
           <>
             <p className="today-plan-line mono-status">
@@ -1344,19 +1323,15 @@ function TodayView({
         <UnloggedMonitorRow run={monitorRun} />
       )}
 
-      {/* Phase 6I: the no-baseline SETS YOUR BASELINE card (design spec,
-          screen 2b) replaces the entire suggestion apparatus — header
+      {/* Phase BL PR C: the three-door onboarding card (canvas Main)
+          replaces the entire suggestion apparatus — header
           (SUGGESTED/FILTER ⌄/SHUFFLE ↻), the active-filter tokens, the
-          filter sheet, and the suggestion/empty card itself — while either
-          baseline is null. There is nothing to filter or swap and nothing
-          real to suggest, so none of it renders alongside the card. */}
-      {needsBaselineCard ? (
-        <BaselineCard
-          k6Missing={k6Missing}
-          k2Missing={k2Missing}
-          k6Workout={k6Workout}
-          k2Workout={k2Workout}
-        />
+          filter sheet, and the suggestion/empty card itself — while the
+          baseline pair is incomplete. There is nothing to filter or swap
+          and nothing real to suggest, so none of it renders alongside
+          the card (Phase 6I's rule, condition unchanged). */}
+      {needsDoors ? (
+        <DoorsCard />
       ) : (
         <>
           <div className="today-suggestion-header">
@@ -1446,7 +1421,7 @@ function TodayView({
                 <TypeBadge type={recommended.type} />
                 <span className="today-card-duration">
                   {/* `baselines` is never null in this branch
-                      (`needsBaselineCard` above already gated on it), so the
+                      (`needsDoors` above already gated on it), so the
                       bare-dash fallback this ternary used to need is gone —
                       the branch itself is the guarantee now. */}
                   {estimateMinutes(recommended.steps, baselines!).minutes}′
@@ -1458,7 +1433,7 @@ function TodayView({
                 /5
               </p>
               {/* `baselines` is never null here — same guarantee `today-card-
-                  duration` above already relies on (`needsBaselineCard`). */}
+                  duration` above already relies on (`needsDoors`). */}
               <PieceRegion steps={recommended.steps} baselines={baselines!} />
               <p className="today-reason-foot">
                 <span className="today-reason-foot-text">

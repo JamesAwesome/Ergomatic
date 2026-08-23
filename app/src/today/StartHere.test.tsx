@@ -138,7 +138,9 @@ describe("StartHere", () => {
     renderStartHere();
 
     await userEvent.click(
-      screen.getByText("Row 6k once. That is your baseline."),
+      screen.getByText(
+        "Set your baseline: answer questions, type it in, or row a test.",
+      ),
     );
     expect(
       await screen.findByText("PROBE path=/news/your-first-row from=/today"),

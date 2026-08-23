@@ -1883,3 +1883,58 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   to when a record closes.
 - **The 30-second rule is 0-for-10.** Still James's to re-set or retire, still
   belongs in CLAUDE.md.
+
+## Final-PR gate + phase close, 2026-08-23 (Phase BL PR C, #172 — TRIAD: the table mints every target's anchor + a destructive DELETE)
+
+- **A destructive confirm must name the CAPABILITY lost, not just the data.**
+  Reset's confirm said "Workouts lose their targets until you set a baseline
+  again"; what happens is `startBlocked` disables Start Timer on every
+  split-ref workout and Today's plan line/FILTER/SHUFFLE disappear. Losing a
+  number reads as reversible; losing the ability to start reads as broken.
+  **For any destructive control, enumerate what the app STOPS DOING, not what
+  it deletes.** (Fixed on #172 at this gate.)
+- **The `**Status:**` LINE is the thing that goes stale, not "the status
+  paragraph."** Third consecutive gate; first with partial credit (#172 fixed
+  the body while the header kept dissolved conditionals). **The mechanical
+  step tightens: read the `**Status:**` line itself against what the branch
+  just did.**
+- **An enforced parallel-session condition VERIFIED CLEAN, and the check took
+  two commands.** "PR C opens only when LL's spec exists": spec merged
+  2026-08-22, PR opened 2026-08-23. First pass in this ledger. **Countable
+  conditions get checked; unenforceable ones get breached — the difference is
+  whether the condition names an artefact with a timestamp.**
+- **An end-to-end exit clause can be discharged without hardware by driving
+  the clock.** Door 3's arc fast-forwards 26:00 so the measured split lands
+  INSIDE the offer's 60..240 band — a 7-minute fast-forward would have walked
+  straight past the prompt the arc exists to prove. **When a clause is gated
+  by a numeric band, the test's synthetic time must satisfy the band.**
+- **A hand-authored lookup table is checkable by a human ONLY after the gate
+  proves the printed table and the code identical.** Done here (all 16 cells,
+  both numbers, both tags, plus four derived properties recomputed). **James's
+  sign-off is about JUDGEMENT; he should never spend it re-checking
+  transcription.**
+- **Frame a number ruling by what the numbers DOWNSTREAM become.** The
+  question about a 2:30 beginner 2k is not "is 2:30 plausible" but "the
+  library prescribes `2k−4` in 58 workouts and `6k+12` in 99 — can a beginner
+  hold 2:26 and 2:49?" **Grep the corpus for the offsets actually applied and
+  quote the resulting numbers.**
+- **A questionnaire whose output range is smaller than its question count
+  suggests should be asked whether it needs to exist.** 16 cells → 5 distinct
+  pairs → 20 s/500m of range. The case FOR the screens is welcome and
+  consent, not accuracy — a fine reason, said out loud at the gate rather
+  than assumed.
+- **RF14, sixth occurrence in seven gates.** F4 (the baselines article's
+  stale closing paragraph) lived only in a PR Record block as "rides the next
+  content PR" — on a phase whose exit criterion is teaching truth, on the
+  article the phase's own e2e sends a new rower to read. Rescued and fixed at
+  this gate.
+- **Release call: v0.19.0 MINOR; the phase CLOSES on this merge.** Range
+  v0.18.1..main = #167 (owes the spm-banding clause WITH its no-backfill
+  sentence, pre-stated) + #170 (none) + #172 (four clauses: the three doors;
+  Reset as the only way to see them on a set account, "no undo" said; answers
+  never stored; the teaching rewrite — and NOT a word implying test history
+  is visible). #171 claims no version; both edit ROADMAP + this ledger —
+  sequence and re-gate the second.
+- **Backlog: third consecutive net-negative delta** (63 main → 61 branch).
+- **The 30-second rule is 0-for-11.** Still James's to re-set or retire in
+  CLAUDE.md.
