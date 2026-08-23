@@ -30,9 +30,18 @@ Ruled during brainstorming (James, 2026-08-22):
   notifications ever; WORKOUTSTATE_WORKOUTLOGGED (12) never observed;
   Last Split decode 10× against nine capture pairs and the PM5's own
   memory screen) are its, reconciled into ROADMAP §Phase RC.
-- **PRIMARY (C2 API):** the verification code (0x003F) is firmware-gated
-  to nine disjoint bands; our PM5's firmware version has never been
-  recorded (walk item W1 exists for exactly this).
+- **PRIMARY (C2 BLE spec):** 0x003F — documented as the *"C2 rowing
+  logged workout characteristic"*, in the C2 Rowing service (0x0030) —
+  is firmware-gated to nine disjoint bands; our PM5's firmware version
+  has never been recorded (walk item W1 exists for exactly this). The
+  byte-order dispute is INTERNAL to Concept2's own PDF: the BLE table
+  reads `(Lo)`-first, `CSAFE_PM_GET_CURRENT_WORKOUT` (0x72) reads
+  "Byte 0: Hash (MSB)".
+- **INFERENCE, named as such (anchor pass):** that 0x003F's hash IS the
+  logbook's `verification_code` is inferred from their shared
+  description, not stated by any document. If wrong, W4's same-frame
+  photograph shows the mismatch and the verification branch closes as
+  "not the same quantity" — the walk tests the equation itself.
 - **Does the system have the concept?** Whether the PM5 HAS a
   "log entry committed" event reachable over BLE is **OPEN — it is the
   question, not a premise.** The one-hypothesis reading (we hang up
@@ -56,25 +65,49 @@ hang-up.
 **Design.** Following the `window.__pm5Recording__` precedent
 (`recording.ts`, dev/web only, installed at the adapter layer):
 
-- `window.__pm5HoldOpen__.arm()` — arms a one-shot deferral. On the next
-  natural finish, teardown's `driver.disconnect()` is deferred 90 s.
-  Everything else about teardown proceeds: the record closes exactly as
-  today, `closeRecord` runs, the summary screen appears. Only the radio
-  stays up, subscriptions live, ring + recording tap still capturing.
+- `window.__pm5HoldOpen__.arm()` — arms a one-shot deferral. **The
+  deferral target is the TRANSPORT's `disconnect()`** (the `t.disconnect()`
+  the driver's own `disconnect()` ends with), wrapped at the instrument
+  seam — NOT `driver.disconnect()` itself, whose `drainSummaryReconcile()`
+  must still run on time (anchor pass: the two targets are incompatible,
+  and only the transport-level deferral keeps subscriptions live without
+  disturbing driver semantics). On the next natural finish everything
+  about teardown proceeds: the record closes exactly as today,
+  `closeRecord` runs, the summary screen appears. Only the radio stays
+  up, BLE notification callbacks still firing into the recording tap.
 - `window.__pm5HoldOpen__.release()` — disconnects now (cancels the
   timer). The 90 s expiry calls the same path.
 - `window.__pm5HoldOpen__.status()` — `"disarmed" | "armed" | "holding"`
   plus ms remaining, so the walk operator can read the state instead of
   trusting memory.
-- **Armed state is visible on the connected screen** (dev builds only):
-  a small "HOLD-OPEN ARMED" chip. A diagnostic that only exists in a
-  console variable is disarmed by anyone who forgets it (recurring
-  failure 13's corollary); the chip is the tell.
-- **Scope guard:** installed only where the fake/tap seam already lives
-  — the DEV/web arm of `adapters/monitorTransport.ts`. Native never sees
-  it. Production bundles must not contain it: settled by `pnpm build` +
-  string grep for `__pm5HoldOpen__` over `dist/`, both directions
-  (recurring failure 12), as a committed test or documented probe.
+- **The ring must survive the hold window (PM gate C1 + anchor pass 3):**
+  teardown stashes `exportLog()` to sessionStorage BEFORE the disconnect
+  (`useMonitorSession.ts:1985`'s own comment says a later ring entry
+  "would never reach sessionStorage at all", and `LogSession.tsx:666`
+  reads exactly that key). The instrument therefore RE-STASHES the ring
+  export on `release()` and on expiry, and exposes
+  `window.__pm5HoldOpen__.ring()` for a live read mid-hold — otherwise
+  the 90 s window is invisible to MONITOR LOG · COPY and the walk's
+  copy ask returns a log that ends at the finish.
+- **Armed state is visible while it can be seen:** a small
+  "HOLD-OPEN ARMED" chip on the connected screen covers the pre-finish
+  window; the connected screen unmounts at the finish (PM gate C1), so
+  the `holding` state's readout is `status()`/`ring()` on the console —
+  the walk card says so where the instrument is written down (recurring
+  failure 13's corollary: no silently disarmable diagnostics).
+- **Scope guard (anchor pass 4):** `adapters/monitorTransport.ts` is the
+  WRONG seam — its own comment keeps the tap out of it, and its only
+  conditional is a runtime `isNative()` Rollup cannot fold. Install at
+  `transports/index.ts`'s existing tap/fake seam, gated
+  `import.meta.env.DEV || VITE_ENABLE_FAKE_MONITOR === "1"` — the second
+  arm matters because the WALK LAB IS A PRODUCTION BUILD
+  (`compose.e2e.yml:39` sets `VITE_ENABLE_FAKE_MONITOR=1`; a DEV-only
+  gate hands the operator a console variable that does not exist at the
+  erg). Native never sees it. Real production bundles must not contain
+  it: settled by `pnpm build` + string grep for `__pm5HoldOpen__` over
+  `dist/`, both directions (recurring failure 12), as a committed test —
+  and the e2e-flavored build's inclusion is EXPECTED, so the probe runs
+  against the plain production build.
 - **Interaction with Phase LL's watchdog, stated:** after the record
   closes, the liveness decorator's silence callback has no surface to
   fire on (the session is over); the held-open link's frames route to
@@ -87,18 +120,25 @@ timestamped in the ring, raw bytes in the recording. If state 12 or
 0x0039 arrives at t+N seconds, the recording names N. If nothing arrives
 in 90 s, that negative is committed as a finding too.
 
-## 3. Subscribe 0x003F (verification code)
+## 3. Subscribe 0x003F (the "logged workout" characteristic)
 
-- Add `VERIFICATION_CODE_UUID = pm5Uuid(0x003f)` beside the existing
-  0x0039/0x003A constants (`domain/monitor/pm5/uuids.ts:67-71`).
-- Web arm subscribes it; failure to subscribe DEGRADES (Phase LL's
-  non-critical class — some firmware bands will not expose it; a missing
-  characteristic must not fail the connect). Native arm: not in this
-  spec.
+- Add `LOGGED_WORKOUT_UUID = pm5Uuid(0x003f)` beside the existing
+  0x0039/0x003A constants (`domain/monitor/pm5/uuids.ts:67-71`), with a
+  `SERVICE_OF` entry mapping it to the C2 Rowing service 0x0030 (already
+  in `optionalServices`, so no permission change).
+- **The subscribe is the INSTRUMENT's, not the driver's** (anchor pass
+  6): adding it to the driver's shared subscribe list puts it on both
+  arms. The hold-open seam performs the subscribe on the web arm only.
+- **"Degrades on failure" must be BUILT, not assumed** (anchor pass 6):
+  `webBluetooth.ts:331-360` has no `.catch()` — the degrade class is
+  `capacitorBle.ts`-only today. The instrument's subscribe carries an
+  explicit `.catch()` that records `subscribe-failed` (with the error
+  name) to the ring, so "absent on this firmware" is distinguishable
+  from "present but silent" — the distinction W4 exists to read.
 - Payload handling: raw hex to ring + recording, no decode. The byte
-  order is disputed between C2's own documents (CSAFE says byte 0 = MSB;
-  the BLE table says "Lo") — W4's same-frame photograph settles which,
-  and decoding before that would enshrine a guess.
+  order is disputed WITHIN Concept2's own PDF (BLE table `(Lo)`-first
+  vs CSAFE 0x72 "Byte 0: MSB") — W4's same-frame photograph settles
+  which, and decoding before that would enshrine a guess.
 
 ## 4. Wave-0 fix A (RC-4): Last Split Time is 0.01 s/lsb — our decode is 10× too large
 
@@ -124,31 +164,28 @@ both C2 documents' printed 0.1 (wrong four times).
   `pm5-interface-notes.md` §20 items 17 and 24 — reconcile those rows in
   the same PR, recurring failure 9's docs sibling).
 
-## 5. Wave-0 fix B (RC-6): band `spm`, drop zero `p` in the stored series
+## 5. Wave-0 fix B (RC-6, NARROWED by both gates): band `spm` to the existing `0` sentinel
 
-TRIAD-adjacent (stored series content; shape unchanged). Verified this
-session at `seriesRecorder.ts:229-230`:
+**Narrowed at the phase-open gates.** The original RC-6 (make `p` and
+`spm` optional, drop zero `p`) is REFUTED as written: `traceModel.ts:161,164`
+guard both fields on `!== 0`, not `!== undefined` — absent fields push
+NaN into two shipped screens (the `hr` precedent does not transfer) —
+and the server's `validateSeriesSample` (`server/routes/data.ts`)
+requires both fields, so "shape unchanged" was false and the save would
+be REJECTED. The `p: 0` half also fixes no live harm: every shipped
+reader already honours `0` as the no-reading sentinel; its real motive
+is C2 serialization, which is wave-5 work (RC-11's spec owns it).
 
-- `spm: f.spm ?? 0` stores unbanded wire values; the sibling `hr` two
-  lines below is banded 20..254. The PM5 demonstrably emits 64 and 101
-  spm in coherent frames at boundaries; two stored samples in the
-  committed step-2 capture would carry 64. Band `spm` the same way:
-  out-of-band → drop the field for that sample (same "drop the field,
-  never the save" treatment `hr` already gets). **Band: 10..60 spm** — INFERENCE, stated as a spec decision: elite
-  sprint cadence tops out near the low 50s, so 60 clears every humanly
-  rowable stroke rate while both measured boundary artifacts (64 and
-  101) fall outside it. If a walk recording ever shows a genuine in-band
-  artifact, that is RC-1-era coherence work, not a band retune.
-- `p: Math.round((f.currentSplit ?? 0) * 10)` writes `p: 0` when the
-  wire pace is absent/zero — 8 samples on session-2, 2 on pyramid. C2's
-  `stroke_data.p` has no concept of a zero pace and our own live surface
-  refuses one layer up (`surfaceModel.ts:586`). Treat pace like `hr`:
-  no reading → omit `p` for that sample. `Sample.p` becomes optional in
-  the STORED shape — additive-optional (old samples with `p: 0` remain
-  readable; readers already handle absent fields on `hr`'s precedent).
-- Pin both with replays from the committed captures showing the exact
-  samples that today carry `64`/`0` and after the fix carry
-  neither.
+**What ships now — the one line with a rower-visible defect:** at
+`seriesRecorder.ts:229`, `spm: f.spm ?? 0` stores unbanded wire values;
+the PM5 demonstrably emits 64 and 101 spm in coherent frames at
+boundaries, and a 64/101 spike IS drawn on the chart today. Band `spm`
+to **10..60** (INFERENCE, stated: elite sprint cadence tops out near the
+low 50s; both measured artifacts fall outside) and write the EXISTING
+`0` sentinel for out-of-band values — one line, no shape change, no
+server change, no reader change. Pin with a replay from the committed
+step-2 capture naming the exact samples that today carry `64` and after
+the fix carry `0`.
 
 ## 6. The combined walk (planned via /hardware-walk at the erg)
 
@@ -167,7 +204,11 @@ system-scope), 9a (native inter-frame gap distribution off the ring),
 plus the §2b flash ring-copy ask and the false-banner warning — all as
 written on ROADMAP's LL walk card.
 
-**Laptop (Chrome, this branch, dev seam) — Phase RC's wire questions:**
+**Laptop (Chrome, this branch, dev seam) — Phase RC's wire questions.**
+RC's distance-shaped follow-up is renamed **W10** here (two items were
+both called W7; LL's W7 keeps the name and moves to the PHONE leg, where
+its "does the watchdog false-fire" half is actually observable — PM gate
+C5).
 
 - **W1** — photograph the PM5's firmware version screen (2 min, no
   rowing). Gates whether 0x003F can exist on this monitor at all.
@@ -182,10 +223,26 @@ written on ROADMAP's LL walk card.
 - **W4** — same piece: 0x003F raw hex from the recording beside a
   photograph of the PM5's own 16-digit code. Settles fire/no-fire on
   our firmware, timing, and byte order.
-- **W7 (LL's)** — navigate the PM5's menu mid-session on the laptop leg:
-  does the wire go quiet, and does the watchdog false-fire?
-- **W7-distance (RC's)** — only if W2 shows 0x0039 arriving at all: a
-  distance-shaped summary (3×300 m r30, held open 90 s).
+- **W10** — only if W2 shows 0x0039 arriving at all: a distance-shaped
+  summary (3×300 m r30, held open 90 s).
+
+**Protocol rules the plan must carry (both gates):**
+
+- **Priority order, written down: W1 → W2/W3/W4 (one piece) → the phone
+  leg → W10.** The budget can run out; it must not run out before W2,
+  the item ROADMAP calls the single most valuable — and LL's clause (b)
+  is pinned above the cut line within the phone leg (it is the
+  cohort-of-one gate). Everything below W10 is cuttable without a
+  second thought.
+- **One link at a time, stated:** the laptop disconnects (hold released)
+  before the phone leg connects. Whether the PM5 accepts two centrals
+  is an open question the ROADMAP contradicts itself on (`:2050` "HAS NO
+  SOURCE" vs `:4285` asserting single-central) — the walk SETTLES it as
+  a deliberate probe (one tap, after all evidence is gathered), never
+  discovers it mid-evidence.
+- The walk PLAN (budget, piece list, capture asks) is still composed
+  and approved at the erg per the hardware-walk skill; this section
+  fixes the questions, the device split, and the cut order.
 
 **Sequencing note:** the phone leg needs nothing from this branch; the
 laptop leg needs this spec's instrument merged (or the walk runs on the
@@ -212,21 +269,26 @@ either way).
 ## 8. Exit criteria — written so they can go red
 
 1. On a real PM5, the instrument holds the link open 90 s past a natural
-   finish with the ring and recording capturing; the session's record
+   finish with the recording tap capturing and the ring RE-STASHED on
+   release so MONITOR LOG · COPY shows the window; the session's record
    closes normally in the same run (the two are independently visible in
    the walk's artifacts).
 2. A replay test against committed capture bytes decodes Last Split Time
    7476-hundredths as 74.76 s; the fake's encoder round-trips the same
    scale; `pm5-interface-notes.md` §20 items 17/24 are reconciled.
-3. A replayed stored series carries no `p: 0` sample and no out-of-band
-   `spm`; the exact samples that today carry `64`/`0` are named in the
-   test.
+3. A replayed stored series carries no out-of-band `spm` (the exact
+   samples that today carry `64` are named in the test and carry the
+   `0` sentinel after the fix).
 4. `pnpm build` + grep proves `__pm5HoldOpen__` absent from `dist/` in a
    probe that has been shown to go red (plant, detect, remove).
 5. The combined walk's questions are answered on the record — including
    any negative (0x0039 silent through 90 s is a committed finding, and
    closes the verification branch's "reachable in principle" to
-   "unreachable on our firmware" if W1+W4 say so).
+   "unreachable on our firmware" if W1+W4 say so). A silent W2 also
+   reroutes the PHASE exit's "monitor's log entry decoded from a real
+   finish" clause into its negative branch — the phase can close on a
+   documented "unreachable", never hang open on an unmeetable clause
+   (PM gate C6).
 
 ## 9. Gates and sequencing
 

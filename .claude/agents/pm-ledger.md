@@ -1614,3 +1614,106 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   nowhere to see it yet, and not yet removable." RELEASING.md needs no new
   rollback floor — 0014 is additive, no backfill, no seed rename; checked so
   the next stored-shape gate does not re-derive it.
+## Phase-open gate, 2026-08-22 (Phase RC slate: the held-open finish, evidence-first)
+
+- **A dev instrument that "keeps capturing" can still be unreadable, because
+  the EXPORT ran first.** RC's hold-open defers `driver.disconnect()`
+  (teardown Step 4) while the ring's only stash — `exportLog()` →
+  `sessionStorage["ergomatic:last-rowed-log"]` — is Step 2, and its own doc
+  comment says "an entry written to the ring after this line would never reach
+  sessionStorage at all." `LogSession.tsx:666` reads exactly that key, so the
+  whole 90 s hold window would have been invisible to `MONITOR LOG · COPY`.
+  The transport-layer recording tap survives (it sits below the driver;
+  `unsubscribeRef` is the HOOK's driver-event listener, not a characteristic
+  unsubscribe) — but its own delivery path is the one #100's gate flagged as
+  ungated. **For any instrument that extends a session's life past teardown,
+  trace the EVIDENCE's export path, not the capture path, and ask which of the
+  two teardown does first.** Sibling finding: the "ARMED" chip lived on the
+  connected screen, which unmounts on finish ("the ended hand-off frame
+  navigates away on its first render") — so the `holding` state, the only one
+  the operator must not disturb, had no readout at all.
+- **"Shape unchanged" in a section header that changes the shape is worth one
+  grep of the readers.** RC-6 made `Sample.p` (and, unstated, `spm`) optional.
+  Named footprint: one file. Measured: four — `seriesRecorder.ts`'s required
+  fields, `server/routes/data.ts:502-522` which REJECTS the save on an absent
+  `p`/`spm`, `stores/logs.ts`'s type, and `traceModel.ts:161,165`, whose
+  `if (s.p !== 0)` turns an absent field into `undefined/10` = **NaN** on two
+  shipped screens. The 2026-08-17 PW nullable ruling generalises past columns
+  to OPTIONAL FIELDS: ask which installed build reads it.
+- **When the reader already honours a sentinel, "drop the field" is the more
+  expensive fix, not the cleaner one.** `traceModel` already excludes `p: 0`
+  and `spm: 0`, so RC-6's `p` half buys nothing observable and its only motive
+  (C2's `stroke_data.p` rejects zero pace) is a wave-5 SERIALIZATION concern
+  that will filter the payload anyway. The `spm` half is real and
+  rower-visible — `s.spm !== 0` means the wire's 64/101 artifacts ARE drawn
+  today, compressing the rate chart's real band — and banding them to the
+  existing 0 sentinel fixes it in one line with no type, server, reader or
+  cross-version cost. **Before making a stored field optional, check whether
+  the consumer that wants absence exists yet, and whether a sentinel the
+  readers already drop gets you there.**
+- **TRIAD classification is not blast radius, and the grouping question should
+  be asked on the second.** RC-4 (Last Split 10x) is TRIAD by definition and
+  `grep -rn "lastSplitTimeSeconds" src domain server` finds parser + fake
+  encoder + tests, **zero consumers** — it belongs in the instrument's PR.
+  RC-6, classed "TRIAD-adjacent", reaches a server route, a stored type and a
+  shipped chart, AND collides with `server/routes/data.ts` which Phase BL's
+  #164 just edited with PRs B/C still coming. **Split by what a reviewer must
+  hold at once and by what main is contending, never by the TRIAD label.**
+- **An exit clause whose evidence may never arrive needs the negative branch
+  its sibling already has.** RC's clause (e) closes the 0x003F branch on the
+  record if it never fires; clause (b) (decode the log entry date/time) has no
+  such escape, and its data lives in 0x0039, which the phase's own W2 may show
+  silent forever. The review's `:386` records a rival hypothesis the spec does
+  not repeat — end-of-workout messages "can be DROPPED entirely" — so a 90 s
+  silence does not discriminate "we hang up early" from "this firmware drops
+  them." **At a phase open, read each exit clause against the walk result that
+  would make it unmeetable, and give it (e)'s shape.** (The obvious
+  contingency, ErgData's CSAFE 0x6A log pull, is already correctly closed by
+  review row (j): the commands are public, the field layouts are not.)
+- **A combined two-phase walk needs a written CUT ORDER and a contention
+  protocol before it is scheduled.** 17 items, ~4200 m, two unbounded (W8 is
+  an inactivity timeout of unknown duration; W9 as written needs a SECOND
+  ERG). Ruled order, keep-from-the-top: W1 (2 min, gates the whole
+  verification branch) → W2+W3+W4 on one keystone piece → LL (a)/(b)/(c), the
+  brick → LL (a) pre-stroke + W5 → 9a → LL (e); cut line; then W6, W9, W8,
+  W7-distance. **Clause (b) must never fall below the cut line — it is the
+  cohort-of-one gate.** And nothing anywhere in `pm5-interface-notes.md` or
+  the ecosystem review says whether two centrals may hold one PM5: legs run
+  strictly sequentially, idle app fully closed, and a failed connect is
+  presumed contention before it is presumed a defect.
+- **Two walk items named W7, and one routed to a medium that cannot answer
+  half of it.** LL's W7 (PM5 menu mid-session) and RC's W7 (3x300 r30 held
+  open) collide by name; and §6 sent LL's W7 to the LAPTOP, where the
+  wire-quiet half is answerable but the "does the 2500 ms watchdog
+  false-fire" half is not — native is unmeasured, which is why 9a exists.
+  The CR2-close medium rule, third occurrence.
+- **The phase's headline prize depends on a PII field the standing ruling
+  starts from NO.** The verification-code branch — ROADMAP's "whole point of
+  the phase" — requires POSTING a row, which requires `weight_class`
+  (REQUIRED, we store nothing). Told at open rather than at wave 5, with two
+  zero-code moves: settle whether it can be transient upload-time rather than
+  stored (BL's questionnaire precedent), and read C2's docs on whether an
+  ErgData duplicate merges, rejects or duplicates — ROADMAP concedes this
+  "decides whether this is leverage or a fight over ownership of the row."
+- **The phase's only rower-visible defect is correctly sequenced late and
+  should be DECIDED early.** RC-5 (three stored heroes contradicting by 24.3
+  and 39.9 s/500 m) implements after RC-1 for good reason — RC-1 changes two
+  of the three. But the product decision needs no walk and no code, and RC-1's
+  storage design should be informed by it. **Separate a deferred
+  IMPLEMENTATION from a deferred DECISION at every slate gate; the second is
+  usually free and usually upstream of the first.**
+- **Release call: NO tag on spec 1.** Dev-only instrument, 0x003F with no
+  consumer, RC-4 with no consumer — nothing a tester can falsify (#140's
+  rule). The walk needs no new build either: LL's clauses bind to a Release
+  build and v0.17.0 build 717 already is it. Un-released stack: ONE merge
+  (#164, BL PR A); next tag v0.18.0 MINOR and it is **BL's** — note the BL
+  open-gate entry above recommends v0.17.0, which LL spent the same day, the
+  CS-close staleness rule recurring inside 48 hours. If RC-6 ships the `spm`
+  banding it earns a notes clause: the rate line visibly loses its 64/101
+  spikes and the fix is write-forward-only.
+- **Backlog: 67 unchecked, 212 checked, 10 triggered follow-ons** (70 at BL
+  open, 71 at 8A close, 60 at WU open, 37 at LL open, 24 on 2026-08-13).
+  Second consecutive net decrease. RC's twelve items were filed 2026-08-21 and
+  spec 1 works them the next day — executed, not filed. **Roadmap presence
+  PASS**: the Status header flipped in the same commit as the spec (`425a0f2`),
+  the first phase open in this ledger with no RF17 absence to report.
