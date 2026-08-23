@@ -1821,6 +1821,11 @@ Nothing here should be discovered at submission time.
         **never authoritative for a `100dvh` question**, which is
         precisely half of what the connected-surface occlusion check
         tests. **S**
+- [ ] **app/e2e/ is not typechecked** (James, 2026-08-23 — owner assigned;
+      previously a trap note): tsconfig.app.json covers only
+      src/domain/scripts and Playwright erases types; a hand-rolled config
+      over e2e/ surfaced 14 pre-existing errors when last tried. Fix the
+      errors, wire the config into pnpm typecheck.
 - [ ] **Let a build flag reach the fake transport on NATIVE.** One line
       in `src/adapters/monitorTransport.ts`, and it is the difference
       between "the simulator can never see a connected screen" and "every
@@ -2666,6 +2671,7 @@ walk's three findings, filed as LL follow-ups:**
   path broken. Fix is SPLIT: F2a (defuse via corroboration, Phase RC
   before RC-1) and F2b (re-key, inside RC-1/RC-8).
   `ring-phone-2-background-continuity-kill.json` is the capture.
+  **F2a defuse SHIPPED (PR #174); F2b remains open in RC-1.**
 - **F3 (small UI) — `endedBy: "link-lost"` is stored and consumed
   (`completedFullDistance`) but rendered NOWHERE** — the log detail shows
   no marking; v0.17.0's notes over-promised the surface. One line on the
@@ -2702,24 +2708,26 @@ and `ergomatic.sessionDraft`, costing an unlogged session and any
 in-progress draft. **The original hold ("until criterion (b) exists") is
 DISCHARGED (close gate, 2026-08-23): the destructive workaround is dead —
 Cancel → Connect recovers without deletion. The cohort stays at ONE TESTER
-on a NEW condition with its own discharge test: F2a is merged (the
-continuity guard no longer convicts on a single uncorroborated TWD
+on a NEW condition with its own discharge test: F2a is merged (PR #174,
+the continuity guard no longer convicts on a single uncorroborated TWD
 reading — a tester must not silently lose a measured row), AND either F1
 is fixed or the tester note carries "if Try again does nothing, tap
 Cancel then Connect".**
 
 ## Phase RC — The row Concept2 would recognise
 
-**Status:** OPENED 2026-08-22 (James: evidence-first). Spec 1 is
-`docs/superpowers/specs/2026-08-22-held-open-finish-design.md`: the
-dev-only hold-open instrument (defer the finish disconnect 90 s, subscribe
-0x003F raw), wave-0 fixes RC-4 and RC-6, and the COMBINED walk (Phase LL's
-exit clauses on the current stock TestFlight phone build (v0.18.0+;
-re-check the latest tag at walk time) + RC's W1-W4 on the laptop seam, one
-erg session). RC-1/RC-8 are specced AFTER the walk, with evidence in
-hand. Named, scoped and evidenced by the ecosystem review of 2026-08-21
-(`docs/monitor/pm5-ble-ecosystem-review.md`, which that review also
-reconciles).
+**Status:** OPEN, mid-phase (updated 2026-08-23 at #174's PM gate).
+Spec 1 (the held-open finish instrument + RC-4/RC-6) MERGED as #167; the
+COMBINED walk RAN 2026-08-23 and answered every wire question YES
+(record: `docs/monitor/sessions/walk-2026-08-23/` — summary burst exists,
+0x003F fires on firmware 459.069, byte order settled, no seconds on the
+wire; see "Walk items this phase owns" ANSWERED block). F2a (the
+continuity defuse inherited from Phase LL's close) is PR #174. NEXT: the
+RC-1/RC-8 storage-spine spec, with the walk's evidence in hand and F2b +
+the warm-up question + the F5 TWD caveat all bound into it. Originally
+opened 2026-08-22 (James: evidence-first); named, scoped and evidenced by
+the ecosystem review of 2026-08-21
+(`docs/monitor/pm5-ble-ecosystem-review.md`).
 
 **Asset on hand (James, 2026-08-22): a Concept2 Logbook DEVELOPMENT API
 key already exists in the repo-root `.env`, currently unused.** Presence
@@ -2793,7 +2801,7 @@ that needs no erg, and it can run in a test.
 
 ### The work
 
-- [ ] **F2a — DEFUSE the continuity guard's single-reading conviction
+- [x] **F2a — DEFUSE the continuity guard's single-reading conviction
       (from Phase LL's exit walk, 2026-08-23). TRIAD (changes when records
       close), full cycle, spec first, LANDS ALONE, sequenced BEFORE
       RC-1.** The guard convicts on one backward TWD reading even when the
@@ -2802,6 +2810,7 @@ that needs no erg, and it can run in a test.
       record. This is a BOUND, not a key — the correct key is F2b's,
       inside RC-1. Evidence: the six-row TWD table in the LL walk card's
       corrected F2 and `walk-2026-08-23/ring-phone-2-background-continuity-kill.json`.
+      **Shipped, see `continuity.ts` + spec 2026-08-23-continuity-corroboration.**
 - [ ] **RC-1 — Store WORK and REST separately, per interval and per
       session.** TRIAD (stored shape + a number's meaning). Nothing else
       moves reconciliation. Add `restSeconds` and `type` to
@@ -2825,7 +2834,13 @@ that needs no erg, and it can run in a test.
       walk proved TWD non-monotonic and inconsistent on time intervals
       (five zeros against one 81 in one day; the LL walk card's corrected
       F2 has the table). The spec inherits the CORRECTED root cause,
-      never the filed "iOS was outside the corpus" wording.
+      never the filed "iOS was outside the corpus" wording. **Owed risk
+      from F2a's own trade (final-review MEDIUM-1, 2026-08-23): a record
+      F2a now MERGES instead of closing can SILENTLY UNDER-COUNT, not
+      read as visibly wrong — `driver.ts`'s per-interval session register
+      max-merges post-reset metres against the pre-reset value (300 m
+      rowed + a reset + 200 m more stores ≈300 m, not 500 m) — so RC-1's
+      re-key spec must not assume a merged record announces itself.**
 - [ ] **RC-2 — Decode Log Entry Date/Time; log it beside our wall clock;
       store nothing yet.** Format settled from two projects and checked
       arithmetically: date `uint16` = month | day<<4 | (year-2000)<<9;
