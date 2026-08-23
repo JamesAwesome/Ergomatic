@@ -2606,11 +2606,15 @@ criterion (b) exists.
 
 ## Phase RC — The row Concept2 would recognise
 
-**Status:** NOT OPENED. Named, scoped and evidenced by the ecosystem
-review of 2026-08-21 (`docs/monitor/pm5-ble-ecosystem-review.md`, which
-that review also reconciles). No spec is written yet. This section exists
-so the work has a home the moment one is, and so its findings stop living
-in a report (recurring failure 14).
+**Status:** OPENED 2026-08-22 (James: evidence-first). Spec 1 is
+`docs/superpowers/specs/2026-08-22-held-open-finish-design.md`: the
+dev-only hold-open instrument (defer the finish disconnect 90 s, subscribe
+0x003F raw), wave-0 fixes RC-4 and RC-6, and the COMBINED walk (Phase LL's
+exit clauses on stock v0.17.0 phone + RC's W1-W4 on the laptop seam, one
+erg session). RC-1/RC-8 are specced AFTER the walk, with evidence in
+hand. Named, scoped and evidenced by the ecosystem review of 2026-08-21
+(`docs/monitor/pm5-ble-ecosystem-review.md`, which that review also
+reconciles).
 
 **Asset on hand (James, 2026-08-22): a Concept2 Logbook DEVELOPMENT API
 key already exists in the repo-root `.env`, currently unused.** Presence
