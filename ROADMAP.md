@@ -1499,11 +1499,13 @@ its own PM final-PR gate), the You re-test shortcut, and the ORIGIN
 predicate in the editor. James's R1 ruling (2026-08-22): the phone-timer door RECORDS too — losing
 a genuine unconnected test is worse than carrying a removable bogus row;
 the remove/void verb gates 8B's list (binding, in 8B's own bullet).
-**The phase now stands AT ITS STOP-POINT:**
-doors, questionnaire + 16-cell table, and Reset baseline setup are
-unstarted as PR C — the phase may close and release on A+B if the
-table cannot meet its bounded criteria. `estimated` remains the one
-enum value with no writer until PR C. **Three durable facts
+**The stop-point was passed: the table met its
+bounded criteria, and PR C is implemented** (doors + questionnaire +
+16-cell table + Reset baseline setup; every enum value now has a real
+writer — `estimated` was the last). James's 2026-08-23 copy ruling
+(strong-and-steady 6k, not-a-sprint reminder; 2k stays ALL OUT) is
+built into the doors card, RowPath, and the committed canvas sources
+in the same commit. **Three durable facts
 every later consumer of provenance must know (PR #164's gate):**
 (1) VERSION SKEW — a pre-#164 client's Apply resends untouched fields
 as plain writes, demoting a newer build's `derived`/`tested` source on
@@ -1532,19 +1534,39 @@ the table ships.
 door suits them, and a rowed test finally gets RECORDED instead of
 hand-typed.
 
-- [ ] **Baseline provenance** — per NUMBER, James's rev-2 ruling:
+- [x] **Baseline provenance** — per NUMBER, James's rev-2 ruling:
       `k2Source`/`k6Source`, each
       `manual | estimated | derived | tested`, stored, NEVER shown;
       existing rows migrate to `manual` (truthful — the You editor was
       the only writer that ever existed); additive API. **Triad core —
-      lands per the grouping rule's triad exception.** **M**
-- [ ] **The three doors** replace the single-offer no-baseline card
-      (outcome-framed per James: recommend / I know it / row it; door 3
-      dual-distance, reusing the shipped BaselineCard toggle). **M**
-- [ ] **The questionnaire + estimate table**: two questions (experience,
-      cardio), NO age band (standing PII-minimization ruling), 16-cell
-      static lookup in `domain/` with per-row source citations from the
-      named C2-rankings research task. **M**
+      lands per the grouping rule's triad exception.** Delivered by PR A
+      (#164); ticked late — the status paragraph above recorded the land
+      while this box sat unchecked. **M**
+- [x] **The three doors** replace the single-offer no-baseline card
+      (outcome-framed per James: recommend / I know it / row it) — PR C:
+      `today/DoorsCard.tsx` + the three `/onboarding/*` flow screens;
+      renders whenever the PAIR is incomplete (the superset ruling).
+      Door 3 is dual-distance as NEW UI in the old card's anatomy — this
+      bullet's original "reusing the shipped BaselineCard toggle" was
+      overruled at the phase-open gate (the card refuses to render for a
+      both-set account; spec rev 2's M7 finding), and BaselineCard is
+      deleted. Door-3/6k copy carries James's 2026-08-23 ruling: strong
+      and steady, with the not-a-sprint reminder; the 2k stays ALL OUT
+      and the 6K Test workout itself still renders MAX (v0.18.1). **M**
+- [x] **The questionnaire + estimate table**: two questions (experience,
+      cardio), NO age band (standing PII-minimization ruling), answers
+      TRANSIENT (never stored, never sent — pinned by an e2e wire
+      capture); 16-cell static lookup in `domain/estimateBaseline.ts`
+      with per-cell population comments and source tags. Re-grounded per
+      rev 2 (the C2-rankings PRIMARY claim was withdrawn at the gates):
+      SECONDARY recreational band 2:30..2:15/500m, conservative bias,
+      one exempt cell (a-lot x training-hard, 2:10); bounded criteria
+      all pinned by test (totality, 60..240, k2<k6, gap ==
+      K2_K6_OFFSET_SECONDS, fast-end bound, monotonicity). CONSTANTS
+      RECONCILED to one family: the editor's seeds now derive from the
+      table's most-common cell (145/152 = 2:25/2:32), retiring the
+      hand-typed 112/122 club-rower pair and its contradicting 10s gap.
+      James checks all 16 cells at the PR. **M**
 - [x] **The post-test prompt** (PR B): a completed test session offers
       its own result as the new baseline (`tested`) post-save, and never
       blocks or auto-writes; accept can then offer the derived
@@ -1571,11 +1593,14 @@ hand-typed.
       still all out") — deployed rows converge in place on boot.
       DEVIATIONS row 121 is the stated design (no handoff mock exists).
       **S**
-- [ ] **Reset baseline setup** (James, 2026-08-22, at the gate): a
+- [x] **Reset baseline setup** (James, 2026-08-22, at the gate; PR C): a
       staged-confirm action on You clearing both numbers and both
       sources — the doors become re-enterable for ANY account, demos
-      included. Needs a deliberate clear operation (the PUT rejects
-      null today). Rides PR C. **S**
+      included. The deliberate clear operation is `DELETE
+      /api/baselines` (its own verb — PUT still rejects null on
+      purpose), deleting the row whole so SOURCE-BESIDE-NULL can leave
+      nothing stale; additive, old clients unaffected, proven against
+      real Postgres. **S**
 
 **Exit:** the spec's draft exit criteria, refined at phase open — each
 door works end to end, the prompt closes the measurement loop, every
