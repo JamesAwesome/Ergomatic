@@ -34,7 +34,7 @@ export const ONBOARDING_LIBRARY_WORKOUTS: WorkoutInput[] = [
         // still all out" — a 6K test is an all-out effort like the 2K,
         // never the easy `min` word the seed originally carried. Renders
         // as MAX/ALL OUT everywhere the ref shows, and with baselines
-        // set, `resolveSplit` now prices it at k2 pace (was k6+20).
+        // set, `estimationSplit` now prices it at k2 pace (was k6+20; `resolveSplit` throws on effort refs).
         // Existing deployed rows converge in place on boot
         // (seed.ts's contentEqual step-diff path — integration-tested).
         ref: { effort: "max" },
