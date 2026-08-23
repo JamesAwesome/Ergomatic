@@ -219,7 +219,7 @@ export function buildAdditionalStatus2Bytes(s: AdditionalStatus2): Uint8Array {
   writeU16LE(bytes, 8, Math.round(s.splitAvgPace * 100));
   writeU16LE(bytes, 10, s.splitAvgPowerWatts);
   writeU16LE(bytes, 12, s.splitAvgCalories);
-  writeU24LE(bytes, 14, Math.round(s.lastSplitTimeSeconds * 10));
+  writeU24LE(bytes, 14, Math.round(s.lastSplitTimeSeconds * 100));
   writeU24LE(bytes, 17, s.lastSplitDistanceMeters);
   return bytes;
 }

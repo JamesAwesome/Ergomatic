@@ -2727,7 +2727,8 @@ that needs no erg, and it can run in a test.
       Caveat: `avgPaceSecondsPer500m`'s /10 scale rests on the same
       document that was wrong about Last Split Time two pages earlier and
       has never decoded a real byte — DOC-ONLY until a capture lands.
-- [ ] **RC-4 — Last Split Time is 0.01 s/lsb, not 0.1.** TRIAD, S,
+- [x] **RC-4 — Last Split Time is 0.01 s/lsb, not 0.1.** Settled by
+      replay, see `parse.test.ts` (seq 1195). TRIAD, S,
       **settled without an erg.** Both C2 documents print 0.1, four
       times. Nine capture pairs say 0.01 (0x0033's u24LE@14 is the exact
       hundredths value whose truncation to tenths is 0x0037's split
@@ -2824,8 +2825,10 @@ that needs no erg, and it can run in a test.
       rest-exclusive; ORM's writer independently agrees).
       `pm5-interface-notes.md:4393` says 0x0037's work-only status is
       "still open" while `state-architecture-review.md:1310` says PROVEN
-      — the review is right. §20 items 17 and 24 are contradicted by the
-      captures that settle RC-4. `driver.ts:2094-2099` says "no capture
+      — the review is right. ~~§20 items 17 and 24 are contradicted by
+      the captures that settle RC-4.~~ **DONE, folded into RC-4's PR** —
+      both items rewritten to the 0.01 s/lsb, dimension-conditional
+      semantic. `driver.ts:2094-2099` says "no capture
       or existing test evidences" state 9; one committed two days later
       does. `types.ts:429-433` claims `onDisconnect` covers the Bluetooth
       stack resetting and iOS backgrounding — it covers neither.

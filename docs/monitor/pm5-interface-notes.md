@@ -498,7 +498,7 @@ want "how far into THIS interval" read these two fields directly (against
 | 8-9    | Split/Interval Avg Pace                              | 0.01 sec/lsb                        |
 | 10-11  | Split/Interval Avg Power                             | whole watts                         |
 | 12-13  | Split/Interval Avg Calories                          | whole cals                          |
-| 14-16  | Last Split Time                                      | 0.1 sec/lsb                         |
+| 14-16  | Last Split Time                                      | **0.01 sec/lsb** — both C2 documents print 0.1 (wrong, RC-4, §20 item 17) |
 | 17-19  | Last Split Distance                                  | whole meters                        |
 
 **The multiplexed (`0x0080`) restatements of 0x0032/0x0033 are NOT
@@ -4272,33 +4272,55 @@ Wait for both halves of one boundary, in either order.
 **Evidence:** §18 #3's follow-up diagnosis row (D4), and §19.8's own caveat
 about which readings predate the fix.
 
-**17. 0x0033's Last Split Time and Last Split Distance read ZERO through
-interval indices 0 and 1, then LAG one boundary behind from index 2 on.**
-Measured (225 time frames + 161 distance frames at interval index 1, zero
+**17. 0x0033's Last Split Time is 0.01 s/lsb, not the 0.1 s/lsb both C2
+documents print (RC-4, 2026-08-22) — and the checkpoint pair is
+DIMENSION-CONDITIONAL, never a countdown checkpoint at any scale.**
+Settled without a new erg session: nine capture pairs (0x0033's u24LE@14
+is the exact hundredths value whose truncation to tenths equals 0x0037's
+already-established Split/Interval Time) and the PM5's own memory screen
+(raw `7476` → displayed `1:14.7`, `walk-2026-08-17/README.md:14`) agree
+against both documents' printed 0.1. `parse.ts` had divided by 10 instead
+of 100 since CR2 spec 2a Task 6; `statusFrames.ts`'s fake encoder mirrored
+the identical error, so no round trip could ever have caught it — pinned
+instead by a REPLAY against committed capture bytes (`parse.test.ts`,
+`walk-2026-08-17/step-2-pm5-recording-1786973078979.jsonl` seq 1195: raw
+`7476` decodes to `74.76 s`, 0.05 s off the SAME frame's Elapsed Time of
+`74.71 s` — transiently live mid-interval, not zero and not a lagging
+boundary value). That reading contradicts this item's original "reads
+ZERO through indices 0-1, then LAGS one boundary behind" characterization
+as a universal rule, which held on the captures below; paralleling item
+25's own Total Work Distance finding on this same characteristic and this
+same session, the pair reads as dimension-conditional (its behavior
+differs by interval goal type) rather than as one fixed rule. On no
+dimension is it usable as a countdown checkpoint: CR2 spec 2a Task 6
+already stopped trying and reads 0x0031's own per-interval Elapsed
+Time/Distance pair directly instead (no checkpoint).
+**The original finding, still the record for the captures it was measured
+on:** 225 time frames + 161 distance frames at interval index 1, zero
 mismatches, independently re-verified by inverting `intervalRemaining` out
-of the lab captures): the pair does NOT hold the current interval's own
-start point, and it does not refresh to a fresh value at every boundary
-either. It holds the PREVIOUS boundary's cumulative point — at interval
-index 2 it reads interval 0's end value — one boundary behind the interval
-a consumer is actually in, on every regular status tick. A consumer cannot
-recover progress into the current interval from this pair by subtraction
-past index 1; CR2 spec 2a Task 6 stopped trying to, and reads 0x0031's own
-per-interval Elapsed Time/Distance pair directly instead (no checkpoint).
-**Official docs:** SILENT on update cadence. The BLE doc lists the two
-fields (pp.14-15, §10's 0x0033 table) and nothing more.
+of the lab captures — the pair does NOT hold the current interval's own
+start point there, and it does not refresh to a fresh value at every
+boundary either; it holds the PREVIOUS boundary's cumulative point — at
+interval index 2 it reads interval 0's end value — one boundary behind the
+interval a consumer is actually in, on every regular status tick observed
+in that data.
+**Official docs:** SILENT on update cadence, and WRONG on scale — the BLE
+doc lists Last Split Time at 0.1 sec/lsb (pp.14-15, §10's 0x0033 table,
+now corrected) and nothing about behavior.
 **Evidence:** the inversion off `docs/monitor/sessions/walk-2026-08-15/`
-(225+161 frames, zero mismatches) settled this. §18 #7, §17 item 7: 58.92 s
-remaining observed 1.08 s into a 60 s interval — correct only because that
-capture never left interval index 1, where the checkpoint happens to read
-0 and "holds steady at the start point" and "reads zero" are numerically
-indistinguishable. §15 #8's walk-4 addendum first raised the contradiction
-this resolves. **Still open** (§20 item 24): whether the lag is "one
-boundary behind" (interval 0's own end value, unchanged until the
-checkpoint itself next advances) or "previous split's own value" (each
-boundary contributing its own distinct prior value) — both fit every
+(225+161 frames, zero mismatches) settled the original lag finding. §18
+#7, §17 item 7: 58.92 s remaining observed 1.08 s into a 60 s interval —
+correct only because that capture never left interval index 1, where the
+checkpoint happens to read 0 and "holds steady at the start point" and
+"reads zero" are numerically indistinguishable. §15 #8's walk-4 addendum
+first raised the contradiction this resolves. RC-4's
+`walk-2026-08-17/step-2-...jsonl` seq 1195 (§20 item 24) settles the scale
+and supplies the transiently-live counter-example.
+**Still open** (§20 item 24): whether the original lag, where it applies,
+is "one boundary behind" or "previous split's own value" — both fit every
 capture in hand and imply the same fix; only a 4-UNEQUAL-interval walk row
-separates them, since equal intervals make the two hypotheses numerically
-identical.
+separates them. Also open: which interval-goal dimension each behavior
+belongs to, beyond the one distance-goal capture in hand.
 
 **18. Heart rate has two sentinels in the field, and only one of them is the
 documented one.** With no belt paired, 0x0038's work-heartrate field
@@ -4415,30 +4437,51 @@ in a browser test, never measured against hardware, and nothing downstream
 treats them as a timing oracle.
 
 **24. What 0x0033's Last Split checkpoint pair actually reports on
-interval workouts — HALF-SETTLED.** §15 #8's session-cumulative reading and
-walk 4's per-interval 0x0031 finding could not both be whole truths, because
-the driver subtracted one from the other and the countdown was CORRECT on
-hardware only through interval indices 0-1. The inversion of
-`intervalRemaining` out of the lab captures (225 time frames + 161 distance
-frames, zero mismatches, independently re-verified) settled WHICH: the
+interval workouts — HALF-SETTLED, scale corrected (RC-4, 2026-08-22).**
+§15 #8's session-cumulative reading and walk 4's per-interval 0x0031
+finding could not both be whole truths, because the driver subtracted one
+from the other and the countdown was CORRECT on hardware only through
+interval indices 0-1. The inversion of `intervalRemaining` out of the lab
+captures (225 time frames + 161 distance frames, zero mismatches,
+independently re-verified) settled WHICH, for those captures: the
 checkpoint reads ZERO through interval indices 0 and 1, then LAGS one
 boundary behind from index 2 on — not session-cumulative, not
 interval-relative. `src/monitor/driver.ts`'s `computeRemainingForFrame`/
 `computeAccruedForFrame` no longer read this pair at all (CR2 spec 2a
 Task 6); 0x0031's own per-interval Elapsed Time/Distance pair is read
-directly instead. **Still open:** whether the lag is "one boundary behind"
-(interval 0's own end value, repeating unchanged at every later boundary
-until the checkpoint itself next advances) or "previous split's own value"
-(each boundary contributing its own distinct prior value) — both fit every
-capture in hand and imply the same fix; only a raw 0x0033 capture across a
-4-UNEQUAL-interval program separates them, since equal intervals make the
-two hypotheses numerically identical.
-**Official docs:** SILENT (no update cadence, no basis stated).
+directly instead.
+RC-4 adds a second, CONTRADICTING data point on top of correcting the
+scale bug (`parse.ts`/`statusFrames.ts` had decoded/encoded Last Split
+Time at 0.1 s/lsb; the field is 0.01 s/lsb — nine capture pairs and the
+PM5's own memory screen agree; see §20 item 17): the committed
+`walk-2026-08-17/step-2-pm5-recording-1786973078979.jsonl` seq 1195, a
+2×250m distance-goal keystone, decodes Last Split Time to `74.76 s`
+against the SAME frame's Elapsed Time of `74.71 s` — 0.05 s apart, neither
+zero nor a stale boundary value. The checkpoint pair is
+DIMENSION-CONDITIONAL (paralleling item 25's Total Work Distance finding
+on this same characteristic, same session) and transiently live
+mid-interval on at least one dimension; on neither dimension is it a
+countdown checkpoint, which is why no consumer reads it that way
+(`driver.ts` above; `parse.test.ts`'s replay pin exists to keep the scale
+honest, not to license using the field as a clock).
+**Still open:** whether the original lag, where it applies, is "one
+boundary behind" (interval 0's own end value, repeating unchanged at
+every later boundary until the checkpoint itself next advances) or
+"previous split's own value" (each boundary contributing its own distinct
+prior value) — both fit every capture in hand and imply the same fix;
+only a raw 0x0033 capture across a 4-UNEQUAL-interval program separates
+them, since equal intervals make the two hypotheses numerically
+identical. Also open: which interval-goal dimension each behavior belongs
+to.
+**Official docs:** SILENT (no update cadence, no basis stated) and WRONG
+on scale (both documents print 0.1 s/lsb; §20 item 17).
 **Evidence:** §15 #8's walk-4 addendum first raised the contradiction; the
 inversion above (also §20 item 17) settled it half of the way; the
 2026-08-15 connected-axes design spec §3 ("The interval clock") records the
-adjudication. The deciding walk row (4 unequal intervals) is queued on the
-spec-2 walk list, `docs/monitor/sessions/walk-2026-08-15/README.md`.
+adjudication. RC-4's `parse.test.ts` replay pin against seq 1195 settles
+the scale and supplies the transiently-live counter-example. The deciding
+walk row (4 unequal intervals) is queued on the spec-2 walk list,
+`docs/monitor/sessions/walk-2026-08-15/README.md`.
 
 **25. Total Work Distance (offsets 11-13) is a BOUNDARY ACCUMULATOR on a
 distance-goal interval, not a live rowed-distance reading — and on a
