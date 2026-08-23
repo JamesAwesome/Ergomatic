@@ -1,9 +1,11 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import type { Me } from "./useMe";
 import { signOut as authSignOut } from "./adapters/auth";
 import { useArticleReads } from "./api/useArticleReads";
 import { startHereReadCount } from "./today/startHereSteps";
 import BaselineEditor from "./you/BaselineEditor";
+import ResetBaselineSetup from "./you/ResetBaselineSetup";
 import RetestShortcut from "./you/RetestShortcut";
 
 function initials(name: string): string {
@@ -23,6 +25,11 @@ export default function You({
   onSignedOut: () => void;
 }) {
   const reads = useArticleReads();
+  // Phase BL PR C: bumped by Reset baseline setup's successful clear —
+  // remounts BaselineEditor (key below) so its draft re-seeds from the
+  // now-empty server state instead of keeping the cleared numbers on
+  // screen as if they still existed.
+  const [resetGeneration, setResetGeneration] = useState(0);
   // `null` (not 0) whenever read state isn't known — the meta renders bare
   // "START HERE" with no count in that case, the same suppression rule
   // StartHere.tsx's own header uses (startHereSteps.ts's shared helper).
@@ -49,7 +56,7 @@ export default function You({
         </button>
       </section>
       <h2 className="section-heading">BASELINES</h2>
-      <BaselineEditor />
+      <BaselineEditor key={resetGeneration} />
       {/* Phase BL PR B, reshaped by James's tester feedback (2026-08-22):
           row the 6k / race the 2k, one tap from the numbers to each
           designated test's DETAIL screen (Connect / Start Timer / Log it
@@ -57,6 +64,11 @@ export default function You({
           covers identity, the from:"/you" back chain, and where the
           start guards live now. */}
       <RetestShortcut />
+      {/* Phase BL PR C: the staged-confirm Reset baseline setup — the
+          product answer to "the doors are unreachable once set" (spec rev
+          2's Reset onboarding ruling). Sits with the BASELINES section it
+          destroys, below the shortcut. */}
+      <ResetBaselineSetup onReset={() => setResetGeneration((g) => g + 1)} />
       {/* Task 7 (design spec §"Learning the app on You"): the mock's other
           settings rows (PRE-WORKOUT COUNTDOWN, PACE TOLERANCE, ACCENT
           COLOR) are filler (DEVIATIONS.md/handoff README §7) and are

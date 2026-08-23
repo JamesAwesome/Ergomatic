@@ -136,6 +136,11 @@ function makeFakeBaselinesStore(): BaselinesStore {
       };
       rows.set(userId, { ...current, ...patch });
     },
+    // Phase BL PR C: mirrors the real store's whole-row delete (numbers
+    // and sources go together; a later put starts from the defaults).
+    async clear(userId: string) {
+      rows.delete(userId);
+    },
   } as unknown as BaselinesStore;
 }
 

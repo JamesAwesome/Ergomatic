@@ -9105,6 +9105,13 @@ section:not(.news-pinned) .news-row:last-of-type {
    caption ("the buttons speak for themselves") and no staged-confirm
    wrapper any more — the links start nothing, so the .baseline-confirm
    reuse and the full-width staged item died with the in-place start. */
+/* Phase BL PR C: Reset baseline setup's slot under the BASELINES section
+   (you/ResetBaselineSetup.tsx). The staged confirm inside reuses the
+   editor's own .baseline-confirm / .baseline-actions vocabulary. */
+.reset-baselines {
+  margin-top: 12px;
+}
+
 .retest {
   margin-top: 12px;
   display: flex;
