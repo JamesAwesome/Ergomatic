@@ -363,6 +363,36 @@ export function parseEndOfWorkoutSummary(
   };
 }
 
+export interface SummaryLogStamp {
+  year: number;
+  month: number;
+  day: number;
+  hours: number;
+  minutes: number;
+}
+
+/**
+ * Decode the 0x0039 log date/time stamp (RC-2, diagnostic-only).
+ * Bytes PRIMARY (committed hardware captures walk-2026-08-24).
+ * Formula INFERENCE over one date/hour from two captures (no vendor doc).
+ * Wire facts: date u16 LE = month (0-3 bits) | day<<4 (4-8 bits) | (year-2000)<<9 (9-15 bits);
+ * time u16 LE = minutes (0-7 bits) | hours<<8 (8-15 bits).
+ */
+export function parseSummaryLogStamp(
+  bytes: Uint8Array,
+): SummaryLogStamp | null {
+  if (bytes.length < 4) return null;
+  const date = readU16LE(bytes, 0);
+  const time = readU16LE(bytes, 2);
+  return {
+    year: 2000 + (date >> 9),
+    month: date & 0x0f,
+    day: (date >> 4) & 0x1f,
+    hours: time >> 8,
+    minutes: time & 0xff,
+  };
+}
+
 /**
  * The merged view of all five status characteristics. A driver (a later
  * task) builds one of these per "tick" by spreading each characteristic's
