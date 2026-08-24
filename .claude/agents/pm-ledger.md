@@ -2155,3 +2155,85 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
 - **The 30-second rule is 0-for-13** (#183 at 337 words); seventh consecutive
   declined enforcement, same reason. Still James's to re-set or retire, still
   belongs in `CLAUDE.md`.
+
+## Phase-open gate, 2026-08-24 (Phase JR slate: Just Row, observe the machine's free row)
+
+- **"The driver can do it" is not "the app has a path to it", and a capture
+  walk is the place that gap gets discovered at the erg.** JR's PR 0 walks an
+  unprogrammed Just Row on the strength of `driver.ts` ("frames flow before any
+  `program()`"). True at the driver; false at the app --
+  `WorkoutDetail.tsx:232`'s `handleConnectProceed` is the ONLY connect entry,
+  and `ConnectedInterstitial.tsx` fires `session.connect()` at `:298` then
+  auto-`program()` at `:312` with no operator-holdable window between them. A
+  walk that needs a state the shipped UI cannot enter needs an INSTRUMENT
+  first, and that instrument is a PR, not a walk item. **At any gate that
+  schedules a capture, name the screen and the tap sequence that reaches the
+  state being captured** -- RF13's operator-instruction bar applied to a walk's
+  PREMISE rather than its printed commands.
+- **Two hardware sessions in one queue is one hardware session.** JR's PR 0 and
+  RC's exit-7 walk were scheduled independently, days apart, on the same erg.
+  (Overtaken by events -- James had already run exit-7 -- but the technique
+  stands: check the walk queue before scheduling a new trip, and remember the
+  #100 rule that an instrument sharing a week with a scheduled walk outranks
+  the queue.)
+- **A stored shape can hide in the PR labelled "surface".** JR assigned TRIAD
+  to PR 1 (`session_logs`) and put `MonitorRun` "v2, additive `mode`" in PR 2.
+  `MonitorRun.program: WorkoutProgram` is REQUIRED and `isMonitorRun` enforces
+  `isPlainRecord(program) && Array.isArray(program.intervals)` -- so the
+  "additive" field is really fabricate-an-empty-program or
+  make-program-optional (a reader sweep). localStorage is TRIAD by the fast
+  path's own line. **At a slate gate, grep every persisted record the phase
+  touches for REQUIRED fields the new case cannot supply, and re-cut the PR
+  boundary on the answer** -- not on the spec's own labels.
+- **The server's plan-advance DEFAULT is `true`, and every "this must not
+  advance the plan" spec has to say so.** `routes/data.ts:1382` reads
+  `advancesPlan: (body.advancesPlan as boolean | undefined) ?? true` -- there is
+  no server-side derivation from workout type at all, so "the plan derivation
+  provably skips it" mis-locates the mechanism onto a component that does not
+  make the decision. Third relative of 6I's "a baseline test must not silently
+  consume plan session 1". **Require both halves: the client posts `false`, and
+  the server refuses to advance for the new type.**
+- **A whole-piece average has no wire source when the piece has no intervals.**
+  JR's stored-shape table said `avg_split_seconds` = "last live frame". This
+  codebase's `avgSplit` is `splitIntervalAvgPace` (`parse.ts:568`), SPLIT-scoped
+  -- and a Just Row auto-splits every 5 minutes, so on a 25-minute row that is
+  the last five minutes. The only whole-row average, `avgPaceSecondsPer500m`
+  (`parse.ts:362`), lives in the 0x0039 frame. **Before storing any "average"
+  for a piece, name the frame, name its scope, and confirm the scope is the
+  piece.** Direct application of the CS-close split-field ruling. Resolution:
+  derive `500 x time/distance` ourselves, labelled ours.
+- **A new door must fit the card it joins, or the card is being rewritten.**
+  JR's fourth "quiet door" entered `DoorsCard` -- label `SET UP YOUR BASELINE`,
+  body "Every workout's targets come from your 2k and 6k baseline splits" --
+  as the one door that produces no baseline. **Ruled CUT at this gate (James
+  confirmed):** the phase's own always-visible Today row already delivers
+  "nobody is ever blocked from just rowing", so the door bought nothing and
+  cost BL's approved framing. **Generalises: when a spec adds a member to an
+  existing card/list/group, read that group's OWN heading and body copy back
+  against the new member.**
+- **A route can be the unbuilt half of a feature.** "Offers the normal log
+  screen" was one bullet in JR's PR 2. `monitorModeRun` (`LogSession.tsx:253`)
+  takes `workoutId: string`, requires an exact match; its route is
+  `/library/:id/log`. A null-workout run has no `:id` -- and `Today.tsx:667`
+  already hides "Log it" for exactly that case, calling it a latent in its own
+  comment. **Whenever a spec says a new record "reaches the existing screen",
+  check the screen's ROUTE PARAMETERS, not just its component.**
+- **Best oracle sentence at an open gate so far, worth copying:** JR's exit
+  walk states what its oracle MEASURES before claiming agreement. That is
+  RF#11's 2026-08-21 sharpening satisfied unprompted, at the slate stage.
+  (The anchor pass then sharpened it further: the comparison is a
+  TRANSCRIPTION check, not a definition check, because the stored number IS
+  the PM's counter -- both statements now live in the spec.)
+- **Release call: NO TAG on PR 0 or PR 1 as tester releases** (an instrument
+  no tester can reach; stored fields nothing renders -- the #140 rule, third
+  pre-statement in a row); but PR 1 still tags READ-SIDE-FIRST at patch level
+  (the R-A discipline: the fallback ships in an earlier tag than the writer).
+  **PR 2 is MINOR and gets a clean attributable release.** Notes owe three
+  clauses: the feature, **that a Just Row never advances your plan**, and that
+  these rows carry no targets and no type chip.
+- **Exit criteria: the phase had a walk and no per-PR criteria.** Six numbered
+  criteria now frozen in the spec; criterion 1's honest form is "`done_n` is
+  unchanged across a Just Row save", not "the columns are null" -- the #117
+  tautology check.
+- **The 30-second rule is 0-for-13.** Still James's to re-set or retire, still
+  belongs in `CLAUDE.md`.
