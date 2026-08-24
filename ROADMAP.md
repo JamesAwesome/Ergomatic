@@ -2886,7 +2886,7 @@ that needs no erg, and it can run in a test.
       SAME frame's elapsed and distance are advancing; a real monitor
       reset zeroes all three. Require corroboration before closing a
       record. This is a BOUND, not a key — the correct key is F2b's,
-      inside RC-1. Evidence: the six-row TWD table in the LL walk card's
+      SHIPPED in the spine's PR 3 (the interval-count bound). Evidence: the six-row TWD table in the LL walk card's
       corrected F2 and `walk-2026-08-23/ring-phone-2-background-continuity-kill.json`.
       **Shipped, see `continuity.ts` + spec 2026-08-23-continuity-corroboration.**
 - [x] **RC-1 — Store WORK and REST separately, per interval and per
