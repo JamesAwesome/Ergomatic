@@ -278,6 +278,12 @@ export interface IntervalActual {
   // and absent again on the synthesized-final fallback (`driver.ts`'s
   // `deriveFinalIntervalFromSummary` caller), which has no wire reading
   // for it either (0x0039 carries no per-interval rest time).
+  //
+  // MIXED PROVENANCE with its sibling: `restDistanceMeters` is a machine
+  // MEASUREMENT corroborated against TWD (1535+64=1599, decoded to the
+  // metre), while THIS field is the unestablished readback above — a
+  // future reconciler (RC-5) must not treat "rest" as one population
+  // just because the two live under one heading.
   restSeconds?: number;
   // ADDITIVE (storage-spine design spec §3, RC-1): 0x0037's own
   // Split/Interval Type (`pm5/parse.ts`'s `SplitIntervalData.

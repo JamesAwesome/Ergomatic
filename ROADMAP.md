@@ -2773,17 +2773,17 @@ note's fallback wording is no longer needed.**
 
 ## Phase RC — The row Concept2 would recognise
 
-**Status:** OPEN, mid-phase (updated 2026-08-23 at #174's PM gate).
-Spec 1 (the held-open finish instrument + RC-4/RC-6) MERGED as #167; the
-COMBINED walk RAN 2026-08-23 and answered every wire question YES
-(record: `docs/monitor/sessions/walk-2026-08-23/` — summary burst exists,
-0x003F fires on firmware 459.069, byte order settled, no seconds on the
-wire; see "Walk items this phase owns" ANSWERED block). F2a (the
-continuity defuse inherited from Phase LL's close) is PR #174. NEXT: the
-RC-1/RC-8 storage-spine spec, with the walk's evidence in hand and F2b +
-the warm-up question + the F5 TWD caveat all bound into it. Originally
-opened 2026-08-22 (James: evidence-first); named, scoped and evidenced by
-the ecosystem review of 2026-08-21
+**Status:** OPEN, mid-phase (updated 2026-08-24 at #182's PM gate). The
+storage-spine spec (`2026-08-23-storage-spine-design.md`) is two-thirds
+executed: PR 1 (#180, the burst captured both sides — display of the new
+observation fields HARDWARE-GATED on exit 7's photograph) and PR 2
+(#182, RC-1: work/rest stored separately, no backfill, double-precision
+seconds) are merged; PR 3 (F2b, the interval-count continuity bound) is
+the spec's remaining third. Earlier: #167 (instrument + RC-4/RC-6),
+#174 (F2a), #177 (cohort unlock); the combined walk answered every wire
+question YES (record: `docs/monitor/sessions/walk-2026-08-23/`).
+Originally opened 2026-08-22 (James: evidence-first); named, scoped and
+evidenced by the ecosystem review of 2026-08-21
 (`docs/monitor/pm5-ble-ecosystem-review.md`).
 
 **Asset on hand (James, 2026-08-22): a Concept2 Logbook DEVELOPMENT API
@@ -2908,10 +2908,14 @@ that needs no erg, and it can run in a test.
       made rather than an under-count. The rest pair is all-or-nothing
       (one actual missing rest data omits `restSeconds`/`restMeters` from
       the WHOLE record, never a partial sum). Server: four nullable
-      `integer` columns beside the fused hero columns
+      columns beside the fused hero columns
       (`session_logs.work_seconds`/`work_meters`/`rest_seconds`/
-      `rest_meters`, migration 0015), additive, POST-validated
-      non-negative-integer-or-null. **NO BACKFILL: every `session_logs`
+      `rest_meters`, migration 0015), additive — **the SECONDS pair is
+      `double precision`** (0x0037's elapsed decodes in TENTHS; the first
+      cut's integer columns 400'd real saves — the final review's
+      blocker), the meters pair integer (whole-metre wire fields);
+      POST-validated non-negative-FINITE-or-null for seconds,
+      non-negative-integer-or-null for meters. **NO BACKFILL: every `session_logs`
       row and every `MonitorRun` written before this PR keeps its
       fused-only quantities forever — these four fields are simply absent
       on it, and no migration or reader ever tries to derive them after
@@ -3026,6 +3030,11 @@ that needs no erg, and it can run in a test.
       and nobody had asked what it writes when it fires. **Sequence it
       INSIDE A-2's spec.**
 - [ ] **RC-8 — Correct the fake's five contradictions of the real wire.**
+      **Residual sub-item (#182's T2 review): `fake.ts`'s
+      `toMachineIndex` is resting-conditional while `intervalIndex.ts`'s
+      `toActualIndex` is unconditional — a latent index mismatch for
+      rest-free non-first-interval boundaries in fake-driven tests
+      (pre-existing, worked around in tests, not yet load-bearing).**
       Gates the honesty of everything above. `fake.ts` forces
       `restSeconds` to 0 off a rest; writes `ergMachineType: 1` where the
       machine reads 0 in 3448 of 3448 frames; writes `splitIntervalType:
