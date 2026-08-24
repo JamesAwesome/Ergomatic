@@ -5,6 +5,22 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.21.0 (2026-08-24): range v0.20.0..main = #179 (questionnaire
+    // advance), #181 (the teaching moves to News — the REMOVAL, the
+    // time-sensitive clause), #180/#182 (spine PRs 1-2: stored machinery,
+    // nothing tester-visible — no clause, reason stated here per RF15),
+    // #183 (the count bound — its clause carries both directions AND the
+    // "narrowed, not closed" correction to v0.20.0's "deeper fix" line,
+    // per the #183 PM gate; shipped notes are history and stay unedited).
+    version: "v0.21.0",
+    date: "2026-08-24",
+    items: [
+      "Learning the app moved house: the START HERE block is gone from Today, and the same four short reads now live pinned at the top of News. Nothing was deleted; Today just belongs to your training now. The You-tab setting that reset the reading list went with it.",
+      "One tap answers and advances: on the baseline questionnaire, choosing an option now carries you to the next question by itself. No more answer-then-hunt-for-next.",
+      "A monitor reset during an interval workout is now caught by the machine's own interval counter: if the erg genuinely resets mid-gap, the app ends the row honestly (marked LINK LOST) instead of quietly rowing your next metres into the old total. Two honest corrections to what v0.20.0 said: this narrows the come-up-short window rather than closing it (single-interval and distance workouts still carry it), and the new check is one more way a row can be ended if the monitor misbehaves. Everything else from the last two updates was under-the-hood groundwork you cannot see yet.",
+    ],
+  },
+  {
     // v0.20.0 (2026-08-23): the cohort-unlock pair. Range v0.19.1..main =
     // #174 (F2a, the continuity guard) + #177 (Try again + the LINK LOST
     // surface) — both accounted, nothing else in the range. Written per
