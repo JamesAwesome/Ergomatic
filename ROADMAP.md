@@ -2919,6 +2919,7 @@ that needs no erg, and it can run in a test.
       sharpens this field enough to close the gap** — sequence that
       awareness into PR 3's own spec rather than assuming PR 1 alone
       delivers full capture.
+- [ ] **RC-2 — Decode Log Entry Date/Time; log it beside our wall clock;
       store nothing yet.** Format settled from two projects and checked
       arithmetically: date `uint16` = month | day<<4 | (year-2000)<<9;
       time `uint16` = minutes | hours<<8. **The residual that inverts the
