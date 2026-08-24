@@ -1443,7 +1443,32 @@ button.back-link:disabled,
   border-bottom: none;
 }
 
+/* Second half of the 2026-08-24 alignment fix: once the offer button is
+   inset to match the fields, the divider of the row ABOVE it (which runs
+   the full card width) is no longer covered end to end, and its first
+   ~36px shows as a stray stub floating in the label gutter beside the
+   button. The offer block is its own strong visual separator, so the
+   divider has no work left to do there. Same `:has` idiom as the rule
+   above, and adjacency is correct here: only a slot sitting DIRECTLY
+   after a row replaces that row's divider. */
+.baseline-row:has(+ .baseline-derive-slot) {
+  border-bottom: none;
+}
+
+/* The label sits in a FIXED column (James, 2026-08-24: the derive offer
+   button ran the full card width while the fields it belongs to are inset
+   by this label, so the two read as different widths stacked on each
+   other). `--baseline-label-col` is the single source of that inset: the
+   label claims exactly it, and `.baseline-derive-slot` below pads by the
+   same value plus `.baseline-row`'s own 12px gap, so the button's left
+   edge lands on the field's. Change the column here and both move
+   together — the alignment cannot drift the way two hand-tuned numbers
+   would. 24px clears "2K"/"6K" at 11px mono with 0.08em tracking (~15px)
+   with room to spare. Pinned by design.spec.ts's own box comparison,
+   which measures 36px of drift if either half is removed. */
 .baseline-label {
+  flex: none;
+  width: var(--baseline-label-col, 24px);
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.08em;
@@ -1601,6 +1626,11 @@ button.back-link:disabled,
   align-items: center;
   min-height: 48px;
   margin: 0 0 8px;
+  /* Aligned with the fields, not the card: the offer belongs to the row
+     above it, so it starts where that row's `.baseline-field` starts —
+     the label column plus `.baseline-row`'s 12px gap. See the
+     `--baseline-label-col` note on `.baseline-label`. */
+  padding-left: calc(var(--baseline-label-col, 24px) + 12px);
 }
 
 .baseline-derive-slot .baseline-derive {

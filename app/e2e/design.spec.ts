@@ -3707,6 +3707,33 @@ test.describe("you screen with the derivation offer visible (task review round, 
     expect(after!.y).toBe(before!.y);
   });
 
+  // James, 2026-08-24: the offer button ran the full card width while the
+  // fields it belongs to are inset by their "2K"/"6K" label, so a button
+  // and a field sat stacked at two visibly different widths. Both edges
+  // now derive from `--baseline-label-col` (index.css), and this measures
+  // the consequence in a real browser rather than trusting the rule: the
+  // button's box must match the field's box it belongs to, on BOTH edges.
+  // Deleting either the label's fixed width or the slot's padding-left
+  // moves one edge and reddens this.
+  test("the derive offer's button spans exactly the field above it, not the whole card", async ({
+    page,
+  }) => {
+    const field = page.locator(".baseline-row .baseline-field").first();
+    const button = page.getByRole("button", {
+      name: "ESTIMATE FROM 6K (−7s)",
+    });
+
+    const fieldBox = await stableBoundingBox(field);
+    const buttonBox = await stableBoundingBox(button);
+    expect(fieldBox).not.toBeNull();
+    expect(buttonBox).not.toBeNull();
+
+    // Sub-pixel tolerance only: these are the same computed inset, so any
+    // real drift is whole pixels.
+    expect(Math.abs(buttonBox!.x - fieldBox!.x)).toBeLessThan(1);
+    expect(Math.abs(buttonBox!.width - fieldBox!.width)).toBeLessThan(1);
+  });
+
   test("the inert 'ESTIMATED' line clears ink contrast, and the sweep re-passes axe with it rendered", async ({
     page,
   }) => {
