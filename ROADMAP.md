@@ -2728,7 +2728,14 @@ walk's three findings, filed as LL follow-ups:**
   path broken. Fix is SPLIT: F2a (defuse via corroboration, Phase RC
   before RC-1) and F2b (re-key, inside RC-1/RC-8).
   `ring-phone-2-background-continuity-kill.json` is the capture.
-  **F2a defuse SHIPPED (PR #174); F2b remains open in RC-1.**
+  **F2a defuse SHIPPED (PR #174); F2b SHIPPED (PR 3, storage-spine spec
+  §4, inside RC-1's ROADMAP row but not RC-1's own PR #182's diff) — the
+  blind window closes on multi-interval programs past interval 1.
+  Residual, honestly stated: interval 1 of every program and every
+  1-interval program remain F2a-only (the count reads 0 there on any
+  program, inert by construction); the count bound's true-positive
+  evidence is SYNTHETIC-ONLY — no committed capture contains an
+  interruption episode to convict on.**
 - **F3 (small UI) — RESOLVED in the cohort-unlock PR (2026-08-23):**
   the log detail now renders `LINK LOST · the app lost the monitor
   before the end` for `endedBy: "link-lost"` sessions (FromTheLog.tsx;
@@ -2938,6 +2945,39 @@ that needs no erg, and it can run in a test.
       swaps in wildly wrong values on all four and asserts the rendered
       heroes don't move) — RC-5 is NOT closed by this (see its own row
       below). The re-key (F2b) is PR 3's own task, out of this PR's scope.
+      **F2b — SHIPPED, but in PR 3, not this PR's own diff**
+      (storage-spine spec §4, 2026-08-24): the guard gains 0x0033's raw
+      Interval Count as an ADDITIONAL bound —
+      `after.intervalCount < before.intervalCount` ⇒ `"reset"`, alongside
+      F2a's unchanged three-axis signature — closing exactly the blind
+      window F2a traded away (a mid-gap TWD reset with per-interval clocks
+      still reading forward), never worse than F2a anywhere. **Suppression
+      decided with both eyes open, sweep numbers on record:** the count
+      bound runs under the SAME distance-goal suppression F2a already
+      uses, not lifted. Both `distanceGoal` predicates were swept
+      (`continuity.test.ts` PART 5, a 30 s-gap slide over the 6-file
+      corpus): the WIRE predicate (per-sample
+      `workoutDurationType === 128`) came back clean — 0 backward count
+      readings across 1,026 non-suppressed pairs; the PRODUCTION predicate
+      actually in force (`programHasDistanceGoal(run.program)`, the armed
+      program) also came back clean but **VACUOUS** — 0 backward readings
+      across **0** non-suppressed pairs, because every one of the six
+      committed corpus files armed a program containing a distance
+      interval, so the predicate suppressed the whole corpus before a
+      single pair was tested. A 0-pair "clean" is an absence of evidence,
+      not evidence of safety (repo rule 11) — **KEPT under suppression,
+      not lifted.** **Honest capability statement:** the count reads 0
+      through the whole first interval and on every 1-interval program
+      (0-based, forward-attributed — pm5-interface-notes.md §15 #1's
+      correction), so the bound is inert there — 78.3% of 30 s-gap corpus
+      pairs see no count change at all; where it IS live (multi-interval,
+      past interval 1) it closes F2a's blind window exactly. True-positive
+      conviction power is SYNTHETIC-ONLY: no committed recording contains
+      an interruption episode, so the bound's own convicting test runs on
+      a constructed multi-interval fixture, not a captured one. New wire
+      fact backing the bound: 0x0033's Interval Count changes at REST
+      ONSET, independently corroborating the end-during-rest bound above
+      (pm5-interface-notes.md §20 item 26).
       The warm-up program-time question named above never reached this
       spec at all — Phase WU (shipped 2026-08-22, PR #150) removed
       warm-up as a compiler concept before RC-1 started, exactly the

@@ -720,6 +720,21 @@ disputed checksums in §6):
    > `toProgramIndex`/0x0033 keeps the rest-keyed rule, since that field's
    > own no-rest reading (`0`) matched identity. See §17 item 13's own
    > CORRECTION for the full evidence.
+   > **CORRECTION (2026-08-24, storage-spine PR 3, spec §4 delta D4): the
+   > base ambiguity this item opened with is settled for the interval-count
+   > BOUND'S purposes, because the bound never reads the base.** F2b's new
+   > `check()` clause is `after.intervalCount < before.intervalCount`, a
+   > comparison invariant under any constant offset a 0-based-vs-1-based
+   > reading might imply — whether 0x0033's Interval Count is genuinely
+   > 0-based (matching the write-side index, §12) or only reads that way
+   > because forward attribution puts every first-interval sample at 0
+   > regardless of base, `after < before` cannot change sign from the
+   > choice. Settled free by the sweep (`continuity.test.ts` PART 5): the
+   > count reads 0 through the whole first interval and on every
+   > 1-interval program — 78.3% of 30 s-gap corpus pairs see no count
+   > change at all — consistent with either base, and the bound is
+   > correctly inert there either way. This is a NOTE, not a gate: the base
+   > question this item raised remains otherwise unanswered.
 2. **0x0038's Work/Rest Heartrate sentinel — ANSWERED (D5), excluded from
    the numbered runsheet; see the paragraph below.** Only 0x0032's Heartrate field
    is explicitly documented as "255=invalid" (§10). `parse.ts` applies the
@@ -4527,6 +4542,34 @@ CI gate. Consequence for anything that reads this field going forward:
 never trust it as "metres rowed" on a distance-goal interval, and never
 trust it as "live" (vs. "as of the last rest boundary") on ANY interval
 kind — the identical suppression this task's own continuity rule applies.
+
+**26. 0x0033's Interval Count changes at REST ONSET, not at the boundary
+0x0037 reports — with the opposite timing on a no-rest boundary.** On the
+corpus's rest-bearing gaps the count changes 29.8 s ahead of that
+interval's own 0x0037 on a 30 s-rest program and 59.7 s ahead on a
+60 s-rest program: in both cases a few tenths of a second into the REST,
+not at the rest's end where 0x0037 lands. On a no-rest boundary there is
+no rest to onset into and the timing flips: the count instead LAGS
+0x0037, by 0.28–0.72 s, changing just after the split reports rather than
+before it. This independently corroborates the storage-spine design
+spec's own §3 end-during-rest bound (PR 2, RC-1): an END landing inside a trailing rest
+can genuinely lose the just-finished interval's 0x0037 (arrives only at
+rest END) while the count has already moved on, since the count's own
+transition sits near the rest's START on every rest-bearing boundary this
+corpus has.
+**Official docs:** SILENT on when within a boundary 0x0033's count field
+updates; §10's table gives only the offset and width, no update cadence.
+**Evidence:** storage-spine design spec (`docs/superpowers/
+specs/2026-08-23-storage-spine-design.md`) §4, delta D1 — the spec's own
+delta-antagonist pass swept 8 boundaries across the corpus's rest-bearing
+and no-rest shapes (`walk-2026-08-16/session-1-keystone-2x250r0.jsonl`
+(r0), `session-2-wu-4unequal.jsonl` (r30), `walk-2026-08-17/step-3-*`
+(r30), `walk-2026-08-18-metrics/pyramid-*` among them) and reported these
+figures; the count axis itself (0x0033's raw Interval Count, carried as
+`MonitorFrame.rawIntervalCount`) is exercised as a live CI gate by
+`continuity.test.ts` PART 5, though this specific onset-timing figure is
+the reviewed spec's own finding, not a re-derivation from raw capture
+timestamps in this doc.
 
 Other readings owed by the next hardware row are listed at the end of §18's
 2026-08-08 entry.
