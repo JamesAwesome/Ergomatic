@@ -2466,7 +2466,15 @@ DEVIATIONS 75/82) was never proven broken — only never proven working, its
 banner having never fired on native — and because it is the most
 invention-heavy piece available: `createPm5Driver` subscribes only at
 construction, has no teardown, and rebuilding a live driver
-double-processes every notification. Before reconnect is IN:
+double-processes every notification. **RECONNECT PREREQUISITE from
+#183's gate: the only real backward interval count in the corpus is a
+CONNECT-TIME leftover register (`session-2-wu-4unequal.jsonl` AS2 seq
+24→29, count 3→0) — harmless today only because no re-subscribe path
+exists. A reconnect that re-subscribes with a run OPEN lets the first
+post-resubscribe 0x0033 reach the continuity guard as `after` and would
+convict a healthy row on the stale register; any reconnect design must
+reset/quarantine `lastContinuityRef` (the count axis specifically)
+across the re-subscribe.** Before reconnect is IN:
 
 1. The research pass has answered the buy-vs-build question and the
    PM5's does-it-exist question.
@@ -2795,12 +2803,15 @@ note's fallback wording is no longer needed.**
 ## Phase RC — The row Concept2 would recognise
 
 **Status:** OPEN, mid-phase (updated 2026-08-24 at #182's PM gate). The
-storage-spine spec (`2026-08-23-storage-spine-design.md`) is two-thirds
-executed: PR 1 (#180, the burst captured both sides — display of the new
-observation fields HARDWARE-GATED on exit 7's photograph) and PR 2
-(#182, RC-1: work/rest stored separately, no backfill, double-precision
-seconds) are merged; PR 3 (F2b, the interval-count continuity bound) is
-the spec's remaining third. Earlier: #167 (instrument + RC-4/RC-6),
+storage-spine spec (`2026-08-23-storage-spine-design.md`) is FULLY
+EXECUTED: PR 1 (#180, the burst captured both sides — display of the
+observation fields HARDWARE-GATED on exit 7's photograph), PR 2 (#182,
+RC-1: work/rest stored separately, no backfill, double-precision
+seconds), and PR 3 (#183, F2b: the interval-count continuity bound,
+suppression KEPT on a refused-vacuous sweep). The phase's live
+frontier: the RC-2/RC-3 wave (identity decode + the nine summary
+fields), both display-gated on the walk photograph; the walk itself
+(exit 7); and the v0.21.0 notes debt. Earlier: #167 (instrument + RC-4/RC-6),
 #174 (F2a), #177 (cohort unlock); the combined walk answered every wire
 question YES (record: `docs/monitor/sessions/walk-2026-08-23/`).
 Originally opened 2026-08-22 (James: evidence-first); named, scoped and
@@ -2885,15 +2896,19 @@ that needs no erg, and it can run in a test.
       RC-1.** The guard convicts on one backward TWD reading even when the
       SAME frame's elapsed and distance are advancing; a real monitor
       reset zeroes all three. Require corroboration before closing a
-      record. This is a BOUND, not a key — and F2b (SHIPPED, the
-      spine's PR 3) is a SECOND bound, not a re-key: the §2b
+      record. This is a BOUND, not a key — and F2b (SHIPPED, #183) is a SECOND bound, not a re-key: the §2b
       silent-under-count trade stays LIVE on distance-goal programs
       (suppressed), interval 1, and 1-interval programs. What would
       settle the suppression lift: a committed capture of a
       non-distance-goal armed program (the whole corpus is
       distance-goal under the production predicate — 0/0 vacuous), or a
       real interruption recording (true-positive evidence is
-      synthetic-only). The v0.20.0 notes clause ("until a deeper fix
+      synthetic-only). **The vacuum's denominator (the #183 PM gate):
+      198 of the seeded library's 300 workouts contain NO distance step
+      — the bound ships LIVE on ~66% of the library with zero swept
+      pairs under the governing predicate. The corpus (6 captures, all
+      distance-armed) is unrepresentative of the library; the 0/0 is an
+      evidence gap on the live path, not inertness.** The v0.20.0 notes clause ("until a deeper fix
       lands") owes an update at the next tag: the deeper fix narrowed
       the window, it did not close it. Evidence: the six-row TWD table in the LL walk card's
       corrected F2 and `walk-2026-08-23/ring-phone-2-background-continuity-kill.json`.
@@ -2960,7 +2975,8 @@ that needs no erg, and it can run in a test.
       `after.intervalCount < before.intervalCount` ⇒ `"reset"`, alongside
       F2a's unchanged three-axis signature — closing exactly the blind
       window F2a traded away (a mid-gap TWD reset with per-interval clocks
-      still reading forward), never worse than F2a anywhere. **Suppression
+      still reading forward), never WEAKER at catching a reset, and byte-identical to F2a wherever
+      the count is absent (interval 1, 1-interval programs, pre-first-0x0033). **Suppression
       decided with both eyes open, sweep numbers on record:** the count
       bound runs under the SAME distance-goal suppression F2a already
       uses, not lifted. Both `distanceGoal` predicates were swept
@@ -3008,10 +3024,12 @@ that needs no erg, and it can run in a test.
       `null`, nothing to compare), or one landing while `intervalCount`
       still names a PRIOR interval (0x0033's own sample gap swallowing
       the burst's ~142-449ms window whole, per §1). Both funnel to
-      `out-of-window`, silently. **PR 3/F2b's interval-count work is what
-      sharpens this field enough to close the gap** — sequence that
-      awareness into PR 3's own spec rather than assuming PR 1 alone
-      delivers full capture.
+      `out-of-window`, silently. **#183 (spine PR 3) delivered the raw material — an unclamped
+      frame-level `rawIntervalCount` — but the admission check still
+      runs on `toProgramIndex` and does NOT consume it (the #183 PM
+      gate's audit): the capture-rate gap stands. Successor owner: the
+      RC-2/RC-3 wave's spec, which touches the same admission path and
+      inherits this sentence.**
 - [ ] **NO DISPLAY of `summaryTotals`/`verificationBytes` before exit 7's
       photograph (PM gate on #180, condition 4).** Everything green on
       PR 1 verifies against our own fake and our own capture (recurring

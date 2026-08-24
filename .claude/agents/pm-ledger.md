@@ -2092,3 +2092,66 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
 - **Backlog: 62 unchecked / 223 checked on the branch, 63 / 222 on main.**
   Branch-neutral — RC-1 ticked, nothing filed. Third consecutive gate where the
   phase is executing rather than filing.
+
+## PM final-PR gate, PR #183 (storage spine PR 3, F2b — TRIAD), 2026-08-24
+
+- **A corpus can be unrepresentative in the direction that makes a gap look
+  like safety.** #183's record says, correctly and in four places, that the
+  production `distanceGoal` predicate "suppresses the ENTIRE corpus" (0
+  backward readings over **0** pairs). A reader carries away "suppressed
+  everywhere we looked." The library says otherwise:
+  `programHasDistanceGoal` is `intervals.some(i => i.kind === "distance")`,
+  and **198 of the 300 seeded workouts contain no distance step** — the bound
+  ships LIVE on ~66% of the library with zero swept pairs under the predicate
+  that governs it. **When a sweep comes back vacuous, measure how big the
+  unswept population is before writing the vacuum down** — one command. A
+  vacuum reported without its denominator reads as inertness.
+- **The KEPT ruling is this ledger's first spec conditional resolved against
+  the convenient arm on its own evidence, and the record is durable in three
+  places** — a test asserting `nonSuppressedPairs).toBe(0)` with the reason in
+  its own name, the file header, and ROADMAP. Cite it as the shape to copy:
+  **an assertion that a gate was NEVER EXERCISED is a stronger artifact than
+  the clean result it accompanies.**
+- **"Nothing displays it" and "a tester sees nothing change" are different
+  sentences, and #180's precedent only licenses the first.** #180 stored
+  fields nobody read. #183 changes what a tester RECEIVES in the case it
+  exists for — two honest rows instead of one short one, or a healthy row
+  split in two if it misfires — while displaying nothing new. **Apply the
+  precedent by reasoning, not by copy: ask what the tester GETS, not what the
+  screen shows.**
+- **An unscoped superlative in line one loses to its own bullet 3 lines
+  down.** "never worse than F2a anywhere" vs "it adds one new way to close a
+  healthy row" — both above the fold, in the same PR. `continuity.ts` scoped
+  it correctly ("EXACTLY F2a's verdict" wherever the count is absent) and the
+  body dropped the scope. Third gate running where **the code was more honest
+  than the body and the fix was to copy the doc comment up.**
+- **A forward-pointer citing a PR is a dangling citation the moment that PR
+  merges.** ROADMAP told PR 3 to "sequence that awareness into PR 3's own
+  spec"; PR 3 did not (the raw count has no reader outside `continuity.ts`),
+  and after merge the line names a vehicle that has left. **At any gate, grep
+  ROADMAP for the PR under gate and check every forward-looking sentence
+  about it** — the successor's name must replace it before it merges.
+- **RF14 rescue, and a new one: the only real backward interval count in the
+  corpus is a CONNECT-TIME leftover register** (`session-2-wu-4unequal.jsonl`
+  AS2 seq 24→29, 3→0). Harmless today only because no re-subscribe path
+  exists this phase. **Phase LL's reconnect re-opens that exact shape with a
+  run OPEN, and neither A-2 nor the "Before reconnect is IN" list mentioned
+  the continuity guard.** Landed in LL's own item body at this gate — the
+  #174 "put it where its author will read it" pattern, second use.
+- **The status-paragraph check has now fired FIVE gates running** (#165,
+  #167, #174, #182, #183): "two-thirds executed … PR 3 is the spec's
+  remaining third", on the PR that executes the remaining third, in a branch
+  that rewrote 55 ROADMAP lines. **Escalate: it is now a merge condition on
+  every PR that completes a spec or ticks a phase box, checked before the
+  body is read.**
+- **Release call: NO TAG on #183; it rides v0.21.0 MINOR, which was already
+  owed and is unchanged by this PR.** Two clauses owed: the new count-bound
+  clause with both directions and its honest boundary, and a **correction to
+  a note testers have already read** — v0.20.0's "the total can come up short
+  until a deeper fix lands" must become "narrowed, not closed." That debt was
+  on ROADMAP before the gate rather than rescued at it; first time.
+- **Backlog: 62 / 223 on the branch, identical to main.** Fourth consecutive
+  branch-neutral gate — the phase is executing, not filing.
+- **The 30-second rule is 0-for-13** (#183 at 337 words); seventh consecutive
+  declined enforcement, same reason. Still James's to re-set or retire, still
+  belongs in `CLAUDE.md`.
