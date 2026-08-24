@@ -674,6 +674,40 @@ describe("recordActual: actuals accumulate only while the run is open (Phase 7A-
     expect(loadMonitorRun()).toStrictEqual(viaJson(after));
   });
 
+  // Final whole-branch review, LOW-1: the late-acceptance branch used to
+  // rebuild `next` by spreading the CALLER's `run` argument, discarding
+  // the record `stillLive` had just re-read from storage. This test makes
+  // the two provably different objects — a stale caller copy (an old
+  // `title`) versus what storage genuinely holds (a fresher one) — so a
+  // regression back to spreading `run` fails loudly instead of silently
+  // passing on the every-day case where the two happen to agree.
+  it("builds the late-acceptance write on the record `stillLive` just re-read from storage, not a stale copy the caller was holding (LOW-1)", () => {
+    const staleCallerCopy: MonitorRun = {
+      ...freshMonitorRun(),
+      title: "Stale title the caller was holding",
+      completedAt: new Date("2026-08-05T12:20:00.000Z").toISOString(),
+    };
+    // Storage holds a DIFFERENT object — same identity (`startedAt`), a
+    // fresher `title` — simulating a write that landed between the
+    // caller's own copy and this call (the up-to-2000ms burst-linger gap
+    // the guard above's own comment names).
+    const freshInStorage: MonitorRun = {
+      ...staleCallerCopy,
+      title: "Fresh title actually in storage",
+    };
+    saveMonitorRun(freshInStorage);
+
+    const after = recordActual(staleCallerCopy, finalActual, {
+      finalBoundary: true,
+    });
+
+    // The result reflects STORAGE's title, not the stale caller copy's.
+    expect(after.title).toBe("Fresh title actually in storage");
+    expect(after.title).not.toBe(staleCallerCopy.title);
+    expect(after.actuals).toStrictEqual([finalActual]);
+    expect(loadMonitorRun()).toStrictEqual(viaJson(after));
+  });
+
   it("...but ONE of them: a second flagged actual naming a DIFFERENT interval is refused, not filed", () => {
     // CONSUMED-ONCE, re-derived at the record layer (review M-3). The driver
     // clears its own grace after the first boundary, so two flagged actuals
@@ -897,11 +931,23 @@ describe("RC-1 — work and rest, summed separately at natural close (storage-sp
     // independently-derived number that happens to agree.
     expect(done.workMeters! + done.restMeters!).toBe(1599);
 
-    // workSeconds/restSeconds: summed off the SAME real bytes, checked
-    // against an independently-computed reduce (this file has no
-    // committed "the elapsed seconds are X" oracle the way DISTANCE has
-    // the PM5's own TWD — the meters assertions above are the real pin;
-    // these confirm the seconds side isn't silently skipped).
+    // workSeconds/restSeconds: summed off the SAME real bytes.
+    //
+    // **STATED NUMBERS, not just self-agreement (final whole-branch
+    // review, recurring-failure #3: "the one place that derives the
+    // number from real wire bytes asserts it against an independently-
+    // computed reduce, so it agrees with itself whatever the value is and
+    // never states a number").** `398.4`/`90` are re-decoded and stated
+    // here as literals — matching the review's own independent decode
+    // exactly — precisely BECAUSE `workSeconds` is fractional (0x0037's
+    // Split/Interval Time is tenths-precision, `parse.ts:232`'s `/10`):
+    // per-interval 29.7 + 60.0 + 120.0 + 128.7 + 60.0 = 398.4s work,
+    // 0 + 30 + 30 + 30 + 0 = 90s rest. The `reduce` below is kept as a
+    // SECOND, cross-checking assertion (not the only one), so a future
+    // transcription slip in the literal fails loudly against the
+    // independently-computed value too.
+    expect(done.workSeconds).toBe(398.4);
+    expect(done.restSeconds).toBe(90);
     const expectedWorkSeconds = restBearingActuals.reduce(
       (s, a) => s + a.elapsedSeconds,
       0,
@@ -1003,6 +1049,30 @@ describe("RC-1 — work and rest, summed separately at natural close (storage-sp
       expect(done.restSeconds).toBeUndefined();
       expect(done.restMeters).toBeUndefined();
     }
+  });
+
+  // Final whole-branch review, MEDIUM-1: `[].every(...)` is vacuously
+  // `true`, so before this guard a `"finished"` close with EMPTY actuals
+  // (the finish grace never delivering a single boundary —
+  // `useMonitorSession.ts`'s own comment names this exact hardware shape,
+  // "0 OF 1 INTERVALS MEASURED") wrote four honest-looking real zeroes —
+  // indistinguishable from "we measured a session that covered zero
+  // metres," while `summaryModel.monitorDistanceMeters`'s `> 0` rule
+  // renders the SAME record as a dash. A record with nothing measured now
+  // gets nothing stored.
+  it("a 'finished' close with EMPTY actuals stores NONE of the four fields — never four honest-looking zeroes for a session nothing was measured of (MEDIUM-1)", () => {
+    const run: MonitorRun = { ...freshMonitorRun(), actuals: [] };
+    const done = completeMonitorRun(
+      run,
+      { terminated: false, endedBy: "finished" },
+      finishedAt,
+    );
+    expect(done.actuals).toStrictEqual([]);
+    expect(done.workSeconds).toBeUndefined();
+    expect(done.workMeters).toBeUndefined();
+    expect(done.restSeconds).toBeUndefined();
+    expect(done.restMeters).toBeUndefined();
+    expect("workSeconds" in done).toBe(false);
   });
 
   it("the finish-grace ordering: a run closed BEFORE its final actual arrives gets sums computed TWICE — once (incomplete but honest) at completeMonitorRun, again (complete) when recordActual accepts the late boundary — never permanently missing the interval the grace exists to catch", () => {

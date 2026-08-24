@@ -2743,11 +2743,23 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
   // addition to the wire body, same optional-key idiom `deviceName`/
   // `series`/`endedBy` already proved out — spread straight from
   // `monitorRun`'s own four fields, never re-derived here.
-  it("posts workSeconds/workMeters/restSeconds/restMeters straight from the loaded MonitorRun when present", async () => {
+  //
+  // **REAL, capture-derived, FRACTIONAL values (final whole-branch
+  // review, BLOCKER-1) — not a hand-picked whole number.** These are
+  // `walk-2026-08-16/session-2-wu-4unequal.jsonl`'s own seq
+  // 246/779/1666/2607/2981, decoded through the branch's real
+  // `toIntervalActual`/`computeWorkRestSums` (independently re-verified
+  // during this fix wave, matching the review's own numbers exactly):
+  // work 29.7+60.0+120.0+128.7+60.0 = 398.4s / 1535m, rest 0+30+30+30+0 =
+  // 90s / 0+30+22+12+0 = 64m. `workSeconds` is fractional BY CONSTRUCTION
+  // (0x0037's Split/Interval Time is tenths-precision,
+  // `domain/monitor/pm5/parse.ts:232`) — a hand-picked integer here would
+  // never have caught the route rejecting every real natural finish.
+  it("posts workSeconds/workMeters/restSeconds/restMeters straight from the loaded MonitorRun when present — REAL fractional capture values, not a hand-picked whole number", async () => {
     const { run, workout } = buildMonitorFixture({
-      workSeconds: 1471,
+      workSeconds: 398.4,
       workMeters: 1535,
-      restSeconds: 0,
+      restSeconds: 90,
       restMeters: 64,
     });
     saveMonitorRun(run);
@@ -2767,9 +2779,9 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
 
     const body = parsedBodies(apiFn)[0]!;
-    expect(body.workSeconds).toBe(1471);
+    expect(body.workSeconds).toBe(398.4);
     expect(body.workMeters).toBe(1535);
-    expect(body.restSeconds).toBe(0);
+    expect(body.restSeconds).toBe(90);
     expect(body.restMeters).toBe(64);
   });
 

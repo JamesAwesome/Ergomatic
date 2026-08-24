@@ -238,23 +238,44 @@ export const sessionLogs = pgTable(
     // Storage-spine design spec §3 (RC-1, TRIAD — a stored shape): the
     // session's work and rest, stored SEPARATELY from the three fused
     // hero columns above — migration 0015, four additive-optional,
-    // nullable integer columns, no default, no backfill. Every existing
-    // row reads all four back as null, forever (spec §3's own "old
-    // records keep fused-only quantities forever, said above the fold").
-    // Mirrors `MonitorRun.workSeconds`/`workMeters`/`restSeconds`/
-    // `restMeters` (`src/monitor/monitorRun.ts`) — the CLIENT computes
-    // these once, at natural close, from `IntervalActual` sums; this
-    // column only ever stores what `routes/data.ts`'s POST validated,
-    // same posture `endedBy` above already has. `integer`, not
-    // `doublePrecision` like the hero block above: every wire source
-    // (`elapsedSeconds`/`distanceMeters`/`restSeconds`/
-    // `restDistanceMeters`) is a whole-number field
-    // (`domain/monitor/types.ts`), so there is no B8-shaped truncation
-    // risk here — `distanceMeters` above is this table's own precedent
-    // for an `integer` hero column.
-    workSeconds: integer("work_seconds"),
+    // nullable columns, no default, no backfill. Every existing row reads
+    // all four back as null, forever (spec §3's own "old records keep
+    // fused-only quantities forever, said above the fold"). Mirrors
+    // `MonitorRun.workSeconds`/`workMeters`/`restSeconds`/`restMeters`
+    // (`src/monitor/monitorRun.ts`) — the CLIENT computes these once, at
+    // natural close, from `IntervalActual` sums; this column only ever
+    // stores what `routes/data.ts`'s POST validated, same posture
+    // `endedBy` above already has.
+    //
+    // **CORRECTED at the final whole-branch review (BLOCKER-1) — this
+    // comment used to claim every wire source here "is a whole-number
+    // field," which is false and was never sourced from the field that
+    // actually decides it.** `elapsedSeconds` (0x0037's own Split/Interval
+    // Time, `domain/monitor/pm5/parse.ts`'s `splitIntervalTimeSeconds:
+    // readU24LE(bytes, 6) / 10`) is TENTHS-of-a-second precision on the
+    // wire, not whole seconds — a real natural finish's `workSeconds` is
+    // routinely fractional (session-2's own real capture sums to
+    // 398.4s). `workSeconds` is therefore `doublePrecision`, the same
+    // type and the same B8-truncation reasoning the hero block above
+    // already uses (`avgSplitSeconds`'s own comment) — a `real` column
+    // would risk the identical float4 truncation on a value this
+    // precise. `restSeconds` (0x0037's own Interval Rest Time, offset 12,
+    // `intervalRestTimeSeconds: readU16LE(bytes, 12)`, no `/10`) reads
+    // WHOLE seconds on every committed capture — genuinely a
+    // whole-number wire field, unlike its sibling — but is
+    // `doublePrecision` too, for symmetry with `workSeconds` (the pair is
+    // computed and read together) and because a whole number loses
+    // nothing by living in a wider column; nothing here assumes the wire
+    // could someday send it fractional. `workMeters`/`restMeters` stay
+    // `integer`: `distanceMeters` (0x0037 offset 9, `splitIntervalDistanceMeters:
+    // readU24LE(bytes, 9)`, no scale) and `intervalRestDistanceMeters`
+    // (offset 14, `readU16LE(bytes, 14)`, no scale) are both genuinely
+    // whole-metre u24/u16 wire fields — `distanceMeters` above is this
+    // table's own precedent for an `integer` hero column, and it still
+    // applies to these two, just not to the seconds pair beside them.
+    workSeconds: doublePrecision("work_seconds"),
     workMeters: integer("work_meters"),
-    restSeconds: integer("rest_seconds"),
+    restSeconds: doublePrecision("rest_seconds"),
     restMeters: integer("rest_meters"),
   },
   (t) => [

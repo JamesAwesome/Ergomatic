@@ -1388,26 +1388,32 @@ describe("GET/POST /api/logs", () => {
   // ABSENT from the reject cases: unlike `distanceMeters`' own `> 0` rule,
   // a genuinely rest-free (or work-free) session's honest reading is `0`,
   // never a validation error (its own dedicated accept test, below).
+  //
+  // **CORRECTED at the final whole-branch review (BLOCKER-1) — the seconds
+  // pair's own error message and rule changed.** `workSeconds`/
+  // `restSeconds` no longer require `Number.isInteger` (0x0037's own
+  // Split/Interval Time is tenths-precision — `parse.ts:232`'s `/10` —
+  // see `workRestQuantityError`'s own header comment); a decimal
+  // `workSeconds`/`restSeconds` is now a POSITIVE case (this file's own
+  // dedicated fractional-composition test, below), not a 400. The meters
+  // pair keeps the whole-number rule (genuinely whole wire fields) and
+  // gains its own decimal-rejection cases here, so the split itself is
+  // pinned, not just asserted in a comment.
   it.each([
     [
       "workSeconds",
       "not a number",
-      "must be a non-negative whole number <= 604800, or null",
+      "must be a non-negative finite number <= 604800, or null",
     ],
     [
       "workSeconds",
       -1,
-      "must be a non-negative whole number <= 604800, or null",
+      "must be a non-negative finite number <= 604800, or null",
     ],
     [
       "workSeconds",
       604801,
-      "must be a non-negative whole number <= 604800, or null",
-    ],
-    [
-      "workSeconds",
-      5.5,
-      "must be a non-negative whole number <= 604800, or null",
+      "must be a non-negative finite number <= 604800, or null",
     ],
     [
       "workMeters",
@@ -1425,14 +1431,19 @@ describe("GET/POST /api/logs", () => {
       "must be a non-negative whole number <= 1000000, or null",
     ],
     [
+      "workMeters",
+      5.5,
+      "must be a non-negative whole number <= 1000000, or null",
+    ],
+    [
       "restSeconds",
       -1,
-      "must be a non-negative whole number <= 604800, or null",
+      "must be a non-negative finite number <= 604800, or null",
     ],
     [
       "restSeconds",
       604801,
-      "must be a non-negative whole number <= 604800, or null",
+      "must be a non-negative finite number <= 604800, or null",
     ],
     [
       "restMeters",
@@ -1442,6 +1453,11 @@ describe("GET/POST /api/logs", () => {
     [
       "restMeters",
       1_000_001,
+      "must be a non-negative whole number <= 1000000, or null",
+    ],
+    [
+      "restMeters",
+      5.5,
       "must be a non-negative whole number <= 1000000, or null",
     ],
   ])(
@@ -1458,6 +1474,21 @@ describe("GET/POST /api/logs", () => {
       expect(res.body.error).toBe(`${field} ${messageSuffix}`);
     },
   );
+
+  // The seconds pair's own positive fractional case, isolated from the
+  // capture-derived composition test below: a hand-picked decimal that
+  // ISN'T a real wire value still has to pass, proving the rule itself
+  // (not just this one capture's own number) accepts non-integers.
+  it("accepts a fractional workSeconds/restSeconds (the tenths-precision wire field, not a hand-picked whole number)", async () => {
+    const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
+      {
+        ...validLogBody(),
+        workSeconds: 12.3,
+        restSeconds: 4.5,
+      },
+    );
+    expect(res.status).toBe(201);
+  });
 
   it.each([
     ["workSeconds", 604800],
@@ -1520,6 +1551,40 @@ describe("GET/POST /api/logs", () => {
       workSeconds: 1471,
       workMeters: 1535,
       restSeconds: 0,
+      restMeters: 64,
+    });
+  });
+
+  // Final whole-branch review, BLOCKER-1: this branch's own OTHER
+  // workSeconds fixtures (this file's own case just above included) are
+  // all hand-picked whole numbers, so nothing ever composed a
+  // CAPTURE-DERIVED value with this route's validator. `398.4` is
+  // `walk-2026-08-16/session-2-wu-4unequal.jsonl`'s own real work-seconds
+  // sum (seq 246/779/1666/2607/2981, re-decoded during this fix wave,
+  // matching the review's own numbers exactly: 29.7+60.0+120.0+128.7+60.0
+  // = 398.4s) — fractional BY CONSTRUCTION, since 0x0037's Split/Interval
+  // Time is tenths-precision (`domain/monitor/pm5/parse.ts:232`'s `/10`).
+  // Before this fix wave, this exact value 400'd (`workSeconds must be a
+  // non-negative whole number...`) — proof is this test itself: it failed
+  // red against the pre-fix `Number.isInteger` rule (self-mutation below
+  // reproduces that failure and reverts it).
+  it("posts a REAL, capture-derived FRACTIONAL workSeconds through the route to 201 — not a hand-picked whole number (BLOCKER-1's own red-first pin)", async () => {
+    const app = appFor(makeStores());
+    const res = await asA(request(app).post("/api/logs")).send({
+      ...validLogBody(),
+      workSeconds: 398.4,
+      workMeters: 1535,
+      restSeconds: 90,
+      restMeters: 64,
+    });
+    expect(res.status).toBe(201);
+
+    const list = await asA(request(app).get("/api/logs"));
+    const row = list.body.find((r: { id: string }) => r.id === res.body.id);
+    expect(row).toMatchObject({
+      workSeconds: 398.4,
+      workMeters: 1535,
+      restSeconds: 90,
       restMeters: 64,
     });
   });

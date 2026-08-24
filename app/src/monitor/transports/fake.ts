@@ -1076,6 +1076,19 @@ function boundaryBundle(
       // decide whether this boundary needed a resting tick first, so a
       // script with no trailing rest still emits 0 here honestly (it is
       // `completed.restSeconds`, not a second knob).
+      //
+      // **`?? 0` is the FAKE's own guess, not a wire truth (final
+      // whole-branch review, LOW-2)** — it fires only when `completed` is
+      // `undefined`, i.e. `actual.index` names no interval this program
+      // has (an out-of-range or otherwise unresolvable index, the same
+      // shape `program.intervals[actual.index]` above can produce). A
+      // real PM5 always reports SOME Interval Rest Time on 0x0037,
+      // whatever it is, for every boundary it sends — this fallback exists
+      // so a scripted test can still emit a well-formed frame for a
+      // boundary its own script fixture describes badly, never as a claim
+      // about what a real machine would send in that situation. Same class
+      // Task 1 already flagged for the hardcode this replaced, one branch
+      // deeper.
       intervalRestTimeSeconds: completed?.restSeconds ?? 0,
       // R-B: the fake models this honestly off the script's own
       // `actual.restDistanceMeters` — a constant here (0 or otherwise)
