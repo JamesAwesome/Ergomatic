@@ -4736,3 +4736,61 @@ project's wire):
    `deriveFinalIntervalFromSummary` is the single function that changes. A
    single-interval row cannot settle it (no prior to subtract, no rest
    between anything), and neither can a rest-free one.
+
+## 24. The burst-first race (walk 2026-08-23 keystone) — for `src/monitor/driver.ts`'s summary-fallback gate (storage-spine design spec §1/§2)
+
+One rowed 2×250m/no-rest piece (`docs/monitor/sessions/walk-2026-08-23/
+keystone-pm5-recording-1787491974452.jsonl.gz`, that walk's own README.md:
+"the laptop keystone (2×250m, no rest) with the hold-open armed"), captured
+with a dev instrument holding 0x003F's own subscription open for 90.3s past
+the finish so the whole natural-finish burst is on the wire, byte for byte
+— the first capture in this repo to carry 0x0039/0x003A/0x003F at all.
+Every figure below was re-decoded directly off the raw capture for this
+section (not carried from the design spec by memory) and is pinned against
+the same bytes, through the real driver and the real `useMonitorSession`
+hook, by `src/monitor/burstReplay.test.ts`.
+
+1. **The machine's own finish burst, in order, at exact recorded offsets
+   from its own final split (0x0037, seq 514, t=171859.9ms):** 0x0038
+   (seq 515) +0.4ms; 0x0039 (seq 516) +269.6ms; 0x003A (seq 517) +270.7ms
+   (1.1ms after 0x0039); 0x003F (seq 518) +307.8ms. `transports/fake.ts`'s
+   own `FakeBurst` type defaults to these same two offsets (269.6/307.8)
+   verbatim, cited to this capture.
+2. **State 5→12 directly: state 10 (WORKOUTEND) is never observed on the
+   wire.** The last General Status tick before the burst (seq 511,
+   t=171319.3ms) reads workoutState byte `0x05` (INTERVALWORKDISTANCE,
+   rowing); the next one this driver ever sees (seq 519, t=172309.3ms,
+   +449.4ms after the final split) reads `0x0c` (12, WORKOUTLOGGED)
+   directly — no intermediate 0x0031 notification anywhere in this capture
+   carries state 10. §14's own mapping table names state 12 "reached ONLY
+   via `WorkoutEnd->WorkoutLogged` (never via `Terminate`)"; this capture is
+   the first evidence that the intermediate WorkoutEnd state can be
+   entirely invisible to a BLE subscriber, not merely brief.
+3. **The burst beats our own terminal transition, and does so on 3 of the 5
+   committed natural finishes** (storage-spine design spec §1's own count,
+   re-verified against this capture: 0x0039/0x003A/0x003F, seq 516-518, all
+   land by t=172167.7ms — 141.6-449.4ms BEFORE the driver's own terminal
+   0x0031 at t=172309.3ms). The race genuinely goes both ways across the
+   small committed corpus; no fixed ordering can be assumed by any consumer
+   of the burst.
+4. **THE GATE-DISCARD MECHANISM this race exposed, fixed by storage-spine
+   design spec §2 (PR 1).** Before that fix, `driver.ts`'s `noteSummary`
+   (via `graceIsOpen`) only ever accepted a 0x0039 arriving AFTER this
+   driver's own run had closed (`run.closed === true`) — a summary landing
+   while the run still read open, however briefly, was routed to the
+   out-of-window branch and discarded UNREAD, even though the link
+   delivered it perfectly. On the burst-first side of this race that is
+   EVERY 0x0039: by construction, the summary is still ahead of the
+   terminal 0x0031 that would close the run. The fix adds a bounded BUFFER
+   (`noteSummary`'s `currentIndex === lastIndex` branch, gated on this
+   run's own `toProgramIndex` reading already naming its LAST interval): a
+   0x0039 arriving in that window is held (`run.summaryInGrace`) instead of
+   discarded, and is folded onto the record the instant the terminal
+   transition's own `maybeReconcileImmediately` finds both the split and
+   the held summary already in hand — no `FINISH_GRACE_MS` wait needed on
+   this capture's own shape. See `driver.ts`'s `noteSummary`/
+   `reconcileSummary`/`maybeReconcileImmediately`, and
+   `src/monitor/burstReplay.test.ts`'s end-to-end replay of this exact
+   capture for the pinned regression test (byte-identical against a
+   burst-stripped control of the same recording, but for the two
+   observation fields the fix adds).
