@@ -4769,8 +4769,11 @@ hook, by `src/monitor/burstReplay.test.ts`.
 3. **The burst beats our own terminal transition, and does so on 3 of the 5
    committed natural finishes** (storage-spine design spec §1's own count,
    re-verified against this capture: 0x0039/0x003A/0x003F, seq 516-518, all
-   land by t=172167.7ms — 141.6-449.4ms BEFORE the driver's own terminal
-   0x0031 at t=172309.3ms). The race genuinely goes both ways across the
+   land by t=172167.7ms — 141.6-179.8ms BEFORE the driver's own terminal
+   0x0031 at t=172309.3ms; the final SPLIT, 0x0037 at t=171859.9ms, is
+   earlier still, 449.4ms ahead of the terminal, but that gap is item 1's
+   own figure for a different, excluded event, not the summary/verification
+   trio this item is about). The race genuinely goes both ways across the
    small committed corpus; no fixed ordering can be assumed by any consumer
    of the burst.
 4. **THE GATE-DISCARD MECHANISM this race exposed, fixed by storage-spine
