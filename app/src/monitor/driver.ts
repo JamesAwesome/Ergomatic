@@ -1869,9 +1869,22 @@ export function createPm5Driver(
     // comment): `base.intervalIndex` is still the RAW 0x0033 Interval
     // Count (parse.ts never changed) — `toProgramIndex` translates it into
     // OUR program index before it ever reaches `frame` (a consumer-facing
-    // value, per this task's own contract: intervalIndex/actual.index carry
-    // OUR index everywhere they reach a consumer, the raw value survives
-    // only in the event log below).
+    // value, per this task's own contract: intervalIndex/actual.index
+    // carry OUR index everywhere they reach a consumer).
+    //
+    // Storage-spine design spec §4 (delta D6, PR 3 Task 1): `frame.
+    // rawIntervalCount` below is the ONE deliberate, named exception to
+    // that contract — the raw 0x0033 byte, unclamped and un-normalized,
+    // read straight off `status.intervalCount` (the merged raw state) and
+    // carried through to every consumer, not just the event log below.
+    // F2b's interval-count bound (§4) needs exactly what the old contract
+    // withheld: an unclamped, monotonic-per-session reading, so a genuine
+    // mid-stream machine reset shows up as `after < before` instead of
+    // being hidden by `toProgramIndex`'s clamp-to-program-edge behavior (a
+    // real backward jump can land on the same clamped value as the
+    // reading before it). `MonitorFrame.rawIntervalCount`'s own doc
+    // comment (`domain/monitor/types.ts`) and `intervalIndex.ts`'s header
+    // comment record the same reversal.
     const p = armedProgram();
     const programLength = p?.intervals.length ?? 0;
     const intervalIndex = toProgramIndex(
@@ -2180,6 +2193,11 @@ export function createPm5Driver(
       ...base,
       intervalIndex: emittedIntervalIndex,
       splitAvgPace: splitAvgPaceIsStale ? null : base.splitAvgPace,
+      // D6 (storage-spine spec §4, Task 1) — the raw sibling of
+      // `intervalIndex` above; see this function's own comment a few
+      // lines up and the field's own doc comment for why this one stays
+      // unclamped and un-normalized.
+      rawIntervalCount: status.intervalCount,
     };
     const totals = [...session.seen.values()];
     const frame: MonitorFrame = {

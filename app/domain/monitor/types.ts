@@ -196,6 +196,37 @@ export interface MonitorFrame {
    *  optional specifically so this task's addition does not force every one
    *  of those literals to grow a field their own test has no opinion on. */
   totalWorkDistanceMeters?: number;
+  /** Storage-spine design spec §4 (PR 3 Task 1, delta D6): 0x0033's own
+   *  Interval Count (`pm5/parse.ts`'s `AdditionalStatus2.intervalCount`,
+   *  offset 3, interface-notes.md §10) — UNCLAMPED and un-normalized,
+   *  read straight off the merged raw status, never `toProgramIndex`'s
+   *  output (`intervalIndex` above) and never nulled outside
+   *  rowing/resting. This DELIBERATELY REVERSES the contract
+   *  `domain/monitor/pm5/intervalIndex.ts`'s own header comment and
+   *  `src/monitor/driver.ts`'s `maybeEmitFrame` used to state
+   *  ("intervalIndex/actual.index carry OUR index everywhere they reach a
+   *  consumer, the raw value survives only in the event log") — F2b's
+   *  interval-count bound (design spec §4) needs exactly the thing that
+   *  contract withheld: an unclamped, monotonic-per-session reading, so a
+   *  genuine mid-stream machine reset (`after < before`) is visible
+   *  instead of hidden behind `toProgramIndex`'s clamp-to-program-edge
+   *  behavior (a real backward jump can land on the same clamped value as
+   *  the reading before it). Base (0- vs 1-based) is unconfirmed
+   *  (interface-notes.md §15 #1) but immaterial to that bound: `after <
+   *  before` is invariant under any constant offset (design spec §4,
+   *  delta D4). Additive-optional, but NOT the `totalWorkDistanceMeters`
+   *  pattern above — `pm5/parse.ts`'s `toMonitorFrame` deliberately does
+   *  NOT set this field (it stays a byte-faithful codec with no opinion on
+   *  this task's addition, same layering reason `intervalIndex` above is
+   *  left raw at that layer); only `src/monitor/driver.ts`'s own frame
+   *  construction (`maybeEmitFrame`) sets it, from `status.intervalCount`
+   *  on the merged raw state, and only once the run's first 0x0033 has
+   *  actually arrived — no `frame` event is ever emitted before that
+   *  (`maybeEmitFrame`'s own `seen.as2` gate). `undefined` for every frame
+   *  built directly by `toMonitorFrame` (that module's own unit tests) and
+   *  for the many pre-existing `MonitorFrame` test literals elsewhere that
+   *  have no opinion on it. */
+  rawIntervalCount?: number;
 }
 
 export interface IntervalActual {

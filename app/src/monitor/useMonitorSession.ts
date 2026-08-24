@@ -471,6 +471,22 @@ export function programHasDistanceGoal(p: WorkoutProgram): boolean {
  * both cases (the caller's `lastContinuityRef` snapshot for `last`, this
  * frame itself for `frame`), never fabricated from one scalar the way
  * Task 1's bridge did.
+ *
+ * F2b (storage-spine design spec 2026-08-23 §4, PR 3 Task 2): `last` also
+ * carries `intervalCount?`, the caller's `lastContinuityRef` snapshot of
+ * the PRIOR frame's own `rawIntervalCount`; `frame.rawIntervalCount`
+ * itself is `after`'s count — `continuity.ts`'s own `check` reads both as
+ * `ContinuityReading.intervalCount`, falling back to the three-axis
+ * signature alone whenever either is `undefined` (a frame before this
+ * run's first 0x0033, same "absent" contract `domain/monitor/types.ts`
+ * documents for `rawIntervalCount` itself). The `run === null` guard two
+ * lines below is why session-2-wu-4unequal.jsonl's own real backward
+ * count (seq 24->29, the leftover-register PRE-RUN shape) never reaches a
+ * conviction here even though the identical pair, handed straight to
+ * `check`, DOES convict on the count axis alone
+ * (`useMonitorSession.test.ts`'s own "F2b production-path pin") — no run
+ * has opened yet at WAITTOBEGIN, so this function returns before `check`
+ * is ever called, whatever the readings say.
  */
 export function applyContinuityCheck(
   run: MonitorRun | null,
@@ -478,6 +494,7 @@ export function applyContinuityCheck(
     totalWorkDistanceMeters: number;
     elapsedSeconds: number;
     distanceMeters: number;
+    intervalCount?: number;
   } | null,
   frame: MonitorFrame,
   frameSilence: boolean,
@@ -496,12 +513,14 @@ export function applyContinuityCheck(
       elapsedSeconds: last.elapsedSeconds,
       distanceMeters: last.distanceMeters,
       distanceGoal,
+      intervalCount: last.intervalCount,
     },
     {
       totalWorkDistanceMeters: frame.totalWorkDistanceMeters,
       elapsedSeconds: frame.elapsedSeconds,
       distanceMeters: frame.distanceMeters,
       distanceGoal,
+      intervalCount: frame.rawIntervalCount,
     },
   );
   if (verdict !== "reset") return run;
@@ -510,7 +529,9 @@ export function applyContinuityCheck(
     `resumed stream failed continuity: twd ${last.totalWorkDistanceMeters} ` +
       `-> ${frame.totalWorkDistanceMeters} elapsed ${last.elapsedSeconds} ` +
       `-> ${frame.elapsedSeconds} distance ${last.distanceMeters} -> ` +
-      `${frame.distanceMeters} — closing as link-lost, never merging`,
+      `${frame.distanceMeters} intervalCount ` +
+      `${last.intervalCount ?? "none"} -> ${frame.rawIntervalCount ?? "none"} ` +
+      `— closing as link-lost, never merging`,
   );
   // §4: "On reset: preserve the interrupted record, start clean, never
   // merge." No reconnect flow exists this phase (spec §8) to start a
@@ -1201,11 +1222,22 @@ export function useMonitorSession(
    *  or once `cancel()` clears it for the next one — never re-derived
    *  from `state.frame` directly, the same "own it in a ref" discipline
    *  `freezeRef`/`rowingStreakRef` already use for per-run tracking a
-   *  render cycle must not lose. */
+   *  render cycle must not lose.
+   *
+   *  F2b (storage-spine design spec 2026-08-23 §4, PR 3 Task 2): gains
+   *  `intervalCount?`, the same frame's own `rawIntervalCount`. The
+   *  EXISTING null semantics are unchanged, not widened: a frame without
+   *  `totalWorkDistanceMeters` still skips this snapshot WHOLESALE (both
+   *  assignment sites below keep their `undefined` guard on that field
+   *  alone) — a frame WITH `totalWorkDistanceMeters` but no
+   *  `rawIntervalCount` yet carries a real snapshot with `intervalCount`
+   *  absent, exactly `ContinuityReading`'s own "missing on either side
+   *  falls back to F2a" contract expects. */
   const lastContinuityRef = useRef<{
     totalWorkDistanceMeters: number;
     elapsedSeconds: number;
     distanceMeters: number;
+    intervalCount?: number;
   } | null>(null);
   /** One `connect()` at a time — a second press while the monitor chooser is open
    *  must not open a second one. */
@@ -1641,7 +1673,10 @@ export function useMonitorSession(
           // only a `MonitorFrame` a future caller built BARE (bypassing
           // both) could ever omit it, the same "additive-optional,
           // coverage-exempt fallback" shape `domain/monitor/types.ts`'s
-          // own doc comment on this field already names.
+          // own doc comment on this field already names. F2b: the
+          // `undefined` guard stays keyed on `totalWorkDistanceMeters`
+          // alone (this ref's own doc comment) — `rawIntervalCount` rides
+          // along whether or not it has arrived yet.
           lastContinuityRef.current =
             frame.totalWorkDistanceMeters === undefined
               ? null
@@ -1649,6 +1684,7 @@ export function useMonitorSession(
                   totalWorkDistanceMeters: frame.totalWorkDistanceMeters,
                   elapsedSeconds: frame.elapsedSeconds,
                   distanceMeters: frame.distanceMeters,
+                  intervalCount: frame.rawIntervalCount,
                 };
           update({
             frame,
@@ -1761,7 +1797,7 @@ export function useMonitorSession(
         }
         // Same defensive, test-suite-unreachable fallback arm as the seed
         // above — every real frame reaching this branch already carries
-        // the field.
+        // the field. F2b: `rawIntervalCount` rides along, same guard.
         lastContinuityRef.current =
           frame.totalWorkDistanceMeters === undefined
             ? lastContinuityRef.current
@@ -1769,6 +1805,7 @@ export function useMonitorSession(
                 totalWorkDistanceMeters: frame.totalWorkDistanceMeters,
                 elapsedSeconds: frame.elapsedSeconds,
                 distanceMeters: frame.distanceMeters,
+                intervalCount: frame.rawIntervalCount,
               };
         const freeze = nextFreezeRun(freezeRef.current, frame);
         freezeRef.current = freeze;

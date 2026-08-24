@@ -16,7 +16,18 @@
 // 0-based-per-work-interval numbering. `src/monitor/driver.ts` is its only
 // caller: `MonitorFrame.intervalIndex` and `IntervalActual.index` carry the
 // return value of that function, never the raw machine byte, everywhere
-// they reach a consumer — the raw value survives only in the event log.
+// they reach a consumer.
+//
+// CORRECTION (storage-spine design spec §4, delta D6, PR 3 Task 1): the
+// raw machine value used to survive only in the event log — that is no
+// longer true. `MonitorFrame.rawIntervalCount` (`domain/monitor/types.ts`)
+// is a deliberate, named exception: `src/monitor/driver.ts`'s
+// `maybeEmitFrame` sets it straight from the merged raw status, unclamped
+// and un-normalized, because F2b's interval-count bound needs exactly the
+// monotonic-per-session reading `toProgramIndex`'s clamp would hide. This
+// function and its output (`intervalIndex`/`actual.index`) are UNCHANGED
+// by that addition — the reversal is additive, not a rewrite of the
+// normalization this module does.
 //
 // `toMachineIndex` goes the other way, for the ONE caller that has to
 // SPEAK the machine's numbering rather than read it: the simulator

@@ -47,9 +47,11 @@ import {
 import { withLiveness, type LivenessDeps } from "./transports/liveness";
 import { fromHexString, parseRecording } from "./transports/recording";
 import {
+  parseAdditionalStatus2,
   parseGeneralStatus,
   toMonitorState,
 } from "../../domain/monitor/pm5/parse.js";
+import { check as checkContinuity } from "./continuity";
 import { readFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 import {
@@ -6367,6 +6369,94 @@ describe("Phase LL Task 4: applyContinuityCheck (pure — the resumed-stream con
       null,
     );
     expect(twice).toBe(once);
+  });
+
+  it("F2b production-path pin (design spec §4, PR 3 Task 2 Step 2(e)): session-2-wu-4unequal.jsonl's own real backward count (seq 24->29, the leftover-register PRE-RUN shape `.claude/agents/antagonist-ledger.md`'s 'Phase RC delta pass' names) never reaches a conviction through `applyContinuityCheck`, because `run === null` short-circuits before `check` is ever called — the SAME pair, fed straight into `check` with no such guard, DOES convict, so 'no conviction' here is `run === null` doing the work, not an accident of the readings themselves", () => {
+    const text = readFileSync(
+      `${LL_SESSIONS_DIR}walk-2026-08-16/session-2-wu-4unequal.jsonl`,
+      "utf8",
+    );
+    const { events } = parseRecording(text);
+    const eventAt = (seq: number) => {
+      const e = events.find((ev) => ev.seq === seq);
+      if (!e || !("dir" in e) || e.dir !== "rx") {
+        throw new Error(
+          `seq ${seq} is not an rx event — the pin has nothing to decode`,
+        );
+      }
+      return e;
+    };
+    // The merged snapshot each side of the pair represents: the count from
+    // AS2 seq 24/29, carried onto the NEXT General Status tick (seq
+    // 27/30) — the identical driver.ts merge order `continuity.test.ts`'s
+    // own PART 5 `loadCountSamples` reproduces for the corpus sweep.
+    const gsBefore = parseGeneralStatus(fromHexString(eventAt(27).hex));
+    const gsAfter = parseGeneralStatus(fromHexString(eventAt(30).hex));
+    const as2Before = parseAdditionalStatus2(fromHexString(eventAt(24).hex));
+    const as2After = parseAdditionalStatus2(fromHexString(eventAt(29).hex));
+    if (
+      "error" in gsBefore ||
+      "error" in gsAfter ||
+      "error" in as2Before ||
+      "error" in as2After
+    ) {
+      throw new Error(
+        "session-2 fixture bytes failed to decode — the pin is broken",
+      );
+    }
+    expect(as2Before.intervalCount).toBe(3);
+    expect(as2After.intervalCount).toBe(0);
+    // Both ticks are genuinely pre-run: WAITTOBEGIN, no run has opened.
+    expect(toMonitorState(gsBefore.workoutState)).toBe("armed");
+    expect(toMonitorState(gsAfter.workoutState)).toBe("armed");
+
+    const last = {
+      totalWorkDistanceMeters: gsBefore.totalWorkDistanceMeters,
+      elapsedSeconds: gsBefore.elapsedSeconds,
+      distanceMeters: gsBefore.distanceMeters,
+      intervalCount: as2Before.intervalCount,
+    };
+    const frameAfter = frame({
+      totalWorkDistanceMeters: gsAfter.totalWorkDistanceMeters,
+      elapsedSeconds: gsAfter.elapsedSeconds,
+      distanceMeters: gsAfter.distanceMeters,
+      rawIntervalCount: as2After.intervalCount,
+    });
+
+    // The production path: run === null (no MonitorRun open yet at
+    // WAITTOBEGIN) — applyContinuityCheck's own short-circuit, unchanged
+    // by this task, fires before `check` is ever reached.
+    expect(
+      applyContinuityCheck(null, last, frameAfter, true, t0, null),
+    ).toBeNull();
+
+    // Belt and braces: prove this is NOT vacuous — the identical pair,
+    // handed straight to `check` (bypassing applyContinuityCheck's guard
+    // entirely), DOES convict on the count axis. `distanceGoal: false`
+    // here is deliberate, not the readings' own wire truth (both are
+    // actually distance-goal, session-2's own armed program contains a
+    // 500m interval — PART 5's own documented citation in
+    // continuity.test.ts): forcing it false isolates exactly the
+    // mechanism THIS pin is about (`run === null`), not a second,
+    // unrelated suppression that would convict either way.
+    expect(
+      checkContinuity(
+        {
+          totalWorkDistanceMeters: last.totalWorkDistanceMeters,
+          elapsedSeconds: last.elapsedSeconds,
+          distanceMeters: last.distanceMeters,
+          distanceGoal: false,
+          intervalCount: last.intervalCount,
+        },
+        {
+          totalWorkDistanceMeters: gsAfter.totalWorkDistanceMeters,
+          elapsedSeconds: gsAfter.elapsedSeconds,
+          distanceMeters: gsAfter.distanceMeters,
+          distanceGoal: false,
+          intervalCount: as2After.intervalCount,
+        },
+      ),
+    ).toBe("reset");
   });
 });
 
