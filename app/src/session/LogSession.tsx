@@ -34,6 +34,7 @@ import { clearRun, loadRun, type SessionRun } from "./run";
 import {
   clearMonitorRun,
   loadMonitorRun,
+  type MachineSummaryDetail,
   type MonitorRun,
 } from "../monitor/monitorRun";
 import type { SeriesData } from "../monitor/seriesRecorder";
@@ -439,6 +440,23 @@ interface LogFormFields {
   workMeters?: number;
   restSeconds?: number;
   restMeters?: number;
+  // RC-3 (storage-spine design spec §2, PR 1 Task 7): the monitor mode's
+  // fifth addition, same optional-key idiom as `deviceName`/`series`/
+  // `endedBy`/the four RC-1 fields above — spread straight from
+  // `monitorRun.summaryTotals`/`summaryDetail`/`verificationBytes`
+  // (Tasks 2-4), never re-derived here. Undefined here means
+  // `JSON.stringify` drops the key entirely below, exactly like an absent
+  // `deviceName` already does; the server's own validator (Task 6,
+  // `routes/data.ts`) accepts absent, so this never blocks a save.
+  // `machineSummary` can legitimately carry `verificationBytes` alone with
+  // no detail fields — a record written by shipped build 738 has
+  // `summaryTotals` but no `summaryDetail` (that field didn't exist yet),
+  // so the blob then holds bytes only. That is correct, not a bug.
+  machineWorkSeconds?: number;
+  machineWorkMeters?: number;
+  machineSummary?: {
+    verificationBytes?: readonly number[];
+  } & Partial<MachineSummaryDetail>;
 }
 
 /** Fix round 1 (whole-branch review, I1): the two doors' `handleSave` were
@@ -1372,6 +1390,28 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
           workMeters: monitorRun.workMeters,
           restSeconds: monitorRun.restSeconds,
           restMeters: monitorRun.restMeters,
+          // RC-3 (storage-spine design spec §2, PR 1 Task 7): same
+          // optional-key idiom as `workSeconds` etc. above — spread
+          // straight from `monitorRun.summaryTotals`/`summaryDetail`/
+          // `verificationBytes` (Tasks 2-4), never re-derived here.
+          ...(monitorRun.summaryTotals !== undefined
+            ? {
+                machineWorkSeconds: monitorRun.summaryTotals.workElapsedSeconds,
+                machineWorkMeters: Math.round(
+                  monitorRun.summaryTotals.workDistanceMeters,
+                ),
+                machineSummary: {
+                  ...(monitorRun.verificationBytes !== undefined
+                    ? { verificationBytes: [...monitorRun.verificationBytes] }
+                    : {}),
+                  // A record written by shipped build 738 can carry
+                  // `summaryTotals` with no `summaryDetail` (that field
+                  // didn't exist yet) — the blob then carries bytes only,
+                  // which is correct, not a bug.
+                  ...(monitorRun.summaryDetail ?? {}),
+                },
+              }
+            : {}),
         },
         opts,
       );
