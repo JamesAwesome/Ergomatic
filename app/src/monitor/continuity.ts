@@ -149,9 +149,22 @@
 // alone.
 // ============================================================================
 
-/** A single wire reading `check` below judges continuity from. All four
- *  fields come off the SAME `MonitorFrame`/frame-derived reading — never
- *  re-decoded, never resampled from a different moment.
+/** A single wire reading `check` below judges continuity from. **Not every
+ *  field comes off the same characteristic** (storage-spine design spec
+ *  §4, PR 3 Task 2 — this doc comment's own honesty rewrite): the three
+ *  0x0031 fields below (`totalWorkDistanceMeters`/`elapsedSeconds`/
+ *  `distanceMeters`) come off the SAME `MonitorFrame`/frame-derived
+ *  General Status reading — never re-decoded, never resampled from a
+ *  different moment. `intervalCount` does NOT: it is 0x0033's (Additional
+ *  Status 2's) own Interval Count, a DIFFERENT characteristic sampled
+ *  independently of 0x0031 and merged in by the time this reading was
+ *  taken — the most recent 0x0033 as of this reading, not a value decoded
+ *  from the same notification (`domain/monitor/types.ts`'s
+ *  `MonitorFrame.rawIntervalCount` doc comment has the full merge story;
+ *  `src/monitor/driver.ts`'s `raw` object is what does the merging in
+ *  production). Carried WITH the reading rather than fetched separately,
+ *  same reasoning as `distanceGoal` below: a caller comparing two readings
+ *  states each reading's own truth.
  *  `totalWorkDistanceMeters` is 0x0031's own Total Work Distance, exactly
  *  as `domain/monitor/pm5/parse.ts`'s `GeneralStatus.totalWorkDistanceMeters`
  *  decodes it (offset 11, whole metres, unscaled) — a caller reads this off
@@ -165,6 +178,16 @@
  *  rejected as a standalone bound (the header comment's own first bullet:
  *  it legally jumps backward at every boundary) — it is trustworthy only
  *  in CONJUNCTION with the other two, never on its own.
+ *  `intervalCount` is 0x0033's own raw Interval Count, exactly as
+ *  `domain/monitor/pm5/parse.ts`'s `AdditionalStatus2.intervalCount`
+ *  decodes it (offset 3, unclamped, un-normalized) — a caller reads this
+ *  off a `MonitorFrame`'s own `rawIntervalCount` (additive-optional, F2b's
+ *  bound, design spec §4). `undefined` until the run's first 0x0033 has
+ *  arrived; a reading pair missing it on EITHER side falls back to F2a's
+ *  three-axis signature alone (`check`'s own doc comment below has the
+ *  exact rule and why the corpus sweep decided it stays under the SAME
+ *  suppression as the three-axis signature, not a separately-lifted one —
+ *  `continuity.test.ts`'s own PART 5).
  *  `distanceGoal` is NOT a wire field — it is the caller's own answer to
  *  "does the armed program contain a distance-kind interval", the exact
  *  predicate `driver.ts`'s `recordTwdVerdict` already computes
@@ -178,6 +201,10 @@ export interface ContinuityReading {
   elapsedSeconds: number;
   distanceMeters: number;
   distanceGoal: boolean;
+  /** F2b (design spec §4): 0x0033's raw Interval Count, carried with this
+   *  reading — see this interface's own doc comment above for the full
+   *  merge story. `undefined` until the run's first 0x0033 arrives. */
+  intervalCount?: number;
 }
 
 export type ContinuityVerdict = "continuation" | "reset";
@@ -185,25 +212,55 @@ export type ContinuityVerdict = "continuation" | "reset";
 /**
  * Judges whether `after` is an honest continuation of `before`, or a reset
  * (F2a, design spec 2026-08-23-continuity-corroboration §2: "conviction
- * takes a full-reset signature, not one reading").
+ * takes a full-reset signature, not one reading"; F2b, storage-spine
+ * design spec 2026-08-23 §4: the interval-count bound below).
  *
  * Suppressed (always `"continuation"`) whenever EITHER reading was taken
  * while a distance-goal interval was armed — see this file's own header
  * comment for why that suppression is required, not optional, on this
- * particular field, and why it survives the F2a change unchanged.
+ * particular field, and why it survives the F2a change unchanged. **F2b's
+ * count bound runs under this SAME suppression, not a separately-lifted
+ * one** — `continuity.test.ts`'s own PART 5 sweep decided the spec §4
+ * conditional: the count bound's own suppression LIFTS only if a
+ * both-predicate sweep is clean AND non-vacuous; the production predicate
+ * (`programHasDistanceGoal(run.program)`, the ARMED PROGRAM, constant for
+ * the whole session — a DIFFERENT rule from this file's own per-sample
+ * wire signal, `.claude/agents/antagonist-ledger.md`'s "Phase RC delta
+ * pass" entry) suppresses the ENTIRE committed corpus (every one of the 6
+ * captures armed a program containing a distance-kind interval), so that
+ * arm of the sweep is clean but VACUOUS — 0 pairs ever compared. A 0-pair
+ * "zero backward readings" is not evidence the bound is safe unsuppressed;
+ * the decision recorded there is KEPT.
  *
- * Convicts `"reset"` ONLY when ALL THREE axes are strictly backward in the
- * same reading — `totalWorkDistanceMeters`, `elapsedSeconds`, AND
- * `distanceMeters` each read LOWER in `after` than in `before`. No
- * tolerance on any axis: the reset signature this predicate looks for is
- * zeros against real progress, nothing marginal is being discriminated
- * (design spec §2), and the corpus measurement backing the old single-axis
- * tolerance (this file's own header comment) never needed one either. A
- * forward or unchanged reading on ANY one of the three axes is always
- * `"continuation"` — this is what makes the predicate safe against a
- * flaky single-field reading (the F2a false kill: TWD backward alone,
- * elapsed and distance both advancing) while still catching a genuine
- * discontinuity, where a reset monitor reads all three lower at once.
+ * Convicts `"reset"` when EITHER of two independent signatures fires:
+ *
+ * 1. **F2a's three-axis signature, unchanged**: ALL THREE axes are
+ *    strictly backward in the same reading — `totalWorkDistanceMeters`,
+ *    `elapsedSeconds`, AND `distanceMeters` each read LOWER in `after`
+ *    than in `before`. No tolerance on any axis: the reset signature this
+ *    predicate looks for is zeros against real progress, nothing marginal
+ *    is being discriminated (design spec §2), and the corpus measurement
+ *    backing the old single-axis tolerance (this file's own header
+ *    comment) never needed one either. A forward or unchanged reading on
+ *    ANY one of the three axes blocks this signature — this is what makes
+ *    it safe against a flaky single-field reading (the F2a false kill:
+ *    TWD backward alone, elapsed and distance both advancing) while still
+ *    catching a genuine discontinuity, where a reset monitor reads all
+ *    three lower at once.
+ * 2. **F2b's count bound**: BOTH readings carry an `intervalCount`
+ *    (`!== undefined` — a genuine `0` reading, interval 1 of every
+ *    program, 0-based, is PRESENT, not missing; a truthiness check would
+ *    misread it) AND `after.intervalCount < before.intervalCount`. A
+ *    reading pair missing the count on EITHER side falls back to
+ *    signature 1 alone — EXACTLY F2a's verdict, never worse (spec §4:
+ *    additive-optional, the `totalWorkDistanceMeters` precedent). This is
+ *    the conviction the three-axis signature alone cannot make: a mid-gap
+ *    reset whose per-interval clocks (elapsed/distance) read FORWARD
+ *    again by the time the next reading lands — F2a's own §2b traded-away
+ *    blind window (this file's header comment) — still shows the raw
+ *    interval count reading backward, because a genuine machine reset
+ *    re-arms an EARLIER interval, and the count is unclamped
+ *    (`domain/monitor/types.ts`'s `rawIntervalCount` doc comment).
  */
 export function check(
   before: ContinuityReading,
@@ -214,5 +271,9 @@ export function check(
     after.totalWorkDistanceMeters < before.totalWorkDistanceMeters &&
     after.elapsedSeconds < before.elapsedSeconds &&
     after.distanceMeters < before.distanceMeters;
-  return resetSignature ? "reset" : "continuation";
+  const countBackward =
+    before.intervalCount !== undefined &&
+    after.intervalCount !== undefined &&
+    after.intervalCount < before.intervalCount;
+  return resetSignature || countBackward ? "reset" : "continuation";
 }

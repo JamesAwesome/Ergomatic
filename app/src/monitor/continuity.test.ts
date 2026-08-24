@@ -1,10 +1,19 @@
 import { readFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
-import { parseGeneralStatus } from "../../domain/monitor/pm5/parse.js";
-import { GENERAL_STATUS_UUID } from "../../domain/monitor/pm5/uuids.js";
+import type { WorkoutProgram } from "../../domain/monitor/program.js";
+import {
+  parseAdditionalStatus2,
+  parseGeneralStatus,
+  toMonitorState,
+} from "../../domain/monitor/pm5/parse.js";
+import {
+  ADDITIONAL_STATUS_2_UUID,
+  GENERAL_STATUS_UUID,
+} from "../../domain/monitor/pm5/uuids.js";
 import { check, type ContinuityReading } from "./continuity";
 import { fromHexString, parseRecording } from "./transports/recording";
+import { programHasDistanceGoal } from "./useMonitorSession";
 
 // ============================================================================
 // PART 1 — the pure predicate, against hand-built readings: the baseline
@@ -271,6 +280,174 @@ describe("continuity.check: the three-axis full-reset signature (F2a, spec 2026-
 });
 
 // ============================================================================
+// PART 2c — F2b: the interval-count bound (design spec §4, PR 3 Task 2
+// Step 2). PART 5's own sweep (below) decided the suppression question
+// FIRST: KEPT, not lifted — the count bound runs under the SAME
+// distance-goal suppression the three-axis signature already uses, no
+// separately-lifted rule. These pins exercise the bound's own logic:
+// `after.intervalCount < before.intervalCount`, guarded by presence on
+// BOTH sides (falls back to F2a exactly when either is missing).
+// ============================================================================
+
+function countReading(
+  over: Partial<ContinuityReading> & {
+    totalWorkDistanceMeters: number;
+    elapsedSeconds: number;
+    distanceMeters: number;
+  },
+): ContinuityReading {
+  return { distanceGoal: false, ...over };
+}
+
+describe("continuity.check: the interval-count bound (F2b, design spec §4)", () => {
+  it("SYNTHETIC multi-interval fixture: a mid-gap reset with per-interval clocks reading FORWARD (TWD holds/grows, elapsed/distance both look like a fresh interval start) but the raw interval count reading BACKWARD ⇒ reset — the conviction F2a's three-axis signature alone could not make (F2a §2b's traded-away blind window, this file's own header comment)", () => {
+    const before = countReading({
+      totalWorkDistanceMeters: 300,
+      elapsedSeconds: 40,
+      distanceMeters: 150,
+      intervalCount: 2,
+    });
+    const after = countReading({
+      totalWorkDistanceMeters: 305, // forward — F2a's own signature stays silent
+      elapsedSeconds: 5, // a fresh interval's own clock, reading forward from 0
+      distanceMeters: 20, // same
+      intervalCount: 1, // the machine genuinely re-armed an earlier interval
+    });
+    expect(check(before, after)).toBe("reset");
+  });
+
+  it("a genuine backward transition INTO 0 is still a conviction — 0 is a real, PRESENT reading (interval 1, 0-based, spec §4's own honest capability statement), not a missing one; the presence guard must be `!== undefined`, never truthiness, or this case is silently missed", () => {
+    const before = countReading({
+      totalWorkDistanceMeters: 300,
+      elapsedSeconds: 40,
+      distanceMeters: 150,
+      intervalCount: 1,
+    });
+    const after = countReading({
+      totalWorkDistanceMeters: 305,
+      elapsedSeconds: 5,
+      distanceMeters: 20,
+      intervalCount: 0,
+    });
+    expect(check(before, after)).toBe("reset");
+  });
+
+  it("count missing on the AFTER side falls back to EXACTLY F2a's verdict — reset when the three-axis signature says reset", () => {
+    const before = countReading({
+      totalWorkDistanceMeters: 300,
+      elapsedSeconds: 40,
+      distanceMeters: 150,
+      intervalCount: 2,
+    });
+    const after = countReading({
+      totalWorkDistanceMeters: 10,
+      elapsedSeconds: 5,
+      distanceMeters: 3,
+      // intervalCount omitted: genuinely missing (no 0x0033 yet for THIS reading)
+    });
+    expect(check(before, after)).toBe("reset");
+  });
+
+  it("count missing on the AFTER side falls back to EXACTLY F2a's verdict — continuation when the three-axis signature says continuation, even though the count itself would read backward if it were present", () => {
+    const before = countReading({
+      totalWorkDistanceMeters: 300,
+      elapsedSeconds: 40,
+      distanceMeters: 150,
+      intervalCount: 2,
+    });
+    const after = countReading({
+      totalWorkDistanceMeters: 305, // forward — F2a says continuation
+      elapsedSeconds: 45,
+      distanceMeters: 160,
+      // intervalCount omitted
+    });
+    expect(check(before, after)).toBe("continuation");
+  });
+
+  it("count missing on the BEFORE side falls back to EXACTLY F2a's verdict — reset when the three-axis signature says reset", () => {
+    const before = countReading({
+      totalWorkDistanceMeters: 300,
+      elapsedSeconds: 40,
+      distanceMeters: 150,
+      // intervalCount omitted
+    });
+    const after = countReading({
+      totalWorkDistanceMeters: 10,
+      elapsedSeconds: 5,
+      distanceMeters: 3,
+      intervalCount: 0,
+    });
+    expect(check(before, after)).toBe("reset");
+  });
+
+  it("count missing on the BEFORE side falls back to EXACTLY F2a's verdict — continuation when the three-axis signature says continuation", () => {
+    const before = countReading({
+      totalWorkDistanceMeters: 300,
+      elapsedSeconds: 40,
+      distanceMeters: 150,
+      // intervalCount omitted
+    });
+    const after = countReading({
+      totalWorkDistanceMeters: 305,
+      elapsedSeconds: 45,
+      distanceMeters: 160,
+      intervalCount: 0,
+    });
+    expect(check(before, after)).toBe("continuation");
+  });
+
+  it("count EQUAL, three-axis backward ⇒ reset — F2a's own conviction is unchanged by this bound; an unchanged count never blocks it", () => {
+    const before = countReading({
+      totalWorkDistanceMeters: 300,
+      elapsedSeconds: 60,
+      distanceMeters: 245,
+      intervalCount: 2,
+    });
+    const after = countReading({
+      totalWorkDistanceMeters: 0,
+      elapsedSeconds: 0,
+      distanceMeters: 0,
+      intervalCount: 2,
+    });
+    expect(check(before, after)).toBe("reset");
+  });
+
+  it("count FORWARD across a legal, boundary-straddling gap ⇒ continuation — TWD holds/grows while elapsed/distance reset for the next interval (the three real non-distance boundary shapes, PART 4 above) AND the interval count advances, the ordinary case a genuine boundary produces", () => {
+    const before = countReading({
+      totalWorkDistanceMeters: 373,
+      elapsedSeconds: 60,
+      distanceMeters: 213.7,
+      intervalCount: 1,
+    });
+    const after = countReading({
+      totalWorkDistanceMeters: 373, // holds, the step-3 seq 953->956 shape
+      elapsedSeconds: 0,
+      distanceMeters: 0,
+      intervalCount: 2, // forward — a genuine boundary advances the count
+    });
+    expect(check(before, after)).toBe("continuation");
+  });
+
+  it("the distance-goal suppression covers the count bound too — decided KEPT, not a separately-lifted rule (PART 5's own sweep below): a backward count on a distance-goal reading stays a continuation", () => {
+    const before = countReading({
+      totalWorkDistanceMeters: 500,
+      elapsedSeconds: 69.75,
+      distanceMeters: 248.5,
+      distanceGoal: true,
+      intervalCount: 5,
+    });
+    const after = countReading({
+      totalWorkDistanceMeters: 0,
+      elapsedSeconds: 0.5,
+      distanceMeters: 1.9,
+      distanceGoal: true,
+      intervalCount: 2, // backward, but suppressed before this axis is even read
+    });
+    expect(check(before, after)).toBe("continuation");
+  });
+});
+
+// ============================================================================
 // PART 3 — the corpus derivation AND its own validation, in one place: the
 // same simulation shape the anchor pass used to falsify RowTracer's own
 // elapsed bound (`.claude/agents/antagonist-ledger.md`'s "Phase LL anchor
@@ -515,3 +692,333 @@ describe("continuity.check: the three real non-distance boundary pairs stay cont
     expect(check(before, after)).toBe("continuation");
   });
 });
+
+// ============================================================================
+// PART 5 — THE COUNT BOUND'S SUPPRESSION SWEEP (storage-spine design spec
+// §4, PR 3 Task 2 Step 1): run BEFORE the bound exists in `continuity.ts`,
+// on purpose — the spec's own conditional ("lift F2a's suppression for the
+// count bound, or keep it") is DECIDED by this sweep, not asserted first
+// and checked second. Nothing below calls `check` or reads
+// `ContinuityReading.intervalCount` (that field doesn't exist yet); this
+// block measures the raw predicate — `after.intervalCount <
+// before.intervalCount` on a non-suppressed, in-run pair — independently,
+// under BOTH `distanceGoal` signals the codebase has:
+//
+// - the WIRE signal `continuity.test.ts`'s own PART 3 already uses:
+//   per-sample `workoutDurationType === 128`, read straight off the SAME
+//   frame the count is attached to;
+// - the PRODUCTION signal `useMonitorSession.ts`'s `applyContinuityCheck`
+//   actually runs: `programHasDistanceGoal(run.program)` — the ARMED
+//   PROGRAM, a single fact constant for the whole session, not a
+//   per-sample read.
+//
+// `.claude/agents/antagonist-ledger.md`'s "Phase RC delta pass" entry
+// (2026-08-23) is the reason both are measured, not just the first: an
+// earlier draft of this bound's own claim ("a corpus sweep shows zero
+// backward interval-count readings on healthy resumes") was FALSE for the
+// predicate production actually runs, because the two signals disagree —
+// oracle blindness "through a different door," not just a fixture the code
+// can't reach at all.
+//
+// **A brief-contradicting finding, recorded here rather than worked around
+// silently (repo rule 10):** Task 2's own brief asserted "the armed
+// program is derivable from each recording's header — the captures carry
+// their programs." That is FALSE for 5 of the 6 committed corpus files —
+// only `step-3-pm5-recording-second-rest-1786973713929.jsonl`'s header
+// actually carries a `program` field (verified: `grep -c '"program"'` over
+// each of the other five files' raw bytes returns 0). The five walks that
+// produced these captures predate the recorder capturing the armed program
+// in-band; what DOES exist for every one of them is the walk's own
+// RUNSHEET/README, committed alongside the recording, naming the exact
+// program that was armed. `ARMED_PROGRAM` below is built from THOSE
+// citations (one per file, quoted inline) for the five, and from the
+// real `header.program` for the sixth — never guessed, never left as a
+// gap this sweep would otherwise have to skip.
+// ============================================================================
+
+/** Minimal `ProgramInterval` — every field this block never reads
+ *  (`targetSplit`/`displaySpm`/`restSeconds`/exact `value`) is a
+ *  placeholder; `programHasDistanceGoal` reads only `kind`. */
+function armedInterval(
+  kind: "time" | "distance",
+): WorkoutProgram["intervals"][number] {
+  return {
+    type: "work",
+    kind,
+    value: kind === "time" ? 60 : 250,
+    targetSplit: null,
+    displaySpm: null,
+    restSeconds: 0,
+  };
+}
+
+/** The five corpus files whose header carries no `program` (confirmed
+ *  above) — the armed program as documented by the walk that produced
+ *  each one, quoted from the committed RUNSHEET/README. */
+const DOCUMENTED_ARMED_PROGRAM: Record<string, WorkoutProgram> = {
+  // docs/monitor/sessions/walk-2026-08-16/RUNSHEET.md, "Session 1 — the
+  // keystone": "Program: 2×250 m, r0, NO warm-up."
+  "walk-2026-08-16/session-1-keystone-2x250r0.jsonl": {
+    intervals: [armedInterval("distance"), armedInterval("distance")],
+  },
+  // Same RUNSHEET, "Session 2 — the unequal-intervals clock row":
+  // "Program: 4 unequal intervals — 1:00 / 2:00 / 500 m / 1:00, r30."
+  "walk-2026-08-16/session-2-wu-4unequal.jsonl": {
+    intervals: [
+      armedInterval("time"),
+      armedInterval("time"),
+      armedInterval("distance"),
+      armedInterval("time"),
+    ],
+  },
+  // docs/monitor/sessions/walk-2026-08-17/README.md's own table, row
+  // "1 keystone": "2×250m r0, no wu" (`step-2-*.jsonl`).
+  "walk-2026-08-17/step-2-pm5-recording-1786973078979.jsonl": {
+    intervals: [armedInterval("distance"), armedInterval("distance")],
+  },
+  // Same README table, row "3 (END)": "2×250m keystone, END ~44s in"
+  // (`step-4-*.jsonl`).
+  "walk-2026-08-17/step-4-pm5-recording-1786974067695.jsonl": {
+    intervals: [armedInterval("distance"), armedInterval("distance")],
+  },
+  // docs/monitor/sessions/walk-2026-08-18-metrics/README.md: "Program
+  // (Walk Pyramid, distinct targets): `w 300m 6k @22 r1 · w 700m 6k-4 @24
+  // r1 · w 300m 6k+4 @22`" — three distance-kind intervals.
+  "walk-2026-08-18-metrics/pyramid-pm5-recording-1787090555458.jsonl.gz": {
+    intervals: [
+      armedInterval("distance"),
+      armedInterval("distance"),
+      armedInterval("distance"),
+    ],
+  },
+};
+
+/** `step-3`'s header really does carry `program` (Task 1's own capture);
+ *  read it from there instead of duplicating it by hand, so the two
+ *  sources cannot silently disagree. Every other file falls back to
+ *  `DOCUMENTED_ARMED_PROGRAM` above. Throws loudly if a file has neither —
+ *  a silently-skipped file would make the production-predicate sweep
+ *  undercount without saying so (repo rule 10). */
+function armedProgramFor(fileName: string): WorkoutProgram {
+  const { header } = loadCapture(fileName);
+  if (header.program) return header.program;
+  const documented = DOCUMENTED_ARMED_PROGRAM[fileName];
+  if (!documented) {
+    throw new Error(
+      `no armed program (header or documented) for ${fileName} — the production-predicate sweep cannot compute programHasDistanceGoal for it`,
+    );
+  }
+  return documented;
+}
+
+interface CountSample {
+  t: number;
+  seq: number;
+  /** The merged raw AS2 state at this GS tick — `undefined` until this
+   *  file's first 0x0033 has arrived, the identical "absent until first
+   *  0x0033" contract `domain/monitor/types.ts`'s `rawIntervalCount`
+   *  doc comment names for the real driver (Task 1). */
+  intervalCount?: number;
+  /** This SAME frame's own `workoutDurationType === 128` — PART 3's wire
+   *  signal, per-sample. */
+  wireDistanceGoal: boolean;
+  /** `false` until this file's first non-"armed" `workoutState` (WAIT­TO­BEGIN
+   *  or COUNTDOWNPAUSE) — the production path's `run === null` window: no
+   *  `MonitorRun` exists, so `applyContinuityCheck` never calls `check` at
+   *  all, whatever the readings say. Latches `true` for the rest of the
+   *  file once crossed (a run, once opened, does not return to "armed"
+   *  mid-session in this corpus). */
+  inRun: boolean;
+}
+
+/** Every 0x0031 sample in `fileName`, in wire-arrival order, carrying the
+ *  MERGED raw interval count exactly the way `driver.ts`'s own `raw`
+ *  object does: `mergeStatus`'s callback for 0x0033 updates the merged
+ *  state on EVERY AS2 arrival; `maybeEmitFrame` (0x0031's own callback)
+ *  reads whatever that merged state holds AT THE MOMENT the GS tick
+ *  fires — never re-paired to the AS2 event by timestamp, never
+ *  re-derived. This function reproduces exactly that: a running
+ *  `lastCount` updated on every AS2 rx, snapshotted onto the sample built
+ *  at the NEXT GS rx (`driver.test.ts`'s own capture-replay pin for
+ *  Task 1's `rawIntervalCount` field exercises the identical pairing
+ *  through the real driver). */
+function loadCountSamples(fileName: string): CountSample[] {
+  const { events } = loadCapture(fileName);
+  const samples: CountSample[] = [];
+  let lastCount: number | undefined;
+  let runOpened = false;
+  for (const e of events) {
+    if (!("dir" in e) || e.dir !== "rx") continue;
+    if (e.char === ADDITIONAL_STATUS_2_UUID) {
+      const decoded = parseAdditionalStatus2(fromHexString(e.hex));
+      if (!("error" in decoded)) lastCount = decoded.intervalCount;
+      continue;
+    }
+    if (e.char !== GENERAL_STATUS_UUID) continue;
+    const decoded = parseGeneralStatus(fromHexString(e.hex));
+    if ("error" in decoded) continue;
+    if (toMonitorState(decoded.workoutState) !== "armed") runOpened = true;
+    samples.push({
+      t: e.t,
+      seq: e.seq,
+      intervalCount: lastCount,
+      wireDistanceGoal:
+        decoded.workoutDurationType === WORKOUT_DURATION_IDENTIFIER_DISTANCE,
+      inRun: runOpened,
+    });
+  }
+  return samples;
+}
+
+/** The anchor pass's own simulation shape (`slideGap` above), reused for
+ *  `CountSample` — for every sample, find the first later sample at least
+ *  `gapMs` ahead in wall time and pair them. */
+function slideCountGap(
+  samples: CountSample[],
+  gapMs: number,
+): { before: CountSample; after: CountSample }[] {
+  const results: { before: CountSample; after: CountSample }[] = [];
+  for (let i = 0; i < samples.length; i++) {
+    const targetT = samples[i]!.t + gapMs;
+    let j = i + 1;
+    while (j < samples.length && samples[j]!.t < targetT) j++;
+    if (j >= samples.length) break;
+    results.push({ before: samples[i]!, after: samples[j]! });
+  }
+  return results;
+}
+
+interface CountSweepResult {
+  /** Pairs where BOTH sides carry a count AND neither is suppressed —
+   *  the only pairs this bound's suppression decision can be measured
+   *  against. A pair missing a count on either side is F2a's territory,
+   *  not this bound's — never counted here either way. */
+  nonSuppressedPairs: number;
+  backward: string[];
+}
+
+/** WIRE predicate: suppressed when EITHER reading's own
+ *  `workoutDurationType === 128` — PART 3's per-sample signal, unchanged. */
+function sweepWirePredicate(): CountSweepResult {
+  const backward: string[] = [];
+  let nonSuppressedPairs = 0;
+  for (const f of CORPUS_FILES) {
+    for (const { before, after } of slideCountGap(
+      loadCountSamples(f),
+      30_000,
+    )) {
+      if (before.intervalCount === undefined) continue;
+      if (after.intervalCount === undefined) continue;
+      if (before.wireDistanceGoal || after.wireDistanceGoal) continue;
+      nonSuppressedPairs++;
+      if (after.intervalCount < before.intervalCount) {
+        backward.push(
+          `${f} seq ${before.seq}->${after.seq}: count ${before.intervalCount}->${after.intervalCount}`,
+        );
+      }
+    }
+  }
+  return { nonSuppressedPairs, backward };
+}
+
+/** PRODUCTION predicate: suppressed when `programHasDistanceGoal` of THIS
+ *  FILE's own armed program is true — a single fact for the whole file,
+ *  computed once, never per-sample (this is what makes it a DIFFERENT
+ *  rule from the wire predicate, not a stricter version of the same one).
+ *  Additionally excludes any pair touching a pre-run sample
+ *  (`!inRun`) — the `run === null` window the production path never
+ *  reaches `check` from at all (brief Step 1's explicit exclusion). */
+function sweepProductionPredicate(): CountSweepResult {
+  const backward: string[] = [];
+  let nonSuppressedPairs = 0;
+  for (const f of CORPUS_FILES) {
+    const suppressed = programHasDistanceGoal(armedProgramFor(f));
+    for (const { before, after } of slideCountGap(
+      loadCountSamples(f),
+      30_000,
+    )) {
+      if (before.intervalCount === undefined) continue;
+      if (after.intervalCount === undefined) continue;
+      if (!before.inRun || !after.inRun) continue;
+      if (suppressed) continue;
+      nonSuppressedPairs++;
+      if (after.intervalCount < before.intervalCount) {
+        backward.push(
+          `${f} seq ${before.seq}->${after.seq}: count ${before.intervalCount}->${after.intervalCount}`,
+        );
+      }
+    }
+  }
+  return { nonSuppressedPairs, backward };
+}
+
+describe("continuity: the count bound's suppression sweep (spec §4's conditional, decided here)", () => {
+  it("WIRE predicate (per-sample workoutDurationType===128): zero backward count readings, 1,026 non-suppressed pairs exercised — the identical count PART 3's own TWD sweep measures under this same predicate (both counts happen to be present for every one of them)", () => {
+    const result = sweepWirePredicate();
+    if (result.backward.length > 0) {
+      throw new Error(
+        `${result.backward.length} backward count reading(s) under the WIRE predicate: ${result.backward.join("; ")}`,
+      );
+    }
+    expect(result.backward).toHaveLength(0);
+    // Committed floor, same discipline as PART 3's own sanity test: a
+    // regression to zero pairs exercised would still pass a
+    // backward-count-only assertion while proving nothing. Measured:
+    // 1,026 — floor set well under, guarding against it shrinking
+    // silently.
+    expect(result.nonSuppressedPairs).toBeGreaterThan(1000);
+  });
+
+  it("PRODUCTION predicate (programHasDistanceGoal(run.program), constant per session): EVERY ONE of the 6 committed captures armed a program containing a distance-kind interval (cited above, per file) — this predicate suppresses the ENTIRE corpus, 0 non-suppressed pairs", () => {
+    const result = sweepProductionPredicate();
+    expect(result.backward).toHaveLength(0);
+    // THE decisive number: not "clean," VACUOUS. Zero pairs were ever
+    // compared under this predicate — every corpus file's own armed
+    // program contains a distance interval, so `suppressed` is `true`
+    // for all six before a single pair is even considered. A 0-pair
+    // "zero backward readings" is not evidence of safety (repo rule 11 /
+    // this file's own PART 3 sanity-test convention: an unexercised gate
+    // proves nothing about what it guards).
+    expect(result.nonSuppressedPairs).toBe(0);
+  });
+
+  it("session-2's own pre-run backward count (the leftover-register connect shape, AS2 seq 24->29, count 3->0) is excluded from the production sweep by TWO INDEPENDENT mechanisms, not one: the distance-goal suppression (session-2's own program contains a 500m interval) AND the in-run filter (workoutState reads WAITTOBEGIN at both surrounding General Status ticks, seq 27 and seq 30)", () => {
+    const samples = loadCountSamples(SESSION2_FILE);
+    const before = samples.find((s) => s.seq === 27);
+    const after = samples.find((s) => s.seq === 30);
+    if (!before || !after) {
+      throw new Error(
+        "session-2 seq 27/30 General Status samples not found — the pin has nothing to check",
+      );
+    }
+    // The count itself really did go backward (3 -> 0, merged from the
+    // AS2 events at seq 24 and seq 29) — this pin is not vacuous either.
+    expect(before.intervalCount).toBe(3);
+    expect(after.intervalCount).toBe(0);
+    // Mechanism 1: distance-goal suppression (session-2's own armed
+    // program, cited above, contains a 500m interval).
+    expect(before.wireDistanceGoal).toBe(true);
+    expect(after.wireDistanceGoal).toBe(true);
+    expect(programHasDistanceGoal(armedProgramFor(SESSION2_FILE))).toBe(true);
+    // Mechanism 2: the in-run filter — no run has opened yet at either
+    // tick (workoutState 0, WAITTOBEGIN).
+    expect(before.inRun).toBe(false);
+    expect(after.inRun).toBe(false);
+  });
+});
+
+// ============================================================================
+// THE SWEEP'S DECISION (spec §4's conditional): KEPT, not lifted. The WIRE
+// predicate alone is clean (0 backward / >100 non-suppressed pairs) — but
+// it is the WRONG predicate to decide on, per the antagonist ledger entry
+// cited above. The PRODUCTION predicate — the one `applyContinuityCheck`
+// actually runs — is clean too, but VACUOUSLY: 0 non-suppressed pairs,
+// because every committed capture's own armed program contains a
+// distance-kind interval. A rule that is never exercised cannot be shown
+// safe by this corpus; "0 backward readings" over "0 pairs tested" is an
+// absence of evidence, not evidence of absence. `continuity.ts`'s `check`
+// (Task 2 Step 3) therefore ships the count bound under the SAME
+// distance-goal suppression the three-axis signature already uses — no
+// new, separately-lifted rule — and this file's own header comment
+// records why in the same words.
+// ============================================================================
