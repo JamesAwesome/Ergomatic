@@ -2885,8 +2885,17 @@ that needs no erg, and it can run in a test.
       RC-1.** The guard convicts on one backward TWD reading even when the
       SAME frame's elapsed and distance are advancing; a real monitor
       reset zeroes all three. Require corroboration before closing a
-      record. This is a BOUND, not a key — the correct key is F2b's,
-      SHIPPED in the spine's PR 3 (the interval-count bound). Evidence: the six-row TWD table in the LL walk card's
+      record. This is a BOUND, not a key — and F2b (SHIPPED, the
+      spine's PR 3) is a SECOND bound, not a re-key: the §2b
+      silent-under-count trade stays LIVE on distance-goal programs
+      (suppressed), interval 1, and 1-interval programs. What would
+      settle the suppression lift: a committed capture of a
+      non-distance-goal armed program (the whole corpus is
+      distance-goal under the production predicate — 0/0 vacuous), or a
+      real interruption recording (true-positive evidence is
+      synthetic-only). The v0.20.0 notes clause ("until a deeper fix
+      lands") owes an update at the next tag: the deeper fix narrowed
+      the window, it did not close it. Evidence: the six-row TWD table in the LL walk card's
       corrected F2 and `walk-2026-08-23/ring-phone-2-background-continuity-kill.json`.
       **Shipped, see `continuity.ts` + spec 2026-08-23-continuity-corroboration.**
 - [x] **RC-1 — Store WORK and REST separately, per interval and per

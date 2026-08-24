@@ -119,10 +119,13 @@
 // it — 300 m rowed, a reset, 200 m more rowed stores ≈300 m, not 500 m,
 // silently. The merge trades one silent-loss failure mode (a killed
 // healthy row) for a DIFFERENT silent-under-count failure mode, not for a
-// visible one. The proper fix — a re-key off TWD entirely, so no
-// per-axis conjunction is needed at all — is F2b's, inside RC-1's spec,
-// which now carries this under-count risk explicitly (ROADMAP). This
-// file's predicate is a bound tightened, not the fix.
+// visible one. F2b SHIPPED (the spine's PR 3, this file's interval-count
+// bound below): it closes this window on MULTI-INTERVAL programs past
+// interval 1 — but NOT on distance-goal programs (the suppression covers
+// both bounds; the sweep's KEPT decision), interval 1, or 1-interval
+// programs, where this under-count trade remains live. This file's
+// predicates are bounds tightened, not a re-key; a true re-key would
+// need a field the corpus has not yet supplied.
 //
 // The distance-goal suppression below is UNCHANGED and still load-
 // bearing, not superseded by the three-axis signature: at a
