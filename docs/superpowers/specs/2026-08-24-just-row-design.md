@@ -1,6 +1,8 @@
 # Just Row — observe the machine's own free row
 
-**Date:** 2026-08-24 · **Status:** Approved by James (design sections, this
+**Date:** 2026-08-24 · **Rev 2** (all phase-open gate findings folded:
+antagonist anchor pass 12 findings, PM GO-WITH-CONDITIONS C1–C7) ·
+**Status:** Approved by James (design sections + two gate rulings, this
 session) · **Phase:** JR
 
 ## What and why
@@ -8,255 +10,365 @@ session) · **Phase:** JR
 A rower who just wants to pull taps **Just Row** on Today, the app connects
 to the PM5 and watches the machine's own native Just Row mode — no program,
 no targets, no baseline required. When they finish (Done in the app, Menu on
-the erg, or walking away until the monitor sleeps), the session closes with
-the machine's numbers and offers the normal log screen. The row lands in
-history and the future 8B calendar like any other session, marked as what it
-is: a free row, not a workout.
+the erg, or walking away until the monitor powers itself off), the session
+closes with the machine's numbers and offers the log screen. The row lands
+in history and the future 8B calendar marked as what it is: a free row, not
+a workout.
 
 The feature exists because the app currently has no way to row without
 choosing a workout, and because the whole stack already has the concept: the
 PM5's Just Row is Concept2's own primary unprogrammed mode, their Logbook
-API carries `JustRow` as a first-class workout type, and our driver was
-built with the no-program case handled and documented as "its own designed
-feature" waiting to be designed. This is that design.
+API carries `JustRow` as a first-class workout type, and our driver
+deliberately refuses to infer a run without a program — naming a
+"JustRow-follow mode" as its own designed feature. This is that design.
 
-## Rulings (James, 2026-08-24, this brainstorm)
+## Rulings (James, 2026-08-24)
 
-1. **Open-ended free row** — no quick-pick targets, no chooser. Tap, pull,
-   stop. (Quick targets were offered and declined.)
-2. **Connected only this phase** — no phone-timer count-up mode, no manual
-   "log a free row after" door. Those wait for demand.
-3. **Same table, marked** — a `session_logs` row, not a separate record
-   type. History and the 8B calendar see it for free.
-4. **Entry on Today, always** — visible with or without a baseline; when
-   baselines are unset it also joins the doors card as a fourth quiet door.
-5. **End = Done in the app OR backing out on the erg** — the rower owns the
-   decision on either surface; the app never guesses with an invented idle
-   threshold. (Link drop from the monitor's own power-off chain is the
-   third, passive closer.)
-6. **Approach A** — a lean parallel observer path; the programmed-session
-   stack (`useMonitorSession`, `ConnectedSurface`) is not touched. Chosen
-   explicitly for parallel-safety against Phase RC's in-flight wave.
+1. **Open-ended free row** — no quick-pick targets, no chooser.
+2. **Connected only this phase** — no phone-timer count-up, no manual
+   "log a free row after" door.
+3. **Same table, marked** — a `session_logs` row, not a separate record.
+4. **Entry on Today, always** — one persistent row, visible with or
+   without a baseline. **The fourth doors-card door is CUT** (PM gate C7,
+   James confirmed): the doors card's own copy promises every door ends in
+   a baseline, and the always-visible Today row already gives a
+   no-baseline rower the entry on the same screen. The BL canvas and card
+   copy stay untouched.
+5. **End = Done in the app OR backing out on the erg**, plus the
+   machine's own idle power-off as the passive closer. The app never
+   invents an idle threshold. Named honestly: "Done" is an APP-side end
+   the machine does not have — the erg keeps its row open until Menu or
+   timeout, so the PM's stored piece can be longer than ours (coast-down
+   plus whatever precedes Menu). The exit walk states this instead of
+   discovering it.
+6. **Approach A** — a parallel observer path; `ConnectedSurface` and
+   `useMonitorSession` are not modified. **Corrected claim:** this is
+   parallel-*safer*, not parallel-safe — the observer still needs driver
+   /frame-seam widening (see Detection) and must rebuild session concerns
+   that live in the hook, not the driver (see PR 2 scope). Implementation
+   therefore still waits behind Phase RC's wave.
+7. **The capture walk is its own erg session, James-scheduled** — RC's
+   exit-7 walk already ran (2026-08-24), so there is no trip to attach to.
 
 ## Does the system have the concept? (the mandatory question)
 
-**Yes, at every layer — we invent nothing.**
+**Yes at every layer — we invent nothing conceptually.** The PM5's Just Row
+is its native unprogrammed mode (PRIMARY); Concept2's Logbook API carries
+`workout_type: "JustRow"` first-class, with distance and time both
+required, no title field, and no rest concept for it (PRIMARY, verified
+against the live source at the anchor pass —
+<https://log.concept2.com/developers/documentation/>); our driver documents
+the no-program case and explicitly reserves a follow mode for real design
+(`driver.ts:920-926`).
 
-- **PM5:** Just Row is the monitor's native unprogrammed mode. It starts
-  when the rower pulls, is announced on the wire (workout type 0/1), and
-  ends only by Terminate (Menu) or the inactivity chain. PRIMARY.
-- **Concept2 Logbook API:** `workout_type: "JustRow"` is a first-class enum
-  member (`unknown, JustRow, FixedDistanceSplits, …, VariableIntervalUndefinedRest`).
-  A Just Row result is an ordinary record: `distance` and `time` both
-  required, no title field (the name derives from the type), splits carried
-  in the same array as any piece. Rest does not exist for JustRow — the
-  interval-only `rest_distance`/`rest_time` fields don't apply, so its
-  numbers are the whole piece. The PM even files an early-terminated
-  fixed-distance workout as a Just Row. PRIMARY —
-  <https://log.concept2.com/developers/documentation/>.
-- **Our driver:** frames flow before any `program()` (all status/summary
-  characteristics subscribed at construction); `ANONYMOUS_RUN`
-  (`useMonitorSession.ts`) documents `workoutId: null` as "a real,
-  supported state"; the series recorder explicitly handles "a driver with
-  no armed program, a JustRow"; and `driver.ts:920-926` names a
-  JustRow-follow mode as its own designed feature, not a state inference.
-  SECONDARY (our source).
+**What we DO assert on the machine's behalf (the PAUSED-state discipline):**
+an app-side "Done" that the PM5 does not have. When the rower taps Done,
+the machine's row keeps running until Menu or its own timeout. We record
+our observation window's numbers and say so; if a Logbook sync ever comes,
+the machine's row and ours may legitimately differ for a Done-ended piece.
 
-## Research findings (tagged; full trail in the brainstorm session)
+## Wire facts after the anchor pass (corrected; tags per claim)
 
-### Wire facts
+The anchor pass falsified three of rev 1's wire claims against our own
+captures and transcriptions. This section is the corrected record.
 
-- **Mode announcement:** BLE General Status 0x0031 byte 6 carries
-  `OBJ_WORKOUTTYPE_T`: `JUSTROW_NOSPLITS = 0`, `JUSTROW_SPLITS = 1`,
-  programmed types 2–8+. PRIMARY (Concept2 PM CSAFE spec Appendix A). Our
-  driver already decodes it (`app/domain/monitor/pm5/parse.ts:130`).
-  SECONDARY.
-- **The menu ambiguity:** the idle main menu also reads type 0, and an
-  empty arm reads type 1 with `durationRaw=0 durationType=128` (sessions
-  4a/4b, trace-verified). SECONDARY. So "menu" vs "about to Just Row" is
-  **indistinguishable before the first stroke** — the surface waits for
-  motion (`rowingActive` + state WORKOUTROW), which fits the product flow.
-  "Live Just Row" = workoutType 0/1 + WORKOUTROW + rowingActive is an
-  INFERENCE from the above, never yet captured as such (PR 0 closes it).
-- **End states:** Appendix E (PRIMARY): for JustRow the only sequence is
-  `WaitToBegin → WorkoutRow → Terminate → Rearm → WaitToBegin`. **JustRow
-  never reaches WORKOUTEND/WORKOUTLOGGED** — those are for defined-end
-  workouts. So "rower backed out on the erg" is the WORKOUTROW→TERMINATE
-  transition, on the wire, documented.
-- **Idle chain:** 6 s of inactivity in-use → Paused (public-CSAFE slave
-  state); 220 s paused → Finished; the monitor then powers off ("a couple
-  of minutes… count starts once the flywheel stops"). PRIMARY (spec Table
-  16 + concept2.com). Power-off drops the BLE link — INFERENCE (no doc
-  states the BLE-side effect).
-- **Auto-start:** the PM turns on and Just Row begins when the rower pulls.
-  PRIMARY (concept2.com how-to-use). Connect-then-pull is therefore the
-  happy path. Whether pulling from the main-menu screen (monitor already
-  on) auto-enters Just Row is INFERENCE — a 10-second hardware check in
-  PR 0.
-- **Persistence thresholds:** the PM saves a Just Row ≥1 minute or ≥100 m;
-  max 50,000 m; auto-splits stored at 5 min (→10 min past 35:00, →20 min
-  past 70:00). PRIMARY (concept2.com).
-- **Summary frames:** 0x0039/0x003A end-of-workout summary is documented
-  (PRIMARY, BLE doc rev 1.30) but has appeared in **zero** of our five
-  captured natural finishes, and the ecosystem reports these frames can be
-  dropped outright (SECONDARY, `docs/monitor/pm5-ble-ecosystem-review.md`).
-  **The design must not depend on 0x0039.** The last live frame is the
-  record; 0x0039 is an opportunistic cross-check only.
+- **Workout-type sniffing is DEAD.** Rev 1 proposed detecting Just Row via
+  0x0031's workout type 0/1. Our own captures show `workoutType=1` on a
+  TERMINATING type-8 programmed workout, and types 0, 1, and 8 all at
+  idle (SECONDARY, `pm5-session4a-final.log.gz` decoded at the anchor
+  pass). The field identifies nothing we need. It is not part of this
+  design.
+- **"JustRow ends only via Terminate" is UNVERIFIED.** The repo's Appendix
+  E transcription carries no JustRow attribution for the Terminate
+  sequence — the link was our own gloss — and this repo has already caught
+  Appendix E wrong about these exact ordinals (the keystone walk saw
+  5→12 with state 10 never appearing, `parse.ts:410-416`). Whether a real
+  Just Row can reach the `"finished"`-mapped state is a CAPTURE question,
+  and the design below tolerates either answer. INFERENCE until PR 0b.
+- **Terminate IS observable at the frame seam**: `parse.ts:439` maps
+  ordinal 11 → `state: "terminated"`, sole producer. SECONDARY, vetted.
+- **0x0039 HAS been captured** — the 2026-08-23 keystone walk recorded an
+  rx 0x0039+0x003A pair; the old "zero ever" corpus fact was our own
+  deafness, per that walk's README (SECONDARY). Still: arrival is not
+  guaranteed (ecosystem reports drops), so 0x0039 remains an opportunistic
+  cross-check, never the record.
+- **Idle chain** — 6 s inactivity → Paused, 220 s → Finished, then the
+  monitor powers off ("a couple of minutes… count starts once the
+  flywheel stops"). SECONDARY: the 6 s/220 s figures live in our own
+  research summary of the CSAFE slave state machine
+  (`docs/superpowers/research/2026-07-27-pm5-ble-research.md`), and the
+  power-off is concept2.com (PRIMARY). BLE-side effect of power-off
+  (link drop) is INFERENCE. Whether the timeout emits an auto-TERMINATE
+  first is an open assertion in `monitorRun.ts:145` — capture question.
+- **Auto-start**: the PM turns on and Just Row begins when the rower
+  pulls (PRIMARY, concept2.com). Pull-from-menu auto-entry with the app
+  already connected: INFERENCE, capture question.
+- **Persistence**: the PM saves a Just Row ≥1 min or ≥100 m; max
+  50,000 m; auto-splits stored at 5 min, →10 min past 35:00, →20 min past
+  70:00 (PRIMARY, concept2.com). **The auto-splits create the phase's
+  single highest-value open question — see OPEN 1.**
 
-### OPEN — closed by PR 0's instrumented capture, before recording code ships
+### OPEN — closed by PR 0b's capture before PR 2 merges
 
-1. Do the 5-minute auto-splits fire live on 0x0037/0x0038 during a Just
-   Row, or are they storage-only? (Row past 5:00 with those subscribed —
-   the walk row `state-architecture-review.md` already proposed.)
-2. Does the 0x0031 elapsed clock tick or hold through the 6 s → Paused
-   coast window, and what does workoutState read when the 220 s timeout
-   fires? (Deliberate 30 s+ stop; leave one row to time out.)
-3. Does a Menu-end (Terminate) emit 0x0039? (End one row via Menu,
-   stay connected ≥90 s after.)
-4. Does pulling from the main menu auto-enter Just Row with the app
-   already connected?
+1. **Do 0x0031's elapsed/distance RESET at a Just Row auto-split?** If
+   they reset the way programmed interval boundaries reset, every free
+   row over five minutes would store the current split, not the row — a
+   30-minute row landing as ~5 minutes. This decides both headline
+   numbers. (Companion code fact, testable without hardware: with
+   `programLength <= 0` the series recorder's interval key pins at 0 and
+   an elapsed reset would silence the trace after the first split —
+   `intervalIndex.ts:183`. PR 2 must fix or bypass this regardless.)
+2. Do the auto-splits fire live on 0x0037/0x0038?
+3. Does the elapsed clock tick or hold through the 6 s Paused window, and
+   what does workoutState read when the 220 s timeout fires — is there an
+   auto-TERMINATE before power-off?
+4. Does a Menu-end emit 0x0039? (Stay connected ≥90 s after.)
+5. Does pulling from the main menu auto-enter Just Row with the app
+   connected?
+6. Does the post-Terminate auto-rearm cycle (Terminate → Rearm →
+   WaitToBegin, unaided) produce frame sequences that could re-trip a
+   naive motion detector? (The design guards against this — see
+   Detection — the capture confirms the guard's shape.)
+7. Can a real Just Row ever reach the `"finished"`-mapped state (12)?
 
-**No genuine unprogrammed Just Row capture exists today** — every session
-in `docs/monitor/sessions/` is a programmed workout. PR 0's capture is both
-the evidence and the permanent replay fixture.
+**No genuine unprogrammed Just Row capture exists** — every recording in
+`docs/monitor/sessions/` is a programmed workout (verified frame-by-frame
+at the anchor pass). PR 0b's capture is both the evidence and PR 2's
+permanent replay fixture.
 
 ## Design
 
 ### Entry (Today)
 
-- A persistent, low-key **Just Row** row on Today — always visible,
-  regardless of baseline state. Connected-only: the row says so plainly
-  (e.g. "Just Row · connect and pull").
-- When `baselines === null`, the doors card gains a fourth quiet door with
-  the same destination. This delivers the "nobody is ever blocked from
-  just rowing" half of the row-without-a-baseline follow-on; the
-  every-workout-targetless half stays a follow-on (cross-referenced in
-  ROADMAP).
-- Both navigate to `/justrow`. No baseline gate anywhere on the path.
+One persistent, low-key **Just Row** row on Today — always visible,
+regardless of baseline state, connected-only and saying so plainly.
+Navigates to `/justrow`. No baseline gate anywhere on the path. (This
+delivers the "nobody is ever blocked from just rowing" half of the
+row-without-a-baseline follow-on; the every-workout-targetless half stays
+a follow-on.)
+
+### Detection (rewritten after B1/B9)
+
+The observer does not sniff workout types and does not infer runs from
+state words. Its session opens on **user intent plus motion**:
+
+- The rower tapped Just Row — that is the intent; the surface is already
+  in its Ready state ("pull to begin").
+- Motion = the frame seam's existing `rowingActive` / `state: "rowing"`
+  becoming true with distance advancing. First motion → **Live**, and the
+  observer marks the session open.
+- Once **Ended** (any closer), the observer NEVER re-opens on frames —
+  the PM's own post-Terminate housekeeping (Terminate → Rearm →
+  WaitToBegin, unaided) must not fabricate a second session (the
+  driver's own documented hazard). A new row requires a new user action.
+
+Whatever driver/frame-seam widening this needs (e.g. surfacing a
+distinct terminate observation to the observer) is named in PR 2's plan
+and is the acknowledged RC-adjacent touch — reviewed as such, after RC's
+wave.
 
 ### Live surface (`/justrow`)
 
-New lean `JustRowSurface` — approach A, sharing the transport
-(`adapters/monitorTransport.ts`), driver, and 1 Hz series recorder;
-touching neither `ConnectedSurface` nor `useMonitorSession`.
+New `JustRowSurface` + `useJustRowSession`, sharing the transport, driver,
+and series recorder. States: **Connecting → Ready ("pull to begin") →
+Live (elapsed, distance, current pace, SPM; a 44 px Done control) →
+Ended (summary of recorded numbers; Log it / discard)**.
 
-States:
+If the rower is already mid-Just-Row at connect, frames show motion
+immediately: straight to Live with the machine's accumulated numbers —
+the record is the machine's whole row, not "since we connected."
 
-1. **Connecting** — existing connect affordances/error patterns.
-2. **Ready — "pull to begin"** — connected, waiting for motion (the menu
-   ambiguity makes this the honest state; no fake "armed").
-3. **Live** — elapsed, distance, current pace, SPM from 0x0031/0x0032;
-   the same field-trust rules as the programmed surface. A visible
-   **Done** control (44 px, WCAG AA, per design reference).
-4. **Ended** — terminal summary of last live numbers with **Log it**
-   (→ log flow) and discard.
+**PR 2 rebuilds, not inherits, the session concerns that live in
+`useMonitorSession` rather than the driver** — priced into its size:
+keep-awake, app foreground/background handling and suspect-marking,
+silence hysteresis, link-drop disposal, typed failure mapping, series
+recorder lifecycle, and teardown ordering. Each gets a line in PR 2's
+plan naming what is copied, simplified, or consciously dropped.
 
-The session layer is a slim `useJustRowSession` hook: connect, frame
-subscription, live-detection (workoutType 0/1 + WORKOUTROW +
-rowingActive), Terminate watch, series recording, close.
+**Coexistence guard:** opening a Just Row session must run the same
+guard discipline as the programmed path — it must not clobber an
+unlogged phone-timer `SessionRun` or an unlogged `MonitorRun`
+(`createMonitorRun` unconditionally clears the timer run today; the
+observer checks before opening — F5 data-loss class).
 
-### End semantics (three closers, all honest)
+### End semantics
 
-| Closer | Signal | `ended_by` |
+| Closer | Signal | Close reason |
 | --- | --- | --- |
 | Done tap in the app | UI event | `rower` |
-| Menu/back on the erg | WORKOUTROW → TERMINATE on 0x0031 | `rower` |
-| Walk-away | link drop after the PM's 6 s → 220 s → power-off chain | `link-lost` |
+| Menu/back on the erg | frame-seam `terminated` (ordinal 11) while our session is open | `rower` |
+| Machine idle power-off | terminate-then-link-drop, or link drop from a paused state | **`idle` — a NEW `ended_by` enum member** (migration, PR 1) |
+| Genuine link loss mid-row | link drop while Live/rowing | `link-lost` |
 
-All three keep the last live frame's numbers as the record. If PR 0 shows
-Menu-end emits 0x0039, its totals are recorded as a cross-check
-(diagnostic, not authority). No invented idle threshold in the app —
-the PM's own timeout chain is the passive closer.
+Why the new member: `link-lost` renders "LINK LOST · the app lost the
+monitor before the end" and its release note promises "a row the app lost
+is never confused with a row you chose to end" — reusing it for the PM's
+*designed* idle power-off would label the most normal free-row ending a
+failure. `idle` gets its own honest copy ("the monitor switched itself
+off after the row"). The exact discrimination between `idle` and
+`link-lost` (was the machine paused/terminated when the link went?) is
+designed against OPEN 3's capture; the conservative fallback is: drop
+while paused → `idle`, drop while rowing → `link-lost`.
 
-A mid-row link drop (or app death) must be recoverable: the session
-persists a `MonitorRun` (v2, additive `mode: "justrow"`, `workoutId:
-null`) so Today's existing unlogged-run affordance offers "Log it" the
-same way it does for programmed runs. The unlogged-run row's navigation
-must handle the null-workout case (today it builds
-`/library/${run.workoutId}/log`).
+If OPEN 7 shows a real Just Row reaching the `"finished"` state, the close
+maps to `finished` honestly — the "never `finished`" claim from rev 1 is
+retired; the stored value reflects what the wire showed.
 
-### Stored shape (TRIAD — full antagonist pass + PM gate)
+All closers record the last live frame's numbers. If 0x0039 arrives, its
+totals are stored as a diagnostic cross-check (not authority).
+
+A mid-row link drop or app death persists a recoverable `MonitorRun` so
+Today offers recovery. **Today's unlogged-run row currently renders
+discard-only for a null-workout run** (the documented latent) — PR 2
+gives it a real "Log it" path to the new log door.
+
+### Stored shape (TRIAD — PR 1, tagged BEFORE PR 2)
 
 One `session_logs` row:
 
 | Column | Value | Note |
 | --- | --- | --- |
 | `workout_id` | `null` | already nullable end-to-end |
-| `workout_title` | `"Just Row"` | display name; column is NOT NULL |
-| `workout_type` | `"JustRow"` | Concept2's own enum word; column is plain text; collision-proof against `AN/O2/AT/TR` |
-| `steps` | `[]` | server validation gains a branch: empty allowed **iff** `workoutType === "JustRow"`. We store no steps because none existed — record, not projection. Fabricating a synthetic step is rejected. |
-| `time_seconds`, `distance_meters`, `avg_split_seconds` | last live frame | both headline numbers stored, matching the Logbook API's both-required rule |
-| `work_seconds/meters` | = the whole piece | rest does not exist for JustRow (Logbook-aligned; no TWD mirror trap) |
-| `rest_seconds/meters` | `null` | there is no rest concept to report |
-| `ended_by` | `rower` / `link-lost` | never `finished` — the PM5 has no WORKOUTEND for JustRow, and our enum's `finished` means the machine's own end. Honest to the wire. |
-| `series` | the 1 Hz trace | recorder already handles the no-program stream |
-| `plan_key`/`plan_index` | `null` — **pinned by test** | a Just Row never advances a plan; the server-side plan derivation in `stores/logs.ts` must provably skip it |
-| `baseline_k2/k6` | as at save (may be null) | unchanged semantics |
+| `workout_title` | `"Just Row"` | display name; NOT NULL column |
+| `workout_type` | `"JustRow"` | Concept2's enum word; the column is plain `text` (NOT the same-named pgEnum, which types `workouts.type` only — vetted). In the same PR, the server CLOSES `workoutType` to the known set (`AN/O2/AT/TR/JustRow`) instead of any non-empty string. |
+| `steps` | `[]` | server branch: empty allowed **iff** `workoutType === "JustRow"`. No fabricated steps — record, not projection. (Vetted: the only server consumer of steps is create-time validation; client renderers absorb `[]` — the summary self-gates on zero rows.) |
+| `time_seconds`, `distance_meters` | the observer's recorded totals | both headline numbers, matching the Logbook API's both-required rule. **Their correctness against auto-split resets is OPEN 1 — PR 2 does not merge until the capture answers it.** |
+| `avg_split_seconds` | **derived by us: `500 × time/distance`**, labelled ours | no live frame carries a piece average (the per-split field is split-scoped; the whole-row average lives only on unreliable 0x0039). This is a NEW derived number — named as such, tested, and covered by the TRIAD pass. |
+| `work_seconds/meters` | = the whole piece | rest does not exist for JustRow (Logbook-aligned) |
+| `rest_seconds/meters` | `null` | no rest concept to report |
+| `ended_by` | per the end-semantics table, incl. the new `idle` member | migration in PR 1 |
+| `series` | the 1 Hz trace | with the `programLength <= 0` interval-key fix (OPEN 1 companion) |
+| `plan_key`/`plan_index` | `null` | see plan refusal below |
+| `baseline_k2/k6` | as at save (may be null) | unchanged |
 
-Client POST reuses `/api/logs` with the monitor-door fields. The
-`workoutId: null` path exists (LogSession's 400-retry and the FK's SET
-NULL both produce it today); this phase makes it a first-class producer.
+**Plan refusal, both halves (B6/C5):** the server's `advancesPlan`
+defaults to TRUE and nothing is type-aware — as-is, a free row would tick
+"SESSION n OF 84" and deleting it would un-count a plan day. PR 1 ships
+both: the client posts `advancesPlan: false`, AND the server refuses to
+advance when `workoutType === "JustRow"` regardless of the flag. Pinned
+by an integration test asserting **`plan_state.done_n` is unchanged
+across a Just Row save** (the non-tautological form).
 
-**Version skew:** old clients never render `workoutType: "JustRow"` rows'
-type chip — they must degrade to showing the title, not crash. Verify the
-existing history renderers against an unknown type string before shipping
-PR 1 (if any renderer keys exhaustively on the four types, the fallback
-lands in PR 1).
+**MonitorRun (stored localStorage shape — TRIAD, lives in PR 1):** the
+existing v2 record gains an additive `mode: "justrow"` field (the
+validator tolerates unknown keys — vetted; **no v3 bump**, priced at data
+loss by the record's own contract). `program` is REQUIRED and
+shallow-validated, so a Just Row record carries `program:
+{ intervals: [] }` — an honest empty observation program, distinct from
+the rejected fabricated-steps case: it fabricates no rowing structure,
+and `buildMonitorLogSteps` returns `[]` on it (vetted, no throw).
+
+**Version skew / release ordering (B10):** an unknown `workout_type` in
+today's `TypeBadge` degrades to invisible text (computed 1.11:1 against
+a 4.5:1 floor), not to a graceful fallback. Therefore **PR 1 ships the
+read-side fallback (neutral badge for unknown types) and is TAGGED
+before PR 2 ever writes a `"JustRow"` row** — the R-A discipline
+(read-side first, its own tag) already named in `schema.ts`. The
+`RecentLog`/`StoredLog` client types widen from the four-literal union
+to admit `"JustRow"` in the same PR.
+
+### The log door (B8/C6)
+
+"Offers the normal log screen" is real work, named: the monitor log door
+is routed as `/library/:id/log` and requires a workout id match — a
+workout-less run has no route. **PR 2 adds a Just Row log entry** (new
+route, e.g. `/justrow/log`) reusing the shared form internals
+(`useLogForm`) with the JustRow field set (no steps, monitor-door
+numbers, `advancesPlan: false`). Today's recovery row routes there for
+`mode: "justrow"` runs.
 
 ### Consumers
 
-- **History/log screens:** "Just Row · distance · time" with a neutral
-  marker where the type chip would be. No `AN/O2/AT/TR` chip — the row is
-  not a training-zone workout and does not pretend to be.
-- **8B calendar (future):** sees the row like any log, marked done on its
-  day — James's all-logs-marked ruling already covers it.
-- **Suggestions/streaks/plan:** untouched. A Just Row is not a plan
-  session, not a checkpoint, not a pool member.
-- **Post-test prompt:** ineligible by construction (title is not a
-  designated test title).
-
-### Error handling
-
-- Connect failures: same patterns as the programmed interstitial.
-- Programming is never attempted, so the `0x81`-reject class of failures
-  cannot occur here.
-- If the rower is already mid-Just-Row when the app connects, frames show
-  type 0/1 + WORKOUTROW immediately: the surface goes straight to
-  **Live** with the machine's accumulated numbers. (The record is the
-  machine's whole row, not "since we connected" — state this in the UI
-  copy if PR 0 shows it matters.)
+- **History/log screens:** "Just Row · distance · time"; the neutral
+  unknown-type badge from PR 1. No AN/O2/AT/TR chip.
+- **From-the-log:** renders without a steps widget — an absence, not an
+  empty version (the abstention ruling); `ended_by: idle` gets its own
+  copy line.
+- **8B calendar (future):** sees the row like any log — the all-logs
+  ruling covers it; `plan_key` null means non-plan-linked, which is
+  exactly 8B's spec.
+- **Phase PS input (recorded now, per the PM gate):** JR creates a log
+  population with `steps: []`, no rest, and a fifth type string — PS's
+  charts need a JustRow bucket decision at its brainstorm.
+- **Suggestions/streaks/plan:** untouched by construction (plan refusal
+  above; not a pool member; post-test prompt stays ineligible —
+  title-gated, vetted).
 
 ## Phase shape
 
-- **PR 0 — the capture walk (hardware, `/hardware-walk`):** one
-  instrumented session closing all four OPENs: connect → pull from menu →
-  row past 5:00 with 0x0037/38 subscribed → deliberate 30 s stop →
-  resume → end via Menu, stay connected ≥90 s (0x0039 watch); second
-  short row left to time out (idle chain + link-drop shape). Capture
-  lands in `docs/monitor/sessions/` and becomes the replay fixture for
-  PR 2's tests. Findings amend this spec before PR 1 merges.
-- **PR 1 — stored shape + server (TRIAD):** the `steps`-empty-iff-JustRow
-  validation branch, the plan-derivation skip (pinned by test), the
-  history renderer fallback for unknown types. Full antagonist pass on
-  this spec + PM final-PR gate.
-- **PR 2 — surface + session:** `/justrow` route, `JustRowSurface`,
-  `useJustRowSession`, MonitorRun v2 `mode`, Today entry + fourth door,
-  log flow. Tested against PR 0's capture via the replay harness.
-- **Exit walk:** a real Just Row on the erg, both screens in one
-  photograph (recurring-failure 11), ended once by Done and once by Menu;
-  the logged row checked against the PM5's memory screen — and the
-  quantity stated: our stored distance/time vs the PM's own Just Row
-  memory entry, which is the same work-only quantity (no rest exists), so
-  the oracle is not a mirror here.
+- **PR 0a — the observe-only instrument (ships first).** No app path can
+  connect without programming today (`ConnectedInterstitial` auto-
+  programs on pairing) — so the capture walk needs an instrument PR
+  before it can run: a dev-only observe mode that connects, subscribes
+  (0x0037/38/39/3A included), and records WITHOUT programming. The
+  capture leg runs on the **laptop/Chrome web arm** — the byte recorder
+  is composed there only (its own header says so) — and the walk card
+  names that leg and the file-writing path explicitly (RF13).
+- **PR 0b — the capture walk (hardware, `/hardware-walk`, its own
+  session, James schedules).** One instrumented Just Row closing OPENs
+  1–7: connect → pull from menu → row past 5:00 → deliberate 30 s stop →
+  resume → end via Menu, stay connected ≥90 s; a second short row left
+  to time out; a third started already-rowing if budget allows. Capture
+  lands in `docs/monitor/sessions/`; findings amend this spec.
+- **PR 1 — every stored shape (TRIAD, tagged alone before PR 2):**
+  the `session_logs` validation branch + closed `workoutType` set, the
+  `idle` enum migration, the plan refusal (both halves), the
+  unknown-type badge fallback + client type widening, the MonitorRun
+  `mode` field. Full antagonist pass + PM final-PR gate. Its PR body
+  states plainly that it changes nothing visible.
+- **PR 2 — surface + session + log door (L, after RC's wave and after
+  PR 0b's answers):** `/justrow` route, `JustRowSurface`,
+  `useJustRowSession` (with the rebuilt-concerns list, the coexistence
+  guard, the no-reopen rule, and any frame-seam widening named), the new
+  log door and Today recovery routing, the series-recorder key fix.
+  Tested against PR 0b's capture via the replay harness.
+- **Exit walk:** a real Just Row, both screens in one photograph, ended
+  once by Done and once by Menu. **What the oracle can and cannot catch
+  (B11):** our stored number is the PM's own live counter transcribed,
+  so the comparison is a TRANSCRIPTION check (unit, scale, stale frame,
+  wrong field) — valuable, but it cannot catch a definition error, since
+  we define nothing except `avg_split` (checked by arithmetic from the
+  photographed time/distance instead). The Menu-ended row compares
+  directly; the Done-ended row's PM entry is expected LONGER (coast-down
+  + pre-Menu gap) — the walk records the delta rather than calling it
+  disagreement, and the Done-ended row must exceed the PM's ≥1 min/100 m
+  save threshold or it will have no memory entry at all.
+
+## Per-PR exit criteria (numbered, frozen at PR 1 open)
+
+1. `plan_state.done_n` is unchanged across a Just Row save (integration
+   test), and deleting a Just Row log leaves it unchanged too.
+2. A history list containing a `workoutType: "JustRow"` row renders it
+   with the neutral badge at ≥4.5:1 contrast — asserted structurally, and
+   proven on a build that predates PR 2's writer (the R-A ordering).
+3. A `session_logs` row with `steps: []` renders in from-the-log with no
+   steps widget (absence, not empty widget).
+4. A mid-row link drop yields a recoverable run and Today offers "Log
+   it" routing to the Just Row log door.
+5. `ended_by` for a Just Row is one of `rower`/`idle`/`link-lost` per
+   the end-semantics table — and `finished` only if OPEN 7's capture
+   showed the machine itself produces it (in which case the table is
+   amended first).
+6. Opening a Just Row session with an unlogged timer `SessionRun` or
+   `MonitorRun` present does not destroy it (coexistence guard test).
+
+## Release call (PM gate, recorded)
+
+No tag on PR 0a/0b or PR 1 alone (instrument no tester can reach; stored
+fields nothing renders — but PR 1 still tags for the R-A read-side
+ordering, as a patch-level read-side tag). PR 2 is MINOR and the first
+tag testers can falsify; its notes owe three clauses: the feature in one
+sentence, **that a Just Row never advances your plan**, and that these
+rows carry no targets and no type chip.
 
 ## Out of scope (this phase)
 
-- Phone-timer open count-up mode (no engine change).
-- Manual "log a free row after" door.
-- Quick-pick targets from the Just Row entry.
-- Any Concept2 Logbook API sync (findings recorded for the day it comes).
+- Phone-timer open count-up mode; manual "log a free row after" door;
+  quick-pick targets.
+- The doors-card fourth door (CUT — ruling 4).
+- Concept2 Logbook API sync (findings recorded for the day it comes;
+  note the Done-ended divergence recorded under "What we assert").
 - The every-workout-targetless half of the row-without-a-baseline
   follow-on.
-- Split-by-split display of the PM's auto-splits (depends on OPEN 1;
-  if they fire live, a follow-on decides whether to store/show them —
-  the `series` trace already preserves the shape regardless).
+- Split-by-split display of the PM's auto-splits (depends on OPENs 1–2;
+  `series` preserves the shape regardless).

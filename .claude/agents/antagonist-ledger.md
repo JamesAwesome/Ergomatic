@@ -2655,3 +2655,106 @@ targetSplit:null}` reproduces the recorded tx exactly and `divergences` stays
   two additive-optional `MonitorRun` fields being safe in both directions
   (`isMonitorRun` has no unknown-key check, no `v` bump); and PR 1 needing no
   server change at all.
+
+## Spec-stage anchor pass, 2026-08-24 (Phase JR, "Just Row")
+
+- **"Live Just Row = workoutType 0/1 + WORKOUTROW + rowingActive."** Unobservable
+  and unsupported. Two of the three terms do not exist at the `MonitorFrame` seam:
+  `workoutType` never leaves the driver (`driver.ts:4264-4266` says so in prose),
+  and WORKOUTROW (ordinal 1) collapses with 4/5/8/9 into `"rowing"`
+  (`parse.ts:427-443`). And the MEANING is falsified by our own record: the repo
+  pins exactly ONE member of `OBJ_WORKOUTTYPE_T` (ordinal 8,
+  `pm5-interface-notes.md:454`), while `pm5-session4a-final.log.gz` shows
+  `workoutType=1` on a TERMINATING type-8 programmed workout (`raw=... 01 01 0b ...`,
+  byte 6 = type, byte 8 = 0x0b TERMINATE), plus types 0, 1 AND 8 all at idle.
+  **Technique: for any predicate a spec proposes, check that EVERY term survives
+  to the seam the consumer reads -- list the target interface's fields and strike
+  the terms that aren't there -- before arguing about the predicate's logic. A
+  spec's detection rule is written in the vocabulary of the WIRE DECODE, and this
+  codebase deliberately narrows that vocabulary one layer up.**
+
+- **"Appendix E (PRIMARY): JustRow never reaches WORKOUTEND/WORKOUTLOGGED."**
+  The repo transcribes Appendix E (`pm5-interface-notes.md:3491-3493`) and it
+  documents WORKOUTROW->WorkoutEnd->WorkoutLogged for fixed-duration workouts, with
+  no JustRow attribution anywhere; the only text linking the two is our own gloss
+  at `:646`. And `parse.ts:410-416` already records the real machine going 5->12
+  with WORKOUTEND never appearing -- Appendix E falsified once already, on the same
+  two ordinals. **Technique: when a spec tags a vendor document PRIMARY, grep the
+  repo for our own transcription of it AND for any code comment recording a
+  hardware DEPARTURE from it. A document this project has already caught being
+  wrong about a state machine does not get a fresh PRIMARY tag on the neighbouring
+  claim.**
+
+- **"0x0039 has appeared in ZERO of our five captured natural finishes."** False:
+  `walk-2026-08-23/keystone-*.jsonl.gz` seq 516/517 are an rx 0x0039 + 0x003A, and
+  that walk's own README:30-36 explains the old zero as OUR deafness, not the
+  machine's silence. The spec cited `pm5-ble-ecosystem-review.md` (08-21), the
+  stale half of a contradiction resolved in the same directory two days later.
+  **Technique: for any "we have never observed X" claim, `ls` the capture
+  directory by DATE and read the newest walk's README first. Corpus facts in this
+  repo have expiry dates, and the document that states one is usually older than
+  the walk that killed it.**
+
+- **A comment can be the load-bearing wire premise, unmeasured.**
+  `driver.ts:2205-2214` reads "a JustRow with no program armed has no interval
+  identity at all, and there per-interval IS the session" -- and NO genuine
+  unprogrammed JustRow capture exists (checked: all 8 recordings carry type 8
+  only). The PM auto-splits a Just Row at 5:00/10:00/20:00, so if 0x0031's pair
+  resets at a split, every free row over five minutes stores the last split.
+  **Technique: when a design will store a number straight off a frame, find the
+  code comment that says what that frame's field MEANS in the new mode, then ask
+  which capture measured it. The most dangerous premise is the one already written
+  down confidently in the file you were going to reuse.**
+
+- **A stored-shape table can name a number with no source.** `avg_split_seconds`
+  = "last live frame": no live frame carries a piece average. `MonitorFrame` has
+  `currentSplit` and per-SPLIT `splitAvgPace`; `AdditionalStatus1.averageSplit` is
+  parsed and never surfaced (its only non-test reader is `fake.ts:947`, which
+  fakes it as `currentSplit`); the only piece average on the wire is 0x0039's,
+  the frame the same spec forbids depending on. **Technique: for every row of a
+  stored-shape table, grep the named SOURCE FIELD forward to the consumer. A row
+  that cites "the frame" without naming the field is a derivation nobody has
+  designed yet -- and a derivation is a TRIAD number.**
+
+- **"The plan derivation must provably skip it."** The derivation is not
+  type-aware and never was: `data.ts` defaults `advancesPlan` to `true` and
+  `stores/logs.ts:581` increments `plan_state.done_n` on that flag alone. A free
+  row would tick off a training-plan session and stamp plan linkage, and deleting
+  it later un-counts a plan day. **Technique: when a spec says an existing
+  mechanism "must skip" a new case, read the mechanism's ACTUAL predicate and its
+  DEFAULT. "Must skip" is a wish; the default is the behaviour, and here it ran
+  the wrong way.**
+
+- **An enum value can carry shipped COPY that contradicts a new use.**
+  `ended_by: "link-lost"` renders "LINK LOST - the app lost the monitor before the
+  end" (`storedSummary.ts:410`) and a release note sells it as "a row the app lost
+  is never confused with a row you chose to end". Reusing it for the PM5's own
+  designed idle power-off labels the most normal free-row ending a failure.
+  **Technique: before reusing an enum member for a new producer, grep for its
+  RENDERED STRING and its release note, not just its type. A value's meaning in
+  this codebase is the sentence a rower reads, not the identifier.**
+
+- **An unknown enum value degraded to invisible text, not to a fallback.**
+  `TypeBadge`'s `Record<WorkoutType, string>` yields `background: var(undefined)`
+  -- an invalid declaration, dropped -- leaving `--on-color` #fffdf7 on --page
+  #f4f1e8: **1.11:1** against a 4.5:1 floor. And the read-side fallback must ship
+  in an EARLIER TAG than the writer, the R-A discipline `schema.ts` already
+  records by name. **Technique: for an "old clients must degrade gracefully"
+  claim, hand-execute the lookup miss and COMPUTE the resulting contrast. "Does
+  not crash" and "degrades" are different claims, and an invisible badge passes
+  the first.**
+
+- **Attacked and NOT broken (Phase JR's vetted ground):** the Concept2 Logbook
+  API claims, verified against the live source (`JustRow` spelled exactly,
+  distance+time both required, rest fields "for interval workouts only", no title
+  field) -- the one citation in the spec that fully earns PRIMARY; TERMINATE's
+  observability at the frame level (`parse.ts:439`, ordinal 11 is the sole
+  producer of `"terminated"`); `session_logs.workout_type` being plain `text`, not
+  the same-named pgEnum that types `workouts.type` (so no migration, no
+  collision); the narrowness of `steps: []` (one server consumer, the create-time
+  validation; `buildRows([])` and `PostWorkoutSummary`'s own `rows.length === 0`
+  gate absorb it client-side); post-test-prompt ineligibility (title-gated before
+  anything else); `buildMonitorLogSteps` NOT throwing on a 0-length seed/program
+  pair; and `MonitorRun`'s additive-field contract tolerating a new `mode` --
+  with two corrections: v2 already exists, and `monitorRun.ts:275-282` prices a
+  v3 bump at outright data loss.
