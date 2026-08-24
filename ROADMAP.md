@@ -5002,6 +5002,48 @@ the panes' vocabulary now meets its opposite on the screen right after.
 here is not written down anywhere — code, comment, or copy. Establish that
 BEFORE renaming anything, or the rename ships a guess.
 
+## Phase JR — Just Row (observe the machine's own free row)
+
+**Status:** Spec merged; awaiting build slot (after Phase RC's wave for
+implementation; the spec was written in parallel by design).
+**Spec:** `docs/superpowers/specs/2026-08-24-just-row-design.md`
+**Goal:** A rower taps Just Row on Today, the app connects and OBSERVES the
+PM5's own native Just Row — no program, no targets, no baseline required.
+Done in the app, Menu on the erg, or the monitor's own idle power-off ends
+it; the machine's numbers are offered to the normal log screen and the row
+lands in history marked `JustRow` (Concept2's own enum word).
+
+- [ ] **PR 0 — the instrumented capture walk.** No genuine unprogrammed
+      Just Row capture exists; four OPENs (live 5-min auto-splits, the
+      pause-window clock, 0x0039 on Menu-end, pull-from-menu auto-entry)
+      are closed by one hardware session before recording code ships. The
+      capture becomes PR 2's replay fixture. **S (erg time)**
+- [ ] **PR 1 — stored shape + server (TRIAD).** `session_logs` row with
+      `workout_id` null / title "Just Row" / `workout_type` "JustRow" /
+      `steps: []` (empty allowed iff JustRow); plan derivation provably
+      skips it; history renderers degrade on unknown type strings. Full
+      antagonist pass + PM final-PR gate. **M**
+- [ ] **PR 2 — surface + session.** `/justrow` route, lean `JustRowSurface`
+      + `useJustRowSession` over the existing transport/driver/series
+      recorder (approach A — the programmed stack untouched, parallel-safe
+      against RC); Today entry + fourth quiet door when baselines are
+      unset; MonitorRun v2 `mode: "justrow"` so the unlogged-run recovery
+      works. **M/L**
+- [ ] **Exit walk:** a real Just Row, both screens in one photograph,
+      ended once by Done and once by Menu; stored numbers checked against
+      the PM's own memory entry (same work-only quantity — no rest exists
+      for JustRow, so the oracle is not a mirror here).
+
+**Key wire facts (research pass, tags in the spec):** the PM5 announces
+Just Row on 0x0031 (workout type 0/1, PRIMARY) but the idle menu reads the
+same — live = type + WORKOUTROW + rowingActive, settled by PR 0; JustRow
+ends ONLY via Terminate (never WORKOUTEND, PRIMARY Appendix E), which is
+exactly the "rower backed out on the erg" signal; idle chain 6 s → Paused,
+220 s → Finished → power-off (PRIMARY); 0x0039 summary is documented but
+has never appeared in any of our captures — the last live frame is the
+record. Concept2's Logbook API carries `JustRow` first-class with no
+title field and no rest concept (PRIMARY).
+
 ## Bugfix rounds
 
 Ad hoc fix rounds outside the phase sequence — small bundles of device
@@ -5370,7 +5412,10 @@ next phase. One line per round, newest first.
   brainstorm — the doors stay the fast path to a FULLY working app (targets,
   suggestions, estimates), but nobody is ever blocked from just rowing.
   Touches `needsBaselines` gating, the timer/judge target-less rendering,
-  and the reminder's surface. **Trigger:** James schedules it.
+  and the reminder's surface. **Partially delivered by Phase JR** (2026-08-24): the "nobody is ever
+  blocked from just rowing" half ships as the connected Just Row door; the
+  every-workout-targetless half remains this follow-on. **Trigger:** James
+  schedules it.
 - **Library export/import (private JSON)**: household members share their own transcriptions. Trigger: second active rower asks for it.
 - **Auto-capture baselines from the onboarding log**: Phase 6I's no-baseline
   card ends with a manually-entered baseline (You → baseline editor) —
