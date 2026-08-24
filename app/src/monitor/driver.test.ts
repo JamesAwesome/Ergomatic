@@ -4951,6 +4951,154 @@ describe("createPm5Driver: D3 — a machine index the armed program's length can
   });
 });
 
+describe("createPm5Driver: storage-spine PR3 Task 1 — the machine's raw interval count rides `frame.rawIntervalCount` (design spec §4, delta D6)", () => {
+  it("a frame emitted after a 0x0033 carries rawIntervalCount equal to the wire byte, while intervalIndex's existing normalized behavior stays byte-identical", async () => {
+    const timeline: FakeTimelineEvent[] = [
+      {
+        atMs: 100,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALREST,
+        elapsedSeconds: 20,
+        distanceMeters: 150,
+        spm: 0,
+        currentSplit: 0,
+        heartRateBpm: 130,
+        // Resting forward-attributes one past this on the wire
+        // (`toMachineIndex`, interface-notes.md §18 #3) — the scripted RAW
+        // wire value is 2, while the driver's own PRE-EXISTING
+        // `toProgramIndex` undoes that back to 1. This is the "existing
+        // case" being pinned byte-identical, not a new fixture invented
+        // for this task.
+        programIntervalIndex: 1,
+      },
+    ];
+    const { fake, driver, events } = harness({
+      program: THREE_INTERVAL_PROGRAM,
+      events: timeline,
+    });
+    await programAndArm(driver, fake, THREE_INTERVAL_PROGRAM);
+
+    fake.tick(100);
+
+    const frames = events.filter((e) => e.kind === "frame");
+    const latest = frames[frames.length - 1];
+    expect(latest).toMatchObject({
+      kind: "frame",
+      frame: {
+        // The RAW 0x0033 byte the fake put on the wire
+        // (`toMachineIndex(1, "resting")` = 2) — unclamped, never
+        // `toProgramIndex`'d.
+        rawIntervalCount: 2,
+        // `toProgramIndex(2, "resting", 3)` = 1 — the SAME normalized
+        // value this codebase already produced for this exact scripted
+        // tick before this task; unchanged by `rawIntervalCount`'s
+        // addition.
+        intervalIndex: 1,
+      },
+    });
+  });
+
+  it("no 'frame' event exists before the run's first 0x0033 — nothing for the field to be absent FROM until the very first frame, which already carries it", () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+    const events: MonitorEvent[] = [];
+    driver.events((e) => events.push(e));
+
+    transport.notify(ADDITIONAL_STATUS_1_UUID, new Uint8Array(17));
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 10, 40),
+    );
+    // `maybeEmitFrame`'s own `seen.general && seen.as1 && seen.as2` gate:
+    // as2 hasn't arrived yet, so no frame — the machine's own contract,
+    // not a special case this task adds.
+    expect(events.filter((e) => e.kind === "frame")).toHaveLength(0);
+
+    // The run's first 0x0033 arrives now — the very next frame already
+    // carries the field, no second tick needed.
+    transport.notify(ADDITIONAL_STATUS_2_UUID, additionalStatus2In(3));
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 11, 42),
+    );
+    const frames = events.filter((e) => e.kind === "frame");
+    expect(frames).toHaveLength(1);
+    expect(frames[0]).toMatchObject({
+      kind: "frame",
+      frame: { rawIntervalCount: 3 },
+    });
+  });
+
+  it("capture replay: session-2-wu-4unequal.jsonl seq 245 and seq 601's 0x0033 bytes, decoded independently in THIS test (offset 3, interface-notes.md §10), match the frame's rawIntervalCount", async () => {
+    const contents = readFileSync(
+      `${RC1_SESSIONS_DIR}session-2-wu-4unequal.jsonl`,
+      "utf8",
+    );
+    const lines = contents.split("\n");
+    const as2BytesForSeq = (seq: number): Uint8Array => {
+      const line = lines.find(
+        (l) =>
+          l.includes(`"seq":${seq},`) && l.includes(ADDITIONAL_STATUS_2_UUID),
+      );
+      if (!line) {
+        throw new Error(
+          `seq ${seq}'s 0x0033 frame was not found in session-2-wu-4unequal.jsonl — the capture-replay pin has nothing to decode`,
+        );
+      }
+      const record = JSON.parse(line) as { hex: string };
+      const bytes = Uint8Array.from(
+        record.hex
+          .trim()
+          .split(/\s+/)
+          .map((b) => parseInt(b, 16)),
+      );
+      expect(bytes).toHaveLength(20);
+      return bytes;
+    };
+
+    const bytesSeq245 = as2BytesForSeq(245);
+    const bytesSeq601 = as2BytesForSeq(601);
+    // INDEPENDENT DECODE, re-implemented here from the wire layout
+    // (interface-notes.md §10's table — offset 3 is Interval Count) rather
+    // than calling `parseAdditionalStatus2`, the same idiom the RC-1
+    // capture-replay pin above uses for 0x0037's own offsets.
+    const independentCount245 = bytesSeq245[3]!;
+    const independentCount601 = bytesSeq601[3]!;
+    expect(independentCount245).toBe(1);
+    expect(independentCount601).toBe(2);
+
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+    const events: MonitorEvent[] = [];
+    driver.events((e) => events.push(e));
+    transport.notify(ADDITIONAL_STATUS_1_UUID, new Uint8Array(17));
+
+    transport.notify(ADDITIONAL_STATUS_2_UUID, bytesSeq245);
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 10, 40),
+    );
+    transport.notify(ADDITIONAL_STATUS_2_UUID, bytesSeq601);
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 20, 80),
+    );
+
+    const frames = events.filter((e) => e.kind === "frame");
+    expect(frames).toHaveLength(2);
+    expect(frames[0]).toMatchObject({
+      kind: "frame",
+      frame: { rawIntervalCount: independentCount245 },
+    });
+    expect(frames[1]).toMatchObject({
+      kind: "frame",
+      frame: { rawIntervalCount: independentCount601 },
+    });
+  });
+});
+
 describe("createPm5Driver: Task 5 — toActualIndex's own null (state outside rowing/resting) still logs divergence", () => {
   it("a boundary that completes while the general-status word already reads TERMINATE (but the run has not yet closed) normalizes to null and logs divergence — CSAFE-DEF footnote 12 p.25 via §19.8", async () => {
     // This exploits `maybeEmitFrame`'s own `seen.general && seen.as1 &&
