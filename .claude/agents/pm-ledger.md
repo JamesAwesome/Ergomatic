@@ -2237,3 +2237,33 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   tautology check.
 - **The 30-second rule is 0-for-13.** Still James's to re-set or retire, still
   belongs in `CLAUDE.md`.
+
+## Storage-location ruling, 2026-08-24 (RC-2/RC-3 wave, summary record)
+
+- **A display target names a storage tier; check the read path before
+  approving "store it client-side".** The summary-record spec was approved with
+  display on the log detail AND storage on the client `MonitorRun` record. The
+  log detail is server-backed (`storedSummary.ts:5` — `GET /api/logs/:id`) and
+  `LogSession.tsx:1178` calls `clearMonitorRun()` in the save callback, so the
+  record dies at the instant the row it would decorate is born. Three
+  individually reasonable scoping answers were jointly impossible. **At a
+  phase-open gate, trace the proposed display's fetch call before ruling on
+  where the data lives.**
+- **"Defer the display" and "discard the evidence" are different decisions and
+  look identical in a spec.** Not storing the machine's burst until RC-5 means
+  every connected session rowed in between is permanently unverifiable — a
+  burst never captured cannot be backfilled. Reshaping a stored column later is
+  recoverable; not capturing is not. Prefer the recoverable error.
+- **The additive-nullable-jsonb precedent is in the schema, twice.** Migration
+  0011 (`series`) and 0012 (`ended_by`) both exist because monitor-observed
+  data had to outlive the client record for the log detail to read it
+  (`app/server/db/schema.ts:213-229`). Cite them rather than re-deriving the
+  argument; a ~250-byte blob beside a 1 Hz trace is not a footprint question.
+- **Moving storage to the server re-arms a gate the spec waived.** The wave's
+  PR 2 was scoped "no PM gate — display of already-gated numbers". Displaying
+  server-stored values makes it a stored-shape consumer; the waiver was written
+  against the client-only premise and does not survive the correction.
+- **Resolution (James, 2026-08-24, after a footprint-quantified Eng/DBA/PM
+  argument):** HYBRID — typed `machine_work_seconds`/`machine_work_meters`
+  columns plus one `machine_summary` jsonb; footprint (~50-125 KB/year) ruled
+  a non-issue by all three arguers.

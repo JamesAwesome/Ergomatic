@@ -2758,3 +2758,88 @@ targetSplit:null}` reproduces the recorded tx exactly and `divergences` stays
   pair; and `MonitorRun`'s additive-field contract tolerating a new `mode` --
   with two corrections: v2 already exists, and `monitorRun.ts:275-282` prices a
   v3 bump at outright data loss.
+
+## Phase RC, the summary-record wave spec (2026-08-24) — full pass, TRIAD
+
+- **"Widen THAT gate" hid four gates in series.** The spec said a terminate burst
+  needed the writer's `endedBy` guard widened. It needs four: the hook's linger is
+  gated on `endedBy === "finished"` (`useMonitorSession.ts:2270`) so the link is
+  torn down ~1s before the burst; `noteSummary`'s admission needs a grace only the
+  `finished` branch arms (`driver.ts:2376/2390/2400` vs the bare `2413-2415`
+  terminated branch); nothing drains a buffered summary because
+  `maybeReconcileImmediately` needs `recordedActuals.has(lastIndex)`
+  (`driver.ts:3064`) and the terminate's own 0x0037 takes `boundary-out-of-run`
+  (`driver.ts:3522`) and is never recorded; only then the writer
+  (`monitorRun.ts:1042`). **Technique: when a spec proposes to "widen a gate",
+  trace the value END TO END from wire to storage and COUNT the refusals. A
+  singular noun in a spec is a claim about arity, and it was wrong by 4x.**
+
+- **The repo already held the capture that falsified the claim, from the walk the
+  spec cited.** The spec's terminate premise rested on ONE lab capture (web arm,
+  hold-open instrument). `docs/monitor/sessions/walk-2026-08-23/ring-phone-3-menu-
+  terminate.json` is a PRODUCTION-arm phone ring of a Menu-terminate, 29 entries,
+  ending at `terminal terminated` with no 0x0039/0x003A/0x003F at all — the
+  finished ring from the same era carries all three. **Technique: before accepting
+  "one capture supports it", `ls` the whole sessions directory for the same EVENT
+  on the OTHER arm. The lab proves what the machine does; only a phone ring proves
+  what production hears.**
+
+- **A display spec named a screen and a store that do not meet.** §3 said the log
+  detail renders `summaryTotals` "via `storedSummary`'s read path".
+  `FromTheLog.tsx:82` fetches `GET /api/logs/:id`; `storedSummary.ts:5-8` says it
+  reads a stored `session_logs` row; the observations live only on the localStorage
+  `MonitorRun` — which `LogSession.tsx:1178` DELETES inside the save's success
+  callback. The placement anchor the spec gave ("above MONITOR LOG · COPY") exists
+  only on the OTHER screen (`LogSession.tsx:743`). **Technique: for any "show X on
+  screen Y" claim, grep X across `src/` excluding its own module. Zero consumers
+  means greenfield, and then follow the record's LIFETIME to the line that clears
+  it — a field you can only read before the save is a field the saved row cannot
+  show.**
+
+- **Admitting a value to a shared reconciler arms every branch of it, not one.**
+  Widening the summary gate to terminate also feeds `deriveFinalIntervalFromSummary`,
+  whose `filled-from-summary` branch emits `intervalComplete{finalBoundary:true}`
+  (`driver.ts:3390`) — synthesising a COMPLETED final interval into a record whose
+  whole meaning is "abandoned". **Technique: when a spec admits a new input to an
+  existing function, enumerate that function's BRANCHES and say which the new input
+  may reach. "Admit it" is not a scope; a branch list is.**
+
+- **The spec under-tagged its own best evidence, and the mis-tag was heading into
+  code.** It called the 0x003F-to-verification-code equation "INFERENCE (standing,
+  unphotographed)". It is photographed: walk-2026-08-23 `photo-w4-verification-
+  code.jpeg`, 6EF3-D827 5B55-52E1, LE-u32 of `27 d8 f3 6e | e1 52 55 5b`, exact.
+  **Technique: check citations in BOTH directions. Recurring failure 16 catches
+  premises claiming more evidence than they have; this is the mirror — a premise
+  claiming LESS still misleads, and it produced hedged user copy for a settled
+  fact.**
+
+- **A stored-shape comment mis-stated a unit the parser had already applied.**
+  `avgPaceSecondsPer500m: number; // 0.1 s/lsb scale` — but `parse.ts:362` already
+  divides by 10, so the stored value is seconds. **Technique: for every unit
+  comment on a stored field, read the LINE THAT PRODUCES the value, not the wire
+  table it came from. Scale caveats belong to the wire; stored fields carry the
+  descaled unit.**
+
+- **Two captures of the same wire fact are not two samples.** RC-2's date/time
+  packing was tagged "PRIMARY (hardware, 2 captures)"; both are Aug 24 2026, hour
+  15. One date, one hour — the formula is INFERENCE, and §4's boundary tests pin
+  our own encoder, not the machine. No vendor documentation of the packing exists
+  (§23 says "UNCERTAIN"; a web search found nothing authoritative — recorded as a
+  result). **Technique: before crediting N captures, check whether they VARY in the
+  field the claim is about.**
+
+- **Attacked and NOT broken (Phase RC's vetted ground):** 0x0039's byte offsets,
+  confirmed against the PM5's own View Detail SCREEN (avg stroke rate 26 and avg
+  pace 124.0 = 2:04.0, digit for digit) and internally cross-checked on the
+  terminated piece (24.30s x 500 / 76.0m = 159.87 vs the wire's 159.8) — so the
+  "does the layout shift on a terminated piece?" hypothesis is FALSIFIED, and the
+  `01` vs `08` byte is most likely the machine logging a terminated piece under its
+  default workout type (`ring-phone-3` seq 6 shows type 1 pre-programming); the
+  0x003F rendering; RC-2's formulas as arithmetic; `CloseReason`'s venue-blindness
+  (`useMonitorSession.ts:1857` and `:2711`); the single write-once door keyed on
+  `summaryTotals` (both `summary-observations` producers hold a full parsed summary
+  at the emit); and `summaryDetail` as an additive-optional field needing no `v`
+  bump. ONE new residual found: the terminate capture's 0x0039 avgStrokeRate reads
+  44 while the same burst's 0x0038 reads 22 and 0x0032 reads 29 instantaneous —
+  physically 22 is the true value (8.5 m/stroke vs an impossible 4.3), so a number
+  the wave will STORE is anomalous on the one path with no SCREEN oracle.

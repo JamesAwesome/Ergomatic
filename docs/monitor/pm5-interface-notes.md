@@ -4878,3 +4878,25 @@ anywhere yet. Capture: `docs/monitor/sessions/walk-2026-08-24/
 lab-terminate-ring.json`. Consequence for production: the terminated
 path needs the same linger/observation capture the finished path got in
 storage-spine PR 1 — the machine speaks there too.
+
+### §25 addendum (antagonist pass, 2026-08-24): two more terminate residuals, one falsified hypothesis
+
+- **The layout does NOT shift on a terminated piece** — hypothesis
+  falsified by hand-decode: elapsed, distance, drag factor and avg pace
+  all land on cross-checking values at their documented offsets
+  (24.30s × 500 / 76.0m = 159.87 vs the wire's own 159.8 s/500m).
+- **The `01` vs `08` workoutType byte** is most plausibly the machine
+  logging a terminated piece under its default/JustRow type
+  (`walk-2026-08-23/ring-phone-3-menu-terminate.json` seq 6 shows
+  `workoutType=1` before programming) — plausible reading, still
+  uninterpreted in code.
+- **avgStrokeRate anomaly:** the terminate capture's 0x0039 decodes
+  avgStrokeRate 44 while the same burst's 0x0038 reads 22 and 0x0032
+  read 29 instantaneous; 22 is the physically coherent value
+  (8.5 m/stroke vs an impossible 4.3). One capture, no SCREEN oracle on
+  the terminate path yet — the owed terminated-piece PM5 memory
+  photograph settles it. Stored verbatim meanwhile.
+- **Production hears none of this today**: `ring-phone-3-menu-terminate.json`
+  (production phone arm, same event) ends at the terminal with no burst —
+  teardown drops the link ~1s before it arrives. The summary-record wave
+  spec's four-gate terminate capture is the fix.
