@@ -952,7 +952,11 @@ function statusBundle(
       // header comment names it as the reason no e2e/screenshot fixture
       // could exercise this path before this task).
       restSeconds: sessionMetrics.restSecondsNow,
-      ergMachineType: 1,
+      // RC-8 (storage-spine design spec §3): every committed frame this
+      // repo has decoded reads 0 here — 3448 of 3448
+      // (docs/monitor/pm5-ble-ecosystem-review.md:389). Used to be
+      // hardcoded `1`, a value the real machine has never sent.
+      ergMachineType: 0,
     },
     general: {
       elapsedSeconds: e.elapsedSeconds,
@@ -1054,21 +1058,41 @@ function boundaryBundle(
       splitIntervalPowerWatts: 0,
       splitAvgDragFactor: 130,
       splitIntervalNumber: wireIndex,
-      ergMachineType: 1,
+      // RC-8: see `statusBundle`'s own `ergMachineType` comment — same
+      // fact, same fix, the other site the antagonist named.
+      ergMachineType: 0,
     },
     split: {
       elapsedSeconds: e.cumulativeElapsedSeconds,
       distanceMeters: e.cumulativeDistanceMeters,
       splitIntervalTimeSeconds: actual.elapsedSeconds,
       splitIntervalDistanceMeters: actual.distanceMeters,
-      intervalRestTimeSeconds: 0,
+      // RC-8 (storage-spine design spec §3): used to be hardcoded `0` on
+      // every boundary, the exact field RC-1 stores as `IntervalActual.
+      // restSeconds` — a constant here would make every consuming test
+      // agree with itself regardless of whether the driver actually
+      // carries the field through. `completed` is `program.intervals[
+      // actual.index]`, the SAME lookup the guard above already uses to
+      // decide whether this boundary needed a resting tick first, so a
+      // script with no trailing rest still emits 0 here honestly (it is
+      // `completed.restSeconds`, not a second knob).
+      intervalRestTimeSeconds: completed?.restSeconds ?? 0,
       // R-B: the fake models this honestly off the script's own
       // `actual.restDistanceMeters` — a constant here (0 or otherwise)
       // would make every consuming test agree with itself regardless of
       // whether the driver actually carries the field through
       // (`domain/monitor/pm5/parse.ts`'s `toIntervalActual`).
       intervalRestDistanceMeters: actual.restDistanceMeters,
-      splitIntervalType: 0,
+      // RC-8: every real 0x0037 this repo has decoded agrees — distance-
+      // kind intervals put 1 on the wire, time-kind intervals put 0
+      // (walk-2026-08-16/session-1-keystone-2x250r0 seq 445/879,
+      // walk-2026-08-17/step-3 seq 414/959, walk-2026-08-16/session-2-wu-
+      // 4unequal seq 246/779/1666/2607/2981, walk-2026-08-18-metrics
+      // pyramid seq 1337/2782/3279). The same mapping `statusBundle`'s
+      // own `intervalType` field already uses (`isDistance ? 1 : 0`) —
+      // 0x0031's General Status characteristic reports the SAME axis for
+      // the interval currently in progress.
+      splitIntervalType: completed?.kind === "distance" ? 1 : 0,
       splitIntervalNumber: wireIndex,
     },
   };

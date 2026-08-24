@@ -10,6 +10,7 @@ import {
   parseAdditionalStatus2,
   parseEndOfWorkoutSummary,
   parseGeneralStatus,
+  parseSplitIntervalData,
   WORKOUTSTATE_INTERVALREST,
   WORKOUTSTATE_INTERVALWORKTIME,
   WORKOUTSTATE_REARM,
@@ -176,6 +177,13 @@ function decodeAs2(bytes: Uint8Array) {
 
 function decodeAsSplit(bytes: Uint8Array) {
   const decoded = parseAdditionalSplitIntervalData(bytes);
+  if ("error" in decoded)
+    throw new Error("unexpected parse error in test fixture");
+  return decoded;
+}
+
+function decodeSplit(bytes: Uint8Array) {
+  const decoded = parseSplitIntervalData(bytes);
   if ("error" in decoded)
     throw new Error("unexpected parse error in test fixture");
   return decoded;
@@ -1825,7 +1833,10 @@ describe("createFakeTransport: D5 — the beltless heart-rate byte is 0, not 255
       averageSplit: beltlessTick.currentSplit,
       restDistanceMeters: 0,
       restSeconds: 0,
-      ergMachineType: 1,
+      // RC-8: 0, not the old 1 — see `fake.ts`'s own `ergMachineType`
+      // comment. This byte is compared byte-for-byte against the fake's
+      // actual wire output below, so it has to track the fix.
+      ergMachineType: 0,
     };
     const noBeltBytes = buildAdditionalStatus1Bytes({
       ...fields,
@@ -1838,6 +1849,162 @@ describe("createFakeTransport: D5 — the beltless heart-rate byte is 0, not 255
     expect(noBeltBytes).not.toStrictEqual(documentedSentinelBytes); // the two really do differ
     expect(as1).toHaveLength(1);
     expect(as1[0]).toStrictEqual(noBeltBytes);
+  });
+});
+
+// RC-8's remaining corrections (storage-spine design spec §3): three fields
+// the fake used to lie about, all named at the antagonist's spine delta
+// pass. Every pin here replays a value a committed capture actually put on
+// the wire — fakes prove plumbing, captures prove meaning.
+describe("createFakeTransport: RC-8 — ergMachineType, intervalRestTimeSeconds, splitIntervalType tell the truth", () => {
+  it("ergMachineType reads 0 on both 0x0032 and 0x0038, never the old 1 hardcode (real machine: 0 in 3448 of 3448 committed frames, docs/monitor/pm5-ble-ecosystem-review.md:389)", async () => {
+    const fake = createFakeTransport({
+      program: PROGRAM,
+      events: TIMELINE_EVENTS,
+    });
+    await programIt(fake, PROGRAM);
+
+    const as1: Uint8Array[] = [];
+    const asSplits: Uint8Array[] = [];
+    fake.subscribe(ADDITIONAL_STATUS_1_UUID, (b) => as1.push(b));
+    fake.subscribe(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, (b) =>
+      asSplits.push(b),
+    );
+    fake.tick(2000);
+
+    expect(as1.length).toBeGreaterThan(0);
+    expect(asSplits.length).toBeGreaterThan(0);
+    for (const b of as1) expect(decodeAs1(b).ergMachineType).toBe(0);
+    for (const b of asSplits) expect(decodeAsSplit(b).ergMachineType).toBe(0);
+  });
+
+  it("intervalRestTimeSeconds on 0x0037 equals the SCRIPTED interval's own rest — not the old unconditional 0", async () => {
+    const fake = createFakeTransport({
+      program: TWO_INTERVALS_ONE_REST, // interval 0: restSeconds 30; interval 1: restSeconds 0
+      events: [
+        // Interval 0 finishes into a 30s rest — the boundary guard
+        // (`boundaryBundle`) requires a resting tick first whenever the
+        // completed interval has a trailing rest.
+        {
+          atMs: 100,
+          kind: "status",
+          workoutState: WORKOUTSTATE_INTERVALREST,
+          elapsedSeconds: 2,
+          distanceMeters: 0,
+          spm: 0,
+          currentSplit: 0,
+          heartRateBpm: 130,
+          programIntervalIndex: 0,
+          restSeconds: 28,
+        },
+        {
+          atMs: 200,
+          kind: "boundary",
+          actual: {
+            index: 0,
+            elapsedSeconds: 60,
+            distanceMeters: 220,
+            avgSpm: 22,
+            avgHeartRateBpm: 140,
+            restDistanceMeters: 0,
+          },
+          cumulativeElapsedSeconds: 60,
+          cumulativeDistanceMeters: 220,
+        },
+        // Interval 1 has NO trailing rest — a rowing boundary is legal
+        // (§17 item 13's no-rest exception), and the emitted rest time
+        // must stay 0 because the SCRIPT says so, not a hardcode.
+        {
+          atMs: 300,
+          kind: "status",
+          workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+          elapsedSeconds: 55,
+          distanceMeters: 200,
+          spm: 22,
+          currentSplit: 120,
+          heartRateBpm: 140,
+          programIntervalIndex: 1,
+        },
+        {
+          atMs: 400,
+          kind: "boundary",
+          actual: {
+            index: 1,
+            elapsedSeconds: 60,
+            distanceMeters: 220,
+            avgSpm: 22,
+            avgHeartRateBpm: 140,
+            restDistanceMeters: 0,
+          },
+          cumulativeElapsedSeconds: 120,
+          cumulativeDistanceMeters: 440,
+        },
+      ],
+    });
+    await programIt(fake, TWO_INTERVALS_ONE_REST);
+
+    const splits: Uint8Array[] = [];
+    fake.subscribe(SPLIT_INTERVAL_DATA_UUID, (b) => splits.push(b));
+    fake.tick(400);
+
+    expect(
+      splits.map((b) => decodeSplit(b).intervalRestTimeSeconds),
+    ).toStrictEqual([
+      30, // interval 0's own scripted rest — the field RC-1 will store
+      0, // interval 1 scripted with NO rest — 0 because the script says
+    ]);
+  });
+
+  it("splitIntervalType on 0x0037 reflects the completed interval's own kind — 0 for time, 1 for distance (docs/monitor/sessions/walk-2026-08-16/session-1-keystone-2x250r0.jsonl seq 445/879, walk-2026-08-17/step-3 seq 414/959, walk-2026-08-16/session-2-wu-4unequal seq 246/779/1666/2607/2981, walk-2026-08-18-metrics pyramid seq 1337/2782/3279 — every real 0x0037 this repo has decoded agrees: distance-kind intervals put 1 on the wire, time-kind intervals put 0)", async () => {
+    const timeFake = createFakeTransport({
+      program: PROGRAM, // kind: "time"
+      events: TIMELINE_EVENTS,
+    });
+    await programIt(timeFake, PROGRAM);
+    const timeSplits: Uint8Array[] = [];
+    timeFake.subscribe(SPLIT_INTERVAL_DATA_UUID, (b) => timeSplits.push(b));
+    timeFake.tick(2000);
+    expect(timeSplits).toHaveLength(1);
+    expect(decodeSplit(timeSplits[0]!).splitIntervalType).toBe(0);
+
+    const distanceFake = createFakeTransport({
+      program: DISTANCE_PROGRAM, // kind: "distance"
+      events: [
+        {
+          atMs: 1000,
+          kind: "status",
+          workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+          elapsedSeconds: 5,
+          distanceMeters: 20,
+          spm: 24,
+          currentSplit: 110,
+          heartRateBpm: 140,
+          programIntervalIndex: 0,
+        },
+        {
+          atMs: 2000,
+          kind: "boundary",
+          actual: {
+            index: 0,
+            elapsedSeconds: 120,
+            distanceMeters: 500,
+            avgSpm: 23,
+            avgHeartRateBpm: 145,
+            restDistanceMeters: 0,
+          },
+          cumulativeElapsedSeconds: 120,
+          cumulativeDistanceMeters: 500,
+        },
+      ],
+    });
+    await programIt(distanceFake, DISTANCE_PROGRAM);
+    const distanceSplits: Uint8Array[] = [];
+    distanceFake.subscribe(SPLIT_INTERVAL_DATA_UUID, (b) =>
+      distanceSplits.push(b),
+    );
+    distanceFake.tick(2000);
+    expect(distanceSplits).toHaveLength(1);
+    expect(decodeSplit(distanceSplits[0]!).splitIntervalType).toBe(1);
   });
 });
 
