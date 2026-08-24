@@ -3542,3 +3542,182 @@ describe("createFakeTransport: FakeBurst — the natural-finish burst (storage-s
     expect(burstFirstOrder).toStrictEqual(["burst", "terminal"]);
   });
 });
+
+// Storage-spine design spec §2 riders (PR 1, "Riders (this PR)" (a)+(b)):
+// `pendingBurst`'s single slot gets a loud overwrite instead of silent
+// replacement, and a Menu-terminate mid-piece is scriptable through the
+// SAME `FakeBurst` mechanism the natural finish uses — Task 4's hook test
+// scripts an events array shaped like this one to drive the four
+// observations-only capture gates.
+describe("createFakeTransport: FakeBurst riders — loud pendingBurst overwrite + the terminate-burst script", () => {
+  it("throws rather than silently replacing an already-armed pendingBurst", async () => {
+    const firstBoundary = (): FakeTimelineEvent => ({
+      atMs: 1000,
+      kind: "boundary",
+      actual: {
+        index: 0,
+        elapsedSeconds: 60,
+        distanceMeters: 220,
+        avgSpm: 23,
+        avgHeartRateBpm: 145,
+        restDistanceMeters: 0,
+      },
+      cumulativeElapsedSeconds: 60,
+      cumulativeDistanceMeters: 220,
+      // Far out — still pending when the second boundary tries to arm one.
+      burst: { summaryAtMsOffset: 5000, verificationAtMsOffset: 6000 },
+    });
+    const secondBoundary = (): FakeTimelineEvent => ({
+      atMs: 1500,
+      kind: "boundary",
+      actual: {
+        index: 0,
+        elapsedSeconds: 90,
+        distanceMeters: 300,
+        avgSpm: 23,
+        avgHeartRateBpm: 145,
+        restDistanceMeters: 0,
+      },
+      cumulativeElapsedSeconds: 90,
+      cumulativeDistanceMeters: 300,
+      burst: { summaryAtMsOffset: 100 },
+    });
+    const fake = createFakeTransport({
+      program: PROGRAM,
+      events: [firstBoundary(), secondBoundary()],
+    });
+    await programIt(fake, PROGRAM);
+    fake.tick(1000); // arms the first burst (due at 6000/7000)
+    expect(() => fake.tick(500)).toThrow(/pendingBurst already armed/);
+  });
+
+  // docs/monitor/sessions/walk-2026-08-24/lab-terminate-ring.json: rowing
+  // ~24s into a 1-interval program, a state-11 0x0031 (Menu terminate), a
+  // partial 0x0037/0x0038 (24.26s/75.6m), then ~1s later the SAME
+  // 0x0039+0x003A/0x003F burst shape a natural finish gets — bytes read
+  // straight off the committed capture, not retyped from memory.
+  const LAB_SUMMARY = Uint8Array.from([
+    0x88, 0x35, 0x0e, 0x0f, 0x7e, 0x09, 0x00, 0xf8, 0x02, 0x00, 0x2c, 0x00,
+    0x00, 0x00, 0x00, 0x64, 0x00, 0x01, 0x3e, 0x06,
+  ]);
+  const LAB_ADDITIONAL_SUMMARY = Uint8Array.from([
+    0x88, 0x35, 0x0e, 0x0f, 0x00, 0x4c, 0x00, 0x01, 0x04, 0x00, 0x56, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x53, 0x02,
+  ]);
+  const LAB_VERIFICATION = Uint8Array.from([
+    0x76, 0x78, 0xe6, 0x7e, 0x23, 0xe3, 0xe4, 0x01, 0x16, 0x17, 0x01, 0x00,
+    0x52, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  ]);
+
+  it("emits a state-11 0x0031, a partial 0x0037 (exact lab bytes), then the delayed burst (exact lab bytes)", async () => {
+    const fake = createFakeTransport({
+      program: PROGRAM,
+      events: [
+        {
+          atMs: 46000,
+          kind: "status",
+          workoutState: WORKOUTSTATE_TERMINATE,
+          elapsedSeconds: 24.26,
+          distanceMeters: 75.6,
+          spm: 0,
+          currentSplit: 0,
+          heartRateBpm: null,
+          programIntervalIndex: 0,
+        },
+        {
+          atMs: 46000,
+          kind: "boundary",
+          actual: {
+            index: 0,
+            // The split's own work time/distance (0x0037 offsets 6-11,
+            // `splitIntervalTimeSeconds`/`splitIntervalDistanceMeters`) —
+            // a HAIR ahead of the cumulative pair below, a genuine
+            // machine quirk the lab capture shows, not an invented one.
+            elapsedSeconds: 24.3,
+            distanceMeters: 76,
+            avgSpm: 22,
+            avgHeartRateBpm: null,
+            restDistanceMeters: 0,
+          },
+          cumulativeElapsedSeconds: 24.26,
+          cumulativeDistanceMeters: 75.6,
+          burst: {
+            // The lab's own burst lands ~1s after the boundary, all three
+            // notifications together (not the natural-finish keystone's
+            // 269.6/307.8ms split) — `+47s` vs `+46s` in the capture.
+            summaryAtMsOffset: 1000,
+            verificationAtMsOffset: 1000,
+            summaryBytes: LAB_SUMMARY,
+            additionalSummaryBytes: LAB_ADDITIONAL_SUMMARY,
+            verificationBytes: LAB_VERIFICATION,
+          },
+        },
+      ],
+    });
+    await programIt(fake, PROGRAM);
+    const order: string[] = [];
+    const splits: Uint8Array[] = [];
+    fake.subscribe(GENERAL_STATUS_UUID, (b) => {
+      if (decodeGeneral(b).workoutState === WORKOUTSTATE_TERMINATE) {
+        order.push("0x0031-terminate");
+      }
+    });
+    fake.subscribe(SPLIT_INTERVAL_DATA_UUID, (b) => {
+      order.push("0x0037");
+      splits.push(b);
+    });
+    fake.subscribe(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, () =>
+      order.push("0x0038"),
+    );
+    fake.subscribe(END_OF_WORKOUT_SUMMARY_UUID, (b) => {
+      order.push("0x0039");
+      expect(b).toStrictEqual(LAB_SUMMARY);
+    });
+    fake.subscribe(END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID, (b) => {
+      order.push("0x003A");
+      expect(b).toStrictEqual(LAB_ADDITIONAL_SUMMARY);
+    });
+    fake.subscribe(LOGGED_WORKOUT_UUID, (b) => {
+      order.push("0x003F");
+      expect(b).toStrictEqual(LAB_VERIFICATION);
+    });
+
+    fake.tick(46000); // the terminate status tick + the partial boundary
+    expect(order).toStrictEqual(["0x0031-terminate", "0x0037", "0x0038"]);
+    // Byte-exact EXCEPT Split/Interval Number (offset 17, last byte): the
+    // lab's own byte is `1`, but `toMachineIndex` (`intervalIndex.ts`) only
+    // adds 1 while `machineState === "resting"` — it passes `programIndex`
+    // (`0`) straight through for every other state, "terminated" included,
+    // so this fake puts `0` there instead. That is OUT OF SCOPE for this
+    // task (fake.ts's own file map names only `pendingBurst`/its setter/the
+    // offsets note) and inconsequential to a real hook: the driver's own
+    // `toActualIndex` returns `null` for ANY `machineState` outside
+    // "rowing"/"resting" BEFORE it ever reads this byte
+    // (`intervalIndex.ts`'s own doc comment, citing CSAFE-DEF footnote 12
+    // — the Split/Interval Number "will change depending on where you are
+    // in the interval" once terminated, so the driver declines to trust it
+    // at all). Flagged here rather than silently patched.
+    const decodedSplit = parseSplitIntervalData(splits[0]!);
+    if ("error" in decodedSplit) throw new Error("unexpected parse error");
+    expect(decodedSplit).toStrictEqual({
+      elapsedSeconds: 24.26,
+      distanceMeters: 75.6,
+      splitIntervalTimeSeconds: 24.3,
+      splitIntervalDistanceMeters: 76,
+      intervalRestTimeSeconds: 0,
+      intervalRestDistanceMeters: 0,
+      splitIntervalType: 0,
+      splitIntervalNumber: 0,
+    });
+
+    fake.tick(1000); // ~1s later — the whole burst together, lab timing
+    expect(order).toStrictEqual([
+      "0x0031-terminate",
+      "0x0037",
+      "0x0038",
+      "0x0039",
+      "0x003A",
+      "0x003F",
+    ]);
+  });
+});
