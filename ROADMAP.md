@@ -2813,16 +2813,20 @@ note's fallback wording is no longer needed.**
 
 ## Phase RC — The row Concept2 would recognise
 
-**Status:** OPEN, mid-phase (updated 2026-08-24 at #182's PM gate). The
-storage-spine spec (`2026-08-23-storage-spine-design.md`) is FULLY
-EXECUTED: PR 1 (#180, the burst captured both sides — display of the
-observation fields HARDWARE-GATED on exit 7's photograph), PR 2 (#182,
-RC-1: work/rest stored separately, no backfill, double-precision
-seconds), and PR 3 (#183, F2b: the interval-count continuity bound,
-suppression KEPT on a refused-vacuous sweep). The phase's live
-frontier: the RC-2/RC-3 wave (identity decode + the nine summary
-fields), both display-gated on the walk photograph; the walk itself
-(exit 7); and the v0.21.0 notes debt. Earlier: #167 (instrument + RC-4/RC-6),
+**Status:** OPEN, mid-phase (updated 2026-08-24, exit-7 walk PASSED).
+The storage-spine spec (`2026-08-23-storage-spine-design.md`) is FULLY
+EXECUTED — PR 1 (#180), PR 2 (#182, RC-1 storage), PR 3 (#183, F2b
+count bound) — **and hardware-verified: the exit-7 walk on production
+build 738 matched the PM5's memory screen digit for digit
+(work-only 124s/500m, final interval :56.1/250/1:52.2, TWD 742;
+record: `docs/monitor/sessions/walk-2026-08-24/`). The display gate
+is UNLOCKED.** The same walk's lab leg settled the terminate question:
+a Menu-kill emits the full log-commit burst, hash included
+(`pm5-interface-notes.md` §25) — the terminated path can carry the
+same observation capture, in the RC-2/RC-3 wave's scope. The phase's
+live frontier: the RC-2/RC-3 wave (identity decode + the nine summary
+fields, now unblocked) and the v0.21.0 notes debt (paid — v0.21.0
+shipped as build 738). Earlier: #167 (instrument + RC-4/RC-6),
 #174 (F2a), #177 (cohort unlock); the combined walk answered every wire
 question YES (record: `docs/monitor/sessions/walk-2026-08-23/`).
 Originally opened 2026-08-22 (James: evidence-first); named, scoped and
@@ -3041,19 +3045,35 @@ that needs no erg, and it can run in a test.
       gate's audit): the capture-rate gap stands. Successor owner: the
       RC-2/RC-3 wave's spec, which touches the same admission path and
       inherits this sentence.**
-- [ ] **NO DISPLAY of `summaryTotals`/`verificationBytes` before exit 7's
-      photograph (PM gate on #180, condition 4).** Everything green on
-      PR 1 verifies against our own fake and our own capture (recurring
-      failure 11); the fields are deliberately unvalidated by
-      `isMonitorRun` until a reader exists. The first PR that RENDERS
-      either field (RC-2/RC-3/RC-9-era) is gated on the walk's
-      production-build photograph: stored summary totals vs the PM5
-      memory screen's work-only row, read from the linger-end SECOND
-      stash. Small riders for that same PR wave (deferred minors from
+- [x] **~~NO DISPLAY of `summaryTotals`/`verificationBytes` before exit
+      7's photograph~~ — GATE SATISFIED 2026-08-24: the walk's
+      production-build captures (PM5 View Detail photo + build 738's own
+      stored record + the linger-end second stash) matched digit for
+      digit; record `docs/monitor/sessions/walk-2026-08-24/`. Display of
+      both fields is now permitted (PM gate on #180, condition 4,
+      discharged).** Small riders for the RC-2/RC-3 PR wave still owed
+      (deferred minors from
       #180's reviews): pin the totals-first-bytes-second write-once
       sequence; give `FakeBurst`'s single `pendingBurst` slot a loud
       overwrite (scripting foot-gun); FakeBurst carries two offsets by
       spec notation, the plan prose said three.
+- [ ] **The log chart draws the first rest as a bare gap (James,
+      2026-08-24: "the graph is weird").** On the exit-7 walk's own log
+      (`docs/monitor/sessions/walk-2026-08-24/app-log-intervals-chart.png`)
+      only the TRAILING rest gets the gold band; the r60 between the
+      intervals renders as empty whitespace, and interval 2's trace sits
+      compressed against the banded tail. Desk diagnosis from the saved
+      samples first — say whether it is a rest-marker gap (samples
+      missing `rest` for the mid-piece rest) or an axis/render defect —
+      then fix. Rides the next PR touching the log surface.
+- [ ] **Put the realtime meters count back (James, 2026-08-24: "i want
+      to put that back to a realtime count").** The connected screen's
+      total-meters counts by 5s and reads less responsive since the CM
+      quantisation (#123 rounded the counter to TWD's 5m grid). REVERSES
+      that CM ruling knowingly: return the counter to the accumulator's
+      1m-granularity live count; keep TWD corroboration internal. Its
+      own small item (display-only, but it changes which quantity a
+      headline number tracks — say so in the PR).
 - [ ] **RC-2 — Decode Log Entry Date/Time; log it beside our wall clock;
       store nothing yet.** Format settled from two projects and checked
       arithmetically: date `uint16` = month | day<<4 | (year-2000)<<9;

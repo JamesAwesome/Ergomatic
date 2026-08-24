@@ -4859,3 +4859,22 @@ hook, by `src/monitor/burstReplay.test.ts`.
    capture for the pinned regression test (byte-identical against a
    burst-stripped control of the same recording, but for the two
    observation fields the fix adds).
+
+## 25. Menu-terminate emits the full log-commit burst (walk 2026-08-24, lab leg) — for the RC-2/RC-3 wave
+
+A mid-piece **Menu** press is a log commit, not a silent abort. Observed
+on the web arm with the hold-open instrument (main @ e4afbe5, PM5
+432331249, fw 459.069), 1×60s piece terminated at 24.26s/75.6m: the PM5
+sent the partial interval's own final 0x0037 (elapsed 24.26s, 75.6m,
+rest field 0), then 0x0039 (work-only totals 24.30s/76.0m, log date/time
+Aug 24 2026 15:14), 0x003A, and 0x003F — the identical sequence a
+natural finish gets (§24), about 1s after the terminate-state 0x0031.
+The piece was logged to the PM5's memory the same way. Two residuals,
+stated honestly: the 0x0039 byte that reads workoutType came back `01`
+on the terminated piece vs `08` on the completed one (raw observation,
+not yet interpreted), and the terminate-transition 0x0031 carried
+workoutState byte `0b` (with `0d` after the burst) — neither is decoded
+anywhere yet. Capture: `docs/monitor/sessions/walk-2026-08-24/
+lab-terminate-ring.json`. Consequence for production: the terminated
+path needs the same linger/observation capture the finished path got in
+storage-spine PR 1 — the machine speaks there too.
