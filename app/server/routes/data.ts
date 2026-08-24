@@ -642,6 +642,67 @@ function validateSeries(
   };
 }
 
+// RC-2/RC-3 wave design spec §1 ("The server tier (same PR)", TRIAD): the
+// machine's own end-of-workout summary blob. Unlike `validateSeries`
+// above, this does NOT reconstruct a field-by-field typed object — the
+// nine `MachineSummaryDetail` fields ride along VERBATIM, whatever their
+// shape, as long as the whole blob is a plain object under the size cap
+// (spec's own words: "the nine summaryDetail fields verbatim" — migration
+// 0011's `series` column is the STORAGE precedent, untyped jsonb, not a
+// validation precedent). The one field this function does inspect is
+// `verificationBytes`, because it is the one array-shaped key a
+// hand-crafted liar could use to smuggle an oversized or out-of-band
+// payload past the size cap's own JSON.stringify check in a way that
+// still "looks like bytes."
+//
+// **Correction to the design spec and task-6-brief (ruling carried in this
+// task's dispatch, 2026-08-24, recorded in progress.md):** both say
+// `verificationBytes` is "length 8". It is not — the client stores the
+// FULL 19-byte 0x003F payload verbatim (`src/monitor/monitorRun.ts`'s own
+// `verificationBytes?: readonly number[]`, sourced from the raw 0x003F
+// frame, not a pre-sliced 8-byte view); display code takes the first 8
+// later. The band below is therefore 1..32 integers 0-255 — permissive
+// enough to admit the real 19-byte payload and a future wire revision,
+// tight enough to still reject nonsense.
+const MACHINE_SUMMARY_MAX_BYTES = 2048;
+const VERIFICATION_BYTES_MIN = 1;
+const VERIFICATION_BYTES_MAX = 32;
+
+function validateMachineSummary(
+  raw: unknown,
+):
+  | { ok: true; summary: Record<string, unknown> | null }
+  | { ok: false; message: string } {
+  if (raw === undefined || raw === null) return { ok: true, summary: null };
+  if (!isRec(raw) || Array.isArray(raw)) {
+    return { ok: false, message: "machineSummary must be an object" };
+  }
+  if (JSON.stringify(raw).length > MACHINE_SUMMARY_MAX_BYTES) {
+    return {
+      ok: false,
+      message: `machineSummary must serialize to at most ${MACHINE_SUMMARY_MAX_BYTES} bytes`,
+    };
+  }
+  if (raw.verificationBytes !== undefined) {
+    const bytes = raw.verificationBytes;
+    const validBytes =
+      Array.isArray(bytes) &&
+      bytes.length >= VERIFICATION_BYTES_MIN &&
+      bytes.length <= VERIFICATION_BYTES_MAX &&
+      bytes.every(
+        (b) =>
+          typeof b === "number" && Number.isInteger(b) && b >= 0 && b <= 255,
+      );
+    if (!validBytes) {
+      return {
+        ok: false,
+        message: `machineSummary.verificationBytes must be an array of ${VERIFICATION_BYTES_MIN}..${VERIFICATION_BYTES_MAX} integers 0-255`,
+      };
+    }
+  }
+  return { ok: true, summary: raw };
+}
+
 export function createDataRouter({
   stores,
   requireUser,
@@ -1336,6 +1397,35 @@ export function createDataRouter({
       badRequest(res, restMetersErr, "restMeters");
       return;
     }
+    // RC-2/RC-3 wave design spec §1 (TRIAD): the machine's own totals,
+    // same sanity-not-truth posture and the same bounds as the RC-1 pair
+    // just above — a natural-finish 0x0039 elapsed field is the identical
+    // tenths-precision source `workSeconds` already proves fractional.
+    const machineWorkSecondsErr = workRestQuantityError(
+      body.machineWorkSeconds,
+      "machineWorkSeconds",
+      WORK_REST_SECONDS_MAX,
+      false,
+    );
+    if (machineWorkSecondsErr) {
+      badRequest(res, machineWorkSecondsErr, "machineWorkSeconds");
+      return;
+    }
+    const machineWorkMetersErr = workRestQuantityError(
+      body.machineWorkMeters,
+      "machineWorkMeters",
+      WORK_REST_METERS_MAX,
+      true,
+    );
+    if (machineWorkMetersErr) {
+      badRequest(res, machineWorkMetersErr, "machineWorkMeters");
+      return;
+    }
+    const machineSummaryResult = validateMachineSummary(body.machineSummary);
+    if (!machineSummaryResult.ok) {
+      badRequest(res, machineSummaryResult.message, "machineSummary");
+      return;
+    }
     if (!Array.isArray(body.steps) || body.steps.length === 0) {
       badRequest(res, "steps must be a non-empty array", "steps");
       return;
@@ -1393,6 +1483,11 @@ export function createDataRouter({
       workMeters: (body.workMeters as number | null | undefined) ?? null,
       restSeconds: (body.restSeconds as number | null | undefined) ?? null,
       restMeters: (body.restMeters as number | null | undefined) ?? null,
+      machineWorkSeconds:
+        (body.machineWorkSeconds as number | null | undefined) ?? null,
+      machineWorkMeters:
+        (body.machineWorkMeters as number | null | undefined) ?? null,
+      machineSummary: machineSummaryResult.summary,
     });
     res.status(201).json({ id });
   });

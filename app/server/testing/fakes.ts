@@ -440,9 +440,20 @@ function makeFakeLogsStore(planState: FakePlanStateStore): LogsStore {
       // Series capture spec (2026-08-19), §3: `series` drops from the
       // list projection the same way `steps` already does — see
       // `stores/logs.ts`'s `LOG_LIST_COLUMNS` comment for the reason.
+      // RC-2/RC-3 wave: `machineSummary` joins them (same size-based
+      // exclusion; `machineWorkSeconds`/`machineWorkMeters` stay, same
+      // idiom as the RC-1 pair).
       return source
         .slice(0, limit)
-        .map(({ steps: _steps, series: _series, seq: _seq, ...rest }) => rest);
+        .map(
+          ({
+            steps: _steps,
+            series: _series,
+            machineSummary: _machineSummary,
+            seq: _seq,
+            ...rest
+          }) => rest,
+        );
     },
     // From-the-log spec (2026-08-18), §3: full row (steps included),
     // owner-scoped by construction — `byUser.get(userId)` can never see
@@ -589,6 +600,11 @@ function makeFakeLogsStore(planState: FakePlanStateStore): LogsStore {
         workMeters: stored.workMeters ?? null,
         restSeconds: stored.restSeconds ?? null,
         restMeters: stored.restMeters ?? null,
+        // RC-2/RC-3 wave (migration 0016): same treatment, three more
+        // fields.
+        machineWorkSeconds: stored.machineWorkSeconds ?? null,
+        machineWorkMeters: stored.machineWorkMeters ?? null,
+        machineSummary: stored.machineSummary ?? null,
         planKey,
         planIndex,
         id: crypto.randomUUID(),

@@ -277,6 +277,36 @@ export const sessionLogs = pgTable(
     workMeters: integer("work_meters"),
     restSeconds: doublePrecision("rest_seconds"),
     restMeters: integer("rest_meters"),
+    // RC-2/RC-3 wave design spec §1 ("The server tier (same PR)", TRIAD):
+    // the machine's own end-of-workout summary — migration 0016, three
+    // additive-optional, nullable columns, no default, no backfill. Same
+    // posture as `workSeconds`/`endedBy` above: the CLIENT decides the
+    // value (`src/monitor/monitorRun.ts`'s `MonitorRun.summaryTotals`/
+    // `summaryDetail`/`verificationBytes`, captured verbatim from
+    // `parseEndOfWorkoutSummary`'s 0x0039 decode), this column only ever
+    // stores what `routes/data.ts`'s POST validated, and every existing
+    // row reads all three back as null, forever.
+    //
+    // `machineWorkSeconds` is `doublePrecision`, same B8-truncation
+    // reasoning as `workSeconds` above (0x0039's own elapsed field is the
+    // identical tenths-precision Split/Interval Time source). Wire
+    // decimeters; a `real` column risks losing precision on a value this
+    // exact.
+    machineWorkSeconds: doublePrecision("machine_work_seconds"),
+    // `machineWorkMeters` is `integer`: 0x0039's own distance field is
+    // decimeters on the wire, and the client rounds to whole meters before
+    // posting (`Math.round` — the validator names the rounding, same
+    // "sanity, not truth" trust boundary as every numeric field here).
+    machineWorkMeters: integer("machine_work_meters"),
+    // `machineSummary` is untyped jsonb (no `.$type<>()` binding), same
+    // convention as `series` above — migration 0011 is the precedent this
+    // column follows: monitor-observed, display-verbatim, never `WHERE`'d
+    // yet. Carries `verificationBytes` (the 0x003F payload, optional) and
+    // the nine `MachineSummaryDetail` fields verbatim
+    // (`src/monitor/monitorRun.ts`) — `routes/data.ts`'s own validator is
+    // the shape authority (object, size-capped, `verificationBytes`
+    // band-checked when present), not this column's type.
+    machineSummary: jsonb("machine_summary"),
   },
   (t) => [
     index("session_logs_user_id_idx").on(t.userId),

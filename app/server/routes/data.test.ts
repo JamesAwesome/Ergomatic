@@ -1604,6 +1604,205 @@ describe("GET/POST /api/logs", () => {
     });
   });
 
+  // Migration 0016 (RC-2/RC-3 wave design spec §1, TRIAD): the machine's
+  // own totals — same `workRestQuantityError` shape RC-1's own table above
+  // uses (seconds finite, meters whole), reusing the identical bounds
+  // (§1: "same posture" as workSeconds/workMeters).
+  it.each([
+    [
+      "machineWorkSeconds",
+      "not a number",
+      "must be a non-negative finite number <= 604800, or null",
+    ],
+    [
+      "machineWorkSeconds",
+      -1,
+      "must be a non-negative finite number <= 604800, or null",
+    ],
+    [
+      "machineWorkSeconds",
+      604801,
+      "must be a non-negative finite number <= 604800, or null",
+    ],
+    [
+      "machineWorkMeters",
+      "not a number",
+      "must be a non-negative whole number <= 1000000, or null",
+    ],
+    [
+      "machineWorkMeters",
+      -1,
+      "must be a non-negative whole number <= 1000000, or null",
+    ],
+    [
+      "machineWorkMeters",
+      1_000_001,
+      "must be a non-negative whole number <= 1000000, or null",
+    ],
+    [
+      "machineWorkMeters",
+      76.5,
+      "must be a non-negative whole number <= 1000000, or null",
+    ],
+  ])(
+    "rejects machine field %s: %p with 400, field named, exact message",
+    async (field, value, messageSuffix) => {
+      const res = await asA(
+        request(appFor(makeStores())).post("/api/logs"),
+      ).send({
+        ...validLogBody(),
+        [field]: value,
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe(field);
+      expect(res.body.error).toBe(`${field} ${messageSuffix}`);
+    },
+  );
+
+  it("accepts a fractional machineWorkSeconds (the tenths-precision wire field, not a hand-picked whole number)", async () => {
+    const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
+      {
+        ...validLogBody(),
+        machineWorkSeconds: 24.3,
+      },
+    );
+    expect(res.status).toBe(201);
+  });
+
+  it("accepts zero for both machine total fields — a genuinely zero-distance/zero-time machine reading, never a validation error", async () => {
+    const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
+      {
+        ...validLogBody(),
+        machineWorkSeconds: 0,
+        machineWorkMeters: 0,
+      },
+    );
+    expect(res.status).toBe(201);
+  });
+
+  it("accepts explicit null for all three machine fields", async () => {
+    const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
+      {
+        ...validLogBody(),
+        machineWorkSeconds: null,
+        machineWorkMeters: null,
+        machineSummary: null,
+      },
+    );
+    expect(res.status).toBe(201);
+  });
+
+  it("400s a machineSummary that is not a plain object (a string)", async () => {
+    const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
+      {
+        ...validLogBody(),
+        machineSummary: "not an object",
+      },
+    );
+    expect(res.status).toBe(400);
+    expect(res.body.field).toBe("machineSummary");
+  });
+
+  it("400s a machineSummary that is an array, not a plain object", async () => {
+    const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
+      {
+        ...validLogBody(),
+        machineSummary: [1, 2, 3],
+      },
+    );
+    expect(res.status).toBe(400);
+    expect(res.body.field).toBe("machineSummary");
+  });
+
+  it("400s a machineSummary exceeding 2048 serialized bytes", async () => {
+    const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
+      {
+        ...validLogBody(),
+        machineSummary: { padding: "x".repeat(2100) },
+      },
+    );
+    expect(res.status).toBe(400);
+    expect(res.body.field).toBe("machineSummary");
+  });
+
+  it.each([
+    ["a non-array", { verificationBytes: "not an array" }],
+    ["an empty array", { verificationBytes: [] }],
+    [
+      "a 33-entry array (over the 32 cap)",
+      { verificationBytes: Array(33).fill(0) },
+    ],
+    ["a negative byte", { verificationBytes: [0, -1] }],
+    ["a byte over 255", { verificationBytes: [0, 256] }],
+    ["a non-integer byte", { verificationBytes: [0, 1.5] }],
+  ])(
+    "400s machineSummary.verificationBytes as %s",
+    async (_label, machineSummary) => {
+      const res = await asA(
+        request(appFor(makeStores())).post("/api/logs"),
+      ).send({ ...validLogBody(), machineSummary });
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe("machineSummary");
+    },
+  );
+
+  it("accepts machineSummary.verificationBytes at the 1 and 32 entry bounds", async () => {
+    const one = await asA(request(appFor(makeStores())).post("/api/logs")).send(
+      {
+        ...validLogBody(),
+        machineSummary: { verificationBytes: [7] },
+      },
+    );
+    expect(one.status).toBe(201);
+
+    const thirtyTwo = await asA(
+      request(appFor(makeStores())).post("/api/logs"),
+    ).send({
+      ...validLogBody(),
+      machineSummary: { verificationBytes: Array(32).fill(255) },
+    });
+    expect(thirtyTwo.status).toBe(201);
+  });
+
+  it("the route round-trips machineWorkSeconds/machineWorkMeters/machineSummary unmangled (fake store — proves parsing, not storage; the real-column proof is storeContracts.ts's own case)", async () => {
+    const app = appFor(makeStores());
+    const machineSummary = {
+      verificationBytes: [118, 120, 230, 126, 35, 227, 228, 1],
+      avgStrokeRate: 44,
+      endingHeartRateBpm: null,
+      avgHeartRateBpm: null,
+      minHeartRateBpm: null,
+      maxHeartRateBpm: null,
+      dragFactorAverage: 100,
+      workoutType: 1,
+      recoveryHeartRateBpm: null,
+      avgPaceSecondsPer500m: 159.8,
+    };
+    const res = await asA(request(app).post("/api/logs")).send({
+      ...validLogBody(),
+      machineWorkSeconds: 24.3,
+      machineWorkMeters: 76,
+      machineSummary,
+    });
+    expect(res.status).toBe(201);
+
+    const got = await asA(request(app).get(`/api/logs/${res.body.id}`));
+    expect(got.body.machineWorkSeconds).toBe(24.3);
+    expect(got.body.machineWorkMeters).toBe(76);
+    expect(got.body.machineSummary).toStrictEqual(machineSummary);
+  });
+
+  it("POST with no machine keys at all still 201s and stores all three null (pre-Task-6 body shape, additive-only between tags)", async () => {
+    const app = appFor(makeStores());
+    const res = await asA(request(app).post("/api/logs")).send(validLogBody());
+    expect(res.status).toBe(201);
+
+    const got = await asA(request(app).get(`/api/logs/${res.body.id}`));
+    expect(got.body.machineWorkSeconds).toBeNull();
+    expect(got.body.machineWorkMeters).toBeNull();
+    expect(got.body.machineSummary).toBeNull();
+  });
+
   it("rejects an invalid pain value with 400, still naming the field, when pain is present", async () => {
     const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
       {

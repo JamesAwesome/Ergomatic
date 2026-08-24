@@ -185,6 +185,21 @@ export interface LogInput {
   workMeters?: number | null;
   restSeconds?: number | null;
   restMeters?: number | null;
+  // RC-2/RC-3 wave design spec §1 ("The server tier (same PR)", TRIAD):
+  // the machine's own end-of-workout summary, optional/nullable, same
+  // convention as `workSeconds`/`endedBy` above — absent or explicit null
+  // both store null (a phone-timer/manual log, an older client, or a save
+  // that raced ahead of the burst posts nothing). Bounds-checked at the
+  // route (`routes/data.ts`'s `workRestQuantityError`/
+  // `validateMachineSummary`) before this type is ever constructed, same
+  // trust-boundary posture as every other field on this interface.
+  // `machineSummary` is untyped (`Record<string, unknown> | null`, not a
+  // `MachineSummaryDetail` shape) — it is stored VERBATIM once validated,
+  // same "monitor-observed, display-verbatim" contract `series` above
+  // already has.
+  machineWorkSeconds?: number | null;
+  machineWorkMeters?: number | null;
+  machineSummary?: Record<string, unknown> | null;
   // Deliberately absent from this interface: `plan_key`/`plan_index` are
   // NEVER client input. `create()` below derives them itself, inside the
   // same transaction as the log insert, from the plan_state upsert's own
@@ -248,6 +263,15 @@ const LOG_LIST_COLUMNS = {
   workMeters: sessionLogs.workMeters,
   restSeconds: sessionLogs.restSeconds,
   restMeters: sessionLogs.restMeters,
+  // RC-2/RC-3 wave: `machineWorkSeconds`/`machineWorkMeters` are two more
+  // small scalars, same idiom as the RC-1 pair above — included. But
+  // `machineSummary` joins `steps`/`series` in the EXCLUSION instead: a
+  // ~2KB-worst-case jsonb blob is the same dead weight for a list row
+  // those two already are (the size cap is deliberately generous — nine
+  // fields plus up to 32 verification bytes — for the log-detail GET,
+  // never sized with a 30-row list response in mind).
+  machineWorkSeconds: sessionLogs.machineWorkSeconds,
+  machineWorkMeters: sessionLogs.machineWorkMeters,
 };
 
 // Log-delete spec (2026-08-18), §2: the newest-wins resolution rule,
@@ -618,6 +642,9 @@ export function createLogsStore(db: Db) {
             workMeters: input.workMeters ?? null,
             restSeconds: input.restSeconds ?? null,
             restMeters: input.restMeters ?? null,
+            machineWorkSeconds: input.machineWorkSeconds ?? null,
+            machineWorkMeters: input.machineWorkMeters ?? null,
+            machineSummary: input.machineSummary ?? null,
             planKey,
             planIndex,
           })
