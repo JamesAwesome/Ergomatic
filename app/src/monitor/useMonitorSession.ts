@@ -660,9 +660,16 @@ const FINISH_HANDOFF_HOLD_MS = 3500;
  * (`walk-2026-08-24/lab-terminate-ring.json`, n = 1), plus up to
  * `driver.ts`'s `HASH_SUBWINDOW_MS` if 0x003F never comes. That is ~1.2 s
  * against this 2000, so the terminate path fits with roughly 1.7× margin
- * rather than 5×. Stated, not smoothed over: a slower terminate burst on
- * some other firmware would be capped here and lost, and the next
- * terminate capture is what would move this number.
+ * rather than 5×.
+ *
+ * AND THE REAL BUDGET IS SMALLER STILL, because this clock starts at
+ * TEARDOWN, not at the terminal frame: the machine's ~1 s is measured from
+ * its own terminate, while these 2000 ms only begin once the hook has
+ * flipped to `ended`, the caller has navigated, and the component has
+ * unmounted. Whatever that navigate-and-unmount takes comes straight off
+ * the top. Stated, not smoothed over: a slower terminate burst — or a
+ * slower navigation — is capped here and lost, and the next terminate
+ * capture is what would move this number.
  *
  * Holds at ~5.0× the modelled worst case (398 ms: late-side first element
  * +90.2 ms plus the burst span +307.8 ms), structurally bounded at one

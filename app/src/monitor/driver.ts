@@ -2472,6 +2472,43 @@ export function createPm5Driver(
       activeRun!.terminatedAwaitingSummary = true;
       log.record("terminal", "terminated");
       emit({ kind: "terminated" });
+      // THE EARLY-BURST ORDERING (fix round 1, review IMPORTANT). Gate 2's
+      // flag only opens `noteSummary`'s door, which is no use at all when
+      // 0x0039 ALREADY CAME AND WENT: the burst beating our own terminal
+      // transition is the documented common case (§1's PRIMARY research
+      // measured it in 3 of 5 committed finishes), and on a run still
+      // reporting its final interval `noteSummary` files it in
+      // `summaryInGrace` as "buffered — held for this run's own natural
+      // close". A single-interval program is in its final interval from
+      // the instant it opens, so this is the DEFAULT shape there, not an
+      // edge.
+      //
+      // Nothing else on a terminate would ever read that buffer: no
+      // `pendingSummaryReconcile` is armed, `noteSummary` has already run
+      // for these bytes and will not run again, and the hook's own
+      // `reconcile()` drains a deadline that does not exist. The run
+      // therefore ended with the machine's numbers in hand, no event, no
+      // record, and NO LOG ENTRY — a silent loss, strictly worse than the
+      // `out-of-window` one this spec set out to fix.
+      //
+      // So the close picks the buffer up and routes it through the SAME
+      // observations-only path the late ordering uses. `summaryInGrace` is
+      // emptied here, which also keeps gate 3 exactly as strong as before
+      // (nothing is left in the one field `reconcileSummary` reads), and
+      // the flag is cleared because this summary IS the run's one
+      // admission — a later re-fire must find the door shut.
+      //
+      // AFTER the `terminated` emit, never before, for the same reason
+      // `maybeReconcileImmediately` sits after `workoutComplete` in the
+      // sibling branch above: the emit is what drives the hook's
+      // `closeRecord`, and an observations event reaching
+      // `appendSummaryObservations` while the record still reads
+      // `completedAt: null` would be declined permanently.
+      const heldBeforeTerminal = activeRun!.summaryInGrace;
+      if (heldBeforeTerminal !== null) {
+        activeRun!.terminatedAwaitingSummary = false;
+        noteTerminateObservations(activeRun!, heldBeforeTerminal, "early");
+      }
     }
   }
 
@@ -2680,8 +2717,14 @@ export function createPm5Driver(
     // Checked BEFORE every closed-run branch below, because none of them
     // can serve this shape: `graceIsOpen` is false on a terminate (no
     // grace is ever opened), the early-side branch needs an OPEN run, and
-    // the late-side branch needs the final split already recorded — which
-    // a terminated piece, by construction, does not have. Without this the
+    // the late-side branch requires `pendingSummaryReconcile !== null` —
+    // which a terminate never arms, since `armSummaryReconcile`'s one call
+    // site is the `finished` branch. (CORRECTED, fix round 1 m1: this used
+    // to say the late-side branch was ruled out because a terminated piece
+    // "by construction" has no final split recorded. That is FALSE — a
+    // Menu press during the trailing rest of the last interval leaves the
+    // final 0x0037 already filed — and it was not the load-bearing reason
+    // anyway. The pending-deadline conjunct is.) Without this door the
     // burst falls through to `out-of-window` and is lost, which is exactly
     // what production did.
     //
@@ -2701,7 +2744,7 @@ export function createPm5Driver(
     // be false — unreachable code wearing a guard's clothes.
     if (run.terminatedAwaitingSummary) {
       run.terminatedAwaitingSummary = false; // once per run — the re-fire finds it shut
-      noteTerminateObservations(run, summary);
+      noteTerminateObservations(run, summary, "late");
       return;
     }
     if (!graceIsOpen(run)) {
@@ -3386,16 +3429,42 @@ export function createPm5Driver(
    * (The brief for this task prescribed a synchronous emit inside
    * `noteSummary` and a test asserting the hash was stored — the two could
    * not both hold. Recorded here rather than silently worked around.)
+   *
+   * TWO CALLERS, one per ARRIVAL ORDER, and `ordering` is which — recorded
+   * in the verdict because a walk reading the ring needs to know whether
+   * this burst beat our terminal transition or followed it (the same fact
+   * §1's own 3-of-5 research is about, and the one a future timing change
+   * would move). `"late"` is `noteSummary`'s door; `"early"` is
+   * `maybeEmitFrame`'s terminated branch picking up a summary that was
+   * already buffered before the close.
    */
   function noteTerminateObservations(
     run: NonNullable<typeof activeRun>,
     summary: WorkoutSummary,
+    ordering: "early" | "late",
   ): void {
+    // GATE 3'S INVARIANT HAS ONE OWNER, and it is this line (fix round 1).
+    // `reconcileSummary` reads exactly one field to decide whether it may
+    // synthesize an interval — `run.summaryInGrace` — so "a terminate's
+    // summary is not reachable from there" is true iff that field is empty
+    // on this path. The `"late"` caller never filled it; the `"early"`
+    // caller is handing us what was in it. Clearing it HERE rather than at
+    // each call site means a third caller cannot be added that forgets.
+    //
+    // Untestable from outside today, and said plainly rather than dressed
+    // up: with no reconcile deadline armed on a terminate,
+    // `drainSummaryReconcile` short-circuits and nothing else reads the
+    // field, so a version of this line that did nothing would pass every
+    // test in the suite. It is here to make the structural claim TRUE
+    // instead of accidentally-true — the same reason `reconcileSummary`'s
+    // own `run.finishGraceUntil = null` sits beside a `recordedActuals`
+    // bound that already covers it.
+    run.summaryInGrace = null;
     const emitTerminate = (): void => {
       pendingTerminateObservations = null;
       log.record(
         "summary-reconciled",
-        `terminate-observations — 0x0039 arrived after a rower-ended close (${summary.elapsedSeconds}s/${summary.meters}m, hash ${run.verificationBytes === null ? "never arrived" : "included"}) and is recorded as OBSERVATIONS ONLY; no interval is derived from it and none ever can be — this run was abandoned, not finished (summary-record design spec §1)`,
+        `terminate-observations — 0x0039 ${ordering === "early" ? "held from before our own terminal transition (buffered while the run was still open in its final interval)" : "arrived after a rower-ended close"} (${summary.elapsedSeconds}s/${summary.meters}m, hash ${run.verificationBytes === null ? "never arrived" : "included"}) and is recorded as OBSERVATIONS ONLY; no interval is derived from it and none ever can be — this run was abandoned, not finished (summary-record design spec §1)`,
       );
       emit(
         summaryObservationsEvent(
