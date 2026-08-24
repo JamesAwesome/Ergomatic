@@ -5096,7 +5096,17 @@ next phase. One line per round, newest first.
   nudged only — so `you/BaselineField.tsx` is now the one control
   everywhere (`[−][typable split][+]`, the house `Stepper` visual,
   settle-then-nudge, `aria-disabled` dead ends, a polite live region).
-  `BaselineRow` and `.onb-field-box` retired. **QUEUED, found while
+  `BaselineRow` and `.onb-field-box` retired. **Review fix, same day:**
+  the new empty field and the existing derivation offer are two
+  suggestion mechanisms that met on one row and disagreed (placeholder
+  2:25.0 above a button offering 2:23.0), and a single stepper tap
+  materialised the generic seed — a value that is not the offer's — which
+  made the estimate unreachable and wrote the seed as `manual`. An
+  offer-eligible side now takes the offer's value as its seed. Also
+  fixed: the live region kept stale text after a Discard and then went
+  SILENT on the next identical announcement (a polite region fires on a
+  DOM mutation, and React bails on an unchanged string), so an
+  announcement is now bound to the value it names. **QUEUED, found while
   shipping it:** the derive slot's inert line still reads `ESTIMATED ·
   TYPE TO ADJUST` — true but now half the story, since that same field
   nudges. The brief froze the derive slot, so the copy was left alone
