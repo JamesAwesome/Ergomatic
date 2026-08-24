@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import { compileProgram } from "../../domain/monitor/program.js";
@@ -189,6 +190,20 @@ const THREE_INTERVAL_PROGRAM: WorkoutProgram = {
     restSeconds: 30,
   })),
 };
+
+/** Repo-root recordings, resolved relative to THIS file — the same idiom
+ *  `registerReplay.test.ts` uses (`captureReplay.test.ts:112-117`'s own
+ *  reasoning: plain string surgery on `import.meta.url`, never the global
+ *  `URL` constructor, since this project's jsdom environment resolves
+ *  `new URL(...)` against `http://localhost:3000/` instead of the given
+ *  `file://` base). `docs/monitor/sessions/walk-2026-08-16/` lives three
+ *  directories above `app/src/monitor/`. */
+const RC1_SESSIONS_DIR = import.meta.url
+  .replace(/^file:\/\//, "")
+  .replace(
+    /src\/monitor\/driver\.test\.ts$/,
+    "../docs/monitor/sessions/walk-2026-08-16/",
+  );
 
 // Plan Task 2: `program()` now sends `buildTerminate()` as its own
 // best-effort prepare step BEFORE the real programming sequence — every
@@ -451,15 +466,21 @@ function splitHalf(
   // rest distance) is unaffected; the ramp test below is the one caller
   // that passes something else.
   restDistanceMeters = 0,
+  // RC-1 (storage-spine design spec §3): defaults to 0/0 so every
+  // existing caller (none of which cares about rest time/type) is
+  // unaffected — the RC-1 ramp test below is the one caller that passes
+  // something else.
+  restSeconds = 0,
+  type = 0,
 ) {
   return buildSplitIntervalDataBytes({
     elapsedSeconds: seconds,
     distanceMeters: meters,
     splitIntervalTimeSeconds: seconds,
     splitIntervalDistanceMeters: meters,
-    intervalRestTimeSeconds: 0,
+    intervalRestTimeSeconds: restSeconds,
     intervalRestDistanceMeters: restDistanceMeters,
-    splitIntervalType: 0,
+    splitIntervalType: type,
     splitIntervalNumber: boundary,
   });
 }
@@ -1920,6 +1941,14 @@ describe("createPm5Driver: terminate + Appendix-E — the RUN closes, the driver
         avgSpm: 0,
         avgHeartRateBpm: null,
         restDistanceMeters: 0,
+        // RC-1: `completed` (`program.intervals[actual.index]`,
+        // `transports/fake.ts`'s `boundaryBundle`) is `undefined` here —
+        // the script's own `index: 5` names no real interval of
+        // `MINIMAL_PROGRAM`'s single one — so both fields fall to
+        // `boundaryBundle`'s own `?? 0`/`: 0` defaults, same as
+        // `restDistanceMeters` above.
+        restSeconds: 0,
+        type: 0,
       },
     });
     const outOfRun = log
@@ -4428,6 +4457,321 @@ describe("createPm5Driver: R-B — Interval Rest Distance (0x0037 offset 14-15) 
         e.kind === "intervalComplete" ? e.actual.restDistanceMeters : -1,
       ),
     ).toStrictEqual([8, 12, 6]);
+  });
+});
+
+describe("createPm5Driver: RC-1 — Interval Rest Time and Split/Interval Type (0x0037 offsets 12/16) ride intervalComplete's actual", () => {
+  it("three sequential boundaries with unequal restSeconds/type — including a rest-free (0) one — each carry their OWN values through to actual, never a shared constant (raw stubTransport bytes, parse-through-driver path in isolation)", async () => {
+    // Same shape as the sibling R-B ramp test above: raw bytes via
+    // stubTransport, not the fake's scripted timeline. Unequal AND
+    // includes a genuine 0 on purpose — a constant (or a hardcoded 0)
+    // here would make the suite agree with itself regardless of whether
+    // the field is really wired boundary-to-boundary (RC-1's own Step
+    // 1a/1d).
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+    const events: MonitorEvent[] = [];
+    driver.events((e) => events.push(e));
+    transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));
+    transport.notify(ADDITIONAL_STATUS_1_UUID, new Uint8Array(17));
+
+    await programViaStub(driver, transport, THREE_INTERVAL_PROGRAM);
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 30, 100),
+    );
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 60, 200, 0, 40, 0));
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 22));
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(2, 60, 200, 0, 25, 1));
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(2, 22));
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(3, 60, 200, 0, 0, 0));
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(3, 22));
+
+    const boundaries = events.filter((e) => e.kind === "intervalComplete");
+    expect(boundaries).toHaveLength(3);
+    expect(boundaries[0]).toMatchObject({
+      kind: "intervalComplete",
+      actual: { index: 0, restSeconds: 40, type: 0 },
+    });
+    expect(boundaries[1]).toMatchObject({
+      kind: "intervalComplete",
+      actual: { index: 1, restSeconds: 25, type: 1 },
+    });
+    // Step 1d: the rest-free boundary's restSeconds is PRESENT and 0, not
+    // absent — the field rides through whenever the wire delivered it,
+    // and the wire delivering 0 is a real reading, not silence.
+    expect(boundaries[2]).toMatchObject({
+      kind: "intervalComplete",
+      actual: { index: 2, restSeconds: 0, type: 0 },
+    });
+    const lastEvent = boundaries[2]!;
+    const lastActual =
+      lastEvent.kind === "intervalComplete" ? lastEvent.actual : null;
+    expect(lastActual).not.toBeNull();
+    expect(Object.keys(lastActual!)).toContain("restSeconds");
+  });
+
+  it("the fake's OWN encode path (transports/fake.ts's boundaryBundle, corrected in Task 1) sources restSeconds/type honestly from the program's own restSeconds/kind — not a constant, and not only reachable through the stub", async () => {
+    // A 2-interval program with UNEQUAL restSeconds and DIFFERENT kinds
+    // (time then distance). Both intervals carry a trailing rest so both
+    // boundaries are delivered during a RESTING tick, same as the sibling
+    // R-B fake test above — `boundaryBundle`'s own enforced rule requires
+    // this whenever `restSeconds > 0`, and `toMachineIndex`'s own
+    // resting-conditional +1 (shared with 0x0033's forward-attribution
+    // rule, `domain/monitor/pm5/intervalIndex.ts`) only round-trips
+    // through `toActualIndex`'s UNCONDITIONAL -1 when the boundary is
+    // delivered resting — a rest-free interval's own boundary needs a
+    // different fixture shape (this file's raw-bytes RC-1 tests above
+    // already cover restSeconds: 0, off the parse-through-driver path in
+    // isolation from this asymmetry).
+    const program: WorkoutProgram = {
+      intervals: [
+        {
+          type: "work",
+          kind: "time",
+          value: 60,
+          targetSplit: 120,
+          displaySpm: 22,
+          restSeconds: 40,
+        },
+        {
+          type: "work",
+          kind: "distance",
+          value: 500,
+          targetSplit: 120,
+          displaySpm: 22,
+          restSeconds: 25,
+        },
+      ],
+    };
+    const timeline: FakeTimelineEvent[] = [
+      {
+        atMs: 100,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        elapsedSeconds: 60,
+        distanceMeters: 200,
+        spm: 20,
+        currentSplit: 130,
+        heartRateBpm: 130,
+        programIntervalIndex: 0,
+      },
+      {
+        atMs: 200,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALREST,
+        elapsedSeconds: 100,
+        distanceMeters: 200,
+        spm: 0,
+        currentSplit: 0,
+        heartRateBpm: 128,
+        programIntervalIndex: 0,
+      },
+      {
+        atMs: 300,
+        kind: "boundary",
+        actual: {
+          index: 0,
+          elapsedSeconds: 60,
+          distanceMeters: 200,
+          avgSpm: 20,
+          avgHeartRateBpm: 130,
+          restDistanceMeters: 0,
+        },
+        cumulativeElapsedSeconds: 100,
+        cumulativeDistanceMeters: 200,
+      },
+      {
+        atMs: 400,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+        elapsedSeconds: 160,
+        distanceMeters: 700,
+        spm: 24,
+        currentSplit: 100,
+        heartRateBpm: 150,
+        programIntervalIndex: 1,
+      },
+      {
+        atMs: 500,
+        kind: "status",
+        workoutState: WORKOUTSTATE_INTERVALREST,
+        elapsedSeconds: 185,
+        distanceMeters: 700,
+        spm: 0,
+        currentSplit: 0,
+        heartRateBpm: 145,
+        programIntervalIndex: 1,
+      },
+      {
+        atMs: 600,
+        kind: "boundary",
+        actual: {
+          index: 1,
+          elapsedSeconds: 100,
+          distanceMeters: 500,
+          avgSpm: 24,
+          avgHeartRateBpm: 150,
+          restDistanceMeters: 0,
+        },
+        cumulativeElapsedSeconds: 200,
+        cumulativeDistanceMeters: 700,
+      },
+    ];
+    const { fake, driver, events } = harness({ program, events: timeline });
+    await programAndArm(driver, fake, program);
+    for (let i = 0; i < 6; i += 1) fake.tick(100);
+
+    const boundaries = events.filter((e) => e.kind === "intervalComplete");
+    expect(boundaries).toHaveLength(2);
+    expect(boundaries[0]).toMatchObject({
+      kind: "intervalComplete",
+      actual: { index: 0, restSeconds: 40, type: 0 },
+    });
+    expect(boundaries[1]).toMatchObject({
+      kind: "intervalComplete",
+      actual: { index: 1, restSeconds: 25, type: 1 },
+    });
+  });
+
+  it("a rest-bearing committed capture's boundary folds restSeconds/type off the wire's own bytes — walk-2026-08-16 session 2 (wu+4unequal), seq 1666, decoded independently in THIS test, never via parseSplitIntervalData", async () => {
+    const raw = readFileSync(
+      `${RC1_SESSIONS_DIR}session-2-wu-4unequal.jsonl`,
+      "utf8",
+    );
+    const line = raw
+      .split("\n")
+      .find(
+        (l) => l.includes('"seq":1666') && l.includes(SPLIT_INTERVAL_DATA_UUID),
+      );
+    if (!line) {
+      throw new Error(
+        "seq 1666's 0x0037 frame was not found in session-2-wu-4unequal.jsonl — the capture-replay pin has nothing to decode",
+      );
+    }
+    const record = JSON.parse(line) as { hex: string };
+    const bytes = Uint8Array.from(
+      record.hex
+        .trim()
+        .split(/\s+/)
+        .map((b) => parseInt(b, 16)),
+    );
+    expect(bytes).toHaveLength(18);
+
+    // INDEPENDENT DECODE, re-implemented here from the wire layout
+    // (interface-notes.md §10) rather than calling `parseSplitIntervalData`
+    // — offset 12-13 little-endian is Interval Rest Time (whole seconds),
+    // offset 16 is Split/Interval Type. Cross-checks
+    // `domain/monitor/pm5/parse.test.ts`'s own committed decode of these
+    // SAME verbatim bytes (intervalRestTimeSeconds: 30, splitIntervalType: 0).
+    const independentRestSeconds = bytes[12]! | (bytes[13]! << 8);
+    const independentType = bytes[16]!;
+    expect(independentRestSeconds).toBe(30);
+    expect(independentType).toBe(0);
+
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+    const events: MonitorEvent[] = [];
+    driver.events((e) => events.push(e));
+    transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));
+    transport.notify(ADDITIONAL_STATUS_1_UUID, new Uint8Array(17));
+
+    await programViaStub(driver, transport, THREE_INTERVAL_PROGRAM);
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 30, 100),
+    );
+    // The capture's own splitIntervalNumber (offset 17, byte value 3)
+    // rides verbatim in `bytes`; the 0x0038 half is synthetic (0x0038
+    // carries no rest time/type field of its own — nothing this test
+    // checks lives there), matched on the same wire number so the two
+    // halves pair.
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, bytes);
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(3, 22));
+
+    const boundaries = events.filter((e) => e.kind === "intervalComplete");
+    expect(boundaries).toHaveLength(1);
+    expect(boundaries[0]).toMatchObject({
+      kind: "intervalComplete",
+      actual: {
+        restSeconds: independentRestSeconds,
+        type: independentType,
+      },
+    });
+  });
+});
+
+describe("createPm5Driver: RC-1 — the synthesized-final fallback omits restSeconds/type (no wire reading for either, RC-7's own precedent for restDistanceMeters)", () => {
+  it("the summary-derived final interval carries NO restSeconds/type keys at all — absent, not 0 (0x0039 has no per-interval Rest Time or Split/Interval Type)", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const clock = manualClock();
+    // A minimal inline scheduler — `manualSchedule` is defined inside the
+    // THE SUMMARY-FALLBACK GATE describe block further down this file and
+    // is not reachable from module scope; this test needs only the one
+    // deadline call, fired by hand.
+    const scheduled: { ms: number; fire: () => void }[] = [];
+    const timer = {
+      schedule: (cb: () => void, ms: number): (() => void) => {
+        scheduled.push({ ms, fire: cb });
+        return () => {};
+      },
+      pending: () => scheduled[scheduled.length - 1] ?? null,
+    };
+    const driver = createPm5Driver(transport, log, {
+      now: clock.now,
+      schedule: timer.schedule,
+    });
+    const events: MonitorEvent[] = [];
+    driver.events((e) => events.push(e));
+    transport.notify(ADDITIONAL_STATUS_1_UUID, new Uint8Array(17));
+    transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));
+
+    await programViaStub(driver, transport, MINIMAL_PROGRAM);
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 30, 100),
+    );
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_WORKOUTEND, 60, 200),
+    );
+    // The split never arrives; only the summary does, and only the
+    // deadline (never claimed by a split) fires the synthesis.
+    transport.notify(
+      END_OF_WORKOUT_SUMMARY_UUID,
+      buildEndOfWorkoutSummaryBytes({
+        elapsedSeconds: 62.5,
+        meters: 214,
+        avgStrokeRate: 24,
+        endingHeartRateBpm: 150,
+        avgHeartRateBpm: 150,
+        minHeartRateBpm: 130,
+        maxHeartRateBpm: 160,
+        dragFactorAverage: 130,
+        recoveryHeartRateBpm: 100,
+        workoutType: 1,
+        avgPaceSecondsPer500m: 120,
+      }),
+    );
+    expect(timer.pending()?.ms).toBe(3000);
+    timer.pending()!.fire();
+
+    const boundaries = events.filter((e) => e.kind === "intervalComplete");
+    expect(boundaries).toHaveLength(1);
+    const synthesized = boundaries[0]!;
+    expect(synthesized).toMatchObject({
+      kind: "intervalComplete",
+      actual: { index: 0, elapsedSeconds: 62.5, distanceMeters: 214 },
+      finalBoundary: true,
+    });
+    const actualKeys = Object.keys(
+      synthesized.kind === "intervalComplete" ? synthesized.actual : {},
+    );
+    expect(actualKeys).not.toContain("restSeconds");
+    expect(actualKeys).not.toContain("type");
   });
 });
 

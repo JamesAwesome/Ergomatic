@@ -572,5 +572,15 @@ export function toIntervalActual(raw: RawPm5Status): IntervalActual {
     // `parseSplitIntervalData` above — see `IntervalActual.restDistanceMeters`'s
     // own doc comment (`domain/monitor/types.ts`).
     restDistanceMeters: raw.intervalRestDistanceMeters,
+    // RC-1 (storage-spine design spec §3): 0x0037's own Interval Rest Time
+    // and Split/Interval Type, already decoded by `parseSplitIntervalData`
+    // above (offsets 12/16) — no new wire work, the same fold
+    // `restDistanceMeters` just above uses. See `IntervalActual.
+    // restSeconds`/`.type`'s own doc comments (`domain/monitor/types.ts`)
+    // for the readback caveat and the raw-byte caveat respectively, and
+    // for why `restSeconds` here is NOT `MonitorFrame.restSeconds`
+    // (0x0032's own, different field).
+    restSeconds: raw.intervalRestTimeSeconds,
+    type: raw.splitIntervalType,
   };
 }
