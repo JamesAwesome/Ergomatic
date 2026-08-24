@@ -2919,6 +2919,19 @@ that needs no erg, and it can run in a test.
       sharpens this field enough to close the gap** — sequence that
       awareness into PR 3's own spec rather than assuming PR 1 alone
       delivers full capture.
+- [ ] **NO DISPLAY of `summaryTotals`/`verificationBytes` before exit 7's
+      photograph (PM gate on #180, condition 4).** Everything green on
+      PR 1 verifies against our own fake and our own capture (recurring
+      failure 11); the fields are deliberately unvalidated by
+      `isMonitorRun` until a reader exists. The first PR that RENDERS
+      either field (RC-2/RC-3/RC-9-era) is gated on the walk's
+      production-build photograph: stored summary totals vs the PM5
+      memory screen's work-only row, read from the linger-end SECOND
+      stash. Small riders for that same PR wave (deferred minors from
+      #180's reviews): pin the totals-first-bytes-second write-once
+      sequence; give `FakeBurst`'s single `pendingBurst` slot a loud
+      overwrite (scripting foot-gun); FakeBurst carries two offsets by
+      spec notation, the plan prose said three.
 - [ ] **RC-2 — Decode Log Entry Date/Time; log it beside our wall clock;
       store nothing yet.** Format settled from two projects and checked
       arithmetically: date `uint16` = month | day<<4 | (year-2000)<<9;
@@ -3121,8 +3134,13 @@ item** and W3/W4 ride the same piece.
 - **W2** — **do not tear down at the finish.** One 2x250 m r0 keystone,
   then stand still for 90 seconds and touch nothing. Settles whether the
   summary path is reachable at all, when state 12 fires, and whether the
-  ~1-minute recovery-HR re-fire is real. **Needs a temporary build that
-  defers the disconnect**, or the laptop harness, which has the tap.
+  ~1-minute recovery-HR re-fire is real. **PARTLY OVERTAKEN by PR #180
+  (2026-08-23): production now holds the link up to 2 s at a natural
+  finish (`BURST_LINGER_MS`) and the burst is captured without any
+  instrument — but the 90-second questions (recovery-HR re-fire, late
+  state-12 behaviour) still need the hold-open instrument or the laptop
+  harness. The readout for the captured burst is the ring's linger-end
+  SECOND stash.**
 - **W3** — the identity photograph, same piece: the PM5's View Detail
   memory screen and the phone in ONE frame, plus the decoded
   `logEntryDate`/`logEntryTime` from the ring. Settles the bit-packing
