@@ -423,6 +423,22 @@ interface LogFormFields {
   // re-declaring the union here — one definition, `monitorRun.ts`'s own
   // `CloseReason | "interrupted"`.
   endedBy?: MonitorRun["endedBy"];
+  // RC-1 (storage-spine design spec §3): the monitor mode's fourth
+  // addition, same optional-key idiom as `deviceName`/`series`/`endedBy`
+  // above — spread straight from `monitorRun`'s own four fields
+  // (`monitorRun.ts`'s own doc comment: computed once, only for a natural
+  // `endedBy === "finished"` close; undefined on every other close reason
+  // and on any record saved before this task). Undefined here means
+  // `JSON.stringify` drops the key entirely below, exactly like an absent
+  // `deviceName` already does; the server's own validator
+  // (`routes/data.ts`) accepts absent, so this never blocks a save. Never
+  // re-derived here — `monitorRun.ts`'s writers are the one place that
+  // decides these four numbers, same posture the three hero numbers
+  // already have with `summaryModel.ts`.
+  workSeconds?: number;
+  workMeters?: number;
+  restSeconds?: number;
+  restMeters?: number;
 }
 
 /** Fix round 1 (whole-branch review, I1): the two doors' `handleSave` were
@@ -1352,6 +1368,10 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
           distanceMeters: model.heroes.distanceMeters,
           series: monitorRun.series,
           endedBy: monitorRun.endedBy,
+          workSeconds: monitorRun.workSeconds,
+          workMeters: monitorRun.workMeters,
+          restSeconds: monitorRun.restSeconds,
+          restMeters: monitorRun.restMeters,
         },
         opts,
       );

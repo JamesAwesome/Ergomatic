@@ -552,7 +552,11 @@ function emitBoundary(
       splitIntervalPowerWatts: 0,
       splitAvgDragFactor: 130,
       splitIntervalNumber: machineIndex,
-      ergMachineType: 1,
+      // RC-8 (storage-spine design spec §3): 0, not the old 1 this fixture
+      // used to carry — the real machine reads 0 in 3448 of 3448 committed
+      // frames (docs/monitor/pm5-ble-ecosystem-review.md:389; fake.ts's own
+      // `ergMachineType` comment has the same citation).
+      ergMachineType: 0,
     }),
   );
 }

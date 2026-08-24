@@ -1383,6 +1383,227 @@ describe("GET/POST /api/logs", () => {
     expect(res.status).toBe(201);
   });
 
+  // RC-1 (storage-spine design spec §3, TRIAD): work and rest — same
+  // shape of table as the hero-field one above, but `0` is deliberately
+  // ABSENT from the reject cases: unlike `distanceMeters`' own `> 0` rule,
+  // a genuinely rest-free (or work-free) session's honest reading is `0`,
+  // never a validation error (its own dedicated accept test, below).
+  //
+  // **CORRECTED at the final whole-branch review (BLOCKER-1) — the seconds
+  // pair's own error message and rule changed.** `workSeconds`/
+  // `restSeconds` no longer require `Number.isInteger` (0x0037's own
+  // Split/Interval Time is tenths-precision — `parse.ts:232`'s `/10` —
+  // see `workRestQuantityError`'s own header comment); a decimal
+  // `workSeconds`/`restSeconds` is now a POSITIVE case (this file's own
+  // dedicated fractional-composition test, below), not a 400. The meters
+  // pair keeps the whole-number rule (genuinely whole wire fields) and
+  // gains its own decimal-rejection cases here, so the split itself is
+  // pinned, not just asserted in a comment.
+  it.each([
+    [
+      "workSeconds",
+      "not a number",
+      "must be a non-negative finite number <= 604800, or null",
+    ],
+    [
+      "workSeconds",
+      -1,
+      "must be a non-negative finite number <= 604800, or null",
+    ],
+    [
+      "workSeconds",
+      604801,
+      "must be a non-negative finite number <= 604800, or null",
+    ],
+    [
+      "workMeters",
+      "not a number",
+      "must be a non-negative whole number <= 1000000, or null",
+    ],
+    [
+      "workMeters",
+      -1,
+      "must be a non-negative whole number <= 1000000, or null",
+    ],
+    [
+      "workMeters",
+      1_000_001,
+      "must be a non-negative whole number <= 1000000, or null",
+    ],
+    [
+      "workMeters",
+      5.5,
+      "must be a non-negative whole number <= 1000000, or null",
+    ],
+    [
+      "restSeconds",
+      -1,
+      "must be a non-negative finite number <= 604800, or null",
+    ],
+    [
+      "restSeconds",
+      604801,
+      "must be a non-negative finite number <= 604800, or null",
+    ],
+    [
+      "restMeters",
+      -1,
+      "must be a non-negative whole number <= 1000000, or null",
+    ],
+    [
+      "restMeters",
+      1_000_001,
+      "must be a non-negative whole number <= 1000000, or null",
+    ],
+    [
+      "restMeters",
+      5.5,
+      "must be a non-negative whole number <= 1000000, or null",
+    ],
+  ])(
+    "rejects RC-1 field %s: %p with 400, field named, exact message",
+    async (field, value, messageSuffix) => {
+      const res = await asA(
+        request(appFor(makeStores())).post("/api/logs"),
+      ).send({
+        ...validLogBody(),
+        [field]: value,
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe(field);
+      expect(res.body.error).toBe(`${field} ${messageSuffix}`);
+    },
+  );
+
+  // The seconds pair's own positive fractional case, isolated from the
+  // capture-derived composition test below: a hand-picked decimal that
+  // ISN'T a real wire value still has to pass, proving the rule itself
+  // (not just this one capture's own number) accepts non-integers.
+  it("accepts a fractional workSeconds/restSeconds (the tenths-precision wire field, not a hand-picked whole number)", async () => {
+    const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
+      {
+        ...validLogBody(),
+        workSeconds: 12.3,
+        restSeconds: 4.5,
+      },
+    );
+    expect(res.status).toBe(201);
+  });
+
+  it.each([
+    ["workSeconds", 604800],
+    ["workMeters", 1_000_000],
+    ["restSeconds", 604800],
+    ["restMeters", 1_000_000],
+  ])(
+    "accepts RC-1 field %s at its exact upper bound (%p)",
+    async (field, value) => {
+      const res = await asA(
+        request(appFor(makeStores())).post("/api/logs"),
+      ).send({
+        ...validLogBody(),
+        [field]: value,
+      });
+      expect(res.status).toBe(201);
+    },
+  );
+
+  it("accepts zero for all four RC-1 fields — a genuinely rest-free session's own honest reading, never a validation error", async () => {
+    const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
+      {
+        ...validLogBody(),
+        workSeconds: 0,
+        workMeters: 0,
+        restSeconds: 0,
+        restMeters: 0,
+      },
+    );
+    expect(res.status).toBe(201);
+  });
+
+  it("accepts explicit null for all four RC-1 fields", async () => {
+    const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
+      {
+        ...validLogBody(),
+        workSeconds: null,
+        workMeters: null,
+        restSeconds: null,
+        restMeters: null,
+      },
+    );
+    expect(res.status).toBe(201);
+  });
+
+  it("the route round-trips the four RC-1 fields unmangled, zero included (fake store — proves parsing, not storage; the real-column proof is storeContracts.ts's own case)", async () => {
+    const app = appFor(makeStores());
+    const res = await asA(request(app).post("/api/logs")).send({
+      ...validLogBody(),
+      workSeconds: 1471,
+      workMeters: 1535,
+      restSeconds: 0,
+      restMeters: 64,
+    });
+    expect(res.status).toBe(201);
+
+    const list = await asA(request(app).get("/api/logs"));
+    const row = list.body.find((r: { id: string }) => r.id === res.body.id);
+    expect(row).toMatchObject({
+      workSeconds: 1471,
+      workMeters: 1535,
+      restSeconds: 0,
+      restMeters: 64,
+    });
+  });
+
+  // Final whole-branch review, BLOCKER-1: this branch's own OTHER
+  // workSeconds fixtures (this file's own case just above included) are
+  // all hand-picked whole numbers, so nothing ever composed a
+  // CAPTURE-DERIVED value with this route's validator. `398.4` is
+  // `walk-2026-08-16/session-2-wu-4unequal.jsonl`'s own real work-seconds
+  // sum (seq 246/779/1666/2607/2981, re-decoded during this fix wave,
+  // matching the review's own numbers exactly: 29.7+60.0+120.0+128.7+60.0
+  // = 398.4s) — fractional BY CONSTRUCTION, since 0x0037's Split/Interval
+  // Time is tenths-precision (`domain/monitor/pm5/parse.ts:232`'s `/10`).
+  // Before this fix wave, this exact value 400'd (`workSeconds must be a
+  // non-negative whole number...`) — proof is this test itself: it failed
+  // red against the pre-fix `Number.isInteger` rule (self-mutation below
+  // reproduces that failure and reverts it).
+  it("posts a REAL, capture-derived FRACTIONAL workSeconds through the route to 201 — not a hand-picked whole number (BLOCKER-1's own red-first pin)", async () => {
+    const app = appFor(makeStores());
+    const res = await asA(request(app).post("/api/logs")).send({
+      ...validLogBody(),
+      workSeconds: 398.4,
+      workMeters: 1535,
+      restSeconds: 90,
+      restMeters: 64,
+    });
+    expect(res.status).toBe(201);
+
+    const list = await asA(request(app).get("/api/logs"));
+    const row = list.body.find((r: { id: string }) => r.id === res.body.id);
+    expect(row).toMatchObject({
+      workSeconds: 398.4,
+      workMeters: 1535,
+      restSeconds: 90,
+      restMeters: 64,
+    });
+  });
+
+  it("POST with no RC-1 keys at all still 201s and stores all four null (pre-RC-1 body shape, additive-only between tags)", async () => {
+    const app = appFor(makeStores());
+    const res = await asA(request(app).post("/api/logs")).send(validLogBody());
+    expect(res.status).toBe(201);
+
+    const list = await asA(request(app).get("/api/logs"));
+    const row = list.body.find((r: { id: string }) => r.id === res.body.id);
+    expect(row).toMatchObject({
+      workSeconds: null,
+      workMeters: null,
+      restSeconds: null,
+      restMeters: null,
+    });
+  });
+
   it("rejects an invalid pain value with 400, still naming the field, when pain is present", async () => {
     const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
       {

@@ -210,6 +210,49 @@ export interface MonitorRun {
    * same never-migrate contract as `summaryTotals`.
    */
   verificationBytes?: readonly number[];
+  /**
+   * RC-1 (storage-spine design spec §3, TRIAD — a stored shape): work and
+   * rest, summed SEPARATELY from `actuals` — never from `summaryTotals`
+   * above, a different PR's different quantity (0x0039's work-only totals,
+   * folded independently by the burst listener; these four fields never
+   * read that one, and vice versa). See `computeWorkRestSums`'s own doc
+   * comment for exactly what each sums and why the rest pair is
+   * all-or-nothing.
+   *
+   * Written by exactly two call sites, both below: `completeMonitorRun`'s
+   * own `endedBy === "finished"` branch (the ordinary case — a natural
+   * WORKOUTEND close), and `recordActual`'s late-acceptance branch (the
+   * finish-grace boundary, which the doc comment on `actuals` above notes
+   * can still arrive AFTER `completeMonitorRun` already ran — re-summing
+   * there is what keeps these four correct for that ordering rather than
+   * permanently missing the final interval). Never written for any other
+   * `endedBy` (`"rower"`/`"link-lost"`/`"program-failed"`): a terminate or
+   * link-lost close's actuals are exactly the ones RC-1's own ROADMAP row
+   * calls incomplete by construction (the trailing-rest 0x0037 an END
+   * during a rest never gets to send), and the spec's bar is "never
+   * estimated" — no attempt beats no number. **Also absent on a
+   * `"finished"` close with EMPTY `actuals`** (final whole-branch review,
+   * MEDIUM-1) — see `computeWorkRestSums`'s own doc comment for the
+   * hardware shape that reaches this (a finish grace that never delivered
+   * a boundary at all).
+   *
+   * **NO BACKFILL** (design spec §3, stated above the fold): a record
+   * closed before this PR simply has none of these four fields, forever —
+   * the same never-migrate contract every other additive field on this
+   * interface already carries, `summaryTotals`'s own comment above
+   * included. **The fused DISPLAY sum is UNCHANGED and does not read these
+   * fields this PR** (`session/summaryModel.ts`'s `monitorDistanceMeters`/
+   * `monitorTimeSeconds` keep summing straight off `actuals`, exactly as
+   * before) — pinned by construction: every screen renders the identical
+   * number whether or not a record carries this split. `isMonitorRun`
+   * below deliberately gains no check for any of the four, same reasoning
+   * as `summaryTotals`'s own comment: write-once-per-close-reason
+   * discipline is the writer's job, not the validator's.
+   */
+  workSeconds?: number;
+  workMeters?: number;
+  restSeconds?: number;
+  restMeters?: number;
 }
 
 // Same discipline as `session/run.ts`'s own `isPlainRecord` — "shaped
@@ -594,6 +637,104 @@ function acceptableFinalBoundary(
  * `session/engine.ts`'s own idiom for `SessionRun` updates — the caller
  * holds the result; nothing here reaches back into a caller's copy.
  */
+/**
+ * RC-1 (storage-spine design spec §3): the pure sum both of `completeMonitorRun`'s
+ * `endedBy === "finished"` branch and `recordActual`'s late-acceptance
+ * branch (below) call, so a "finished" record's four fields are always the
+ * SAME function of whatever `actuals` it has at write time, however many
+ * times that happens to be recomputed.
+ *
+ * **EMPTY `actuals` returns nothing at all (final whole-branch review,
+ * MEDIUM-1)** — this used to fall through to `[].reduce(..., 0) === 0` for
+ * `workSeconds`/`workMeters`, and `[].every(...)` is vacuously `true`, so
+ * the rest pair wrote real zeroes too: a naturally-finished run whose
+ * finish grace never delivered a single boundary (`useMonitorSession.ts`'s
+ * own comment names this exact hardware shape, "0 OF 1 INTERVALS
+ * MEASURED") stored four honest-looking `0`s — indistinguishable from "we
+ * measured a session that covered zero metres" — while
+ * `summaryModel.monitorDistanceMeters`'s `> 0` rule renders the same
+ * record as a dash. A record with nothing measured gets nothing stored,
+ * the same "never estimated" bar the rest pair's own all-or-nothing rule
+ * already applies to a PARTIAL measurement.
+ *
+ * `workSeconds`/`workMeters` are otherwise unconditional: `IntervalActual.
+ * elapsedSeconds`/`distanceMeters` are REQUIRED fields
+ * (`domain/monitor/types.ts`), present on every actual this driver has
+ * ever produced (the synthesized-final fallback included —
+ * `deriveFinalIntervalFromSummary`'s own doc comment: both are always
+ * supplied, never omitted), so the work sum is always complete over
+ * whatever non-empty `actuals` holds.
+ *
+ * **The fused DISPLAY total equals `workMeters + restMeters` for METRES
+ * ONLY — corrected at the final whole-branch review, MEDIUM-2, which found
+ * the ORIGINAL version of this paragraph asserting the same equality for
+ * seconds too.** `summaryModel.ts`'s `monitorDistanceMeters` sums
+ * `Σ(actual.distanceMeters + (actual.restDistanceMeters ?? 0))` — the
+ * identical decomposition this function's `workMeters`/`restMeters` pair
+ * computes, so the two really do agree whenever the rest pair exists.
+ * `monitorTimeSeconds` does NOT mirror `workSeconds + restSeconds` the
+ * same way: it calls `measuredSessionSeconds` (this file's own
+ * `interruptedTotalSeconds`), which sums `Σ elapsedSeconds` plus, for
+ * every actual with a real `index`, that interval's OWN `restSeconds` read
+ * out of `program.intervals` — the PROGRAMMED rest, a fact about what the
+ * rower was ASKED to do, never a wire reading. This function's own
+ * `restSeconds` is the WIRE's 0x0037 rest reading, summed over every
+ * actual unconditionally, with no `index` gate at all. The two are
+ * different populations under the same English name (ROADMAP's RC-5 is
+ * this exact contradiction's own row: DISTANCE and TIME already disagree
+ * by design, and this pair inherits the same shape rather than closing
+ * it) — concretely, they diverge whenever the FINAL interval's own 0x0037
+ * rest reads 0 (every committed capture's last boundary does, since there
+ * is no trailing rest left to measure) while its PROGRAMMED rest is
+ * nonzero, and whenever an actual's `index` is `null` (contributes to the
+ * wire sum here, contributes nothing to the programmed sum there). No
+ * displayed number reads this function's fields this PR either way — see
+ * the "screens do not change" pin — so this is a documentation
+ * correction, not a behavior change.
+ *
+ * `restSeconds`/`restMeters` are NOT unconditional: `IntervalActual.
+ * restSeconds`/`restDistanceMeters` are additive-optional (absent on the
+ * synthesized-final fallback specifically — that path has no wire reading
+ * for either, both fields' own doc comments), so a rest-bearing session
+ * whose final interval fell back to synthesis would have one actual with
+ * work data but no rest data. A PARTIAL sum over only the actuals that
+ * have it would silently drop that one interval's real rest — indistinguishable
+ * from "this interval genuinely had no rest," exactly the silent
+ * under-count CLAUDE.md's recurring-failure list warns against, and the
+ * opposite of the spec's own "never estimated" bar. So the rest PAIR is
+ * all-or-nothing: every actual in the array carries both rest fields, or
+ * neither `restSeconds` nor `restMeters` is written on the record at all
+ * — never a number that looks complete but silently isn't.
+ */
+function computeWorkRestSums(actuals: readonly IntervalActual[]): {
+  workSeconds?: number;
+  workMeters?: number;
+  restSeconds?: number;
+  restMeters?: number;
+} {
+  if (actuals.length === 0) return {};
+  const workSeconds = actuals.reduce((sum, a) => sum + a.elapsedSeconds, 0);
+  const workMeters = actuals.reduce((sum, a) => sum + a.distanceMeters, 0);
+  const restComplete = actuals.every(
+    (a) => a.restSeconds !== undefined && a.restDistanceMeters !== undefined,
+  );
+  if (!restComplete) return { workSeconds, workMeters };
+  // `?? 0` is defense-in-depth, not a reachable branch: `restComplete`
+  // above already proved every actual's `restSeconds`/`restDistanceMeters`
+  // is defined, so the fallback can never fire here — kept anyway so this
+  // reduce doesn't silently start trusting a guarantee a future edit to
+  // `restComplete` could quietly weaken.
+  return {
+    workSeconds,
+    workMeters,
+    restSeconds: actuals.reduce((sum, a) => sum + (a.restSeconds ?? 0), 0),
+    restMeters: actuals.reduce(
+      (sum, a) => sum + (a.restDistanceMeters ?? 0),
+      0,
+    ),
+  };
+}
+
 export function recordActual(
   run: MonitorRun,
   actual: IntervalActual,
@@ -607,7 +748,15 @@ export function recordActual(
   // program failure with a run still open, design spec's own Decisions
   // row); a boundary the machine reports after any of those lands here
   // and is refused.
-  if (run.completedAt !== null) {
+  const wasClosed = run.completedAt !== null;
+  // The record this write actually builds on — `run` for a live accept
+  // (nothing to re-read: `run` IS the current record, by construction of
+  // every other writer in this file), or the freshly-loaded copy
+  // `stillLive` returns for the late/closed path below. Declared here so
+  // TypeScript can narrow it without an extra branch at the `next`
+  // assembly site.
+  let base: MonitorRun = run;
+  if (wasClosed) {
     if (!acceptableFinalBoundary(run, actual, opts)) return run;
     // Storage-spine design spec §2's late side, Task 3: `BURST_LINGER_MS`
     // widens the gap between "the hook decided this late actual is
@@ -615,12 +764,48 @@ export function recordActual(
     // since before the linger started) and this write, by up to 2000ms —
     // the same `clearMonitorRun()` resurrection race
     // `appendSummaryObservations` guards against (that function's own doc
-    // comment). `stillLive` mirrors its identity check rather than
-    // re-deriving one: decline, writing nothing and returning `run`
-    // unchanged, if storage no longer holds this run.
-    if (stillLive(run.startedAt) === null) return run;
+    // comment).
+    //
+    // **CORRECTED at the final whole-branch review (LOW-1) — this branch
+    // used to call `stillLive` for its identity check ALONE and then
+    // discard the record it returned, rebuilding `next` by spreading the
+    // stale `run` argument instead.** `appendSummaryObservations` (the
+    // OTHER post-close writer, same file) uses `stillLive`'s own return
+    // value as its base for exactly the reason this branch now does too:
+    // the object `stillLive` hands back is what storage holds RIGHT NOW,
+    // and `run` is whatever the caller was holding before the up-to-2000ms
+    // linger — not provably the same object today (the review traced the
+    // one production caller, `useMonitorSession.ts`, and found the ref
+    // kept in sync by every writer that touches it, so this was not yet
+    // exploitable), but T3 widened what rides on that invariant from two
+    // fields (`summaryTotals`/`verificationBytes`) to six, and the safety
+    // now lives in a different file (a ref-sync discipline in the hook)
+    // than the writer that depends on it. Reading from `stillLive`'s own
+    // result makes the guarantee structural instead of coincidental.
+    const live = stillLive(run.startedAt);
+    if (live === null) return run;
+    base = live;
   }
-  const next: MonitorRun = { ...run, actuals: [...run.actuals, actual] };
+  const actuals = [...base.actuals, actual];
+  const next: MonitorRun = {
+    ...base,
+    actuals,
+    // RC-1 (storage-spine design spec §3): the finish-grace boundary
+    // accepted above is the ONLY way `actuals` can still grow after a
+    // "finished" close — re-running `computeWorkRestSums` here is what
+    // keeps `workSeconds`/`workMeters`/`restSeconds`/`restMeters` correct
+    // for that ordering (the common one — `useMonitorSession.ts`'s own
+    // `openHandoffHold` comment calls the split-already-in-hand order "the
+    // desktop order," the rarer exception) rather than permanently
+    // reflecting whatever `actuals` held at `completeMonitorRun`'s own,
+    // earlier call. A closed run whose `endedBy` is not `"finished"` never
+    // had sums computed to begin with (that function's own gate below) and
+    // none are added here either — only `"finished"` records ever carry
+    // these four fields.
+    ...(wasClosed && base.endedBy === "finished"
+      ? computeWorkRestSums(actuals)
+      : {}),
+  };
   saveMonitorRun(next);
   return next;
 }
@@ -674,6 +859,16 @@ export function completeMonitorRun(
     completedAt: now.toISOString(),
     terminated: args.terminated,
     endedBy: args.endedBy,
+    // RC-1 (storage-spine design spec §3): computed ONCE here, at natural
+    // close, from whatever `actuals` this run holds RIGHT NOW — which is
+    // already complete when the finish-grace boundary arrived before the
+    // machine's own finished tick (`openHandoffHold`'s own "the desktop
+    // order" case), and is re-summed a second time by `recordActual`'s own
+    // late-acceptance branch above when it doesn't. Never computed for any
+    // other `endedBy` — a terminate/link-lost/program-failed close's
+    // actuals are the ones ROADMAP's RC-1 row calls incomplete by
+    // construction, and this spec's bar is "never estimated."
+    ...(args.endedBy === "finished" ? computeWorkRestSums(run.actuals) : {}),
   };
   saveMonitorRun(next);
   return next;

@@ -293,6 +293,10 @@ function buildMonitorFixture(
     deviceName?: string;
     series?: SeriesData;
     endedBy?: MonitorRun["endedBy"];
+    workSeconds?: number;
+    workMeters?: number;
+    restSeconds?: number;
+    restMeters?: number;
   } = {},
 ): { run: MonitorRun; workout: LibraryWorkout } {
   const hoarfrost = library("Hoarfrost");
@@ -381,6 +385,23 @@ function buildMonitorFixture(
     // Phase LL Task 4: same "omit the key entirely unless given" idiom as
     // `series` above, same reason.
     ...(overrides.endedBy !== undefined ? { endedBy: overrides.endedBy } : {}),
+    // RC-1 (storage-spine design spec §3): same "omit the key entirely
+    // unless given" idiom as `series`/`endedBy` above, same reason — a
+    // real `completeMonitorRun` only ever writes these four together
+    // (`endedBy === "finished"`), so a fixture must be able to represent
+    // "absent" as genuinely absent, not `undefined`-valued.
+    ...(overrides.workSeconds !== undefined
+      ? { workSeconds: overrides.workSeconds }
+      : {}),
+    ...(overrides.workMeters !== undefined
+      ? { workMeters: overrides.workMeters }
+      : {}),
+    ...(overrides.restSeconds !== undefined
+      ? { restSeconds: overrides.restSeconds }
+      : {}),
+    ...(overrides.restMeters !== undefined
+      ? { restMeters: overrides.restMeters }
+      : {}),
   };
   const workout: LibraryWorkout = {
     id: MONITOR_WORKOUT_ID,
@@ -2716,6 +2737,77 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
 
     const body = parsedBodies(apiFn)[0]!;
     expect("endedBy" in body).toBe(false);
+  });
+
+  // RC-1 (storage-spine design spec §3): the monitor door's fourth
+  // addition to the wire body, same optional-key idiom `deviceName`/
+  // `series`/`endedBy` already proved out — spread straight from
+  // `monitorRun`'s own four fields, never re-derived here.
+  //
+  // **REAL, capture-derived, FRACTIONAL values (final whole-branch
+  // review, BLOCKER-1) — not a hand-picked whole number.** These are
+  // `walk-2026-08-16/session-2-wu-4unequal.jsonl`'s own seq
+  // 246/779/1666/2607/2981, decoded through the branch's real
+  // `toIntervalActual`/`computeWorkRestSums` (independently re-verified
+  // during this fix wave, matching the review's own numbers exactly):
+  // work 29.7+60.0+120.0+128.7+60.0 = 398.4s / 1535m, rest 0+30+30+30+0 =
+  // 90s / 0+30+22+12+0 = 64m. `workSeconds` is fractional BY CONSTRUCTION
+  // (0x0037's Split/Interval Time is tenths-precision,
+  // `domain/monitor/pm5/parse.ts:232`) — a hand-picked integer here would
+  // never have caught the route rejecting every real natural finish.
+  it("posts workSeconds/workMeters/restSeconds/restMeters straight from the loaded MonitorRun when present — REAL fractional capture values, not a hand-picked whole number", async () => {
+    const { run, workout } = buildMonitorFixture({
+      workSeconds: 398.4,
+      workMeters: 1535,
+      restSeconds: 90,
+      restMeters: 64,
+    });
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-workrest-monitor" }), {
+          status: 201,
+        }),
+      ),
+    );
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+
+    const body = parsedBodies(apiFn)[0]!;
+    expect(body.workSeconds).toBe(398.4);
+    expect(body.workMeters).toBe(1535);
+    expect(body.restSeconds).toBe(90);
+    expect(body.restMeters).toBe(64);
+  });
+
+  it("a MonitorRun with none of the four RC-1 fields (a record predating this PR, or closed some other way than a natural finish) omits all four keys from the POST body", async () => {
+    const { run, workout } = buildMonitorFixture();
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-no-workrest-monitor" }), {
+          status: 201,
+        }),
+      ),
+    );
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+
+    const body = parsedBodies(apiFn)[0]!;
+    expect("workSeconds" in body).toBe(false);
+    expect("workMeters" in body).toBe(false);
+    expect("restSeconds" in body).toBe(false);
+    expect("restMeters" in body).toBe(false);
   });
 
   it("an empty or >64-char deviceName is omitted from the POST body — the save still succeeds (branch review Minor)", async () => {

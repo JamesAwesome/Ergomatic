@@ -730,6 +730,89 @@ export function describeStoreContracts(
         });
       });
 
+      // RC-1 (storage-spine design spec §3, TRIAD): the four work/rest
+      // columns round-trip through the real `integer` columns, INCLUDING
+      // zero — a genuinely rest-free session's honest `restSeconds`/
+      // `restMeters`, which must survive as `0`, never coerced to `null`
+      // the way an absent value legitimately is (`?? null` in
+      // `create()` only ever fires for `undefined`/`null` INPUT, never
+      // for a real `0`).
+      it("create round-trips the four work/rest columns exactly, including a genuinely rest-free session's zero", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        const { id } = await stores.logs.create(
+          userId,
+          logInput({
+            workSeconds: 1471,
+            workMeters: 1535,
+            restSeconds: 0,
+            restMeters: 64,
+          }),
+        );
+        const list = await stores.logs.list(userId, 10);
+        const row = list.find((r) => r.id === id);
+        expect(row).toMatchObject({
+          workSeconds: 1471,
+          workMeters: 1535,
+          restSeconds: 0,
+          restMeters: 64,
+        });
+      });
+
+      // Final whole-branch review, BLOCKER-1: `work_seconds`/`rest_seconds`
+      // are `double precision`, not `integer` — 0x0037's own Split/
+      // Interval Time is tenths-precision (`domain/monitor/pm5/parse.ts`'s
+      // `readU24LE(bytes, 6) / 10`), so a real natural finish's
+      // `workSeconds` is routinely fractional. This is the B8-probe shape
+      // for that column pair: `398.4` is `walk-2026-08-16/
+      // session-2-wu-4unequal.jsonl`'s own real work-seconds sum (seq
+      // 246/779/1666/2607/2981, re-decoded during this fix wave), proven
+      // against REAL Postgres — the schema comment's own B8 reasoning
+      // (`avg_split_seconds`'s `real` vs `double precision` truncation
+      // finding) applies identically here, and this is the permanent
+      // regression guard for it, not the schema comment alone.
+      it("create round-trips a REAL, capture-derived FRACTIONAL workSeconds/restSeconds exactly through the real double-precision columns (BLOCKER-1's B8-shaped proof)", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        const { id } = await stores.logs.create(
+          userId,
+          logInput({
+            workSeconds: 398.4,
+            workMeters: 1535,
+            restSeconds: 90,
+            restMeters: 64,
+          }),
+        );
+        const list = await stores.logs.list(userId, 10);
+        const row = list.find((r) => r.id === id);
+        expect(row).toMatchObject({
+          workSeconds: 398.4,
+          workMeters: 1535,
+          restSeconds: 90,
+          restMeters: 64,
+        });
+      });
+
+      // Fix round 1's own precedent (finding 3, cited by the hero-number
+      // case just above): `logInput()`'s base shape never sets any of the
+      // four work/rest fields — a pre-RC-1 client posts none of them and
+      // must still 201, storing all four null (additive-only between
+      // tags, the same "no backfill" contract `MonitorRun`'s own doc
+      // comment states above the fold).
+      it("create with no work/rest fields posted stores all four null (pre-RC-1 body shape)", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        const { id } = await stores.logs.create(userId, logInput());
+        const list = await stores.logs.list(userId, 10);
+        const row = list.find((r) => r.id === id);
+        expect(row).toMatchObject({
+          workSeconds: null,
+          workMeters: null,
+          restSeconds: null,
+          restMeters: null,
+        });
+      });
+
       // From-the-log spec (2026-08-18), §2 "the linkage mechanism": the
       // four cases the plan carries by name.
       describe("plan linkage", () => {

@@ -189,7 +189,14 @@ compose.yml -f compose.e2e.yml build --no-cache` before `up`.
   on the missing column). The branch that merges second REGENERATES its
   migration off new main (delete + `pnpm db:generate`) — never a mere
   journal merge. Check open PRs for a competing index before you
-  generate one.
+  generate one. **And a migration REWRITTEN IN PLACE on a branch changes
+  its hash:** any DB that already applied the OLD version (a
+  per-worktree dev volume, a long-lived local stack) will refuse or
+  mis-track the new one — CI's fresh containers never hit this, so it
+  looks like a local ghost. Pre-merge rewrites are legitimate ONLY while
+  the migration has never shipped; after any rewrite, reset stale dev
+  volumes (`docker compose -p <stack> down -v`) rather than debugging
+  the hash mismatch (#182's fix wave hit exactly this).
 
 ## Report contract
 

@@ -2033,3 +2033,62 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   a walk card was written to work around, reconcile the card in the same
   PR** — #13's operator-instruction bar applies to cards that go stale, not
   just cards written wrong.
+
+## PM final-PR gate, PR #182 (storage spine PR 2 — TRIAD twice), 2026-08-24
+
+- **A late fix can falsify a durable record and stop one file short.** #182's
+  BLOCKER-1 turned two columns from `integer` to `double precision` and corrected
+  the migration comment, the schema comment, the route comment and the PR body —
+  and never touched `ROADMAP.md`, whose SHIPPED paragraph still read "four
+  nullable `integer` columns … POST-validated non-negative-integer-or-null". This
+  is the inverse of #180's "the code was more honest than its body", and it is
+  worse: the ROADMAP paragraph is what the successor spec's implementer reads.
+  **At any gate on a PR with a post-review fix wave, diff the fix commit's file
+  list against the durable records the earlier commits wrote to** (`git show
+  <fix> --stat | grep -i roadmap`) — a fix that touches only code and comments is
+  the tell.
+- **Transcribed capture hex is checkable in one grep, and the check is the whole
+  value of the oracle.** #182's work/rest pin hand-transcribes five 0x0037 frames
+  into a test. `grep -c -- "<hex>" docs/monitor/sessions/.../session-2.jsonl`
+  returned 1 for each. Do this every time a test claims "REAL capture" with inline
+  bytes; without it the oracle is a transcription and the external authority is
+  gone. #182 also states the decoded literals (398.4/90) alongside a `reduce`
+  cross-check rather than only the reduce — that is the fix for RF#3's
+  "agrees with itself whatever the value is", and it is the shape to ask for.
+- **"Additive and nullable" is not the whole stored-shape question — ask what the
+  columns MEAN together.** #182 stores `restMeters` (a machine measurement
+  corroborated against TWD: 1535+64=1599) beside `restSeconds` (explicitly "A
+  READBACK, NEVER A MEASUREMENT"), summed under one name and bound by one
+  all-or-nothing guard that implies a shared provenance they do not have. Nothing
+  displays them today, so it costs nothing until the reconciliation reads them.
+  **At a stored-shape gate, check whether adjacent fields under one heading share
+  a provenance** — the fake-pause failure mode, wearing a column name.
+- **"By design" needs its rejected alternative, or it is an assertion.** #182's
+  no-backfill sentence is correct and correctly placed, but the stored `series`
+  carries `r?: true` on rest samples, so a retroactive split WAS available. The
+  right reason — a 1 Hz-bucket derivation would be OUR number stored in a column
+  that reads as the machine's, i.e. RF#11 in a new costume — is better than the
+  assertion and appears nowhere. **When a gate meets "by design", ask what the
+  other option was and whether its rejection is written down.**
+- **A silent REMOVAL is the most urgent kind of release note.** `v0.20.0..main`
+  holds #179 (visible) and #181, which deletes START HERE from Today and Learning
+  the app from You. A surface vanishing with no note reads as a regression, not a
+  decision, and that clause owes a where-it-went sentence, not just a
+  what-changed one. **Release call: NO TAG on #182 (nothing falsifiable, the
+  #140 rule, pre-stated at #180's gate); v0.21.0 MINOR is owed for #179 + #181
+  and is time-sensitive because of the removal.** Pre-stated for the future:
+  when RC-5 reconciles the three heroes, its notes owe "applies to rows recorded
+  after this build" — #182 makes the log history permanently two-population, and
+  that belongs in RC-5's ROADMAP body now, not rediscovered later.
+- **The status-paragraph check has now fired FOUR gates running** (#165, #167,
+  #174, #182): Phase RC's Status still read "NEXT: the RC-1/RC-8 storage-spine
+  spec" with #180 merged and RC-1 shipping in the PR under gate. Treat it as a
+  standing condition on any PR that ticks a box in a phase whose Status it does
+  not touch; stop re-deriving it.
+- **The 30-second rule is 0-for-12** (#182 at 293 words); sixth consecutive
+  declined enforcement, same reason — line one named the outcome, every bullet
+  answered "so what?". Still James's to re-set or retire, still belongs in
+  CLAUDE.md.
+- **Backlog: 62 unchecked / 223 checked on the branch, 63 / 222 on main.**
+  Branch-neutral — RC-1 ticked, nothing filed. Third consecutive gate where the
+  phase is executing rather than filing.

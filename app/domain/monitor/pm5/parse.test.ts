@@ -813,4 +813,19 @@ describe("toIntervalActual: field mapping (interface-notes.md's own reasoning co
     const actual = toIntervalActual(baseRaw({ intervalRestDistanceMeters: 0 }));
     expect(actual.restDistanceMeters).toBe(0);
   });
+
+  it("uses intervalRestTimeSeconds (0x0037 offset 12) for restSeconds (RC-1) — NOT AdditionalStatus1's differently-sourced Rest Time (`MonitorFrame.restSeconds`, a different field under the same name)", () => {
+    const actual = toIntervalActual(baseRaw({ intervalRestTimeSeconds: 45 }));
+    expect(actual.restSeconds).toBe(45);
+  });
+
+  it("a rest-free interval's restSeconds is 0, not null/undefined — the wire's own zero, not an absence (RC-1)", () => {
+    const actual = toIntervalActual(baseRaw({ intervalRestTimeSeconds: 0 }));
+    expect(actual.restSeconds).toBe(0);
+  });
+
+  it("uses splitIntervalType (0x0037 offset 16) for type, stored raw (RC-1)", () => {
+    expect(toIntervalActual(baseRaw({ splitIntervalType: 1 })).type).toBe(1);
+    expect(toIntervalActual(baseRaw({ splitIntervalType: 0 })).type).toBe(0);
+  });
 });

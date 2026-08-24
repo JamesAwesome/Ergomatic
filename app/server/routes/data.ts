@@ -171,6 +171,58 @@ function endedByError(value: unknown): string | null {
   return null;
 }
 
+// RC-1 (storage-spine design spec §3, TRIAD): work and rest, same
+// null-tolerant, bounds-checked-here-not-trusted contract as
+// `avgSplitSeconds`/`distanceMeters`/`timeSeconds` below — never a
+// positive-only rule, unlike `distanceMeters`'s `> 0`: `0` is a genuine
+// reading (a rest-free session's own `restSeconds`/`restMeters`). One
+// shared function across all four field names, rather than
+// `endedByError`'s one-function-per-field shape — the RULE is nearly
+// identical across all four (non-negative, bounded, or absent/null), so a
+// shared bound is one thing to keep in sync, not four near-duplicates.
+//
+// **CORRECTED at the final whole-branch review (BLOCKER-1) — this used to
+// claim every source is "a non-negative wire integer" and require
+// `Number.isInteger` on all four.** `IntervalActual.elapsedSeconds`
+// (0x0037's own Split/Interval Time, `domain/monitor/pm5/parse.ts`'s
+// `readU24LE(bytes, 6) / 10`) is TENTHS-of-a-second precision, so
+// `workSeconds` — and `restSeconds` beside it, for the same reason
+// `schema.ts`'s own corrected comment gives — accept any non-negative
+// FINITE number, not just an integer; a real natural finish's
+// `workSeconds` is routinely fractional (session-2's own real capture:
+// 398.4s), and the old integer-only rule 400'd every one of those saves.
+// `workMeters`/`restMeters` genuinely ARE whole-metre wire fields
+// (`splitIntervalDistanceMeters`/`intervalRestDistanceMeters`, both
+// unscaled `readU24LE`/`readU16LE`) and keep the integer requirement.
+const WORK_REST_SECONDS_MAX = 604800;
+const WORK_REST_METERS_MAX = 1_000_000;
+
+function workRestQuantityError(
+  value: unknown,
+  field: string,
+  max: number,
+  // RC-1's own two populations (BLOCKER-1 fix): `true` for the meters
+  // pair (genuinely whole wire fields), `false` for the seconds pair
+  // (0x0037's elapsed time is tenths-precision — see this function's own
+  // header comment).
+  wholeNumber: boolean,
+): string | null {
+  if (
+    value !== undefined &&
+    value !== null &&
+    (typeof value !== "number" ||
+      !Number.isFinite(value) ||
+      (wholeNumber && !Number.isInteger(value)) ||
+      value < 0 ||
+      value > max)
+  ) {
+    return wholeNumber
+      ? `${field} must be a non-negative whole number <= ${max}, or null`
+      : `${field} must be a non-negative finite number <= ${max}, or null`;
+  }
+  return null;
+}
+
 function notesError(value: unknown): string | null {
   if (value !== null && value !== undefined && typeof value !== "string") {
     return "notes must be a string or null";
@@ -1239,6 +1291,51 @@ export function createDataRouter({
       );
       return;
     }
+    // RC-1 (storage-spine design spec §3, TRIAD): work and rest, same
+    // sanity-not-truth posture as the three hero fields just above — an
+    // authenticated client can still post a wrong number about its own
+    // rowing, accepted and recorded as the trust boundary the server
+    // cannot close.
+    const workSecondsErr = workRestQuantityError(
+      body.workSeconds,
+      "workSeconds",
+      WORK_REST_SECONDS_MAX,
+      false,
+    );
+    if (workSecondsErr) {
+      badRequest(res, workSecondsErr, "workSeconds");
+      return;
+    }
+    const workMetersErr = workRestQuantityError(
+      body.workMeters,
+      "workMeters",
+      WORK_REST_METERS_MAX,
+      true,
+    );
+    if (workMetersErr) {
+      badRequest(res, workMetersErr, "workMeters");
+      return;
+    }
+    const restSecondsErr = workRestQuantityError(
+      body.restSeconds,
+      "restSeconds",
+      WORK_REST_SECONDS_MAX,
+      false,
+    );
+    if (restSecondsErr) {
+      badRequest(res, restSecondsErr, "restSeconds");
+      return;
+    }
+    const restMetersErr = workRestQuantityError(
+      body.restMeters,
+      "restMeters",
+      WORK_REST_METERS_MAX,
+      true,
+    );
+    if (restMetersErr) {
+      badRequest(res, restMetersErr, "restMeters");
+      return;
+    }
     if (!Array.isArray(body.steps) || body.steps.length === 0) {
       badRequest(res, "steps must be a non-empty array", "steps");
       return;
@@ -1292,6 +1389,10 @@ export function createDataRouter({
         (body.distanceMeters as number | null | undefined) ?? null,
       series: seriesResult.series,
       endedBy: (body.endedBy as EndedBy | null | undefined) ?? null,
+      workSeconds: (body.workSeconds as number | null | undefined) ?? null,
+      workMeters: (body.workMeters as number | null | undefined) ?? null,
+      restSeconds: (body.restSeconds as number | null | undefined) ?? null,
+      restMeters: (body.restMeters as number | null | undefined) ?? null,
     });
     res.status(201).json({ id });
   });

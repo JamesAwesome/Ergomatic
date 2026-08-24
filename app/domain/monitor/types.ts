@@ -134,6 +134,12 @@ export interface MonitorFrame {
   //   consumer needs one: `surfaceModel.ts`'s estimate only reads it while
   //   `state === "resting"`, and what it reads outside a rest is
   //   unspecified by the wire and simply unused.
+  //
+  //   NOT `IntervalActual.restSeconds` (below, RC-1, storage-spine design
+  //   spec §3) — that field is 0x0037's own Interval Rest Time, a
+  //   per-completed-interval READBACK, decoded once at the boundary. Same
+  //   English name, different characteristic, different quantity; see that
+  //   field's own comment for the full distinction.
   intervalIndex: number | null;
   // ^ OUR program index (0-based per work interval), never the raw machine
   //   value straight off the wire — normalized by the driver via
@@ -246,6 +252,54 @@ export interface IntervalActual {
   // existing reader's `?? 0` already handles both causes identically; nothing
   // downstream needed to change.
   restDistanceMeters?: number;
+  // ADDITIVE (storage-spine design spec §3, RC-1): 0x0037's own Interval
+  // Rest Time (`pm5/parse.ts`'s `SplitIntervalData.intervalRestTimeSeconds`,
+  // offset 12, whole seconds) — the machine's rest-duration field for THIS
+  // interval's trailing rest.
+  //
+  // **NOT `MonitorFrame.restSeconds`** (this same file, above) — that field
+  // is 0x0032's own Rest Time (Additional Status 1, offset 13, a LIVE
+  // countdown that runs in real time through a rest), a different
+  // characteristic reporting a different quantity under the same English
+  // name. This field is 0x0037's, decoded once per completed interval, and
+  // the two must never be confused (flagged at Task 1's review as a
+  // naming-confusion risk).
+  //
+  // **A READBACK, NEVER A MEASUREMENT** (design spec §1's caveat, carried
+  // verbatim, ROADMAP RC-1): whether this number is the machine's own
+  // timed observation of the rest just taken or a readback of the
+  // programmed rest is NOT established — every committed capture's value
+  // equals the programmed rest exactly. Every comment referencing this
+  // field says "readback," never "measured," until a capture proves
+  // otherwise.
+  //
+  // Additive-optional, the same shape `restDistanceMeters` above already
+  // established: absent for records persisted before this field existed,
+  // and absent again on the synthesized-final fallback (`driver.ts`'s
+  // `deriveFinalIntervalFromSummary` caller), which has no wire reading
+  // for it either (0x0039 carries no per-interval rest time).
+  //
+  // MIXED PROVENANCE with its sibling: `restDistanceMeters` is a machine
+  // MEASUREMENT corroborated against TWD (1535+64=1599, decoded to the
+  // metre), while THIS field is the unestablished readback above — a
+  // future reconciler (RC-5) must not treat "rest" as one population
+  // just because the two live under one heading.
+  restSeconds?: number;
+  // ADDITIVE (storage-spine design spec §3, RC-1): 0x0037's own
+  // Split/Interval Type (`pm5/parse.ts`'s `SplitIntervalData.
+  // splitIntervalType`, offset 16) — stored RAW, byte value unchanged.
+  // The mapping this repo has observed (distance-kind intervals put `1`
+  // on the wire, time-kind intervals put `0` — every real 0x0037 decoded
+  // so far agrees, `transports/fake.ts`'s own honest encode uses the same
+  // rule) is a correlation on THIS repo's captures, not a documented
+  // Concept2 enum — a future consumer that wants MEANING out of this byte
+  // owns verifying that, not this field.
+  //
+  // Additive-optional, the same shape `restDistanceMeters`/`restSeconds`
+  // above already established: absent for pre-existing records, and
+  // absent on the synthesized-final fallback (no wire reading — 0x0039
+  // carries no per-interval type either).
+  type?: number;
 }
 
 /**

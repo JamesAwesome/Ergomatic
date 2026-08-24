@@ -171,6 +171,20 @@ export interface LogInput {
   // exact five known values before this type is ever constructed, same
   // trust-boundary posture as every other field here.
   endedBy?: EndedBy | null;
+  // RC-1 (storage-spine design spec §3, TRIAD): work and rest, optional/
+  // nullable, same convention as `deviceName`/`thumbs`/`endedBy` above —
+  // absent or explicit null both store null (a phone-timer/manual log, an
+  // older client, or a monitor close that isn't a natural `"finished"`
+  // finish posts nothing — `src/monitor/monitorRun.ts`'s own writers only
+  // ever compute these four for that one close reason). Bounds-checked at
+  // the route (`routes/data.ts`'s `workRestQuantityError`) against a
+  // non-negative-whole-number-or-absent rule before this type is ever
+  // constructed, same trust-boundary posture as every other numeric field
+  // on this interface.
+  workSeconds?: number | null;
+  workMeters?: number | null;
+  restSeconds?: number | null;
+  restMeters?: number | null;
   // Deliberately absent from this interface: `plan_key`/`plan_index` are
   // NEVER client input. `create()` below derives them itself, inside the
   // same transaction as the log insert, from the plan_state upsert's own
@@ -228,6 +242,12 @@ const LOG_LIST_COLUMNS = {
   // above — included in the list projection (unlike `steps`/`series`,
   // which are excluded for size).
   endedBy: sessionLogs.endedBy,
+  // RC-1: four more small scalars, same idiom — included in the list
+  // projection.
+  workSeconds: sessionLogs.workSeconds,
+  workMeters: sessionLogs.workMeters,
+  restSeconds: sessionLogs.restSeconds,
+  restMeters: sessionLogs.restMeters,
 };
 
 // Log-delete spec (2026-08-18), §2: the newest-wins resolution rule,
@@ -594,6 +614,10 @@ export function createLogsStore(db: Db) {
             distanceMeters: input.distanceMeters ?? null,
             series: input.series ?? null,
             endedBy: input.endedBy ?? null,
+            workSeconds: input.workSeconds ?? null,
+            workMeters: input.workMeters ?? null,
+            restSeconds: input.restSeconds ?? null,
+            restMeters: input.restMeters ?? null,
             planKey,
             planIndex,
           })

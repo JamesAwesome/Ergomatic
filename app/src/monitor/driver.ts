@@ -3343,6 +3343,14 @@ export function createPm5Driver(
       // function's own documented elapsed-time gap two lines up (§23 walk
       // item 4) — a real gap, now stated as an absence instead of
       // papered over with a number that looks measured.
+      //
+      // RC-1 (storage-spine design spec §3): `restSeconds`/`type` are
+      // OMITTED here too, for the identical reason — 0x0039 carries no
+      // per-interval Rest Time or Split/Interval Type either, only the
+      // 0x0037 this branch exists BECAUSE it was lost carries those. This
+      // object is built as a literal, not `{ ...rawActual, ... }`, so the
+      // omission is structural: there is no `rawActual` in scope on this
+      // path to spread from.
     };
     run.actuals += 1;
     run.recordedActuals.set(lastIndex, {
