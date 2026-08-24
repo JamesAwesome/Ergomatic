@@ -7,7 +7,7 @@ import {
   deriveK6FromK2,
 } from "../../domain/deriveBaseline.js";
 import { MOST_COMMON_ESTIMATE } from "../../domain/estimateBaseline.js";
-import SplitInput from "./SplitInput";
+import BaselineField from "./BaselineField";
 import {
   MAX_SPLIT,
   MIN_SPLIT,
@@ -15,6 +15,7 @@ import {
   discard,
   initDraft,
   isDirty,
+  nudge,
   setDraft,
   type DraftState,
 } from "./baselineDraft";
@@ -27,54 +28,14 @@ import {
 // offer's 7s). They are the estimate table's own most-common cell
 // (2:25 / 2:32), so the table, the derive offer and the editor's seeds
 // are ONE family — agreement pinned by domain/estimateBaseline.test.ts.
-// Used only to seed a brand-new rower's draft so the typed fields and
-// Apply have something sensible to display and work from; Apply still
-// writes real numbers back to the API.
+// Honest-empty round (2026-08-24, James's report): these are no longer
+// pushed into the draft as VALUES for a side the rower has never entered —
+// an unset side is `null` and the seed is what its empty field shows as a
+// dim PLACEHOLDER (baselineDraft.ts's header, SplitInput's `seed` prop).
+// They are also what the first stepper tap on an empty field materialises,
+// exactly.
 const SEED_K2 = MOST_COMMON_ESTIMATE.k2Seconds;
 const SEED_K6 = MOST_COMMON_ESTIMATE.k6Seconds;
-
-/** The stepper row — label, mono split, ± buttons. Since Option T (James,
- *  2026-08-23) this serves ONLY door 1's "Adjust the numbers first" step
- *  (`onboarding/Recommend.tsx`), which keeps its steppers on purpose: the
- *  rower is nudging an offered number, not entering one. Both true
- *  split-ENTRY surfaces (this editor's own rows and door 2) type instead
- *  (`SplitInput`). */
-export function BaselineRow({
-  label,
-  seconds,
-  onFaster,
-  onSlower,
-}: {
-  label: "2k" | "6k";
-  seconds: number;
-  onFaster: () => void;
-  onSlower: () => void;
-}) {
-  return (
-    <div className="baseline-row">
-      <span className="baseline-label">{label}</span>
-      <span className="baseline-value">{fmtSplit(seconds)}</span>
-      <div className="baseline-steppers">
-        <button
-          type="button"
-          className="baseline-stepper"
-          aria-label={`${label} faster`}
-          onClick={onFaster}
-        >
-          −
-        </button>
-        <button
-          type="button"
-          className="baseline-stepper"
-          aria-label={`${label} slower`}
-          onClick={onSlower}
-        >
-          +
-        </button>
-      </div>
-    </div>
-  );
-}
 
 function ConfirmLine({
   label,
@@ -82,13 +43,17 @@ function ConfirmLine({
   to,
 }: {
   label: "2k" | "6k";
-  from: number;
-  to: number;
+  from: number | null;
+  to: number | null;
 }) {
   if (from === to) return null;
+  // `to` is non-null past that guard: a draft side only ever goes from
+  // null to a number (nothing in the editor clears a field back to unset),
+  // and `discard`/`commit` move draft and committed together — so a null
+  // `to` always arrives with a null `from` and returns above.
   return (
     <p className="baseline-confirm-line">
-      {label} {fmtSplit(from)} → {fmtSplit(to)}
+      {label} {from === null ? "Not set" : fmtSplit(from)} → {fmtSplit(to!)}
     </p>
   );
 }
@@ -150,7 +115,7 @@ function DeriveSlot({
 }: {
   offer: { which: "k2" | "k6"; value: number };
   touched: boolean;
-  draftValue: number;
+  draftValue: number | null;
   onFill: () => void;
 }) {
   const label =
@@ -185,11 +150,12 @@ function ReadyEditor({
   // value — with exactly one set (the derivation-offer state, item 2), the
   // OTHER side's number IS a real baseline, so this prompt would falsely
   // deny it (found capturing this round's own screenshot, recurring-
-  // failure #7). `initDraft` below still seeds whichever side is null
-  // regardless of this flag — only the copy's condition changed.
+  // failure #7). Since the honest-empty round `initDraft` carries the raw
+  // nulls straight through — a side the rower has never entered stays
+  // unset all the way to the field, which renders empty.
   const seeded = baselines.k2Seconds === null && baselines.k6Seconds === null;
   const [state, setState] = useState<DraftState>(() =>
-    initDraft(baselines.k2Seconds ?? SEED_K2, baselines.k6Seconds ?? SEED_K6),
+    initDraft(baselines.k2Seconds, baselines.k6Seconds),
   );
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -258,13 +224,18 @@ function ReadyEditor({
           which === "k2" ? baselines.k2Seconds : baselines.k6Seconds;
         return server === null || state.draft[which] !== server;
       };
+      //
+      // The `!`s are the draft's own stated invariant, not optimism:
+      // `touched` implies a number (baselineDraft.ts's header — every
+      // mutator that sets `touched` writes a value in the same call, and
+      // `nudge` refuses an unset side outright rather than inventing one).
       const patch: BaselinesPatch = {};
       if (state.touched.k2 && changed("k2")) {
-        patch.k2Seconds = state.draft.k2;
+        patch.k2Seconds = state.draft.k2!;
         patch.k2Source = sourceFor("k2");
       }
       if (state.touched.k6 && changed("k6")) {
-        patch.k6Seconds = state.draft.k6;
+        patch.k6Seconds = state.draft.k6!;
         patch.k6Source = sourceFor("k6");
       }
       if (Object.keys(patch).length > 0) {
@@ -282,16 +253,18 @@ function ReadyEditor({
     <div className="baselines-card">
       {seeded && (
         <p className="baseline-prompt">
-          No baselines yet. These are starting points. Tap a field and type your
-          own.
+          No baselines yet. Tap a field and type, or use minus and plus to start
+          from the suggestion.
         </p>
       )}
       <div className="baseline-row">
         <span className="baseline-label">2k</span>
-        <SplitInput
+        <BaselineField
           label="2k"
           seconds={state.draft.k2}
+          seed={SEED_K2}
           onType={(v) => setState((s) => setDraft(s, "k2", v))}
+          onNudge={(d) => setState((s) => nudge(s, "k2", d))}
           className="baseline-input"
         />
       </div>
@@ -305,10 +278,12 @@ function ReadyEditor({
       )}
       <div className="baseline-row">
         <span className="baseline-label">6k</span>
-        <SplitInput
+        <BaselineField
           label="6k"
           seconds={state.draft.k6}
+          seed={SEED_K6}
           onType={(v) => setState((s) => setDraft(s, "k6", v))}
+          onNudge={(d) => setState((s) => nudge(s, "k6", d))}
           className="baseline-input"
         />
       </div>

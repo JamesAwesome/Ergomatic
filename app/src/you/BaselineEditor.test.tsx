@@ -102,20 +102,24 @@ describe("BaselineEditor", () => {
     expect(screen.queryByText(/→/)).not.toBeInTheDocument();
   });
 
-  it("seeds sensible starting values and prompts the rower when baselines are unset", async () => {
+  // The honest-empty round (2026-08-24, James's report): the seeds used to
+  // render as the fields' VALUES, in the same accent ink a saved baseline
+  // gets, so a number the app invented was indistinguishable from one the
+  // rower had rowed. They are PLACEHOLDERS now — the field is empty.
+  it("leaves an unset baseline EMPTY, showing the seed only as a placeholder — never as a value the rower never gave", async () => {
     const save = mockReady({ k2Seconds: null, k6Seconds: null });
     await renderEditor();
 
-    expect(screen.getByText(/starting point/i)).toBeInTheDocument();
+    expect(screen.getByText(/No baselines yet/i)).toBeInTheDocument();
     // The seeds are the estimate table's most-common cell (2:25 / 2:32),
     // not the old club-rower 112/122 pair — the PR C constants
     // reconciliation; domain/estimateBaseline.test.ts pins the derivation.
-    expect(screen.getByRole("textbox", { name: "2k split" })).toHaveValue(
-      "2:25.0",
-    );
-    expect(screen.getByRole("textbox", { name: "6k split" })).toHaveValue(
-      "2:32.0",
-    );
+    const k2 = screen.getByRole("textbox", { name: "2k split" });
+    const k6 = screen.getByRole("textbox", { name: "6k split" });
+    expect(k2).toHaveValue("");
+    expect(k2).toHaveAttribute("placeholder", "2:25.0");
+    expect(k6).toHaveValue("");
+    expect(k6).toHaveAttribute("placeholder", "2:32.0");
     // Neither side is a known real value here (both null) — deriving one
     // from the other would mean deriving from a made-up seed, so the offer
     // must not appear at all (ui-notes round, item 2's "exactly one side
@@ -138,6 +142,47 @@ describe("BaselineEditor", () => {
     // provenance — a typed edit is a manual entry ("233" -> 2:33 = 153s).
     expect(save).toHaveBeenCalledTimes(1);
     expect(save).toHaveBeenCalledWith({ k6Seconds: 153, k6Source: "manual" });
+  });
+
+  // The one-control round: the You editor had NO steppers — a rower who
+  // learned minus/plus on door 1 found nothing here. Both sides, because
+  // each field wires its own handler (the 6k arm went uncovered until this
+  // existed, and a mutation isolated to it would have survived).
+  it("nudges an already-saved 2k by half a second and Apply writes the nudged number", async () => {
+    const save = mockReady();
+    await renderEditor();
+
+    await userEvent.click(screen.getByRole("button", { name: "2k faster" }));
+
+    expect(screen.getByRole("textbox", { name: "2k split" })).toHaveValue(
+      "1:51.5",
+    );
+    expect(screen.getByText("2k 1:52.0 → 1:51.5")).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /apply baselines/i }),
+    );
+    expect(save).toHaveBeenCalledExactlyOnceWith({
+      k2Seconds: 111.5,
+      k2Source: "manual",
+    });
+  });
+
+  it("nudges the 6k side too, its own handler and its own confirm line", async () => {
+    const save = mockReady();
+    await renderEditor();
+
+    await userEvent.click(screen.getByRole("button", { name: "6k slower" }));
+
+    expect(screen.getByText("6k 2:02.0 → 2:02.5")).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /apply baselines/i }),
+    );
+    expect(save).toHaveBeenCalledExactlyOnceWith({
+      k6Seconds: 122.5,
+      k6Source: "manual",
+    });
   });
 
   it("keeps the draft and surfaces an error when save is rejected", async () => {
@@ -233,19 +278,76 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
 
     // 122 - 7 = 115s/500m = 1:55.0, replacing the SEED_K2 starting point
     // (145 = 2:25.0) the confirm line's "from" side still names.
-    expect(screen.getByText("2k 2:25.0 → 1:55.0")).toBeInTheDocument();
+    expect(screen.getByText("2k Not set → 1:55.0")).toBeInTheDocument();
     expect(save).not.toHaveBeenCalled();
   });
 
-  it("declining is simply not tapping it: the confirm block stays absent and the seeded value stands", async () => {
+  it("declining is simply not tapping it: the confirm block stays absent and the 2k side stays empty", async () => {
     mockReady({ k2Seconds: null, k6Seconds: 122 });
     await renderEditor();
 
     expect(screen.queryByText(/→/)).not.toBeInTheDocument();
-    // The SEED_K2 starting point (145 -> 2:25.0), never the derived 1:55.0.
+    // Nothing was accepted, so nothing is claimed: the field is empty with
+    // the SEED_K2 suggestion (2:25.0) as a placeholder, never the derived
+    // 1:55.0 and never the seed as a value.
+    const k2 = screen.getByRole("textbox", { name: "2k split" });
+    expect(k2).toHaveValue("");
+    expect(k2).toHaveAttribute("placeholder", "2:25.0");
+  });
+
+  // THE HALF-SET ACCOUNT, the second half of James's report: the only
+  // "unset" marker used to be an 11px prose line shown when BOTH sides
+  // were null, so a rower with one real baseline got no marker at all on
+  // the fabricated side — it simply read as a second saved number.
+  it("reads correctly half-set: the rowed 6k is a filled value, the never-rowed 2k is empty", async () => {
+    mockReady({ k2Seconds: null, k6Seconds: 122 });
+    await renderEditor();
+
+    expect(screen.getByRole("textbox", { name: "6k split" })).toHaveValue(
+      "2:02.0",
+    );
+    expect(
+      screen.getByRole("textbox", { name: "6k split" }),
+    ).not.toHaveAttribute("placeholder");
+    expect(screen.getByRole("textbox", { name: "2k split" })).toHaveValue("");
+  });
+
+  // The unified control, on the surface that had no steppers at all.
+  it("the steppers work here too: the first tap on the empty 2k materialises its seed exactly, and Apply saves that number", async () => {
+    const save = mockReady({ k2Seconds: null, k6Seconds: 122 });
+    await renderEditor();
+
+    await userEvent.click(screen.getByRole("button", { name: "2k faster" }));
+
+    // The seed itself (145 = 2:25.0), NOT 144.5: a rower reaching for −
+    // on an empty field is starting from the suggestion, not stepping past
+    // it. The value is now the rower's, so it saves as manual.
     expect(screen.getByRole("textbox", { name: "2k split" })).toHaveValue(
       "2:25.0",
     );
+    expect(screen.getByText("2k Not set → 2:25.0")).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /apply baselines/i }),
+    );
+    expect(save).toHaveBeenCalledExactlyOnceWith({
+      k2Seconds: 145,
+      k2Source: "manual",
+    });
+  });
+
+  // RECURRING FAILURE 4, and the wire discipline the brief calls out: the
+  // seed must stay unsendable. Touch NOTHING, Apply is not even reachable
+  // — and the derive offer, whose own eligibility depends on 2k staying
+  // server-null, is still standing.
+  it("an untouched seed is never sendable: with nothing touched there is no Apply at all", async () => {
+    const save = mockReady({ k2Seconds: null, k6Seconds: 122 });
+    await renderEditor();
+
+    expect(
+      screen.queryByRole("button", { name: /apply baselines/i }),
+    ).not.toBeInTheDocument();
+    expect(save).not.toHaveBeenCalled();
   });
 
   it("the filled value is an ordinary draft edit: typing still adjusts it afterward", async () => {
@@ -257,7 +359,7 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
     );
     await typeSplit("2k split", "154");
 
-    expect(screen.getByText("2k 2:25.0 → 1:54.0")).toBeInTheDocument();
+    expect(screen.getByText("2k Not set → 1:54.0")).toBeInTheDocument();
   });
 
   it("Apply round-trips the derived value through the real save path, stamped derived — the case the per-number provenance ruling exists for", async () => {
@@ -457,7 +559,7 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
 
       // The 6k line names the real edit; no 2k line exists anywhere on
       // screen, even though 2k is ALSO displayed (at its seed) elsewhere.
-      expect(screen.getByText("6k 2:32.0 → 2:33.0")).toBeInTheDocument();
+      expect(screen.getByText("6k Not set → 2:33.0")).toBeInTheDocument();
       expect(screen.queryByText(/^2k .* → /)).not.toBeInTheDocument();
     });
 
@@ -577,7 +679,7 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
 
       await typeSplit("2k split", "224");
       // The typed entry is the only edit made — "224" -> 2:24 = 144s.
-      expect(screen.getByText("2k 2:25.0 → 2:24.0")).toBeInTheDocument();
+      expect(screen.getByText("2k Not set → 2:24.0")).toBeInTheDocument();
       // No offer button exists anywhere to click, so there is no remaining
       // path to the overwrite the finding describes — asserted by absence
       // (docs/TESTING.md's own "invoke it and assert the consequence" rule

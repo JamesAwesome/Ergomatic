@@ -18,7 +18,7 @@ function Harness({
   initial = 145,
   onType,
 }: {
-  initial?: number;
+  initial?: number | null;
   onType?: (v: number) => void;
 }) {
   const [state, setState] = useState<DraftState>(() => initDraft(initial, 152));
@@ -26,6 +26,7 @@ function Harness({
     <SplitInput
       label="2k"
       seconds={state.draft.k2}
+      seed={145}
       onType={(v) => {
         onType?.(v);
         setState((s) => setDraft(s, "k2", v));
@@ -157,5 +158,52 @@ describe("SplitInput (typed split entry)", () => {
     // abandoned clear stays visible (and discardable at the editor's
     // confirm card), never a silent revert pretending nothing happened.
     expect(field).toHaveValue("1:00.0");
+  });
+});
+
+// The honest-empty round (2026-08-24, James's report): an UNSET baseline
+// used to be impossible to render, because `seconds` was non-nullable —
+// the seed was pushed in as the VALUE and painted in the same accent ink a
+// saved number gets. True placeholder semantics: an unset side is an EMPTY
+// field whose placeholder is the seed, in --ink-4 (5.29:1 on --surface,
+// computed).
+describe("SplitInput with an unset baseline (the honest-empty round)", () => {
+  it("renders EMPTY with the seed as its placeholder — a suggestion the rower can read but has not agreed to", () => {
+    render(<Harness initial={null} />);
+    const field = screen.getByRole("textbox", { name: "2k split" });
+    expect(field).toHaveValue("");
+    expect(field).toHaveAttribute("placeholder", "2:25.0");
+  });
+
+  it("keeps showing the seed as placeholder after a focus that types nothing — leaving an empty field still commits nothing", async () => {
+    const onType = vi.fn();
+    render(<Harness initial={null} onType={onType} />);
+    const field = screen.getByRole("textbox", { name: "2k split" });
+    await userEvent.click(field);
+    expect(field).toHaveValue("");
+    expect(field).toHaveAttribute("placeholder", "2:25.0");
+    await userEvent.tab();
+    expect(onType).not.toHaveBeenCalled();
+    expect(field).toHaveValue("");
+  });
+
+  it("typing into an empty field fills it and it stops being empty — the value the rower typed, not the seed", async () => {
+    const onType = vi.fn();
+    render(<Harness initial={null} onType={onType} />);
+    const field = screen.getByRole("textbox", { name: "2k split" });
+    await userEvent.type(field, "158");
+    expect(onType).toHaveBeenLastCalledWith(118);
+    await userEvent.tab();
+    expect(field).toHaveValue("1:58.0");
+    // Now that it holds a real value, the resting field has no placeholder
+    // to fall back to — the dim seed is gone for good on this side.
+    expect(field).not.toHaveAttribute("placeholder");
+  });
+
+  it("a SET field rests with no placeholder at all — dim means 'not a value', so a saved number must never show one", () => {
+    render(<Harness initial={112} />);
+    const field = screen.getByRole("textbox", { name: "2k split" });
+    expect(field).toHaveValue("1:52.0");
+    expect(field).not.toHaveAttribute("placeholder");
   });
 });

@@ -47,21 +47,22 @@
    is a navigation Link styled with Today's `.today-unlogged-discard`
    idiom, which is itself already covered below via the bare `button`
    selector for its ORIGINAL button usage; this entry is only needed for
-   the Link usage. The baseline/onboarding value displays and labels
-   (split-entry round, 2026-08-23 — James: rapid-tapping the old steppers
-   kept selecting the value text): `span.baseline-value` is qualified like
-   `span.stepper-value` (the adjust step's stepper-adjacent display span —
-   the typed `.split-input` fields are real inputs and stay selectable),
-   and `.baseline-label`/`.onb-field-label`/`.onb-field-unit`/
+   the Link usage. The baseline/onboarding labels (split-entry round,
+   2026-08-23 — James: rapid-tapping the old steppers kept selecting the
+   value text): `.baseline-label`/`.onb-field-label`/`.onb-field-unit`/
    `.onb-offer-label`/`.onb-offer-value` are the labels and static values
    sitting flush against tappable fields and steppers on the same
-   surfaces. */
+   surfaces. `span.baseline-value` left this list with the component that
+   rendered it (BaselineRow, retired 2026-08-24 when all three baseline
+   surfaces moved to the one `BaselineField` control) — every baseline
+   value is a real `.split-input` now, and inputs stay selectable, while
+   the ± cells are plain `<button>`s already covered by the bare selector
+   at the top of this list. */
 button,
 [role="radio"],
 .chip,
 .workout-row,
 span.stepper-value,
-span.baseline-value,
 .baseline-label,
 .onb-field-label,
 .onb-field-unit,
@@ -1450,72 +1451,136 @@ button.back-link:disabled,
   text-transform: uppercase;
 }
 
-.baseline-value {
-  font-family: var(--font-mono);
-  font-size: 32px;
-  color: var(--accent);
-  flex: 1;
-  text-align: center;
-}
-
-.baseline-steppers {
+/* -- The unified baseline field (BaselineField.tsx, 2026-08-24) --------
+   `[−][typable split][+]` — ONE control on all three baseline surfaces
+   (the You editor's rows, door 2's /onboarding/know, door 1's adjust
+   step), replacing the split affordances James reported: two surfaces
+   that could only be typed into and one that could only be nudged. The
+   visual is the house's shipped `.stepper` (the builder's control, the
+   "Stepper pattern" paragraph in docs/design/builder-redesign/README.md)
+   — one joined container, 44×44 `−`/`+` cells, a value cell between them
+   carrying the side borders. The ink border and the accent focus ring
+   move here from `.split-input`, which is now an inner cell with no
+   chrome of its own.
+   `align-items: stretch` (not `.stepper`'s `center`): the value cell's
+   own side rules then run the full height of the control, and a surface
+   that wants a taller field — door 2's 56px box — gets it by raising the
+   GROUP's min-height, with the buttons growing to match rather than
+   floating in the middle of it. */
+.baseline-field {
   display: flex;
-  gap: 8px;
+  align-items: stretch;
+  flex: 1;
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--ink);
+  border-radius: var(--radius);
+  overflow: hidden;
 }
 
-.baseline-stepper {
-  min-width: var(--tap);
+/* Focus ring: border swaps to accent and a 1px inset outline doubles it
+   to the canvas's 2px treatment without any layout shift. On the GROUP,
+   via :focus-within, so tabbing to either stepper or into the field
+   lights the same one control. */
+.baseline-field:focus-within {
+  border-color: var(--accent);
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.baseline-field-btn {
+  flex: 0 0 var(--tap);
+  width: var(--tap);
   min-height: var(--tap);
   background: transparent;
-  border: 1px solid var(--rule-3);
+  border: none;
+  color: var(--ink);
+  font-family: var(--font-mono);
   font-size: 20px;
   line-height: 1;
   cursor: pointer;
-  color: var(--ink);
+}
+
+.baseline-field-btn:hover {
+  background: var(--surface-sunken);
+}
+
+/* A dead-end direction at MIN_SPLIT/MAX_SPLIT. `aria-disabled`, never
+   `disabled`: the button keeps focus and its place in the tab order (a
+   real `disabled` drops focus to the document mid-interaction), so only
+   the ink says "nothing that way". --ink-4 on --surface computes 5.29:1,
+   clearing AA — a dimmed glyph here is still readable text, not a hint. */
+.baseline-field-btn[aria-disabled="true"] {
+  color: var(--ink-4);
+  cursor: default;
+}
+
+.baseline-field-btn[aria-disabled="true"]:hover {
+  background: transparent;
+}
+
+/* The value cell — the input, plus whatever unit the surface hangs
+   beside it (door 2's /500m). Owns the joined control's inner rules, the
+   same way `.stepper-value` does. */
+.baseline-field-value {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  padding: 0 8px;
+  border-left: 1px solid var(--rule-2);
+  border-right: 1px solid var(--rule-2);
 }
 
 /* -- Option T typed split entry (SplitInput.tsx, 2026-08-23) ----------
-   Both split-ENTRY surfaces type now (the You editor's rows and door 2's
-   /onboarding/know); the recommendation flow's adjust step keeps the
-   stepper family above. Base metrics here; each surface's own class
-   (`.baseline-input`, `.onb-field-input`) shapes the box it sits in.
-   Accent value ink like the `.baseline-value` span it replaces —
-   #b5341f on --surface computes 5.94:1, clearing AA at any size. The
-   ink border is what says "tappable field" where the steppers used to.
-   font-size never below 16px (the iOS focus-zoom guard at the top of
-   this file). */
+   The value cell of `.baseline-field` above, which owns the box, the
+   border and the focus ring — so this element carries none of its own
+   (the same arrangement `.stepper-value-input` has inside `.stepper`,
+   and `border-radius: 0` for the same reason: the global
+   `button, input { border-radius: var(--radius); }` reset at the top of
+   this file would otherwise round an inner cell of an already-rounded
+   container). Accent value ink — #b5341f on --surface computes 5.94:1,
+   clearing AA at any size. font-size never below 16px (the iOS
+   focus-zoom guard at the top of this file); each surface's own class
+   (`.baseline-input`, `.onb-field-input`) sizes it up from there. */
 .split-input {
   min-height: var(--tap);
-  border: 1px solid var(--ink);
-  border-radius: var(--radius);
-  background: var(--surface);
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
   color: var(--accent);
   font-family: var(--font-mono);
   font-size: 16px;
   text-align: center;
 }
 
-/* Focus ring: border swaps to accent and a 1px inset outline doubles it
-   to the canvas's 2px treatment without any layout shift. */
+/* The ring lives on the group (:focus-within above), not the input. */
 .split-input:focus {
-  border-color: var(--accent);
-  outline: 1px solid var(--accent);
-  outline-offset: -1px;
+  outline: none;
 }
 
-/* The pre-focus value shown while the cleared field waits for digits.
-   ink-4 on --surface: 5.29:1 (the shared ::placeholder computation in
-   the stepper section). opacity 1 overrides Firefox's default fade. */
+/* Two things wear this, and the honest-empty round (2026-08-24) added
+   the second: the value the field held before a tap (so clearing-on-
+   focus never reads as data loss), and the SEED on an UNSET side — a
+   suggestion the rower can read without the field claiming it. That is
+   the whole distinction James reported missing: empty-and-dim versus
+   filled-and-accent, structural rather than a shade.
+   --ink-4 on --surface: 5.29:1, computed (the shared ::placeholder
+   computation in the stepper section). opacity 1 overrides Firefox's
+   default 54% fade, which would otherwise undercut that ratio. */
 .split-input::placeholder {
   color: var(--ink-4);
   opacity: 1;
 }
 
-/* The You editor's row field — fills the space between the "2k"/"6k"
-   label and the card edge where the value span + steppers used to sit. */
+/* The You editor's row field (and door 1's adjust step, which uses the
+   same row shape) — fills the space between the "2k"/"6k" label and the
+   card edge. */
 .baseline-input {
-  flex: 1;
-  min-width: 0;
   font-size: 24px;
 }
 
@@ -8127,10 +8192,13 @@ section:not(.news-pinned) .news-row:last-of-type {
   line-height: 1.45;
 }
 
-/* Door 2's typed split fields (canvas OptionTypeIt): mono label over a
-   boxed field — the box owns the chrome (border, focus ring) so the
-   input inside can sit flush beside its /500m unit; `.onb-field-input`
-   strips the `.split-input` base box accordingly. */
+/* Door 2's split fields (canvas OptionTypeIt): mono label over the
+   unified `.baseline-field` control, which owns the chrome (border,
+   focus ring) so the input inside can sit flush beside its /500m unit.
+   The bespoke `.onb-field-box` this door used to draw is gone — one
+   control, one box, all three baseline surfaces (2026-08-24). The 56px
+   the old box carried survives on the group, so the door's field is
+   still the roomiest of the three and its steppers grow to match. */
 .onb-field {
   display: flex;
   flex-direction: column;
@@ -8141,36 +8209,13 @@ section:not(.news-pinned) .news-row:last-of-type {
   letter-spacing: 0.16em;
 }
 
-.onb-field-box {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.onb-field .baseline-field {
   min-height: 56px;
-  background: var(--surface);
-  border: 1px solid var(--ink);
-  border-radius: var(--radius);
-  padding: 0 14px;
-}
-
-.onb-field-box:focus-within {
-  border-color: var(--accent);
-  outline: 1px solid var(--accent);
-  outline-offset: -1px;
 }
 
 .onb-field-input {
-  flex: 1;
-  min-width: 0;
-  border: 0;
-  background: transparent;
   font-size: 28px;
   text-align: left;
-  padding: 0;
-}
-
-/* The ring lives on the box (:focus-within above), not the input. */
-.onb-field-input:focus {
-  outline: none;
 }
 
 .onb-field-unit {
