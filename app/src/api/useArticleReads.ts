@@ -75,8 +75,7 @@ export function useArticleReads(): ArticleReadsState {
       // with a `readSlugs` field) — not reachable at runtime today, since
       // this hook's own effect runs exactly once (`[]` deps, no retry) and
       // so has no path that could ever move `state` away from "ready" once
-      // entered. Same shape (and same reasoning) as usePreferences.ts's
-      // `save`.
+      // entered.
       setState((prev) =>
         prev.state !== "ready" ? prev : { ...prev, readSlugs: next },
       );

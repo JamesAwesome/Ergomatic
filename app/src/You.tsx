@@ -1,9 +1,6 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import type { Me } from "./useMe";
 import { signOut as authSignOut } from "./adapters/auth";
-import { useArticleReads } from "./api/useArticleReads";
-import { startHereReadCount } from "./today/startHereSteps";
 import BaselineEditor from "./you/BaselineEditor";
 import ResetBaselineSetup from "./you/ResetBaselineSetup";
 import RetestShortcut from "./you/RetestShortcut";
@@ -24,16 +21,11 @@ export default function You({
   user: Me;
   onSignedOut: () => void;
 }) {
-  const reads = useArticleReads();
   // Phase BL PR C: bumped by Reset baseline setup's successful clear —
   // remounts BaselineEditor (key below) so its draft re-seeds from the
   // now-empty server state instead of keeping the cleared numbers on
   // screen as if they still existed.
   const [resetGeneration, setResetGeneration] = useState(0);
-  // `null` (not 0) whenever read state isn't known — the meta renders bare
-  // "START HERE" with no count in that case, the same suppression rule
-  // StartHere.tsx's own header uses (startHereSteps.ts's shared helper).
-  const readCount = startHereReadCount(reads);
 
   return (
     <main className="screen">
@@ -69,25 +61,13 @@ export default function You({
           2's Reset onboarding ruling). Sits with the BASELINES section it
           destroys, below the shortcut. */}
       <ResetBaselineSetup onReset={() => setResetGeneration((g) => g + 1)} />
-      {/* Task 7 (design spec §"Learning the app on You"): the mock's other
-          settings rows (PRE-WORKOUT COUNTDOWN, PACE TOLERANCE, ACCENT
-          COLOR) are filler (DEVIATIONS.md/handoff README §7) and are
-          deliberately not built. WARM-UP used to be the one exception —
-          a fully-specified control (README §11) built for real, not
-          filler — but Phase WU (2026-08-21) removed the setting; "Learning
-          the app" below is a real row of its own, unrelated to any of
-          this. */}
-      <h2 className="section-heading">SETTINGS</h2>
-      <Link
-        to="/you/learning"
-        state={{ from: "/you" }}
-        className="you-settings-row"
-      >
-        <span className="you-settings-row-title">Learning the app</span>
-        <span className="you-settings-row-meta mono-status">
-          START HERE{readCount !== null ? ` · ${readCount} OF 4` : ""}
-        </span>
-      </Link>
+      {/* No SETTINGS section: the mock's settings rows (PRE-WORKOUT
+          COUNTDOWN, PACE TOLERANCE, ACCENT COLOR) are filler
+          (DEVIATIONS.md/handoff README §7) and are deliberately not
+          built; the two rows that WERE real are both since removed —
+          WARM-UP by Phase WU (2026-08-21), and "Learning the app" by
+          James's 2026-08-23 ruling (the teaching lives in News's pinned
+          articles alone now). */}
     </main>
   );
 }

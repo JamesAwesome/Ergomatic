@@ -33,8 +33,8 @@ function safeTrail(value: unknown): string[] {
  *
  * Both keys ride the same `location.state` a `<Link>` navigated here with
  * — `{ trail, origin }`, written by Reader's own NEXT link and
- * ArticleLink's cross-link hop (both PUSH). Today/News's own entry links
- * (`startHereSteps.tsx`'s `StepRow`, `News.tsx`'s `ArticleRow`) still send
+ * ArticleLink's cross-link hop (both PUSH). News's own entry links
+ * (`News.tsx`'s `ArticleRow`) still send
  * only the legacy single `from` key — read here as an implicit
  * ONE-element trail, so the very first hop away still has something to
  * retrace to. `origin` defaults to `back` (the trail's own last element)

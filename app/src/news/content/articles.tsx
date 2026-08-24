@@ -27,7 +27,8 @@ import { NotationBody } from "./bodies/notation";
 // your-first-row 216 words -> 2 min, connect-the-monitor 190 words -> 2
 // min — the design spec's own "~3 min" estimate for connect-the-monitor
 // (written before the prose existed) is superseded by this real count;
-// `StartHere.tsx`'s hardcoded minutes were updated to match. Recounted
+// `StartHere.tsx`'s hardcoded minutes were updated to match (that file is
+// deleted since James's 2026-08-23 teaching-surfaces removal). Recounted
 // after the disconnect paragraph's redraft (same day, controller fix): 217
 // words -> still 2 min, no further changes needed. ui-notes round
 // (2026-08-09, item 3's two prose surgeries): your-first-row's replaced
@@ -35,7 +36,7 @@ import { NotationBody } from "./bodies/notation";
 // both grew their bodies — recounted at 256 words (your-first-row) and 476
 // words (baselines, body + the IN THE APP aside together); both stay at
 // their existing `minutes` value above (ceil(256/180)=2, ceil(476/180)=3),
-// no registry or `StartHere.tsx` change needed this round. Phase BL PR C
+// no registry change needed this round. Phase BL PR C
 // (2026-08-23): your-first-row rewritten for the three doors (the single
 // "row 6k and it sets your baseline" story was a shipped lie — nothing
 // wrote a baseline until PR B's post-save offer) — recounted at 288
@@ -88,11 +89,19 @@ export const ARTICLES: NewsArticle[] = [
     body: <PainScaleBody />,
   },
   {
+    // PINNED per James (2026-08-23): the START HERE block on Today, the
+    // You › Learning the app screen, and News's own dismissed-only
+    // Start-here pin are all removed — News's pinned shelf carries the
+    // teaching ALONE now, and this is its entry article (the old block's
+    // step 1). Registry POSITION unchanged, per the registry-order rule
+    // above; it renders between workout-types and reading-the-shorthand.
+    // This uses the shelf's last seat (the ≤3 cap, handoff open question
+    // #2 — articles.test.tsx asserts it).
     slug: "your-first-row",
     title: "Your first row",
     minutes: 2,
     kind: "first-party",
-    pinned: false,
+    pinned: true,
     publishedAt: "2026-08-08",
     body: <YourFirstRowBody />,
   },

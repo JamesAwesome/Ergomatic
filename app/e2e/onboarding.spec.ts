@@ -1,28 +1,25 @@
 import { test, expect, type Page } from "@playwright/test";
 import { RUN_ID, signInViaBackdoor } from "./helpers";
 
-// Phase 6I Task 8, rebuilt for Phase BL PR C's three doors: the whole
-// fresh-user onboarding arc against the real stack — block + DOORS card
-// on Today, a cross-surface read advancing the count, then DOOR 3 walked
-// end to end (doors -> RowPath -> the 6K Test's DETAIL screen -> Start
-// Timer -> Countdown -> Timer -> Log -> Save), landing in PR B's
+// Phase 6I Task 8, rebuilt for Phase BL PR C's three doors, then cut
+// down by James's 2026-08-23 ruling (the START HERE block, You › Learning
+// the app, and News's dismissed-only pin are all REMOVED — News's pinned
+// articles carry the teaching alone): the fresh-user onboarding arc
+// against the real stack — the DOORS card leading Today, then DOOR 3
+// walked end to end (doors -> RowPath -> the 6K Test's DETAIL screen ->
+// Start Timer -> Countdown -> Timer -> Log -> Save), landing in PR B's
 // post-save offer whose accept + derived-counterpart accept is what
 // finally completes the pair — the plan/suggestion apparatus returning
-// once it does, DISMISS, the News pin, and the /you/learning round-trip
-// (PUT IT BACK, MARK ALL FOUR UNREAD). One long test, deliberately: every
-// step depends on the state the previous one left (the read count carried
-// through to the pin's own meta line, the dismissed flag carried through
-// to the News pin's very existence) — splitting it into independent tests
-// would mean re-deriving that state at each boundary instead of proving
-// the real, continuous journey a fresh rower actually takes. Doors 1 and
-// 2 and Reset baseline setup get their own tests below (their state needs
-// differ: door 1 wants a wire capture, reset wants a set pair).
+// once it does. One long test, deliberately: every step depends on the
+// state the previous one left. Doors 1 and 2 and Reset baseline setup get
+// their own tests below (their state needs differ: door 1 wants a wire
+// capture, reset wants a set pair).
 //
 // `RUN_ID` (news.spec.ts's own convention, its own comment explains why):
-// this test asserts ABSOLUTE read/unread counts at a specific step, and the
-// compose stack's Postgres volume persists across back-to-back `pnpm e2e`
-// invocations — a fixed email would carry read state from a prior run into
-// this one and make "1 OF 4 READ" a lie on the second pass.
+// the arc's post-save offer WRITES both baselines, and the compose
+// stack's Postgres volume persists across back-to-back `pnpm e2e`
+// invocations — a fixed email would carry the set pair from a prior run
+// into this one and never see the doors at all on the second pass.
 
 // The two designated onboarding titles (domain/onboarding.ts's
 // ONBOARDING_TITLES) — hardcoded here rather than imported, matching every
@@ -99,8 +96,8 @@ async function resetPlanProgress(page: Page): Promise<void> {
   }
 }
 
-test.describe("Phase 6I: Today onboarding — the fresh-user arc", () => {
-  test("block + doors -> cross-surface read -> door 3 rowed end to end -> the offer completes the pair -> apparatus returns -> dismiss/pin/You round-trip", async ({
+test.describe("Today onboarding — the fresh-user arc", () => {
+  test("doors lead Today -> door 3 rowed end to end -> the offer completes the pair -> apparatus returns", async ({
     page,
   }) => {
     await signInViaBackdoor(page, {
@@ -112,19 +109,21 @@ test.describe("Phase 6I: Today onboarding — the fresh-user arc", () => {
     await choosePlan(page, "sprint");
     await resetPlanProgress(page);
 
-    // -- fresh user: START HERE (0 OF 4, reads loaded) + the no-baseline
-    //    card, defaulted to the 6k, plan/suggestion apparatus entirely gone.
+    // -- fresh user: the three-door card LEADS the screen (James's
+    //    2026-08-23 ruling took the START HERE teaching block off Today;
+    //    nothing sits between the h1 and the card now), plan/suggestion
+    //    apparatus entirely gone.
     await page.goto("/today");
-    await expect(page.locator(".starthere-block")).toBeVisible();
-    await expect(page.locator(".starthere-label")).toHaveText(
-      "START HERE · 0 OF 4 READ",
-    );
-    await expect(page.locator(".starthere-steps .starthere-row")).toHaveCount(
-      4,
-    );
-
     const card = page.locator(".doorscard");
     await expect(card).toBeVisible();
+    // The card is the FIRST thing after the screen's own <h1> — red if
+    // any teaching block is ever restored above it.
+    await expect(page.locator("main.screen > :nth-child(1)")).toHaveClass(
+      /screen-title/,
+    );
+    await expect(page.locator("main.screen > :nth-child(2)")).toHaveClass(
+      /doorscard/,
+    );
     await expect(card.locator(".doorscard-label")).toHaveText(
       "SET UP YOUR BASELINE",
     );
@@ -152,33 +151,6 @@ test.describe("Phase 6I: Today onboarding — the fresh-user arc", () => {
     await expect(page.getByRole("button", { name: "FILTER ⌄" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "SHUFFLE ↻" })).toHaveCount(
       0,
-    );
-
-    // -- cross-surface read: reading "baselines" from News legitimately
-    //    advances the SAME count Today's block shows (the spec's own
-    //    "linking rather than restating" principle) — no restating needed.
-    await page.goto("/news");
-    await expect(page.locator(".news-unread-count")).toHaveText("7 UNREAD");
-    await page.locator('a.news-row[href="/news/baselines"]').click();
-    await expect(page).toHaveURL(/\/news\/baselines$/);
-    await expect(page.locator(".reader-body")).toBeVisible();
-
-    // Back to Today via IN-APP navigation (the tab link), not `page.goto`
-    // (a hard reload): Reader.tsx's own `markRead` PUT fires from a mount
-    // useEffect, fire-and-forget with no on-screen completion signal — a
-    // hard navigation right after opening the article can outrace or abort
-    // that still-in-flight request (found by this test's own first full-
-    // suite run: an intermittent "0 OF 4 READ" one nav later). Staying
-    // in-SPA keeps the same JS execution context (and therefore the same
-    // in-flight fetch) alive across the trip, the same reason news.spec.ts's
-    // own read test uses "← BACK" rather than `page.goto("/news")` to return.
-    await page
-      .locator('nav[aria-label="Main"]')
-      .getByRole("link", { name: "TODAY" })
-      .click();
-    await expect(page).toHaveURL(/\/today$/);
-    await expect(page.locator(".starthere-label")).toHaveText(
-      "START HERE · 1 OF 4 READ",
     );
 
     // -- DOOR 3: the doors card -> RowPath (canvas copy, incl. the ruled
@@ -320,98 +292,6 @@ test.describe("Phase 6I: Today onboarding — the fresh-user arc", () => {
     await expect(page.locator(".today-plan-line")).toContainText(
       "SESSION 1 OF 84",
     );
-
-    // -- DISMISS: immediate, no staged confirm.
-    await expect(page.locator(".starthere-block")).toBeVisible();
-    await page.getByRole("button", { name: "DISMISS" }).click();
-    await expect(page.locator(".starthere-block")).toHaveCount(0);
-
-    // -- the News pin appears only now, carrying the SAME read count
-    //    (1 OF 4) the block itself showed all along. Via the tab link (SPA
-    //    nav), not `page.goto` — DISMISS's own `preferences.save` is the
-    //    SAME fire-and-forget shape `markRead` is (usePreferences.ts's own
-    //    comment: "optimistic value may revert on next load"), so a hard
-    //    reload right after clicking it risks the identical outrace this
-    //    file's earlier cross-surface-read step already hit once.
-    await page
-      .locator('nav[aria-label="Main"]')
-      .getByRole("link", { name: "NEWS" })
-      .click();
-    await expect(page).toHaveURL(/\/news$/);
-    const pin = page.locator("a.news-pin-starthere");
-    await expect(pin).toBeVisible();
-    await expect(pin.locator(".news-row-title")).toHaveText(
-      "Start here, in four steps",
-    );
-    await expect(pin.locator(".news-row-meta")).toHaveText(
-      "1 OF 4 READ · DISMISSED ON TODAY",
-    );
-
-    await pin.click();
-    await expect(page).toHaveURL(/\/you\/learning$/);
-    await expect(
-      page.getByRole("heading", { name: "Learning the app" }),
-    ).toBeVisible();
-    await expect(page.locator(".learning-progress-count")).toHaveText(
-      "1 OF 4 READ",
-    );
-    await expect(page.locator(".learning-status-line")).toHaveText(
-      "DISMISSED ON TODAY · STILL PINNED IN NEWS",
-    );
-
-    // -- PUT IT BACK ON TODAY: restores the block, read state untouched.
-    await page.getByRole("button", { name: "PUT IT BACK ON TODAY" }).click();
-    await expect(page.locator(".learning-status-line")).toHaveCount(0);
-    await expect(
-      page.getByRole("button", { name: "PUT IT BACK ON TODAY" }),
-    ).toHaveCount(0);
-    // Same fire-and-forget-save reasoning as DISMISS above — the tab link,
-    // not `page.goto`.
-    await page
-      .locator('nav[aria-label="Main"]')
-      .getByRole("link", { name: "TODAY" })
-      .click();
-    await expect(page).toHaveURL(/\/today$/);
-    await expect(page.locator(".starthere-block")).toBeVisible();
-
-    // -- MARK ALL FOUR UNREAD (staged, tap-again idiom): un-reads every
-    //    step slug AND clears the dismissed flag (a no-op here — already
-    //    put back) — cross-surface consequence, pinned end to end: the
-    //    count drops to 0 here on /you/learning, "baselines" un-greys back
-    //    on News, and News's own unread count rises.
-    await page.goto("/you/learning");
-    await expect(page.locator(".learning-progress-count")).toHaveText(
-      "1 OF 4 READ",
-    );
-    const markAllUnread = page.getByRole("button", {
-      name: "MARK ALL FOUR UNREAD",
-    });
-    await markAllUnread.click();
-    await expect(page.getByRole("button", { name: "TAP AGAIN" })).toBeVisible();
-    await page.getByRole("button", { name: "TAP AGAIN" }).click();
-    await expect(page.locator(".learning-progress-count")).toHaveText(
-      "0 OF 4 READ",
-    );
-
-    // Same fire-and-forget reasoning again — MARK ALL FOUR UNREAD fires
-    // four `markUnread` DELETEs plus a `preferences.save`, none awaited by
-    // the click handler; the tab link keeps them alive across the trip.
-    await page
-      .locator('nav[aria-label="Main"]')
-      .getByRole("link", { name: "NEWS" })
-      .click();
-    await expect(page).toHaveURL(/\/news$/);
-    // Un-greyed: "baselines" reads unread again, and the count rises back
-    // from 5 (after the earlier read) to 6 (this account's full, untouched
-    // registry) — a real reversal, not merely "still shows 6 because
-    // nothing else was ever read."
-    await expect(page.locator(".news-unread-count")).toHaveText("7 UNREAD");
-    await expect(
-      page.locator('a.news-row[href="/news/baselines"]'),
-    ).toHaveAttribute("data-read", "false");
-    // Un-dismissed too (idempotent here — PUT IT BACK already cleared it):
-    // the pin itself is gone, since it renders only while dismissed.
-    await expect(page.locator("a.news-pin-starthere")).toHaveCount(0);
   });
 });
 

@@ -53,7 +53,7 @@ test("tab order: TODAY · NEWS · LIBRARY · PLAN · YOU, TREND gone", async ({
   expect(labels).toEqual(["TODAY", "NEWS", "LIBRARY", "PLAN", "YOU"]);
 });
 
-test("News at rest: 7 UNREAD, two pinned rows, five latest rows, WHAT'S NEW shows the latest version", async ({
+test("News at rest: 7 UNREAD, three pinned rows, four latest rows, WHAT'S NEW shows the latest version", async ({
   page,
 }) => {
   await signInViaBackdoor(page, {
@@ -64,47 +64,43 @@ test("News at rest: 7 UNREAD, two pinned rows, five latest rows, WHAT'S NEW show
 
   await expect(page.locator(".news-unread-count")).toHaveText("7 UNREAD");
 
-  // PINNED: workout-types (with type chips), then reading-the-shorthand —
-  // registry order (the PR #81 pin swap: baselines moved back to LATEST).
+  // PINNED: workout-types (with type chips), your-first-row (James's
+  // 2026-08-23 ruling: the shelf carries the teaching alone now), then
+  // reading-the-shorthand — registry order.
   const pinnedRows = page.locator(".news-pinned .news-row");
-  await expect(pinnedRows).toHaveCount(2);
+  await expect(pinnedRows).toHaveCount(3);
   await expect(pinnedRows.nth(0)).toHaveAttribute(
     "href",
     "/news/workout-types",
   );
   await expect(pinnedRows.nth(1)).toHaveAttribute(
     "href",
+    "/news/your-first-row",
+  );
+  await expect(pinnedRows.nth(2)).toHaveAttribute(
+    "href",
     "/news/reading-the-shorthand",
   );
   await expect(pinnedRows.nth(0).locator(".news-row-chips")).toBeVisible();
   await expect(pinnedRows.nth(1).locator(".news-row-chips")).toHaveCount(0);
+  await expect(pinnedRows.nth(2).locator(".news-row-chips")).toHaveCount(0);
 
-  // LATEST: your-first-row and connect-the-monitor sort first (published
-  // 2026-08-08), then the 2026-08-07 three in registry order — baselines,
-  // picking-a-workout, pain-scale (baselines rejoined LATEST in the PR #81
-  // pin swap; registry order wins the date tie).
-  // Minor #3 (Phase 6I Task 7): scoped to the LATEST section's own
-  // `.news-latest` class now, rather than a negation locator — Task 7 added
-  // a third row kind to News.tsx (the Start-here pin, inside `.news-pinned`,
-  // not a fourth `<section>`) that the old `:not(.news-pinned):not(.news-
-  // whatsnew)` selector would still correctly skip, but a named positive
-  // selector is the more robust contract going forward.
+  // LATEST: connect-the-monitor sorts first (published 2026-08-08), then
+  // the 2026-08-07 three in registry order — baselines, picking-a-workout,
+  // pain-scale (registry order wins the date tie; your-first-row left
+  // LATEST for the pinned shelf, 2026-08-23).
   const latestRows = page.locator(".news-latest .news-row");
-  await expect(latestRows).toHaveCount(5);
+  await expect(latestRows).toHaveCount(4);
   await expect(latestRows.nth(0)).toHaveAttribute(
-    "href",
-    "/news/your-first-row",
-  );
-  await expect(latestRows.nth(1)).toHaveAttribute(
     "href",
     "/news/connect-the-monitor",
   );
-  await expect(latestRows.nth(2)).toHaveAttribute("href", "/news/baselines");
-  await expect(latestRows.nth(3)).toHaveAttribute(
+  await expect(latestRows.nth(1)).toHaveAttribute("href", "/news/baselines");
+  await expect(latestRows.nth(2)).toHaveAttribute(
     "href",
     "/news/picking-a-workout",
   );
-  await expect(latestRows.nth(4)).toHaveAttribute("href", "/news/pain-scale");
+  await expect(latestRows.nth(3)).toHaveAttribute("href", "/news/pain-scale");
 
   await expect(page.getByRole("heading", { name: "WHAT'S NEW" })).toBeVisible();
   await expect(page.locator(".news-release-version").first()).toContainText(
@@ -345,20 +341,19 @@ test("round 4: NEXT navigates into a freshly mounted scroller that starts at 0, 
 // collapse: NEXT/ArticleLink PUSH again. ← BACK and browser BACK retrace
 // the article stack one article per press, then exit to Today; ✕ still
 // exits directly to Today from any depth, unchanged from #66/#69.
-test("BACK-walks-the-stack round: from Today's START HERE step 1, NEXT-chaining two articles deep, ← BACK retraces one article at a time and only reaches Today on the THIRD press — ✕ still exits directly from any depth", async ({
+test("BACK-walks-the-stack round: from News's pinned your-first-row, NEXT-chaining two articles deep, ← BACK retraces one article at a time and only reaches News on the THIRD press — ✕ still exits directly from any depth", async ({
   page,
 }) => {
   await signInViaBackdoor(page, {
     email: `back-stack-chain-${RUN_ID}@e2e.test`,
     name: "Back Stack Chain",
   });
-  await page.goto("/today");
-  await expect(page.locator(".starthere-block")).toBeVisible();
-
-  // Step 1 is "your-first-row" (startHereSteps.tsx's own fixed table),
-  // entered with `from: "/today"` (StartHere.tsx).
-  const step1 = page.locator(".starthere-steps .starthere-row").first();
-  await expect(step1).toHaveAttribute("href", "/news/your-first-row");
+  // Entry surface: News itself (James's 2026-08-23 ruling removed Today's
+  // START HERE block — the pinned shelf is the teaching's only home now),
+  // entered with `from: "/news"` (News.tsx's ArticleRow).
+  await page.goto("/news");
+  const step1 = page.locator('a.news-row[href="/news/your-first-row"]');
+  await expect(step1).toBeVisible();
   await step1.click();
   await expect(page).toHaveURL(/\/news\/your-first-row$/);
   await expect(page.locator(".reader-body")).toBeVisible();
@@ -387,10 +382,9 @@ test("BACK-walks-the-stack round: from Today's START HERE step 1, NEXT-chaining 
   await expect(page).toHaveURL(entryArticleUrl);
   await expect(page.locator(".reader-body")).toBeVisible();
 
-  // A THIRD ← BACK reaches Today — the stack, walked fully.
+  // A THIRD ← BACK reaches News — the stack, walked fully.
   await page.getByRole("link", { name: /BACK/ }).click();
-  await expect(page).toHaveURL(/\/today$/);
-  await expect(page.locator(".starthere-block")).toBeVisible();
+  await expect(page).toHaveURL(/\/news$/);
 
   // Re-enter the chain and prove ✕ still exits directly from the same
   // depth, unchanged from #66/#69 — only BACK's own target reversed.
@@ -399,7 +393,7 @@ test("BACK-walks-the-stack round: from Today's START HERE step 1, NEXT-chaining 
   await page.locator(".reader-next").click();
   await page.locator(".reader-next").click();
   await page.getByRole("link", { name: "Close" }).click();
-  await expect(page).toHaveURL(/\/today$/);
+  await expect(page).toHaveURL(/\/news$/);
 });
 
 // Crosslink round — field bug (James's 2026-08-09 recording, Chromium):
@@ -414,20 +408,20 @@ test("BACK-walks-the-stack round: from Today's START HERE step 1, NEXT-chaining 
 // another article) now pushes and carries the same `{ trail, origin }`
 // shape NEXT does, so BACK retraces THROUGH a cross-link hop exactly like
 // it does through a NEXT hop.
-test("BACK-walks-the-stack round: an in-prose cross-link inside an article retraces via ← BACK one hop at a time (both the in-page link and browser BACK), while ✕ still exits directly to Today", async ({
+test("BACK-walks-the-stack round: an in-prose cross-link inside an article retraces via ← BACK one hop at a time (both the in-page link and browser BACK), while ✕ still exits directly to the entry surface", async ({
   page,
 }) => {
   await signInViaBackdoor(page, {
     email: `crosslink-${RUN_ID}@e2e.test`,
     name: "Crosslink Origin",
   });
-  await page.goto("/today");
-  await expect(page.locator(".starthere-block")).toBeVisible();
-
-  // Step 3 is "picking-a-workout" (startHereSteps.tsx's own fixed table),
-  // entered with `from: "/today"` (StartHere.tsx).
-  const step3 = page.locator(".starthere-steps .starthere-row").nth(2);
-  await expect(step3).toHaveAttribute("href", "/news/picking-a-workout");
+  // James's recording entered from Today's START HERE block; that block
+  // is removed (2026-08-23 ruling), so the same trail mechanics are
+  // proven from News's own picking-a-workout row (`from: "/news"`) — the
+  // one entry surface articles have left.
+  await page.goto("/news");
+  const step3 = page.locator('a.news-row[href="/news/picking-a-workout"]');
+  await expect(step3).toBeVisible();
   await step3.click();
   await expect(page).toHaveURL(/\/news\/picking-a-workout$/);
   await expect(page.locator(".reader-title")).toHaveText(
@@ -454,14 +448,13 @@ test("BACK-walks-the-stack round: an in-prose cross-link inside an article retra
     PICKING_A_WORKOUT_TITLE,
   );
 
-  // ← BACK again reaches Today, the entry surface.
+  // ← BACK again reaches News, the entry surface.
   await page.getByRole("link", { name: /BACK/ }).click();
-  await expect(page).toHaveURL(/\/today$/);
-  await expect(page.locator(".starthere-block")).toBeVisible();
+  await expect(page).toHaveURL(/\/news$/);
 
   // (b) Re-enter, hop through the cross-link again, then ✕ — it still
-  // exits directly to Today, unchanged from #66/#69; only ← BACK's own
-  // target reversed.
+  // exits directly to the entry surface, unchanged from #66/#69; only
+  // ← BACK's own target reversed.
   await step3.click();
   await expect(page).toHaveURL(/\/news\/picking-a-workout$/);
   await page
@@ -471,10 +464,9 @@ test("BACK-walks-the-stack round: an in-prose cross-link inside an article retra
   await expect(page).toHaveURL(/\/news\/pain-scale$/);
   const close = page.getByRole("link", { name: "Close" });
   await expect(close).toBeVisible();
-  await expect(close).toHaveAttribute("href", "/today");
+  await expect(close).toHaveAttribute("href", "/news");
   await close.click();
-  await expect(page).toHaveURL(/\/today$/);
-  await expect(page.locator(".starthere-block")).toBeVisible();
+  await expect(page).toHaveURL(/\/news$/);
 
   // (c) The depth lock, browser-BACK form: re-enter, hop through the
   // cross-link a third time, then ONE browser BACK — proving the PUSH (not
@@ -498,8 +490,9 @@ test("BACK-walks-the-stack round: an in-prose cross-link inside an article retra
   // once more from picking-a-workout, then take a NEXT hop from the
   // cross-linked article itself — a genuinely different hop KIND than
   // (a)-(c) above, which never left the cross-link/cross-link pattern. ✕
-  // must still resolve Today after the mix, proving `origin` (established
-  // at the cross-link hop) threads through a SUBSEQUENT NEXT hop unchanged.
+  // must still resolve the entry surface after the mix, proving `origin`
+  // (established at the cross-link hop) threads through a SUBSEQUENT NEXT
+  // hop unchanged.
   await page
     .locator(".reader-body")
     .getByRole("link", { name: "pain from 1 to 5" })
@@ -509,7 +502,7 @@ test("BACK-walks-the-stack round: an in-prose cross-link inside an article retra
   await expect(page.locator(".reader-body")).toBeVisible();
   await expect(page.getByRole("link", { name: "Close" })).toHaveAttribute(
     "href",
-    "/today",
+    "/news",
   );
 });
 

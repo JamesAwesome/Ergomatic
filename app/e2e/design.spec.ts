@@ -8343,27 +8343,10 @@ test.describe("connected screens (fake-driven)", () => {
   });
 });
 
-// Phase 6I Task 8: the three new/changed screens the onboarding phase adds —
-// Today's fresh-user block+card state, You's Learning-the-app detail, and
-// News with the Start-here pin. `dismissStartHere` is the one new setup
-// helper this phase's sweeps need beyond what already exists above
-// (`markArticleRead`, `signInViaBackdoor`) — a real `PUT /api/prefs` round
-// trip, same idiom as every other direct-API setup helper in this file.
-async function dismissStartHere(page: Page): Promise<void> {
-  const result = await page.evaluate(async () => {
-    const res = await fetch("/api/prefs", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ startHereDismissed: true }),
-    });
-    return { ok: res.ok, status: res.status, body: await res.text() };
-  });
-  if (!result.ok) {
-    throw new Error(`dismiss setup failed: ${result.status} ${result.body}`);
-  }
-}
-
-test.describe("today screen (Phase BL PR C: fresh user — START HERE block + the three-door card)", () => {
+// Phase BL PR C's fresh-user Today (the three-door card; the START HERE
+// block that used to sit above it was removed by James's 2026-08-23
+// ruling — News's pinned articles carry the teaching alone now).
+test.describe("today screen (Phase BL PR C: fresh user — the three-door card)", () => {
   test.beforeEach(async ({ page }) => {
     // A genuinely fresh account (no baselines row at all): the state a
     // real brand-new sign-in lands on, not a fixture layered on top of one
@@ -8516,61 +8499,5 @@ test.describe("onboarding door flows (Phase BL PR C)", () => {
       await expect(page.locator(".onb-screen")).toBeVisible();
       await assertNoFailingInk4Labels(page);
     }
-  });
-});
-
-test.describe("you/learning screen (Phase 6I: Learning the app detail)", () => {
-  test.beforeEach(async ({ page }) => {
-    await signInViaBackdoor(page, {
-      email: "design-onboarding-learning@e2e.test",
-      name: "Design Onboarding Learning Tester",
-    });
-    // Dismissed, so the status line (and PUT IT BACK control) render too —
-    // the fuller of the screen's two states, matching this file's own
-    // "mixed read state, not virgin" precedent for News above.
-    await dismissStartHere(page);
-    await markArticleRead(page, "baselines");
-    await page.goto("/you/learning");
-    await expect(
-      page.getByRole("heading", { name: "Learning the app" }),
-    ).toBeVisible();
-  });
-
-  test("every visible interactive element has a >=44x44 tap target", async ({
-    page,
-  }) => {
-    await assertTapTargets(page);
-  });
-
-  test("zero WCAG 2A/2AA violations", async ({ page }) => {
-    await assertNoA11yViolations(page);
-  });
-
-  test("no mono label ≤11px still paints at --ink-4", async ({ page }) => {
-    await assertNoFailingInk4Labels(page);
-  });
-});
-
-test.describe("news screen (Phase 6I: Start-here pin)", () => {
-  test.beforeEach(async ({ page }) => {
-    await signInViaBackdoor(page, {
-      email: "design-onboarding-news-pin@e2e.test",
-      name: "Design Onboarding News Pin Tester",
-    });
-    await dismissStartHere(page);
-    await page.goto("/news");
-    await expect(page.locator("a.news-pin-starthere")).toBeVisible();
-  });
-
-  test("every visible interactive element has a >=44x44 tap target", async ({
-    page,
-  }) => {
-    await assertTapTargets(page);
-  });
-
-  test("zero WCAG 2A/2AA violations with the Start-here pin on screen", async ({
-    page,
-  }) => {
-    await assertNoA11yViolations(page);
   });
 });

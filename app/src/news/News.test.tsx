@@ -3,10 +3,8 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import News, { ArticleRow } from "./News";
 import type { ArticleReadsState } from "../api/useArticleReads";
-import type { PreferencesData, PreferencesState } from "../api/usePreferences";
 import type { NewsArticle } from "./content/types";
 import { RELEASE_NOTES } from "./content/releaseNotes";
-import { START_HERE_STEPS } from "../today/startHereSteps";
 
 // The registry is real (recurring-failure #3: an empty/synthetic fixture
 // hid two shipped defects before) — every scenario below reads through the
@@ -15,12 +13,6 @@ import { START_HERE_STEPS } from "../today/startHereSteps";
 const mockUseArticleReads = vi.fn<() => ArticleReadsState>();
 vi.mock("../api/useArticleReads", () => ({
   useArticleReads: () => mockUseArticleReads(),
-}));
-
-// Task 7: the Start-here pin's own "only while dismissed" gate reads this.
-const mockUsePreferences = vi.fn<() => PreferencesState>();
-vi.mock("../api/usePreferences", () => ({
-  usePreferences: () => mockUsePreferences(),
 }));
 
 function renderNews() {
@@ -40,33 +32,8 @@ function readyState(readSlugs: string[]): ArticleReadsState {
   };
 }
 
-const PREFS_DEFAULTS: PreferencesData = {
-  difficulties: ["easy", "medium", "hard"],
-  timeCapMinutes: 60,
-  countdownSeconds: 5,
-  startHereDismissed: false,
-};
-
-function readyPrefs(
-  overrides: Partial<PreferencesData> = {},
-): PreferencesState {
-  return {
-    state: "ready",
-    preferences: { ...PREFS_DEFAULTS, ...overrides },
-    save: vi.fn(),
-  };
-}
-
-// Every existing scenario below predates the Start-here pin and never sets
-// `startHereDismissed` itself — defaulting to "not dismissed" here keeps
-// them all exercising the pin-absent case, which is what they were already
-// implicitly asserting via `.news-pinned .news-row` counts of 2.
-beforeEach(() => {
-  mockUsePreferences.mockReturnValue(readyPrefs());
-});
-
 describe("News", () => {
-  it("ready with nothing read: both pins and all five latest stories render, 7 UNREAD, every square unread", () => {
+  it("ready with nothing read: all three pins and all four latest stories render, 7 UNREAD, every square unread", () => {
     mockUseArticleReads.mockReturnValue(readyState([]));
     const { container } = renderNews();
 
@@ -213,81 +180,6 @@ describe("News", () => {
   });
 });
 
-describe("News — Start-here pin (Task 7)", () => {
-  it("not dismissed: no pin renders, PINNED still holds only the two permanent rows", () => {
-    mockUseArticleReads.mockReturnValue(readyState([]));
-    mockUsePreferences.mockReturnValue(
-      readyPrefs({ startHereDismissed: false }),
-    );
-    renderNews();
-
-    expect(
-      screen.queryByText("Start here, in four steps"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.getAllByRole("link").filter((l) => l.closest(".news-pinned")),
-    ).toHaveLength(2);
-  });
-
-  it("dismissed: the pin renders first in PINNED, links to /you/learning with state.from=/news, and shows N OF 4 READ · DISMISSED ON TODAY", () => {
-    mockUseArticleReads.mockReturnValue(readyState(["baselines"]));
-    mockUsePreferences.mockReturnValue(
-      readyPrefs({ startHereDismissed: true }),
-    );
-    renderNews();
-
-    const pin = screen.getByRole("link", { name: /Start here, in four steps/ });
-    expect(pin).toHaveAttribute("href", "/you/learning");
-    expect(pin.closest(".news-pinned")).not.toBeNull();
-    expect(pin.textContent).toMatch(/1 OF 4 READ · DISMISSED ON TODAY/);
-
-    const pinnedLinks = screen
-      .getAllByRole("link")
-      .filter((l) => l.closest(".news-pinned"));
-    expect(pinnedLinks).toHaveLength(3);
-    expect(pinnedLinks[0]).toBe(pin);
-  });
-
-  // Cross-surface consequence: reading a step slug from anywhere (here,
-  // simulated the same way LearningTheApp/You.test.tsx do — via the shared
-  // useArticleReads state) is the SAME count the pin's own meta reports;
-  // reading all four takes it to 4 OF 4.
-  it("all four steps read: pin meta reads 4 OF 4 READ", () => {
-    mockUseArticleReads.mockReturnValue(
-      readyState(START_HERE_STEPS.map((s) => s.slug)),
-    );
-    mockUsePreferences.mockReturnValue(
-      readyPrefs({ startHereDismissed: true }),
-    );
-    renderNews();
-
-    const pin = screen.getByRole("link", { name: /Start here, in four steps/ });
-    expect(pin.textContent).toMatch(/4 OF 4 READ · DISMISSED ON TODAY/);
-  });
-
-  it("dismissed but reads not yet resolved: pin still renders (dismissal is known), but suppresses the count claim", () => {
-    mockUseArticleReads.mockReturnValue({ state: "loading" });
-    mockUsePreferences.mockReturnValue(
-      readyPrefs({ startHereDismissed: true }),
-    );
-    renderNews();
-
-    const pin = screen.getByRole("link", { name: /Start here, in four steps/ });
-    expect(pin.textContent).toMatch(/DISMISSED ON TODAY/);
-    expect(pin.textContent).not.toMatch(/OF 4/);
-  });
-
-  it("preferences not yet resolved: pin absent (dismissal isn't known to be true)", () => {
-    mockUseArticleReads.mockReturnValue(readyState([]));
-    mockUsePreferences.mockReturnValue({ state: "loading" });
-    renderNews();
-
-    expect(
-      screen.queryByText("Start here, in four steps"),
-    ).not.toBeInTheDocument();
-  });
-});
-
 describe("ArticleRow (linked kind — no linked article exists in the real registry yet, so this exercises the branch directly)", () => {
   const linkedArticle: NewsArticle = {
     slug: "external-piece",
@@ -354,21 +246,17 @@ describe("ArticleRow (linked kind — no linked article exists in the real regis
 
   // CL item / ROADMAP "News scroll memory": BACK from an article used to
   // land News at the top always — a tradeoff taken deliberately when the
-  // feed was about 1.15 screens, revisited now that it's grown (six
-  // articles plus the Start-here pin). Copies Library's own scroll-memory
+  // feed was about 1.15 screens, revisited now that it's grown to seven
+  // articles. Copies Library's own scroll-memory
   // idiom (`libraryScroll.ts` + `Library.tsx`'s save/restore effects,
   // `TabBar.tsx`'s clear-on-tab-tap) — same tests, same shape, ported to
-  // News's own `newsScroll.ts`. Restoration gates on BOTH `reads` and
-  // `preferences` having settled (ready OR error, i.e. "not still
-  // loading") rather than on `rowsReady` the way Library does: News always
-  // renders its article rows immediately (no LOADING placeholder branch),
-  // but every row's read-state markup (the unread square, the " · READ"
-  // suffix) is suppressed while `reads` is loading, and the Start-here
-  // pin's own PRESENCE depends on `preferences` settling — a restore while
-  // either is still unknown could land short of this screen's true final
-  // height (an e2e run caught exactly this: gating on preferences alone
-  // restored to a small fraction of the real saved position while reads
-  // was still in flight).
+  // News's own `newsScroll.ts`. Restoration gates on `reads` having
+  // settled (ready OR error, i.e. "not still loading") rather than on
+  // `rowsReady` the way Library does: News always renders its article
+  // rows immediately (no LOADING placeholder branch), but every row's
+  // read-state markup (the unread square, the " · READ" suffix) is
+  // suppressed while `reads` is loading — a restore while it is still
+  // unknown could land short of this screen's true final height.
   describe("scroll restoration (CL item: News scroll memory)", () => {
     const SAVED_SCROLL_Y = 900;
 
@@ -376,26 +264,14 @@ describe("ArticleRow (linked kind — no linked article exists in the real regis
       sessionStorage.clear();
     });
 
-    it("restores the saved position once BOTH reads and preferences settle — never while either is still loading", () => {
+    it("restores the saved position once reads settles — never while it is still loading", () => {
       sessionStorage.setItem("ergomatic.newsScroll", String(SAVED_SCROLL_Y));
       const scrollToSpy = vi
         .spyOn(window, "scrollTo")
         .mockImplementation(() => {});
       mockUseArticleReads.mockReturnValue({ state: "loading" });
-      mockUsePreferences.mockReturnValue({ state: "loading" });
 
       const { rerender } = renderNews();
-      expect(scrollToSpy).not.toHaveBeenCalled();
-
-      // Preferences alone settling must NOT be enough — reads is still
-      // loading, so this screen's true final height (read-state markup
-      // included) isn't known yet.
-      mockUsePreferences.mockReturnValue(readyPrefs());
-      rerender(
-        <MemoryRouter>
-          <News />
-        </MemoryRouter>,
-      );
       expect(scrollToSpy).not.toHaveBeenCalled();
 
       mockUseArticleReads.mockReturnValue(readyState([]));
@@ -410,13 +286,12 @@ describe("ArticleRow (linked kind — no linked article exists in the real regis
       scrollToSpy.mockRestore();
     });
 
-    it("also restores once both settle to an ERROR — the pin simply never renders and read-state markup stays suppressed, but the screen's height is already final either way", () => {
+    it("also restores once reads settles to an ERROR — read-state markup stays suppressed, but the screen's height is already final either way", () => {
       sessionStorage.setItem("ergomatic.newsScroll", String(SAVED_SCROLL_Y));
       const scrollToSpy = vi
         .spyOn(window, "scrollTo")
         .mockImplementation(() => {});
       mockUseArticleReads.mockReturnValue({ state: "error" });
-      mockUsePreferences.mockReturnValue({ state: "error", retry: vi.fn() });
 
       renderNews();
 

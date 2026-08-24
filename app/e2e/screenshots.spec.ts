@@ -57,40 +57,6 @@ async function setBaselines(page: Page): Promise<void> {
 // "you-warmup-on" had no such substitute — there is no longer a screen
 // state to capture — so that test and its capture are gone too.
 
-/** Phase 6I Task 7: dismisses START HERE on Today via an in-page fetch —
- *  same real-networking reasoning as `setBaselines` above — so a screenshot
- *  can show News's own Start-here pin (only visible once dismissed) and
- *  the Learning screen's own dismissed status line/PUT IT BACK control,
- *  rather than the empty/never-dismissed state. */
-async function dismissStartHere(page: Page): Promise<void> {
-  const result = await page.evaluate(async () => {
-    const res = await fetch("/api/prefs", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ startHereDismissed: true }),
-    });
-    return { ok: res.ok, status: res.status, body: await res.text() };
-  });
-  if (!result.ok) {
-    throw new Error(
-      `dismiss start-here failed: ${result.status} ${result.body}`,
-    );
-  }
-}
-
-/** Marks a single article slug read via an in-page fetch — used to give the
- *  Learning screen's own progress line/pin meta a real, non-zero count
- *  rather than a fresh account's 0 OF 4. */
-async function markArticleRead(page: Page, slug: string): Promise<void> {
-  const result = await page.evaluate(async (s) => {
-    const res = await fetch(`/api/article-reads/${s}`, { method: "PUT" });
-    return { ok: res.ok, status: res.status };
-  }, slug);
-  if (!result.ok) {
-    throw new Error(`mark read failed: ${result.status}`);
-  }
-}
-
 /** Neutralises `.tabbar`'s `position: fixed`, for THREE different reasons
  *  across its callers (round 4 review: this comment used to name only the
  *  first; trace-truth Task 3 added the third).
@@ -370,7 +336,6 @@ test("today-checkpoint", async ({ page }) => {
     name: "Screenshot Tester",
   });
   await setBaselines(page);
-  await dismissStartHere(page);
   await choosePlan(page, "sprint");
   // Deterministic doneN on a reused account: zero, then advance exactly 6.
   await resetPlanProgress(page);
@@ -415,11 +380,6 @@ test("today-capped", async ({ page }) => {
     name: "Screenshot Tester",
   });
   await setBaselines(page);
-  // §7.1 is about the CARD's own height at 375px, not the unrelated
-  // Phase 6I START HERE block (an every-fresh-account onboarding panel
-  // that already pushes the card down in "today.png" above, before this
-  // task) — dismissed here so the check isn't confounded by it.
-  await dismissStartHere(page);
   // The mock's own "Long Fetch" pyramid (Workout steps final.dc.html):
   // 2-4-6-8-6-4-2' at 6k+6→6k+0→6k+6, 2' rest between — 32' work / 44'
   // total, matching the design handoff's own printed numbers exactly.
@@ -475,7 +435,6 @@ test("today-rolled", async ({ page }) => {
     name: "Screenshot Tester",
   });
   await setBaselines(page);
-  await dismissStartHere(page);
   await importBulk(
     page,
     [`${title} | AT | medium | 4`, "x9", "w 1000m 6k+2 @26 r1"].join("\n"),
@@ -509,8 +468,9 @@ test("today-rolled", async ({ page }) => {
 // "today.png" above never shows — that capture deliberately sets
 // baselines first so it can exercise FILTER/SHUFFLE. This is the OTHER
 // state a brand-new account actually lands on: no baselines row at all,
-// the dismissible START HERE block above everything, and the THREE-DOOR
-// card (canvas Main) in place of the normal suggestion apparatus.
+// and the THREE-DOOR card (canvas Main) LEADING the screen in place of
+// the normal suggestion apparatus (the START HERE block that used to sit
+// above it was removed by James's 2026-08-23 ruling).
 test("today-onboarding", async ({ page }) => {
   await signInViaBackdoor(page, {
     email: "screenshots-today-onboarding@e2e.test",
@@ -518,18 +478,11 @@ test("today-onboarding", async ({ page }) => {
   });
   await page.goto("/today");
   await page.locator(".doorscard").waitFor();
-  // The header's own "N OF 4 READ" count resolves from a separate fetch
-  // (`useArticleReads`) than the card's — waiting on the card alone raced
-  // it on this test's own first run, capturing the bare "START HERE"
-  // loading-suppression fallback instead of the real "0 OF 4 READ" a fresh
-  // account actually shows once both have loaded.
-  await expect(page.locator(".starthere-label")).toContainText("READ");
   // Scroll the WHOLE doors card into frame first: the third door — the
-  // one carrying the strong-and-steady ruling's sub-copy — sits below
-  // the 844px fold under the START HERE block, and a capture that
-  // scrolls past the feature is recurring-failure #7's exact shape.
-  // (fullPage was tried and rejected: the fixed tab bar paints over
-  // door 3 mid-page. START HERE's own copy is on record in today.png.)
+  // one carrying the strong-and-steady ruling's sub-copy — can sit below
+  // the 844px fold, and a capture that scrolls past the feature is
+  // recurring-failure #7's exact shape. (fullPage was tried and rejected:
+  // the fixed tab bar paints over door 3 mid-page.)
   await page
     .getByRole("link", { name: /Row to find my baseline/ })
     .evaluate((el) => el.scrollIntoView({ block: "center" }));
@@ -1530,25 +1483,6 @@ test("you-derive-offer-6k", async ({ page }) => {
   await page.getByRole("button", { name: "ESTIMATE FROM 2K (+7s)" }).waitFor();
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "you-derive-offer-6k.png"),
-  });
-});
-
-// Phase 6I Task 7: You › Learning the app — dismissed on Today (so the
-// status line/PUT IT BACK ON TODAY control both render, not just the
-// baseline empty state) with one of the four steps already read (a real,
-// non-zero progress count), the realistic state a rower actually reaches
-// this screen from rather than a brand-new account's 0 OF 4.
-test("you-learning", async ({ page }) => {
-  await signInViaBackdoor(page, {
-    email: "screenshots-you-learning@e2e.test",
-    name: "Screenshot Tester",
-  });
-  await dismissStartHere(page);
-  await markArticleRead(page, "baselines");
-  await page.goto("/you/learning");
-  await page.locator(".learning-progress-count").waitFor();
-  await page.screenshot({
-    path: path.join(SCREENSHOTS_DIR, "you-learning.png"),
   });
 });
 
@@ -2657,13 +2591,8 @@ test("news", async ({ page }) => {
     email: "screenshots-news@e2e.test",
     name: "Screenshot Tester",
   });
-  // Phase 6I Task 7: dismissed first, so this capture is "News recaptured
-  // with the third pin" (the phase spec's own screenshot obligation) —
-  // Start-here now sits above the two permanent explainers.
-  await dismissStartHere(page);
   await page.goto("/news");
   await page.locator(".news-unread-count").waitFor();
-  await page.locator(".news-pin-starthere").waitFor();
 
   const workoutTypesRow = page.locator(
     'a.news-row[href="/news/workout-types"]',

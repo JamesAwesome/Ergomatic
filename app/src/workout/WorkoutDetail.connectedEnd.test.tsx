@@ -84,7 +84,6 @@ const READY_PREFS = {
     difficulties: [],
     timeCapMinutes: 60,
     countdownSeconds: 10,
-    startHereDismissed: true,
   },
 };
 let preferencesReturn: unknown = READY_PREFS;

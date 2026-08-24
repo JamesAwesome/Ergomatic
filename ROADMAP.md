@@ -846,6 +846,20 @@ Today itself, not from a screen they have to find.
 **Design authority:** `docs/design/handoffs/2026-08-07-news-tab/README.md`
 decisions 6 and 7.
 
+**Removed by James's 2026-08-23 ruling** ("take the learning the app
+section off the today screen and just have it pinned on news. Also remove
+the setting from 'you' to reset it. The baseline recommended is enough."):
+the teaching surfaces this phase built — Today's `START HERE` block
+(Task 5's `StartHere.tsx`/`startHereSteps.tsx`), You's `Learning the app`
+row and `/you/learning` screen, and News's dismissed-only Start-here pin
+(all of Task 7) — are deleted. They shipped and worked; the removal is a
+later product decision, not a reversal of this phase's exit. What
+survives: the four articles themselves (with `your-first-row` now a
+registry pin, so News's PINNED shelf carries the teaching alone), the
+three-door card (superseded Task 5's `BaselineCard` via Phase BL PR C),
+and the `preferences.start_here_dismissed` column — dormant server-side
+(additive-only API; `server/db/schema.ts`'s own comment names it fallow).
+
 - [x] **Task 1 — the nullable domain**: `needsBaselines(steps)`
       (`domain/needsBaselines.ts`) — true unless every work step is an
       effort ref — the one predicate every coupled call site shares;

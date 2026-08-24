@@ -39,9 +39,9 @@ describe("article registry invariants", () => {
     for (const a of ARTICLES) expect(a.minutes).toBeGreaterThanOrEqual(1);
   });
 
-  it("your-first-row/connect-the-monitor are unpinned, published 2026-08-08, minutes by the 6H formula (ceil(words/180)) — your-first-row 288 words after the BL PR C three-door rewrite -> 2 min, connect-the-monitor 217 words -> 2 min", () => {
+  it("your-first-row is PINNED (James 2026-08-23: the pinned shelf carries the teaching alone), connect-the-monitor unpinned; both published 2026-08-08, minutes by the 6H formula (ceil(words/180)) — your-first-row 288 words -> 2 min, connect-the-monitor 217 words -> 2 min", () => {
     const yourFirstRow = articleBySlug("your-first-row")!;
-    expect(yourFirstRow.pinned).toBe(false);
+    expect(yourFirstRow.pinned).toBe(true);
     expect(yourFirstRow.publishedAt).toBe("2026-08-08");
     expect(yourFirstRow.minutes).toBe(2);
 
@@ -51,13 +51,13 @@ describe("article registry invariants", () => {
     expect(connectTheMonitor.minutes).toBe(2);
   });
 
-  it("launch shelf: the two permanent pins plus five latest stories (the pin swap: shorthand pinned, baselines back in LATEST)", () => {
+  it("the shelf: three pins (your-first-row took the last seat, James 2026-08-23) plus four latest stories", () => {
     expect(pinnedArticles().map((a) => a.slug)).toStrictEqual([
       "workout-types",
+      "your-first-row",
       "reading-the-shorthand",
     ]);
     expect(latestArticles().map((a) => a.slug)).toStrictEqual([
-      "your-first-row",
       "connect-the-monitor",
       "baselines",
       "picking-a-workout",

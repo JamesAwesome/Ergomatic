@@ -185,7 +185,7 @@ export default function Builder({ mode }: { mode?: BuilderEditMode } = {}) {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   // START OVER's own two-tap arm (WorkoutDetail.tsx's OwnerActions Delete
-  // button / LearningTheApp.tsx's identical shape) — deliberately NOT
+  // button's identical shape) — deliberately NOT
   // `useStagedDiscard`, whose `fire()` clears the SESSION draft/run records,
   // a side effect this control has no business triggering; `ARM_TIMEOUT_MS`
   // is still imported from that shared home so the one number that must

@@ -1,26 +1,8 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { vi, describe, it, expect, afterEach, beforeEach } from "vitest";
+import { vi, describe, it, expect, afterEach } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import You from "./You";
-import type { ArticleReadsState } from "./api/useArticleReads";
-
-// Task 7: the SETTINGS row's own meta reads the real four-slug progress off
-// this hook — only it is mocked (News.test.tsx/StartHere.test.tsx's own "only
-// the hook under test" discipline), never the row's own real markup.
-const mockUseArticleReads = vi.fn<() => ArticleReadsState>();
-vi.mock("./api/useArticleReads", () => ({
-  useArticleReads: () => mockUseArticleReads(),
-}));
-
-function readyState(readSlugs: string[]): ArticleReadsState {
-  return {
-    state: "ready",
-    readSlugs: new Set(readSlugs),
-    markRead: vi.fn(),
-    markUnread: vi.fn(),
-  };
-}
 
 function renderYou(user = { id: "u1", email: "a@x.com", name: "Ada Rower" }) {
   return render(
@@ -29,10 +11,6 @@ function renderYou(user = { id: "u1", email: "a@x.com", name: "Ada Rower" }) {
     </MemoryRouter>,
   );
 }
-
-beforeEach(() => {
-  mockUseArticleReads.mockReturnValue(readyState([]));
-});
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -139,70 +117,6 @@ describe("You", () => {
       expect(
         calls.some((c) => c.url === "/api/baselines" && c.method === "DELETE"),
       ).toBe(true);
-    });
-  });
-
-  describe("SETTINGS · Learning the app row (Task 7)", () => {
-    it("shows a SETTINGS section heading and a Learning the app row linking to /you/learning", () => {
-      renderYou();
-      expect(screen.getByText("SETTINGS")).toBeVisible();
-      const row = screen.getByRole("link", { name: /Learning the app/ });
-      expect(row).toHaveAttribute("href", "/you/learning");
-    });
-
-    it("meta reads START HERE · 0 OF 4 with nothing read", () => {
-      mockUseArticleReads.mockReturnValue(readyState([]));
-      renderYou();
-      expect(screen.getByText("START HERE · 0 OF 4")).toBeVisible();
-    });
-
-    // Cross-surface consequence: reading ANY of the four slugs from
-    // anywhere (here: `baselines`, exactly the slug the phase spec names)
-    // advances this row's own count — it reads off the same real
-    // `article_reads` set News/Reader/StartHere all share, not a second,
-    // onboarding-only counter.
-    it("reading baselines from elsewhere advances the row's own count to 1 OF 4", () => {
-      mockUseArticleReads.mockReturnValue(readyState(["baselines"]));
-      renderYou();
-      expect(screen.getByText("START HERE · 1 OF 4")).toBeVisible();
-    });
-
-    it("all four read: meta reads START HERE · 4 OF 4", () => {
-      mockUseArticleReads.mockReturnValue(
-        readyState([
-          "your-first-row",
-          "baselines",
-          "picking-a-workout",
-          "connect-the-monitor",
-        ]),
-      );
-      renderYou();
-      expect(screen.getByText("START HERE · 4 OF 4")).toBeVisible();
-    });
-
-    it("reads not ready (loading): meta shows bare START HERE, no count — suppression rule", () => {
-      mockUseArticleReads.mockReturnValue({ state: "loading" });
-      renderYou();
-      expect(screen.getByText("START HERE")).toBeVisible();
-      expect(screen.queryByText(/OF 4/)).not.toBeInTheDocument();
-    });
-
-    it("reads errored: meta shows bare START HERE, same suppression", () => {
-      mockUseArticleReads.mockReturnValue({ state: "error" });
-      renderYou();
-      expect(screen.getByText("START HERE")).toBeVisible();
-      expect(screen.queryByText(/OF 4/)).not.toBeInTheDocument();
-    });
-
-    it("the row carries the BackLink 'from' contract (state.from = /you)", () => {
-      renderYou();
-      // RTL can't read a <Link>'s `state` prop directly — Library.test.tsx's
-      // own LocationProbe idiom would need a second route; here the href
-      // itself is the load-bearing assertion (state is asserted at the
-      // AppRoutes/BackLink level for this route, mirroring how Library.tsx's
-      // own header links are only href-checked in Library.test.tsx too).
-      const row = screen.getByRole("link", { name: /Learning the app/ });
-      expect(row).toHaveAttribute("href", "/you/learning");
     });
   });
 });

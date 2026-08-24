@@ -42,10 +42,6 @@ vi.mock("../news/Releases", () => ({
 vi.mock("../You", () => ({
   default: () => <h1>You</h1>,
 }));
-vi.mock("../you/LearningTheApp", () => ({
-  default: () => <h1>Learning The App</h1>,
-}));
-
 beforeEach(() => {
   localStorage.clear();
 });
@@ -235,33 +231,17 @@ describe("AppRoutes", () => {
     ).toBeInTheDocument();
   });
 
-  // Task 7 (Phase 6I): /you/learning is registered inside the SAME
-  // `user && onSignedOut` conditional as /you — a signed-out render (no
-  // user/onSignedOut prop, this file's own convention throughout) must
-  // wildcard it to Today exactly like /you itself, never render
-  // LearningTheApp for a rower AppRoutes doesn't know is signed in.
-  it("wildcards /you/learning to Today when signed out (no user prop)", async () => {
-    render(
-      <MemoryRouter initialEntries={["/you/learning"]}>
-        <AppRoutes />
-      </MemoryRouter>,
-    );
-    expect(await screen.findByRole("heading", { name: "Today" })).toBeVisible();
-    expect(
-      screen.queryByRole("heading", { name: "Learning The App" }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("renders LearningTheApp at /you/learning when signed in", async () => {
+  // James's 2026-08-23 ruling removed /you/learning (LearningTheApp) —
+  // an old bookmark or stale client lands on the signed-in wildcard and
+  // resolves to Today rather than 404ing.
+  it("wildcards the removed /you/learning route to Today even when signed in", async () => {
     const user = { id: "u1", email: "a@x.com", name: "Ada Rower" };
     render(
       <MemoryRouter initialEntries={["/you/learning"]}>
         <AppRoutes user={user} onSignedOut={() => {}} />
       </MemoryRouter>,
     );
-    expect(
-      await screen.findByRole("heading", { name: "Learning The App" }),
-    ).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "Today" })).toBeVisible();
   });
 
   it("shows the tab bar on an ordinary route (today)", async () => {

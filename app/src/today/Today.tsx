@@ -41,7 +41,6 @@ import {
   type MonitorRun,
 } from "../monitor/monitorRun";
 import { useStagedDiscard } from "../session/useStagedDiscard";
-import StartHere from "./StartHere";
 import DoorsCard from "./DoorsCard";
 import { loadTodayPick, saveTodayPick, todayDateString } from "./todayPick";
 import {
@@ -436,9 +435,6 @@ export default function Today() {
       library={workoutsState.workouts}
       baselines={baselines}
       preferences={preferencesState.preferences}
-      onDismissStartHere={() =>
-        preferencesState.save({ startHereDismissed: true })
-      }
       plan={planState.plan}
       logs={recentLogsState.logs}
       run={run}
@@ -862,7 +858,6 @@ function TodayView({
   library,
   baselines,
   preferences,
-  onDismissStartHere,
   plan,
   logs,
   run,
@@ -876,7 +871,6 @@ function TodayView({
   // either-null branching).
   baselines: Baselines | null;
   preferences: PreferencesData;
-  onDismissStartHere: () => void;
   plan: PlanData;
   logs: RecentLog[];
   run: SessionRun | null;
@@ -1182,15 +1176,6 @@ function TodayView({
   return (
     <main className="screen">
       <h1 className="screen-title">Today</h1>
-      {/* Phase 6I: mounted above everything else on the screen (spec:
-          "Sits at the top of Today, above the suggestion card") — including
-          the live-run resume card below, per the controller's own "above
-          everything" framing. No layout reservation once dismissed: this
-          simply doesn't render (Today.tsx owns the mount condition;
-          StartHere itself has no opinion on whether it should exist). */}
-      {!preferences.startHereDismissed && (
-        <StartHere onDismiss={onDismissStartHere} />
-      )}
       {/* Phase 6I (condition carried into BL PR C's doors): the whole
           plan/freestyle line, type-swap chips and descriptor word are
           "plan apparatus" (spec's own words) — hidden entirely while the

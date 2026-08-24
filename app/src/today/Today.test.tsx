@@ -108,18 +108,9 @@ const NO_BASELINES = { k2Seconds: null, k6Seconds: null };
 // doors are the superset re-entry; the old BaselineCard's only-missing-
 // distance branch died with it).
 const ONLY_K6_BASELINE = { k2Seconds: null, k6Seconds: 122 };
-// `startHereDismissed: true` is this file's own default (NOT the server's
-// real default, which is `false` — server/stores/preferences.ts) so the
-// pre-existing suite below keeps exercising "normal Today" without every
-// one of ~100 unrelated tests also having an opinion about the START HERE
-// block; the block's own mount/dismiss/step behavior is covered in
-// StartHere.test.tsx, and the few tests here that need it un-dismissed say
-// so explicitly via `mockReady({ preferences: { ..., startHereDismissed:
-// false } })`.
 const DEFAULT_PREFS = {
   difficulties: ["easy", "medium", "hard"],
   timeCapMinutes: 60,
-  startHereDismissed: true,
 };
 
 // 84-entry sequence with `code` at `doneN` and a filler code ("O2")
@@ -238,8 +229,6 @@ function mockReady(overrides?: {
   plan?: PlanData;
   preferences?: typeof DEFAULT_PREFS;
   logs?: RecentLog[];
-  savePreferences?: ReturnType<typeof vi.fn>;
-  readSlugs?: string[];
 }) {
   const workouts = overrides?.workouts ?? [
     ZEPHYR,
@@ -251,8 +240,6 @@ function mockReady(overrides?: {
   const plan = overrides?.plan ?? PLAN_AT;
   const preferences = overrides?.preferences ?? DEFAULT_PREFS;
   const logs = overrides?.logs ?? LOGS;
-  const save = overrides?.savePreferences ?? vi.fn();
-  const readSlugs = overrides?.readSlugs ?? [];
 
   vi.doMock("../api/useWorkouts", () => ({
     useWorkouts: () => ({ state: "ready", workouts }),
@@ -264,23 +251,10 @@ function mockReady(overrides?: {
     usePlan: () => ({ state: "ready", plan }),
   }));
   vi.doMock("../api/usePreferences", () => ({
-    usePreferences: () => ({ state: "ready", preferences, save }),
+    usePreferences: () => ({ state: "ready", preferences }),
   }));
   vi.doMock("../api/useRecentLogs", () => ({
     useRecentLogs: () => ({ state: "ready", logs }),
-  }));
-  // Phase 6I: StartHere (mounted whenever `!preferences.startHereDismissed`)
-  // reads this hook directly — mocked unconditionally, same "ready, real
-  // Set, no network" shape every StartHere-un-dismissed test below needs;
-  // the pre-existing suite never sees it render at all (DEFAULT_PREFS'
-  // own `startHereDismissed: true`), so this is inert for those ~100 tests.
-  vi.doMock("../api/useArticleReads", () => ({
-    useArticleReads: () => ({
-      state: "ready",
-      readSlugs: new Set(readSlugs),
-      markRead: vi.fn(),
-      markUnread: vi.fn(),
-    }),
   }));
 }
 
@@ -2684,51 +2658,23 @@ describe("Today (2b): the interrupted connected session row", () => {
   });
 });
 
-describe("Today (Phase 6I: START HERE + the no-baseline card)", () => {
-  it("mounts StartHere above everything when the block isn't dismissed", async () => {
-    mockReady({
-      preferences: { ...DEFAULT_PREFS, startHereDismissed: false },
-    });
+describe("Today (the no-baseline card)", () => {
+  // James's 2026-08-23 ruling took the START HERE teaching block off Today
+  // entirely (News's pinned articles carry it alone now) — so a fresh
+  // no-baseline account's Today LEADS with the doors card: nothing between
+  // the screen's own <h1> and the card. This pin goes red if any teaching
+  // block (or anything else) is ever restored above it.
+  it("a fresh no-baseline account's Today leads with the doors card — first child after the h1", async () => {
+    mockReady({ baselines: NO_BASELINES });
     await renderToday();
 
-    const block = await screen.findByText("START HERE · 0 OF 4 READ");
-    expect(block).toBeVisible();
-    // "Above everything" (the controller's own framing): the block's DOM
-    // position precedes even the screen's own <h1>'s next sibling — proven
-    // here as "precedes the plan line," the next thing Today renders.
+    expect(await screen.findByText("SET UP YOUR BASELINE")).toBeVisible();
     const main = screen
       .getByRole("heading", { name: "Today" })
       .closest("main")!;
     const children = [...main.children];
-    const blockIndex = children.findIndex((c) =>
-      c.classList.contains("starthere-block"),
-    );
-    const planLineIndex = children.findIndex((c) =>
-      c.classList.contains("today-plan-line"),
-    );
-    expect(blockIndex).toBeGreaterThanOrEqual(0);
-    expect(blockIndex).toBeLessThan(planLineIndex);
-  });
-
-  it("renders nothing at all for StartHere when the block is dismissed (this file's own default)", async () => {
-    mockReady();
-    const { container } = await renderToday();
-    await screen.findByRole("heading", { name: "Today" });
-    expect(container.querySelector(".starthere-block")).not.toBeInTheDocument();
-  });
-
-  it("DISMISS calls preferences.save({ startHereDismissed: true }) — no staged confirm", async () => {
-    const save = vi.fn();
-    mockReady({
-      preferences: { ...DEFAULT_PREFS, startHereDismissed: false },
-      savePreferences: save,
-    });
-    await renderToday();
-
-    await userEvent.click(screen.getByRole("button", { name: "DISMISS" }));
-    expect(save).toHaveBeenCalledExactlyOnceWith({
-      startHereDismissed: true,
-    });
+    expect(children[0]!.tagName).toBe("H1");
+    expect(children[1]!.classList.contains("doorscard")).toBe(true);
   });
 
   it("both baselines missing: shows the three-door card and hides the ENTIRE plan/suggestion apparatus", async () => {

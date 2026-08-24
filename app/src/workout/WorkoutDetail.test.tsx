@@ -196,7 +196,6 @@ function mockHooks(
         difficulties: [],
         timeCapMinutes: 60,
         countdownSeconds: 10,
-        startHereDismissed: true,
       },
     }),
   }));
