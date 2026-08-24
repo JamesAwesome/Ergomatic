@@ -3626,7 +3626,13 @@ test.describe("you screen", () => {
     const color = await faster.evaluate((el) => getComputedStyle(el).color);
     expect(color).toBe("rgb(111, 106, 95)"); // --ink-4, 5.29:1 on --surface
 
-    await faster.click();
+    // `force`, deliberately: Playwright's own actionability check reads
+    // `aria-disabled="true"` as "not enabled" and would sit here for 30s
+    // rather than click. A real finger has no such courtesy, so the tap is
+    // forced through — the handler's own refusal is what must hold, and
+    // the client suite drives the same click via user-event, which honours
+    // only the real `disabled` attribute.
+    await faster.click({ force: true });
     await expect(field).toHaveValue("1:00.0");
     await assertTapTargets(page);
     await assertNoA11yViolations(page);
