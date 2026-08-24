@@ -1048,13 +1048,13 @@ export function createPm5Driver(
      *  pass B3). No decode logic lives here or in `pm5/parse.ts`: the
      *  characteristic's own byte order is disputed in the BLE spec itself
      *  (`uuids.ts`'s own doc comment), so this driver carries bytes only.
-     *  `null` until (and unless) 0x003F ever arrives for this run — most
-     *  runs today will never populate it, since nothing yet keeps the
-     *  transport subscribed past a fast teardown (the LATE side, a
-     *  separate task); this field and its production subscriber are the
-     *  plumbing that the fake proves end to end, ahead of the late-side
-     *  fix that makes it reliable on real hardware too. Folded onto the
-     *  `summary-observations` event (`reconcileSummary`) as
+     *  `null` until (and unless) 0x003F ever arrives for this run. The
+     *  hook's burst linger (`useMonitorSession.ts`'s `BURST_LINGER_MS`) is
+     *  what keeps the transport subscribed long enough to hear it, on
+     *  natural finishes and — since the summary-record design spec's §1 —
+     *  rower-ended closes alike. Folded onto the
+     *  `summary-observations` event (`reconcileSummary`, and
+     *  `noteTerminateObservations`) as
      *  `verificationBytes`, omitted entirely when still `null` — the same
      *  additive-optional shape `IntervalActual.restDistanceMeters` uses. */
     verificationBytes: readonly number[] | null;
@@ -1071,6 +1071,34 @@ export function createPm5Driver(
      *  what a walk needs when a 0x0039 turns up to a shut gate
      *  (`describeClosedGrace`). */
     graceClaimed: boolean;
+    /** **GATE 2 of the terminate admission (summary-record design spec §1).**
+     *  `true` from the instant this run was closed by a `terminated`
+     *  terminal frame until its burst's 0x0039 is admitted (or the run is
+     *  replaced). It is the ONLY thing that opens `noteSummary`'s
+     *  observations-only door, and it is deliberately a SEPARATE field from
+     *  `finishGraceUntil`/`summaryInGrace`:
+     *
+     *  - it never touches `graceIsOpen`, so the terminate's own partial
+     *    0x0037 keeps taking `boundary-out-of-run` exactly as it always has
+     *    (CSAFE-DEF footnote 12 via interface-notes.md §19.8 — post-terminate
+     *    housekeeping has no stable Split/Interval Number and must never be
+     *    filed as an interval actual);
+     *  - the summary it admits is NEVER stored in `summaryInGrace`, which is
+     *    the only field `reconcileSummary` reads. That is gate 3, and it is
+     *    STRUCTURAL rather than a guard: there is no path by which a
+     *    terminate's 0x0039 can reach `filled-from-summary` and synthesize a
+     *    completed final interval onto an ABANDONED run.
+     *
+     *  Cleared the moment the door admits (once per run), so the ~1-minute
+     *  HRM re-fire (`pm5-ble-ecosystem-review.md:420-422`) finds it shut and
+     *  falls through to the ordinary `out-of-window` verdict.
+     *
+     *  MUTUALLY EXCLUSIVE with an armed `armSummaryReconcile` by
+     *  construction, not by luck: the deadline is armed only in
+     *  `maybeEmitFrame`'s `finished` branch and this flag only in its
+     *  `terminated` sibling, both behind the same `runIsOpen()` guard that a
+     *  run's FIRST terminal frame consumes — a run cannot take both. */
+    terminatedAwaitingSummary: boolean;
   } | null = null;
   /** The live reconcile deadline's canceller, or `null` when none is armed
    *  — one at a time, because a run finishes once (`armSummaryReconcile`).
@@ -1079,6 +1107,26 @@ export function createPm5Driver(
    *  left to decide, and firing it anyway would be the timer talking about
    *  someone else's workout. */
   let pendingSummaryReconcile: (() => void) | null = null;
+  /** The terminate path's own one-at-a-time pending emit (summary-record
+   *  design spec §1), or `null` when none is armed — its timer's
+   *  `cancel`ler paired with the `emit` that timer would have run, so
+   *  either trigger (the window elapsing, or 0x003F arriving early) can
+   *  reach the same body.
+   *
+   *  A SEPARATE slot from `pendingSummaryReconcile` above, deliberately:
+   *  that one's drain calls `reconcileSummary`, and gate 3 is that a
+   *  terminate's summary can never reach that function at all. What this
+   *  one holds is the observations-only emit, waiting out
+   *  `HASH_SUBWINDOW_MS` for 0x003F — the identical "the hash is part of
+   *  complete too" problem the natural path solves with its own sub-window
+   *  (`maybeReconcileImmediately`'s own doc comment): the burst's 0x0039
+   *  arrives BEFORE its 0x003F every time, and `appendSummaryObservations`
+   *  is write-once, so emitting at 0x0039 would lose the verification hash
+   *  permanently. */
+  let pendingTerminateObservations: {
+    cancel: () => void;
+    emit: () => void;
+  } | null = null;
   let reconnectPending = false;
   /** This task's single-flight gate (`ProgramBusyError`'s own doc comment,
    *  ROADMAP's "a second `program()` call ... strands the first"): `true`
@@ -2412,6 +2460,16 @@ export function createPm5Driver(
       // moment our own terminal transition happens.
       maybeReconcileImmediately(activeRun!);
     } else {
+      // GATE 2 ARMS HERE (summary-record design spec §1) — and nowhere
+      // else. A `terminated` close still opens NO finish grace and arms NO
+      // reconcile deadline (footnote 12, and `armSummaryReconcile`'s own
+      // "NATURAL-FINISH-ONLY is enforced at THIS call site"): the ONLY
+      // thing this run gains is permission for its own 0x0039 to be
+      // recorded as an OBSERVATION. Set BEFORE the emit, because the emit
+      // is what drives the hook's `closeRecord`/navigation and the burst
+      // that follows it can, on the fake's own timing, arrive inside the
+      // same tick.
+      activeRun!.terminatedAwaitingSummary = true;
       log.record("terminal", "terminated");
       emit({ kind: "terminated" });
     }
@@ -2615,6 +2673,35 @@ export function createPm5Driver(
         "summary-reconciled",
         "out-of-window — 0x0039 arrived before any program() ever opened a run (a workout the rower started on the machine itself, or a summary left over from before we connected); nothing filed",
       );
+      return;
+    }
+    // ── THE OBSERVATIONS-ONLY DOOR (summary-record design spec §1, gates
+    // 2+3) ─────────────────────────────────────────────────────────────
+    // Checked BEFORE every closed-run branch below, because none of them
+    // can serve this shape: `graceIsOpen` is false on a terminate (no
+    // grace is ever opened), the early-side branch needs an OPEN run, and
+    // the late-side branch needs the final split already recorded — which
+    // a terminated piece, by construction, does not have. Without this the
+    // burst falls through to `out-of-window` and is lost, which is exactly
+    // what production did.
+    //
+    // What passes through it is the OBSERVATION SET ALONE. `summaryInGrace`
+    // stays `null` on this path — the summary lives in `emitTerminate`'s
+    // closure, not on the run — so `reconcileSummary` (the only reader of
+    // that field, and the only writer of a synthesized
+    // `intervalComplete{finalBoundary: true}`) has nothing to consume even
+    // if some future call site reached it. That is gate 3, structural: an
+    // abandoned run can never gain a COMPLETED final interval it did not
+    // row.
+    //
+    // No `run.closed` conjunct, and that is not an omission: this flag is
+    // written on exactly one line, immediately after `activeRun!.closed =
+    // true` in the same branch, and nothing anywhere reopens a closed run.
+    // A `run.closed &&` here would be a guard on a condition that cannot
+    // be false — unreachable code wearing a guard's clothes.
+    if (run.terminatedAwaitingSummary) {
+      run.terminatedAwaitingSummary = false; // once per run — the re-fire finds it shut
+      noteTerminateObservations(run, summary);
       return;
     }
     if (!graceIsOpen(run)) {
@@ -3020,6 +3107,18 @@ export function createPm5Driver(
    *  from more than one of those three sites in the same teardown costs
    *  nothing. */
   function drainSummaryReconcile(): void {
+    // The terminate path's own pending emit drains here too (summary-record
+    // design spec §1). Same rule as the sentence above, applied to the
+    // other slot: the link going away costs this run its ability to WAIT
+    // for 0x003F, never the observations it already holds. Without this, a
+    // terminate whose 0x003F never comes would have its 0x0039 stranded
+    // behind a `HASH_SUBWINDOW_MS` timer that fires after the hook has
+    // unsubscribed — the burst heard and then thrown away, which is the
+    // whole defect this spec exists to fix, one layer further in. First,
+    // because the emit reaches the record and the reconcile below can only
+    // ever concern a DIFFERENT run's shape (the two are mutually exclusive
+    // — `terminatedAwaitingSummary`'s own doc comment).
+    flushTerminateObservations();
     if (pendingSummaryReconcile !== null) {
       pendingSummaryReconcile();
       pendingSummaryReconcile = null;
@@ -3221,8 +3320,9 @@ export function createPm5Driver(
    * Builds the `summary-observations` event (storage-spine design spec
    * §2, `detail` added RC-3 Task 3): 0x0039's own work-only totals, its
    * other nine fields, plus 0x003F's raw bytes if this run ever heard one.
-   * The ONLY thing that varies between `reconcileSummary`'s two callers
-   * below is `totals`/`summary` — `verificationBytes` always reads off
+   * The ONLY thing that varies between its three callers —
+   * `reconcileSummary`'s two branches and `noteTerminateObservations` —
+   * is `totals`/`summary` — `verificationBytes` always reads off
    * `run` itself, never a caller's local, so a stray 0x003F arriving
    * anywhere between `program()` and this call is picked up identically by
    * whichever branch fires. Omits the `verificationBytes` key outright
@@ -3260,6 +3360,94 @@ export function createPm5Driver(
           detail,
           verificationBytes: run.verificationBytes,
         };
+  }
+
+  /**
+   * THE TERMINATE PATH'S OWN EMIT (summary-record design spec §1, gate 3's
+   * other half) — the observations-only sibling of `reconcileSummary`,
+   * kept deliberately separate from it rather than folded in as another
+   * branch. `reconcileSummary`'s job is to decide WHICH SOURCE FED THE
+   * RECORD's final interval; a terminated run has no final interval to
+   * feed and never will, so it has no business in that function at all.
+   *
+   * **Why this waits instead of emitting on the spot.** 0x003F lands AFTER
+   * 0x0039 on every capture we hold (the natural-finish keystone measured
+   * +269.6ms and +307.8ms off the split, notes §24 item 1; the lab
+   * terminate ring has all three in one ~1s-late group with 0x003F last),
+   * and `appendSummaryObservations` is WRITE-ONCE on `summaryTotals` — one
+   * door for the whole observation set. Emitting the moment 0x0039 decodes
+   * would therefore lose the verification hash PERMANENTLY, the exact
+   * defect the final-review fix wave's HIGH-2 found on the natural path
+   * and fixed with `HASH_SUBWINDOW_MS`. This is that same fix, on this
+   * path, using the same constant: hold for at most `HASH_SUBWINDOW_MS`,
+   * emit early the instant 0x003F arrives, and emit ANYWAY when the window
+   * elapses so firmware that never sends one is not stranded.
+   *
+   * (The brief for this task prescribed a synchronous emit inside
+   * `noteSummary` and a test asserting the hash was stored — the two could
+   * not both hold. Recorded here rather than silently worked around.)
+   */
+  function noteTerminateObservations(
+    run: NonNullable<typeof activeRun>,
+    summary: WorkoutSummary,
+  ): void {
+    const emitTerminate = (): void => {
+      pendingTerminateObservations = null;
+      log.record(
+        "summary-reconciled",
+        `terminate-observations — 0x0039 arrived after a rower-ended close (${summary.elapsedSeconds}s/${summary.meters}m, hash ${run.verificationBytes === null ? "never arrived" : "included"}) and is recorded as OBSERVATIONS ONLY; no interval is derived from it and none ever can be — this run was abandoned, not finished (summary-record design spec §1)`,
+      );
+      emit(
+        summaryObservationsEvent(
+          run,
+          {
+            workElapsedSeconds: summary.elapsedSeconds,
+            workDistanceMeters: summary.meters,
+          },
+          summary,
+        ),
+      );
+    };
+    if (run.verificationBytes !== null) {
+      // The hash was already in hand (a 0x003F that beat its own 0x0039, or
+      // a stray one earlier in this run) — nothing to wait for.
+      emitTerminate();
+      return;
+    }
+    const cancel = schedule(() => {
+      // A `program()` in between replaced the run this emit belongs to.
+      // Same identity guard, and the same belt-to-`program()`'s-braces
+      // reasoning, as `armSummaryReconcile`'s own: `program()` already
+      // cancels this timer before it swaps `activeRun`, and nothing else in
+      // this driver ever reassigns that variable, so this branch is
+      // UNREACHABLE today and is uncovered on purpose (the same trade
+      // `reconcileSummary`'s `lastIndex < 0` guard states: one branch
+      // against a timer speaking about someone else's workout).
+      if (activeRun !== run) {
+        pendingTerminateObservations = null;
+        return;
+      }
+      emitTerminate();
+    }, HASH_SUBWINDOW_MS);
+    pendingTerminateObservations = { cancel, emit: emitTerminate };
+  }
+
+  /** Fires a pending terminate-observations emit EARLY (summary-record
+   *  design spec §1). Two call sites, mirroring the natural path's own two:
+   *  0x003F's subscriber (the byte the wait exists for has landed) and
+   *  `drainSummaryReconcile` (the link is going down — `reconcile()`,
+   *  `disconnect()`, `onDisconnect` — so waiting for more wire evidence is
+   *  no longer a thing this run can do). Idempotent: a no-op once the slot
+   *  is `null`, exactly like `drainSummaryReconcile` itself. */
+  function flushTerminateObservations(): void {
+    const pending = pendingTerminateObservations;
+    if (pending === null) return;
+    pending.cancel();
+    // Nulled BEFORE the emit, not after: `emit` runs the hook's listener
+    // synchronously, and this slot must already read "nothing pending" by
+    // the time anything that listener touches could call back in here.
+    pendingTerminateObservations = null;
+    pending.emit();
   }
 
   /**
@@ -4093,6 +4281,17 @@ export function createPm5Driver(
       // not both already held (this run's own guard), same as every other
       // call site.
       maybeReconcileImmediately(activeRun);
+      // CALL SITE 5, the terminate path's own (summary-record design spec
+      // §1). NOTHING above this line was ever finished-gated — the bytes
+      // are attributed to whichever run is open at receipt, closed or not,
+      // and `activeRun !== null` is the whole admission — so a rower-ended
+      // run's hash already landed on the run object correctly today; what
+      // it had no way to do was reach the RECORD, because nothing on the
+      // terminate path ever emitted an observations event to carry it.
+      // This is that missing trigger: the byte the observations emit is
+      // waiting for has arrived, so it goes out NOW rather than at the end
+      // of its `HASH_SUBWINDOW_MS`. A no-op on every other run.
+      flushTerminateObservations();
     }
   });
 
@@ -4933,6 +5132,13 @@ export function createPm5Driver(
         // defence; this is the first.
         pendingSummaryReconcile?.();
         pendingSummaryReconcile = null;
+        // The terminate path's own deadline, cancelled for the identical
+        // reason one line up (summary-record design spec §1): an
+        // observations emit still waiting on 0x003F belongs to the run
+        // being replaced, and firing it against the new one would fold a
+        // dead workout's numbers onto a live record.
+        pendingTerminateObservations?.cancel();
+        pendingTerminateObservations = null;
         activeRun = {
           program: p,
           closed: false,
@@ -4943,6 +5149,7 @@ export function createPm5Driver(
           summaryInGrace: null,
           graceClaimed: false,
           verificationBytes: null,
+          terminatedAwaitingSummary: false,
         };
         log.record("armed", `programmed ${p.intervals.length} interval(s)`);
         emit({ kind: "armed" });

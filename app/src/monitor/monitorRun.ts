@@ -211,8 +211,11 @@ export interface MonitorRun {
    * PR 1's own field (`docs/superpowers/specs/2026-08-23-storage-spine-design.md`
    * §2, "the post-close observation writer"): 0x0039's work-only totals —
    * `workElapsedSeconds`/`workDistanceMeters` — folded onto a
-   * NATURALLY-FINISHED record after the fact by `appendSummaryObservations`
-   * below, the record's ONLY writer for this field. Additive-optional, the
+   * BURST-ELIGIBLE record (a natural finish or a rower-ended close, this
+   * writer's own gate below — widened from naturally-finished by the
+   * summary-record design spec's §1) after the fact by
+   * `appendSummaryObservations` below, the record's ONLY writer for this
+   * field. Additive-optional, the
    * same never-migrate contract `series`/`endedBy` above already
    * established: a record from before this task simply has none, and this
    * field is never written any other way — in particular NOT by
