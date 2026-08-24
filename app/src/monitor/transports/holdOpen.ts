@@ -180,10 +180,23 @@ export function createHoldOpenTransport(
     // request was made, and the QUESTION W4 exists to answer — "did the
     // PM5 send anything back?" — is legible from whatever comes after it.
     ringPush(`+${sinceArm()}s 0x003f subscribe-issued`);
-    // THE INSTRUMENT's OWN SUBSCRIBE (Phase RC spec 1 §3) — 0x003F is
-    // not on the driver's shared subscribe list (adding it there would
-    // put it on the native arm too; this decorator is dev/web-only), so
-    // arm() is where it starts. The unsubscribe handle is deliberately
+    // THE INSTRUMENT's OWN SUBSCRIBE (Phase RC spec 1 §3). STALE AS OF
+    // THE STORAGE-SPINE SPEC's PR 1 (final-review LOW-1, corrected here):
+    // this comment used to say 0x003F is "not on the driver's shared
+    // subscribe list (adding it there would put it on the native arm
+    // too; this decorator is dev/web-only)" — that PR did exactly that
+    // (`driver.ts`'s own `t.subscribe(LOGGED_WORKOUT_UUID, ...)`, plus
+    // `capacitorBle.ts`'s `SERVICE_OF` map gaining the entry the native
+    // arm needs), so 0x003F is now on BOTH arms via the driver's own
+    // subscription, independent of this instrument entirely. No
+    // functional collision: `capacitorBle.ts` fans out per characteristic
+    // (`subscribers: Map<string, Set<...>>`), `webBluetooth.ts` registers
+    // independent listeners, and the driver never unsubscribes its own
+    // transport characteristics (only `t.disconnect()`), so a SECOND,
+    // instrument-only subscribe here is a harmless duplicate, not a
+    // conflict — it stays, because `arm()` is still the only door that
+    // opens a window BEYOND the driver's own teardown (the 90s hold this
+    // whole decorator exists for). The unsubscribe handle is deliberately
     // dropped: the link is about to die by design, same as every other
     // characteristic this decorator never calls unsubscribe() on itself.
     //

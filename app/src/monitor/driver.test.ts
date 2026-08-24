@@ -8854,25 +8854,43 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     );
   }
 
-  it("(a) PRECEDENCE: a split at t+200ms wins, and the summary at expiry does not re-fire it — one final boundary per run, across BOTH sources", async () => {
+  it("(a) PRECEDENCE / THE CANONICAL LATE SIDE: a split at t+200ms claims the grace, and the summary that follows is now ADMITTED for observations instead of discarded — final-review fix wave, HIGH-1, the reviewer's own probe shape", async () => {
     const g = primedGate();
     await rowToFinish(g);
 
     // The split is merely LATE, not lost — the case review I4 says must
     // never be displaced (its per-interval averages are real data the
-    // summary's whole-workout averages cannot reconstruct).
+    // summary's whole-workout averages cannot reconstruct). It also
+    // CLAIMS the finish grace the instant it lands (`emitIntervalComplete`
+    // nulls `finishGraceUntil`), which is exactly what used to shut the
+    // door on every summary that followed it — the genuine late side,
+    // HIGH-1's own finding: on the real wire the split precedes 0x0039 by
+    // ~270ms EVERY time (notes §24 item 1), so this ordering is not an
+    // edge case, it is the ordinary one.
     g.clock.advance(200);
     g.transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 60, 200));
     g.transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 24));
     expect(boundaries(g.events)).toHaveLength(1);
 
-    // ...and the summary lands afterwards, inside the same window.
+    // ...and the summary lands afterwards, inside the same window — now
+    // ADMITTED (HIGH-1's fix): the split already recorded the final
+    // interval, so this can only ever feed observations, never a
+    // derivation the grace's own closure would make premature.
     g.clock.advance(300);
     g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(60, 200));
+    // Complete on split + summary, but the hash has not arrived — HIGH-2's
+    // sub-window, not the fallback deadline.
+    expect(g.timer.pending()?.ms).toBe(200);
 
-    // The deadline arrives. Nothing is missing, so nothing is synthesized.
-    g.clock.advance(2500);
-    g.timer.pending()!.fire();
+    // The hash arrives (+38ms, the measured 0x0039->0x003F gap, notes §24
+    // item 1) — the canonical late-side fixture's third wire event, and
+    // what finally drains this run for real.
+    const verificationBytes = Uint8Array.from([
+      0x27, 0xd8, 0xf3, 0x6e, 0xe1, 0x52, 0x55, 0x5b,
+    ]);
+    g.clock.advance(38);
+    g.transport.notify(LOGGED_WORKOUT_UUID, verificationBytes);
+    expect(g.timer.pending()).toBeNull();
 
     expect(boundaries(g.events)).toHaveLength(1);
     expect(boundaries(g.events)[0]).toMatchObject({
@@ -8880,12 +8898,12 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
       finalBoundary: true,
     });
     // TWO entries, and the pair is the whole story: the split claimed the
-    // grace, so the summary that followed found the gate already shut
-    // (`out-of-window`, with the reason named), and the deadline then
-    // reported `split-won`. A reader can tell this apart from a run where
-    // no summary ever arrived at all, which is why both are logged.
+    // grace, so the summary that followed found the gate already shut —
+    // but the split it lost to is ALSO what makes this summary admissible
+    // for observations (`buffered`, not `out-of-window` any more), and the
+    // drain then reported `split-won` with those observations folded in.
     expect(verdicts(g.log).map((e) => e.detail.split(" ")[0])).toStrictEqual([
-      "out-of-window",
+      "buffered",
       "split-won",
     ]);
     // The SPECIFIC reason, not a disjunction: "a boundary claimed it" and
@@ -8896,6 +8914,17 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
       "a boundary has already claimed this run's grace",
     );
     expect(verdicts(g.log)[0]!.detail).not.toContain("terminate");
+    // WHAT USED TO BE LOST, NOW STORED: the exact defect HIGH-1 found —
+    // this record used to carry zero `summary-observations` events.
+    expect(
+      g.events.filter((e) => e.kind === "summary-observations"),
+    ).toStrictEqual([
+      {
+        kind: "summary-observations",
+        totals: { workElapsedSeconds: 60, workDistanceMeters: 200 },
+        verificationBytes: Array.from(verificationBytes),
+      },
+    ]);
   });
 
   it("(a2) PRECEDENCE, THE HARD ORDER: the summary arrives FIRST and a split still beats it — held evidence is discarded unread, never filed ahead of the real thing", async () => {
@@ -8916,14 +8945,30 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
 
     g.clock.advance(300);
     g.transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 60, 200));
+    g.transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 24));
     // Review fix round 1, HIGH finding: `maybeReconcileImmediately` fires
     // the INSTANT this second notification completes the split-won
-    // precondition (the summary was already held above) — the deadline is
-    // consumed HERE, not at some later `g.clock.advance`/`g.timer.pending()
-    // .fire()` a test would otherwise have to drive by hand. `g.timer
-    // .pending()` is `null` past this line; asserting that is the pin for
-    // "drains exactly once, at completion, not at the fallback deadline".
-    g.transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 24));
+    // precondition (the summary was already held above) — but final-review
+    // fix wave HIGH-2 widens "complete" to include the verification hash:
+    // with no 0x003F yet, this RE-ARMS the one deadline slot to the short
+    // `HASH_SUBWINDOW_MS` (200ms) instead of draining straight to `null`.
+    expect(g.timer.pending()?.ms).toBe(200);
+    // The SPLIT's own boundary already filed — that emission is
+    // independent of the reconcile/drain, which only decides the
+    // OBSERVATIONS event below.
+    expect(boundaries(g.events)).toHaveLength(1);
+
+    // The hash arrives — the measured +38.2ms gap from 0x0039
+    // (pm5-interface-notes.md §24 item 1), now the canonical late-side
+    // fixture's own third wire event. `LOGGED_WORKOUT_UUID`'s own
+    // subscriber calls `maybeReconcileImmediately` again, finds
+    // `verificationBytes` set this time, and drains — for real, to `null`
+    // — right here.
+    const verificationBytes = Uint8Array.from([
+      0x27, 0xd8, 0xf3, 0x6e, 0xe1, 0x52, 0x55, 0x5b,
+    ]);
+    g.clock.advance(38);
+    g.transport.notify(LOGGED_WORKOUT_UUID, verificationBytes);
     expect(g.timer.pending()).toBeNull();
 
     // The SPLIT's numbers, including the averages only it carries.
@@ -8941,12 +8986,16 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     // lost now ride a `summary-observations` event instead.
     expect(verdicts(g.log)[0]!.detail).not.toContain("discarded unread");
     expect(verdicts(g.log)[0]!.detail).toContain("recorded as observations");
+    // NOW carries the hash too (final-review fix wave, HIGH-2) — omitted
+    // entirely before this fix, since the drain used to fire on 0x0039
+    // alone, 38ms before this byte ever arrived.
     expect(
       g.events.filter((e) => e.kind === "summary-observations"),
     ).toStrictEqual([
       {
         kind: "summary-observations",
         totals: { workElapsedSeconds: 999, workDistanceMeters: 9999 },
+        verificationBytes: Array.from(verificationBytes),
       },
     ]);
   });
@@ -9289,14 +9338,18 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     // rather than carried home.
     expect(totals[0]!.detail).toContain("§23 walk items 2 and 4 settle HERE");
 
-    // The record is untouched by any of this: the split won, and the entry
-    // is diagnostics.
+    // The record is untouched by any of this: the split won, and the
+    // entry is diagnostics. HIGH-1's fix (final-review fix wave): the
+    // split already recorded the final interval, so this late summary is
+    // now ADMITTED (`buffered`, never `out-of-window`) — it just still
+    // changes nothing about the ACTUAL, which the split alone already
+    // filed.
     expect(boundaries(g.events)).toHaveLength(3);
     g.clock.advance(2600);
     g.timer.pending()!.fire();
     expect(boundaries(g.events)).toHaveLength(3);
     expect(verdicts(g.log).map((e) => e.detail.split(" ")[0])).toStrictEqual([
-      "out-of-window",
+      "buffered",
       "split-won",
     ]);
   });
@@ -9632,14 +9685,27 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     // HIGH finding: `maybeReconcileImmediately` (armed right after this
     // frame's own `workoutComplete` emit) finds interval 1 already
     // recorded AND the summary already held — both halves of split-won's
-    // own precondition are already true — so the drain fires HERE,
-    // synchronously with this notification, not at the 3000ms deadline. No
-    // `g.timer.pending()!.fire()` needed; the pin for that is
-    // `g.timer.pending()` reading `null` past this line.
+    // own precondition are already true. Final-review fix wave, HIGH-2:
+    // "complete" now ALSO needs the verification hash, which has not
+    // arrived yet — so this notification re-arms the one deadline slot to
+    // `HASH_SUBWINDOW_MS` (200ms) instead of draining straight away.
     g.transport.notify(
       GENERAL_STATUS_UUID,
       generalStatusIn(WORKOUTSTATE_WORKOUTEND, 150, 500),
     );
+    expect(g.timer.pending()?.ms).toBe(200);
+    expect(boundaries(g.events)).toHaveLength(2); // not filed until the drain
+
+    // The hash arrives (the measured +38.2ms gap from 0x0039,
+    // pm5-interface-notes.md §24 item 1) — `LOGGED_WORKOUT_UUID`'s own
+    // subscriber calls `maybeReconcileImmediately` again, finds
+    // `verificationBytes` set this time, and drains for real, right here.
+    // No `g.timer.pending()!.fire()` needed; the pin for that is
+    // `g.timer.pending()` reading `null` past this line.
+    const verificationBytes = Uint8Array.from([
+      0x27, 0xd8, 0xf3, 0x6e, 0xe1, 0x52, 0x55, 0x5b,
+    ]);
+    g.transport.notify(LOGGED_WORKOUT_UUID, verificationBytes);
     expect(g.timer.pending()).toBeNull();
 
     const splitWon = verdicts(g.log).find((e) =>
@@ -9649,12 +9715,15 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     expect(splitWon.detail).toContain("recorded as observations");
     // No THIRD boundary — split-won never files an actual off the summary.
     expect(boundaries(g.events)).toHaveLength(2);
+    // NOW carries the hash too (final-review fix wave, HIGH-2) — omitted
+    // before this fix, since the drain used to fire on 0x0039 alone.
     expect(
       g.events.filter((e) => e.kind === "summary-observations"),
     ).toStrictEqual([
       {
         kind: "summary-observations",
         totals: { workElapsedSeconds: 150, workDistanceMeters: 500 },
+        verificationBytes: Array.from(verificationBytes),
       },
     ]);
   });

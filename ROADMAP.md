@@ -2898,7 +2898,27 @@ that needs no erg, and it can run in a test.
       max-merges post-reset metres against the pre-reset value (300 m
       rowed + a reset + 200 m more stores ≈300 m, not 500 m) — so RC-1's
       re-key spec must not assume a merged record announces itself.**
-- [ ] **RC-2 — Decode Log Entry Date/Time; log it beside our wall clock;
+- [ ] **PR 1's own residual capture-rate gap (final whole-branch review,
+      2026-08-23, RF14): the burst is not caught 100% of the time even
+      after HIGH-1/HIGH-2 shipped.** PR 1 (`rc-spine`, walk-2026-08-23
+      keystone) fixed the two defects the review found on the LATE side —
+      a split claiming the finish grace no longer shuts the door on the
+      0x0039 that follows it (HIGH-1), and the drain no longer fires
+      blind on 0x0039 alone, 38ms before 0x003F would have arrived
+      (HIGH-2, `HASH_SUBWINDOW_MS`). **One gap survives both fixes,
+      already bounded and documented in code (`driver.ts`'s own
+      "TWO LOSS MODES" comment, `noteSummary`) but never stated where a
+      reader tracking the real capture rate would see it:** the EARLY
+      side's own admission check (`currentIndex === lastIndex`, sourced
+      from 0x0033's `intervalCount`) cannot buffer a 0x0039 that beats
+      this run's very first 0x0033 sample (`toProgramIndex` returns
+      `null`, nothing to compare), or one landing while `intervalCount`
+      still names a PRIOR interval (0x0033's own sample gap swallowing
+      the burst's ~142-449ms window whole, per §1). Both funnel to
+      `out-of-window`, silently. **PR 3/F2b's interval-count work is what
+      sharpens this field enough to close the gap** — sequence that
+      awareness into PR 3's own spec rather than assuming PR 1 alone
+      delivers full capture.
       store nothing yet.** Format settled from two projects and checked
       arithmetically: date `uint16` = month | day<<4 | (year-2000)<<9;
       time `uint16` = minutes | hours<<8. **The residual that inverts the

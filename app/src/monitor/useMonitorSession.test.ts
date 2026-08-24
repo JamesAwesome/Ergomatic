@@ -39,6 +39,7 @@ import { buildMonitorLogSteps } from "../session/logDraft";
 import { monitorModeRun } from "../session/LogSession";
 import {
   createFakeTransport,
+  type FakeBoundaryEvent,
   type FakeControls,
   type FakeScript,
   type FakeTimelineEvent,
@@ -476,7 +477,7 @@ const ONE_IDENTITY: RunIdentity = {
 
 /** `ONE_INTERVAL`'s own final (and only) boundary, as the fake puts it on
  *  the wire. */
-function finalBoundary(atMs: number): FakeTimelineEvent {
+function finalBoundary(atMs: number): FakeBoundaryEvent {
   return {
     atMs,
     kind: "boundary",
@@ -2039,27 +2040,29 @@ describe("useMonitorSession: the ended hand-off waits for the last split (walk d
 });
 
 describe("useMonitorSession: teardown — the burst linger (storage-spine design spec §2, PR 1 Task 3)", () => {
-  it("(a) LATE SIDE, PRODUCTION TIMING: driver grace 3000ms, linger 2000ms, the burst arrives at +400ms after the terminal — observations stored, disconnect at burst completion (~400ms, the EARLY EXIT — never the 2000ms cap), the driver's own deadline drained exactly once and never left to double-fire", async () => {
-    // Review fix round 1, HIGH finding: `BURST_LINGER_MS` (2000) is
-    // strictly SHORTER than `FINISH_GRACE_MS` (3000) — on REAL production
-    // timing the linger's own cap would always win the race against the
-    // driver's un-forced deadline, so the "early exit on burst completion"
-    // branch could never fire for a genuinely late-arriving burst unless
-    // the driver itself reconciles as soon as its inputs are complete
-    // (`driver.ts`'s `maybeReconcileImmediately`). This test no longer
-    // manually fires the driver's own timer out of the real 3000>2000
-    // order — `driverTimer` here exists ONLY to prove the real deadline
-    // gets drained (cancelled, not left pending to double-fire later).
+  it("(a) THE CANONICAL LATE SIDE, PRODUCTION TIMING (final-review fix wave, HIGH-1 + HIGH-2 — the reviewer's own probe shape): terminal, THEN the split claims the grace, THEN the burst (0x0039 at +269.6ms, 0x003F at +307.8ms off the split — FakeBurst's own keystone-measured defaults) — observations AND the verification hash are both stored, and disconnect happens at burst completion, never the full BURST_LINGER_MS", async () => {
+    // Before this fix wave: `summary-observations` events across this
+    // exact ordering = `[]` (the reviewer's own reproduced probe). The
+    // OLD version of this test used a different, non-failing shape (split
+    // BEFORE terminal) — the reviewer's own "why no test caught it"
+    // finding. This is the true wire ordering: our terminal transition
+    // arrives BEFORE the final split, the split CLAIMS the finish grace
+    // the instant it lands, and only THEN does the burst follow — using
+    // `FakeBurst`'s own default offsets, not hand-picked numbers.
     const driverTimer = manualSchedule();
     const burstTimer = manualSchedule();
     let driverMs = 0;
+    const lateBoundary: FakeTimelineEvent = {
+      ...finalBoundary(290),
+      burst: {},
+    };
     const { result, fake, transport, unmount } = harness(
       {
         program: ONE_INTERVAL,
         events: [
           status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
-          finalBoundary(150),
-          finishedAt(200),
+          finishedAt(200), // OUR TERMINAL FIRST — the genuine late side
+          lateBoundary, // the split arrives 90ms later, claiming the grace
         ],
       },
       {
@@ -2075,45 +2078,50 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
 
     await connect(result);
     await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
-    tick(fake, 100);
-    tick(fake, 100);
+    tick(fake, 100); // t=100: status
+    tick(fake, 100); // t=200: terminal
 
-    // The split already landed (before the terminal) — nothing missing,
-    // so the hand-off hold never opens. `armSummaryReconcile` is still
-    // armed regardless (§2's own "any design must serve both sides"), at
-    // its real 3000ms — `maybeReconcileImmediately`'s own arm-time call
-    // site is a no-op here since no summary is held yet.
+    // The split has not landed — the hand-off hold opens, and the deadline
+    // is armed at its ordinary 3000ms (nothing about the hold changes it).
     expect(result.current.phase).toBe("ended");
+    expect(result.current.handoffHeld).toBe(true);
+    expect(driverTimer.pending()?.ms).toBe(3000);
+
+    driverMs = 290;
+    tick(fake, 90); // t=290: the split — CLAIMS the grace
+
+    // The hold releases on the boundary itself; nothing has touched the
+    // deadline yet (no summary held).
     expect(result.current.handoffHeld).toBe(false);
     expect(result.current.actuals).toHaveLength(1);
     expect(driverTimer.pending()?.ms).toBe(3000);
 
     unmount();
-
-    // Naturally-finished, no burst recorded yet: teardown defers instead
-    // of draining immediately.
     expect(burstTimer.pending()?.ms).toBe(BURST_LINGER_MS);
     expect(transport.disconnects).toBe(0);
-    expect(loadMonitorRun()?.summaryTotals).toBeUndefined();
 
-    // The burst arrives at +400ms — AFTER our own terminal (the late side,
-    // §1's "2 of 5") and well inside BOTH the driver's 3000ms grace and
-    // the hook's 2000ms linger. `noteSummary`'s late-side branch holds it
-    // AND finds the split already recorded — evidence is now COMPLETE —
-    // so `maybeReconcileImmediately` drains synchronously, right here, at
-    // ~400ms: no manual timer fire of any kind.
-    driverMs = 400;
-    act(() => {
-      fake.deliverSummary({ elapsedSeconds: 60, meters: 200 });
-    });
+    // +269.6ms off the split: 0x0039 arrives. HIGH-1's fix admits it (the
+    // split already claimed the grace, but the deferred reconcile has not
+    // drained) instead of `out-of-window`. HIGH-2's fix: complete on
+    // split+summary but the hash is missing, so this RE-ARMS the deadline
+    // to the short `HASH_SUBWINDOW_MS` (200ms) rather than draining blind.
+    driverMs = 560;
+    tick(fake, 270); // t=560, past the summary's 559.6ms due time
+    expect(driverTimer.pending()?.ms).toBe(200);
+    expect(transport.disconnects).toBe(0); // still not disconnected
+    expect(loadMonitorRun()?.summaryTotals).toBeUndefined(); // not written yet
 
-    // THE EARLY EXIT IS REAL: disconnect already happened, at burst
-    // completion (~400ms) — nowhere near the 2000ms cap — and BOTH timers
-    // that could have fired later are settled, not dangling: the driver's
-    // own 3000ms deadline was drained (once, not merely cancelled and
-    // silently forgotten — `drainSummaryReconcile`'s own idempotency is
-    // what makes a stray second call here harmless, and there is no
-    // second call), and the hook's own 2000ms linger cap is cancelled.
+    // +307.8ms off the split (+38.2ms after the summary): 0x003F arrives.
+    // `LOGGED_WORKOUT_UUID`'s subscriber finds split+summary+hash all
+    // complete now and drains for real — cancelling the sub-window,
+    // emitting `summary-observations` WITH the hash, and finishing the
+    // hook's own linger early.
+    driverMs = 598;
+    tick(fake, 38); // t=598, past the hash's 597.8ms due time
+
+    // THE EARLY EXIT IS REAL: disconnect at burst completion (~400ms after
+    // the terminal), nowhere near the 2000ms cap — and both timers that
+    // could have fired later are settled, not dangling.
     expect(transport.disconnects).toBe(1);
     expect(driverTimer.pending()).toBeNull();
     expect(burstTimer.pending()).toBeNull();
@@ -2123,16 +2131,32 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
       workElapsedSeconds: 60,
       workDistanceMeters: 200,
     });
+    // THE HASH, STORED (HIGH-2's own fix — omitted entirely before it,
+    // since the drain used to fire on 0x0039 alone, 38ms before this byte
+    // ever arrived).
+    expect(stored?.verificationBytes).toStrictEqual([
+      0x27, 0xd8, 0xf3, 0x6e, 0xe1, 0x52, 0x55, 0x5b, 0xf8, 0x14, 0x01, 0x00,
+      0x94, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    ]);
 
-    // DRAINED EXACTLY ONCE: one verdict, one observation — not two, which
-    // is what a double-fire (the deadline ALSO elapsing later, or a stray
-    // second drain call) would have produced.
+    // TWO entries, and the pair is the whole story now: HIGH-1's own
+    // admission ("buffered" — the split already claimed the grace, but
+    // the summary is still admissible for observations) and the eventual
+    // drain's own verdict ("split-won", with the observations folded in).
+    // `reconcileSummary` itself still ran exactly once — the pin for that
+    // is the SINGLE `split-won` entry, not the entry count, since the
+    // admission log line is a different function (`noteSummary`) logging
+    // a different event (the arrival) under the same `summary-reconciled`
+    // kind.
     const verdicts = JSON.parse(result.current.exportLog()) as {
       kind: string;
       detail: string;
     }[];
+    const reconciled = verdicts.filter((e) => e.kind === "summary-reconciled");
+    expect(reconciled).toHaveLength(2);
+    expect(reconciled[0]!.detail).toContain("buffered");
     expect(
-      verdicts.filter((e) => e.kind === "summary-reconciled"),
+      reconciled.filter((e) => e.detail.startsWith("split-won")),
     ).toHaveLength(1);
 
     // THE SECOND STASH: the ring entries the drain itself produced,
@@ -2143,7 +2167,7 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
     const entries = JSON.parse(stashed!) as { kind: string; detail: string }[];
     expect(entries.some((e) => e.kind === "summary-half")).toBe(true);
     const verdict = entries.find((e) => e.kind === "summary-reconciled");
-    expect(verdict?.detail).toContain("split-won");
+    expect(verdict?.detail).toContain("buffered");
   });
 
   it("(a-cap) LATE SIDE, PRODUCTION TIMING, NOTHING EVER ARRIVES: the driver's own 3000ms deadline would elapse LONG after the hook's 2000ms linger cap — the cap drains first, and the deadline never gets the chance to double-fire", async () => {
@@ -2222,16 +2246,29 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
     for (let i = 0; i < 500; i += 1) log.record("filler", `junk-${i}`);
 
     const burstTimer = manualSchedule();
+    const driverTimer = manualSchedule();
+    const boundaryWithBurst: FakeBoundaryEvent = {
+      ...finalBoundary(150),
+      burst: {},
+    };
     const { result, fake, unmount } = harness(
       {
         program: ONE_INTERVAL,
         events: [
           status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
-          finalBoundary(150),
+          boundaryWithBurst,
           finishedAt(200),
         ],
       },
-      { createLog: () => log, burstLingerSchedule: burstTimer.schedule },
+      {
+        createLog: () => log,
+        burstLingerSchedule: burstTimer.schedule,
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: driverTimer.schedule,
+        },
+      },
     );
 
     await connect(result);
@@ -2254,13 +2291,17 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
     expect(firstStash).toHaveLength(500);
     const oldestAtFirstStash = firstStash[0]!;
 
-    // The burst arrives — split already recorded, so it drains immediately
-    // (review fix round 1's own HIGH-finding fix) and logs at least one
-    // NEW entry (`summary-half`, `summary-reconciled`), each of which
-    // evicts one more of the ring's oldest entries.
-    act(() => {
-      fake.deliverSummary({ elapsedSeconds: 60, meters: 200 });
-    });
+    // The burst arrives (`FakeBurst`'s own keystone-measured offsets off
+    // the boundary at t=150: 0x0039 at 419.6, 0x003F at 457.8) — split
+    // already recorded, so 0x0039 alone re-arms the short hash sub-window
+    // (final-review fix wave, HIGH-2), and 0x003F is what actually drains
+    // — logging at least one NEW entry (`summary-half`,
+    // `summary-reconciled`) each, evicting more of the ring's oldest
+    // entries.
+    tick(fake, 220); // t=420: past the summary's 419.6ms due time
+    expect(driverTimer.pending()?.ms).toBe(200);
+    tick(fake, 40); // t=460: past the hash's 457.8ms due time
+    expect(driverTimer.pending()).toBeNull();
 
     const secondStash = JSON.parse(
       sessionStorage.getItem("ergomatic:last-monitor-log")!,
@@ -2389,13 +2430,16 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
   it("(d) THE RESURRECTION RACE: MONITOR_RUN_KEY is cleared during the linger — the burst's own appendSummaryObservations declines, and nothing reappears in storage", async () => {
     const driverTimer = manualSchedule();
     const burstTimer = manualSchedule();
-    const driverMs = 0;
+    const boundaryWithBurst: FakeBoundaryEvent = {
+      ...finalBoundary(150),
+      burst: {},
+    };
     const { result, fake, unmount } = harness(
       {
         program: ONE_INTERVAL,
         events: [
           status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
-          finalBoundary(150),
+          boundaryWithBurst,
           finishedAt(200),
         ],
       },
@@ -2404,7 +2448,6 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
         driverOptions: {
           settleTicks: 0,
           prepareSettleTicks: 0,
-          now: () => driverMs,
           schedule: driverTimer.schedule,
         },
       },
@@ -2426,16 +2469,13 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
     clearMonitorRun();
     expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
 
-    // THEN the burst arrives — and drains SYNCHRONOUSLY right here
-    // (`driver.ts`'s `maybeReconcileImmediately`: the split was already
-    // recorded via `finalBoundary(150)`, so evidence completes the
-    // instant this notification lands; review fix round 1's HIGH finding
-    // is what makes a separate `driverTimer.pending()!.fire()` step both
-    // unnecessary and, since nothing is left pending after the drain,
-    // impossible — there is no manual step between arrival and decline).
-    act(() => {
-      fake.deliverSummary({ elapsedSeconds: 60, meters: 200 });
-    });
+    // THEN the burst arrives (`FakeBurst`'s own keystone offsets off the
+    // boundary at t=150) — the split was already recorded, so 0x0039
+    // alone re-arms the short hash sub-window (final-review fix wave,
+    // HIGH-2), and 0x003F is what actually drains, right here.
+    tick(fake, 220); // t=420: past the summary's 419.6ms due time
+    expect(driverTimer.pending()?.ms).toBe(200);
+    tick(fake, 40); // t=460: past the hash's 457.8ms due time
     expect(driverTimer.pending()).toBeNull();
 
     // `appendSummaryObservations` re-reads storage fresh and finds nothing

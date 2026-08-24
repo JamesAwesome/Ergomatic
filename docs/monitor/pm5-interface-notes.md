@@ -4766,16 +4766,35 @@ hook, by `src/monitor/burstReplay.test.ts`.
    via `WorkoutEnd->WorkoutLogged` (never via `Terminate`)"; this capture is
    the first evidence that the intermediate WorkoutEnd state can be
    entirely invisible to a BLE subscriber, not merely brief.
-3. **The burst beats our own terminal transition, and does so on 3 of the 5
-   committed natural finishes** (storage-spine design spec §1's own count,
-   re-verified against this capture: 0x0039/0x003A/0x003F, seq 516-518, all
-   land by t=172167.7ms — 141.6-179.8ms BEFORE the driver's own terminal
-   0x0031 at t=172309.3ms; the final SPLIT, 0x0037 at t=171859.9ms, is
-   earlier still, 449.4ms ahead of the terminal, but that gap is item 1's
-   own figure for a different, excluded event, not the summary/verification
-   trio this item is about). The race genuinely goes both ways across the
-   small committed corpus; no fixed ordering can be assumed by any consumer
-   of the burst.
+3. **The burst beats our own terminal transition on THIS capture** —
+   0x0039/0x003A/0x003F, seq 516-518, all land by t=172167.7ms —
+   141.6-179.8ms BEFORE the driver's own terminal 0x0031 at t=172309.3ms;
+   the final SPLIT, 0x0037 at t=171859.9ms, is earlier still, 449.4ms
+   ahead of the terminal, but that gap is item 1's own figure for a
+   different, excluded event, not the summary/verification trio this item
+   is about. **CORRECTED (final whole-branch review, MEDIUM-1): this is
+   n = 1, not "3 of 5".** This walk is the ONLY capture in this repo that
+   carries 0x0039/0x003A/0x003F at all (this section's own opening line:
+   "the first capture in this repo to carry 0x0039/0x003A/0x003F at
+   all") — there is no second burst-bearing recording to count a
+   fraction against, and no statistic about the BURST's own race can be
+   stated as a fraction of 5. **The "3 of 5" figure that used to sit here
+   is real, but it counts a different race**: storage-spine design spec
+   §1 and the antagonist ledger both state it as "split-before-terminal
+   in 3 of 5 [committed natural finishes]" — the SPLIT (0x0037/0x0038)
+   arriving before our own terminal 0x0031, a statistic every committed
+   recording can answer because every recording carries a split. This
+   capture's own split-vs-terminal reading (449.4ms ahead) is consistent
+   with that population but is one data point, not the fraction. The
+   correction matters beyond wording: restating a split-vs-terminal
+   statistic as a burst-vs-terminal one is recurring-failure #16's shape
+   (an unsourced premise repeated until it reads as fact), and reading
+   "the summary is late" as the race's usual shape rather than "the
+   split is late" was the most plausible origin of the final-review
+   HIGH-1 finding — a genuine late-side defect this same PR round fixed
+   (`driver.ts`'s `noteSummary` admission gate; item 4 below is unaffected
+   by this correction, since it already scoped its own fix to the general
+   case, not to a specific fraction).
 4. **THE GATE-DISCARD MECHANISM this race exposed, fixed by storage-spine
    design spec §2 (PR 1).** Before that fix, `driver.ts`'s `noteSummary`
    (via `graceIsOpen`) only ever accepted a 0x0039 arriving AFTER this
