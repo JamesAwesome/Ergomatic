@@ -46,7 +46,9 @@ import { MAX_SPLIT, MIN_SPLIT, STEP, clampSplit } from "./baselineDraft";
  *  Stepper taps move no focus and change no text the rower is reading, so
  *  the change would otherwise be SILENT to a screen reader. The
  *  visually-hidden `aria-live="polite"` region below announces the settled
- *  value after each one. */
+ *  value after each one — and an announcement is tied to the value it
+ *  describes, so it clears the instant the field moves for any other
+ *  reason. See `announcement` below for the two bugs that buys. */
 export default function BaselineField({
   label,
   seconds,
@@ -71,7 +73,31 @@ export default function BaselineField({
   children?: ReactNode;
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const [announcement, setAnnouncement] = useState("");
+  // An announcement is bound to the value it describes, and rendered only
+  // while the field still holds that value (review fix, 2026-08-24). This
+  // is one line of derivation standing in for two bugs, both invisible to
+  // a sighted user:
+  //
+  //  1. STALE TEXT. This is component state and nothing remounts the
+  //     field, so a Discard upstream emptied the field while the region
+  //     went on saying "2k 2:25.0" — a spoken claim about a value that no
+  //     longer existed.
+  //  2. SILENCE ON A REAL CHANGE, which is the worse half. A polite region
+  //     fires on a DOM mutation, not on a render. Materialise, Discard,
+  //     materialise again produced the identical string both times, so
+  //     React bailed on the state write, the text node never changed, and
+  //     the second — entirely real — change was announced to nobody.
+  //     Clearing on the value's departure is what makes the next
+  //     announcement a genuine mutation.
+  //
+  // Derived at render rather than synced by an effect: an effect would
+  // announce a frame late and would need its own teardown to avoid
+  // exactly the staleness above.
+  const [announced, setAnnounced] = useState<{
+    text: string;
+    forValue: number | null;
+  }>({ text: "", forValue: null });
+  const announcement = announced.forValue === seconds ? announced.text : "";
 
   // Both bounds are inclusive in `clampSplit`, so "at the bound" is where
   // a further tap in that direction can no longer change anything. An
@@ -85,16 +111,18 @@ export default function BaselineField({
     inputRef.current?.blur();
     if (seconds === null) {
       onType(seed);
-      setAnnouncement(`${label} ${fmtSplit(seed)}`);
+      setAnnounced({ text: `${label} ${fmtSplit(seed)}`, forValue: seed });
       return;
     }
     // aria-disabled does not stop a click the way `disabled` does; this is
     // what actually makes a dead-end button dead.
     if (direction === -1 ? atMin : atMax) return;
     onNudge(direction);
-    setAnnouncement(
-      `${label} ${fmtSplit(clampSplit(seconds + direction * STEP))}`,
-    );
+    // The same `clampSplit` the draft applies, not a second copy of the
+    // bounds: an announcement derived from a drifting clamp would tell a
+    // screen-reader user a number the field does not hold.
+    const next = clampSplit(seconds + direction * STEP);
+    setAnnounced({ text: `${label} ${fmtSplit(next)}`, forValue: next });
   };
 
   return (

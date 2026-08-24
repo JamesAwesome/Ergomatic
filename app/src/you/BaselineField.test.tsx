@@ -205,6 +205,35 @@ describe("BaselineField announces what a stepper tap settled on", () => {
     expect(live).toHaveTextContent("");
   });
 
+  // Review fix 2: an announcement describes ONE value. The moment the
+  // field moves for any other reason — typing, a Discard upstream — the
+  // claim is stale and must go, or a screen reader is left holding a
+  // number the field no longer shows.
+  it("drops the announcement as soon as the value moves some other way — a spoken claim never outlives its value", async () => {
+    render(<Harness initial={112} />);
+    await userEvent.click(faster());
+    expect(screen.getByText("2k 1:51.5")).toBeInTheDocument();
+
+    await userEvent.type(field(), "203");
+
+    const live = screen.getByText("", { selector: "[aria-live]" });
+    expect(live).toHaveTextContent("");
+  });
+
+  it("speaks again after that clearing, even when the value lands on the same number as before", async () => {
+    render(<Harness initial={112} />);
+    await userEvent.click(faster());
+    expect(screen.getByText("2k 1:51.5")).toBeInTheDocument();
+
+    // Away by typing (announcement cleared), then back to 1:51.5 by the
+    // same nudge. Identical text to the first announcement — it can only
+    // reach a polite region because the region was emptied in between.
+    await userEvent.type(field(), "152");
+    await userEvent.click(faster());
+
+    expect(screen.getByText("2k 1:51.5")).toBeInTheDocument();
+  });
+
   it("says nothing new when a dead-end tap changes nothing", async () => {
     render(<Harness initial={MIN_SPLIT} />);
     await userEvent.click(faster());

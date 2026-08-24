@@ -163,6 +163,30 @@ function ReadyEditor({
   const dirty = isDirty(state);
   const offer = deriveOffer(baselines);
 
+  // ONE suggested number per row (review fix, 2026-08-24). An empty
+  // field's placeholder and the derivation offer below it are two
+  // different suggestion mechanisms that met on the same row when the
+  // honest-empty round landed, and they disagreed: the placeholder read
+  // the generic table seed (2:25.0) while the button offered a
+  // derivation from the rower's OWN rowed split (2:23.0) — two numbers,
+  // two seconds apart, for one field. The steppers this round added made
+  // that worse than untidy: materialising the generic seed marked the
+  // side touched at a value that is not the offer's, so `DeriveSlot`
+  // rendered nothing and the estimate became unreachable in ONE TAP,
+  // with Apply then writing the generic seed as `manual`.
+  //
+  // So whenever an offer is eligible for a side, that side's seed IS the
+  // offer's value. The placeholder, the button and the first-tap
+  // materialisation all name the same number; a first tap now lands
+  // exactly on `offer.value`, which is the predicate `DeriveSlot` and
+  // `sourceFor` already use, so the tap resolves as ACCEPTING the offer
+  // (inert "ESTIMATED" line, stored `derived`) instead of destroying it.
+  // With no eligible offer — both sides unset, or a derivation outside
+  // the storable band — there is nothing better to suggest than the
+  // estimate table's own modal cell.
+  const seedFor = (which: "k2" | "k6"): number =>
+    offer?.which === which ? offer.value : which === "k2" ? SEED_K2 : SEED_K6;
+
   const handleDiscard = () => {
     setState((s) => discard(s));
     setError(null);
@@ -262,7 +286,7 @@ function ReadyEditor({
         <BaselineField
           label="2k"
           seconds={state.draft.k2}
-          seed={SEED_K2}
+          seed={seedFor("k2")}
           onType={(v) => setState((s) => setDraft(s, "k2", v))}
           onNudge={(d) => setState((s) => nudge(s, "k2", d))}
           className="baseline-input"
@@ -281,7 +305,7 @@ function ReadyEditor({
         <BaselineField
           label="6k"
           seconds={state.draft.k6}
-          seed={SEED_K6}
+          seed={seedFor("k6")}
           onType={(v) => setState((s) => setDraft(s, "k6", v))}
           onNudge={(d) => setState((s) => nudge(s, "k6", d))}
           className="baseline-input"
