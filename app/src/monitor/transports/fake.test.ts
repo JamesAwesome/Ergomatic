@@ -15,6 +15,7 @@ import {
   WORKOUTSTATE_REARM,
   WORKOUTSTATE_TERMINATE,
   WORKOUTSTATE_WAITTOBEGIN,
+  WORKOUTSTATE_WORKOUTLOGGED,
 } from "../../../domain/monitor/pm5/parse.js";
 import { parseFrame } from "../../../domain/monitor/csafe.js";
 import {
@@ -27,8 +28,10 @@ import {
   ADDITIONAL_SPLIT_INTERVAL_DATA_UUID,
   ADDITIONAL_STATUS_1_UUID,
   ADDITIONAL_STATUS_2_UUID,
+  END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID,
   END_OF_WORKOUT_SUMMARY_UUID,
   GENERAL_STATUS_UUID,
+  LOGGED_WORKOUT_UUID,
   RECEIVE_CHARACTERISTIC_UUID,
   SAMPLE_RATE_UUID,
   SPLIT_INTERVAL_DATA_UUID,
@@ -3047,5 +3050,328 @@ describe("createFakeTransport: 0x0033's Last Split checkpoint — Task 6's inver
       lastSplitTimeSeconds: 0,
       lastSplitDistanceMeters: 0,
     });
+  });
+});
+
+// Storage-spine design spec §2 (PR 1, RC-8's first half): the fake's own
+// natural-finish burst — `FakeBoundaryEvent.burst`.
+describe("createFakeTransport: FakeBurst — the natural-finish burst (storage-spine design spec §2)", () => {
+  it("fires 0x0039/0x003A together at the scripted summary offset, then 0x003F at the scripted verification offset, and never before either is due", async () => {
+    const fake = createFakeTransport({
+      program: PROGRAM,
+      events: [
+        {
+          atMs: 2000,
+          kind: "boundary",
+          actual: {
+            index: 0,
+            elapsedSeconds: 60,
+            distanceMeters: 220,
+            avgSpm: 23,
+            avgHeartRateBpm: 145,
+            restDistanceMeters: 0,
+          },
+          cumulativeElapsedSeconds: 60,
+          cumulativeDistanceMeters: 220,
+          burst: { summaryAtMsOffset: 300, verificationAtMsOffset: 500 },
+        },
+      ],
+    });
+    await programIt(fake, PROGRAM);
+    const order: string[] = [];
+    fake.subscribe(SPLIT_INTERVAL_DATA_UUID, () => order.push("0x0037"));
+    fake.subscribe(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, () =>
+      order.push("0x0038"),
+    );
+    fake.subscribe(END_OF_WORKOUT_SUMMARY_UUID, () => order.push("0x0039"));
+    fake.subscribe(END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID, () =>
+      order.push("0x003A"),
+    );
+    fake.subscribe(LOGGED_WORKOUT_UUID, () => order.push("0x003F"));
+
+    fake.tick(2000); // reaches the boundary — 0x0037/38 fire, burst scheduled
+    expect(order).toStrictEqual(["0x0037", "0x0038"]);
+
+    fake.tick(200); // 2200 — summary offset (2300) not yet due
+    expect(order).toStrictEqual(["0x0037", "0x0038"]);
+
+    fake.tick(100); // 2300 — 0x0039 first, then 0x003A, same tick
+    expect(order).toStrictEqual(["0x0037", "0x0038", "0x0039", "0x003A"]);
+
+    fake.tick(100); // 2400 — verification offset (2500) still not due
+    expect(order).toStrictEqual(["0x0037", "0x0038", "0x0039", "0x003A"]);
+
+    fake.tick(100); // 2500 — 0x003F
+    expect(order).toStrictEqual([
+      "0x0037",
+      "0x0038",
+      "0x0039",
+      "0x003A",
+      "0x003F",
+    ]);
+  });
+
+  it("computes 0x0039's totals WORK-ONLY from the script's own intervals — fused (rest-inclusive) would give a different number", async () => {
+    // A resting status tick before the boundary — `boundaryBundle`'s own
+    // ENFORCED rule (interface-notes.md §18 #3): interval 0 has a trailing
+    // rest, so the machine must already read "resting" by the time its
+    // boundary arrives, exactly as the real one does.
+    const restTick: FakeTimelineEvent = {
+      atMs: 900,
+      kind: "status",
+      workoutState: WORKOUTSTATE_INTERVALREST,
+      elapsedSeconds: 5,
+      distanceMeters: 0,
+      spm: 0,
+      currentSplit: 0,
+      heartRateBpm: 0,
+      programIntervalIndex: 0,
+      restDistanceMeters: 8,
+    };
+    // Interval 0: 60s/220m work, then a 30s rest that coasts 15m — the
+    // FUSED session total folds that rest in (real 0x0037 wire semantics,
+    // `FakeBoundaryEvent`'s own doc comment); WORK-ONLY never does.
+    const boundary0: FakeTimelineEvent = {
+      atMs: 1000,
+      kind: "boundary",
+      actual: {
+        index: 0,
+        elapsedSeconds: 60,
+        distanceMeters: 220,
+        avgSpm: 22,
+        avgHeartRateBpm: 140,
+        restDistanceMeters: 15,
+      },
+      cumulativeElapsedSeconds: 60,
+      cumulativeDistanceMeters: 220,
+    };
+    // Interval 1 (final, no trailing rest): 45s/210m work. The session's
+    // FUSED cumulative at this point is 60+30+45=135s / 220+15+210=445m —
+    // deliberately authored here so a fake that summed THIS instead of
+    // the per-interval `actual` fields would be caught red-handed.
+    const boundary1: FakeTimelineEvent = {
+      atMs: 2000,
+      kind: "boundary",
+      actual: {
+        index: 1,
+        elapsedSeconds: 45,
+        distanceMeters: 210,
+        avgSpm: 22,
+        avgHeartRateBpm: 142,
+        restDistanceMeters: 0,
+      },
+      cumulativeElapsedSeconds: 135,
+      cumulativeDistanceMeters: 445,
+      burst: { summaryAtMsOffset: 100 },
+    };
+    const fake = createFakeTransport({
+      program: TWO_INTERVALS_ONE_REST,
+      events: [restTick, boundary0, boundary1],
+    });
+    await programIt(fake, TWO_INTERVALS_ONE_REST);
+    const summaries: Uint8Array[] = [];
+    fake.subscribe(END_OF_WORKOUT_SUMMARY_UUID, (b) => summaries.push(b));
+
+    fake.tick(1000); // boundary 0 — no burst attached, nothing fires
+    fake.tick(1000); // boundary 1 — schedules the burst 100ms out
+    fake.tick(100); // 2100 — summary offset due
+    expect(summaries).toHaveLength(1);
+
+    const decoded = parseEndOfWorkoutSummary(summaries[0]!);
+    if (decoded === null) throw new Error("unexpected parse error");
+    // WORK-ONLY: 60+45=105s, 220+210=430m — the sum of each boundary's own
+    // `actual` fields, never the last boundary's fused cumulative pair.
+    expect(decoded.elapsedSeconds).toBe(105);
+    expect(decoded.meters).toBe(430);
+    // The fused figures a wrong implementation would produce instead —
+    // spelled out so the discrimination in the two assertions above isn't
+    // read as a coincidence.
+    expect(decoded.elapsedSeconds).not.toBe(135);
+    expect(decoded.meters).not.toBe(445);
+  });
+
+  it("0x003F carries exactly the scripted bytes, not the keystone default", async () => {
+    const scripted = Uint8Array.from([0x01, 0x02, 0x03, 0x04]);
+    const fake = createFakeTransport({
+      program: PROGRAM,
+      events: [
+        {
+          atMs: 1000,
+          kind: "boundary",
+          actual: {
+            index: 0,
+            elapsedSeconds: 60,
+            distanceMeters: 220,
+            avgSpm: 23,
+            avgHeartRateBpm: 145,
+            restDistanceMeters: 0,
+          },
+          cumulativeElapsedSeconds: 60,
+          cumulativeDistanceMeters: 220,
+          burst: { verificationBytes: scripted },
+        },
+      ],
+    });
+    await programIt(fake, PROGRAM);
+    const verifications: Uint8Array[] = [];
+    fake.subscribe(LOGGED_WORKOUT_UUID, (b) => verifications.push(b));
+
+    fake.tick(1000); // boundary — schedules the burst on default offsets
+    fake.tick(400); // 1400 — past both default offsets (269.6/307.8ms out)
+
+    expect(verifications).toHaveLength(1);
+    expect(verifications[0]).toStrictEqual(scripted);
+  });
+
+  it("a script without a burst never emits 0x0039/0x003A/0x003F — the pre-existing timeline still delivers exactly as before", async () => {
+    const fake = createFakeTransport({
+      program: PROGRAM,
+      events: TIMELINE_EVENTS,
+    });
+    await programIt(fake, PROGRAM);
+    const generals: Uint8Array[] = [];
+    const splits: Uint8Array[] = [];
+    const summaries: Uint8Array[] = [];
+    const additionalSummaries: Uint8Array[] = [];
+    const verifications: Uint8Array[] = [];
+    fake.subscribe(GENERAL_STATUS_UUID, (b) => generals.push(b));
+    fake.subscribe(SPLIT_INTERVAL_DATA_UUID, (b) => splits.push(b));
+    fake.subscribe(END_OF_WORKOUT_SUMMARY_UUID, (b) => summaries.push(b));
+    fake.subscribe(END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID, (b) =>
+      additionalSummaries.push(b),
+    );
+    fake.subscribe(LOGGED_WORKOUT_UUID, (b) => verifications.push(b));
+
+    // TIMELINE_EVENTS' own boundary is at 2000ms; well past even a default
+    // burst's own verification offset (2000+307.8), had one been scheduled.
+    fake.tick(3000);
+
+    // The ordinary path is untouched.
+    expect(generals.length).toBeGreaterThan(0);
+    expect(splits).toHaveLength(1);
+    // Nothing burst-shaped ever goes out unless a script asks for it.
+    expect(summaries).toHaveLength(0);
+    expect(additionalSummaries).toHaveLength(0);
+    expect(verifications).toHaveLength(0);
+  });
+
+  it("a burst due while the link is down is silently missed — gated at ITS OWN due time, not at scheduling time", async () => {
+    const fake = createFakeTransport({
+      program: PROGRAM,
+      events: [
+        {
+          atMs: 1000,
+          kind: "boundary",
+          actual: {
+            index: 0,
+            elapsedSeconds: 60,
+            distanceMeters: 220,
+            avgSpm: 23,
+            avgHeartRateBpm: 145,
+            restDistanceMeters: 0,
+          },
+          cumulativeElapsedSeconds: 60,
+          cumulativeDistanceMeters: 220,
+          burst: { summaryAtMsOffset: 200, verificationAtMsOffset: 300 },
+        },
+      ],
+    });
+    await programIt(fake, PROGRAM);
+    const summaries: Uint8Array[] = [];
+    const additionalSummaries: Uint8Array[] = [];
+    const verifications: Uint8Array[] = [];
+    fake.subscribe(END_OF_WORKOUT_SUMMARY_UUID, (b) => summaries.push(b));
+    fake.subscribe(END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID, (b) =>
+      additionalSummaries.push(b),
+    );
+    fake.subscribe(LOGGED_WORKOUT_UUID, (b) => verifications.push(b));
+
+    fake.tick(1000); // boundary — schedules the burst (unconditionally)
+    fake.injectDisconnect(); // link down BEFORE either offset is reached
+    fake.tick(400); // 1400 — past both offsets, but the link is down
+
+    expect(summaries).toHaveLength(0);
+    expect(additionalSummaries).toHaveLength(0);
+    expect(verifications).toHaveLength(0);
+  });
+
+  it("both race orderings are scriptable: the terminal 0x0031 state flip can land before OR after the burst, purely from atMs", async () => {
+    const boundaryAtMs = 1000;
+    const boundary = (): FakeTimelineEvent => ({
+      atMs: boundaryAtMs,
+      kind: "boundary",
+      actual: {
+        index: 0,
+        elapsedSeconds: 60,
+        distanceMeters: 220,
+        avgSpm: 23,
+        avgHeartRateBpm: 145,
+        restDistanceMeters: 0,
+      },
+      cumulativeElapsedSeconds: 60,
+      cumulativeDistanceMeters: 220,
+      burst: { summaryAtMsOffset: 200, verificationAtMsOffset: 300 },
+    });
+    const terminal = (atMs: number): FakeTimelineEvent => ({
+      atMs,
+      kind: "status",
+      workoutState: WORKOUTSTATE_WORKOUTLOGGED,
+      elapsedSeconds: 60,
+      distanceMeters: 220,
+      spm: 0,
+      currentSplit: 0,
+      heartRateBpm: 0,
+      programIntervalIndex: 0,
+    });
+
+    // Terminal-first: the 0x0031 flip lands between the boundary and the
+    // burst (real race, spec §1: 2 of 5 committed finishes).
+    const terminalFirst = createFakeTransport({
+      program: PROGRAM,
+      events: [boundary(), terminal(boundaryAtMs + 50)],
+    });
+    await programIt(terminalFirst, PROGRAM);
+    const terminalFirstOrder: string[] = [];
+    terminalFirst.subscribe(GENERAL_STATUS_UUID, (b) => {
+      if (decodeGeneral(b).workoutState === WORKOUTSTATE_WORKOUTLOGGED) {
+        terminalFirstOrder.push("terminal");
+      }
+    });
+    terminalFirst.subscribe(END_OF_WORKOUT_SUMMARY_UUID, () =>
+      terminalFirstOrder.push("burst"),
+    );
+    // Ticked in steps that stop AT each due atMs, matching the realistic
+    // ~100-500ms pump cadence (`transports/index.ts`'s `autoTicking`) —
+    // `deliverPendingBurst`'s own doc comment: within one giant tick that
+    // crosses several due moments at once, the script's own timeline
+    // (`runDueEvents`) always delivers in atMs order BEFORE that tick's
+    // end-of-tick burst check, the same "one step per tick" contract
+    // `advanceAutoCycle` already has — stepped ticks are what let this
+    // test observe the TRUE atMs-relative order instead.
+    terminalFirst.tick(1000); // boundary — schedules the burst
+    terminalFirst.tick(50); // 1050 — terminal (WORKOUTLOGGED)
+    terminalFirst.tick(150); // 1200 — burst summary offset
+    expect(terminalFirstOrder).toStrictEqual(["terminal", "burst"]);
+
+    // Burst-first: the 0x0031 flip lands after the whole burst (spec §1:
+    // 3 of 5 committed finishes, the walk-2026-08-23 keystone among them).
+    const burstFirst = createFakeTransport({
+      program: PROGRAM,
+      events: [boundary(), terminal(boundaryAtMs + 400)],
+    });
+    await programIt(burstFirst, PROGRAM);
+    const burstFirstOrder: string[] = [];
+    burstFirst.subscribe(GENERAL_STATUS_UUID, (b) => {
+      if (decodeGeneral(b).workoutState === WORKOUTSTATE_WORKOUTLOGGED) {
+        burstFirstOrder.push("terminal");
+      }
+    });
+    burstFirst.subscribe(END_OF_WORKOUT_SUMMARY_UUID, () =>
+      burstFirstOrder.push("burst"),
+    );
+    burstFirst.tick(1000); // boundary — schedules the burst
+    burstFirst.tick(200); // 1200 — burst summary offset
+    burstFirst.tick(200); // 1400 — terminal (WORKOUTLOGGED)
+    expect(burstFirstOrder).toStrictEqual(["burst", "terminal"]);
   });
 });
