@@ -134,6 +134,12 @@ export interface MonitorFrame {
   //   consumer needs one: `surfaceModel.ts`'s estimate only reads it while
   //   `state === "resting"`, and what it reads outside a rest is
   //   unspecified by the wire and simply unused.
+  //
+  //   NOT `IntervalActual.restSeconds` (below, RC-1, storage-spine design
+  //   spec §3) — that field is 0x0037's own Interval Rest Time, a
+  //   per-completed-interval READBACK, decoded once at the boundary. Same
+  //   English name, different characteristic, different quantity; see that
+  //   field's own comment for the full distinction.
   intervalIndex: number | null;
   // ^ OUR program index (0-based per work interval), never the raw machine
   //   value straight off the wire — normalized by the driver via
