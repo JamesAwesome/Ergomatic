@@ -5082,6 +5082,31 @@ Ad hoc fix rounds outside the phase sequence — small bundles of device
 reports and quick fixes shipped as their own PR rather than waiting on the
 next phase. One line per round, newest first.
 
+- **SHIPPED (2026-08-24, the honest-empty / one-control round — James's
+  report): an unset baseline now LOOKS unset, and one control does both
+  entry jobs on all three baseline surfaces.** Two defects in one change.
+  (1) `SplitInput`'s `seconds` was non-nullable, so a baseline the rower
+  had never entered rendered the app's own seed as the field's VALUE in a
+  saved number's accent ink; the only unset marker was an 11px line shown
+  when BOTH sides were null, so a half-set account got no marker at all.
+  An unset side is `null` end to end now, renders EMPTY with the seed as
+  an `--ink-4` placeholder (5.29:1 on `--surface`, computed), and the
+  first ± tap materialises that seed exactly. (2) Entry affordances were
+  split — the You editor and door 2 typed only, door 1's adjust step
+  nudged only — so `you/BaselineField.tsx` is now the one control
+  everywhere (`[−][typable split][+]`, the house `Stepper` visual,
+  settle-then-nudge, `aria-disabled` dead ends, a polite live region).
+  `BaselineRow` and `.onb-field-box` retired. **QUEUED, found while
+  shipping it:** the derive slot's inert line still reads `ESTIMATED ·
+  TYPE TO ADJUST` — true but now half the story, since that same field
+  nudges. The brief froze the derive slot, so the copy was left alone
+  deliberately; it is a words-only change (two e2e assertions and one
+  client test name it) and belongs to the next PR that touches the You
+  editor. **ALSO QUEUED:** door 1's adjust step shows a PROPOSED number
+  with no provenance eyebrow of its own — the offer step it came from is
+  the only place the fill's source is named. Fine today; revisit if that
+  step ever becomes reachable without passing the offer.
+
 - **ANSWERED (PM final-PR gate, 2026-08-18, PR #121 → `docs/superpowers/
   specs/2026-08-18-log-delete-design.md`): a logged session can be
   deleted, remove-only, from its own from-the-log view.** Spec 2 made
