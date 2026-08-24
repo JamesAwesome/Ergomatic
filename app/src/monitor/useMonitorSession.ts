@@ -1995,6 +1995,7 @@ export function useMonitorSession(
         if (run !== null) {
           const appended = appendSummaryObservations(run.startedAt, {
             totals: event.totals,
+            detail: event.detail,
             ...(event.verificationBytes !== undefined
               ? { verificationBytes: event.verificationBytes }
               : {}),

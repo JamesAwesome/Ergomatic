@@ -50,6 +50,28 @@ export const MONITOR_RUN_KEY = "ergomatic.monitorRun";
  */
 export type CloseReason = "finished" | "rower" | "link-lost" | "program-failed";
 
+/**
+ * RC-3 (storage-spine design spec §2, PR 1 Task 2): the nine 0x0039 fields
+ * beyond the work-only totals `MonitorRun.summaryTotals` already carries —
+ * verbatim `WorkoutSummary` values (`domain/monitor/pm5/parse.ts`) minus
+ * that pair, field-for-field, so `summaryObservationsEvent` (`driver.ts`)
+ * can build one without spreading `elapsedSeconds`/`meters` back in by
+ * accident. `avgPaceSecondsPer500m` is already descaled to SECONDS —
+ * `parseEndOfWorkoutSummary` divides the wire's 0.1s/lsb integer before
+ * this type ever sees it, so nothing downstream re-derives the scale.
+ */
+export type MachineSummaryDetail = {
+  avgStrokeRate: number;
+  endingHeartRateBpm: number | null;
+  avgHeartRateBpm: number | null;
+  minHeartRateBpm: number | null;
+  maxHeartRateBpm: number | null;
+  dragFactorAverage: number;
+  workoutType: number;
+  recoveryHeartRateBpm: number | null;
+  avgPaceSecondsPer500m: number;
+};
+
 /** The monitor run: what a connected PM5 is (or just finished) programming
  *  and reporting against. `program`/`actuals` are the compiled IR and the
  *  interval-boundary actuals `MonitorDriver`'s `intervalComplete` events
@@ -210,6 +232,24 @@ export interface MonitorRun {
    * same never-migrate contract as `summaryTotals`.
    */
   verificationBytes?: readonly number[];
+  /**
+   * RC-3 (storage-spine design spec §2, PR 1 Task 2): 0x0039's other nine
+   * fields — everything the characteristic carries beyond the work-only
+   * totals `summaryTotals` above already holds — folded on in the SAME
+   * call, by the SAME writer, `appendSummaryObservations` below.
+   * Verbatim parser values (`MachineSummaryDetail`'s own doc comment names
+   * the one descale: `avgPaceSecondsPer500m` is already in SECONDS here,
+   * not the wire's 0.1s/lsb integer — `domain/monitor/pm5/parse.ts`'s
+   * `parseEndOfWorkoutSummary` has already divided by 10 before this field
+   * is ever built). Additive-optional, the same never-migrate contract
+   * `summaryTotals`/`series`/`endedBy` above already established: a
+   * record from before this task simply has none, and this field is
+   * never written any other way. `isMonitorRun` below deliberately gains
+   * no check for this field either, same reasoning as `summaryTotals`'s
+   * own comment: write-once and identity are the writer's job, not the
+   * validator's.
+   */
+  summaryDetail?: MachineSummaryDetail;
   /**
    * RC-1 (storage-spine design spec §3, TRIAD — a stored shape): work and
    * rest, summed SEPARATELY from `actuals` — never from `summaryTotals`
@@ -978,8 +1018,9 @@ function stillLive(startedAt: string): MonitorRun | null {
 }
 
 /**
- * PR 1's post-close observation writer (design spec §2): appends the
- * burst's observations — 0x0039's work-only totals, and 0x003F's raw
+ * PR 1's post-close observation writer (design spec §2, widened RC-3 Task
+ * 2): appends the burst's observations — 0x0039's work-only totals, its
+ * other nine fields (`MachineSummaryDetail`), and 0x003F's raw
  * verification-hash bytes when the burst produced one — to the STORED
  * record, write-once and identity-keyed, and mute on every mismatch rather
  * than throwing. This is what lets the burst's listener keep listening
@@ -1005,25 +1046,29 @@ function stillLive(startedAt: string): MonitorRun | null {
  *      burst belongs to with an unrelated one before the burst landed.
  *      (1) and (2) together are `stillLive`, above.
  *   3. the stored run is not naturally closed — `completedAt === null`
- *      (still live; no completion writer has run yet) or
- *      `endedBy !== "finished"` (closed some OTHER way — Terminate/END,
- *      a continuity reset, F6 — whose burst status this spec leaves
- *      UNKNOWN, §1; only a natural WORKOUTEND finish is this writer's
- *      door).
+ *      (still live; no completion writer has run yet), or `endedBy` is
+ *      neither `"finished"` nor `"rower"` (the complement of
+ *      link-lost/program-failed, RC-3 Task 2, spec §1 gate 1: `"rower"`
+ *      covers BOTH venues — Menu-at-the-erg and the app's End button,
+ *      `CloseReason`'s own doc comment — and the machine speaks the
+ *      identical burst for a Menu terminate, notes §25 — and this stays
+ *      correct if W8's inactivity auto-terminate lands in `"rower"`
+ *      later). A link-lost or program-failed close's burst status is
+ *      still UNKNOWN (§1) and still declines.
  *   4. `summaryTotals` already exists — write-once: a second burst
  *      arriving for a record already carrying observations (the two
  *      independent triggers in `driver.ts`'s `reconcileSummary`, or a
  *      retried delivery) must never overwrite the first.
  *
- * On the one valid case, writes ONLY `summaryTotals` (always) and
- * `verificationBytes` (only when the caller has one — a burst that never
- * produced 0x003F still folds its totals alone) — every other field on
- * the record, byte for byte, is exactly what was already stored.
- * `isMonitorRun`'s own positive-conjunction, no-unknown-key design (this
- * file's comment above `isMonitorRun`) is what makes that safe without a
- * validator change or a `v` bump: a record carrying either of these two
- * fields still round-trips through `loadMonitorRun` on any build, new or
- * old.
+ * On the one valid case, writes `summaryTotals` and `summaryDetail`
+ * (always, in the SAME write) and `verificationBytes` (only when the
+ * caller has one — a burst that never produced 0x003F still folds its
+ * totals and detail alone) — every other field on the record, byte for
+ * byte, is exactly what was already stored. `isMonitorRun`'s own
+ * positive-conjunction, no-unknown-key design (this file's comment above
+ * `isMonitorRun`) is what makes that safe without a validator change or a
+ * `v` bump: a record carrying any of these three fields still round-trips
+ * through `loadMonitorRun` on any build, new or old.
  *
  * Returns what it wrote (the new record), or `null` when it declined —
  * matching `recordActual`/`completeMonitorRun`'s own "new record back,
@@ -1034,16 +1079,23 @@ export function appendSummaryObservations(
   runStartedAt: string,
   observations: {
     totals: { workElapsedSeconds: number; workDistanceMeters: number };
+    detail: MachineSummaryDetail;
     verificationBytes?: readonly number[];
   },
 ): MonitorRun | null {
   const run = stillLive(runStartedAt);
   if (run === null) return null;
-  if (run.completedAt === null || run.endedBy !== "finished") return null;
+  if (run.completedAt === null) return null;
+  // Burst-eligible closes only: the complement of link-lost/program-failed.
+  // "rower" covers BOTH venues (Menu-at-the-erg and the app's End button,
+  // CloseReason's own doc) and stays correct if W8's inactivity
+  // auto-terminate lands in "rower" later (spec §1 gate 1).
+  if (run.endedBy !== "finished" && run.endedBy !== "rower") return null;
   if (run.summaryTotals !== undefined) return null;
   const next: MonitorRun = {
     ...run,
     summaryTotals: observations.totals,
+    summaryDetail: observations.detail,
     ...(observations.verificationBytes !== undefined
       ? { verificationBytes: observations.verificationBytes }
       : {}),

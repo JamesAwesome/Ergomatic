@@ -9202,6 +9202,51 @@ describe("createPm5Driver: summary-half receipt logging (fast-follow Task 1, des
     expect(halves[0]!.detail).toContain("0x003A");
     expect(halves[0]!.detail).toContain(`raw=${hex(bytes)}`);
   });
+
+  it("a 0x0039 notification produces exactly one summary-log-stamp ring entry carrying the decoded wire= stamp and wall= (RC-2, storage-spine design spec §2, PR 1 Task 3)", () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    createPm5Driver(transport, log, { now: () => 0 });
+
+    // Walk-2026-08-23 keystone's own seq 516 raw bytes (interface-notes.md
+    // §24), date/time at offsets 0-3: `78 35 1c 09` decodes to
+    // 2026-08-23 09:28 (`parseSummaryLogStamp`'s own formula, re-derived by
+    // hand in `burstReplay.test.ts`'s own comment on the same bytes) — the
+    // rest of the 20-byte layout is left zeroed, which `parseEndOfWorkout
+    // Summary` still decodes (this entry fires off the stamp, independent
+    // of what the other nine fields read).
+    const bytes = new Uint8Array(20);
+    bytes.set([0x78, 0x35, 0x1c, 0x09], 0);
+    transport.notify(END_OF_WORKOUT_SUMMARY_UUID, bytes);
+
+    const stamps = log.entries().filter((e) => e.kind === "summary-log-stamp");
+    expect(stamps).toHaveLength(1);
+    expect(stamps[0]!.detail).toContain("wire=2026-08-23 09:28");
+    expect(stamps[0]!.detail).toContain("wall=");
+  });
+
+  it("a second 0x0039 (the recovery-HR re-fire) produces a SECOND summary-log-stamp entry — one per NOTIFICATION, not one per run (spec exit criterion 3)", () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    createPm5Driver(transport, log);
+
+    transport.notify(END_OF_WORKOUT_SUMMARY_UUID, new Uint8Array(20));
+    transport.notify(END_OF_WORKOUT_SUMMARY_UUID, new Uint8Array(20));
+
+    const stamps = log.entries().filter((e) => e.kind === "summary-log-stamp");
+    expect(stamps).toHaveLength(2);
+  });
+
+  it("a garbled (too-short) 0x0039 produces NO summary-log-stamp entry — the stamp is derived off the same successful parse gate as the totals", () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    createPm5Driver(transport, log);
+
+    transport.notify(END_OF_WORKOUT_SUMMARY_UUID, new Uint8Array(19));
+
+    const stamps = log.entries().filter((e) => e.kind === "summary-log-stamp");
+    expect(stamps).toHaveLength(0);
+  });
 });
 
 describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design spec §5, adversarial B2/B3/I4/I5)", () => {
@@ -9278,6 +9323,12 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     };
   }
 
+  // Doubles as `summary-observations`' own `detail` fixture (RC-3 Task 3):
+  // its nine fields are exactly `MachineSummaryDetail`'s nine, field for
+  // field — `summaryObservationsEvent` builds `detail` from the SAME
+  // `WorkoutSummary` this object seeds `summaryBytes` from, so every
+  // `detail:` expectation below reuses this constant rather than
+  // hand-duplicating its values.
   const FULL_SUMMARY = {
     avgStrokeRate: 24,
     endingHeartRateBpm: 168,
@@ -9418,6 +9469,7 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
       {
         kind: "summary-observations",
         totals: { workElapsedSeconds: 60, workDistanceMeters: 200 },
+        detail: FULL_SUMMARY,
         verificationBytes: Array.from(verificationBytes),
       },
     ]);
@@ -9491,6 +9543,7 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
       {
         kind: "summary-observations",
         totals: { workElapsedSeconds: 999, workDistanceMeters: 9999 },
+        detail: FULL_SUMMARY,
         verificationBytes: Array.from(verificationBytes),
       },
     ]);
@@ -10087,6 +10140,7 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
       {
         kind: "summary-observations",
         totals: { workElapsedSeconds: 30, workDistanceMeters: 100 },
+        detail: FULL_SUMMARY,
       },
     ]);
   });
@@ -10142,6 +10196,7 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
       {
         kind: "summary-observations",
         totals: { workElapsedSeconds: 150, workDistanceMeters: 500 },
+        detail: FULL_SUMMARY,
       },
     ]);
   });
@@ -10219,6 +10274,7 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
       {
         kind: "summary-observations",
         totals: { workElapsedSeconds: 150, workDistanceMeters: 500 },
+        detail: FULL_SUMMARY,
         verificationBytes: Array.from(verificationBytes),
       },
     ]);
@@ -10242,6 +10298,7 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     expect(observations).toStrictEqual({
       kind: "summary-observations",
       totals: { workElapsedSeconds: 62.5, workDistanceMeters: 214 },
+      detail: FULL_SUMMARY,
       verificationBytes: Array.from(verificationBytes),
     });
   });

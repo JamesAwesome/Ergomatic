@@ -103,10 +103,32 @@ describe("MonitorEvent", () => {
       {
         kind: "summary-observations",
         totals: { workElapsedSeconds: 62.5, workDistanceMeters: 214 },
+        detail: {
+          avgStrokeRate: 24,
+          endingHeartRateBpm: 168,
+          avgHeartRateBpm: 152,
+          minHeartRateBpm: 96,
+          maxHeartRateBpm: 175,
+          dragFactorAverage: 128,
+          workoutType: 8,
+          recoveryHeartRateBpm: 120,
+          avgPaceSecondsPer500m: 125,
+        },
       },
       {
         kind: "summary-observations",
         totals: { workElapsedSeconds: 62.5, workDistanceMeters: 214 },
+        detail: {
+          avgStrokeRate: 24,
+          endingHeartRateBpm: 168,
+          avgHeartRateBpm: 152,
+          minHeartRateBpm: 96,
+          maxHeartRateBpm: 175,
+          dragFactorAverage: 128,
+          workoutType: 8,
+          recoveryHeartRateBpm: 120,
+          avgPaceSecondsPer500m: 125,
+        },
         verificationBytes: [0x27, 0xd8, 0xf3, 0x6e],
       },
     ];

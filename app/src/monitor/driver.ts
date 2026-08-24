@@ -74,6 +74,7 @@ import {
   parseEndOfWorkoutSummary,
   parseGeneralStatus,
   parseSplitIntervalData,
+  parseSummaryLogStamp,
   toIntervalActual,
   toMonitorFrame,
   toMonitorState,
@@ -2569,6 +2570,31 @@ export function createPm5Driver(
       );
       return;
     }
+    // RC-2 (storage-spine design spec §2, PR 1 Task 3): the log date/time
+    // stamp, recorded as its own ring entry on EVERY successful 0x0039
+    // decode — including the re-fire (spec exit criterion 3: one entry per
+    // NOTIFICATION, not one per run). DIAGNOSTIC only, per
+    // `parseSummaryLogStamp`'s own doc comment: the wire carries no
+    // seconds, and this is never an identity. `wall=` is this driver's own
+    // clock seam (`now()`, this function's closure), never a bare
+    // `Date.now()` — matches every other timestamp this driver logs.
+    const stamp = parseSummaryLogStamp(bytes);
+    // `stamp === null` is unreachable HERE by construction, same shape as
+    // `reconcileSummary`'s own `lastIndex < 0` guard below: this call site
+    // is only ever reached after `parseEndOfWorkoutSummary(bytes)` already
+    // succeeded, which requires `bytes.length >= 20`; `parseSummaryLogStamp`
+    // only returns `null` for `bytes.length < 4`. Kept explicit (matching
+    // the brief's own null-checking idiom, `parseSummaryLogStamp`'s
+    // general-purpose `| null` return) rather than asserted away, so this
+    // never silently reads garbage if the two layouts' minimum lengths ever
+    // diverge — the cost of the guard is one branch, uncovered on purpose.
+    if (stamp !== null) {
+      const pad = (n: number): string => String(n).padStart(2, "0");
+      log.record(
+        "summary-log-stamp",
+        `wire=${stamp.year}-${pad(stamp.month)}-${pad(stamp.day)} ${pad(stamp.hours)}:${pad(stamp.minutes)} wall=${new Date(now()).toISOString()} (wire carries no seconds; DIAGNOSTIC only, never an identity - spec S2)`,
+      );
+    }
     const run = activeRun;
     // THE WALK'S OWN INSTRUMENT (final review IMP-1), logged BEFORE any
     // window question so it fires on every path a 0x0039 can take: stored,
@@ -3193,26 +3219,45 @@ export function createPm5Driver(
 
   /**
    * Builds the `summary-observations` event (storage-spine design spec
-   * §2): 0x0039's own work-only totals, plus 0x003F's raw bytes if this
-   * run ever heard one. The ONLY thing that varies between
-   * `reconcileSummary`'s two callers below is `totals` — `verificationBytes`
-   * always reads off `run` itself, never a caller's local, so a stray
-   * 0x003F arriving anywhere between `program()` and this call is picked
-   * up identically by whichever branch fires. Omits the key outright when
-   * `null` (never `verificationBytes: undefined`) — the same
+   * §2, `detail` added RC-3 Task 3): 0x0039's own work-only totals, its
+   * other nine fields, plus 0x003F's raw bytes if this run ever heard one.
+   * The ONLY thing that varies between `reconcileSummary`'s two callers
+   * below is `totals`/`summary` — `verificationBytes` always reads off
+   * `run` itself, never a caller's local, so a stray 0x003F arriving
+   * anywhere between `program()` and this call is picked up identically by
+   * whichever branch fires. Omits the `verificationBytes` key outright
+   * when `null` (never `verificationBytes: undefined`) — the same
    * additive-optional shape `IntervalActual.restDistanceMeters` uses,
    * and the shape `Object.keys`/`JSON.stringify` treat as "absent",
    * unlike an explicit `undefined` value.
+   *
+   * `detail` is built as a field-by-field literal off `summary`, never a
+   * spread (`{ ...summary }` would leak `summary`'s own
+   * `elapsedSeconds`/`meters` onto the event alongside `totals`' — the
+   * exact duplicate-source-of-truth this event's own shape forbids).
    */
   function summaryObservationsEvent(
     run: NonNullable<typeof activeRun>,
     totals: { workElapsedSeconds: number; workDistanceMeters: number },
+    summary: WorkoutSummary,
   ): MonitorEvent {
+    const detail = {
+      avgStrokeRate: summary.avgStrokeRate,
+      endingHeartRateBpm: summary.endingHeartRateBpm,
+      avgHeartRateBpm: summary.avgHeartRateBpm,
+      minHeartRateBpm: summary.minHeartRateBpm,
+      maxHeartRateBpm: summary.maxHeartRateBpm,
+      dragFactorAverage: summary.dragFactorAverage,
+      workoutType: summary.workoutType,
+      recoveryHeartRateBpm: summary.recoveryHeartRateBpm,
+      avgPaceSecondsPer500m: summary.avgPaceSecondsPer500m,
+    };
     return run.verificationBytes === null
-      ? { kind: "summary-observations", totals }
+      ? { kind: "summary-observations", totals, detail }
       : {
           kind: "summary-observations",
           totals,
+          detail,
           verificationBytes: run.verificationBytes,
         };
   }
@@ -3281,10 +3326,14 @@ export function createPm5Driver(
       if (held !== null) {
         run.summaryInGrace = null;
         emit(
-          summaryObservationsEvent(run, {
-            workElapsedSeconds: held.elapsedSeconds,
-            workDistanceMeters: held.meters,
-          }),
+          summaryObservationsEvent(
+            run,
+            {
+              workElapsedSeconds: held.elapsedSeconds,
+              workDistanceMeters: held.meters,
+            },
+            held,
+          ),
         );
       }
       return;
@@ -3394,10 +3443,14 @@ export function createPm5Driver(
     // which have already had `deriveFinalIntervalFromSummary`'s premises
     // (priors subtracted, possibly a rest allowance) applied to them.
     emit(
-      summaryObservationsEvent(run, {
-        workElapsedSeconds: summary.elapsedSeconds,
-        workDistanceMeters: summary.meters,
-      }),
+      summaryObservationsEvent(
+        run,
+        {
+          workElapsedSeconds: summary.elapsedSeconds,
+          workDistanceMeters: summary.meters,
+        },
+        summary,
+      ),
     );
   }
 
