@@ -285,8 +285,15 @@ export const preferences = pgTable("preferences", {
   countdownSeconds: integer("countdown_seconds").notNull().default(10),
   paceToleranceSeconds: real("pace_tolerance_seconds").notNull().default(1),
   accentColor: text("accent_color").notNull().default("#b5341f"),
-  // Phase 6I: START HERE's own dismissal, server-side so it's recoverable
-  // from You (PUT IT BACK ON TODAY) rather than a client-local flag.
+  // Phase 6I: START HERE's own dismissal, server-side so it was
+  // recoverable from You (PUT IT BACK ON TODAY) rather than a
+  // client-local flag. James's 2026-08-23 ruling removed the teaching
+  // surfaces (Today's START HERE block, You › Learning the app, News's
+  // dismissed-only pin) — the client no longer reads or writes this
+  // column, and the pinned News articles carry the teaching alone. LEFT
+  // IN PLACE ON PURPOSE, dormant not load-bearing — same rollback
+  // reasoning as `warmup` above (the API stays additive-only between
+  // tags, and the server route still accepts/returns the field).
   startHereDismissed: boolean("start_here_dismissed").notNull().default(false),
 });
 

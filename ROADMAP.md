@@ -846,6 +846,20 @@ Today itself, not from a screen they have to find.
 **Design authority:** `docs/design/handoffs/2026-08-07-news-tab/README.md`
 decisions 6 and 7.
 
+**Removed by James's 2026-08-23 ruling** ("take the learning the app
+section off the today screen and just have it pinned on news. Also remove
+the setting from 'you' to reset it. The baseline recommended is enough."):
+the teaching surfaces this phase built — Today's `START HERE` block
+(Task 5's `StartHere.tsx`/`startHereSteps.tsx`), You's `Learning the app`
+row and `/you/learning` screen, and News's dismissed-only Start-here pin
+(all of Task 7) — are deleted. They shipped and worked; the removal is a
+later product decision, not a reversal of this phase's exit. What
+survives: the four articles themselves (with `your-first-row` now a
+registry pin, so News's PINNED shelf carries the teaching alone), the
+three-door card (superseded Task 5's `BaselineCard` via Phase BL PR C),
+and the `preferences.start_here_dismissed` column — dormant server-side
+(additive-only API; `server/db/schema.ts`'s own comment names it fallow).
+
 - [x] **Task 1 — the nullable domain**: `needsBaselines(steps)`
       (`domain/needsBaselines.ts`) — true unless every work step is an
       effort ref — the one predicate every coupled call site shares;
@@ -5199,6 +5213,16 @@ next phase. One line per round, newest first.
 - **"Which days did I override, and what was the other suggestion?"** (James, 2026-08-12, during the plan-prescriptions design). Two different questions wearing one sentence. The CHECKPOINT half needs no new capture at all once Phase 8B stamps `plan_key`/`done_n` on each log: a prescription is authored, deterministic data — though NOT from the log's own `workout_title` as this entry originally said: `workout_title` is a save-time snapshot, pre-rename logs carry `First 2k` forever, and the sound method is `plan_index ∈ {6,34,62}` via the columns PW already shipped (corrected at the 2026-08-22 gate). The FREE-FORM half — what the ordinary suggestion would have been on a day the rower shuffled away — is genuinely not backfillable, because `suggest()` depends on the account's preferences and every entry's recency at that instant. It is also NOT one column: the suggestion in force lives on Today, and reaching the save means a new field on the versioned `SessionDraft` localStorage record plus every `buildDraft` entry point that never sees Today at all (Library, WorkoutDetail, BaselineCard, the manual log door). Priced accordingly here rather than smuggled into a checkpoint phase as "two nullable columns." **Trigger:** James wants the retrospective screen, not the column. Then design the screen first, and let it say which of the two questions it is actually asking.
 - **A third prescription producer and a real precedence hierarchy** (James, 2026-08-12). Phase 8A ships one producer (the plan) called from one place, so precedence is a comment, not a mechanism. **Trigger:** a second producer becomes real (8C's reservations are the likely first). Then introduce the resolver that orders them, with an asserting test, and settle what a displaced tier does — see 8C's own re-decide item.
 - **Retire `LEGACY_TITLE_RENAMES`** (the 8A seed rename map). Permanent code the moment it lands. **Trigger:** every deployed environment has booted past the rename, so no WORKOUTS row can still carry `First 6k`/`First 2k`. Scope corrected at the 2026-08-22 gate: `session_logs.workout_title` is a save-time snapshot and keeps the old spelling FOREVER — the trigger is about the workouts table only, and any query over historical log titles needs both spellings permanently.
+- **Harden the post-save offer against the library-loading race** (filed
+  2026-08-23 after the flake fired on three branches in one day): when the
+  library is still loading at save time, `LogSession` honestly reads "not
+  the designated test" and navigates to Today before the post-test offer
+  renders — under e2e load this flakes `post-test-prompt` captures and
+  `retest.spec` prompt waits, and on a slow real device it can eat a real
+  rower's offer. The fix is product-shaped (await the library read before
+  deciding, or re-offer on Today), not a test tweak — there is no UI
+  signal a test could await today. **Trigger:** next PR touching the
+  post-save flow, or the flake reaching CI red. **S/M**
 - **Row without a baseline set** (James, 2026-08-23, during BL PR C): a
   no-baseline account can currently browse and row effort-ref workouts, but
   split-ref workouts gate on `needsBaselines` and lose their targets — James

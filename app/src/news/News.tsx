@@ -4,8 +4,6 @@ import type { WorkoutType } from "../../domain/types.js";
 import TypeBadge from "../components/TypeBadge";
 import { useArticleReads } from "../api/useArticleReads";
 import type { ArticleReadsState } from "../api/useArticleReads";
-import { usePreferences } from "../api/usePreferences";
-import { startHereReadCount } from "../today/startHereSteps";
 import {
   latestArticles,
   pinnedArticles,
@@ -120,44 +118,10 @@ export function ArticleRow({
   );
 }
 
-/** The Start-here pinned row (design spec §"Learning the app on You" /
- *  News's own §3, screen 2a): a special pinned row, not a registry article
- *  — it has no body of its own (opens `/you/learning`, not a Reader page),
- *  and its "read state" is the aggregate of the four step slugs
- *  (`startHereReadCount`, the same helper StartHere.tsx/You.tsx/
- *  LearningTheApp.tsx all share) rather than a single slug's own read flag.
- *  Renders only while `preferences.startHereDismissed` is POSITIVELY known
- *  to be true — not merely "not false" — so a still-loading/errored
- *  preferences fetch never risks showing a pin for a rower who never
- *  dismissed anything. The count portion of its own meta line follows the
- *  same suppression rule the count itself already uses elsewhere
- *  (`startHereReadCount` returns `null` while reads aren't ready). */
-function StartHerePin({ reads }: { reads: ArticleReadsState }) {
-  const readCount = startHereReadCount(reads);
-  return (
-    <Link
-      to="/you/learning"
-      state={{ from: "/news" }}
-      className="news-row news-pin-starthere"
-    >
-      <span className="news-row-body">
-        <span className="news-row-title">Start here, in four steps</span>
-        <span className="news-row-meta">
-          {readCount !== null ? `${readCount} OF 4 READ · ` : ""}DISMISSED ON
-          TODAY
-        </span>
-      </span>
-    </Link>
-  );
-}
-
 export default function News() {
   const reads = useArticleReads();
-  const preferences = usePreferences();
   const latest = RELEASE_NOTES[0]!;
   const unread = reads.state === "ready" ? unreadCount(reads.readSlugs) : 0;
-  const startHereDismissed =
-    preferences.state === "ready" && preferences.preferences.startHereDismissed;
   const restoredScrollRef = useRef(false);
   // The save effect below needs to tell "a real scroll of THIS screen"
   // apart from a scroll event that fires AFTER this screen's own DOM has
@@ -167,17 +131,14 @@ export default function News() {
   // Every ROW on this screen carries read-state-dependent markup (the
   // unread square, the accessible Read/Unread word, the " · READ" meta
   // suffix — all suppressed, not just blank, while `reads.state ===
-  // "loading"`, per `readStateFor`'s own suppression rule above), and the
-  // Start-here pin's very PRESENCE depends on `preferences` settling too —
-  // so BOTH fetches settling is what "this screen's real final height is
-  // now known" actually means, not just one. "Settled" means ready OR
-  // error for each, not `rowsReady`-style "ready only" the way
-  // `Library.tsx` gates its own restore (Library shows a LOADING
-  // placeholder with no list at all while loading; News never does — every
-  // row renders immediately, just with its read-state markup missing until
-  // this settles).
-  const contentSettled =
-    reads.state !== "loading" && preferences.state !== "loading";
+  // "loading"`, per `readStateFor`'s own suppression rule above) — so the
+  // reads fetch settling is what "this screen's real final height is now
+  // known" actually means. "Settled" means ready OR error, not
+  // `rowsReady`-style "ready only" the way `Library.tsx` gates its own
+  // restore (Library shows a LOADING placeholder with no list at all
+  // while loading; News never does — every row renders immediately, just
+  // with its read-state markup missing until this settles).
+  const contentSettled = reads.state !== "loading";
 
   // Save scroll position for the lifetime of this screen, throttled to
   // ~100ms — copies `Library.tsx`'s own save effect idiom, with one
@@ -263,7 +224,6 @@ export default function News() {
         <h2 id="news-pinned-h" className="news-section-label">
           PINNED
         </h2>
-        {startHereDismissed && <StartHerePin reads={reads} />}
         {pinnedArticles().map((a) => (
           <ArticleRow key={a.slug} article={a} reads={reads} />
         ))}

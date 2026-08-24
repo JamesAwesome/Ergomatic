@@ -27,7 +27,6 @@ import Timer from "../session/Timer";
 import Today from "../today/Today";
 import WorkoutDetail from "../workout/WorkoutDetail";
 import You from "../You";
-import LearningTheApp from "../you/LearningTheApp";
 import type { Me } from "../useMe";
 import TabBar from "./TabBar";
 
@@ -197,12 +196,6 @@ export default function AppRoutes({
               path="/you"
               element={<You user={user} onSignedOut={onSignedOut} />}
             />
-            {/* Phase 6I Task 7: registered inside the SAME `user &&
-                onSignedOut` conditional as /you, one level up — the
-                implementer-landmine note (design spec) that a
-                signed-out config wildcards this to /today exactly like
-                /you itself, rather than needing its own guard. */}
-            <Route path="/you/learning" element={<LearningTheApp />} />
           </>
         )}
         <Route path="*" element={<Navigate to="/today" replace />} />
