@@ -537,15 +537,44 @@ test("onboarding-door-recommendation", async ({ page }) => {
   });
 });
 
+// Door 1's ADJUST step, which had no capture at all until the one-control
+// round (2026-08-24) gave it typed fields — the surface whose controls
+// changed most, and the one baseline surface with no empty state: a
+// prefilled recommendation is PROPOSED, shown at full accent strength.
+test("onboarding-door-adjust", async ({ page }) => {
+  await signInViaBackdoor(page, {
+    email: "screenshots-door-adjust@e2e.test",
+    name: "Screenshot Tester",
+  });
+  await page.goto("/onboarding/recommend");
+  await page
+    .getByRole("radio", { name: "A little. I know the stroke" })
+    .click();
+  await page
+    .getByRole("radio", { name: "Active once or twice a week" })
+    .click();
+  await page.getByRole("button", { name: "Adjust the numbers first" }).click();
+  await expect(page.getByRole("textbox", { name: "2k split" })).toHaveValue(
+    "2:25.0",
+  );
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "onboarding-door-adjust.png"),
+  });
+});
+
 test("onboarding-door-know", async ({ page }) => {
   await signInViaBackdoor(page, {
     email: "screenshots-door-know@e2e.test",
     name: "Screenshot Tester",
   });
   await page.goto("/onboarding/know");
-  // The typed fields (Option T) rest on the seed pair — input VALUES now,
-  // not text nodes.
-  await expect(page.getByRole("textbox", { name: "2k split" })).toHaveValue(
+  // Honest-empty round (2026-08-24): the fields are EMPTY here — this
+  // account has no baselines — with the seed pair showing as dim
+  // placeholders inside the unified `[−] value [+]` control. The capture's
+  // whole point is that an unentered baseline now LOOKS unentered.
+  await expect(page.getByRole("textbox", { name: "2k split" })).toHaveValue("");
+  await expect(page.getByRole("textbox", { name: "2k split" })).toHaveAttribute(
+    "placeholder",
     "2:25.0",
   );
   await page.screenshot({
