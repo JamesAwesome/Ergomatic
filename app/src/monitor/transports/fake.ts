@@ -61,6 +61,13 @@
 //     (`FakeStatusEvent.restDistanceMeters`); TWD is a banked session
 //     total, frozen during work, stepping at boundaries and during rests
 //     (`bankedDistanceMeters`, `totalWorkDistanceFor`).
+//   - storage-spine design spec §2 (PR 1, RC-8's first half): a boundary
+//     can carry a `FakeBurst`, and the fake follows it with the SAME
+//     natural-finish burst the walk-2026-08-23 keystone captured — final
+//     0x0037/0x0038, then 0x0039+0x003A, then 0x003F, each `atMs`-offset
+//     from that boundary and scriptable, riding the same virtual-clock
+//     `tick()` machinery as everything else here (`FakeBurst`'s own doc
+//     comment has the wire timing and the work-only totals rule).
 //
 
 // Three ack shapes here are SYNTHETIC and say so at their definitions,
@@ -142,8 +149,10 @@ import {
   ADDITIONAL_SPLIT_INTERVAL_DATA_UUID,
   ADDITIONAL_STATUS_1_UUID,
   ADDITIONAL_STATUS_2_UUID,
+  END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID,
   END_OF_WORKOUT_SUMMARY_UUID,
   GENERAL_STATUS_UUID,
+  LOGGED_WORKOUT_UUID,
   RECEIVE_CHARACTERISTIC_UUID,
   SAMPLE_RATE_UUID,
   SPLIT_INTERVAL_DATA_UUID,
@@ -276,9 +285,94 @@ export interface FakeBoundaryEvent {
   // this boundary carries). `boundaryBundle` now derives the wire byte
   // itself; see its own comment for the identity and the zero-distance
   // guard.
-  actual: Omit<IntervalActual, "index" | "avgSplit"> & { index: number };
+  // `restDistanceMeters` is re-narrowed back to required here (storage-
+  // spine design spec §2, RC-7): `IntervalActual.restDistanceMeters` went
+  // additive-optional so the driver's synthesized-final fallback can OMIT
+  // a quantity it never measured, but every script authoring a boundary
+  // through this type still speaks for a REAL 0x0037 the fake will
+  // encode — `boundaryBundle` below writes `intervalRestDistanceMeters`
+  // straight onto the wire (`statusFrames.ts`'s builder input, itself
+  // required, matching the real characteristic), so an omitted value here
+  // would have to be defaulted somewhere, silently disagreeing with a
+  // script that meant to author 0.
+  actual: Omit<IntervalActual, "index" | "avgSplit" | "restDistanceMeters"> & {
+    index: number;
+    restDistanceMeters: number;
+  };
   cumulativeElapsedSeconds: number;
   cumulativeDistanceMeters: number;
+  /** Storage-spine design spec §2 (PR 1, RC-8's first half): scripts the
+   *  machine's own natural-finish burst as a continuation of THIS
+   *  boundary — the script's own choice of WHICH boundary is the
+   *  workout's last one, never inferred from `script.program` (the same
+   *  "script decides, never inferred" rule `rowingState`/
+   *  `restDistanceMeters` already follow). See `FakeBurst`'s own doc
+   *  comment for the wire timing and the work-only totals rule. */
+  burst?: FakeBurst;
+}
+
+/** A scripted natural-finish burst, attached to the boundary event that
+ *  completes the workout's FINAL interval. Real wire shape
+ *  (walk-2026-08-23 keystone, `docs/monitor/sessions/walk-2026-08-23/
+ *  README.md`'s own "summary burst" finding, re-decoded from the raw
+ *  capture at seq 514-518): the machine follows its final 0x0037/0x0038
+ *  with 0x0039+0x003A (269.6/270.7 ms later — the same instant, for this
+ *  file's purposes) then 0x003F (307.8 ms later) — three more
+ *  notifications, each `atMs`-offset from THIS boundary's own `atMs` and
+ *  independently scriptable, riding the same virtual clock as everything
+ *  else in this file (no wall clock — `tick()`'s own doc comment). A
+ *  script controls which side of the real race (design spec §1: "3 of 5
+ *  burst-first") it is describing purely through `atMs` values: put a
+ *  terminal `FakeStatusEvent` (`WORKOUTSTATE_WORKOUTLOGGED`) BEFORE this
+ *  boundary's `atMs` plus these offsets for a burst-first finish, or
+ *  AFTER for a terminal-first one — the existing sorted-timeline delivery
+ *  (`runDueEvents`) does the rest; nothing about the burst itself needs to
+ *  know which race it is in.
+ *
+ *  `summaryOverrides` is the ONLY totals knob a script gets:
+ *  `elapsedSeconds`/`meters` are NOT authored here — 0x0039 reports the
+ *  WHOLE WORKOUT's totals, WORK-ONLY (spec §1: "the work-only pins use
+ *  the rest-bearing captures ... where the two definitions actually
+ *  differ"), and a script that could set an arbitrary number here could
+ *  just as easily set a FUSED one with no test able to tell the
+ *  difference — exactly the trap `avgSplit`'s removal from
+ *  `FakeBoundaryEvent` already fixed once (that field's own doc comment).
+ *  The fake instead SUMS every boundary's own `actual.elapsedSeconds`/
+ *  `distanceMeters` — the per-interval WORK fields, never
+ *  `cumulativeElapsedSeconds`/`cumulativeDistanceMeters`, which include
+ *  rest — as each boundary is processed, so the totals this burst reports
+ *  are exactly what the script's own intervals say, truthfully: "derived,
+ *  never authored", the same rule `boundaryBundle`'s own Average Pace
+ *  already follows. */
+export interface FakeBurst {
+  /** ms after this boundary's own `atMs` that 0x0039/0x003A go out —
+   *  default 269.6, the keystone's own measured offset (rounded to the
+   *  0x0039 side; 0x003A followed 1.1 ms later on that capture, folded
+   *  into the same tick here). */
+  summaryAtMsOffset?: number;
+  /** ms after this boundary's own `atMs` that 0x003F goes out — default
+   *  307.8, the keystone's own measured offset. */
+  verificationAtMsOffset?: number;
+  /** 0x003A's raw bytes, 19 of them (`uuids.ts`'s own doc comment) —
+   *  nothing decodes this characteristic (`driver.ts`'s `noteSummaryHalf`
+   *  logs it for observability only, design spec §2's own review I5), so
+   *  the default is the keystone's own captured bytes (seq 517) rather
+   *  than an invented plausible payload. */
+  additionalSummaryBytes?: Uint8Array;
+  /** 0x003F's raw bytes — default the keystone's own captured bytes
+   *  (seq 518): `27 d8 f3 6e e1 52 55 5b f8 14 01 00 94 00 00 00 00 00
+   *  00`, whose first 8 bytes README's own W4 finding confirms against
+   *  the PM5's own verification screen (`6EF3D827 5B5552E1`, two
+   *  little-endian u32 words); the rest is undecoded and carried
+   *  verbatim. */
+  verificationBytes?: Uint8Array;
+  /** Every 0x0039 field besides `elapsedSeconds`/`meters`, which this
+   *  burst always computes truthfully (this type's own doc comment) —
+   *  same non-zero-on-purpose defaults `FakeControls.deliverSummary`
+   *  already uses, and for the same reason (that method's own doc
+   *  comment: a test asserting "no average carried across" must be able
+   *  to fail against a fake that defaulted to zero). */
+  summaryOverrides?: Partial<Omit<WorkoutSummary, "elapsedSeconds" | "meters">>;
 }
 
 export type FakeTimelineEvent = FakeStatusEvent | FakeBoundaryEvent;
@@ -679,6 +773,48 @@ function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
 function toHex(bytes: Uint8Array): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join(" ");
 }
+
+/** 0x0039's non-zero-on-purpose average defaults, shared by
+ *  `FakeControls.deliverSummary` (the on-demand injection) and the
+ *  scripted `FakeBurst` — one place, so the two never quietly drift.
+ *  `deliverSummary`'s own doc comment has the reasoning for why these are
+ *  real, non-zero readings rather than convenient zeros. */
+const DEFAULT_SUMMARY_AVERAGES: Omit<
+  WorkoutSummary,
+  "elapsedSeconds" | "meters"
+> = {
+  avgStrokeRate: 24,
+  endingHeartRateBpm: 168,
+  avgHeartRateBpm: 152,
+  minHeartRateBpm: 96,
+  maxHeartRateBpm: 175,
+  dragFactorAverage: 128,
+  recoveryHeartRateBpm: 120,
+  workoutType: 8,
+  avgPaceSecondsPer500m: 125,
+};
+
+/** `FakeBurst`'s own default offsets — the keystone's own measured
+ *  269.6/307.8 ms (walk-2026-08-23, `docs/monitor/sessions/
+ *  walk-2026-08-23/README.md`'s "summary burst" finding). */
+const DEFAULT_SUMMARY_BURST_OFFSET_MS = 269.6;
+const DEFAULT_VERIFICATION_BURST_OFFSET_MS = 307.8;
+
+/** 0x003A's raw bytes, captured verbatim (keystone seq 517) — nothing in
+ *  this codebase decodes this characteristic (`FakeBurst`'s own doc
+ *  comment), so a real, observed payload stands in for an invented one. */
+const KEYSTONE_ADDITIONAL_SUMMARY_BYTES = Uint8Array.from([
+  0x78, 0x35, 0x1c, 0x09, 0x01, 0xfa, 0x00, 0x02, 0x1c, 0x00, 0x83, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0xef, 0x02,
+]);
+
+/** 0x003F's raw bytes, captured verbatim (keystone seq 518) — first 8
+ *  bytes confirmed against the PM5's own verification screen (`FakeBurst`'s
+ *  own doc comment); the remainder is undecoded and carried as-is. */
+const KEYSTONE_VERIFICATION_BYTES = Uint8Array.from([
+  0x27, 0xd8, 0xf3, 0x6e, 0xe1, 0x52, 0x55, 0x5b, 0xf8, 0x14, 0x01, 0x00, 0x94,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+]);
 
 /** CR2 spec 1, Task 8, CORRECTED by the 2026-08-18 connected-metrics spec's
  *  own research pass. `totalWorkDistanceMeters` (0x0031 byte 11, `parse.ts`)
@@ -1328,6 +1464,30 @@ export function createFakeTransport(script: FakeScript): Transport &
   // Cleared the instant it is folded in; reset to `0` on every fresh accept
   // too, for the same "means nothing across a workout boundary" reason.
   let lastRestDistanceMeters = 0;
+  // Storage-spine design spec §2 (RC-8): the SESSION's WORK-ONLY totals —
+  // unlike `bankedDistanceMeters` (TWD, fused: work + rest), these two
+  // accumulate ONLY each boundary's own `actual.elapsedSeconds`/
+  // `distanceMeters` (`deliverOrCache`'s boundary branch, alongside
+  // `bankedDistanceMeters`'s own work-add) and are NEVER touched by a
+  // rest — this is what a `FakeBurst`'s 0x0039 truthfully reports (that
+  // type's own doc comment: "derived, never authored"). Reset to `0` on
+  // every fresh accept, same reason `bankedDistanceMeters` is.
+  let bankedWorkSeconds = 0;
+  let bankedWorkMeters = 0;
+  // Storage-spine design spec §2: the natural-finish burst a boundary's
+  // own `FakeBurst` schedules, checked every `tick()` (`deliverPendingBurst`'s
+  // own doc comment) until both notifications have gone out. `null` when
+  // nothing is pending — the common case, and always the case for a
+  // script that never sets `FakeBoundaryEvent.burst`.
+  let pendingBurst: {
+    summaryAtMs: number;
+    verificationAtMs: number;
+    summary: WorkoutSummary;
+    additionalSummaryBytes: Uint8Array;
+    verificationBytes: Uint8Array;
+    summaryDelivered: boolean;
+    verificationDelivered: boolean;
+  } | null = null;
   // The machine's CURRENT state word, in `MonitorFrame` terms — updated
   // from every status event this fake processes (delivered or merely
   // cached; the PM keeps rowing whether or not the phone is listening).
@@ -1996,6 +2156,13 @@ export function createFakeTransport(script: FakeScript): Transport &
       heldSplitAvgPace = 0;
       bankedDistanceMeters = 0;
       lastRestDistanceMeters = 0;
+      // Storage-spine design spec §2: same "means nothing across a workout
+      // boundary" reasoning — a new program landing means the previous
+      // workout's work-only totals are stale, and any burst it scheduled
+      // was for a run this machine is no longer holding.
+      bankedWorkSeconds = 0;
+      bankedWorkMeters = 0;
+      pendingBurst = null;
       // Fix-round 1, F1: withheld until a subsequent `tick()` (or
       // `deliverArmedNow()`) — see `tick()`'s own doc comment for why
       // this is no longer synchronous with the ack itself. Fix wave
@@ -2116,7 +2283,107 @@ export function createFakeTransport(script: FakeScript): Transport &
       // un-gated on `linkDown`, matching every other line in this block:
       // the machine's own bookkeeping does not pause for the phone's radio.
       bankedDistanceMeters += event.actual.distanceMeters;
+      // Storage-spine design spec §2: the SESSION's WORK-ONLY totals, the
+      // same "unconditional, un-gated on `linkDown`" bookkeeping as
+      // `bankedDistanceMeters` just above — this boundary's own work
+      // happened whether or not the phone is listening, and `FakeBurst`'s
+      // 0x0039 (below) has to be able to report it truthfully even for a
+      // boundary missed to a disconnect and only picked up later.
+      bankedWorkSeconds += event.actual.elapsedSeconds;
+      bankedWorkMeters += event.actual.distanceMeters;
       if (!linkDown) deliverBoundary(event);
+      // Storage-spine design spec §2 (RC-8): this boundary's own
+      // `FakeBurst`, if the script gave it one, schedules the
+      // natural-finish burst relative to THIS boundary's `atMs` —
+      // scheduled unconditionally (the machine decides to send the burst
+      // regardless of the phone's radio, same reasoning as the two banked
+      // totals just above); `deliverPendingBurst` is what actually gates
+      // each notification on `linkDown`, checked at ITS OWN due time, not
+      // at this scheduling instant.
+      if (event.burst) {
+        pendingBurst = {
+          summaryAtMs:
+            event.atMs +
+            (event.burst.summaryAtMsOffset ?? DEFAULT_SUMMARY_BURST_OFFSET_MS),
+          verificationAtMs:
+            event.atMs +
+            (event.burst.verificationAtMsOffset ??
+              DEFAULT_VERIFICATION_BURST_OFFSET_MS),
+          summary: {
+            elapsedSeconds: bankedWorkSeconds,
+            meters: bankedWorkMeters,
+            ...DEFAULT_SUMMARY_AVERAGES,
+            ...event.burst.summaryOverrides,
+          },
+          additionalSummaryBytes:
+            event.burst.additionalSummaryBytes ??
+            KEYSTONE_ADDITIONAL_SUMMARY_BYTES,
+          verificationBytes:
+            event.burst.verificationBytes ?? KEYSTONE_VERIFICATION_BYTES,
+          summaryDelivered: false,
+          verificationDelivered: false,
+        };
+      }
+    }
+  }
+
+  /** Fires whichever of `pendingBurst`'s two remaining notifications is now
+   *  due, called from `tick()` AFTER `runDueEvents()` — the same "checked
+   *  on the tick, never on a timer" contract `deliverArmedIfHeld`/
+   *  `advanceAutoCycle` already use, and the same ordering rule: within
+   *  ONE `tick(ms)` call, the script's own timeline always delivers in
+   *  atMs order FIRST, and this burst check runs once at the end, so a
+   *  giant tick that crosses both a later scripted event's `atMs` AND the
+   *  burst's own offset delivers the scripted event before the burst
+   *  regardless of which `atMs` is numerically smaller. This is never
+   *  wrong for the burst's OWN two notifications (0x0039+0x003A always
+   *  precede 0x003F, `pendingBurst`'s own construction order) or for a
+   *  large tick that crosses ONLY the burst's offsets — it only means a
+   *  script proving a specific race ordering against an UNRELATED
+   *  scripted event (a terminal status, say) should tick in steps that
+   *  stop at each due `atMs`, the same realistic ~100-500ms cadence
+   *  `transports/index.ts`'s `autoTicking` pump uses, rather than one
+   *  tick spanning the whole window (`fake.test.ts`'s own race-ordering
+   *  test does this).
+   *
+   *  Gated by `linkDown` HERE, at each notification's own due time — not
+   *  at scheduling time (`deliverOrCache`'s boundary branch schedules
+   *  unconditionally, `FakeBurst`'s own doc comment) — because the
+   *  machine sent the burst regardless of the phone's radio; only the
+   *  notification can be missed. Deliberately NOT re-flushed by
+   *  `completeReconnect()` the way `latestStatus`/`latestBoundary` are: a
+   *  burst missed to THIS fake's `injectDisconnect()` knob is out of this
+   *  task's scope — the design spec's own linger mechanism (PR 1 §2) is
+   *  what a real reconnect-vs-burst race is for. */
+  function deliverPendingBurst(): void {
+    if (!pendingBurst) return;
+    if (
+      !pendingBurst.summaryDelivered &&
+      virtualClock >= pendingBurst.summaryAtMs
+    ) {
+      if (!linkDown) {
+        notify(
+          END_OF_WORKOUT_SUMMARY_UUID,
+          buildEndOfWorkoutSummaryBytes(pendingBurst.summary),
+        );
+        notify(
+          END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID,
+          pendingBurst.additionalSummaryBytes,
+        );
+      }
+      pendingBurst.summaryDelivered = true;
+    }
+    if (
+      !pendingBurst.verificationDelivered &&
+      virtualClock >= pendingBurst.verificationAtMs
+    ) {
+      if (!linkDown) {
+        notify(LOGGED_WORKOUT_UUID, pendingBurst.verificationBytes);
+      }
+      pendingBurst.verificationDelivered = true;
+    }
+    if (pendingBurst.summaryDelivered && pendingBurst.verificationDelivered) {
+      pendingBurst = null;
     }
   }
 
@@ -2209,6 +2476,12 @@ export function createFakeTransport(script: FakeScript): Transport &
       // session the script describes carries on.
       advanceAutoCycle();
       runDueEvents();
+      // Storage-spine design spec §2: any burst a boundary scheduled this
+      // tick (or an earlier one) gets its own due-offsets check — after
+      // `runDueEvents()` so a single large `tick(ms)` that crosses both the
+      // boundary's own `atMs` AND its burst offsets delivers the whole
+      // thing in one call (`deliverPendingBurst`'s own doc comment).
+      deliverPendingBurst();
       // Fix wave F-CRIT: armed is a LEVEL. If neither the auto-cycle nor
       // the script said anything this tick (either would have dropped the
       // level, `clearArmedLevel`), the machine repeats what it is still
@@ -2289,15 +2562,7 @@ export function createFakeTransport(script: FakeScript): Transport &
       notify(
         END_OF_WORKOUT_SUMMARY_UUID,
         buildEndOfWorkoutSummaryBytes({
-          avgStrokeRate: 24,
-          endingHeartRateBpm: 168,
-          avgHeartRateBpm: 152,
-          minHeartRateBpm: 96,
-          maxHeartRateBpm: 175,
-          dragFactorAverage: 128,
-          recoveryHeartRateBpm: 120,
-          workoutType: 8,
-          avgPaceSecondsPer500m: 125,
+          ...DEFAULT_SUMMARY_AVERAGES,
           ...totals,
         }),
       );

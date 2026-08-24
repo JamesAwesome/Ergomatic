@@ -185,6 +185,31 @@ export interface MonitorRun {
    * contract as `series` above.
    */
   seriesDropped?: true;
+  /**
+   * PR 1's own field (`docs/superpowers/specs/2026-08-23-storage-spine-design.md`
+   * §2, "the post-close observation writer"): 0x0039's work-only totals —
+   * `workElapsedSeconds`/`workDistanceMeters` — folded onto a
+   * NATURALLY-FINISHED record after the fact by `appendSummaryObservations`
+   * below, the record's ONLY writer for this field. Additive-optional, the
+   * same never-migrate contract `series`/`endedBy` above already
+   * established: a record from before this task simply has none, and this
+   * field is never written any other way — in particular NOT by
+   * `completeMonitorRun`, which closes on the wire event alone and has no
+   * summary in hand yet. `isMonitorRun` below deliberately gains no check
+   * for this field (its own comment: "this positive conjunction tolerates
+   * the new fields on records this task's own code never wrote") —
+   * write-once and identity are the writer's job, not the validator's.
+   */
+  summaryTotals?: { workElapsedSeconds: number; workDistanceMeters: number };
+  /**
+   * 0x003F's raw verification-hash bytes, written the same way and at the
+   * same time as `summaryTotals` above (one call, one writer,
+   * `appendSummaryObservations`) — but independently optional within that
+   * call: a burst that never produced 0x003F (absent-on-firmware, LL's
+   * degrade semantics) still folds its totals alone. Additive-optional,
+   * same never-migrate contract as `summaryTotals`.
+   */
+  verificationBytes?: readonly number[];
 }
 
 // Same discipline as `session/run.ts`'s own `isPlainRecord` — "shaped
@@ -582,8 +607,18 @@ export function recordActual(
   // program failure with a run still open, design spec's own Decisions
   // row); a boundary the machine reports after any of those lands here
   // and is refused.
-  if (run.completedAt !== null && !acceptableFinalBoundary(run, actual, opts)) {
-    return run;
+  if (run.completedAt !== null) {
+    if (!acceptableFinalBoundary(run, actual, opts)) return run;
+    // Storage-spine design spec §2's late side, Task 3: `BURST_LINGER_MS`
+    // widens the gap between "the hook decided this late actual is
+    // acceptable" (built from a `run` object it may have been holding
+    // since before the linger started) and this write, by up to 2000ms —
+    // the same `clearMonitorRun()` resurrection race
+    // `appendSummaryObservations` guards against (that function's own doc
+    // comment). `stillLive` mirrors its identity check rather than
+    // re-deriving one: decline, writing nothing and returning `run`
+    // unchanged, if storage no longer holds this run.
+    if (stillLive(run.startedAt) === null) return run;
   }
   const next: MonitorRun = { ...run, actuals: [...run.actuals, actual] };
   saveMonitorRun(next);
@@ -720,6 +755,106 @@ export function completeContinuityReset(
   now: Date,
 ): MonitorRun {
   return completeWithoutWireEvidence(run, now, "link-lost");
+}
+
+/**
+ * THE `clearMonitorRun()` RESURRECTION RACE'S SHARED CHECK (storage-spine
+ * design spec §2's late side, Task 3): `true` — the currently-stored
+ * record, freshly re-read — when the record in storage right now is still
+ * THIS run (same `startedAt`, still present); `null` when a late write
+ * would either resurrect a record that was already cleared or land on
+ * some unrelated run that has since taken its place.
+ *
+ * TWO writers share this, both because `BURST_LINGER_MS` widens the same
+ * window for both: `appendSummaryObservations` below (a burst that lands
+ * up to the linger's cap after `LogSession`/`Today` already unmounted) and
+ * `recordActual`'s finish-grace door (a late-arriving finish-grace actual,
+ * accepted against a `run` object the CALLER may have been holding since
+ * before the linger started — `useMonitorSession.ts`'s deferred teardown
+ * is the one caller old enough for that to matter). Neither trusts the
+ * `MonitorRun` object it was handed for THIS question: both re-read
+ * storage fresh, because both can now fire well after that object was
+ * built.
+ */
+function stillLive(startedAt: string): MonitorRun | null {
+  const stored = loadMonitorRun();
+  if (stored === null || stored.startedAt !== startedAt) return null;
+  return stored;
+}
+
+/**
+ * PR 1's post-close observation writer (design spec §2): appends the
+ * burst's observations — 0x0039's work-only totals, and 0x003F's raw
+ * verification-hash bytes when the burst produced one — to the STORED
+ * record, write-once and identity-keyed, and mute on every mismatch rather
+ * than throwing. This is what lets the burst's listener keep listening
+ * for up to `BURST_LINGER_MS` after `LogSession`/`Today` have already
+ * unmounted and moved on (spec §2's "the listener deliberately outlives
+ * the unmounted component"): by the time a late burst arrives, nothing
+ * about the record it wants to touch can be trusted from memory, so this
+ * re-reads storage fresh (`stillLive`, above — not a value threaded in) on
+ * every call.
+ *
+ * FOUR ways this declines, each silent (no throw, `null` back, nothing
+ * persisted) because a late burst arriving into a world that changed out
+ * from under it is not a bug worth surfacing to whatever screen is now
+ * live:
+ *
+ *   1. `MONITOR_RUN_KEY` is empty — the `clearMonitorRun()` resurrection
+ *      race (`LogSession.tsx`/`Today.tsx`'s own clear sites, cited in the
+ *      spec): the rower already logged or discarded this run and nothing
+ *      is left to append to.
+ *   2. the stored run's `startedAt !== runStartedAt` — identity is kept
+ *      on the RUN, not "the session" (delta C-i): a second `program()`
+ *      re-arm inside the same hook instance overwrote the record this
+ *      burst belongs to with an unrelated one before the burst landed.
+ *      (1) and (2) together are `stillLive`, above.
+ *   3. the stored run is not naturally closed — `completedAt === null`
+ *      (still live; no completion writer has run yet) or
+ *      `endedBy !== "finished"` (closed some OTHER way — Terminate/END,
+ *      a continuity reset, F6 — whose burst status this spec leaves
+ *      UNKNOWN, §1; only a natural WORKOUTEND finish is this writer's
+ *      door).
+ *   4. `summaryTotals` already exists — write-once: a second burst
+ *      arriving for a record already carrying observations (the two
+ *      independent triggers in `driver.ts`'s `reconcileSummary`, or a
+ *      retried delivery) must never overwrite the first.
+ *
+ * On the one valid case, writes ONLY `summaryTotals` (always) and
+ * `verificationBytes` (only when the caller has one — a burst that never
+ * produced 0x003F still folds its totals alone) — every other field on
+ * the record, byte for byte, is exactly what was already stored.
+ * `isMonitorRun`'s own positive-conjunction, no-unknown-key design (this
+ * file's comment above `isMonitorRun`) is what makes that safe without a
+ * validator change or a `v` bump: a record carrying either of these two
+ * fields still round-trips through `loadMonitorRun` on any build, new or
+ * old.
+ *
+ * Returns what it wrote (the new record), or `null` when it declined —
+ * matching `recordActual`/`completeMonitorRun`'s own "new record back,
+ * caller's copy untouched" idiom, except here there is no caller copy to
+ * return unchanged: a decline has nothing worth handing back at all.
+ */
+export function appendSummaryObservations(
+  runStartedAt: string,
+  observations: {
+    totals: { workElapsedSeconds: number; workDistanceMeters: number };
+    verificationBytes?: readonly number[];
+  },
+): MonitorRun | null {
+  const run = stillLive(runStartedAt);
+  if (run === null) return null;
+  if (run.completedAt === null || run.endedBy !== "finished") return null;
+  if (run.summaryTotals !== undefined) return null;
+  const next: MonitorRun = {
+    ...run,
+    summaryTotals: observations.totals,
+    ...(observations.verificationBytes !== undefined
+      ? { verificationBytes: observations.verificationBytes }
+      : {}),
+  };
+  saveMonitorRun(next);
+  return next;
 }
 
 /**

@@ -100,6 +100,15 @@ describe("MonitorEvent", () => {
       { kind: "terminated" },
       { kind: "disconnected", reason: "radio out of range" },
       { kind: "reconnected" },
+      {
+        kind: "summary-observations",
+        totals: { workElapsedSeconds: 62.5, workDistanceMeters: 214 },
+      },
+      {
+        kind: "summary-observations",
+        totals: { workElapsedSeconds: 62.5, workDistanceMeters: 214 },
+        verificationBytes: [0x27, 0xd8, 0xf3, 0x6e],
+      },
     ];
     expect(events.map((e) => e.kind)).toStrictEqual([
       "frame",
@@ -109,6 +118,8 @@ describe("MonitorEvent", () => {
       "terminated",
       "disconnected",
       "reconnected",
+      "summary-observations",
+      "summary-observations",
     ]);
   });
 });

@@ -2898,6 +2898,40 @@ that needs no erg, and it can run in a test.
       max-merges post-reset metres against the pre-reset value (300 m
       rowed + a reset + 200 m more stores ≈300 m, not 500 m) — so RC-1's
       re-key spec must not assume a merged record announces itself.**
+- [ ] **PR 1's own residual capture-rate gap (final whole-branch review,
+      2026-08-23, RF14): the burst is not caught 100% of the time even
+      after HIGH-1/HIGH-2 shipped.** PR 1 (`rc-spine`, walk-2026-08-23
+      keystone) fixed the two defects the review found on the LATE side —
+      a split claiming the finish grace no longer shuts the door on the
+      0x0039 that follows it (HIGH-1), and the drain no longer fires
+      blind on 0x0039 alone, 38ms before 0x003F would have arrived
+      (HIGH-2, `HASH_SUBWINDOW_MS`). **One gap survives both fixes,
+      already bounded and documented in code (`driver.ts`'s own
+      "TWO LOSS MODES" comment, `noteSummary`) but never stated where a
+      reader tracking the real capture rate would see it:** the EARLY
+      side's own admission check (`currentIndex === lastIndex`, sourced
+      from 0x0033's `intervalCount`) cannot buffer a 0x0039 that beats
+      this run's very first 0x0033 sample (`toProgramIndex` returns
+      `null`, nothing to compare), or one landing while `intervalCount`
+      still names a PRIOR interval (0x0033's own sample gap swallowing
+      the burst's ~142-449ms window whole, per §1). Both funnel to
+      `out-of-window`, silently. **PR 3/F2b's interval-count work is what
+      sharpens this field enough to close the gap** — sequence that
+      awareness into PR 3's own spec rather than assuming PR 1 alone
+      delivers full capture.
+- [ ] **NO DISPLAY of `summaryTotals`/`verificationBytes` before exit 7's
+      photograph (PM gate on #180, condition 4).** Everything green on
+      PR 1 verifies against our own fake and our own capture (recurring
+      failure 11); the fields are deliberately unvalidated by
+      `isMonitorRun` until a reader exists. The first PR that RENDERS
+      either field (RC-2/RC-3/RC-9-era) is gated on the walk's
+      production-build photograph: stored summary totals vs the PM5
+      memory screen's work-only row, read from the linger-end SECOND
+      stash. Small riders for that same PR wave (deferred minors from
+      #180's reviews): pin the totals-first-bytes-second write-once
+      sequence; give `FakeBurst`'s single `pendingBurst` slot a loud
+      overwrite (scripting foot-gun); FakeBurst carries two offsets by
+      spec notation, the plan prose said three.
 - [ ] **RC-2 — Decode Log Entry Date/Time; log it beside our wall clock;
       store nothing yet.** Format settled from two projects and checked
       arithmetically: date `uint16` = month | day<<4 | (year-2000)<<9;
@@ -3100,8 +3134,13 @@ item** and W3/W4 ride the same piece.
 - **W2** — **do not tear down at the finish.** One 2x250 m r0 keystone,
   then stand still for 90 seconds and touch nothing. Settles whether the
   summary path is reachable at all, when state 12 fires, and whether the
-  ~1-minute recovery-HR re-fire is real. **Needs a temporary build that
-  defers the disconnect**, or the laptop harness, which has the tap.
+  ~1-minute recovery-HR re-fire is real. **PARTLY OVERTAKEN by PR #180
+  (2026-08-23): production now holds the link up to 2 s at a natural
+  finish (`BURST_LINGER_MS`) and the burst is captured without any
+  instrument — but the 90-second questions (recovery-HR re-fire, late
+  state-12 behaviour) still need the hold-open instrument or the laptop
+  harness. The readout for the captured burst is the ring's linger-end
+  SECOND stash.**
 - **W3** — the identity photograph, same piece: the PM5's View Detail
   memory screen and the phone in ONE frame, plus the decoded
   `logEntryDate`/`logEntryTime` from the ring. Settles the bit-packing

@@ -230,16 +230,22 @@ export interface IntervalActual {
   // — DISTANCE means the machine's own number (work + rest), and this field
   // is what makes that sum reachable (walk-2026-08-16 session 2: work 1535m
   // + rest 64m = the machine's own TWD 1599m exactly, interface-notes.md's
-  // own decode). `number`, never optional, the same "the type can be newer
-  // than the record" choice this file already makes for `ProgramInterval`'s
-  // required fields (see the `isMonitorRun`/`v` comment block above) — a
-  // `MonitorRun.actuals` entry `saveMonitorRun` persisted BEFORE this field
-  // existed loads back at runtime with it `undefined` despite the type
-  // saying `number`. This is deliberately NOT a migration (nothing to
-  // derive it from after the fact — the wire bytes are long gone); every
-  // reader of a possibly-old `IntervalActual` reads it `?? 0`, never
-  // trusts the type alone.
-  restDistanceMeters: number;
+  // own decode).
+  //
+  // **OPTIONAL as of the storage-spine design spec §2 (RC-7):** this used
+  // to read "`number`, never optional" here, on the reasoning that a
+  // record persisted before this field existed loads back with it
+  // `undefined` despite the type; every reader already coped with that by
+  // reading `?? 0`. RC-7 adds a SECOND, deliberate source of absence —
+  // `driver.ts`'s synthesized-final fallback (`deriveFinalIntervalFromSummary`'s
+  // caller) has no wire reading for this field at all (0x0039 carries no
+  // per-interval rest distance) and now OMITS it rather than asserting the
+  // wire's own "no rest" sentinel (`0`) for a quantity it never measured —
+  // the same additive-optional shape this field's own history already
+  // established for old records, now also covering a live gap. Every
+  // existing reader's `?? 0` already handles both causes identically; nothing
+  // downstream needed to change.
+  restDistanceMeters?: number;
 }
 
 /**
@@ -306,7 +312,31 @@ export type MonitorEvent =
   | { kind: "workoutComplete" }
   | { kind: "terminated" }
   | { kind: "disconnected"; reason: string }
-  | { kind: "reconnected" };
+  | { kind: "reconnected" }
+  // THE MACHINE'S OWN FINISH (storage-spine design spec §2, PR 1):
+  // 0x0039's decoded work-only totals, folded onto a run that closed by a
+  // NATURAL finish — emitted from `src/monitor/driver.ts`'s reconcile
+  // consumption path, AT MOST ONCE per run, whichever of its two branches
+  // the run takes (the split won, or the split never arrived and the
+  // fallback synthesized the final interval). `totals` are 0x0039's own
+  // `elapsedSeconds`/`meters`, untransformed — work-only, never fused with
+  // rest (§1's own caveat: whether that distinction is even OBSERVABLE
+  // depends on the piece; this event reports what the machine sent, not a
+  // corrected number). `verificationBytes` carries 0x003F's raw,
+  // undecoded bytes — present only if that characteristic's notification
+  // was actually received during this run (production reachability needs
+  // its own subscriber, §2's B3 delta); ABSENT (never `undefined`-valued)
+  // otherwise, the same additive-optional shape `IntervalActual.
+  // restDistanceMeters` already uses. Never fired on a `terminate()`/END
+  // close — burst behaviour on that path is UNKNOWN (§1), and this event
+  // asserts nothing about it. Out of scope for what CONSUMES this event
+  // (RC-2/RC-3, decode/display of 0x0039's other fields, is a later wave):
+  // PR 1 only records bytes.
+  | {
+      kind: "summary-observations";
+      totals: { workElapsedSeconds: number; workDistanceMeters: number };
+      verificationBytes?: readonly number[];
+    };
 
 export interface MonitorDriver {
   readonly capabilities: MonitorCapabilities;

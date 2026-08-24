@@ -1985,3 +1985,51 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   named the outcome and every bullet answered "so what?" — the rule is measuring
   length where it means decodability. Still James's to re-set or retire, still
   belongs in CLAUDE.md.
+
+## PM final-PR gate, PR #180 (storage spine PR 1), 2026-08-23
+
+- **The empty-rollup first command is a check, not a prediction — and the
+  dispatch's own premise gets checked with it.** #180 was dispatched as
+  "empty rollup + CONFLICTING, main has moved all day". Both were false:
+  CI was running against the real head, and `merge-base` equalled
+  `origin/main` exactly (#179's commit). Thirty seconds of `gh pr view` +
+  `git merge-base` retired two thirds of a gate question. **A controller's
+  description of PR state is an unsourced premise like any other.**
+- **"Nothing displays it" is provable in one grep, and it is the honest
+  answer to "what does a tester receive".** For any storage-spine-shaped PR,
+  `grep -rn <field> app/src app/domain | grep -v test | cut -d: -f1 | sort -u`
+  settles it. #180's returned only `monitor/` files — so the correct
+  tester-impact bullet was "you see nothing", and the body never said it.
+  **A PR that changes nothing visible must SAY it changes nothing visible;
+  omitting it reads as an oversell by silence.**
+- **The code was more honest than its PR body, in both directions.** The
+  n=1 caveat on the ~400 ms figure is carried verbatim at
+  `useMonitorSession.ts:635-638` and in the spec, and the body upgraded it
+  to "in practice". The residual capture gap is stated in `driver.ts`'s own
+  comment AND on ROADMAP, and the body's headline claimed "every natural
+  finish". **When a gate finds an overclaim, check whether the code already
+  contains the honest version — twice now the fix has been "copy the doc
+  comment up", not "go measure something".**
+- **A citation to a place is checkable in one command; check it.**
+  "Deferred minors in the ledger archive" — no such file, and
+  `grep -rl` for the three named findings returned nothing anywhere in the
+  repo or in git-excluded `.superpowers/`. That is #14 and #16's corollary
+  in one line. **Grep every "recorded in X" phrase in a Record block; the
+  fifth-plus rescue at a PM gate happened here.**
+- **Ruling: PR 1 merges on CI, not on the walk — because the walk needs it.**
+  Spec exit 7's readout is the linger-end second stash, which PR 1 ships, so
+  holding the PR for hardware deadlocks. This does NOT generalise the CR2
+  precedent away: CR2 spec 1 merged on the walk because it changed a
+  DISPLAYED number. **The line is display, not storage.** The residue was
+  made a merge condition — a ROADMAP line gating the first display of
+  `summaryTotals`/`verificationBytes` on exit 7's photograph, because until
+  then those numbers are verified only against our own fake and our own
+  capture (#11), and the fields are deliberately unvalidated by
+  `isMonitorRun` until a reader exists.
+- **Shipping a mechanism can silently stale a walk card.** PR 1's 2 s linger
+  half-satisfies ROADMAP W2's "needs a temporary build that defers the
+  disconnect" while leaving its 90-second question untouched, and no card
+  mentions the second stash the exit depends on. **When a PR ships behaviour
+  a walk card was written to work around, reconcile the card in the same
+  PR** — #13's operator-instruction bar applies to cards that go stale, not
+  just cards written wrong.

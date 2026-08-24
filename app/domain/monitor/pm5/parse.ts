@@ -407,6 +407,14 @@ export const WORKOUTSTATE_INTERVALWORKDISTANCE = 5;
 export const WORKOUTSTATE_INTERVALWORKTIMETOREST = 8;
 export const WORKOUTSTATE_WORKOUTEND = 10;
 export const WORKOUTSTATE_TERMINATE = 11;
+/** WORKOUTLOGGED — `WORKOUTSTATE_TO_STATE`'s own `12: "finished"` row below
+ *  says "reached only via WorkoutEnd" (Appendix E), but the walk-2026-08-23
+ *  keystone (storage-spine design spec §1) shows the real machine going
+ *  straight there: state 5→12 directly, state 10 never appears in that
+ *  capture. Named for `src/monitor/transports/fake.ts`'s natural-finish
+ *  burst, which scripts the wire's own terminal transition as the capture
+ *  actually shows it, not the Appendix E path nothing observed. */
+export const WORKOUTSTATE_WORKOUTLOGGED = 12;
 export const WORKOUTSTATE_REARM = 13;
 
 /**

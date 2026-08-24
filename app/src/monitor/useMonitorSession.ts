@@ -62,6 +62,7 @@ import {
 import { createEventLog, type MonitorEventLog } from "./eventLog";
 import type { LogSeed } from "../session/logDraft";
 import {
+  appendSummaryObservations,
   completeContinuityReset,
   completeMonitorRun,
   createMonitorRun,
@@ -622,6 +623,22 @@ function requestStoragePersistence(log: MonitorEventLog): void {
  */
 const FINISH_HANDOFF_HOLD_MS = 3500;
 
+/**
+ * Storage-spine design spec §2's late side (PR 1, Task 3): at a
+ * NATURAL-FINISH teardown whose record has not yet heard the machine's
+ * summary burst (0x0039 + 0x003F), `teardown`'s reconcile/unsubscribe/
+ * disconnect steps defer to the EARLIER of the burst arriving or this many
+ * milliseconds — exported so tests can name it rather than hard-coding
+ * 2000 twice.
+ *
+ * Holds at ~5.0× the modelled worst case (398 ms: late-side first element
+ * +90.2 ms plus the burst span +307.8 ms), structurally bounded at one
+ * burst span because our terminal cannot precede the machine's own flip.
+ * n = 1 caveat carried: the burst-span offsets come from the only
+ * 0x0039/0x003F ever captured, on a 2-interval piece.
+ */
+export const BURST_LINGER_MS = 2000;
+
 /** Phase LT spec 2 §2's flush policy, verbatim: "a 30-second timer" the
  *  hook owns, independent of the boundary and close flushes. Not tuned —
  *  the spec names the number directly, no derivation to carry. */
@@ -751,6 +768,17 @@ export interface MonitorSessionDeps {
    *  `setInterval`/`clearInterval`. Injected so a test fires 30-second
    *  flushes on demand instead of a session actually running that long. */
   seriesFlushSchedule?: (cb: () => void, ms: number) => () => void;
+  /** Storage-spine design spec §2's late side (PR 1, Task 3): the burst
+   *  linger's own one-shot schedule-and-cancel pair — `BURST_LINGER_MS`,
+   *  as a schedule a test FIRES instead of waiting 2 real seconds for. A
+   *  SEPARATE seam from `schedule` above rather than a reuse of it, for
+   *  the identical reason `seriesFlushSchedule`'s own doc comment gives:
+   *  most tests finish a natural-finish workout without caring about the
+   *  burst, and reusing `schedule` would add an extra call to every
+   *  `schedule()`-call-count assertion the ended hand-off suite already
+   *  makes the moment any of those tests reaches a natural close. Defaults
+   *  to `setTimeout`/`clearTimeout`. */
+  burstLingerSchedule?: (cb: () => void, ms: number) => () => void;
   /** Passed to `createPm5Driver`. `deviceName` is NOT accepted here — it
    *  comes from the picker result, never from a caller's guess (spec's I5
    *  ruling: no screen ever renders the `"PM5"` placeholder). */
@@ -1402,6 +1430,28 @@ export function useMonitorSession(
    *  is open. One at a time — a run ends once. */
   const handoffHoldRef = useRef<(() => void) | null>(null);
 
+  /** Storage-spine design spec §2's late side (PR 1, Task 3): while a
+   *  natural-finish teardown is in its burst linger, this holds the
+   *  function that finishes it early — set by `teardown` right before it
+   *  defers, cleared the moment it runs (by whichever of the two triggers
+   *  gets there first: the `summary-observations` handler below, or the
+   *  linger's own `BURST_LINGER_MS` timeout). `null` at every other time,
+   *  including every OTHER teardown cause, so a `summary-observations`
+   *  event arriving outside a linger (the ordinary in-grace "split-won"
+   *  case, still mounted) finds nothing here to call. */
+  const lingerFinishRef = useRef<(() => void) | null>(null);
+
+  /** The burst linger's own timeout canceller (`schedule`'s return value),
+   *  or `null` when no linger is currently running. A ref, not a local
+   *  variable inside `teardown`, matching `handoffHoldRef`'s own idiom
+   *  immediately below: `finish` (the linger's completion, defined inside
+   *  `teardown`) needs to cancel this timer from whichever trigger reaches
+   *  it first, and assigning across that boundary through a plain closure
+   *  variable trips `react-hooks/immutability` — the reassignment lands in
+   *  the outer scope after the closure that reads it has already been
+   *  handed off (to `lingerFinishRef.current` above). */
+  const burstLingerCancelRef = useRef<(() => void) | null>(null);
+
   /** Ends the hand-off hold, whatever ended it, and says so in the trace.
    *  A no-op when nothing is held, so every release site can call it
    *  unconditionally. */
@@ -1891,6 +1941,42 @@ export function useMonitorSession(
         endByMachine(true);
         return;
       }
+      if (event.kind === "summary-observations") {
+        // THE MACHINE'S OWN FINISH, FOLDED ONTO THE RECORD (storage-spine
+        // design spec §2, PR 1 Task 3). `driver.ts`'s own doc comment on
+        // this event kind: emitted AT MOST ONCE per run, only for a
+        // NATURAL finish, whichever of `reconcileSummary`'s two branches
+        // the run took — the driver never fires it for a terminate/END
+        // close. `runRef.current` is the identity this write is keyed on;
+        // `appendSummaryObservations` re-reads storage fresh rather than
+        // trusting it (the same `clearMonitorRun()` resurrection race its
+        // own doc comment names), so a `run === null` here just means
+        // there is no identity to even ATTEMPT the write with — not a
+        // reason to skip trying to finish an open linger, which happens
+        // unconditionally below.
+        const run = runRef.current;
+        if (run !== null) {
+          const appended = appendSummaryObservations(run.startedAt, {
+            totals: event.totals,
+            ...(event.verificationBytes !== undefined
+              ? { verificationBytes: event.verificationBytes }
+              : {}),
+          });
+          if (appended !== null) runRef.current = appended;
+        }
+        // If a natural-finish teardown is mid-linger waiting for exactly
+        // this, it finishes NOW rather than at `BURST_LINGER_MS` — "or
+        // earlier, on burst completion" (spec §2). `null` at every other
+        // time (this ref's own doc comment), so the ordinary in-grace
+        // "split-won" case — still mounted, no teardown in flight — finds
+        // nothing here and simply returns. Deliberately does NOT null the
+        // ref itself here — `finish`'s own body (`teardown`, below) is
+        // what clears it, so the identical function stays callable
+        // idempotently from EITHER trigger without this call site needing
+        // to know which one fired first.
+        lingerFinishRef.current?.();
+        return;
+      }
       if (event.kind === "disconnected") {
         // Lose-and-degrade (spec's C5 ruling): no retry machinery, no
         // reconnect promise, and the record stays OPEN — the erg is still
@@ -2007,42 +2093,78 @@ export function useMonitorSession(
       // still finds nothing left to repeat either way.
       const driver = claimed ?? driverRef.current;
       driverRef.current = null;
+      const run = runRef.current;
 
-      // STEP 1: RECONCILE (Task 7). Before EVEN the hand-off release below
-      // — this is the one step that needs a LIVE listener still subscribed
-      // to the driver. `driver.reconcile()` drains whatever the summary
-      // gate's own deadline (`armSummaryReconcile`) is still holding and
-      // answers it synchronously with whatever evidence this run has
-      // already earned (`driver.ts`'s `drainSummaryReconcile`, the F7
-      // rule) — a no-op when nothing is pending, which is every teardown
-      // but a mid-grace unmount.
+      // STEP 1 + THE HAND-OFF BACKSTOP, AS ONE FUNCTION (Task 7's original
+      // pairing, factored by storage-spine design spec §2's late side,
+      // Task 3, so the immediate path below and the deferred path further
+      // down call the identical body — they may only ever differ in WHEN).
       //
-      // THE TWIN THIS CLOSES: `driver.disconnect()` used to apply a
-      // DIFFERENT rule from a passive link drop — it just cancelled the
-      // deadline and threw the verdict away — and even after fixing
-      // `disconnect()` to drain it too, calling it there was still too
-      // late for THIS hook: `disconnect()` used to run after
-      // `unsubscribeRef.current?.()` below, so its drain would have emitted
-      // into a listener set with nothing left in it. Calling `reconcile()`
-      // here, before that unsubscribe, is what closes both halves at once
-      // — any reconcile-eligible verdict reaches `handleEvent` while it is
-      // still wired up, including its own `releaseHandoff("final-boundary")`
-      // call for a fill that lands on the way out.
-      driver?.reconcile();
+      // `driver.reconcile()` drains whatever the summary gate's own
+      // deadline (`armSummaryReconcile`) is still holding and answers it
+      // synchronously with whatever evidence this run has already earned
+      // (`driver.ts`'s `drainSummaryReconcile`, the F7 rule) — a no-op
+      // when nothing is pending, which is every teardown but a mid-grace
+      // one. `releaseHandoff("teardown")` stays GLUED to it, immediately
+      // after, exactly as review M-1 originally placed it: a teardown IS
+      // the hand-off completing, or the rower leaving — either way nothing
+      // is left to wait for, and this is the hold's LAST chance to release
+      // with the more specific `"final-boundary"` reason instead
+      // (`handleEvent`'s own `intervalComplete` case, for a fill landing
+      // on the way out) — if this ran at teardown's own t=0 instead
+      // (before STEP 1 can defer), it would win that race on every
+      // mid-grace unmount and the trace would never say `final-boundary`
+      // again. A no-op when nothing is held either way — including every
+      // close that was never a natural finish, where the hold was never
+      // opened at all — because `releaseHandoff` is itself idempotent
+      // (`handoffHoldRef.current === null` short-circuits it).
+      const reconcileAndReleaseHandoff = (): void => {
+        driver?.reconcile();
+        releaseHandoff("teardown");
+      };
 
-      // Above the stash below (review M-1, unchanged by this task): a
-      // teardown IS the hand-off completing, or the rower leaving — either
-      // way nothing is left to wait for. Releasing rather than silently
-      // cancelling buys two things: the exported trace shows a
-      // `handoff-hold` with a matching release instead of an open hold and
-      // no explanation (the one case the walk-day-2 entries could not
-      // account for from a stash alone), and `handoffHeld` cannot be left
-      // `true` in a state a future "stay mounted past ended" change would
-      // then find stuck. A no-op when nothing is held — including when the
-      // reconcile just above already released it with the more specific
-      // `"final-boundary"` reason, since `releaseHandoff` is itself
-      // idempotent (`handoffHoldRef.current === null` short-circuits it).
-      releaseHandoff("teardown");
+      // STEPS 3+4, AS ONE FUNCTION, likewise factored for reuse by both
+      // paths.
+      const unsubscribeAndDisconnect = (): void => {
+        // STEP 3: UNSUBSCRIBE. Listener goes now that the reconcile above
+        // has had its one chance to reach it — a disconnect callback
+        // fired by our own `disconnect()` below can still never reach a
+        // component that is on its way out (the original reason this ran
+        // early, unchanged).
+        unsubscribeRef.current?.();
+        unsubscribeRef.current = null;
+        // Phase LL Task 2: the degraded-characteristic and app-lifecycle
+        // listeners go with it — same "nothing left to watch for once
+        // we're on our way out" reasoning, and the same overwrite-not-
+        // accumulate discipline every other per-connect subscription in
+        // this file already follows.
+        degradedUnsubRef.current?.();
+        degradedUnsubRef.current = null;
+        // Minor 1: cancel THIS attempt's token before nulling the ref — a
+        // still-pending native promise's own `.then()` checks it and
+        // unregisters itself instead of overwriting a later attempt's
+        // real unsub (see the ref's own doc comment).
+        if (lifecycleAttemptRef.current !== null) {
+          lifecycleAttemptRef.current.cancelled = true;
+        }
+        lifecycleUnsubRef.current?.();
+        lifecycleUnsubRef.current = null;
+        // STEP 4: DISCONNECT (terminate-then-disconnect for the "armed,
+        // never pulled" case is unchanged by this task).
+        if (driver === null) return;
+        const phase = stateRef.current.phase;
+        if (
+          !alreadyTerminated &&
+          (phase === "programming" || phase === "ready")
+        ) {
+          bestEffort(
+            driver.terminate().finally(() => bestEffort(driver.disconnect())),
+          );
+          return;
+        }
+        bestEffort(driver.disconnect());
+      };
+
       // Phase LT spec 2, Task 2: a run left OPEN through teardown (a link
       // drop, a tab-bar escape, an unmount before any close event ever
       // arrives — the "record stays open" side of spec's C5 lose-and-
@@ -2050,24 +2172,33 @@ export function useMonitorSession(
       // component that no longer exists. `closeRecord` already cancels this
       // on every path that actually closes the record; this call is what
       // covers every path that does not. Idempotent no-op when already
-      // stopped (`stopSeriesFlush`'s own doc comment).
+      // stopped (`stopSeriesFlush`'s own doc comment). Unaffected by this
+      // task either way (not one of the three deferred steps), so it stays
+      // at t=0 on every path.
       stopSeriesFlush();
+
       // STEP 2: STASH. THE LOG SURVIVES THE SESSION (2026-08-08, hardware
       // walk 2): the ended hand-off frame navigates away on its first
       // render, so the in-memory trace died exactly when the operator
       // wanted to copy it. Teardown runs on EVERY exit path — ended,
       // cancel, disconnect, a tab-bar escape — so one stash here covers
-      // them all. Runs AFTER the reconcile above (Task 7) for the same
-      // reason it must run BEFORE the unsubscribe below: `exportLog()`
-      // serializes a snapshot STRING at THIS call, and an entry written
-      // to the ring after this line would never reach sessionStorage at
-      // all — it would die with the tab (§22's own recorded trap, and this
-      // task's own ordering-pin test).
+      // them all. On the IMMEDIATE path below, this still runs in TODAY'S
+      // exact position — after `reconcileAndReleaseHandoff`, before
+      // `unsubscribeAndDisconnect` — because `exportLog()` serializes a
+      // snapshot STRING at THIS call, and an entry written to the ring
+      // after this line would never reach THIS stash at all (§22's own
+      // recorded trap, and the ordering-pin test). On the DEFERRED path
+      // further down, THIS call is what "stays at t=0" means: STEPS 1/3/4
+      // have not run yet at all, so this is a floor, not the last word —
+      // a burst still in flight gets a SECOND stash once they finally do
+      // (rewritten from "would never reach sessionStorage" to name it,
+      // storage-spine design spec §2, Task 3).
       // sessionStorage, not localStorage: diagnostics for the tab's own
       // lifetime, not a record. Read it back from the console:
       //   copy(sessionStorage.getItem("ergomatic:last-monitor-log"))
-      const log = logRef.current;
-      if (log !== null) {
+      const stash = (): void => {
+        const log = logRef.current;
+        if (log === null) return;
         try {
           const exported = log.exportLog();
           sessionStorage.setItem("ergomatic:last-monitor-log", exported);
@@ -2083,44 +2214,85 @@ export function useMonitorSession(
         } catch {
           // Quota or privacy mode: diagnostics never break a teardown.
         }
-      }
-      // STEP 3: UNSUBSCRIBE. Listener goes now that the reconcile above has
-      // had its one chance to reach it — a disconnect callback fired by
-      // our own `disconnect()` below can still never reach a component
-      // that is on its way out (the original reason this ran early,
-      // unchanged).
-      unsubscribeRef.current?.();
-      unsubscribeRef.current = null;
-      // Phase LL Task 2: the degraded-characteristic and app-lifecycle
-      // listeners go with it — same "nothing left to watch for once we're
-      // on our way out" reasoning, and the same overwrite-not-accumulate
-      // discipline every other per-connect subscription in this file
-      // already follows.
-      degradedUnsubRef.current?.();
-      degradedUnsubRef.current = null;
-      // Minor 1: cancel THIS attempt's token before nulling the ref — a
-      // still-pending native promise's own `.then()` checks it and
-      // unregisters itself instead of overwriting a later attempt's real
-      // unsub (see the ref's own doc comment).
-      if (lifecycleAttemptRef.current !== null) {
-        lifecycleAttemptRef.current.cancelled = true;
-      }
-      lifecycleUnsubRef.current?.();
-      lifecycleUnsubRef.current = null;
-      // STEP 4: DISCONNECT (terminate-then-disconnect for the "armed,
-      // never pulled" case is unchanged by this task).
-      if (driver === null) return;
-      const phase = stateRef.current.phase;
-      if (
-        !alreadyTerminated &&
-        (phase === "programming" || phase === "ready")
-      ) {
-        bestEffort(
-          driver.terminate().finally(() => bestEffort(driver.disconnect())),
-        );
+      };
+
+      // THE LATE SIDE (storage-spine design spec §2, Task 3): a
+      // NATURAL-FINISH record (`closeRecord`'s own "finished" close
+      // reason, `endByMachine`'s only door for it — never cancel, fail,
+      // an interrupted End, or a terminate) whose burst has not yet been
+      // recorded gets STEP 1 (with its glued hand-off release), STEP 3,
+      // and STEP 4 deferred to the earlier of the burst arriving or
+      // `BURST_LINGER_MS`. `run.summaryTotals !== undefined` means the
+      // burst already landed and was written BEFORE this teardown ever
+      // ran (the early side, §2's own "3 of 5": the burst beat OUR
+      // terminal transition, and by the time the hand-off hold found
+      // nothing missing and let this screen unmount, `reconcile()` had
+      // nothing left to wait for) — that case takes the immediate path
+      // below with NO added latency, same as every close that was never a
+      // natural finish at all.
+      const naturalFinish =
+        run !== null && run.completedAt !== null && run.endedBy === "finished";
+      const burstAlreadyHeard = run !== null && run.summaryTotals !== undefined;
+
+      if (naturalFinish && !burstAlreadyHeard) {
+        stash();
+        const schedule =
+          depsRef.current.burstLingerSchedule ??
+          ((cb: () => void, ms: number): (() => void) => {
+            const id = setTimeout(cb, ms);
+            return () => clearTimeout(id);
+          });
+        const finish = (): void => {
+          // Both triggers can reach this — the burst's own event, racing
+          // the linger's own timeout — and `lingerFinishRef` is cleared by
+          // whichever gets here first (its own doc comment), which is also
+          // the belt-and-braces guard against a stray double-call: once
+          // `lingerFinishRef.current` is null, a SECOND trigger (the timer
+          // firing after the event already ran, or vice versa) finds
+          // nothing here at all — `handleEvent`'s own `summary-observations`
+          // case and this ref's own doc comment both read on that.
+          // STEPS 1/3/4 are not written to tolerate running twice, so this
+          // guard is load-bearing, not decorative.
+          if (lingerFinishRef.current !== finish) return;
+          lingerFinishRef.current = null;
+          burstLingerCancelRef.current?.();
+          burstLingerCancelRef.current = null;
+          reconcileAndReleaseHandoff();
+          unsubscribeAndDisconnect();
+          // THE SECOND STASH (spec §2's own "a second ring stash runs at
+          // linger end"): the first stash above could not see whatever
+          // STEPS 1/3/4 just wrote to the ring — the drain's own verdict
+          // entry, the disconnect's own entries, and the burst's own
+          // `summary-observations`/`record-actual` entries if it arrived
+          // during the wait. Same keys, overwrite.
+          //
+          // NOT A SUPERSET, and said so precisely (review fix round 1,
+          // MEDIUM finding — the earlier wording here claimed "strictly
+          // contains everything the first one did", which `eventLog.ts`'s
+          // own 500-entry ring makes false in general): this is the ring's
+          // CURRENT window at drain time, its most recent `capacity`
+          // entries. The burst-era entries this second stash exists FOR
+          // are guaranteed present — they are, by construction, among the
+          // most recent — but if enough OTHER entries were recorded
+          // between the first stash and this one to push the ring past its
+          // cap, whatever was oldest in the FIRST stash can have already
+          // been evicted from the ring before this snapshot was ever
+          // taken. On the `BURST_LINGER_MS`-bounded window this task adds,
+          // that eviction needs several hundred OTHER entries logged in
+          // under two seconds to happen at all — bounded, not impossible —
+          // and this is the walk's own readout door regardless (exit
+          // criterion 7: "the ring's SECOND stash ... without it the walk
+          // sees nothing").
+          stash();
+        };
+        lingerFinishRef.current = finish;
+        burstLingerCancelRef.current = schedule(finish, BURST_LINGER_MS);
         return;
       }
-      bestEffort(driver.disconnect());
+
+      reconcileAndReleaseHandoff();
+      stash();
+      unsubscribeAndDisconnect();
     },
     [releaseHandoff, stopSeriesFlush],
   );
