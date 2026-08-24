@@ -1383,6 +1383,162 @@ describe("GET/POST /api/logs", () => {
     expect(res.status).toBe(201);
   });
 
+  // RC-1 (storage-spine design spec §3, TRIAD): work and rest — same
+  // shape of table as the hero-field one above, but `0` is deliberately
+  // ABSENT from the reject cases: unlike `distanceMeters`' own `> 0` rule,
+  // a genuinely rest-free (or work-free) session's honest reading is `0`,
+  // never a validation error (its own dedicated accept test, below).
+  it.each([
+    [
+      "workSeconds",
+      "not a number",
+      "must be a non-negative whole number <= 604800, or null",
+    ],
+    [
+      "workSeconds",
+      -1,
+      "must be a non-negative whole number <= 604800, or null",
+    ],
+    [
+      "workSeconds",
+      604801,
+      "must be a non-negative whole number <= 604800, or null",
+    ],
+    [
+      "workSeconds",
+      5.5,
+      "must be a non-negative whole number <= 604800, or null",
+    ],
+    [
+      "workMeters",
+      "not a number",
+      "must be a non-negative whole number <= 1000000, or null",
+    ],
+    [
+      "workMeters",
+      -1,
+      "must be a non-negative whole number <= 1000000, or null",
+    ],
+    [
+      "workMeters",
+      1_000_001,
+      "must be a non-negative whole number <= 1000000, or null",
+    ],
+    [
+      "restSeconds",
+      -1,
+      "must be a non-negative whole number <= 604800, or null",
+    ],
+    [
+      "restSeconds",
+      604801,
+      "must be a non-negative whole number <= 604800, or null",
+    ],
+    [
+      "restMeters",
+      -1,
+      "must be a non-negative whole number <= 1000000, or null",
+    ],
+    [
+      "restMeters",
+      1_000_001,
+      "must be a non-negative whole number <= 1000000, or null",
+    ],
+  ])(
+    "rejects RC-1 field %s: %p with 400, field named, exact message",
+    async (field, value, messageSuffix) => {
+      const res = await asA(
+        request(appFor(makeStores())).post("/api/logs"),
+      ).send({
+        ...validLogBody(),
+        [field]: value,
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.field).toBe(field);
+      expect(res.body.error).toBe(`${field} ${messageSuffix}`);
+    },
+  );
+
+  it.each([
+    ["workSeconds", 604800],
+    ["workMeters", 1_000_000],
+    ["restSeconds", 604800],
+    ["restMeters", 1_000_000],
+  ])(
+    "accepts RC-1 field %s at its exact upper bound (%p)",
+    async (field, value) => {
+      const res = await asA(
+        request(appFor(makeStores())).post("/api/logs"),
+      ).send({
+        ...validLogBody(),
+        [field]: value,
+      });
+      expect(res.status).toBe(201);
+    },
+  );
+
+  it("accepts zero for all four RC-1 fields — a genuinely rest-free session's own honest reading, never a validation error", async () => {
+    const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
+      {
+        ...validLogBody(),
+        workSeconds: 0,
+        workMeters: 0,
+        restSeconds: 0,
+        restMeters: 0,
+      },
+    );
+    expect(res.status).toBe(201);
+  });
+
+  it("accepts explicit null for all four RC-1 fields", async () => {
+    const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
+      {
+        ...validLogBody(),
+        workSeconds: null,
+        workMeters: null,
+        restSeconds: null,
+        restMeters: null,
+      },
+    );
+    expect(res.status).toBe(201);
+  });
+
+  it("the route round-trips the four RC-1 fields unmangled, zero included (fake store — proves parsing, not storage; the real-column proof is storeContracts.ts's own case)", async () => {
+    const app = appFor(makeStores());
+    const res = await asA(request(app).post("/api/logs")).send({
+      ...validLogBody(),
+      workSeconds: 1471,
+      workMeters: 1535,
+      restSeconds: 0,
+      restMeters: 64,
+    });
+    expect(res.status).toBe(201);
+
+    const list = await asA(request(app).get("/api/logs"));
+    const row = list.body.find((r: { id: string }) => r.id === res.body.id);
+    expect(row).toMatchObject({
+      workSeconds: 1471,
+      workMeters: 1535,
+      restSeconds: 0,
+      restMeters: 64,
+    });
+  });
+
+  it("POST with no RC-1 keys at all still 201s and stores all four null (pre-RC-1 body shape, additive-only between tags)", async () => {
+    const app = appFor(makeStores());
+    const res = await asA(request(app).post("/api/logs")).send(validLogBody());
+    expect(res.status).toBe(201);
+
+    const list = await asA(request(app).get("/api/logs"));
+    const row = list.body.find((r: { id: string }) => r.id === res.body.id);
+    expect(row).toMatchObject({
+      workSeconds: null,
+      workMeters: null,
+      restSeconds: null,
+      restMeters: null,
+    });
+  });
+
   it("rejects an invalid pain value with 400, still naming the field, when pain is present", async () => {
     const res = await asA(request(appFor(makeStores())).post("/api/logs")).send(
       {

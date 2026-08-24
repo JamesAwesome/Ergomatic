@@ -171,6 +171,45 @@ function endedByError(value: unknown): string | null {
   return null;
 }
 
+// RC-1 (storage-spine design spec §3, TRIAD): work and rest, same
+// null-tolerant, bounds-checked-here-not-trusted contract as
+// `avgSplitSeconds`/`distanceMeters`/`timeSeconds` below — but a WHOLE
+// COUNT, never a positive-only one: every source
+// (`elapsedSeconds`/`distanceMeters`/`restSeconds`/`restDistanceMeters` on
+// `IntervalActual`) is a non-negative wire integer, and `0` is a genuine
+// reading (a rest-free session's own `restSeconds`/`restMeters`), unlike
+// `distanceMeters`'s `> 0` rule below. One shared function across all four
+// field names, rather than `endedByError`'s one-function-per-field shape:
+// the RULE itself (non-negative whole number or absent/null) is identical
+// across all four, so a shared bound is one thing to keep in sync, not
+// four near-duplicates that could drift apart the way `avgSplitSeconds`/
+// `distanceMeters`/`timeSeconds` below each carry their own hand-copied
+// bound.
+// Same two bounds `timeSeconds`/`distanceMeters` below already enforce for
+// the fused hero numbers — named here (rather than the hero fields' own
+// hand-copied literals) because `workRestQuantityError` has four call
+// sites, not one.
+const WORK_REST_SECONDS_MAX = 604800;
+const WORK_REST_METERS_MAX = 1_000_000;
+
+function workRestQuantityError(
+  value: unknown,
+  field: string,
+  max: number,
+): string | null {
+  if (
+    value !== undefined &&
+    value !== null &&
+    (typeof value !== "number" ||
+      !Number.isInteger(value) ||
+      value < 0 ||
+      value > max)
+  ) {
+    return `${field} must be a non-negative whole number <= ${max}, or null`;
+  }
+  return null;
+}
+
 function notesError(value: unknown): string | null {
   if (value !== null && value !== undefined && typeof value !== "string") {
     return "notes must be a string or null";
@@ -1239,6 +1278,47 @@ export function createDataRouter({
       );
       return;
     }
+    // RC-1 (storage-spine design spec §3, TRIAD): work and rest, same
+    // sanity-not-truth posture as the three hero fields just above — an
+    // authenticated client can still post a wrong number about its own
+    // rowing, accepted and recorded as the trust boundary the server
+    // cannot close.
+    const workSecondsErr = workRestQuantityError(
+      body.workSeconds,
+      "workSeconds",
+      WORK_REST_SECONDS_MAX,
+    );
+    if (workSecondsErr) {
+      badRequest(res, workSecondsErr, "workSeconds");
+      return;
+    }
+    const workMetersErr = workRestQuantityError(
+      body.workMeters,
+      "workMeters",
+      WORK_REST_METERS_MAX,
+    );
+    if (workMetersErr) {
+      badRequest(res, workMetersErr, "workMeters");
+      return;
+    }
+    const restSecondsErr = workRestQuantityError(
+      body.restSeconds,
+      "restSeconds",
+      WORK_REST_SECONDS_MAX,
+    );
+    if (restSecondsErr) {
+      badRequest(res, restSecondsErr, "restSeconds");
+      return;
+    }
+    const restMetersErr = workRestQuantityError(
+      body.restMeters,
+      "restMeters",
+      WORK_REST_METERS_MAX,
+    );
+    if (restMetersErr) {
+      badRequest(res, restMetersErr, "restMeters");
+      return;
+    }
     if (!Array.isArray(body.steps) || body.steps.length === 0) {
       badRequest(res, "steps must be a non-empty array", "steps");
       return;
@@ -1292,6 +1372,10 @@ export function createDataRouter({
         (body.distanceMeters as number | null | undefined) ?? null,
       series: seriesResult.series,
       endedBy: (body.endedBy as EndedBy | null | undefined) ?? null,
+      workSeconds: (body.workSeconds as number | null | undefined) ?? null,
+      workMeters: (body.workMeters as number | null | undefined) ?? null,
+      restSeconds: (body.restSeconds as number | null | undefined) ?? null,
+      restMeters: (body.restMeters as number | null | undefined) ?? null,
     });
     res.status(201).json({ id });
   });

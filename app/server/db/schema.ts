@@ -235,6 +235,27 @@ export const sessionLogs = pgTable(
     // limit — a server row exists only if the rower saves), and this
     // column only ever stores what `routes/data.ts`'s POST validated.
     endedBy: endedByEnum("ended_by"),
+    // Storage-spine design spec §3 (RC-1, TRIAD — a stored shape): the
+    // session's work and rest, stored SEPARATELY from the three fused
+    // hero columns above — migration 0015, four additive-optional,
+    // nullable integer columns, no default, no backfill. Every existing
+    // row reads all four back as null, forever (spec §3's own "old
+    // records keep fused-only quantities forever, said above the fold").
+    // Mirrors `MonitorRun.workSeconds`/`workMeters`/`restSeconds`/
+    // `restMeters` (`src/monitor/monitorRun.ts`) — the CLIENT computes
+    // these once, at natural close, from `IntervalActual` sums; this
+    // column only ever stores what `routes/data.ts`'s POST validated,
+    // same posture `endedBy` above already has. `integer`, not
+    // `doublePrecision` like the hero block above: every wire source
+    // (`elapsedSeconds`/`distanceMeters`/`restSeconds`/
+    // `restDistanceMeters`) is a whole-number field
+    // (`domain/monitor/types.ts`), so there is no B8-shaped truncation
+    // risk here — `distanceMeters` above is this table's own precedent
+    // for an `integer` hero column.
+    workSeconds: integer("work_seconds"),
+    workMeters: integer("work_meters"),
+    restSeconds: integer("rest_seconds"),
+    restMeters: integer("rest_meters"),
   },
   (t) => [
     index("session_logs_user_id_idx").on(t.userId),

@@ -2868,7 +2868,7 @@ that needs no erg, and it can run in a test.
       inside RC-1. Evidence: the six-row TWD table in the LL walk card's
       corrected F2 and `walk-2026-08-23/ring-phone-2-background-continuity-kill.json`.
       **Shipped, see `continuity.ts` + spec 2026-08-23-continuity-corroboration.**
-- [ ] **RC-1 — Store WORK and REST separately, per interval and per
+- [x] **RC-1 — Store WORK and REST separately, per interval and per
       session.** TRIAD (stored shape + a number's meaning). Nothing else
       moves reconciliation. Add `restSeconds` and `type` to
       `IntervalActual` from 0x0037 offsets 12-13 and 16 (they sit beside
@@ -2898,6 +2898,32 @@ that needs no erg, and it can run in a test.
       max-merges post-reset metres against the pre-reset value (300 m
       rowed + a reset + 200 m more stores ≈300 m, not 500 m) — so RC-1's
       re-key spec must not assume a merged record announces itself.**
+      **SHIPPED (PR2 Task 3, storage-spine spec §3):** `MonitorRun` gains
+      `workSeconds`/`workMeters`/`restSeconds`/`restMeters`, computed once
+      by `completeMonitorRun`'s own `endedBy === "finished"` branch (and
+      re-summed by `recordActual`'s late finish-grace branch when the
+      final actual arrives after close) — never for a terminate/link-lost/
+      program-failed close, matching caveat (b) above exactly: those
+      closes' actuals are incomplete by construction, so no attempt is
+      made rather than an under-count. The rest pair is all-or-nothing
+      (one actual missing rest data omits `restSeconds`/`restMeters` from
+      the WHOLE record, never a partial sum). Server: four nullable
+      `integer` columns beside the fused hero columns
+      (`session_logs.work_seconds`/`work_meters`/`rest_seconds`/
+      `rest_meters`, migration 0015), additive, POST-validated
+      non-negative-integer-or-null. **NO BACKFILL: every `session_logs`
+      row and every `MonitorRun` written before this PR keeps its
+      fused-only quantities forever — these four fields are simply absent
+      on it, and no migration or reader ever tries to derive them after
+      the fact.** The display sum is UNCHANGED and does not read these
+      fields (pinned by construction: `summaryModel.test.ts`'s own test
+      swaps in wildly wrong values on all four and asserts the rendered
+      heroes don't move) — RC-5 is NOT closed by this (see its own row
+      below). The re-key (F2b) is PR 3's own task, out of this PR's scope.
+      The warm-up program-time question named above never reached this
+      spec at all — Phase WU (shipped 2026-08-22, PR #150) removed
+      warm-up as a compiler concept before RC-1 started, exactly the
+      sequencing rationale below (WU precedes RC-1) predicted.
 - [ ] **PR 1's own residual capture-rate gap (final whole-branch review,
       2026-08-23, RF14): the burst is not caught 100% of the time even
       after HIGH-1/HIGH-2 shipped.** PR 1 (`rc-spine`, walk-2026-08-23
@@ -2978,7 +3004,14 @@ that needs no erg, and it can run in a test.
       saved record, not a capture. **Not closed by the warm-up section
       below:** Concept2 has no average-split field, so this is a rower
       question with its own answer, and aligning DISTANCE and TIME with C2
-      can widen the contradiction rather than close it.
+      can widen the contradiction rather than close it. **Explicitly NOT
+      closed by RC-1 (PR2 Task 3, 2026-08-23):** RC-1 stores work and rest
+      as separate quantities but the DISPLAYED DISTANCE/TIME/AVG SPLIT
+      heroes are pinned unchanged (`summaryModel.ts` still computes the
+      fused sum straight off `actuals`, never the new fields) — the three
+      heroes still contradict each other by exactly the same margins as
+      before this PR; RC-1 only made the raw components available for a
+      FUTURE reconciliation, it did not perform one.
 - [x] ~~RC-6 — Band `spm` and drop zero `p` in the stored series.~~ —
       **NARROWED, `spm` half SHIPPED** (2026-08-22, held-open-finish spec
       1 task 5). `seriesRecorder.ts` now bands `spm` to 10..60 inclusive,
@@ -3000,7 +3033,24 @@ that needs no erg, and it can run in a test.
       **hardcodes `intervalRestTimeSeconds: 0` on every boundary**
       (`fake.ts:878`) — precisely the field RC-1 wants to carry. RC-1
       would otherwise ship green against a fake that says the machine
-      reports 0.
+      reports 0. **THREE of five CORRECTED (PR2 Task 1, storage-spine
+      spec §3, scoped to the fields RC-1's own tests depend on —
+      Task 1's report, not a full RC-8 pass):** `ergMachineType` (both
+      `fake.ts` sites, `0x0032`/`0x0038`, decoded 0 in 3448/3448 committed
+      frames) → `0`; the `intervalRestTimeSeconds: 0` hardcode →
+      `completed?.restSeconds ?? 0`; `splitIntervalType: 0` always →
+      `completed?.kind === "distance" ? 1 : 0`, all three decoded off real
+      wire hex across four captures (Task 1's report has the table). **The
+      other two items in this row's own list — `restSeconds` forced 0
+      off a rest, and Last Split Time/Distance sent unconditionally —
+      read as ALREADY conditional in `fake.ts` as of this PR
+      (`restSecondsFor`/`wireLastSplit`, both predating this phase, first
+      introduced by #144 "EST LEFT keeps counting" and #99/#102's own
+      lag-one-boundary work respectively)** — flagged for the next RC-8
+      dispatch to verify and close out or correct this row, not resolved
+      here: Task 3 did not re-derive whether that pre-existing behavior
+      is itself honest against a real capture, only that it is no longer
+      the hardcoded-0 shape this row describes.
 - [ ] **RC-9 — Wire the free external oracles nobody reads.** (a)
       0x0032's `averageSplit` (offset 9) is a PM5-computed session
       average pace, decoded and discarded, sitting beside our own

@@ -6,6 +6,12 @@ import {
   type WorkoutProgram,
 } from "../../domain/monitor/program.js";
 import type { IntervalActual } from "../../domain/monitor/types.js";
+import {
+  parseAdditionalSplitIntervalData,
+  parseSplitIntervalData,
+  toIntervalActual,
+  type RawPm5Status,
+} from "../../domain/monitor/pm5/parse.js";
 import { buildDraft } from "../session/draft";
 import { buildRun } from "../session/engine";
 import type { LogSeed } from "../session/logDraft";
@@ -30,6 +36,7 @@ import {
   type Sample,
   type SeriesData,
 } from "./seriesRecorder";
+import { fromHexString } from "./transports/recording";
 
 // Realistic fixture, per repo convention (session/run.test.ts's own
 // comment): Filling Low (AT) — 3x2000m @ 6k+4 with 3' rest,
@@ -100,6 +107,28 @@ const actual1: IntervalActual = {
 
 function viaJson<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
+}
+
+// RC-1's own oracle-grounding pattern (`session/summaryModel.test.ts`'s
+// identical helper, duplicated rather than shared — see that file's own
+// header comment on why decoding with the driver's own parser functions,
+// not the full record-replay harness, is the right amount of realism for a
+// pure-function unit test). Real wire bytes decode to a real
+// `IntervalActual`, not a hand-built literal that could silently drift
+// from what the parser actually produces.
+function decodeActual(
+  hex37: string,
+  hex38: string,
+  normalizedIndex: number,
+): IntervalActual {
+  const a = parseSplitIntervalData(fromHexString(hex37));
+  const b = parseAdditionalSplitIntervalData(fromHexString(hex38));
+  if ("error" in a)
+    throw new Error(`0x0037 parse error: ${JSON.stringify(a.error)}`);
+  if ("error" in b)
+    throw new Error(`0x0038 parse error: ${JSON.stringify(b.error)}`);
+  const raw = { ...a, ...b } as RawPm5Status;
+  return { ...toIntervalActual(raw), index: normalizedIndex };
 }
 
 // A minimal, distinctly-shaped SessionRun for the cross-clear/truth-table
@@ -802,6 +831,243 @@ describe("completeMonitorRun: the completion writer (7B Task 4's own first calle
 
     expect(recordActual(done, actual1)).toBe(done);
     expect(loadMonitorRun()?.actuals).toStrictEqual([]);
+  });
+});
+
+describe("RC-1 — work and rest, summed separately at natural close (storage-spine design spec §3)", () => {
+  beforeEach(() => localStorage.clear());
+
+  const finishedAt = new Date("2026-08-05T12:41:00.000Z");
+
+  // walk-2026-08-16/session-2-wu-4unequal.jsonl, seq 246/779/1666/2607/2981
+  // — task 2's own oracle, independently re-decoded here exactly like
+  // `session/summaryModel.test.ts`'s own identical fixture: work
+  // 100+229+461+500+245 = 1535m (rest 0+30+22+12+0 = 64m), machine TWD
+  // (the fused legacy total) 1599m exactly.
+  const wu = decodeActual(
+    "00 00 00 00 00 00 29 01 00 64 00 00 00 00 00 00 01 01",
+    "00 00 00 18 71 00 cd 05 05 00 9b 02 27 0d 6b 00 67 01 00",
+    0,
+  );
+  const w2 = decodeActual(
+    "03 00 00 04 00 00 58 02 00 e5 00 00 1e 00 1e 00 00 02",
+    "03 00 00 1b 88 84 1e 05 0e 00 43 03 e8 0e 9c 00 68 02 00",
+    1,
+  );
+  const w3 = decodeActual(
+    "00 00 00 09 00 00 b0 04 00 cd 01 00 1e 00 16 00 00 03",
+    "00 00 00 1a 95 91 15 05 1c 00 4e 03 01 0f 9f 00 67 03 00",
+    2,
+  );
+  const w4 = decodeActual(
+    "0c 00 00 00 00 00 07 05 00 f4 01 00 1e 00 0c 00 01 04",
+    "0c 00 00 18 96 91 07 05 1f 00 61 03 2d 0f a4 00 68 04 00",
+    3,
+  );
+  const w5 = decodeActual(
+    "70 17 00 94 09 00 58 02 00 f5 00 00 00 00 00 00 00 05",
+    "70 17 00 1d 98 00 c8 04 10 00 bc 03 f3 0f bf 00 68 05 00",
+    4,
+  );
+  const restBearingActuals = [wu, w2, w3, w4, w5];
+
+  it("(a) the work-only discrimination pin (REAL session-2 capture): workMeters sums the WORK component only (1535m), restMeters sums the rest component only (64m) — an r0 keystone could never discriminate between the two; this rest-bearing capture does", () => {
+    expect(restBearingActuals.map((a) => a.distanceMeters)).toStrictEqual([
+      100, 229, 461, 500, 245,
+    ]);
+    expect(restBearingActuals.map((a) => a.restDistanceMeters)).toStrictEqual([
+      0, 30, 22, 12, 0,
+    ]);
+
+    const run: MonitorRun = {
+      ...freshMonitorRun(),
+      actuals: restBearingActuals,
+    };
+    const done = completeMonitorRun(
+      run,
+      { terminated: false, endedBy: "finished" },
+      finishedAt,
+    );
+
+    expect(done.workMeters).toBe(1535);
+    expect(done.restMeters).toBe(64);
+    // The fused legacy total (what `summaryModel.ts`'s own DISTANCE hero
+    // still renders, unchanged this PR) is the sum of the two halves —
+    // proving the split is a genuine decomposition, not a second,
+    // independently-derived number that happens to agree.
+    expect(done.workMeters! + done.restMeters!).toBe(1599);
+
+    // workSeconds/restSeconds: summed off the SAME real bytes, checked
+    // against an independently-computed reduce (this file has no
+    // committed "the elapsed seconds are X" oracle the way DISTANCE has
+    // the PM5's own TWD — the meters assertions above are the real pin;
+    // these confirm the seconds side isn't silently skipped).
+    const expectedWorkSeconds = restBearingActuals.reduce(
+      (s, a) => s + a.elapsedSeconds,
+      0,
+    );
+    const expectedRestSeconds = restBearingActuals.reduce(
+      (s, a) => s + (a.restSeconds ?? 0),
+      0,
+    );
+    expect(done.workSeconds).toBe(expectedWorkSeconds);
+    expect(done.restSeconds).toBe(expectedRestSeconds);
+  });
+
+  it("(b) the rounding-law pin, STORED side: the four fields hold the raw, UNROUNDED sums — no `Math.round` inside `completeMonitorRun`'s own computation (only `summaryModel.ts`'s DISPLAY path rounds — see that file's own pin)", () => {
+    const fractional: IntervalActual = {
+      index: 0,
+      elapsedSeconds: 60,
+      distanceMeters: 10.4,
+      avgSplit: null,
+      avgSpm: null,
+      avgHeartRateBpm: null,
+      restDistanceMeters: 10.4,
+      restSeconds: 10.4,
+    };
+    const run: MonitorRun = { ...freshMonitorRun(), actuals: [fractional] };
+    const done = completeMonitorRun(
+      run,
+      { terminated: false, endedBy: "finished" },
+      finishedAt,
+    );
+
+    expect(done.workMeters).toBe(10.4);
+    expect(done.restMeters).toBe(10.4);
+    // The two laws genuinely disagree on this input (the brief's own
+    // worked example): fused-then-round is 21, split-then-round is 20 —
+    // proving the distinction matters, not just documenting it.
+    expect(Math.round(done.workMeters! + done.restMeters!)).toBe(21);
+    expect(Math.round(done.workMeters!) + Math.round(done.restMeters!)).toBe(
+      20,
+    );
+  });
+
+  it("the rest pair is ALL-OR-NOTHING: one actual missing rest data omits restSeconds/restMeters from the WHOLE record — never a partial sum that silently drops that interval's real rest", () => {
+    const withRest: IntervalActual = {
+      ...actual1,
+      restSeconds: 30,
+      restDistanceMeters: 10,
+    };
+    // The synthesized-final fallback's own shape (`driver.ts`'s
+    // `deriveFinalIntervalFromSummary` caller): work data present, rest
+    // fields entirely absent — no wire reading for either.
+    const noRestData: IntervalActual = {
+      index: 1,
+      elapsedSeconds: 100,
+      distanceMeters: 400,
+      avgSplit: null,
+      avgSpm: null,
+      avgHeartRateBpm: null,
+    };
+    const run: MonitorRun = {
+      ...freshMonitorRun(),
+      actuals: [withRest, noRestData],
+    };
+    const done = completeMonitorRun(
+      run,
+      { terminated: false, endedBy: "finished" },
+      finishedAt,
+    );
+
+    // Work is unaffected — always complete, both actuals' own required
+    // fields.
+    expect(done.workSeconds).toBe(
+      withRest.elapsedSeconds + noRestData.elapsedSeconds,
+    );
+    expect(done.workMeters).toBe(
+      withRest.distanceMeters + noRestData.distanceMeters,
+    );
+    // Rest is entirely absent, NOT a partial sum of just `withRest`'s
+    // 30s/10m — that number would be indistinguishable from "the second
+    // interval genuinely had no rest," a silent under-count.
+    expect(done.restSeconds).toBeUndefined();
+    expect(done.restMeters).toBeUndefined();
+  });
+
+  it("computed ONLY for endedBy === 'finished' — a terminate/link-lost/program-failed close never gets these four fields, even with rest-complete actuals in hand", () => {
+    const withRest: IntervalActual = {
+      ...actual1,
+      restSeconds: 30,
+      restDistanceMeters: 10,
+    };
+    for (const endedBy of ["rower", "link-lost", "program-failed"] as const) {
+      const run: MonitorRun = { ...freshMonitorRun(), actuals: [withRest] };
+      const done = completeMonitorRun(
+        run,
+        { terminated: true, endedBy },
+        finishedAt,
+      );
+      expect(done.workSeconds).toBeUndefined();
+      expect(done.workMeters).toBeUndefined();
+      expect(done.restSeconds).toBeUndefined();
+      expect(done.restMeters).toBeUndefined();
+    }
+  });
+
+  it("the finish-grace ordering: a run closed BEFORE its final actual arrives gets sums computed TWICE — once (incomplete but honest) at completeMonitorRun, again (complete) when recordActual accepts the late boundary — never permanently missing the interval the grace exists to catch", () => {
+    const lastIndex = freshMonitorRun().program.intervals.length - 1;
+    const firstActual: IntervalActual = {
+      ...actual1,
+      restSeconds: 30,
+      restDistanceMeters: 10,
+    };
+    const withoutFinal: MonitorRun = {
+      ...freshMonitorRun(),
+      actuals: [firstActual],
+    };
+    const closed = completeMonitorRun(
+      withoutFinal,
+      { terminated: false, endedBy: "finished" },
+      finishedAt,
+    );
+    // At close, only the one actual in hand — a real number, just an
+    // incomplete one (this run's own `actuals` genuinely doesn't have the
+    // final interval yet, the "desktop order"'s opposite).
+    expect(closed.workMeters).toBe(firstActual.distanceMeters);
+    expect(closed.restMeters).toBe(10);
+
+    const finalActual: IntervalActual = {
+      index: lastIndex,
+      elapsedSeconds: 200,
+      distanceMeters: 900,
+      avgSplit: null,
+      avgSpm: null,
+      avgHeartRateBpm: null,
+      restSeconds: 0,
+      restDistanceMeters: 0,
+    };
+    const after = recordActual(closed, finalActual, { finalBoundary: true });
+
+    expect(after.actuals).toStrictEqual([firstActual, finalActual]);
+    // Re-summed over BOTH actuals now — the finish grace's own late
+    // arrival is included, not permanently missing from a record that
+    // closed before it landed.
+    expect(after.workMeters).toBe(
+      firstActual.distanceMeters + finalActual.distanceMeters,
+    );
+    expect(after.restMeters).toBe(10 + 0);
+    expect(loadMonitorRun()).toStrictEqual(viaJson(after));
+  });
+
+  it("a late finish-grace actual arriving after a TERMINATE close never gets sums computed either — recordActual's own gate (endedBy === 'finished') mirrors completeMonitorRun's", () => {
+    const lastIndex = freshMonitorRun().program.intervals.length - 1;
+    const terminated: MonitorRun = {
+      ...freshMonitorRun(),
+      completedAt: finishedAt.toISOString(),
+      terminated: true,
+      endedBy: "rower",
+    };
+    saveMonitorRun(terminated);
+    const late: IntervalActual = { ...actual1, index: lastIndex };
+
+    const after = recordActual(terminated, late, { finalBoundary: true });
+
+    expect(after.actuals).toStrictEqual([late]);
+    expect(after.workSeconds).toBeUndefined();
+    expect(after.workMeters).toBeUndefined();
+    expect(after.restSeconds).toBeUndefined();
+    expect(after.restMeters).toBeUndefined();
   });
 });
 

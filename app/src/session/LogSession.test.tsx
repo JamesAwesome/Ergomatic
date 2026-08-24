@@ -293,6 +293,10 @@ function buildMonitorFixture(
     deviceName?: string;
     series?: SeriesData;
     endedBy?: MonitorRun["endedBy"];
+    workSeconds?: number;
+    workMeters?: number;
+    restSeconds?: number;
+    restMeters?: number;
   } = {},
 ): { run: MonitorRun; workout: LibraryWorkout } {
   const hoarfrost = library("Hoarfrost");
@@ -381,6 +385,23 @@ function buildMonitorFixture(
     // Phase LL Task 4: same "omit the key entirely unless given" idiom as
     // `series` above, same reason.
     ...(overrides.endedBy !== undefined ? { endedBy: overrides.endedBy } : {}),
+    // RC-1 (storage-spine design spec §3): same "omit the key entirely
+    // unless given" idiom as `series`/`endedBy` above, same reason — a
+    // real `completeMonitorRun` only ever writes these four together
+    // (`endedBy === "finished"`), so a fixture must be able to represent
+    // "absent" as genuinely absent, not `undefined`-valued.
+    ...(overrides.workSeconds !== undefined
+      ? { workSeconds: overrides.workSeconds }
+      : {}),
+    ...(overrides.workMeters !== undefined
+      ? { workMeters: overrides.workMeters }
+      : {}),
+    ...(overrides.restSeconds !== undefined
+      ? { restSeconds: overrides.restSeconds }
+      : {}),
+    ...(overrides.restMeters !== undefined
+      ? { restMeters: overrides.restMeters }
+      : {}),
   };
   const workout: LibraryWorkout = {
     id: MONITOR_WORKOUT_ID,
@@ -2716,6 +2737,65 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
 
     const body = parsedBodies(apiFn)[0]!;
     expect("endedBy" in body).toBe(false);
+  });
+
+  // RC-1 (storage-spine design spec §3): the monitor door's fourth
+  // addition to the wire body, same optional-key idiom `deviceName`/
+  // `series`/`endedBy` already proved out — spread straight from
+  // `monitorRun`'s own four fields, never re-derived here.
+  it("posts workSeconds/workMeters/restSeconds/restMeters straight from the loaded MonitorRun when present", async () => {
+    const { run, workout } = buildMonitorFixture({
+      workSeconds: 1471,
+      workMeters: 1535,
+      restSeconds: 0,
+      restMeters: 64,
+    });
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-workrest-monitor" }), {
+          status: 201,
+        }),
+      ),
+    );
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+
+    const body = parsedBodies(apiFn)[0]!;
+    expect(body.workSeconds).toBe(1471);
+    expect(body.workMeters).toBe(1535);
+    expect(body.restSeconds).toBe(0);
+    expect(body.restMeters).toBe(64);
+  });
+
+  it("a MonitorRun with none of the four RC-1 fields (a record predating this PR, or closed some other way than a natural finish) omits all four keys from the POST body", async () => {
+    const { run, workout } = buildMonitorFixture();
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-no-workrest-monitor" }), {
+          status: 201,
+        }),
+      ),
+    );
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+
+    const body = parsedBodies(apiFn)[0]!;
+    expect("workSeconds" in body).toBe(false);
+    expect("workMeters" in body).toBe(false);
+    expect("restSeconds" in body).toBe(false);
+    expect("restMeters" in body).toBe(false);
   });
 
   it("an empty or >64-char deviceName is omitted from the POST body — the save still succeeds (branch review Minor)", async () => {

@@ -471,6 +471,51 @@ describe("buildSummaryModel — DISTANCE (R-B), the machine's own number, extern
   });
 });
 
+describe("buildSummaryModel — RC-1 pin (storage-spine design spec §3, 'screens do not change'): the DISPLAY sum must not read the new work/rest fields", () => {
+  // A fractional actuals set (unrealistic for real wire data — every
+  // committed 0x0037 field is a whole number — but that's exactly why the
+  // pin needs it: the two rounding laws only disagree on a fractional
+  // input, and the point is proving `monitorDistanceMeters` still applies
+  // ONE round at the end, not that real data ever exercises this branch).
+  const fractionalActual: IntervalActual = {
+    index: 0,
+    elapsedSeconds: 60,
+    distanceMeters: 10.4,
+    avgSplit: null,
+    avgSpm: null,
+    avgHeartRateBpm: null,
+    restDistanceMeters: 10.4,
+  };
+  const baseRun = monitorRun({
+    program: {
+      intervals: [interval({ kind: "distance", value: 10.4, restSeconds: 10 })],
+    },
+    actuals: [fractionalActual],
+  });
+
+  it("the rounding-law pin: DISPLAY renders round(Σ(work+rest)) = 21, never round(Σwork)+round(Σrest) = 20 (`monitorDistanceMeters`'s own ONE-round-at-the-end shape)", () => {
+    const model = buildSummaryModel({ door: "monitor", run: baseRun });
+    expect(model.heroes.distanceMeters).toBe(21);
+    expect(model.heroes.distanceMeters).not.toBe(20);
+  });
+
+  it("byte-identical whether or not the record carries the new RC-1 fields — pinned by construction, not by absence of code: even wildly wrong values on workSeconds/workMeters/restSeconds/restMeters change NOTHING about what renders", () => {
+    const withoutFields = buildSummaryModel({ door: "monitor", run: baseRun });
+    const withFields = buildSummaryModel({
+      door: "monitor",
+      run: {
+        ...baseRun,
+        workSeconds: 999,
+        workMeters: 999,
+        restSeconds: 999,
+        restMeters: 999,
+      },
+    });
+    expect(withFields.heroes).toStrictEqual(withoutFields.heroes);
+    expect(withFields).toStrictEqual(withoutFields);
+  });
+});
+
 describe("buildSummaryModel — TIME (R-D) and AVG SPLIT (R-C), the walk-3 shape", () => {
   // walk-2026-08-17/step-3-pm5-recording-second-rest-1786973713929.jsonl —
   // its own committed `header.program` (verbatim): 60s r0 (a warm-up when
