@@ -945,31 +945,11 @@ auto-capture follow-on under "Triggered follow-ons."
 
 ## Phase 6J — Trend charts on You
 
-**Status:** Not started
-**Goal:** A rower can see whether they're getting faster, on You, where
-Trend now lives instead of its own tab.
-**Design authority:** `docs/design/handoffs/2026-08-07-news-tab/README.md`
-decision 9 — a sketch of the fold, not a chart spec (its own open question
-#1: "the three Trend charts need real ranges, bucketing and empty states").
-Needs its own chart-spec design pass before implementation starts.
-
-- [ ] A `TREND` heading at the top of You, above baselines
-- [ ] Metres per week — eight bars, current week in ink, others in `--rule-3`
-- [ ] O2 pace per session — a line against a dashed 6k target, the latest
-      session dotted in accent, a delta callout in O2 teal
-- [ ] Time by type — a single stacked bar in the workout-type colours with
-      a percentage legend
-
-**Amends Phase 8B:** Phase 8B's own Progress-screen bullet (2k/6k test-trend
-bars, minutes/week stacked by type, type mix/last-30-days — currently one
-bullet covering all three chart groups) relocates onto You under this
-phase instead of shipping as its own screen, and is superseded once this
-phase starts. Phase 8B's month-calendar bullet (on Plan, not Progress) and
-its test-history-list bullet (on You already) are untouched.
-
-**Exit:** A rower with at least two sessions of history sees real metres,
-pace, and type-mix trends on You, with an honest empty state below two
-sessions — not sample data.
+**Status:** SUPERSEDED (James, 2026-08-24) — promoted to its own phase,
+**Phase PS — Personal stats**, sequenced AFTER Phase 8B; see that section.
+The 2026-08-07 handoff sketch (decision 9) and the three chart groups
+listed here carry over as INPUTS to Phase PS's re-brainstorm, not as its
+design; nothing was built under this heading.
 
 ## Phase 7A — Monitor domain (the domain beneath the screens)
 
@@ -1649,6 +1629,37 @@ baseline carries a source and no screen shows it.
 - [ ] Test history list on **You** — the CONSUMER for the `test_history` rows Phase BL's prompt produces (BL creates the producer; until this ships the history has rows nobody can see, and release notes must not imply otherwise). **The prompt half of this bullet MOVED to Phase BL** (split at BL's phase-open gate, 2026-08-22 — one home per body of work; the old "staged-confirm flow" mechanism wording here is superseded by BL's post-save prompt). Identity note stands: a test session is identified by title (`ONBOARDING_TITLES`) or by prescription (`plan_index ∈ {6,34,62}`); this list's design pass says which it keys on. **Named input from PR B's review (2026-08-22): the table is rower-APPEND-ONLY by composition** — decline records (ruling), rows outlive log deletion (FK SET NULL, deliberate), and no delete API exists — so a test the rower considers invalid is permanent, anchors the next delta, and this list renders it with no removal path. **BINDING (PM final-PR gate on #165, 2026-08-22): the list does NOT ship without a remove/void answer, decided at its design pass** — the same precedent PR #121's final-PR gate set for the stored heroes (pm-ledger, 2026-08-18: a spec that adds stored numbers answers "how does a rower correct or remove this?" BEFORE it ships, not after). "It stays append-only, and here is why" is an acceptable answer; silence is not. **Second input: the semantic cross-check** — POST /api/test-history is ownership-checked but takes client-asserted distance/split; when history becomes visible, assert the linked log's own workoutTitle/avgSplitSeconds agree (makes the FK semantic, not merely referential).
 
 **Exit:** Logged sessions appear on the calendar and in every chart; a logged 2k test can update the 2k baseline through the staged-confirm flow.
+
+## Phase PS — Personal stats
+
+**Status:** Not started. Sequenced AFTER Phase 8B (James, 2026-08-24:
+"make it its own phase and put it after 8B — re-brainstormed when we get
+there. The phase will be all about personal stats"). Promoted from Phase
+6J (Trend charts on You), whose section above is now a tombstone.
+
+**Goal:** A rower can see whether they are getting faster — the app's
+personal-stats story, in one phase.
+
+**RE-BRAINSTORM REQUIRED at phase open** — the 6J sketch is an input,
+not a design. Inputs the brainstorm inherits:
+
+- The 2026-08-07 News-tab handoff's decision 9 (Trend folds onto You):
+  a sketch, with its own open question ("the three Trend charts need
+  real ranges, bucketing and empty states").
+- The three chart groups relocated from Phase 8B's old Progress bullet:
+  metres per week, O2 pace per session vs target, time by type — plus
+  2k/6k test-trend bars.
+- Everything Phase RC has stored since that sketch was drawn: work/rest
+  as separate quantities, machine-confirmed summary totals
+  (display-gated on the walk photograph), `endedBy`, and the baselines
+  history Phase BL added — the stats story should be re-scoped against
+  what the record NOW holds, not what it held in August's first week.
+- The dataviz house rules (charts follow docs/design tokens; honest
+  empty states below two sessions — never sample data).
+
+**Exit (provisional, re-set at the brainstorm):** a rower with real
+history sees real trends on You; below the honest threshold, an honest
+empty state.
 
 ## Phase 8C — Rower-authored prescriptions (phase two: the rower suggests)
 
