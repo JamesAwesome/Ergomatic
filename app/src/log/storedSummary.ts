@@ -193,6 +193,23 @@ export interface StoredLog {
   // field at all).
   restSeconds: number | null;
   restMeters: number | null;
+  // RC-1 (storage-spine design spec §3, TRIAD): the session's WORK pair —
+  // `computeWorkRestSums` (`monitorRun.ts`) writes it for the SAME
+  // `"finished"`-close population `restSeconds`/`restMeters` above are
+  // written for, as an UNCONDITIONAL sum over every actual
+  // (`actuals.reduce((sum, a) => sum + a.elapsedSeconds, 0)`, no
+  // index/sub-threshold filter) — the identical population
+  // `summaryModel.ts`'s `tierBWorkDistanceMeters`/`tierBWorkTimeSeconds`
+  // sum on the live door. Fix round 1 (Task 3 review, IMPORTANT): THIS is
+  // the sound signal `buildHeroes` below now PREFERS over recomputing
+  // from `Σ steps` — see that function's own tier-B comment for why Σ
+  // steps alone can under-count (a null-index actual, or a legacy
+  // warm-up interval, never becomes a step at all) while this pair
+  // cannot, because it is summed directly off `run.actuals`, never off
+  // `steps`/`logSeed`. Required-and-nullable, same convention as
+  // `restSeconds`/`restMeters` above.
+  workSeconds: number | null;
+  workMeters: number | null;
 }
 
 /** §5D: the read-back's own three pieces. `empty` is the "all four null"
@@ -281,18 +298,85 @@ function buildMeta(row: StoredLog): SummaryMeta {
 //  intentionally (pinned by a dedicated test in `storedSummary.test.ts`
 //  so nobody "fixes" it into a fallback quotient later).
 //
-//  TIER B — no machine totals, but at least one stored step carries
-//  `actualMeters` (a monitor row saved since the 2026-08-08 amendment).
+//  TIER B1 — no machine totals, but the row carries RC-1's own WORK pair
+//  (`workSeconds`/`workMeters`, both non-null and `> 0` — written by
+//  `computeWorkRestSums`, `monitorRun.ts`, for any `"finished"`-close
+//  monitor row since RC-1 shipped, 2026-08-24). PREFERRED over Σ steps
+//  (fix round 1, Task 3 review, IMPORTANT finding): this pair sums
+//  DIRECTLY off `run.actuals` at save time, unconditionally — the
+//  IDENTICAL population `summaryModel.ts`'s `tierBWorkDistanceMeters`/
+//  `tierBWorkTimeSeconds` sum on the live door, with no null-index or
+//  warm-up exclusion — so it is SOUND where Σ steps (tier B2 below) is
+//  not: a null-index actual, or a legacy warm-up interval, never becomes
+//  a stored step at all (see B2's own comment), but this pair counts it
+//  regardless, because it never goes through `steps`/`logSeed` at all.
+//  AVG SPLIT still comes from `tierBAvgSplitSeconds(row.steps)` — that
+//  computation is UNAFFECTED by the same gap (a null-index actual is
+//  correctly excluded from AVG SPLIT by §1's own rule, and since it never
+//  becomes a step, `tierBAvgSplitSeconds` already excludes it by
+//  construction, the same "not by a check this module has to write"
+//  reasoning B2 relies on). `buildStoredTotalLine` is called with an
+//  EMPTY `stepSums` in this branch (never the real one) — see that
+//  function's own note on why fallback-2 must never fire here: this
+//  branch's hero is already correct and complete, so any excess between
+//  it and Σ steps is exactly the same null-index/warm-up gap, not rest,
+//  and attributing it to the TOTAL line's rest clause would be the same
+//  wrong-number class this whole spec exists to kill, one line lower.
+//
+//  TIER B2 — no machine totals, no RC-1 work pair, but at least one
+//  stored step carries `actualMeters` (a monitor row saved after the
+//  2026-08-08 `actualMeters` amendment but before RC-1 shipped,
+//  2026-08-24 — a CLOSED, ~16-day historical window that cannot grow).
 //  DISTANCE/TIME are Σ `actualMeters`/Σ `actualSeconds` over every step
-//  that carries them — unconditional, no wu/null-index/sub-threshold
-//  exclusion, matching `summaryModel.ts`'s own `tierBWorkDistanceMeters`/
-//  `tierBWorkTimeSeconds`. AVG SPLIT is ONE quotient (`500 × Σt/Σd`,
-//  `tierBAvgSplitSeconds` below) over the steps whose `actualSeconds`
-//  clears `MIN_MEASURABLE_ELAPSED_SECONDS` — the sub-threshold exclusion
-//  `monitorAvgSplit` also applies; a null-index actual never becomes a
-//  stored step at all (`buildMonitorLogSteps`'s own "unattributable,
-//  unmatched" rule), so it is excluded from every sum here by
-//  construction, not by a check this module has to write.
+//  that carries them. **PARITY CLAIM, CORRECTED (fix round 1: the
+//  original comment here claimed full parity with `tierBWorkDistanceMeters`/
+//  `tierBWorkTimeSeconds` — TRUE for the sub-threshold exclusion, FALSE
+//  for null-index/warm-up):**
+//    - Sub-threshold parity HOLDS: like the live door, this sum applies
+//      no sub-threshold exclusion (a mis-tap's own tiny reading still
+//      counts toward DISTANCE/TIME here, exactly as `tierBWorkDistanceMeters`
+//      does) — only AVG SPLIT excludes it, below.
+//    - Null-index/warm-up parity DOES NOT HOLD: `logDraft.ts:844-846`
+//      builds `buildMonitorLogSteps`'s `actualByIndex` map ONLY from
+//      actuals whose `index !== null`, so a null-index actual — or a
+//      LEGACY warm-up interval (`buildMonitorLogSteps`'s own "a legacy
+//      warmup seed step produces NO step" rule) — can NEVER produce a
+//      stored step, on ANY row, at any time. Σ steps therefore
+//      UNDER-COUNTS relative to what the live door's `tierBWorkDistanceMeters`/
+//      `tierBWorkTimeSeconds` compute (which sum `run.actuals` directly
+//      and include both), while spec §1 explicitly requires a null-index
+//      actual to STAY counted in DISTANCE/TIME. This is a real, KNOWN,
+//      ACCEPTED gap for this tier-B2 population specifically (see the
+//      dedicated risk note below) — closed for every OTHER population by
+//      B1's `workSeconds`/`workMeters` pair above, which sums `run.actuals`
+//      directly and cannot have this gap.
+//  AVG SPLIT is ONE quotient (`500 × Σt/Σd`, `tierBAvgSplitSeconds`
+//  below) over the steps whose `actualSeconds` clears
+//  `MIN_MEASURABLE_ELAPSED_SECONDS`; a null-index actual is excluded from
+//  this sum too, but (unlike DISTANCE/TIME) that's the CORRECT behavior
+//  per §1 — the gap above is about DISTANCE/TIME under-counting, not
+//  about AVG SPLIT over-counting.
+//
+//  RISK NOTE — TIER B2's ACCEPTED, TESTED residual (fix round 1, Task 3
+//  review, IMPORTANT finding; this is the DECISION that finding asked
+//  for): no stored field distinguishes "this row's Σ steps under-counts
+//  because of a null-index/warm-up gap" from "this row's Σ steps is
+//  exactly right and its OWN stored `distanceMeters`/`timeSeconds` are
+//  simply the pre-task-3 FUSED numbers" (`buildStoredRest`'s own
+//  fallback-2 rung, held sound at this same review) — both produce the
+//  IDENTICAL observable shape (`stored > Σ steps`), and the two cases
+//  want OPPOSITE treatment (decline vs. shrink-and-derive-rest). Given
+//  genuinely no signal to tell them apart, THIS module DECLINES to
+//  decline: B2 keeps computing DISTANCE/TIME from Σ steps, accepting the
+//  narrow, CLOSED, non-growing residual risk of an under-count on a
+//  null-index-carrying row from this specific 16-day window, in exchange
+//  for correctly shrinking the far larger population of ordinary
+//  rest-bearing tier-B2 rows to work-only (fallback-2's whole reason to
+//  exist). Pinned, not silent: `storedSummary.test.ts`'s own "TIER B2
+//  accepted residual risk" test shows the CURRENT (unfixed) under-count
+//  for this narrow population by name, so nobody "fixes" B1 into also
+//  covering B2's population by accident and loses the pin that this gap
+//  still exists there.
 //
 //  FALLBACK — no step carries `actualMeters` at all. This covers every
 //  timer/manual-door row (neither door ever writes the field — their
@@ -301,19 +385,6 @@ function buildMeta(row: StoredLog): SummaryMeta {
 //  entirely: the stored `avgSplitSeconds`/`timeSeconds`/`distanceMeters`
 //  render exactly as they did before this task — the ONLY branch where a
 //  fused (pre-RC-5) number can still reach the screen.
-//
-//  KNOWN GAP (flagged, not fixed — task-3 report): a stored monitor row
-//  from the narrow window between the 2026-08-08 actualMeters amendment
-//  and Phase WU's warm-up removal (2026-08-22) can carry a LEGACY
-//  warm-up interval that `buildMonitorLogSteps` drops from `steps`
-//  entirely (that function's own "a legacy warmup seed step produces NO
-//  step" rule). Σ steps for such a row under-counts the warm-up's own
-//  metres/seconds relative to what actually happened — this module has
-//  no stored signal ("a step was dropped") to detect that specific shape
-//  and route it to the FALLBACK branch instead, so it is treated as an
-//  ordinary tier-B row. `summaryModel.ts`'s own `isLegacyWarmupRun`
-//  solves this on the LIVE door by reading `run.logSeed`, a field this
-//  screen's stored `steps` array does not preserve.
 function stepActualSums(steps: StoredLogStep[]): {
   meters?: number;
   seconds?: number;
@@ -383,6 +454,16 @@ function tierBAvgSplitSeconds(steps: StoredLogStep[]): number | undefined {
 //     a work-only hero with no way to recover the rest their own fused
 //     column already proves happened.
 //  3. Neither resolves: no rest clause.
+//
+// Fix round 1 (Task 3 review, IMPORTANT finding): rung 2 is SAFE only
+// because its caller controls `stepSums` — `buildHeroes`' TIER B1 branch
+// (RC-1's own `workSeconds`/`workMeters` pair, sound and complete on its
+// own) passes an EMPTY `stepSums` here on purpose, so this rung can never
+// fire and misattribute a null-index/warm-up gap as rest on a row whose
+// hero is already correct. Only TIER B2 (Σ steps is the hero) passes the
+// real `stepSums`, where the comparison's pre-PR reasoning above actually
+// holds — see the tier-B2 comment block above `stepActualSums` for the
+// full risk/decision writeup.
 function buildStoredRest(
   row: StoredLog,
   stepSums: { meters?: number; seconds?: number },
@@ -466,6 +547,34 @@ function buildHeroes(row: StoredLog): SummaryHeroes {
     };
   }
 
+  // TIER B1 — RC-1's own work pair, preferred over Σ steps whenever
+  // present (fix round 1: the sound signal the null-index finding asked
+  // for). `stepSums` is deliberately NOT passed to `buildStoredTotalLine`
+  // here — see that function's own note and `buildStoredRest`'s comment
+  // for why fallback-2 must never fire against a hero this branch already
+  // knows is complete.
+  const hasWorkPair =
+    row.workSeconds !== null &&
+    row.workMeters !== null &&
+    row.workSeconds > 0 &&
+    row.workMeters > 0;
+  if (hasWorkPair) {
+    const distanceMeters = Math.round(row.workMeters!);
+    const timeSeconds = row.workSeconds!;
+    const avgSplitSeconds = tierBAvgSplitSeconds(row.steps);
+    return {
+      distanceMeters,
+      time: fmtDuration(timeSeconds / 60),
+      timeSeconds,
+      avgSplit:
+        avgSplitSeconds !== undefined ? fmtSplit(avgSplitSeconds) : undefined,
+      avgSplitSeconds,
+      totalLine: buildStoredTotalLine(row, timeSeconds, {}),
+    };
+  }
+
+  // TIER B2 — no RC-1 work pair; Σ steps is the best (imperfect, see this
+  // module's own tier-B2 comment block above) available signal.
   const hasStepActuals = row.steps.some((s) => s.actualMeters !== undefined);
   if (hasStepActuals) {
     const timeSeconds = stepSums.seconds;

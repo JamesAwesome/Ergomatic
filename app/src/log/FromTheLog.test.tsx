@@ -74,6 +74,10 @@ function storedRow(overrides: Partial<StoredLog> = {}): StoredLog {
     // every fixture here defaults to the pair being absent.
     restSeconds: null,
     restMeters: null,
+    // RC-1 work pair (fix round 1, Task 3 review): same default — this
+    // suite's own tier coverage lives in `storedSummary.test.ts`.
+    workSeconds: null,
+    workMeters: null,
     ...overrides,
   };
 }

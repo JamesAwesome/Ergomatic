@@ -66,6 +66,11 @@ function baseRow(overrides: Partial<StoredLog> = {}): StoredLog {
     // describe blocks below override this explicitly per fixture.
     restSeconds: null,
     restMeters: null,
+    // RC-1 work pair (fix round 1, Task 3 review): same default — a
+    // fixture that wants TIER B1 (buildHeroes' preferred, sound source)
+    // overrides these explicitly; everything else stays TIER B2/FALLBACK.
+    workSeconds: null,
+    workMeters: null,
     ...overrides,
   };
 }
@@ -149,7 +154,7 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
     expect(view.heroes.avgSplitSeconds).toBeUndefined();
   });
 
-  it("TIER B: no machine totals but steps carry actualMeters/actualSeconds — heroes compute from Σ steps, AVG SPLIT is one quotient over the summed pair, TOTAL line from the RC-1 rest pair", () => {
+  it("TIER B2: no machine totals but steps carry actualMeters/actualSeconds — heroes compute from Σ steps, AVG SPLIT is one quotient over the summed pair, TOTAL line from the RC-1 rest pair", () => {
     const view = buildStoredSummary(
       baseRow({
         deviceName: "PM5 432331249",
@@ -175,7 +180,7 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
     );
   });
 
-  it("TIER B, fallback-2 (pre-PR rest derivation): no RC-1 pair stored, but the row's OLD fused distanceMeters/timeSeconds exceed Σ steps — the difference IS the rest, recovered onto the TOTAL line while the heroes shrink to work-only", () => {
+  it("TIER B2, fallback-2 (pre-PR rest derivation): no RC-1 pair stored, but the row's OLD fused distanceMeters/timeSeconds exceed Σ steps — the difference IS the rest, recovered onto the TOTAL line while the heroes shrink to work-only", () => {
     const view = buildStoredSummary(
       baseRow({
         deviceName: "PM5 432331249",
@@ -251,7 +256,7 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
     expect(view.heroes.totalLine).toBeUndefined();
   });
 
-  it("TIER B: a pm5-sourced step carrying only ONE of actualSeconds/actualMeters, and a stopwatch-sourced step carrying BOTH — neither shape `buildMonitorLogSteps` writes today, but `routes/data.ts`'s own validator accepts each field independently, so a stored row CAN carry them. Both are excluded from the AVG SPLIT quotient (it needs the pm5 pair together); DISTANCE/TIME still sum whichever half each one has, unconditionally", () => {
+  it("TIER B2: a pm5-sourced step carrying only ONE of actualSeconds/actualMeters, and a stopwatch-sourced step carrying BOTH — neither shape `buildMonitorLogSteps` writes today, but `routes/data.ts`'s own validator accepts each field independently, so a stored row CAN carry them. Both are excluded from the AVG SPLIT quotient (it needs the pm5 pair together); DISTANCE/TIME still sum whichever half each one has, unconditionally", () => {
     const steps: StoredLog["steps"] = [
       ...EXIT7_STEPS,
       // pm5, elapsed only — no distance reading for this interval.
@@ -283,7 +288,7 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
     expect(view.heroes.avgSplit).toBe("2:04.0");
   });
 
-  it("TIER B: a sub-threshold pm5 step (actualSeconds below MIN_MEASURABLE_ELAPSED_SECONDS) stays IN the DISTANCE/TIME sums but OUT of the AVG SPLIT quotient — mirrors summaryModel.ts's own monitorAvgSplit rule for a stored row", () => {
+  it("TIER B2: a sub-threshold pm5 step (actualSeconds below MIN_MEASURABLE_ELAPSED_SECONDS) stays IN the DISTANCE/TIME sums but OUT of the AVG SPLIT quotient — mirrors summaryModel.ts's own monitorAvgSplit rule for a stored row", () => {
     const steps: StoredLog["steps"] = [
       ...EXIT7_STEPS,
       {
@@ -307,7 +312,7 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
     expect(view.heroes.avgSplitSeconds).toBeCloseTo(124.0, 5);
   });
 
-  it("TIER B: a pm5-sourced step carrying actualMeters but no actualSeconds at all (independently optional per the server's own validator) leaves TIME and AVG SPLIT absent while DISTANCE still renders", () => {
+  it("TIER B2: a pm5-sourced step carrying actualMeters but no actualSeconds at all (independently optional per the server's own validator) leaves TIME and AVG SPLIT absent while DISTANCE still renders", () => {
     const view = buildStoredSummary(
       baseRow({
         deviceName: "PM5 432331249",
@@ -346,6 +351,126 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
     );
     expect(view.heroes.timeSeconds).toBeCloseTo(124.0, 5);
     expect(view.heroes.totalLine).toBe("2:04 total");
+  });
+
+  // Fix round 1 (Task 3 review, IMPORTANT finding): a null-index actual
+  // never becomes a stored step (`logDraft.ts:844-846`'s own
+  // `actualByIndex` map only holds `index !== null` actuals), so Σ steps
+  // alone would under-count DISTANCE/TIME relative to what genuinely
+  // happened — the exact defect this TIER B1 branch exists to close. This
+  // fixture simulates it directly: `EXIT7_STEPS` sums to 500m/124.0s, but
+  // `workSeconds`/`workMeters` (RC-1's own pair, summed off `run.actuals`
+  // directly and therefore immune to the gap) carry 150.0s/560m — the
+  // exit-7 pair PLUS a third, 26.0s/60m interval whose actual arrived with
+  // a null index and so produced no step at all.
+  it("TIER B1: RC-1's own workSeconds/workMeters pair is preferred over Σ steps — a null-index actual's own work (never a step) is correctly counted here, where Σ steps alone would silently drop it", () => {
+    const view = buildStoredSummary(
+      baseRow({
+        deviceName: "PM5 432331249",
+        steps: EXIT7_STEPS,
+        machineWorkSeconds: null,
+        machineWorkMeters: null,
+        workSeconds: 150.0,
+        workMeters: 560,
+        restSeconds: 40,
+        restMeters: 90,
+      }),
+    );
+    // DISTANCE/TIME come from the work pair — NOT Σ EXIT7_STEPS
+    // (500m/124.0s), which is what a step-only computation would wrongly
+    // show.
+    expect(view.heroes.distanceMeters).toBe(560);
+    expect(view.heroes.timeSeconds).toBe(150.0);
+    expect(view.heroes.time).toBe("2:30");
+    // AVG SPLIT is UNAFFECTED by the gap — it only ever averages the
+    // steps that DO exist (the null-index actual was correctly excluded
+    // from AVG SPLIT to begin with, per §1's own rule), so it stays the
+    // exit-7 pair's own 124.0, not a quotient over the work pair.
+    expect(view.heroes.avgSplitSeconds).toBeCloseTo(124.0, 5);
+    expect(view.heroes.avgSplit).toBe("2:04.0");
+    expect(view.heroes.totalLine).toBe(
+      "3:10 total · plus 90 m coasting in rest",
+    );
+  });
+
+  it("TIER B1: the RC-1 work pair NEVER derives a fallback-2 rest clause from its own gap against Σ steps or the stored fused columns — that gap is work (a dropped step), not rest, and attributing it as rest would double-count on top of a hero that is already complete", () => {
+    const view = buildStoredSummary(
+      baseRow({
+        deviceName: "PM5 432331249",
+        steps: EXIT7_STEPS,
+        machineWorkSeconds: null,
+        machineWorkMeters: null,
+        workSeconds: 150.0,
+        workMeters: 560,
+        // No RC-1 rest pair — the ONLY rest source TIER B1 ever consults.
+        restSeconds: null,
+        restMeters: null,
+        // OLD fused stored columns, larger again than BOTH the work pair
+        // and Σ steps — if fallback-2 fired here (it must not), it would
+        // derive a bogus "rest" from 900−560 and double-count on top of
+        // the 150.0s hero.
+        avgSplitSeconds: 999,
+        timeSeconds: 400,
+        distanceMeters: 900,
+      }),
+    );
+    expect(view.heroes.distanceMeters).toBe(560);
+    expect(view.heroes.timeSeconds).toBe(150.0);
+    // No rest clause: the total is exactly the work pair's own seconds,
+    // formatted alone.
+    expect(view.heroes.totalLine).toBe("2:30 total");
+  });
+
+  it("TIER B1: the work pair renders DISTANCE/TIME even when no step yields an AVG SPLIT quotient at all (e.g. no steps stored) — never a fallback quotient over the work pair itself", () => {
+    const view = buildStoredSummary(
+      baseRow({
+        deviceName: "PM5 432331249",
+        steps: [],
+        machineWorkSeconds: null,
+        machineWorkMeters: null,
+        workSeconds: 150.0,
+        workMeters: 560,
+      }),
+    );
+    expect(view.heroes.distanceMeters).toBe(560);
+    expect(view.heroes.timeSeconds).toBe(150.0);
+    expect(view.heroes.avgSplit).toBeUndefined();
+    expect(view.heroes.avgSplitSeconds).toBeUndefined();
+  });
+
+  // Fix round 1 (Task 3 review, IMPORTANT finding, decision 2): the
+  // ACCEPTED residual — pinned so it is visible, not silently "fixed"
+  // later by someone who doesn't know it's a known, bounded trade-off.
+  // No stored signal distinguishes "this row's Σ steps under-counts
+  // because a null-index actual dropped out" from "this row's Σ steps is
+  // exactly right and its stored columns are simply the old fused
+  // numbers" (`buildStoredRest`'s fallback-2 rung, itself held sound at
+  // this review) — both look identical (`stored > Σ steps`), and they
+  // want OPPOSITE treatment. This module's own tier-B2 comment names the
+  // decision: for the narrow, CLOSED population where RC-1's work pair is
+  // absent (predates 2026-08-24) but steps carry `actualMeters`
+  // (postdates 2026-08-08), Σ steps is trusted anyway, accepting the
+  // narrow risk in exchange for correctly shrinking the far larger
+  // ordinary-legacy-row population. This test proves the CURRENT,
+  // UNFIXED under-count for that narrow case: the same null-index gap as
+  // the TIER B1 tests above (a 26.0s/60m interval that produced no step),
+  // but with NO `workSeconds`/`workMeters` pair to rescue it — DISTANCE/
+  // TIME under-report at 500m/124.0s, not the true 560m/150.0s.
+  it("TIER B2: ACCEPTED residual risk, pinned — with no RC-1 work pair available, a null-index actual's own work is silently absent from Σ steps, and DISTANCE/TIME under-count", () => {
+    const view = buildStoredSummary(
+      baseRow({
+        deviceName: "PM5 432331249",
+        steps: EXIT7_STEPS,
+        machineWorkSeconds: null,
+        machineWorkMeters: null,
+        workSeconds: null,
+        workMeters: null,
+      }),
+    );
+    // The KNOWN, ACCEPTED gap: this under-counts the true 560m/150.0s by
+    // exactly the dropped interval's own 60m/26.0s.
+    expect(view.heroes.distanceMeters).toBe(500);
+    expect(view.heroes.timeSeconds).toBeCloseTo(124.0, 5);
   });
 });
 
