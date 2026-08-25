@@ -130,7 +130,7 @@ those rows at all; only their rest contribution moves to §2's line.
 
 Beneath the heroes, one line, always present on a monitor row:
 
-    4:04 total · 242 m during rest
+    4:04 total · plus 242 m coasting in rest
 
 - Wall-clock total = work seconds + rest seconds; rest metres = the
   session's rest distance. **Sources CORRECTED after the pass (finding 4)
@@ -152,10 +152,26 @@ Beneath the heroes, one line, always present on a monitor row:
      per-interval rests** — `monitorRun.ts` forbids that by name (a
      missing interval's rest is indistinguishable from a genuine zero),
      and this spec does not overrule it.
+- **Wording is the rower's own (design review, 2026-08-25): "coasting in
+  rest", never "during rest"** — the earlier phrasing "makes it sound
+  like I rowed it, and I didn't, the wheel did." The metres genuinely
+  interest them ("I know the flywheel doesn't just stop"), so the clause
+  stays; only its verb changes.
 - No em-dashes; middle dot separator, house style.
-- It is a LINE, not a hero: it must not compete visually, and it must be
-  visible without scrolling (the tester's first reaction to smaller
-  headline numbers is answered by the line directly beneath them).
+- **PLACEMENT IS A REQUIREMENT, not a nicety (design review):** the line
+  must be in the SAME GLANCE as the shrinking headline. Asked what would
+  stop them filing a bug on 742→500, the rower said: the total line
+  sitting right underneath, and TIME holding steady — "silence is what
+  reads as data loss, not a smaller number with a receipt attached." If
+  it were buried or scrolled off, "I'd absolutely file a bug." So: no
+  scroll, no collapse, no lazy render; it is a LINE (never a hero) and it
+  ships in the same viewport as the three numbers.
+- **Tier disclosure: NOTHING is added (design review ruling).** No badge,
+  no ESTIMATED marker on tier B. The rower's own answer: they do not care
+  which tier a row is in as long as the number is right, and the MACHINE
+  CONFIRMED block's ABSENCE is already the quiet tell — "I'll notice the
+  block's gone before I notice a number's off by a second." Adding a
+  marker would shout about a distinction they treat as background.
 
 ## §3 — What a rower sees change
 
@@ -212,6 +228,25 @@ Beneath the heroes, one line, always present on a monitor row:
 - `pnpm e2e` + `pnpm screenshots`; the captured log-detail row is already
   the exit-7 piece, so the capture will show 500/2:04/2:04.0 with the
   total line — verify by eye that the block and heroes now agree.
+
+## The rower's two open complaints, both OUT of this PR and both queued
+
+The design review's own words: these are "not answered here", and one of
+them is "the same disease, untreated". Neither is in scope; both are in
+ROADMAP so nobody rediscovers them at a gate.
+
+1. **PARTIAL on an abandoned piece.** "I want it to say I stopped, not
+   silently show a shorter piece that looks like I planned a 250 when I
+   meant 500 and bailed." The block from PR #192 already renders on a
+   terminated row (with the machine's own partial numbers), but nothing
+   on the screen SAYS the piece was ended early. Queued as its own item —
+   it is copy plus a stored-state read, and it deserves its own pass.
+2. **The chart's rest-inclusive axes.** With the heroes now work-only,
+   the chart beneath them still spans rest-inclusive time: "if I stare at
+   that chart for ten seconds I'll be back to 'does this app know what
+   happened or not'." This is the axis-quantity question already queued
+   (series-truth §D, ROADMAP) — this spec makes it MORE visible, not
+   less, and the ROADMAP item gains that sentence.
 
 ## Explicitly not in this PR
 
