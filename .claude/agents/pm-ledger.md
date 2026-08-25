@@ -2404,3 +2404,75 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   lived only in the Record block. **Judge the top by what it OMITS about behaviour,
   not by word count.** Still James's to re-set or retire, still belongs in
   `CLAUDE.md`.
+
+## PM final-PR gate, PR #192 (summary-record wave PR 2 — display of stored machine totals), 2026-08-25
+
+- **A capture that stages an IMPOSSIBLE pairing is worse than no capture, and
+  "we used the walk's REAL values" is how it happens.** #192's flagship
+  `log-detail.png` put `MACHINE CONFIRMED · WORK ONLY / 2:04.0 work · 500m`
+  under a hero reading `TIME 7:58 · DISTANCE 2000`, with a caption asserting the
+  gap is rest — 1500 m and 354 s of rest coast in a 7:58 piece, 75%. The
+  screenshot spec grafted exit-7's genuine single-piece decode onto an unrelated
+  4×500 m fixture and its own comment celebrated the provenance ("not hand-picked
+  round numbers"). `types.ts` plus `walk-2026-08-24/README.md` (the PM5's
+  own Totals row, `2:04.0 / 500`, summed across two intervals) settle that 0x0039
+  is whole-workout, so the pairing cannot occur. **Real numbers from the wrong
+  session are less honest than invented consistent ones.** Third occurrence of
+  RF#7's sharpened form (#117's hero, #191's axis prediction, this).
+- **Re-gate (47671a4): all five conditions landed, and the fix wave produced a
+  BETTER artefact than the condition asked for.** The re-shot frame is the exit-7
+  piece itself, so the real 500-vs-742 collision is now in the committed record
+  and the labelling ruling is judgeable rather than merely asserted — the fix for
+  a dishonest capture was a MORE demanding capture, not an easier one. The §23
+  discharges state the discriminating prediction ("a per-interval reading would
+  have shown 56.1s/250m, not the 124.0s/500m the wire delivered"), which is the
+  form that makes an n=1 citable; copy that shape. **Standing note for the next
+  gate: a re-gate still opens the PNG.** The report said the frame was fixed and
+  it was — but the two prior gates in this wave were both settled by ten seconds
+  of in-frame arithmetic, never by a summary of it.
+- **The arithmetic check was run on the relationship that already existed.** The
+  PR body said "hero arithmetic recomputed (478s/2000m → 1:59.5 ✓)" — true, and
+  the AVG-SPLIT identity predates this PR. The relationship #192 *introduces*
+  (block vs hero) went unchecked. **At a gate, recompute the pairing the PR ADDS,
+  not the one the screen already had.**
+- **A mitigation sentence must point AT the object the ruling names.** James's
+  label ruling resolved the block-vs-chart collision by labelling; the first-cut
+  caption read "The totals **above** include rest" while `TraceChart` renders
+  BELOW the block with a rest-inclusive x-axis. One word excluded the one
+  object. Fixed at the re-gate ("Everything else on this screen"). Also note the
+  design inversion, accepted: the sentence carrying the semantic load renders at
+  10px `--ink-3` — the smallest, faintest text in the block.
+- **The status-paragraph check PASSED — first time in eight gates** (#165, #167,
+  #174, #182, #183, #190, #191 all failed it). **But Phase CM's Status went
+  stale in the same commit**, still describing the 5 m quantisation #192
+  reverses (fixed at the re-gate). **Extend the check from "this phase's
+  paragraph" to "every paragraph that records a ruling this PR reverses"** —
+  grep the reversed ruling's own nouns, not the phase name.
+- **A capture-only tail is behaviourally zero-risk and evidentially HIGH-risk.**
+  #192's original tail was captures + screenshot spec + a spec amendment — zero
+  product-behaviour lines, clean by the running standard — and it carried this
+  gate's only blocking finding. Captures are what a gate READS. The two-command
+  behavioural-line check stays right; it does not bound evidential risk.
+- **Wire facts this PR's label rests on, banked:** exit-7 (2×250 m r60) had
+  0x0039 report **500 m / 2:04.0** — the SUM across two intervals, so
+  whole-workout cumulative, not per-interval like its 0x0031 namesake — while
+  TWD read 742, so 0x0039 **excludes rest**. §23's walk items 2 AND 4, both
+  discharged at the re-gate with the discriminating prediction stated. **A
+  discharge that lives only in a walk README is a dangling discharge — the
+  inverse of RF#16's dangling citation.** n=1, but a DISCRIMINATING n=1.
+- **"Moot" answered a copy question with an implementation fact.** #190's gate
+  put the terminated-piece obligation on the RELEASE NOTES; #192's body declared
+  it moot. Fixed at the re-gate (routed to the notes). **Check which artefact an
+  obligation was placed on before accepting that it is discharged.**
+- **Release call: `v0.22.0` MINOR, notes PR before the tag.** `v0.21.0..main` is
+  SEVEN merges, eight with #192. Notes owed by: #189 (baseline control,
+  tester-visible), #191 (series-truth: charts stop dropping intervals,
+  PROSPECTIVE ONLY, plus the chart-clock shortening above the fold), #192 (the
+  block; new rows only, no backfill; the 1m counter; what CODE is for; that it
+  renders on pieces you ended early). No note, with reasons: #185/#187/#188
+  (docs only), #186 (22-package bump, no intended behaviour change), #190
+  (storage; owns #192's "from this build forward" clause).
+- **The 30-second rule is 0-for-16**; tenth consecutive declined enforcement.
+  Shape correct, length inherent to a triad PR. The enforceable failures were
+  CONTENT (the overclaim and the deflection), both fixed at the re-gate. Still
+  James's to re-set or retire, still belongs in `CLAUDE.md`.
