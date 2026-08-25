@@ -8491,11 +8491,33 @@ section:not(.news-pinned) .news-row:last-of-type {
   margin: 14px 0 20px;
 }
 
+/* RC-5 §2 (hero-truth design spec, 2026-08-25): wraps the hero row plus
+   its optional TOTAL line so the 24px gap this block always owed the
+   reflection card beneath it stays constant whether or not a total line
+   renders (the timer/manual doors never set one). */
+.summary-heroes-block {
+  margin: 0 0 24px;
+}
+
 .summary-heroes {
   display: flex;
   align-items: flex-end;
   gap: 20px;
-  margin: 0 0 24px;
+  margin: 0;
+}
+
+/* The wall-clock total, directly beneath the heroes — same viewport, no
+   scroll/collapse (placement is a requirement, not a nicety, the design
+   review's own ruling: "the total line sitting right underneath" is what
+   stops a rower filing a bug on a heroes total that shrank). Quiet ink,
+   matching `.summary-meta`'s own weight so it reads as a caption on the
+   heroes above it, not a fourth hero. */
+.summary-total-line {
+  margin: 6px 0 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
 }
 
 .summary-hero {

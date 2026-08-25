@@ -14,7 +14,7 @@ import {
 import type { Baselines, Step, WorkoutType } from "../../domain/types.js";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import { fromHexString } from "../monitor/transports/recording";
-import type { MonitorRun } from "../monitor/monitorRun";
+import type { MachineSummaryDetail, MonitorRun } from "../monitor/monitorRun";
 import { buildDraft, type SessionDraft } from "./draft";
 import { buildRun } from "./engine";
 import {
@@ -28,6 +28,7 @@ import type { SessionRun } from "./run";
 import {
   buildSpmCell,
   buildSummaryModel,
+  buildTotalLine,
   deviationBarWidthPercent,
   rowJudgment,
   type MeasuredRow,
@@ -245,7 +246,7 @@ describe("buildSummaryModel — oracle bytes are tied to the committed recording
   });
 });
 
-describe("buildSummaryModel — DISTANCE (R-B), the machine's own number, external oracles", () => {
+describe("buildSummaryModel — DISTANCE (RC-5 §1: tier B is WORK-ONLY now — rest moved to the TOTAL line), external oracles", () => {
   // walk-2026-08-17/step-2-pm5-recording-1786973078979.jsonl, seq 736/737
   // (interval 1) and 1191/1192 (interval 2) — the "1 keystone" row of that
   // walk's own README (`docs/monitor/sessions/walk-2026-08-17/README.md`):
@@ -322,7 +323,7 @@ describe("buildSummaryModel — DISTANCE (R-B), the machine's own number, extern
     4,
   );
 
-  it("the rest-bearing session (5 unequal pieces): DISTANCE === 1599, the machine TWD — a work-only sum reads 1535 and is WRONG", () => {
+  it("the rest-bearing session (5 unequal pieces, not a legacy wu run): DISTANCE === 1535, work-only — the machine's TWD (1599) is no longer the hero, it feeds the TOTAL line's rest clause instead", () => {
     expect([wu, w2, w3, w4, w5].map((a) => a.distanceMeters)).toStrictEqual([
       100, 229, 461, 500, 245,
     ]);
@@ -335,7 +336,10 @@ describe("buildSummaryModel — DISTANCE (R-B), the machine's own number, extern
         intervals: [
           // Phase WU retyped this interval (`type: "warmup"` before); it
           // carries no target either way, and DISTANCE never consulted the
-          // type, so 1599 is unchanged.
+          // type. This fixture's own `logSeed` (the default `monitorRun()`
+          // helper) marks every step `kind: "work"` — it is NOT a legacy
+          // wu-carrying run (`warmupIndex` returns -1), so RC-5's tier B
+          // work-only rule applies uniformly, same as any other row.
           interval({ kind: "distance", value: 100 }),
           interval({ kind: "distance", value: 229, restSeconds: 30 }),
           interval({ kind: "distance", value: 461, restSeconds: 30 }),
@@ -347,18 +351,20 @@ describe("buildSummaryModel — DISTANCE (R-B), the machine's own number, extern
     });
 
     const model = buildSummaryModel({ door: "monitor", run });
-    expect(model.heroes.distanceMeters).toBe(1599);
 
-    // A work-only regression's own number, computed independently here
-    // (not by mutating the source — that happens for real in the
-    // self-mutation pass documented in the task report) so the "1535 is
-    // wrong" claim is pinned by an assertion, not just a comment.
+    // The work-only sum, computed independently here (not by mutating the
+    // source — that happens for real in the self-mutation pass documented
+    // in the task report) so the hero's own number is pinned by an
+    // assertion, not just a comment.
     const workOnly = [wu, w2, w3, w4, w5].reduce(
       (s, a) => s + a.distanceMeters,
       0,
     );
     expect(workOnly).toBe(1535);
-    expect(model.heroes.distanceMeters).not.toBe(workOnly);
+    expect(model.heroes.distanceMeters).toBe(1535);
+    // The machine's own TWD (1599 — work + rest) is what this hero used
+    // to render; it's no longer the hero at all.
+    expect(model.heroes.distanceMeters).not.toBe(1599);
   });
 
   it("§7 vetted ground, on real wire data: the machine's OWN avgSplit equals 500×t/d exactly for both keystone boundaries", () => {
@@ -370,7 +376,7 @@ describe("buildSummaryModel — DISTANCE (R-B), the machine's own number, extern
     );
   });
 
-  it("old-shape record: restDistanceMeters undefined at runtime (a MonitorRun.actuals entry written before task 2's field existed) contributes 0, never crashes or NaNs (task 2's `?? 0` contract — this is the first consumer)", () => {
+  it("old-shape record: restDistanceMeters undefined at runtime (a MonitorRun.actuals entry written before task 2's field existed) never crashes or NaNs — RC-5: the DISTANCE hero doesn't read restDistanceMeters at all any more (work-only), so an absent rest field can't touch it; the `?? 0` contract now lives in the TOTAL line's own rest derivation instead (see the RC-5 describe block below)", () => {
     const oldActual = { ...work1 } as IntervalActual;
     // Simulating a pre-field persisted record: `restDistanceMeters` went
     // additive-optional (storage-spine design spec §2, RC-7 — it used to
@@ -383,11 +389,11 @@ describe("buildSummaryModel — DISTANCE (R-B), the machine's own number, extern
       actuals: [oldActual],
     });
     const model = buildSummaryModel({ door: "monitor", run });
-    expect(model.heroes.distanceMeters).toBe(250); // 250 + (undefined ?? 0)
+    expect(model.heroes.distanceMeters).toBe(250); // work-only: just distanceMeters
     expect(Number.isNaN(model.heroes.distanceMeters)).toBe(false);
   });
 
-  it("review finding 2: a null-index actual (boundary-out-of-run/divergence — 'A CONSUMER MUST NOT TREAT null AS INTERVAL 0') is EXCLUDED from AVG SPLIT (no program identity to judge against) but INCLUDED in DISTANCE/TIME (machine semantics — the meters/seconds genuinely happened)", () => {
+  it("review finding 2: a null-index actual (boundary-out-of-run/divergence — 'A CONSUMER MUST NOT TREAT null AS INTERVAL 0') is EXCLUDED from AVG SPLIT (no program identity to judge against) but INCLUDED in DISTANCE/TIME (machine semantics — the meters/seconds genuinely happened; RC-5 §1's corrected exclusions keep this true under the new work-only rule too — this fixture's own rest is 0 for both actuals, so it can't by itself distinguish work-only from the old fused sum; the RC-5 describe block below adds a rest-bearing variant that does)", () => {
     // work2 arrives with no program identity (a divergent/out-of-run
     // boundary) — its own real distance/time still count toward the
     // machine totals, but it has nothing to be numbered or judged as.
@@ -428,12 +434,12 @@ describe("buildSummaryModel — DISTANCE (R-B), the machine's own number, extern
     expect(model.rows[1]!.measured).toBe(false);
   });
 
-  it("the free third oracle (review finding 6): step-3's own 3 completed boundaries sum to 808m, matching the machine's OWN TWD reading captured at teardown (step-3-ring.json's final-totals line: 'machineTotal=808m')", () => {
+  it("the free third oracle (review finding 6): step-3's own 3 completed boundaries sum to 803m WORK-ONLY (the hero) — the machine's own TWD reading captured at teardown ('machineTotal=808m', step-3-ring.json) is the FUSED number, no longer the hero, and is exactly what the TOTAL line's rest clause (5m) accounts for", () => {
     // work 160+214+429 (the opener + work1 + work2's own splitIntervalDistanceMeters)
-    // + rest 0+0+5 (their own intervalRestDistanceMeters) = 808. Reuses the
-    // exact decoded boundaries from the TIME/AVG SPLIT describe block below
-    // (re-decoded here rather than imported across describe blocks, same
-    // real hex, cited identically).
+    // + rest 0+0+5 (their own intervalRestDistanceMeters) = 808 fused / 803
+    // work-only. Reuses the exact decoded boundaries from the TIME/AVG
+    // SPLIT describe block below (re-decoded here rather than imported
+    // across describe blocks, same real hex, cited identically).
     const wu = decodeActual(
       "00 00 00 00 00 00 58 02 00 a0 00 00 00 00 00 00 00 01",
       "00 00 00 1a 6b 00 53 07 08 00 e2 01 6a 0a 35 00 63 01 00",
@@ -467,16 +473,15 @@ describe("buildSummaryModel — DISTANCE (R-B), the machine's own number, extern
       actuals: [wu, w1, w2],
     });
     const model = buildSummaryModel({ door: "monitor", run });
-    expect(model.heroes.distanceMeters).toBe(808);
+    expect(model.heroes.distanceMeters).toBe(803);
   });
 });
 
-describe("buildSummaryModel — RC-1 pin (storage-spine design spec §3, 'screens do not change'): the DISPLAY sum must not read the new work/rest fields", () => {
+describe("buildSummaryModel — RC-1 pin, RE-BASELINED for RC-5: DISTANCE/TIME/AVG SPLIT ignore RC-1's own work/rest fields entirely (work-only, computed from actuals) — only the TOTAL line reads restMeters, and only through its own stated priority", () => {
   // A fractional actuals set (unrealistic for real wire data — every
   // committed 0x0037 field is a whole number — but that's exactly why the
   // pin needs it: the two rounding laws only disagree on a fractional
-  // input, and the point is proving `monitorDistanceMeters` still applies
-  // ONE round at the end, not that real data ever exercises this branch).
+  // input).
   const fractionalActual: IntervalActual = {
     index: 0,
     elapsedSeconds: 60,
@@ -493,13 +498,13 @@ describe("buildSummaryModel — RC-1 pin (storage-spine design spec §3, 'screen
     actuals: [fractionalActual],
   });
 
-  it("the rounding-law pin: DISPLAY renders round(Σ(work+rest)) = 21, never round(Σwork)+round(Σrest) = 20 (`monitorDistanceMeters`'s own ONE-round-at-the-end shape)", () => {
+  it("DISTANCE is work-only: round(Σwork) = 10, never round(Σ(work+rest)) = 21 — RC-5 retires this hero's old fused rounding law", () => {
     const model = buildSummaryModel({ door: "monitor", run: baseRun });
-    expect(model.heroes.distanceMeters).toBe(21);
-    expect(model.heroes.distanceMeters).not.toBe(20);
+    expect(model.heroes.distanceMeters).toBe(10);
+    expect(model.heroes.distanceMeters).not.toBe(21);
   });
 
-  it("byte-identical whether or not the record carries the new RC-1 fields — pinned by construction, not by absence of code: even wildly wrong values on workSeconds/workMeters/restSeconds/restMeters change NOTHING about what renders", () => {
+  it("DISTANCE/TIME/AVG SPLIT are byte-identical whether or not the record carries RC-1's own work/rest fields — pinned by construction: even wildly wrong values on workSeconds/workMeters/restSeconds/restMeters change NOTHING about the three heroes. The TOTAL line is the ONE exception (RC-5 §2 source 1): it reads `restMeters` directly when present, ahead of deriving it from the fused pair", () => {
     const withoutFields = buildSummaryModel({ door: "monitor", run: baseRun });
     const withFields = buildSummaryModel({
       door: "monitor",
@@ -511,8 +516,206 @@ describe("buildSummaryModel — RC-1 pin (storage-spine design spec §3, 'screen
         restMeters: 999,
       },
     });
-    expect(withFields.heroes).toStrictEqual(withoutFields.heroes);
-    expect(withFields).toStrictEqual(withoutFields);
+    expect(withFields.heroes.distanceMeters).toBe(
+      withoutFields.heroes.distanceMeters,
+    );
+    expect(withFields.heroes.time).toBe(withoutFields.heroes.time);
+    expect(withFields.heroes.timeSeconds).toBe(
+      withoutFields.heroes.timeSeconds,
+    );
+    expect(withFields.heroes.avgSplit).toBe(withoutFields.heroes.avgSplit);
+    expect(withFields.heroes.avgSplitSeconds).toBe(
+      withoutFields.heroes.avgSplitSeconds,
+    );
+
+    // TOTAL: work 60s + interval 0's own programmed rest (10s, index 0 is
+    // present) = 70s = "1:10", on EITHER run — RC-1's fields never feed
+    // the total-seconds figure, only the rest-METRES clause.
+    expect(withoutFields.heroes.totalLine).toBe(
+      "1:10 total · plus 11 m coasting in rest",
+    );
+    // Without RC-1's own restMeters, the rest clause is DERIVED from the
+    // fused pair: monitorDistanceMeters (round(10.4+10.4)=21) minus Σwork
+    // (10.4) = 10.6, rounded to 11 for display.
+    expect(withFields.heroes.totalLine).toBe(
+      "1:10 total · plus 999 m coasting in rest",
+    );
+    // With RC-1's restMeters present, it WINS over the derived 11.
+    expect(withFields.heroes.totalLine).not.toContain("11 m");
+  });
+});
+
+describe("buildSummaryModel — RC-5: the three heroes agree (tier A machine-verbatim, tier B work-only quotient), and the TOTAL line carries the wall-clock number rest moved off of", () => {
+  // The exit-7 walk's own numbers (docs/monitor/sessions/walk-2026-08-24/
+  // README.md, PM5 View Detail SCREEN, PRIMARY): 2×250m r1:00, Totals row
+  // `2:04.0 / 500 / 2:04.0`. Interval 1 `1:07.9 / 250 / 2:15.8, 25 spm`,
+  // rest 1 `r1:00 / 147m`; interval 2 `:56.1 / 250 / 1:52.2, 28 spm`, rest
+  // 2 `r1:00 / 95m`. `0x0039`'s own decode (WIRE, `phone-exit7-ring.json`
+  // seq 61, cited identically in `server/routes/machineSummary.
+  // integration.test.ts`): elapsed 124.0s, distance 500m, avg pace 124.0s
+  // (0x0039 offset 18-19). NOT decoded via `decodeActual` here — interval
+  // 1's own raw 0x0037/0x0038 bytes were never logged in the committed
+  // ring (only interval 2's were; the ring's "notify-first" entries carry
+  // no raw payload, only a byte-length) — so both intervals are built from
+  // the walk's own PHOTOGRAPHED numbers instead, which the README already
+  // transcribed as PRIMARY evidence.
+  const exit7Program: WorkoutProgram = {
+    intervals: [
+      interval({ kind: "distance", value: 250, restSeconds: 60 }),
+      interval({ kind: "distance", value: 250, restSeconds: 60 }),
+    ],
+  };
+  const exit7Actual1: IntervalActual = {
+    index: 0,
+    elapsedSeconds: 67.9,
+    distanceMeters: 250,
+    avgSplit: 135.8, // 2:15.8
+    avgSpm: 25,
+    avgHeartRateBpm: null,
+    restDistanceMeters: 147,
+    restSeconds: 60,
+  };
+  const exit7Actual2: IntervalActual = {
+    index: 1,
+    elapsedSeconds: 56.1,
+    distanceMeters: 250,
+    avgSplit: 112.2, // 1:52.2
+    avgSpm: 28,
+    avgHeartRateBpm: null,
+    restDistanceMeters: 95,
+    restSeconds: 60,
+  };
+  const exit7SummaryDetail: MachineSummaryDetail = {
+    avgStrokeRate: 26,
+    endingHeartRateBpm: null,
+    avgHeartRateBpm: null,
+    minHeartRateBpm: null,
+    maxHeartRateBpm: null,
+    dragFactorAverage: 100,
+    workoutType: 8,
+    recoveryHeartRateBpm: null,
+    avgPaceSecondsPer500m: 124.0, // 0x0039 offset 18-19, decoded (PRIMARY)
+  };
+
+  it("tier A (run.summaryTotals present, PR #190): DISTANCE 500, TIME 2:04, AVG SPLIT 2:04.0 — the machine's OWN numbers verbatim, never a quotient of ours; TOTAL line 4:04 · plus 242 m coasting in rest, using RC-1's stored restMeters", () => {
+    const run = monitorRun({
+      program: exit7Program,
+      actuals: [exit7Actual1, exit7Actual2],
+      endedBy: "finished",
+      summaryTotals: { workElapsedSeconds: 124.0, workDistanceMeters: 500 },
+      summaryDetail: exit7SummaryDetail,
+      workSeconds: 124.0,
+      workMeters: 500,
+      restSeconds: 120,
+      restMeters: 242,
+    });
+    const model = buildSummaryModel({ door: "monitor", run });
+    expect(model.heroes.distanceMeters).toBe(500);
+    expect(model.heroes.time).toBe("2:04");
+    expect(model.heroes.avgSplit).toBe("2:04.0");
+    expect(model.heroes.totalLine).toBe(
+      "4:04 total · plus 242 m coasting in rest",
+    );
+  });
+
+  it("tier B (no summaryTotals — a pre-#190 record): the SAME three numbers, computed from the row's own actuals — DISTANCE/TIME work-only (Σ), AVG SPLIT ONE quotient over the summed pair (never a second derivation); TOTAL line DERIVES its rest clause from the fused pair (no RC-1 fields stored on this run)", () => {
+    const run = monitorRun({
+      program: exit7Program,
+      actuals: [exit7Actual1, exit7Actual2],
+    });
+    const model = buildSummaryModel({ door: "monitor", run });
+    expect(model.heroes.distanceMeters).toBe(500);
+    expect(model.heroes.time).toBe("2:04");
+    // ONE quotient over the summed pair — never a per-actual avgSplit, and
+    // never two separate 500×t/d computations.
+    expect(model.heroes.avgSplit).toBe(fmtSplit((500 * (67.9 + 56.1)) / 500));
+    expect(model.heroes.avgSplit).toBe("2:04.0");
+    expect(model.heroes.totalLine).toBe(
+      "4:04 total · plus 242 m coasting in rest",
+    );
+  });
+
+  it("a run with a null-index actual (rest-bearing, unlike the review-finding-2 fixture above — this one can actually discriminate work-only from the old fused sum): it stays IN the DISTANCE/TIME work-only sum, OUT of AVG SPLIT — and its rest metres still reach the TOTAL line (§1's corrected exclusions are about JUDGING, not what happened)", () => {
+    const nullIndexed: IntervalActual = { ...exit7Actual2, index: null };
+    const run = monitorRun({
+      program: exit7Program,
+      actuals: [exit7Actual1, nullIndexed],
+    });
+    const model = buildSummaryModel({ door: "monitor", run });
+    // Both actuals' work meters/seconds count — the work-only sum has no
+    // index gate at all.
+    expect(model.heroes.distanceMeters).toBe(500);
+    expect(model.heroes.time).toBe("2:04");
+    // AVG SPLIT excludes the null-index actual — exit7Actual1 alone:
+    // 500×67.9/250 = 135.8s = 2:15.8, the README's own interval-1 pace.
+    expect(model.heroes.avgSplit).toBe("2:15.8");
+    expect(model.heroes.avgSplit).not.toBe("2:04.0");
+    // The rest clause still reflects BOTH actuals' rest metres (147+95) —
+    // rest tracking never gated on index.
+    expect(model.heroes.totalLine).toContain("242 m coasting in rest");
+  });
+
+  it("tier A with a zero summaryTotals (the '0 OF N INTERVALS MEASURED' hardware shape — a burst that arrived, but no boundary ever did): every hero is absent, never a fabricated 0/0:00", () => {
+    const run = monitorRun({
+      program: exit7Program,
+      actuals: [],
+      endedBy: "finished",
+      summaryTotals: { workElapsedSeconds: 0, workDistanceMeters: 0 },
+      summaryDetail: exit7SummaryDetail,
+    });
+    const model = buildSummaryModel({ door: "monitor", run });
+    expect(model.heroes.distanceMeters).toBeUndefined();
+    expect(model.heroes.time).toBeUndefined();
+    expect(model.heroes.timeSeconds).toBeUndefined();
+    expect(model.heroes.totalLine).toBeUndefined();
+  });
+
+  it("a no-rest run: the TOTAL line renders the total ALONE, with no rest clause (never a fabricated `0 m`)", () => {
+    const noRestActual: IntervalActual = {
+      index: 0,
+      elapsedSeconds: 139,
+      distanceMeters: 500,
+      avgSplit: 139,
+      avgSpm: 24,
+      avgHeartRateBpm: null,
+      restDistanceMeters: 0,
+      restSeconds: 0,
+    };
+    const run = monitorRun({
+      program: {
+        intervals: [interval({ kind: "distance", value: 500, restSeconds: 0 })],
+      },
+      actuals: [noRestActual],
+    });
+    const model = buildSummaryModel({ door: "monitor", run });
+    expect(model.heroes.totalLine).toBe("2:19 total");
+    expect(model.heroes.totalLine).not.toContain("coasting");
+  });
+});
+
+describe("buildTotalLine — the exported formatter, ONE place the string is built (Task 3 reuses it for the stored-row screen)", () => {
+  it("formats total + rest clause per the exact house copy: middle dot, 'plus', 'coasting in rest' (never 'during', never an em-dash)", () => {
+    expect(buildTotalLine(244, 242)).toBe(
+      "4:04 total · plus 242 m coasting in rest",
+    );
+  });
+
+  it("omits the rest clause when restMeters is absent, zero, or negative — never a `0 m` that implies a measurement", () => {
+    expect(buildTotalLine(139, undefined)).toBe("2:19 total");
+    expect(buildTotalLine(139, 0)).toBe("2:19 total");
+    expect(buildTotalLine(139, -1)).toBe("2:19 total");
+  });
+
+  it("renders nothing at all when totalSeconds is absent, zero, or negative — no `0:00 total`", () => {
+    expect(buildTotalLine(undefined, 242)).toBeUndefined();
+    expect(buildTotalLine(0, 242)).toBeUndefined();
+    expect(buildTotalLine(-5, 242)).toBeUndefined();
+  });
+
+  it("rounds a fractional rest-metres figure for display", () => {
+    expect(buildTotalLine(60, 10.6)).toBe(
+      "1:00 total · plus 11 m coasting in rest",
+    );
   });
 });
 
@@ -569,14 +772,23 @@ describe("buildSummaryModel — TIME (R-D) and AVG SPLIT (R-C), the walk-3 shape
     2,
   );
 
-  it("TIME === 5:00: Σ work seconds (60+60+120) + programmed rest for completed intervals (0+30+30), every completed interval included (R-D)", () => {
+  it("TIME === 4:00, work-only (RC-5 §1: R-D's old fused formula — Σ work seconds 60+60+120 + programmed rest for completed intervals 0+30+30 — is no longer the hero); the OLD fused number (5:00) now lives on the TOTAL line instead, with its own 5m rest clause", () => {
     expect([wu, w1, w2].map((a) => a.elapsedSeconds)).toStrictEqual([
       60, 60, 120,
     ]);
     const run = monitorRun({ program, actuals: [wu, w1, w2] });
     const model = buildSummaryModel({ door: "monitor", run });
-    expect(model.heroes.time).toBe("5:00");
-    expect(model.heroes.time).toBe(fmtDuration(300 / 60));
+    expect(model.heroes.time).toBe("4:00");
+    expect(model.heroes.time).toBe(fmtDuration(240 / 60));
+    expect(model.heroes.time).not.toBe("5:00");
+    // The TOTAL line carries the number this hero used to render: work
+    // 240s + programmed rest 60s (0+30+30) = 300s = "5:00", plus this
+    // fixture's own rest metres (0+0+5 — the free-third-oracle test above
+    // decodes the identical wu/w1/w2 boundaries and pins Σwork=803,
+    // Σrest=5 for the same triplet).
+    expect(model.heroes.totalLine).toBe(
+      "5:00 total · plus 5 m coasting in rest",
+    );
   });
 
   it("AVG SPLIT counts EVERY completed interval (R-C, post-Phase-WU) — no machine oracle exists for the weighted average (spec §5: 0x0032's Average Pace matches no candidate formula); the witness is §7's per-interval identity plus hand arithmetic over the real decoded boundaries", () => {
@@ -619,7 +831,7 @@ describe("buildSummaryModel — TIME (R-D) and AVG SPLIT (R-C), the walk-3 shape
     expect(model.heroes.avgSplit).not.toBe(fmtSplit(droppingInterval0));
   });
 
-  it("a LEGACY stored run whose seed still says kind:'warmup' keeps its interval 0 OUT of AVG SPLIT — the record's number must not move under it", () => {
+  it("a LEGACY stored run whose seed still says kind:'warmup' keeps its interval 0 OUT of AVG SPLIT — the record's number must not move under it. RC-5 §1's own ruling: DISTANCE/TIME for this legacy shape ALSO don't move — they stay the OLD fused numbers (808m/5:00), never the new work-only figures (803m/4:00) a fresh run would get", () => {
     // THE KEPT GUARD (`summaryModel.ts`'s `warmupIndex`, `logDraft.ts`'s
     // `LogSeed`). `LogSeed` is PERSISTED inside a `MonitorRun`, so a run
     // finished and stored before Phase WU still carries `kind: "warmup"` on
@@ -640,6 +852,17 @@ describe("buildSummaryModel — TIME (R-D) and AVG SPLIT (R-C), the walk-3 shape
     });
     const model = buildSummaryModel({ door: "monitor", run });
     expect(model.heroes.avgSplit).toBe("2:20.0");
+    expect(model.heroes.distanceMeters).toBe(808);
+    expect(model.heroes.time).toBe("5:00");
+    expect(model.heroes.distanceMeters).not.toBe(803);
+    expect(model.heroes.time).not.toBe("4:00");
+    // A legacy wu run still gets a TOTAL line — but it's now redundant
+    // with the (unchanged) DISTANCE/TIME heroes for this shape: no rest
+    // clause hides anywhere new, since the fused number never moved off
+    // the hero in the first place for this legacy record.
+    expect(model.heroes.totalLine).toBe(
+      "5:00 total · plus 5 m coasting in rest",
+    );
   });
 
   it("interval 0 is an ordinary NUMBERED row now: measured, judged like any other, no unnumbered WARM-UP row above it — §1's re-baseline: the completed work rows judge against their OWN 129s target, not a working average", () => {

@@ -3905,17 +3905,21 @@ describe("LogSession: the manual door's own staged discard (LT-0)", () => {
 // F6 Task 3 (spec 2b): the monitor door's own TIME hero stops reading
 // wall-clock (`completedAt - startedAt`) entirely for a run the rower ended
 // through Today's row (`endedBy: "interrupted"`) — that gap can span days
-// between the row and the moment "Log it" was pressed, and none of it
-// happened. `measuredSessionSeconds` (Task 4's `buildSummaryModel`, R-D)
-// computes work + programmed rest for completed intervals instead, and the
-// date comes from the run's OWN `startedAt`.
+// between the row and the moment "Log it" was pressed — and the date comes
+// from the run's OWN `startedAt`. RC-5 (hero-truth design spec,
+// 2026-08-25) later redefines WHAT the TIME hero measures for a tier B
+// (non-legacy) run — work-only, `tierBWorkTimeSeconds` in
+// `summaryModel.ts` — rather than R-D's old work-plus-programmed-rest
+// formula; the old formula's own number still renders, just on the TOTAL
+// line beneath instead of the hero.
 describe("LogSession: the interrupted header stops reading wall-clock (F6/R-D)", () => {
-  it("an interrupted record shows measured minutes (work + completed rest) as the TIME hero, not the day-long wall-clock gap, dated from startedAt", async () => {
+  it("an interrupted record shows measured minutes (work only, RC-5) as the TIME hero, not the day-long wall-clock gap, dated from startedAt", async () => {
     const { run, workout } = buildMonitorFixture({
       // Only interval 1 (Hoarfrost's time work, restSeconds 300 per its own
       // auto-inserted rest phase) measured — interval 2 never reached.
-      // work 360s + rest 300s = 660s = 11:00 exactly: nowhere near the
-      // day-long wall-clock gap below.
+      // work 360s = 6:00 exactly (RC-5: work-only, the rest goes to the
+      // TOTAL line instead): nowhere near the day-long wall-clock gap
+      // below.
       actuals: [
         {
           index: 1,
@@ -3941,20 +3945,35 @@ describe("LogSession: the interrupted header stops reading wall-clock (F6/R-D)",
     await screen.findByRole("heading", { name: "Hoarfrost" });
 
     expect(screen.getByText("TIME")).toBeInTheDocument();
-    expect(screen.getByText("11:00")).toBeInTheDocument();
+    // Scoped to the hero value specifically — this fixture's own interval
+    // row ALSO reads "6:00" (the same 360s actual, rendered a second time
+    // as its own row's time cell), so a bare `getByText("6:00")` is
+    // ambiguous.
+    expect(
+      screen.getByText("6:00", { selector: ".summary-hero-value" }),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/1440:00/)).not.toBeInTheDocument();
     expect(screen.getByText(/^AUG 1 ·/)).toBeInTheDocument();
     expect(screen.queryByText(/^AUG 2/)).not.toBeInTheDocument();
+    // The TOTAL line carries what used to be the TIME hero's own number
+    // (work 360s + interval 1's own 300s programmed rest = 660s = 11:00),
+    // with no rest-metres clause (restDistanceMeters is 0 on this run's
+    // only actual).
+    expect(screen.getByText("11:00 total")).toBeInTheDocument();
   });
 
   // Final-review FIX-4: this test used to claim "wall-clock minutes" but
-  // the value it asserts ("58:25") is R-D's MEASURED formula (work +
-  // completed rest) — the same one the interrupted case above uses. The
-  // monitor door's TIME hero is never wall-clock (this module's own
-  // header: "R-D is monitor-only" applies unconditionally, not just when
-  // `endedBy === "interrupted"`); the "inverse pin" this test actually
-  // performs is that dateLabel switches source (completedAt here vs.
-  // startedAt above) while TIME stays on the measured formula either way.
+  // the value it asserted ("58:25") was R-D's MEASURED formula (work +
+  // completed rest) — the same one the interrupted case above used. RC-5
+  // (hero-truth) moved that fused number OFF the TIME hero and onto the
+  // TOTAL line instead; the TIME hero itself is now work-only ("53:25").
+  // The monitor door's TIME hero is still never wall-clock (this module's
+  // own header: "R-D is monitor-only" applies unconditionally, not just
+  // when `endedBy === "interrupted"` — RC-5 only changed WHICH measured
+  // formula feeds the hero, not that it's measured at all); the "inverse
+  // pin" this test actually performs is that dateLabel switches source
+  // (completedAt here vs. startedAt above) while TIME stays on a measured
+  // formula either way.
   it("inverse pin: a normal-completion record (no endedBy) shows the same MEASURED time as the interrupted case, never wall-clock, dated from completedAt", async () => {
     const { run, workout } = buildMonitorFixture();
     saveMonitorRun(run);
@@ -3963,9 +3982,13 @@ describe("LogSession: the interrupted header stops reading wall-clock (F6/R-D)",
     await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
     await screen.findByRole("heading", { name: "Hoarfrost" });
 
-    // work 705+2500=3205s + restSeconds (300 for interval1, 0 for
-    // interval2) = 3505s -> "58:25".
-    expect(screen.getByText("58:25")).toBeInTheDocument();
+    // Work-only (RC-5): 705+2500 = 3205s -> "53:25".
+    expect(screen.getByText("53:25")).toBeInTheDocument();
+    // The TOTAL line carries the OLD fused number this hero used to show:
+    // work 3205s + restSeconds (300 for interval1, 0 for interval2) =
+    // 3505s -> "58:25 total" (no rest-metres clause — both actuals'
+    // restDistanceMeters are 0 on this fixture).
+    expect(screen.getByText("58:25 total")).toBeInTheDocument();
 
     // Negative guard computed from the fixture's OWN timestamps (not a
     // hand-typed literal) so a regression that swaps the measured formula
@@ -3978,7 +4001,7 @@ describe("LogSession: the interrupted header stops reading wall-clock (F6/R-D)",
         new Date(run.startedAt).getTime()) /
       1000;
     const wallClockLabel = fmtDuration(wallClockSeconds / 60);
-    expect(wallClockLabel).toBe("20:00"); // sanity: distinct from "58:25"
+    expect(wallClockLabel).toBe("20:00"); // sanity: distinct from "53:25"
     expect(screen.queryByText(wallClockLabel)).not.toBeInTheDocument();
 
     // dateLabel from completedAt (restored — the review found this
