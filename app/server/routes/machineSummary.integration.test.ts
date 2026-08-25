@@ -131,6 +131,36 @@ describe("POST/GET /api/logs: the machine's summary round-trips through real Pos
     expect(got.body.machineSummary).toStrictEqual(REALISTIC_SUMMARY);
   });
 
+  // Design spec §4 names BOTH real pairs for the server round-trip
+  // criterion, not just the terminate capture's 24.3/76 above: a natural
+  // finish's own 0x0039, decoded verbatim from `phone-exit7-ring.json`
+  // (seq 61, raw `88 35 03 0f 70 30 00 88 13 00 ...` — elapsed
+  // `readU24LE(bytes,4)/100` = 0x003070/100 = 124.0, distance
+  // `readU24LE(bytes,7)/10` = 0x001388/10 = 500.0). Both land on whole
+  // numbers at this particular capture's wire values (unlike the
+  // terminate capture's tenths-precision 24.3), which is itself the
+  // point: a real natural finish CAN produce a whole number, so the
+  // route must accept one exactly as readily as a fractional one.
+  it("round-trips the natural-finish capture's real pair (124.0s / 500m) — the spec's second named example, distinct from the terminate capture's 24.3/76", async () => {
+    const bearer = await bearerToken();
+    const created = await request(app)
+      .post("/api/logs")
+      .set("Authorization", bearer)
+      .send({
+        ...validLogBody(),
+        machineWorkSeconds: 124.0,
+        machineWorkMeters: 500,
+      });
+    expect(created.status).toBe(201);
+
+    const got = await request(app)
+      .get(`/api/logs/${created.body.id}`)
+      .set("Authorization", bearer);
+    expect(got.status).toBe(200);
+    expect(got.body.machineWorkSeconds).toBe(124.0);
+    expect(got.body.machineWorkMeters).toBe(500);
+  });
+
   it("stores nulls when the machine fields are absent (a pre-this-task client, or a non-monitor door)", async () => {
     const bearer = await bearerToken();
     const created = await request(app)

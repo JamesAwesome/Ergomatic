@@ -2916,7 +2916,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     expect("machineSummary" in body).toBe(false);
   });
 
-  it("defensive case — summaryTotals present with summaryDetail absent (a shape no current writer produces; appendSummaryObservations always writes both together) — posts a machineSummary carrying verificationBytes only", async () => {
+  it("a build-738-era record (summaryTotals/verificationBytes present, summaryDetail absent — that build's writer never produced the field) posts a machineSummary carrying verificationBytes only", async () => {
     const { run, workout } = buildMonitorFixture({
       summaryTotals: { workElapsedSeconds: 24.3, workDistanceMeters: 76 },
       verificationBytes: REALISTIC_VERIFICATION_BYTES,

@@ -680,7 +680,10 @@ function validateMachineSummary(
   if (JSON.stringify(raw).length > MACHINE_SUMMARY_MAX_BYTES) {
     return {
       ok: false,
-      message: `machineSummary must serialize to at most ${MACHINE_SUMMARY_MAX_BYTES} bytes`,
+      // Wording matches what's actually measured: `.length` on a JS
+      // string counts UTF-16 code units, not bytes (the constant's own
+      // name is a holdover — the ceiling itself is unchanged).
+      message: `machineSummary must serialize to at most ${MACHINE_SUMMARY_MAX_BYTES} characters`,
     };
   }
   if (raw.verificationBytes !== undefined) {

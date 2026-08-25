@@ -163,11 +163,14 @@ ruling, 2026-08-24, after the Eng/DBA/PM argument):
   distance, whole meters (wire is decimeters; store `Math.round` of the
   parsed value, and the validator names the rounding).
 - `machine_summary` `jsonb`, nullable — one object carrying
-  `verificationBytes` (array of 0-255 ints, length 8, optional within
-  the blob) and the nine `summaryDetail` fields verbatim. Migration
-  0011's `series` is the precedent: monitor-observed, display-verbatim,
-  never `WHERE`'d yet; Phase PS promotes keys to typed columns when its
-  real query shape exists.
+  `verificationBytes` and the nine `summaryDetail` fields verbatim.
+  Migration 0011's `series` is the precedent: monitor-observed,
+  display-verbatim, never `WHERE`'d yet; Phase PS promotes keys to typed
+  columns when its real query shape exists.
+  **Task-6 correction:** the client stores the FULL 0x003F payload (19
+  bytes on this firmware), not a length-8 array — the server validates
+  `verificationBytes` as 1..32 ints 0-255 (`routes/data.ts`); display
+  later reads only the first 8 of the stored array.
 
 Migration 0016: additive, nullable, no defaults, NO backfill — old rows
 read null and the display renders nothing for them. The save API gains

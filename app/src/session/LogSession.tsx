@@ -449,15 +449,16 @@ interface LogFormFields {
   // `deviceName` already does; the server's own validator (Task 6,
   // `routes/data.ts`) accepts absent, so this never blocks a save.
   // The build below guards `summaryDetail` being absent while
-  // `summaryTotals` is present — a shape no current writer produces
-  // (`appendSummaryObservations` in `monitorRun.ts` writes both fields
-  // together, unconditionally, in the same object literal; every real
-  // record has both or neither). This is defensive code for a shape the
-  // type system allows (`summaryDetail` is independently optional on
-  // `MonitorRun`), not a real historical record — build 738 predates
-  // `summaryTotals`/`summaryDetail` entirely and has NEITHER field, so a
-  // genuine build-738 record takes the absence branch above, not this
-  // one.
+  // `summaryTotals` is present — a REAL historical shape, not merely a
+  // type-system possibility: build 738's `appendSummaryObservations`
+  // (`git show v0.21.0:app/src/monitor/monitorRun.ts`) wrote ONLY
+  // `summaryTotals` (always) and `verificationBytes` (conditionally) —
+  // `summaryDetail` did not exist on that build's `MonitorRun` at all.
+  // An unsaved build-738-era run that survives the update and gets saved
+  // through THIS code carries totals (and maybe bytes) with no detail,
+  // so this guard is live, not dead defensive code. Same shape the
+  // server-side integration test names "a build-738-era record's honest
+  // shape" (`machineSummary.integration.test.ts`).
   machineWorkSeconds?: number;
   machineWorkMeters?: number;
   machineSummary?: {
@@ -1410,13 +1411,17 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
                   ...(monitorRun.verificationBytes !== undefined
                     ? { verificationBytes: [...monitorRun.verificationBytes] }
                     : {}),
-                  // Defensive: `summaryDetail` absent while `summaryTotals`
-                  // is present is a shape no current writer produces
-                  // (`appendSummaryObservations` in `monitorRun.ts` writes
-                  // both together, unconditionally) — not a real
-                  // historical record (build 738 predates both fields and
-                  // has neither, so it never reaches this branch at all).
-                  // Kept in case a future writer ever splits them.
+                  // A real build-738-era record can carry `summaryTotals`
+                  // (and maybe `verificationBytes`) with no `summaryDetail`
+                  // — that build's `appendSummaryObservations` never wrote
+                  // the field (it didn't exist on that build's
+                  // `MonitorRun` at all; `git show
+                  // v0.21.0:app/src/monitor/monitorRun.ts`). An unsaved
+                  // run from that build, saved through this code after the
+                  // update, reaches here and posts a bytes-only
+                  // `machineSummary` — correct, not a bug. Same shape the
+                  // server-side integration test names "a build-738-era
+                  // record's honest shape."
                   ...(monitorRun.summaryDetail ?? {}),
                 },
               }
