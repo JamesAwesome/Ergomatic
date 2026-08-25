@@ -407,9 +407,21 @@ describe("HistoryList hero snippet — tier parity with the detail screen (RC-5 
   // `storedSummary.test.ts`'s own "TIER B2, fallback-2" fixture (same
   // exit-7 steps, same fused 742m/244s/138.8s numbers) so the divergence
   // is a REAL, already-vetted case, not an invented one.
-  it("TIER B2 (accepted, bounded divergence — CLOSED 2026-08-08..08-24 window, cannot grow): the list shows the OLD stored FUSED value while buildStoredSummary, on the IDENTICAL fixture, computes the Σ-steps value — different numbers, by design, pinned so a refactor of the FALLBACK branch can't silently change this", () => {
+  //
+  // **CORRECTED (Task 3 fix round 2, final whole-branch review, finding
+  // I1): this row's `endedBy: "finished"` is what now PROVES it lands in
+  // the genuinely-bounded 2026-08-08..2026-08-24 window** — a row with
+  // any other `endedBy` (rower/link-lost/program-failed/interrupted)
+  // would instead DECLINE on the detail screen too (`storedSummary.ts`'s
+  // `isReconstructableClose`) and the two screens would AGREE, not
+  // diverge — see `HistoryList.test.tsx`'s own "declined" case below for
+  // that half of the story, and `LogRow.tsx`'s own corrected header
+  // comment for why "cannot grow" was never true of the WHOLE TIER B2
+  // population, only this `endedBy`-provable slice of it.
+  it("TIER B2 (SAFE — endedBy finished, accepted bounded divergence): the list shows the OLD stored FUSED value while buildStoredSummary, on the IDENTICAL fixture, computes the Σ-steps value — different numbers, by design, pinned so a refactor of the FALLBACK branch can't silently change this", () => {
     const detail = buildStoredSummary(
       baseStoredRow({
+        endedBy: "finished",
         steps: EXIT7_STEPS,
         machineWorkSeconds: null,
         machineWorkMeters: null,
@@ -446,6 +458,48 @@ describe("HistoryList hero snippet — tier parity with the detail screen (RC-5 
     // accepted gap, made visible rather than silently passing.
     expect(screen.getByText("AVG 2:18.8 · 742 m")).toBeVisible();
     expect(screen.queryByText(/AVG 2:04\.0/)).not.toBeInTheDocument();
+  });
+
+  // Fix round 2 (final whole-branch review, finding I1): the OTHER half
+  // of the correction — a row whose `endedBy` names an incomplete-by-
+  // construction close now DECLINES on the detail screen too
+  // (`storedSummary.ts`'s `isReconstructableClose`), so the list and the
+  // detail screen AGREE for this population, byte-identical fixture to
+  // the "SAFE" divergence test above except for `endedBy`.
+  it("TIER B2 DECLINED (endedBy link-lost): the list and the detail screen now AGREE — both render the stored FUSED value, since the detail screen no longer trusts Σ steps for this row either", () => {
+    const detail = buildStoredSummary(
+      baseStoredRow({
+        endedBy: "link-lost",
+        steps: EXIT7_STEPS,
+        machineWorkSeconds: null,
+        machineWorkMeters: null,
+        workSeconds: null,
+        workMeters: null,
+        avgSplitSeconds: 138.8,
+        timeSeconds: 244,
+        distanceMeters: 742,
+      }),
+    );
+    // The detail screen now DECLINES too — no Σ-steps shrink.
+    expect(detail.heroes.distanceMeters).toBe(742);
+    expect(detail.heroes.avgSplit).toBe("2:18.8");
+
+    mockUseLogHistory.mockReturnValue(
+      readyState([
+        makeLog("log-tier-b2-declined-agreement", {
+          machineWorkSeconds: null,
+          machineWorkMeters: null,
+          workSeconds: null,
+          workMeters: null,
+          avgSplitSeconds: 138.8,
+          distanceMeters: 742,
+        }),
+      ]),
+    );
+    renderHistoryList();
+    // The list's own FALLBACK renders the SAME fused numbers the detail
+    // screen now also declines to — no divergence, byte-identical.
+    expect(screen.getByText("AVG 2:18.8 · 742 m")).toBeVisible();
   });
 });
 

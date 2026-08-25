@@ -69,12 +69,27 @@ function hasMachineTotals(log: RecentLog): boolean {
 // can't (`steps` is excluded from `LOG_LIST_COLUMNS` for size; see this
 // module's header comment). A row that would land in the detail screen's
 // TIER B2 (no machine totals, no RC-1 work pair, but steps carry
-// `actualMeters`) falls through to FALLBACK here instead — a KNOWN,
-// BOUNDED disagreement with the detail screen, accepted because TIER B2
-// is a CLOSED, ~16-day historical window that cannot grow (no row saved
-// since RC-1 shipped, 2026-08-24, can land there — `storedSummary.ts`'s
-// own TIER B2 comment). Pinned by its own dedicated test
-// (`HistoryList.test.tsx`), not left to be discovered later.
+// `actualMeters`) falls through to FALLBACK here instead.
+//
+// **CORRECTED (Task 3 fix round 2, final whole-branch review, finding
+// I1): the disagreement window is NOT "a CLOSED, ~16-day historical
+// window that cannot grow" — that premise was false.**
+// `computeWorkRestSums`/`appendSummaryObservations` (the work-pair and
+// machine-totals writers) only ever fire for `"finished"`/`"rower"`
+// closes, so a link-lost/program-failed/interrupted/burst-less-terminate
+// monitor row can NEVER carry either pair, forever — an ONGOING
+// population, not a closed window. `storedSummary.ts`'s own TIER B2 now
+// gates on `isReconstructableClose(row.endedBy)` for exactly this reason
+// (fix round 2): it DECLINES to FALLBACK for that same ongoing
+// population, reading the SAME stored, possibly-fused `distanceMeters`
+// this list already does — so THIS list and the detail screen now AGREE
+// on that population too, not just disagree-by-design. The remaining
+// disagreement is genuinely bounded to the population `storedSummary.ts`'s
+// TIER B2 (SAFE) branch still trusts Σ steps for: a row whose `endedBy`
+// is `"finished"`/`null`/`undefined` AND predates RC-1 (2026-08-24) —
+// the SAME closed 2026-08-08..2026-08-24 window fix round 1 originally
+// (mis-)claimed for the WHOLE population. Pinned by its own dedicated
+// test (`HistoryList.test.tsx`), not left to be discovered later.
 //
 //  TIER A — `hasMachineTotals`: the machine's own work meters, rounded —
 //  byte-identical to `buildHeroes`' TIER A DISTANCE (both round the same
@@ -84,8 +99,10 @@ function hasMachineTotals(log: RecentLog): boolean {
 //  reasoning as TIER A, matching `buildHeroes`' TIER B1 DISTANCE.
 //  FALLBACK — neither pair: the row's stored, possibly-fused
 //  `distanceMeters`, unchanged. This is ALSO `buildHeroes`' own FALLBACK
-//  (and its TIER B2, per the note above) — the two screens already agree
-//  here, both reading the identical stored column.
+//  (and its DECLINED TIER B2 — endedBy names an incomplete-by-
+//  construction close — per the note above) — the two screens already
+//  agree here, both reading the identical stored column. Only a TRUSTED
+//  TIER B2 row (endedBy proves historical) still disagrees.
 function heroDistanceMeters(log: RecentLog): number | undefined {
   if (hasMachineTotals(log)) {
     return Math.round(log.machineWorkMeters!);

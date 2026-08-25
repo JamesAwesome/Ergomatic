@@ -296,7 +296,15 @@ function buildMeta(row: StoredLog): SummaryMeta {
 //  A build-738-era row (machine totals present, `avgPaceSecondsPer500m`
 //  absent — that key predates Task 1) renders NO avg split hero at all,
 //  intentionally (pinned by a dedicated test in `storedSummary.test.ts`
-//  so nobody "fixes" it into a fallback quotient later).
+//  so nobody "fixes" it into a fallback quotient later). Fix round 2
+//  (CRITICAL finding C1): `buildStoredTotalLine` is called with an EMPTY
+//  `stepSums` here too, for the identical reason TIER B1 below is —
+//  `appendSummaryObservations` admits a TERMINATED (`endedBy: "rower"`)
+//  row into tier A, and such a row's RC-1 rest pair is NULL
+//  (`computeWorkRestSums` runs only for `"finished"`) while its abandoned
+//  final interval's own rowed metres can be missing from `steps` (no
+//  0x0037 ever sent for it) — passing the real `stepSums` let
+//  fallback-2 relabel that ROWED WORK as rest.
 //
 //  TIER B1 — no machine totals, but the row carries RC-1's own WORK pair
 //  (`workSeconds`/`workMeters`, both non-null and `> 0` — written by
@@ -323,15 +331,36 @@ function buildMeta(row: StoredLog): SummaryMeta {
 //  and attributing it to the TOTAL line's rest clause would be the same
 //  wrong-number class this whole spec exists to kill, one line lower.
 //
-//  TIER B2 — no machine totals, no RC-1 work pair, but at least one
-//  stored step carries `actualMeters` (a monitor row saved after the
-//  2026-08-08 `actualMeters` amendment but before RC-1 shipped,
-//  2026-08-24 — a CLOSED, ~16-day historical window that cannot grow).
+//  TIER B2 — no machine totals, no RC-1 work pair, at least one stored
+//  step carries `actualMeters`, AND `row.endedBy` is `"finished"`, `null`,
+//  or `undefined` (`isReconstructableClose` below) — **corrected at fix
+//  round 2 (final whole-branch review, IMPORTANT finding I1): the
+//  original comment here claimed this population was "a CLOSED, ~16-day
+//  historical window that cannot grow" — FALSE.** `computeWorkRestSums`
+//  (RC-1's work-pair writer) runs ONLY for `endedBy === "finished"`
+//  (`completeMonitorRun`'s own gate, `monitorRun.ts`), and
+//  `appendSummaryObservations` (the machine-totals writer) admits only
+//  `"finished"`/`"rower"` — so a row closed `"link-lost"`,
+//  `"program-failed"`, `"interrupted"`, OR a `"rower"` terminate whose
+//  burst never arrived can NEVER carry machine totals OR the work pair,
+//  by design, FOREVER — not a closed window, an ONGOING population that
+//  grows with every future interrupted/lost-link session. The
+//  `row.endedBy` GATE ABOVE is the fix: it restricts THIS branch (Σ
+//  steps trusted, fallback-2 rest recovery applied) to the population
+//  that is provably historical — a `"finished"` row reaching here (no
+//  machine totals, no work pair) MUST predate RC-1 (2026-08-24), because
+//  every `"finished"` row saved since then gets the work pair
+//  unconditionally whenever it has any actuals at all (the same reason a
+//  `"finished"` row with `hasStepActuals` true can never lack it) — and
+//  `null`/`undefined` `endedBy` predates Phase LL Task 4 (2026-08-2X,
+//  before RC-1 too). A row whose `endedBy` is one of the four
+//  "incomplete by construction" reasons (RC-1's own ROADMAP row's
+//  phrase) is EXCLUDED from this branch regardless of when it was saved
+//  — see the RISK NOTE below for why, and DECLINE (FALLBACK) for what it
+//  gets instead.
 //  DISTANCE/TIME are Σ `actualMeters`/Σ `actualSeconds` over every step
-//  that carries them. **PARITY CLAIM, CORRECTED (fix round 1: the
-//  original comment here claimed full parity with `tierBWorkDistanceMeters`/
-//  `tierBWorkTimeSeconds` — TRUE for the sub-threshold exclusion, FALSE
-//  for null-index/warm-up):**
+//  that carries them. **PARITY CLAIM (fix round 1: TRUE for the
+//  sub-threshold exclusion, FALSE for null-index/warm-up):**
 //    - Sub-threshold parity HOLDS: like the live door, this sum applies
 //      no sub-threshold exclusion (a mis-tap's own tiny reading still
 //      counts toward DISTANCE/TIME here, exactly as `tierBWorkDistanceMeters`
@@ -346,10 +375,9 @@ function buildMeta(row: StoredLog): SummaryMeta {
 //      `tierBWorkTimeSeconds` compute (which sum `run.actuals` directly
 //      and include both), while spec §1 explicitly requires a null-index
 //      actual to STAY counted in DISTANCE/TIME. This is a real, KNOWN,
-//      ACCEPTED gap for this tier-B2 population specifically (see the
-//      dedicated risk note below) — closed for every OTHER population by
-//      B1's `workSeconds`/`workMeters` pair above, which sums `run.actuals`
-//      directly and cannot have this gap.
+//      ACCEPTED gap — but now genuinely bounded, because the `endedBy`
+//      gate above confines this branch to the provably-historical
+//      population (see the RISK NOTE).
 //  AVG SPLIT is ONE quotient (`500 × Σt/Σd`, `tierBAvgSplitSeconds`
 //  below) over the steps whose `actualSeconds` clears
 //  `MIN_MEASURABLE_ELAPSED_SECONDS`; a null-index actual is excluded from
@@ -357,34 +385,66 @@ function buildMeta(row: StoredLog): SummaryMeta {
 //  per §1 — the gap above is about DISTANCE/TIME under-counting, not
 //  about AVG SPLIT over-counting.
 //
-//  RISK NOTE — TIER B2's ACCEPTED, TESTED residual (fix round 1, Task 3
-//  review, IMPORTANT finding; this is the DECISION that finding asked
-//  for): no stored field distinguishes "this row's Σ steps under-counts
-//  because of a null-index/warm-up gap" from "this row's Σ steps is
-//  exactly right and its OWN stored `distanceMeters`/`timeSeconds` are
-//  simply the pre-task-3 FUSED numbers" (`buildStoredRest`'s own
-//  fallback-2 rung, held sound at this same review) — both produce the
-//  IDENTICAL observable shape (`stored > Σ steps`), and the two cases
-//  want OPPOSITE treatment (decline vs. shrink-and-derive-rest). Given
-//  genuinely no signal to tell them apart, THIS module DECLINES to
-//  decline: B2 keeps computing DISTANCE/TIME from Σ steps, accepting the
-//  narrow, CLOSED, non-growing residual risk of an under-count on a
-//  null-index-carrying row from this specific 16-day window, in exchange
-//  for correctly shrinking the far larger population of ordinary
-//  rest-bearing tier-B2 rows to work-only (fallback-2's whole reason to
-//  exist). Pinned, not silent: `storedSummary.test.ts`'s own "TIER B2
-//  accepted residual risk" test shows the CURRENT (unfixed) under-count
-//  for this narrow population by name, so nobody "fixes" B1 into also
-//  covering B2's population by accident and loses the pin that this gap
-//  still exists there.
+//  RISK NOTE — TIER B2's ACCEPTED, TESTED residual, RE-DECIDED at fix
+//  round 2 on the TRUE population (final whole-branch review, IMPORTANT
+//  finding I1's own question: "is trusting Σ steps still right, or
+//  should B2 decline to the stored fused columns?"). No stored field
+//  distinguishes "this row's Σ steps under-counts because of a
+//  null-index/warm-up gap" from "this row's Σ steps is exactly right and
+//  its OWN stored `distanceMeters`/`timeSeconds` are simply the
+//  pre-task-3 FUSED numbers" (`buildStoredRest`'s own fallback-2 rung,
+//  held sound at fix round 1) — both produce the IDENTICAL observable
+//  shape (`stored > Σ steps`), and the two cases want OPPOSITE treatment
+//  (decline vs. shrink-and-derive-rest). Fix round 1's answer ("declines
+//  to decline: B2 keeps computing from Σ steps") rested on the FALSE
+//  "closed, non-growing window" premise — re-decided here on the TRUE
+//  one: **for the population where we CANNOT tell historical from
+//  ongoing (any row whose `endedBy` names an incomplete-by-construction
+//  close), B2 now DECLINES to FALLBACK** (the stored, possibly-fused
+//  columns, unchanged, no rest-line derivation) rather than risk an
+//  ever-growing stream of silent under-counts on interrupted/lost-link
+//  rows — the SAME C1-shaped harm (a rowed interval's own work
+//  relabelled as rest, or simply dropped) this fix round already closed
+//  for tier A. Trusting Σ steps stays RIGHT only for the population where
+//  `endedBy` PROVES the row is historical (`isReconstructableClose`
+//  above) — a genuinely closed, non-growing 2026-08-08..2026-08-24
+//  window, same size as fix round 1 believed the WHOLE population to be.
+//  Pinned, not silent: `storedSummary.test.ts` carries both a
+//  "TIER B2 (SAFE)" case (Σ steps trusted, endedBy finished/null) and a
+//  "TIER B2 DECLINES" case (endedBy link-lost, falls to FALLBACK) so
+//  neither behavior can silently drift into the other.
 //
-//  FALLBACK — no step carries `actualMeters` at all. This covers every
-//  timer/manual-door row (neither door ever writes the field — their
-//  heroes were already work-only before this task and stay byte-
-//  identical) AND any monitor row predating the 2026-08-08 amendment
-//  entirely: the stored `avgSplitSeconds`/`timeSeconds`/`distanceMeters`
-//  render exactly as they did before this task — the ONLY branch where a
-//  fused (pre-RC-5) number can still reach the screen.
+//  FALLBACK — no step carries `actualMeters` at all, OR steps carry
+//  `actualMeters` but `row.endedBy` names an incomplete-by-construction
+//  close (the DECLINED tier-B2 population, RISK NOTE above). This covers
+//  every timer/manual-door row (neither door ever writes the field —
+//  their heroes were already work-only before this task and stay
+//  byte-identical), any monitor row predating the 2026-08-08 amendment
+//  entirely, AND — new at fix round 2 — every link-lost/program-failed/
+//  interrupted/burst-less-terminate monitor row, forever: the stored
+//  `avgSplitSeconds`/`timeSeconds`/`distanceMeters` render exactly as
+//  saved, unimproved but never silently wrong. `buildStoredTotalLine` is
+//  called with an EMPTY `stepSums` here too (fix round 2) — a declined
+//  row can still have `stepSums.meters` defined (steps exist, just
+//  distrusted), and passing the real one would let fallback-2 fire on
+//  the SAME gap this branch exists to protect against.
+// Fix round 2 (final whole-branch review, IMPORTANT finding I1): TIER
+// B2's own gate — TRUE for `"finished"`, `null`, and `undefined` (every
+// shape that PROVES this row predates RC-1, 2026-08-24 — see the TIER B2
+// comment block above for why), FALSE for the four close reasons RC-1's
+// own ROADMAP row calls "incomplete by construction": `"rower"` (a
+// terminate whose burst never arrived, so it never became tier A),
+// `"link-lost"`, `"program-failed"`, `"interrupted"`. A row failing this
+// check falls through to FALLBACK instead of trusting Σ steps.
+function isReconstructableClose(endedBy: StoredLog["endedBy"]): boolean {
+  return (
+    endedBy !== "rower" &&
+    endedBy !== "link-lost" &&
+    endedBy !== "program-failed" &&
+    endedBy !== "interrupted"
+  );
+}
+
 function stepActualSums(steps: StoredLogStep[]): {
   meters?: number;
   seconds?: number;
@@ -455,15 +515,21 @@ function tierBAvgSplitSeconds(steps: StoredLogStep[]): number | undefined {
 //     column already proves happened.
 //  3. Neither resolves: no rest clause.
 //
-// Fix round 1 (Task 3 review, IMPORTANT finding): rung 2 is SAFE only
-// because its caller controls `stepSums` — `buildHeroes`' TIER B1 branch
-// (RC-1's own `workSeconds`/`workMeters` pair, sound and complete on its
-// own) passes an EMPTY `stepSums` here on purpose, so this rung can never
-// fire and misattribute a null-index/warm-up gap as rest on a row whose
-// hero is already correct. Only TIER B2 (Σ steps is the hero) passes the
-// real `stepSums`, where the comparison's pre-PR reasoning above actually
-// holds — see the tier-B2 comment block above `stepActualSums` for the
-// full risk/decision writeup.
+// Fix round 1 (Task 3 review, IMPORTANT finding), widened at fix round 2
+// (CRITICAL finding C1): rung 2 is SAFE only because its caller controls
+// `stepSums` — `buildHeroes`' TIER A and TIER B1 branches (the machine's
+// own totals; RC-1's own `workSeconds`/`workMeters` pair — BOTH sound and
+// complete on their own) pass an EMPTY `stepSums` here on purpose, so this
+// rung can never fire and misattribute a gap between the hero and Σ steps
+// as rest when that gap is really an abandoned interval's own rowed work
+// (tier A, a terminated row) or a null-index/warm-up actual (tier B1).
+// Only a TIER B2 row whose Σ steps IS the hero passes the real `stepSums`
+// — and, since fix round 2 (finding I1), that is now further gated on
+// `isReconstructableClose(row.endedBy)`: a row whose `endedBy` names an
+// incomplete-by-construction close DECLINES to FALLBACK instead (also an
+// empty `stepSums`) rather than risk this rung firing on a growing,
+// un-bounded population. See the tier-B2/FALLBACK comment block above
+// `stepActualSums` for the full risk/decision writeup.
 function buildStoredRest(
   row: StoredLog,
   stepSums: { meters?: number; seconds?: number },
@@ -543,7 +609,21 @@ function buildHeroes(row: StoredLog): SummaryHeroes {
       timeSeconds,
       avgSplit: hasAvgSplit ? fmtSplit(avgSplitSeconds!) : undefined,
       avgSplitSeconds: hasAvgSplit ? avgSplitSeconds : undefined,
-      totalLine: buildStoredTotalLine(row, timeSeconds, stepSums),
+      // Fix round 2 (final whole-branch review, CRITICAL finding C1): an
+      // EMPTY `stepSums`, not the real one — see TIER B1's own comment a
+      // few lines down for the shared reasoning, which applies here
+      // UNCHANGED. `appendSummaryObservations` admits `endedBy ===
+      // "rower"` (a Menu/End terminate) as well as `"finished"`, so a
+      // TERMINATED row can be tier A while its RC-1 rest pair is NULL
+      // (`computeWorkRestSums` runs ONLY for `"finished"`,
+      // `completeMonitorRun`'s own gate) — and the abandoned final
+      // interval's own actual can arrive with no matching program index
+      // a step was ever built for (its 0x0037 boundary never sends), so
+      // Σ steps under-counts the machine's own `machineWorkMeters` by
+      // exactly that interval's real, ROWED metres. Passing the real
+      // `stepSums` here let fallback-2 relabel that rowed work as rest —
+      // caught by a dedicated tier-A-with-null-rest-pair test below.
+      totalLine: buildStoredTotalLine(row, timeSeconds, {}),
     };
   }
 
@@ -574,8 +654,12 @@ function buildHeroes(row: StoredLog): SummaryHeroes {
   }
 
   // TIER B2 — no RC-1 work pair; Σ steps is the best (imperfect, see this
-  // module's own tier-B2 comment block above) available signal.
-  const hasStepActuals = row.steps.some((s) => s.actualMeters !== undefined);
+  // module's own tier-B2 comment block above) available signal, trusted
+  // ONLY when `endedBy` proves the row is historical (fix round 2,
+  // `isReconstructableClose`) — otherwise DECLINES to FALLBACK below.
+  const hasStepActuals =
+    row.steps.some((s) => s.actualMeters !== undefined) &&
+    isReconstructableClose(row.endedBy);
   if (hasStepActuals) {
     const timeSeconds = stepSums.seconds;
     const avgSplitSeconds = tierBAvgSplitSeconds(row.steps);
@@ -591,7 +675,12 @@ function buildHeroes(row: StoredLog): SummaryHeroes {
     };
   }
 
-  // FALLBACK — stored heroes, unchanged.
+  // FALLBACK — stored heroes, unchanged. Fix round 2: EMPTY `stepSums`
+  // here too (never the real one) — a DECLINED tier-B2 row (steps exist
+  // but `endedBy` is unsafe) can still have `stepSums.meters` defined,
+  // and passing it would let fallback-2 fire on the exact gap this
+  // branch exists to protect against (see the TIER B2/FALLBACK comment
+  // block above `stepActualSums`).
   const timeSeconds = row.timeSeconds ?? undefined;
   return {
     avgSplit:
@@ -600,7 +689,7 @@ function buildHeroes(row: StoredLog): SummaryHeroes {
     time: timeSeconds !== undefined ? fmtDuration(timeSeconds / 60) : undefined,
     timeSeconds,
     distanceMeters: row.distanceMeters ?? undefined,
-    totalLine: buildStoredTotalLine(row, timeSeconds, stepSums),
+    totalLine: buildStoredTotalLine(row, timeSeconds, {}),
   };
 }
 
