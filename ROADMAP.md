@@ -3840,9 +3840,13 @@ item** and W3/W4 ride the same piece.
   previous one's finish is the walk's own NORMAL between-pieces rhythm,
   so this is not a rare edge to watch for; expect it to fire on a
   routine multi-piece session and confirm by counting: N pieces rowed
-  should produce N `avg-pace-verdict` lines (minus any genuinely
-  suppressed ones, each with its own named reason), and a gap in that
-  count with no suppression reason is the zero-fire, not a healthy run.
+  should produce N `avg-pace-verdict` lines, FULL STOP — a suppression
+  WRITES a line (with its reason), it does not subtract one, so the
+  count never comes down for a healthy reason. A missing line is the
+  zero-fire, not a healthy run. (Corrected at the #196 PM re-gate: this
+  clause used to read "minus any genuinely suppressed ones", which
+  invited exactly the miscount that would explain a real zero-fire
+  away.)
 
 **Arming the hold-open instrument (final-review I3 — the card never said
 HOW before this fix):** W2/W3/W4/W10 all need it armed. On the laptop, in
