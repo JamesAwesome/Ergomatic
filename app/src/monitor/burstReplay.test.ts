@@ -318,9 +318,14 @@ describe("the walk's own finish, replayed to the byte (storage-spine design spec
     // (dragFactorAverage); offset 16 `00` -> null (recoveryHeartRateBpm,
     // same sentinel); offset 17 `08` = 8 (workoutType); offsets 18-19
     // `6b 05` LE = 0x056b = 1387, /10 = 138.7 (avgPaceSecondsPer500m) —
-    // matching `summaryTotals.workElapsedSeconds` above is a coincidence of
-    // this particular piece's pace, not a decode bug (the two fields read
-    // different byte ranges).
+    // matching `summaryTotals.workElapsedSeconds` above is NOT a
+    // coincidence, it is a SCALE ORACLE (PM gate on PR #190): a 500m
+    // piece's pace-per-500m IS its elapsed time by identity, and the two
+    // fields decode from DIFFERENT byte ranges — so their agreement at
+    // 138.7 externally confirms the /10 scale the BLE doc alone could not
+    // (the doc was wrong about Last Split Time two pages earlier). The
+    // terminate capture corroborates: 24.3s/76m implies 159.9 vs the
+    // wire's decoded 159.8.
     expect(realRecord.summaryDetail).toStrictEqual({
       avgStrokeRate: 25,
       endingHeartRateBpm: null,

@@ -2824,9 +2824,11 @@ is UNLOCKED.** The same walk's lab leg settled the terminate question:
 a Menu-kill emits the full log-commit burst, hash included
 (`pm5-interface-notes.md` §25) — the terminated path can carry the
 same observation capture, in the RC-2/RC-3 wave's scope. The phase's
-live frontier: the RC-2/RC-3 wave (identity decode + the nine summary
-fields, now unblocked) and the v0.21.0 notes debt (paid — v0.21.0
-shipped as build 738). Earlier: #167 (instrument + RC-4/RC-6),
+live frontier (updated at #190's PM gate): the summary-record wave's
+PR 1 LANDED — RC-2 (diagnostic decode) and RC-3's storage half shipped,
+terminate capture live through the four gates; the remainder is PR 2,
+the MACHINE CONFIRMED display block (the wave's release event, MINOR).
+The v0.21.0 notes debt is paid (v0.21.0 shipped as build 738). Earlier: #167 (instrument + RC-4/RC-6),
 #174 (F2a), #177 (cohort unlock); the combined walk answered every wire
 question YES (record: `docs/monitor/sessions/walk-2026-08-23/`).
 Originally opened 2026-08-22 (James: evidence-first); named, scoped and
@@ -3094,7 +3096,22 @@ that needs no erg, and it can run in a test.
       `session_logs.machine_summary` (migration 0016, hybrid shape) —
       six of the nine are C2 top-level columns the reconciliation table
       marked NOT CAPTURED. **Storage only; nothing renders yet** — the
-      MACHINE CONFIRMED display (spec §3) is PR 2.
+      MACHINE CONFIRMED display (spec §3) is PR 2. Three obligations
+      recorded at #190's PM gate: (1) the old DOC-ONLY caveat on
+      `avgPaceSecondsPer500m`'s /10 scale is DISCHARGED by evidence, not
+      deleted silently — the keystone's 500m piece decodes pace 138.7
+      against elapsed 138.7 from a DIFFERENT byte range (a scale oracle
+      by identity: a 500m piece's pace-per-500m IS its elapsed time),
+      corroborated by the terminate capture (24.3s/76m implies 159.9 vs
+      decoded 159.8); (2) **the nine detail fields have never been
+      compared to any PM5 screen** — exit-7's photograph verified only
+      the two totals, and the one terminate capture's avgStrokeRate
+      reads 44 where physics says 22 (§25) — the first surface that
+      displays any of the nine (Phase PS inherits this) owes a
+      photograph, same discipline the totals had; (3) `machine_summary`
+      is stored VERBATIM (object-ness, size cap, and the
+      verificationBytes band are the only server checks) — every future
+      reader type-guards each field at read.
 - [ ] **Owed walk item: the terminated-piece PM5 memory photograph AND
       the app-STOP-venue capture.** Zero captures exist on either arm for
       the End-button venue today — the fake covers its shape only, never
@@ -3139,7 +3156,13 @@ that needs no erg, and it can run in a test.
       field is dimension-conditional and transiently live mid-interval,
       so it can never be a countdown checkpoint at any scale.
 - [ ] **RC-5 — The three stored heroes contradict each other by up to
-      40 s/500 m.** TRIAD. DISTANCE sums work + machine rest over ALL
+      40 s/500 m.** TRIAD. **Population note (#190's PM gate):** the
+      machine fields split the log table into permanent populations —
+      rows with `machine_*` (saved from PR 1's build onward) vs without
+      (older, or a save that raced the ~2s burst window and stored nulls
+      forever, no backfill by design) — so any future reconciliation and
+      its release notes owe an "applies to rows recorded after build X"
+      clause. DISTANCE sums work + machine rest over ALL
       actuals including warm-up; TIME sums work + PROGRAMMED rest over
       the same population; AVG SPLIT is 500·Σt/Σd over work metres only,
       EXCLUDING warm-up. Session-2 prints 1599 m and 8:08.4 (implying
