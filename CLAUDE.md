@@ -328,8 +328,8 @@ often they recur.
     nothing about the erg.
     **AND ASK WHAT QUANTITY THE ORACLE MEASURES, not just whether it
     agrees (2026-08-21).** This rule as written above would have passed
-    the defect that produced it. We DO compare against the machine —
-    `recordTwdVerdict` checks our accumulator against the PM5's Total
+    the defect that produced it. We DID compare against the machine —
+    `recordTwdVerdict` checked our accumulator against the PM5's Total
     Work Distance, and PR #123 celebrated a sub-metre three-way
     agreement. It proved nothing: TWD is work PLUS rest-coast metres
     (decoded to the metre, 1535+64=1599 and 1300+47=1347) and so is our
@@ -338,7 +338,17 @@ often they recur.
     shown two numbers agreeing about a quantity the authority does not
     store. **An oracle that shares your definition is a mirror.** Before
     trusting any external number, state what it measures and confirm it
-    is the same thing you are trying to be right about.
+    is the same thing you are trying to be right about. **VINDICATED
+    (RC-9c, 2026-08-25): `recordTwdVerdict` is now RETIRED, for exactly
+    this entry's own reason — lifting its distance-interval suppression
+    (the fix a naive reading of "compare against the machine" would
+    reach for) makes it PASS everywhere, 0.2-1.5 m deltas across five
+    captures, all mirrors, never a real check. This entry warned about
+    the shape a phase before the code caught it; RC-9 replaced the
+    mirror with two genuinely independent oracles instead (0x0032's own
+    average pace, 0x003A's own rest distance — design spec
+    `2026-08-25-free-oracles`) rather than trying to fix the mirror in
+    place.**
 12. **Settling a claim about build output by reading code instead of
     building it.** Twice now: `dist-grep.sh`'s own header records an
     identifier needle coming back clean against a build that genuinely

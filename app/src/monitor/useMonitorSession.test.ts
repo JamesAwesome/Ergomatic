@@ -7028,8 +7028,9 @@ describe("Phase LL Task 4 review fix (F3/I6): the continuity reset, end to end t
   // `step-3-pm5-recording-second-rest...jsonl` — `continuity.ts`'s own
   // header comment and this task's corpus derivation) is itself a MIXED
   // program (both carry a distance interval), and `programHasDistanceGoal`
-  // suppresses on the WHOLE program, by design (mirrors `driver.ts`'s own
-  // `recordTwdVerdict` — narrowing it to per-frame to dodge this would be
+  // suppresses on the WHOLE program, by design (the same whole-program
+  // widening `driver.ts`'s per-run TWD verdict used to apply too, before
+  // RC-9c retired it — narrowing it to per-frame to dodge this would be
   // the review's own class of regression, not a fix). Driving `program()`
   // with that REAL mixed program replays cleanly but leaves the
   // continuity check permanently suppressed for the whole run — nothing

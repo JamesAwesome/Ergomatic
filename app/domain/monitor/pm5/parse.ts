@@ -288,8 +288,17 @@ export function parseAdditionalSplitIntervalData(
  * spec's I5 ruling: "all needed fields ride 0x0039; pair-gating on 0x003A
  * would recreate the drop fragility" the split path already suffers.
  * 0x003A carries fields 0x0039 had no room left for (§23's own 20-byte
- * ceiling note) and has no dedicated parser here; a later task adds one
- * only if the reconciliation gate ever needs one of its fields.
+ * ceiling note). **UPDATED, RC-9d (design spec 2026-08-25-free-oracles
+ * §3):** this narrows the I5 ruling above deliberately, rather than
+ * contradicting it — `parseAdditionalSummaryRest` below decodes exactly
+ * two of 0x003A's fields (Total Rest Distance, Interval Rest Time) for a
+ * RING-ONLY diagnostic oracle (`src/monitor/driver.ts`'s
+ * `recordRestDistanceVerdict`), never for the reconciliation gate I5's own
+ * reasoning was protecting. `noteSummary`'s gate still decodes 0x0039
+ * alone, unchanged — pair-gating the RECONCILE on both halves would still
+ * recreate the drop fragility this ruling warns about; a diagnostic that
+ * merely reports "no reading yet" when 0x003A is late or missing carries
+ * none of that risk.
  *
  * Log Entry Date/Time (0x0039 offsets 0-3) are NOT decoded: the doc states
  * no bit-packing format for them on this page (§23), and this module's own
@@ -390,6 +399,46 @@ export function parseSummaryLogStamp(
     day: (date >> 4) & 0x1f,
     hours: time >> 8,
     minutes: time & 0xff,
+  };
+}
+
+/** 0x003A — C2 rowing additional end-of-workout summary data, narrowed to
+ *  exactly two fields (RC-9d, design spec 2026-08-25-free-oracles §3,
+ *  narrowing `parseEndOfWorkoutSummary`'s own I5 ruling above — see that
+ *  function's updated doc comment for why this narrowing is deliberate,
+ *  not a contradiction). BLE rev 1.30 p.22.
+ *
+ *  This is a RING-ONLY diagnostic oracle's decoder (`driver.ts`'s
+ *  `recordRestDistanceVerdict`), not a gate: nothing in this driver's
+ *  control flow branches on either field, and no caller needs the rest of
+ *  0x003A's layout — a wider parser would be undecoded surface with no
+ *  reader, the exact shape I5 already warns against for this
+ *  characteristic. */
+export interface AdditionalSummaryRest {
+  /** Total Rest Distance, offsets 12-14, 1 m/lsb, unscaled — a RUNNING
+   *  TOTAL across the whole workout (PRIMARY, both committed captures:
+   *  exit-7 walk seq 63 decodes 242 m against the PM5's own memory screen
+   *  breakdown, 147 + 95 = 242 exactly; the r0 keystone piece, seq 517,
+   *  decodes a genuine 0 — no rest was programmed, not a missing
+   *  reading). */
+  totalRestDistanceMeters: number;
+  /** Interval Rest Time, offsets 15-16, whole seconds, unscaled. REPORTED
+   *  ONLY — never gated on (`recordRestDistanceVerdict`'s own doc
+   *  comment carries the full reasoning): it reads 0 on BOTH committed
+   *  captures, including the exit-7 walk's own genuine r60 rests, so
+   *  whether that is a firmware quirk of this specific field or the
+   *  programmed value read back is UNKNOWN — two zero observations do not
+   *  decide it either way. */
+  intervalRestSeconds: number;
+}
+
+export function parseAdditionalSummaryRest(
+  bytes: Uint8Array,
+): AdditionalSummaryRest | null {
+  if (bytes.length < 17) return null;
+  return {
+    totalRestDistanceMeters: readU24LE(bytes, 12),
+    intervalRestSeconds: readU16LE(bytes, 15),
   };
 }
 

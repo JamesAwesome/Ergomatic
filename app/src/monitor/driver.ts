@@ -71,6 +71,7 @@ import {
   parseAdditionalSplitIntervalData,
   parseAdditionalStatus1,
   parseAdditionalStatus2,
+  parseAdditionalSummaryRest,
   parseEndOfWorkoutSummary,
   parseGeneralStatus,
   parseSplitIntervalData,
@@ -78,7 +79,9 @@ import {
   toIntervalActual,
   toMonitorFrame,
   toMonitorState,
+  WORKOUTSTATE_INTERVALWORKDISTANCE,
   WORKOUTSTATE_INTERVALWORKDISTANCETOREST,
+  WORKOUTSTATE_INTERVALWORKTIME,
   WORKOUTSTATE_INTERVALWORKTIMETOREST,
   type Pm5ParseError,
   type RawPm5Status,
@@ -115,6 +118,15 @@ import type {
   Transport,
 } from "../../domain/monitor/types.js";
 import type { MonitorEventLog } from "./eventLog";
+// RC-9a (design spec 2026-08-25-free-oracles §1, fix round 1): imported
+// rather than re-declared — a local copy had nothing binding it to
+// `summaryModel.ts`'s own value, so a future change there would silently
+// stop this verdict mirroring `monitorAvgSplit`'s exclusion while this
+// file's own comments kept claiming it does. This is the one place
+// `src/monitor/` reaches into `src/session/` — no `no-restricted-imports`
+// rule forbids it (checked), and the value is a SCALAR the two modules
+// must agree on, not an architectural premise.
+import { MIN_MEASURABLE_ELAPSED_SECONDS } from "../session/summaryModel";
 
 /** A programming/terminate write that never got acked "ok", OR a
  *  programming call whose verification phase never saw the machine report
@@ -330,6 +342,52 @@ export function computeIntervalAccrued(
   if (!interval) return null;
   const kind = interval.kind === "distance" ? "time" : "distance";
   return { kind, value: Math.max(0, progress) };
+}
+
+/**
+ * `recordRestDistanceVerdict`'s own all-or-nothing gate (RC-9d, fix round
+ * 1) — exported as a pure function, same pattern as
+ * `computeIntervalRemaining`/`computeIntervalAccrued` above, because this
+ * predicate is the one place the review found real drift risk: it must
+ * check the SAME PAIR `monitorRun.ts`'s own `computeWorkRestSums`
+ * (monitorRun.ts:765-767) and `summaryModel.ts`'s `monitorRest`
+ * (summaryModel.ts:693-695) check on the STORED record, or a future write
+ * site could produce a plausible-looking but wrong sum — exactly the
+ * "two rest populations under one line" shape this repo has already
+ * shipped once (fix-round I2, cited at summaryModel.ts:611-614).
+ *
+ * `restSeconds`/`restDistanceMeters` are typed INDEPENDENTLY optional on
+ * `IntervalActual` (`domain/monitor/types.ts:295`/`:328`), and that type's
+ * own doc comment (types.ts:323-327) warns a future reconciler "must not
+ * treat 'rest' as one population just because the two live under one
+ * heading" — this function is that warning, enforced. Checking only
+ * `restDistanceMeters` (fix round 1's own finding) would have been TRUE
+ * today only by accident: both of `driver.ts`'s write sites into
+ * `recordedActuals` (the summary-fallback synthesis, which omits BOTH
+ * fields together, and the boundary path, which sets BOTH together from
+ * one `IntervalActual` — see those two call sites' own comments) always
+ * keep the pair together, so a single-field check and a pair check agree
+ * on every actual this driver can build TODAY. They would disagree the
+ * moment either write site's own coupling breaks — the exact shape the
+ * type was widened to allow and the exact drift the review caught.
+ *
+ * Genuinely UNREACHABLE through this driver's own wire-simulated test
+ * surface as of this task (`toIntervalActual`, `domain/monitor/pm5/
+ * parse.ts:653-676`, always sets both fields together from one decoded
+ * 0x0037 frame — `SplitIntervalData`'s own fields are both required,
+ * non-optional `number`s). Tested directly, as a pure predicate, for
+ * exactly that reason — the same testability trade `computeIntervalRemaining`/
+ * `computeIntervalAccrued` above already made.
+ */
+export function restPairComplete(
+  actuals: readonly {
+    restSeconds?: number;
+    restDistanceMeters?: number;
+  }[],
+): boolean {
+  return actuals.every(
+    (a) => a.restSeconds !== undefined && a.restDistanceMeters !== undefined,
+  );
 }
 
 /** One arrived response frame on 0x0022: the RAW bytes alongside the
@@ -798,6 +856,67 @@ const STRUCTURE_MISMATCH_WINDOW_MS = 2000;
  *  one is a measurement (walk day 3) and must not be padded to make room. */
 const FINISH_GRACE_MS = 3000;
 
+/** RC-9a (design spec 2026-08-25-free-oracles §1) — the live average-pace
+ *  verdict's own band. The pre-spec pass measured a 0.07-0.20 s MEDIAN
+ *  disagreement between 0x0032's `averageSplit` and our own quotient
+ *  across seven captures, plus an unexplained terminal step of up to
+ *  1.02 s (never sampled here — see `lastWorkStateAverageSplit`'s own
+ *  comment). 1.0 s clears both with room and is far inside what a single
+ *  lost interval would move the quotient by — worked below (the ONLY
+ *  place this derivation lives; `recordAvgPaceVerdict`'s own "BAND:"
+ *  line points HERE, not the reverse).
+ *
+ *  THE LOST-INTERVAL DERIVATION. `ours` (`recordAvgPaceVerdict`) is the
+ *  RATIO `500 * ΣT / ΣD` over whatever this run's `recordedActuals`
+ *  holds — never a count. Let `ΣT`/`ΣD` be the TRUE totals (what they
+ *  would be with a missing interval `i`, time `t_i`, distance `d_i`,
+ *  included), `P = 500·ΣT/ΣD` the true average pace, `P_i = 500·t_i/d_i`
+ *  interval `i`'s OWN pace, and `ours = 500·(ΣT-t_i)/(ΣD-d_i)` what this
+ *  function actually computes without it. Substituting `ΣT = P·ΣD/500`
+ *  and clearing denominators:
+ *
+ *      ours - P  =  d_i · (P - P_i) / (ΣD - d_i)
+ *
+ *  **The verdict is INSENSITIVE to a lost interval whose own pace equals
+ *  the run's average**: `P_i = P` drives the shift to exactly ZERO at
+ *  ANY band width, however large the missing interval — `ours` is a
+ *  ratio of sums, not a population count, and losing a data point that
+ *  was already sitting on the mean cannot move a ratio. This is why the
+ *  three checks above this verdict's own suppression list (actuals vs.
+ *  `recordedActuals.size`, the final-interval-recorded check, the
+ *  mid-terminate shape) are load-bearing on their own: they catch a lost
+ *  interval STRUCTURALLY, by population, and this ratio check must never
+ *  be read as a substitute — "agree" proves the two computed pace
+ *  numbers match, never that no interval went missing.
+ *
+ *  Worked from a real run — the exit-7 walk capture
+ *  (`docs/monitor/sessions/walk-2026-08-24/README.md`): interval 1
+ *  67.9 s/250 m (`P_1` = 135.8 s/500m), interval 2 56.1 s/250 m (`P_2` =
+ *  112.2 s/500m), true average `P` = 124.0 s/500m (2:04.0/500m,
+ *  `ΣD` = 500). Losing interval 2 (`d_i` = 250, `P_i` = 112.2, the
+ *  FASTER of the two, `P - P_i` = +11.8): `ours - P` = 250·11.8/250 =
+ *  **+11.8 s/500m** (`ours` reads 135.8, the SLOWER of the two — losing
+ *  a fast interval makes what's left LOOK slower) — 11.8× the 1.0 s
+ *  band, easily caught. Losing interval 1 instead (`P_i` = 135.8,
+ *  `P - P_i` = -11.8) shifts the other way by the same 11.8 s magnitude
+ *  (`ours` reads 112.2) — also caught. Neither
+ *  interval sat exactly on this run's own 124.0 s/500m average, which is
+ *  the ordinary case and why this band catches real losses in practice;
+ *  it is not a guarantee, only the population checks above are. */
+const AVG_PACE_VERDICT_BAND_SECONDS = 1.0;
+
+/** RC-9d (design spec 2026-08-25-free-oracles §3) — the rest-distance
+ *  verdict's own band. Both sides are whole-metre, unscaled wire integers
+ *  with no natural rounding source between them — 0x003A's own running
+ *  Total Rest Distance against Σ 0x0037's own per-interval Interval Rest
+ *  Distance — unlike (a)'s two independently-timed quotients. Both
+ *  committed captures agree EXACTLY: 242 vs 242 (exit-7 walk, seq 63) and
+ *  0 vs 0 (the r0 keystone piece, seq 517). 1 m is generous headroom for a
+ *  one-count truncation difference at a boundary the two committed
+ *  captures never happened to exercise, never evidence of a real
+ *  disagreement that size. */
+const REST_DISTANCE_VERDICT_BAND_METERS = 1;
+
 /**
  * Final-review fix wave, HIGH-2: the verification hash's own tiny
  * sub-window. `maybeReconcileImmediately` re-arms the ONE deadline slot
@@ -960,13 +1079,33 @@ export function createPm5Driver(
      *  Task 2, and deliberately not a Set PLUS a parallel map: the summary
      *  gate's derivation needs "is every prior interval recorded?" and
      *  "what did those priors measure?" to be the same question asked of
-     *  the same structure, or the two answers can drift. Only the two
-     *  SUBTRACTABLE fields are kept — an average is not subtractable, which
-     *  is the whole of B3's finding, so storing one here would only invite
-     *  a future caller to try. */
+     *  the same structure, or the two answers can drift. Originally only
+     *  the two SUBTRACTABLE fields were kept — an average is not
+     *  subtractable, which is the whole of B3's finding, so storing one
+     *  here would only invite a future caller to try.
+     *
+     *  **WIDENED to four, RC-9d (design spec 2026-08-25-free-oracles §3):**
+     *  `restSeconds`/`restDistanceMeters` ride along too, additive-optional
+     *  exactly as `IntervalActual`'s own same-named fields are
+     *  (`domain/monitor/types.ts`) — present on a boundary-derived actual
+     *  (`emitIntervalComplete`'s own write below), absent on the
+     *  summary-fallback synthesis (`deriveFinalIntervalFromSummary`'s
+     *  caller omits both — 0x0039 carries no per-interval rest of its
+     *  own). B3's argument does not apply to this pair: unlike an average,
+     *  a rest DISTANCE is exactly as subtractable/summable as the work
+     *  fields already kept here. `recordRestDistanceVerdict` is the one
+     *  reader, and treats the pair the SAME all-or-nothing way
+     *  `monitorRun.ts`'s own `computeWorkRestSums` treats the identical
+     *  fields on the STORED record: summed only when every recorded actual
+     *  carries both, never partially. */
     recordedActuals: Map<
       number,
-      { elapsedSeconds: number; distanceMeters: number }
+      {
+        elapsedSeconds: number;
+        distanceMeters: number;
+        restSeconds?: number;
+        restDistanceMeters?: number;
+      }
     >;
     /** The last `"rowing"`/`"resting"` state observed while this run was
      *  open, or `null` if it never reported one. The finish grace normalizes
@@ -1100,6 +1239,16 @@ export function createPm5Driver(
      *  `terminated` sibling, both behind the same `runIsOpen()` guard that a
      *  run's FIRST terminal frame consumes — a run cannot take both. */
     terminatedAwaitingSummary: boolean;
+    /** RC-9a (design spec 2026-08-25-free-oracles §1) — `true` once
+     *  `reconcileSummary`'s `deriveFinalIntervalFromSummary` branch has
+     *  actually filled this run's final interval (`filled-from-summary`).
+     *  The ONLY reader is `recordAvgPaceVerdict`: that path builds OUR side
+     *  of the comparison FROM 0x0039's own totals, so comparing it back
+     *  against a machine reading would be tautological in exactly the case
+     *  the verdict exists to catch (evidence base, "a fill path can make an
+     *  oracle tautological"). Never set on the ordinary split-derived path,
+     *  never unset once true — a run's final interval is filled once. */
+    finalFilledFromSummary: boolean;
   } | null = null;
   /** The live reconcile deadline's canceller, or `null` when none is armed
    *  — one at a time, because a run finishes once (`armSummaryReconcile`).
@@ -1163,6 +1312,26 @@ export function createPm5Driver(
    *  `suspicious-terminal` too (the same bytes, deliberately — see that
    *  entry's own comment). */
   let lastRaw0x0031: Uint8Array | null = null;
+  /** RC-9a (design spec 2026-08-25-free-oracles §1) — the last WORK-state
+   *  (`workoutState` 4/5, `WORKOUTSTATE_INTERVALWORKTIME`/`_DISTANCE`)
+   *  0x0032 `averageSplit` observed this run's life, already descaled to
+   *  SECONDS by `parseAdditionalStatus1` (0.01 s/lsb — 0x0039's own Avg
+   *  Pace is a DIFFERENT characteristic at 0.1 s/lsb, never read here; see
+   *  `recordAvgPaceVerdict`'s own comment for the scale trap). Tracked live
+   *  by the 0x0032 merge callback below, sampled by `recordAvgPaceVerdict`
+   *  — NEVER read at the terminal frame itself: the evidence base's own
+   *  "unexplained terminal step" (up to 1.02 s, session-2 129.78→128.76,
+   *  keystone 138.44→138.23) is exactly what sampling live avoids. A
+   *  genuine `0.00` reading (the interval-reset artifact the evidence base
+   *  documents — this driver's own decode of `session-2-wu-4unequal.jsonl`
+   *  found it recurs at MULTIPLE boundaries, not the single frame the
+   *  spec's prose names, which is noted in this task's own report) is
+   *  excluded on purpose so it can never overwrite a real reading with a
+   *  false zero. `null` before any qualifying sample. Reset to `null` on
+   *  every fresh `program()` (see that method's own per-run diagnostic
+   *  reset block) — a stale reading from a PRIOR run must never leak into
+   *  a NEW run's comparison. */
+  let lastWorkStateAverageSplit: number | null = null;
   /** THE SESSION REGISTER MAP (CR2 spec 1, replacing walk 4's fold).
    *
    *  0x0031's Elapsed Time and Distance are PER-INTERVAL. The fold this
@@ -2421,10 +2590,6 @@ export function createPm5Driver(
         ? `state=${frame.state} 0x0031=never seen`
         : `state=${frame.state} 0x0031=${toHex(lastRaw0x0031)}`;
     log.record("terminal-raw", terminalRawDetail);
-    // The TWD verdict runs HERE, not at 0x0039-time — the machine settles
-    // its own total at the finish (re-walk 2026-08-15, seq 36's false
-    // "differ by 183.8m" against a TWD one tick from settling).
-    recordTwdVerdict(activeRun);
     // THE SUSPICION VERDICT (Task 8, spec §2, PM/antagonist-corrected) —
     // LOG-ONLY and FAIL-OPEN: nothing below this block, and nothing this
     // block itself does, changes any close behaviour — no field on `run`
@@ -2543,6 +2708,15 @@ export function createPm5Driver(
         activeRun!.terminatedAwaitingSummary = false;
         noteTerminateObservations(activeRun!, heldBeforeTerminal, "early");
       }
+      // RC-9a: a `terminated` close opens no finish grace (this branch's
+      // own leading comment) — no further split can ever reach
+      // `recordedActuals` after this point (`emitIntervalComplete`'s own
+      // out-of-run branch takes over, index=null, untouched by this
+      // driver's own bookkeeping), so this run's recorded population is
+      // already final RIGHT HERE. Unlike the `finished` sibling, this
+      // verdict runs synchronously at the terminal transition itself —
+      // there is no async fill to wait for.
+      recordAvgPaceVerdict(activeRun!);
     }
   }
 
@@ -2624,9 +2798,17 @@ export function createPm5Driver(
    * summary pair exists to fix (review I5: "every field the spec's list
    * needs sits on 0x0039 alone... a reconcile that waits for both
    * `summary-half`s dies when 0x003A drops even though 0x0039 arrived
-   * complete"). 0x003A is logged for observability only — nothing reads
-   * its bytes and nothing gates on its arrival; Task 2's gate
-   * (`noteSummary` below) decodes 0x0039 alone.
+   * complete"). **UPDATED, RC-9d (design spec 2026-08-25-free-oracles
+   * §3):** 0x003A's bytes were observability-only when this comment was
+   * first written — that changed. `recordRestDistanceVerdict` (called
+   * alongside this function at 0x003A's own subscribe site, below) now
+   * decodes two of its fields for a RING-ONLY diagnostic oracle. What
+   * has NOT changed is the RECONCILE gate this paragraph's own reasoning
+   * protects: nothing about the summary-fallback reconcile GATES on
+   * 0x003A's arrival or content — Task 2's gate (`noteSummary` below)
+   * still decodes 0x0039 alone, and a diagnostic that reports "no reading
+   * yet" when 0x003A is late or missing carries none of the drop-fragility
+   * risk a reconcile gated on it would.
    *
    * Mirrors `noteBoundaryHalf`'s own log site and voice deliberately
    * (`split-half`'s "characteristic ... received (run open/closed,
@@ -2639,11 +2821,10 @@ export function createPm5Driver(
    * function's own comment: "boundary-rare, so they cannot flood the
    * ring"). 0x0039/0x003A are rarer still — once per workout end, with an
    * occasional HRM re-fire — so the same no-flood argument applies with
-   * more room to spare. This does NOT change what gates on the bytes:
-   * `noteSummary` below still decodes 0x0039 alone, and 0x003A's bytes are
-   * observability only, exactly as this function's own header already
-   * says — the ring simply now has them for whoever settles the summary
-   * premises next.
+   * more room to spare. This function's OWN job is unchanged: it always
+   * only logs RECEIPT (`summary-half`), for both characteristics, exactly
+   * as before; `recordRestDistanceVerdict` is a separate call the 0x003A
+   * subscribe site now also makes, not a second thing this function does.
    */
   function noteSummaryHalf(
     characteristic: "0x0039" | "0x003A",
@@ -2978,15 +3159,18 @@ export function createPm5Driver(
     }
 
     // The accumulator-vs-machine VERDICT used to live here too, and the
-    // re-walk's first row proved that wrong (2026-08-15, seq 36): the
+    // re-walk's first row proved ITS TIMING wrong (2026-08-15, seq 36): the
     // 0x0039 can arrive BEFORE the machine's own totalWorkDistanceMeters
     // has ticked past the previous interval's value — it fired "differ by
     // 183.8m" one tick before TWD settled at 367 against an accumulator of
-    // 367.8. The machine settles its total AT the finish, so the verdict
-    // runs at the terminal transition now (`recordTwdVerdict`, called
-    // beside `final-totals`, which already reads the settled value). The
-    // unconditional print above stays: raw numbers at 0x0039-time are
-    // evidence, verdicts on unsettled numbers are noise.
+    // 367.8. Moving it to the terminal transition fixed the timing, but not
+    // the premise: RC-9c retired the verdict outright (design spec
+    // 2026-08-25-free-oracles §2) — 0x0031's Total Work Distance is an
+    // odometer of metres genuinely rowed, work plus rest coast, the same
+    // quantity our own accumulator sums, so a green comparison certified
+    // nothing about the stored row. The unconditional print above stays:
+    // raw numbers at 0x0039-time are evidence; a verdict comparing two
+    // mirrors of the same number is not.
   }
 
   /** THE `final-totals` ENTRY, ONE BUILDER FOR BOTH TRIGGERS (Task 7, "one
@@ -3047,42 +3231,331 @@ export function createPm5Driver(
     );
   }
 
-  /** THE ACCUMULATOR-VS-MACHINE VERDICT (CR2 spec 1, Task 5; moved from
-   *  `logSummaryTotals` after the re-walk caught it firing on a lagging
-   *  TWD — see the comment at that call site). `lastEmittedTotals` is what
-   *  the rower's screen last showed; `raw.totalWorkDistanceMeters` is the
-   *  machine's own running distance, settled by the time a terminal state
-   *  arrives. A persistent gap is exactly what a lost interval or a
-   *  mis-keyed register write would produce.
+  /** THE LIVE AVERAGE-PACE VERDICT (RC-9a, design spec
+   *  2026-08-25-free-oracles §1) — the accumulator-vs-machine verdict
+   *  `recordTwdVerdict` used to be (RC-9c retired that one, see this file's
+   *  own comment above), but genuinely independent this time: 0x0032's
+   *  `averageSplit` is the machine's OWN cumulative, WORK-ONLY 500 m pace
+   *  (evidence base, all seven captures: tracks `500·ΣT_work/ΣD_work` to a
+   *  median 0.07-0.20 s, freezes solid through rest, never resets at a
+   *  boundary) — the SAME quantity the Concept2 logbook stores for an
+   *  interval workout ("distance/time are work-only", PRIMARY) and the
+   *  same our own `monitorAvgSplit` (`src/session/summaryModel.ts`)
+   *  computes, off a DIFFERENT characteristic (0x0032 there is 0x0037/38's
+   *  own boundary sums here) — two genuinely independent computers of one
+   *  authority-defined quantity, unlike the retired TWD verdict where both
+   *  sides were the identical fused work+rest odometer.
    *
-   *  5 METERS ABSOLUTE, NOT A PERCENTAGE. A percentage arm would make the
-   *  alarm LESS sensitive as the session lengthens, and the failure mode
-   *  this design introduces is a single lost interval — one dropped 500 m
-   *  interval in a 20x500 m session is exactly 5% of the total, precisely
-   *  the case a percentage threshold would wave through.
+   *  NEVER compared against the rendered tier-A hero: post-RC-5 that hero
+   *  IS 0x0039's own `avgPaceSecondsPer500m` field (0.1 s/lsb — A
+   *  DIFFERENT CHARACTERISTIC), and the one capture carrying both reads
+   *  138.7 there against 138.44/138.23 here — a 0.47 s spread the evidence
+   *  base already explains as machine-vs-machine, not a defect. This
+   *  verdict's "our side" is always `run.recordedActuals`'s own weighted
+   *  quotient, which exists on every run regardless of whether a 0x0039
+   *  ever arrives.
    *
-   *  SUPPRESSED on a distance goal: `totalWorkDistanceMeters` reports the
-   *  GOAL there, not the distance actually rowed (confirmed PRIMARY, 500 m
-   *  goal read against 13.4 m genuinely rowed, mid-row at workoutState 5 —
-   *  not merely at arm). `workoutDurationType` is PER-FRAME and
-   *  `compileProgram` can emit a MIXED program, so the suppression widens
-   *  to "the armed program contains ANY distance interval" — a mixed
-   *  program's time-goal intervals would otherwise light this up exactly
-   *  when the machine legitimately reports its distance-goal neighbor's
-   *  target instead of a rowed total. */
-  function recordTwdVerdict(run: typeof activeRun): void {
-    const distanceGoal =
-      raw.workoutDurationType === 128 ||
-      (run?.program.intervals.some((i) => i.kind === "distance") ?? false);
-    const delta = Math.abs(
-      lastEmittedTotals.distanceMeters - (raw.totalWorkDistanceMeters ?? 0),
-    );
-    if (!distanceGoal && delta > 5) {
+   *  SCALE (stated here AND at `lastWorkStateAverageSplit`'s own
+   *  declaration, per the Global Constraints rule to name both scales
+   *  wherever either appears): 0x0032's `averageSplit` is 0.01 s/lsb;
+   *  0x0039's Avg Pace (never read by this function) is 0.1 s/lsb — both
+   *  already descaled to SECONDS by `parse.ts` before either reaches this
+   *  driver. Everything below compares descaled seconds only.
+   *
+   *  SUPPRESSED (with the reason in the ring entry) when:
+   *   - no qualifying 0x0032 sample was ever observed this run
+   *     (`lastWorkStateAverageSplit === null`) — nothing to compare against;
+   *   - the final interval was filled from 0x0039
+   *     (`run.finalFilledFromSummary`) — `deriveFinalIntervalFromSummary`
+   *     builds OUR side FROM the machine's own summary, so the comparison
+   *     would be tautological in exactly the case it exists to catch;
+   *   - an actual this run saw could not be attributed to a program
+   *     interval and never reached `recordedActuals` at all
+   *     (`emitIntervalComplete`'s own "only if `normalizedIndex !== null`"
+   *     gate) — detected as `run.actuals` counting more emitted boundaries
+   *     than `recordedActuals` holds, the live analogue of
+   *     `monitorAvgSplit`'s `index === null` exclusion (that function
+   *     reads a PERSISTED `IntervalActual[]` where a null-index entry
+   *     still exists to be filtered; this driver's live `recordedActuals`
+   *     Map is keyed by index and structurally never holds one, so the
+   *     population-count mismatch is the honest live equivalent) — this
+   *     check alone is NOT sufficient (fix round 1): a mid-work
+   *     `terminated` close loses its own final, still-in-progress
+   *     interval WITHOUT incrementing `run.actuals` at all
+   *     (`emitIntervalComplete`'s out-of-run branch returns before either
+   *     counter moves), so the next check below is required too;
+   *   - this run's own FINAL program interval (`program.intervals.length
+   *     - 1`) was never recorded in `recordedActuals` — covers the
+   *     mid-work-terminate shape the check above cannot see, and the
+   *     natural-finish shape where neither a split nor a summary ever
+   *     arrived (`reconcileSummary`'s "declined ... still missing"
+   *     branch, run.actuals never incremented for that index either);
+   *   - a recorded actual measured below `MIN_MEASURABLE_ELAPSED_SECONDS`
+   *     — mirrors `monitorAvgSplit`'s identical exclusion. (No live
+   *     analogue of that function's THIRD exclusion, a legacy warm-up
+   *     interval: post-Phase-WU `compileProgram` never produces one, so no
+   *     run this driver opens can carry it — nothing to check.)
+   *   - nothing this run recorded measures any distance at all (Σd = 0).
+   *
+   *  BAND: `AVG_PACE_VERDICT_BAND_SECONDS`'s own comment. */
+  function recordAvgPaceVerdict(run: NonNullable<typeof activeRun>): void {
+    if (lastWorkStateAverageSplit === null) {
       log.record(
-        "divergence",
-        `accumulator and machine total differ by ${delta.toFixed(1)}m`,
+        "avg-pace-verdict",
+        "suppressed — no work-state (0x0032) averageSplit observed this run",
       );
+      return;
     }
+    if (run.finalFilledFromSummary) {
+      log.record(
+        "avg-pace-verdict",
+        "suppressed — the final interval was filled from 0x0039 " +
+          "(deriveFinalIntervalFromSummary fired); our own quotient would " +
+          "be built partly FROM the machine's summary, so the comparison " +
+          "is tautological",
+      );
+      return;
+    }
+    // FIX ROUND 1 (review, minor): this comparison can also over-suppress
+    // — TWO boundaries landing on the SAME normalized index (a duplicate
+    // Split/Interval Number, the `recordedActuals.set` overwrite) reads
+    // identically to one lost to a null index (`actuals` counts both,
+    // `recordedActuals.size` counts the index once), so a genuinely sound
+    // run could suppress here too. Left as is: the safe direction — a
+    // false suppression costs a missing walk-log line, never a false
+    // DIFFER/agree — and a duplicate index has no committed capture either.
+    if (run.actuals > run.recordedActuals.size) {
+      log.record(
+        "avg-pace-verdict",
+        `suppressed — an actual this run saw could not be attributed to a ` +
+          `program interval (${run.actuals} actual(s) emitted, only ` +
+          `${run.recordedActuals.size} indexed) and is excluded from our ` +
+          `own quotient`,
+      );
+      return;
+    }
+    // FIX ROUND 1 (review): a mid-work `terminated` close has NO capture
+    // evidence in this repo (no committed capture ends in workoutState 11)
+    // and a KNOWN false-DIFFER shape the check above cannot see. On a
+    // terminate mid-interval, the still-in-progress interval's own boundary
+    // (if it arrives at all) takes `emitIntervalComplete`'s OUT-OF-RUN
+    // branch (the run already closed, and a `terminated` close opens no
+    // grace to route it through instead) — which returns BEFORE either
+    // `run.actuals` or `run.recordedActuals` is touched (that branch's own
+    // comment: "a closed run's actuals can therefore never grow THIS WAY").
+    // So `run.actuals` and `run.recordedActuals.size` stay EQUAL — the
+    // check above sees nothing wrong — while 0x0032's cumulative average
+    // has already kept counting the rower's real, unrecorded strokes. A
+    // DIFFERENT, ALREADY-AVOIDED version of this same false-DIFFER shape is
+    // why this verdict is called at all after `reconcileSummary` on the
+    // `finished` path rather than synchronously at the terminal transition
+    // (this function's own doc comment, "NEVER compared against..." —
+    // review-verified against `session-2-wu-4unequal.jsonl`: sampling
+    // synchronously at that capture's own terminal frame would compare the
+    // correct machine reading, 129.78, against an INCOMPLETE 4-boundary
+    // quotient of 131.16 — the 5th interval's own split lands ~83ms later
+    // — a 1.38s gap past the 1.0s band). This guard is the general form of
+    // the same underlying shape for the case that placement fix does NOT
+    // cover: whenever this run's own FINAL program interval was never
+    // recorded at all — a mid-work terminate, or a natural finish whose
+    // split AND summary both genuinely never arrived
+    // (`reconcileSummary`'s own "declined ... still missing" branch) — our
+    // quotient is missing an unknown amount of real work the machine's own
+    // average already counts, and no amount of correct TIMING fixes that;
+    // the population itself is short.
+    if (!run.recordedActuals.has(run.program.intervals.length - 1)) {
+      log.record(
+        "avg-pace-verdict",
+        `suppressed — this run's own final interval (index ` +
+          `${run.program.intervals.length - 1}) was never recorded; the ` +
+          `machine's cumulative average may already include work ours has ` +
+          `no record of (mid-work terminate is the ordinary way this ` +
+          `happens — its boundary, if any, is discarded out-of-run and ` +
+          `touches neither run.actuals nor recordedActuals)`,
+      );
+      return;
+    }
+    let excludedSubThreshold = false;
+    let workSeconds = 0;
+    let workMeters = 0;
+    for (const actual of run.recordedActuals.values()) {
+      if (actual.elapsedSeconds < MIN_MEASURABLE_ELAPSED_SECONDS) {
+        excludedSubThreshold = true;
+        continue;
+      }
+      workSeconds += actual.elapsedSeconds;
+      workMeters += actual.distanceMeters;
+    }
+    if (excludedSubThreshold) {
+      log.record(
+        "avg-pace-verdict",
+        `suppressed — a recorded actual measured under ` +
+          `${MIN_MEASURABLE_ELAPSED_SECONDS}s and is excluded from our own ` +
+          `quotient (mirrors summaryModel.ts's monitorAvgSplit rule)`,
+      );
+      return;
+    }
+    if (workMeters <= 0) {
+      log.record(
+        "avg-pace-verdict",
+        "suppressed — nothing measured this run (Σd = 0)",
+      );
+      return;
+    }
+    const ours = (500 * workSeconds) / workMeters;
+    const delta = Math.abs(lastWorkStateAverageSplit - ours);
+    const agrees = delta <= AVG_PACE_VERDICT_BAND_SECONDS;
+    log.record(
+      "avg-pace-verdict",
+      `machine(0x0032)=${lastWorkStateAverageSplit.toFixed(2)}s/500m ` +
+        `ours=${ours.toFixed(2)}s/500m delta=${delta.toFixed(2)}s — ` +
+        `${agrees ? "agree" : "DIFFER"} (band ${AVG_PACE_VERDICT_BAND_SECONDS.toFixed(1)}s)`,
+    );
+  }
+
+  /** THE REST-DISTANCE ORACLE (RC-9d, design spec 2026-08-25-free-oracles
+   *  §3) — the first external check on the rest population RC-1 just
+   *  started storing and RC-10 must POST; nothing external checks it
+   *  today. Compares 0x003A's own Total Rest Distance (a RUNNING TOTAL
+   *  across the whole workout) against Σ `restDistanceMeters` over this
+   *  run's own `recordedActuals` (0x0037's own per-interval trailing-rest
+   *  reading, RC-1).
+   *
+   *  **FIX ROUND 2 (whole-branch review) CORRECTED this paragraph's own
+   *  claim.** It used to say this comparison is safe because it is "two
+   *  genuinely independent computers of the identical quantity, unlike the
+   *  retired TWD verdict" — WRONG, and the review named it as the wrong
+   *  reason to ship: structurally this IS the same shape TWD had
+   *  (machine-total-on-one-side vs sum-of-machine-parts-on-the-other,
+   *  0x003A's own running total against a sum of 0x0037's own per-interval
+   *  fields — both sides ultimately wire-derived, exactly like TWD's own
+   *  accumulator-vs-TWD comparison was). What actually saves this verdict
+   *  from being a mirror is the QUANTITY, not the computation shape: rest
+   *  distance is a field the AUTHORITY (Concept2's own logbook) stores
+   *  SEPARATELY from work distance — RC-1's storage spine exists because
+   *  RC-10 must POST `rest_distance`/`rest_time` as their own fields — so
+   *  this verdict checks a number the authority actually DEFINES, unlike
+   *  TWD's fused work+rest sum, which the evidence base found no external
+   *  system stores or verifies at all ("Concept2's logbook — the actual
+   *  authority for what the row was — stores work only").
+   *
+   *  ALL-OR-NOTHING, via `restPairComplete` (own doc comment, above,
+   *  carries the fix-round-1 history): summed only when every recorded
+   *  actual carries BOTH `restSeconds` AND `restDistanceMeters` — the SAME
+   *  pair `monitorRun.ts`'s own `computeWorkRestSums` requires for the
+   *  STORED record (RC-1, identical reason). A run whose final interval
+   *  fell back to the summary synthesis (`deriveFinalIntervalFromSummary`'s
+   *  caller OMITS both rest fields — 0x0039 carries no per-interval rest of
+   *  its own) suppresses rather than silently reading that missing
+   *  interval's rest as a real zero.
+   *
+   *  **FIX ROUND 2, the Important finding:** `restPairComplete` only
+   *  checks entries that ARE present in `recordedActuals` — it says
+   *  nothing about whether the run's own FINAL interval is present AT
+   *  ALL. This function runs SYNCHRONOUSLY from 0x003A's own subscribe
+   *  callback, which arrives ~1ms after 0x0039 on the committed captures
+   *  (walk-2026-08-23 seq 516/517) — well before `reconcileSummary`'s
+   *  3000ms grace deadline could ever fire the summary-fallback synthesis,
+   *  and racing the SAME late final-split notification the finish grace
+   *  exists to catch (hardware walk 5: the PM5 sends the final interval's
+   *  0x0037/0x0038 pair AFTER the "finished" status frame, not before).
+   *  The exit-7 capture's own race went the SAFE way this one time (final
+   *  split accepted at seq 58, 0x003A only at seq 63) — but 161 of 300
+   *  seeded workouts compile with a trailing rest on their own final
+   *  interval (`domain/monitor/program.ts:281-286`), and nothing pins the
+   *  race outcome the other way: had 0x003A arrived first, this verdict
+   *  would have summed only the SURVIVING (non-final) actuals — DIFFER,
+   *  on a perfectly healthy run, the first external check on the RC-1
+   *  rest population crying wolf on the exact walk it exists to validate.
+   *  Fixed with the SAME population-completeness guard `recordAvgPaceVerdict`
+   *  needed for the identical class of bug (that function's own
+   *  `!run.recordedActuals.has(run.program.intervals.length - 1)` check,
+   *  own comment carries the full fix-round-1 history) — chosen over
+   *  DEFERRING this verdict's own call site the way (a) defers (waiting on
+   *  `reconcileSummary`'s outcome): deferring would need buffering the
+   *  decoded 0x003A payload across up to 3000ms and re-firing from (a)'s
+   *  own two call sites, a real structural change to a ring-only
+   *  diagnostic; the guard is a two-line, purely-additive fix with the
+   *  SAME safety property (a)'s own fix-round-1 comment already accepted
+   *  for this exact tradeoff: "a false suppression costs a missing
+   *  walk-log line, never a false DIFFER/agree."
+   *
+   *  ZERO IS A REAL VALUE, never a suppression trigger (evidence base: the
+   *  r0 keystone capture decodes 0 and a genuinely rest-free run's own sum
+   *  is 0 too — an r0 piece has no rest, and the verdict must agree on
+   *  that, not read it as "nothing to compare").
+   *
+   *  `Interval Rest Time` (offsets 15-16) is REPORTED in every entry this
+   *  function writes, but NEVER GATES anything here: it reads 0 on BOTH
+   *  committed captures, including the exit-7 walk's own genuine r60
+   *  rests, so whether that is a firmware quirk of this specific field or
+   *  the programmed value read back is UNKNOWN (`AdditionalSummaryRest`'s
+   *  own doc comment, `pm5/parse.ts`) — asserting either would be a guess
+   *  this driver has no evidence for.
+   *
+   *  BAND: `REST_DISTANCE_VERDICT_BAND_METERS`'s own comment. */
+  function recordRestDistanceVerdict(bytes: Uint8Array): void {
+    const decoded = parseAdditionalSummaryRest(bytes);
+    if (decoded === null) {
+      log.record(
+        "rest-distance-verdict",
+        `suppressed — 0x003A arrived with ${bytes.length} byte(s), fewer ` +
+          `than the 17 this narrow parser requires (offsets 12-16)`,
+      );
+      return;
+    }
+    const run = activeRun;
+    if (run === null || run.recordedActuals.size === 0) {
+      log.record(
+        "rest-distance-verdict",
+        `reported only — Interval Rest Time=${decoded.intervalRestSeconds}s; ` +
+          `distance suppressed — no run's actuals to compare against ` +
+          `(0x003A arrived with none recorded)`,
+      );
+      return;
+    }
+    // FIX ROUND 2 (whole-branch review, Important): the guard `(a)`'s own
+    // fix-round-1 needed for the identical class of bug — this function's
+    // own doc comment above carries the full evidence and reasoning.
+    if (!run.recordedActuals.has(run.program.intervals.length - 1)) {
+      log.record(
+        "rest-distance-verdict",
+        `reported only — Interval Rest Time=${decoded.intervalRestSeconds}s; ` +
+          `distance suppressed — this run's own final interval (index ` +
+          `${run.program.intervals.length - 1}) was not yet recorded when ` +
+          `0x003A arrived; 0x003A can race ahead of a late-arriving final ` +
+          `split (the finish grace's own late side — see this function's ` +
+          `own doc comment), and a mid-work terminate or a genuinely lost ` +
+          `split produce the identical shape`,
+      );
+      return;
+    }
+    const actuals = [...run.recordedActuals.values()];
+    if (!restPairComplete(actuals)) {
+      log.record(
+        "rest-distance-verdict",
+        `reported only — Interval Rest Time=${decoded.intervalRestSeconds}s; ` +
+          `distance suppressed — an actual this run recorded is missing ` +
+          `restSeconds and/or restDistanceMeters (the summary-fallback ` +
+          `synthesis path omits both; 0x0039 carries no per-interval rest)`,
+      );
+      return;
+    }
+    const ours = actuals.reduce(
+      (sum, a) => sum + (a.restDistanceMeters ?? 0),
+      0,
+    );
+    const delta = Math.abs(decoded.totalRestDistanceMeters - ours);
+    const agrees = delta <= REST_DISTANCE_VERDICT_BAND_METERS;
+    log.record(
+      "rest-distance-verdict",
+      `machine(0x003A)=${decoded.totalRestDistanceMeters}m ours=${ours}m ` +
+        `delta=${delta}m — ${agrees ? "agree" : "DIFFER"} ` +
+        `(band ${REST_DISTANCE_VERDICT_BAND_METERS}m); ` +
+        `Interval Rest Time=${decoded.intervalRestSeconds}s (reported only ` +
+        `— reads 0 on both committed captures including a real r60, so ` +
+        `firmware-quirk-vs-programmed-value is unresolved; never gated on)`,
+    );
   }
 
   /** WHY the summary gate was shut when a 0x0039 turned up — four genuinely
@@ -3156,6 +3629,16 @@ export function createPm5Driver(
       // about its own workout.
       if (activeRun !== run) return;
       reconcileSummary(run);
+      // RC-9a: called HERE, not at the terminal transition — by the time
+      // `reconcileSummary` returns, this run's finish grace has fully
+      // resolved (a late split recorded ordinarily, the summary fill, or
+      // neither), so `recordedActuals`/`finalFilledFromSummary` are as
+      // final as they will ever get. Placed inline rather than the
+      // terminal-transition call site the retired TWD verdict used,
+      // because THIS verdict (unlike that synchronous wire read) depends
+      // on evidence that can still be in flight when the terminal frame
+      // itself arrives.
+      recordAvgPaceVerdict(run);
     }, ms);
   }
 
@@ -3205,7 +3688,15 @@ export function createPm5Driver(
       // path cancels this same field before a new run ever opens — so a
       // deadline still pending here can only name the CURRENT `activeRun`,
       // closed and non-null.
-      if (activeRun !== null) reconcileSummary(activeRun);
+      if (activeRun !== null) {
+        reconcileSummary(activeRun);
+        // RC-9a: the same pairing `armSummaryReconcile`'s own scheduled
+        // callback makes (its own comment) — this is the SECOND of the two
+        // places `reconcileSummary` is ever called, and this verdict must
+        // follow it here too, or a drained run (disconnect, the hook's
+        // `reconcile()`) would never get one at all.
+        recordAvgPaceVerdict(activeRun);
+      }
     }
   }
 
@@ -3711,6 +4202,11 @@ export function createPm5Driver(
       // path to spread from.
     };
     run.actuals += 1;
+    // RC-9d: `restDistanceMeters` stays OMITTED here too, same reason as
+    // `restSeconds`/`type` just above — this run's `recordedActuals` is
+    // therefore incomplete for `recordRestDistanceVerdict`'s all-or-nothing
+    // rule, and that verdict suppresses rather than reading the gap as a
+    // real zero (`recordedActuals`'s own doc comment).
     run.recordedActuals.set(lastIndex, {
       elapsedSeconds: derived.elapsedSeconds,
       distanceMeters: derived.distanceMeters,
@@ -3723,6 +4219,10 @@ export function createPm5Driver(
     run.finishGraceUntil = null;
     run.graceClaimed = true;
     run.summaryInGrace = null;
+    // RC-9a: this run's final interval is now built FROM 0x0039, not from a
+    // genuine split — `recordAvgPaceVerdict`'s only reader, so its
+    // comparison suppresses rather than certifying a tautology.
+    run.finalFilledFromSummary = true;
     log.record(
       "summary-reconciled",
       `filled-from-summary — the final split never arrived, so interval ${lastIndex} is synthesized from 0x0039: elapsed=${derived.elapsedSeconds}s distance=${derived.distanceMeters}m (${derived.how}). Avg split/spm/HR are OMITTED (null): 0x0039's averages are the whole workout's, not this interval's (design spec §5, B3)`,
@@ -3933,9 +4433,15 @@ export function createPm5Driver(
       // multi-interval derivation subtracts the recorded priors, and this
       // is where a prior becomes recorded. The averages deliberately do
       // not — an average is not subtractable, which is B3's whole finding.
+      // RC-9d: `restSeconds`/`restDistanceMeters` ride along too, straight
+      // off this same boundary-derived `actual` — additive-optional,
+      // `undefined` whenever `actual`'s own (additive-optional) fields are
+      // (`recordedActuals`'s own doc comment has the full reasoning).
       activeRun!.recordedActuals.set(normalizedIndex, {
         elapsedSeconds: actual.elapsedSeconds,
         distanceMeters: actual.distanceMeters,
+        restSeconds: actual.restSeconds,
+        restDistanceMeters: actual.restDistanceMeters,
       });
     }
     // One boundary per grace, consumed here — a second notification arriving
@@ -4042,8 +4548,25 @@ export function createPm5Driver(
     ADDITIONAL_STATUS_1_UUID,
     "0x0032",
     parseAdditionalStatus1,
-    () => {
+    (decoded) => {
       seen.as1 = true;
+      // RC-9a (`lastWorkStateAverageSplit`'s own doc comment carries the
+      // full reasoning): `raw` is already merged with `decoded` by the
+      // time this callback runs (`mergeStatus`'s own doc comment), but
+      // `raw.workoutState` is 0x0031's own field — this tick's 0x0032
+      // sample is judged against whichever 0x0031 reading is most recently
+      // merged, same "sampled at the same rate" idiom
+      // `splitAvgPaceProvenanceIndex`'s own callback (0x0033, below) already
+      // uses. `!== 0` excludes the interval-reset artifact — see the field's
+      // own comment for why this driver's own decode shows it is not
+      // actually a single frame.
+      if (
+        (raw.workoutState === WORKOUTSTATE_INTERVALWORKTIME ||
+          raw.workoutState === WORKOUTSTATE_INTERVALWORKDISTANCE) &&
+        decoded.averageSplit !== 0
+      ) {
+        lastWorkStateAverageSplit = decoded.averageSplit;
+      }
     },
   );
   mergeStatus(
@@ -4339,12 +4862,12 @@ export function createPm5Driver(
   // is a whole-workout total, not a per-tick status field).
   //
   // Receipt is logged for BOTH (`summary-half`, mirroring
-  // `noteBoundaryHalf`'s own site/voice) and only 0x0039 is decoded
-  // (Task 2's gate, `noteSummary` — review I5: every field the gate needs
-  // rides 0x0039, and waiting on 0x003A would rebuild the drop fragility
-  // R1 exists to fix). Receipt is logged FIRST on purpose: a stash must
-  // show that the bytes arrived even when the verdict below is that they
-  // change nothing.
+  // `noteBoundaryHalf`'s own site/voice) and only 0x0039 GATES the
+  // reconcile (Task 2's gate, `noteSummary` — review I5: every field the
+  // gate needs rides 0x0039, and waiting on 0x003A would rebuild the drop
+  // fragility R1 exists to fix). Receipt is logged FIRST on purpose: a
+  // stash must show that the bytes arrived even when the verdict below is
+  // that they change nothing.
   t.subscribe(END_OF_WORKOUT_SUMMARY_UUID, (bytes) => {
     noteSummaryHalf("0x0039", bytes);
     noteSummary(bytes);
@@ -4352,8 +4875,17 @@ export function createPm5Driver(
   // `bytes` (Phase LL Task 1): this callback used to take NO parameter at
   // all — 0x003A's own hex could never reach the ring no matter what
   // (`noteSummaryHalf`'s own updated doc comment has the full reasoning).
+  // RC-9d (design spec 2026-08-25-free-oracles §3): `recordRestDistanceVerdict`
+  // now reads that hex too, same call-order discipline as 0x0039 above —
+  // receipt (`summary-half`) logged first, the decode/verdict second, so a
+  // stash always shows the bytes arrived even if the verdict itself
+  // suppresses. This is still NOT the reconcile gate: `recordRestDistanceVerdict`
+  // writes its own `rest-distance-verdict` ring entry and nothing else,
+  // never touching `run.recordedActuals`/`finishGraceUntil` or any other
+  // state `noteSummary`'s gate depends on.
   t.subscribe(END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID, (bytes) => {
     noteSummaryHalf("0x003A", bytes);
+    recordRestDistanceVerdict(bytes);
   });
 
   // 0x003F, the PRODUCTION subscriber (storage-spine design spec §2,
@@ -5222,6 +5754,11 @@ export function createPm5Driver(
         // entry is judged against nothing carried from the outgoing run,
         // not against a bucket that workout happened to leave `twd` in.
         lastLoggedTwd = null;
+        // RC-9a: the outgoing run's last work-state 0x0032 reading says
+        // nothing about the new run's own average — same "per-run
+        // diagnostic, reset on re-arm" reasoning as every field in this
+        // block.
+        lastWorkStateAverageSplit = null;
         // `summarySeen`'s own comment (Task 8): whether a 0x0039 arrived is
         // a fact about THIS run, and a re-arm's own summary has not arrived
         // yet just because the outgoing run's did.
@@ -5253,6 +5790,7 @@ export function createPm5Driver(
           graceClaimed: false,
           verificationBytes: null,
           terminatedAwaitingSummary: false,
+          finalFilledFromSummary: false,
         };
         log.record("armed", `programmed ${p.intervals.length} interval(s)`);
         emit({ kind: "armed" });

@@ -52,6 +52,27 @@ screen:
 | DISTANCE hero | 742 TWD (500 + 147 + 95 rest) | 742 (accumulator 742.7, machineTotal 742) | MATCH |
 | Work sum cross-check | 1:07.9 + :56.1 = 2:04.0 | 0x0039 elapsed 124s — cumulative AND rest-exclusive, re-confirmed on a second piece | MATCH |
 
+**CORRECTED IN PLACE (RC-9c PM gate, 2026-08-25 — kept above, not deleted,
+same pattern `pm5-interface-notes.md` item 25 uses):** the "DISTANCE
+hero" row is wrong on three counts. (1) Its left cell, "742 TWD (500 +
+147 + 95 rest)", is NOT a PM5 screen reading — the memory screen has no
+single line labelled "TWD" or "742"; it is HAND-SUMMED here from three
+separate screen rows (the Totals distance and the two rest columns
+already used, correctly, by the rows above). (2) The "MATCH" it reports
+is a MIRROR: both sides are the identical work-plus-rest-coast odometer
+(our own accumulator and our own wire decode of 0x0031, which the "742
+(accumulator 742.7, machineTotal 742)" cell names outright) — exactly
+the comparison RC-9c retires (`recordTwdVerdict`) for proving nothing
+about an independently-defined quantity, the same class of mistake
+CLAUDE.md's recurring-failure #11 describes. Agreement here says our two
+internal numbers agree with each other, not that either is right. (3)
+"DISTANCE hero" itself is RC-5's own deleted concept — `summaryModel.ts`'s
+`monitorDistanceMeters` (RC-5 hero-truth spec §1) states plainly "it
+used to BE the DISTANCE hero for every monitor row. It no longer is";
+the tier-B "work only" hero replaced it. This row therefore verifies
+nothing this walk's other five rows don't already cover, and should not
+be read as a passed check independent of them.
+
 `0x0039` log date/time decode (WIRE, ring seq 60 raw `88 35 03 0f …`):
 date u16 `0x3588` → Aug 24 2026, time u16 `0x0F03` → 15:03 — matches the
 app's 15:04 header to the minute; the wire carries no seconds

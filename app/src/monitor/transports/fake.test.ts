@@ -1830,7 +1830,11 @@ describe("createFakeTransport: D5 — the beltless heart-rate byte is 0, not 255
       speedMetersPerSecond: 0,
       spm: beltlessTick.spm,
       currentSplit: beltlessTick.currentSplit,
-      averageSplit: beltlessTick.currentSplit,
+      // RC-9a: `averageSplit` is the machine's cumulative work-only average
+      // (`updateSessionAvgSplit`, `fake.ts`), not a copy of `currentSplit`
+      // any more — with no prior boundary banked, this tick's own
+      // 500*10/40 = 125 IS the whole session's work so far.
+      averageSplit: 125,
       restDistanceMeters: 0,
       restSeconds: 0,
       // RC-8: 0, not the old 1 — see `fake.ts`'s own `ergMachineType`
@@ -1849,6 +1853,105 @@ describe("createFakeTransport: D5 — the beltless heart-rate byte is 0, not 255
     expect(noBeltBytes).not.toStrictEqual(documentedSentinelBytes); // the two really do differ
     expect(as1).toHaveLength(1);
     expect(as1[0]).toStrictEqual(noBeltBytes);
+  });
+});
+
+// RC-9a (design spec 2026-08-25-free-oracles §1) — `averageSplit` (0x0032)
+// used to be `e.currentSplit`, a copy of the CURRENT split field: a world
+// with no cumulative work-only average at all. This describe block is the
+// fake's OWN direct proof that the replacement (`updateSessionAvgSplit`)
+// actually accumulates across a boundary and freezes through a rest —
+// `avgPaceVerdict.replay.test.ts` proves the real machine's own number
+// against a committed capture, but that test never exercises this fake at
+// all, so the fix needs a witness of its own.
+describe("createFakeTransport: RC-9a — averageSplit is the session's cumulative, work-only pace, not a copy of currentSplit", () => {
+  it("accumulates work-only across a boundary and freezes through the intervening rest — never counts the rest metres", async () => {
+    const fake = createFakeTransport({
+      program: TWO_INTERVALS_ONE_REST, // interval 0: restSeconds 30; interval 1: restSeconds 0
+      events: [
+        // Interval 0, mid-work: 30s/100m so far this interval, nothing
+        // banked yet -> 500*30/100 = 150.00.
+        {
+          atMs: 50,
+          kind: "status",
+          workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+          elapsedSeconds: 30,
+          distanceMeters: 100,
+          spm: 22,
+          currentSplit: 150,
+          heartRateBpm: 140,
+          programIntervalIndex: 0,
+        },
+        // Interval 0's rest — the boundary guard requires this before a
+        // trailing-rest boundary (RC-8's own describe block, immediately
+        // below). `averageSplit` must HOLD at 150.00 here — resting, not
+        // rowing, so `updateSessionAvgSplit` does not recompute — even
+        // though this tick's own `restDistanceMeters` (30m coasting) is
+        // real wire traffic the average must not absorb.
+        {
+          atMs: 100,
+          kind: "status",
+          workoutState: WORKOUTSTATE_INTERVALREST,
+          elapsedSeconds: 5,
+          distanceMeters: 0,
+          spm: 0,
+          currentSplit: 0,
+          heartRateBpm: 130,
+          programIntervalIndex: 0,
+          restDistanceMeters: 30,
+        },
+        // Interval 0 completes: 60s/220m of WORK (the rest's own metres are
+        // not part of this pair — `FakeBoundaryEvent.actual` is per-interval
+        // work only, `toIntervalActual`'s own contract).
+        {
+          atMs: 200,
+          kind: "boundary",
+          actual: {
+            index: 0,
+            elapsedSeconds: 60,
+            distanceMeters: 220,
+            avgSpm: 22,
+            avgHeartRateBpm: 140,
+            restDistanceMeters: 30,
+          },
+          cumulativeElapsedSeconds: 60,
+          cumulativeDistanceMeters: 220,
+        },
+        // Interval 1, mid-work: THIS interval's own 20s/80m (per-interval,
+        // resets at the new work start) on top of interval 0's banked
+        // 60s/220m -> 500*(60+20)/(220+80) = 500*80/300 = 133.33.
+        {
+          atMs: 300,
+          kind: "status",
+          workoutState: WORKOUTSTATE_INTERVALWORKTIME,
+          elapsedSeconds: 20,
+          distanceMeters: 80,
+          spm: 22,
+          currentSplit: 100,
+          heartRateBpm: 145,
+          programIntervalIndex: 1,
+        },
+      ],
+    });
+    await programIt(fake, TWO_INTERVALS_ONE_REST);
+
+    const as1: Uint8Array[] = [];
+    fake.subscribe(ADDITIONAL_STATUS_1_UUID, (b) => as1.push(b));
+    fake.tick(300);
+
+    expect(as1.length).toBeGreaterThanOrEqual(3);
+    const averageSplits = as1.map((b) => decodeAs1(b).averageSplit);
+    // The three ticks scripted above, in order — accumulate, freeze, then
+    // accumulate again ACROSS the boundary (not reset by it).
+    expect(averageSplits[0]).toBeCloseTo(150.0, 2);
+    expect(averageSplits[1]).toBeCloseTo(150.0, 2); // frozen through the rest
+    expect(averageSplits[2]).toBeCloseTo(133.33, 2);
+    // The `currentSplit` fields scripted above (150, 0, 100) prove this is
+    // genuinely a DIFFERENT number from `currentSplit`, not a relabelled
+    // copy of it — the exact fabrication this task retires.
+    const currentSplits = as1.map((b) => decodeAs1(b).currentSplit);
+    expect(currentSplits).toStrictEqual([150, 0, 100]);
+    expect(averageSplits[2]).not.toBe(currentSplits[2]);
   });
 });
 

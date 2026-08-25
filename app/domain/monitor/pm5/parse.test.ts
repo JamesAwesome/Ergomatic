@@ -5,6 +5,7 @@ import {
   parseAdditionalSplitIntervalData,
   parseAdditionalStatus1,
   parseAdditionalStatus2,
+  parseAdditionalSummaryRest,
   parseEndOfWorkoutSummary,
   parseGeneralStatus,
   parseSplitIntervalData,
@@ -892,5 +893,68 @@ describe("parseSummaryLogStamp", () => {
   });
   it("returns null on fewer than 4 bytes", () => {
     expect(parseSummaryLogStamp(new Uint8Array([0x88, 0x35, 0x03]))).toBeNull();
+  });
+});
+
+describe("parseAdditionalSummaryRest (0x003A, offsets 12-14 Total Rest Distance 1 m/lsb + 15-16 Interval Rest Time whole seconds, BLE rev 1.30 p.22)", () => {
+  it("decodes the exit-7 walk's Total Rest Distance to 242 m (seq 63, docs/monitor/sessions/walk-2026-08-24/phone-exit7-ring.json)", () => {
+    // 88 35 03 0f 02 fa 00 02 20 00 b8 00 f2 00 00 00 00 a3 03
+    // index:  0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18
+    // offsets 12-14 (u24 LE, 1 m/lsb): f2 00 00 -> 0x0000f2 = 242
+    // offsets 15-16 (u16 LE, whole seconds): 00 00 -> 0
+    const bytes = new Uint8Array([
+      0x88, 0x35, 0x03, 0x0f, 0x02, 0xfa, 0x00, 0x02, 0x20, 0x00, 0xb8, 0x00,
+      0xf2, 0x00, 0x00, 0x00, 0x00, 0xa3, 0x03,
+    ]);
+    expect(bytes).toHaveLength(19);
+    expect(parseAdditionalSummaryRest(bytes)).toStrictEqual({
+      totalRestDistanceMeters: 242,
+      intervalRestSeconds: 0,
+    });
+  });
+
+  it("decodes the r0 keystone piece's Total Rest Distance to a genuine 0 m, not a missing reading (seq 517, walk-2026-08-23 keystone)", () => {
+    // 78 35 1c 09 01 fa 00 02 1c 00 83 00 00 00 00 00 00 ef 02
+    // index:  0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18
+    // offsets 12-14: 00 00 00 -> 0 (this piece was programmed r0 — no rest)
+    // offsets 15-16: 00 00 -> 0
+    const bytes = new Uint8Array([
+      0x78, 0x35, 0x1c, 0x09, 0x01, 0xfa, 0x00, 0x02, 0x1c, 0x00, 0x83, 0x00,
+      0x00, 0x00, 0x00, 0x00, 0x00, 0xef, 0x02,
+    ]);
+    expect(bytes).toHaveLength(19);
+    expect(parseAdditionalSummaryRest(bytes)).toStrictEqual({
+      totalRestDistanceMeters: 0,
+      intervalRestSeconds: 0,
+    });
+  });
+
+  it("decodes offsets 12-14 and 15-16 as INDEPENDENT fields — neither committed capture pins this (both read 0 at offset 14, the byte the two fields' offset ranges abut)", () => {
+    const bytes = new Uint8Array(19);
+    // Total Rest Distance (offsets 12-14): 0x0000f2 = 242, so offset 14
+    // (the field's own high byte) is genuinely 0 here — the same value it
+    // happens to read on both committed captures. A parser that read
+    // Interval Rest Time starting one byte too early (offset 14 instead
+    // of 15) would still decode 0 against either real capture, since
+    // offset 14 is 0 in both; this fixture pins offset 15 specifically by
+    // giving Interval Rest Time a value (2314, LE 0x0a 0x09) that offset
+    // 14 (0x00) cannot produce by accident.
+    bytes[12] = 0xf2;
+    bytes[13] = 0x00;
+    bytes[14] = 0x00;
+    bytes[15] = 0x0a;
+    bytes[16] = 0x09;
+    expect(parseAdditionalSummaryRest(bytes)).toStrictEqual({
+      totalRestDistanceMeters: 242,
+      intervalRestSeconds: 2314,
+    });
+  });
+
+  it("returns null under 17 bytes — offset 16 (the last byte Interval Rest Time reads) needs a length of 17", () => {
+    expect(parseAdditionalSummaryRest(new Uint8Array(16))).toBeNull();
+  });
+
+  it("a 17-byte buffer of all zeros is NOT null — the length guard is length-only, never content-sniffing (mirrors parseEndOfWorkoutSummary's own rule)", () => {
+    expect(parseAdditionalSummaryRest(new Uint8Array(17))).not.toBeNull();
   });
 });

@@ -36,24 +36,36 @@
 // - **Total Work Distance survives, WITH a suppression RowTracer never
 //   needed**: 0x0031's own Total Work Distance (`GeneralStatus.
 //   totalWorkDistanceMeters`, offset 11, whole meters) is an absolute,
-//   session-wide counter (R0, CR2 spec 1) that only ever grows while the
-//   machine is rowing — UNLESS the armed program contains a
-//   distance-programmed interval, in which case this same field reports
-//   the INTERVAL'S GOAL, not distance actually rowed (confirmed PRIMARY,
-//   `src/monitor/driver.ts`'s own `recordTwdVerdict`: "500 m goal read
-//   against 13.4 m genuinely rowed, mid-row"; full mechanism, both
-//   captures, and the rest-window half of the finding are now written up
-//   in `docs/monitor/pm5-interface-notes.md` §20 item 25, the house
-//   convention's home for this class of wire fact). This task's own corpus
-//   derivation (`continuity.test.ts`) reproduced the exact shape live: one
-//   capture flickers 0/250/500 (a boundary accumulator, never distance
-//   rowed), mid-interval, on a 2x250m-shaped distance program — a false
+//   session-wide ODOMETER of metres genuinely rowed — work plus rest coast
+//   — that LAGS the interval currently in progress and catches up in a
+//   jump at each boundary (RC-9c, design spec 2026-08-25-free-oracles §2,
+//   correcting an earlier PRIMARY claim here that it "reports the
+//   interval's goal": that claim rested on two `pm5-session4b` ring
+//   samples taken BEFORE `program()`'s own writes, a stale pre-arm state
+//   read twice. `session-1-keystone-2x250r0` shows the real mechanism: TWD
+//   reads 0 through the whole of interval 1 while 250 m are genuinely
+//   rowed, jumps to 250 through interval 2, and settles at 500 at
+//   WORKOUTEND). On a distance-programmed interval this lag makes the
+//   field jump exactly like a reset would even though nothing reset —
+//   which is why it cannot be trusted as a continuity signal there, goal
+//   report or not. This task's own corpus derivation (`continuity.test.ts`)
+//   reproduced the exact shape live: one capture flickers 0/250/500 (the
+//   lagging odometer, never the metres genuinely in progress at that
+//   instant), mid-interval, on a 2x250m-shaped distance program — a false
 //   "reset" on every single simulated resume inside it; a second capture
 //   (the mixed pyramid) shows the field frozen through every work bout and
-//   ticking only during rests, confirming the same mechanism a second,
-//   independent way. `check` below applies the IDENTICAL suppression
-//   `recordTwdVerdict` already ships (a distance-kind interval anywhere in
-//   the armed program), because it is the same wire fact, not a new one.
+//   ticking only during rests, confirming the same lag a second,
+//   independent way: `301` at seq 980 to `330` at seq 1331, one-per-tick
+//   through a `workoutState: 3` (resting) span, before the boundary out of
+//   that rest (seq 1334) steps it the rest of the way to `332`. `check`
+//   below applies the suppression this file has
+//   always shipped (a distance-kind interval anywhere in the armed
+//   program) — RC-9c retired the separate per-run TWD verdict that used to
+//   compare this same field against the accumulator (both sides were the
+//   same work-plus-rest-coast quantity, so a green verdict was a mirror),
+//   but this suppression is a DIFFERENT use of the same wire fact and is
+//   unaffected by that retirement: it protects a reset-detector, not a
+//   stored number.
 //
 // On the residual, non-distance-goal corpus (the only stretches where this
 // field means "distance genuinely rowed"), the measurement was
@@ -192,13 +204,15 @@
  *  suppression as the three-axis signature, not a separately-lifted one —
  *  `continuity.test.ts`'s own PART 5).
  *  `distanceGoal` is NOT a wire field — it is the caller's own answer to
- *  "does the armed program contain a distance-kind interval", the exact
- *  predicate `driver.ts`'s `recordTwdVerdict` already computes
- *  (`program.intervals.some((i) => i.kind === "distance")`) — carried per
- *  reading rather than as a third `check` argument so a caller comparing
- *  two readings from DIFFERENT programs (a boundary that changed which
- *  program is armed) states each reading's own truth rather than one fact
- *  assumed to cover both. */
+ *  "does the armed program contain a distance-kind interval"
+ *  (`program.intervals.some((i) => i.kind === "distance")`), the same
+ *  predicate `useMonitorSession.ts`'s own `programHasDistanceGoal` computes
+ *  for production callers (RC-9c retired the only other computer of this
+ *  predicate, `driver.ts`'s per-run TWD verdict — see this file's own
+ *  header comment) — carried per reading rather than as a third `check`
+ *  argument so a caller comparing two readings from DIFFERENT programs (a
+ *  boundary that changed which program is armed) states each reading's
+ *  own truth rather than one fact assumed to cover both. */
 export interface ContinuityReading {
   totalWorkDistanceMeters: number;
   elapsedSeconds: number;
