@@ -2958,3 +2958,104 @@ targetSplit:null}` reproduces the recorded tx exactly and `divergences` stays
   deriver; verdict durable-with-conditions). C corrected to strict `<`,
   hook-owned, client-only. Old-row displacement repair DECLINED by James
   (population ~1 row), recorded as possible-but-declined.
+
+## Pre-spec oracle-soundness pass, 2026-08-25 (Phase RC, RC-9)
+
+- **"0x0031's Total Work Distance reports the GOAL on a distance-goal interval,
+  not what was rowed."** Believed since Phase CM, written into `driver.ts`'s
+  `recordTwdVerdict` doc comment as "confirmed PRIMARY", and promoted to
+  `pm5-interface-notes.md` item 25 as "a boundary accumulator of INTENDED work,
+  not an odometer". **FALSE under an armed program.**
+  `session-1-keystone-2x250r0.jsonl` (2×250 m, durationType 128 throughout)
+  reads TWD **0** for the whole of interval 1 while 250 m are genuinely rowed,
+  250 for interval 2, 500 at WORKOUTEND — Σ completed work, lagging the current
+  interval entirely; the pyramid shows it ticking one-per-metre through the ws3
+  rest (301→332), i.e. work PLUS rest coast. The two samples the original claim
+  rests on are both from `pm5-session4b`'s ring **seq 3 and 14 — before
+  `program()`'s writes at seq 7+**, a stale monitor state observed twice.
+  **Technique: when a wire claim's evidence predates our own arm, it is evidence
+  about the machine's LEFTOVER state, not about our program. Check the seq of
+  the cited sample against the seq of the first `write`.**
+
+- **Two counted claims in the same interface-notes item, both wrong in the same
+  direction.** Item 25: "the field changes value on 41 of 1085 status ticks, and
+  every one of those 41 reads workoutState 3". The 41 is exact; the "every one"
+  is false — **36 ws3, 3 ws5, 1 ws9, 1 ws10**, and the five exceptions are where
+  the mechanism lives. Item 25 also places a cited sample "mid the FIRST 250"
+  when TWD had already stepped 0→250 at the boundary 84 ticks earlier: it is
+  interval TWO, and the reading is a **1.6 s transient that reverts** (step-2
+  seq 822 = 500, seq 831 = 250; pyramid seq 3255 = 1347, seq 3273 = 1047).
+  **Technique: a hand-excused universal ("every one of the N") inside a
+  correctly-counted N is where the counting stopped and the narrative started.
+  Recount the histogram, not the total — and re-derive WHICH interval a cited
+  sample is in from the boundary markers, never from the prose.**
+
+- **"0x0032's Average Pace might be a mirror of our AVG SPLIT."** It is not, and
+  the captures settle its population without hardware. Measured over all seven
+  recordings, `averageSplit` tracks `500·ΣT_work/ΣD_work` to a **median
+  0.07-0.20 s** (n=252/770/248/467/85/679/135), **freezes solid through rest**
+  (session-2 seq 600→774: 136.13 unchanged across 9.6 s and 30.6 m of coasting),
+  never resets at a boundary, and includes the opening interval (seq 594:
+  135.85, where interval-2-alone would be 130.39). Work-only cumulative — the
+  same quantity the C2 logbook stores ("for interval workouts this is work
+  distance only", PRIMARY) and the same our `monitorAvgSplit` computes, from a
+  different characteristic. **Technique: a mirror is an oracle that shares your
+  DEFINITION where the AUTHORITY's differs — not merely one that agrees with
+  you. Before killing an oracle as a mirror, state all three definitions (ours,
+  its, the authority's) and check which pair diverges.**
+
+- **The PM5 disagrees with itself, so "the machine's number" is not one number.**
+  On the only capture carrying both, 0x0039's Avg Pace reads **138.7**
+  (0.1 s/lsb) while 0x0032's `averageSplit` reads **138.44** at the last work
+  sample and **138.23** after the terminal transition — a **0.47 s** spread, and
+  the terminal step recurs (session-2: 129.78 → 128.76 at WORKOUTEND, −1.02 s,
+  unexplained by any constructible population change). **Technique: for any
+  field a verdict will sample at "the end", print its value on the last WORK
+  frame and on the terminal frame separately. The step between them is a free
+  measurement of how much the sampling instant is worth — here, a second.**
+
+- **ORACLE BLINDNESS, the exit-pass class, proven by a two-column table.** Of the
+  eight committed `.jsonl` recordings, exactly **one** carries a 0x0039 — and it
+  is the **only one with zero `workoutState 3` frames** (rest-tick histogram
+  0/177/0/116/0/236/0; 0x0039 present only on the last). So any verdict against
+  0x0039's work-only totals is, on the committed corpus, testable only where
+  work-only and work+rest are the same number. The rest-bearing evidence exists
+  solely as a text line in `walk-2026-08-24/phone-exit7-ring.json` seq 61, which
+  no CI gate can replay. **Technique: before proposing a verdict against a wire
+  field, tabulate (capture × carries the field × contains the discriminating
+  state). Two columns, eight rows, and it either finds the gate or proves it
+  cannot exist yet.**
+
+- **A fill path can make an oracle tautological in exactly the case it exists
+  for.** `deriveFinalIntervalFromSummary` builds a missing final actual as
+  `0x0039 totals − Σ recorded priors`, and its single-interval arm takes 0x0039
+  verbatim. So "Σ recordedActuals vs 0x0039" is honest on a healthy run and an
+  identity on a run with a dropped boundary — the run the verdict was built to
+  catch. **Technique: for any oracle, grep for a code path that WRITES one side
+  from the other. Name the FUNCTION that must not have run.**
+
+- **A better oracle was sitting undecoded.** 0x003A offsets 12-14, **Total Rest
+  Distance** (1 m/lsb, PRIMARY, BLE rev 1.30 p.22), has no parser at all — and
+  it reads **242 m** on the 2026-08-24 r60 walk against our own 242.7 m of
+  measured rest coast, and **0** on the r0 keystone. It checks the population
+  RC-1 just started storing and RC-10 must POST, which nothing external checks.
+  **Technique: when asked "is this oracle sound?", also ask "is it the BEST one
+  available?" — grep the parsers for fields with zero non-test consumers, then
+  grep for characteristics with no parser at all. The second list is where this
+  one was.**
+
+- **Attacked and NOT broken:** `parse.ts`'s 0x0037 Split/Interval Time scale
+  (`/10` — a 686 raw against a 68.6 s interval looked 10× wrong until read; it
+  is correct); 0x0039's cumulative-and-rest-exclusive premise (exit-7 ring seq
+  61: 124 s/500 m from 0x0039 against 124 s/500 m from 0x0037/0x0038, on a run
+  with 120 s programmed rest and both actuals from real splits); and the
+  0.1-vs-0.01 s/lsb pace-scale split, which `parse.ts` already documents.
+
+- **`fake.ts` sets `averageSplit: e.currentSplit`** — a coherent world in which
+  no cumulative work-only average exists. Third sighting of the shape ("read
+  what the FAKE puts in that field before writing the failing test"); it now
+  qualifies as a standing check on any spec that turns on a wire field.
+
+- **James's scope ruling (2026-08-25):** ship (a) rescoped + (c)
+  retire-and-correct + (d) the rest-distance oracle; QUEUE (b) until a
+  rest-bearing capture that survives to 0x0039 exists.
