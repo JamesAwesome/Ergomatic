@@ -1224,12 +1224,18 @@ describe("FromTheLog — the MACHINE CONFIRMED · WORK ONLY block", () => {
     // RC-5 (hero-truth spec) §3, Task 3: the caption's SECOND correction.
     // The PM-gate wording above ("Everything else on this screen includes
     // rest") went false the moment this task made the heroes work-only —
-    // the totals ABOVE the block no longer include rest either. New copy
-    // names both neighbours honestly: excluded here AND in the totals
-    // above, still present in the chart below.
+    // the totals ABOVE the block no longer include rest either. THIRD
+    // correction (Task 3 fix round 4, PM gate finding 6): the second
+    // wording still argued with the screen — the TOTAL line ("4:04 total
+    // · plus 242 m coasting in rest") sits four lines above this caption
+    // and is the only thing on screen actually called a total, and it
+    // DOES include rest. New copy separates "the three numbers above"
+    // (work-only) from "the total line and the chart below" (both
+    // rest-inclusive) instead of implying every number above is
+    // rest-free.
     expect(
       screen.getByText(
-        "Rest metres excluded, here and in the totals above. The chart below still spans rest.",
+        "Rest metres excluded from the three numbers above. The total line and the chart below both span rest.",
       ),
     ).toBeVisible();
 

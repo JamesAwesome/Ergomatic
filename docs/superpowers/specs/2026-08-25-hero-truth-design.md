@@ -188,13 +188,20 @@ Beneath the heroes, one line, always present on a monitor row:
   columns; RC-1 and #190 shipped them) and the list renders the SAME
   tier logic as the detail, falling back to the fused column only where
   neither exists — with that fallback stated in the code, not silent.
-- **Old rows: DISTANCE/TIME do not move** (see §1's corrected exclusions
-  and the warm-up ruling) — what changes for them is that their rest is
-  named on §2's line instead of being folded into the headline, and their
-  AVG SPLIT is unchanged. Only tier A rows (saved since #190) adopt the
-  machine's own numbers, and only rows whose fused heroes included rest
-  see the headline shrink. The release note says which rows change and
-  that the total moved one line down.
+- **CORRECTED (Task 3 fix round 4, PM gate finding 2): "Old rows:
+  DISTANCE/TIME do not move" was false, and it propagated into the PR
+  body.** It contradicted this very section's own first bullet — the
+  exit-7 row IS an old row, and it moves 742 → 500. **What is actually
+  true: a REST-BEARING row's DISTANCE/TIME shrinks, old rows and new
+  alike** (see §1's corrected exclusions and the warm-up ruling for the
+  narrow carve-outs that keep a specific old shape's fused numbers
+  unchanged — legacy warm-up rows, and rows this PR's own implementation
+  cannot reconstruct with confidence, per its own accepted-residual
+  ruling). **What stays put is only a row with NO rest at all** — nothing
+  to shrink, nothing changes. AVG SPLIT is unaffected either way except
+  where §1's exclusions already governed it before this PR. The release
+  note says which rows change (rest-bearing ones) and that the total
+  moved one line down.
 - The MACHINE CONFIRMED · WORK ONLY block (PR #192) now AGREES with the
   heroes instead of contrasting with them: block 500, hero 500. Its
   caption ("Rest metres excluded. Everything else on this screen includes

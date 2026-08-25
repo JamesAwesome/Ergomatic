@@ -1654,6 +1654,18 @@ not a design. Inputs the brainstorm inherits:
   (display-gated on the walk photograph), `endedBy`, and the baselines
   history Phase BL added — the stats story should be re-scoped against
   what the record NOW holds, not what it held in August's first week.
+- **RC-5's own hazard for "metres per week" (Task 3 fix round 4, PM gate
+  finding 8): `session_logs.distance_meters`/`time_seconds`/
+  `avg_split_seconds` mean FUSED (work + rest) before this merge and
+  WORK-ONLY (tier-appropriate) after it — with NO stored marker on the
+  row saying which** (`storedSummary.ts`'s own FALLBACK/TIER-B2 branches;
+  `schema.ts`'s corrected `distance_meters` comment). A brainstorm that
+  sums this column across a rower's whole history, or per week, will
+  silently sum two different definitions of "metres" side by side unless
+  it either re-derives a consistent population per row (mirroring
+  `storedSummary.ts`'s own tier logic) or explicitly accepts the seam and
+  says so. Settle this BEFORE writing "metres per week" arithmetic, not
+  after a chart ships with an unexplained kink at the cutover date.
 - The dataviz house rules (charts follow docs/design tokens; honest
   empty states below two sessions — never sample data).
 
@@ -2851,12 +2863,21 @@ LABELLING (James's ruling, 2026-08-25: the block reads `MACHINE
 CONFIRMED · WORK ONLY` with a caption naming the split, rather than
 redesigning the chart's axes), and the connected screen's meters
 counter reverts to its 1m realtime granularity (James's reversal of
-the CM calm rule). The summary-record wave (RC-2 + RC-3 + display) is
-functionally COMPLETE, pending its own release. The v0.21.0 notes debt
-is paid (v0.21.0 shipped as build 738). Earlier: #167 (instrument + RC-4/RC-6),
-#174 (F2a), #177 (cohort unlock); the combined walk answered every wire
-question YES (record: `docs/monitor/sessions/walk-2026-08-23/`).
-Originally opened 2026-08-22 (James: evidence-first); named, scoped and
+the CM calm rule). The summary-record wave (RC-2 + RC-3 + display, PR 2
+= #192, made explicit here rather than the earlier self-referential
+"this PR") **RELEASED as v0.22.0 (build 747, shipped the morning of
+2026-08-25)** — no longer "pending its own release." The v0.21.0 notes
+debt is paid (v0.21.0 shipped as build 738). **RC-5 (hero-truth) has
+since SHIPPED on top of that release** — the three stored heroes stop
+contradicting each other (two tiers, the machine's own numbers where it
+spoke; the wall-clock total gets its own line beneath) — see RC-5's own
+row below for the full record; not folded into this paragraph's earlier
+prose since it is a separate spec/PR, but named here so Phase RC's
+status paragraph doesn't go silent on its own most recent work. Earlier:
+#167 (instrument + RC-4/RC-6), #174 (F2a), #177 (cohort unlock); the
+combined walk answered every wire question YES (record:
+`docs/monitor/sessions/walk-2026-08-23/`). Originally opened 2026-08-22
+(James: evidence-first); named, scoped and
 evidenced by the ecosystem review of 2026-08-21
 (`docs/monitor/pm5-ble-ecosystem-review.md`).
 
@@ -3298,7 +3319,7 @@ that needs no erg, and it can run in a test.
         were the SAME defect this closes — a fused DISTANCE/TIME beside
         a work-only AVG SPLIT. Both are now work-only on saved-since-#190
         rows and named-as-fused-plus-rest-clause on the rest.
-      - **[ ] TIER B2 residual — general form, accepted and pinned, not
+      - [ ] **TIER B2 residual — general form, accepted and pinned, not
         silent (Task 3 fix round 1; premise CORRECTED and the decline
         question RE-DECIDED at fix round 2, final whole-branch review,
         finding I1).** `buildMonitorLogSteps` never produces a stored
@@ -3335,7 +3356,7 @@ that needs no erg, and it can run in a test.
         record "an interval existed but produced no step," which it
         does not). Pinned by dedicated `storedSummary.test.ts` cases
         (both the SAFE-endedBy residual and the DECLINED-endedBy cases).
-      - **[ ] List-vs-detail bounded disagreement, same corrected
+      - [ ] **List-vs-detail bounded disagreement, same corrected
         window (premise corrected at fix round 2, same finding I1).**
         The history list's projection excludes `steps` entirely (size),
         so it cannot reach TIER B2 at all — a row in the genuinely
@@ -3361,38 +3382,72 @@ that needs no erg, and it can run in a test.
         RC-5 exists to kill, reintroduced deliberately for this one
         population as the accepted pre-RC-5 status quo ("unimproved but
         never silently wrong," per the FALLBACK branch's own comment).
-      - **[ ] Build-738-era rows render NO AVG SPLIT hero at all —
-        tester-visible, release-note clause owed.** A row saved between
-        PR #190 (machine totals land) and this PR (the machine's own
-        `avgPaceSecondsPer500m` starts being stored) is tier A by the
-        `machine_work_seconds`/`machine_work_meters` test but has no
-        `avgPaceSecondsPer500m` in its `machine_summary` blob — by
-        design (tier A never falls back to a quotient of ours), that row
-        shows DISTANCE and TIME but the AVG SPLIT hero is simply absent,
-        never a stale or wrong number. Real, bounded population (rows
-        saved during v0.21.0's TestFlight window); the next release note
-        should say a small number of recent sessions may show two heroes
-        instead of three, permanently, and that this is intended, not a
-        bug.
-      - **[ ] v0.11.0's shipped release note now tells a false instruction
-        — owed a correction in v0.22.0's (or the next) SUCCESSOR notes,
-        never edited in place (Task 3 fix round 2, finding I3).**
-        `src/news/content/releaseNotes.ts:270` (v0.11.0, still rendered
-        to any tester who opens that entry) reads: "DISTANCE counts
-        everything the flywheel counted, warm-up and rest meters
-        included, so it should match the monitor exactly. Check them
-        side by side." RC-5 makes DISTANCE work-only on saved-since-#190
-        rows — the instruction to check against the monitor's OWN total
-        is now reliably wrong (the monitor's Totals row is ALSO
-        work-only per this same phase's own antagonist finding, so
-        checking against it would actually still agree — but checking
-        against the monitor's fused/TWD reading, which is what a rower
-        untrained by this phase would reach for, would not). Shipped
-        notes are history and stay as written; the NEXT notes entry
-        (v0.22.0 or whichever tag actually carries RC-5) must say
-        explicitly that the v0.11.0 instruction no longer applies and
-        name what changed.
-      - **[ ] The live CONNECTED screen's TOTAL METERS is still fused —
+      - [ ] **Build-738-era rows render NO AVG SPLIT hero at all —
+        tester-visible, release-note clause owed. POPULATION CORRECTED
+        (Task 3 fix round 4, PM gate finding 4 — verified via
+        `git log`/`git tag --contains` before writing, per the gate's own
+        instruction).** The original claim ("rows saved during v0.21.0's
+        TestFlight window") is FALSE: `machine_work_seconds`/
+        `machine_work_meters` first exist as of PR #190
+        (`3cb393d`), and `git tag --contains 3cb393d` returns v0.22.0
+        ONLY — so no build-738 (v0.21.0) row was EVER tier A; that build
+        couldn't post the columns that make a row tier A at all. **The
+        one real path (`LogSession.tsx`'s own comment on the guard, and
+        `git show v0.21.0:app/src/monitor/monitorRun.ts`, confirms
+        `appendSummaryObservations` already captured `summaryTotals`
+        client-side under build 738 — #190 is what made it SURVIVE THE
+        SAVE server-side, not what started capturing it): a run completed
+        under build 738, left UNSAVED (sitting in local storage) across
+        the app's update to a build carrying #190 (`machine_work_seconds`/
+        `machine_work_meters` posting) but not yet this PR's
+        `avgPaceSecondsPer500m` storage, then finally saved.** That old
+        `MonitorRun` object carries `summaryTotals` (738 wrote it) but no
+        `summaryDetail` at all (738's `MonitorRun` type never had the
+        field) — so the save posts real machine totals (tier A) with an
+        honestly bytes-only-or-absent `machine_summary`, and AVG SPLIT is
+        simply absent, never a stale or wrong number
+        (`machineSummary.integration.test.ts`'s own "build-738-era
+        record's honest shape" case pins the same shape server-side). Real,
+        bounded population (an unsaved-run-across-an-update shape, not a
+        release-window one); no backfill. **Same cause, folded in rather
+        than left as a separate population (PM gate finding 4):** this is
+        also why `postTestOffer` silently declines the baseline offer for
+        exactly these rows — see the `postTestOffer.ts`/`testHistory.ts`
+        minor below, which shares this bullet's population and cause, not
+        a second one. The next release note should say a small number of
+        recent sessions may show two heroes instead of three, permanently
+        (and may have missed a baseline offer they'd otherwise have
+        earned), and that this is intended, not a bug.
+      - [ ] **TWO shipped release notes now tell instructions RC-5
+        falsifies — both owed a correction in RC-5's own SUCCESSOR notes
+        entry, neither edited in place (Task 3 fix round 2 finding I3;
+        v0.22.0's own note added at fix round 4, PM gate finding 5).**
+        Shipped notes are history and stay as written; RC-5's own release
+        note — **NOT v0.22.0, which already shipped this morning
+        (2026-08-25) WITHOUT RC-5, per fix round 4's own correction above
+        — the next tag after it** — must say explicitly that both
+        instructions below no longer apply and name what changed.
+        - `src/news/content/releaseNotes.ts:270` (v0.11.0, still rendered
+          to any tester who opens that entry) reads: "DISTANCE counts
+          everything the flywheel counted, warm-up and rest meters
+          included, so it should match the monitor exactly. Check them
+          side by side." RC-5 makes DISTANCE work-only on saved-since-#190
+          rows — the instruction to check against the monitor's OWN total
+          is now reliably wrong (the monitor's Totals row is ALSO
+          work-only per this same phase's own antagonist finding, so
+          checking against it would actually still agree — but checking
+          against the monitor's fused/TWD reading, which is what a rower
+          untrained by this phase would reach for, would not).
+        - `src/news/content/releaseNotes.ts:22` (v0.22.0, shipped this
+          morning, describing the MACHINE CONFIRMED · WORK ONLY block)
+          reads: "Work only means rest metres are excluded; everything
+          else on that screen includes rest, so the numbers are meant to
+          differ." **RC-5 falsifies BOTH halves**: the heroes above the
+          block are now ALSO work-only (no longer "everything else…
+          includes rest"), so the block and the heroes now AGREE — the
+          numbers are no longer "meant to differ." Same shipped-note
+          rule: not edited, corrected in the successor note.
+      - [ ] **The live CONNECTED screen's TOTAL METERS is still fused —
         two unlabelled populations on consecutive screens (Task 3 fix
         round 2, finding I4; NOT code in this PR, its own item).**
         `surfaceModel.ts:479-492`'s `sessionDistanceMeters` is "work +
@@ -3408,7 +3463,7 @@ that needs no erg, and it can run in a test.
         too, or get a "+ rest" clause of its own, matching the pattern
         this phase just established for the stored screen) — not a rider
         on this PR.
-      - **[ ] An INTERRUPTED session's TOTAL line can be present live and
+      - [ ] **An INTERRUPTED session's TOTAL line can be present live and
         absent stored, for the identical row — same family as the item
         above (Task 3 fix round 3, re-review; pre-existing across the
         branch, not caused by this PR's diff, previously unrecorded).**
@@ -3426,21 +3481,18 @@ that needs no erg, and it can run in a test.
         session can show a rest clause live and none at all once saved
         and reopened. Neither side is wrong (each states only what it can
         prove), but the disagreement is real and currently silent.
-      - **[ ] Three minor divergences, recorded not fixed (Task 3 fix
+      - [ ] **Three minor divergences, recorded not fixed (Task 3 fix
         round 2, findings M2-M4).**
         - `postTestOffer.ts:45`'s `avgSplitSeconds` input now receives,
           on a tier-A monitor save, the machine's own TRUNCATED
           `avgPaceSecondsPer500m` (via `model.heroes.avgSplitSeconds`,
           `LogSession.tsx`'s monitor-door `postTestOffer` call) rather
           than our rounded quotient — a small precision change to what a
-          baseline offer's number means. On a build-738-era tier-A row
-          (machine totals present, the scalar absent — the same
-          population the AVG-SPLIT-hero item above names) `model.heroes.
-          avgSplitSeconds` is `undefined`, so `postTestOffer`'s own first
-          gate (`input.avgSplitSeconds === undefined`) declines the
-          baseline offer silently — a designated-test session with a
-          real, completed average split gets no offer at all, for that
-          narrow population.
+          baseline offer's number means, for every fresh tier-A save
+          going forward. (The SILENT-DECLINE case — no offer at all on an
+          unsaved-across-an-update build-738-era row — is NOT a second
+          population: it shares the "Build-738-era rows render NO AVG
+          SPLIT" bullet above, folded in there per PM gate finding 4.)
         - `server/stores/testHistory.ts:62-63`'s `deltaSeconds =
           input.splitSeconds - previous.splitSeconds` can now subtract a
           POST-RC-5 split (a tier-A row's machine-truncated value, or a

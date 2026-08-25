@@ -2402,13 +2402,18 @@ test("log-detail", async ({ page }) => {
   ).toBeVisible();
   await expect(page.getByText("2:04.0 work · 500m")).toBeVisible();
   await expect(page.getByText("CODE AF99-4706 C021-B054")).toBeVisible();
-  // RC-5 (hero-truth spec) §3, Task 3: the caption's second correction —
+  // RC-5 (hero-truth spec) §3, Task 3: the caption's THIRD correction
+  // (Task 3 fix round 4, PM gate finding 6, copy-only — no re-shoot).
   // "Everything else on this screen includes rest" went false the moment
-  // the heroes became work-only (this task); the totals above no longer
-  // include rest either, so the caption now says so explicitly.
+  // the heroes became work-only (this task). The second wording still
+  // argued with the screen: the TOTAL line ("4:04 total · plus 242 m
+  // coasting in rest") sits four lines above this caption and IS a
+  // rest-inclusive total. New copy separates "the three numbers above"
+  // (work-only) from "the total line and the chart below" (both
+  // rest-inclusive).
   await expect(
     page.getByText(
-      "Rest metres excluded, here and in the totals above. The chart below still spans rest.",
+      "Rest metres excluded from the three numbers above. The total line and the chart below both span rest.",
     ),
   ).toBeVisible();
 
