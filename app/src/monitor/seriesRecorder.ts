@@ -112,16 +112,28 @@
 // lands BACKWARD into that same unclaimed span — every one of those is a
 // second the series permanently lacks). A routine lagging tick, by
 // contrast, always lands on a bucket the healthy climb already passed
-// through moments earlier, so the never-emitted test excludes it by
-// construction. `emittedBuckets` (a plain `Set<number>`, naturally bounded
-// by session length — the same cap `SERIES_SAMPLE_CAP` already bounds)
-// tracks every bucket that has ever won. `backwardBucketCount` — exposed
-// on the recorder's own result, never on `SeriesData` (the server route's
-// reconstruction would silently drop it) — counts `bucket <
-// lastEmittedBucket && !emittedBuckets.has(bucket)`; the sample is still
-// dropped either way, exactly as ordinary same-bucket decimation
-// (`bucket === lastEmittedBucket`, the hot path — 80-90% of healthy iOS
-// frames, measured 2.23 frames/s desktop, 90-180ms iOS) already drops its
+// through moments earlier, so the never-emitted test excludes it —
+// PROVIDED that bucket is actually inside the series' own span (fix round
+// 2 correction: "by construction" overclaimed this — a run whose very
+// FIRST emitted bucket is not 0 is the ordinary case, not an edge one:
+// the exit-7 ring's own first rowing frame reads elapsed=1.02, bucket 1,
+// so bucket 0 is never emitted EITHER, but for a completely different
+// reason than the poison shape — it is simply BEFORE the series' own
+// first sample, not a span the series skipped mid-run. A stale/reconnect
+// tick that happens to read elapsed≈0 after the run has already
+// progressed would satisfy "never emitted" on that reasoning alone and
+// wrongly count). The third term excludes it: a bucket below the run's
+// own first-ever emitted bucket is outside the series' span, never loss.
+// `emittedBuckets` (a plain `Set<number>`, naturally bounded by session
+// length — the same cap `SERIES_SAMPLE_CAP` already bounds) tracks every
+// bucket that has ever won; `firstEmittedBucket` remembers the very first
+// one. `backwardBucketCount` — exposed on the recorder's own result,
+// never on `SeriesData` (the server route's reconstruction would silently
+// drop it) — counts `bucket < lastEmittedBucket && !emittedBuckets.has
+// (bucket) && bucket > firstEmittedBucket`; the sample is still dropped
+// either way, exactly as ordinary same-bucket decimation (`bucket ===
+// lastEmittedBucket`, the hot path — 80-90% of healthy iOS frames,
+// measured 2.23 frames/s desktop, 90-180ms iOS) already drops its
 // non-winning frames.
 
 import type { MonitorFrame } from "../../domain/monitor/types.js";
@@ -237,17 +249,21 @@ export interface SeriesRecorder {
   onFrame(f: MonitorFrame): void;
   snapshot(): SeriesData | undefined;
   stop(): void;
-  /** series-truth spec §C′ (REFINED, fix round 1): the count of samples
-   *  whose own work-clock bucket read STRICTLY LESS than the highest
-   *  bucket already emitted AND was never claimed by any earlier sample —
-   *  actual, unrecoverable data loss ("a reading for a second the series
-   *  will never have"), never ordinary same-bucket decimation (`===`, the
-   *  hot path) and never a routine backward tick that merely re-visits a
-   *  bucket the healthy climb already passed through (the ~450-540ms
-   *  0x0033-lags-0x0031 boundary skew — measured 1 and 18 times on this
-   *  repo's two committed clean captures under the FIRST, over-firing cut
-   *  of this predicate; ZERO under this one, since every one of those
-   *  ticks lands on an already-emitted bucket). Zero for the whole
+  /** series-truth spec §C′ (REFINED twice — fix round 1, then fix round 2):
+   *  the count of samples whose own work-clock bucket read STRICTLY LESS
+   *  than the highest bucket already emitted, was never claimed by any
+   *  earlier sample, AND lies ABOVE the run's own first-ever emitted
+   *  bucket — actual, unrecoverable data loss ("a reading for a second
+   *  the series will never have"), never ordinary same-bucket decimation
+   *  (`===`, the hot path), never a routine backward tick that merely
+   *  re-visits a bucket the healthy climb already passed through (the
+   *  ~450-540ms 0x0033-lags-0x0031 boundary skew — measured 1 and 18
+   *  times on this repo's two committed clean captures under the FIRST,
+   *  over-firing cut of this predicate; ZERO under this one), and never a
+   *  stale/pre-session reading landing below the very first sample the
+   *  run ever had (the exit-7 ring's own first rowing frame is bucket 1,
+   *  not 0 — a below-first bucket is outside the series' span, not a gap
+   *  it skipped; fix round 2's own correction). Zero for the whole
    *  lifetime of a healthy run. Deliberately absent from
    *  `SeriesData`/`snapshot()`: the server route's own reconstruction of a
    *  stored series has no field to carry it, so a caller that needs this
@@ -293,6 +309,15 @@ export function createSeriesRecorder(): SeriesRecorder {
    *  naturally bounded by session length — it can never hold more entries
    *  than `SERIES_SAMPLE_CAP` already bounds `samples` to. */
   const emittedBuckets = new Set<number>();
+  /** The very first bucket this run ever emitted — `null` before the
+   *  first sample. Fix round 2: a bucket BELOW this one was never
+   *  emitted for a completely different reason than data loss (it is
+   *  simply before the series' own first reading, e.g. the exit-7 ring's
+   *  own first rowing frame is bucket 1, never bucket 0) — C′'s
+   *  never-emitted test alone cannot tell that apart from a genuine
+   *  mid-run gap, so `backwardBucketCount` additionally requires the
+   *  bucket to lie ABOVE this one. */
+  let firstEmittedBucket: number | null = null;
 
   function onFrame(f: MonitorFrame): void {
     if (stopped || truncated) return;
@@ -333,13 +358,23 @@ export function createSeriesRecorder(): SeriesRecorder {
     const workClockSeconds = baseSeconds + f.elapsedSeconds;
     const bucket = Math.floor(workClockSeconds + BUCKET_EPSILON_SECONDS);
 
-    // C′, REFINED (fix round 1): count a backward bucket ONLY when it was
-    // NEVER emitted before — actual data loss, never a routine tick that
-    // merely re-visits a bucket the healthy climb already passed through
-    // (the 0x0033-lag artifact this predicate's own doc comment traces).
-    // A backward bucket is still dropped either way, never appended: the
-    // samples array stays a valid non-decreasing `t` sequence regardless.
-    if (bucket < lastEmittedBucket && !emittedBuckets.has(bucket)) {
+    // C′, REFINED TWICE (fix round 1, then fix round 2): count a backward
+    // bucket ONLY when it was NEVER emitted before (actual data loss,
+    // never a routine tick that merely re-visits a bucket the healthy
+    // climb already passed through — the 0x0033-lag artifact this
+    // predicate's own doc comment traces) AND it lies ABOVE this run's
+    // own first-ever emitted bucket (fix round 2: a below-first bucket is
+    // outside the series' span entirely — a stale/pre-session reading,
+    // never a mid-run gap — so it is excluded even though it, too, was
+    // technically never emitted). A backward bucket is still dropped
+    // either way, never appended: the samples array stays a valid
+    // non-decreasing `t` sequence regardless.
+    if (
+      bucket < lastEmittedBucket &&
+      !emittedBuckets.has(bucket) &&
+      firstEmittedBucket !== null &&
+      bucket > firstEmittedBucket
+    ) {
       backwardBucketCount++;
     }
 
@@ -351,6 +386,7 @@ export function createSeriesRecorder(): SeriesRecorder {
     if (bucket <= lastEmittedBucket) return;
     lastEmittedBucket = bucket;
     emittedBuckets.add(bucket);
+    if (firstEmittedBucket === null) firstEmittedBucket = bucket;
 
     if (samples.length >= SERIES_SAMPLE_CAP) {
       truncated = true;

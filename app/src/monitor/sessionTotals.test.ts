@@ -2088,7 +2088,7 @@ describe("createSeriesRecorder — series-truth Task 3: the exit-7 oracle, real 
           h,
           {
             elapsed: t,
-            distance: round1((t / 56.1) * 250.3),
+            distance: round1((t / 56.2) * 250.3),
             state: WORKOUTSTATE_INTERVALWORKDISTANCE,
             workoutDurationType: 128,
           },
@@ -2193,6 +2193,117 @@ describe("createSeriesRecorder — series-truth Task 3: the exit-7 oracle, real 
       expect(rec.backwardBucketCount()).toBe(0);
     },
   );
+});
+
+// ---------------------------------------------------------------------------
+// series-truth design spec §B′ (fix round 2, controller review Important
+// 1) — the recorder's disclosed bounded edge, PINNED, not merely asserted
+// unreachable. `driver.ts`'s own refused-open guard mirrors `intervalIndex`
+// back onto the open key ONLY for states 8/9 (the ephemeral work->rest
+// transition); outside those two states the mirror is deliberately UNGATED
+// (`driver.ts`'s own comment: unconditional mirroring there "corrupted an
+// otherwise-correct countdown/target with no wire fact supporting it"),
+// so a genuinely NEW interval whose FIRST OBSERVED tick already collides
+// with a stale, gap-truncated register — exactly the shape
+// `driver.test.ts`'s "a reconnect timeline SPANNING a boundary" regression
+// exercises — leaves `intervalIndex` rising (the TRUE interval identity)
+// while `attributedIntervalIndex` stays folded on the still-open key (the
+// session accumulator's own accepted compromise). `seriesRecorder`, keying
+// on attribution alone, inherits exactly that compromise: the series
+// max-merges the new interval's own readings into the PRIOR key, short by
+// the whole gap — the SAME undercount the session accumulator itself
+// reports, "visible against the machine's own totals" (spec §B′). This is
+// the "one-deriver trade James accepted (consistent-with-the-accumulator
+// over independently-diverging)" the spec names — pinned here, never
+// described as unreachable.
+// ---------------------------------------------------------------------------
+
+describe("createSeriesRecorder — series-truth Task 3 fix round 2: the recorder's disclosed bounded edge, pinned as the accepted one-deriver cost (spec §B′)", () => {
+  it("a reconnect-spanning-shaped tick (post-gap first observation landing at elapsed == the open key's own register, state 4 — outside the 8/9 mirror) makes intervalIndex and attributedIntervalIndex DISAGREE through the real driver, and the recorder's series max-merges the new interval into the prior key, short by the gap, matching the accumulator exactly", async () => {
+    const h = await programmed(TWO_INTERVAL_NO_REST_PROGRAM);
+
+    // Interval 1's own final observed reading — key 0's register.
+    const f1 = await tick(
+      h,
+      { elapsed: 60, distance: 300, state: WORKOUTSTATE_INTERVALWORKTIME },
+      0,
+    );
+    expect(f1.intervalIndex).toBe(0);
+    expect(f1.attributedIntervalIndex).toBe(0);
+
+    // THE RECONNECT-SPANNING TICK: interval 2's own first observed
+    // reading already reads elapsed=60 — EQUAL to key 0's own register
+    // (not less), the guard's own strict-`<` boundary — and count has
+    // already advanced to 1 (the machine's own genuinely correct new
+    // index; no poison, no wire lie). `toProgramIndex(1, "rowing", 2)`
+    // resolves 1 (identity — state 4 is a plain rowing tick, not the
+    // ephemeral 8/9 transition), a key `session.seen` does not hold —
+    // the guard refuses to open it (elapsed 60 is not STRICTLY before
+    // key 0's own register, 60) and folds into key 0 instead. Because
+    // this refusal is on the disclosed bounded edge (state 4, not 8/9),
+    // the mirror does NOT fire: `intervalIndex` keeps its own,
+    // un-mirrored, TRUE value (1) while `attributedIntervalIndex`
+    // stays on the folded key (0) — the disagreement.
+    const f2 = await tick(
+      h,
+      { elapsed: 60, distance: 310, state: WORKOUTSTATE_INTERVALWORKTIME },
+      1,
+    );
+    expect(f2.intervalIndex).toBe(1); // rises — the TRUE interval identity
+    expect(f2.attributedIntervalIndex).toBe(0); // stays — the accumulator's own compromise
+
+    // A further interval-2 tick, still folding (silently — the refusal
+    // log is first-sighting-only, `driver.ts`'s own `refusedKeysLogged`).
+    const f3 = await tick(h, {
+      elapsed: 65,
+      distance: 330,
+      state: WORKOUTSTATE_INTERVALWORKTIME,
+    });
+    expect(f3.intervalIndex).toBe(1);
+    expect(f3.attributedIntervalIndex).toBe(0);
+    // The accumulator's OWN accepted undercount: 65, not the true
+    // 60 (interval 1) + 65 (interval 2's own progress since ITS OWN
+    // start) = 125 — short by exactly interval 1's own full duration,
+    // the "short by the whole skipped interval" cost register maps
+    // have always carried on this disclosed edge.
+    expect(f3.sessionElapsedSeconds).toBeCloseTo(65, 1);
+    expect(f3.sessionDistanceMeters).toBeCloseTo(330, 1);
+
+    const rec = createSeriesRecorder();
+    rec.onFrame(f1);
+    rec.onFrame(f2);
+    rec.onFrame(f3);
+    const series = rec.snapshot()!;
+
+    // The series matches the accumulator's own compromise EXACTLY — the
+    // same undercount, never an independently-diverging one (spec §B′'s
+    // own "consistent-with-the-accumulator over independently-
+    // diverging" framing). Key never genuinely changes (attribution
+    // stays 0 throughout), so this is the LAST bucket, at f3's own raw
+    // elapsed/distance (base = 0, nothing below key 0).
+    const last = series.samples[series.samples.length - 1]!;
+    expect(last.t / 10).toBeCloseTo(f3.sessionElapsedSeconds!, 1);
+    expect(last.d / 10).toBeCloseTo(f3.sessionDistanceMeters!, 1);
+    expect(last.t / 10).toBeCloseTo(65, 1);
+    expect(last.d / 10).toBeCloseTo(330, 1);
+
+    // Short by the gap, spelled out: the true combined total (interval
+    // 1's own 60s plus interval 2's own 65s-since-its-start) is 125;
+    // the recorder (like the accumulator) reports 65 — a 60s shortfall,
+    // exactly interval 1's own full duration, permanently lost to this
+    // one run (never self-correcting — every later interval-2 tick
+    // folds the same way, since key 1 never opens).
+    const trueCombinedSeconds = f1.elapsedSeconds + f3.elapsedSeconds;
+    expect(trueCombinedSeconds - last.t / 10).toBeCloseTo(f1.elapsedSeconds, 1);
+
+    // Never a C′ alarm: the key never actually MOVES (attribution stays
+    // 0 the whole run), so there is no backward bucket to observe —
+    // this is a SILENT undercount, exactly the accepted cost's own
+    // shape (a loud C′ entry would be the wrong signal here; nothing
+    // was lost from an already-open span, the span itself just never
+    // opened).
+    expect(rec.backwardBucketCount()).toBe(0);
+  });
 });
 
 describe("session accumulator: splitAvgPace provenance is LEVEL-triggered (interval-referent-monotone fix round 1, finding B)", () => {

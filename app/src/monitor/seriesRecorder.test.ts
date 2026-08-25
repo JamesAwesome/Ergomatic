@@ -1090,18 +1090,30 @@ describe("createSeriesRecorder — trace-truth Task 2: rests are marked (real ca
 // the pre-this-task recorder and came back GREEN — Task 2's own driver fix
 // (the state 8/9 mirror onto `intervalIndex` itself, not just onto the new
 // `attributedIntervalIndex` field) already keeps the two fields in
-// agreement for every real capture this repo has, including the
-// synthesized exit-7 replay, so that oracle alone cannot exercise this
-// task's actual change (a supplement and a full replacement produce
+// agreement on THAT ONE fixture, so that oracle alone cannot exercise this
+// task's actual change there (a supplement and a full replacement produce
 // identical output whenever the two source fields never disagree). This
 // is FINDING-WORTHY (reported to task-3-report.md) and is exactly why the
 // controller's own fallback instruction exists: the test below constructs
-// the one shape the oracle cannot — a frame where `intervalIndex` and
-// `attributedIntervalIndex` genuinely disagree, a shape Task 2's driver
-// fix makes unreachable in production but which this module's OWN
-// contract ("key on attribution alone, never intervalIndex — spec §B′,
-// delete don't supplement") must still honor. RED against the pre-this-
-// task recorder (which follows `intervalIndex`); GREEN after.
+// a frame where `intervalIndex` and `attributedIntervalIndex` genuinely
+// disagree — a shape that Task 2's driver fix makes unreachable ONLY for
+// the state-8/9 mirror gate; it is NOT unreachable in general (fix round 2
+// correction, controller review Important 1). `driver.ts`'s own
+// refused-open guard is deliberately UNGATED outside states 8/9 (its own
+// comment: mirroring `intervalIndex` there was "corrupting an otherwise-
+// correct countdown/target with no wire fact supporting it"), so on that
+// disclosed bounded edge — a genuinely NEW interval whose first observed
+// tick already collides with a stale, gap-truncated register (the exact
+// shape `driver.test.ts`'s "a reconnect timeline SPANNING a boundary"
+// regression exercises) — `intervalIndex` legitimately keeps rising while
+// `attributedIntervalIndex` stays folded on the still-open key. Spec §B′
+// records this as the ACCEPTED one-deriver cost, not a hypothetical: this
+// module's own contract ("key on attribution alone, never intervalIndex —
+// delete, don't supplement") must still honor it, both here (a synthetic
+// disagreement, isolating the deletion itself) and on the edge's own real
+// shape (this file's own "the recorder's disclosed bounded edge" describe
+// block below, driven through the real driver). RED against the pre-this-
+// task recorder (which followed `intervalIndex`); GREEN after.
 // ---------------------------------------------------------------------
 
 describe("createSeriesRecorder — series-truth Task 3: attributedIntervalIndex consumption (spec §B′)", () => {
@@ -1274,6 +1286,45 @@ describe("createSeriesRecorder — series-truth Task 3: backwardBucketCount (spe
     expect(rec.backwardBucketCount()).toBe(1);
   });
 
+  // Fix round 2 (controller review, Important 2): the never-emitted test
+  // alone cannot tell "a genuine mid-run gap" from "a stale/pre-session
+  // reading landing before the run's own first sample" — both are
+  // buckets that were technically never emitted. The exit-7 ring's own
+  // first rowing frame is elapsed=1.02 (bucket 1, never bucket 0), so a
+  // real run's first-ever emitted bucket is routinely NOT 0. This test
+  // starts a run at bucket 1 (never bucket 0), then feeds a stale tick
+  // reading elapsed≈0 — the "below-first" case, correctly excluded.
+  it("a run whose first-ever emitted bucket is NOT 0 (the exit-7 ring's own shape) does not count a stale tick landing BELOW that first bucket — outside the series' span, not a gap it skipped", () => {
+    const rec = createSeriesRecorder();
+    // First-ever sample: elapsed=1.02, bucket 1 (never bucket 0) — the
+    // ring's own first rowing frame shape.
+    rec.onFrame(
+      frame({
+        attributedIntervalIndex: 0,
+        elapsedSeconds: 1.02,
+        distanceMeters: 3,
+      }),
+    );
+    rec.onFrame(
+      frame({
+        attributedIntervalIndex: 0,
+        elapsedSeconds: 50,
+        distanceMeters: 200,
+      }),
+    );
+    // A stale/reconnect artifact reading elapsed≈0 — bucket 0 was NEVER
+    // emitted (the run started at bucket 1), but bucket 0 is BELOW the
+    // run's own first-ever emitted bucket (1), so this is not loss.
+    rec.onFrame(
+      frame({
+        attributedIntervalIndex: 0,
+        elapsedSeconds: 0.3,
+        distanceMeters: 1,
+      }),
+    );
+    expect(rec.backwardBucketCount()).toBe(0);
+  });
+
   it("ordinary same-bucket decimation is never counted as backward — `bucket < lastEmittedBucket`, never `<=` (spec §C′'s own original correction, still true after the refinement)", () => {
     const rec = createSeriesRecorder();
     rec.onFrame(frame({ elapsedSeconds: 10 }));
@@ -1402,24 +1453,24 @@ const SESSION_1_PROGRAM: WorkoutProgram = {
 // permanent data loss — so both captures below now measure ZERO.
 describe("createSeriesRecorder — series-truth Task 3: the two committed captures replay byte-identically (exit criterion 2)", () => {
   /** Instrumentation (exit criterion 2's own demand: green must be
-   *  distinguishable from "the new path never ran"). Two things proven
+   *  distinguishable from "the new path never ran"). Two things checked
    *  together: (1) `attributedIntervalIndex` is actually POPULATED on real
    *  driver-emitted frames from this capture (a driver that stopped
    *  emitting it would leave `definedCount` at zero — this assertion goes
    *  red the moment the field this task's whole change depends on stops
-   *  arriving); (2) it never DECREASES across the whole replay. (2) is the
-   *  sufficient condition under which the OLD `intervalIndex > currentKey`
-   *  raise and the NEW direct-attribution consumption compute the
-   *  IDENTICAL `currentKey` sequence at every tick — a monotonic
-   *  non-decreasing raise and a monotonic non-decreasing direct
-   *  assignment coincide exactly, by induction on each tick (equal or
-   *  higher: both assign the new value; never lower, by (2) itself). Both
-   *  committed captures are documented CLEAN (design spec's own
-   *  "Corollary evidence": "NEITHER is a distance-kind interval WITH a
-   *  rest" — the state-8/9 poison shape this whole design fixes never
-   *  fires on either), so this is not merely consistent with
-   *  byte-identical output, it PROVES it, without needing a second,
-   *  literal re-implementation of the deleted algorithm as an oracle. */
+   *  arriving); (2) it never DECREASES across the whole replay — CONSISTENT
+   *  WITH (not a proof of) old/new equivalence here: a monotonic
+   *  non-decreasing raise and a monotonic non-decreasing direct assignment
+   *  coincide whenever they're fed the SAME field, but this fixture's own
+   *  monotonicity says nothing about whether `intervalIndex` (the OLD
+   *  algorithm's field) and `attributedIntervalIndex` (the NEW one's) ever
+   *  disagreed on it — `sessionTotals.test.ts`'s own "the recorder's
+   *  disclosed bounded edge" describe block (fix round 2) proves directly
+   *  that they CAN, on a different real shape neither committed capture
+   *  happens to contain. The actual evidence for byte-identical output on
+   *  THESE TWO captures
+   *  is the pinned totals below, measured against the shipped pre-this-
+   *  task recorder — not an inference from monotonicity. */
   function assertConsumptionRanAndIsMonotonic(frames: MonitorFrame[]): void {
     let definedCount = 0;
     let lastAttributed = -Infinity;
@@ -1595,7 +1646,7 @@ describe("createSeriesRecorder — series-truth Task 3 fix round 1: the poisoned
         frame({
           attributedIntervalIndex: 1,
           elapsedSeconds: t,
-          distanceMeters: round1((t / 56.1) * 250.3),
+          distanceMeters: round1((t / 56.2) * 250.3),
         }),
       );
     }
@@ -1627,5 +1678,16 @@ describe("createSeriesRecorder — series-truth Task 3 fix round 1: the poisoned
     // of them) falls inside the never-emitted 68..134 gap: genuine,
     // permanent loss, all counted.
     expect(rec.backwardBucketCount()).toBe(57);
+
+    // Fix round 2 minor: even on this deliberately pathological fixture
+    // (a forward jump followed by a long backward retreat), the stored
+    // SERIES itself never regresses — every backward-landing tick is
+    // dropped, never appended, so `t` stays non-decreasing throughout.
+    // `backwardBucketCount` is a diagnostic signal; it never lets the
+    // shape of the series itself go backward.
+    const ts = rec.snapshot()!.samples.map((s) => s.t);
+    for (let i = 1; i < ts.length; i++) {
+      expect(ts[i]!).toBeGreaterThan(ts[i - 1]!);
+    }
   });
 });
