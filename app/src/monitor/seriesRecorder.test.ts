@@ -922,60 +922,64 @@ describe("createSeriesRecorder — trace-truth Task 1: the register map, driven 
     };
   }
 
-  it("continues the last key when intervalIndex goes null, never resetting accumulation", () => {
+  // series-truth Task 3 (spec §B′): the two tests below used to feed
+  // `intervalIndex` directly, exercising the OLD currentKey-raise this
+  // module deleted. Updated to `attributedIntervalIndex` (the field the
+  // module actually consumes now) — same scenario, same expected values,
+  // since the "absent/synthetic key" behavior this describe block
+  // documents carries over unchanged onto the new field (spec §B′'s own
+  // "absent continues the last key" contract).
+  it("continues the last key when attributedIntervalIndex goes absent, never resetting accumulation", () => {
     const rec = createSeriesRecorder();
     rec.onFrame(
-      frame({ intervalIndex: 0, elapsedSeconds: 10, distanceMeters: 40 }),
+      frame({
+        attributedIntervalIndex: 0,
+        elapsedSeconds: 10,
+        distanceMeters: 40,
+      }),
     );
     rec.onFrame(
-      frame({ intervalIndex: 1, elapsedSeconds: 5, distanceMeters: 20 }),
+      frame({
+        attributedIntervalIndex: 1,
+        elapsedSeconds: 5,
+        distanceMeters: 20,
+      }),
     );
     rec.onFrame(
-      frame({ intervalIndex: null, elapsedSeconds: 6, distanceMeters: 24 }),
+      frame({
+        attributedIntervalIndex: undefined,
+        elapsedSeconds: 6,
+        distanceMeters: 24,
+      }),
     );
     const last = rec.snapshot()!.samples.at(-1)!;
     expect(last.t).toBe(160); // (10 banked + 6) * 10 tenths
   });
 
-  it("accumulates under a single synthetic key when intervalIndex is null throughout", () => {
+  it("accumulates under a single synthetic key when attributedIntervalIndex is absent throughout", () => {
     const rec = createSeriesRecorder();
-    rec.onFrame(
-      frame({ intervalIndex: null, elapsedSeconds: 1, distanceMeters: 4 }),
-    );
-    rec.onFrame(
-      frame({ intervalIndex: null, elapsedSeconds: 2, distanceMeters: 8 }),
-    );
+    rec.onFrame(frame({ elapsedSeconds: 1, distanceMeters: 4 }));
+    rec.onFrame(frame({ elapsedSeconds: 2, distanceMeters: 8 }));
     expect(rec.snapshot()!.samples).toHaveLength(2); // records, does not refuse
   });
 
-  // Review finding I1 (2026-08-20): the original `[...ts].sort()` assertion
-  // was vacuous — losing monotonicity causes silent SAMPLE LOSS, not
-  // out-of-order `t` (the bucket guard eats the backward sample before it
-  // can ever appear in `ts`), so the array is trivially sorted either way.
-  // Reproduced: mutating the guard to `if (f.intervalIndex !== null)`
-  // (dropping the `> currentKey` monotonic check) makes this scenario
-  // yield `ts = [100, 150]` — TWO samples, the third silently swallowed —
-  // and `[...ts].sort()` still passes on two elements. Asserting the exact
-  // array closes that gap: a lost sample changes the LENGTH, not just the
-  // order.
-  it("never lets a backward key move the cumulative clock backwards", () => {
-    const rec = createSeriesRecorder();
-    rec.onFrame(
-      frame({ intervalIndex: 0, elapsedSeconds: 10, distanceMeters: 40 }),
-    );
-    rec.onFrame(
-      frame({ intervalIndex: 1, elapsedSeconds: 5, distanceMeters: 20 }),
-    );
-    rec.onFrame(
-      frame({ intervalIndex: 0, elapsedSeconds: 7, distanceMeters: 28 }),
-    );
-    const ts = rec.snapshot()!.samples.map((s) => s.t);
-    // (10 banked) + 5 = 150 tenths at the second frame; the third frame's
-    // OWN key stays 1 (monotonic — a raw index of 0 cannot move the
-    // current key backward), so it updates key 1's register to
-    // max(5,7)=7 and wins a NEW bucket at (10 banked) + 7 = 170 tenths.
-    expect(ts).toStrictEqual([100, 150, 170]);
-  });
+  // series-truth Task 3 (spec §B′/§C′): this describe block used to carry
+  // a test named "never lets a backward key move the cumulative clock
+  // backwards", asserting the OLD forced-monotonic `currentKey` guarantee
+  // (a raw `intervalIndex` regression could never move the key
+  // backward). That guarantee is DELETED, not preserved under a new field
+  // name: this module now trusts `attributedIntervalIndex` outright, with
+  // no forward-only clamp of its own (spec §B′: "one deriver in the
+  // system" — re-clamping here would be exactly the supplementing the
+  // spec forbids), so a backward attribution DOES move the cumulative
+  // clock backward. The consequence is observed, not prevented: C′'s
+  // `backwardBucketCount` (this file's own "series-truth Task 3:
+  // backwardBucketCount" describe block, "a forced strictly-backward work
+  // clock ... counts exactly one backward bucket and drops the sample,
+  // never appends it") covers this exact scenario and its own sample-drop
+  // guarantee — the array-identity gap review finding I1 originally
+  // closed (a lost sample changes the LENGTH, not just the order) is
+  // covered there via the explicit before/after length comparison.
 });
 
 // ---------------------------------------------------------------------
@@ -1074,5 +1078,345 @@ describe("createSeriesRecorder — trace-truth Task 2: rests are marked (real ca
     expect(Object.keys(samples.find((s) => s.r === undefined)!)).not.toContain(
       "r",
     );
+  });
+});
+
+// ---------------------------------------------------------------------
+// series-truth design spec §B′/§C′ (task-3-brief.md) — the recorder
+// consumes `attributedIntervalIndex` and DELETES its own key derivation.
+//
+// Controller pre-flight ruling, carried out: the full exit-7 oracle
+// (`sessionTotals.test.ts`, "the exit-7 oracle") was run RED-FIRST against
+// the pre-this-task recorder and came back GREEN — Task 2's own driver fix
+// (the state 8/9 mirror onto `intervalIndex` itself, not just onto the new
+// `attributedIntervalIndex` field) already keeps the two fields in
+// agreement for every real capture this repo has, including the
+// synthesized exit-7 replay, so that oracle alone cannot exercise this
+// task's actual change (a supplement and a full replacement produce
+// identical output whenever the two source fields never disagree). This
+// is FINDING-WORTHY (reported to task-3-report.md) and is exactly why the
+// controller's own fallback instruction exists: the test below constructs
+// the one shape the oracle cannot — a frame where `intervalIndex` and
+// `attributedIntervalIndex` genuinely disagree, a shape Task 2's driver
+// fix makes unreachable in production but which this module's OWN
+// contract ("key on attribution alone, never intervalIndex — spec §B′,
+// delete don't supplement") must still honor. RED against the pre-this-
+// task recorder (which follows `intervalIndex`); GREEN after.
+// ---------------------------------------------------------------------
+
+describe("createSeriesRecorder — series-truth Task 3: attributedIntervalIndex consumption (spec §B′)", () => {
+  function frame(over: Partial<MonitorFrame> = {}): MonitorFrame {
+    return {
+      elapsedSeconds: 0,
+      distanceMeters: 0,
+      sessionElapsedSeconds: 0,
+      sessionDistanceMeters: 0,
+      currentSplit: 120,
+      spm: 20,
+      heartRateBpm: null,
+      rowingActive: true,
+      splitAvgPace: null,
+      restSeconds: 0,
+      intervalIndex: null,
+      intervalRemaining: null,
+      intervalAccrued: null,
+      state: "rowing",
+      ...over,
+    };
+  }
+
+  it("attribution wins over a disagreeing intervalIndex — the shape the exit-7 oracle alone cannot exercise (RED before this task's change, GREEN after)", () => {
+    const rec = createSeriesRecorder();
+    rec.onFrame(
+      frame({
+        intervalIndex: 0,
+        attributedIntervalIndex: 0,
+        elapsedSeconds: 10,
+        distanceMeters: 40,
+      }),
+    );
+    // The disagreement: intervalIndex says "advance to 1" — exactly what
+    // the OLD `intervalIndex > currentKey` raise would have keyed on —
+    // while attribution says "still key 0", the driver's own resolved
+    // key. The recorder must trust attribution exclusively.
+    rec.onFrame(
+      frame({
+        intervalIndex: 1,
+        attributedIntervalIndex: 0,
+        elapsedSeconds: 15,
+        distanceMeters: 60,
+      }),
+    );
+    const last = rec.snapshot()!.samples.at(-1)!;
+    // Attribution wins: key stays 0, register 0 grows to max(10,15)=15,
+    // no lower key to fold in — t=150 (15.0s), d=600 (60.0m). The OLD
+    // derivation's answer was t=250 (25.0s: currentKey raised to 1, base
+    // = key 0's own 10s, + this frame's own 15s).
+    expect(last.t).toBe(150);
+    expect(last.d).toBe(600);
+  });
+
+  it("an absent attributedIntervalIndex continues the last key (only non-driver fixtures produce this — the field's own doc comment)", () => {
+    const rec = createSeriesRecorder();
+    rec.onFrame(
+      frame({
+        attributedIntervalIndex: 1,
+        elapsedSeconds: 20,
+        distanceMeters: 80,
+      }),
+    );
+    rec.onFrame(
+      frame({
+        attributedIntervalIndex: undefined,
+        elapsedSeconds: 25,
+        distanceMeters: 100,
+      }),
+    );
+    const last = rec.snapshot()!.samples.at(-1)!;
+    // Key stays 1 (continued, not reset) — base is the sum of registers
+    // BELOW 1, which is empty (key 0 was never opened), so t is this
+    // frame's own raw elapsed alone: 250 (25.0s).
+    expect(last.t).toBe(250);
+  });
+});
+
+describe("createSeriesRecorder — series-truth Task 3: backwardBucketCount (spec §C′)", () => {
+  function frame(over: Partial<MonitorFrame> = {}): MonitorFrame {
+    return {
+      elapsedSeconds: 0,
+      distanceMeters: 0,
+      sessionElapsedSeconds: 0,
+      sessionDistanceMeters: 0,
+      currentSplit: 120,
+      spm: 20,
+      heartRateBpm: null,
+      rowingActive: true,
+      splitAvgPace: null,
+      restSeconds: 0,
+      intervalIndex: null,
+      intervalRemaining: null,
+      intervalAccrued: null,
+      state: "rowing",
+      ...over,
+    };
+  }
+
+  it("a forced strictly-backward work clock (attribution genuinely reverses) counts exactly one backward bucket and drops the sample, never appends it", () => {
+    const rec = createSeriesRecorder();
+    rec.onFrame(
+      frame({
+        attributedIntervalIndex: 1,
+        elapsedSeconds: 50,
+        distanceMeters: 200,
+      }),
+    );
+    const before = rec.snapshot()!.samples.length;
+    rec.onFrame(
+      frame({
+        attributedIntervalIndex: 0,
+        elapsedSeconds: 5,
+        distanceMeters: 20,
+      }),
+    );
+    const after = rec.snapshot()!.samples;
+    expect(after.length).toBe(before); // dropped, not appended
+    expect(rec.backwardBucketCount()).toBe(1);
+  });
+
+  it("ordinary same-bucket decimation is never counted as backward — the strict `<` predicate, never `<=` (spec §C′'s own correction of the original, over-firing predicate)", () => {
+    const rec = createSeriesRecorder();
+    rec.onFrame(frame({ elapsedSeconds: 10 }));
+    rec.onFrame(frame({ elapsedSeconds: 10.4 })); // same bucket, first-frame-wins
+    expect(rec.snapshot()!.samples).toHaveLength(1);
+    expect(rec.backwardBucketCount()).toBe(0);
+  });
+
+  it("a genuine forward advance is never counted as backward", () => {
+    const rec = createSeriesRecorder();
+    rec.onFrame(frame({ elapsedSeconds: 0 }));
+    rec.onFrame(frame({ elapsedSeconds: 5 }));
+    expect(rec.backwardBucketCount()).toBe(0);
+  });
+
+  it("repeated backward buckets each count once, independently", () => {
+    const rec = createSeriesRecorder();
+    rec.onFrame(
+      frame({
+        attributedIntervalIndex: 2,
+        elapsedSeconds: 80,
+        distanceMeters: 300,
+      }),
+    );
+    rec.onFrame(
+      frame({
+        attributedIntervalIndex: 1,
+        elapsedSeconds: 10,
+        distanceMeters: 40,
+      }),
+    ); // backward: bucket 10 < 80
+    rec.onFrame(
+      frame({
+        attributedIntervalIndex: 0,
+        elapsedSeconds: 5,
+        distanceMeters: 20,
+      }),
+    ); // backward again: bucket 5 < 80 (lastEmittedBucket unchanged by the drop above)
+    expect(rec.backwardBucketCount()).toBe(2);
+  });
+
+  it("starts at zero — a healthy run with no attribution reversal reports zero, never undefined or NaN", () => {
+    const rec = createSeriesRecorder();
+    expect(rec.backwardBucketCount()).toBe(0);
+    rec.onFrame(frame({ elapsedSeconds: 3 }));
+    expect(rec.backwardBucketCount()).toBe(0);
+  });
+});
+
+/** 2x250m r0, walk-2026-08-16's own keystone capture — `registerReplay.
+ *  test.ts`'s own `SESSION_1_PROGRAM`, duplicated here per this file's own
+ *  established convention (each describe block owns its own program
+ *  consts; `STEP_2_PROGRAM` above is a DIFFERENT capture, walk-2026-08-17's
+ *  step-2, that happens to share the same program shape). */
+const SESSION_1_PROGRAM: WorkoutProgram = {
+  intervals: [
+    {
+      type: "work",
+      kind: "distance",
+      value: 250,
+      targetSplit: 129,
+      displaySpm: null,
+      restSeconds: 0,
+    },
+    {
+      type: "work",
+      kind: "distance",
+      value: 250,
+      targetSplit: 129,
+      displaySpm: null,
+      restSeconds: 0,
+    },
+  ],
+};
+
+// FINDING (task-3-report.md carries the full evidence): exit criterion 3's
+// own wording ("ZERO on the clean replays") is CONTRADICTED by both
+// committed captures. Measured this task session: session-1-keystone
+// reports `backwardBucketCount() === 1`, session-2-wu-4unequal reports 18
+// — not zero. Root cause, traced to the exact frames (not a bug in this
+// task's own predicate): a REST boundary's first observed post-reset tick
+// routinely arrives with `attributedIntervalIndex` UNCHANGED for one more
+// tick than the raw elapsed/distance reset already happened — the same
+// "0x0033 lags 0x0031" skew this codebase's own driver-side guards (the
+// stale-count rest clamp, the open-on-reset guard) exist to protect the
+// REGISTER against. `session-2-wu-4unequal.jsonl` frame 73 is the clearest
+// case: frames 60-72 climb 23.17s->29.25s under key 0 (interval 0 nearing
+// its own 100m target); frame 73 reads elapsed=0/distance=0 — a genuine
+// wire reset — but `attributedIntervalIndex` is STILL 0 for that one tick
+// (frame 74 is the first to read 1). The REGISTER is unharmed (max-merge
+// keeps key 0 at its already-recorded 29.25s peak), so the STORED SERIES
+// is unaffected — confirmed below: both captures' sample counts and final
+// t/d are IDENTICAL to the values measured against the pre-this-task
+// recorder (this is exit criterion 2, and it holds). But the per-tick
+// WORK CLOCK this recorder computes for that one lagging tick
+// (`baseSeconds + f.elapsedSeconds`, using the frame's own raw reading,
+// not the register's max) genuinely reads a smaller value than the bucket
+// already emitted — exactly what `backwardBucketCount` is defined to
+// count (spec §C′'s own predicate, implemented in `seriesRecorder.ts`
+// unchanged from this literal description). This is NOT this task's own
+// defect: the pre-existing `bucket <= lastEmittedBucket` guard already
+// silently absorbed this identical case before this task — C′ only makes
+// it COUNTED, for the first time, and what it counts turns out to include
+// this routine boundary-lag artifact alongside the pathological
+// attribution-poison shape the design's own narrative motivates. Reported
+// to the controller/Task 4 rather than worked around: Task 4's hook fires
+// a ring entry whenever this count is nonzero, and on this evidence that
+// will be EVERY real rest boundary, not the rare pathological event the
+// design's prose describes — a threshold or a narrower predicate may be
+// warranted at that layer, but rewriting §C′'s literal definition here
+// would be silently overriding a spec decision, not implementing it.
+describe("createSeriesRecorder — series-truth Task 3: the two committed captures replay byte-identically (exit criterion 2)", () => {
+  /** Instrumentation (exit criterion 2's own demand: green must be
+   *  distinguishable from "the new path never ran"). Two things proven
+   *  together: (1) `attributedIntervalIndex` is actually POPULATED on real
+   *  driver-emitted frames from this capture (a driver that stopped
+   *  emitting it would leave `definedCount` at zero — this assertion goes
+   *  red the moment the field this task's whole change depends on stops
+   *  arriving); (2) it never DECREASES across the whole replay. (2) is the
+   *  sufficient condition under which the OLD `intervalIndex > currentKey`
+   *  raise and the NEW direct-attribution consumption compute the
+   *  IDENTICAL `currentKey` sequence at every tick — a monotonic
+   *  non-decreasing raise and a monotonic non-decreasing direct
+   *  assignment coincide exactly, by induction on each tick (equal or
+   *  higher: both assign the new value; never lower, by (2) itself). Both
+   *  committed captures are documented CLEAN (design spec's own
+   *  "Corollary evidence": "NEITHER is a distance-kind interval WITH a
+   *  rest" — the state-8/9 poison shape this whole design fixes never
+   *  fires on either), so this is not merely consistent with
+   *  byte-identical output, it PROVES it, without needing a second,
+   *  literal re-implementation of the deleted algorithm as an oracle. */
+  function assertConsumptionRanAndIsMonotonic(frames: MonitorFrame[]): void {
+    let definedCount = 0;
+    let lastAttributed = -Infinity;
+    for (const f of frames) {
+      if (f.attributedIntervalIndex !== undefined) {
+        definedCount++;
+        expect(f.attributedIntervalIndex).toBeGreaterThanOrEqual(
+          lastAttributed,
+        );
+        lastAttributed = f.attributedIntervalIndex;
+      }
+    }
+    expect(definedCount).toBeGreaterThan(0);
+  }
+
+  it("session-1-keystone-2x250r0.jsonl: attribution is populated and monotonic (proving old/new equivalence), and the pinned totals are unchanged from the pre-this-task recorder", async () => {
+    const frames = await loadCaptureFrames(
+      "docs/monitor/sessions/walk-2026-08-16/session-1-keystone-2x250r0.jsonl",
+      SESSION_1_PROGRAM,
+    );
+    assertConsumptionRanAndIsMonotonic(frames);
+    const rec = createSeriesRecorder();
+    for (const f of frames) rec.onFrame(f);
+    const snap = rec.snapshot()!;
+    // Pinned against the SHIPPED pre-this-task recorder, measured this
+    // task session before the deletion (task-3-report.md carries the
+    // probe): 138 samples, last t/d 137.3s/497.4m — IDENTICAL to the
+    // post-deletion recorder (exit criterion 2 holds).
+    expect(snap.samples).toHaveLength(138);
+    expect(snap.samples.at(-1)?.t).toBe(1373);
+    expect(snap.samples.at(-1)?.d).toBe(4974);
+    // See this describe block's own FINDING comment above: 1, not 0 — the
+    // boundary-lag artifact fires once on this capture's own single
+    // interval boundary (restSeconds: 0 throughout, so this is the
+    // work->work reset itself, not a rest).
+    expect(rec.backwardBucketCount()).toBe(1);
+  });
+
+  it("session-2-wu-4unequal.jsonl: attribution is populated and monotonic (proving old/new equivalence), and the pinned totals are unchanged from the pre-this-task recorder", async () => {
+    const frames = await loadCaptureFrames(
+      "docs/monitor/sessions/walk-2026-08-16/session-2-wu-4unequal.jsonl",
+      SESSION_2_PROGRAM,
+    );
+    assertConsumptionRanAndIsMonotonic(frames);
+    const rec = createSeriesRecorder();
+    for (const f of frames) rec.onFrame(f);
+    const snap = rec.snapshot()!;
+    // Pinned against the SHIPPED pre-this-task recorder, measured this
+    // task session before the deletion: 419 samples, last t/d
+    // 419.5s/1598.8m — matches this file's own "trace-truth Task 2"
+    // describe block above (419 samples, same capture+program), and
+    // IDENTICAL to the post-deletion recorder (exit criterion 2 holds).
+    expect(snap.samples).toHaveLength(419);
+    expect(snap.samples.at(-1)?.t).toBe(4195);
+    expect(snap.samples.at(-1)?.d).toBe(15988);
+    // See this describe block's own FINDING comment above: 18, not 0 —
+    // this capture crosses 4 real interval boundaries (5 intervals, 3
+    // rest-bearing per SESSION_2_PROGRAM plus the wu's own reset), each a
+    // chance for the boundary-lag artifact to fire, sometimes more than
+    // once per boundary (frame 73's single-tick lag vs. the 12-tick run
+    // at frames 239-250, where the rest's own advancing elapsed clock
+    // read BELOW an already-emitted bucket for several consecutive ticks
+    // before catching back up).
+    expect(rec.backwardBucketCount()).toBe(18);
   });
 });

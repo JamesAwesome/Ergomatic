@@ -49,25 +49,60 @@
 // names the identical class of cost for the fold ITS OWN session register
 // map replaced, "an exact 2.00x, six times in the record").
 //
-// This module now keys on `MonitorFrame.intervalIndex` instead — the
-// EMITTED value (post stale-count-clamp, `driver.ts`'s own SESSION
-// REGISTER MAP comment), never `toProgramIndex`'s raw output (the clamp
-// can RAISE it). No edge is detected, so none can be missed: a register
-// per key, each merged by MAXIMUM (never last-write-wins — a `(0,0)` frame
-// arriving late under an already-completed key cannot poison it, because
-// `max(existing, 0) === existing`, the identical reasoning `driver.ts:1072`
-// documents for its own session register map). The work clock is the
-// current key's own live register value plus the sum of every LOWER key's
-// final register — i.e. every completed interval's own final reading,
-// folded once each, in order.
+// This module used to key on the driver's plain, un-attributed per-frame
+// interval field itself, re-doing a bounded version of the driver's OWN
+// open-on-reset guard from a field that cannot carry the guard's
+// discriminating signal (series-truth design spec §B′): `MonitorFrame`'s
+// six-valued `state` + `rawIntervalCount` make
+// a poison tick and an honest post-gap first tick INDISTINGUISHABLE at
+// this seam, so any guard built here is either the driver's own guard,
+// copy-pasted (a second place to keep in sync, forever), or a strictly
+// weaker one. `docs/monitor/sessions/walk-2026-08-24/phone-exit7-ring.json`
+// (a 2×250m r60 row) is the capture that proved the weaker copy wrong: the
+// driver's own guard correctly refused to open the poisoned key, but this
+// module's independent derivation opened it anyway and inflated the work
+// clock by the finishing interval's own register — 56.1 real seconds of
+// the second interval never reached the stored series.
 //
-// THE CURRENT KEY is monotonic non-decreasing (spec §2): `max(seenKeys)`,
-// the same floor `driver.ts`'s own `activeKey` uses. A NULL index
-// CONTINUES the last key rather than resetting or falling back to
-// edge-detection (spec §2, explicitly FORBIDDEN) — before any non-null
-// index has ever been seen, the key is already the synthetic `0`, so an
-// all-null frame stream (a driver with no armed program, a JustRow) still
-// accumulates under one register rather than recording nothing.
+// FIX (spec §B′, "delete, don't supplement"): `MonitorFrame` gained an
+// additive `attributedIntervalIndex` field (`domain/monitor/types.ts`) —
+// the exact key `src/monitor/driver.ts`'s own register-map fold resolved
+// for this tick, AFTER its open-on-reset guard, mirrored onto every
+// emitted frame (`driver.ts`'s `attributedIntervalIndex: activeKey ??
+// undefined`). This module now keys ENTIRELY on that field. No edge is
+// detected, so none can be missed: a register per key, each merged by
+// MAXIMUM (never last-write-wins — a `(0,0)` frame arriving late under an
+// already-completed key cannot poison it, because `max(existing, 0) ===
+// existing`, the identical reasoning `driver.ts:1072` documents for its
+// own session register map). The work clock is the current key's own live
+// register value plus the sum of every LOWER key's final register — i.e.
+// every completed interval's own final reading, folded once each, in
+// order.
+//
+// THE CURRENT KEY directly follows `attributedIntervalIndex` (present ->
+// `currentKey = f.attributedIntervalIndex`, no comparison against the
+// prior value) — this module inherits the driver's OWN monotonicity
+// guarantee rather than re-deriving or re-checking one of its own (one
+// deriver in the system, spec §B′'s own framing). ABSENT continues the
+// last key rather than resetting (only non-driver test fixtures ever
+// produce an absent field on an open run — driver-emitted frames always
+// carry it once a run is open); before any key has ever been seen, the
+// key is already the synthetic `0`, so an all-absent frame stream (a
+// driver with no armed program, a JustRow) still accumulates under one
+// register rather than recording nothing.
+//
+// Trusting the driver's attribution outright means this module can no
+// longer assume the key only ever moves forward — C′ (spec §C′) is the
+// consequence: a bucket computed from a genuinely SMALLER work clock than
+// the highest bucket already emitted is counted (`backwardBucketCount`,
+// exposed on the recorder's own result, never on `SeriesData` — the
+// server route's reconstruction would silently drop it) and the sample is
+// still dropped, exactly as ordinary same-bucket decimation already drops
+// its non-winning frames. The two are NOT the same signal: decimation
+// (`bucket === lastEmittedBucket`) is the hot path, 80-90% of healthy iOS
+// frames (measured 2.23 frames/s desktop, 90-180ms iOS); counting it would
+// wire an alarm to normal operation. Only `bucket < lastEmittedBucket` —
+// the work clock actually moving backward — is counted.
 
 import type { MonitorFrame } from "../../domain/monitor/types.js";
 
@@ -182,6 +217,15 @@ export interface SeriesRecorder {
   onFrame(f: MonitorFrame): void;
   snapshot(): SeriesData | undefined;
   stop(): void;
+  /** series-truth spec §C′: the count of samples whose own work-clock
+   *  bucket read STRICTLY LESS than the highest bucket already emitted —
+   *  the work clock genuinely moving backward, never ordinary same-bucket
+   *  decimation (`===`, the hot path). Zero for the whole lifetime of a
+   *  healthy run. Deliberately absent from `SeriesData`/`snapshot()`: the
+   *  server route's own reconstruction of a stored series has no field to
+   *  carry it, so a caller that needs this reads it here, off the
+   *  recorder itself, not off a snapshot. */
+  backwardBucketCount(): number;
 }
 
 export function createSeriesRecorder(): SeriesRecorder {
@@ -193,29 +237,44 @@ export function createSeriesRecorder(): SeriesRecorder {
    *  identical shape and states the reason: "Maximum, not last-write-wins,
    *  for two independently-found reasons". A `(0,0)` frame arriving late
    *  under a completed interval's key cannot poison its register, because
-   *  `max(existing, 0) === existing`. Keyed on `MonitorFrame.intervalIndex`
-   *  — the EMITTED value, never `toProgramIndex`'s raw output (the driver's
-   *  stale-count rest clamp can RAISE it). */
+   *  `max(existing, 0) === existing`. Keyed on
+   *  `MonitorFrame.attributedIntervalIndex` — the key `driver.ts`'s own
+   *  register-map fold actually used for this tick, never re-derived here
+   *  (spec §B′: one deriver in the system). Entries are never deleted, even
+   *  if `currentKey` later moves backward (C′) — a later frame that
+   *  re-attributes forward past a key still finds that key's own register
+   *  exactly where max-merge left it. */
   const registers = new Map<number, { seconds: number; meters: number }>();
-  /** Monotonic non-decreasing (spec §2): `max(seenKeys)`, the same floor
-   *  `driver.ts`'s `activeKey` uses. A backward key would otherwise shrink
-   *  the prefix sum below and walk the cumulative clock backwards. */
+  /** Directly follows `attributedIntervalIndex` (spec §B′) — no comparison
+   *  against the prior value, no forward-only clamp. The driver's own
+   *  register-map fold already resolved the correct key for this tick,
+   *  including every guard it has (open-on-reset, the stale-count rest
+   *  clamp); re-checking or re-clamping here would be exactly the
+   *  supplementing spec §B′ forbids. This means `currentKey` is no longer
+   *  guaranteed monotonic — see `backwardBucketCount` below, the
+   *  consequence this module now has to observe rather than prevent. */
   let currentKey = 0;
   /** The highest whole work-second bucket already claimed by a sample.
    *  `-1` before the first sample so bucket 0 (the very first frame,
    *  however early) can still win. */
   let lastEmittedBucket = -1;
+  /** series-truth spec §C′ — see `SeriesRecorder.backwardBucketCount`'s own
+   *  doc comment for the full contract. */
+  let backwardBucketCount = 0;
 
   function onFrame(f: MonitorFrame): void {
     if (stopped || truncated) return;
 
-    // A null index CONTINUES the last key (spec §2) — it never starts a
-    // register and never resets accumulation. Before any non-null key has
-    // been seen, `currentKey` is already 0, so an all-null run records
-    // under one synthetic register rather than recording nothing. Falling
-    // back to edge-detection on a null key is explicitly FORBIDDEN.
-    if (f.intervalIndex !== null && f.intervalIndex > currentKey) {
-      currentKey = f.intervalIndex;
+    // ABSENT continues the last key (spec §B′, same "no opinion this
+    // tick" contract `attributedIntervalIndex`'s own doc comment states) —
+    // it never starts a register and never resets accumulation. Before
+    // any defined key has been seen, `currentKey` is already the
+    // synthetic `0`, so an all-absent run (a non-driver test fixture with
+    // no opinion on this field) records under one synthetic register
+    // rather than recording nothing. A driver-emitted frame with an open
+    // run always carries this field — see the field's own doc comment.
+    if (f.attributedIntervalIndex !== undefined) {
+      currentKey = f.attributedIntervalIndex;
     }
 
     const reg = registers.get(currentKey) ?? { seconds: 0, meters: 0 };
@@ -241,6 +300,15 @@ export function createSeriesRecorder(): SeriesRecorder {
 
     const workClockSeconds = baseSeconds + f.elapsedSeconds;
     const bucket = Math.floor(workClockSeconds + BUCKET_EPSILON_SECONDS);
+
+    // C′: count ONLY a STRICTLY backward bucket — the work clock actually
+    // moving backward, never ordinary same-bucket decimation (`===`, the
+    // hot path this recorder's whole job is to absorb silently). A
+    // backward bucket is still dropped, never appended: the samples array
+    // stays a valid non-decreasing `t` sequence either way.
+    if (bucket < lastEmittedBucket) {
+      backwardBucketCount++;
+    }
 
     // First-frame-wins: a bucket already claimed (by an earlier frame,
     // possibly a duplicate/held reading at the same underlying value —
@@ -296,5 +364,10 @@ export function createSeriesRecorder(): SeriesRecorder {
     stopped = true;
   }
 
-  return { onFrame, snapshot, stop };
+  return {
+    onFrame,
+    snapshot,
+    stop,
+    backwardBucketCount: () => backwardBucketCount,
+  };
 }
