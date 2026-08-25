@@ -2476,3 +2476,46 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   Shape correct, length inherent to a triad PR. The enforceable failures were
   CONTENT (the overclaim and the deflection), both fixed at the re-gate. Still
   James's to re-set or retire, still belongs in `CLAUDE.md`.
+
+### 2026-08-25 — RC-5: "match the PM5" resolved, and what the PM5 actually shows
+
+**Decoded from primary evidence** (three photographed View Detail screens +
+0x0039/0x003A decode of `walk-2026-08-24/phone-exit7-ring.json`):
+
+- The PM5's **Totals row is one population — work only**: time, metres and
+  `/500m` all agree by 500·t/d on their own row (124/500/2:04.0;
+  254.9/899/2:21.7).
+- **The only fused number the PM5 shows is Total Time, in the page header.**
+  Rest metres live on rest rows and in 0x003A's own `Total Rest Distance`
+  field (242 = 147+95). The machine never adds rest into a total.
+- **0x0039 offset 18-19 Avg Pace = work-only** (1240 → 124.0 s), digit-equal
+  to the screen. The PM5 HAS an average split; we assert nothing on its behalf.
+- PM5 display and C2 logbook agree (both work-only) — "match the PM5" and
+  "match the logbook" are one instruction here, not two.
+
+**PM ruling:** all three heroes work-only and mutually consistent, wall-clock
+elapsed on its own TOTAL line. A caption explaining a contradiction is a
+confession, not a fix — any hero shape that keeps two populations in one row
+fails Phase RC exit (c) by construction. Rejected the fused-TIME+DISTANCE /
+labelled-AVG-SPLIT shape on that ground (it still implies a 40.4 s/500 m gap
+on the exact piece we photographed).
+
+**Oracle lesson (#11's 2026-08-21 form, recurring):** exit-7's own table
+scored "DISTANCE 742 · TWD · MATCH" against a WIRE field the PM5 never
+displays — its screen said 500. A walk that photographs both screens can
+still compare the wrong quantity. **Ask which number is ON the screen, not
+just which number the machine emits.**
+
+**Fallback fact worth keeping:** work-only heroes need no "rows after build X"
+clause — they derive from 0x0037 actuals stored since long before the
+`machine_*` columns. Only the TOTAL line depends on rest, and programmed rest
+reproduced the PM5's Total Time exactly on both rest-bearing walks.
+
+**Rower persona (same day, independent):** first read of the current screen is
+"the app's pace calc is broken" — the division is done in five seconds, every
+time, by every rower. Wants work numbers as the piece and rest as overhead;
+calls the fused pair "useless for comparing to my Concept2 logbook". Also
+asked for: a piece ended early marked PARTIAL with no backfilled programmed
+rest, and a link-lost row that says so rather than papering the gap (both
+already shipped or queued — LINK LOST is live, PARTIAL is not: queued at
+this spec's close).
