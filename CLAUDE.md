@@ -423,6 +423,37 @@ often they recur.
     `grep "<phase>" ROADMAP.md` and got zero — the roadmap learned about
     the phase only when a gate demanded it. **The brainstorm that names a
     phase adds its ROADMAP section in the same commit as its spec.**
+18. **Opening a phase without READING the ROADMAP — and re-researching what
+    this repo already settled.** The sibling of #17, and it cost a whole
+    spec. Phase LM was opened on 2026-08-25 to fix a tester's lost workout;
+    its spec diagnosed the wrong bug, proposed a fix that could not work,
+    and scoped a PR 2 that contradicted a standing James ruling. All four
+    corrections were already in the repo: `ROADMAP.md:3271` carried the
+    real mechanism from James's own tester report the day before
+    ("still in the pre-row state with no record"); `ROADMAP.md:2095-2130`
+    carried his 2026-08-20 ruling ("CORRECT RESUME, not a background
+    mode"); `docs/superpowers/research/2026-08-20-ble-connection-management.md`
+    had already done the research, at the right LAYER; and the code
+    described its own failure in a comment
+    (`useMonitorSession.ts:988-990`). Only the antagonist caught it.
+    **Before researching anything the OS, browser or device owns, run
+    `ls docs/superpowers/research/` and `grep` the ROADMAP for the
+    symptom.** This project researches things once and then re-researches
+    them from scratch, and the second pass is always the shallower one.
+    **And name the LAYER**: Apple's Core Bluetooth background docs are
+    accurate and govern the NATIVE app, while our logging runs in a
+    WebView that WebKit throttles on rules that never read a plist key. A
+    correct citation answering the wrong layer reads exactly like
+    evidence.
+19. **Writing to the main checkout with a relative shell path.** The SDLC
+    rule requires `git rev-parse --show-toplevel` before every COMMIT, and
+    that guard works. It does not cover WRITES: the shell's cwd resets
+    between tool calls, so a `cat >>` or `>` redirect after a reset edits
+    the main checkout instead of the worktree. Happened again on
+    2026-08-25 (PR #197), the fifth stray main-checkout write, caught only
+    at `git add`. **Every shell write uses an ABSOLUTE worktree path, or a
+    `cd` in the SAME command.** Edit/Write tools take absolute paths and
+    are safe; shell redirects are not.
 
 
 ## Commands

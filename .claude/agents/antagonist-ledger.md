@@ -3059,3 +3059,97 @@ targetSplit:null}` reproduces the recorded tx exactly and `divergences` stays
 - **James's scope ruling (2026-08-25):** ship (a) rescoped + (c)
   retire-and-correct + (d) the rest-distance oracle; QUEUE (b) until a
   rest-bearing capture that survives to 0x0039 exists.
+
+## Phase LM anchor pass (TRIAD), 2026-08-25 — "when the monitor is lost, say so"
+
+- **"End with the link gone already stores `endedBy: "link-lost"`, so the label is a
+  read of a fact we have."** True — and vacuous in the flagship case, because there is
+  no record to read it off. `createMonitorRun` has ONE call site
+  (`useMonitorSession.ts:1681`), inside the `phase === "ready"` first-pull gate
+  (`state === "rowing" && rowingActive && distanceMeters > 0`, or a 5-frame streak),
+  and `closeRecord` (`:1477`) opens with `if (run === null …) return`. A rower who
+  locks the phone BEFORE the first pull never leaves `ready`, so End stores nothing at
+  all — and the manual door's save (`LogSession.tsx:1605`) posts neither `deviceName`
+  nor `endedBy`, so the stored row's `ended_by` is NULL and `buildLinkLostLine`
+  (`storedSummary.ts:882`) can never fire either. The file's OWN comment at
+  `useMonitorSession.ts:988-990` states the mechanism verbatim ("End produces a session
+  with no record and no error anywhere"), and `ROADMAP.md:3271` had already recorded it
+  from the original tester report. **Technique: for any "the record already carries X"
+  premise, find the record's CONSTRUCTOR and read its gate — not the writer of X. A
+  field's writer proves the field is set when the record exists; only the constructor
+  says whether it does. And when a spec's own cited ROADMAP section is one scroll from
+  the answer, read the section, not the anchor.**
+
+- **A spec's two-candidate dichotomy, both candidates killed by the spec's own
+  photograph.** Task 1 offered "door fallthrough" vs "`storedSummary`'s label ladder".
+  `phone-lost-saved-row.png` renders the `WORKOUT COMPLETE` eyebrow, which lives only in
+  `PostWorkoutSummary.tsx:639`, imported by exactly one file (`LogSession.tsx:44`) — the
+  LIVE summary. `storedSummary.ts` cannot produce that frame at all. And
+  `MonitorRun.deviceName` is a REQUIRED `string` (`monitorRun.ts:131`), so "no device
+  name was stored" is impossible on a live run regardless. The surviving mechanism
+  (`run === null`) was the one condition the spec's own enumeration of "four conditions"
+  dropped. **Technique: identify WHICH COMPONENT a committed screenshot is, by grepping
+  a literal string visible in it, before reasoning about which builder produced its
+  fields. A screen's identity is a free, exact discriminator between candidate
+  mechanisms, and "the saved record" in prose can mean two different screens with two
+  different derivations.**
+
+- **Fusing a provenance field with a close-reason field is the mirror shape in
+  display clothing.** `sourceLabel` answers "where did these numbers come from";
+  `endedBy` answers "how did this close". They agree only on the zero-measured close.
+  On a link that drops after 3 of 4 intervals, a `LINK LOST` source label stamps failure
+  over genuinely PM5-measured data and deletes the one signal saying it came off the
+  machine — while `LINK_LOST_LINE` (`storedSummary.ts:874`) already exists to say
+  exactly that, on a row with data. **Technique: before merging two fields because they
+  agree in the observed case, write the 2x2 and name the quadrant where they disagree.
+  If the codebase already has a separate renderer for the second field, that renderer IS
+  the prior team's answer to this question.**
+
+- **A research pass can be thorough, correctly tagged, and answer at the wrong LAYER.**
+  The spec cited Apple's Core Bluetooth background doc (PRIMARY, accurate) to conclude
+  iOS "HAS the concept" of listening while pocketed, and scoped a `UIBackgroundModes` PR
+  2 on it. That concept belongs to the NATIVE app; our logging lives in a WebView, and
+  the repo's own `docs/superpowers/research/2026-08-20-ble-connection-management.md:1500`
+  had already established that WebKit's WebContent throttler suspends it on a rule where
+  "nothing … reads `UIBackgroundModes`" — with a James ruling on the same date
+  (`ROADMAP.md:2120`): "CORRECT RESUME, not a background mode." **Technique: before
+  accepting a does-it-exist answer, name the LAYER the capability is documented at and
+  the layer your code runs at. Then `ls docs/superpowers/research/` — this project
+  researches things once and then re-researches them from scratch, and the second pass
+  is always the shallower one.**
+
+- **"This is a complete explanation of the observed 0 m."** Not complete: queue-and-
+  deliver predicts data ARRIVING on resume, and `pm5-interface-notes.md:4663` records a
+  15-20 s screen lock NOT dropping the GATT link with "the session resumed ticking on
+  unlock". The walk README's own W-10 declines to establish the mechanism. A second
+  producer lives in our code: the ready gate needs `rowingActive` AND increasing
+  distance, so a rower who stops before unlocking loses the session on a healthy link.
+  **Technique: an explanation is "complete" only if it predicts the observation
+  UNIQUELY. Ask what the cited mechanism predicts, compare that to what was seen, and
+  enumerate the in-house producers of the same symptom before crediting the platform.**
+
+- **Attacked and NOT broken (Phase LM's vetted ground):** the absent `UIBackgroundModes`
+  key (whole plist read); keep-awake spanning the live surface
+  (`ConnectedInterstitial.tsx:283-286` + its own `<ConnectedSurface>` at `:716`, plugin
+  present in `package.json` and `Package.swift`) and therefore the MANUAL-lock
+  inference; `closeRecord(true, linkGone ? "link-lost" : "rower")` at `:2782` with
+  `linkGone` correctly covering both `disconnected` and latched `frameSilence`;
+  `buildMonitorLogSteps` throwing only on a missing/mis-sized `logSeed`
+  (`logDraft.ts:834-843`); `storedSummary.ts:281`'s source-keyed `timeLabel`
+  suppression; the "all three exits" criterion on either door (`PostWorkoutSummary` is
+  shared, both doors pass `plan`); `targetsOnlyCaption` as an existing one-rule-two-
+  screens precedent; and every `file:line` citation in the spec — all eleven resolve to
+  their subject, which is rare enough to be worth recording. Two residuals: the spec's
+  `timeLabel` warning is INVERTED (the current condition already gives a fourth value
+  its time), and `row.loggedAt` is the SAVE moment (`schema.ts:148`), not the closing
+  moment the spec justifies it with.
+
+- **Controller's follow-up ruling (James, 2026-08-25), which the pass earned:** the
+  2026-08-20 "correct resume, not a background mode" ruling was scoped to an
+  interruption of a session ALREADY RUNNING, and the never-started case falls outside
+  it — correct resume has nothing to correct toward. So §D1e's probe (one build with
+  `bluetooth-central`, one without, count frames across a ~60 s background window) is
+  folded into PR 1's instrumentation rather than deferred, and PR 2 gets scoped on
+  measurement. **PR 1 still ships no plist change.** Note §D1e's own closing line —
+  "Do not write a spec that assumes either answer" — which revision 1 violated in both
+  directions at once.

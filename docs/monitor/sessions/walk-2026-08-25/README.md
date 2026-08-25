@@ -192,11 +192,26 @@ answer the question; it would only confirm it. Downgraded accordingly.
 
 ### W-10 · The pocketed phone loses the workout, and then mislabels what it saves
 
-James's tester report reproduced first try. Locking the phone drops the monitor
-link; nothing rowed while pocketed reaches the run (`0m` measured after ~30 s of
-real rowing). That settles the standing INFERENCE about iOS suspension —
-witnessed, PRIMARY, though the precise mechanism (BLE central torn down vs
-notifications withheld vs WebView suspended) is NOT established here.
+James's tester report reproduced first try: `0m` measured after ~30 s of real
+rowing, then a row saved looking hand-typed.
+
+**CORRECTED 2026-08-25 (antagonist anchor pass on the Phase LM spec) — the
+paragraph that stood here was wrong about what happened.** It said the link was
+dropped and a recording was lost. There was no recording. The app opens a record
+only on the first pull it SEES (`createMonitorRun`, one call site at
+`useMonitorSession.ts:1681`, inside the `phase === "ready"` gate), so locking
+before that pull leaves the phase in `ready`, creates nothing, and gives End
+nothing to close. The saved row then comes out of the MANUAL door, which posts
+no `deviceName` and no `endedBy` — hence `LOGGED BY HAND`.
+
+**And the cause of the zero is NOT settled by this walk**, contrary to what this
+section originally claimed. Two producers have the identical symptom: frames
+never arriving (WebKit suspending the WebContent process), or frames arriving
+and the ready gate refusing them (it needs `rowingActive` AND increasing
+distance, and a rower who stops before unlocking supplies neither).
+`pm5-interface-notes.md:4663` records a 15-20 s lock NOT dropping the link, with
+the session resuming ticking on unlock — so the platform explanation does not
+even predict this uniquely. Phase LM PR 1 instruments it.
 
 The row is not missing from history. It is saved as a **targets-only, hand-logged**
 record, which is why a tester concludes the recording vanished. Three defects

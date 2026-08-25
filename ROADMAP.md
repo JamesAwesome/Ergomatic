@@ -5680,45 +5680,73 @@ report first try (`docs/monitor/sessions/walk-2026-08-25/`, finding W-10).
 Scoped by James to all three defects together after he was shown the frame:
 *"the LOST isn't easy to notice, i think we need to highlight that more."*
 
-**What happened.** A tester connected, programmed a workout, tapped "Show me
-the numbers", locked the phone and put it in their pocket, rowed, then hit End
-— and concluded the recording was lost. It was. Locking the phone drops the
-monitor link; nothing rowed while pocketed reaches the run. After ~30 s of real
-rowing the screen read `0m`. The row is not missing from history, though: it is
-saved as a targets-only record stamped **LOGGED BY HAND**, which is exactly
-what a vanished recording looks like from the outside.
+**What happened. CORRECTED 2026-08-25 by the antagonist anchor pass — the
+first diagnosis was wrong and the corrected one is narrower and sharper.** A
+tester connected, programmed a workout, tapped "Show me the numbers", locked
+the phone and pocketed it, rowed, then hit End, and concluded the recording was
+lost. It was never STARTED. The app opens a record only when it sees the first
+pull — `createMonitorRun` has one call site (`useMonitorSession.ts:1681`) inside
+the `phase === "ready"` gate — so locking before that pull leaves the phase in
+`ready` forever, creates no record, and gives End nothing to close
+(`closeRecord:1477` returns on `run === null`). The file's own comment at
+`useMonitorSession.ts:988-990` describes this verbatim, and **this ROADMAP
+already recorded the mechanism at `:3271` from James's own 2026-08-24 tester
+report** — the phase was opened without reading it.
+
+The row then saves through the MANUAL door (`monitorModeRun` null →
+`LogSession.tsx:1578`), whose POST carries neither `deviceName` nor `endedBy`,
+so the stored row reads **LOGGED BY HAND** — which is exactly what a vanished
+recording looks like from the outside.
 
 **The three defects, which are one story.**
 
-1. **`· LOST` is easy to miss.** It is small mono text in the header, next to
-   the erg's serial number, while the numbers that dominate the screen read
-   `0:00.0` and `0` — which look like a piece that has not started, not like an
-   app that has gone deaf. A rower mid-piece will not notice.
+1. **The screen looks like a session in progress when it is not.** The panes
+   paint live-LOOKING numbers off fall-through frames while the phase is still
+   `ready`, and the only contrary signal is `· LOST` in small mono text beside
+   the erg's serial. James asked for that to be louder, and he was right for a
+   sharper reason than he was given: those numbers are not stale readings, they
+   were never readings at all.
 2. **The banner promises something false.** "Row on. The erg is still counting
    and End keeps what we saw" is true whenever we saw anything, and a lie in
    the one case that costs a workout — where we saw nothing. Copy that is
    reassuring in proportion to how bad the situation is.
-3. **The saved row misdescribes its own provenance.** LOGGED BY HAND is a
-   claim about how a record came to exist, and it is wrong here: the rower
-   rowed, and we failed to hear it. That is a different thing from typing
-   numbers in, and the record should not conflate them.
+3. **The saved row poses as hand-logged.** The rower rowed and we did not hear
+   them; neither of those is "logged by hand". **But the fix is NOT a
+   `LINK LOST` source label** (anchor pass, and this was revision 1's biggest
+   hole): `sourceLabel` answers "where did these numbers come from" while
+   `endedBy` answers "how did this close", and they agree only on the
+   zero-measured case. On a link dropping after 3 of 4 intervals, a `LINK LOST`
+   source would stamp failure over genuinely PM5-measured rows and delete the
+   one signal saying they came off the machine — the mirror shape in display
+   clothing. `LINK_LOST_LINE` (`storedSummary.ts:874`) already carries the close
+   reason for rows that have data.
 
 **TRIAD weight** — defect 3 changes what a stored row claims about itself, so
 this gets the full antagonist pass on its spec and a PM final-PR gate,
-regardless of how small the diff turns out to be.
+regardless of how small the diff turns out to be. Note the stored row currently
+has `ended_by = NULL` (the manual door never posts it), so fixing the STORED
+record — not just the live screen — is a write-path change, and the spec makes
+the PR say which of the two it did.
 
-**Required research before the design is presented** (the standing
-brainstorming rule, and the reason this is a phase and not a fast-path styling
-tweak): iOS owns backgrounding, and we have never checked what it permits.
-Screen Wake Lock, Capacitor's background modes, whether a BLE central can hold
-a subscription while the app is suspended, and what Core Bluetooth
-state-restoration would and would not give us. Vendor docs first, tagged
-PRIMARY / SECONDARY / INFERENCE. **And the does-it-exist question, explicitly:
-before designing any "keep rowing while locked" affordance, establish that iOS
-will actually deliver those notifications — if it will not, name what we are
-asserting on its behalf.** The walk settled that the link IS lost; it did NOT
-settle the mechanism (central torn down vs notifications withheld vs WebView
-suspended), and the fix shape depends on which.
+**The research was ALREADY DONE and is not owed again** — this is the second
+correction the anchor pass forced. `docs/superpowers/research/2026-08-20-ble-connection-management.md`
+plus James's ruling at `:2095-2130` settle it: **"The recommendation is CORRECT
+RESUME, not a background mode."** The obstacle is WebKit's WebContent
+throttler, whose runnable set is *visible, audible, capturing*, and **nothing in
+that chain reads `UIBackgroundModes`** — so a background mode buys "the link
+stays up" and never "we keep logging the row". Keep-awake is likewise already
+done (`ConnectedInterstitial.tsx:283`, spanning the whole connected flow since
+2026-08-11), so this was a MANUAL lock and no wake-lock work would have helped.
+**PR 2 is correct resume.** Any proposal for `UIBackgroundModes` is re-opening a
+closed ruling and needs James, not a research pass.
+
+**What is genuinely unknown** and must not be asserted in any copy or PR body:
+whether the zero came from frames never arriving (WebKit suspended) or frames
+arriving and the ready gate refusing them (it needs `rowingActive` AND
+increasing distance). `pm5-interface-notes.md:4663` records a 15-20 s lock NOT
+dropping the link, with the session resuming ticking on unlock — so the platform
+explanation is not even complete. PR 1's Task 1 instruments this rather than
+guessing, because PR 2's shape depends on the answer.
 
 **Not yet decided, and the design owes an answer to each:** whether a
 zero-measured connected session should offer "Log against plan" at all;
