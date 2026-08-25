@@ -147,6 +147,25 @@ export interface StoredLog {
   // repo's own defensive posture for every optional field here, even
   // though `stores.logs.get()` always selects the column now).
   endedBy?: (CloseReason | "interrupted") | null;
+  // RC-2/RC-3 wave design spec (docs/superpowers/specs/2026-08-24-summary-
+  // record-design.md §3): the machine's own end-of-workout totals, PR
+  // #190's server columns (`server/stores/logs.ts`'s `LOG_LIST_COLUMNS` /
+  // `get()` — both selected on every GET, `machineWorkSeconds`/
+  // `machineWorkMeters` doubles/integer, `machineSummary` untyped jsonb).
+  // Type only, matching the GET shape exactly: required-and-nullable, same
+  // convention as `avgSplitSeconds`/`timeSeconds`/`distanceMeters` above
+  // (never optional — the column is always selected, so "absent" isn't a
+  // shape this row can actually carry). `machineSummary` is narrowed to
+  // the ONE key this wave's display reads (§3: "the display reads only
+  // the two machine totals + the verification bytes" — the other nine
+  // decoded fields are stored but have no display surface yet); the
+  // server's own type keeps it a bare `Record<string, unknown> | null`
+  // (`server/stores/logs.ts`'s own comment: "stored VERBATIM once
+  // validated"), so this narrower client type is a deliberate view, not a
+  // structural mirror like `StoredLogStep` above.
+  machineWorkSeconds: number | null;
+  machineWorkMeters: number | null;
+  machineSummary: { verificationBytes?: number[] } | null;
 }
 
 /** §5D: the read-back's own three pieces. `empty` is the "all four null"

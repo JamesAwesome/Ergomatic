@@ -2461,6 +2461,62 @@ button.back-link:disabled,
   margin: 20px 0 0;
 }
 
+/* RC-2/RC-3 wave (docs/superpowers/specs/2026-08-24-summary-record-
+   design.md §3, PR 2): the MACHINE CONFIRMED · WORK ONLY block —
+   informational, not a hero (§3: "must not displace the stored heroes or
+   intervals"), so it borrows `.summary-intervals-title`/`.summary-
+   intervals-caption`'s own already-audited mono/letter-spacing pattern
+   (this file, above) rather than inventing a third label style, and sits
+   in the same `.summary-intervals { margin: 0 0 24px }` rhythm below the
+   interval table. Contrast, computed (not eyeballed, recurring failure
+   6) — this screen is `.overlay-screen`, whose background is `--page`
+   (index.css's own `.overlay-screen` rule, matching the draft-restore-
+   notice/§4 N5 back-label comments' own pairing above in this file):
+     --ink   (#1b1a17) on --page (#f4f1e8): 15.41:1 — title
+     --ink-2 (#3f3c35) on --page (#f4f1e8):  9.75:1 — value line, code
+     --ink-3 (#57544c) on --page (#f4f1e8):  6.69:1 — caption (same
+       figure this file's own draft-restore-notice comment already
+       computed for `--ink-3` on `--page`, reused here since it is the
+       identical pair)
+   All three clear the 4.5:1 AA floor with wide margin. Nothing tappable
+   (§3: "44px targets don't apply"). */
+.log-machine-confirmed {
+  margin: 20px 0 0;
+}
+
+.log-machine-confirmed-title {
+  margin: 0 0 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--ink);
+}
+
+.log-machine-confirmed-value {
+  margin: 0 0 4px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  color: var(--ink-2);
+}
+
+.log-machine-confirmed-code {
+  margin: 0 0 4px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--ink-2);
+}
+
+.log-machine-confirmed-caption {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+}
+
 /* Log-delete spec (2026-08-18), §1: the staged destructive confirm, last
    in the view, below `.log-plan-footer`. `.button-l4` (index.css's "4 ·
    destructive" level, own doc comment names "Delete workout, Discard at

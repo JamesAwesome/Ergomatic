@@ -52,6 +52,15 @@ function baseRow(overrides: Partial<StoredLog> = {}): StoredLog {
     distanceMeters: null,
     planKey: null,
     planIndex: null,
+    // RC-2/RC-3 wave (Task 1): required-and-nullable, same as the other
+    // three totals above — this suite never exercises the machine-
+    // confirmed fields itself (that's `FromTheLog.test.tsx`'s own
+    // describe block, since the block reads straight off `StoredLog`,
+    // never through `buildStoredSummary`), so every fixture here defaults
+    // to the common null case.
+    machineWorkSeconds: null,
+    machineWorkMeters: null,
+    machineSummary: null,
     ...overrides,
   };
 }
