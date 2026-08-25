@@ -11377,3 +11377,297 @@ describe("createPm5Driver: the live average-pace verdict (RC-9a, design spec 202
     expect(entries[0]!.detail).not.toContain("300.00");
   });
 });
+
+describe("createPm5Driver: the rest-distance oracle (RC-9d, design spec 2026-08-25-free-oracles §3)", () => {
+  function restDistanceVerdicts(log: ReturnType<typeof createEventLog>) {
+    return log.entries().filter((e) => e.kind === "rest-distance-verdict");
+  }
+
+  // The exit-7 walk's own committed 0x003A frame (seq 63,
+  // docs/monitor/sessions/walk-2026-08-24/phone-exit7-ring.json):
+  // 88 35 03 0f 02 fa 00 02 20 00 b8 00 f2 00 00 00 00 a3 03
+  // offsets 12-14 (u24 LE, 1 m/lsb): f2 00 00 -> 242
+  // offsets 15-16 (u16 LE, whole seconds): 00 00 -> 0
+  const EXIT7_0X003A = new Uint8Array([
+    0x88, 0x35, 0x03, 0x0f, 0x02, 0xfa, 0x00, 0x02, 0x20, 0x00, 0xb8, 0x00,
+    0xf2, 0x00, 0x00, 0x00, 0x00, 0xa3, 0x03,
+  ]);
+  // The r0 keystone piece's own committed 0x003A frame (seq 517,
+  // walk-2026-08-23): 78 35 1c 09 01 fa 00 02 1c 00 83 00 00 00 00 00 00
+  // ef 02 — offsets 12-14 and 15-16 both 0 (no rest was programmed).
+  const KEYSTONE_0X003A = new Uint8Array([
+    0x78, 0x35, 0x1c, 0x09, 0x01, 0xfa, 0x00, 0x02, 0x1c, 0x00, 0x83, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0xef, 0x02,
+  ]);
+
+  /** Names ONLY Total Rest Distance/Interval Rest Time — every other byte
+   *  zeroed, mirroring `additionalStatus1With`'s own convention above. Used
+   *  where a test needs a value NEITHER committed capture happens to
+   *  carry (a non-zero Interval Rest Time), so it cannot borrow the two
+   *  literal frames above. */
+  function additionalSummaryRestBytes(
+    totalRestDistanceMeters: number,
+    intervalRestSeconds = 0,
+  ): Uint8Array {
+    const bytes = new Uint8Array(19);
+    bytes[12] = totalRestDistanceMeters & 0xff;
+    bytes[13] = (totalRestDistanceMeters >> 8) & 0xff;
+    bytes[14] = (totalRestDistanceMeters >> 16) & 0xff;
+    bytes[15] = intervalRestSeconds & 0xff;
+    bytes[16] = (intervalRestSeconds >> 8) & 0xff;
+    return bytes;
+  }
+
+  const TWO_INTERVAL_R60_PROGRAM: WorkoutProgram = {
+    intervals: [
+      {
+        type: "work",
+        kind: "time",
+        value: 60,
+        targetSplit: 120,
+        displaySpm: 22,
+        restSeconds: 60,
+      },
+      {
+        type: "work",
+        kind: "time",
+        value: 60,
+        targetSplit: 120,
+        displaySpm: 22,
+        restSeconds: 60,
+      },
+    ],
+  };
+
+  it("agrees with the machine's own 0x003A Total Rest Distance — exit-7 walk's own captured frame, PM5 memory screen 147 + 95 = 242 m", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+    await programViaStub(driver, transport, TWO_INTERVAL_R60_PROGRAM);
+    transport.notify(ADDITIONAL_STATUS_2_UUID, additionalStatus2In(0));
+
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 68, 250),
+    );
+    // Interval 1's own trailing rest (PM5 View Detail, exit-7 README): 147 m.
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 68, 250, 147));
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 25));
+
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 56, 250),
+    );
+    // Interval 2's own trailing rest (PM5 View Detail, exit-7 README): 95 m.
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(2, 56, 250, 95));
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(2, 28));
+
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_TERMINATE, 124, 500),
+    );
+    // 147 + 95 = 242, exactly the exit-7 frame's own decoded value.
+    transport.notify(END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID, EXIT7_0X003A);
+
+    const entries = restDistanceVerdicts(log);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.detail).not.toContain("suppressed");
+    expect(entries[0]!.detail).toContain("machine(0x003A)=242m");
+    expect(entries[0]!.detail).toContain("ours=242m");
+    expect(entries[0]!.detail).toContain("delta=0m");
+    expect(entries[0]!.detail).toContain("agree");
+    expect(entries[0]!.detail).not.toContain("DIFFER");
+    expect(entries[0]!.detail).toContain("Interval Rest Time=0s");
+  });
+
+  it("DIFFERS, naming both numbers, when our own sum genuinely disagrees with the machine's Total Rest Distance beyond the 1 m band — a lost-interval shape, not noise", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+    await programViaStub(driver, transport, MINIMAL_PROGRAM);
+    transport.notify(ADDITIONAL_STATUS_2_UUID, additionalStatus2In(0));
+
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 60, 200),
+    );
+    // Our own sum: 100 m. The exit-7 frame decodes 242 m — a 142 m gap,
+    // nowhere close to the 1 m band.
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 60, 200, 100));
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 22));
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_TERMINATE, 60, 200),
+    );
+    transport.notify(END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID, EXIT7_0X003A);
+
+    const entries = restDistanceVerdicts(log);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.detail).not.toContain("suppressed");
+    expect(entries[0]!.detail).toContain("machine(0x003A)=242m");
+    expect(entries[0]!.detail).toContain("ours=100m");
+    expect(entries[0]!.detail).toContain("delta=142m");
+    expect(entries[0]!.detail).toContain("DIFFER");
+    expect(entries[0]!.detail).not.toContain("agree");
+  });
+
+  it("handles the r0 zero without a false alarm — the keystone piece's own captured frame decodes 0 m, and a genuinely rest-free run's own sum agrees rather than reading it as nothing to compare", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+    await programViaStub(driver, transport, MINIMAL_PROGRAM);
+    transport.notify(ADDITIONAL_STATUS_2_UUID, additionalStatus2In(0));
+
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 60, 200),
+    );
+    // r0 — no programmed rest; restDistanceMeters=0 is a REAL wire reading,
+    // not an absence.
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 60, 200, 0));
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 22));
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_TERMINATE, 60, 200),
+    );
+    transport.notify(END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID, KEYSTONE_0X003A);
+
+    const entries = restDistanceVerdicts(log);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.detail).not.toContain("suppressed");
+    expect(entries[0]!.detail).toContain("machine(0x003A)=0m");
+    expect(entries[0]!.detail).toContain("ours=0m");
+    expect(entries[0]!.detail).toContain("delta=0m");
+    expect(entries[0]!.detail).toContain("agree");
+  });
+
+  it("suppresses, naming the reason, when 0x003A arrives too short for the narrow parser (under 17 bytes)", () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    createPm5Driver(transport, log);
+    transport.notify(
+      END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID,
+      new Uint8Array(16),
+    );
+
+    const entries = restDistanceVerdicts(log);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.detail).toBe(
+      "suppressed — 0x003A arrived with 16 byte(s), fewer than the 17 this narrow parser requires (offsets 12-16)",
+    );
+  });
+
+  it("reports Interval Rest Time but suppresses the distance half, naming the reason, when no run's actuals exist to compare against (0x003A before any program() ever ran)", () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    createPm5Driver(transport, log);
+    transport.notify(END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID, EXIT7_0X003A);
+
+    const entries = restDistanceVerdicts(log);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.detail).toContain("reported only");
+    expect(entries[0]!.detail).toContain("Interval Rest Time=0s");
+    expect(entries[0]!.detail).toContain("distance suppressed");
+    expect(entries[0]!.detail).toContain("no run's actuals");
+  });
+
+  it("reports Interval Rest Time without ever gating on it — a reading neither committed capture has shown still agrees on distance, unaffected", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+    await programViaStub(driver, transport, MINIMAL_PROGRAM);
+    transport.notify(ADDITIONAL_STATUS_2_UUID, additionalStatus2In(0));
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 60, 200),
+    );
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 60, 200, 50));
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 22));
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_TERMINATE, 60, 200),
+    );
+    // Total Rest Distance 50 (matches ours); Interval Rest Time 45s — a
+    // value neither committed capture has ever shown (both read 0),
+    // proving this field changes nothing about the distance verdict.
+    transport.notify(
+      END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID,
+      additionalSummaryRestBytes(50, 45),
+    );
+
+    const entries = restDistanceVerdicts(log);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.detail).not.toContain("suppressed");
+    expect(entries[0]!.detail).toContain("machine(0x003A)=50m");
+    expect(entries[0]!.detail).toContain("ours=50m");
+    expect(entries[0]!.detail).toContain("agree");
+    expect(entries[0]!.detail).toContain("Interval Rest Time=45s");
+  });
+
+  it("suppresses the distance half, naming the reason, when the run's final interval was filled from 0x0039's summary — that path has no per-interval wire rest reading (RC-7's own precedent, restSeconds/type)", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const clock = manualClock();
+    // A minimal inline scheduler — `manualSchedule` is defined inside THE
+    // SUMMARY-FALLBACK GATE describe block elsewhere in this file and is
+    // not reachable from this describe; this test needs only the one
+    // deadline call, fired by hand (mirrors the RC-1 fallback-omission
+    // describe's own copy of this pattern, above).
+    const scheduled: { ms: number; fire: () => void }[] = [];
+    const timer = {
+      schedule: (cb: () => void, ms: number): (() => void) => {
+        scheduled.push({ ms, fire: cb });
+        return () => {};
+      },
+      pending: () => scheduled[scheduled.length - 1] ?? null,
+    };
+    const driver = createPm5Driver(transport, log, {
+      now: clock.now,
+      schedule: timer.schedule,
+    });
+    transport.notify(ADDITIONAL_STATUS_1_UUID, new Uint8Array(17));
+    transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));
+
+    await programViaStub(driver, transport, MINIMAL_PROGRAM);
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 30, 100),
+    );
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_WORKOUTEND, 60, 200),
+    );
+    // The split never arrives; only the summary does, and only the
+    // deadline (never claimed by a split) fires the synthesis — the
+    // synthesized actual carries no restDistanceMeters at all (0x0039 has
+    // no per-interval rest field), so `recordedActuals` is incomplete.
+    transport.notify(
+      END_OF_WORKOUT_SUMMARY_UUID,
+      buildEndOfWorkoutSummaryBytes({
+        elapsedSeconds: 62.5,
+        meters: 214,
+        avgStrokeRate: 24,
+        endingHeartRateBpm: 150,
+        avgHeartRateBpm: 150,
+        minHeartRateBpm: 130,
+        maxHeartRateBpm: 160,
+        dragFactorAverage: 130,
+        recoveryHeartRateBpm: 100,
+        workoutType: 1,
+        avgPaceSecondsPer500m: 120,
+      }),
+    );
+    expect(timer.pending()?.ms).toBe(3000);
+    timer.pending()!.fire();
+
+    transport.notify(END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID, EXIT7_0X003A);
+
+    const entries = restDistanceVerdicts(log);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.detail).toContain("reported only");
+    expect(entries[0]!.detail).toContain("Interval Rest Time=0s");
+    expect(entries[0]!.detail).toContain("distance suppressed");
+    expect(entries[0]!.detail).toContain("no restDistanceMeters reading");
+    expect(entries[0]!.detail).toContain("summary-fallback synthesis");
+  });
+});

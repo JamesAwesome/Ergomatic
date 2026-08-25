@@ -71,6 +71,7 @@ import {
   parseAdditionalSplitIntervalData,
   parseAdditionalStatus1,
   parseAdditionalStatus2,
+  parseAdditionalSummaryRest,
   parseEndOfWorkoutSummary,
   parseGeneralStatus,
   parseSplitIntervalData,
@@ -819,6 +820,18 @@ const FINISH_GRACE_MS = 3000;
  *  comment has the worked reasoning). */
 const AVG_PACE_VERDICT_BAND_SECONDS = 1.0;
 
+/** RC-9d (design spec 2026-08-25-free-oracles §3) — the rest-distance
+ *  verdict's own band. Both sides are whole-metre, unscaled wire integers
+ *  with no natural rounding source between them — 0x003A's own running
+ *  Total Rest Distance against Σ 0x0037's own per-interval Interval Rest
+ *  Distance — unlike (a)'s two independently-timed quotients. Both
+ *  committed captures agree EXACTLY: 242 vs 242 (exit-7 walk, seq 63) and
+ *  0 vs 0 (the r0 keystone piece, seq 517). 1 m is generous headroom for a
+ *  one-count truncation difference at a boundary the two committed
+ *  captures never happened to exercise, never evidence of a real
+ *  disagreement that size. */
+const REST_DISTANCE_VERDICT_BAND_METERS = 1;
+
 /**
  * Final-review fix wave, HIGH-2: the verification hash's own tiny
  * sub-window. `maybeReconcileImmediately` re-arms the ONE deadline slot
@@ -981,13 +994,33 @@ export function createPm5Driver(
      *  Task 2, and deliberately not a Set PLUS a parallel map: the summary
      *  gate's derivation needs "is every prior interval recorded?" and
      *  "what did those priors measure?" to be the same question asked of
-     *  the same structure, or the two answers can drift. Only the two
-     *  SUBTRACTABLE fields are kept — an average is not subtractable, which
-     *  is the whole of B3's finding, so storing one here would only invite
-     *  a future caller to try. */
+     *  the same structure, or the two answers can drift. Originally only
+     *  the two SUBTRACTABLE fields were kept — an average is not
+     *  subtractable, which is the whole of B3's finding, so storing one
+     *  here would only invite a future caller to try.
+     *
+     *  **WIDENED to four, RC-9d (design spec 2026-08-25-free-oracles §3):**
+     *  `restSeconds`/`restDistanceMeters` ride along too, additive-optional
+     *  exactly as `IntervalActual`'s own same-named fields are
+     *  (`domain/monitor/types.ts`) — present on a boundary-derived actual
+     *  (`emitIntervalComplete`'s own write below), absent on the
+     *  summary-fallback synthesis (`deriveFinalIntervalFromSummary`'s
+     *  caller omits both — 0x0039 carries no per-interval rest of its
+     *  own). B3's argument does not apply to this pair: unlike an average,
+     *  a rest DISTANCE is exactly as subtractable/summable as the work
+     *  fields already kept here. `recordRestDistanceVerdict` is the one
+     *  reader, and treats the pair the SAME all-or-nothing way
+     *  `monitorRun.ts`'s own `computeWorkRestSums` treats the identical
+     *  fields on the STORED record: summed only when every recorded actual
+     *  carries both, never partially. */
     recordedActuals: Map<
       number,
-      { elapsedSeconds: number; distanceMeters: number }
+      {
+        elapsedSeconds: number;
+        distanceMeters: number;
+        restSeconds?: number;
+        restDistanceMeters?: number;
+      }
     >;
     /** The last `"rowing"`/`"resting"` state observed while this run was
      *  open, or `null` if it never reported one. The finish grace normalizes
@@ -2680,9 +2713,17 @@ export function createPm5Driver(
    * summary pair exists to fix (review I5: "every field the spec's list
    * needs sits on 0x0039 alone... a reconcile that waits for both
    * `summary-half`s dies when 0x003A drops even though 0x0039 arrived
-   * complete"). 0x003A is logged for observability only — nothing reads
-   * its bytes and nothing gates on its arrival; Task 2's gate
-   * (`noteSummary` below) decodes 0x0039 alone.
+   * complete"). **UPDATED, RC-9d (design spec 2026-08-25-free-oracles
+   * §3):** 0x003A's bytes were observability-only when this comment was
+   * first written — that changed. `recordRestDistanceVerdict` (called
+   * alongside this function at 0x003A's own subscribe site, below) now
+   * decodes two of its fields for a RING-ONLY diagnostic oracle. What
+   * has NOT changed is the RECONCILE gate this paragraph's own reasoning
+   * protects: nothing about the summary-fallback reconcile GATES on
+   * 0x003A's arrival or content — Task 2's gate (`noteSummary` below)
+   * still decodes 0x0039 alone, and a diagnostic that reports "no reading
+   * yet" when 0x003A is late or missing carries none of the drop-fragility
+   * risk a reconcile gated on it would.
    *
    * Mirrors `noteBoundaryHalf`'s own log site and voice deliberately
    * (`split-half`'s "characteristic ... received (run open/closed,
@@ -2695,11 +2736,10 @@ export function createPm5Driver(
    * function's own comment: "boundary-rare, so they cannot flood the
    * ring"). 0x0039/0x003A are rarer still — once per workout end, with an
    * occasional HRM re-fire — so the same no-flood argument applies with
-   * more room to spare. This does NOT change what gates on the bytes:
-   * `noteSummary` below still decodes 0x0039 alone, and 0x003A's bytes are
-   * observability only, exactly as this function's own header already
-   * says — the ring simply now has them for whoever settles the summary
-   * premises next.
+   * more room to spare. This function's OWN job is unchanged: it always
+   * only logs RECEIPT (`summary-half`), for both characteristics, exactly
+   * as before; `recordRestDistanceVerdict` is a separate call the 0x003A
+   * subscribe site now also makes, not a second thing this function does.
    */
   function noteSummaryHalf(
     characteristic: "0x0039" | "0x003A",
@@ -3285,6 +3325,88 @@ export function createPm5Driver(
       `machine(0x0032)=${lastWorkStateAverageSplit.toFixed(2)}s/500m ` +
         `ours=${ours.toFixed(2)}s/500m delta=${delta.toFixed(2)}s — ` +
         `${agrees ? "agree" : "DIFFER"} (band ${AVG_PACE_VERDICT_BAND_SECONDS.toFixed(1)}s)`,
+    );
+  }
+
+  /** THE REST-DISTANCE ORACLE (RC-9d, design spec 2026-08-25-free-oracles
+   *  §3) — the first external check on the rest population RC-1 just
+   *  started storing and RC-10 must POST; nothing external checks it
+   *  today. Compares 0x003A's own Total Rest Distance (a RUNNING TOTAL
+   *  across the whole workout) against Σ `restDistanceMeters` over this
+   *  run's own `recordedActuals` (0x0037's own per-interval trailing-rest
+   *  reading, RC-1) — two genuinely independent computers of the identical
+   *  quantity, unlike the retired TWD verdict where both sides were the
+   *  same fused work+rest odometer.
+   *
+   *  ALL-OR-NOTHING, mirroring `monitorRun.ts`'s own `computeWorkRestSums`
+   *  (the STORED record's identical rule, RC-1, for the identical reason):
+   *  summed only when every recorded actual carries a `restDistanceMeters`
+   *  reading. A run whose final interval fell back to the summary
+   *  synthesis (`deriveFinalIntervalFromSummary`'s caller OMITS both rest
+   *  fields — 0x0039 carries no per-interval rest of its own) suppresses
+   *  rather than silently reading that missing interval's rest as a real
+   *  zero.
+   *
+   *  ZERO IS A REAL VALUE, never a suppression trigger (evidence base: the
+   *  r0 keystone capture decodes 0 and a genuinely rest-free run's own sum
+   *  is 0 too — an r0 piece has no rest, and the verdict must agree on
+   *  that, not read it as "nothing to compare").
+   *
+   *  `Interval Rest Time` (offsets 15-16) is REPORTED in every entry this
+   *  function writes, but NEVER GATES anything here: it reads 0 on BOTH
+   *  committed captures, including the exit-7 walk's own genuine r60
+   *  rests, so whether that is a firmware quirk of this specific field or
+   *  the programmed value read back is UNKNOWN (`AdditionalSummaryRest`'s
+   *  own doc comment, `pm5/parse.ts`) — asserting either would be a guess
+   *  this driver has no evidence for.
+   *
+   *  BAND: `REST_DISTANCE_VERDICT_BAND_METERS`'s own comment. */
+  function recordRestDistanceVerdict(bytes: Uint8Array): void {
+    const decoded = parseAdditionalSummaryRest(bytes);
+    if (decoded === null) {
+      log.record(
+        "rest-distance-verdict",
+        `suppressed — 0x003A arrived with ${bytes.length} byte(s), fewer ` +
+          `than the 17 this narrow parser requires (offsets 12-16)`,
+      );
+      return;
+    }
+    const run = activeRun;
+    const actuals = run === null ? [] : [...run.recordedActuals.values()];
+    if (actuals.length === 0) {
+      log.record(
+        "rest-distance-verdict",
+        `reported only — Interval Rest Time=${decoded.intervalRestSeconds}s; ` +
+          `distance suppressed — no run's actuals to compare against ` +
+          `(0x003A arrived with none recorded)`,
+      );
+      return;
+    }
+    const complete = actuals.every((a) => a.restDistanceMeters !== undefined);
+    if (!complete) {
+      log.record(
+        "rest-distance-verdict",
+        `reported only — Interval Rest Time=${decoded.intervalRestSeconds}s; ` +
+          `distance suppressed — an actual this run recorded has no ` +
+          `restDistanceMeters reading (the summary-fallback synthesis path ` +
+          `omits it; 0x0039 carries no per-interval rest)`,
+      );
+      return;
+    }
+    const ours = actuals.reduce(
+      (sum, a) => sum + (a.restDistanceMeters ?? 0),
+      0,
+    );
+    const delta = Math.abs(decoded.totalRestDistanceMeters - ours);
+    const agrees = delta <= REST_DISTANCE_VERDICT_BAND_METERS;
+    log.record(
+      "rest-distance-verdict",
+      `machine(0x003A)=${decoded.totalRestDistanceMeters}m ours=${ours}m ` +
+        `delta=${delta}m — ${agrees ? "agree" : "DIFFER"} ` +
+        `(band ${REST_DISTANCE_VERDICT_BAND_METERS}m); ` +
+        `Interval Rest Time=${decoded.intervalRestSeconds}s (reported only ` +
+        `— reads 0 on both committed captures including a real r60, so ` +
+        `firmware-quirk-vs-programmed-value is unresolved; never gated on)`,
     );
   }
 
@@ -3932,6 +4054,11 @@ export function createPm5Driver(
       // path to spread from.
     };
     run.actuals += 1;
+    // RC-9d: `restDistanceMeters` stays OMITTED here too, same reason as
+    // `restSeconds`/`type` just above — this run's `recordedActuals` is
+    // therefore incomplete for `recordRestDistanceVerdict`'s all-or-nothing
+    // rule, and that verdict suppresses rather than reading the gap as a
+    // real zero (`recordedActuals`'s own doc comment).
     run.recordedActuals.set(lastIndex, {
       elapsedSeconds: derived.elapsedSeconds,
       distanceMeters: derived.distanceMeters,
@@ -4158,9 +4285,15 @@ export function createPm5Driver(
       // multi-interval derivation subtracts the recorded priors, and this
       // is where a prior becomes recorded. The averages deliberately do
       // not — an average is not subtractable, which is B3's whole finding.
+      // RC-9d: `restSeconds`/`restDistanceMeters` ride along too, straight
+      // off this same boundary-derived `actual` — additive-optional,
+      // `undefined` whenever `actual`'s own (additive-optional) fields are
+      // (`recordedActuals`'s own doc comment has the full reasoning).
       activeRun!.recordedActuals.set(normalizedIndex, {
         elapsedSeconds: actual.elapsedSeconds,
         distanceMeters: actual.distanceMeters,
+        restSeconds: actual.restSeconds,
+        restDistanceMeters: actual.restDistanceMeters,
       });
     }
     // One boundary per grace, consumed here — a second notification arriving
@@ -4581,12 +4714,12 @@ export function createPm5Driver(
   // is a whole-workout total, not a per-tick status field).
   //
   // Receipt is logged for BOTH (`summary-half`, mirroring
-  // `noteBoundaryHalf`'s own site/voice) and only 0x0039 is decoded
-  // (Task 2's gate, `noteSummary` — review I5: every field the gate needs
-  // rides 0x0039, and waiting on 0x003A would rebuild the drop fragility
-  // R1 exists to fix). Receipt is logged FIRST on purpose: a stash must
-  // show that the bytes arrived even when the verdict below is that they
-  // change nothing.
+  // `noteBoundaryHalf`'s own site/voice) and only 0x0039 GATES the
+  // reconcile (Task 2's gate, `noteSummary` — review I5: every field the
+  // gate needs rides 0x0039, and waiting on 0x003A would rebuild the drop
+  // fragility R1 exists to fix). Receipt is logged FIRST on purpose: a
+  // stash must show that the bytes arrived even when the verdict below is
+  // that they change nothing.
   t.subscribe(END_OF_WORKOUT_SUMMARY_UUID, (bytes) => {
     noteSummaryHalf("0x0039", bytes);
     noteSummary(bytes);
@@ -4594,8 +4727,17 @@ export function createPm5Driver(
   // `bytes` (Phase LL Task 1): this callback used to take NO parameter at
   // all — 0x003A's own hex could never reach the ring no matter what
   // (`noteSummaryHalf`'s own updated doc comment has the full reasoning).
+  // RC-9d (design spec 2026-08-25-free-oracles §3): `recordRestDistanceVerdict`
+  // now reads that hex too, same call-order discipline as 0x0039 above —
+  // receipt (`summary-half`) logged first, the decode/verdict second, so a
+  // stash always shows the bytes arrived even if the verdict itself
+  // suppresses. This is still NOT the reconcile gate: `recordRestDistanceVerdict`
+  // writes its own `rest-distance-verdict` ring entry and nothing else,
+  // never touching `run.recordedActuals`/`finishGraceUntil` or any other
+  // state `noteSummary`'s gate depends on.
   t.subscribe(END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID, (bytes) => {
     noteSummaryHalf("0x003A", bytes);
+    recordRestDistanceVerdict(bytes);
   });
 
   // 0x003F, the PRODUCTION subscriber (storage-spine design spec §2,
