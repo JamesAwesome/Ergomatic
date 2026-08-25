@@ -180,11 +180,41 @@ verdict**, so a null result is distinguishable from an unrun probe.
 This ships in PR 1 because it is diagnostic only, it is small, and the next
 pocketed phone should not cost another walk.
 
-## Task 2 — The pre-row state is unmistakable
+## Task 2 — The pre-row state is unmistakable, and it warns BEFORE the loss
 
 Failing test first, shape per Gate 0. The requirement, independent of treatment:
 a rower looking at the connected surface can tell whether the app has seen a pull.
 Numbers that have never been measured must not render as measurements.
+
+### The pre-emptive warning (James, 2026-08-25 — "a warning on the ready screen not to sleep the screen")
+
+**This is the only PREVENTIVE element in PR 1.** Everything else here tells the
+rower after the workout is already gone. The ready state is where the rower
+stands in the seconds before they pocket the phone, so it is the one place a
+warning can still change the outcome.
+
+Constraints on it, all of which the wording must respect:
+
+- **It is not "the screen may sleep".** Keep-awake is already armed for the
+  whole connected flow, so the screen will not sleep on its own. The only way
+  into this failure is a deliberate power-button lock (or switching apps). Say
+  the true thing, not the plausible one.
+- **It must not promise sufficiency.** We have NOT established that keeping the
+  app foregrounded is enough, only that being backgrounded is where the loss
+  happened. State what we know — we hear the erg only while the app is on
+  screen — and promise nothing beyond it. This is the same no-asserting-a-cause
+  rule as Task 3.
+- **It must not become a permanent scold.** Most rowers never lock the phone,
+  and a warning shown every session on a screen seen every session is noise
+  that gets tuned out — at which point it stops working for the rower who
+  needs it. Whether it is always-present-but-quiet, once-per-device, or shown
+  only after this has bitten before is a **Gate 0 decision**, not this spec's.
+- **Copy rules bind:** no em-dashes in user-facing strings, and short enough to
+  read while settling onto the seat.
+
+Exit criterion 2 covers the state's distinguishability; the warning gets its own
+criterion below because a rower can meet a clear ready state and still lock the
+phone.
 
 ## Task 3 — The banner tells the truth, and asserts no cause
 
@@ -266,21 +296,25 @@ docs/TESTING.md governs. Specifics:
 2. A rower can tell, from the connected surface, whether the app has seen a pull.
    Structural assertion plus James's eye at Gate 0 — "cannot mistake" is not
    falsifiable on its own.
-3. The banner never claims to have kept anything when nothing was measured, and
+3. The ready state carries a warning that keeping the app on screen is what
+   lets us hear the erg, worded so it neither blames the screen timeout (which
+   keep-awake already handles) nor promises that staying foregrounded is
+   sufficient. Its frequency is whatever Gate 0 chose.
+4. The banner never claims to have kept anything when nothing was measured, and
    names no cause.
-4. One exported predicate decides "measured anything", consumed by both the
+5. One exported predicate decides "measured anything", consumed by both the
    banner and the caption.
-5. A connected session that recorded nothing does not present as hand-logged on
+6. A connected session that recorded nothing does not present as hand-logged on
    the live summary; and the PR states plainly whether the STORED row is fixed
    too or left wrong.
-6. All three exits still offered, `Log against plan` included and undemoted.
-7. `endSession` closing nothing, and `monitorModeRun` returning null, each leave
+7. All three exits still offered, `Log against plan` included and undemoted.
+8. `endSession` closing nothing, and `monitorModeRun` returning null, each leave
    a ring entry naming why; the ring carries a wall clock.
-8. **The §D1e probe is run and reported with FRAME COUNTS**, both with and
+9. **The §D1e probe is run and reported with FRAME COUNTS**, both with and
    without `bluetooth-central`, so a null result is distinguishable from an
    unrun probe. The report says which of §D1e's three outcomes occurred, and
    whether §D2a's drain inference held. No plist change is merged either way.
-9. **A phone walk with two separate legs**, because they exercise different code:
+10. **A phone walk with two separate legs**, because they exercise different code:
    **lock BEFORE the first pull** (the nothing-measured branch, this spec's
    flagship) and **lock MID-PIECE** (the something-measured branch). A single leg
    reported as covering both is the oracle-blindness the anchor pass flagged.
