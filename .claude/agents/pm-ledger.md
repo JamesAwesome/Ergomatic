@@ -2519,3 +2519,79 @@ asked for: a piece ended early marked PARTIAL with no backfilled programmed
 rest, and a link-lost row that says so rather than papering the gap (both
 already shipped or queued — LINK LOST is live, PARTIAL is not: queued at
 this spec's close).
+
+## PM final-PR gate, PR #194 (RC-5 hero-truth — TRIAD: three numbers' meaning), 2026-08-25
+
+- **A PR body claim was falsified by a passing test in the same PR.** Bullet 4
+  said the history list "now resolves the same way as the detail, so one session
+  can't read 742 in the list and 500 when you open it"; `HistoryList.test.tsx:459`
+  asserts `"AVG 2:18.8 · 742 m"` is visible for a row whose detail renders 500 m.
+  The residual was honestly recorded in ROADMAP and honestly pinned — and then
+  denied above the fold. **At a gate, take each above-the-fold claim to the test
+  file that would contradict it**, the same discipline the briefing already
+  demands of specs. Sibling of #192's overclaim, one artefact over.
+- **"Old rows don't move" and "rest is named on the line instead of hidden in the
+  headline" cannot both be true.** Both shipped in one bullet, inherited verbatim
+  from spec §3, contradicted by the PR's own flagship capture (742 → 500 on an old
+  row). **When a bullet says a number stopped including something, it says the
+  number moved** — check softening language against the impact bullet three lines
+  below it.
+- **A residual's POPULATION is a claim and gets the same evidence bar as a wire
+  fact.** RC-5's "build-738-era rows render no AVG SPLIT (rows saved during
+  v0.21.0's TestFlight window)" is unreachable: `git log -S machine_work_seconds`
+  puts that column in #190 and `git tag --contains` puts #190 in v0.22.0 ONLY, so
+  no build-738 row is tier A at all. The real population is one path — a run
+  completed but left unsaved across the 738→747 update. It mattered because a
+  release-note clause was owed to it: **an overstated residual becomes a false
+  statement to testers.** Two commands settle it.
+- **A shipped release note can be falsified by the NEXT release.** v0.22.0's note
+  (`releaseNotes.ts:22`, one day old) says "everything else on that screen includes
+  rest, so the numbers are meant to differ"; RC-5 makes the heroes work-only and
+  makes block and hero MATCH. The branch tracked the v0.11.0 correction and missed
+  the one-day-old one. **Grep `releaseNotes.ts` for the reversed ruling's own nouns,
+  not just for old versions** — the most recent note is the likeliest to be
+  reversed and the least likely to be suspected.
+- **The mitigation-sentence rule recurred one release after it was written.**
+  #192's caption fix was re-broken by RC-5: "Rest metres excluded, here and in the
+  totals above" rendered four lines above "4:04 total · plus 242 m coasting in
+  rest", the only object on screen called a total and the one that includes rest.
+  **A caption asserting scope must be re-read every time the screen's scope
+  changes; it is not fixed once.**
+- **Accepted-residual ruling, with the argument, so it is not re-litigated:** the
+  list-vs-detail 742/500 gap (monitor rows 2026-08-08..2026-08-24, `endedBy`
+  finished/null) is ACCEPTED. The only alternative — making the detail decline
+  tier B2 as well — would restore a fused 742 hero beside a work-only 2:04.0 AVG
+  SPLIT on the rower's most recent rows: the 40 s in-frame contradiction RC-5
+  exists to kill. **A cross-screen disagreement where one side is a summary line
+  beats a self-contradicting detail screen.** It must be in the notes, not denied.
+- **Seven accepted residuals were written `- **[ ]`, which is not task-list
+  syntax** — every residual the PR filed was invisible to the ROADMAP counts this
+  project runs on itself. **Filing that no audit can see is filing-as-deferral
+  with better manners.** Check the delta, not the prose, when a PR says "all in
+  ROADMAP". (After the fix: 73/231 vs main's 66/230.)
+- **A stored column changed meaning with no marker, and it is documented in exactly
+  one place.** `session_logs.distance_meters`/`time_seconds`/`avg_split_seconds`
+  are fused before this merge and work-only after; `schema.ts` says so. Phase PS's
+  input list did not, and PS owns "metres per week". **When a column's meaning
+  becomes save-time-dependent, the note belongs with the FUTURE READER, not only
+  with the schema.**
+- **Re-gate, 0b19e20: eight conditions, all text, all landed, and the implementer
+  verified the population correction INDEPENDENTLY** (`git log -S` +
+  `git tag --contains` + `git show v0.21.0:`) rather than taking the gate's word —
+  the same two-command habit #190's gate asked for, now used unprompted. The
+  correction went further than the finding: `postTestOffer`'s silent decline was
+  folded into the residual as the SAME cause, explicitly "NOT a second
+  population." **When a gate finding says two symptoms share a cause, the fix is
+  ONE residual, not two rows that will drift apart.**
+- **Release call: `v0.23.0` MINOR, notes PR before the tag.** `v0.22.0..main` is
+  EMPTY (v0.22.0 tagged at main's tip, #193), so this PR is the whole range.
+  Notes owe: rest-bearing rows read smaller AND that this includes old rows; the
+  machine's own numbers where the machine spoke, truncation named; corrections to
+  BOTH v0.22.0's and v0.11.0's shipped notes; the bounded list-vs-detail gap;
+  ended-early/link-lost rows keep their old headline; PARTIAL and the chart's
+  rest-spanning axes explicitly not in this release. Before writing the
+  build-738 clause, check whether such a row can exist for this cohort at all —
+  if not, DROP it rather than describe a shape a tester cannot have.
+- **The 30-second rule is 0-for-17**; eleventh consecutive declined enforcement.
+  Length was again inherent to a triad PR; the enforceable failures were CONTENT
+  both times. Still James's to re-set or retire, still belongs in `CLAUDE.md`.
