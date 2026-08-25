@@ -33,17 +33,37 @@
 // whenever the rower keeps the flywheel moving (`seriesRecorder.ts`'s
 // own header, corrected trace-truth Task 2: measured at 21 rest samples
 // on `session-2-wu-4unequal.jsonl`, and 3 even on `step-3`'s own tail).
-// Either way — frozen (zero samples, nothing to skip) or advancing
-// (samples at the ordinary cadence) — a rest by itself never produces a
-// gap in `t`, because the recorder's own work clock excludes rest
-// duration from its count regardless of which case it was. A real gap is
-// a dropped frame or a rejected reset candidate, and IS visible as a jump
-// in consecutive samples' `t`. This module breaks the line at any gap over
-// `GAP_BREAK_SECONDS` between two consecutive REAL (sentinel-excluded)
-// readings for the measure being drawn — which also, correctly, breaks the
-// line across a long run of sentinel samples (no real pace exists there
-// either), exactly the "breaks... across a missing-hr stretch" behavior
-// §2 already describes for HR's own absence.
+//
+// NEITHER `t` NOR `d` IS A WORK-ONLY QUANTITY (series-truth spec §D,
+// widened to both axes): each is the sum of per-interval final readings,
+// and each is CONDITIONAL ON ROWER BEHAVIOUR DURING RESTS — a frozen
+// rest contributes nothing to either axis; an advancing rest contributes
+// all of itself (the exit-7 ring: key 0's own register read 129.5s
+// against a 67.91s WORK interval, and the series' final `d` of 742.7m
+// stands against 0x0039's work-only 500m — the ring is the receipt, not
+// this file). Say "conditional on rower behaviour during rests", never
+// "includes rest": the second phrasing still reads as one fixed unit,
+// when what actually lands on either axis depends on what the rower did.
+//
+// Despite that, a rest by itself still never produces a gap in `t` — but
+// not because the work clock "excludes" rest duration (it does not: an
+// advancing rest's samples land IN `t`, same as work). Either way —
+// frozen (zero samples, nothing to skip) or advancing (samples at the
+// ordinary cadence, folded straight into `t`) — consecutive real samples
+// never land more than `GAP_BREAK_SECONDS` apart on their own account. A
+// real gap is a dropped frame or a rejected reset candidate, and IS
+// visible as a jump in consecutive samples' `t`. This module breaks the
+// line at any gap over `GAP_BREAK_SECONDS` between two consecutive REAL
+// (sentinel-excluded) readings for the measure being drawn — which also,
+// correctly, breaks the line across a long run of sentinel samples (no
+// real pace exists there either), exactly the "breaks... across a
+// missing-hr stretch" behavior §2 already describes for HR's own
+// absence.
+//
+// The axis-quantity question (should the chart use a true work-only
+// clock instead?) is explicitly OUT of scope here and queued in ROADMAP
+// (series-truth spec §D) — changing what an axis MEANS is its own
+// number-meaning decision, not a docs fix.
 //
 // RESTS ARE DRAWN BUT DO NOT SET THE VERTICAL SCALE (2026-08-20 ruling,
 // from a real photographed session where they did): a rest excursion
@@ -175,11 +195,13 @@ function realReadings(samples: readonly Sample[], measure: Measure): Reading[] {
  *  more than `GAP_BREAK_SECONDS` apart (§3). A rest never trips this on
  *  its own — not because it "freezes" (it doesn't always: a rest whose
  *  wire keeps advancing produces samples at the ordinary ~1s cadence,
- *  same as work), but because the recorder's own work clock (`t`)
- *  excludes rest duration from its count either way — a frozen rest
- *  contributes no samples to skip over, an advancing one contributes
- *  samples with no abnormal gap between them. A real gap (a dropped
- *  frame, a rejected reset candidate, or a long sentinel run) does. */
+ *  same as work, folded straight into `t` — series-truth spec §D, this
+ *  file's own header above: `t` is not a work-only quantity either), but
+ *  because either way — frozen (zero samples, nothing to skip over) or
+ *  advancing (samples at the ordinary cadence, no abnormal gap between
+ *  them) — consecutive real readings never land far enough apart on
+ *  their own account. A real gap (a dropped frame, a rejected reset
+ *  candidate, or a long sentinel run) does. */
 function toSegments(readings: readonly Reading[]): TracePoint[][] {
   const segments: TracePoint[][] = [];
   let current: TracePoint[] = [];

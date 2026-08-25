@@ -75,6 +75,40 @@ import {
   type RunIdentity,
 } from "./useMonitorSession";
 
+// series-truth Task 4: the hook only ever READS `backwardBucketCount()` off
+// whichever recorder `createSeriesRecorder()` handed it at close — it never
+// derives the count itself (the recorder does, spec §C′, pinned by
+// `seriesRecorder.test.ts`). The genuinely-poisoned wire shape that produces
+// a nonzero count is no longer reachable through the FIXED driver+recorder
+// pair this branch ships (that is the whole point of B′), so the one
+// hook-level test that needs a nonzero count FORCES it through this
+// passthrough wrapper rather than trying to reconstruct an unreachable wire
+// sequence — it exists to test the hook's OWN wiring (read count, write one
+// ring entry), not to re-prove the counting logic seriesRecorder.test.ts
+// already owns. Every other test in this file gets the real, un-forced
+// recorder: `forced` stays `null` unless a test sets it, and the describe
+// block that uses it resets it in its own `afterEach`.
+const seriesRecorderControl = vi.hoisted(() => ({
+  forced: null as number | null,
+}));
+
+vi.mock("./seriesRecorder", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./seriesRecorder")>();
+  return {
+    ...actual,
+    createSeriesRecorder: (): ReturnType<
+      typeof actual.createSeriesRecorder
+    > => {
+      const real = actual.createSeriesRecorder();
+      return {
+        ...real,
+        backwardBucketCount: (): number =>
+          seriesRecorderControl.forced ?? real.backwardBucketCount(),
+      };
+    },
+  };
+});
+
 // ---------------------------------------------------------------------------
 // Fixtures
 // ---------------------------------------------------------------------------
@@ -5349,6 +5383,135 @@ describe("useMonitorSession: series capture — recorder wiring and the three fl
     expect(loadMonitorRun()?.series?.samples.map((s) => s.t)).toStrictEqual([
       100, 300, 600,
     ]);
+  });
+});
+
+describe("useMonitorSession: series-truth Task 4 — the ring's own backward-buckets entry (spec §C′, written at closeRecord)", () => {
+  const ONE_INTERVAL: WorkoutProgram = {
+    intervals: [
+      {
+        type: "work",
+        kind: "time",
+        value: 60,
+        targetSplit: 120,
+        displaySpm: 22,
+        restSeconds: 0,
+      },
+    ],
+  };
+  const IDENTITY: RunIdentity = {
+    workoutId: "series-backward-ring",
+    title: "Series backward ring",
+    ...TEST_SEED,
+  };
+
+  function ringEntries(
+    result: Session,
+  ): { seq: number; kind: string; detail: string }[] {
+    return JSON.parse(result.current.exportLog()) as {
+      seq: number;
+      kind: string;
+      detail: string;
+    }[];
+  }
+
+  afterEach(() => {
+    seriesRecorderControl.forced = null;
+  });
+
+  it("a nonzero backwardBucketCount at close writes exactly one series-backward-buckets entry, naming the count and the spec that governs it", async () => {
+    seriesRecorderControl.forced = 12;
+    const { result, fake } = harness({
+      program: ONE_INTERVAL,
+      events: [
+        status(100, { elapsedSeconds: 10, distanceMeters: 40 }),
+        {
+          atMs: 200,
+          kind: "status",
+          workoutState: WORKOUTSTATE_WORKOUTEND,
+          elapsedSeconds: 60,
+          distanceMeters: 200,
+          spm: 0,
+          currentSplit: 0,
+          heartRateBpm: 140,
+          programIntervalIndex: 0,
+        },
+        {
+          atMs: 200,
+          kind: "boundary",
+          actual: {
+            index: 0,
+            elapsedSeconds: 60,
+            distanceMeters: 200,
+            avgSpm: 24,
+            avgHeartRateBpm: 142,
+            restDistanceMeters: 0,
+          },
+          cumulativeElapsedSeconds: 60,
+          cumulativeDistanceMeters: 200,
+        },
+      ],
+    });
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, IDENTITY);
+
+    tick(fake, 100); // -> live
+    tick(fake, 100); // the WORKOUTEND frame + close, in one tick
+
+    expect(result.current.phase).toBe("ended");
+    const entries = ringEntries(result).filter(
+      (e) => e.kind === "series-backward-buckets",
+    );
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.detail).toBe(
+      "12 sample(s) refused because the work clock went backwards - attribution defect upstream, series is missing data (series-truth spec C')",
+    );
+  });
+
+  it("a clean session (backwardBucketCount 0) writes no series-backward-buckets entry at all", async () => {
+    // `seriesRecorderControl.forced` stays `null` here — the REAL recorder,
+    // driven by real (non-poisoned) frames, reports 0 for the whole run.
+    const { result, fake } = harness({
+      program: ONE_INTERVAL,
+      events: [
+        status(100, { elapsedSeconds: 10, distanceMeters: 40 }),
+        {
+          atMs: 200,
+          kind: "status",
+          workoutState: WORKOUTSTATE_WORKOUTEND,
+          elapsedSeconds: 60,
+          distanceMeters: 200,
+          spm: 0,
+          currentSplit: 0,
+          heartRateBpm: 140,
+          programIntervalIndex: 0,
+        },
+        {
+          atMs: 200,
+          kind: "boundary",
+          actual: {
+            index: 0,
+            elapsedSeconds: 60,
+            distanceMeters: 200,
+            avgSpm: 24,
+            avgHeartRateBpm: 142,
+            restDistanceMeters: 0,
+          },
+          cumulativeElapsedSeconds: 60,
+          cumulativeDistanceMeters: 200,
+        },
+      ],
+    });
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, IDENTITY);
+
+    tick(fake, 100); // -> live
+    tick(fake, 100); // the WORKOUTEND frame + close, in one tick
+
+    expect(result.current.phase).toBe("ended");
+    expect(
+      ringEntries(result).filter((e) => e.kind === "series-backward-buckets"),
+    ).toHaveLength(0);
   });
 });
 

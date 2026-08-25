@@ -42,6 +42,8 @@ import {
 } from "../../domain/monitor/pm5/commands.js";
 import {
   WORKOUTSTATE_INTERVALREST,
+  WORKOUTSTATE_INTERVALWORKDISTANCE,
+  WORKOUTSTATE_INTERVALWORKDISTANCETOREST,
   WORKOUTSTATE_INTERVALWORKTIME,
   WORKOUTSTATE_INTERVALWORKTIMETOREST,
   WORKOUTSTATE_TERMINATE,
@@ -75,6 +77,7 @@ import { buildDraft } from "../session/draft";
 import { buildRun } from "../session/engine";
 import { createEventLog } from "./eventLog";
 import { createPm5Driver } from "./driver";
+import { createSeriesRecorder } from "./seriesRecorder.js";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -217,6 +220,34 @@ const TWO_INTERVAL_REST_PROGRAM: WorkoutProgram = {
       targetSplit: 120,
       displaySpm: 22,
       restSeconds: 0,
+    },
+  ],
+};
+
+/** 2x250m r60, distance-kind both legs — the armed shape of the walk-2026-
+ *  08-24 exit-7 capture (`docs/monitor/sessions/walk-2026-08-24/
+ *  phone-exit7-ring.json`, README's own `v250m/1:00r...2` PM5 View Detail
+ *  header). Used only by the series-truth Task 3 oracle below: every other
+ *  program in this file is time-kind (this file's own `tick()` harness
+ *  defaults `workoutDurationType` to 0/time; the oracle passes `128`
+ *  explicitly per tick, matching the ring's own `durationType=128`). */
+const EXIT7_PROGRAM: WorkoutProgram = {
+  intervals: [
+    {
+      type: "work" as const,
+      kind: "distance" as const,
+      value: 250,
+      targetSplit: null,
+      displaySpm: null,
+      restSeconds: 60,
+    },
+    {
+      type: "work" as const,
+      kind: "distance" as const,
+      value: 250,
+      targetSplit: null,
+      displaySpm: null,
+      restSeconds: 60,
     },
   ],
 };
@@ -1833,6 +1864,446 @@ describe("session accumulator: the walk's falsification (CR2 spec 1 Task 11)", (
       expect(allRefusals).toHaveLength(2);
     },
   );
+});
+
+// ---------------------------------------------------------------------------
+// series-truth design spec §A/§B′ (task-2-brief.md Step 1(a)) — state 9's
+// own sibling fix. `docs/monitor/sessions/walk-2026-08-24/phone-exit7-ring.
+// json` seq 27/28 (a 2x250m r60 row, all distance-kind intervals) hit the
+// SAME poison shape Task 11 above pins for state 8
+// (`WORKOUTSTATE_INTERVALWORKTIMETOREST`), but through
+// `WORKOUTSTATE_INTERVALWORKDISTANCETOREST` (9) — the guard's own comment
+// (`driver.ts`'s `maybeEmitFrame`) named this as "the symmetric, plausible
+// sibling case ... the same one-line extension if a future walk shows it";
+// this walk is that capture. Ring seq 27 is interval 1's own honest final
+// tick (elapsed=67.91s, distance=250.2m, machineTotal=250m, machine count
+// still 0); ring seq 28 is the poison tick itself (elapsed=68.02s,
+// distance=250.6m) with the ring's own "divergence" entry recording the
+// driver refusing to open key 1 with it and merging into key 0 instead —
+// the machine count at that tick (1) is the "one unrecorded half" the
+// sibling Task-11 test above also has to infer (SECONDARY: no capture shows
+// 0x0033's own byte at that exact instant, only the resulting refusal).
+// ---------------------------------------------------------------------------
+
+describe(
+  "session accumulator: state 9's own poison tick (series-truth spec §A, " +
+    "walk-2026-08-24 exit-7)",
+  () => {
+    it(
+      "a state-9 poison tick (distance-kind interval boundary) is mirrored " +
+        "exactly like state 8: the emitted intervalIndex AND the new " +
+        "attributedIntervalIndex field both stay at the register key the " +
+        "guard actually used (0), not the too-high key it refused to open " +
+        "(1) — ring seq 27/28's own numbers",
+      async () => {
+        const h = await programmed(TWO_INTERVAL_REST_PROGRAM);
+
+        // Ring seq 27 — interval 1's own honest final tick before the
+        // boundary. series-truth review rider (task-3-brief.md): ring seq
+        // 27's own decoded byte is ALREADY `workoutState=9`
+        // (`WORKOUTSTATE_INTERVALWORKDISTANCETOREST` — the machine reports
+        // the ephemeral transition at this exact tick, not a plain state-5
+        // rowing reading), corrected here from the prior state-5 fixture
+        // (which overclaimed "ring seq 27's own numbers" while using a
+        // byte the ring never shows at that seq). Functionally identical
+        // either way: `session.seen` is still empty at this, the first-
+        // ever write (`programmed()`'s own doc comment), so the
+        // refused-open guard's state-8/9 mirror — the only place this
+        // byte matters — never runs regardless of which state f1 carries;
+        // this fixes the fixture's fidelity to the ring, not its
+        // assertions.
+        const f1 = await tick(
+          h,
+          {
+            elapsed: 67.91,
+            distance: 250.2,
+            state: WORKOUTSTATE_INTERVALWORKDISTANCETOREST,
+          },
+          0,
+        );
+        expect(f1.intervalIndex).toBe(0);
+        expect(f1.attributedIntervalIndex).toBe(0);
+
+        // Ring seq 28 — THE POISON TICK: elapsed=68.02s, distance=250.6m,
+        // machine count already 1. `toProgramIndex(1, "rowing", 2)`
+        // resolves program index 1, a key `session.seen` does not hold yet
+        // — the open-on-reset guard correctly refuses to OPEN it (elapsed
+        // 68.02 is not before key 0's own register, 67.91) and folds
+        // `activeKey` back to 0 for the session totals, exactly as ring seq
+        // 28's own "divergence" entry records in production. Before this
+        // fix, the mirror gate named only
+        // `WORKOUTSTATE_INTERVALWORKTIMETOREST` (8) — state 9 fell through
+        // untouched, leaving `intervalIndex` at the too-high 1, and
+        // `attributedIntervalIndex` did not exist at all. Both are the bugs
+        // this test pins.
+        const f2 = await tick(
+          h,
+          {
+            elapsed: 68.02,
+            distance: 250.6,
+            state: WORKOUTSTATE_INTERVALWORKDISTANCETOREST,
+          },
+          1,
+        );
+        expect(f2.intervalIndex).toBe(0); // RED before fix A: was 1.
+        expect(f2.attributedIntervalIndex).toBe(0); // RED before fix A+B′: was undefined.
+
+        // The register the guard actually wrote to (key 0, max-merged) is
+        // exactly what `attributedIntervalIndex` must equal — the identity
+        // fix B′ exists for. `session` is a driver-internal closure
+        // variable with no public accessor, so this is asserted via the
+        // session totals `tick()` already returns: key 0's register grew
+        // to the poison tick's own (larger) pair by max-merge, so
+        // `sessionDistanceMeters`/`sessionElapsedSeconds` read the poison
+        // tick's own numbers directly.
+        expect(f2.sessionDistanceMeters).toBeCloseTo(250.6, 1);
+        expect(f2.sessionElapsedSeconds).toBeCloseTo(68.02, 1);
+      },
+    );
+  },
+);
+
+// ---------------------------------------------------------------------------
+// series-truth design spec §E / exit criterion 1 (task-3-brief.md Step 1a,
+// controller pre-flight ruling) — the exit-7 oracle. Synthesized FROM the
+// ring (`docs/monitor/sessions/walk-2026-08-24/phone-exit7-ring.json`, no
+// replayable BLE capture of this defect exists — production build, no
+// instrument), replayed through the REAL driver -> REAL
+// `createSeriesRecorder`, asserting ONLY ring-sourced facts (spec §E: the
+// pace assertion the earlier draft carried was killed by the antagonist
+// pass — `currentSplit` is invented by this fixture, so asserting it would
+// test the fixture, not the fix).
+//
+// Checkpoints taken verbatim off the ring:
+//   seq 27  elapsed=67.91 distance=250.2 state=9 count=0 (honest final
+//           interval-1 tick, ALREADY state 9 — the machine reports the
+//           ephemeral work->rest state before its own count increments)
+//   seq 28  elapsed=68.02 distance=250.6 state=9 count=1 (THE POISON TICK
+//           — count has now incremented; the open-on-reset guard refuses
+//           to open key 1 and folds into key 0 instead, ring's own
+//           "divergence" entry)
+//   seq 49  final-totals: registers 0:(129.5s,397.2m) 1:(101s,345.5m),
+//           accumulator=742.7m accumulatorElapsed=230.5s
+//   seq 48  frame state=finished elapsed=100.97 distance=345.5 (the
+//           source of key 1's own final register reading, 101s rounded)
+// Everything between those checkpoints is a 1 Hz synthetic fill (no ring
+// entry exists for every second — the ring is a throttled diagnostic
+// buffer, not a full capture), linearly interpolated between the named
+// checkpoints and carrying the correct wire STATE for its phase (§18's own
+// toProgramIndex table: work states 4/5/8/9 pass the raw count through
+// unchanged; resting subtracts one) — chosen so the driver's own key
+// resolution reaches the exact same two final registers the ring shows,
+// not merely a plausible-looking approximation.
+// ---------------------------------------------------------------------------
+
+describe("createSeriesRecorder — series-truth Task 3: the exit-7 oracle, real driver -> real recorder (spec §E, exit criterion 1)", () => {
+  it(
+    "a synthetic replay of the ring's own checkpoints (interval 1 to " +
+      "67.91s/250.2m, the state-9 poison tick at 68.02s/250.6m, an " +
+      "advancing rest to 129.5s/397.2m, interval 2 reset to 0 then " +
+      "56.2s/250.3m, a trailing rest to a finished tick at " +
+      "100.97s/345.5m) reaches ~230 samples, t~230.5s, final d within 1m " +
+      "of 742.7, TWO rest runs, zero backward buckets, and interval 2's " +
+      "own samples present",
+    async () => {
+      const h = await programmed(EXIT7_PROGRAM);
+      const rec = createSeriesRecorder();
+      const round1 = (n: number): number => Math.round(n * 10) / 10;
+
+      // --- interval 1 work: count 0, state 5 (INTERVALWORKDISTANCE) ---
+      for (let t = 0; t <= 67; t++) {
+        const f = await tick(
+          h,
+          {
+            elapsed: t,
+            distance: round1((t / 67.91) * 250.2),
+            state: WORKOUTSTATE_INTERVALWORKDISTANCE,
+            workoutDurationType: 128,
+          },
+          t === 0 ? 0 : undefined,
+        );
+        rec.onFrame(f);
+      }
+      // seq 27 — honest final tick, ALREADY state 9, count still 0.
+      rec.onFrame(
+        await tick(h, {
+          elapsed: 67.91,
+          distance: 250.2,
+          state: WORKOUTSTATE_INTERVALWORKDISTANCETOREST,
+          workoutDurationType: 128,
+        }),
+      );
+      // seq 28 — THE POISON TICK: count increments to 1, the guard
+      // refuses to open key 1 (elapsed 68.02 is not before key 0's own
+      // register, 67.91) and folds into key 0 instead — exactly the
+      // ring's own "divergence" entry.
+      rec.onFrame(
+        await tick(
+          h,
+          {
+            elapsed: 68.02,
+            distance: 250.6,
+            state: WORKOUTSTATE_INTERVALWORKDISTANCETOREST,
+            workoutDurationType: 128,
+          },
+          1,
+        ),
+      );
+
+      // --- rest after interval 1: count 1, state 3 (INTERVALREST) — the
+      // resting-minus-one rule keys this straight back to interval 0
+      // (`toProgramIndex(1, "resting", 2) === 0`), so key 0 keeps
+      // growing until the genuine reset below. ---
+      for (let t = 69; t <= 129; t++) {
+        const f = await tick(
+          h,
+          {
+            elapsed: t,
+            distance: round1(
+              250.6 + ((t - 68.02) / (129.5 - 68.02)) * (397.2 - 250.6),
+            ),
+            state: WORKOUTSTATE_INTERVALREST,
+            workoutDurationType: 128,
+          },
+          t === 69 ? 1 : undefined,
+        );
+        rec.onFrame(f);
+      }
+      rec.onFrame(
+        await tick(h, {
+          elapsed: 129.5,
+          distance: 397.2,
+          state: WORKOUTSTATE_INTERVALREST,
+          workoutDurationType: 128,
+        }),
+      );
+
+      // --- interval 2 work: elapsed genuinely resets to 0 (the register
+      // 129.5/397.2 is strictly less than 0? no — the OPEN guard's own
+      // rule is `elapsed < openRegister.elapsed`, and 0 < 129.5, so key 1
+      // genuinely opens here). count stays 1 (`toProgramIndex(1,
+      // "rowing", 2) === 1`, already the newly-opened key). ---
+      for (let t = 0; t <= 56; t++) {
+        const f = await tick(
+          h,
+          {
+            elapsed: t,
+            distance: round1((t / 56.2) * 250.3),
+            state: WORKOUTSTATE_INTERVALWORKDISTANCE,
+            workoutDurationType: 128,
+          },
+          t === 0 ? 1 : undefined,
+        );
+        rec.onFrame(f);
+      }
+      // interval 2's own boundary — state 9 again, but count is STILL 1
+      // here (no second poison: `toProgramIndex(1, "rowing", 2) === 1`,
+      // already in `session.seen`, so the open-on-reset guard never
+      // fires — matching the ring's own single "divergence" entry, not
+      // two).
+      rec.onFrame(
+        await tick(h, {
+          elapsed: 56.2,
+          distance: 250.3,
+          state: WORKOUTSTATE_INTERVALWORKDISTANCETOREST,
+          workoutDurationType: 128,
+        }),
+      );
+
+      // --- rest after interval 2: count 2, state 3 — resting-minus-one
+      // keys this to interval 1 (`toProgramIndex(2, "resting", 2) === 1`).
+      // seq 43's own frame (elapsed=56.44 distance=251.2) is the first
+      // resting tick. ---
+      rec.onFrame(
+        await tick(
+          h,
+          {
+            elapsed: 56.44,
+            distance: 251.2,
+            state: WORKOUTSTATE_INTERVALREST,
+            workoutDurationType: 128,
+          },
+          2,
+        ),
+      );
+      for (let t = 57; t <= 100; t++) {
+        const f = await tick(h, {
+          elapsed: t,
+          distance: round1(
+            251.2 + ((t - 56.44) / (100.97 - 56.44)) * (345.5 - 251.2),
+          ),
+          state: WORKOUTSTATE_INTERVALREST,
+          workoutDurationType: 128,
+        });
+        rec.onFrame(f);
+      }
+      // seq 48 — the machine finishes mid-rest. `activeKey`'s own
+      // "finished" fallback arm (`driver.ts`, Math.max(session.seen.keys()))
+      // keeps this reading folding into key 1, exactly matching the
+      // ring's own final register (101s rounded from 100.97, 345.5m).
+      rec.onFrame(
+        await tick(h, {
+          elapsed: 100.97,
+          distance: 345.5,
+          state: WORKOUTSTATE_WORKOUTEND,
+          workoutDurationType: 128,
+        }),
+      );
+
+      const series = rec.snapshot()!;
+
+      // ~230 samples (ring: 230.5s of work-clock, ~1 sample/work-second).
+      expect(series.samples.length).toBeGreaterThan(220);
+      expect(series.samples.length).toBeLessThan(235);
+
+      // t reaching ~230.5s (129.5 + 100.97 = 230.47s of work clock).
+      const lastSample = series.samples[series.samples.length - 1]!;
+      expect(lastSample.t / 10).toBeGreaterThan(229);
+      expect(lastSample.t / 10).toBeLessThan(231);
+
+      // final d within 1m of 742.7 (397.2 + 345.5, the ring's own
+      // "final-totals" line).
+      expect(Math.abs(lastSample.d / 10 - 742.7)).toBeLessThan(1);
+
+      // interval 2's own samples exist — the structural fact the killed
+      // pace assertion proxied for (spec §E). Interval 2's work-clock
+      // base is 129.5s, running to 129.5+56.2=185.7s.
+      const interval2Samples = series.samples.filter(
+        (s) => s.t / 10 >= 130 && s.t / 10 <= 186,
+      );
+      expect(interval2Samples.length).toBeGreaterThan(50);
+
+      // TWO rest runs (spec §3: rests are DRAWN but MARKED) — count
+      // maximal consecutive runs of `r === true`, never one merged run.
+      let restRuns = 0;
+      let inRun = false;
+      for (const s of series.samples) {
+        if (s.r === true) {
+          if (!inRun) restRuns++;
+          inRun = true;
+        } else {
+          inRun = false;
+        }
+      }
+      expect(restRuns).toBe(2);
+
+      // Zero backward buckets — this exact scenario never regresses the
+      // work clock once the driver's own attribution is trusted (exit
+      // criterion 3's "healthy exit-7 counterfactual").
+      expect(rec.backwardBucketCount()).toBe(0);
+    },
+  );
+});
+
+// ---------------------------------------------------------------------------
+// series-truth design spec §B′ (fix round 2, controller review Important
+// 1) — the recorder's disclosed bounded edge, PINNED, not merely asserted
+// unreachable. `driver.ts`'s own refused-open guard mirrors `intervalIndex`
+// back onto the open key ONLY for states 8/9 (the ephemeral work->rest
+// transition); outside those two states the mirror is deliberately UNGATED
+// (`driver.ts`'s own comment: unconditional mirroring there "corrupted an
+// otherwise-correct countdown/target with no wire fact supporting it"),
+// so a genuinely NEW interval whose FIRST OBSERVED tick already collides
+// with a stale, gap-truncated register — exactly the shape
+// `driver.test.ts`'s "a reconnect timeline SPANNING a boundary" regression
+// exercises — leaves `intervalIndex` rising (the TRUE interval identity)
+// while `attributedIntervalIndex` stays folded on the still-open key (the
+// session accumulator's own accepted compromise). `seriesRecorder`, keying
+// on attribution alone, inherits exactly that compromise: the series
+// max-merges the new interval's own readings into the PRIOR key, short by
+// the whole gap — the SAME undercount the session accumulator itself
+// reports, "visible against the machine's own totals" (spec §B′). This is
+// the "one-deriver trade James accepted (consistent-with-the-accumulator
+// over independently-diverging)" the spec names — pinned here, never
+// described as unreachable.
+// ---------------------------------------------------------------------------
+
+describe("createSeriesRecorder — series-truth Task 3 fix round 2: the recorder's disclosed bounded edge, pinned as the accepted one-deriver cost (spec §B′)", () => {
+  it("a reconnect-spanning-shaped tick (post-gap first observation landing at elapsed == the open key's own register, state 4 — outside the 8/9 mirror) makes intervalIndex and attributedIntervalIndex DISAGREE through the real driver, and the recorder's series max-merges the new interval into the prior key, short by the gap, matching the accumulator exactly", async () => {
+    const h = await programmed(TWO_INTERVAL_NO_REST_PROGRAM);
+
+    // Interval 1's own final observed reading — key 0's register.
+    const f1 = await tick(
+      h,
+      { elapsed: 60, distance: 300, state: WORKOUTSTATE_INTERVALWORKTIME },
+      0,
+    );
+    expect(f1.intervalIndex).toBe(0);
+    expect(f1.attributedIntervalIndex).toBe(0);
+
+    // THE RECONNECT-SPANNING TICK: interval 2's own first observed
+    // reading already reads elapsed=60 — EQUAL to key 0's own register
+    // (not less), the guard's own strict-`<` boundary — and count has
+    // already advanced to 1 (the machine's own genuinely correct new
+    // index; no poison, no wire lie). `toProgramIndex(1, "rowing", 2)`
+    // resolves 1 (identity — state 4 is a plain rowing tick, not the
+    // ephemeral 8/9 transition), a key `session.seen` does not hold —
+    // the guard refuses to open it (elapsed 60 is not STRICTLY before
+    // key 0's own register, 60) and folds into key 0 instead. Because
+    // this refusal is on the disclosed bounded edge (state 4, not 8/9),
+    // the mirror does NOT fire: `intervalIndex` keeps its own,
+    // un-mirrored, TRUE value (1) while `attributedIntervalIndex`
+    // stays on the folded key (0) — the disagreement.
+    const f2 = await tick(
+      h,
+      { elapsed: 60, distance: 310, state: WORKOUTSTATE_INTERVALWORKTIME },
+      1,
+    );
+    expect(f2.intervalIndex).toBe(1); // rises — the TRUE interval identity
+    expect(f2.attributedIntervalIndex).toBe(0); // stays — the accumulator's own compromise
+
+    // A further interval-2 tick, still folding (silently — the refusal
+    // log is first-sighting-only, `driver.ts`'s own `refusedKeysLogged`).
+    const f3 = await tick(h, {
+      elapsed: 65,
+      distance: 330,
+      state: WORKOUTSTATE_INTERVALWORKTIME,
+    });
+    expect(f3.intervalIndex).toBe(1);
+    expect(f3.attributedIntervalIndex).toBe(0);
+    // The accumulator's OWN accepted undercount: 65, not the true
+    // 60 (interval 1) + 65 (interval 2's own progress since ITS OWN
+    // start) = 125 — short by exactly interval 1's own full duration,
+    // the "short by the whole skipped interval" cost register maps
+    // have always carried on this disclosed edge.
+    expect(f3.sessionElapsedSeconds).toBeCloseTo(65, 1);
+    expect(f3.sessionDistanceMeters).toBeCloseTo(330, 1);
+
+    const rec = createSeriesRecorder();
+    rec.onFrame(f1);
+    rec.onFrame(f2);
+    rec.onFrame(f3);
+    const series = rec.snapshot()!;
+
+    // The series matches the accumulator's own compromise EXACTLY — the
+    // same undercount, never an independently-diverging one (spec §B′'s
+    // own "consistent-with-the-accumulator over independently-
+    // diverging" framing). Key never genuinely changes (attribution
+    // stays 0 throughout), so this is the LAST bucket, at f3's own raw
+    // elapsed/distance (base = 0, nothing below key 0).
+    const last = series.samples[series.samples.length - 1]!;
+    expect(last.t / 10).toBeCloseTo(f3.sessionElapsedSeconds!, 1);
+    expect(last.d / 10).toBeCloseTo(f3.sessionDistanceMeters!, 1);
+    expect(last.t / 10).toBeCloseTo(65, 1);
+    expect(last.d / 10).toBeCloseTo(330, 1);
+
+    // Short by the gap, spelled out: the true combined total (interval
+    // 1's own 60s plus interval 2's own 65s-since-its-start) is 125;
+    // the recorder (like the accumulator) reports 65 — a 60s shortfall,
+    // exactly interval 1's own full duration, permanently lost to this
+    // one run (never self-correcting — every later interval-2 tick
+    // folds the same way, since key 1 never opens).
+    const trueCombinedSeconds = f1.elapsedSeconds + f3.elapsedSeconds;
+    expect(trueCombinedSeconds - last.t / 10).toBeCloseTo(f1.elapsedSeconds, 1);
+
+    // Never a C′ alarm: the key never actually MOVES (attribution stays
+    // 0 the whole run), so there is no backward bucket to observe —
+    // this is a SILENT undercount, exactly the accepted cost's own
+    // shape (a loud C′ entry would be the wrong signal here; nothing
+    // was lost from an already-open span, the span itself just never
+    // opened).
+    expect(rec.backwardBucketCount()).toBe(0);
+  });
 });
 
 describe("session accumulator: splitAvgPace provenance is LEVEL-triggered (interval-referent-monotone fix round 1, finding B)", () => {

@@ -435,6 +435,17 @@ export const WORKOUTSTATE_INTERVALWORKDISTANCE = 5;
  *  `src/monitor/sessionTotals.test.ts`'s fixture, for the same reason the
  *  other seven ordinals are exported (see this block's own doc comment). */
 export const WORKOUTSTATE_INTERVALWORKTIMETOREST = 8;
+/** The ephemeral work->rest transition state for distance-kind intervals
+ *  (root `IntervalWorkDistance`, `WORKOUTSTATE_TO_STATE`'s own `9: "rowing"`
+ *  row below) — the symmetric counterpart to state 8, found in production
+ *  (walk-2026-08-24 exit-7 data, ring seq 27). Added for the series-truth
+ *  fix (series-truth design spec §A). Same guard semantics as state 8: the
+ *  driver's open-on-reset gate fires on this boundary exactly as it does on
+ *  8, and the emitted frame's interval index must be mirrored onto the new
+ *  `MonitorFrame.attributedIntervalIndex` field for the recorder to key on.
+ *  Named for the same reason the other ordinals are exported (see this
+ *  block's own doc comment). */
+export const WORKOUTSTATE_INTERVALWORKDISTANCETOREST = 9;
 export const WORKOUTSTATE_WORKOUTEND = 10;
 export const WORKOUTSTATE_TERMINATE = 11;
 /** WORKOUTLOGGED — `WORKOUTSTATE_TO_STATE`'s own `12: "finished"` row below

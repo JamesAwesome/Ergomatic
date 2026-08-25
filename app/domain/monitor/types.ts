@@ -196,6 +196,16 @@ export interface MonitorFrame {
    *  optional specifically so this task's addition does not force every one
    *  of those literals to grow a field their own test has no opinion on. */
   totalWorkDistanceMeters?: number;
+  // The interval key the driver's OWN register logic resolved for this
+  // frame, after its open-on-reset guard — the single deriver of
+  // attribution (series-truth spec §B′). `src/monitor/driver.ts` sets this
+  // on every emitted frame, capturing the key the driver used internally;
+  // `seriesRecorder` keys on THIS, never on `intervalIndex` + elapsed.
+  // Additive-optional, same convention as `rawIntervalCount` below: absent
+  // for test fixtures that have no opinion on it, and absent for frames
+  // built directly by `pm5/parse.ts`'s `toMonitorFrame` (that module stays
+  // a byte-faithful codec with no opinion on this task's addition).
+  attributedIntervalIndex?: number;
   /** Storage-spine design spec §4 (PR 3 Task 1, delta D6): 0x0033's own
    *  Interval Count (`pm5/parse.ts`'s `AdditionalStatus2.intervalCount`,
    *  offset 3, interface-notes.md §10) — UNCLAMPED and un-normalized,

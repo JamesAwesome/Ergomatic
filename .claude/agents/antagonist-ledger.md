@@ -2843,3 +2843,118 @@ targetSplit:null}` reproduces the recorded tx exactly and `divergences` stays
   44 while the same burst's 0x0038 reads 22 and 0x0032 reads 29 instantaneous —
   physically 22 is the true value (8.5 m/stroke vs an impossible 4.3), so a number
   the wave will STORE is anomalous on the one path with no SCREEN oracle.
+
+## Spec-stage full pass (TRIAD), 2026-08-25 (Phase RC, "the series stops lying on distance intervals")
+
+- **"Count the recorder's backward-bucket rejections and the count is zero on a
+  clean replay."** The two halves contradict each other and the second is right.
+  `seriesRecorder.ts:250`'s `bucket <= lastEmittedBucket` IS the 1 Hz decimation,
+  not an error path: at the measured 2.23 frames/s desktop and 90-180 ms iOS
+  spacing (`pm5-interface-notes.md:4403`), 80-90% of all healthy frames take that
+  return. The defect signal is the STRICTLY backward case (`<`) — the exit-7 loss
+  reads buckets 67..124 against a `lastEmittedBucket` of 196. **Technique: when a
+  spec proposes to instrument an existing early-return, ask what fraction of
+  NORMAL traffic already takes it — the frame rate is in the ledger and the answer
+  is arithmetic. A new alarm wired to a hot path is an alarm nobody can read, and
+  the spec's own "zero on clean replays" criterion is what proves it.**
+
+- **"The count surfaces the same way `truncated` already does."** Both halves of
+  the symmetry are false. `truncated` produces NO ring entry anywhere
+  (`grep -rn truncated src server domain` — recorder, monitorRun, store, route,
+  nothing in `useMonitorSession.ts`), so there is no precedent to inherit; and
+  `truncated` IS persisted (`server/routes/data.ts:641` reconstructs it by name)
+  while a new sibling field is silently dropped by that same reconstruction.
+  The spec also assigned the write to "the driver", which never sees the recorder
+  (`useMonitorSession.ts:1270` owns it). **Technique: "it surfaces the same way X
+  does" is two claims — the CHANNEL and the PERSISTENCE — and they fail
+  independently. Grep X across src+server and check both ends before inheriting
+  a precedent; then name the module that actually holds the reference.**
+
+- **Porting a guard across a seam that has lost the guard's discriminator.** The
+  spec proposed re-applying the driver's open-on-reset predicate inside
+  `seriesRecorder`. `driver.ts:2207` can gate its mirror on the raw
+  `status.workoutState` byte (8/9); `MonitorFrame` carries only the six-valued
+  `state` (`parse.ts:457-471`) and `rawIntervalCount`, on which the poison tick
+  and an honest post-gap first tick are IDENTICAL. So the port fires exactly on
+  the driver's own disclosed bounded edge — hand-executed red on two of the repo's
+  own regressions (`driver.test.ts:979` idx0 e40 / idx1 e40 -> refuse, sample
+  dropped, clock 40 not 80; `driver.test.ts:1101` e30/e28/e45 -> key 2 never
+  opens, clock 75 not 103) — and the refusal is PERMANENT, because the refused
+  interval's own elapsed keeps growing the register it was merged into. That is
+  verbatim the "short by the whole skipped interval, forever" failure
+  `seriesRecorder.ts:44-50` says the register map exists to eliminate, and
+  `ROADMAP.md:2124-2131` still carries it OPEN and TRIAD-tagged — uncited by the
+  spec. **Technique: before porting a predicate one layer up, list the fields the
+  ORIGINAL reads and strike the ones absent from the target interface. If the
+  discriminating term is among them, the port is not the same guard — it is the
+  guard's false-positive set with the guard removed. Then grep ROADMAP for the
+  failure the port re-creates.**
+
+- **A guard whose read/write ORDER the spec never pinned.** "Strictly less than
+  the current key's register" is evaluated before the register write
+  (`seriesRecorder.ts:217-224`); after it, the test becomes
+  `elapsed < max(register, elapsed)` — false always — collapsing every interval
+  into key 0 forever. **Technique: recurrence of the 2026-08-15 Task 11 lesson.
+  For any guard expressed as a comparison against a running max, state which side
+  of the max's own update it sits on. The spec that omits it has a 50% chance of
+  shipping a permanent no-op.**
+
+- **"No migration can repair old rows."** True of the SAMPLES, false of the
+  DISPLACEMENT — which is the part James actually saw. The inflation applied from
+  the poison tick onward is exactly the finishing interval's final work elapsed
+  (67.91 s), and the saved row already stores it as `LogStep.actualSeconds`
+  (`server/stores/logs.ts:80-82`), cross-confirmed by 0x0039's own 124 s total
+  (ring seq 61 = 67.91 + 56.2). Repairable to 0.1 s. **Technique: "impossible to
+  repair" is a claim about the STORED SHAPE, not about the lost values — enumerate
+  the row's other fields and ask whether the CORRUPTION (not the data) is a
+  function of one of them. A defect with a closed-form magnitude is invertible even
+  when its casualties are not.**
+
+- **A docs-truth fix that corrected one axis and left its twin.**
+  `traceModel.ts:38-40`'s "the work clock excludes rest duration" is false
+  (key 0's register is 129.5 s for a 67.91 s interval). The spec corrected `t` and
+  said nothing about `d`, where the identical mismatch is larger: the series ends
+  at 742.7 m against 0x0039's work-only 500 m. And the quantity is
+  ROWER-DEPENDENT — a frozen rest contributes nothing, an advancing one
+  contributes all of itself — so `t` is not a clock and is not comparable between
+  intervals. **Technique: for a header correction on a paired axis (`t`/`d`,
+  `x`/`y`), check the sibling before believing the fix is complete; and when a
+  quantity turns out CONDITIONAL on behaviour, say conditional, not "includes" —
+  the second phrasing still lets a reader treat it as a unit.**
+
+- **A synthetic fixture asserting a number it planted.** Exit criterion "fastest
+  split 1:52.2 present" reads as hardware corroboration; `p` comes from
+  `currentSplit`, which the fixture invents, and 1:52.4 / 2:15.8 are just each
+  interval's average pace (250 m / 56.2 s, 250 m / 67.91 s). **Technique: for every
+  assertion in a synthesized-fixture test, ask which committed artifact the
+  asserted number came from. The ones that came from the fixture are testing the
+  fixture — restate them as the structural fact they proxy for ("interval 2's
+  samples exist"), and keep the assertions to the capture's own numbers.**
+
+- **Attacked and NOT broken (added to Phase RC's vetted ground):** the whole
+  diagnosis, re-derived by hand from `walk-2026-08-24/phone-exit7-ring.json`
+  (seq 27/28/35/42/49) through `parse.ts:467` -> `toProgramIndex` ->
+  `driver.ts:2207` -> `seriesRecorder.ts:217/250`, sample counts and the 101 s
+  delta closing against the ring's own registers; part A's gate widening (neither
+  killed `driver.test.ts` regression uses state 8 or 9, no fixture in `src/` uses
+  9 at all, every `frame.intervalIndex` consumer moves the right way for the
+  affected tick, and no honest-data false positive is constructible since a
+  genuine distance interval starts in state 5); the final-boundary immunity
+  (`toProgramIndex`'s upper clamp, confirmed on ring seq 42's SECOND state-9);
+  rests keying backward via the `resting -1` offset, so no rest frame is ever the
+  poison; additive-field safety on the localStorage side
+  (`monitorRun.ts:352-366` validates `series` structurally); and E's harness not
+  being self-confirming (the fake speaks `toMachineIndex`, the deliberately
+  separate inverse). ONE correction to the spec's framing: A is a three-line,
+  two-file change — `parse.ts:423-448` exports ordinals 0,3,4,5,8,10,11,12,13 and
+  9 exists only inside `WORKOUTSTATE_TO_STATE`, so the constant must be exported
+  first.
+
+- **Resolution (controller + James, same day):** B replaced by B-prime — the
+  driver emits `attributedIntervalIndex` on the frame (rawIntervalCount's
+  additive precedent) and the recorder's own derivation is DELETED (trace-truth's
+  "delete the heuristic" ruling); grounded by a research pass (Concept2
+  single-writer interval identity, FIT device-authored boundaries, DDIA single
+  deriver; verdict durable-with-conditions). C corrected to strict `<`,
+  hook-owned, client-only. Old-row displacement repair DECLINED by James
+  (population ~1 row), recorded as possible-but-declined.

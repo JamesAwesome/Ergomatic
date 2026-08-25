@@ -2122,12 +2122,22 @@ A research delta followed (same document, `# DELTA` section). Its result:
 
 **Three findings from the delta that outlive the choice:**
 
-- [ ] **`seriesRecorder`'s boundary fold silently UNDER-COUNTS when a gap
-      spans an interval boundary** — it folds the stale pre-gap reading,
-      or (post-gap distance > 3 m) rejects the boundary outright and
-      drops samples until the work clock climbs back. **That is a WRONG
-      NUMBER, not a gap**, it is TRIAD weight, and it is true whichever
-      option this phase picks. Highest-priority item in this phase. **M**
+- [x] **~~`seriesRecorder`'s boundary fold silently UNDER-COUNTS when a
+      gap spans an interval boundary~~ — RECORDER-SIDE HALF SUPERSEDED,
+      DRIVER-SIDE HALF NOW AN ACCEPTED, SPEC-RECORDED COST (series-truth
+      spec §B′, 2026-08-25).** `seriesRecorder` no longer folds or
+      rejects anything on its own account: B′ deletes its own boundary
+      heuristic entirely and keys registers on `attributedIntervalIndex`
+      — the ONE key the driver's own register logic already resolved —
+      so there is no second, recorder-owned fold left to under-count.
+      The driver-side observation stands, unchanged: on a refused open
+      OUTSIDE states 8/9, the series still max-merges the post-gap
+      interval into the prior key — short by the gap, the same
+      short-by-the-gap the accumulator already accepts. James accepted
+      that trade (consistent-with-the-accumulator over
+      independently-diverging) rather than build a second guard; it is
+      pinned by a `seriesRecorder.test.ts` regression on that exact
+      edge, never left "unreachable".
 - [ ] **A backlog may already exist, twice over, unbuilt.** Apple
       documents that for a foreground-only app "all Bluetooth-related
       events… are queued by the system and delivered to the app only when
@@ -2824,11 +2834,21 @@ is UNLOCKED.** The same walk's lab leg settled the terminate question:
 a Menu-kill emits the full log-commit burst, hash included
 (`pm5-interface-notes.md` §25) — the terminated path can carry the
 same observation capture, in the RC-2/RC-3 wave's scope. The phase's
-live frontier (updated at #190's PM gate): the summary-record wave's
-PR 1 LANDED — RC-2 (diagnostic decode) and RC-3's storage half shipped,
+live frontier (updated at #191's PM gate): series-truth LANDED — the
+stored series stops losing intervals on distance-with-rest pieces
+(single-deriver attribution, state-9 mirror, loud backward-bucket
+alarm; prospective only), shipped BEFORE the summary-record wave's
+PR 2 by James's sequencing call. CORRECTION to the exit-7 claim below:
+the walk verified the ACCUMULATOR against the monitor digit for digit;
+it did NOT verify the stored series, which that same session saved
+missing 56.1s of its faster interval (found by James reading the
+graph, fixed by series-truth). The summary-record wave's PR 1 LANDED
+earlier — RC-2 (diagnostic decode) and RC-3's storage half shipped,
 terminate capture live through the four gates; the remainder is PR 2,
-the MACHINE CONFIRMED display block (the wave's release event, MINOR).
-The v0.21.0 notes debt is paid (v0.21.0 shipped as build 738). Earlier: #167 (instrument + RC-4/RC-6),
+the MACHINE CONFIRMED display block (the wave's release event, MINOR —
+resolve the axis-collision input on the axis-quantity item BEFORE its
+design). The v0.21.0 notes debt is paid (v0.21.0 shipped as build
+738). Earlier: #167 (instrument + RC-4/RC-6),
 #174 (F2a), #177 (cohort unlock); the combined walk answered every wire
 question YES (record: `docs/monitor/sessions/walk-2026-08-23/`).
 Originally opened 2026-08-22 (James: evidence-first); named, scoped and
@@ -3059,15 +3079,70 @@ that needs no erg, and it can run in a test.
       sequence; give `FakeBurst`'s single `pendingBurst` slot a loud
       overwrite (scripting foot-gun); FakeBurst carries two offsets by
       spec notation, the plan prose said three.
-- [ ] **The log chart draws the first rest as a bare gap (James,
-      2026-08-24: "the graph is weird").** On the exit-7 walk's own log
-      (`docs/monitor/sessions/walk-2026-08-24/app-log-intervals-chart.png`)
-      only the TRAILING rest gets the gold band; the r60 between the
-      intervals renders as empty whitespace, and interval 2's trace sits
-      compressed against the banded tail. Desk diagnosis from the saved
-      samples first — say whether it is a rest-marker gap (samples
-      missing `rest` for the mid-piece rest) or an axis/render defect —
-      then fix. Rides the next PR touching the log surface.
+- [x] **~~The log chart draws the first rest as a bare gap (James,
+      2026-08-24: "the graph is weird")~~ — FIXED, root cause was
+      WIRE-ATTRIBUTION, not render (series-truth spec, this PR).** The
+      "rides the next PR touching the log surface" line above was
+      correct about the fix landing later but wrong about WHERE the
+      defect lived: desk diagnosis found the series recorder latching
+      onto a lying `frame.intervalIndex` at the distance-with-rest
+      boundary (PM5 state 9) and silently dropping every sample after —
+      the second interval and its trailing rest never reached the stored
+      series at all, which is what read as a "bare gap". Fixed by
+      driving the recorder off `attributedIntervalIndex`, the key the
+      driver's own register logic already resolved (spec §B′) — no
+      chart/axis code changed.
+- [x] **Series-truth: the series stops lying on distance intervals with
+      rests (spec `2026-08-25-series-truth-design.md`, this PR).**
+      SHIPPED, PROSPECTIVE ONLY — the fix stops new rows from losing
+      data; it does not repair rows already saved. James's ruling
+      (2026-08-25): the band DISPLACEMENT on an already-saved row is
+      arithmetically repairable (the inflation equals the finishing
+      interval's own stored `actualSeconds`), but the MISSING SAMPLES
+      are not (inventing them from interval averages was refused) —
+      repair declined, population is roughly one row.
+- [ ] **A lab capture of a real 2×Nm rNN piece (distance work, rest
+      between) is still owed** — the series-truth regression fixture
+      (spec §E) is SYNTHETIC, built from the production ring's own
+      numbers, not from a replayable capture; no committed recording
+      exercises this shape. Walk item: row a 2x-distance-with-rest
+      piece, save the capture alongside the exit-7 session, and add it
+      to the replay corpus.
+- [ ] **The axis-quantity question, queued (series-truth spec §D).**
+      `traceModel.ts`'s `t`/`d` axes are each the sum of per-interval
+      final readings and are CONDITIONAL ON ROWER BEHAVIOUR during
+      rests (frozen contributes nothing, advancing contributes all of
+      itself) — never work-only, despite reading like a work clock.
+      Whether the chart should instead show a TRUE work-only clock is
+      an open product question, deliberately out of this PR: changing
+      what an axis MEANS is its own number-meaning decision.
+      **NOT DEFERRABLE PAST PR 2's DESIGN (#191's PM gate, the named
+      collision):** the summary-record wave's PR 2 will render the
+      machine's WORK-ONLY total with a MACHINE CONFIRMED badge on the
+      SAME screens where this chart draws (`PostWorkoutSummary`/
+      `FromTheLog`) — on the exit-7 piece that is a badge confirming
+      500m beside a d-axis running to 742.7m, 48% apart in one frame,
+      on the screen whose selling point is machine agreement. Resolve
+      before PR 2's design, not at its gate.
+- [ ] **Flaky test on file: `App.test.tsx`/`RetestShortcut.tsx` unhandled
+      async error, seen 2-of-5 full-suite runs (series-truth branch,
+      2026-08-25), never touching that diff's files.** Pre-existing;
+      will bite CI on future PRs until diagnosed. Capture the failure,
+      don't re-run to green (the standing flake rule).
+- [ ] **C' rider for the RC-2/RC-3 wave: the continuity-reset close
+      skips the backward-bucket ring entry** (`useMonitorSession.ts`
+      ~1809 stops the recorder without reading the count) — the one
+      close where the diagnostic dies silently; final review minor 2.
+- [ ] **Phase RC CLOSE-OUT: a derivation audit (James, 2026-08-25).**
+      Before the phase closes, enumerate every CONSUMER-SIDE derivation
+      of a wire fact the driver already resolves (interval membership,
+      rest state, boundaries, totals — sweep every consumer of
+      `MonitorFrame` and the parsed status), classify each
+      consume-the-authority vs. invented-heuristic, and queue fixes for
+      the heuristics. Motivated by the series-truth defect being the
+      THIRD of its class in this repo: the recorder's own key
+      derivation (this PR), Phase LL's boundary fold (below), and the
+      CM-era boundary heuristic.
 - [ ] **Put the realtime meters count back (James, 2026-08-24: "i want
       to put that back to a realtime count").** The connected screen's
       total-meters counts by 5s and reads less responsive since the CM
