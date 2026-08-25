@@ -2834,11 +2834,21 @@ is UNLOCKED.** The same walk's lab leg settled the terminate question:
 a Menu-kill emits the full log-commit burst, hash included
 (`pm5-interface-notes.md` §25) — the terminated path can carry the
 same observation capture, in the RC-2/RC-3 wave's scope. The phase's
-live frontier (updated at #190's PM gate): the summary-record wave's
-PR 1 LANDED — RC-2 (diagnostic decode) and RC-3's storage half shipped,
+live frontier (updated at #191's PM gate): series-truth LANDED — the
+stored series stops losing intervals on distance-with-rest pieces
+(single-deriver attribution, state-9 mirror, loud backward-bucket
+alarm; prospective only), shipped BEFORE the summary-record wave's
+PR 2 by James's sequencing call. CORRECTION to the exit-7 claim below:
+the walk verified the ACCUMULATOR against the monitor digit for digit;
+it did NOT verify the stored series, which that same session saved
+missing 56.1s of its faster interval (found by James reading the
+graph, fixed by series-truth). The summary-record wave's PR 1 LANDED
+earlier — RC-2 (diagnostic decode) and RC-3's storage half shipped,
 terminate capture live through the four gates; the remainder is PR 2,
-the MACHINE CONFIRMED display block (the wave's release event, MINOR).
-The v0.21.0 notes debt is paid (v0.21.0 shipped as build 738). Earlier: #167 (instrument + RC-4/RC-6),
+the MACHINE CONFIRMED display block (the wave's release event, MINOR —
+resolve the axis-collision input on the axis-quantity item BEFORE its
+design). The v0.21.0 notes debt is paid (v0.21.0 shipped as build
+738). Earlier: #167 (instrument + RC-4/RC-6),
 #174 (F2a), #177 (cohort unlock); the combined walk answered every wire
 question YES (record: `docs/monitor/sessions/walk-2026-08-23/`).
 Originally opened 2026-08-22 (James: evidence-first); named, scoped and
@@ -3106,6 +3116,14 @@ that needs no erg, and it can run in a test.
       Whether the chart should instead show a TRUE work-only clock is
       an open product question, deliberately out of this PR: changing
       what an axis MEANS is its own number-meaning decision.
+      **NOT DEFERRABLE PAST PR 2's DESIGN (#191's PM gate, the named
+      collision):** the summary-record wave's PR 2 will render the
+      machine's WORK-ONLY total with a MACHINE CONFIRMED badge on the
+      SAME screens where this chart draws (`PostWorkoutSummary`/
+      `FromTheLog`) — on the exit-7 piece that is a badge confirming
+      500m beside a d-axis running to 742.7m, 48% apart in one frame,
+      on the screen whose selling point is machine agreement. Resolve
+      before PR 2's design, not at its gate.
 - [ ] **Flaky test on file: `App.test.tsx`/`RetestShortcut.tsx` unhandled
       async error, seen 2-of-5 full-suite runs (series-truth branch,
       2026-08-25), never touching that diff's files.** Pre-existing;

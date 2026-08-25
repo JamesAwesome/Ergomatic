@@ -2343,3 +2343,64 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   declined enforcement, same reason — outcome line, six so-what bullets, depth
   in the Record block. Still James's to re-set or retire, still belongs in
   `CLAUDE.md`.
+
+## PM final-PR gate, PR #191 (series-truth — TRIAD twice: a number's meaning + a stored shape), 2026-08-25
+
+- **A walk that verifies the ACCUMULATOR has not verified the STORED SERIES, and a
+  status paragraph will happily conflate them.** Phase RC's Status says the exit-7
+  walk "matched the PM5's memory screen digit for digit … the display gate is
+  UNLOCKED" — true of the totals, and the same session silently saved a chart
+  missing 56.1s of its faster interval. The defect was found by James looking at a
+  graph, not by any gate. **When a walk photographs numbers, ask which artefacts it
+  did NOT check** — a two-screen photograph is an oracle for one quantity, not for
+  everything the session wrote. Sibling of RF#11's oracle rule, one level out: the
+  oracle was sound and its SCOPE was overstated.
+- **A criterion edited mid-implementation because the implementer MEASURED it false
+  is the good case — check direction, not timestamp.** #191's `## Exit criteria`
+  changed once, after three implementation commits (#100's rule reads that as
+  drift). The original criterion 3 demanded ZERO backward-bucket counts on the
+  clean captures from a predicate that measured 1 and 18 on those same captures —
+  it was unsatisfiable as written. The edit narrowed the predicate AND added a
+  positive control ("the poisoned counterfactual counts ~57") the first version
+  lacked. Sharpens #104: a criterion that gained a positive control hardened; one
+  that lost a clause softened.
+- **The "deferred" axis question was not deferrable, and only the file layout
+  showed it.** §D queued "should the chart use a work-only clock?" as out of scope,
+  correctly. But `TraceChart` renders in `PostWorkoutSummary.tsx`/`FromTheLog.tsx`
+  and `summaryTotals` is consumed in `LogSession.tsx` — the SAME surfaces the
+  pending MACHINE CONFIRMED block targets. On the exit-7 piece that is a badge
+  saying the machine confirms 500 m beside a chart axis running to 742.7 m: 48%
+  apart, in one frame, on the screen whose selling point is machine agreement.
+  **Before accepting "this axis question is deferred", enumerate what the NEXT
+  planned PR will render beside it.** RF#7 ("recompute the headline from the rows
+  in the same frame") applied one PR early, at sequencing time.
+- **A solo canary is unavailable the moment ANY tester-visible merge is already
+  unreleased.** #191 is a triad number-meaning fix and the 2026-08-15 precedent
+  says those tag alone — but #189 (baseline control, visible) was already sitting
+  in `v0.21.0..main`, so a tag would bundle regardless. Ruled: NO SOLO TAG, rides
+  PR 2's MINOR. **Second half, and the reusable part: the fix's owed verification
+  is a 2×Nm rNN CAPTURE, which needs the dev/web-gated instrument — a Chrome walk,
+  no build.** Before cutting a canary tag "so it can be verified", check whether
+  the verification medium needs a build at all.
+- **Residuals landed in ROADMAP, not the PR body — first gate in a long run with
+  nothing to rescue.** Five items filed (flake, C′ continuity-reset rider, the
+  2×Nm rNN capture walk item, the axis question, James's derivation audit), two
+  ticked. RF#14 finally not firing. Watch the other end though: Phase RC's
+  close-out gained three unscoped items in one PR, the derivation audit being a
+  sweep nothing has sized.
+- **Zero-behavioural-line tail, FIFTH occurrence** (#104, #109, #183, #190, #191):
+  one comment word in `driver.ts`, a ROADMAP filing, a spec sentence. Standard
+  holds; the two-command check still settles it.
+- **The status-paragraph check has now fired SEVEN gates running** (#165, #167,
+  #174, #182, #183, #190, #191) — this time on a PR that rewrote 87 ROADMAP lines
+  and left the Status paragraph both silent about itself AND overstating the walk
+  above it. Merge condition since #183, never once run. It is no longer a lapse;
+  it needs a mechanical home (a phase-close grep, or a line in CLAUDE.md) or it
+  will fire an eighth time.
+- **The 30-second rule is 0-for-15**; ninth consecutive declined enforcement, same
+  reason — shape correct, length inherent to a triad PR. The enforceable failure at
+  this gate was CONTENT, not length: the accepted-cost behaviour change (a
+  reconnect-spanning boundary now shortens the chart clock to match the totals)
+  lived only in the Record block. **Judge the top by what it OMITS about behaviour,
+  not by word count.** Still James's to re-set or retire, still belongs in
+  `CLAUDE.md`.
