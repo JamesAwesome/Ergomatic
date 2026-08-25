@@ -3380,9 +3380,25 @@ export function createPm5Driver(
    *  today. Compares 0x003A's own Total Rest Distance (a RUNNING TOTAL
    *  across the whole workout) against Σ `restDistanceMeters` over this
    *  run's own `recordedActuals` (0x0037's own per-interval trailing-rest
-   *  reading, RC-1) — two genuinely independent computers of the identical
-   *  quantity, unlike the retired TWD verdict where both sides were the
-   *  same fused work+rest odometer.
+   *  reading, RC-1).
+   *
+   *  **FIX ROUND 2 (whole-branch review) CORRECTED this paragraph's own
+   *  claim.** It used to say this comparison is safe because it is "two
+   *  genuinely independent computers of the identical quantity, unlike the
+   *  retired TWD verdict" — WRONG, and the review named it as the wrong
+   *  reason to ship: structurally this IS the same shape TWD had
+   *  (machine-total-on-one-side vs sum-of-machine-parts-on-the-other,
+   *  0x003A's own running total against a sum of 0x0037's own per-interval
+   *  fields — both sides ultimately wire-derived, exactly like TWD's own
+   *  accumulator-vs-TWD comparison was). What actually saves this verdict
+   *  from being a mirror is the QUANTITY, not the computation shape: rest
+   *  distance is a field the AUTHORITY (Concept2's own logbook) stores
+   *  SEPARATELY from work distance — RC-1's storage spine exists because
+   *  RC-10 must POST `rest_distance`/`rest_time` as their own fields — so
+   *  this verdict checks a number the authority actually DEFINES, unlike
+   *  TWD's fused work+rest sum, which the evidence base found no external
+   *  system stores or verifies at all ("Concept2's logbook — the actual
+   *  authority for what the row was — stores work only").
    *
    *  ALL-OR-NOTHING, via `restPairComplete` (own doc comment, above,
    *  carries the fix-round-1 history): summed only when every recorded
@@ -3393,6 +3409,37 @@ export function createPm5Driver(
    *  caller OMITS both rest fields — 0x0039 carries no per-interval rest of
    *  its own) suppresses rather than silently reading that missing
    *  interval's rest as a real zero.
+   *
+   *  **FIX ROUND 2, the Important finding:** `restPairComplete` only
+   *  checks entries that ARE present in `recordedActuals` — it says
+   *  nothing about whether the run's own FINAL interval is present AT
+   *  ALL. This function runs SYNCHRONOUSLY from 0x003A's own subscribe
+   *  callback, which arrives ~1ms after 0x0039 on the committed captures
+   *  (walk-2026-08-23 seq 516/517) — well before `reconcileSummary`'s
+   *  3000ms grace deadline could ever fire the summary-fallback synthesis,
+   *  and racing the SAME late final-split notification the finish grace
+   *  exists to catch (hardware walk 5: the PM5 sends the final interval's
+   *  0x0037/0x0038 pair AFTER the "finished" status frame, not before).
+   *  The exit-7 capture's own race went the SAFE way this one time (final
+   *  split accepted at seq 58, 0x003A only at seq 63) — but 161 of 300
+   *  seeded workouts compile with a trailing rest on their own final
+   *  interval (`domain/monitor/program.ts:281-286`), and nothing pins the
+   *  race outcome the other way: had 0x003A arrived first, this verdict
+   *  would have summed only the SURVIVING (non-final) actuals — DIFFER,
+   *  on a perfectly healthy run, the first external check on the RC-1
+   *  rest population crying wolf on the exact walk it exists to validate.
+   *  Fixed with the SAME population-completeness guard `recordAvgPaceVerdict`
+   *  needed for the identical class of bug (that function's own
+   *  `!run.recordedActuals.has(run.program.intervals.length - 1)` check,
+   *  own comment carries the full fix-round-1 history) — chosen over
+   *  DEFERRING this verdict's own call site the way (a) defers (waiting on
+   *  `reconcileSummary`'s outcome): deferring would need buffering the
+   *  decoded 0x003A payload across up to 3000ms and re-firing from (a)'s
+   *  own two call sites, a real structural change to a ring-only
+   *  diagnostic; the guard is a two-line, purely-additive fix with the
+   *  SAME safety property (a)'s own fix-round-1 comment already accepted
+   *  for this exact tradeoff: "a false suppression costs a missing
+   *  walk-log line, never a false DIFFER/agree."
    *
    *  ZERO IS A REAL VALUE, never a suppression trigger (evidence base: the
    *  r0 keystone capture decodes 0 and a genuinely rest-free run's own sum
@@ -3419,8 +3466,7 @@ export function createPm5Driver(
       return;
     }
     const run = activeRun;
-    const actuals = run === null ? [] : [...run.recordedActuals.values()];
-    if (actuals.length === 0) {
+    if (run === null || run.recordedActuals.size === 0) {
       log.record(
         "rest-distance-verdict",
         `reported only — Interval Rest Time=${decoded.intervalRestSeconds}s; ` +
@@ -3429,6 +3475,23 @@ export function createPm5Driver(
       );
       return;
     }
+    // FIX ROUND 2 (whole-branch review, Important): the guard `(a)`'s own
+    // fix-round-1 needed for the identical class of bug — this function's
+    // own doc comment above carries the full evidence and reasoning.
+    if (!run.recordedActuals.has(run.program.intervals.length - 1)) {
+      log.record(
+        "rest-distance-verdict",
+        `reported only — Interval Rest Time=${decoded.intervalRestSeconds}s; ` +
+          `distance suppressed — this run's own final interval (index ` +
+          `${run.program.intervals.length - 1}) was not yet recorded when ` +
+          `0x003A arrived; 0x003A can race ahead of a late-arriving final ` +
+          `split (the finish grace's own late side — see this function's ` +
+          `own doc comment), and a mid-work terminate or a genuinely lost ` +
+          `split produce the identical shape`,
+      );
+      return;
+    }
+    const actuals = [...run.recordedActuals.values()];
     if (!restPairComplete(actuals)) {
       log.record(
         "rest-distance-verdict",

@@ -3609,9 +3609,14 @@ that needs no erg, and it can run in a test.
     Total Rest Distance (offsets 12-14, 1 m/lsb) gets a narrow parser and
     a ring-only verdict against the sum of `recordedActuals`' own
     `restDistanceMeters` (RC-1's stored rest metres): agrees exactly, 242
-    vs 242 m, on the exit-7 walk capture (PM5 memory screen's own
-    147 + 95 = 242), handles a genuine 0 (the r0 keystone) without a
-    false alarm.
+    vs 242 m — the exit-7 walk's OWN two committed numbers
+    (PM5 memory screen 147 + 95 = 242), decoded by the real parser against
+    the real captured 0x003A frame, but fed into a SYNTHETIC 2-interval
+    program with the two rest values hand-entered
+    (`driver.test.ts:11443`), not a byte-for-byte replay of the capture —
+    the test proves the parser and the summation, not that this driver's
+    own 0x0037 decode of that specific session yields 147/95. Handles a
+    genuine 0 (the r0 keystone) without a false alarm.
     Interval Rest Time (offsets 15-16) is decoded and REPORTED, never
     gated on — it reads 0 on both captures including the r60 walk, and
     we do not yet know if that is a firmware quirk or the programmed

@@ -11605,7 +11605,149 @@ describe("createPm5Driver: the rest-distance oracle (RC-9d, design spec 2026-08-
     expect(entries[0]!.detail).toContain("Interval Rest Time=45s");
   });
 
-  it("suppresses the distance half, naming the reason, when the run's final interval was filled from 0x0039's summary — that path has no per-interval wire rest reading (RC-7's own precedent, restSeconds/type)", async () => {
+  // FIX ROUND 2 (whole-branch review, Important finding): the test that
+  // used to live here fired the 3000ms grace deadline BEFORE notifying
+  // 0x003A — the REVERSE of the TYPICAL wire order. On the committed
+  // captures (walk-2026-08-23 seq 516/517; exit-7's own leg, README's
+  // "+361ms" summary burst), 0x003A arrives ~1ms after 0x0039 — long
+  // before the 3000ms deadline could ever fire the summary-fallback
+  // synthesis. Reordered below to that typical order; the summary-fallback
+  // shape now suppresses via the POPULATION guard (the final interval
+  // simply is not recorded yet), not `restPairComplete`.
+  //
+  // **CORRECTED (same fix round, self-review against the coverage report):
+  // `restPairComplete`'s own call site inside `recordRestDistanceVerdict`
+  // is NOT unreachable through the wire** — an earlier draft of this
+  // comment claimed it was and deleted driver-level coverage of it,
+  // which the coverage report caught (driver.ts dropped from 99.43% to
+  // 99.15% branches). It IS reachable: both write sites keep EACH ACTUAL
+  // internally coupled (Task 1's own finding), but `restPairComplete`
+  // checks EVERY recorded actual, and only the run's own FINAL index can
+  // ever be synthesized — so the population guard passing (final index
+  // present) does not guarantee the pair is complete: it is exactly the
+  // case where 0x003A arrives LATE ENOUGH for the synthesis to have
+  // already filled that final index (whether an unusually slow 0x003A
+  // notification, or the terminate-path observations door taking longer).
+  // The single committed capture only pins ~1ms as ONE observed gap, not a
+  // protocol guarantee — kept below as the LESS COMMON but still real
+  // order, restoring the branch's own coverage.
+  it("suppresses — final interval not yet recorded — when 0x003A arrives at its REAL timing (~1ms after 0x0039), before the 3000ms grace deadline has any chance to fire the summary-fallback synthesis", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const clock = manualClock();
+    // A minimal inline scheduler — `manualSchedule` is defined inside THE
+    // SUMMARY-FALLBACK GATE describe block elsewhere in this file and is
+    // not reachable from this describe; this test needs only the one
+    // deadline call, fired by hand (mirrors the RC-1 fallback-omission
+    // describe's own copy of this pattern, above).
+    const scheduled: { ms: number; fire: () => void }[] = [];
+    const timer = {
+      schedule: (cb: () => void, ms: number): (() => void) => {
+        scheduled.push({ ms, fire: cb });
+        return () => {};
+      },
+      pending: () => scheduled[scheduled.length - 1] ?? null,
+    };
+    const driver = createPm5Driver(transport, log, {
+      now: clock.now,
+      schedule: timer.schedule,
+    });
+    transport.notify(ADDITIONAL_STATUS_1_UUID, new Uint8Array(17));
+    transport.notify(ADDITIONAL_STATUS_2_UUID, new Uint8Array(20));
+
+    await programViaStub(driver, transport, MINIMAL_PROGRAM);
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 30, 100),
+    );
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_WORKOUTEND, 60, 200),
+    );
+    // The split never arrives. 0x0039 arrives, and 0x003A follows ~1ms
+    // later — the REAL order — well before the 3000ms deadline below ever
+    // fires, so `recordedActuals` is still completely EMPTY at verdict
+    // time (no synthesis has happened yet; nothing was ever recorded).
+    transport.notify(
+      END_OF_WORKOUT_SUMMARY_UUID,
+      buildEndOfWorkoutSummaryBytes({
+        elapsedSeconds: 62.5,
+        meters: 214,
+        avgStrokeRate: 24,
+        endingHeartRateBpm: 150,
+        avgHeartRateBpm: 150,
+        minHeartRateBpm: 130,
+        maxHeartRateBpm: 160,
+        dragFactorAverage: 130,
+        recoveryHeartRateBpm: 100,
+        workoutType: 1,
+        avgPaceSecondsPer500m: 120,
+      }),
+    );
+    transport.notify(END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID, EXIT7_0X003A);
+
+    const entries = restDistanceVerdicts(log);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.detail).toContain("reported only");
+    expect(entries[0]!.detail).toContain("Interval Rest Time=0s");
+    expect(entries[0]!.detail).toContain("distance suppressed");
+    expect(entries[0]!.detail).toContain("no run's actuals");
+    expect(entries[0]!.detail).not.toContain("DIFFER");
+
+    // The deadline fires AFTER the verdict already ran — matching the real
+    // order in full ("0x0039 then 0x003A ~1ms later, deadline after") —
+    // and must not produce a second verdict entry or throw.
+    expect(timer.pending()?.ms).toBe(3000);
+    timer.pending()!.fire();
+    expect(restDistanceVerdicts(log)).toHaveLength(1);
+  });
+
+  it("FIX ROUND 2 (whole-branch review, the Important finding, reproduced and disproved): does NOT DIFFER on a dropped-final-split, otherwise HEALTHY multi-interval run — 0x003A racing ahead of the still-in-flight final split, the exact exit-7 shape (161 of 300 seeded workouts compile with a trailing rest on their own final interval, domain/monitor/program.ts:281-286)", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+    await programViaStub(driver, transport, TWO_INTERVAL_R60_PROGRAM);
+    transport.notify(ADDITIONAL_STATUS_2_UUID, additionalStatus2In(0));
+
+    // Interval 1 completes ORDINARILY, full rest pair recorded — the exact
+    // exit-7 numbers (PM5 View Detail): 147 m.
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 68, 250),
+    );
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 68, 250, 147));
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 25));
+
+    // Interval 2 (this program's own FINAL interval) never gets its own
+    // split before 0x003A arrives — the dropped-final-split shape: the
+    // machine's own summary burst (0x0039 then 0x003A ~1ms later) wins the
+    // race against the still-in-flight late final split, which the finish
+    // grace has NOT yet delivered (before this fix, `ours` would have
+    // summed only interval 1's 147 m against the machine's own 242 m — a
+    // false 95 m DIFFER on a perfectly healthy run).
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_WORKOUTEND, 124, 500),
+    );
+    transport.notify(END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID, EXIT7_0X003A);
+
+    const entries = restDistanceVerdicts(log);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.detail).toContain("distance suppressed");
+    expect(entries[0]!.detail).toContain(
+      "this run's own final interval (index 1) was not yet recorded",
+    );
+    expect(entries[0]!.detail).not.toContain("DIFFER");
+    expect(entries[0]!.detail).not.toContain("agree");
+    // Bug-independent negative check: the pre-fix code would have named
+    // 147 (interval 1 alone) as "ours" inside a DIFFER entry — neither
+    // number appears here, because the verdict never reaches the compare
+    // step at all.
+    expect(entries[0]!.detail).not.toContain("147");
+    expect(entries[0]!.detail).not.toContain("242");
+  });
+
+  it("suppresses the distance half, naming the reason, when 0x003A arrives LATE ENOUGH for the summary-fallback synthesis to have already filled the final interval — that path has no per-interval wire rest reading (RC-7's own precedent, restSeconds/type), so the population guard PASSES (the final index is present) but `restPairComplete` still catches the missing pair", async () => {
     const transport = stubTransport();
     const log = createEventLog();
     const clock = manualClock();
@@ -11641,7 +11783,8 @@ describe("createPm5Driver: the rest-distance oracle (RC-9d, design spec 2026-08-
     // The split never arrives; only the summary does, and only the
     // deadline (never claimed by a split) fires the synthesis — the
     // synthesized actual carries no restDistanceMeters at all (0x0039 has
-    // no per-interval rest field), so `recordedActuals` is incomplete.
+    // no per-interval rest field), so `recordedActuals` HAS the final
+    // index (the population guard passes) but the pair is incomplete.
     transport.notify(
       END_OF_WORKOUT_SUMMARY_UUID,
       buildEndOfWorkoutSummaryBytes({
@@ -11659,8 +11802,10 @@ describe("createPm5Driver: the rest-distance oracle (RC-9d, design spec 2026-08-
       }),
     );
     expect(timer.pending()?.ms).toBe(3000);
+    // 0x003A arrives LATE here — AFTER the deadline already fired the
+    // synthesis — the less common order per this describe block's own
+    // fix-round-2 comment, kept specifically to exercise this branch.
     timer.pending()!.fire();
-
     transport.notify(END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID, EXIT7_0X003A);
 
     const entries = restDistanceVerdicts(log);
@@ -11672,6 +11817,10 @@ describe("createPm5Driver: the rest-distance oracle (RC-9d, design spec 2026-08-
       "missing restSeconds and/or restDistanceMeters",
     );
     expect(entries[0]!.detail).toContain("summary-fallback synthesis");
+    // Proves this suppression came from `restPairComplete`, NOT the
+    // population guard — the wording is disjoint from that guard's own
+    // "was not yet recorded" message.
+    expect(entries[0]!.detail).not.toContain("was not yet recorded");
   });
 });
 
