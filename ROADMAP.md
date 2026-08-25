@@ -3106,6 +3106,15 @@ that needs no erg, and it can run in a test.
       Whether the chart should instead show a TRUE work-only clock is
       an open product question, deliberately out of this PR: changing
       what an axis MEANS is its own number-meaning decision.
+- [ ] **Flaky test on file: `App.test.tsx`/`RetestShortcut.tsx` unhandled
+      async error, seen 2-of-5 full-suite runs (series-truth branch,
+      2026-08-25), never touching that diff's files.** Pre-existing;
+      will bite CI on future PRs until diagnosed. Capture the failure,
+      don't re-run to green (the standing flake rule).
+- [ ] **C' rider for the RC-2/RC-3 wave: the continuity-reset close
+      skips the backward-bucket ring entry** (`useMonitorSession.ts`
+      ~1809 stops the recorder without reading the count) — the one
+      close where the diagnostic dies silently; final review minor 2.
 - [ ] **Phase RC CLOSE-OUT: a derivation audit (James, 2026-08-25).**
       Before the phase closes, enumerate every CONSUMER-SIDE derivation
       of a wire fact the driver already resolves (interval membership,

@@ -191,7 +191,9 @@ during the pinned replays so a green result is distinguishable from
 - No axis-quantity change (D queues it).
 - No display work (the summary-record wave's PR 2 follows separately).
 - No change to the driver's own accumulator/register logic — the guard
-  that already works is not touched, only mirrored (A) and ported (B).
+  that already works is not touched — only mirrored (A) and its resolved
+  key EMITTED for consumers (B′; nothing is ported, the original port was
+  blocked).
 
 ## Exit criteria
 

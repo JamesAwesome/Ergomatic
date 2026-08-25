@@ -2258,7 +2258,7 @@ export function createPm5Driver(
       intervalIndex: emittedIntervalIndex,
       splitAvgPace: splitAvgPaceIsStale ? null : base.splitAvgPace,
       // series-truth design spec §B′ (Task 2): `activeKey` IS the key the
-      // register write just below (`session.seen.set(activeKey, ...)`)
+      // register write above (`session.seen.set(activeKey, ...)`)
       // used for this exact tick — the stale-count rest clamp and the
       // open-on-reset guard above both reassign `activeKey` itself (not a
       // parallel value), so reading it here rather than re-deriving
