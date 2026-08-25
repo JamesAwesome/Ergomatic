@@ -1201,21 +1201,72 @@ describe("createSeriesRecorder — series-truth Task 3: backwardBucketCount (spe
     };
   }
 
-  it("a forced strictly-backward work clock (attribution genuinely reverses) counts exactly one backward bucket and drops the sample, never appends it", () => {
+  // Fix round 1 (controller ruling, spec revised — docs/superpowers/specs/
+  // 2026-08-25-series-truth-design.md §C′ and exit criterion 3): the
+  // ORIGINAL predicate (any `bucket < lastEmittedBucket`) fired 1 and 18
+  // times on the two committed CLEAN captures (see this file's own
+  // "FINDING, RESOLVED" comment further below) — a routine
+  // 0x0033-lags-0x0031 boundary tick always lands on a bucket the healthy
+  // climb already visited moments earlier, so counting it is an alarm on
+  // normal traffic. The REFINED predicate narrows to actual data loss:
+  // `bucket < lastEmittedBucket && !emittedBuckets.has(bucket)`. These two
+  // tests distinguish the excluded case from the counted one directly —
+  // same backward shape, different bucket history.
+  it("a backward frame that RE-VISITS an already-emitted bucket counts ZERO — not a data-loss signal, since the series already has a sample for that second", () => {
+    const rec = createSeriesRecorder();
+    // Bucket 0 is emitted first, then bucket 50 — both now in the
+    // emitted set, `lastEmittedBucket` at 50.
+    rec.onFrame(
+      frame({
+        attributedIntervalIndex: 0,
+        elapsedSeconds: 0,
+        distanceMeters: 0,
+      }),
+    );
+    rec.onFrame(
+      frame({
+        attributedIntervalIndex: 0,
+        elapsedSeconds: 50,
+        distanceMeters: 200,
+      }),
+    );
+    // Backward (bucket 0 < lastEmittedBucket 50) — but bucket 0 was
+    // ALREADY emitted by the first frame above, so this is a re-visit,
+    // not a loss.
+    rec.onFrame(
+      frame({
+        attributedIntervalIndex: 0,
+        elapsedSeconds: 0.3,
+        distanceMeters: 1,
+      }),
+    );
+    expect(rec.backwardBucketCount()).toBe(0);
+  });
+
+  it("a backward frame that lands on a NEVER-EMITTED bucket counts ONE — the actual data-loss signal, and the sample is still dropped, never appended", () => {
     const rec = createSeriesRecorder();
     rec.onFrame(
       frame({
-        attributedIntervalIndex: 1,
+        attributedIntervalIndex: 0,
+        elapsedSeconds: 0,
+        distanceMeters: 0,
+      }),
+    );
+    rec.onFrame(
+      frame({
+        attributedIntervalIndex: 0,
         elapsedSeconds: 50,
         distanceMeters: 200,
       }),
     );
     const before = rec.snapshot()!.samples.length;
+    // Bucket 25 was SKIPPED by the forward jump from 0 to 50 above — it
+    // was never emitted, so landing on it backward is real loss.
     rec.onFrame(
       frame({
         attributedIntervalIndex: 0,
-        elapsedSeconds: 5,
-        distanceMeters: 20,
+        elapsedSeconds: 25,
+        distanceMeters: 100,
       }),
     );
     const after = rec.snapshot()!.samples;
@@ -1223,7 +1274,7 @@ describe("createSeriesRecorder — series-truth Task 3: backwardBucketCount (spe
     expect(rec.backwardBucketCount()).toBe(1);
   });
 
-  it("ordinary same-bucket decimation is never counted as backward — the strict `<` predicate, never `<=` (spec §C′'s own correction of the original, over-firing predicate)", () => {
+  it("ordinary same-bucket decimation is never counted as backward — `bucket < lastEmittedBucket`, never `<=` (spec §C′'s own original correction, still true after the refinement)", () => {
     const rec = createSeriesRecorder();
     rec.onFrame(frame({ elapsedSeconds: 10 }));
     rec.onFrame(frame({ elapsedSeconds: 10.4 })); // same bucket, first-frame-wins
@@ -1238,29 +1289,56 @@ describe("createSeriesRecorder — series-truth Task 3: backwardBucketCount (spe
     expect(rec.backwardBucketCount()).toBe(0);
   });
 
-  it("repeated backward buckets each count once, independently", () => {
+  it("repeated backward buckets are each independently judged against the emitted set — re-visits excluded, never-emitted ones counted, in the same run", () => {
     const rec = createSeriesRecorder();
     rec.onFrame(
       frame({
-        attributedIntervalIndex: 2,
-        elapsedSeconds: 80,
-        distanceMeters: 300,
+        attributedIntervalIndex: 0,
+        elapsedSeconds: 0,
+        distanceMeters: 0,
       }),
     );
     rec.onFrame(
       frame({
-        attributedIntervalIndex: 1,
-        elapsedSeconds: 10,
-        distanceMeters: 40,
+        attributedIntervalIndex: 0,
+        elapsedSeconds: 80,
+        distanceMeters: 300,
       }),
-    ); // backward: bucket 10 < 80
+    );
+    // Backward, bucket 0 — but ALREADY emitted (the first frame above):
+    // excluded.
     rec.onFrame(
       frame({
         attributedIntervalIndex: 0,
-        elapsedSeconds: 5,
-        distanceMeters: 20,
+        elapsedSeconds: 0.2,
+        distanceMeters: 1,
       }),
-    ); // backward again: bucket 5 < 80 (lastEmittedBucket unchanged by the drop above)
+    );
+    // Backward, bucket 40 — NEVER emitted (the 0->80 jump skipped it):
+    // counted.
+    rec.onFrame(
+      frame({
+        attributedIntervalIndex: 0,
+        elapsedSeconds: 40,
+        distanceMeters: 150,
+      }),
+    );
+    // Backward, bucket 0 again — still already emitted: excluded.
+    rec.onFrame(
+      frame({
+        attributedIntervalIndex: 0,
+        elapsedSeconds: 0.5,
+        distanceMeters: 2,
+      }),
+    );
+    // Backward, bucket 60 — NEVER emitted: counted.
+    rec.onFrame(
+      frame({
+        attributedIntervalIndex: 0,
+        elapsedSeconds: 60,
+        distanceMeters: 220,
+      }),
+    );
     expect(rec.backwardBucketCount()).toBe(2);
   });
 
@@ -1298,42 +1376,30 @@ const SESSION_1_PROGRAM: WorkoutProgram = {
   ],
 };
 
-// FINDING (task-3-report.md carries the full evidence): exit criterion 3's
-// own wording ("ZERO on the clean replays") is CONTRADICTED by both
-// committed captures. Measured this task session: session-1-keystone
-// reports `backwardBucketCount() === 1`, session-2-wu-4unequal reports 18
-// — not zero. Root cause, traced to the exact frames (not a bug in this
-// task's own predicate): a REST boundary's first observed post-reset tick
-// routinely arrives with `attributedIntervalIndex` UNCHANGED for one more
-// tick than the raw elapsed/distance reset already happened — the same
-// "0x0033 lags 0x0031" skew this codebase's own driver-side guards (the
-// stale-count rest clamp, the open-on-reset guard) exist to protect the
-// REGISTER against. `session-2-wu-4unequal.jsonl` frame 73 is the clearest
-// case: frames 60-72 climb 23.17s->29.25s under key 0 (interval 0 nearing
-// its own 100m target); frame 73 reads elapsed=0/distance=0 — a genuine
-// wire reset — but `attributedIntervalIndex` is STILL 0 for that one tick
-// (frame 74 is the first to read 1). The REGISTER is unharmed (max-merge
-// keeps key 0 at its already-recorded 29.25s peak), so the STORED SERIES
-// is unaffected — confirmed below: both captures' sample counts and final
-// t/d are IDENTICAL to the values measured against the pre-this-task
-// recorder (this is exit criterion 2, and it holds). But the per-tick
-// WORK CLOCK this recorder computes for that one lagging tick
-// (`baseSeconds + f.elapsedSeconds`, using the frame's own raw reading,
-// not the register's max) genuinely reads a smaller value than the bucket
-// already emitted — exactly what `backwardBucketCount` is defined to
-// count (spec §C′'s own predicate, implemented in `seriesRecorder.ts`
-// unchanged from this literal description). This is NOT this task's own
-// defect: the pre-existing `bucket <= lastEmittedBucket` guard already
-// silently absorbed this identical case before this task — C′ only makes
-// it COUNTED, for the first time, and what it counts turns out to include
-// this routine boundary-lag artifact alongside the pathological
-// attribution-poison shape the design's own narrative motivates. Reported
-// to the controller/Task 4 rather than worked around: Task 4's hook fires
-// a ring entry whenever this count is nonzero, and on this evidence that
-// will be EVERY real rest boundary, not the rare pathological event the
-// design's prose describes — a threshold or a narrower predicate may be
-// warranted at that layer, but rewriting §C′'s literal definition here
-// would be silently overriding a spec decision, not implementing it.
+// FINDING, RESOLVED (fix round 1 — docs/superpowers/specs/2026-08-25-
+// series-truth-design.md §C′ and exit criterion 3, revised by the
+// controller against this task's own measurement). The ORIGINAL predicate
+// (any `bucket < lastEmittedBucket`) contradicted exit criterion 3's
+// "ZERO on the clean replays": measured `backwardBucketCount() === 1` on
+// session-1-keystone and `=== 18` on session-2-wu-4unequal. Root cause,
+// traced to the exact frames: a REST boundary's first observed post-reset
+// tick routinely arrives with `attributedIntervalIndex` UNCHANGED for one
+// more tick than the raw elapsed/distance reset already happened — the
+// same "0x0033 lags 0x0031" skew this codebase's own driver-side guards
+// (the stale-count rest clamp, the open-on-reset guard) exist to protect
+// the REGISTER against. `session-2-wu-4unequal.jsonl` frame 73 is the
+// clearest case: frames 60-72 climb 23.17s->29.25s under key 0 (interval 0
+// nearing its own 100m target); frame 73 reads elapsed=0/distance=0 — a
+// genuine wire reset — but `attributedIntervalIndex` is STILL 0 for that
+// one tick (frame 74 is the first to read 1). The REGISTER was always
+// unharmed (max-merge keeps key 0 at its already-recorded 29.25s peak),
+// but every one of these lagging ticks lands on a bucket the healthy climb
+// had ALREADY emitted moments before (bucket 0, in frame 73's case) — a
+// re-visit, never a bucket the series will actually lack. The REFINED
+// predicate (this file's own "backwardBucketCount (spec §C′)" describe
+// block above) excludes exactly this shape by construction — a backward
+// tick only counts when its bucket was NEVER emitted, i.e. genuine,
+// permanent data loss — so both captures below now measure ZERO.
 describe("createSeriesRecorder — series-truth Task 3: the two committed captures replay byte-identically (exit criterion 2)", () => {
   /** Instrumentation (exit criterion 2's own demand: green must be
    *  distinguishable from "the new path never ran"). Two things proven
@@ -1385,11 +1451,12 @@ describe("createSeriesRecorder — series-truth Task 3: the two committed captur
     expect(snap.samples).toHaveLength(138);
     expect(snap.samples.at(-1)?.t).toBe(1373);
     expect(snap.samples.at(-1)?.d).toBe(4974);
-    // See this describe block's own FINDING comment above: 1, not 0 — the
-    // boundary-lag artifact fires once on this capture's own single
-    // interval boundary (restSeconds: 0 throughout, so this is the
-    // work->work reset itself, not a rest).
-    expect(rec.backwardBucketCount()).toBe(1);
+    // Fix round 1 (this file's own "FINDING, RESOLVED" comment above): the
+    // boundary-lag tick at this capture's own single interval boundary
+    // landed on `backwardBucketCount() === 1` under the ORIGINAL predicate
+    // — it re-visits a bucket the healthy climb already emitted, so the
+    // REFINED (never-emitted) predicate correctly excludes it: 0.
+    expect(rec.backwardBucketCount()).toBe(0);
   });
 
   it("session-2-wu-4unequal.jsonl: attribution is populated and monotonic (proving old/new equivalence), and the pinned totals are unchanged from the pre-this-task recorder", async () => {
@@ -1409,14 +1476,156 @@ describe("createSeriesRecorder — series-truth Task 3: the two committed captur
     expect(snap.samples).toHaveLength(419);
     expect(snap.samples.at(-1)?.t).toBe(4195);
     expect(snap.samples.at(-1)?.d).toBe(15988);
-    // See this describe block's own FINDING comment above: 18, not 0 —
-    // this capture crosses 4 real interval boundaries (5 intervals, 3
-    // rest-bearing per SESSION_2_PROGRAM plus the wu's own reset), each a
-    // chance for the boundary-lag artifact to fire, sometimes more than
-    // once per boundary (frame 73's single-tick lag vs. the 12-tick run
-    // at frames 239-250, where the rest's own advancing elapsed clock
-    // read BELOW an already-emitted bucket for several consecutive ticks
-    // before catching back up).
-    expect(rec.backwardBucketCount()).toBe(18);
+    // Fix round 1 (this file's own "FINDING, RESOLVED" comment above): 18
+    // boundary-lag ticks under the ORIGINAL predicate — across this
+    // capture's 4 real interval boundaries (5 intervals, 3 rest-bearing
+    // per SESSION_2_PROGRAM plus the wu's own reset), sometimes more than
+    // once per boundary (frame 73's single-tick lag vs. the 12-tick run at
+    // frames 239-250, where the rest's own advancing elapsed clock read
+    // BELOW an already-emitted bucket for several consecutive ticks before
+    // catching back up) — EVERY one of those 18 lands on a bucket the
+    // healthy climb had already visited (this capture never carries the
+    // exit-7 poison shape, so no forward jump ever skips a span of
+    // buckets for a later tick to fall backward into), so the REFINED
+    // (never-emitted) predicate correctly excludes all 18: 0.
+    expect(rec.backwardBucketCount()).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------
+// Fix round 1, exit criterion 3's own "poisoned exit-7 counterfactual"
+// (spec: "recorder fed the pre-fix attribution — frames whose
+// attributedIntervalIndex mimics the old latch"). Extends the
+// "attributedIntervalIndex consumption" describe block's own disagreement
+// fixture to the FULL exit-7 shape: the same milestone numbers
+// `sessionTotals.test.ts`'s "the exit-7 oracle" replays through the real,
+// FIXED driver, but here fed directly to the recorder with attribution
+// hand-forced to the OLD BUG's own behavior — latched at the poisoned key
+// forever, never falling back (Task 1's driver fix A didn't exist; Task
+// 2's B′ producer didn't exist; this is what a driver WITHOUT either fix
+// would have emitted on `attributedIntervalIndex`, or rather what the
+// OLD recorder's own `intervalIndex`-keyed derivation would have latched
+// `currentKey` to, since neither ever lowers once raised).
+// ---------------------------------------------------------------------
+
+describe("createSeriesRecorder — series-truth Task 3 fix round 1: the poisoned exit-7 counterfactual (exit criterion 3)", () => {
+  function frame(over: Partial<MonitorFrame> = {}): MonitorFrame {
+    return {
+      elapsedSeconds: 0,
+      distanceMeters: 0,
+      sessionElapsedSeconds: 0,
+      sessionDistanceMeters: 0,
+      currentSplit: 120,
+      spm: 20,
+      heartRateBpm: null,
+      rowingActive: true,
+      splitAvgPace: null,
+      restSeconds: 0,
+      intervalIndex: null,
+      intervalRemaining: null,
+      intervalAccrued: null,
+      state: "rowing",
+      ...over,
+    };
+  }
+
+  it("a latched, never-falls-back attribution (the pre-fix defect's own shape) yields a large, measured backwardBucketCount — the ~57 never-emitted buckets interval 2's own work genuinely lands on", () => {
+    const rec = createSeriesRecorder();
+    const round1 = (n: number): number => Math.round(n * 10) / 10;
+
+    // Interval 1 work: honest, key 0 (the bug has not fired yet).
+    for (let t = 0; t <= 67; t++) {
+      rec.onFrame(
+        frame({
+          attributedIntervalIndex: 0,
+          elapsedSeconds: t,
+          distanceMeters: round1((t / 67.91) * 250.2),
+        }),
+      );
+    }
+    rec.onFrame(
+      frame({
+        attributedIntervalIndex: 0,
+        elapsedSeconds: 67.91,
+        distanceMeters: 250.2,
+      }),
+    );
+    // THE LATCH: the poison tick, and every frame after it for the rest
+    // of this run, is forced to key 1 — the pre-fix defect's own shape
+    // (no mirror, no fallback: the key that opened wrongly here is never
+    // released).
+    rec.onFrame(
+      frame({
+        attributedIntervalIndex: 1,
+        elapsedSeconds: 68.02,
+        distanceMeters: 250.6,
+      }),
+    );
+    // "Rest" — still latched to key 1, so every one of these ticks folds
+    // its own raw elapsed straight onto key 1's register (climbing
+    // through elapsed values that really belong to interval 1's own
+    // trailing rest, mislabeled as key 1 the whole way).
+    for (let t = 69; t <= 129; t++) {
+      rec.onFrame(
+        frame({
+          attributedIntervalIndex: 1,
+          elapsedSeconds: t,
+          distanceMeters: round1(
+            250.6 + ((t - 68.02) / (129.5 - 68.02)) * (397.2 - 250.6),
+          ),
+        }),
+      );
+    }
+    rec.onFrame(
+      frame({
+        attributedIntervalIndex: 1,
+        elapsedSeconds: 129.5,
+        distanceMeters: 397.2,
+      }),
+    );
+    // Interval 2 GENUINELY resets on the wire (elapsed/distance back to
+    // 0) — but the latch keeps `attributedIntervalIndex` at 1 (unchanged
+    // from every tick above), so this module never sees a key CHANGE
+    // here at all; the register for key 1 stays exactly where the fake
+    // "rest" climb left it, and interval 2's own honest, much smaller
+    // elapsed readings fold in via max-merge (a no-op — max(129.5, small)
+    // stays 129.5) while the PER-TICK work clock genuinely retreats.
+    for (let t = 0; t <= 56; t++) {
+      rec.onFrame(
+        frame({
+          attributedIntervalIndex: 1,
+          elapsedSeconds: t,
+          distanceMeters: round1((t / 56.1) * 250.3),
+        }),
+      );
+    }
+    rec.onFrame(
+      frame({
+        attributedIntervalIndex: 1,
+        elapsedSeconds: 56.2,
+        distanceMeters: 250.3,
+      }),
+    );
+
+    // The measured count (57), and the arithmetic behind it. The honest
+    // interval-1 climb (ticks 0..67.91) emits buckets 0..67 in order. The
+    // poison tick's own base is FROZEN at key 0's last register (67.91s)
+    // the instant the latch fires — its own work clock is
+    // 67.91+68.02=135.93 (bucket 135), a forward JUMP that skips buckets
+    // 68..134 (67 buckets) entirely, never emitted. The fake "rest" climb
+    // (still base=67.91, elapsed 69..129.5) then emits buckets 136..197
+    // forward, in order — no further gap. Interval 2's own genuine ticks
+    // (base still frozen at 67.91, elapsed 0..56.2) retreat the work
+    // clock back to 67.91..124.11 — buckets 67..124, 58 buckets. The
+    // VERY FIRST of those (elapsed=0, bucket 67) lands on the ONE bucket
+    // in that span interval 1's own honest climb ALREADY emitted — a
+    // genuine re-visit, correctly excluded by the refined predicate (this
+    // is exactly what turned 58 under the original, unrefined predicate —
+    // measured directly against this same fixture before the refinement
+    // — into 57 here: not an approximation, a one-bucket correction the
+    // refinement itself produces). Every remaining bucket in 68..124 (57
+    // of them) falls inside the never-emitted 68..134 gap: genuine,
+    // permanent loss, all counted.
+    expect(rec.backwardBucketCount()).toBe(57);
   });
 });
