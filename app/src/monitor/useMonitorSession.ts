@@ -1460,6 +1460,13 @@ export function useMonitorSession(
    *  no default: a close that could omit the reason would silently
    *  recreate the exact `terminated: true` conflation this task exists to
    *  end. */
+  /** series-truth spec §C′ / Task 4: the recorder never sees the ring (it
+   *  is a pure accumulator, the driver's own doc comment applies here too);
+   *  the HOOK is the recorder's actual owner, so this is the one place that
+   *  reads its `backwardBucketCount()` and, when nonzero, says so — once,
+   *  here, upstream of the teardown stash, never at every refused sample
+   *  (the count itself already IS the once-per-close summary). Silent at
+   *  zero: a healthy run's ring stays exactly as it was before this task. */
   const closeRecord = useCallback(
     (terminated: boolean, endedBy: CloseReason): void => {
       const run = runRef.current;
@@ -1471,6 +1478,14 @@ export function useMonitorSession(
         nowDate(),
       );
       stopSeriesFlush();
+      const backwardBucketCount =
+        seriesRecorderRef.current?.backwardBucketCount() ?? 0;
+      if (backwardBucketCount > 0) {
+        logRef.current?.record(
+          "series-backward-buckets",
+          `${backwardBucketCount} sample(s) refused because the work clock went backwards - attribution defect upstream, series is missing data (series-truth spec C')`,
+        );
+      }
       seriesRecorderRef.current?.stop();
       seriesRecorderRef.current = null;
     },
