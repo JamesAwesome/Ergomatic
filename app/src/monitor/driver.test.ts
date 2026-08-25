@@ -1504,9 +1504,9 @@ describe("createPm5Driver: the full happy path over a real compiled workout (Sea
       // SEPARATE, out-of-scope gap this task found but did not fix (the
       // fake's `totalWorkDistanceFor` derives 0x0031's session-cumulative
       // TWD field from this SAME per-tick `distanceMeters`, so genuinely
-      // separate per-interval keys make `recordTwdVerdict`'s accumulator
-      // check unsatisfiable by any fixture choice — proved by exhaustion,
-      // not left unresearched).
+      // separate per-interval keys made the (now-retired, RC-9c) TWD
+      // verdict's accumulator check unsatisfiable by any fixture choice —
+      // proved by exhaustion, not left unresearched).
       {
         atMs: 300,
         kind: "status",
@@ -1726,37 +1726,23 @@ describe("createPm5Driver: the full happy path over a real compiled workout (Sea
     // consequence of that on this fixture's known-unrealistic elapsed
     // value.
     //
-    // A SECOND carve-out, added by the 2026-08-18 connected-metrics spec's
-    // Task 1, which is the "whichever task closes the TWD/accumulator
-    // coupling next" this comment used to owe: `fake.ts`'s
-    // `totalWorkDistanceFor` no longer derives 0x0031's TWD from this SAME
-    // per-tick `distanceMeters` (it now banks real boundary/rest metres
-    // instead, independent of it — that function's own doc comment), so
-    // `recordTwdVerdict`'s check is no longer vacuously satisfied by
-    // construction: it now genuinely compares two INDEPENDENT numbers, and
-    // this fixture's own already-disclosed wire-impossibility (every key
-    // beyond 0 refused open, above) makes the driver's own accumulator
-    // read the last tick's raw session-cumulative total (3400 m) while the
-    // fake's honest, boundary-derived TWD reads the real work total (3000
-    // m, 0 rest scripted) — a 400 m gap this task's own correction is what
-    // makes VISIBLE, not a new defect it introduces. Exactly the "proved by
-    // exhaustion" unsatisfiability this comment used to name, now
-    // materialized rather than deferred. Closing it for good needs this
-    // fixture's elapsed/distance genuinely reset per interval, which
-    // conflicts with the `intervalRemaining` clamp assertion below that
-    // depends on this SAME unrealism (its own comment) — left as the next
-    // owed follow-up rather than widened here, since rewriting it changes
-    // what that assertion covers. Denylist form, same reasoning as
-    // "refused open" above: a real future divergence (any OTHER kind)
-    // still fails this test, exactly as it did before Task 11 existed.
+    // A SECOND carve-out used to live here, added by the 2026-08-18
+    // connected-metrics spec's Task 1: this fixture's own already-disclosed
+    // wire-impossibility (every key beyond 0 refused open, above) made the
+    // driver's own accumulator read the last tick's raw session-cumulative
+    // total (3400 m) while the fake's honest, boundary-derived TWD read the
+    // real work total (3000 m, 0 rest scripted) — a 400 m gap the (now
+    // retired, RC-9c) TWD verdict would have logged as "accumulator and
+    // machine total differ". RC-9c removed that verdict outright (design
+    // spec 2026-08-25-free-oracles §2), so no divergence entry of that
+    // shape can fire any more and the carve-out is gone with it — this
+    // fixture's known unrealism otherwise remains, unaffected, and still
+    // documents the `intervalRemaining` clamp above.
     expect(
       log
         .entries()
         .filter(
-          (e) =>
-            e.kind === "divergence" &&
-            !e.detail.includes("refused open") &&
-            !e.detail.includes("accumulator and machine total differ"),
+          (e) => e.kind === "divergence" && !e.detail.includes("refused open"),
         ),
     ).toHaveLength(0);
     // D5, end to end over a real workout: the closing tick had no belt, and
@@ -1779,8 +1765,9 @@ describe("createPm5Driver: the full happy path over a real compiled workout (Sea
     //     interval"). Proved unfixable this round, not merely left alone:
     //     task-6-report.md's "Deviation from the brief" section works the
     //     algebra showing NO choice of this fixture's numbers can satisfy
-    //     `recordTwdVerdict`'s own check once real per-interval accumulator
-    //     keys open (exhaustion proof, condition (d) below is why).
+    //     the (now-retired, RC-9c) TWD verdict's own check once real
+    //     per-interval accumulator keys open (exhaustion proof, condition
+    //     (d) below is why).
     // (b) THE ASSERTED 0 IS THE CLAMP'S HONEST OUTPUT FOR THAT INPUT.
     //     `computeIntervalRemaining`'s `Math.max(0, interval.value -
     //     progress)` — its own doc comment: "a quantization overshoot ...
@@ -1798,7 +1785,7 @@ describe("createPm5Driver: the full happy path over a real compiled workout (Sea
     //     whose self-mutation this task's report shows biting.
     // (d) THE REALISTIC-FIXTURE REWORK IS A NAMED FOLLOW-UP, not silently
     //     deferred: "the fake's independent machine total" — giving
-    //     `fake.ts`'s `totalWorkDistanceFor`/`recordTwdVerdict` a TWD field
+    //     `fake.ts`'s `totalWorkDistanceFor` a TWD field
     //     that tracks a real running session total independent of the
     //     per-tick `distanceMeters` item 12 says must be per-interval,
     //     rather than deriving one from the other. Tracked as the CARRY-2

@@ -415,14 +415,19 @@ export function handleFrameRecovery(
 }
 
 /** Phase LL Task 4 (design spec §4's continuity rule): true whenever `p`
- *  contains ANY distance-kind interval — the exact predicate
- *  `src/monitor/driver.ts`'s own `recordTwdVerdict` already computes for
- *  the identical reason (`continuity.ts`'s own header comment has the full
- *  wire citation: a distance-goal interval makes 0x0031's Total Work
- *  Distance report the interval's GOAL, not distance rowed, so a
- *  continuity check keyed on that field must not run inside one). Factored
- *  out, plain-value, directly testable — same discipline as
- *  `handleFrameSilence`/`handleFrameRecovery` above. */
+ *  contains ANY distance-kind interval — `continuity.ts`'s own header
+ *  comment has the full wire citation: on a distance-goal interval,
+ *  0x0031's Total Work Distance LAGS the interval in progress (it is an
+ *  odometer of metres genuinely rowed, work plus rest coast, not a goal —
+ *  RC-9c, design spec 2026-08-25-free-oracles §2, correcting an earlier
+ *  claim here that it reports the goal) and jumps at each boundary exactly
+ *  like a reset would, so a continuity check keyed on that field must not
+ *  run inside one. `driver.ts`'s per-run TWD verdict used to compute this
+ *  identical predicate for an unrelated reason (comparing the field
+ *  against our own accumulator); RC-9c retired that verdict, but this
+ *  predicate is unaffected — it protects a reset-detector, not a stored
+ *  number. Factored out, plain-value, directly testable — same discipline
+ *  as `handleFrameSilence`/`handleFrameRecovery` above. */
 export function programHasDistanceGoal(p: WorkoutProgram): boolean {
   return p.intervals.some((i) => i.kind === "distance");
 }

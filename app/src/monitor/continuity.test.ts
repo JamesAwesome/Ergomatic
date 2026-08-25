@@ -459,10 +459,12 @@ describe("continuity.check: the interval-count bound (F2b, design spec §4)", ()
 // distance-goal identifier (128) — this test does not reach into a
 // `WorkoutProgram`, since a raw capture carries no compiled program, only
 // the wire's own per-frame declaration of what kind of goal is active,
-// which is exactly the narrower of the two suppression signals
-// `driver.ts`'s own `recordTwdVerdict` also reads (see `continuity.ts`'s
-// header comment on why the production code widens to the whole-program
-// check instead — this corpus test intentionally uses the narrower,
+// which is the narrower of the two suppression signals this same wire fact
+// has fed (`driver.ts`'s per-run TWD verdict used to read the WHOLE-program
+// arm of the OR too, before RC-9c retired it; `continuity.ts`'s own header
+// comment has the full wire citation for why the surviving production
+// check, `useMonitorSession.ts`'s `programHasDistanceGoal`, still widens to
+// the whole program — this corpus test intentionally uses the narrower,
 // PER-FRAME signal, which is a STRICTER test of the suppression: if the
 // narrower signal already produces zero false positives, the wider,
 // production suppression can only produce fewer).

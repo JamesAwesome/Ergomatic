@@ -2421,10 +2421,6 @@ export function createPm5Driver(
         ? `state=${frame.state} 0x0031=never seen`
         : `state=${frame.state} 0x0031=${toHex(lastRaw0x0031)}`;
     log.record("terminal-raw", terminalRawDetail);
-    // The TWD verdict runs HERE, not at 0x0039-time — the machine settles
-    // its own total at the finish (re-walk 2026-08-15, seq 36's false
-    // "differ by 183.8m" against a TWD one tick from settling).
-    recordTwdVerdict(activeRun);
     // THE SUSPICION VERDICT (Task 8, spec §2, PM/antagonist-corrected) —
     // LOG-ONLY and FAIL-OPEN: nothing below this block, and nothing this
     // block itself does, changes any close behaviour — no field on `run`
@@ -2978,15 +2974,18 @@ export function createPm5Driver(
     }
 
     // The accumulator-vs-machine VERDICT used to live here too, and the
-    // re-walk's first row proved that wrong (2026-08-15, seq 36): the
+    // re-walk's first row proved ITS TIMING wrong (2026-08-15, seq 36): the
     // 0x0039 can arrive BEFORE the machine's own totalWorkDistanceMeters
     // has ticked past the previous interval's value — it fired "differ by
     // 183.8m" one tick before TWD settled at 367 against an accumulator of
-    // 367.8. The machine settles its total AT the finish, so the verdict
-    // runs at the terminal transition now (`recordTwdVerdict`, called
-    // beside `final-totals`, which already reads the settled value). The
-    // unconditional print above stays: raw numbers at 0x0039-time are
-    // evidence, verdicts on unsettled numbers are noise.
+    // 367.8. Moving it to the terminal transition fixed the timing, but not
+    // the premise: RC-9c retired the verdict outright (design spec
+    // 2026-08-25-free-oracles §2) — 0x0031's Total Work Distance is an
+    // odometer of metres genuinely rowed, work plus rest coast, the same
+    // quantity our own accumulator sums, so a green comparison certified
+    // nothing about the stored row. The unconditional print above stays:
+    // raw numbers at 0x0039-time are evidence; a verdict comparing two
+    // mirrors of the same number is not.
   }
 
   /** THE `final-totals` ENTRY, ONE BUILDER FOR BOTH TRIGGERS (Task 7, "one
@@ -3045,44 +3044,6 @@ export function createPm5Driver(
         `durationType=${raw.workoutDurationType ?? "?"} ` +
         `registers=${session.seen.size} of ${programmed} programmed ${regs}`,
     );
-  }
-
-  /** THE ACCUMULATOR-VS-MACHINE VERDICT (CR2 spec 1, Task 5; moved from
-   *  `logSummaryTotals` after the re-walk caught it firing on a lagging
-   *  TWD — see the comment at that call site). `lastEmittedTotals` is what
-   *  the rower's screen last showed; `raw.totalWorkDistanceMeters` is the
-   *  machine's own running distance, settled by the time a terminal state
-   *  arrives. A persistent gap is exactly what a lost interval or a
-   *  mis-keyed register write would produce.
-   *
-   *  5 METERS ABSOLUTE, NOT A PERCENTAGE. A percentage arm would make the
-   *  alarm LESS sensitive as the session lengthens, and the failure mode
-   *  this design introduces is a single lost interval — one dropped 500 m
-   *  interval in a 20x500 m session is exactly 5% of the total, precisely
-   *  the case a percentage threshold would wave through.
-   *
-   *  SUPPRESSED on a distance goal: `totalWorkDistanceMeters` reports the
-   *  GOAL there, not the distance actually rowed (confirmed PRIMARY, 500 m
-   *  goal read against 13.4 m genuinely rowed, mid-row at workoutState 5 —
-   *  not merely at arm). `workoutDurationType` is PER-FRAME and
-   *  `compileProgram` can emit a MIXED program, so the suppression widens
-   *  to "the armed program contains ANY distance interval" — a mixed
-   *  program's time-goal intervals would otherwise light this up exactly
-   *  when the machine legitimately reports its distance-goal neighbor's
-   *  target instead of a rowed total. */
-  function recordTwdVerdict(run: typeof activeRun): void {
-    const distanceGoal =
-      raw.workoutDurationType === 128 ||
-      (run?.program.intervals.some((i) => i.kind === "distance") ?? false);
-    const delta = Math.abs(
-      lastEmittedTotals.distanceMeters - (raw.totalWorkDistanceMeters ?? 0),
-    );
-    if (!distanceGoal && delta > 5) {
-      log.record(
-        "divergence",
-        `accumulator and machine total differ by ${delta.toFixed(1)}m`,
-      );
-    }
   }
 
   /** WHY the summary gate was shut when a 0x0039 turned up — four genuinely

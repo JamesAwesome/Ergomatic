@@ -145,27 +145,6 @@ const MINIMAL_PROGRAM: WorkoutProgram = {
   ],
 };
 
-/** A single 500 m work interval — CR2 spec 1 Task 5's own distance-goal
- *  suppression fixture. Only `kind` differs from `MINIMAL_PROGRAM` above;
- *  it exists so the accumulator-vs-machine divergence's suppression rule
- *  (`logSummaryTotals`'s own doc comment: "the armed program contains ANY
- *  distance interval") can be exercised without needing `workoutDurationType
- *  === 128` on the wire, which this file's `tick()` helper cannot produce
- *  (hardcoded to `0`, time). The suppression is an OR of the two conditions,
- *  and this fixture tests the program-shape half on its own. */
-const DISTANCE_PROGRAM: WorkoutProgram = {
-  intervals: [
-    {
-      type: "work",
-      kind: "distance",
-      value: 500,
-      targetSplit: 120,
-      displaySpm: 22,
-      restSeconds: 0,
-    },
-  ],
-};
-
 /** Three 60s work intervals with a 30s rest each — the "sound segment" shape
  *  (§F2's 3x1:00-with-rest row). A hand-built program, not a library one: the
  *  test needs to feed EXACTLY three work+rest cycles with numbers chosen to
@@ -476,12 +455,13 @@ async function reprogram(h: Harness, p: WorkoutProgram): Promise<void> {
  *
  *  `f.workoutDurationType` (CR2 spec 1 Task 5 review, IMPORTANT-1): defaults
  *  to `0` (time), the value every prior caller relied on implicitly. Added
- *  so a test can feed `128` (distance) and isolate `logSummaryTotals`'s
- *  `distanceGoal`'s WIRE arm (`raw.workoutDurationType === 128`) from its
- *  PROGRAM-SHAPE arm (`run?.program.intervals.some(kind === "distance")`)
- *  — the two are independently reachable halves of one OR, and only the
- *  program-shape half had a program fixture (`DISTANCE_PROGRAM`) able to
- *  drive it before this change. */
+ *  so a test can feed `128` (distance) on the wire independently of the
+ *  armed program's own shape — used below to build realistic distance-goal
+ *  frames (e.g. the exit-7 replay). The distance-goal WIRE arm this was
+ *  originally added to isolate lived in `driver.ts`'s per-run TWD verdict,
+ *  retired by RC-9c (design spec 2026-08-25-free-oracles §2); the surviving
+ *  distance-goal predicate, `useMonitorSession.ts`'s `programHasDistanceGoal`,
+ *  reads the armed PROGRAM's shape only, not this per-frame byte. */
 async function tick(
   h: Harness,
   f: {
@@ -1154,175 +1134,53 @@ describe("session accumulator: the finish's own reading (CR2 spec 1 Task 5, cont
 });
 
 // ---------------------------------------------------------------------------
-// R0's TWD comparison gets its verdict (CR2 spec 1, Task 5). `logSummaryTotals`
-// states the raw numbers unconditionally (`summary-totals`, R0 — Task 1); this
-// task adds the RULING on them: a `"divergence"` entry when the frame
-// accumulator (`lastEmittedTotals.distanceMeters`) and the machine's own
-// `totalWorkDistanceMeters` (0x0031) disagree by more than 5 m, suppressed on
-// a distance goal (`workoutDurationType === 128` OR the armed program
-// contains any `kind: "distance"` interval) — the brief's own reasoning for
-// 5 m ABSOLUTE, not a percentage: a percentage would grow LESS sensitive as
-// the session lengthens, and one lost 500 m interval in a 20x500 m session is
-// exactly 5% of the total, precisely the failure mode this design introduces.
+// RC-9c (design spec 2026-08-25-free-oracles §2): the accumulator-vs-machine
+// TWD verdict this block used to pin (CR2 spec 1 Task 5's `recordTwdVerdict`)
+// is RETIRED, not fixed. Both sides of that comparison were the identical
+// quantity — 0x0031's Total Work Distance is an odometer of metres genuinely
+// rowed, work plus rest coast, same as our own accumulator — so a green
+// verdict certified nothing about the stored row, and RC-5 moved every
+// displayed number off that quantity anyway. This pin proves the retirement:
+// the exact scenario that used to log "accumulator and machine total differ
+// by 50.0m" (a 50 m gap, comfortably past the old 5 m tolerance) now produces
+// no `"divergence"` entry of that shape at all — inverted from the old
+// assertion (`toHaveLength(1)` -> `toHaveLength(0)`), red against
+// unmodified `recordTwdVerdict`.
 // ---------------------------------------------------------------------------
 
-describe("session accumulator: accumulator-vs-machine divergence (CR2 spec 1 Task 5)", () => {
-  it(
-    "logs a divergence when the accumulator and the machine's own total " +
-      "differ by more than 5 m (no distance goal)",
-    async () => {
-      const h = await programmed(MINIMAL_PROGRAM);
+describe("session accumulator: the TWD verdict is retired (RC-9c)", () => {
+  it("a 50 m accumulator/machine gap that used to fire the TWD divergence now logs nothing of the kind", async () => {
+    const h = await programmed(MINIMAL_PROGRAM);
 
-      // The accumulator banks 50 m (this tick's own distance); the machine's
-      // own totalWorkDistanceMeters (`twd`) is fed a deliberately different
-      // 100 m — a 50 m gap, comfortably past the 5 m tolerance.
-      await tick(
-        h,
-        {
-          elapsed: 30,
-          distance: 50,
-          twd: 100,
-          state: WORKOUTSTATE_INTERVALWORKTIME,
-        },
-        0,
-      );
-
-      // The verdict runs at the TERMINAL since the re-walk (seq 36's false
-      // alarm) — trigger it with a finished frame carrying the same gap.
-      await tick(h, {
+    // The accumulator banks 50 m (this tick's own distance); the machine's
+    // own totalWorkDistanceMeters (`twd`) is fed a deliberately different
+    // 100 m — the exact gap the retired verdict used to convict on.
+    await tick(
+      h,
+      {
         elapsed: 30,
         distance: 50,
         twd: 100,
-        state: WORKOUTSTATE_WORKOUTEND,
-      });
+        state: WORKOUTSTATE_INTERVALWORKTIME,
+      },
+      0,
+    );
+    await tick(h, {
+      elapsed: 30,
+      distance: 50,
+      twd: 100,
+      state: WORKOUTSTATE_WORKOUTEND,
+    });
 
-      const div = h.log
-        .entries()
-        .filter(
-          (e) =>
-            e.kind === "divergence" &&
-            e.detail.includes("accumulator and machine total differ"),
-        );
-      expect(div).toHaveLength(1);
-      expect(div[0]!.detail).toContain("50.0m");
-    },
-  );
-
-  it(
-    "does NOT log the accumulator-vs-machine divergence when the armed " +
-      "program contains a distance interval, however large the gap " +
-      "(distance-goal suppression, program-shape half of the OR)",
-    async () => {
-      const h = await programmed(DISTANCE_PROGRAM);
-
-      // Same 50 m accumulator, but the machine's own total is fed a huge
-      // gap (950 m) — this would fire the divergence above the 5 m
-      // tolerance many times over if the suppression were not applied.
-      await tick(
-        h,
-        {
-          elapsed: 30,
-          distance: 50,
-          twd: 1000,
-          state: WORKOUTSTATE_INTERVALWORKTIME,
-        },
-        0,
+    const div = h.log
+      .entries()
+      .filter(
+        (e) =>
+          e.kind === "divergence" &&
+          e.detail.includes("accumulator and machine total differ"),
       );
-
-      await tick(h, {
-        elapsed: 30,
-        distance: 50,
-        twd: 1000,
-        state: WORKOUTSTATE_WORKOUTEND,
-      });
-
-      const div = h.log
-        .entries()
-        .filter(
-          (e) =>
-            e.kind === "divergence" &&
-            e.detail.includes("accumulator and machine total differ"),
-        );
-      expect(div).toHaveLength(0);
-    },
-  );
-
-  it(
-    "does NOT log the accumulator-vs-machine divergence when 0x0031's own " +
-      "workoutDurationType reads 128 (distance goal), ISOLATED from the " +
-      "program-shape arm — a time-kind program armed throughout, so only " +
-      "the wire byte can be suppressing this (review IMPORTANT-1: the prior " +
-      "suite had no test able to reach this arm on its own, since tick()'s " +
-      "workoutDurationType was hardcoded to 0)",
-    async () => {
-      const h = await programmed(MINIMAL_PROGRAM); // kind: "time" throughout
-
-      // Same shape as the "logs a divergence" test above (50 m accumulator,
-      // 100 m machine total, a 50 m gap past the 5 m tolerance) — the ONLY
-      // difference is `workoutDurationType: 128` on the wire. If this test
-      // passes for any reason OTHER than the wire arm, MINIMAL_PROGRAM's own
-      // kind ("time") rules out the program-shape arm as an explanation.
-      await tick(
-        h,
-        {
-          elapsed: 30,
-          distance: 50,
-          twd: 100,
-          state: WORKOUTSTATE_INTERVALWORKTIME,
-          workoutDurationType: 128,
-        },
-        0,
-      );
-
-      await tick(h, {
-        elapsed: 30,
-        distance: 50,
-        twd: 100,
-        state: WORKOUTSTATE_WORKOUTEND,
-        workoutDurationType: 128,
-      });
-
-      const div = h.log
-        .entries()
-        .filter(
-          (e) =>
-            e.kind === "divergence" &&
-            e.detail.includes("accumulator and machine total differ"),
-        );
-      expect(div).toHaveLength(0);
-    },
-  );
-
-  it(
-    "does NOT log the accumulator-vs-machine divergence when the two agree " +
-      "within the 5 m tolerance",
-    async () => {
-      const h = await programmed(MINIMAL_PROGRAM);
-
-      // twd omitted -> defaults to the same 50 m the accumulator itself
-      // banks (`tick()`'s own doc comment: "f.twd ?? f.distance").
-      await tick(
-        h,
-        { elapsed: 30, distance: 50, state: WORKOUTSTATE_INTERVALWORKTIME },
-        0,
-      );
-
-      await tick(h, {
-        elapsed: 30,
-        distance: 50,
-        state: WORKOUTSTATE_WORKOUTEND,
-      });
-
-      const div = h.log
-        .entries()
-        .filter(
-          (e) =>
-            e.kind === "divergence" &&
-            e.detail.includes("accumulator and machine total differ"),
-        );
-      expect(div).toHaveLength(0);
-    },
-  );
+    expect(div).toHaveLength(0);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -2571,69 +2429,11 @@ describe("session accumulator: the terminal frame's own raw bytes reach the ring
   });
 });
 
-describe("session accumulator: the TWD comparison runs at the terminal, not at 0x0039 (walk 2026-08-15 re-row, seq 36)", () => {
-  // Row 1 of the re-walk produced a FALSE divergence: the 0x0039 arrived
-  // before the machine's own totalWorkDistanceMeters had ticked past
-  // interval 1's value (184 against an accumulator of 367.8 — "differ by
-  // 183.8m"), and one tick later TWD read 367. The machine settles its own
-  // total AT the finish, so the comparison belongs at the terminal
-  // transition, where final-totals already reads the settled value.
-  it("does not fire on a TWD that lags at 0x0039-time and settles by the terminal", async () => {
-    const h = await programmed(TWO_INTERVAL_REST_PROGRAM);
-
-    await tick(
-      h,
-      {
-        elapsed: 60,
-        distance: 184.4,
-        twd: 184,
-        state: WORKOUTSTATE_INTERVALWORKTIME,
-      },
-      0,
-    );
-    await tick(
-      h,
-      {
-        elapsed: 0.5,
-        distance: 2,
-        twd: 184,
-        state: WORKOUTSTATE_INTERVALWORKTIME,
-      },
-      1,
-    );
-    await tick(
-      h,
-      {
-        elapsed: 59,
-        distance: 183.4,
-        twd: 184,
-        state: WORKOUTSTATE_INTERVALWORKTIME,
-      },
-      1,
-    );
-    // The 0x0039 arrives while TWD still reads interval 1's 184 — the
-    // re-row's exact ordering.
-    h.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, new Uint8Array(20));
-    // One tick later the machine settles: finished frame, TWD 367.
-    await tick(h, {
-      elapsed: 60,
-      distance: 183.4,
-      twd: 367,
-      state: WORKOUTSTATE_WORKOUTEND,
-    });
-
-    const div = h.log
-      .entries()
-      .filter(
-        (e) =>
-          e.kind === "divergence" &&
-          e.detail.includes("accumulator and machine total differ"),
-      );
-    // Honest agreement (367.8 vs 367) — no divergence anywhere, neither at
-    // 0x0039-time (the lag is not a defect) nor at the terminal.
-    expect(div).toHaveLength(0);
-  });
-});
+// RC-9c (design spec 2026-08-25-free-oracles §2): this file used to carry a
+// second pin here — "the TWD comparison runs at the terminal, not at 0x0039"
+// (walk 2026-08-15 re-row, seq 36) — regression-guarding the timing fix for
+// `recordTwdVerdict`. The verdict it timed is retired outright (the block
+// above), so there is nothing left for a timing pin to guard.
 
 // ---------------------------------------------------------------------------
 // Task 8 — the suspicion verdict, log-only and fail-open
