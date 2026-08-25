@@ -270,3 +270,79 @@ ROADMAP so nobody rediscovers them at a gate.
    the block and the heroes now show the same 500.
 5. No `machine_*`-style population clause anywhere: the trio computes on
    every monitor row, old and new.
+
+---
+
+## Reconciliation (RC-5 Task 5, 2026-08-25) — what changed during implementation
+
+This section is appended, not a rewrite; the text above is the original
+spec as approved. Four things the implementation found that the spec as
+written got wrong or overtook, each with its evidence.
+
+1. **Exit criterion 2's invariant is FALSE for the legacy-warm-up shape,
+   BY DESIGN — the invariant's own text should have scoped this out and
+   didn't.** `summaryModel.test.ts`'s legacy-wu fixture ("a LEGACY stored
+   run whose seed still says kind:'warmup'...") asserts
+   `distanceMeters: 808`, `time: "5:00"` (300s), `avgSplit: "2:20.0"`
+   (140.0s). `500 · TIME / DISTANCE = 500 × 300 / 808 = 185.64s = 3:05.6`,
+   not 2:20.0 — off by 45.6 s/500 m, far outside any rounding tolerance.
+   This is not a bug: §1's own warm-up ruling requires DISTANCE/TIME to
+   stay the OLD fused numbers on a legacy `wu` row while AVG SPLIT stays
+   the work-only quotient excluding that same warm-up interval — the two
+   are now DELIBERATELY different populations for this one shape, so the
+   identity criterion 2 states cannot hold for it. §4's own tolerance
+   paragraph already scoped the invariant to "tier B except runs carrying
+   null-index or sub-threshold actuals" but did not name legacy warm-up
+   as a third, harder exclusion (not a tolerance-widening — a REAL
+   population difference, not rounding). Criterion 2 as written is
+   corrected to add: *excluding legacy-warm-up rows, where DISTANCE/TIME
+   are the old fused totals by ruling and the identity does not hold at
+   all, not even approximately.*
+2. **Exit criterion 5's "no `machine_*`-style population clause anywhere"
+   was SUPERSEDED by James's fork ruling, which this spec's own header
+   already records but the exit criteria section was never updated to
+   match.** The fork ruling ("James's fork ruling (2026-08-25)" above)
+   explicitly chose the OPPOSITE of criterion 5: a permanent, named
+   population split between tier A (rows carrying the machine's own
+   totals) and tier B (rows that don't), because "match the PM5" and "one
+   uniform rule on every row" cannot both hold. Criterion 5 is corrected
+   to read: *the population split is deliberate, named on screen (the
+   MACHINE CONFIRMED block's presence/absence), and accepted — not a
+   defect to close. What criterion 5 actually protects (and does hold):
+   no HIDDEN or unlabelled population clause — a rower is never shown a
+   number that silently means something different from what it looks
+   like.*
+3. **Task 1 was a no-op — the spec's own premise that
+   `avgPaceSecondsPer500m` was "NOT currently stored, so this PR adds it"
+   (§1) was already false the day this spec was written.** PR #190
+   (`3cb393d`, merged 2026-08-24, before this branch existed) had already
+   added `MachineSummaryDetail.avgPaceSecondsPer500m`, the decode
+   (`parse.ts`), the driver's field-by-field literal, and the burst-replay
+   test with the identical keystone arithmetic this spec's §1 cites. Task
+   1's report (`task-1-report.md`) verified this file:line by file:line
+   and made no code change. The spec's factual claim about what needed
+   building was stale by the time of dispatch (recurring failure #10);
+   the FIELD itself and its consumption by Tasks 2-4 are unaffected — only
+   the "this PR adds it" framing in §1 is corrected to "this field, added
+   by PR #190, is what Task 2-4 render."
+4. **The sub-threshold fixture §4 asked for: built on the STORED side,
+   NOT newly built on the LIVE side — a real, pre-existing coverage gap,
+   not a regression.** §4 lists "a run with sub-threshold intervals" among
+   the required legacy fixtures. Task 3 built exactly this for the stored
+   screen (`storedSummary.test.ts`, "TIER B2: a sub-threshold pm5 step...
+   stays IN the DISTANCE/TIME sums but OUT of the AVG SPLIT quotient").
+   The LIVE door's equivalent branch — `summaryModel.ts`'s
+   `monitorAvgSplit`, `actual.elapsedSeconds < MIN_MEASURABLE_ELAPSED_SECONDS`
+   — is explicitly UNCHANGED by this phase (its own doc comment: "AVG
+   SPLIT is `monitorAvgSplit`, UNCHANGED by this task either way — it was
+   already work-only ... before RC-5") and Task 2's own coverage table
+   named that exact branch uncovered, both before and after its fix
+   round, confirmed pre-existing by `git diff -U0` hunk ranges. The one
+   sub-threshold test this file does carry
+   (`summaryModel.test.ts`, "review finding 1's own worked example") runs
+   the TIMER door (`timerAvgSplit`), not the monitor door — it does not
+   exercise `monitorAvgSplit`'s own sub-threshold `continue` at all. No
+   task in this plan added a monitor-door sub-threshold fixture; the gap
+   pre-dates RC-5 and RC-5 did not close it. Flagged for whoever next
+   touches `monitorAvgSplit`, not fixed here (out of a captures/ROADMAP
+   task's own scope).

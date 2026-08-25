@@ -1985,6 +1985,13 @@ async function postLog(
       // rate split (`spm` = target on every door, `actualSpm` = measured,
       // monitor-only — §2's own overload fix).
       actualSeconds?: number;
+      // RC-5, Task 5: the step's own MEASURED distance — distinct from
+      // `meters` above (the PRESCRIBED/target distance). `storedSummary.ts`'s
+      // `stepActualSums` (the stored TOTAL line's rest-derivation rung, and
+      // TIER B2's own Σ) reads THIS field, never `meters`. Without it a
+      // pm5-sourced row's stepSums are empty and `buildStoredRest`'s
+      // fallback-2 rung can never fire.
+      actualMeters?: number;
       spm?: number;
       actualSpm?: number;
     }[];
@@ -2010,7 +2017,13 @@ async function postLog(
     // seq 64) — not hand-picked round numbers.
     machineWorkSeconds?: number | null;
     machineWorkMeters?: number | null;
-    machineSummary?: { verificationBytes: number[] } | null;
+    // RC-5, Task 1: `avgPaceSecondsPer500m` is the machine's own average
+    // split — an ADDITIVE key on the same untyped jsonb blob (no
+    // migration, no schema change; `plan §Global Constraints`).
+    machineSummary?: {
+      avgPaceSecondsPer500m?: number;
+      verificationBytes: number[];
+    } | null;
   },
 ): Promise<void> {
   const result = await page.evaluate(async (b) => {
@@ -2213,34 +2226,31 @@ test("log-history", async ({ page }) => {
 // reflection fields answered (the read-back, not the just-opened blank
 // form), and the plan footer all on one screen.
 //
-// PM gate fix wave (2026-08-25), condition 1 (BLOCKING): the row this
-// capture used to seed was an INVENTED 4×500m/2,000m piece sitting under
-// a MACHINE CONFIRMED · WORK ONLY block seeded separately with the
-// exit-7 walk's real 500m/124.0s pair — an impossible frame (the block's
-// own caption says "the totals above include rest", but a 500m work
-// total under a 2,000m hero implies 1,500m/354s of rest that never
-// happened on THIS row). Fixed by re-seeding the row AS the exit-7 piece
-// itself: `docs/monitor/sessions/walk-2026-08-24/README.md`'s own table,
-// a real 2×250m r60 (PM5 View Detail, "v250m/1:00r...2"). Two rows, both
-// pm5-sourced, both real:
+// PM gate fix wave (2026-08-25), condition 1: re-seeded AS the exit-7
+// piece itself (`docs/monitor/sessions/walk-2026-08-24/README.md`'s own
+// table, a real 2×250m r60, PM5 View Detail "v250m/1:00r...2"), so the
+// row's steps and its MACHINE CONFIRMED block agree — both pm5-sourced,
+// both real:
 //
 //   Interval 1: elapsed 1:07.9 (67.9s), 250m, split 2:15.8 (135.8s),
 //     25 spm, target 2:07.0 (127.0s) → dev +8.8 (slower).
 //   Interval 2: elapsed :56.1 (56.1s), 250m, split 1:52.2 (112.2s),
 //     28 spm, target 2:07.0 (127.0s) → dev −14.8 (faster).
 //
+// RC-5 (hero-truth spec, 2026-08-25), Task 5: this row carries
+// `machineWorkSeconds`/`machineWorkMeters` — tier A — so its heroes
+// render the MACHINE's OWN numbers verbatim, never a fused quotient of
+// ours: DISTANCE 500, TIME 2:04 (124.0s), AVG SPLIT 2:04.0 (the
+// machine's own `avgPaceSecondsPer500m`, seeded below — this IS the
+// same number, because 250+250=500m over 67.9+56.1=124.0s is exactly
+// the machine's own work pair; the PM5's own "Totals" row reads 2:04.0
+// too). The wall-clock TOTAL line is separate and DOES fuse in rest:
+// elapsed 67.9+60(r1)+56.1+60(r2) = 244.0s = "4:04 total"; rest metres
+// 147(r1)+95(r2) = 242, so "4:04 total · plus 242 m coasting in rest".
 // Recurring failure #7, sharpened: every number below is hand-checkable
-// on the committed capture, straight off the walk's own table.
-// Work-only total: 67.9+56.1 = 124.0s over 250+250 = 500m, so AVG SPLIT
-// (`500 × Σt/Σd`) is `500 × 124.0/500` = 124.0 = "2:04.0" — the SAME
-// number the machine-confirmed line below shows, because it's the SAME
-// piece (the PM5's own "Totals" row reads 2:04.0 too). TIME and
-// DISTANCE are the REAL all-in totals, work plus both rests: elapsed
-// 67.9+60(r1)+56.1+60(r2) = 244.0s = "4:04"; distance
-// 250+147(r1)+250+95(r2) = 742m — exactly the machine block's own 500m
-// PLUS the walk's own two rest-meter readings (147+95=242), so the
-// caption ("...includes rest") is now TRUE of this exact frame:
-// 500 + 147 + 95 = 742.
+// on the committed capture, straight off the walk's own table —
+// 250+250 = 500 (the DISTANCE hero) and 500+147+95 = 742 (the total
+// line's own implied fused distance, not a rendered hero).
 test("log-detail", async ({ page }) => {
   await signInViaBackdoor(page, {
     email: "screenshots-log-detail@e2e.test",
@@ -2262,11 +2272,13 @@ test("log-detail", async ({ page }) => {
     // narrated a long multi-piece session that no longer exists on this
     // row — a real 2×250m piece gets a note that fits a two-rep sprint.
     notes: "Legs felt fresher on the second one.",
-    // PM gate fix wave, condition 1: the exit-7 piece's own real hero
-    // trio (walk README table) — AVG SPLIT is the work-only average
-    // (124.0s, matching the PM5's own "Totals" row and the
-    // machine-confirmed line below, because this IS that piece); TIME
-    // and DISTANCE are the real all-in totals, work plus both rests.
+    // RC-5, Task 5: these three (`avgSplitSeconds`/`timeSeconds`/
+    // `distanceMeters`) are the row's legacy stored-fallback fields —
+    // this row is tier A (`machineWorkSeconds`/`machineWorkMeters` are
+    // set below), so `buildHeroes` never reads them for the rendered
+    // heroes; they stay as the all-in fused trio for realism (a genuine
+    // saved row still carries a fused `timeSeconds`/`distanceMeters`)
+    // and to prove the tier-A branch really does ignore them.
     avgSplitSeconds: 124.0,
     timeSeconds: 244,
     distanceMeters: 742,
@@ -2279,6 +2291,12 @@ test("log-detail", async ({ page }) => {
         actualSeconds: 67.9,
         actualSource: "pm5",
         meters: 250,
+        // RC-5, Task 5: this piece hit its target distance exactly (the
+        // walk's own real reading — a real interval's actual can differ
+        // from its prescribed meters, this one didn't), so `actualMeters`
+        // equals `meters` above by coincidence of the real data, not by
+        // construction.
+        actualMeters: 250,
         actualSpm: 25,
       },
       {
@@ -2288,6 +2306,7 @@ test("log-detail", async ({ page }) => {
         actualSeconds: 56.1,
         actualSource: "pm5",
         meters: 250,
+        actualMeters: 250,
         actualSpm: 28,
       },
     ],
@@ -2308,7 +2327,13 @@ test("log-detail", async ({ page }) => {
     // `WALK_VERIFICATION_BYTES` derives `AF99-4706 C021-B054` from.
     machineWorkSeconds: 124.0,
     machineWorkMeters: 500,
+    // RC-5, Task 5: `avgPaceSecondsPer500m` (Task 1's new field) is the
+    // machine's OWN computed average — the walk's real 2:04.0 "Totals"
+    // row — so the tier-A hero renders the machine's number verbatim,
+    // never a quotient of ours. Without this key `buildHeroes` renders
+    // NO avg-split hero at all (the build-738-era shape, ROADMAP RC-5).
     machineSummary: {
+      avgPaceSecondsPer500m: 124.0,
       verificationBytes: [
         0x06, 0x47, 0x99, 0xaf, 0x54, 0xb0, 0x21, 0xc0, 0x82, 0x16, 0x01, 0x00,
         0x94, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -2323,17 +2348,28 @@ test("log-detail", async ({ page }) => {
   await expect(page).toHaveURL(/\/today\/log\/[^/]+$/);
   await expect(page.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
   await expect(page.getByText("AVG SPLIT")).toBeVisible();
-  // PM gate fix wave: heroes are the exit-7 piece's own real trio —
-  // AVG SPLIT 2:04.0 (work-only), TIME 4:04, DISTANCE 742 (both
-  // all-in). Located structurally (`.summary-hero-value` in DOM order:
-  // avgSplit, time, distanceMeters — `PostWorkoutSummary.tsx`), not by
-  // bare text, since "2:04.0" also appears inside the machine-confirmed
-  // block's own value line below and a substring `getByText` match
-  // would be ambiguous between the two.
+  // RC-5 (hero-truth), Task 5: this row is tier A (machineWorkSeconds/
+  // machineWorkMeters both set), so the heroes render the MACHINE's own
+  // numbers verbatim — DISTANCE 500, TIME 2:04 (124.0s), AVG SPLIT
+  // 2:04.0 (the machine's own `avgPaceSecondsPer500m`, seeded above) —
+  // never the old fused 742/4:04. Located structurally
+  // (`.summary-hero-value` in DOM order: avgSplit, time, distanceMeters
+  // — `PostWorkoutSummary.tsx`), not by bare text, since "2:04.0" also
+  // appears inside the machine-confirmed block's own value line below
+  // and a substring `getByText` match would be ambiguous between the
+  // two.
   const heroValues = page.locator(".summary-hero-value");
   await expect(heroValues.nth(0)).toHaveText("2:04.0");
-  await expect(heroValues.nth(1)).toHaveText("4:04");
-  await expect(heroValues.nth(2)).toHaveText("742");
+  await expect(heroValues.nth(1)).toHaveText("2:04");
+  await expect(heroValues.nth(2)).toHaveText("500");
+  // The wall-clock TOTAL line is separate from the heroes and DOES fuse
+  // in rest: 67.9+60(r1)+56.1+60(r2) = 244.0s = "4:04 total"; rest
+  // metres 147(r1)+95(r2) = 242. Recompute in-frame: 500 (DISTANCE
+  // hero) + 147 + 95 = 742 = the total line's own implied fused
+  // distance (never a rendered hero).
+  await expect(page.locator(".summary-total-line")).toHaveText(
+    "4:04 total · plus 242 m coasting in rest",
+  );
   await expect(
     page.getByText("UNDER · FASTER · PAIN 3/5 · LIKED"),
   ).toBeVisible();
@@ -2370,20 +2406,6 @@ test("log-detail", async ({ page }) => {
   // "Everything else on this screen includes rest" went false the moment
   // the heroes became work-only (this task); the totals above no longer
   // include rest either, so the caption now says so explicitly.
-  //
-  // NOTE for Task 5 (captures/ROADMAP task, same plan): this test's
-  // hero-value assertions above (heroValues.nth(0)/(1)/(2), the row-level
-  // target/pace/dev checks are unaffected) still expect the OLD fused
-  // 742/4:04 trio and the `machineSummary` payload seeded a few lines up
-  // has no `avgPaceSecondsPer500m` key — under this task's tier logic
-  // that row is now tier A (machineWorkSeconds/machineWorkMeters both
-  // set) and would render NO avg-split hero at all (a build-738-era
-  // shape), shifting `.summary-hero-value`'s DOM order. Task 5 owns
-  // updating this fixture's `machineSummary` (add
-  // `avgPaceSecondsPer500m: 124.0`) and the hero/total-line assertions to
-  // the new 500/2:04/2:04.0 + "4:04 total · plus 242 m coasting in rest"
-  // shape per its own brief ("the capture must now show 500/2:04/2:04.0")
-  // — deliberately left untouched here since this task does not run e2e.
   await expect(
     page.getByText(
       "Rest metres excluded, here and in the totals above. The chart below still spans rest.",

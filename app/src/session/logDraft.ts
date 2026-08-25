@@ -184,15 +184,15 @@ export interface LogStep {
   /** The interval's measured elapsed time, pm5-only, verbatim from
    *  `IntervalActual.elapsedSeconds` (>= 0) — same PM5 PAIRING EXCEPTION as
    *  `avgHr` above: present whenever a matched actual exists, regardless of
-   *  `actualSplit`. **UNIT CAVEAT** (spec §3, adversarial m1): this maps
-   *  from 0x0037's Split/Interval Time under `pm5-interface-notes.md` §10's
-   *  documented scale, and whether that wire field measures WORK time alone
-   *  or work-plus-its-trailing-rest has never been read against a
-   *  stopwatch on real hardware. Stored here under the DOCUMENTED meaning
-   *  (work time); §17 carries the open item (filed by Task 5) — if a later
-   *  hardware reading says work-plus-rest instead, the fix is a
-   *  re-derivation in THIS builder (subtract the interval's own
-   *  `restSeconds`), never a storage-shape change. */
+   *  `actualSplit`. **UNIT CAVEAT — SETTLED (RC-5 hero-truth, 2026-08-25,
+   *  `pm5-interface-notes.md` §26):** this maps from 0x0037's Split/
+   *  Interval Time under `pm5-interface-notes.md` §10's documented scale.
+   *  The exit-7 capture's own last boundary (seq 53) decodes
+   *  `splitIntervalTimeSeconds` 56.1s in the SAME frame as a separate
+   *  `intervalRestTimeSeconds` field reading 60s — if the first field
+   *  fused in trailing rest it would read 116.1, not 56.1, and the PM5's
+   *  own screen shows 56.1 as that interval's split. WORK time alone,
+   *  confirmed by wire evidence, not merely the documented default. */
   actualSeconds?: number;
   /** The interval's measured distance, pm5-only, verbatim from
    *  `IntervalActual.distanceMeters` (>= 0, whole meters) — same PM5

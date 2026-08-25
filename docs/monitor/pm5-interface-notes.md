@@ -4430,19 +4430,33 @@ readings; the 7C branch review (review-derived, code-cited).
 
 ### Still open, and honestly so
 
-**22. Whether 0x0037's Split/Interval Time is work-only or work plus rest.**
-An interval's logged elapsed time maps from that field and is stored under
-the work-only reading. The documented shape argues for it: 0x0037 carries a
-SEPARATE Interval Rest Time field at offsets 12-13, which would be redundant
-if Split/Interval Time already included the rest it names.
+**22. Whether 0x0037's Split/Interval Time is work-only or work plus rest —
+SETTLED work-only (state-architecture review §7, then RC-5 hero-truth,
+2026-08-25, §26 below).** An interval's logged elapsed time maps from that
+field and is stored under the work-only reading. The documented shape
+argues for it: 0x0037 carries a SEPARATE Interval Rest Time field at
+offsets 12-13, which would be redundant if Split/Interval Time already
+included the rest it names. Two INDEPENDENT (non-circular) confirmations,
+neither the `avgSplit` self-consistency arithmetic this item originally
+correctly rejected as circular:
+- **First (state-architecture review §7):** a distance-interval boundary
+  decodes `splitIntervalTimeSeconds = 60.0` with `intervalRestTimeSeconds =
+  30` in the SAME frame, while that SAME interval's 0x0031 elapsed counter
+  (a continuous stopwatch that keeps running through rest — B8, §7) reached
+  91.31s by the time the following rest itself ended — 60+30=90, within
+  1.3s of the independently-tracked 91.31 (reset-timing slop, not the same
+  quantity twice). If Split/Interval Time already fused in the rest, it
+  would read ~90, not 60.
+- **Second (RC-5 hero-truth, §26 below):** the exit-7 capture's last
+  boundary (seq 53) decodes `splitIntervalTimeSeconds = 56.1` with
+  `intervalRestTimeSeconds = 60` in the SAME frame; the PM5's own screen
+  (`walk-2026-08-24/README.md`) shows that interval's split as 56.1, not
+  116.1.
 **Official docs:** SILENT.
-**Evidence for the open state:** §17 item 22. No walk's numbers settle it,
-and a decode's internal time, distance and pace self-consistency CANNOT
-distinguish the two conventions, because `avgSplit` is itself PM5-computed
-from the same split's time and distance and so satisfies the identity
-regardless of which duration the machine used internally. That arithmetic is
-CIRCULAR, not evidence. Settling it needs one work interval timed by an
-independent stopwatch against the logged value.
+**Evidence:** §17 item 22 (original open framing); state-architecture
+review §7 (first settlement); §26 below (second, independent capture).
+`app/src/session/logDraft.ts`'s `actualSeconds` doc comment carries the
+corrected, settled claim.
 
 **23. Real pairing and programming latency has never been measured.** Three
 spans are unknown: device pick to pairing complete, pairing complete to the
@@ -4932,3 +4946,59 @@ the summary-record wave's PR 1 — the four gates (observations-only) —
 per `docs/superpowers/specs/2026-08-24-summary-record-design.md` §1.
 Production now hears the terminate burst; a terminate-path SCREEN oracle
 is still owed (ROADMAP.md's Phase RC owed-walk item).
+
+## 26. Two established facts from the hero-truth antagonist pass (RC-5, 2026-08-25) — for `docs/superpowers/specs/2026-08-25-hero-truth-design.md`
+
+**The PM5 TRUNCATES its own displayed/computed pace; we round.** Two
+independent captures, both PRIMARY:
+
+- **lab-terminate-ring.json** (§25): a 1×60s piece terminated at
+  24.30s/76.0m. The 0x0039 summary's own Avg Pace reads **159.8** s/500m
+  where the quotient `500 × 24.30 / 76.0 = 159.868` would round to 159.9.
+  159.8 is the truncation of 159.868 to one decimal, not its rounding.
+- **walk-2026-08-20** (`walk-2026-08-20-lt-close/README.md`): the PM5's
+  own View Detail screen prints the piece's total split as **2:21.7**
+  where its own Total Time (4:14.9 = 254.9s) over its own Total Work
+  Distance (899m) gives `500 × 254.9 / 899 = 141.768` s/500m = 2:21.768,
+  which rounds to 2:21.8, not the 2:21.7 the machine shows.
+
+`domain/format.ts`'s `fmtSplit` uses `Math.round`. This is why §1 of the
+hero-truth spec renders the machine's OWN `avgPaceSecondsPer500m` field
+verbatim on tier A rather than a quotient of ours — any quotient we
+compute would differ from the screen about half the time, on a machine
+whose own displayed number is not obtained by rounding.
+
+**The PM5's Totals row is not the sum of its own displayed interval
+rows.** Landing the wire-note candidate `walk-2026-08-20-lt-close/README.md`
+flagged but never filed here: that walk's PM5 View Detail screen shows
+interval distances 198 + 500 + 203 = **901** m, while its own **total**
+row states **899** m — a 2m self-disagreement from rounding each
+displayed row before summing. Consequence: any oracle built by summing
+the PM5's own displayed per-interval rows carries this error and is not
+digit-identical to the machine's own stated total — which is exactly why
+the hero-truth spec's tier A reads the machine's OWN totals fields
+(`machine_work_seconds`/`machine_work_meters`, and now
+`avgPaceSecondsPer500m`) rather than re-deriving them by summing rows we
+already have, and why tier B (no machine totals; computed from our own
+recorded actuals) never claims digit-identity with the machine.
+
+**Two stale claims this pass found and closed:**
+
+- `app/src/monitor/monitorRun.ts`'s `computeWorkRestSums` doc comment
+  used to assert "every committed capture's last boundary [reads 0x0037
+  rest] 0, since there is no trailing rest left to measure." **False** —
+  the exit-7 capture's own last boundary (`phone-exit7-ring.json` seq 53,
+  the FINAL interval of a natural 2×250m/r60 finish) decodes
+  `intervalRestTimeSeconds = 60` and `intervalRestDistanceMeters = 95` in
+  its own 0x0037 frame (raw `71 27 00 7f 0d 00 31 02 00 fa 00 00 3c 00 5f
+  00 01 02`; offsets 12-13 `3c 00` = 60, offsets 14-15 `5f 00` = 95) — a
+  real, nonzero trailing rest reading on the machine's own final boundary
+  of a completed piece. The comment is corrected in place.
+- `LogStep.actualSeconds`'s UNIT CAVEAT (`app/src/session/logDraft.ts`)
+  is now SETTLED, not open — see item 22's correction above. The SAME
+  seq-53 frame that closes the first stale claim also settles this one:
+  `splitIntervalTimeSeconds` (offset 6-8) decodes to `56.1`, matching the
+  interval's own real work duration and the PM5's screen (walk table:
+  "elapsed :56.1 (56.1s)"), while `intervalRestTimeSeconds` in the SAME
+  frame is a separate 60 — proving `actualSeconds` is work-only, not
+  work-plus-trailing-rest (a fused reading would show 116.1, not 56.1).

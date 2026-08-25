@@ -3142,7 +3142,13 @@ that needs no erg, and it can run in a test.
       same screen, not one number contradicting another. The underlying
       axis-quantity design question this bullet opened with (should
       `traceModel.ts`'s `t`/`d` ever become a true work-only clock) is
-      untouched and stays open below.
+      untouched and stays open below. **RC-5 (hero-truth, 2026-08-25)
+      makes this MORE visible, not less: now that the three heroes above
+      the chart are work-only on every row, the chart's own rest-inclusive
+      axes are the LAST rest-inclusive quantity left on the screen — the
+      rower's own words, "if I stare at that chart for ten seconds I'll
+      be back to 'does this app know what happened or not,'" are sharper
+      once nothing else on the screen still disagrees with them.**
 - [ ] **Flaky test on file: `App.test.tsx`/`RetestShortcut.tsx` unhandled
       async error, seen 2-of-5 full-suite runs (series-truth branch,
       2026-08-25), never touching that diff's files.** Pre-existing;
@@ -3260,31 +3266,88 @@ that needs no erg, and it can run in a test.
       committed bytes, never a round trip. Ship the semantic with it: the
       field is dimension-conditional and transiently live mid-interval,
       so it can never be a countdown checkpoint at any scale.
-- [ ] **RC-5 — The three stored heroes contradict each other by up to
-      40 s/500 m.** TRIAD. **Population note (#190's PM gate):** the
-      machine fields split the log table into permanent populations —
-      rows with `machine_*` (saved from PR 1's build onward) vs without
-      (older, or a save that raced the ~2s burst window and stored nulls
-      forever, no backfill by design) — so any future reconciliation and
-      its release notes owe an "applies to rows recorded after build X"
-      clause. DISTANCE sums work + machine rest over ALL
-      actuals including warm-up; TIME sums work + PROGRAMMED rest over
-      the same population; AVG SPLIT is 500·Σt/Σd over work metres only,
-      EXCLUDING warm-up. Session-2 prints 1599 m and 8:08.4 (implying
-      **2:32.7**) beside an AVG SPLIT of **2:08.5** — 24.3 s/500 m apart.
-      Pyramid: 2:13.1 against 2:53.0 implied, **39.9 s/500 m.** PR #117
-      shipped this exact shape through seven reviews; this one is in the
-      saved record, not a capture. **Not closed by the warm-up section
-      below:** Concept2 has no average-split field, so this is a rower
-      question with its own answer, and aligning DISTANCE and TIME with C2
-      can widen the contradiction rather than close it. **Explicitly NOT
-      closed by RC-1 (PR2 Task 3, 2026-08-23):** RC-1 stores work and rest
-      as separate quantities but the DISPLAYED DISTANCE/TIME/AVG SPLIT
-      heroes are pinned unchanged (`summaryModel.ts` still computes the
-      fused sum straight off `actuals`, never the new fields) — the three
-      heroes still contradict each other by exactly the same margins as
-      before this PR; RC-1 only made the raw components available for a
-      FUTURE reconciliation, it did not perform one.
+- [x] **RC-5 — The three stored heroes contradict each other by up to
+      40 s/500 m.** TRIAD. **SHIPPED** (hero-truth spec/plan,
+      2026-08-25, `docs/superpowers/specs/2026-08-25-hero-truth-design.md`,
+      5 tasks): DISTANCE, TIME and AVG SPLIT are now ONE population —
+      work only — on every stored row, and the wall-clock total (work
+      plus rest) gets its own line beneath: `4:04 total · plus 242 m
+      coasting in rest`. **Two-tier ruling (James's fork, 2026-08-25,
+      "I want to match the PM5"):** "match the PM5" and "one uniform
+      rule on every row" cannot both hold, because the machine disagrees
+      with the sum of its own displayed rows (walk-2026-08-20: its
+      interval rows sum to 901 m against its own stated total of 899 m,
+      ~2m of self-disagreement from rounding each row) and truncates its
+      own pace where we round (159.8 where the quotient is 159.868)
+      — both antagonist findings, `docs/monitor/pm5-interface-notes.md`
+      §26. So: **tier A**
+      (a row carrying `machine_work_seconds`/`machine_work_meters`,
+      i.e. saved since PR #190) renders the machine's OWN totals and
+      its own `avgPaceSecondsPer500m` (newly stored, additive jsonb key,
+      no migration) verbatim, digit-identical to its screen; **tier B**
+      (everything else) computes the same three quantities from its own
+      recorded actuals and never claims to be the machine's — no badge,
+      no marker; the MACHINE CONFIRMED block's absence is the tell. The
+      population split #190 created is accepted here, named on screen,
+      and is the price of digit-identity. History-list rows use the same
+      tier logic as the detail screen so the two can no longer disagree
+      by 742-vs-500 for the same session (RC-5 Task 4).
+      - **Original evidence, now explained rather than merely reduced:**
+        session-2's 1599 m/8:08.4 (implying 2:32.7) beside AVG SPLIT
+        2:08.5 (24.3 s/500 m apart), and the pyramid's 39.9 s/500 m gap,
+        were the SAME defect this closes — a fused DISTANCE/TIME beside
+        a work-only AVG SPLIT. Both are now work-only on saved-since-#190
+        rows and named-as-fused-plus-rest-clause on the rest.
+      - **[ ] TIER B2 residual — general form, accepted and pinned, not
+        silent (Task 3 fix round 1).** `buildMonitorLogSteps` never
+        produces a stored step for an actual whose `index` is `null`
+        (any legacy warm-up seed included), so a row's Σ `steps`
+        under-counts that actual's own work whenever no other stored
+        signal can rescue it. RC-1's own `workSeconds`/`workMeters` pair
+        (preferred whenever present, since it sums `run.actuals`
+        unconditionally and never goes through `steps`) closes the gap
+        for every row saved **2026-08-24 onward**. The residual is a
+        **CLOSED, non-growing window: rows saved 2026-08-08 (the
+        `actualMeters` amendment) through 2026-08-24 (RC-1 ships)** with
+        a null-index actual and no RC-1 work pair — Σ steps under-counts
+        DISTANCE/TIME for those rows, by design, with no backfill path
+        (`monitorRun.ts`'s own "NO BACKFILL" doc comment on the sibling
+        field), pinned by a dedicated `storedSummary.test.ts` case rather
+        than silently inherited.
+      - **[ ] List-vs-detail bounded disagreement, same window.** The
+        history list's projection excludes `steps` entirely (size), so it
+        cannot reach TIER B2 at all — a row in the same 2026-08-08..
+        2026-08-24 window that the detail screen computes from Σ steps
+        falls, on the LIST only, to the FALLBACK branch (the row's old
+        stored fused columns) instead. Bounded to the same closed window,
+        stated in code (`LogRow.tsx`'s own tier comment), pinned by a
+        dedicated `HistoryList.test.tsx` case that asserts the two
+        screens' numbers are VISIBLY different for the identical session
+        (742 m/2:18.8 on the list vs 500 m/2:04.0 on the detail) rather
+        than merely claiming the gap in a comment.
+      - **[ ] Build-738-era rows render NO AVG SPLIT hero at all —
+        tester-visible, release-note clause owed.** A row saved between
+        PR #190 (machine totals land) and this PR (the machine's own
+        `avgPaceSecondsPer500m` starts being stored) is tier A by the
+        `machine_work_seconds`/`machine_work_meters` test but has no
+        `avgPaceSecondsPer500m` in its `machine_summary` blob — by
+        design (tier A never falls back to a quotient of ours), that row
+        shows DISTANCE and TIME but the AVG SPLIT hero is simply absent,
+        never a stale or wrong number. Real, bounded population (rows
+        saved during v0.21.0's TestFlight window); the next release note
+        should say a small number of recent sessions may show two heroes
+        instead of three, permanently, and that this is intended, not a
+        bug.
+- [ ] **The rower's PARTIAL-on-an-abandoned-piece complaint (hero-truth
+      design review, 2026-08-25) — queued, out of RC-5's own PR.** "I
+      want it to say I stopped, not silently show a shorter piece that
+      looks like I planned a 250 when I meant 500 and bailed." PR #192's
+      MACHINE CONFIRMED block already renders on a terminated row (with
+      the machine's own partial numbers), but nothing on the screen SAYS
+      the piece ended early rather than as planned. Copy plus a
+      stored-state read (the terminate-path distinguishing signal RC-5's
+      antagonist pass and §25 of the interface notes discuss); deserves
+      its own design pass, not a rider on this one.
 - [x] ~~RC-6 — Band `spm` and drop zero `p` in the stored series.~~ —
       **NARROWED, `spm` half SHIPPED** (2026-08-22, held-open-finish spec
       1 task 5). `seriesRecorder.ts` now bands `spm` to 10..60 inclusive,
