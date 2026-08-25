@@ -436,13 +436,21 @@ function buildMeta(row: StoredLog): SummaryMeta {
 // terminate whose burst never arrived, so it never became tier A),
 // `"link-lost"`, `"program-failed"`, `"interrupted"`. A row failing this
 // check falls through to FALLBACK instead of trusting Σ steps.
+// Fix round 3 (re-review, Minor): an ALLOWLIST, not a denylist — the
+// earlier `!== "rower" && !== "link-lost" && ...` shape fails OPEN: a
+// FIFTH `CloseReason` added later (`monitorRun.ts:1099` already
+// anticipates one, W8's inactivity auto-terminate) would silently pass
+// this check and re-enter the trusted TIER B2 branch, resurrecting the
+// exact under-count/misattribution bug this fix round closed — no type
+// error, no failing test, just a quiet regression the day that fifth
+// value ships. This form fails CLOSED instead: only the two shapes that
+// PROVE a row historical (`"finished"`, or `null`/`undefined` predating
+// `endedBy` entirely) are trusted; anything else — including a value
+// this union doesn't even know about yet — declines. Byte-identical
+// behavior today (the five current values partition the same way either
+// direction), different behavior the day a sixth value exists.
 function isReconstructableClose(endedBy: StoredLog["endedBy"]): boolean {
-  return (
-    endedBy !== "rower" &&
-    endedBy !== "link-lost" &&
-    endedBy !== "program-failed" &&
-    endedBy !== "interrupted"
-  );
+  return endedBy === "finished" || endedBy == null;
 }
 
 function stepActualSums(steps: StoredLogStep[]): {

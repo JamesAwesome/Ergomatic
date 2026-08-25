@@ -3353,6 +3353,14 @@ that needs no erg, and it can run in a test.
         `"finished"`-closed session in the closed window (742 m/2:18.8
         on the list vs 500 m/2:04.0 on the detail), one asserting they
         AGREE for a `"link-lost"`-closed session (both 742 m/2:18.8).
+        **One more consequence, named for completeness (fix round 3,
+        re-review):** a DECLINED row's own interval ROWS still sum to
+        their work-only total (e.g. 250+250=500 m) while its HERO shows
+        the old fused value (742 m) with no rest clause on the total
+        line to explain the 242 m gap — the same in-frame contradiction
+        RC-5 exists to kill, reintroduced deliberately for this one
+        population as the accepted pre-RC-5 status quo ("unimproved but
+        never silently wrong," per the FALLBACK branch's own comment).
       - **[ ] Build-738-era rows render NO AVG SPLIT hero at all —
         tester-visible, release-note clause owed.** A row saved between
         PR #190 (machine totals land) and this PR (the machine's own
@@ -3400,6 +3408,24 @@ that needs no erg, and it can run in a test.
         too, or get a "+ rest" clause of its own, matching the pattern
         this phase just established for the stored screen) — not a rider
         on this PR.
+      - **[ ] An INTERRUPTED session's TOTAL line can be present live and
+        absent stored, for the identical row — same family as the item
+        above (Task 3 fix round 3, re-review; pre-existing across the
+        branch, not caused by this PR's diff, previously unrecorded).**
+        `summaryModel.ts`'s `monitorRest` (the LIVE screen's rest source)
+        has a second rung that derives rest straight from `run.actuals`
+        whenever EVERY actual carries its own rest reading — with NO
+        `endedBy` gate at all, so an interrupted session whose completed
+        intervals all measured a real rest still gets
+        `"… · plus N m coasting in rest"` on the live post-workout
+        summary. RC-1's stored `restSeconds`/`restMeters` pair, by
+        contrast, is written ONLY for a `"finished"` close
+        (`computeWorkRestSums`'s own gate) — and TIER B2's `endedBy`
+        allowlist (fix round 2/3) correctly declines an `"interrupted"`
+        row for the SAME reason C1 was fixed. Net effect: the SAME
+        session can show a rest clause live and none at all once saved
+        and reopened. Neither side is wrong (each states only what it can
+        prove), but the disagreement is real and currently silent.
       - **[ ] Three minor divergences, recorded not fixed (Task 3 fix
         round 2, findings M2-M4).**
         - `postTestOffer.ts:45`'s `avgSplitSeconds` input now receives,

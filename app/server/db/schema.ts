@@ -196,7 +196,10 @@ export const sessionLogs = pgTable(
     // triad-governed stored number does not get to lose precision the
     // summary itself never lost.
     avgSplitSeconds: doublePrecision("avg_split_seconds"),
-    // The R-B number: a plain integer, the machine's whole-meter total.
+    // The R-B number: a plain integer, a whole-meter total (fix round 3,
+    // re-review: "the machine's" is no longer accurate for tier B, whose
+    // total is OUR quotient over our own summed actuals, not a single
+    // machine-reported field).
     // **CORRECTED (RC-5 hero-truth spec, Task 3 fix round 2, finding
     // I2): this column's MEANING is save-time-dependent, not fixed.**
     // Originally (R-B, pre-RC-5): work + rest + warm-up, fused. As of

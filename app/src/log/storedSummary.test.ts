@@ -610,6 +610,39 @@ describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL
     expect(view.heroes.timeSeconds).toBe(150.0);
     expect(view.heroes.totalLine).toBe("2:30 total");
   });
+
+  // Fix round 3 (re-review, Minor): `isReconstructableClose` is an
+  // ALLOWLIST (`endedBy === "finished" || endedBy == null`), not a
+  // denylist — this is the test that actually proves the difference. A
+  // denylist shape would have let an UNRECOGNISED `endedBy` (a future
+  // sixth `CloseReason` — `monitorRun.ts:1099` already anticipates one,
+  // W8's inactivity auto-terminate) silently re-enter the trusted branch;
+  // this allowlist declines anything that isn't one of the two provably-
+  // historical shapes. Cast is deliberate: today's `StoredLog["endedBy"]`
+  // union has no such value, but a real API response is JSON off the
+  // wire and cannot be trusted to honor the client's own type the moment
+  // the server adds a value this build doesn't know about yet.
+  it("TIER B2 DECLINES for an UNRECOGNISED endedBy value (a future CloseReason this build doesn't know about) — the allowlist fails closed, not open", () => {
+    const view = buildStoredSummary(
+      baseRow({
+        deviceName: "PM5 432331249",
+        endedBy: "auto-terminated" as unknown as StoredLog["endedBy"],
+        steps: EXIT7_STEPS,
+        machineWorkSeconds: null,
+        machineWorkMeters: null,
+        restSeconds: null,
+        restMeters: null,
+        avgSplitSeconds: 138.8,
+        timeSeconds: 244,
+        distanceMeters: 742,
+      }),
+    );
+    // Declined: the OLD fused columns render unchanged, not the Σ-steps
+    // shrink a trusting (denylist) implementation would have produced.
+    expect(view.heroes.distanceMeters).toBe(742);
+    expect(view.heroes.timeSeconds).toBe(244);
+    expect(view.heroes.totalLine).toBe("4:04 total");
+  });
 });
 
 describe("buildStoredSummary — §5A source derivation", () => {
