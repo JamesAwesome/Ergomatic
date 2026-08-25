@@ -3074,26 +3074,55 @@ that needs no erg, and it can run in a test.
       1m-granularity live count; keep TWD corroboration internal. Its
       own small item (display-only, but it changes which quantity a
       headline number tracks — say so in the PR).
-- [ ] **RC-2 — Decode Log Entry Date/Time; log it beside our wall clock;
-      store nothing yet.** Format settled from two projects and checked
-      arithmetically: date `uint16` = month | day<<4 | (year-2000)<<9;
-      time `uint16` = minutes | hours<<8. **The residual that inverts the
-      headline:** the wire carries hours and minutes and NO SECONDS,
-      while C2's own hardware-sourced example row reads
-      `2015-08-05 13:15:41`. The wire cannot supply what C2's dedup key
-      wants. Settle the tolerance question before anything stores this as
-      an identity. Rides Phase LL's A-2 and its walk.
-- [ ] **RC-3 — Carry 0x0039's nine already-decoded fields into the
-      record.** TRIAD. `parseEndOfWorkoutSummary` decodes
+- [x] **RC-2 — Decode Log Entry Date/Time; log it beside our wall clock;
+      store nothing yet.** SHIPPED (summary-record wave, PR 1,
+      `docs/superpowers/specs/2026-08-24-summary-record-design.md` §2):
+      `parseSummaryLogStamp` decodes date `uint16` = month | day<<4 |
+      (year-2000)<<9, time `uint16` = minutes | hours<<8, and the driver
+      emits one `summary-log-stamp` ring entry per burst. **The residual
+      that inverts the headline stands unchanged:** the wire carries
+      hours and minutes and NO SECONDS, while C2's own hardware-sourced
+      example row reads `2015-08-05 13:15:41` — the stamp remains
+      diagnostic-only, stored nowhere, until the C2-link tolerance
+      question is settled.
+- [x] **RC-3 — Carry 0x0039's nine already-decoded fields into the
+      record.** TRIAD. SHIPPED (summary-record wave, PR 1, same spec §1):
       `avgStrokeRate`, `endingHeartRateBpm`, `avgHeartRateBpm`,
       `minHeartRateBpm`, `maxHeartRateBpm`, `dragFactorAverage`,
-      `recoveryHeartRateBpm`, `workoutType` and `avgPaceSecondsPer500m` —
-      **zero consumers, all nine.** Six are C2 top-level columns the
-      reconciliation table marks NOT CAPTURED. Strictly more coverage at
-      strictly lower cost than a new 0x003A parser, same prerequisite.
-      Caveat: `avgPaceSecondsPer500m`'s /10 scale rests on the same
-      document that was wrong about Last Split Time two pages earlier and
-      has never decoded a real byte — DOC-ONLY until a capture lands.
+      `recoveryHeartRateBpm`, `workoutType` and `avgPaceSecondsPer500m`
+      now write into `MonitorRun.summaryDetail` and, at save, into
+      `session_logs.machine_summary` (migration 0016, hybrid shape) —
+      six of the nine are C2 top-level columns the reconciliation table
+      marked NOT CAPTURED. **Storage only; nothing renders yet** — the
+      MACHINE CONFIRMED display (spec §3) is PR 2.
+- [ ] **Owed walk item: the terminated-piece PM5 memory photograph AND
+      the app-STOP-venue capture.** Zero captures exist on either arm for
+      the End-button venue today — the fake covers its shape only, never
+      real bytes. Two things the next natural walk still owes: (1) a
+      terminate-path SCREEN oracle (`pm5-interface-notes.md` §25's
+      avgStrokeRate anomaly is unresolved without it); (2) a real capture
+      of the app's own END button mid-piece, on both the web and native
+      arms, now that PR 1's four gates make production actually listen
+      for the burst on that path.
+- [ ] **Owed walk item: the pocketed-phone leg (James, 2026-08-24, tester
+      report, verbatim mechanism unconfirmed).** A tester connected,
+      programmed, reached "show me the numbers", pocketed/locked the
+      phone, rowed the piece to completion, and unlocked to find the app
+      still in the pre-row state with no record — END silently discarded
+      it (the never-rowed path has no save door). For the next natural
+      walk: connect, program, show-me-the-numbers, LOCK the screen, row
+      ~30s, unlock; capture the ring + connection log. Questions it
+      settles: does the BLE link survive screen lock on iOS, does frame
+      delivery freeze with the WebView, what state the run object is in
+      on resume, does the watchdog fire. Suspected mechanism (iOS
+      suspends the WebView JS so frames never reach the run) is
+      **INFERENCE until walked** — cross-reference Phase LL's
+      correct-resume-over-background-mode ruling ("The background
+      question, ANSWERED", above) and its research doc
+      (`docs/superpowers/research/2026-08-20-ble-connection-management.md`)
+      as the starting ground; that doc already records a 15-20s screen
+      lock NOT dropping the GATT link (§21 item 7), which is why the
+      product gap below is not assumed to be a link problem.
 - [x] **RC-4 — Last Split Time is 0.01 s/lsb, not 0.1.** Settled by
       replay, see `parse.test.ts` (seq 1195). TRIAD, S,
       **settled without an erg.** Both C2 documents print 0.1, four
@@ -3418,6 +3447,20 @@ assume either reading. RC-2/RC-3/the verification branch are UNBLOCKED.
   shows dashes while a 44-sample trace of the 150.7 m rowed sits in the
   same row. That is a stated product rule, not an oversight. Revisit
   deliberately or not at all.
+- **The armed-but-machine-rowed END path silently discards the row**
+  (James, 2026-08-24, tester report; see the pocketed-phone walk item
+  above). A rower who never presses Start on the app side but completes
+  a programmed piece on the machine gets no save door and no message —
+  the app should say something honest instead of discarding silently.
+  Queued, not scheduled. Trigger: the pocketed-phone walk settles the
+  mechanism; fix rides that phase.
+- **Recover-from-monitor-memory** — the deep fix for the same tester
+  report: the PM5's own memory holds the committed row even when the app
+  never saw it, and a read-back path is the only thing that can return a
+  genuinely lost workout. Natural follow-on to the summary-record wave
+  (its writer already knows the record shape a recovered row would
+  fill). Queued, not scheduled. Trigger: James schedules it, likely after
+  the pocketed-phone walk narrows the mechanism.
 
 ### Sequencing across RC, WU and LL — worked, not asserted (James, 2026-08-21)
 

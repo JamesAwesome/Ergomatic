@@ -4900,3 +4900,9 @@ storage-spine PR 1 — the machine speaks there too.
   (production phone arm, same event) ends at the terminal with no burst —
   teardown drops the link ~1s before it arrives. The summary-record wave
   spec's four-gate terminate capture is the fix.
+
+**SHIPPED 2026-08-24**: production capture of terminate bursts ships with
+the summary-record wave's PR 1 — the four gates (observations-only) —
+per `docs/superpowers/specs/2026-08-24-summary-record-design.md` §1.
+Production now hears the terminate burst; a terminate-path SCREEN oracle
+is still owed (ROADMAP.md's Phase RC owed-walk item).
