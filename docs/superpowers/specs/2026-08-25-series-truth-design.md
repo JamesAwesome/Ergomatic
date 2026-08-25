@@ -56,53 +56,118 @@ sequencing call, 2026-08-25: data loss first, display second).
 
 ## The fixes (one PR, five parts)
 
-**A — driver: the one-line extension its comment reserved.** The
-refused-open mirror onto `emittedIntervalIndex` fires for
-`WORKOUTSTATE_INTERVALWORKDISTANCETOREST` (9) exactly as it does for 8.
+**A — driver: the extension its comment reserved (three lines, two
+files — the antagonist corrected "one-line": ordinal 9 exists only
+inside `WORKOUTSTATE_TO_STATE`, so
+`WORKOUTSTATE_INTERVALWORKDISTANCETOREST = 9` must first be exported
+from `domain/monitor/pm5/parse.ts`).** The refused-open mirror onto
+`emittedIntervalIndex` fires for state 9 exactly as it does for 8.
 Nothing else about the gate changes; the existing regressions that
-killed the unconditional mirror (state-8 tests) stay green untouched.
+killed the unconditional mirror use `WORKOUTSTATE_INTERVALWORKTIME` and
+stay green untouched (verified by the pass). No honest-data false
+positive is constructible: a genuine distance interval starts in state
+5, and at an r0 boundary the pair has already reset so the guard never
+refuses.
 
-**B — recorder: port the open-on-reset guard the design was modelled
-on.** Before `currentKey` may RISE to a frame's higher `intervalIndex`,
-the recorder applies the driver's own level-triggered predicate: a new
-key opens only when no key has been seen yet, or when this frame's
-`elapsedSeconds` is strictly less than the CURRENT key's own register
-(a genuine wire reset). Otherwise the frame merges into the current key.
-No constants, no edge memory. B makes the recorder self-defending
-against ANY future emitted-index lie; A removes the one poison we have
-evidence for at source. They are complementary, both required.
+**B′ — the driver emits the key it actually used; the recorder's own
+derivation is DELETED, not supplemented (replaces the original B, which
+the antagonist's full pass BLOCKED).** The original B ported the
+driver's open-on-reset predicate into the recorder — but the
+discriminating byte (`status.workoutState` 8/9) does not survive to the
+recorder's seam: on `MonitorFrame`'s six-valued `state` +
+`rawIntervalCount`, the poison tick and an honest post-gap first tick
+are IDENTICAL, so the ported guard fires on the driver's own disclosed
+bounded edge (hand-executed red on `driver.test.ts`'s reconnect-spanning
+and walk-signature regressions) and the refusal is permanent — verbatim
+the "short by the whole skipped interval, forever" failure the register
+map exists to eliminate. Instead: `MonitorFrame` gains an additive
+`attributedIntervalIndex` (the same precedent `rawIntervalCount` set) —
+the key the driver's OWN register logic resolved for this frame, after
+its open-on-reset guard. `seriesRecorder` keys its registers on that
+field and its `currentKey`-raising comparison against `intervalIndex`
+is removed (trace-truth's own ruling: delete the heuristic, do not
+supplement it). One deriver in the system; the recorder inherits every
+current and future guard the driver has. Research pass
+(2026-08-25, James's durability question): DURABLE-WITH-CONDITIONS —
+Concept2's own ecosystem is single-writer for interval identity
+(SECONDARY, logbook API stores device-authored pre-segmented
+intervals); FIT consumers compute membership only against
+device-written boundaries, never invented heuristics (SECONDARY); DDIA:
+one authoritative deriver for derived data (SECONDARY); this repo is
+3-for-3 on the failure class (this defect, LL's boundary-fold
+under-count, trace-truth's diagnosis). Conditions bound: no copy-pasted
+guard logic anywhere (B′ has none by construction); failures loud (C′);
+and the EXTERNAL machine-comparison oracles stay untouched — a shared
+wrong key makes series+accumulator consistent-but-wrong, which only the
+differently-sourced PM5 comparisons can catch, so the fixture asserts
+the ring's numbers, never our own derivations.
 
-**C — recorder: the drop becomes loud.** Backward-bucket rejections
-(`bucket <= lastEmittedBucket`) are counted and the count surfaces the
-same way `truncated` already does (the recorder's result carries it and
-the driver/hook logs a ring entry when nonzero). A defect of this class
-must be visible at a desk, not discovered at an erg.
+**C′ — the drop becomes loud (corrected: the original predicate counted
+normal decimation).** `bucket <= lastEmittedBucket` IS the 1Hz
+decimation — 80-90% of healthy iOS frames take that return (measured
+2.23 frames/s desktop, 90-180ms iOS; notes §"frame cadence") — so
+counting it is an alarm wired to a hot path. The defect signal is the
+STRICTLY backward case: count frames whose bucket is `<`
+`lastEmittedBucket` (the work clock went backwards; exit-7's loss reads
+buckets 67..124 against 196). Plumbing corrected against the code, not
+the imagined precedent: `truncated` produces NO ring entry anywhere and
+IS server-persisted, so there is no symmetry to inherit. C′ is
+client-side only: the recorder's result exposes the count; the HOOK
+(the recorder's actual owner — the driver never sees it) writes one
+ring entry when nonzero, at `closeRecord` time (upstream of the
+teardown stash, so it reaches the walk's readout). Nothing is
+persisted to the server and no `SeriesData` field is added (the route's
+reconstruction would silently drop it — say so in a comment). Name it
+nothing like "dropped" (`seriesDropped` already means the localStorage
+quota retry): `backwardBucketCount`.
 
-**D — docs on the same surface, no behaviour change.** `traceModel.ts`'s
-header is corrected: `t` is the sum of per-interval final elapsed
-readings and INCLUDES rest whenever the wire advanced through it — the
-chart's x-axis and 0x0039's work-only elapsed measure different
-quantities. The axis-quantity question (should the chart use a true
-work-only clock?) is explicitly OUT of this PR and queued in ROADMAP —
-changing what the axis means is its own number-meaning decision.
+**D — docs on the same surface, no behaviour change (widened to BOTH
+axes per the pass).** `traceModel.ts`'s header is corrected for `t` AND
+`d`: neither is a work-only quantity — each is the sum of per-interval
+final readings and is ROWER-DEPENDENT (a frozen rest contributes
+nothing; an advancing rest contributes all of itself — key 0's register
+read 129.5s for a 67.91s work interval, and the series' final d of
+742.7m stands against 0x0039's work-only 500m). Say "conditional on
+rower behaviour during rests", not "includes rest" — the second phrasing
+still reads as a unit. The `GAP_BREAK_SECONDS` conclusion stands (a rest
+still never produces a `t` gap); only its stated reason changes. The
+axis-quantity question (should the chart use a true work-only clock?)
+is explicitly OUT of this PR and queued in ROADMAP — changing what the
+axis means is its own number-meaning decision.
 
 **E — the regression fixture is synthetic, and says so.** No replayable
 capture of this defect exists (production build, no instrument — only
 the ring). The failing-first test synthesizes the ring's own frame
 sequence (interval 1 to 67.91s, the state-9 poison tick at 68.02s,
 advancing rest to 129.5s, interval 2's reset to 0 then 56.1s, trailing
-rest), replays it through the REAL driver → recorder, and asserts the
-healthy shape: contiguous samples, two rest runs, final d within 1m of
-742.7, fastest split 1:52.2 present. The test's comment states it is
-synthesized FROM the production ring and that a lab capture of a
-2×Nm rNN piece is owed (ROADMAP walk item rides this PR). Both
-committed clean captures stay pinned as replay regressions so A/B
-cannot disturb them.
+rest), replays it through the REAL driver → recorder, and asserts ONLY
+ring-sourced numbers (the pass killed the "fastest 1:52.2 present"
+criterion — pace comes from `currentSplit`, which the fixture invents;
+asserting it tests the fixture): sample count ~230, `t` reaching
+230.5s, two rest runs, final d within 1m of 742.7, and
+`backwardBucketCount === 0`. The structural fact the pace assertion
+proxied for is asserted directly: interval 2's samples exist. The
+fixture includes BOTH state-9 ticks the ring shows (67.91 before the
+count increments, 68.02 after — the refusal throttle makes later
+refusals silent, so a one-tick fixture models a narrower window than
+the hardware). The test's comment states it is synthesized FROM the
+production ring and that a lab capture of a 2×Nm rNN piece is owed
+(ROADMAP walk item rides this PR). Both committed clean captures stay
+pinned as replay regressions — as NO-REGRESSION pins only, not as
+safety evidence (neither contains the risky shape; the pass's
+oracle-blindness finding). Additionally, B′'s branch is instrumented
+during the pinned replays so a green result is distinguishable from
+"the new path never ran".
 
 ## Explicitly not in this PR
 
-- No repair of already-saved rows (impossible — the samples were never
-  built; said in ROADMAP where the walk item lands).
+- No repair of already-saved rows — POSSIBLE IN PART but DECLINED
+  (James, 2026-08-25). The pass corrected the spec's original
+  "impossible": the band DISPLACEMENT is arithmetically repairable
+  (the inflation equals the finishing interval's stored
+  `actualSeconds`, 67.9s, cross-confirmed by 0x0039's 124s total); the
+  missing samples are not, and inventing them from interval averages is
+  refused. Population is roughly one row; repair declined.
 - No axis-quantity change (D queues it).
 - No display work (the summary-record wave's PR 2 follows separately).
 - No change to the driver's own accumulator/register logic — the guard
@@ -111,13 +176,21 @@ cannot disturb them.
 ## Exit criteria
 
 1. The synthetic exit-7-shaped replay produces a contiguous series with
-   both intervals, both rests, fastest 1:52.2, and final d within 1m of
-   the accumulator — failing before A+B, passing after.
+   both intervals, both rests, ~230 samples, t reaching 230.5s, and
+   final d within 1m of 742.7 — failing before A+B′, passing after.
 2. Both committed captures replay byte-identically to their pre-fix
-   series (A/B change nothing on state-8 and no-rest shapes).
-3. A forced backward-bucket sequence yields a nonzero drop count that
-   reaches the ring; zero on all clean replays.
-4. `traceModel.ts`'s header states the t-includes-advancing-rest truth;
-   ROADMAP carries the axis-quantity question and the 2×Nm rNN capture
-   walk item, and corrects the stale "rides the next log-surface PR"
-   line (the defect was wire-attribution, not render).
+   series — a NO-REGRESSION pin, not safety evidence (neither contains
+   the risky shape) — with B′'s branch instrumented so green is
+   distinguishable from never-ran.
+3. A forced strictly-backward bucket sequence yields a nonzero
+   `backwardBucketCount` that reaches the ring via the hook at
+   `closeRecord`; ZERO on the clean replays AND on the healthy exit-7
+   counterfactual (the strict `<` predicate excludes ordinary
+   decimation, which `===` covers).
+4. `traceModel.ts`'s header states the conditional-on-rower truth for
+   BOTH `t` and `d`; ROADMAP carries the axis-quantity question and the
+   2×Nm rNN capture walk item, and corrects the stale "rides the next
+   log-surface PR" line (the defect was wire-attribution, not render).
+5. `seriesRecorder` contains NO derivation of interval attribution —
+   grep for `intervalIndex` in it returns only the consumed
+   `attributedIntervalIndex` field (delete, don't supplement).
