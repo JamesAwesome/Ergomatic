@@ -61,9 +61,293 @@ function baseRow(overrides: Partial<StoredLog> = {}): StoredLog {
     machineWorkSeconds: null,
     machineWorkMeters: null,
     machineSummary: null,
+    // RC-1 (storage-spine design spec §3): same "null is the common case"
+    // default as the RC-2/RC-3 trio above — the hero-truth tier/total-line
+    // describe blocks below override this explicitly per fixture.
+    restSeconds: null,
+    restMeters: null,
     ...overrides,
   };
 }
+
+// RC-5 (hero-truth design spec) §1/§2, Task 3: the exit-7 walk's own real
+// values (`docs/monitor/sessions/walk-2026-08-24/README.md`'s own table —
+// PRIMARY, photographed) — realistic fixtures throughout, per repo
+// convention (recurring failure 3) rather than round invented numbers.
+// Interval 1: elapsed 67.9s, 250m, split 135.8s (2:15.8), 25 spm, target
+// 127.0s (2:07.0) → dev +8.8. Interval 2: elapsed 56.1s, 250m, split
+// 112.2s (1:52.2), 28 spm, target 127.0s → dev −14.8. Work-only totals:
+// 67.9+56.1 = 124.0s over 250+250 = 500m (matches the PM5's own Totals
+// row, 2:04.0 avg pace, `machine_summary.avgPaceSecondsPer500m`). Rest:
+// 60s/147m + 60s/95m = 120s/242m. Fused (pre-RC-5 shape): 244s/742m.
+const EXIT7_STEPS: StoredLog["steps"] = [
+  {
+    label: "250m @ 2:07.0",
+    targetSplit: 127.0,
+    actualSplit: 135.8,
+    actualSeconds: 67.9,
+    actualMeters: 250,
+    actualSource: "pm5",
+    meters: 250,
+    actualSpm: 25,
+  },
+  {
+    label: "250m @ 2:07.0",
+    targetSplit: 127.0,
+    actualSplit: 112.2,
+    actualSeconds: 56.1,
+    actualMeters: 250,
+    actualSource: "pm5",
+    meters: 250,
+    actualSpm: 28,
+  },
+];
+
+describe("buildStoredSummary — RC-5 (hero-truth) §1/§2: heroes and the TOTAL line", () => {
+  it("TIER A: a row carrying the machine's own work totals renders them verbatim, including the machine's own avg split, plus the TOTAL line from the RC-1 rest pair — DISCRIMINATING from tier B (design spec §1's own antagonist-established fact: the machine can disagree with the sum of its own rows, walk-2026-08-20's 901-vs-899), so the machine's totals here are deliberately NOT equal to Σ EXIT7_STEPS (500m/124.0s) — a test that used equal values couldn't tell tier A from tier B", () => {
+    const view = buildStoredSummary(
+      baseRow({
+        deviceName: "PM5 432331249",
+        steps: EXIT7_STEPS,
+        machineWorkSeconds: 123.8,
+        machineWorkMeters: 499,
+        machineSummary: { avgPaceSecondsPer500m: 124.1 },
+        restSeconds: 120,
+        restMeters: 242,
+        // The OLD fused columns, still whatever a pre-this-task save
+        // posted — tier A never reads these three at all.
+        avgSplitSeconds: 999,
+        timeSeconds: 9999,
+        distanceMeters: 9999,
+      }),
+    );
+    expect(view.heroes.distanceMeters).toBe(499);
+    expect(view.heroes.time).toBe("2:04");
+    expect(view.heroes.timeSeconds).toBe(123.8);
+    expect(view.heroes.avgSplit).toBe("2:04.1");
+    expect(view.heroes.avgSplitSeconds).toBe(124.1);
+    expect(view.heroes.totalLine).toBe(
+      "4:04 total · plus 242 m coasting in rest",
+    );
+  });
+
+  it("a build-738-era tier-A row (machine totals present, avgPaceSecondsPer500m absent) renders NO avg-split hero — never a fallback quotient", () => {
+    const view = buildStoredSummary(
+      baseRow({
+        deviceName: "PM5 432331249",
+        steps: EXIT7_STEPS,
+        machineWorkSeconds: 124.0,
+        machineWorkMeters: 500,
+        // No avgPaceSecondsPer500m key at all — the exact build-738-era
+        // shape (that field predates Task 1 of this phase).
+        machineSummary: { verificationBytes: [1, 2, 3] },
+      }),
+    );
+    expect(view.heroes.distanceMeters).toBe(500);
+    expect(view.heroes.time).toBe("2:04");
+    expect(view.heroes.avgSplit).toBeUndefined();
+    expect(view.heroes.avgSplitSeconds).toBeUndefined();
+  });
+
+  it("TIER B: no machine totals but steps carry actualMeters/actualSeconds — heroes compute from Σ steps, AVG SPLIT is one quotient over the summed pair, TOTAL line from the RC-1 rest pair", () => {
+    const view = buildStoredSummary(
+      baseRow({
+        deviceName: "PM5 432331249",
+        steps: EXIT7_STEPS,
+        machineWorkSeconds: null,
+        machineWorkMeters: null,
+        // A raced-burst save posts work-only heroes already (Task 2's
+        // own `model.heroes.*`) — set here to the SAME values Σ steps
+        // produces, matching a genuine post-task-2 save.
+        avgSplitSeconds: 124.0,
+        timeSeconds: 124.0,
+        distanceMeters: 500,
+        restSeconds: 120,
+        restMeters: 242,
+      }),
+    );
+    expect(view.heroes.distanceMeters).toBe(500);
+    expect(view.heroes.timeSeconds).toBeCloseTo(124.0, 5);
+    expect(view.heroes.avgSplitSeconds).toBeCloseTo(124.0, 5);
+    expect(view.heroes.avgSplit).toBe("2:04.0");
+    expect(view.heroes.totalLine).toBe(
+      "4:04 total · plus 242 m coasting in rest",
+    );
+  });
+
+  it("TIER B, fallback-2 (pre-PR rest derivation): no RC-1 pair stored, but the row's OLD fused distanceMeters/timeSeconds exceed Σ steps — the difference IS the rest, recovered onto the TOTAL line while the heroes shrink to work-only", () => {
+    const view = buildStoredSummary(
+      baseRow({
+        deviceName: "PM5 432331249",
+        steps: EXIT7_STEPS,
+        machineWorkSeconds: null,
+        machineWorkMeters: null,
+        restSeconds: null,
+        restMeters: null,
+        // The OLD fused (pre-task-3) values — 742m/244s, exceeding Σ
+        // steps (500m/124.0s) by exactly the walk's own rest pair.
+        avgSplitSeconds: 138.8,
+        timeSeconds: 244,
+        distanceMeters: 742,
+      }),
+    );
+    expect(view.heroes.distanceMeters).toBe(500);
+    expect(view.heroes.timeSeconds).toBeCloseTo(124.0, 5);
+    expect(view.heroes.avgSplit).toBe("2:04.0");
+    expect(view.heroes.totalLine).toBe(
+      "4:04 total · plus 242 m coasting in rest",
+    );
+  });
+
+  it("FALLBACK: a row predating actualMeters (every step's actualMeters/actualSeconds absent) renders its stored heroes UNCHANGED — never a dash for distance — and the TOTAL line WITHOUT a rest clause", () => {
+    const legacySteps: StoredLog["steps"] = [
+      {
+        label: "6:00 @ 6k",
+        actualSplit: 130,
+        actualSource: "pm5",
+        // No actualMeters/actualSeconds at all — the exact pre-2026-08-08
+        // shape.
+        spm: 24,
+      },
+    ];
+    const view = buildStoredSummary(
+      baseRow({
+        deviceName: "PM5 432331249",
+        steps: legacySteps,
+        avgSplitSeconds: 130,
+        timeSeconds: 1550,
+        distanceMeters: 6000,
+        restSeconds: null,
+        restMeters: null,
+      }),
+    );
+    // The stored value still shows, unchanged — never a fabricated
+    // absence for a real, already-persisted number.
+    expect(view.heroes.distanceMeters).toBe(6000);
+    expect(view.heroes.timeSeconds).toBe(1550);
+    expect(view.heroes.avgSplitSeconds).toBe(130);
+    expect(view.heroes.avgSplit).toBe("2:10.0");
+    expect(view.heroes.totalLine).toBe("25:50 total");
+  });
+
+  it("a timer-door stored row (no deviceName, steps carry no actualMeters) renders NO total line at all — matching the live door, which never sets one for timer/manual", () => {
+    const view = buildStoredSummary(
+      baseRow({
+        deviceName: null,
+        steps: [
+          {
+            label: "6:00 @ 6k",
+            actualSplit: 130,
+            actualSource: "stopwatch",
+            meters: 1500,
+          },
+        ],
+        avgSplitSeconds: 130,
+        timeSeconds: 780,
+        distanceMeters: 6000,
+      }),
+    );
+    expect(view.heroes.timeSeconds).toBe(780);
+    expect(view.heroes.totalLine).toBeUndefined();
+  });
+
+  it("TIER B: a pm5-sourced step carrying only ONE of actualSeconds/actualMeters, and a stopwatch-sourced step carrying BOTH — neither shape `buildMonitorLogSteps` writes today, but `routes/data.ts`'s own validator accepts each field independently, so a stored row CAN carry them. Both are excluded from the AVG SPLIT quotient (it needs the pm5 pair together); DISTANCE/TIME still sum whichever half each one has, unconditionally", () => {
+    const steps: StoredLog["steps"] = [
+      ...EXIT7_STEPS,
+      // pm5, elapsed only — no distance reading for this interval.
+      { label: "unpaired reading", actualSource: "pm5", actualSeconds: 30 },
+      // stopwatch-sourced but carrying the pm5-only fields (a malformed
+      // or hand-crafted payload the validator doesn't reject).
+      {
+        label: "stopwatch with actualMeters",
+        actualSource: "stopwatch",
+        actualSeconds: 10,
+        actualMeters: 40,
+        meters: 40,
+      },
+    ];
+    const view = buildStoredSummary(
+      baseRow({
+        deviceName: "PM5 432331249",
+        steps,
+        machineWorkSeconds: null,
+        machineWorkMeters: null,
+      }),
+    );
+    // DISTANCE gains the stopwatch step's 40m (unconditional Σ); TIME
+    // gains both extra steps' seconds (30 + 10); AVG SPLIT is untouched —
+    // still exactly the exit-7 pair's own 124.0.
+    expect(view.heroes.distanceMeters).toBe(540);
+    expect(view.heroes.timeSeconds).toBeCloseTo(164.0, 5);
+    expect(view.heroes.avgSplitSeconds).toBeCloseTo(124.0, 5);
+    expect(view.heroes.avgSplit).toBe("2:04.0");
+  });
+
+  it("TIER B: a sub-threshold pm5 step (actualSeconds below MIN_MEASURABLE_ELAPSED_SECONDS) stays IN the DISTANCE/TIME sums but OUT of the AVG SPLIT quotient — mirrors summaryModel.ts's own monitorAvgSplit rule for a stored row", () => {
+    const steps: StoredLog["steps"] = [
+      ...EXIT7_STEPS,
+      {
+        label: "mis-tap",
+        actualSource: "pm5",
+        actualSeconds: 0.2,
+        actualMeters: 3,
+      },
+    ];
+    const view = buildStoredSummary(
+      baseRow({
+        deviceName: "PM5 432331249",
+        steps,
+        machineWorkSeconds: null,
+        machineWorkMeters: null,
+      }),
+    );
+    expect(view.heroes.distanceMeters).toBe(503);
+    expect(view.heroes.timeSeconds).toBeCloseTo(124.2, 5);
+    // AVG SPLIT unchanged — the mis-tap never touches the quotient.
+    expect(view.heroes.avgSplitSeconds).toBeCloseTo(124.0, 5);
+  });
+
+  it("TIER B: a pm5-sourced step carrying actualMeters but no actualSeconds at all (independently optional per the server's own validator) leaves TIME and AVG SPLIT absent while DISTANCE still renders", () => {
+    const view = buildStoredSummary(
+      baseRow({
+        deviceName: "PM5 432331249",
+        steps: [
+          { label: "distance only", actualSource: "pm5", actualMeters: 500 },
+        ],
+        machineWorkSeconds: null,
+        machineWorkMeters: null,
+      }),
+    );
+    expect(view.heroes.distanceMeters).toBe(500);
+    expect(view.heroes.time).toBeUndefined();
+    expect(view.heroes.timeSeconds).toBeUndefined();
+    expect(view.heroes.avgSplit).toBeUndefined();
+    expect(view.heroes.avgSplitSeconds).toBeUndefined();
+    // No workSeconds at all — buildStoredTotalLine's own early-return.
+    expect(view.heroes.totalLine).toBeUndefined();
+  });
+
+  it("no total line when neither the RC-1 pair nor the fallback-2 derivation resolves (tier B, no rest stored, Σ steps equal to the fused columns)", () => {
+    const view = buildStoredSummary(
+      baseRow({
+        deviceName: "PM5 432331249",
+        steps: EXIT7_STEPS,
+        machineWorkSeconds: null,
+        machineWorkMeters: null,
+        restSeconds: null,
+        restMeters: null,
+        // Already work-only, so distanceMeters/timeSeconds are NOT
+        // greater than Σ steps — fallback-2's own gate correctly declines
+        // to fire (nothing to derive).
+        avgSplitSeconds: 124.0,
+        timeSeconds: 124.0,
+        distanceMeters: 500,
+      }),
+    );
+    expect(view.heroes.timeSeconds).toBeCloseTo(124.0, 5);
+    expect(view.heroes.totalLine).toBe("2:04 total");
+  });
+});
 
 describe("buildStoredSummary — §5A source derivation", () => {
   it("uses the stored deviceName when present, regardless of step shape", () => {

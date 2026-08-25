@@ -57,6 +57,7 @@ import type { SeriesData } from "../monitor/seriesRecorder.js";
 import { formatLogDate } from "../session/logDraft";
 import {
   buildSpmCell,
+  buildTotalLine,
   formatTimeOfDay,
   MIN_MEASURABLE_ELAPSED_SECONDS,
   rowJudgment,
@@ -165,7 +166,33 @@ export interface StoredLog {
   // structural mirror like `StoredLogStep` above.
   machineWorkSeconds: number | null;
   machineWorkMeters: number | null;
-  machineSummary: { verificationBytes?: number[] } | null;
+  // RC-5 (hero-truth design spec) §1, Task 1: the machine's own average
+  // split, added to `machineSummary`'s narrowed client view alongside the
+  // existing `verificationBytes` key — the SAME additive-jsonb-key
+  // convention (`server/stores/logs.ts`'s own comment: "stored VERBATIM
+  // once validated"), no new column, no migration. Optional: absent on
+  // any row saved before Task 1 shipped, including a build-738-era row
+  // that already carries `machineWorkSeconds`/`machineWorkMeters` but
+  // predates this key entirely — `buildHeroes` below renders NO avg
+  // split hero for that shape, on purpose (never a fallback quotient,
+  // Global Constraints: the PM5 truncates, we round).
+  machineSummary: {
+    verificationBytes?: number[];
+    avgPaceSecondsPer500m?: number;
+  } | null;
+  // RC-1 (storage-spine design spec §3, TRIAD): the session's rest pair,
+  // required-and-nullable — same convention as `machineWorkSeconds` above
+  // (the column is always selected on GET, so "absent" isn't a shape this
+  // row can carry; `null` is the real, common case for any row predating
+  // RC-1, or a phone-timer/manual save, or a monitor close that isn't a
+  // natural "finished" finish — `server/stores/logs.ts`'s own
+  // `LogInput.restSeconds`/`restMeters` comment). Task 3's ONLY rest
+  // source for the TOTAL line's own §2 derivation — see `buildStoredRest`
+  // below for why there is no third, per-actual fallback rung here the
+  // way the live door has (`StoredLogStep` carries no per-step rest
+  // field at all).
+  restSeconds: number | null;
+  restMeters: number | null;
 }
 
 /** §5D: the read-back's own three pieces. `empty` is the "all four null"
@@ -239,20 +266,232 @@ function buildMeta(row: StoredLog): SummaryMeta {
   return meta;
 }
 
-// §5B: "fed by the STORED three; per-cell absence identical" — each
-// field independently `undefined` when its own stored number is `null`,
-// exactly `SummaryHeroes`' own per-hero absence contract (never a
-// fabricated `0:00`/`0 m`). `?? undefined` turns the stored `null` into
-// the interface's own absence value.
+// RC-5 (hero-truth design spec) §1, Task 3: the stored screen's own tier
+// split, parallel to `summaryModel.ts`'s `monitorHeroes` but reading a
+// PERSISTED row rather than a live `MonitorRun` — `StoredLogStep` has no
+// `run.actuals`/`logSeed` to read, only whatever was actually saved.
+//
+//  TIER A — the row carries the machine's own work totals
+//  (`machineWorkSeconds`/`machineWorkMeters`, both non-null and `> 0` —
+//  PR #190). DISTANCE/TIME render verbatim; AVG SPLIT renders the
+//  machine's own `machineSummary.avgPaceSecondsPer500m` (Task 1) — NEVER
+//  a quotient of ours (Global Constraints: the PM5 truncates, we round).
+//  A build-738-era row (machine totals present, `avgPaceSecondsPer500m`
+//  absent — that key predates Task 1) renders NO avg split hero at all,
+//  intentionally (pinned by a dedicated test in `storedSummary.test.ts`
+//  so nobody "fixes" it into a fallback quotient later).
+//
+//  TIER B — no machine totals, but at least one stored step carries
+//  `actualMeters` (a monitor row saved since the 2026-08-08 amendment).
+//  DISTANCE/TIME are Σ `actualMeters`/Σ `actualSeconds` over every step
+//  that carries them — unconditional, no wu/null-index/sub-threshold
+//  exclusion, matching `summaryModel.ts`'s own `tierBWorkDistanceMeters`/
+//  `tierBWorkTimeSeconds`. AVG SPLIT is ONE quotient (`500 × Σt/Σd`,
+//  `tierBAvgSplitSeconds` below) over the steps whose `actualSeconds`
+//  clears `MIN_MEASURABLE_ELAPSED_SECONDS` — the sub-threshold exclusion
+//  `monitorAvgSplit` also applies; a null-index actual never becomes a
+//  stored step at all (`buildMonitorLogSteps`'s own "unattributable,
+//  unmatched" rule), so it is excluded from every sum here by
+//  construction, not by a check this module has to write.
+//
+//  FALLBACK — no step carries `actualMeters` at all. This covers every
+//  timer/manual-door row (neither door ever writes the field — their
+//  heroes were already work-only before this task and stay byte-
+//  identical) AND any monitor row predating the 2026-08-08 amendment
+//  entirely: the stored `avgSplitSeconds`/`timeSeconds`/`distanceMeters`
+//  render exactly as they did before this task — the ONLY branch where a
+//  fused (pre-RC-5) number can still reach the screen.
+//
+//  KNOWN GAP (flagged, not fixed — task-3 report): a stored monitor row
+//  from the narrow window between the 2026-08-08 actualMeters amendment
+//  and Phase WU's warm-up removal (2026-08-22) can carry a LEGACY
+//  warm-up interval that `buildMonitorLogSteps` drops from `steps`
+//  entirely (that function's own "a legacy warmup seed step produces NO
+//  step" rule). Σ steps for such a row under-counts the warm-up's own
+//  metres/seconds relative to what actually happened — this module has
+//  no stored signal ("a step was dropped") to detect that specific shape
+//  and route it to the FALLBACK branch instead, so it is treated as an
+//  ordinary tier-B row. `summaryModel.ts`'s own `isLegacyWarmupRun`
+//  solves this on the LIVE door by reading `run.logSeed`, a field this
+//  screen's stored `steps` array does not preserve.
+function stepActualSums(steps: StoredLogStep[]): {
+  meters?: number;
+  seconds?: number;
+} {
+  let hasMeters = false;
+  let meters = 0;
+  let hasSeconds = false;
+  let seconds = 0;
+  for (const step of steps) {
+    if (step.actualMeters !== undefined) {
+      hasMeters = true;
+      meters += step.actualMeters;
+    }
+    if (step.actualSeconds !== undefined) {
+      hasSeconds = true;
+      seconds += step.actualSeconds;
+    }
+  }
+  return {
+    meters: hasMeters ? meters : undefined,
+    seconds: hasSeconds ? seconds : undefined,
+  };
+}
+
+// Tier B's AVG SPLIT: `500 × Σt/Σd` over pm5-sourced steps whose own
+// `actualSeconds` clears the sub-threshold floor — `MIN_MEASURABLE_
+// ELAPSED_SECONDS`'s own doc comment, `summaryModel.ts`'s
+// `monitorAvgSplit`'s identical rule, generalized to a stored step (the
+// `actualSource === "pm5"` gate is defensive: no other door writes
+// `actualMeters` at all, so a non-pm5 step can never reach this sum in
+// practice, but the check documents the intent rather than relying on
+// that as an unstated accident).
+function tierBAvgSplitSeconds(steps: StoredLogStep[]): number | undefined {
+  let t = 0;
+  let d = 0;
+  for (const step of steps) {
+    if (step.actualSource !== "pm5") continue;
+    if (step.actualSeconds === undefined || step.actualMeters === undefined) {
+      continue;
+    }
+    if (step.actualSeconds < MIN_MEASURABLE_ELAPSED_SECONDS) continue;
+    t += step.actualSeconds;
+    d += step.actualMeters;
+  }
+  return d > 0 ? (500 * t) / d : undefined;
+}
+
+// RC-5 §2, Task 3: the TOTAL line's rest source, on the stored screen.
+// Only TWO rungs — this screen has no per-actual rest field to fall back
+// to (`StoredLogStep` carries none at all — a fact Task 2's own live-door
+// ladder doesn't have to deal with):
+//
+//  1. The RC-1 stored pair, `row.restSeconds`/`row.restMeters` — both or
+//     neither (same all-or-nothing contract `monitorRun.ts`'s own writer
+//     keeps for the pair, `summaryModel.ts`'s `monitorRest` reads).
+//  2. PRE-PR ONLY: derived from the fused stored columns minus Σ steps —
+//     `row.distanceMeters − stepSums.meters` /
+//     `row.timeSeconds − stepSums.seconds` — valid ONLY when the stored
+//     totals EXCEED Σ steps, which can only happen for a row saved
+//     BEFORE this task shipped: a post-task-3 tier-B save posts
+//     `distanceMeters`/`timeSeconds` that already equal Σ steps exactly
+//     (`LogSession.tsx`'s `model.heroes.*`, Task 2's own commit). The
+//     comparison itself IS the pre-PR detector; no separate flag exists
+//     to check, and none is needed. Chosen over omitting this rung
+//     entirely (the brief's stated alternative): most of today's real
+//     stored monitor rows predate this task, and without it they'd show
+//     a work-only hero with no way to recover the rest their own fused
+//     column already proves happened.
+//  3. Neither resolves: no rest clause.
+function buildStoredRest(
+  row: StoredLog,
+  stepSums: { meters?: number; seconds?: number },
+): { seconds?: number; meters?: number } {
+  if (row.restSeconds !== null && row.restMeters !== null) {
+    return { seconds: row.restSeconds, meters: row.restMeters };
+  }
+  if (
+    stepSums.meters !== undefined &&
+    stepSums.seconds !== undefined &&
+    row.distanceMeters !== null &&
+    row.timeSeconds !== null &&
+    row.distanceMeters > stepSums.meters &&
+    row.timeSeconds > stepSums.seconds
+  ) {
+    return {
+      seconds: row.timeSeconds - stepSums.seconds,
+      meters: row.distanceMeters - stepSums.meters,
+    };
+  }
+  return {};
+}
+
+// RC-5 §2, Task 3: the stored screen's own TOTAL line, built through the
+// SAME exported formatter `summaryModel.ts`'s live screen uses
+// (`buildTotalLine` — the design spec's own "built in one place, not
+// twice" requirement); this function does only the sourcing
+// (`buildStoredRest` above plus the monitor-row gate below), never a
+// second copy of the formatting.
+//
+// `isMonitorRow` gates this OFF for the timer/manual doors, mirroring
+// `SummaryHeroes.totalLine`'s own doc comment ("the manual/timer doors
+// never set it — no rest concept applies to either"): every timer/manual
+// row lands in `buildHeroes`' FALLBACK branch (neither door writes
+// `actualMeters`), which is otherwise ambiguous between "a genuinely
+// door-agnostic fallback row" and "a legacy monitor row predating
+// actualMeters" — `row.deviceName !== null` is the SAME signal
+// `sourceLabel`/`buildMeta` above already use to tell a PM5 row from a
+// TIMER/LOGGED-BY-HAND one. Without this gate, every stored timer/manual
+// row in the database would suddenly grow a spurious "X:XX total" line
+// it never had before and the live door still never renders.
+function buildStoredTotalLine(
+  row: StoredLog,
+  workSeconds: number | undefined,
+  stepSums: { meters?: number; seconds?: number },
+): string | undefined {
+  if (workSeconds === undefined || row.deviceName === null) return undefined;
+  const rest = buildStoredRest(row, stepSums);
+  const totalSeconds = workSeconds + (rest.seconds ?? 0);
+  return buildTotalLine(totalSeconds, rest.meters);
+}
+
+// §5B (extended by RC-5 §1/§2, Task 3): each hero independently
+// `undefined` when its own source has nothing to show (never a
+// fabricated `0:00`/`0 m`) — see this module's own tier comment above
+// for the three branches and their sources.
 function buildHeroes(row: StoredLog): SummaryHeroes {
+  const hasMachineTotals =
+    row.machineWorkSeconds !== null &&
+    row.machineWorkMeters !== null &&
+    row.machineWorkSeconds > 0 &&
+    row.machineWorkMeters > 0;
+  const stepSums = stepActualSums(row.steps);
+
+  if (hasMachineTotals) {
+    // machineWorkSeconds/machineWorkMeters is `number | null`, non-null
+    // and > 0 here by `hasMachineTotals`'s own gate — the `!`s document
+    // that fact, matching this repo's own convention for a fact a
+    // preceding check already established.
+    const distanceMeters = Math.round(row.machineWorkMeters!);
+    const timeSeconds = row.machineWorkSeconds!;
+    const avgSplitSeconds = row.machineSummary?.avgPaceSecondsPer500m;
+    const hasAvgSplit = avgSplitSeconds !== undefined && avgSplitSeconds > 0;
+    return {
+      distanceMeters,
+      time: fmtDuration(timeSeconds / 60),
+      timeSeconds,
+      avgSplit: hasAvgSplit ? fmtSplit(avgSplitSeconds!) : undefined,
+      avgSplitSeconds: hasAvgSplit ? avgSplitSeconds : undefined,
+      totalLine: buildStoredTotalLine(row, timeSeconds, stepSums),
+    };
+  }
+
+  const hasStepActuals = row.steps.some((s) => s.actualMeters !== undefined);
+  if (hasStepActuals) {
+    const timeSeconds = stepSums.seconds;
+    const avgSplitSeconds = tierBAvgSplitSeconds(row.steps);
+    return {
+      distanceMeters: stepSums.meters,
+      time:
+        timeSeconds !== undefined ? fmtDuration(timeSeconds / 60) : undefined,
+      timeSeconds,
+      avgSplit:
+        avgSplitSeconds !== undefined ? fmtSplit(avgSplitSeconds) : undefined,
+      avgSplitSeconds,
+      totalLine: buildStoredTotalLine(row, timeSeconds, stepSums),
+    };
+  }
+
+  // FALLBACK — stored heroes, unchanged.
+  const timeSeconds = row.timeSeconds ?? undefined;
   return {
     avgSplit:
       row.avgSplitSeconds !== null ? fmtSplit(row.avgSplitSeconds) : undefined,
     avgSplitSeconds: row.avgSplitSeconds ?? undefined,
-    time:
-      row.timeSeconds !== null ? fmtDuration(row.timeSeconds / 60) : undefined,
-    timeSeconds: row.timeSeconds ?? undefined,
+    time: timeSeconds !== undefined ? fmtDuration(timeSeconds / 60) : undefined,
+    timeSeconds,
     distanceMeters: row.distanceMeters ?? undefined,
+    totalLine: buildStoredTotalLine(row, timeSeconds, stepSums),
   };
 }
 

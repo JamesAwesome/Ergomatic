@@ -2366,11 +2366,27 @@ test("log-detail", async ({ page }) => {
   ).toBeVisible();
   await expect(page.getByText("2:04.0 work · 500m")).toBeVisible();
   await expect(page.getByText("CODE AF99-4706 C021-B054")).toBeVisible();
-  // PM gate fix wave, condition 2: the caption now names BOTH neighbours
-  // (heroes above, trace chart below), not just "the totals above".
+  // RC-5 (hero-truth spec) §3, Task 3: the caption's second correction —
+  // "Everything else on this screen includes rest" went false the moment
+  // the heroes became work-only (this task); the totals above no longer
+  // include rest either, so the caption now says so explicitly.
+  //
+  // NOTE for Task 5 (captures/ROADMAP task, same plan): this test's
+  // hero-value assertions above (heroValues.nth(0)/(1)/(2), the row-level
+  // target/pace/dev checks are unaffected) still expect the OLD fused
+  // 742/4:04 trio and the `machineSummary` payload seeded a few lines up
+  // has no `avgPaceSecondsPer500m` key — under this task's tier logic
+  // that row is now tier A (machineWorkSeconds/machineWorkMeters both
+  // set) and would render NO avg-split hero at all (a build-738-era
+  // shape), shifting `.summary-hero-value`'s DOM order. Task 5 owns
+  // updating this fixture's `machineSummary` (add
+  // `avgPaceSecondsPer500m: 124.0`) and the hero/total-line assertions to
+  // the new 500/2:04/2:04.0 + "4:04 total · plus 242 m coasting in rest"
+  // shape per its own brief ("the capture must now show 500/2:04/2:04.0")
+  // — deliberately left untouched here since this task does not run e2e.
   await expect(
     page.getByText(
-      "Rest metres excluded. Everything else on this screen includes rest.",
+      "Rest metres excluded, here and in the totals above. The chart below still spans rest.",
     ),
   ).toBeVisible();
 

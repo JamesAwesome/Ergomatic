@@ -68,6 +68,12 @@ function storedRow(overrides: Partial<StoredLog> = {}): StoredLog {
     machineWorkSeconds: null,
     machineWorkMeters: null,
     machineSummary: null,
+    // RC-1 (storage-spine design spec §3): same "null is the common
+    // case" default as the RC-2/RC-3 trio above — this suite's own
+    // heroes/total-line coverage lives in `storedSummary.test.ts`, so
+    // every fixture here defaults to the pair being absent.
+    restSeconds: null,
+    restMeters: null,
     ...overrides,
   };
 }
@@ -1211,13 +1217,15 @@ describe("FromTheLog — the MACHINE CONFIRMED · WORK ONLY block", () => {
     expect(screen.getByText("MACHINE CONFIRMED · WORK ONLY")).toBeVisible();
     expect(screen.getByText("2:04.0 work · 500m")).toBeVisible();
     expect(screen.getByText(WALK_VERIFICATION_CODE)).toBeVisible();
-    // PM gate fix wave (2026-08-25), condition 2: the caption pointed the
-    // wrong way — "the totals above include rest" named the HEROES, but
-    // the trace chart BELOW the block also includes rest and the old
-    // wording never said so.
+    // RC-5 (hero-truth spec) §3, Task 3: the caption's SECOND correction.
+    // The PM-gate wording above ("Everything else on this screen includes
+    // rest") went false the moment this task made the heroes work-only —
+    // the totals ABOVE the block no longer include rest either. New copy
+    // names both neighbours honestly: excluded here AND in the totals
+    // above, still present in the chart below.
     expect(
       screen.getByText(
-        "Rest metres excluded. Everything else on this screen includes rest.",
+        "Rest metres excluded, here and in the totals above. The chart below still spans rest.",
       ),
     ).toBeVisible();
 

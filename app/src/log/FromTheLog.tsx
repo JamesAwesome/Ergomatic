@@ -85,7 +85,8 @@ function MachineConfirmedBlock({ row }: { row: StoredLog }) {
         <p className="log-machine-confirmed-code">CODE {code}</p>
       )}
       <p className="log-machine-confirmed-caption">
-        Rest metres excluded. Everything else on this screen includes rest.
+        Rest metres excluded, here and in the totals above. The chart below
+        still spans rest.
       </p>
     </div>
   );
