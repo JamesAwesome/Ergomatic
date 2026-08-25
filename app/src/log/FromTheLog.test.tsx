@@ -1211,8 +1211,14 @@ describe("FromTheLog — the MACHINE CONFIRMED · WORK ONLY block", () => {
     expect(screen.getByText("MACHINE CONFIRMED · WORK ONLY")).toBeVisible();
     expect(screen.getByText("2:04.0 work · 500m")).toBeVisible();
     expect(screen.getByText(WALK_VERIFICATION_CODE)).toBeVisible();
+    // PM gate fix wave (2026-08-25), condition 2: the caption pointed the
+    // wrong way — "the totals above include rest" named the HEROES, but
+    // the trace chart BELOW the block also includes rest and the old
+    // wording never said so.
     expect(
-      screen.getByText("Rest metres excluded. The totals above include rest."),
+      screen.getByText(
+        "Rest metres excluded. Everything else on this screen includes rest.",
+      ),
     ).toBeVisible();
 
     // Placement: below the interval table (§3's own placement rule).

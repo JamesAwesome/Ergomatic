@@ -232,6 +232,13 @@ renders a compact block:
 - The block is informational, not a hero: it must not displace the
   stored heroes or intervals; place it below the interval table, above
   MONITOR LOG · COPY, matching the section rhythm already on the screen.
+  **CORRECTED (PM gate fix wave, 2026-08-25, condition 5): "above
+  MONITOR LOG · COPY" was wrong — that diagnostics button lives on the
+  LIVE summary (`LogSession.tsx`), which this stored view (`FromTheLog.
+  tsx`) has no equivalent of at all. The shipped placement is directly
+  below the interval table and above the trace chart** (`FromTheLog.tsx`
+  already carried this correction in its own code comment at ship time;
+  this is the spec catching up to it).
 - The nine detail fields are STORED in PR 1 but NOT displayed in this
   wave (drag factor, HR, avg pace have no settled product surface yet);
   the display reads only the two machine totals + the verification
@@ -247,13 +254,18 @@ in the implementation and its tests:
 
 - **The label ruling.** "MACHINE CONFIRMED" above is superseded by
   **`MACHINE CONFIRMED · WORK ONLY`**, and the block gains a fourth
-  line, a caption: **`Rest metres excluded. The totals above include
-  rest.`** The worked example is now:
+  line, a caption. **CORRECTED (PM gate fix wave, 2026-08-25, condition
+  2):** the caption first shipped as `Rest metres excluded. The totals
+  above include rest.`, which points only at the heroes ABOVE the
+  block — the trace chart BELOW it also includes rest, and the caption
+  never said so. The shipped caption is **`Rest metres excluded.
+  Everything else on this screen includes rest.`** The worked example
+  is now:
 
       MACHINE CONFIRMED · WORK ONLY
       2:04.0 work · 500m
       CODE AF99-4706 C021-B054
-      Rest metres excluded. The totals above include rest.
+      Rest metres excluded. Everything else on this screen includes rest.
 
 - **The axis-collision resolution.** ROADMAP's RC phase carried a
   NOT-DEFERRABLE finding (#191's PM gate): this block's WORK-ONLY total

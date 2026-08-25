@@ -3133,7 +3133,10 @@ that needs no erg, and it can run in a test.
       2026-08-25) — the not-deferrable constraint above is discharged,
       not the broader question below it.** PR 2 ships the badge as
       `MACHINE CONFIRMED · WORK ONLY` with a caption naming the split
-      ("Rest metres excluded. The totals above include rest.") rather
+      ("Rest metres excluded. Everything else on this screen includes
+      rest." — corrected at the PM gate fix wave, 2026-08-25: the
+      caption first shipped naming only the heroes ABOVE the block,
+      when the trace chart BELOW it is included too) rather
       than redesigning the chart's axes — the 500m/742.7m pair now
       reads as two different, both-honestly-labelled quantities on the
       same screen, not one number contradicting another. The underlying
@@ -4831,7 +4834,10 @@ three totals sub-metre in one frame, AVG digit-identical to the monitor's
 own average, WebKit convicted on the off-horizontal swipe cancel with the
 `pointercancel` readout's first field evidence. Post-merge, James's calm
 rule quantised the counter to 5m steps (rounded — floor was falsified at
-the walk's own finish) in a width-pinned slot. TRIAD (number semantics).
+the walk's own finish) in a width-pinned slot. **RECONCILED (PM gate fix
+wave, 2026-08-25, PR #192): the 5m calm-rule quantisation was itself
+reversed by James on 2026-08-25 — the counter is back to a realtime 1m
+count, `PaneLive.tsx`'s `fmtMeters`.** TRIAD (number semantics).
 Spec at
 `docs/superpowers/specs/2026-08-18-connected-metrics-design.md` — blocked
 once in full by the antagonist and rewritten; every load-bearing claim

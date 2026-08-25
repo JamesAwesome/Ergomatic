@@ -2034,62 +2034,48 @@ async function postLog(
   }
 }
 
-// Trace-rendering spec (Phase LT spec 3), Task 3: `log-detail`'s own
-// series — one continuous line (2 s cadence, under the 3 s gap-break
-// threshold) tracking the SAME four WORK rows that test's own big header
-// comment already hand-checks (120/140/118/100 s per 500m, in that
-// order), so the drawn shape and the row numbers agree in the same
-// frame (recurring failure #7, sharpened). `d` is an arbitrary monotonic
-// filler — nothing in the chart reads it (Task 2's own `traceModel.ts`
-// never touches `Sample.d`) — and the small jitter keeps the WORK line
-// honest (a real trace is never perfectly flat, `traceModel.ts`'s own
-// "noise is shown, not smoothed" rule). No `hr` on any row's own stored
-// fields, so this series invents a plausible climbing 130->158 bpm
-// independently rather than pretending a number this fixture never
-// measured.
-// FIXTURE HONESTY (final review, 2026-08-19): this series is HAND-BUILT to
-// track log-detail's own four hand-built row actuals, and its WORK pace
-// jitters by about a second per 500m. A real device trace does not look
-// like this — the committed captures swing by double digits sample to
-// sample and carry a ~26% share of zero-pace sentinels (see
-// `traceModel.test.ts`, which replays them). The capture is honest about
-// the chart's SHAPE and placement; it is not, and must never be cited as,
-// a picture of what real WORK data looks like. The `log-monitor` capture
-// beside it comes from a genuine recorder replay and is the representative
-// one for that.
-// REST REALISM (rest-scale round, PM correction 2026-08-20): the rest
-// window's own pace is NOT derived from the surrounding segment any more
-// — round 1 of this fixture reused `seg.pace` unchanged during the rest,
-// which made the domain-exclusion fix invisible in this exact capture
-// (the rest sat at the SAME value as its own segment's work, so excluding
-// it moved nothing). `restPace()` below is calibrated off James's own
-// 2026-08-20 session (work ~2:02-2:04/500m, rests wandering around 3:20
-// with excursions past 5:00): it wanders from 200s (3:20) at the rest
-// window's own edges up to 310s (5:10) at its midpoint — materially
-// slower than every WORK row in this fixture (max 140s/500m), so this
-// capture now actually exercises the fix it is meant to demonstrate: a
-// domain that excluded the rest would top out near the WORK max (140s);
-// one that still counted it would top out past 300s. `traceModel.test.ts`
-// pins the equivalent assertion numerically; this fixture is what makes
-// it visible in a screenshot.
-// trace-truth Task 2 review (I-2): a run inside segment 2 (WORK pace
-// 140 s/500m, rest pace 200-310s/500m, t 180..210s) is marked `r: true`
-// — the ONLY committed capture that shows the rest tint at all
-// (`log-monitor`'s own fake program carries no rest; see that fixture's
-// own comment). Placed mid-segment, not at a row boundary — this chart
-// draws no boundary marks (§4) and the rest band's own position is
-// independent of the four rows' own split points.
-const REST_WINDOW: readonly [number, number] = [180, 210];
-/** Rest-scale round (2026-08-20): a wandering, materially-slower-than-work
- *  pace for samples inside `REST_WINDOW` — see "REST REALISM" above for
- *  the calibration and why this can no longer just reuse `seg.pace`.
- *  Triangular: 200s (3:20) at the window's own edges, peaking at 310s
- *  (5:10, past James's own observed 5:00 excursions) at its midpoint. */
-function restPace(t: number): number {
-  const span = REST_WINDOW[1] - REST_WINDOW[0];
-  const pos = (t - REST_WINDOW[0]) / span; // 0 at the start edge, 1 at the end edge
-  const shape = 1 - Math.abs(pos - 0.5) * 2; // 0 at either edge, 1 at the midpoint
-  return Math.round(200 + 110 * shape);
+// Trace-rendering spec (Phase LT spec 3), Task 3, RE-SEEDED for the PM
+// gate fix wave (2026-08-25, condition 1): `log-detail`'s own series now
+// tracks the REAL exit-7 piece the row above was re-seeded as
+// (`docs/monitor/sessions/walk-2026-08-24/README.md`'s own table) rather
+// than an invented 4-row/478s shape. Two WORK segments — the walk's own
+// two interval splits, 67.9s/250m @ 135.8 s/500m then 56.1s/250m @
+// 112.2 s/500m — separated by two REST windows, each modeled at its OWN
+// real average pace: `500 × restSeconds ÷ restMeters` off the walk's own
+// rest-meter readings (147m/60s → 204.1 s/500m; 95m/60s → 315.8 s/500m).
+// Total elapsed 67.9+60+56.1+60 = 244.0s, matching the row's own TIME
+// hero exactly — the drawn shape and the header comment's own recompute
+// agree in the same frame (recurring failure #7, sharpened). `d` is an
+// arbitrary monotonic filler — nothing in the chart reads it (Task 2's
+// own `traceModel.ts` never touches `Sample.d`).
+// FIXTURE HONESTY (carried from the prior version, still true): this
+// series is HAND-BUILT — a real device trace swings by double digits
+// sample to sample and carries zero-pace sentinels (`traceModel.test.ts`
+// replays a real one). This fixture is honest about the chart's SHAPE
+// and placement, and now also about its OWN piece's real elapsed/rest
+// numbers; it is still not, and must never be cited as, a picture of
+// what real WORK pace noise looks like — a real 2×Nm rNN recording for
+// the replay corpus is still owed (ROADMAP, Phase RC).
+// REST REALISM: each rest window wanders ±15s (triangular, peaking at
+// its own midpoint) around its OWN real average rather than sitting
+// perfectly flat — both averages (204.1s, 315.8s) are materially slower
+// than either WORK row (135.8s slowest), so the y-axis domain-exclusion
+// fix (rest-scale round, PM correction 2026-08-20) still has something
+// real to exclude in this capture.
+const EXIT7_WORK1_END = 67.9;
+const EXIT7_REST1_END = 127.9;
+const EXIT7_WORK2_END = 184.0;
+const EXIT7_REST2_END = 244.0;
+// 500 × 60 ÷ 147 (rest 1's own real meters/seconds) and 500 × 60 ÷ 95
+// (rest 2's own) — see the block comment above for the walk citation.
+const EXIT7_REST1_AVG_PACE = (500 * 60) / 147;
+const EXIT7_REST2_AVG_PACE = (500 * 60) / 95;
+/** Triangular wander, 0 at either window edge, 1 at its own midpoint —
+ *  same shape the prior fixture's `restPace()` used, generalized to an
+ *  arbitrary window/average pair so both real rest windows can share it. */
+function restWander(t: number, start: number, end: number): number {
+  const pos = (t - start) / (end - start);
+  return 1 - Math.abs(pos - 0.5) * 2;
 }
 function buildLogDetailSeries(): {
   samples: {
@@ -2101,12 +2087,6 @@ function buildLogDetailSeries(): {
     r?: true;
   }[];
 } {
-  const segments = [
-    { end: 120, pace: 120, spm: 24 },
-    { end: 260, pace: 140, spm: 26 },
-    { end: 378, pace: 118, spm: 24 },
-    { end: 478, pace: 100, spm: 28 },
-  ];
   const samples: {
     t: number;
     d: number;
@@ -2115,18 +2095,34 @@ function buildLogDetailSeries(): {
     hr: number;
     r?: true;
   }[] = [];
-  for (let t = 0; t <= 478; t += 2) {
-    const seg =
-      segments.find((s) => t < s.end) ?? segments[segments.length - 1]!;
+  for (let t = 0; t <= EXIT7_REST2_END; t += 2) {
     const jitter = t % 4 === 0 ? -1 : 1;
-    const resting = t >= REST_WINDOW[0] && t <= REST_WINDOW[1];
-    const workPace = seg.pace + jitter;
+    let pace: number;
+    let spm: number;
+    let resting = false;
+    if (t < EXIT7_WORK1_END) {
+      pace = 135.8 + jitter;
+      spm = 25 + (t % 6 === 0 ? -1 : 0);
+    } else if (t < EXIT7_REST1_END) {
+      resting = true;
+      const shape = restWander(t, EXIT7_WORK1_END, EXIT7_REST1_END);
+      pace = EXIT7_REST1_AVG_PACE - 15 + 30 * shape;
+      spm = 25 + (t % 6 === 0 ? -1 : 0);
+    } else if (t < EXIT7_WORK2_END) {
+      pace = 112.2 + jitter;
+      spm = 28 + (t % 6 === 0 ? -1 : 0);
+    } else {
+      resting = true;
+      const shape = restWander(t, EXIT7_WORK2_END, EXIT7_REST2_END);
+      pace = EXIT7_REST2_AVG_PACE - 15 + 30 * shape;
+      spm = 28 + (t % 6 === 0 ? -1 : 0);
+    }
     samples.push({
       t: t * 10,
       d: t * 4,
-      p: (resting ? restPace(t) : workPace) * 10,
-      spm: seg.spm + (t % 6 === 0 ? -1 : 0),
-      hr: 130 + Math.round((t / 478) * 28),
+      p: Math.round(pace * 10),
+      spm,
+      hr: 130 + Math.round((t / EXIT7_REST2_END) * 28),
       ...(resting ? { r: true as const } : {}),
     });
   }
@@ -2217,31 +2213,34 @@ test("log-history", async ({ page }) => {
 // reflection fields answered (the read-back, not the just-opened blank
 // form), and the plan footer all on one screen.
 //
-// Phase LT spec 1, Task 3 (2026-08-18): the row list is the spec's own
-// mixed set — every §1/§2 state in one capture, precisely, via the
-// direct-POST recipe (zero real-time/timing dependence, unlike a live
-// timer run): a JUDGED FASTER row, a JUDGED SLOWER row, an ON-TARGET row
-// (dead-even — 0s deviation, inside the ±0.5s band per `judgeBand.ts`),
-// and an ABSTAINED EFFORT row (no `targetSplit` at all — a MAX piece).
-// The SPM cell rides along on three of the four rows, each demonstrating
-// a DIFFERENT §2 shape: row 1/2 the modern both-halves cell
-// (`actualSpm`+`spm`), row 3 the OLD pre-split shape (`spm` holds the
-// measured value, no `actualSpm` key at all — exit criterion 3's own
-// discriminant, rendered as measured-only with no target half), row 4
-// the modern measured-only cell (a MAX piece's own real rate, no
-// authored target to show beside it).
+// PM gate fix wave (2026-08-25), condition 1 (BLOCKING): the row this
+// capture used to seed was an INVENTED 4×500m/2,000m piece sitting under
+// a MACHINE CONFIRMED · WORK ONLY block seeded separately with the
+// exit-7 walk's real 500m/124.0s pair — an impossible frame (the block's
+// own caption says "the totals above include rest", but a 500m work
+// total under a 2,000m hero implies 1,500m/354s of rest that never
+// happened on THIS row). Fixed by re-seeding the row AS the exit-7 piece
+// itself: `docs/monitor/sessions/walk-2026-08-24/README.md`'s own table,
+// a real 2×250m r60 (PM5 View Detail, "v250m/1:00r...2"). Two rows, both
+// pm5-sourced, both real:
+//
+//   Interval 1: elapsed 1:07.9 (67.9s), 250m, split 2:15.8 (135.8s),
+//     25 spm, target 2:07.0 (127.0s) → dev +8.8 (slower).
+//   Interval 2: elapsed :56.1 (56.1s), 250m, split 1:52.2 (112.2s),
+//     28 spm, target 2:07.0 (127.0s) → dev −14.8 (faster).
 //
 // Recurring failure #7, sharpened: every number below is hand-checkable
-// on the committed capture. All four rows are 500m each (2,000 m total,
-// matching DISTANCE) with `actualSeconds` set to the row's own
-// `actualSplit` (a 500m piece's elapsed time and its split ARE the same
-// number) — total elapsed 120+140+118+100 = 478s, so AVG SPLIT
-// (`500 × Σt/Σd`) is EXACTLY `500 × 478/2000` = 119.5 = "1:59.5", and TIME
-// is the same 478s sum = "7:58". Each row's own judgment is likewise
-// checkable against its inline TARGET: row 1 120 vs 130 = −10.0 (faster,
-// outside the band); row 2 140 vs 130 = +10.0 (slower); row 3 118 vs 118
-// = 0.0 (inside ±0.5s, plain ink, no bar); row 4 has no TARGET cell at
-// all, so nothing to check it against.
+// on the committed capture, straight off the walk's own table.
+// Work-only total: 67.9+56.1 = 124.0s over 250+250 = 500m, so AVG SPLIT
+// (`500 × Σt/Σd`) is `500 × 124.0/500` = 124.0 = "2:04.0" — the SAME
+// number the machine-confirmed line below shows, because it's the SAME
+// piece (the PM5's own "Totals" row reads 2:04.0 too). TIME and
+// DISTANCE are the REAL all-in totals, work plus both rests: elapsed
+// 67.9+60(r1)+56.1+60(r2) = 244.0s = "4:04"; distance
+// 250+147(r1)+250+95(r2) = 742m — exactly the machine block's own 500m
+// PLUS the walk's own two rest-meter readings (147+95=242), so the
+// caption ("...includes rest") is now TRUE of this exact frame:
+// 500 + 147 + 95 = 742.
 test("log-detail", async ({ page }) => {
   await signInViaBackdoor(page, {
     email: "screenshots-log-detail@e2e.test",
@@ -2259,57 +2258,43 @@ test("log-detail", async ({ page }) => {
     held: "under",
     pain: 3,
     thumbs: "up",
-    notes: "Held on through the back half.",
-    avgSplitSeconds: 119.5,
-    timeSeconds: 478,
-    distanceMeters: 2000,
+    // PM gate fix wave: the old note ("Held on through the back half.")
+    // narrated a long multi-piece session that no longer exists on this
+    // row — a real 2×250m piece gets a note that fits a two-rep sprint.
+    notes: "Legs felt fresher on the second one.",
+    // PM gate fix wave, condition 1: the exit-7 piece's own real hero
+    // trio (walk README table) — AVG SPLIT is the work-only average
+    // (124.0s, matching the PM5's own "Totals" row and the
+    // machine-confirmed line below, because this IS that piece); TIME
+    // and DISTANCE are the real all-in totals, work plus both rests.
+    avgSplitSeconds: 124.0,
+    timeSeconds: 244,
+    distanceMeters: 742,
     advancesPlan: true,
     steps: [
       {
-        label: "2:00 @ 2k",
-        targetSplit: 130,
-        actualSplit: 120,
-        actualSeconds: 120,
+        label: "250m @ 2:07.0",
+        targetSplit: 127.0,
+        actualSplit: 135.8,
+        actualSeconds: 67.9,
         actualSource: "pm5",
-        meters: 500,
-        actualSpm: 24,
-        spm: 22,
+        meters: 250,
+        actualSpm: 25,
       },
       {
-        label: "2:20 @ 2k",
-        targetSplit: 130,
-        actualSplit: 140,
-        actualSeconds: 140,
+        label: "250m @ 2:07.0",
+        targetSplit: 127.0,
+        actualSplit: 112.2,
+        actualSeconds: 56.1,
         actualSource: "pm5",
-        meters: 500,
-        actualSpm: 26,
-        spm: 22,
-      },
-      {
-        label: "1:58 @ 6k",
-        targetSplit: 118,
-        actualSplit: 118,
-        actualSeconds: 118,
-        actualSource: "pm5",
-        meters: 500,
-        // No `actualSpm` key at all — the pre-split shape: `spm` holds
-        // the OLD measured value (exit criterion 3's own row-local
-        // discriminant, `spmIsMeasured`).
-        spm: 24,
-      },
-      {
-        label: "1:40 @ MAX",
-        // No targetSplit — a pure-effort piece, the abstained row.
-        actualSplit: 100,
-        actualSeconds: 100,
-        actualSource: "pm5",
-        meters: 500,
+        meters: 250,
         actualSpm: 28,
       },
     ],
-    // Trace-rendering spec (Phase LT spec 3), Task 3: the row's own
-    // trace — `buildLogDetailSeries`'s own header comment names the
-    // exact correspondence to the four rows above.
+    // Trace-rendering spec (Phase LT spec 3), Task 3, re-seeded for the
+    // PM gate fix wave: the row's own trace — `buildLogDetailSeries`'s
+    // own header comment names the exact correspondence to the exit-7
+    // piece's real two rows above.
     series: buildLogDetailSeries(),
     // RC-2/RC-3 wave, PR 2, Task 3: the MACHINE CONFIRMED · WORK ONLY
     // block's own capture — the exit-7 walk's REAL natural-finish pair
@@ -2338,38 +2323,38 @@ test("log-detail", async ({ page }) => {
   await expect(page).toHaveURL(/\/today\/log\/[^/]+$/);
   await expect(page.getByRole("heading", { name: "Sea Fret" })).toBeVisible();
   await expect(page.getByText("AVG SPLIT")).toBeVisible();
-  await expect(page.getByText("1:59.5")).toBeVisible();
+  // PM gate fix wave: heroes are the exit-7 piece's own real trio —
+  // AVG SPLIT 2:04.0 (work-only), TIME 4:04, DISTANCE 742 (both
+  // all-in). Located structurally (`.summary-hero-value` in DOM order:
+  // avgSplit, time, distanceMeters — `PostWorkoutSummary.tsx`), not by
+  // bare text, since "2:04.0" also appears inside the machine-confirmed
+  // block's own value line below and a substring `getByText` match
+  // would be ambiguous between the two.
+  const heroValues = page.locator(".summary-hero-value");
+  await expect(heroValues.nth(0)).toHaveText("2:04.0");
+  await expect(heroValues.nth(1)).toHaveText("4:04");
+  await expect(heroValues.nth(2)).toHaveText("742");
   await expect(
     page.getByText("UNDER · FASTER · PAIN 3/5 · LIKED"),
   ).toBeVisible();
-  await expect(page.getByText("Held on through the back half.")).toBeVisible();
+  await expect(
+    page.getByText("Legs felt fresher on the second one."),
+  ).toBeVisible();
   await expect(
     page.getByText("Logged to Sprint (2k) Prep · SESSION 1 OF 84"),
   ).toBeVisible();
-  // §1/§2's mixed set, each state asserted structurally (not just "the
-  // page contains the number somewhere" — a faster row's own dev label
-  // could otherwise coincidentally match a slower row's if the fixture
-  // numbers weren't distinct, which is why they are).
+  // PM gate fix wave: two rows now, both real, both judged (structural
+  // assertions, not bare text — see the header comment's own recompute).
   const rows = page.locator(".summary-row");
-  await expect(rows).toHaveCount(4);
-  await expect(rows.nth(0).locator(".summary-row-target")).toHaveText("2:10.0");
-  await expect(rows.nth(0).locator(".summary-row-dev")).toHaveText("−10.0");
-  await expect(rows.nth(0).locator(".summary-row-spm")).toHaveText("24 / 22");
-  await expect(rows.nth(1).locator(".summary-row-dev")).toHaveText("+10.0");
-  await expect(rows.nth(1).locator(".summary-row-spm")).toHaveText("26 / 22");
-  // Row 3: ON TARGET — plain ink, no bar, no ± label, but the OLD-shape
-  // SPM cell still renders (measured-only, no target half).
-  await expect(rows.nth(2).locator(".summary-row-dev")).toHaveText("");
-  await expect(rows.nth(2).locator(".summary-row-bar")).toHaveCount(0);
-  await expect(rows.nth(2).locator(".summary-row-spm")).toHaveText("24");
-  await expect(rows.nth(2).locator(".summary-row-pace")).not.toHaveClass(
-    /summary-row-faster|summary-row-slower/,
-  );
-  // Row 4: the abstained effort row — no TARGET cell, no dev, but a real
-  // measured-only SPM cell (its own real rate, no authored target).
-  await expect(rows.nth(3).locator(".summary-row-target")).toHaveText("");
-  await expect(rows.nth(3).locator(".summary-row-dev")).toHaveText("");
-  await expect(rows.nth(3).locator(".summary-row-spm")).toHaveText("28");
+  await expect(rows).toHaveCount(2);
+  await expect(rows.nth(0).locator(".summary-row-target")).toHaveText("2:07.0");
+  await expect(rows.nth(0).locator(".summary-row-pace")).toHaveText("2:15.8");
+  await expect(rows.nth(0).locator(".summary-row-dev")).toHaveText("+8.8");
+  await expect(rows.nth(0).locator(".summary-row-spm")).toHaveText("25");
+  await expect(rows.nth(1).locator(".summary-row-target")).toHaveText("2:07.0");
+  await expect(rows.nth(1).locator(".summary-row-pace")).toHaveText("1:52.2");
+  await expect(rows.nth(1).locator(".summary-row-dev")).toHaveText("−14.8");
+  await expect(rows.nth(1).locator(".summary-row-spm")).toHaveText("28");
 
   // RC-2/RC-3 wave, PR 2, Task 3: the MACHINE CONFIRMED · WORK ONLY block,
   // below the interval rows and above the trace chart — real seeded
@@ -2381,8 +2366,12 @@ test("log-detail", async ({ page }) => {
   ).toBeVisible();
   await expect(page.getByText("2:04.0 work · 500m")).toBeVisible();
   await expect(page.getByText("CODE AF99-4706 C021-B054")).toBeVisible();
+  // PM gate fix wave, condition 2: the caption now names BOTH neighbours
+  // (heroes above, trace chart below), not just "the totals above".
   await expect(
-    page.getByText("Rest metres excluded. The totals above include rest."),
+    page.getByText(
+      "Rest metres excluded. Everything else on this screen includes rest.",
+    ),
   ).toBeVisible();
 
   // Dedicated capture: the trace-chart scroll below moves the viewport
@@ -2403,17 +2392,20 @@ test("log-detail", async ({ page }) => {
   // above carries a `series`).
   await expect(page.locator(".trace-figure")).toBeVisible();
   await expect(page.locator(".trace-line").first()).toBeVisible();
-  // Rest-scale round (PM correction, 2026-08-20): the assertion that
+  // Rest-scale round (PM correction, 2026-08-20; re-derived for the PM
+  // gate fix wave's exit-7 re-seed, 2026-08-25): the assertion that
   // proves the domain-exclusion fix on the EXACT data the screenshot
   // above shows, not just a synthetic fixture in traceModel.test.ts.
-  // `buildLogDetailSeries`'s rest window now wanders 200-310s/500m
-  // (`restPace()`, materially slower than every WORK row here, whose
-  // slowest is row 2 at 140 s/500m) — under the OLD rule (domain from
-  // ALL real readings) the y-axis's slow edge would have to reach past
-  // 300s to cover it; under the fix (domain from WORK readings only)
-  // it stays anchored to the WORK range. Reading the actual rendered
-  // tick labels, not re-deriving the domain by hand, so this is
-  // red-provable by reverting the domain-exclusion fix alone.
+  // `buildLogDetailSeries`'s two rest windows now wander around REAL
+  // walk-derived averages (204.1 s/500m and 315.8 s/500m — see that
+  // function's own header), both materially slower than either WORK row
+  // here (the slower of the two is row 1 at 135.8 s/500m) — under the
+  // OLD rule (domain from ALL real readings) the y-axis's slow edge
+  // would have to reach past 300s to cover the second rest; under the
+  // fix (domain from WORK readings only) it stays anchored to the WORK
+  // range. Reading the actual rendered tick labels, not re-deriving the
+  // domain by hand, so this is red-provable by reverting the domain-
+  // exclusion fix alone.
   const yTickTexts = await page
     .locator(".trace-tick-label-y")
     .allTextContents();
@@ -2424,12 +2416,12 @@ test("log-detail", async ({ page }) => {
     return Number(m[1]) * 60 + Number(m[2]) + Number(m[3]) / 10;
   });
   const slowestTickSeconds = Math.max(...yTickSeconds);
-  // Nowhere near the rest excursion's own 200-310s range — proves the
-  // rest did NOT set the scale.
-  expect(slowestTickSeconds).toBeLessThan(200);
-  // Still covers the slowest WORK row (140 s/500m) with real padding —
+  // Nowhere near either rest excursion's own 189-330s range (204.1±15,
+  // 315.8±15) — proves the rest did NOT set the scale.
+  expect(slowestTickSeconds).toBeLessThan(189);
+  // Still covers the slowest WORK row (135.8 s/500m) with real padding —
   // proves the fix didn't just clamp the axis arbitrarily tight either.
-  expect(slowestTickSeconds).toBeGreaterThanOrEqual(140);
+  expect(slowestTickSeconds).toBeGreaterThanOrEqual(135.8);
 
   // R3-1 (review round 3): a viewport-only capture cropped out the
   // chart's own `.trace-legend` ("BAND = REST", F-2, round 4 wording) — the identical

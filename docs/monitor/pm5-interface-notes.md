@@ -4723,6 +4723,15 @@ project's wire):
    identically-scaled, identically-named fields surprised hardware walk 4
    (§10 above). The characteristic's own name and the design's §5
    derivation both argue yes; nothing on the wire has confirmed it yet.
+   **DISCHARGED (walk-2026-08-24, exit-7 leg): a real 2×250m r60 piece's
+   0x0039 read Elapsed 124.0s / Distance 500m — the SUM of the two
+   250m intervals' own splits, `1:07.9 + :56.1 = 2:04.0`, not either
+   interval's own smaller number and not a per-interval reset the way
+   0x0031 surprised walk 4. n=1, but discriminating: a per-interval or
+   reset reading would have shown 56.1s/250m (the LAST interval alone),
+   not the cumulative 124.0s/500m the wire actually delivered — the two
+   hypotheses predict different numbers, and the observed number picks
+   one. Record: `docs/monitor/sessions/walk-2026-08-24/README.md`.**
 3. Whether the `255`/`0` heart-rate sentinel convention (§10, D5) genuinely
    extends to 0x0039's Ending/Average/Min/Max/Recovery Heartrate bytes as
    cleanly as it does to 0x0032's live Heartrate and 0x0038's Work/Rest
@@ -4779,6 +4788,23 @@ project's wire):
    `deriveFinalIntervalFromSummary` is the single function that changes. A
    single-interval row cannot settle it (no prior to subtract, no rest
    between anything), and neither can a rest-free one.
+
+   **DISCHARGED (walk-2026-08-24, exit-7 leg) — a rest-BEARING 2×250m
+   r60 row finally settles both halves.** 0x0039 read Elapsed 124.0s /
+   Distance 500m: exactly `1:07.9 + :56.1` and `250 + 250`, the two
+   intervals' own WORK splits summed with NEITHER rest window (60s
+   apiece, 147m + 95m) folded in — 0x0039 EXCLUDES rest. The SAME row's
+   0x0031 Total Work Distance (TWD, read separately, decoded to the
+   metre) came back 742 = `500 + 147 + 95`, i.e. work PLUS both rests —
+   confirming the two characteristics measure DIFFERENT spans, as
+   suspected, and settling which one is which: 0x0039/0x0037 share the
+   work-only span (the subtraction premise's own "both sides treat rest
+   the same way" now holds, since both are work-only), TWD is the
+   separate rest-inclusive one. n=1, but discriminating the same way
+   item 2's discharge is: a rest-inclusive 0x0039 would have read
+   244.0s/742m here, not 124.0s/500m — the two hypotheses predict
+   different numbers on THIS row, and the wire delivered the work-only
+   one. Record: `docs/monitor/sessions/walk-2026-08-24/README.md`.
 
 ## 24. The burst-first race (walk 2026-08-23 keystone) — for `src/monitor/driver.ts`'s summary-fallback gate (storage-spine design spec §1/§2)
 
