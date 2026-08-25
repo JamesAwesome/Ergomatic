@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   HEARTRATE_NO_BELT,
+  WORKOUTSTATE_INTERVALWORKDISTANCETOREST,
   parseAdditionalSplitIntervalData,
   parseAdditionalStatus1,
   parseAdditionalStatus2,
@@ -682,6 +683,15 @@ describe("toMonitorFrame: WORKOUTSTATE -> state, cited row-by-row (interface-not
     // Same function `toMonitorFrame` itself reads, not a parallel copy.
     expect(toMonitorState(10)).toBe(
       toMonitorFrame(baseRaw({ workoutState: 10 })).state,
+    );
+  });
+
+  it("WORKOUTSTATE_INTERVALWORKDISTANCETOREST equals 9 and maps to rowing", () => {
+    // The distance-boundary ordinal is exported (series-truth spec §B′, ring
+    // seq 27) and maps to "rowing" via the WORKOUTSTATE_TO_STATE table.
+    expect(WORKOUTSTATE_INTERVALWORKDISTANCETOREST).toBe(9);
+    expect(toMonitorState(WORKOUTSTATE_INTERVALWORKDISTANCETOREST)).toBe(
+      "rowing",
     );
   });
 });
