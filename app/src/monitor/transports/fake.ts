@@ -930,6 +930,9 @@ function statusBundle(
     restDistanceMeters: number;
     restSecondsNow: number;
     bankedDistanceMeters: number;
+    /** RC-9a: 0x0032's own `averageSplit` — `updateSessionAvgSplit`'s own
+     *  doc comment. */
+    sessionAvgSplit: number;
   },
 ): { general: GeneralStatus; as1: AdditionalStatus1; as2: AdditionalStatus2 } {
   const interval = program.intervals[e.programIntervalIndex];
@@ -964,7 +967,11 @@ function statusBundle(
       // sentinel CI already believed in and the machine never sent.
       heartRateBpm: e.heartRateBpm ?? HEARTRATE_NO_BELT,
       currentSplit: e.currentSplit,
-      averageSplit: e.currentSplit,
+      // RC-9a: was `e.currentSplit` — a copy of the CURRENT split field,
+      // fabricating a world with no cumulative work-only average at all.
+      // `sessionMetrics.sessionAvgSplit` is the honest model
+      // (`updateSessionAvgSplit`'s own doc comment).
+      averageSplit: sessionMetrics.sessionAvgSplit,
       restDistanceMeters: sessionMetrics.restDistanceMeters,
       // EST LEFT (design spec §1/§6): honest Rest Time, script-authored
       // through `FakeStatusEvent.restSeconds` — see that field's own doc
@@ -1191,6 +1198,11 @@ function armedBundle(
       // would force this to 0 regardless; honest here for the same reason.
       restSecondsNow: 0,
       bankedDistanceMeters,
+      // RC-9a: `0`, never carried over — same "no carry-over rule of its
+      // own" reasoning this function's own doc comment already states for
+      // `splitAvgPace` (WAITTOBEGIN is before any work interval has
+      // started, so there is nothing yet to average).
+      sessionAvgSplit: 0,
     },
   );
 }
@@ -1503,6 +1515,19 @@ export function createFakeTransport(script: FakeScript): Transport &
   // (`onProgrammingFrameComplete`), same reason `wireLastSplit` is: a held
   // average means nothing across a workout boundary.
   let heldSplitAvgPace = 0;
+  // RC-9a (design spec 2026-08-25-free-oracles §1) — 0x0032's own
+  // `averageSplit`: the machine's CUMULATIVE, WORK-ONLY 500m pace
+  // (PRIMARY, all seven captures decoded pre-spec: `500 * ΣT_work /
+  // ΣD_work`, freezes solid through rest, never resets at a boundary).
+  // `updateSessionAvgSplit`'s own doc comment (below `derivedAvgSplit`) is
+  // the only writer. Replaces the prior fabrication (`averageSplit:
+  // e.currentSplit`, a copy of the CURRENT split — a world with no
+  // cumulative work-only average at all, which made every fake-driven
+  // test of RC-9a's verdict vacuous by construction; third sighting of
+  // this shape, antagonist ledger 2026-08-25). Reset to `0` on every
+  // fresh accept, same reason `heldSplitAvgPace` is: a held average means
+  // nothing across a workout boundary.
+  let heldSessionAvgSplit = 0;
   // TWD's own SESSION total (`totalWorkDistanceFor`'s own doc comment) for
   // everything ALREADY LOCKED IN: every completed work interval's own
   // metres, added the instant its boundary arrives (`deliverOrCache`'s
@@ -1596,6 +1621,31 @@ export function createFakeTransport(script: FakeScript): Transport &
     return heldSplitAvgPace;
   }
 
+  /** `heldSessionAvgSplit`'s only writer — same recompute-while-rowing,
+   *  hold-otherwise shape as `updateSplitAvgPace` immediately above, but
+   *  summing the WHOLE SESSION's own work
+   *  (`bankedWorkSeconds`/`bankedWorkMeters`, storage-spine design spec
+   *  §2's own session-cumulative work-only pair, locked in at each
+   *  boundary) plus THIS tick's own in-progress interval
+   *  (`e.elapsedSeconds`/`e.distanceMeters` — PER-INTERVAL on the wire,
+   *  not session-cumulative, `parse.ts`'s own doc comment on
+   *  `toMonitorFrame`, "walk 4"; `connectedMetricsReplay.test.ts`'s own
+   *  header names the same fact for `distanceMeters`). While genuinely
+   *  ROWING, this interval has not yet reached its own rest, so
+   *  `e.elapsedSeconds`/`e.distanceMeters` at that instant are ALREADY
+   *  work-only for the current interval — no separate rest-exclusion
+   *  needed here, unlike `bankedDistanceMeters`'s own "ticks during
+   *  rests" handling. */
+  function updateSessionAvgSplit(e: FakeStatusEvent): number {
+    if (toMonitorState(e.workoutState) === "rowing") {
+      heldSessionAvgSplit = derivedAvgSplit(
+        bankedWorkSeconds + e.elapsedSeconds,
+        bankedWorkMeters + e.distanceMeters,
+      );
+    }
+    return heldSessionAvgSplit;
+  }
+
   /** `lastRestDistanceMeters`'s only writer, and the single place
    *  `FakeStatusEvent.restDistanceMeters`'s "forced to 0 off a rest" rule
    *  (that field's own doc comment) is enforced — a non-resting tick gets
@@ -1625,6 +1675,7 @@ export function createFakeTransport(script: FakeScript): Transport &
 
   function deliverStatus(e: FakeStatusEvent): void {
     const splitAvgPace = updateSplitAvgPace(e);
+    const sessionAvgSplit = updateSessionAvgSplit(e);
     const restNow = updateRestTracking(e);
     const restSecondsNow = restSecondsFor(e);
     const { general, as1, as2 } = statusBundle(
@@ -1642,6 +1693,7 @@ export function createFakeTransport(script: FakeScript): Transport &
         // variable alone can stay the "frozen during work" value
         // (`bankedDistanceMeters`'s own doc comment).
         bankedDistanceMeters: bankedDistanceMeters + restNow,
+        sessionAvgSplit,
       },
     );
     notify(ADDITIONAL_STATUS_2_UUID, buildAdditionalStatus2Bytes(as2));
@@ -2218,6 +2270,10 @@ export function createFakeTransport(script: FakeScript): Transport &
       // and the banked session total this task adds — see their own
       // declaration comments.
       heldSplitAvgPace = 0;
+      // RC-9a: same "means nothing across a workout boundary" reasoning —
+      // a new program's own average starts from zero, never carried over
+      // from the outgoing run.
+      heldSessionAvgSplit = 0;
       bankedDistanceMeters = 0;
       lastRestDistanceMeters = 0;
       // Storage-spine design spec §2: same "means nothing across a workout

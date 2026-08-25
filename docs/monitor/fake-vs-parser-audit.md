@@ -36,10 +36,13 @@ authority (PRIMARY where cited).
 2. **~15 flat zeros is about right — I count 14** flat-`0` fields plus one
    `HEARTRATE_NO_BELT`(=0)-by-convention field, all UNCONSUMED (table below). A
    further 4 fields (`ergMachineType` ×2, `dragFactor`, `splitAvgDragFactor`) are
-   non-zero constants, also UNCONSUMED. `AdditionalStatus1.averageSplit` is a fifth
-   quasi-hardcode worth flagging on its own: the fake sets it to `e.currentSplit`
-   (line 744) rather than modelling it as its own quantity — harmless today only
-   because it too is UNCONSUMED.
+   non-zero constants, also UNCONSUMED. **CORRECTED (RC-9a, 2026-08-25):**
+   `AdditionalStatus1.averageSplit` used to be a fifth quasi-hardcode (`=
+   e.currentSplit`, harmless only because it was UNCONSUMED) — it is now MODELLED
+   (`updateSessionAvgSplit`, fake.ts) as the machine's own cumulative work-only
+   pace, and is CONSUMED by `driver.ts`'s live average-pace verdict
+   (`recordAvgPaceVerdict`, design spec 2026-08-25-free-oracles §1). See the
+   table row below.
 3. **`restSeconds` (0x0032) and `intervalRestTimeSeconds` (0x0037) are genuinely
    different fields on the wire**, not two copies of one idea — see the dedicated
    section below. **CORRECTED:** `restSeconds` is no longer unconsumed —
@@ -86,7 +89,7 @@ Legend: **M** = MODELLED, **H** = HARDCODED (consumed + constant), **U** = UNCON
 | `spm` | M | `e.spm`, varies | `MonitorFrame.spm`; `judge.ts`, `seriesRecorder.ts`, surface UI |
 | `heartRateBpm` | M | `e.heartRateBpm ?? HEARTRATE_NO_BELT` (D5-correct, `0` not `255` for beltless) | `MonitorFrame.heartRateBpm`; `judge.ts`, surface UI |
 | `currentSplit` | M | `e.currentSplit`, varies | `MonitorFrame.currentSplit`; `surfaceModel.ts`'s armed-carry-over/ghost logic, `judge.ts` |
-| `averageSplit` | U (quasi-hardcode, `= e.currentSplit`) | not independently modelled | none found |
+| `averageSplit` | **M — CORRECTED (RC-9a)**, was U (quasi-hardcode, `= e.currentSplit`) | `updateSessionAvgSplit(e)` — cumulative work-only, `500·(bankedWorkSeconds+e.elapsedSeconds)/(bankedWorkMeters+e.distanceMeters)` while rowing, held through rest | `driver.ts`'s `recordAvgPaceVerdict` (`lastWorkStateAverageSplit`) |
 | `restDistanceMeters` | U (flat `0` in `armedBundle`; session-tracked elsewhere but still never read downstream) | `sessionMetrics.restDistanceMeters` | none found — **not** the same field as `IntervalActual.restDistanceMeters`, which comes from 0x0037 (see below) |
 | `restSeconds` | **H — CORRECTED, the field this audit exists for, now the dangerous bucket's first occupant** | `0` for every existing fixture (script-authorable since the EST LEFT task, but nothing sets it), fake.ts | `surfaceModel.ts`'s `estElapsedRaw` (EST LEFT task) — the rest-phase live term. See dedicated section. |
 | `ergMachineType` | U (non-zero constant `1`) | `1`, fake.ts:747 | none found |
@@ -249,8 +252,6 @@ list missed in a way that changes the shape of the finding.
 - `lastSplitTimeSeconds` / `lastSplitDistanceMeters` — nothing obvious; the driver
   explicitly deleted its own consumer of this pair (2026-08-18 checkpoint-subtraction
   removal) after measuring it unreliable for progress-tracking.
-- `averageSplit` (0x0032, distinct from `splitAvgPace` on 0x0033) — nothing obvious;
-  likely a redundant reading given `splitAvgPace` already serves this need.
 - `restDistanceMeters` (0x0032, live) — nothing obvious beyond what
   `IntervalActual.restDistanceMeters` (from 0x0037, already shipped) already
   provides at the boundary; a live version could animate a rest-distance counter

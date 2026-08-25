@@ -32,6 +32,7 @@ import {
 } from "../../domain/monitor/pm5/uuids.js";
 import {
   buildAdditionalSplitIntervalDataBytes,
+  buildAdditionalStatus1Bytes,
   buildAdditionalStatus2Bytes,
   buildEndOfWorkoutSummaryBytes,
   buildGeneralStatusBytes,
@@ -450,6 +451,26 @@ function additionalStatus2In(intervalCount: number): Uint8Array {
     splitAvgCalories: 0,
     lastSplitTimeSeconds: 0,
     lastSplitDistanceMeters: 0,
+  });
+}
+
+/** A 0x0032 (Additional Status 1) payload naming ONLY `averageSplit` (RC-9a)
+ *  — every other field zeroed, mirroring `additionalStatus2In` immediately
+ *  above. `averageSplit` is passed already in SECONDS (0.01 s/lsb — this
+ *  builder's own `buildAdditionalStatus1Bytes` does the re-scale to the
+ *  wire's u16, and `parseAdditionalStatus1` undoes it symmetrically on
+ *  receipt, so a caller here never touches the raw byte scale directly). */
+function additionalStatus1With(averageSplit: number): Uint8Array {
+  return buildAdditionalStatus1Bytes({
+    elapsedSeconds: 0,
+    speedMetersPerSecond: 0,
+    spm: 0,
+    heartRateBpm: null,
+    currentSplit: 0,
+    averageSplit,
+    restDistanceMeters: 0,
+    restSeconds: 0,
+    ergMachineType: 0,
   });
 }
 
@@ -9612,6 +9633,47 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     expect(verdict[0]!.detail).toContain("filled-from-summary");
   });
 
+  it("RC-9a (design spec 2026-08-25-free-oracles §1): the final interval filled from 0x0039 suppresses the avg-pace verdict too — deriveFinalIntervalFromSummary builds our side FROM the machine's own summary, so the comparison would be tautological", async () => {
+    const g = primedGate();
+    await programViaStub(g.driver, g.transport, ONE_INTERVAL_PROGRAM);
+    // A genuine work-state 0x0032 sample so the suppression below is proven
+    // to fire for THE SUMMARY-FILL REASON specifically, not merely "no
+    // data was ever observed" — a strictly weaker assertion this same run
+    // could otherwise satisfy by accident.
+    // GENERAL STATUS FIRST, matching the real wire order this task's own
+    // decode confirmed (`session-2-wu-4unequal.jsonl` seq 2975→2976→2977 —
+    // 0x0031 always precedes 0x0032/0x0033 for the same tick): the 0x0032
+    // merge callback judges its own `averageSplit` against `raw.workoutState`
+    // AS ALREADY MERGED, so this order is what makes it see workoutState 4
+    // rather than the armed readback's stale WAITTOBEGIN.
+    g.transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 30, 100),
+    );
+    g.transport.notify(ADDITIONAL_STATUS_1_UUID, additionalStatus1With(130.5));
+    g.transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_WORKOUTEND, 60, 200),
+    );
+
+    // THE DROPPED SPLIT, same shape as (b) above: no split ever arrives, so
+    // the deadline fills the final interval from 0x0039's own totals.
+    g.clock.advance(400);
+    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(62.5, 214));
+    g.clock.advance(2600);
+    g.timer.pending()!.fire();
+
+    expect(verdicts(g.log)[0]!.detail).toContain("filled-from-summary");
+
+    const avgPace = g.log
+      .entries()
+      .filter((e) => e.kind === "avg-pace-verdict");
+    expect(avgPace).toHaveLength(1);
+    expect(avgPace[0]!.detail).toContain("suppressed");
+    expect(avgPace[0]!.detail).toContain("filled from 0x0039");
+    expect(avgPace[0]!.detail).toContain("tautological");
+  });
+
   /** Sea Fret rowed with its first two intervals recorded the ordinary way
    *  and the FINAL split dropped — the shape every multi-interval arm
    *  below needs, with the two priors' own measured values as the
@@ -10977,4 +11039,241 @@ describe("createPm5Driver: R0 instrumentation (CR2 spec 1) — the accumulator l
       expect(samples[2]!.detail).toContain("machineTotal=50m");
     },
   );
+});
+
+// ---------------------------------------------------------------------------
+// RC-9a (design spec 2026-08-25-free-oracles §1) — the live average-pace
+// verdict: 0x0032's own `averageSplit` (the machine's cumulative, work-only
+// 500m pace) against `run.recordedActuals`'s own weighted quotient. The
+// rest-bearing, real-numbers exit-criterion-1 pin lives in
+// `avgPaceVerdict.replay.test.ts` (a committed capture, per this repo's own
+// "read what the FAKE puts in that field" standing check — `fake.ts`'s
+// `averageSplit` was a fabrication until this task, so a capture is the
+// safer oracle for the flagship pin even though the fake is fixed too).
+// These tests cover the code paths a capture cannot cheaply isolate:
+// suppression conditions and the 0x0032-vs-0x0039 scale trap.
+// ---------------------------------------------------------------------------
+
+describe("createPm5Driver: the live average-pace verdict (RC-9a, design spec 2026-08-25-free-oracles §1)", () => {
+  function avgPaceVerdicts(log: ReturnType<typeof createEventLog>) {
+    return log.entries().filter((e) => e.kind === "avg-pace-verdict");
+  }
+
+  it("agrees with the machine's own last work-state 0x0032 averageSplit within the 1.0s band, at the terminated transition — and would fail 10x-wrong under the 0x0039 scale (the scale trap)", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+    await programViaStub(driver, transport, MINIMAL_PROGRAM);
+
+    // The seen-gate (`maybeEmitFrame`'s own "having seen all three at least
+    // once" rule) — `programViaStub`'s own armed readback already primes
+    // `seen.general`.
+    transport.notify(ADDITIONAL_STATUS_2_UUID, additionalStatus2In(0));
+
+    // 0x0032's own averageSplit, 150.00 s/500m — a raw u16 of 15000 at
+    // 0x0032's DOCUMENTED 0.01 s/lsb (`buildAdditionalStatus1Bytes`/
+    // `parseAdditionalStatus1` do the re-scale symmetrically; this test
+    // proves THIS VERDICT never re-scales the already-descaled value a
+    // second time). If the verdict compared it as though it were 0x0039's
+    // OWN 0.1 s/lsb pace instead, the effective reading would be 10x too
+    // large (1500.0s) and the exact-match assertion below would fail by
+    // ~1350s — nowhere close to the 1.0s band.
+    // GENERAL STATUS FIRST — the real wire order this task's own decode of
+    // `session-2-wu-4unequal.jsonl` confirmed (seq 2975→2976→2977: 0x0031
+    // always precedes 0x0032/0x0033 for the same tick). The 0x0032 merge
+    // callback judges `averageSplit` against `raw.workoutState` as ALREADY
+    // MERGED, so this order is what lets it see workoutState 4.
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 60, 200),
+    );
+    transport.notify(ADDITIONAL_STATUS_1_UUID, additionalStatus1With(150.0));
+    // OUR side: one recorded actual, 60s/200m -> 500*60/200 = 150.00s/500m
+    // exactly — the machine and our own quotient agree by construction,
+    // delta 0.00s.
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 60, 200));
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 22));
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_TERMINATE, 60, 200),
+    );
+
+    const entries = avgPaceVerdicts(log);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.detail).not.toContain("suppressed");
+    expect(entries[0]!.detail).toContain("machine(0x0032)=150.00s/500m");
+    expect(entries[0]!.detail).toContain("ours=150.00s/500m");
+    expect(entries[0]!.detail).toContain("delta=0.00s");
+    expect(entries[0]!.detail).toContain("agree");
+  });
+
+  it("suppresses, naming the reason, when a recorded actual measured under MIN_MEASURABLE_ELAPSED_SECONDS — mirrors summaryModel.ts's monitorAvgSplit exclusion", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+    await programViaStub(driver, transport, MINIMAL_PROGRAM);
+    transport.notify(ADDITIONAL_STATUS_2_UUID, additionalStatus2In(0));
+
+    // GENERAL STATUS FIRST — see the scale-trap test's own comment for why.
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 30, 100),
+    );
+    transport.notify(ADDITIONAL_STATUS_1_UUID, additionalStatus1With(130.0));
+    // A genuine reading, but below the 1s floor (review finding 1's own
+    // "nobody covers meaningful ground in under a second" reasoning,
+    // `MIN_MEASURABLE_ELAPSED_SECONDS`'s own declaration comment) — this
+    // driver's own `recordedActuals` keeps it (the meters genuinely
+    // happened), but the AVG SPLIT quotient must exclude it, same as
+    // `monitorAvgSplit` does for a stored row.
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 0.5, 3));
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 22));
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_TERMINATE, 0.5, 3),
+    );
+
+    const entries = avgPaceVerdicts(log);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.detail).toContain("suppressed");
+    expect(entries[0]!.detail).toContain("under 1s");
+  });
+
+  it("suppresses, naming the reason, when a boundary this run saw could not be attributed to a program interval (the live analogue of monitorAvgSplit's index===null exclusion)", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+    await programViaStub(driver, transport, MINIMAL_PROGRAM);
+    transport.notify(ADDITIONAL_STATUS_2_UUID, additionalStatus2In(0));
+
+    // GENERAL STATUS FIRST — see the scale-trap test's own comment for why.
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 30, 100),
+    );
+    transport.notify(ADDITIONAL_STATUS_1_UUID, additionalStatus1With(130.0));
+    // `toActualIndex(machineIndex, "rowing", programLength=1)`
+    // (`domain/monitor/pm5/intervalIndex.ts`): candidate = machineIndex-1.
+    // A candidate more than one step outside [0,1) returns null — machine
+    // index 5 (candidate 4) is the "has no corresponding interval" shape,
+    // never attributed to `MINIMAL_PROGRAM`'s single interval. `run.actuals`
+    // still counts it; `recordedActuals` never does.
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(5, 60, 200));
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(5, 22));
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_TERMINATE, 60, 200),
+    );
+
+    const entries = avgPaceVerdicts(log);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.detail).toContain("suppressed");
+    expect(entries[0]!.detail).toContain("could not be attributed");
+    expect(entries[0]!.detail).toContain("1 actual(s) emitted, only 0 indexed");
+  });
+
+  it("suppresses, naming the reason, when no work-state 0x0032 sample was ever observed this run", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+    await programViaStub(driver, transport, MINIMAL_PROGRAM);
+    transport.notify(ADDITIONAL_STATUS_1_UUID, new Uint8Array(17));
+    transport.notify(ADDITIONAL_STATUS_2_UUID, additionalStatus2In(0));
+
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 60, 200),
+    );
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 60, 200));
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 22));
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_TERMINATE, 60, 200),
+    );
+
+    const entries = avgPaceVerdicts(log);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.detail).toBe(
+      "suppressed — no work-state (0x0032) averageSplit observed this run",
+    );
+  });
+
+  it("ignores a 0.00 work-state 0x0032 reading (the interval-reset artifact) rather than letting it overwrite the last REAL reading", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+    await programViaStub(driver, transport, MINIMAL_PROGRAM);
+    transport.notify(ADDITIONAL_STATUS_2_UUID, additionalStatus2In(0));
+
+    // The real reading — this is what the verdict must still compare
+    // against.
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 30, 100),
+    );
+    transport.notify(ADDITIONAL_STATUS_1_UUID, additionalStatus1With(150.0));
+    // The artifact: a genuine 0.00 reading, still work-state, one tick
+    // later. If this were allowed to overwrite `lastWorkStateAverageSplit`,
+    // the verdict below would compare against 0, not 150 — a huge,
+    // unmissable delta rather than a suppression, so this test discriminates
+    // cleanly from every suppression path above.
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 45, 150),
+    );
+    transport.notify(ADDITIONAL_STATUS_1_UUID, additionalStatus1With(0));
+
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 60, 200));
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 22));
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_TERMINATE, 60, 200),
+    );
+
+    const entries = avgPaceVerdicts(log);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.detail).not.toContain("suppressed");
+    expect(entries[0]!.detail).toContain("machine(0x0032)=150.00s/500m");
+  });
+
+  it("samples ONLY workoutState 4/5 — a REST-state 0x0032 reading never becomes lastWorkStateAverageSplit, even though 0x0032's own averageSplit freezes through a rest on the real wire", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+    await programViaStub(driver, transport, MINIMAL_PROGRAM);
+    transport.notify(ADDITIONAL_STATUS_2_UUID, additionalStatus2In(0));
+
+    // The real work-state reading FIRST...
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 30, 100),
+    );
+    transport.notify(ADDITIONAL_STATUS_1_UUID, additionalStatus1With(150.0));
+
+    // ...then a REST-state 0x0032 reading, AFTER it, carrying a value
+    // nothing else in this test would ever produce. Ordered to arrive
+    // LAST on purpose: if the workoutState gate were dropped, this would
+    // OVERWRITE `lastWorkStateAverageSplit` (a later write always wins),
+    // and the assertion below would see 300, not the real work-state
+    // reading — a rest-state reading arriving BEFORE the real one (the
+    // opposite order) would pass even under that mutation, since the real
+    // one would win the overwrite regardless of the gate.
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALREST, 90, 200),
+    );
+    transport.notify(ADDITIONAL_STATUS_1_UUID, additionalStatus1With(300.0));
+
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 60, 200));
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 22));
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_TERMINATE, 60, 200),
+    );
+
+    const entries = avgPaceVerdicts(log);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.detail).toContain("machine(0x0032)=150.00s/500m");
+    expect(entries[0]!.detail).not.toContain("300.00");
+  });
 });
