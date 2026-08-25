@@ -3566,17 +3566,81 @@ that needs no erg, and it can run in a test.
       here: Task 3 did not re-derive whether that pre-existing behavior
       is itself honest against a real capture, only that it is no longer
       the hardcoded-0 shape this row describes.
-- [ ] **RC-9 — Wire the free external oracles nobody reads.** (a)
-      0x0032's `averageSplit` (offset 9) is a PM5-computed session
-      average pace, decoded and discarded, sitting beside our own
-      `monitorAvgSplit` over a deliberately different population — two
-      computers, one quantity, zero new subscriptions. (b)
-      `logSummaryTotals` prints 0x0039's totals beside ours and records
-      no verdict; now that those totals are settled as work-only
-      cumulative, a verdict against them is sound where the TWD verdict
-      is suppressed. (c) The TWD verdict is switched off for the whole
-      session by any distance interval; all seven committed captures
-      contain one, so it has never fired on a capture.
+- [ ] **RC-9 — Wire the free external oracles nobody reads.** **(a), (c),
+      (d) SHIPPED** (design spec `2026-08-25-free-oracles`, pre-spec
+      antagonist pass full on TRIAD ground, PM final gate on the PR);
+      **(b) QUEUED**, reason below — this row stays open on (b) alone.
+  - **(a) SHIPPED** — 0x0032's `averageSplit` (offset 9), a PM5-computed
+    cumulative work-only session average pace, is now compared
+    (ring-only, no UI, no stored field) against `monitorAvgSplit`'s own
+    quotient over `recordedActuals` — synchronously on a `terminated` close, or once the run's evidence settles (`armSummaryReconcile`'s deadline/early-complete path) on a natural finish — two
+    independent computers of the quantity the C2 logbook stores, not the
+    tier-A hero (post-RC-5 that hero IS 0x0039's own field, so comparing
+    it to 0x0032 would be machine-vs-machine). Suppresses on an excluded
+    actual or a summary-filled run; 1.0 s band. `fake.ts`'s
+    `averageSplit: e.currentSplit` fabrication (would have made every
+    fake-driven test vacuous — third sighting of the shape) fixed first.
+  - **(b) QUEUED, not shipped — oracle-blind today.** 0x0039's totals
+    vs. Σ`recordedActuals` needs a rest-bearing capture that SURVIVES to
+    a 0x0039: of the eight committed recordings exactly ONE carries a
+    0x0039 at all, and it is the ONLY one of the eight with ZERO rest
+    frames — so a rest-inclusion bug in either side would be silent on
+    the one capture that could exercise it. It is also TAUTOLOGICAL on
+    any run where `deriveFinalIntervalFromSummary` fired, since that
+    path builds our own side FROM 0x0039 — comparing them then proves
+    only that a value equals itself. **Unblocking condition: a
+    rest-bearing capture that survives to 0x0039** — the hardware-walk
+    item already owed (RC-9's own exit-7 walk).
+  - **(c) SHIPPED, and CORRECTED, not merely "switched off."** The old
+    framing here — "the TWD verdict is switched off for the whole
+    session by any distance interval; all seven committed captures
+    contain one, so it has never fired" — undersold the finding: lifting
+    that suppression does not make the verdict useful, it makes it
+    PASS everywhere (0.2-1.5 m deltas across five captures, all mirrors,
+    since our accumulator and TWD are the same work-plus-rest-coast
+    quantity). `recordTwdVerdict` is **retired outright**, not merely
+    left suppressed. The record itself was also wrong: TWD is an
+    ODOMETER of metres genuinely rowed (work + rest coast), lagging the
+    interval in progress, never "the goal" — `docs/monitor/
+    pm5-interface-notes.md` item 25 and `src/monitor/driver.ts`'s own
+    doc comment both corrected, each citing its capture (RC-9c, design
+    spec §2).
+  - **(d) SHIPPED, new — not in this row's original scope.** 0x003A's
+    Total Rest Distance (offsets 12-14, 1 m/lsb) gets a narrow parser and
+    a ring-only verdict against the sum of `recordedActuals`' own
+    `restDistanceMeters` (RC-1's stored rest metres): agrees exactly, 242
+    vs 242 m, on the exit-7 walk capture (PM5 memory screen's own
+    147 + 95 = 242), handles a genuine 0 (the r0 keystone) without a
+    false alarm.
+    Interval Rest Time (offsets 15-16) is decoded and REPORTED, never
+    gated on — it reads 0 on both captures including the r60 walk, and
+    we do not yet know if that is a firmware quirk or the programmed
+    value.
+  - **Two gaps this branch's own reviews found, neither blocking, both
+    worth a future task's attention:**
+    - **Pre-existing zero-fire: `program()` landing inside a finished
+      run's `FINISH_GRACE_MS` (3000 ms) CANCELS the pending
+      `pendingSummaryReconcile` deadline rather than draining it**
+      (`driver.ts:5671`, `pendingSummaryReconcile?.()` then `= null`, no
+      `reconcileSummary`/`recordAvgPaceVerdict` call) — that outgoing
+      run gets NO (a) verdict at all, silently. This is a DIFFERENT
+      shape than the retired TWD verdict ever had: TWD's comparison ran
+      SYNCHRONOUSLY at the terminal transition, so it could never race a
+      re-arm; (a) is deliberately async (it waits on evidence that can
+      still be in flight), which is exactly what makes it raceable.
+      Zero-fire, not a false verdict — a missing walk-log line, not a
+      wrong one.
+    - **Duplicate-index over-suppression, documented and left as the
+      safe direction** (`driver.ts:3280-3288`'s own fix-round-1
+      comment): (a)'s `run.actuals > run.recordedActuals.size` check
+      also fires when two boundaries land on the SAME normalized index
+      (a duplicate Split/Interval Number overwriting `recordedActuals`
+      via `.set`) — indistinguishable from a genuinely lost index by
+      that comparison alone. No committed capture has a duplicate index
+      to confirm the shape against. Left as-is because the failure mode
+      is a false suppression (a missing verdict), never a false
+      DIFFER/agree — the same "wrong direction is safe" shape (b)'s own
+      queueing reasons on the accumulator.
 - [ ] **RC-10 — The Concept2 sandbox as a test oracle.** Once the dev key
       lands: post a reconciled row to `log-dev.concept2.com`, pull
       `export/{csv,fit,tcx}` back, and diff it against what we stored.

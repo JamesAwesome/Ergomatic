@@ -55,7 +55,10 @@
 //   "reset" on every single simulated resume inside it; a second capture
 //   (the mixed pyramid) shows the field frozen through every work bout and
 //   ticking only during rests, confirming the same lag a second,
-//   independent way. `check` below applies the suppression this file has
+//   independent way: `301` at seq 980 to `330` at seq 1331, one-per-tick
+//   through a `workoutState: 3` (resting) span, before the boundary out of
+//   that rest (seq 1334) steps it the rest of the way to `332`. `check`
+//   below applies the suppression this file has
 //   always shipped (a distance-kind interval anywhere in the armed
 //   program) — RC-9c retired the separate per-run TWD verdict that used to
 //   compare this same field against the accumulator (both sides were the

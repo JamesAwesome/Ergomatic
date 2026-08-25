@@ -4518,10 +4518,30 @@ walk row (4 unequal intervals) is queued on the spec-2 walk list,
 **25. Total Work Distance (offsets 11-13) is a BOUNDARY ACCUMULATOR on a
 distance-goal interval, not a live rowed-distance reading — and on a
 time-goal interval it is frozen through the whole work bout and only ticks
-during the trailing rest.** First found by Phase CM (`recordTwdVerdict`,
-`src/monitor/driver.ts`, "500 m goal read against 13.4 m genuinely rowed,
-mid-row"); re-confirmed and given its mechanism by Phase LL Task 4's review
-(2026-08-22), against two more captures:
+during the trailing rest.** **CORRECTED (RC-9c, 2026-08-25, design spec
+`2026-08-25-free-oracles` §2 — a pre-spec oracle-soundness pass decoding
+every committed capture byte-level): the headline claim above is WRONG,
+byte-for-byte, and is kept here (not deleted) so the correction is legible
+against what was believed.** Total Work Distance is an **ODOMETER of
+metres genuinely rowed — work plus rest coast — that LAGS the interval
+currently in progress and catches up in a jump at each boundary.** It is
+not a "boundary accumulator of INTENDED work": `docs/monitor/sessions/
+walk-2026-08-16/session-1-keystone-2x250r0.jsonl` (a 2×250m,
+`workoutDurationType` **128 — a DISTANCE-goal program — throughout**, so
+this is the exact shape the old claim's "distance-goal" half was about)
+reads TWD **0** through the entire span of interval 1 while 250 m are
+genuinely rowed, **250** through interval 2, and **500** only once, at
+WORKOUTEND. The two samples the old "INTENDED work" claim actually rested
+on are `pm5-session4b`'s ring seq 3 and 14 — both **BEFORE `program()`'s
+own writes at seq 7+**, i.e. a stale pre-arm monitor state observed twice,
+never a running program at all (`src/monitor/continuity.ts`'s header
+comment carries the same correction with the same citations). First found
+by Phase CM (`recordTwdVerdict`, `src/monitor/driver.ts`, "500 m goal read
+against 13.4 m genuinely rowed, mid-row" — the verdict itself was
+**RETIRED by RC-9c**, since both sides of that comparison are the same
+work-plus-rest-coast quantity and a green result certified nothing about
+the stored row); re-confirmed and given its mechanism by Phase LL Task 4's
+review (2026-08-22), against two more captures:
 - `docs/monitor/sessions/walk-2026-08-17/step-2-pm5-recording-1786973078979.jsonl`,
   a 2x250m: mid the FIRST 250 (elapsed 12.32 s, distance 9.7 m genuinely
   rowed, `workoutState: 5`/rowing), this field reads `500` — the SECOND
@@ -4532,7 +4552,24 @@ mid-row"); re-confirmed and given its mechanism by Phase LL Task 4's review
   `500` once the machine has already committed to the NEXT interval's own
   goal, all before a single metre of interval 2 is rowed. It is the
   machine's own running total of INTENDED work, stepped at each interval
-  boundary, not an odometer of metres actually pulled.
+  boundary, not an odometer of metres actually pulled. **CORRECTED
+  (RC-9c): "mid the FIRST 250" is wrong** — TWD had already stepped
+  `0`→`250` at the interval-1/interval-2 boundary 84 ticks earlier (seq
+  733→738, where `elapsed`/`distance` also reset to `0`); the sample
+  quoted above (seq 822: elapsed 12.32 s, distance 9.7 m) is **12 s into
+  interval TWO**, not the first. And it is not a settled "commit to the
+  next goal" either: it is a **1.6 s TRANSIENT that reverts** — seq 822
+  reads `500`, seq 831 (1,619.9 ms later) reads `250` again, and the field
+  does not settle at `500` for good until seq 1193, at the real
+  interval-2→WORKOUTEND boundary (`workoutState` 5→10). So this sample is
+  TWD briefly overshooting to the position it will eventually settle at,
+  then un-committing, then re-committing for real 1.6 s later — not a
+  single clean step to "the next goal." The mixed-pyramid capture below
+  shows the identical shape: seq 3255 reads `1347` (an early overshoot,
+  `workoutState: 5`), seq 3273 reverts to `1047` 2.97 s later, and seq
+  3276 recommits `1347` for good as `workoutState` moves 5→10
+  (WORKOUTEND). TWD is non-monotonic in the instants right around a
+  boundary, in both captures, before it settles.
 - `docs/monitor/sessions/walk-2026-08-18-metrics/pyramid-pm5-recording-1787090555458.jsonl.gz`
   (a mixed pyramid, every interval distance-goal): the field changes value
   on 41 of 1085 status ticks in the capture, and every one of those 41
@@ -4540,22 +4577,47 @@ mid-row"); re-confirmed and given its mechanism by Phase LL Task 4's review
   is frozen for the entire work bout of every interval and only advances
   while the machine is in its trailing rest, confirming the "rest-window"
   half of the mechanism independently of the step-2 capture's own
-  boundary-jump evidence.
+  boundary-jump evidence. **CORRECTED (RC-9c): the "every one of those 41"
+  claim is false — re-decoded directly against `parseGeneralStatus` over
+  the full capture, the histogram is `workoutState` **36 × 3 (resting), 3
+  × 5 (rowing), 1 × 9 (`INTERVALWORKDISTANCETOREST`, the ephemeral
+  work→rest transition), 1 × 10 (`WORKOUTEND`)** — 41 changes total, the
+  original count stands, but the universal does not. The five exceptions
+  are exactly where the mechanism lives, not noise: seq 1331→1334
+  (`330`→`332`, `workoutState` 3→5 — rest ENDING into work, the mirror
+  image of the "advances during rest" story); seq 2422→2425
+  (`332`→`1032`, `workoutState` 5→9 — the work→rest transition into the
+  NEXT pyramid leg, where the boundary jump is largest because that leg's
+  own goal is largest); and the seq 3255/3273/3276 overshoot-revert-
+  recommit trio above (`workoutState` 5, 5, 10). Every exception sits on a
+  state TRANSITION instant. TWD moves at boundaries, full stop — this
+  capture's boundaries mostly land inside a rest window because most of
+  its rests are long relative to the tick rate, not because "resting" is
+  what triggers the field.
 **Official docs:** SILENT on both halves. The BLE doc's table (§10) gives
 only the scale (whole metres) and the name, which reads as a live,
 monotonic rowed-distance total — the assumption both the original Phase CM
 defect and this task's own first-draft continuity rule (`docs/superpowers/
 specs/2026-08-22-link-truth-design.md` §4) made before the corpus corrected
-it.
+it, and the assumption this item's own original headline claim ALSO made
+in the opposite direction (an "intended work" total instead of a rowed-work
+one) — SILENT docs cost this repo the same wrong-then-wrong-differently
+mistake twice on the same field.
 **Evidence:** `src/monitor/driver.ts`'s `recordTwdVerdict` (Phase CM,
 `distanceGoal` suppression: `workoutDurationType === 128` OR the armed
-program contains a distance interval); `src/monitor/continuity.ts`'s own
-header comment and `continuity.test.ts`'s corpus-derivation describe block
-(Phase LL Task 4), which reproduces both captures' own numbers as a live
-CI gate. Consequence for anything that reads this field going forward:
-never trust it as "metres rowed" on a distance-goal interval, and never
-trust it as "live" (vs. "as of the last rest boundary") on ANY interval
-kind — the identical suppression this task's own continuity rule applies.
+program contains a distance interval) **— the verdict itself is RETIRED as
+of RC-9c; the suppression predicate it defined lives on in
+`continuity.ts`'s reset-detector guard, a different use of the same wire
+fact, unaffected by the retirement**; `src/monitor/continuity.ts`'s own
+header comment (now carrying this same correction with the same
+`pm5-session4b`/`session-1-keystone-2x250r0`/pyramid citations) and
+`continuity.test.ts`'s corpus-derivation describe block (Phase LL Task 4),
+which reproduces both captures' own numbers as a live CI gate. Consequence
+for anything that reads this field going forward: never trust it as
+"metres rowed AT THIS INSTANT" on any interval kind — it lags and jumps at
+boundaries, and jumps non-monotonically for up to ~3 s right around one —
+but it IS a true (delayed) odometer of metres genuinely rowed, work plus
+rest coast, never a total of goals or intentions.
 
 **26. 0x0033's Interval Count changes at REST ONSET, not at the boundary
 0x0037 reports — with the opposite timing on a no-rest boundary.** On the
