@@ -2844,11 +2844,16 @@ it did NOT verify the stored series, which that same session saved
 missing 56.1s of its faster interval (found by James reading the
 graph, fixed by series-truth). The summary-record wave's PR 1 LANDED
 earlier — RC-2 (diagnostic decode) and RC-3's storage half shipped,
-terminate capture live through the four gates; the remainder is PR 2,
-the MACHINE CONFIRMED display block (the wave's release event, MINOR —
-resolve the axis-collision input on the axis-quantity item BEFORE its
-design). The v0.21.0 notes debt is paid (v0.21.0 shipped as build
-738). Earlier: #167 (instrument + RC-4/RC-6),
+terminate capture live through the four gates. **PR 2, the MACHINE
+CONFIRMED · WORK ONLY display block, has now also landed (summary-
+display wave, this PR)** — the axis-collision input is RESOLVED BY
+LABELLING (James's ruling, 2026-08-25: the block reads `MACHINE
+CONFIRMED · WORK ONLY` with a caption naming the split, rather than
+redesigning the chart's axes), and the connected screen's meters
+counter reverts to its 1m realtime granularity (James's reversal of
+the CM calm rule). The summary-record wave (RC-2 + RC-3 + display) is
+functionally COMPLETE, pending its own release. The v0.21.0 notes debt
+is paid (v0.21.0 shipped as build 738). Earlier: #167 (instrument + RC-4/RC-6),
 #174 (F2a), #177 (cohort unlock); the combined walk answered every wire
 question YES (record: `docs/monitor/sessions/walk-2026-08-23/`).
 Originally opened 2026-08-22 (James: evidence-first); named, scoped and
@@ -3124,6 +3129,17 @@ that needs no erg, and it can run in a test.
       500m beside a d-axis running to 742.7m, 48% apart in one frame,
       on the screen whose selling point is machine agreement. Resolve
       before PR 2's design, not at its gate.
+      **The collision is RESOLVED BY LABELLING (James's ruling,
+      2026-08-25) — the not-deferrable constraint above is discharged,
+      not the broader question below it.** PR 2 ships the badge as
+      `MACHINE CONFIRMED · WORK ONLY` with a caption naming the split
+      ("Rest metres excluded. The totals above include rest.") rather
+      than redesigning the chart's axes — the 500m/742.7m pair now
+      reads as two different, both-honestly-labelled quantities on the
+      same screen, not one number contradicting another. The underlying
+      axis-quantity design question this bullet opened with (should
+      `traceModel.ts`'s `t`/`d` ever become a true work-only clock) is
+      untouched and stays open below.
 - [ ] **Flaky test on file: `App.test.tsx`/`RetestShortcut.tsx` unhandled
       async error, seen 2-of-5 full-suite runs (series-truth branch,
       2026-08-25), never touching that diff's files.** Pre-existing;
@@ -3143,14 +3159,18 @@ that needs no erg, and it can run in a test.
       THIRD of its class in this repo: the recorder's own key
       derivation (this PR), Phase LL's boundary fold (below), and the
       CM-era boundary heuristic.
-- [ ] **Put the realtime meters count back (James, 2026-08-24: "i want
-      to put that back to a realtime count").** The connected screen's
-      total-meters counts by 5s and reads less responsive since the CM
-      quantisation (#123 rounded the counter to TWD's 5m grid). REVERSES
-      that CM ruling knowingly: return the counter to the accumulator's
-      1m-granularity live count; keep TWD corroboration internal. Its
-      own small item (display-only, but it changes which quantity a
-      headline number tracks — say so in the PR).
+- [x] **Put the realtime meters count back (James, 2026-08-24: "i want
+      to put that back to a realtime count").** SHIPPED (summary-display
+      wave, PR 2, this PR): the connected screen's total-meters counted
+      by 5s and read less responsive since the CM quantisation (#123
+      rounded the counter to TWD's 5m grid). REVERSES that CM ruling
+      knowingly — `PaneLive.tsx`'s `fmtMeters` now `Math.round(meters)`,
+      1m granularity restored, Intl formatting and rounding (not
+      flooring — #123's own falsification stands) kept; TWD
+      corroboration stays internal, nothing rendered from it. The
+      comment at the call site names the reversal and the accepted
+      repaint-rate cost (~3.7 repaints/s iOS) rather than reading like
+      the CM rule was always this.
 - [x] **RC-2 — Decode Log Entry Date/Time; log it beside our wall clock;
       store nothing yet.** SHIPPED (summary-record wave, PR 1,
       `docs/superpowers/specs/2026-08-24-summary-record-design.md` §2):
@@ -3170,9 +3190,16 @@ that needs no erg, and it can run in a test.
       now write into `MonitorRun.summaryDetail` and, at save, into
       `session_logs.machine_summary` (migration 0016, hybrid shape) —
       six of the nine are C2 top-level columns the reconciliation table
-      marked NOT CAPTURED. **Storage only; nothing renders yet** — the
-      MACHINE CONFIRMED display (spec §3) is PR 2. Three obligations
-      recorded at #190's PM gate: (1) the old DOC-ONLY caveat on
+      marked NOT CAPTURED. **Storage only when this shipped; the display
+      half has now shipped too (summary-display wave, PR 2, this PR,
+      spec §3 as amended): `FromTheLog.tsx` renders a MACHINE CONFIRMED
+      · WORK ONLY block off `machineWorkSeconds`/`machineWorkMeters`/
+      `machineSummary.verificationBytes` alone — the other six of the
+      nine `machineSummary` fields stay stored-but-undisplayed this
+      wave, unchanged from the note below.** The wave (RC-2 + RC-3 +
+      this display PR) is functionally complete pending its own
+      release. Three obligations recorded at #190's PM gate: (1) the
+      old DOC-ONLY caveat on
       `avgPaceSecondsPer500m`'s /10 scale is DISCHARGED by evidence, not
       deleted silently — the keystone's 500m piece decodes pace 138.7
       against elapsed 138.7 from a DIFFERENT byte range (a scale oracle

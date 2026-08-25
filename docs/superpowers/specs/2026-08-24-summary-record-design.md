@@ -240,6 +240,34 @@ renders a compact block:
   apply (nothing tappable); AA contrast computed and reported for any
   new token use (recurring failure 6).
 
+**MARKED AMENDMENT (James's ruling, 2026-08-25, summary-display wave PR
+2 — `docs/superpowers/plans/2026-08-25-summary-display.md`'s Global
+Constraints).** Two changes to the text above, both already reflected
+in the implementation and its tests:
+
+- **The label ruling.** "MACHINE CONFIRMED" above is superseded by
+  **`MACHINE CONFIRMED · WORK ONLY`**, and the block gains a fourth
+  line, a caption: **`Rest metres excluded. The totals above include
+  rest.`** The worked example is now:
+
+      MACHINE CONFIRMED · WORK ONLY
+      2:04.0 work · 500m
+      CODE AF99-4706 C021-B054
+      Rest metres excluded. The totals above include rest.
+
+- **The axis-collision resolution.** ROADMAP's RC phase carried a
+  NOT-DEFERRABLE finding (#191's PM gate): this block's WORK-ONLY total
+  and `traceModel.ts`'s work-plus-rest `t`/`d` axes would read as one
+  number contradicting another on the same screen (500m beside a
+  d-axis running to 742.7m on the exit-7 piece, 48% apart). James's
+  ruling resolves the collision **by labelling, not by changing what
+  either number means**: the WORK ONLY qualifier plus the caption name
+  the split explicitly, so the two numbers read as two honestly-labelled
+  different quantities rather than a disagreement. The chart's own axes
+  are UNCHANGED by this ruling — whether `traceModel.ts` should ever
+  become a true work-only clock stays open, tracked separately in
+  ROADMAP under Phase RC, not resolved here.
+
 ## §4 — Testing
 
 - **Replay oracle (PR 1):** the walk-2026-08-23 keystone recording

@@ -1999,6 +1999,18 @@ async function postLog(
     series?: {
       samples: { t: number; d: number; p: number; spm: number; hr?: number }[];
     };
+    // RC-2/RC-3 wave, PR 2 (2026-08-25): the MACHINE CONFIRMED · WORK ONLY
+    // block's own trigger fields — `POST /api/logs` already accepts these
+    // three directly (`server/routes/data.ts`), the same route
+    // `LogSession.tsx`'s real monitor-driven save posts them through, so
+    // this direct-POST fixture sets them by hand exactly like every other
+    // hand-built field above. `log-detail`'s own capture below sets these
+    // to the exit-7 walk's REAL decoded pair and REAL 19-byte 0x003F
+    // payload (`docs/monitor/sessions/walk-2026-08-24/phone-exit7-ring.json`,
+    // seq 64) — not hand-picked round numbers.
+    machineWorkSeconds?: number | null;
+    machineWorkMeters?: number | null;
+    machineSummary?: { verificationBytes: number[] } | null;
   },
 ): Promise<void> {
   const result = await page.evaluate(async (b) => {
@@ -2299,6 +2311,24 @@ test("log-detail", async ({ page }) => {
     // trace — `buildLogDetailSeries`'s own header comment names the
     // exact correspondence to the four rows above.
     series: buildLogDetailSeries(),
+    // RC-2/RC-3 wave, PR 2, Task 3: the MACHINE CONFIRMED · WORK ONLY
+    // block's own capture — the exit-7 walk's REAL natural-finish pair
+    // (`docs/monitor/sessions/walk-2026-08-24/phone-exit7-ring.json`,
+    // seq 61, `server/routes/machineSummary.integration.test.ts`'s own
+    // named example: elapsed `readU24LE(bytes,4)/100` = 0x003070/100 =
+    // 124.0, distance `readU24LE(bytes,7)/10` = 0x001388/10 = 500.0) and
+    // that SAME walk's real 19-byte 0x003F verification payload (seq 64,
+    // raw `06 47 99 af 54 b0 21 c0 82 16 01 00 94 00 00 00 00 00 00`) —
+    // the identical 8 leading bytes `FromTheLog.test.tsx`'s own
+    // `WALK_VERIFICATION_BYTES` derives `AF99-4706 C021-B054` from.
+    machineWorkSeconds: 124.0,
+    machineWorkMeters: 500,
+    machineSummary: {
+      verificationBytes: [
+        0x06, 0x47, 0x99, 0xaf, 0x54, 0xb0, 0x21, 0xc0, 0x82, 0x16, 0x01, 0x00,
+        0x94, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+      ],
+    },
   });
 
   await page.goto("/today/log");
@@ -2340,6 +2370,33 @@ test("log-detail", async ({ page }) => {
   await expect(rows.nth(3).locator(".summary-row-target")).toHaveText("");
   await expect(rows.nth(3).locator(".summary-row-dev")).toHaveText("");
   await expect(rows.nth(3).locator(".summary-row-spm")).toHaveText("28");
+
+  // RC-2/RC-3 wave, PR 2, Task 3: the MACHINE CONFIRMED · WORK ONLY block,
+  // below the interval rows and above the trace chart — real seeded
+  // machine fields (the exit-7 walk's own values), not the absence case.
+  // Structural assertions on every line before the dedicated capture
+  // below (recurring failure #7: prove the state, then shoot).
+  await expect(
+    page.getByRole("group", { name: "MACHINE CONFIRMED · WORK ONLY" }),
+  ).toBeVisible();
+  await expect(page.getByText("2:04.0 work · 500m")).toBeVisible();
+  await expect(page.getByText("CODE AF99-4706 C021-B054")).toBeVisible();
+  await expect(
+    page.getByText("Rest metres excluded. The totals above include rest."),
+  ).toBeVisible();
+
+  // Dedicated capture: the trace-chart scroll below moves the viewport
+  // far enough down that the block (which sits ABOVE the chart) can
+  // scroll out of frame — a separate screenshot, scrolled to the block
+  // itself, is the only way this element is guaranteed visible in the
+  // committed record (task-3 brief: "THE BLOCK MUST BE VISIBLE IN A
+  // CAPTURE").
+  await page
+    .locator(".log-machine-confirmed")
+    .evaluate((el) => el.scrollIntoView({ block: "center" }));
+  await page.screenshot({
+    path: path.join(SCREENSHOTS_DIR, "log-detail-machine-confirmed.png"),
+  });
 
   // Trace-rendering spec (Phase LT spec 3), Task 3: the chart itself,
   // below the intervals list — real, not the absence case (the row
