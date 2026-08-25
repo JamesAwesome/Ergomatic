@@ -92,25 +92,24 @@ function judgedClass(
  *  regex, for the same reason `fmtSplit`/`fmtDuration` are house functions
  *  rather than ad hoc string surgery at each call site.
  *
- *  QUANTISED TO 5 M (James's calm rule, 2026-08-18: dynamic is fine, but
- *  no visual noise unless warranted). Whole-metre flooring was tried first
- *  and MEASURED to do nothing — decoding the exit walk's own capture, the
- *  rendered string changed 1.97/s with tenths and 1.96/s floored, because
- *  at rowing speed (~3.7 m/s) every ~500ms tick crosses a metre boundary
- *  anyway; on iOS's ~90-180ms notify spacing that becomes ~3.7 repaints/s.
- *  At 5 m the repaint rate is speed-limited, not transport-limited:
- *  ~0.74/s on EVERY platform, one readable sequential step (1,040 → 1,045)
- *  every ~1.3 s of rowing.
+ *  REALTIME 1m COUNT (James's reversal of the calm rule, 2026-08-24:
+ *  "less responsive... put that back to a realtime count"). The 5m
+ *  quantisation (2026-08-18 calm rule: dynamic OK but no visual noise
+ *  unless warranted) reduced repaints to ~0.74/s across all transports by
+ *  making them speed-limited, one sequential step (~1.3s per step at
+ *  rowing speed ~3.7 m/s). Realtime reverts to ~3.7 repaints/s on iOS
+ *  (transport-limited, at iOS's ~90-180ms notify spacing). The decision
+ *  trades off visual churn against responsiveness; James values the latter.
  *
  *  ROUND, not floor — an earlier version floored and justified it as "the
  *  PM5 truncates too", which the antagonist falsified: at the one walk
  *  instant where floor and round disagree (finish, 1346.7) the machine
  *  shows 1347, and `summaryModel.ts`'s DISTANCE rounds as well. Rounding
- *  keeps this cell within ±2.5 m of both. The walk's same-frame protocol
- *  allows ±5 m on THIS cell only; the summary hero stays exact and is what
- *  criterion 2 compares at the finish. */
+ *  keeps this cell within ±0.5 m of what the user typed and ±0.5 m of
+ *  what the summary hero displays at the finish. The walk's same-frame
+ *  protocol compares this to the hero; both round. */
 function fmtMeters(meters: number): string {
-  return `${new Intl.NumberFormat("en-US").format(Math.round(meters / 5) * 5)}m`;
+  return `${new Intl.NumberFormat("en-US").format(Math.round(meters))}m`;
 }
 
 export default function PaneLive({ model }: { model: SurfaceModel }) {

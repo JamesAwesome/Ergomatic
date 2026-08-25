@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { fmtSplit } from "../../domain/format.js";
 import { api } from "../api";
 import type { HeldResult, Thumbs } from "../api/useRecentLogs";
 import {
@@ -11,6 +12,84 @@ import {
 import { resolveBackTarget } from "../shell/BackLink";
 import { buildStoredSummary, type StoredLog } from "./storedSummary";
 import TraceChart from "./TraceChart";
+
+// RC-2/RC-3 wave (docs/superpowers/specs/2026-08-24-summary-record-design.md
+// §3, PR 2), copy amended by the 2026-08-25 plan's Global Constraints
+// (James's label ruling): the LE u32 word rendering the PM5's own
+// Verification screen uses, uppercase hex, `XXXX-XXXX` per word
+// (PRIMARY-photographed, walk-2026-08-23). Reads only the FIRST 8 bytes —
+// a longer array (the jsonb column's cap is 32) still renders exactly one
+// code, matching the hardware screen's own fixed two-word display.
+function verificationCode(bytes: number[]): string {
+  const word = (o: number) =>
+    (
+      ((bytes[o + 3] << 24) |
+        (bytes[o + 2] << 16) |
+        (bytes[o + 1] << 8) |
+        bytes[o]) >>>
+      0
+    )
+      .toString(16)
+      .toUpperCase()
+      .padStart(8, "0");
+  const dash = (w: string) => `${w.slice(0, 4)}-${w.slice(4)}`;
+  return `${dash(word(0))} ${dash(word(4))}`;
+}
+
+// §3's value line, `2:04.0 work · 500m` for the walk's real values — house
+// elastic-positional time WITH tenths (`fmtSplit`, already imported by
+// this screen's own `storedSummary.ts` for pace cells; reused here rather
+// than `fmtDuration`, which drops the tenths digit §3's own example
+// requires). Called only when `machineWorkSeconds` is non-null (the
+// block's own render guard below), so the "work" clause is always
+// present; `machineWorkMeters` is independently nullable at the DB layer
+// (`server/db/schema.ts`) even though the walk's real capture always
+// carries both together, so the meters clause degrades toward absence
+// rather than inventing a value — same "never fabricate, degrade toward
+// absence" rule `storedSummary.ts`'s own header comment names elsewhere
+// on this screen.
+function machineConfirmedValueLine(row: StoredLog): string {
+  const parts = [`${fmtSplit(row.machineWorkSeconds!)} work`];
+  if (row.machineWorkMeters !== null) parts.push(`${row.machineWorkMeters}m`);
+  return parts.join(" · ");
+}
+
+// §3: "a row whose server row carries `machine_work_seconds` renders" —
+// the ONE trigger for the whole block; `machineWorkMeters`/
+// `machineSummary` only ever add or omit a clause inside an already-
+// rendered block, never gate the block's own presence. Reads straight off
+// the fetched `StoredLog` row, never `buildStoredSummary`'s pure view
+// model (Global Constraints: "the block reads ... off the fetched
+// StoredLog row and NOTHING else") — this screen's ONE other component
+// that skips the view model, by the same spec's own explicit instruction.
+function MachineConfirmedBlock({ row }: { row: StoredLog }) {
+  if (row.machineWorkSeconds === null) return null;
+  const bytes = row.machineSummary?.verificationBytes;
+  const code =
+    bytes !== undefined && bytes.length >= 8
+      ? verificationCode(bytes)
+      : undefined;
+  return (
+    <div
+      className="log-machine-confirmed"
+      role="group"
+      aria-label="MACHINE CONFIRMED · WORK ONLY"
+    >
+      <p className="log-machine-confirmed-title">
+        MACHINE CONFIRMED · WORK ONLY
+      </p>
+      <p className="log-machine-confirmed-value">
+        {machineConfirmedValueLine(row)}
+      </p>
+      {code !== undefined && (
+        <p className="log-machine-confirmed-code">CODE {code}</p>
+      )}
+      <p className="log-machine-confirmed-caption">
+        Rest metres excluded. Everything else on this screen includes rest.
+      </p>
+    </div>
+  );
+}
 
 // From-the-log spec (2026-08-18), §4 N5: the back affordance follows the
 // SHIPPED BackLink idiom (origin rides `location.state.from`), but unlike
@@ -441,6 +520,15 @@ export default function FromTheLog() {
           )}
 
           <SummaryIntervalsBlock rows={view.rows} caption={view.caption} />
+
+          {/* RC-2/RC-3 wave, §3: "place it below the interval table...
+              matching the section rhythm already on the screen." §3's own
+              text says "above MONITOR LOG · COPY" — that diagnostics
+              button lives on the LIVE summary (`LogSession.tsx`), which
+              this stored view has no equivalent of; the closest analog on
+              THIS screen is directly below the interval table and above
+              the trace chart, where it sits below. */}
+          <MachineConfirmedBlock row={row} />
 
           {/* Trace-rendering spec (Phase LT spec 3), §1: "above the plan
               footer on the stored one" — `row.series` is `null` (not just

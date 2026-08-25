@@ -58,9 +58,34 @@ function storedRow(overrides: Partial<StoredLog> = {}): StoredLog {
     distanceMeters: 6000,
     planKey: null,
     planIndex: null,
+    // RC-2/RC-3 wave (Task 1): default to the common case — older rows,
+    // and any row saved before this wave shipped, carry all three as
+    // null (recurring failure 3's own "empty is the wrong default"
+    // notwithstanding: null here is the REAL common case per the design
+    // spec's own "older records are the common case for a long time",
+    // §3 — the walk's real values are the exception, exercised by the
+    // machine-confirmed describe block below via an explicit override).
+    machineWorkSeconds: null,
+    machineWorkMeters: null,
+    machineSummary: null,
     ...overrides,
   };
 }
+
+// walk-2026-08-23 keystone capture, the same 8 verification bytes the
+// design spec's own §3 example renders (docs/superpowers/specs/2026-08-
+// 24-summary-record-design.md §3) — real hardware-captured values, not
+// invented ones (recurring failure 3).
+const WALK_VERIFICATION_BYTES = [
+  0x06, 0x47, 0x99, 0xaf, 0x54, 0xb0, 0x21, 0xc0,
+];
+
+// Derived by hand from WALK_VERIFICATION_BYTES, LE u32 words:
+// word 0 = bytes[3]<<24 | bytes[2]<<16 | bytes[1]<<8 | bytes[0]
+//        = 0xaf<<24 | 0x99<<16 | 0x47<<8 | 0x06 = 0xAF994706 -> AF99-4706
+// word 1 = bytes[7]<<24 | bytes[6]<<16 | bytes[5]<<8 | bytes[4]
+//        = 0xc0<<24 | 0x21<<16 | 0xb0<<8 | 0x54 = 0xC021B054 -> C021-B054
+const WALK_VERIFICATION_CODE = "CODE AF99-4706 C021-B054";
 
 // Phase LT spec 3, Task 3: a plausible multi-interval `SeriesData` — same
 // small three-segment shape `PostWorkoutSummary.test.tsx`'s own
@@ -1154,5 +1179,130 @@ describe("FromTheLog — the trace chart (Phase LT spec 3)", () => {
     const { container } = await renderFromTheLog();
     await screen.findByRole("heading", { name: "Sea Fret" });
     expect(container.querySelector(".trace-figure")).toBeNull();
+  });
+});
+
+// RC-2/RC-3 wave, Task 1 (docs/superpowers/specs/2026-08-24-summary-
+// record-design.md §3 as amended by the 2026-08-25 plan's Global
+// Constraints, James's label ruling): the MACHINE CONFIRMED · WORK ONLY
+// block. Reads straight off the fetched `StoredLog` row (never the pure
+// `buildStoredSummary` view) — `machineWorkSeconds`/`machineWorkMeters`/
+// `machineSummary.verificationBytes` are the only three fields this
+// block ever touches; the other nine decoded `machineSummary` fields
+// have no display surface this wave and are never asserted here.
+describe("FromTheLog — the MACHINE CONFIRMED · WORK ONLY block", () => {
+  it("renders the label, the value line, the verification code, and the caption for the walk's real values", async () => {
+    mockApi(
+      () =>
+        new Response(
+          JSON.stringify(
+            storedRow({
+              machineWorkSeconds: 124,
+              machineWorkMeters: 500,
+              machineSummary: { verificationBytes: WALK_VERIFICATION_BYTES },
+            }),
+          ),
+          { status: 200 },
+        ),
+    );
+    const { container } = await renderFromTheLog();
+    await screen.findByRole("heading", { name: "Sea Fret" });
+
+    expect(screen.getByText("MACHINE CONFIRMED · WORK ONLY")).toBeVisible();
+    expect(screen.getByText("2:04.0 work · 500m")).toBeVisible();
+    expect(screen.getByText(WALK_VERIFICATION_CODE)).toBeVisible();
+    // PM gate fix wave (2026-08-25), condition 2: the caption pointed the
+    // wrong way — "the totals above include rest" named the HEROES, but
+    // the trace chart BELOW the block also includes rest and the old
+    // wording never said so.
+    expect(
+      screen.getByText(
+        "Rest metres excluded. Everything else on this screen includes rest.",
+      ),
+    ).toBeVisible();
+
+    // Placement: below the interval table (§3's own placement rule).
+    const block = container.querySelector(".log-machine-confirmed");
+    const intervals = container.querySelector(".summary-intervals");
+    expect(block).not.toBeNull();
+    expect(intervals).not.toBeNull();
+    expect(
+      intervals!.compareDocumentPosition(block!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("renders NO block when all three machine fields are null (the common case, old rows)", async () => {
+    mockApi(() => new Response(JSON.stringify(storedRow()), { status: 200 }));
+    const { container } = await renderFromTheLog();
+    await screen.findByRole("heading", { name: "Sea Fret" });
+
+    expect(screen.queryByText("MACHINE CONFIRMED · WORK ONLY")).toBeNull();
+    expect(container.querySelector(".log-machine-confirmed")).toBeNull();
+  });
+
+  it("renders the block WITHOUT a CODE line when the totals are present but machineSummary is null", async () => {
+    mockApi(
+      () =>
+        new Response(
+          JSON.stringify(
+            storedRow({
+              machineWorkSeconds: 124,
+              machineWorkMeters: 500,
+              machineSummary: null,
+            }),
+          ),
+          { status: 200 },
+        ),
+    );
+    await renderFromTheLog();
+    await screen.findByRole("heading", { name: "Sea Fret" });
+
+    expect(screen.getByText("2:04.0 work · 500m")).toBeVisible();
+    expect(screen.queryByText(/^CODE /)).toBeNull();
+  });
+
+  it("renders the block WITHOUT a CODE line when verificationBytes has fewer than 8 entries", async () => {
+    mockApi(
+      () =>
+        new Response(
+          JSON.stringify(
+            storedRow({
+              machineWorkSeconds: 124,
+              machineWorkMeters: 500,
+              machineSummary: {
+                verificationBytes: WALK_VERIFICATION_BYTES.slice(0, 7),
+              },
+            }),
+          ),
+          { status: 200 },
+        ),
+    );
+    await renderFromTheLog();
+    await screen.findByRole("heading", { name: "Sea Fret" });
+
+    expect(screen.getByText("2:04.0 work · 500m")).toBeVisible();
+    expect(screen.queryByText(/^CODE /)).toBeNull();
+  });
+
+  // `machineWorkMeters` is independently nullable at the DB layer even
+  // though the guard is keyed on `machineWorkSeconds` alone (§3's own
+  // trigger) — the value line degrades to just the work clause, never
+  // inventing a meters figure or a stray " · " with nothing after it.
+  it("renders the value line WITHOUT the meters clause when machineWorkMeters alone is null", async () => {
+    mockApi(
+      () =>
+        new Response(
+          JSON.stringify(
+            storedRow({ machineWorkSeconds: 124, machineWorkMeters: null }),
+          ),
+          { status: 200 },
+        ),
+    );
+    await renderFromTheLog();
+    await screen.findByRole("heading", { name: "Sea Fret" });
+
+    expect(screen.getByText("2:04.0 work")).toBeVisible();
+    expect(screen.queryByText(/·.*m$/)).toBeNull();
   });
 });

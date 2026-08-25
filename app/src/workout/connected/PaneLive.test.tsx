@@ -641,24 +641,26 @@ describe("the meters counter on the progress-bar row (connected-metrics design s
     expect([...row.children]).toStrictEqual([bar, counter]);
   });
 
-  it("quantises to 5m, rounding — the accumulator's churn never reaches the screen (James's calm rule; the measured fix, not the guessed one)", () => {
-    // Whole-metre flooring was measured to change nothing (1.97 -> 1.96
-    // repaints/s: at rowing speed every tick crosses a metre boundary).
-    // 5m makes the repaint rate speed-limited (~0.74/s on every transport)
-    // and the steps sequential. ROUND, because at the exit walk's finish —
-    // the one instant where floor and round disagree — the machine and the
+  it("counts every metre, rounding — realtime responsiveness restored (James's reversal of the calm rule, 2026-08-24)", () => {
+    // The 5m quantisation that reduced repaints to ~0.74/s (speed-limited,
+    // one sequential step every ~1.3s at rowing speed) was James's 2026-08-18
+    // calm rule ("dynamic is fine, but no visual noise unless warranted").
+    // Reversed 2026-08-24: "less responsive... put that back to a realtime
+    // count". Repaint rate returns to ~3.7/s on iOS at rowing speed
+    // (transport-limited). ROUND, because at the exit walk's finish — the
+    // one instant where floor and round disagree — the machine and the
     // summary both round (fmtMeters' own comment has the decode).
     renderPane("live", { sessionDistanceMeters: 1042.9 });
     expect(
       document.querySelector(".connected-progress-meters")!.textContent,
-    ).toBe("1,045m");
+    ).toBe("1,043m");
   });
 
-  it("rounds down as readily as up across the 5m boundary", () => {
+  it("rounds correctly (±0.5 boundary, no quantisation)", () => {
     renderPane("live", { sessionDistanceMeters: 1042.4 });
     expect(
       document.querySelector(".connected-progress-meters")!.textContent,
-    ).toBe("1,040m");
+    ).toBe("1,042m");
   });
 
   it("zero meters still renders (only 'before the first frame' is absent)", () => {
