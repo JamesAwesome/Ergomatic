@@ -87,7 +87,18 @@ its open-on-reset guard. `seriesRecorder` keys its registers on that
 field and its `currentKey`-raising comparison against `intervalIndex`
 is removed (trace-truth's own ruling: delete the heuristic, do not
 supplement it). One deriver in the system; the recorder inherits every
-current and future guard the driver has. Research pass
+current and future guard the driver has — INCLUDING the driver's own
+disclosed bounded edge (Task 3 review, Important 1, recorded as the
+ACCEPTED COST it always was): on a refused open outside states 8/9
+(e.g. the committed reconnect-spanning regression, where a post-gap
+first tick lands at elapsed == the register), the emitted
+`intervalIndex` still rises while `attributedIntervalIndex` stays on
+the open key, and the series now max-merges that interval into the
+prior key exactly as the accumulator does — short by the gap, the
+same on both, visible against the machine's own totals. That is the
+one-deriver trade James accepted (consistent-with-the-accumulator over
+independently-diverging), pinned by a recorder test on that edge, and
+never described as "unreachable". Research pass
 (2026-08-25, James's durability question): DURABLE-WITH-CONDITIONS —
 Concept2's own ecosystem is single-writer for interval identity
 (SECONDARY, logbook API stores device-authored pre-segmented
