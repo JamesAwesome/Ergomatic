@@ -42,6 +42,8 @@ import {
 } from "../../domain/monitor/pm5/commands.js";
 import {
   WORKOUTSTATE_INTERVALREST,
+  WORKOUTSTATE_INTERVALWORKDISTANCE,
+  WORKOUTSTATE_INTERVALWORKDISTANCETOREST,
   WORKOUTSTATE_INTERVALWORKTIME,
   WORKOUTSTATE_INTERVALWORKTIMETOREST,
   WORKOUTSTATE_TERMINATE,
@@ -1834,6 +1836,95 @@ describe("session accumulator: the walk's falsification (CR2 spec 1 Task 11)", (
     },
   );
 });
+
+// ---------------------------------------------------------------------------
+// series-truth design spec §A/§B′ (task-2-brief.md Step 1(a)) — state 9's
+// own sibling fix. `docs/monitor/sessions/walk-2026-08-24/phone-exit7-ring.
+// json` seq 27/28 (a 2x250m r60 row, all distance-kind intervals) hit the
+// SAME poison shape Task 11 above pins for state 8
+// (`WORKOUTSTATE_INTERVALWORKTIMETOREST`), but through
+// `WORKOUTSTATE_INTERVALWORKDISTANCETOREST` (9) — the guard's own comment
+// (`driver.ts`'s `maybeEmitFrame`) named this as "the symmetric, plausible
+// sibling case ... the same one-line extension if a future walk shows it";
+// this walk is that capture. Ring seq 27 is interval 1's own honest final
+// tick (elapsed=67.91s, distance=250.2m, machineTotal=250m, machine count
+// still 0); ring seq 28 is the poison tick itself (elapsed=68.02s,
+// distance=250.6m) with the ring's own "divergence" entry recording the
+// driver refusing to open key 1 with it and merging into key 0 instead —
+// the machine count at that tick (1) is the "one unrecorded half" the
+// sibling Task-11 test above also has to infer (SECONDARY: no capture shows
+// 0x0033's own byte at that exact instant, only the resulting refusal).
+// ---------------------------------------------------------------------------
+
+describe(
+  "session accumulator: state 9's own poison tick (series-truth spec §A, " +
+    "walk-2026-08-24 exit-7)",
+  () => {
+    it(
+      "a state-9 poison tick (distance-kind interval boundary) is mirrored " +
+        "exactly like state 8: the emitted intervalIndex AND the new " +
+        "attributedIntervalIndex field both stay at the register key the " +
+        "guard actually used (0), not the too-high key it refused to open " +
+        "(1) — ring seq 27/28's own numbers",
+      async () => {
+        const h = await programmed(TWO_INTERVAL_REST_PROGRAM);
+
+        // Ring seq 27 — interval 1's own honest final tick before the
+        // boundary. `WORKOUTSTATE_INTERVALWORKDISTANCE` (5) is the real
+        // wire state for actively rowing a distance-kind interval (Task
+        // 11's own sibling test uses state 4, `WORKOUTSTATE_INTERVALWORKTIME`,
+        // because its fixture is time-kind — this one uses the
+        // distance-kind row for evidence fidelity to the ring).
+        const f1 = await tick(
+          h,
+          {
+            elapsed: 67.91,
+            distance: 250.2,
+            state: WORKOUTSTATE_INTERVALWORKDISTANCE,
+          },
+          0,
+        );
+        expect(f1.intervalIndex).toBe(0);
+        expect(f1.attributedIntervalIndex).toBe(0);
+
+        // Ring seq 28 — THE POISON TICK: elapsed=68.02s, distance=250.6m,
+        // machine count already 1. `toProgramIndex(1, "rowing", 2)`
+        // resolves program index 1, a key `session.seen` does not hold yet
+        // — the open-on-reset guard correctly refuses to OPEN it (elapsed
+        // 68.02 is not before key 0's own register, 67.91) and folds
+        // `activeKey` back to 0 for the session totals, exactly as ring seq
+        // 28's own "divergence" entry records in production. Before this
+        // fix, the mirror gate named only
+        // `WORKOUTSTATE_INTERVALWORKTIMETOREST` (8) — state 9 fell through
+        // untouched, leaving `intervalIndex` at the too-high 1, and
+        // `attributedIntervalIndex` did not exist at all. Both are the bugs
+        // this test pins.
+        const f2 = await tick(
+          h,
+          {
+            elapsed: 68.02,
+            distance: 250.6,
+            state: WORKOUTSTATE_INTERVALWORKDISTANCETOREST,
+          },
+          1,
+        );
+        expect(f2.intervalIndex).toBe(0); // RED before fix A: was 1.
+        expect(f2.attributedIntervalIndex).toBe(0); // RED before fix A+B′: was undefined.
+
+        // The register the guard actually wrote to (key 0, max-merged) is
+        // exactly what `attributedIntervalIndex` must equal — the identity
+        // fix B′ exists for. `session` is a driver-internal closure
+        // variable with no public accessor, so this is asserted via the
+        // session totals `tick()` already returns: key 0's register grew
+        // to the poison tick's own (larger) pair by max-merge, so
+        // `sessionDistanceMeters`/`sessionElapsedSeconds` read the poison
+        // tick's own numbers directly.
+        expect(f2.sessionDistanceMeters).toBeCloseTo(250.6, 1);
+        expect(f2.sessionElapsedSeconds).toBeCloseTo(68.02, 1);
+      },
+    );
+  },
+);
 
 describe("session accumulator: splitAvgPace provenance is LEVEL-triggered (interval-referent-monotone fix round 1, finding B)", () => {
   it(

@@ -439,7 +439,7 @@ export const WORKOUTSTATE_INTERVALWORKTIMETOREST = 8;
  *  (root `IntervalWorkDistance`, `WORKOUTSTATE_TO_STATE`'s own `9: "rowing"`
  *  row below) — the symmetric counterpart to state 8, found in production
  *  (walk-2026-08-24 exit-7 data, ring seq 27). Added for the series-truth
- *  fix (storage-spine design spec §A). Same guard semantics as state 8: the
+ *  fix (series-truth design spec §A). Same guard semantics as state 8: the
  *  driver's open-on-reset gate fires on this boundary exactly as it does on
  *  8, and the emitted frame's interval index must be mirrored onto the new
  *  `MonitorFrame.attributedIntervalIndex` field for the recorder to key on.

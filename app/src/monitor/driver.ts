@@ -78,6 +78,7 @@ import {
   toIntervalActual,
   toMonitorFrame,
   toMonitorState,
+  WORKOUTSTATE_INTERVALWORKDISTANCETOREST,
   WORKOUTSTATE_INTERVALWORKTIMETOREST,
   type Pm5ParseError,
   type RawPm5Status,
@@ -2199,12 +2200,26 @@ export function createPm5Driver(
         // state 8 (both use `WORKOUTSTATE_INTERVALWORKTIME`, a genuine
         // reset), confirming the two shapes are in fact distinguishable by
         // this signal. State 9 (`WORKOUTSTATE_INTERVALWORKDISTANCETOREST`,
-        // the same ephemeral shape for a distance-kind interval) is the
-        // symmetric, plausible sibling case — NOT gated here, since no
-        // capture or existing test evidences it either way (parse.ts does
-        // not even name the ordinal today) — the same one-line extension
-        // if a future walk shows it.
-        if (status.workoutState === WORKOUTSTATE_INTERVALWORKTIMETOREST) {
+        // the same ephemeral shape for a distance-kind interval) used to be
+        // named here as "the symmetric, plausible sibling case — NOT gated
+        // here, since no capture or existing test evidences it either way
+        // ... the same one-line extension if a future walk shows it". This
+        // walk is that capture: `docs/monitor/sessions/
+        // walk-2026-08-24/phone-exit7-ring.json` seq 27/28, a 2x250m r60
+        // row (distance-kind intervals) where state 9 poisoned the same
+        // way state 8 does — the refused-open guard above correctly kept
+        // the SESSION TOTALS honest, but (before this fix, series-truth
+        // design spec §A) left the emitted referent at the too-high key it
+        // never opened. Gated on both ordinals now, by the same reasoning:
+        // neither `driver.test.ts` regression this narrowing exists to
+        // protect uses state 8 OR state 9 (both use plain
+        // `WORKOUTSTATE_INTERVALWORKTIME`/`WORKOUTSTATE_INTERVALWORKDISTANCE`
+        // — a genuine reset), so extending the gate to 9 cannot reintroduce
+        // either regression.
+        if (
+          status.workoutState === WORKOUTSTATE_INTERVALWORKTIMETOREST ||
+          status.workoutState === WORKOUTSTATE_INTERVALWORKDISTANCETOREST
+        ) {
           emittedIntervalIndex = openKey;
         }
       }
@@ -2242,6 +2257,25 @@ export function createPm5Driver(
       ...base,
       intervalIndex: emittedIntervalIndex,
       splitAvgPace: splitAvgPaceIsStale ? null : base.splitAvgPace,
+      // series-truth design spec §B′ (Task 2): `activeKey` IS the key the
+      // register write just below (`session.seen.set(activeKey, ...)`)
+      // used for this exact tick — the stale-count rest clamp and the
+      // open-on-reset guard above both reassign `activeKey` itself (not a
+      // parallel value), so reading it here rather than re-deriving
+      // anything is what makes this field EQUAL the register key by
+      // construction, not by a second, potentially-diverging mirror.
+      // Deliberately UNGATED by the state-8/9 mirror condition that
+      // `emittedIntervalIndex` above uses: that gate exists only to keep
+      // `intervalIndex` (a countdown/target-facing field) from moving on
+      // the guard's OWN disclosed bounded edge (see the guard's comment) —
+      // `attributedIntervalIndex` has no such caveat to inherit, since it
+      // is defined as "whatever key the accumulator used," full stop, for
+      // every state including the ones `intervalIndex` intentionally
+      // leaves alone. `null` (no write this tick — armed/idle/terminated,
+      // or rowing/resting/finished with no prior key to fall back to) maps
+      // to `undefined`, the field's own documented "no opinion" value
+      // (`domain/monitor/types.ts`).
+      attributedIntervalIndex: activeKey ?? undefined,
       // D6 (storage-spine spec §4, Task 1) — the raw sibling of
       // `intervalIndex` above; see this function's own comment a few
       // lines up and the field's own doc comment for why this one stays
