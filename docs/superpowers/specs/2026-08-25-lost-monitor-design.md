@@ -132,7 +132,25 @@ ticking on unlock"*. The walk's own W-10 declines to establish the mechanism.
 PR 2's shape depends on which it is, so **Task 1 instruments it and the §D1e
 probe measures it** rather than either being guessed.
 
-## Gate 0 — James approves the visual treatment before implementation
+## Gate 0 — APPROVED (James, 2026-08-25)
+
+Presented as an artifact showing current vs proposed across three screens on the
+real tokens, with every contrast ratio computed. **Approved with the
+controller's recommendations**, plus two corrections James made in the review
+that changed the work — both recorded in the tasks they affect:
+
+1. **"Is it actually waiting?"** — it is, and the app already says `READY`.
+   Task 2 became "stop erasing the ready state" instead of "add a waiting
+   headline", and the root cause turned out to drive four displays, not one.
+2. **The copy was far too long, and the warning was in the wrong place.** It
+   moved to the ready screen and shrank to four words; the lost banner went from
+   twelve words to three.
+
+Rulings: warning shows **every session, quiet**; lost banner is **filled red**;
+pre-row state gets **no banner at all**.
+
+The original gate text follows, kept because it binds any FUTURE change to these
+surfaces.
 
 Binding, precedes every task. What gets presented to him:
 
@@ -275,11 +293,59 @@ banner in that photo is our own resume code, not the device.
 This ships in PR 1 because it is diagnostic only, it is small, and the next
 pocketed phone should not cost another walk.
 
-## Task 2 — The pre-row state is unmistakable, and it warns BEFORE the loss
+## Task 2 — Stop ERASING the ready state, and warn on the ready screen
 
-Failing test first, shape per Gate 0. The requirement, independent of treatment:
-a rower looking at the connected surface can tell whether the app has seen a pull.
-Numbers that have never been measured must not render as measurements.
+**GATE 0 APPROVED (James, 2026-08-25), with a finding that changes this task's
+shape: the fix is mostly NOT new copy. It is not throwing away state we have.**
+
+James's question at Gate 0 — *"in the waiting step, is it actually waiting?"* —
+turned out to be the whole task. It is waiting, and the app already owns the
+word: `surfaceModel.ts:1111` builds `${ordinal} OF ${count} · READY` for the
+armed state. The screen in the walk said `1 OF 1 · WORK` because
+`armedMirror = status === "armed"` (`:836`) and `SurfaceStatus` is a single
+union — `"live" | "paused" | "stale" | "armed"` (`:70`) — so **the moment the
+surface goes stale it stops being armed**, and every armed behaviour collapses
+at once.
+
+**Four consumers flip together** (all verified this session), and they account
+for the whole of the walk screenshot:
+
+| Consumer | Armed | What the walk showed once stale |
+| --- | --- | --- |
+| `intervalLabelShort` (`:1122`) | `1 OF 1 · READY` | `1 OF 1 · WORK` |
+| `paceActual` (`:855`) | mirrors the target as a preview | `LAST 0:00.0` |
+| `rateActual` (`:867`) | `0` | `LAST 0` |
+| `totalLeftSeconds`/`elapsedSeconds` (`:1067`, `:1077`) | un-started | `EST LEFT 8:24`, estimating a piece that never began |
+
+So this is ONE root cause, not four copy defects. **Preserve armed-ness across
+staleness** rather than patching four displays independently.
+
+**This makes Task 2 carry number weight, and it is not fast path.**
+`totalLeftSeconds`/`elapsedSeconds` are numbers a rower reads; a wrong version
+produces a wrong `EST LEFT`. Failing test first, per-consumer, and the test
+fixture must be a stale-AND-never-rowed surface — the exact combination the
+union currently cannot express.
+
+**What ships, per Gate 0:**
+
+- **Pre-row state: restore `READY`, invent nothing.** No banner, no headline, no
+  new sentence. `1 OF 1 · READY`, with the two numbers labelled `TARGET`, so
+  nothing that was never measured poses as a measurement.
+- **The warning moves to the READY SCREEN** (`ConnectedInterstitial`'s
+  programmed state, under *"The monitor starts the clock on your first
+  stroke."*) — read standing still, not mid-stroke. **Four words:
+  `KEEP THE SCREEN ON`**, on a sunken strip with a `--marker` rule. It asserts
+  no cause, promises no sufficiency, and survives whichever way the probe lands.
+- **Frequency: every session, quiet** (James's ruling at Gate 0). Four words on
+  a screen the rower passes through anyway; a once-per-device rule risks the
+  rower who forgets.
+- **Contrast, computed not eyeballed:** `--marker` on `--surface` 6.49:1, on
+  `--surface-sunken` 5.50:1. Floor is 4.5:1.
+
+**Watch for the same collapse elsewhere.** The union makes every status
+mutually exclusive, so anything else keyed on a status member is a candidate for
+the identical bug. Sweep the grid and the progress bar before calling this done,
+and report what you find even if it is nothing.
 
 ### The pre-emptive warning (James, 2026-08-25 — "a warning on the ready screen not to sleep the screen")
 
@@ -336,6 +402,26 @@ Failing test first. Two messages where there is one today.
   have recorded nothing and points at the monitor, which is still counting and is
   now the only place the rower's numbers exist. It must not imply unlocking
   recovers anything, and **must not name a cause** (see above).
+
+**GATE 0 RULINGS ON THIS BANNER (James, 2026-08-25):**
+
+- **Filled red** (`--judge-slower` ground, `--surface` text, 7.94:1), not the
+  sunken variant. Unmissable at arm's length. Note the one risk accepted with
+  it: red also means "slower than target" a column away, so nothing else on
+  these panes may take a filled red treatment.
+- **Cut the copy to the bone.** James, on revision 2's wording: *"Too much
+  prose. Holy fuck why is everything a whole sentence. This is a workout app
+  people aren't going to read a fucking novel of warnings."* Twelve words became
+  three: **`LOST THE MONITOR` / "2 intervals kept."** He also rejected "Nothing
+  new" as reading off — the title already carries that.
+- **`LAST` becomes `LAST SEEN`** on both heroes, and everything stale greys to
+  `--ink-3` together, including the metres. That is the existing house idiom
+  (*"every stale value greys to --ink-3"*), not a new treatment.
+- **The banner does not appear on the pre-row state at all.** With `READY`
+  restored (Task 2), there is nothing for it to say there.
+
+Copy length is a hard constraint on this task, not a preference: a rower reads
+this mid-stroke or not at all.
 
 Binding details the anchor pass established:
 
@@ -475,12 +561,23 @@ docs/TESTING.md governs. Specifics:
    report leg B as confirming the banner without saying which landing it hit.
    Requires a device build carrying the change; build 749 cannot show it.
 
-**Hardware gating, stated rather than left silent:** criteria 9 and 10 both need
-a device build and erg time, and 9 needs two builds. **PR 1 may merge on the
-desk-side criteria (1-8) with 9 and 10 as NAMED POST-MERGE GATES**, tracked in
-ROADMAP as owed walk items — the alternative, blocking the PR on James's
-availability at the erg, is how a phase stalls. The PR body must say plainly
-which criteria were met and which are owed.
+**Hardware gating — RULED BY JAMES, 2026-08-25: "Have the walks block."**
+Criteria 9 and 10 need a device build and erg time, and 9 needs two builds.
+**PR 1 does NOT merge until they are met.** The controller proposed merging on
+the desk-side criteria (1-8) with the walks as post-merge gates; James reversed
+it, and the reversal is the binding version.
+
+The reasoning to respect rather than re-argue: every desk gate this repo has
+checks the app against itself, and this phase exists because a rower lost a
+workout that every one of those gates would have passed. Criterion 10 leg A is
+the ONLY check that the flagship defect is actually fixed on a phone, and
+criterion 9 is the only thing that turns three candidate causes into one. Merging
+without them would ship a fix for a defect we had not confirmed we fixed —
+recurring failure #11, in its purest form.
+
+Consequence to plan for, not to route around: **PR 1 is blocked on James's
+availability at the erg**, so batch the walk with anything else owed on hardware
+rather than asking twice, and do not let the branch rot in the meantime.
 
 ## What revision 1 got wrong
 
