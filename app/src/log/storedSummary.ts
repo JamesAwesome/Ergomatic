@@ -57,6 +57,7 @@ import type { SeriesData } from "../monitor/seriesRecorder.js";
 import { formatLogDate } from "../session/logDraft";
 import {
   buildSpmCell,
+  buildTotalLine,
   formatTimeOfDay,
   MIN_MEASURABLE_ELAPSED_SECONDS,
   rowJudgment,
@@ -165,7 +166,50 @@ export interface StoredLog {
   // structural mirror like `StoredLogStep` above.
   machineWorkSeconds: number | null;
   machineWorkMeters: number | null;
-  machineSummary: { verificationBytes?: number[] } | null;
+  // RC-5 (hero-truth design spec) §1, Task 1: the machine's own average
+  // split, added to `machineSummary`'s narrowed client view alongside the
+  // existing `verificationBytes` key — the SAME additive-jsonb-key
+  // convention (`server/stores/logs.ts`'s own comment: "stored VERBATIM
+  // once validated"), no new column, no migration. Optional: absent on
+  // any row saved before Task 1 shipped, including a build-738-era row
+  // that already carries `machineWorkSeconds`/`machineWorkMeters` but
+  // predates this key entirely — `buildHeroes` below renders NO avg
+  // split hero for that shape, on purpose (never a fallback quotient,
+  // Global Constraints: the PM5 truncates, we round).
+  machineSummary: {
+    verificationBytes?: number[];
+    avgPaceSecondsPer500m?: number;
+  } | null;
+  // RC-1 (storage-spine design spec §3, TRIAD): the session's rest pair,
+  // required-and-nullable — same convention as `machineWorkSeconds` above
+  // (the column is always selected on GET, so "absent" isn't a shape this
+  // row can carry; `null` is the real, common case for any row predating
+  // RC-1, or a phone-timer/manual save, or a monitor close that isn't a
+  // natural "finished" finish — `server/stores/logs.ts`'s own
+  // `LogInput.restSeconds`/`restMeters` comment). Task 3's ONLY rest
+  // source for the TOTAL line's own §2 derivation — see `buildStoredRest`
+  // below for why there is no third, per-actual fallback rung here the
+  // way the live door has (`StoredLogStep` carries no per-step rest
+  // field at all).
+  restSeconds: number | null;
+  restMeters: number | null;
+  // RC-1 (storage-spine design spec §3, TRIAD): the session's WORK pair —
+  // `computeWorkRestSums` (`monitorRun.ts`) writes it for the SAME
+  // `"finished"`-close population `restSeconds`/`restMeters` above are
+  // written for, as an UNCONDITIONAL sum over every actual
+  // (`actuals.reduce((sum, a) => sum + a.elapsedSeconds, 0)`, no
+  // index/sub-threshold filter) — the identical population
+  // `summaryModel.ts`'s `tierBWorkDistanceMeters`/`tierBWorkTimeSeconds`
+  // sum on the live door. Fix round 1 (Task 3 review, IMPORTANT): THIS is
+  // the sound signal `buildHeroes` below now PREFERS over recomputing
+  // from `Σ steps` — see that function's own tier-B comment for why Σ
+  // steps alone can under-count (a null-index actual, or a legacy
+  // warm-up interval, never becomes a step at all) while this pair
+  // cannot, because it is summed directly off `run.actuals`, never off
+  // `steps`/`logSeed`. Required-and-nullable, same convention as
+  // `restSeconds`/`restMeters` above.
+  workSeconds: number | null;
+  workMeters: number | null;
 }
 
 /** §5D: the read-back's own three pieces. `empty` is the "all four null"
@@ -239,20 +283,421 @@ function buildMeta(row: StoredLog): SummaryMeta {
   return meta;
 }
 
-// §5B: "fed by the STORED three; per-cell absence identical" — each
-// field independently `undefined` when its own stored number is `null`,
-// exactly `SummaryHeroes`' own per-hero absence contract (never a
-// fabricated `0:00`/`0 m`). `?? undefined` turns the stored `null` into
-// the interface's own absence value.
+// RC-5 (hero-truth design spec) §1, Task 3: the stored screen's own tier
+// split, parallel to `summaryModel.ts`'s `monitorHeroes` but reading a
+// PERSISTED row rather than a live `MonitorRun` — `StoredLogStep` has no
+// `run.actuals`/`logSeed` to read, only whatever was actually saved.
+//
+//  TIER A — the row carries the machine's own work totals
+//  (`machineWorkSeconds`/`machineWorkMeters`, both non-null and `> 0` —
+//  PR #190). DISTANCE/TIME render verbatim; AVG SPLIT renders the
+//  machine's own `machineSummary.avgPaceSecondsPer500m` (Task 1) — NEVER
+//  a quotient of ours (Global Constraints: the PM5 truncates, we round).
+//  A build-738-era row (machine totals present, `avgPaceSecondsPer500m`
+//  absent — that key predates Task 1) renders NO avg split hero at all,
+//  intentionally (pinned by a dedicated test in `storedSummary.test.ts`
+//  so nobody "fixes" it into a fallback quotient later). Fix round 2
+//  (CRITICAL finding C1): `buildStoredTotalLine` is called with an EMPTY
+//  `stepSums` here too, for the identical reason TIER B1 below is —
+//  `appendSummaryObservations` admits a TERMINATED (`endedBy: "rower"`)
+//  row into tier A, and such a row's RC-1 rest pair is NULL
+//  (`computeWorkRestSums` runs only for `"finished"`) while its abandoned
+//  final interval's own rowed metres can be missing from `steps` (no
+//  0x0037 ever sent for it) — passing the real `stepSums` let
+//  fallback-2 relabel that ROWED WORK as rest.
+//
+//  TIER B1 — no machine totals, but the row carries RC-1's own WORK pair
+//  (`workSeconds`/`workMeters`, both non-null and `> 0` — written by
+//  `computeWorkRestSums`, `monitorRun.ts`, for any `"finished"`-close
+//  monitor row since RC-1 shipped, 2026-08-24). PREFERRED over Σ steps
+//  (fix round 1, Task 3 review, IMPORTANT finding): this pair sums
+//  DIRECTLY off `run.actuals` at save time, unconditionally — the
+//  IDENTICAL population `summaryModel.ts`'s `tierBWorkDistanceMeters`/
+//  `tierBWorkTimeSeconds` sum on the live door, with no null-index or
+//  warm-up exclusion — so it is SOUND where Σ steps (tier B2 below) is
+//  not: a null-index actual, or a legacy warm-up interval, never becomes
+//  a stored step at all (see B2's own comment), but this pair counts it
+//  regardless, because it never goes through `steps`/`logSeed` at all.
+//  AVG SPLIT still comes from `tierBAvgSplitSeconds(row.steps)` — that
+//  computation is UNAFFECTED by the same gap (a null-index actual is
+//  correctly excluded from AVG SPLIT by §1's own rule, and since it never
+//  becomes a step, `tierBAvgSplitSeconds` already excludes it by
+//  construction, the same "not by a check this module has to write"
+//  reasoning B2 relies on). `buildStoredTotalLine` is called with an
+//  EMPTY `stepSums` in this branch (never the real one) — see that
+//  function's own note on why fallback-2 must never fire here: this
+//  branch's hero is already correct and complete, so any excess between
+//  it and Σ steps is exactly the same null-index/warm-up gap, not rest,
+//  and attributing it to the TOTAL line's rest clause would be the same
+//  wrong-number class this whole spec exists to kill, one line lower.
+//
+//  TIER B2 — no machine totals, no RC-1 work pair, at least one stored
+//  step carries `actualMeters`, AND `row.endedBy` is `"finished"`, `null`,
+//  or `undefined` (`isReconstructableClose` below) — **corrected at fix
+//  round 2 (final whole-branch review, IMPORTANT finding I1): the
+//  original comment here claimed this population was "a CLOSED, ~16-day
+//  historical window that cannot grow" — FALSE.** `computeWorkRestSums`
+//  (RC-1's work-pair writer) runs ONLY for `endedBy === "finished"`
+//  (`completeMonitorRun`'s own gate, `monitorRun.ts`), and
+//  `appendSummaryObservations` (the machine-totals writer) admits only
+//  `"finished"`/`"rower"` — so a row closed `"link-lost"`,
+//  `"program-failed"`, `"interrupted"`, OR a `"rower"` terminate whose
+//  burst never arrived can NEVER carry machine totals OR the work pair,
+//  by design, FOREVER — not a closed window, an ONGOING population that
+//  grows with every future interrupted/lost-link session. The
+//  `row.endedBy` GATE ABOVE is the fix: it restricts THIS branch (Σ
+//  steps trusted, fallback-2 rest recovery applied) to the population
+//  that is provably historical — a `"finished"` row reaching here (no
+//  machine totals, no work pair) MUST predate RC-1 (2026-08-24), because
+//  every `"finished"` row saved since then gets the work pair
+//  unconditionally whenever it has any actuals at all (the same reason a
+//  `"finished"` row with `hasStepActuals` true can never lack it) — and
+//  `null`/`undefined` `endedBy` predates Phase LL Task 4 (2026-08-2X,
+//  before RC-1 too). A row whose `endedBy` is one of the four
+//  "incomplete by construction" reasons (RC-1's own ROADMAP row's
+//  phrase) is EXCLUDED from this branch regardless of when it was saved
+//  — see the RISK NOTE below for why, and DECLINE (FALLBACK) for what it
+//  gets instead.
+//  DISTANCE/TIME are Σ `actualMeters`/Σ `actualSeconds` over every step
+//  that carries them. **PARITY CLAIM (fix round 1: TRUE for the
+//  sub-threshold exclusion, FALSE for null-index/warm-up):**
+//    - Sub-threshold parity HOLDS: like the live door, this sum applies
+//      no sub-threshold exclusion (a mis-tap's own tiny reading still
+//      counts toward DISTANCE/TIME here, exactly as `tierBWorkDistanceMeters`
+//      does) — only AVG SPLIT excludes it, below.
+//    - Null-index/warm-up parity DOES NOT HOLD: `logDraft.ts:844-846`
+//      builds `buildMonitorLogSteps`'s `actualByIndex` map ONLY from
+//      actuals whose `index !== null`, so a null-index actual — or a
+//      LEGACY warm-up interval (`buildMonitorLogSteps`'s own "a legacy
+//      warmup seed step produces NO step" rule) — can NEVER produce a
+//      stored step, on ANY row, at any time. Σ steps therefore
+//      UNDER-COUNTS relative to what the live door's `tierBWorkDistanceMeters`/
+//      `tierBWorkTimeSeconds` compute (which sum `run.actuals` directly
+//      and include both), while spec §1 explicitly requires a null-index
+//      actual to STAY counted in DISTANCE/TIME. This is a real, KNOWN,
+//      ACCEPTED gap — but now genuinely bounded, because the `endedBy`
+//      gate above confines this branch to the provably-historical
+//      population (see the RISK NOTE).
+//  AVG SPLIT is ONE quotient (`500 × Σt/Σd`, `tierBAvgSplitSeconds`
+//  below) over the steps whose `actualSeconds` clears
+//  `MIN_MEASURABLE_ELAPSED_SECONDS`; a null-index actual is excluded from
+//  this sum too, but (unlike DISTANCE/TIME) that's the CORRECT behavior
+//  per §1 — the gap above is about DISTANCE/TIME under-counting, not
+//  about AVG SPLIT over-counting.
+//
+//  RISK NOTE — TIER B2's ACCEPTED, TESTED residual, RE-DECIDED at fix
+//  round 2 on the TRUE population (final whole-branch review, IMPORTANT
+//  finding I1's own question: "is trusting Σ steps still right, or
+//  should B2 decline to the stored fused columns?"). No stored field
+//  distinguishes "this row's Σ steps under-counts because of a
+//  null-index/warm-up gap" from "this row's Σ steps is exactly right and
+//  its OWN stored `distanceMeters`/`timeSeconds` are simply the
+//  pre-task-3 FUSED numbers" (`buildStoredRest`'s own fallback-2 rung,
+//  held sound at fix round 1) — both produce the IDENTICAL observable
+//  shape (`stored > Σ steps`), and the two cases want OPPOSITE treatment
+//  (decline vs. shrink-and-derive-rest). Fix round 1's answer ("declines
+//  to decline: B2 keeps computing from Σ steps") rested on the FALSE
+//  "closed, non-growing window" premise — re-decided here on the TRUE
+//  one: **for the population where we CANNOT tell historical from
+//  ongoing (any row whose `endedBy` names an incomplete-by-construction
+//  close), B2 now DECLINES to FALLBACK** (the stored, possibly-fused
+//  columns, unchanged, no rest-line derivation) rather than risk an
+//  ever-growing stream of silent under-counts on interrupted/lost-link
+//  rows — the SAME C1-shaped harm (a rowed interval's own work
+//  relabelled as rest, or simply dropped) this fix round already closed
+//  for tier A. Trusting Σ steps stays RIGHT only for the population where
+//  `endedBy` PROVES the row is historical (`isReconstructableClose`
+//  above) — a genuinely closed, non-growing 2026-08-08..2026-08-24
+//  window, same size as fix round 1 believed the WHOLE population to be.
+//  Pinned, not silent: `storedSummary.test.ts` carries both a
+//  "TIER B2 (SAFE)" case (Σ steps trusted, endedBy finished/null) and a
+//  "TIER B2 DECLINES" case (endedBy link-lost, falls to FALLBACK) so
+//  neither behavior can silently drift into the other.
+//
+//  FALLBACK — no step carries `actualMeters` at all, OR steps carry
+//  `actualMeters` but `row.endedBy` names an incomplete-by-construction
+//  close (the DECLINED tier-B2 population, RISK NOTE above). This covers
+//  every timer/manual-door row (neither door ever writes the field —
+//  their heroes were already work-only before this task and stay
+//  byte-identical), any monitor row predating the 2026-08-08 amendment
+//  entirely, AND — new at fix round 2 — every link-lost/program-failed/
+//  interrupted/burst-less-terminate monitor row, forever: the stored
+//  `avgSplitSeconds`/`timeSeconds`/`distanceMeters` render exactly as
+//  saved, unimproved but never silently wrong. `buildStoredTotalLine` is
+//  called with an EMPTY `stepSums` here too (fix round 2) — a declined
+//  row can still have `stepSums.meters` defined (steps exist, just
+//  distrusted), and passing the real one would let fallback-2 fire on
+//  the SAME gap this branch exists to protect against.
+// Fix round 2 (final whole-branch review, IMPORTANT finding I1): TIER
+// B2's own gate — TRUE for `"finished"`, `null`, and `undefined` (every
+// shape that PROVES this row predates RC-1, 2026-08-24 — see the TIER B2
+// comment block above for why), FALSE for the four close reasons RC-1's
+// own ROADMAP row calls "incomplete by construction": `"rower"` (a
+// terminate whose burst never arrived, so it never became tier A),
+// `"link-lost"`, `"program-failed"`, `"interrupted"`. A row failing this
+// check falls through to FALLBACK instead of trusting Σ steps.
+// Fix round 3 (re-review, Minor): an ALLOWLIST, not a denylist — the
+// earlier `!== "rower" && !== "link-lost" && ...` shape fails OPEN: a
+// FIFTH `CloseReason` added later (`monitorRun.ts:1099` already
+// anticipates one, W8's inactivity auto-terminate) would silently pass
+// this check and re-enter the trusted TIER B2 branch, resurrecting the
+// exact under-count/misattribution bug this fix round closed — no type
+// error, no failing test, just a quiet regression the day that fifth
+// value ships. This form fails CLOSED instead: only the two shapes that
+// PROVE a row historical (`"finished"`, or `null`/`undefined` predating
+// `endedBy` entirely) are trusted; anything else — including a value
+// this union doesn't even know about yet — declines. Byte-identical
+// behavior today (the five current values partition the same way either
+// direction), different behavior the day a sixth value exists.
+function isReconstructableClose(endedBy: StoredLog["endedBy"]): boolean {
+  return endedBy === "finished" || endedBy == null;
+}
+
+function stepActualSums(steps: StoredLogStep[]): {
+  meters?: number;
+  seconds?: number;
+} {
+  let hasMeters = false;
+  let meters = 0;
+  let hasSeconds = false;
+  let seconds = 0;
+  for (const step of steps) {
+    if (step.actualMeters !== undefined) {
+      hasMeters = true;
+      meters += step.actualMeters;
+    }
+    if (step.actualSeconds !== undefined) {
+      hasSeconds = true;
+      seconds += step.actualSeconds;
+    }
+  }
+  return {
+    meters: hasMeters ? meters : undefined,
+    seconds: hasSeconds ? seconds : undefined,
+  };
+}
+
+// Tier B's AVG SPLIT: `500 × Σt/Σd` over pm5-sourced steps whose own
+// `actualSeconds` clears the sub-threshold floor — `MIN_MEASURABLE_
+// ELAPSED_SECONDS`'s own doc comment, `summaryModel.ts`'s
+// `monitorAvgSplit`'s identical rule, generalized to a stored step (the
+// `actualSource === "pm5"` gate is defensive: no other door writes
+// `actualMeters` at all, so a non-pm5 step can never reach this sum in
+// practice, but the check documents the intent rather than relying on
+// that as an unstated accident).
+function tierBAvgSplitSeconds(steps: StoredLogStep[]): number | undefined {
+  let t = 0;
+  let d = 0;
+  for (const step of steps) {
+    if (step.actualSource !== "pm5") continue;
+    if (step.actualSeconds === undefined || step.actualMeters === undefined) {
+      continue;
+    }
+    if (step.actualSeconds < MIN_MEASURABLE_ELAPSED_SECONDS) continue;
+    t += step.actualSeconds;
+    d += step.actualMeters;
+  }
+  return d > 0 ? (500 * t) / d : undefined;
+}
+
+// RC-5 §2, Task 3: the TOTAL line's rest source, on the stored screen.
+// Only TWO rungs — this screen has no per-actual rest field to fall back
+// to (`StoredLogStep` carries none at all — a fact Task 2's own live-door
+// ladder doesn't have to deal with):
+//
+//  1. The RC-1 stored pair, `row.restSeconds`/`row.restMeters` — both or
+//     neither (same all-or-nothing contract `monitorRun.ts`'s own writer
+//     keeps for the pair, `summaryModel.ts`'s `monitorRest` reads).
+//  2. PRE-PR ONLY: derived from the fused stored columns minus Σ steps —
+//     `row.distanceMeters − stepSums.meters` /
+//     `row.timeSeconds − stepSums.seconds` — valid ONLY when the stored
+//     totals EXCEED Σ steps, which can only happen for a row saved
+//     BEFORE this task shipped: a post-task-3 tier-B save posts
+//     `distanceMeters`/`timeSeconds` that already equal Σ steps exactly
+//     (`LogSession.tsx`'s `model.heroes.*`, Task 2's own commit). The
+//     comparison itself IS the pre-PR detector; no separate flag exists
+//     to check, and none is needed. Chosen over omitting this rung
+//     entirely (the brief's stated alternative): most of today's real
+//     stored monitor rows predate this task, and without it they'd show
+//     a work-only hero with no way to recover the rest their own fused
+//     column already proves happened.
+//  3. Neither resolves: no rest clause.
+//
+// Fix round 1 (Task 3 review, IMPORTANT finding), widened at fix round 2
+// (CRITICAL finding C1): rung 2 is SAFE only because its caller controls
+// `stepSums` — `buildHeroes`' TIER A and TIER B1 branches (the machine's
+// own totals; RC-1's own `workSeconds`/`workMeters` pair — BOTH sound and
+// complete on their own) pass an EMPTY `stepSums` here on purpose, so this
+// rung can never fire and misattribute a gap between the hero and Σ steps
+// as rest when that gap is really an abandoned interval's own rowed work
+// (tier A, a terminated row) or a null-index/warm-up actual (tier B1).
+// Only a TIER B2 row whose Σ steps IS the hero passes the real `stepSums`
+// — and, since fix round 2 (finding I1), that is now further gated on
+// `isReconstructableClose(row.endedBy)`: a row whose `endedBy` names an
+// incomplete-by-construction close DECLINES to FALLBACK instead (also an
+// empty `stepSums`) rather than risk this rung firing on a growing,
+// un-bounded population. See the tier-B2/FALLBACK comment block above
+// `stepActualSums` for the full risk/decision writeup.
+function buildStoredRest(
+  row: StoredLog,
+  stepSums: { meters?: number; seconds?: number },
+): { seconds?: number; meters?: number } {
+  if (row.restSeconds !== null && row.restMeters !== null) {
+    return { seconds: row.restSeconds, meters: row.restMeters };
+  }
+  if (
+    stepSums.meters !== undefined &&
+    stepSums.seconds !== undefined &&
+    row.distanceMeters !== null &&
+    row.timeSeconds !== null &&
+    row.distanceMeters > stepSums.meters &&
+    row.timeSeconds > stepSums.seconds
+  ) {
+    return {
+      seconds: row.timeSeconds - stepSums.seconds,
+      meters: row.distanceMeters - stepSums.meters,
+    };
+  }
+  return {};
+}
+
+// RC-5 §2, Task 3: the stored screen's own TOTAL line, built through the
+// SAME exported formatter `summaryModel.ts`'s live screen uses
+// (`buildTotalLine` — the design spec's own "built in one place, not
+// twice" requirement); this function does only the sourcing
+// (`buildStoredRest` above plus the monitor-row gate below), never a
+// second copy of the formatting.
+//
+// `isMonitorRow` gates this OFF for the timer/manual doors, mirroring
+// `SummaryHeroes.totalLine`'s own doc comment ("the manual/timer doors
+// never set it — no rest concept applies to either"): every timer/manual
+// row lands in `buildHeroes`' FALLBACK branch (neither door writes
+// `actualMeters`), which is otherwise ambiguous between "a genuinely
+// door-agnostic fallback row" and "a legacy monitor row predating
+// actualMeters" — `row.deviceName !== null` is the SAME signal
+// `sourceLabel`/`buildMeta` above already use to tell a PM5 row from a
+// TIMER/LOGGED-BY-HAND one. Without this gate, every stored timer/manual
+// row in the database would suddenly grow a spurious "X:XX total" line
+// it never had before and the live door still never renders.
+function buildStoredTotalLine(
+  row: StoredLog,
+  workSeconds: number | undefined,
+  stepSums: { meters?: number; seconds?: number },
+): string | undefined {
+  if (workSeconds === undefined || row.deviceName === null) return undefined;
+  const rest = buildStoredRest(row, stepSums);
+  const totalSeconds = workSeconds + (rest.seconds ?? 0);
+  return buildTotalLine(totalSeconds, rest.meters);
+}
+
+// §5B (extended by RC-5 §1/§2, Task 3): each hero independently
+// `undefined` when its own source has nothing to show (never a
+// fabricated `0:00`/`0 m`) — see this module's own tier comment above
+// for the three branches and their sources.
 function buildHeroes(row: StoredLog): SummaryHeroes {
+  const hasMachineTotals =
+    row.machineWorkSeconds !== null &&
+    row.machineWorkMeters !== null &&
+    row.machineWorkSeconds > 0 &&
+    row.machineWorkMeters > 0;
+  const stepSums = stepActualSums(row.steps);
+
+  if (hasMachineTotals) {
+    // machineWorkSeconds/machineWorkMeters is `number | null`, non-null
+    // and > 0 here by `hasMachineTotals`'s own gate — the `!`s document
+    // that fact, matching this repo's own convention for a fact a
+    // preceding check already established.
+    const distanceMeters = Math.round(row.machineWorkMeters!);
+    const timeSeconds = row.machineWorkSeconds!;
+    const avgSplitSeconds = row.machineSummary?.avgPaceSecondsPer500m;
+    const hasAvgSplit = avgSplitSeconds !== undefined && avgSplitSeconds > 0;
+    return {
+      distanceMeters,
+      time: fmtDuration(timeSeconds / 60),
+      timeSeconds,
+      avgSplit: hasAvgSplit ? fmtSplit(avgSplitSeconds!) : undefined,
+      avgSplitSeconds: hasAvgSplit ? avgSplitSeconds : undefined,
+      // Fix round 2 (final whole-branch review, CRITICAL finding C1): an
+      // EMPTY `stepSums`, not the real one — see TIER B1's own comment a
+      // few lines down for the shared reasoning, which applies here
+      // UNCHANGED. `appendSummaryObservations` admits `endedBy ===
+      // "rower"` (a Menu/End terminate) as well as `"finished"`, so a
+      // TERMINATED row can be tier A while its RC-1 rest pair is NULL
+      // (`computeWorkRestSums` runs ONLY for `"finished"`,
+      // `completeMonitorRun`'s own gate) — and the abandoned final
+      // interval's own actual can arrive with no matching program index
+      // a step was ever built for (its 0x0037 boundary never sends), so
+      // Σ steps under-counts the machine's own `machineWorkMeters` by
+      // exactly that interval's real, ROWED metres. Passing the real
+      // `stepSums` here let fallback-2 relabel that rowed work as rest —
+      // caught by a dedicated tier-A-with-null-rest-pair test below.
+      totalLine: buildStoredTotalLine(row, timeSeconds, {}),
+    };
+  }
+
+  // TIER B1 — RC-1's own work pair, preferred over Σ steps whenever
+  // present (fix round 1: the sound signal the null-index finding asked
+  // for). `stepSums` is deliberately NOT passed to `buildStoredTotalLine`
+  // here — see that function's own note and `buildStoredRest`'s comment
+  // for why fallback-2 must never fire against a hero this branch already
+  // knows is complete.
+  const hasWorkPair =
+    row.workSeconds !== null &&
+    row.workMeters !== null &&
+    row.workSeconds > 0 &&
+    row.workMeters > 0;
+  if (hasWorkPair) {
+    const distanceMeters = Math.round(row.workMeters!);
+    const timeSeconds = row.workSeconds!;
+    const avgSplitSeconds = tierBAvgSplitSeconds(row.steps);
+    return {
+      distanceMeters,
+      time: fmtDuration(timeSeconds / 60),
+      timeSeconds,
+      avgSplit:
+        avgSplitSeconds !== undefined ? fmtSplit(avgSplitSeconds) : undefined,
+      avgSplitSeconds,
+      totalLine: buildStoredTotalLine(row, timeSeconds, {}),
+    };
+  }
+
+  // TIER B2 — no RC-1 work pair; Σ steps is the best (imperfect, see this
+  // module's own tier-B2 comment block above) available signal, trusted
+  // ONLY when `endedBy` proves the row is historical (fix round 2,
+  // `isReconstructableClose`) — otherwise DECLINES to FALLBACK below.
+  const hasStepActuals =
+    row.steps.some((s) => s.actualMeters !== undefined) &&
+    isReconstructableClose(row.endedBy);
+  if (hasStepActuals) {
+    const timeSeconds = stepSums.seconds;
+    const avgSplitSeconds = tierBAvgSplitSeconds(row.steps);
+    return {
+      distanceMeters: stepSums.meters,
+      time:
+        timeSeconds !== undefined ? fmtDuration(timeSeconds / 60) : undefined,
+      timeSeconds,
+      avgSplit:
+        avgSplitSeconds !== undefined ? fmtSplit(avgSplitSeconds) : undefined,
+      avgSplitSeconds,
+      totalLine: buildStoredTotalLine(row, timeSeconds, stepSums),
+    };
+  }
+
+  // FALLBACK — stored heroes, unchanged. Fix round 2: EMPTY `stepSums`
+  // here too (never the real one) — a DECLINED tier-B2 row (steps exist
+  // but `endedBy` is unsafe) can still have `stepSums.meters` defined,
+  // and passing it would let fallback-2 fire on the exact gap this
+  // branch exists to protect against (see the TIER B2/FALLBACK comment
+  // block above `stepActualSums`).
+  const timeSeconds = row.timeSeconds ?? undefined;
   return {
     avgSplit:
       row.avgSplitSeconds !== null ? fmtSplit(row.avgSplitSeconds) : undefined,
     avgSplitSeconds: row.avgSplitSeconds ?? undefined,
-    time:
-      row.timeSeconds !== null ? fmtDuration(row.timeSeconds / 60) : undefined,
-    timeSeconds: row.timeSeconds ?? undefined,
+    time: timeSeconds !== undefined ? fmtDuration(timeSeconds / 60) : undefined,
+    timeSeconds,
     distanceMeters: row.distanceMeters ?? undefined,
+    totalLine: buildStoredTotalLine(row, timeSeconds, {}),
   };
 }
 

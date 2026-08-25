@@ -229,9 +229,12 @@ export interface LogPatch {
 // The list projection (below) explicitly OMITS `steps` AND `series`
 // (series capture spec, 2026-08-19, §3 "List projection": a 720 KB-
 // worst-case trace is dead weight for a list rendering meta + a hero
-// snippet, exactly like `steps` already was — the drift pin in
-// `storeContracts.ts` reads "list = get - steps - series"). This is the
-// shape every column BUT those two produces, named once so `list()`'s
+// snippet, exactly like `steps` already was) AND the `machineSummary`
+// blob (RC-2/RC-3 wave, same size reasoning) — the drift pin in
+// `storeContracts.ts` reads "list = get - steps - series - machineSummary
+// + machineAvgPaceSecondsPer500m" (RC-5 §3, Task 4 added the one derived
+// scalar below). This is the shape every `get()` column produces, minus
+// those three, plus that one derived key, named once so `list()`'s
 // return type reads intentionally rather than as an unlabeled inline
 // object.
 const LOG_LIST_COLUMNS = {
@@ -272,6 +275,25 @@ const LOG_LIST_COLUMNS = {
   // never sized with a 30-row list response in mind).
   machineWorkSeconds: sessionLogs.machineWorkSeconds,
   machineWorkMeters: sessionLogs.machineWorkMeters,
+  // RC-5 (hero-truth design spec) §3, Task 4: ONE scalar projected OUT of
+  // `machineSummary` — a narrow jsonb-path read, not the blob itself,
+  // this task's own option (a) (the plan's stated preference over (b),
+  // omitting AVG SPLIT on tier-A list rows entirely — no migration, no
+  // schema change, `RecentLog`'s own doc comment names the display this
+  // serves). `jsonb_typeof` gates the cast so a malformed stored value
+  // (an authenticated client can post ANYTHING under this key — validated
+  // for size/shape but never for the VALUE, `routes/data.ts`'s
+  // `validateMachineSummary` own comment: "the nine fields ride along
+  // VERBATIM") reads back `null` rather than throwing and 500ing the
+  // WHOLE list query for every row of that user's history — a
+  // non-numeric `avgPaceSecondsPer500m` on ANY row must not be able to
+  // break every OTHER row's list response. `::double precision` (not
+  // `::numeric`) matches `machineWorkSeconds`'s own column type — pg's
+  // node-postgres driver decodes float8 (OID 701) to a real JS number by
+  // default, unlike `numeric` (OID 1700), which decodes as a string.
+  machineAvgPaceSecondsPer500m: sql<
+    number | null
+  >`case when jsonb_typeof(${sessionLogs.machineSummary}->'avgPaceSecondsPer500m') = 'number' then (${sessionLogs.machineSummary}->>'avgPaceSecondsPer500m')::double precision else null end`,
 };
 
 // Log-delete spec (2026-08-18), §2: the newest-wins resolution rule,

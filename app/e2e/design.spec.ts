@@ -1977,11 +1977,16 @@ async function seedInterruptedMonitorRun(page: Page): Promise<void> {
 // (LogSession.test.tsx) — never a hand-built minimum.
 //
 // Every number below is hand-verifiable, not merely "whatever the code
-// says": DISTANCE (R-B, Σ work+rest over ALL actuals incl. the opening
-// piece) =
-// (600+0) + (2000+64) + (10000+0) = 12664 exactly — asserted as an EXACT
-// value below, since this sum is fully within this fixture's own control
-// (no restSeconds lookup involved). The two work intervals' own displayed
+// says": DISTANCE (RC-5, hero-truth: work-only Σ over ALL actuals incl.
+// the opening piece, tier B non-legacy — this fixture's own `logSeed`
+// never carries `kind: "warmup"`) = 600+2000+10000 = 12600 exactly —
+// asserted as an EXACT value below, since this sum is fully within this
+// fixture's own control. R-B's OLD fused formula (which also folded in
+// each actual's `restDistanceMeters`, 0+64+0) produced 12664 — that
+// number is retired as this hero's own value (RC-5 §1); fix round 1's I3
+// also means it can't reach the TOTAL line's rest clause either here,
+// since none of these three actuals carries a `restSeconds` field (see
+// below). The two work intervals' own displayed
 // pace is `actual.avgSplit` VERBATIM (`buildMonitorLogSteps`, logDraft.ts:
 // `step.actualSplit = actual.avgSplit` — the wire-reported reading, never
 // recomputed from elapsed/distance), while the baseline they are judged
@@ -2000,15 +2005,16 @@ async function seedInterruptedMonitorRun(page: Page): Promise<void> {
 // −5.0 against a 125.0 WORKING AVERAGE — same two colors/directions by
 // coincidence, different magnitudes; Phase LT spec 1 task 2 updated the
 // two exact-label assertions below, nothing else about this fixture.)
-// TIME (R-D) sums `elapsedSeconds` (187+600+2400=3187) plus each
-// completed interval's own PROGRAMMED rest — interval 1's restSeconds=300
-// is independently verified by `buildInterruptedMonitorRun`'s own proven
-// "11:00" result (360+300=660) above; the opening piece's and interval 2's
-// own restSeconds are NOT independently known here (no committed capture
-// pins them), so TIME is asserted structurally (`m:ss`, not a bare
-// rounded minute) rather than to an exact value — the honest scope this
-// module's own "CAN THROW"/"SCOPE DECISIONS" header asks every caller to
-// keep to.
+// TIME (RC-5: work-only Σ `elapsedSeconds`, 187+600+2400=3187 -> "53:07")
+// is asserted structurally (`m:ss`, not ending ":00") rather than to an
+// exact value below — a holdover from when this fixture's own TIME
+// summed each completed interval's PROGRAMMED rest too (R-D's old fused
+// formula) and two of the three intervals' own restSeconds were never
+// independently verified; RC-5 retired that formula from the hero
+// entirely (it's Σ elapsedSeconds alone now, fully known), but the
+// structural assertion is kept rather than tightened to an exact value,
+// since it still holds and a future task may find it worth tightening on
+// its own.
 const MONITOR_COMPLETED_ACTUALS: IntervalActual[] = [
   {
     index: 0,
@@ -2158,17 +2164,25 @@ test.describe("today screen (interrupted connected session row)", () => {
       page.getByRole("heading", { name: "Hoarfrost" }),
     ).toBeVisible();
 
-    // The monitor-mode summary's own TIME hero: 360s measured + 300s
-    // Hoarfrost's own programmed rest = 660s = 11:00
-    // (`measuredSessionSeconds`/R-D) — nowhere near the wall-clock gap
-    // between `startedAt` (seeded Aug 1) and `completedAt` (stamped just
-    // now by this very click), which a regression back to wall-clock
-    // reading would show instead. dateLabel reads from `startedAt`, not
-    // `completedAt` (the "Log it" moment, possibly days later).
+    // The monitor-mode summary's own TIME hero (RC-5, hero-truth,
+    // fix round 1): work-only now, 360s measured -> "6:00" — nowhere near
+    // the wall-clock gap between `startedAt` (seeded Aug 1) and
+    // `completedAt` (stamped just now by this very click), which a
+    // regression back to wall-clock reading would show instead. The OLD
+    // fused figure this hero used to render ("11:00" = 360s + Hoarfrost's
+    // own 300s programmed rest) does NOT reappear on the TOTAL line
+    // either: fix round 1's I3 requires EVERY actual to carry BOTH
+    // `restSeconds` and `restDistanceMeters` before deriving a rest
+    // clause, and this seeded actual (`buildInterruptedMonitorRun`) only
+    // ever set `restDistanceMeters: 0` — no `restSeconds` at all — so the
+    // total renders work-only too, "6:00 total", with no rest clause.
+    // dateLabel reads from `startedAt`, not `completedAt` (the "Log it"
+    // moment, possibly days later).
     await expect(page.getByText(/^AUG 1 ·/)).toBeVisible();
     await expect(
-      page.locator(".summary-hero-value", { hasText: "11:00" }),
+      page.locator(".summary-hero-value", { hasText: "6:00" }),
     ).toBeVisible();
+    await expect(page.locator(".summary-total-line")).toHaveText("6:00 total");
 
     const stamped = await page.evaluate(() => {
       const raw = localStorage.getItem("ergomatic.monitorRun");
@@ -4964,11 +4978,18 @@ test.describe("post-workout summary (monitor door, completed — judged rows & m
     expect(value.endsWith(":00")).toBe(false);
   });
 
-  // R-B: Σ(work + rest distance) over ALL actuals incl. the opening piece —
-  // (600+0) + (2000+64) + (10000+0) = 12664 exactly, fully independent of
-  // any restSeconds lookup (this row's own inputs are entirely this
-  // fixture's own numbers).
-  test("§2B DISTANCE: R-B's machine-matching sum — work + rest distance, incl. the opening piece, whole meters", async ({
+  // RC-5 (hero-truth, fix round 1): MONITOR_COMPLETED_ACTUALS carries no
+  // `summaryTotals`, so this row is TIER B, non-legacy (its `logSeed`
+  // never carries `kind: "warmup"`) — DISTANCE is now WORK-ONLY, Σ
+  // `distanceMeters` alone, never R-B's old fused sum: 600+2000+10000 =
+  // 12600, not the fused 12664 (which folded in the opening piece's 0m
+  // and interval 1's 64m rest — those rest metres are no longer read by
+  // this hero at all). None of this fixture's three actuals carries a
+  // `restSeconds` field (only `restDistanceMeters` on two of them), so
+  // fix round 1's I3 completeness gate can't derive a rest clause either
+  // — the TOTAL line renders work-only too, with no clause: Σelapsed
+  // 187+600+2400=3187s -> "53:07 total".
+  test("§2B DISTANCE: work-only Σ, incl. the opening piece, whole meters — the machine's own fused TWD (12664) is no longer this hero", async ({
     page,
   }) => {
     const value = await page
@@ -4977,7 +4998,8 @@ test.describe("post-workout summary (monitor door, completed — judged rows & m
       })
       .locator(".summary-hero-value")
       .innerText();
-    expect(value).toBe("12664");
+    expect(value).toBe("12600");
+    await expect(page.locator(".summary-total-line")).toHaveText("53:07 total");
   });
 
   // Interval 1 (Hoarfrost, avgSplit 150) deviates +18.0 from its OWN 132s

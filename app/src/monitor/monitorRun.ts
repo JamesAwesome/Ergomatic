@@ -727,10 +727,14 @@ function acceptableFinalBoundary(
  * this exact contradiction's own row: DISTANCE and TIME already disagree
  * by design, and this pair inherits the same shape rather than closing
  * it) — concretely, they diverge whenever the FINAL interval's own 0x0037
- * rest reads 0 (every committed capture's last boundary does, since there
- * is no trailing rest left to measure) while its PROGRAMMED rest is
- * nonzero, and whenever an actual's `index` is `null` (contributes to the
- * wire sum here, contributes nothing to the programmed sum there). No
+ * rest reads a value other than its PROGRAMMED rest (RC-5's antagonist
+ * pass CLOSED the earlier claim that this always means "reads 0" — the
+ * exit-7 capture's own last boundary, seq 53, decodes 60s/95m of rest on
+ * the FINAL interval, `docs/monitor/pm5-interface-notes.md` §26 — a
+ * natural finish can leave a real trailing rest reading on the wire even
+ * though no rest was actually taken after it), and whenever an actual's
+ * `index` is `null` (contributes to the wire sum here, contributes
+ * nothing to the programmed sum there). No
  * displayed number reads this function's fields this PR either way — see
  * the "screens do not change" pin — so this is a documentation
  * correction, not a behavior change.

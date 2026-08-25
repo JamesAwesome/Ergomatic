@@ -196,8 +196,21 @@ export const sessionLogs = pgTable(
     // triad-governed stored number does not get to lose precision the
     // summary itself never lost.
     avgSplitSeconds: doublePrecision("avg_split_seconds"),
-    // The R-B number: a plain integer, the machine's whole-meter total
-    // (work + rest + warm-up).
+    // The R-B number: a plain integer, a whole-meter total (fix round 3,
+    // re-review: "the machine's" is no longer accurate for tier B, whose
+    // total is OUR quotient over our own summed actuals, not a single
+    // machine-reported field).
+    // **CORRECTED (RC-5 hero-truth spec, Task 3 fix round 2, finding
+    // I2): this column's MEANING is save-time-dependent, not fixed.**
+    // Originally (R-B, pre-RC-5): work + rest + warm-up, fused. As of
+    // RC-5 (this same phase), `LogSession.tsx` posts the tier-appropriate
+    // WORK-ONLY number instead (`model.heroes.distanceMeters` —
+    // `summaryModel.ts`'s tier A/B split) for every save going forward;
+    // a row saved BEFORE RC-5 shipped still carries the OLD fused value,
+    // read back unchanged (`storedSummary.ts`'s own FALLBACK/declined-
+    // TIER-B2 branches — no migration backfills old rows). `avgSplitSeconds`
+    // above and `timeSeconds` below carry the identical
+    // save-time-dependent split.
     distanceMeters: integer("distance_meters"),
     timeSeconds: doublePrecision("time_seconds"),
     // Plan linkage pair, written ONLY on an advancing save whose

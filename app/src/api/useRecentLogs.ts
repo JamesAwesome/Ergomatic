@@ -45,6 +45,32 @@ export interface RecentLog {
   distanceMeters: number | null;
   planKey: string | null;
   planIndex: number | null;
+  // RC-5 (hero-truth design spec) §3, Task 4: the list's own tier inputs
+  // — `LogRow.tsx`'s tier logic reads these to make the SAME DISTANCE/AVG
+  // SPLIT call `storedSummary.ts`'s `buildHeroes` makes on the detail
+  // screen for the identical row, rather than always showing the OLD
+  // fused `avgSplitSeconds`/`distanceMeters` columns below. Required-and-
+  // nullable, same convention as every other hero field on this
+  // interface (`stores/logs.ts`'s `LOG_LIST_COLUMNS` always selects all
+  // five; null is the common case for a pre-tier row).
+  //
+  // RC-1's own work pair (`server/stores/logs.ts`'s `LOG_LIST_COLUMNS`,
+  // already selected there before this task).
+  workSeconds: number | null;
+  workMeters: number | null;
+  // RC-2/RC-3 wave's own machine totals (same source, already selected).
+  machineWorkSeconds: number | null;
+  machineWorkMeters: number | null;
+  // RC-5 §3, Task 4, option (a): a narrow jsonb-path scalar projected out
+  // of `machineSummary` server-side (`LOG_LIST_COLUMNS`'s own comment) —
+  // the ONE key this screen needs (the machine's own average split) with
+  // no blob and no migration. Absent (`null`) on a build-738-era row
+  // whose machine totals predate this field entirely — `LogRow.tsx`
+  // renders NO avg-split segment then, never a fallback quotient off
+  // `avgSplitSeconds` below (Global Constraints: the PM5 truncates, we
+  // round, and printing our own quotient beside what the detail screen
+  // would show as absent is the exact defect this task exists to kill).
+  machineAvgPaceSecondsPer500m: number | null;
 }
 
 export type RecentLogsState =

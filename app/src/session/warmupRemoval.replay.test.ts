@@ -328,16 +328,23 @@ describe("Phase WU — the two replay pins (task-1-brief.md)", () => {
   // allowed to move, and it moves 128.467 -> 129.772 (2:08.5 -> 2:09.8):
   // the opener was easy, so folding it in makes the session average slower.
   //
-  // DISTANCE and TIME DO NOT MOVE, and that is the load-bearing half of
-  // this pin. Both already counted the warm-up before Phase WU — R-B sums
-  // every actual's work+rest distance and R-D sums every completed
-  // interval's seconds, neither of them ever consulting the interval TYPE —
-  // so retyping interval 0 cannot touch either. If one of them moves, the
-  // removal reached into an accumulator it had no business touching.
+  // DISTANCE and TIME still never consult the interval TYPE, so retyping
+  // interval 0 (warmup -> work) is, on its own, inert to either — that
+  // invariance is unchanged by this comment's rewrite. What DID move the
+  // absolute numbers below is an UNRELATED later task: RC-5 (hero-truth
+  // design spec, 2026-08-25) redefines both heroes for a non-legacy run
+  // (no `logSeed` step carries `kind: "warmup"`, which this replay's own
+  // `CM_PHASES` — every phase retyped `work` — never produces) from R-B/
+  // R-D's OLD fused formulas (work + rest) to WORK-ONLY sums
+  // (`tierBWorkDistanceMeters`/`tierBWorkTimeSeconds`, `summaryModel.ts`).
+  // 1599 (fused) -> 1535 (work-only, Σ100+229+461+500+245); 488.4 (fused,
+  // + 90s programmed rest) -> ~398.4 (work-only Σt, the same number
+  // AVG SPLIT's own `500×Σt/Σd` already used internally — 129.772×1535/500
+  // ≈ 398.38, matching to float precision).
   it("session-2: the retyped opener now counts towards AVG SPLIT", async () => {
     const summary = await buildSummaryForCapture(SESSION_2);
-    expect(summary.heroes.distanceMeters).toBe(1599);
-    expect(summary.heroes.timeSeconds).toBeCloseTo(488.4, 1);
+    expect(summary.heroes.distanceMeters).toBe(1535);
+    expect(summary.heroes.timeSeconds).toBeCloseTo(398.4, 1);
     expect(summary.heroes.avgSplitSeconds).toBeCloseTo(129.772, 2); // 2:09.8
     expect(summary.rows.filter((r) => r.measured)).toHaveLength(5); // 5 work rows
   });
@@ -360,11 +367,14 @@ describe("Phase WU — the two replay pins (task-1-brief.md)", () => {
   // floating-point precision, not merely "close".
   //
   // TIME === AVG SPLIT here is a real identity, not a coincidence: r0 means
-  // zero rest-distance and zero programmed rest, so DISTANCE's `Σ(work +
-  // rest)` (R-B) and AVG SPLIT's own `Σd` both reduce to the SAME 500m
-  // work-only total, and TIME's `Σ work seconds + programmed rest` (R-D)
-  // reduces to plain `Σt` — making AVG SPLIT's `500 × Σt / Σd` equal `Σt`
-  // exactly whenever `Σd` is exactly 500.
+  // zero rest-distance and zero programmed rest, so — whether read through
+  // RC-5's WORK-ONLY DISTANCE/TIME (`tierBWorkDistanceMeters`/
+  // `tierBWorkTimeSeconds`, both plain `Σ` over the actuals, unchanged by
+  // this comment's rewrite) or the OLD fused R-B/R-D formulas this pin
+  // predates — a zero-rest session collapses both readings to the SAME
+  // `Σd`/`Σt`, making AVG SPLIT's `500 × Σt / Σd` equal `Σt` exactly
+  // whenever `Σd` is exactly 500. RC-5 changes nothing about this
+  // particular capture's own numbers for exactly that reason.
   const KEYSTONE_DISTANCE = 500; // measured: 250 + 250, r0, no coast metres
   const KEYSTONE_TIME = 137.9; // measured seconds, Σ elapsed (no programmed rest, r0)
   const KEYSTONE_AVG = 137.9; // measured seconds, 500 × Σt/Σd — equals TIME (see above)

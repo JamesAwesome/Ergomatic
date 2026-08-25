@@ -279,24 +279,37 @@ export function SummaryHeroesBlock({ heroes }: { heroes: SummaryHeroes }) {
     heroes.distanceMeters !== undefined;
   if (!hasHero) return null;
   return (
-    <div className="summary-heroes">
-      {heroes.avgSplit !== undefined && (
-        <div className="summary-hero summary-hero-lead">
-          <span className="summary-hero-label">AVG SPLIT</span>
-          <span className="summary-hero-value">{heroes.avgSplit}</span>
-        </div>
-      )}
-      {heroes.time !== undefined && (
-        <div className="summary-hero">
-          <span className="summary-hero-label">TIME</span>
-          <span className="summary-hero-value">{heroes.time}</span>
-        </div>
-      )}
-      {heroes.distanceMeters !== undefined && (
-        <div className="summary-hero">
-          <span className="summary-hero-label">DISTANCE</span>
-          <span className="summary-hero-value">{heroes.distanceMeters}</span>
-        </div>
+    <div className="summary-heroes-block">
+      <div className="summary-heroes">
+        {heroes.avgSplit !== undefined && (
+          <div className="summary-hero summary-hero-lead">
+            <span className="summary-hero-label">AVG SPLIT</span>
+            <span className="summary-hero-value">{heroes.avgSplit}</span>
+          </div>
+        )}
+        {heroes.time !== undefined && (
+          <div className="summary-hero">
+            <span className="summary-hero-label">TIME</span>
+            <span className="summary-hero-value">{heroes.time}</span>
+          </div>
+        )}
+        {heroes.distanceMeters !== undefined && (
+          <div className="summary-hero">
+            <span className="summary-hero-label">DISTANCE</span>
+            <span className="summary-hero-value">{heroes.distanceMeters}</span>
+          </div>
+        )}
+      </div>
+      {/* RC-5 §2 (hero-truth design spec): the wall-clock total the three
+          heroes above used to fold rest into, now on its own line — right
+          beneath the heroes, unconditionally (no scroll/collapse/lazy
+          render — the design review's own placement requirement: "the
+          total line sitting right underneath" is what stops a rower
+          filing a bug on a heroes total that shrank). Absent whenever
+          `buildTotalLine` had nothing to say (the manual/timer doors, or
+          a monitor row with no measured time at all). */}
+      {heroes.totalLine !== undefined && (
+        <p className="summary-total-line">{heroes.totalLine}</p>
       )}
     </div>
   );

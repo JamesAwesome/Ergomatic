@@ -137,13 +137,30 @@ export interface SummaryMeta {
  *  / 60)` (the formatter takes MINUTES — spec §2's documented trap, easy
  *  to get backwards at a call site that already has raw seconds in
  *  hand). `distanceMeters` already doubles as its own number (no separate
- *  string sibling to pair with). */
+ *  string sibling to pair with).
+ *
+ *  RC-5 (hero-truth design spec, 2026-08-25) §1: on the monitor door,
+ *  these three are now ONE population — work only — whatever the row's
+ *  tier: tier A (the row carries the machine's own `summaryTotals`)
+ *  renders them verbatim, including the machine's OWN `avgSplit` (never a
+ *  quotient of ours); tier B computes the identical three quantities from
+ *  the row's own actuals. See `monitorHeroes` in this module for the
+ *  tier split itself.
+ *
+ *  `totalLine` (§2): the wall-clock total — the number DISTANCE/TIME
+ *  above used to fold rest into, before this task — on its OWN line,
+ *  built by the exported `buildTotalLine` (the ONE place the string is
+ *  formatted; `storedSummary.ts`'s stored-row screen reuses it rather
+ *  than a second copy). Absent only when there is no total to show at
+ *  all (the manual/timer doors never set it — no rest concept applies to
+ *  either). */
 export interface SummaryHeroes {
   avgSplit?: string;
   avgSplitSeconds?: number;
   time?: string;
   timeSeconds?: number;
   distanceMeters?: number;
+  totalLine?: string;
 }
 
 /** A judged row's deviation vs. a baseline split — the shape itself stays
@@ -545,16 +562,28 @@ function warmupIndex(run: MonitorRun): number {
   return run.logSeed?.steps.findIndex((s) => s.kind === "warmup") ?? -1;
 }
 
-/** R-B: DISTANCE = Σ(work + rest distance) over ALL actuals
- *  — the erg-checkable total (0x0037's own Interval Rest Distance, task 2's
- *  wire addition). `restDistanceMeters` reads `?? 0` per that field's own
+/** THE FUSED TOTAL (work + rest distance), Σ(work + rest) over ALL
+ *  actuals — the erg-checkable total (0x0037's own Interval Rest
+ *  Distance). `restDistanceMeters` reads `?? 0` per that field's own
  *  documented contract: a `MonitorRun.actuals` entry persisted before the
  *  field existed loads back `undefined` at runtime despite the type saying
  *  `number` (`domain/monitor/types.ts`'s own comment on
- *  `IntervalActual.restDistanceMeters`) — this is the first consumer of
- *  that contract. Absent (not `0`) when the sum is not `> 0` — no actuals
- *  at all, or a degenerate all-zero-distance run — per §2B's "no `0 m`"
- *  rule. */
+ *  `IntervalActual.restDistanceMeters`). Absent (not `0`) when the sum is
+ *  not `> 0` — no actuals at all, or a degenerate all-zero-distance run —
+ *  per §2B's "no `0 m`" rule.
+ *
+ *  RC-5 (hero-truth design spec) §1: this is R-B's ORIGINAL formula, and
+ *  it used to BE the DISTANCE hero for every monitor row. It no longer is
+ *  — `tierBWorkDistanceMeters` below is the tier B hero now (work only).
+ *  **Fix round 1 (I3):** this function survives for exactly ONE caller
+ *  now — a LEGACY wu-carrying run's own DISTANCE hero, which must not
+ *  move under a record already shown to the rower (§1's warm-up ruling,
+ *  `isLegacyWarmupRun`). It is deliberately NOT used to derive the TOTAL
+ *  line's rest clause any more — that subtraction (`fused - Σwork`) was
+ *  identical to `Σ(restDistanceMeters ?? 0)`, the exact partial-sum shape
+ *  `monitorRun.ts:738-750` forbids by name; `monitorRest` below derives
+ *  from the actuals directly instead, gated on every actual actually
+ *  carrying the field. */
 function monitorDistanceMeters(run: MonitorRun): number | undefined {
   let total = 0;
   for (const actual of run.actuals) {
@@ -563,7 +592,7 @@ function monitorDistanceMeters(run: MonitorRun): number | undefined {
   return total > 0 ? Math.round(total) : undefined;
 }
 
-/** R-D: TIME = Σ work seconds + programmed rest for completed intervals —
+/** THE FUSED TOTAL (work + programmed rest for completed intervals) —
  *  `monitorRun.ts`'s `measuredSessionSeconds` (review
  *  finding 3: this used to be a byte-for-byte duplicate of that module's
  *  `interruptedTotalSeconds`, a formula with its own OPEN hardware finding
@@ -574,10 +603,150 @@ function monitorDistanceMeters(run: MonitorRun): number | undefined {
  *  ("James's recorded rule, generalized from the interrupted branch") —
  *  this call site is not itself about an interrupted run, which is why it
  *  reaches for the neutral name rather than the original. Absent when the
- *  sum is not `> 0` (no `0:00`). */
+ *  sum is not `> 0` (no `0:00`).
+ *
+ *  RC-5 §1: this is R-D's ORIGINAL formula, and it used to BE the TIME
+ *  hero. **Fix round 1 (I2):** it is NOT the TOTAL line's own wall-clock
+ *  number any more either — I2's own finding was that feeding the TOTAL
+ *  line's seconds through THIS function (programmed rest) while its
+ *  metres derived from the WIRE's measured rest put two different rest
+ *  populations under one line (`monitorRun.ts:718-733` names exactly when
+ *  they diverge). `buildMonitorTotalLine` above builds the total from
+ *  this row's own work seconds plus `monitorRest`'s measured figure
+ *  instead. This function survives for exactly ONE caller now, like
+ *  `monitorDistanceMeters` above: a LEGACY wu-carrying run's own (unmoved)
+ *  TIME hero. */
 function monitorTimeSeconds(run: MonitorRun): number | undefined {
   const total = measuredSessionSeconds(run);
   return total > 0 ? total : undefined;
+}
+
+/** RC-5 §1: a legacy (pre-Phase-WU) stored run — `warmupIndex(run) !== -1`
+ *  — whose DISTANCE/TIME must not move under a record already shown to
+ *  the rower (`warmupIndex`'s own KEEP comment). Every run this app can
+ *  build today fails this check (`warmupIndex` returns -1), so it only
+ *  ever fires for a genuinely old `MonitorRun` still sitting unlogged. */
+function isLegacyWarmupRun(run: MonitorRun): boolean {
+  return warmupIndex(run) !== -1;
+}
+
+/** RC-5 §1: tier B's DISTANCE, WORK ONLY — Σ `actual.distanceMeters` over
+ *  EVERY actual, no rest term. No wu exclusion here (a legacy wu run
+ *  never reaches this function — `isLegacyWarmupRun` routes it to
+ *  `monitorDistanceMeters` above instead) and no null-index/sub-threshold
+ *  exclusion either: §1's corrected exclusions keep those readings IN
+ *  DISTANCE/TIME (the meters genuinely happened; only AVG SPLIT judges
+ *  them, via `monitorAvgSplit` below, unchanged). Absent when the sum is
+ *  not `> 0`. */
+function tierBWorkDistanceMeters(run: MonitorRun): number | undefined {
+  let total = 0;
+  for (const actual of run.actuals) total += actual.distanceMeters;
+  return total > 0 ? Math.round(total) : undefined;
+}
+
+/** RC-5 §1: tier B's TIME, WORK ONLY — Σ `actual.elapsedSeconds` over
+ *  EVERY actual, no programmed-rest term. Same exclusion rules (none) as
+ *  `tierBWorkDistanceMeters` above, for the identical reason. Not rounded
+ *  (matching `monitorTimeSeconds`'s own convention — every committed
+ *  wire reading is a whole number in practice; `MachineSummaryDetail`'s
+ *  own tier A sibling can be fractional too, e.g. 24.3). Absent when the
+ *  sum is not `> 0`. */
+function tierBWorkTimeSeconds(run: MonitorRun): number | undefined {
+  let total = 0;
+  for (const actual of run.actuals) total += actual.elapsedSeconds;
+  return total > 0 ? total : undefined;
+}
+
+/** RC-5 §2, CORRECTED at fix round 1 (I2/I3 — the pass proved the original
+ *  cut mixed two rest populations under one line, and its metres-only
+ *  derivation recreated the exact partial-sum shape `monitorRun.ts:738-750`
+ *  forbids by name). Resolves rest SECONDS and rest METRES TOGETHER, as
+ *  ONE pair, through ONE priority ladder — never seconds through R-D's
+ *  programmed-rest formula while metres derives from the wire (I2's own
+ *  finding: "two different rest populations under one line").
+ *
+ *   1. RC-1's stored `run.restSeconds`/`run.restMeters` — written together
+ *      or not at all (`monitorRun.ts`'s own `computeWorkRestSums`:
+ *      "restSeconds"/"restMeters are NOT unconditional ... the rest PAIR
+ *      is all-or-nothing"). Checking one is checking both by that same
+ *      writer's own contract; this function checks both anyway, defensively.
+ *   2. Otherwise DERIVED from the actuals — summed ONLY when EVERY actual
+ *      in `run.actuals` carries BOTH `restSeconds` AND `restDistanceMeters`
+ *      (I3's fix). This is deliberately NOT "distance-minus-work" any
+ *      more: that subtraction was identical to `Σ (restDistanceMeters ??
+ *      0)` — the exact partial sum the design spec forbids, since it
+ *      silently reads a genuinely-missing reading as a real zero. A run
+ *      with even one actual missing either field (the synthesized-final
+ *      fallback's own documented gap, `IntervalActual.restSeconds`'s own
+ *      doc comment; a real shape on this app's committed e2e fixtures)
+ *      derives NOTHING, on purpose.
+ *   3. Neither field resolves: the TOTAL line renders with no rest clause,
+ *      and (RC-5 §2) its own total-seconds figure is then just this row's
+ *      work seconds alone — an honest "we don't know the rest" reading,
+ *      never a fabricated one. */
+function monitorRest(run: MonitorRun): { seconds?: number; meters?: number } {
+  if (run.restSeconds !== undefined && run.restMeters !== undefined) {
+    return { seconds: run.restSeconds, meters: run.restMeters };
+  }
+  const complete =
+    run.actuals.length > 0 &&
+    run.actuals.every(
+      (a) => a.restSeconds !== undefined && a.restDistanceMeters !== undefined,
+    );
+  if (!complete) return {};
+  let seconds = 0;
+  let meters = 0;
+  for (const actual of run.actuals) {
+    // `?? 0` is defense-in-depth, not a reachable branch: `complete` above
+    // already proved every actual's `restSeconds`/`restDistanceMeters` is
+    // defined, so the fallback can never fire here — the same documented,
+    // deliberately-uncovered shape `monitorRun.ts`'s own
+    // `computeWorkRestSums` keeps for the identical reason.
+    seconds += actual.restSeconds ?? 0;
+    meters += actual.restDistanceMeters ?? 0;
+  }
+  return { seconds, meters };
+}
+
+/** RC-5 §2: the TOTAL line's own total-seconds figure — this row's own
+ *  WORK seconds (`workSeconds`, whatever the caller's tier already
+ *  computed as the TIME hero's own number — machine-verbatim on tier A,
+ *  work-only Σ on tier B) plus `monitorRest`'s resolved rest seconds, when
+ *  resolvable. Absent when `workSeconds` itself is absent (nothing to
+ *  build a total from at all). */
+function buildMonitorTotalLine(
+  run: MonitorRun,
+  workSeconds: number | undefined,
+): string | undefined {
+  const rest = monitorRest(run);
+  const totalSeconds =
+    workSeconds !== undefined ? workSeconds + (rest.seconds ?? 0) : undefined;
+  return buildTotalLine(totalSeconds, rest.meters);
+}
+
+/** RC-5 §2's TOTAL line — ONE formatter, exported so Task 3's stored-row
+ *  screen renders the identical string rather than a second hand-rolled
+ *  copy (the design spec's own "built in one place, not twice"
+ *  requirement). Takes the already-RESOLVED pair — `totalSeconds` (the
+ *  wall-clock total, work + rest, however the caller's own door/tier
+ *  computed it) and `restMeters` (already resolved through §2's own
+ *  priority order, e.g. `monitorRest` above) — this function does
+ *  no sourcing of its own, only formatting. House style: middle dot,
+ *  "coasting" never "during" (the rower's own correction, design review
+ *  2026-08-25), no em-dash. Absent entirely when there's no total to show
+ *  at all (never a `0:00 total`); the rest clause independently drops
+ *  whenever `restMeters` is absent or not `> 0` — a genuine no-rest run
+ *  renders the total alone, never a `0 m` that implies a measurement
+ *  neither side actually has. */
+export function buildTotalLine(
+  totalSeconds: number | undefined,
+  restMeters: number | undefined,
+): string | undefined {
+  if (totalSeconds === undefined || totalSeconds <= 0) return undefined;
+  const total = `${fmtDuration(totalSeconds / 60)} total`;
+  return restMeters !== undefined && restMeters > 0
+    ? `${total} · plus ${Math.round(restMeters)} m coasting in rest`
+    : total;
 }
 
 /** R-C: AVG SPLIT = `500 × Σt/Σd` over measured WORK rows. Post-Phase-WU
@@ -620,18 +789,77 @@ function monitorAvgSplit(run: MonitorRun): WorkingAverage {
   return weightedAverage(rows);
 }
 
-function monitorHeroes(
-  run: MonitorRun,
-  avgSplit: WorkingAverage,
-): SummaryHeroes {
-  const timeSeconds = monitorTimeSeconds(run);
+/** RC-5 §1: TIER A when the row carries the machine's own work totals —
+ *  `run.summaryTotals` (RC-3, `MachineSummaryDetail`'s sibling field:
+ *  written together as a pair by `appendSummaryObservations`, never one
+ *  without the other — `MonitorRun.summaryTotals`'s own type,
+ *  `{ workElapsedSeconds: number; workDistanceMeters: number }`, has no
+ *  optional half). DISTANCE/TIME render `summaryTotals` VERBATIM, and AVG
+ *  SPLIT renders the machine's OWN `avgPaceSecondsPer500m`
+ *  (`run.summaryDetail`, Task 1) — NEVER a quotient of ours (Global
+ *  Constraints: the PM5 truncates, we round). `summaryDetail` can be
+ *  absent even when `summaryTotals` is present (a build-738-era record,
+ *  `LogSession.tsx`'s own comment) — AVG SPLIT is simply absent then,
+ *  never a fallback quotient. **Fix round 1, I4:** `avgSplit` ALSO gates
+ *  on the machine's own totals being real (`> 0`) — a burst that arrived
+ *  with nothing measured (`summaryTotals` both zero, the "0 OF N
+ *  INTERVALS MEASURED" hardware shape) must not render a lone AVG SPLIT
+ *  off `summaryDetail` alone: a row with no work at all has no average to
+ *  report, whatever `summaryDetail` happens to carry.
+ *
+ *  TIER B (everything else): the SAME three quantities, computed from
+ *  this row's own actuals — DISTANCE/TIME work-only
+ *  (`tierBWorkDistanceMeters`/`tierBWorkTimeSeconds`) UNLESS this is a
+ *  legacy wu-carrying run (`isLegacyWarmupRun`), which keeps the OLD
+ *  fused numbers unchanged (§1's warm-up ruling: "moving a number on a
+ *  record already shown to the rower"). AVG SPLIT is `monitorAvgSplit`,
+ *  UNCHANGED by this task either way — it was already work-only,
+ *  excluding wu/null-index/sub-threshold readings, before RC-5.
+ *
+ *  The TOTAL line (§2): this row's own TIME hero seconds plus
+ *  `monitorRest`'s resolved rest (`buildMonitorTotalLine` above) — on
+ *  EITHER tier. **Fix round 1, I6:** a LEGACY wu-carrying run gets NO
+ *  total line at all — its DISTANCE/TIME heroes already ARE the fused
+ *  (work+rest) numbers (the carve-out immediately above), so a total line
+ *  restating the identical figure with a rest clause on top would double
+ *  the rest that hero already counts once. Only tier A and non-legacy
+ *  tier B rows — the two shapes whose heroes are genuinely work-only —
+ *  get a total line at all. */
+function monitorHeroes(run: MonitorRun): SummaryHeroes {
+  if (run.summaryTotals !== undefined) {
+    const distanceMeters = Math.round(run.summaryTotals.workDistanceMeters);
+    const timeSecondsRaw = run.summaryTotals.workElapsedSeconds;
+    const hasTotals = distanceMeters > 0 && timeSecondsRaw > 0;
+    const avgSplitSeconds = run.summaryDetail?.avgPaceSecondsPer500m;
+    const hasAvgSplit =
+      hasTotals && avgSplitSeconds !== undefined && avgSplitSeconds > 0;
+    const timeSeconds = timeSecondsRaw > 0 ? timeSecondsRaw : undefined;
+    return {
+      distanceMeters: distanceMeters > 0 ? distanceMeters : undefined,
+      time:
+        timeSeconds !== undefined ? fmtDuration(timeSeconds / 60) : undefined,
+      timeSeconds,
+      avgSplit: hasAvgSplit ? fmtSplit(avgSplitSeconds) : undefined,
+      avgSplitSeconds: hasAvgSplit ? avgSplitSeconds : undefined,
+      totalLine: buildMonitorTotalLine(run, timeSeconds),
+    };
+  }
+  const avgSplit = monitorAvgSplit(run);
+  const legacy = isLegacyWarmupRun(run);
+  const distanceMeters = legacy
+    ? monitorDistanceMeters(run)
+    : tierBWorkDistanceMeters(run);
+  const timeSeconds = legacy
+    ? monitorTimeSeconds(run)
+    : tierBWorkTimeSeconds(run);
   return {
     avgSplit:
       avgSplit.seconds !== undefined ? fmtSplit(avgSplit.seconds) : undefined,
     avgSplitSeconds: avgSplit.seconds,
     time: timeSeconds !== undefined ? fmtDuration(timeSeconds / 60) : undefined,
     timeSeconds,
-    distanceMeters: monitorDistanceMeters(run),
+    distanceMeters,
+    totalLine: legacy ? undefined : buildMonitorTotalLine(run, timeSeconds),
   };
 }
 
@@ -692,8 +920,7 @@ function monitorWorkRows(run: MonitorRun): SummaryRow[] {
 }
 
 function buildMonitorModel(run: MonitorRun): SummaryModel {
-  const avgSplit = monitorAvgSplit(run);
-  const heroes = monitorHeroes(run, avgSplit);
+  const heroes = monitorHeroes(run);
   const rows = monitorWorkRows(run);
 
   const iso =

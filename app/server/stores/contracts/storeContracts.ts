@@ -1046,8 +1046,14 @@ export function describeStoreContracts(
         // matching key, not the assertion shape. RC-2/RC-3 wave:
         // `machineSummary` joins them the same deliberate way (a ~2KB
         // worst-case blob, same size-based exclusion) — `LOG_LIST_COLUMNS`'s
-        // own comment names the reason.
-        it("the list projection is exactly get()'s key set minus steps minus series minus machineSummary — no column silently drops out", async () => {
+        // own comment names the reason. RC-5 (hero-truth design spec) §3,
+        // Task 4: the pin updates a SECOND deliberate way — the list
+        // projection now carries ONE key `get()` does NOT have at its top
+        // level (`machineAvgPaceSecondsPer500m`, a narrow jsonb-path
+        // scalar read OUT of the still-excluded `machineSummary` blob),
+        // so the expected-key set is `get()`'s keys minus the three
+        // exclusions, PLUS this one derived key.
+        it("the list projection is exactly get()'s key set minus steps minus series minus machineSummary, plus the derived machineAvgPaceSecondsPer500m scalar — no column silently drops out", async () => {
           const stores = await makeStores();
           const userId = await stores.makeUser();
           const { id } = await stores.logs.create(
@@ -1060,8 +1066,62 @@ export function describeStoreContracts(
             .filter(
               (k) => k !== "steps" && k !== "series" && k !== "machineSummary",
             )
+            .concat("machineAvgPaceSecondsPer500m")
             .sort();
           expect(Object.keys(listRow).sort()).toStrictEqual(expectedKeys);
+        });
+
+        // RC-5 §3, Task 4: the scalar itself — present when the blob
+        // carries the key, `null` when the blob is absent, and (the
+        // defensive case `LOG_LIST_COLUMNS`'s own `jsonb_typeof` gate
+        // exists for) `null` rather than a thrown/500 query when the
+        // stored value under that key is NOT a number — the trust
+        // boundary `validateMachineSummary` (routes/data.ts) deliberately
+        // leaves open ("the nine fields ride along VERBATIM").
+        it("list rows carry machineAvgPaceSecondsPer500m derived from machineSummary, never the blob itself", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          await stores.logs.create(
+            userId,
+            logInput({
+              machineSummary: { avgPaceSecondsPer500m: 124.1 },
+            }),
+          );
+          const [listRow] = await stores.logs.list(userId, 10);
+          expect(listRow).toMatchObject({
+            machineAvgPaceSecondsPer500m: 124.1,
+          });
+          expect(listRow).not.toHaveProperty("machineSummary");
+        });
+
+        it("list rows read back machineAvgPaceSecondsPer500m as null when machineSummary carries no such key (a build-738-era row)", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          await stores.logs.create(
+            userId,
+            logInput({
+              machineSummary: { verificationBytes: [1, 2, 3] },
+            }),
+          );
+          const [listRow] = await stores.logs.list(userId, 10);
+          expect(listRow).toMatchObject({
+            machineAvgPaceSecondsPer500m: null,
+          });
+        });
+
+        it("list() does not throw, and reads back null, when a stored avgPaceSecondsPer500m is not a number (an authenticated client can post anything under this key — validateMachineSummary never checks the VALUE)", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          await stores.logs.create(
+            userId,
+            logInput({
+              machineSummary: { avgPaceSecondsPer500m: "not-a-number" },
+            }),
+          );
+          const list = await stores.logs.list(userId, 10);
+          expect(list[0]).toMatchObject({
+            machineAvgPaceSecondsPer500m: null,
+          });
         });
       });
 

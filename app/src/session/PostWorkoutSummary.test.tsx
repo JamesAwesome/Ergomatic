@@ -229,6 +229,31 @@ describe("PostWorkoutSummary — heroes (§2B)", () => {
     expect(screen.queryByText("TIME")).not.toBeInTheDocument();
     expect(screen.queryByText("DISTANCE")).not.toBeInTheDocument();
   });
+
+  // RC-5 §2 (hero-truth design spec, 2026-08-25): the TOTAL line renders
+  // right beneath the heroes, in the same viewport (placement is a
+  // requirement, not a nicety) — no scroll, no collapse, no lazy render.
+  it("renders the TOTAL line right beneath the heroes when the model supplies one", () => {
+    renderSummary({
+      model: monitorModel({
+        heroes: {
+          avgSplit: "2:04.0",
+          time: "2:04",
+          distanceMeters: 500,
+          totalLine: "4:04 total · plus 242 m coasting in rest",
+        },
+      }),
+    });
+    expect(
+      screen.getByText("4:04 total · plus 242 m coasting in rest"),
+    ).toBeInTheDocument();
+  });
+
+  it("omits the TOTAL line when the model has none (e.g. the timer/manual doors, which never set one)", () => {
+    renderSummary();
+    expect(screen.queryByText(/coasting in rest/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/\btotal\b/)).not.toBeInTheDocument();
+  });
 });
 
 describe("PostWorkoutSummary — reflection card (§2D)", () => {

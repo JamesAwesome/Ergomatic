@@ -190,6 +190,13 @@ const LOGS: RecentLog[] = [
     distanceMeters: null,
     planKey: null,
     planIndex: null,
+    // RC-5 §3, Task 4: null is the common default (a pre-tier row) — this
+    // suite never exercises the list's tier logic itself.
+    workSeconds: null,
+    workMeters: null,
+    machineWorkSeconds: null,
+    machineWorkMeters: null,
+    machineAvgPaceSecondsPer500m: null,
   },
   {
     id: "log-2",
@@ -205,6 +212,11 @@ const LOGS: RecentLog[] = [
     distanceMeters: null,
     planKey: null,
     planIndex: null,
+    workSeconds: null,
+    workMeters: null,
+    machineWorkSeconds: null,
+    machineWorkMeters: null,
+    machineAvgPaceSecondsPer500m: null,
   },
   {
     id: "log-3",
@@ -220,6 +232,11 @@ const LOGS: RecentLog[] = [
     distanceMeters: null,
     planKey: null,
     planIndex: null,
+    workSeconds: null,
+    workMeters: null,
+    machineWorkSeconds: null,
+    machineWorkMeters: null,
+    machineAvgPaceSecondsPer500m: null,
   },
 ];
 
@@ -1782,6 +1799,11 @@ describe("Today (LAST THREE)", () => {
           distanceMeters: null,
           planKey: null,
           planIndex: null,
+          workSeconds: null,
+          workMeters: null,
+          machineWorkSeconds: null,
+          machineWorkMeters: null,
+          machineAvgPaceSecondsPer500m: null,
         },
       ],
     });
@@ -1812,6 +1834,11 @@ describe("Today (LAST THREE)", () => {
           distanceMeters: null,
           planKey: null,
           planIndex: null,
+          workSeconds: null,
+          workMeters: null,
+          machineWorkSeconds: null,
+          machineWorkMeters: null,
+          machineAvgPaceSecondsPer500m: null,
         },
       ],
     });
