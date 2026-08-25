@@ -41,7 +41,12 @@ screen is derived here; every comparison against it lives in the findings below.
 ### SCREEN — piece 3, phone (four frames, in the order they were seen)
 
 1. `phone-lost-live.png` — the connected screen on unlock. Header
-   `□ PM5 432331249 Row · LOST`. Banner: **LOST THE MONITOR / "Row on. The erg
+   `□ PM5 432331249 Row · LOST`. **`· LOST` here is NOT evidence that the link
+   dropped** (delta pass, 2026-08-25): the app-lifecycle listener sets
+   `frameSilence: true` on EVERY foreground event unconditionally
+   (`useMonitorSession.ts:2653`), retracting only after the hysteresis window.
+   That banner is our own resume code, not the device. Anyone citing this photo
+   for the link's state is citing us. Banner: **LOST THE MONITOR / "Row on. The erg
    is still counting and End keeps what we saw."** Progress `0m`. LAST `0:00.0`
    over `2:06.0 2K +6`; LAST `0` over `24 SPM`; UP NEXT `FINISH`; EST LEFT `8:24`.
 2. `phone-lost-end-form.png` — after tapping END. INTERVALS shows the single row

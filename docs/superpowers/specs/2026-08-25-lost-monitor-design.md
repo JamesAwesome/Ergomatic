@@ -50,6 +50,22 @@ downstream of it:**
    `LOGGED BY HAND`. The rower rowed. We did not hear them. Neither of those is
    "logged by hand".
 
+**Which evidence carries which claim**, because these are not equally proven and
+the spec should not launder one into the other:
+
+- **The proximate defect is PROVEN**, not merely a surviving candidate:
+  `createMonitorRun`'s single call site inside the ready gate, `closeRecord`'s
+  `if (run === null …) return`, the walk's END form reading `TARGETS ONLY ·
+  NOTHING MEASURED`, the saved row reading `LOGGED BY HAND`, and James's own
+  tester report at `ROADMAP.md:3271` naming the pre-row state directly.
+- **`run === null` as the specific `monitorModeRun` condition that fired is
+  ELIMINATION, not observation.** That function has five null-producing
+  conditions, and the `LOGGED BY HAND` row alone is consistent with all five —
+  it is the pre-row-state observation that pins it. Task 1's third bullet exists
+  because we cannot currently tell which fired, and it makes the next occurrence
+  say so.
+- **The CAUSE of the zero is not established at all.** See below.
+
 ## Scope
 
 **In:** the pre-row state's honesty on the connected surface (prominence and
@@ -95,12 +111,19 @@ the 2026-08-20 ruling's scope — see Task 1.
 
 ## What we do NOT know, and must not assert
 
-**No copy, comment or PR body may state a cause for the zero.** Two producers
-have the identical symptom and we have not distinguished them:
+**No copy, comment or PR body may state a cause for the zero — and that includes
+Task 2's warning, which revision 2 violated.** THREE producers have the identical
+symptom and we have not distinguished them:
 
 - iOS/WebKit delivered no frames while suspended.
 - Frames arrived and the ready gate refused them (it needs `rowingActive` AND
   increasing distance; a rower who stops before unlocking supplies neither).
+- **The link dropped while suspended** (delta pass — revision 2's enumeration
+  missed this one). Apple, PRIMARY, via the research doc's §D2b: *"If the
+  connection to the peripheral is lost while your app is suspended, you won't be
+  aware that any disconnection occurred until your app resumes to the
+  foreground."* The walk's own provenance row for piece 3 says `none (link
+  lost)` — but see Task 1 on why the `· LOST` banner is not evidence for this.
 
 Against the platform explanation: `pm5-interface-notes.md:4663` records a
 15-20 s screen lock NOT dropping the GATT link, with *"the session resumed
@@ -142,6 +165,36 @@ self-diagnosing:
   (`2026-08-20-ble-connection-management.md` §D9 item 4). This is what turns the
   instrumentation into the probe.
 
+### The readout must exist on the PHONE, in the never-rowed case (delta pass, BLOCKING)
+
+Revision 2 planned to write all of the above into the existing diagnostics ring.
+**In the flagship case that ring cannot be read on a device**, and the spec did
+not check:
+
+- `useMonitorSession.ts:2296` writes the durable stash inside
+  `if (runRef.current !== null)`. In the never-started case that is `null` by
+  definition, so `ergomatic:last-rowed-log` **is never written**.
+- `LogSession.tsx:743`'s `MonitorLogRow` renders only when that key exists — its
+  own comment: *"a session that never rowed has no key at mount and none ever
+  materializes later either."*
+- `RecordingDownloadRow` (`:691`) gates on a dev-only global, absent from every
+  production build.
+- The other key is `sessionStorage` with a console-only readout, and there is no
+  console on iOS — the walk README's own provenance row for piece 3 reads
+  `Diagnostics ring | none (no console on iOS)`.
+
+So a phase whose entire subject is the never-rowed session planned to instrument
+it into a store that is run-gated, session-scoped and console-only.
+
+**Required:** write the diagnostics unconditionally (a third key, or lift the
+run gate), in **`localStorage`** as §D1e originally specified and NOT
+`sessionStorage` — a WebContent process kill is one of §D1e's own three outcomes
+and would destroy session-scoped evidence, i.e. the instrument would erase
+exactly the result it was built to catch. Render a copy affordance that does not
+require a run. **Criteria 8 and 9 are unsatisfiable until this exists**, and
+without it the next pocketed phone costs another walk, which is the whole reason
+Task 1 exists.
+
 ### The probe (James, 2026-08-25 — fold §D1e in rather than defer it)
 
 `2026-08-20-ble-connection-management.md` §D1e specifies it and its own closing
@@ -170,12 +223,54 @@ do drain on resume (§D2a's INFERENCE, explicitly unestablished), the ready gate
 could open retroactively and the row would be RECOVERED rather than apologised
 for — which is a thing correct resume alone cannot do.
 
+### The probe's own procedure, corrected (delta pass, MAJOR)
+
+Revision 2 inherited §D1e's wording verbatim and did not check it against what
+the conclusion needs. Three corrections, all binding:
+
+- **Run it in BOTH states, and say which is which.** §D1e's *"Row, background
+  the app"* opens the record first, which tests the drain but makes the ready
+  gate irrelevant. This spec's justification is the opposite state — retroactive
+  ready-gate opening, which only exists BEFORE the first pull. Both are wanted;
+  neither substitutes for the other. Label each run.
+- **The rower must KEEP ROWING throughout the background window.** For a drained
+  backlog to open the ready gate it must contain frames carrying a pull.
+  Backgrounding and resting produces a frame count that says something about the
+  drain and nothing about the gate. §D1e does not say this and neither did
+  revision 2 — recurring failure #13, an operator instruction nobody checked
+  against what it must produce.
+- **A frame count alone cannot separate the outcomes** (delta pass, MAJOR). It
+  must be reported alongside:
+  - **The stamp SERIES, not just the total.** "JS ran" and "backlog drained"
+    give the same count; only the distribution separates them — and because the
+    wall clock stamps at PROCESSING time, a drain reads as a hole then a burst,
+    which looks like §D1e's "JS was frozen". Say which instrument discriminates
+    which outcome.
+  - **Connection state and any disconnect event on resume.** A low or zero count
+    is equally consistent with the link having dropped, and Apple (PRIMARY, the
+    research doc's §D2b) says you cannot know until resume: *"If the connection
+    to the peripheral is lost while your app is suspended, you won't be aware
+    that any disconnection occurred until your app resumes to the foreground."*
+    Without this the central outcome is triply ambiguous.
+  - **A denominator.** `pm5-interface-notes.md:137-138` (0x0034 default 500 ms)
+    and `:4152` (~2 Hz, and the PM5 notifies even while merely `armed`) give
+    ~120 frames per 60 s. Report observed against expected over the
+    wall-clock-measured window, never a bare number.
+
 **Existing weak evidence against the drain, which the probe must be able to
-overturn:** on the 2026-08-25 walk the gate never opened. A drained backlog from
-during the row would have carried `rowingActive` and rising distance, which is
-exactly what opens it. That is what "nothing drained" looks like — but no frames
-were counted, so it is suggestive only. **Report the frame count, not just the
-verdict**, so a null result is distinguishable from an unrun probe.
+overturn:** on the 2026-08-25 walk the gate never opened, and a drained backlog
+from during the row would have carried `rowingActive` and rising distance. That
+leg SURVIVED the delta pass — the resume handler
+(`useMonitorSession.ts:2649-2661`) latches `frameSilence` and marks the transport
+suspect but does not tear down the driver, unsubscribe, or reset the streak, so a
+backlog would genuinely reach the gate. **But it is not evidence about §D2a**,
+because if the link was down there was never a backlog at all. Suggestive, and
+about at most one of the three candidates.
+
+**And do not read `· LOST` in `phone-lost-live.png` as evidence about the link:**
+that same handler sets `frameSilence: true` on EVERY foreground event
+unconditionally (`:2653`), retracting only after the hysteresis window. The
+banner in that photo is our own resume code, not the device.
 
 This ships in PR 1 because it is diagnostic only, it is small, and the next
 pocketed phone should not cost another walk.
@@ -195,15 +290,30 @@ warning can still change the outcome.
 
 Constraints on it, all of which the wording must respect:
 
-- **It is not "the screen may sleep".** Keep-awake is already armed for the
-  whole connected flow, so the screen will not sleep on its own. The only way
-  into this failure is a deliberate power-button lock (or switching apps). Say
-  the true thing, not the plausible one.
-- **It must not promise sufficiency.** We have NOT established that keeping the
-  app foregrounded is enough, only that being backgrounded is where the loss
-  happened. State what we know — we hear the erg only while the app is on
-  screen — and promise nothing beyond it. This is the same no-asserting-a-cause
-  rule as Task 3.
+- **It is not "the screen may sleep".** Keep-awake is armed for the whole
+  connected flow, so a screen timeout is not the route in. **But its EFFICACY is
+  INFERENCE, not vetted ground** (delta pass moved this off): the plugin sets
+  `UIApplication.shared.isIdleTimerDisabled`, Apple's documentation for that
+  property could not be retrieved, so whether Low Power Mode or any other state
+  overrides it is UNESTABLISHED; the native arm is armed fire-and-forget with no
+  catch (`ConnectedInterstitial.tsx:283`), so an arming failure is silent; and
+  the web arm is best-effort and may be a no-op. Say the true thing, not the
+  plausible one, and do not build copy that depends on keep-awake never failing.
+- **It must be TRUE UNDER BOTH PRODUCERS, and revision 2's own licensed wording
+  was not** (delta pass, BLOCKING). Revision 2 licensed *"we hear the erg only
+  while the app is on screen"* — that is producer #1 stated as fact, in shipped
+  copy, in the same document that forbids asserting a cause and in the same PR
+  whose probe exists to decide between the two. If §D2a's drain holds, that
+  sentence scolds a rower about a non-problem and teaches them a false model of
+  the app. **The wording must hold whichever way the probe lands**: say what the
+  app can be relied on to WATCH, or point at the erg's own memory as the
+  backstop, rather than claiming what it can or cannot hear. If no such wording
+  survives Gate 0, the warning waits for the probe rather than shipping a guess.
+- **It must not imply the outcome is wholly in the rower's hands.** An incoming
+  call, Siri, and a WebContent process kill all background the app with no rower
+  action — and `releaseNotes.ts:158` already names *"a phone call taking the app
+  to the background"* as a shipped cause of the lost banner. Copy that only warns
+  about locking is incomplete, and blames the rower for cases they did not cause.
 - **It must not become a permanent scold.** Most rowers never lock the phone,
   and a warning shown every session on a screen seen every session is noise
   that gets tuned out — at which point it stops working for the rower who
@@ -240,9 +350,20 @@ Binding details the anchor pass established:
   sub-second actual, giving a banner that says we kept an interval and a summary
   that says `TARGETS ONLY · NOTHING MEASURED`. `targetsOnlyCaption` is already a
   one-rule-two-screens precedent (`storedSummary.ts:895`) — follow it.
-- **`releaseNotes.ts:155` quotes this banner's current behaviour in a shipped
-  release note.** Changing the copy leaves that note describing something that no
-  longer exists. Reconcile it in the same PR.
+- **Two shipped release notes describe this area and BOTH need checking**
+  (revision 2 cited the wrong line and over-claimed; delta pass, MODERATE). The
+  v0.17.0 items are at `releaseNotes.ts:155` and `:156`, not `:155` as the
+  version key:
+  - `:155` quotes the **eyebrow and the freeze** — *"LOST THE MONITOR appears,
+    the live numbers visibly freeze instead of pretending"* — and names *"a
+    phone call taking the app to the background"* as a cause. It does NOT quote
+    the body sentence Task 3 rewrites, so it may remain accurate; check rather
+    than assume, and note it also contradicts any warning copy implying the
+    rower controls all the ways this happens.
+  - `:156` says *"Ending a session under the lost banner stores it as
+    link-lost"* and already carries a 2026-08-23 correction. **Task 4 can
+    falsify this one**, because in the never-started case nothing is stored at
+    all. Reconcile it with whichever Task 4 option is taken.
 
 ## Task 4 — A connected session that recorded nothing must not pose as hand-logged
 
@@ -253,13 +374,31 @@ The honest options, in preference order. **Pick one, justify it in the PR, and d
 not silently take the cheapest:**
 
 1. **Carry the door.** The manual-door save learns it came from the connected
-   door and posts a close reason, so the stored row can say what it is. This is a
-   write-path and stored-shape change — genuinely TRIAD, and the only option that
-   fixes the STORED record as well as the live screen.
+   door and posts something that lets the stored row say what it is. **"Post a
+   close reason" is NOT yet a decidable option** (delta pass, MAJOR) — both
+   candidate fields are determined wrong as they stand, and this option is not
+   choosable until the PR names a field, a value, and a migration:
+   - **`endedBy`** is a Postgres `pgEnum` of exactly five values
+     (`server/db/schema.ts:68-74`; client union `monitorRun.ts:51`), and **none
+     of them means "connected, never saw a pull"**. `link-lost` asserts a cause
+     this spec forbids. A sixth value is a migration the spec never mentioned,
+     subject to the Drizzle timestamp-ordering trap — and it would render
+     nothing anyway, because `buildLinkLostLine` (`storedSummary.ts:881`) is a
+     deliberate equality check on `"link-lost"` whose own comment explains it is
+     not a negation precisely so a future sixth value cannot silently start
+     rendering.
+   - **`deviceName`** flips `sourceLabel` (`storedSummary.ts:252`) to the erg's
+     name on a row with zero measured data, and additionally grants it a
+     `timeLabel`. That claims PM5 provenance for numbers that came off nothing —
+     the same provenance/close-reason fusion this task forbids, running in the
+     opposite direction.
 2. **Live screen only, stored row explicitly left wrong.** Correct what the rower
-   sees at save time and accept that the stored row keeps reading
-   `LOGGED BY HAND`. Cheaper, and **only acceptable if the PR states the
-   consequence in plain words** rather than implying both screens are fixed.
+   sees at save time and accept the stored row keeps reading `LOGGED BY HAND`.
+   Acceptable at PR 1's scope, and **only if the PR states the full cost in plain
+   words**: the stored row is permanently and unbackfillably indistinguishable
+   from a genuine hand-log — there is no other stored signal and nothing can
+   reconstruct it later — **for this row and every earlier one**. That honest
+   statement is what makes option 1's migration worth its price or not.
 
 **`LINK LOST` must NOT become a `sourceLabel` value.** `sourceLabel` answers
 "where did these numbers come from"; `endedBy` answers "how did this close". They
@@ -302,23 +441,46 @@ docs/TESTING.md governs. Specifics:
    sufficient. Its frequency is whatever Gate 0 chose.
 4. The banner never claims to have kept anything when nothing was measured, and
    names no cause.
-5. One exported predicate decides "measured anything", consumed by both the
-   banner and the caption.
+5. One exported RULE decides "measured anything", consumed by both the banner and
+   the caption. Note the two consumers hold different shapes — `targetsOnlyCaption`
+   takes `SummaryRow[]` (`summaryModel.ts:1108`), `isMonitorRowMeasurable` takes a
+   `LogStep` (`:872`), and the banner renders from `session.actuals:
+   IntervalActual[]` (`ConnectedSurface.tsx:456`) or, in the flagship case, no run
+   at all. So this is one rule plus one adapter per consumer, **with the adapters
+   tested against each other**, not one function called twice.
 6. A connected session that recorded nothing does not present as hand-logged on
    the live summary; and the PR states plainly whether the STORED row is fixed
    too or left wrong.
 7. All three exits still offered, `Log against plan` included and undemoted.
 8. `endSession` closing nothing, and `monitorModeRun` returning null, each leave
    a ring entry naming why; the ring carries a wall clock.
-9. **The §D1e probe is run and reported with FRAME COUNTS**, both with and
-   without `bluetooth-central`, so a null result is distinguishable from an
-   unrun probe. The report says which of §D1e's three outcomes occurred, and
-   whether §D2a's drain inference held. No plist change is merged either way.
-10. **A phone walk with two separate legs**, because they exercise different code:
-   **lock BEFORE the first pull** (the nothing-measured branch, this spec's
-   flagship) and **lock MID-PIECE** (the something-measured branch). A single leg
-   reported as covering both is the oracle-blindness the anchor pass flagged.
+9. **The §D1e probe is run and reported with a STAMP SERIES, a link-state
+   readout, and an observed-against-expected frame count** (~2 Hz over the
+   wall-clock window), both with and without `bluetooth-central`, and in both
+   the before-first-pull and mid-row states, with the rower rowing throughout.
+   A bare count does not satisfy this — see Task 1 for why each instrument is
+   needed. **Stated pass/fail for the drain question:** §D2a HELD if frames
+   covering the background window are delivered within a few seconds of resume
+   at close to the expected count; FAILED if the window's frames never arrive.
+   Anything between is reported as ambiguous, with the numbers, and settles
+   nothing. No plist change is merged either way.
+10. **A phone walk with three named outcomes, not two legs assumed to be two
+   branches.** Leg A: **lock BEFORE the first pull** — this spec's flagship, the
+   nothing-measured branch. Leg B: **lock MID-PIECE** — which may not be a defect
+   at all, and has THREE possible landings the two-branch banner does not name:
+   the continuity rule continues the run (cumulative wire registers mean no
+   metres lost), or it returns `"reset"` and closes the record as `link-lost`,
+   moving the surface to `ended` **while the rower is still rowing**, or the
+   something-measured banner shows as designed. **Record which occurred**; do not
+   report leg B as confirming the banner without saying which landing it hit.
    Requires a device build carrying the change; build 749 cannot show it.
+
+**Hardware gating, stated rather than left silent:** criteria 9 and 10 both need
+a device build and erg time, and 9 needs two builds. **PR 1 may merge on the
+desk-side criteria (1-8) with 9 and 10 as NAMED POST-MERGE GATES**, tracked in
+ROADMAP as owed walk items — the alternative, blocking the PR on James's
+availability at the erg, is how a phase stalls. The PR body must say plainly
+which criteria were met and which are owed.
 
 ## What revision 1 got wrong
 

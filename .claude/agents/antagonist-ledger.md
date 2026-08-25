@@ -3153,3 +3153,82 @@ targetSplit:null}` reproduces the recorded tx exactly and `divergences` stays
   measurement. **PR 1 still ships no plist change.** Note §D1e's own closing line —
   "Do not write a spec that assumes either answer" — which revision 1 violated in both
   directions at once.
+
+## Phase LM delta pass (revision 2), 2026-08-25 — "the instrument that cannot be read"
+
+- **"Task 1 adds ring entries so the next occurrence is self-diagnosing."** The
+  entries are real; the readout does not exist. `ergomatic:last-rowed-log` is
+  written only inside `if (runRef.current !== null)` (`useMonitorSession.ts:2296`),
+  `MonitorLogRow` renders only when that key exists (`LogSession.tsx:743`, its own
+  comment: "a session that never rowed has no key at mount and none ever
+  materializes later either"), `RecordingDownloadRow` gates on a dev-only global
+  (`:691`), and the walk README's own provenance table says piece 3 had "none (no
+  console on iOS)". So a phase whose entire subject is the never-rowed session
+  planned to instrument it into a store that is run-gated, session-scoped and
+  console-only. §D1e had specified `localStorage`; substituting "the existing ring"
+  is what introduced it. **Technique: for any "we will instrument it" claim, trace
+  the READOUT to the device, not the write. Find the export affordance's own render
+  gate and ask whether the failure under study satisfies it — the anchor pass's
+  read-the-constructor's-gate rule, applied one layer further out.**
+
+- **A spec can forbid asserting a cause in one section and license the assertion as
+  user-facing copy in another.** §"What we do NOT know" named two producers and
+  refused to choose; Task 2's warning constraints then licensed "State what we know
+  — we hear the erg only while the app is on screen", which is producer #1 stated as
+  fact, in shipped copy, in the same PR whose probe exists to decide between them —
+  quoting §D1e's "Do not write a spec that assumes either answer" two pages earlier.
+  **Technique: after a spec adds a no-asserting-a-cause rule, grep its own later
+  sections for the cause. The rule and its violation are usually separated by enough
+  pages that neither author nor reviewer holds both at once.**
+
+- **A probe's procedure and its justification can describe different machine states.**
+  §D1e's verbatim procedure opens "Row, background the app" — the record is already
+  open. The spec's reason for running it was retroactive READY-gate opening, which
+  only exists before the first pull. It also never said the rower must keep rowing
+  while backgrounded, without which a drained backlog carries no pull and cannot
+  open the gate. **Technique: for any inherited procedure, state the starting STATE
+  it produces and check it against the state the conclusion needs. A verbatim quote
+  is not a checked instruction (recurring failure #13).**
+
+- **A frame count is not one measurement.** It cannot separate "JS ran" from
+  "backlog drained" (only the stamp distribution can, and a processing-time stamp
+  makes a drain look like a freeze); it cannot separate "no frames delivered" from
+  "the link dropped while suspended" (Apple, PRIMARY, §D2b: you do not learn of a
+  disconnect until resume) without a link-state readout the probe did not have; and
+  it is uninterpretable with no denominator — `pm5-interface-notes.md:4152` gives
+  ~2 Hz even while merely armed, so ~120 frames per 60 s is the expectation.
+  **Technique: before accepting a scalar as an oracle, write the outcomes it must
+  distinguish and check that each maps to a different value of THAT scalar. Two
+  outcomes sharing a value is a mirror with extra steps.**
+
+- **"Post a close reason" is not a decision until the field and the value exist.**
+  Task 4's option 1 had two candidate fields and both were determined wrong:
+  `endedBy`'s five values (`schema.ts:68-74`) contain none meaning "connected, never
+  saw a pull", a sixth is a pgEnum migration the spec never mentioned, and
+  `buildLinkLostLine` (`storedSummary.ts:881`) is a deliberate equality check that
+  would render it invisibly; while `deviceName` alone flips `sourceLabel`
+  (`storedSummary.ts:252`) to the erg's name on a row with zero measured data — the
+  same provenance/close-reason fusion the spec forbids, inverted. **Technique: for
+  any "store what it is" option, enumerate the writable fields, read each one's
+  READER, and check the stored enum's actual members. An option with no legal value
+  is not the cheap option, it is not an option.**
+
+- **A photograph can record our own code rather than the world.** `· LOST` in
+  `phone-lost-live.png` proves nothing about the link: the app-lifecycle listener
+  sets `frameSilence: true` on EVERY foreground event unconditionally
+  (`useMonitorSession.ts:2653`), retracting only after the hysteresis window.
+  **Technique: before reading a banner in a capture as evidence about the device,
+  find every unconditional writer of the state behind it.**
+
+- **Attacked and NOT broken (added to Phase LM's vetted ground):** the app-lifecycle
+  resume path does not tear down the driver, unsubscribe, or reset the ready-gate
+  streak (`useMonitorSession.ts:2649-2661`), so a drained backlog would genuinely
+  reach the gate — the spec's "the gate would have opened" leg survives; the PM5
+  notifies at ~2 Hz while merely armed (`pm5-interface-notes.md:4152`), so a frame
+  count is meaningful even if the rower stops; and the proximate defect
+  (`run === null`, phase never left `ready`) is PROVEN rather than merely surviving
+  elimination. **Moved OFF the vetted ground:** "keep-awake means the screen will
+  not sleep on its own" — the anchor vetted the SPAN, not the EFFICACY, which is
+  INFERENCE (the plugin sets `UIApplication.shared.isIdleTimerDisabled`; Apple's own
+  documentation for that property could not be retrieved this session), is armed
+  fire-and-forget with no catch on the native arm, and is best-effort on the web arm.
