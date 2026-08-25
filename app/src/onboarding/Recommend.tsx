@@ -13,12 +13,13 @@ import {
   type Cardio,
   type Experience,
 } from "../../domain/estimateBaseline.js";
-import { BaselineRow } from "../you/BaselineEditor";
+import BaselineField from "../you/BaselineField";
 import {
   MAX_SPLIT,
   MIN_SPLIT,
   initDraft,
   nudge,
+  setDraft,
   type DraftState,
 } from "../you/baselineDraft";
 import OptionGroup from "./OptionGroup";
@@ -340,8 +341,16 @@ function ReadyRecommend({
   );
 }
 
-/** Door 1's "Adjust the numbers first": the editor's fields (BaselineRow,
- *  the real component) prefilled with the recommendation. Save semantics —
+/** Door 1's "Adjust the numbers first": the editor's own unified fields
+ *  (`BaselineField`, the real component) prefilled with the
+ *  recommendation. Since the one-control round (2026-08-24) those fields
+ *  are TYPABLE as well as nudgeable — reaching 1:58 from a 2:25 prefill
+ *  used to cost 54 taps here, because this was the one surface with no
+ *  keypad. This step is NEVER empty: a prefilled number is PROPOSED, not
+ *  unset, so it renders at full accent strength. Dimming means "not a
+ *  value at all" — it is never how this app says "we suggested this", and
+ *  the offer step the rower just came from is where the fill's provenance
+ *  is named. Save semantics —
  *  THE PREFILL-PROVENANCE ANSWER, walked against the ORIGIN ruling
  *  (provenance describes where the NUMBER came from, never the act):
  *  - a server-null side always rides the body (this flow exists to fill
@@ -380,7 +389,11 @@ function AdjustStep({
     const patch: BaselinesPatch = {};
     for (const which of ["k2", "k6"] as const) {
       const server = which === "k2" ? baselines.k2Seconds : baselines.k6Seconds;
-      const draft = state.draft[which];
+      // `!`: this step initialises from the prefill, which is always a
+      // number (an existing baseline or the fill), and nothing here can
+      // clear a field back to unset — so the draft cannot be null. It is
+      // the one baseline surface with no empty state at all.
+      const draft = state.draft[which]!;
       if (server === null) {
         // Always written: filling this side is what the flow is FOR.
         patch[which === "k2" ? "k2Seconds" : "k6Seconds"] = draft;
@@ -411,18 +424,31 @@ function AdjustStep({
         <StepDots filled={3} />
       </div>
       <h1 className="screen-title onb-title">Adjust your starting baseline</h1>
-      <BaselineRow
-        label="2k"
-        seconds={state.draft.k2}
-        onFaster={() => setState((s) => nudge(s, "k2", -1))}
-        onSlower={() => setState((s) => nudge(s, "k2", 1))}
-      />
-      <BaselineRow
-        label="6k"
-        seconds={state.draft.k6}
-        onFaster={() => setState((s) => nudge(s, "k6", -1))}
-        onSlower={() => setState((s) => nudge(s, "k6", 1))}
-      />
+      <p className="onb-body">
+        Tap a value to type it, or nudge with minus and plus.
+      </p>
+      <div className="baseline-row">
+        <span className="baseline-label">2k</span>
+        <BaselineField
+          label="2k"
+          seconds={state.draft.k2}
+          seed={prefill.k2}
+          onType={(v) => setState((s) => setDraft(s, "k2", v))}
+          onNudge={(d) => setState((s) => nudge(s, "k2", d))}
+          className="baseline-input"
+        />
+      </div>
+      <div className="baseline-row">
+        <span className="baseline-label">6k</span>
+        <BaselineField
+          label="6k"
+          seconds={state.draft.k6}
+          seed={prefill.k6}
+          onType={(v) => setState((s) => setDraft(s, "k6", v))}
+          onNudge={(d) => setState((s) => nudge(s, "k6", d))}
+          className="baseline-input"
+        />
+      </div>
       {error && <p className="baseline-error">{error}</p>}
       <div className="onb-foot">
         <button

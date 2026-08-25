@@ -382,8 +382,20 @@ describe("Recommend (door 1)", () => {
       expect(
         screen.getByRole("heading", { name: "Adjust your starting baseline" }),
       ).toBeInTheDocument();
-      expect(screen.getByText("2:25.0")).toBeInTheDocument();
-      expect(screen.getByText("2:32.0")).toBeInTheDocument();
+      // Input VALUES since the one-control round — this step's fields are
+      // typable now, not display spans. And PROPOSED, never empty: a
+      // prefilled recommendation is a real value at full strength, so it
+      // carries no placeholder at all.
+      const k2 = screen.getByRole("textbox", { name: "2k split" });
+      const k6 = screen.getByRole("textbox", { name: "6k split" });
+      expect(k2).toHaveValue("2:25.0");
+      expect(k6).toHaveValue("2:32.0");
+      expect(k2).not.toHaveAttribute("placeholder");
+      expect(
+        screen.getByText(
+          "Tap a value to type it, or nudge with minus and plus.",
+        ),
+      ).toBeInTheDocument();
     });
 
     it("a nudged field saves manual; the untouched prefilled field saves estimated (ORIGIN rule)", async () => {
@@ -426,6 +438,81 @@ describe("Recommend (door 1)", () => {
       });
     });
 
+    // The one-control round: this step had no keypad at all, so reaching
+    // 1:58 from a 2:25 prefill cost 54 stepper taps. The prefill-
+    // provenance predicate is about the VALUE, not the act, so typing has
+    // to resolve through it exactly as nudging does — including the case
+    // that could only be reached by nudging before: landing back on the
+    // fill's own number.
+    it("adjust: typing a different number saves manual — the same answer a nudge gives", async () => {
+      const save = mockReady();
+      await renderRecommend();
+      await answerBoth();
+      await userEvent.click(
+        screen.getByRole("button", { name: "Adjust the numbers first" }),
+      );
+      await userEvent.type(
+        screen.getByRole("textbox", { name: "2k split" }),
+        "158",
+      );
+      await userEvent.click(
+        screen.getByRole("button", { name: "Save baseline" }),
+      );
+      expect(save).toHaveBeenCalledExactlyOnceWith({
+        k2Seconds: 118,
+        k2Source: "manual",
+        k6Seconds: 152,
+        k6Source: "estimated",
+      });
+    });
+
+    it("adjust: the 6k field types too — each side wires its own handler", async () => {
+      const save = mockReady();
+      await renderRecommend();
+      await answerBoth();
+      await userEvent.click(
+        screen.getByRole("button", { name: "Adjust the numbers first" }),
+      );
+      await userEvent.type(
+        screen.getByRole("textbox", { name: "6k split" }),
+        "212",
+      );
+      await userEvent.click(
+        screen.getByRole("button", { name: "Save baseline" }),
+      );
+      expect(save).toHaveBeenCalledExactlyOnceWith({
+        k2Seconds: 145,
+        k2Source: "estimated",
+        k6Seconds: 132,
+        k6Source: "manual",
+      });
+    });
+
+    it("adjust: typing AWAY and back to the prefill saves estimated still — origin is the value's, and the keypad must not change that answer", async () => {
+      const save = mockReady();
+      await renderRecommend();
+      await answerBoth();
+      await userEvent.click(
+        screen.getByRole("button", { name: "Adjust the numbers first" }),
+      );
+      const k2 = screen.getByRole("textbox", { name: "2k split" });
+      await userEvent.type(k2, "230");
+      await userEvent.tab();
+      expect(k2).toHaveValue("2:30.0");
+      // Back to the table cell's own 2:25 by typing it — the value the
+      // fill proposed, so its source stands.
+      await userEvent.type(k2, "225");
+      await userEvent.click(
+        screen.getByRole("button", { name: "Save baseline" }),
+      );
+      expect(save).toHaveBeenCalledExactlyOnceWith({
+        k2Seconds: 145,
+        k2Source: "estimated",
+        k6Seconds: 152,
+        k6Source: "estimated",
+      });
+    });
+
     it("an already-set side prefils with the SERVER value and, untouched, stays out of the body; the missing side saves its derived fill (M8 + F1)", async () => {
       const save = mockReady({ k2Seconds: null, k6Seconds: 130 });
       await renderRecommend();
@@ -435,8 +522,12 @@ describe("Recommend (door 1)", () => {
       );
       // Prefilled with the rower's own 130 (2:10.0) and the derived 123
       // (2:03.0) — never the cell's numbers.
-      expect(screen.getByText("2:10.0")).toBeInTheDocument();
-      expect(screen.getByText("2:03.0")).toBeInTheDocument();
+      expect(screen.getByRole("textbox", { name: "6k split" })).toHaveValue(
+        "2:10.0",
+      );
+      expect(screen.getByRole("textbox", { name: "2k split" })).toHaveValue(
+        "2:03.0",
+      );
       await userEvent.click(
         screen.getByRole("button", { name: "Save baseline" }),
       );

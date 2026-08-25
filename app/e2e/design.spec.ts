@@ -3557,13 +3557,85 @@ test.describe("you screen", () => {
     );
     expect(bodyBg).toBe("rgb(244, 241, 232)"); // --page
 
-    // The typed field (Option T) keeps the accent value ink the old
+    // The typed field keeps the accent value ink the retired
     // `.baseline-value` span carried — 5.94:1 on --surface, measured.
     const baselineValueColor = await page
       .locator(".baseline-input")
       .first()
       .evaluate((el) => getComputedStyle(el).color);
     expect(baselineValueColor).toBe("rgb(181, 52, 31)"); // --accent
+  });
+
+  // The honest-empty round (2026-08-24). This account has NO baselines —
+  // the state the "you" screenshot captures — so both fields are empty and
+  // the seed is showing as a placeholder. The distinction James reported
+  // missing has to be visible in the RENDERED pixels, not just in the DOM:
+  // placeholder ink is --ink-4 (5.29:1 on --surface, computed), value ink
+  // is --accent, and the two must not be the same colour.
+  test("an unset baseline's placeholder renders in the dim ink, not the accent a saved value gets", async ({
+    page,
+  }) => {
+    const field = page.locator(".baseline-input").first();
+    await expect(field).toHaveValue("");
+    await expect(field).toHaveAttribute("placeholder", "2:25.0");
+
+    const { value, placeholder } = await field.evaluate((el) => ({
+      value: getComputedStyle(el).color,
+      placeholder: getComputedStyle(el, "::placeholder").color,
+    }));
+    expect(placeholder).toBe("rgb(111, 106, 95)"); // --ink-4, 5.29:1
+    expect(placeholder).not.toBe(value);
+  });
+
+  // The unified control, on the surface that had no steppers at all — and
+  // the tap-target/axe sweeps above only ever see it in its unset state,
+  // so this drives it into the materialised one and re-sweeps.
+  test("the steppers reached the You editor: the first tap materialises the seed exactly, and the sweeps still pass with a value in the field", async ({
+    page,
+  }) => {
+    const field = page.locator(".baseline-input").first();
+    await expect(field).toHaveValue("");
+
+    await page.getByRole("button", { name: "2k faster" }).click();
+
+    // The seed itself (2:25.0), never 2:24.5.
+    await expect(field).toHaveValue("2:25.0");
+    await expect(field).not.toHaveAttribute("placeholder", /./);
+    await assertTapTargets(page);
+    await assertNoA11yViolations(page);
+  });
+
+  // MIN_SPLIT is 25 half-second taps below the seed, so this drives the
+  // real control to its own floor rather than seeding one: the dead-end
+  // button must dim, keep its 44×44 target, and stay out of axe's way.
+  test("a dead-end stepper at MIN_SPLIT is aria-disabled and dimmed, and still passes the tap-target and axe sweeps", async ({
+    page,
+  }) => {
+    const field = page.locator(".baseline-input").first();
+    const faster = page.getByRole("button", { name: "2k faster" });
+    // 1:00.0 from an empty field: one tap materialises 2:25.0, then 170
+    // half-second taps reach the 60s floor. Typing gets there in three
+    // keystrokes, which is the point of the round — do that instead.
+    await field.click();
+    await field.pressSequentially("100");
+    await page.getByRole("button", { name: "2k slower" }).click();
+    await page.getByRole("button", { name: "2k faster" }).click();
+    await expect(field).toHaveValue("1:00.0");
+
+    await expect(faster).toHaveAttribute("aria-disabled", "true");
+    const color = await faster.evaluate((el) => getComputedStyle(el).color);
+    expect(color).toBe("rgb(111, 106, 95)"); // --ink-4, 5.29:1 on --surface
+
+    // `force`, deliberately: Playwright's own actionability check reads
+    // `aria-disabled="true"` as "not enabled" and would sit here for 30s
+    // rather than click. A real finger has no such courtesy, so the tap is
+    // forced through — the handler's own refusal is what must hold, and
+    // the client suite drives the same click via user-event, which honours
+    // only the real `disabled` attribute.
+    await faster.click({ force: true });
+    await expect(field).toHaveValue("1:00.0");
+    await assertTapTargets(page);
+    await assertNoA11yViolations(page);
   });
 });
 
@@ -3633,6 +3705,33 @@ test.describe("you screen with the derivation offer visible (task review round, 
     expect(after).not.toBeNull();
     expect(after!.height).toBe(before!.height);
     expect(after!.y).toBe(before!.y);
+  });
+
+  // James, 2026-08-24: the offer button ran the full card width while the
+  // fields it belongs to are inset by their "2K"/"6K" label, so a button
+  // and a field sat stacked at two visibly different widths. Both edges
+  // now derive from `--baseline-label-col` (index.css), and this measures
+  // the consequence in a real browser rather than trusting the rule: the
+  // button's box must match the field's box it belongs to, on BOTH edges.
+  // Deleting either the label's fixed width or the slot's padding-left
+  // moves one edge and reddens this.
+  test("the derive offer's button spans exactly the field above it, not the whole card", async ({
+    page,
+  }) => {
+    const field = page.locator(".baseline-row .baseline-field").first();
+    const button = page.getByRole("button", {
+      name: "ESTIMATE FROM 6K (−7s)",
+    });
+
+    const fieldBox = await stableBoundingBox(field);
+    const buttonBox = await stableBoundingBox(button);
+    expect(fieldBox).not.toBeNull();
+    expect(buttonBox).not.toBeNull();
+
+    // Sub-pixel tolerance only: these are the same computed inset, so any
+    // real drift is whole pixels.
+    expect(Math.abs(buttonBox!.x - fieldBox!.x)).toBeLessThan(1);
+    expect(Math.abs(buttonBox!.width - fieldBox!.width)).toBeLessThan(1);
   });
 
   test("the inert 'ESTIMATED' line clears ink contrast, and the sweep re-passes axe with it rendered", async ({
@@ -8465,6 +8564,39 @@ test.describe("onboarding door flows (Phase BL PR C)", () => {
     await assertNoA11yViolations(page);
   });
 
+  // Door 1's ADJUST step had no sweep of its own until the one-control
+  // round (2026-08-24) gave it typed fields — it is the surface whose
+  // controls changed most, and it is the only baseline surface with no
+  // empty state at all (a prefilled recommendation is PROPOSED, shown at
+  // full accent strength, never dimmed).
+  test("door 1's adjust step: tap targets, zero WCAG violations, and prefilled values that are values", async ({
+    page,
+  }) => {
+    await page.goto("/onboarding/recommend");
+    await page
+      .getByRole("radio", { name: "A little. I know the stroke" })
+      .click();
+    await page
+      .getByRole("radio", { name: "Active once or twice a week" })
+      .click();
+    await page
+      .getByRole("button", { name: "Adjust the numbers first" })
+      .click();
+    const k2 = page.getByRole("textbox", { name: "2k split" });
+    await expect(k2).toHaveValue("2:25.0");
+    await expect(k2).not.toHaveAttribute("placeholder", /./);
+
+    // Typed entry, the affordance this step never had: three keystrokes
+    // instead of the 54 stepper taps 2:25 -> 1:58 used to cost here.
+    await k2.click();
+    await k2.pressSequentially("158");
+    await page.getByRole("button", { name: "2k faster" }).click();
+    await expect(k2).toHaveValue("1:57.5");
+
+    await assertTapTargets(page);
+    await assertNoA11yViolations(page);
+  });
+
   test("door 2's editor screen: tap targets and zero WCAG violations", async ({
     page,
   }) => {
@@ -8472,6 +8604,18 @@ test.describe("onboarding door flows (Phase BL PR C)", () => {
     await expect(
       page.getByRole("heading", { name: "Enter your splits" }),
     ).toBeVisible();
+    // Honest-empty round: this account has no baselines, so both fields
+    // are empty with the seed as a dim placeholder.
+    const k2 = page.getByRole("textbox", { name: "2k split" });
+    await expect(k2).toHaveValue("");
+    await expect(k2).toHaveAttribute("placeholder", "2:25.0");
+    await assertTapTargets(page);
+    await assertNoA11yViolations(page);
+
+    // The steppers this door never had, and the materialise rule: the
+    // first tap on an empty field is the seed exactly, not seed ± a step.
+    await page.getByRole("button", { name: "2k faster" }).click();
+    await expect(k2).toHaveValue("2:25.0");
     await assertTapTargets(page);
     await assertNoA11yViolations(page);
   });

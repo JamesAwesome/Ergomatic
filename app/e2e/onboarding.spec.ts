@@ -613,11 +613,14 @@ test.describe("Phase BL PR C: door 1 (recommend), door 2 (know), and Reset", () 
       page.getByText(/This clears both baseline splits/),
     ).toHaveCount(0);
 
-    // The editor re-seeds from the now-empty server state (the modal-cell
-    // seeds, not the cleared 100/120).
-    await expect(page.getByRole("textbox", { name: "2k split" })).toHaveValue(
-      "2:25.0",
-    );
+    // The editor goes back to EMPTY — the honest-empty round's own
+    // strongest end-to-end statement (2026-08-24): after a Reset the rower
+    // has no baselines, so the field says so. The modal-cell seed (2:25.0,
+    // not the cleared 100/120) is present only as a dim placeholder, which
+    // is exactly the difference this round exists to draw.
+    const k2 = page.getByRole("textbox", { name: "2k split" });
+    await expect(k2).toHaveValue("");
+    await expect(k2).toHaveAttribute("placeholder", "2:25.0");
 
     // The server pair is truly the no-row shape...
     const cleared = await page.evaluate(async () => {

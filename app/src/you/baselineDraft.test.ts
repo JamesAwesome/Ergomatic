@@ -100,6 +100,59 @@ describe("baseline drafts", () => {
   });
 });
 
+// The honest-empty round (2026-08-24): an UNSET baseline is representable
+// as such. Before this, `initDraft` was handed a fabricated seed for a
+// server-null side, so a side that had never been rowed was structurally
+// indistinguishable from one that had — the defect James reported.
+describe("an unset side is null, not a fabricated seed", () => {
+  it("keeps a server-null side null instead of standing a number in for it", () => {
+    const s = initDraft(null, 122);
+    expect(s.draft).toStrictEqual({ k2: null, k6: 122 });
+    expect(s.committed).toStrictEqual({ k2: null, k6: 122 });
+    expect(isDirty(s)).toBe(false);
+  });
+
+  // THE INVARIANT the Apply paths lean on: `touched` implies a real
+  // number. Every mutator that sets `touched` also writes a number, and
+  // this is the one call that could break it — a stepper aimed at an
+  // empty field. The control materialises the seed via `setDraft` in that
+  // case (BaselineField.tsx); `nudge` itself has no seed to offer, so it
+  // must refuse rather than invent 0.5s or NaN out of nothing.
+  it("refuses to nudge an unset side: no value appears, and it stays untouched", () => {
+    const s = nudge(initDraft(null, 122), "k2", 1);
+    expect(s.draft.k2).toBeNull();
+    expect(s.touched.k2).toBe(false);
+    expect(isDirty(s)).toBe(false);
+  });
+
+  it("refuses on the other side too — the guard is per field, not shared", () => {
+    const s = nudge(initDraft(112, null), "k6", -1);
+    expect(s.draft.k6).toBeNull();
+    expect(s.touched.k6).toBe(false);
+  });
+
+  it("materialising an unset side through setDraft fills it and marks it touched", () => {
+    const s = setDraft(initDraft(null, 122), "k2", 145);
+    expect(s.draft.k2).toBe(145);
+    expect(s.touched.k2).toBe(true);
+    // The committed side stays null: nothing has been saved yet, so the
+    // confirm card must still read this as "was unset, becomes 2:25".
+    expect(s.committed.k2).toBeNull();
+  });
+
+  it("discard puts an unset side back to unset, never to the number the rower abandoned", () => {
+    const s = discard(setDraft(initDraft(null, 122), "k2", 145));
+    expect(s.draft.k2).toBeNull();
+    expect(isDirty(s)).toBe(false);
+  });
+
+  it("commit folds a materialised value into committed, so the side is no longer unset", () => {
+    const s = commit(setDraft(initDraft(null, 122), "k2", 145));
+    expect(s.committed.k2).toBe(145);
+    expect(s.draft.k2).toBe(145);
+  });
+});
+
 describe("setDraft (ui-notes round, item 2: the derivation offer fills a draft field directly)", () => {
   it("sets only the requested side, leaving the other and committed untouched", () => {
     const s = setDraft(initDraft(112, 122), "k2", 115);

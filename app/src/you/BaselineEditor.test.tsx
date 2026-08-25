@@ -102,20 +102,24 @@ describe("BaselineEditor", () => {
     expect(screen.queryByText(/→/)).not.toBeInTheDocument();
   });
 
-  it("seeds sensible starting values and prompts the rower when baselines are unset", async () => {
+  // The honest-empty round (2026-08-24, James's report): the seeds used to
+  // render as the fields' VALUES, in the same accent ink a saved baseline
+  // gets, so a number the app invented was indistinguishable from one the
+  // rower had rowed. They are PLACEHOLDERS now — the field is empty.
+  it("leaves an unset baseline EMPTY, showing the seed only as a placeholder — never as a value the rower never gave", async () => {
     const save = mockReady({ k2Seconds: null, k6Seconds: null });
     await renderEditor();
 
-    expect(screen.getByText(/starting point/i)).toBeInTheDocument();
+    expect(screen.getByText(/No baselines yet/i)).toBeInTheDocument();
     // The seeds are the estimate table's most-common cell (2:25 / 2:32),
     // not the old club-rower 112/122 pair — the PR C constants
     // reconciliation; domain/estimateBaseline.test.ts pins the derivation.
-    expect(screen.getByRole("textbox", { name: "2k split" })).toHaveValue(
-      "2:25.0",
-    );
-    expect(screen.getByRole("textbox", { name: "6k split" })).toHaveValue(
-      "2:32.0",
-    );
+    const k2 = screen.getByRole("textbox", { name: "2k split" });
+    const k6 = screen.getByRole("textbox", { name: "6k split" });
+    expect(k2).toHaveValue("");
+    expect(k2).toHaveAttribute("placeholder", "2:25.0");
+    expect(k6).toHaveValue("");
+    expect(k6).toHaveAttribute("placeholder", "2:32.0");
     // Neither side is a known real value here (both null) — deriving one
     // from the other would mean deriving from a made-up seed, so the offer
     // must not appear at all (ui-notes round, item 2's "exactly one side
@@ -138,6 +142,47 @@ describe("BaselineEditor", () => {
     // provenance — a typed edit is a manual entry ("233" -> 2:33 = 153s).
     expect(save).toHaveBeenCalledTimes(1);
     expect(save).toHaveBeenCalledWith({ k6Seconds: 153, k6Source: "manual" });
+  });
+
+  // The one-control round: the You editor had NO steppers — a rower who
+  // learned minus/plus on door 1 found nothing here. Both sides, because
+  // each field wires its own handler (the 6k arm went uncovered until this
+  // existed, and a mutation isolated to it would have survived).
+  it("nudges an already-saved 2k by half a second and Apply writes the nudged number", async () => {
+    const save = mockReady();
+    await renderEditor();
+
+    await userEvent.click(screen.getByRole("button", { name: "2k faster" }));
+
+    expect(screen.getByRole("textbox", { name: "2k split" })).toHaveValue(
+      "1:51.5",
+    );
+    expect(screen.getByText("2k 1:52.0 → 1:51.5")).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /apply baselines/i }),
+    );
+    expect(save).toHaveBeenCalledExactlyOnceWith({
+      k2Seconds: 111.5,
+      k2Source: "manual",
+    });
+  });
+
+  it("nudges the 6k side too, its own handler and its own confirm line", async () => {
+    const save = mockReady();
+    await renderEditor();
+
+    await userEvent.click(screen.getByRole("button", { name: "6k slower" }));
+
+    expect(screen.getByText("6k 2:02.0 → 2:02.5")).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /apply baselines/i }),
+    );
+    expect(save).toHaveBeenCalledExactlyOnceWith({
+      k6Seconds: 122.5,
+      k6Source: "manual",
+    });
   });
 
   it("keeps the draft and surfaces an error when save is rejected", async () => {
@@ -233,19 +278,231 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
 
     // 122 - 7 = 115s/500m = 1:55.0, replacing the SEED_K2 starting point
     // (145 = 2:25.0) the confirm line's "from" side still names.
-    expect(screen.getByText("2k 2:25.0 → 1:55.0")).toBeInTheDocument();
+    expect(screen.getByText("2k Not set → 1:55.0")).toBeInTheDocument();
     expect(save).not.toHaveBeenCalled();
   });
 
-  it("declining is simply not tapping it: the confirm block stays absent and the seeded value stands", async () => {
+  it("declining is simply not tapping it: the confirm block stays absent and the 2k side stays empty", async () => {
     mockReady({ k2Seconds: null, k6Seconds: 122 });
     await renderEditor();
 
     expect(screen.queryByText(/→/)).not.toBeInTheDocument();
-    // The SEED_K2 starting point (145 -> 2:25.0), never the derived 1:55.0.
+    // Nothing was accepted, so nothing is claimed: the field is empty,
+    // with the OFFER's own number (1:55.0) as the suggestion it shows —
+    // see "one suggestion per row" below for why it is not SEED_K2.
+    const k2 = screen.getByRole("textbox", { name: "2k split" });
+    expect(k2).toHaveValue("");
+    expect(k2).toHaveAttribute("placeholder", "1:55.0");
+  });
+
+  // REVIEW FIX 1 (2026-08-24) — a regression this round introduced, and
+  // the reason it needs its own describe: the honest-empty field and the
+  // derivation offer are two suggestion mechanisms that landed on the same
+  // row without ever being reconciled. `you-derive-offer.png` had a
+  // placeholder reading 2:25.0 (SEED_K2) directly above a button offering
+  // 2:23.0 — two different numbers, two seconds apart, for the same empty
+  // field. Worse, the steppers this round ADDED made the offer destroyable
+  // in one tap: materialising the generic seed marked the side touched at
+  // a value that is not the offer's, so `DeriveSlot` rendered nothing and
+  // the estimate — derived from a split the rower actually rowed — became
+  // unreachable short of Discard, with Apply writing the generic seed as
+  // `manual`. Impossible before this round (the editor had no steppers),
+  // and no test reached the field any way but the offer button or typing.
+  //
+  // The fix is that an offer-eligible side has ONE suggested number: the
+  // field's own seed becomes the offer's value, so the placeholder, the
+  // button and the first-tap materialisation all name it.
+  describe("one suggestion per row: the offer IS the empty field's seed (review fix 1)", () => {
+    it("shows the DERIVED value as the placeholder, not the generic seed the button contradicts", async () => {
+      mockReady({ k2Seconds: null, k6Seconds: 122 });
+      await renderEditor();
+
+      // deriveK2FromK6(122) = 115 = 1:55.0. The button says −7s from the
+      // rower's own 6k; the field must not whisper a different number.
+      expect(
+        screen.getByRole("button", { name: "ESTIMATE FROM 6K (−7s)" }),
+      ).toBeInTheDocument();
+      expect(screen.getByRole("textbox", { name: "2k split" })).toHaveAttribute(
+        "placeholder",
+        "1:55.0",
+      );
+    });
+
+    it("the mirror side agrees too — the seed follows whichever side the offer is for", async () => {
+      mockReady({ k2Seconds: 130, k6Seconds: null });
+      await renderEditor();
+
+      // deriveK6FromK2(130) = 137 = 2:17.0.
+      expect(
+        screen.getByRole("button", { name: "ESTIMATE FROM 2K (+7s)" }),
+      ).toBeInTheDocument();
+      expect(screen.getByRole("textbox", { name: "6k split" })).toHaveAttribute(
+        "placeholder",
+        "2:17.0",
+      );
+    });
+
+    it("a first stepper tap materialises the DERIVED value and the offer survives it — the tap reads as accepting, not as destroying", async () => {
+      const save = mockReady({ k2Seconds: null, k6Seconds: 122 });
+      await renderEditor();
+
+      await userEvent.click(screen.getByRole("button", { name: "2k faster" }));
+
+      expect(screen.getByRole("textbox", { name: "2k split" })).toHaveValue(
+        "1:55.0",
+      );
+      // The slot resolves to its already-applied state instead of
+      // vanishing: before the fix this tap left the slot empty and the
+      // estimate unreachable.
+      expect(
+        screen.getByText("ESTIMATED · TYPE TO ADJUST"),
+      ).toBeInTheDocument();
+
+      await userEvent.click(
+        screen.getByRole("button", { name: /apply baselines/i }),
+      );
+      // And the stored source tells the truth about where the number came
+      // from: it is the derivation's, not a generic seed the rower would
+      // have been given by accident.
+      expect(save).toHaveBeenCalledExactlyOnceWith({
+        k2Seconds: 115,
+        k2Source: "derived",
+      });
+    });
+
+    it("with NO offer eligible, the field falls back to the estimate table's own seed", async () => {
+      // Both null: deriving one side from the other would mean deriving
+      // from a made-up number, so there is no offer and no better
+      // suggestion than the table's modal cell.
+      mockReady({ k2Seconds: null, k6Seconds: null });
+      await renderEditor();
+
+      expect(
+        screen.queryByRole("button", { name: /ESTIMATE FROM/i }),
+      ).not.toBeInTheDocument();
+      expect(screen.getByRole("textbox", { name: "2k split" })).toHaveAttribute(
+        "placeholder",
+        "2:25.0",
+      );
+      expect(screen.getByRole("textbox", { name: "6k split" })).toHaveAttribute(
+        "placeholder",
+        "2:32.0",
+      );
+    });
+
+    it("an out-of-band derivation is no offer at all, so that field keeps the table's seed", async () => {
+      // 65 - 7 = 58, below MIN_SPLIT — `deriveOffer` refuses it, and the
+      // seed must not quietly follow a number nothing is offering.
+      mockReady({ k2Seconds: null, k6Seconds: 65 });
+      await renderEditor();
+
+      expect(
+        screen.queryByRole("button", { name: /ESTIMATE FROM/i }),
+      ).not.toBeInTheDocument();
+      expect(screen.getByRole("textbox", { name: "2k split" })).toHaveAttribute(
+        "placeholder",
+        "2:25.0",
+      );
+    });
+  });
+
+  // THE HALF-SET ACCOUNT, the second half of James's report: the only
+  // "unset" marker used to be an 11px prose line shown when BOTH sides
+  // were null, so a rower with one real baseline got no marker at all on
+  // the fabricated side — it simply read as a second saved number.
+  it("reads correctly half-set: the rowed 6k is a filled value, the never-rowed 2k is empty", async () => {
+    mockReady({ k2Seconds: null, k6Seconds: 122 });
+    await renderEditor();
+
+    expect(screen.getByRole("textbox", { name: "6k split" })).toHaveValue(
+      "2:02.0",
+    );
+    expect(
+      screen.getByRole("textbox", { name: "6k split" }),
+    ).not.toHaveAttribute("placeholder");
+    expect(screen.getByRole("textbox", { name: "2k split" })).toHaveValue("");
+  });
+
+  // The unified control, on the surface that had no steppers at all.
+  // Both sides null on purpose (review fix 1): with no derivation offer
+  // eligible, the table's own seed IS this field's one suggestion, and a
+  // first tap is the rower adopting it — theirs now, so `manual`. The
+  // offer-eligible case is a different number and a different source; it
+  // lives in "one suggestion per row" below.
+  it("the steppers work here too: the first tap on the empty 2k materialises its seed exactly, and Apply saves that number", async () => {
+    const save = mockReady({ k2Seconds: null, k6Seconds: null });
+    await renderEditor();
+
+    await userEvent.click(screen.getByRole("button", { name: "2k faster" }));
+
+    // The seed itself (145 = 2:25.0), NOT 144.5: a rower reaching for −
+    // on an empty field is starting from the suggestion, not stepping past
+    // it.
     expect(screen.getByRole("textbox", { name: "2k split" })).toHaveValue(
       "2:25.0",
     );
+    expect(screen.getByText("2k Not set → 2:25.0")).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /apply baselines/i }),
+    );
+    expect(save).toHaveBeenCalledExactlyOnceWith({
+      k2Seconds: 145,
+      k2Source: "manual",
+    });
+  });
+
+  // REVIEW FIX 2 (2026-08-24): the live region is component state, and
+  // Discard does not remount the field — so a stale announcement sat
+  // beside an emptied field, and worse, the NEXT identical announcement
+  // was a no-op (same string, no DOM mutation, so a polite region never
+  // fires). A screen-reader user got silence on a real change. The
+  // announcement is now tied to the value it describes: it clears the
+  // moment the value moves for any other reason, which both removes the
+  // stale text and guarantees the next one is a real DOM change.
+  it("a Discard clears the spoken announcement, and materialising again speaks the same value rather than going silent", async () => {
+    mockReady({ k2Seconds: null, k6Seconds: null });
+    await renderEditor();
+    const live = () =>
+      screen
+        .getByRole("group", { name: "2k baseline split" })
+        .querySelector("[aria-live]");
+
+    await userEvent.click(screen.getByRole("button", { name: "2k faster" }));
+    expect(live()).toHaveTextContent("2k 2:25.0");
+
+    await userEvent.click(screen.getByRole("button", { name: /discard/i }));
+
+    // The field is empty again, so the announcement describing 2:25.0 is
+    // a claim about a value that no longer exists.
+    expect(screen.getByRole("textbox", { name: "2k split" })).toHaveValue("");
+    expect(live()).toHaveTextContent("");
+
+    await userEvent.click(screen.getByRole("button", { name: "2k faster" }));
+
+    // Same string as the first time. It can only be ANNOUNCED because the
+    // region was emptied in between — that empty step is the whole fix.
+    expect(live()).toHaveTextContent("2k 2:25.0");
+  });
+
+  // RECURRING FAILURE 4, and the wire discipline the brief calls out: the
+  // seed must stay unsendable. Touch NOTHING, Apply is not even reachable
+  // — and the derive offer, whose own eligibility depends on 2k staying
+  // server-null, is still standing.
+  //
+  // Review note (2026-08-24): named for what it actually proves. It
+  // asserts `isDirty` is false, NOT that `handleApply`'s touched-gate
+  // works — deleting `state.touched.k2 &&` leaves this green. That gate
+  // is pinned by the `toHaveBeenCalledExactlyOnceWith` assertions in the
+  // "Apply commits only touched fields" block below.
+  it("with nothing touched there is no Apply button at all, so an untouched seed has no path to the wire", async () => {
+    const save = mockReady({ k2Seconds: null, k6Seconds: 122 });
+    await renderEditor();
+
+    expect(
+      screen.queryByRole("button", { name: /apply baselines/i }),
+    ).not.toBeInTheDocument();
+    expect(save).not.toHaveBeenCalled();
   });
 
   it("the filled value is an ordinary draft edit: typing still adjusts it afterward", async () => {
@@ -257,7 +514,7 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
     );
     await typeSplit("2k split", "154");
 
-    expect(screen.getByText("2k 2:25.0 → 1:54.0")).toBeInTheDocument();
+    expect(screen.getByText("2k Not set → 1:54.0")).toBeInTheDocument();
   });
 
   it("Apply round-trips the derived value through the real save path, stamped derived — the case the per-number provenance ruling exists for", async () => {
@@ -457,7 +714,7 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
 
       // The 6k line names the real edit; no 2k line exists anywhere on
       // screen, even though 2k is ALSO displayed (at its seed) elsewhere.
-      expect(screen.getByText("6k 2:32.0 → 2:33.0")).toBeInTheDocument();
+      expect(screen.getByText("6k Not set → 2:33.0")).toBeInTheDocument();
       expect(screen.queryByText(/^2k .* → /)).not.toBeInTheDocument();
     });
 
@@ -577,7 +834,7 @@ describe("the derivation offer (ui-notes round, item 2)", () => {
 
       await typeSplit("2k split", "224");
       // The typed entry is the only edit made — "224" -> 2:24 = 144s.
-      expect(screen.getByText("2k 2:25.0 → 2:24.0")).toBeInTheDocument();
+      expect(screen.getByText("2k Not set → 2:24.0")).toBeInTheDocument();
       // No offer button exists anywhere to click, so there is no remaining
       // path to the overwrite the finding describes — asserted by absence
       // (docs/TESTING.md's own "invoke it and assert the consequence" rule

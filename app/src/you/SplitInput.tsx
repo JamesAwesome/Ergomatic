@@ -34,31 +34,56 @@ export function digitsToSplitSeconds(digits: string): number | null {
   return Number(padded.slice(0, -2)) * 60 + Number(padded.slice(-2));
 }
 
-/** Typed baseline-split entry (both split-entry surfaces: the You editor
- *  and door 2's `/onboarding/know`). The field owns the separator because a
- *  numeric keypad has no colon — ClockInput's reasoning, verbatim.
+/** Typed baseline-split entry — the value cell of the unified
+ *  `BaselineField` control on all three baseline surfaces (the You editor,
+ *  door 2's `/onboarding/know`, door 1's adjust step). The field owns the
+ *  separator because a numeric keypad has no colon — ClockInput's
+ *  reasoning, verbatim.
  *
  *  The tenths decision (this component's contract): typed entry is WHOLE
  *  seconds. At rest the field displays the draft through `fmtSplit`
- *  (m:ss.t), so a stored tenth — a tested write, a 0.5-step legacy nudge —
+ *  (m:ss.t), so a stored tenth — a tested write, a 0.5-step nudge —
  *  renders intact; on focus the field clears to a digit buffer (the prior
  *  value stays visible as the placeholder) and each keystroke commits the
  *  parsed whole-second value to the caller's draft; on blur the buffer
  *  drops and the resting display returns, so a typed 152 settles as
- *  "1:52.0". Leaving without typing commits nothing. */
+ *  "1:52.0". Leaving without typing commits nothing.
+ *
+ *  UNSET (`seconds === null`, the honest-empty round 2026-08-24): the
+ *  field renders EMPTY with `seed` as its placeholder. That is the whole
+ *  point of the round — a baseline the rower has never entered used to be
+ *  unrenderable, because this prop was non-nullable, so the seed went in
+ *  as the VALUE and wore a saved number's accent ink. Empty-and-dim versus
+ *  filled-and-accent is now a structural difference, not a shade. It also
+ *  satisfies `baselineDraft.ts`'s own never-a-bare-dash rule without
+ *  fabricating anything: the rower still reads a sensible number, but the
+ *  field does not claim it. */
 export default function SplitInput({
   label,
   seconds,
+  seed,
   onType,
   className,
+  registerRef,
 }: {
   label: "2k" | "6k";
-  seconds: number;
+  /** `null` = this side is unset; the field renders empty. */
+  seconds: number | null;
+  /** The suggestion shown as the dim placeholder while `seconds` is null.
+   *  Never committed by this component — only `BaselineField`'s first
+   *  stepper tap, or the rower's own typing, ever turns it into a value. */
+  seed: number;
   /** Called with the parsed whole-second value on every complete keystroke.
    *  The caller owns clamping (baselineDraft's `setDraft`) and provenance —
    *  this field reports what was typed, nothing more. */
   onType: (seconds: number) => void;
   className?: string;
+  /** Exposes the input element itself — the same idiom Stepper/
+   *  DurationInput use. `BaselineField` needs it to SETTLE the field (blur
+   *  it, dropping any live digit buffer) before a stepper tap applies its
+   *  nudge, because WebKit does not focus a `<button>` on tap and so
+   *  cannot be relied on to blur the input for us. */
+  registerRef?: (el: HTMLInputElement | null) => void;
 }) {
   // null = resting (display the draft's own m:ss.t); "".."999" = the
   // in-progress digit buffer while the field is focused.
@@ -81,20 +106,34 @@ export default function SplitInput({
     if (parsed !== null) onType(parsed);
   }
 
+  // Two distinct reasons for a placeholder, one appearance: the value the
+  // field held before this tap (so clearing-on-focus never reads as data
+  // loss), and the SEED on an unset side (so the rower sees a suggestion
+  // without the field claiming it). Both are ink-4 on --surface — 5.29:1,
+  // computed — via the shared `::placeholder` rule. A resting field that
+  // holds a real value shows NO placeholder: dim means "not a value at
+  // all", and a saved number must never wear it.
+  const resting = buffer === null;
   return (
     <input
       type="text"
       inputMode="numeric"
       className={className ? `split-input ${className}` : "split-input"}
       aria-label={`${label} split`}
-      // Visible only while the buffer is empty — the value the field held
-      // before the tap, so clearing-on-focus never reads as data loss.
-      // ink-4 on --surface (5.29:1) via the shared ::placeholder rule.
-      placeholder={buffer === null ? undefined : fmtSplit(seconds)}
-      value={buffer === null ? fmtSplit(seconds) : digitsToSplitDisplay(buffer)}
+      placeholder={
+        resting && seconds !== null ? undefined : fmtSplit(seconds ?? seed)
+      }
+      value={
+        resting
+          ? seconds === null
+            ? ""
+            : fmtSplit(seconds)
+          : digitsToSplitDisplay(buffer)
+      }
       onFocus={() => setBuffer("")}
       onChange={handleChange}
       onBlur={() => setBuffer(null)}
+      ref={registerRef}
     />
   );
 }
