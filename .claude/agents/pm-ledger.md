@@ -2595,3 +2595,100 @@ this spec's close).
 - **The 30-second rule is 0-for-17**; eleventh consecutive declined enforcement.
   Length was again inherent to a triad PR; the enforceable failures were CONTENT
   both times. Still James's to re-set or retire, still belongs in `CLAUDE.md`.
+
+## PM final-PR gate, PR #196 (RC-9 a/c/d free oracles — TRIAD: a wire field's meaning), 2026-08-25
+
+- **Two comments citing each other for the same missing derivation is a dangling
+  citation with an alibi.** `AVG_PACE_VERDICT_BAND_SECONDS` justified 1.0 s as
+  "far inside what a single lost interval would move the quotient by
+  (`recordAvgPaceVerdict`'s own comment has the worked reasoning)"; that comment
+  said "BAND: `AVG_PACE_VERDICT_BAND_SECONDS`'s own comment." The reasoning
+  existed in neither, nor in the spec, which asserted it in one clause. Each hop
+  LOOKS sourced. **At a gate, follow every "see X for the derivation" one hop —
+  a cycle of two is the common length.** RF#16's family; the tell is a
+  load-bearing scalar whose owner comment defers.
+- **A ratio oracle is blind to the removal of an average member, and this one was
+  never told so.** `ours = 500·ΣT/ΣD` over `recordedActuals`. An interval lost at
+  exactly the run's average pace moves the quotient by ZERO at any band —
+  exit-7's dropped interval was caught only because it was FASTER. Bounded by the
+  count checks above it, but nothing stated the limit, so a walk would read
+  "agree" as "no interval was lost". **When an oracle compares RATIOS, ask what
+  member could be removed without moving it** — the sibling to the 2026-08-21
+  "what quantity does it measure" rule: also ask what it is INSENSITIVE to.
+- **Diagnostics built for a walk must be NAMED where a walk operator looks.**
+  #196 shipped two ring entries whose sole justification is "a line for a
+  hardware walk to read"; grepping every `.md` for `avg-pace-verdict` /
+  `rest-distance-verdict` returned ONE hit, in the throwaway plan. Not the
+  ROADMAP row, not the walk-items card, not the `/hardware-walk` skill, not the
+  PR body. **A diagnostic nobody is told to grep for is a diagnostic nobody
+  reads — check the runsheet, not the row.**
+- **Silence is an outcome, and it was the one outcome carrying no reason.** Every
+  `avg-pace-verdict` suppression writes a plain-English cause — except
+  `program()` landing inside `FINISH_GRACE_MS`, which cancels the pending
+  reconcile and writes NOTHING. The `/hardware-walk` skill's own between-pieces
+  rhythm is exactly that window. **When a diagnostic can be absent, the operator
+  must be told absence is a finding.**
+- **A walk README's evidence table labelled a DERIVATION as a screen reading.**
+  `walk-2026-08-24/README.md:52` scored `DISTANCE hero | 742 TWD (500+147+95) |
+  742 | MATCH` under a column headed **PM5 (SCREEN)**. The PM5 never displayed
+  742; the cell is hand-summed, and both sides are the same work+rest-coast
+  quantity — the mirror #196 exists to retire, scored green in the phase's own
+  PASS record. **Read every cell in a SCREEN column and ask whether a camera
+  could have produced it.** Corrected in place, not deleted (the item-25 pattern).
+- **The status paragraph carried a reversed noun INSIDE its PASS claim** ("matched
+  the PM5's memory screen digit for digit … TWD 742"). #192's rule — grep the
+  reversed ruling's own nouns, not the phase name — catches it in one grep. Ninth
+  firing in eleven gates; still no mechanical home.
+- **`CLAUDE.md` was the branch's own missed grep.** Its plan demanded "zero
+  non-historical hits for `recordTwdVerdict`"; `CLAUDE.md:332` described it in the
+  PRESENT TENSE inside recurring failure #11 — the entry this PR vindicates.
+  **When a PR deletes a symbol, grep `CLAUDE.md` explicitly; it is the file every
+  agent reads first and the one no diff review opens.**
+- **Filing-as-deferral, third syntax.** Backlog was 73/231 on branch AND main —
+  nothing ticked, nothing filed; three residuals were prose sub-bullets under one
+  unchecked row, so all three would be ticked when (b) lands. #194 caught
+  `- **[ ]`; this is the same disease with correct syntax and no checkbox at all.
+  **Check the delta, and check whether a residual has its OWN row.**
+- **Re-gate, `be145a0`: six conditions, all landed, two exceeded — and the best
+  artefact in the PR was produced by the condition, not the original work.** The
+  lost-interval derivation now carries the algebra, the ZERO-shift case, and a
+  worked example off the exit-7 capture — **and the implementer caught its own
+  SIGN ERROR by computing against the capture instead of reasoning it through.**
+  That is RF#11's habit turned on a code comment: a derivation is a claim about
+  numbers, and it gets checked against real ones. Second time in three gates that
+  a fix wave produced a MORE demanding artefact than the finding asked for
+  (#192's re-shot capture was the first). **The gate's own re-derivation is not
+  optional either — the identity was expanded independently before passing.**
+- **The walk README correction found a third count the gate missed**, and cited
+  `summaryModel.ts`'s own comment ("it used to BE the DISTANCE hero … It no
+  longer is") rather than asserting the concept was deleted. Copy that: a
+  correction to a record cites the code that makes it a correction.
+- **A walk instruction added at a gate gets the RF#13 check like any other.** W11
+  tells the operator to read the ring off `MONITOR LOG · COPY`; verified a real
+  control (`PostWorkoutSummary.tsx:534`, asserted by name in
+  `LogSession.test.tsx:928`) before passing. It gives the PHONE route the
+  `/hardware-walk` skill's `sessionStorage` one-liner does not — the skill is
+  laptop-shaped and now one hop behind its own phase's runsheet.
+- **A counting protocol is an instruction, and its arithmetic gets checked.** W11
+  said to expect "N `avg-pace-verdict` lines (minus any genuinely suppressed
+  ones…)". Suppressions WRITE a line; they do not subtract — the parenthetical
+  invited the one miscount that would explain away a real zero-fire. Corrected at
+  the re-gate. **Check that a protocol's arithmetic matches what the code emits,
+  not what the shape sounds like.**
+- **What this PR got RIGHT, worth copying:** the antagonist pass was dispatched
+  BEFORE any spec existed, decoded all seven captures byte-level, and ruled (b)
+  oracle-blind and (c)'s premise FALSE — the spec is written FROM the attack
+  rather than defended against it. Exit criteria md5-identical across the whole
+  branch. Every suppression reason is a plain-English sentence a human can act
+  on. The fake's `averageSplit: e.currentSplit` fabrication (third sighting) was
+  fixed BEFORE the first test of the field was written.
+- **Release call: NO TAG on #196** — ring-only, zero tester-reachable surface;
+  `v0.23.0` is at main's tip so this would be the whole range. Fifth consecutive
+  pre-statement of the #140 rule. The next tester-visible merge opens the range;
+  **#196 owes it no note, and the reason gets WRITTEN ("diagnostics ring only")**
+  rather than silently omitted.
+- **The 30-second rule is 0-for-18**; twelfth consecutive declined enforcement.
+  The enforceable failures were CONTENT again: bullet 3 offered "differs from the
+  monitor's OTHER average-pace field" as proof of independence from OUR
+  accumulator — a non-sequitur; and the body of a walk-only PR never named either
+  ring entry. Still James's to re-set or retire.
