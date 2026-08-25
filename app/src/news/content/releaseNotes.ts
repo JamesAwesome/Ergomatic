@@ -5,6 +5,33 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.23.0 (2026-08-25): range v0.22.0..main = EXACTLY ONE merge, #194
+    // (RC-5, hero-truth) — v0.22.0 was tagged at main's tip (#193), so
+    // this is the cleanest attributable range this project has had.
+    // Clauses owed and written, per the #194 PM gate: rest-bearing rows
+    // read smaller AND that includes OLD rows (the sentence that stops a
+    // data-loss bug report); the machine's own numbers where the machine
+    // spoke, with truncation named; corrections to BOTH v0.11.0's and
+    // v0.22.0's shipped notes (shipped notes are history and stay
+    // unedited — the correction lives here); the bounded list-vs-detail
+    // window; ended-early/link-lost rows keeping their old headline.
+    // DELIBERATELY NOT WRITTEN (PM steer): the build-738 "no AVG SPLIT"
+    // clause — its corrected population is a run completed under build
+    // 738 and left UNSAVED across the update, which this cohort of one
+    // has not got. Describing a shape a tester cannot have is the
+    // failure that rule exists to prevent. Also not said: PARTIAL on an
+    // abandoned piece and the chart's axes, both queued, neither shipped.
+    version: "v0.23.0",
+    date: "2026-08-25",
+    items: [
+      "Your saved sessions now read like the monitor's own memory screen: DISTANCE, TIME and AVG SPLIT are all WORK only, and your seat-to-seat total moved to its own line underneath, which also names the metres the flywheel coasted while you rested. A 2x250m with a minute of rest used to show 742 m and 4:04 beside a 2:04.0 split, three numbers that could not all be true at once. It now shows 500 m, 2:04 and 2:04.0, with '4:04 total, plus 242 m coasting in rest' beneath.",
+      "This applies to rows you already saved, so a session with rest in it will read smaller than it did yesterday. Nothing was lost: the old headline is the total line now, one row down, with its rest spelled out. This is also the number Concept2's logbook keeps, so your rows and your logbook finally mean the same thing.",
+      "For sessions recorded since the last update, those three numbers come straight from the erg, including its own average split. The PM5 rounds pace down where we round to nearest, so its split can sit a tenth away from one you work out by hand. We show the monitor's, not ours.",
+      "Two corrections to things earlier updates told you. v0.22.0 said everything on the session screen except the MACHINE CONFIRMED box included rest: it does not any more, and that box should now agree with the numbers above it rather than differ from them. Older still, v0.11.0 said DISTANCE counted everything the flywheel counted so it should match the monitor exactly: check side by side today and it will not, because DISTANCE is work only now.",
+      "Two smaller honesties. Your history list can still show the older, rest-inclusive distance for a narrow set of older sessions; open the session for the right number. And a session you ended early, or one whose link dropped, keeps the headline it was saved with and gains no rest line, because we cannot prove what its rest was.",
+    ],
+  },
+  {
     // v0.22.0 (2026-08-25): range v0.21.0..main = 8 merges, each
     // accounted per RF15 (the #192 PM gate's own table): #192 (the
     // MACHINE CONFIRMED block + the 1m counter — three clauses, plus
