@@ -392,6 +392,61 @@ describe("HistoryList hero snippet — tier parity with the detail screen (RC-5 
       screen.getByText(`AVG ${detail.heroes.avgSplit} · 6,000 m`),
     ).toBeVisible();
   });
+
+  // Fix round 1 (review finding, IMPORTANT): the FALLBACK test above uses
+  // `legacySteps` with NO `actualMeters` at all — that's a genuine
+  // detail-FALLBACK row (list and detail agree by construction, both
+  // reading the same stored columns), and proves nothing about the
+  // accepted TIER B2 divergence `LogRow.tsx`'s own header comment names.
+  // THIS is the real thing: a row that DOES carry `actualMeters` on its
+  // steps (so the detail screen lands in its own TIER B2, computing Σ
+  // steps), but has no machine totals and no RC-1 work pair — the exact
+  // shape `heroDistanceMeters`/`heroAvgSplitSeconds` cannot reach (no
+  // `steps` in the list projection) and so fall through to FALLBACK
+  // instead, reading the OLD stored fused columns. Built from
+  // `storedSummary.test.ts`'s own "TIER B2, fallback-2" fixture (same
+  // exit-7 steps, same fused 742m/244s/138.8s numbers) so the divergence
+  // is a REAL, already-vetted case, not an invented one.
+  it("TIER B2 (accepted, bounded divergence — CLOSED 2026-08-08..08-24 window, cannot grow): the list shows the OLD stored FUSED value while buildStoredSummary, on the IDENTICAL fixture, computes the Σ-steps value — different numbers, by design, pinned so a refactor of the FALLBACK branch can't silently change this", () => {
+    const detail = buildStoredSummary(
+      baseStoredRow({
+        steps: EXIT7_STEPS,
+        machineWorkSeconds: null,
+        machineWorkMeters: null,
+        workSeconds: null,
+        workMeters: null,
+        // The OLD fused (pre-task-3) values — 742m/244s/138.8s — larger
+        // than Σ EXIT7_STEPS (500m/124.0s/124.0s) by exactly the walk's
+        // own rest.
+        avgSplitSeconds: 138.8,
+        timeSeconds: 244,
+        distanceMeters: 742,
+      }),
+    );
+    // The detail screen's own TIER B2: Σ steps, not the fused columns.
+    expect(detail.heroes.distanceMeters).toBe(500);
+    expect(detail.heroes.avgSplit).toBe("2:04.0");
+
+    mockUseLogHistory.mockReturnValue(
+      readyState([
+        makeLog("log-tier-b2-divergence", {
+          machineWorkSeconds: null,
+          machineWorkMeters: null,
+          workSeconds: null,
+          workMeters: null,
+          avgSplitSeconds: 138.8,
+          distanceMeters: 742,
+        }),
+      ]),
+    );
+    renderHistoryList();
+    // The list has no `steps` to recompute Σ from, so it falls to
+    // FALLBACK and renders the FUSED numbers — visibly DIFFERENT from
+    // `detail.heroes` above (742 ≠ 500, "2:18.8" ≠ "2:04.0"). This is the
+    // accepted gap, made visible rather than silently passing.
+    expect(screen.getByText("AVG 2:18.8 · 742 m")).toBeVisible();
+    expect(screen.queryByText(/AVG 2:04\.0/)).not.toBeInTheDocument();
+  });
 });
 
 // N2's own witness (spec §4): the isConnected-guarded throttled save,
