@@ -2916,7 +2916,7 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     expect("machineSummary" in body).toBe(false);
   });
 
-  it("a MonitorRun written by shipped build 738 (summaryTotals present, summaryDetail absent — the field didn't exist yet) posts a machineSummary carrying verificationBytes only", async () => {
+  it("defensive case — summaryTotals present with summaryDetail absent (a shape no current writer produces; appendSummaryObservations always writes both together) — posts a machineSummary carrying verificationBytes only", async () => {
     const { run, workout } = buildMonitorFixture({
       summaryTotals: { workElapsedSeconds: 24.3, workDistanceMeters: 76 },
       verificationBytes: REALISTIC_VERIFICATION_BYTES,
@@ -2950,6 +2950,12 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
   // half-metre boundary. 500.5 is chosen specifically because floor and
   // round disagree on it (floor -> 500, round -> 501), so this assertion
   // cannot pass by accident of a wrong-but-adjacent implementation.
+  // NOT capture-derived, unlike `REALISTIC_SUMMARY_DETAIL`/
+  // `REALISTIC_VERIFICATION_BYTES` above: no committed capture in this
+  // branch has a fractional `workDistanceMeters` example to cite
+  // verbatim. It is wire-plausible (the field's own tenths precision
+  // makes a value like this a genuine possible reading) but invented for
+  // this test, chosen for the round/floor boundary it forces.
   it("machineWorkMeters is Math.round(summaryTotals.workDistanceMeters), not the raw fractional wire value", async () => {
     const { run, workout } = buildMonitorFixture({
       summaryTotals: { workElapsedSeconds: 199.9, workDistanceMeters: 500.5 },

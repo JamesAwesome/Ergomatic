@@ -448,10 +448,16 @@ interface LogFormFields {
   // `JSON.stringify` drops the key entirely below, exactly like an absent
   // `deviceName` already does; the server's own validator (Task 6,
   // `routes/data.ts`) accepts absent, so this never blocks a save.
-  // `machineSummary` can legitimately carry `verificationBytes` alone with
-  // no detail fields — a record written by shipped build 738 has
-  // `summaryTotals` but no `summaryDetail` (that field didn't exist yet),
-  // so the blob then holds bytes only. That is correct, not a bug.
+  // The build below guards `summaryDetail` being absent while
+  // `summaryTotals` is present — a shape no current writer produces
+  // (`appendSummaryObservations` in `monitorRun.ts` writes both fields
+  // together, unconditionally, in the same object literal; every real
+  // record has both or neither). This is defensive code for a shape the
+  // type system allows (`summaryDetail` is independently optional on
+  // `MonitorRun`), not a real historical record — build 738 predates
+  // `summaryTotals`/`summaryDetail` entirely and has NEITHER field, so a
+  // genuine build-738 record takes the absence branch above, not this
+  // one.
   machineWorkSeconds?: number;
   machineWorkMeters?: number;
   machineSummary?: {
@@ -1404,10 +1410,13 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
                   ...(monitorRun.verificationBytes !== undefined
                     ? { verificationBytes: [...monitorRun.verificationBytes] }
                     : {}),
-                  // A record written by shipped build 738 can carry
-                  // `summaryTotals` with no `summaryDetail` (that field
-                  // didn't exist yet) — the blob then carries bytes only,
-                  // which is correct, not a bug.
+                  // Defensive: `summaryDetail` absent while `summaryTotals`
+                  // is present is a shape no current writer produces
+                  // (`appendSummaryObservations` in `monitorRun.ts` writes
+                  // both together, unconditionally) — not a real
+                  // historical record (build 738 predates both fields and
+                  // has neither, so it never reaches this branch at all).
+                  // Kept in case a future writer ever splits them.
                   ...(monitorRun.summaryDetail ?? {}),
                 },
               }
