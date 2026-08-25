@@ -30,6 +30,13 @@ function makeLog(id: string, overrides: Partial<RecentLog> = {}): RecentLog {
     distanceMeters: null,
     planKey: null,
     planIndex: null,
+    // RC-5 §3, Task 4: null is the common default, same as the hero trio
+    // above — this suite never exercises tier logic itself.
+    workSeconds: null,
+    workMeters: null,
+    machineWorkSeconds: null,
+    machineWorkMeters: null,
+    machineAvgPaceSecondsPer500m: null,
     ...overrides,
   };
 }

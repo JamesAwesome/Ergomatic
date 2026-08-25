@@ -7,6 +7,7 @@ import type { LogHistoryState } from "./useLogHistory";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import type { RecentLog } from "../api/useRecentLogs";
 import { LOG_SCROLL_KEY, saveLogScroll } from "./logScroll";
+import { buildStoredSummary, type StoredLog } from "./storedSummary";
 
 const mockUseLogHistory = vi.fn<() => LogHistoryState>();
 vi.mock("./useLogHistory", () => ({
@@ -35,6 +36,75 @@ function makeLog(id: string, overrides: Partial<RecentLog> = {}): RecentLog {
     distanceMeters: null,
     planKey: null,
     planIndex: null,
+    // RC-5 (hero-truth design spec) §3, Task 4: the list's own tier
+    // inputs, mirroring `StoredLog`'s RC-1/RC-2/RC-3 fields — null is the
+    // common default here too (a pre-tier row, or a timer/manual log);
+    // the tier-logic describe block below overrides these explicitly.
+    workSeconds: null,
+    workMeters: null,
+    machineWorkSeconds: null,
+    machineWorkMeters: null,
+    machineAvgPaceSecondsPer500m: null,
+    ...overrides,
+  };
+}
+
+// RC-5 §1/§2's own exit-7 walk fixture (`storedSummary.test.ts`'s
+// EXIT7_STEPS, same PRIMARY-cited real values — `docs/monitor/sessions/
+// walk-2026-08-24/README.md`'s own table): two 250m intervals, 67.9s +
+// 56.1s = 124.0s over 500m, the machine's own avg pace 2:04.1
+// (124.1s/500m — deliberately NOT equal to Σ steps' 124.0, the same
+// discriminating-fixture reasoning `storedSummary.test.ts`'s own TIER A
+// case uses, so a test built from these numbers can't accidentally pass
+// by tier A and tier B1 coincidentally landing on the same value).
+const EXIT7_STEPS: StoredLog["steps"] = [
+  {
+    label: "250m @ 2:07.0",
+    targetSplit: 127.0,
+    actualSplit: 135.8,
+    actualSeconds: 67.9,
+    actualMeters: 250,
+    actualSource: "pm5",
+    meters: 250,
+    actualSpm: 25,
+  },
+  {
+    label: "250m @ 2:07.0",
+    targetSplit: 127.0,
+    actualSplit: 112.2,
+    actualSeconds: 56.1,
+    actualMeters: 250,
+    actualSource: "pm5",
+    meters: 250,
+    actualSpm: 28,
+  },
+];
+
+function baseStoredRow(overrides: Partial<StoredLog> = {}): StoredLog {
+  return {
+    id: "11111111-1111-1111-1111-111111111111",
+    workoutId: null,
+    workoutTitle: SEA_FRET.title,
+    workoutType: SEA_FRET.type,
+    loggedAt: "2026-08-18T18:57:00.000Z",
+    held: null,
+    pain: null,
+    notes: null,
+    thumbs: null,
+    deviceName: "PM5 432331249",
+    steps: [],
+    avgSplitSeconds: null,
+    timeSeconds: null,
+    distanceMeters: null,
+    planKey: null,
+    planIndex: null,
+    machineWorkSeconds: null,
+    machineWorkMeters: null,
+    machineSummary: null,
+    restSeconds: null,
+    restMeters: null,
+    workSeconds: null,
+    workMeters: null,
     ...overrides,
   };
 }
@@ -185,6 +255,142 @@ describe("HistoryList", () => {
       "href",
       "/today",
     );
+  });
+});
+
+// RC-5 (hero-truth design spec) §3, Task 4: the history list's hero
+// snippet must never print a different DISTANCE/AVG SPLIT than the detail
+// screen shows for the SAME session. Each case below builds the SAME
+// underlying facts twice — once as the list's own `RecentLog` projection,
+// once as the detail screen's `StoredLog` — and asserts the list's
+// rendered snippet matches `buildStoredSummary`'s own output for the
+// identical fixture, rather than two independently-typed expectations
+// that could quietly drift apart from each other.
+describe("HistoryList hero snippet — tier parity with the detail screen (RC-5 §3, Task 4)", () => {
+  it("TIER A: renders the machine's own DISTANCE and AVG SPLIT — the SAME numbers buildStoredSummary derives for the identical row, never the stored fused avgSplitSeconds column", () => {
+    const detail = buildStoredSummary(
+      baseStoredRow({
+        steps: EXIT7_STEPS,
+        machineWorkSeconds: 123.8,
+        machineWorkMeters: 499,
+        machineSummary: { avgPaceSecondsPer500m: 124.1 },
+      }),
+    );
+    expect(detail.heroes.distanceMeters).toBe(499);
+    expect(detail.heroes.avgSplit).toBe("2:04.1");
+
+    mockUseLogHistory.mockReturnValue(
+      readyState([
+        makeLog("log-tier-a", {
+          machineWorkSeconds: 123.8,
+          machineWorkMeters: 499,
+          machineAvgPaceSecondsPer500m: 124.1,
+          // The OLD stored fused column, deliberately DIFFERENT from the
+          // machine's own value — proves the list reads the new scalar,
+          // never this column, once machine totals are present.
+          avgSplitSeconds: 999,
+          distanceMeters: 9999,
+        }),
+      ]),
+    );
+    renderHistoryList();
+    expect(
+      screen.getByText(`AVG ${detail.heroes.avgSplit} · 499 m`),
+    ).toBeVisible();
+  });
+
+  it("TIER A, build-738-era row (machine totals present, the scalar absent): renders DISTANCE alone, no AVG segment — never a fallback quotient off the OLD stored column, matching buildStoredSummary's own 'no avg-split hero' rule", () => {
+    const detail = buildStoredSummary(
+      baseStoredRow({
+        steps: EXIT7_STEPS,
+        machineWorkSeconds: 124.0,
+        machineWorkMeters: 500,
+        machineSummary: { verificationBytes: [1, 2, 3] },
+      }),
+    );
+    expect(detail.heroes.avgSplit).toBeUndefined();
+    expect(detail.heroes.distanceMeters).toBe(500);
+
+    mockUseLogHistory.mockReturnValue(
+      readyState([
+        makeLog("log-tier-a-old", {
+          machineWorkSeconds: 124.0,
+          machineWorkMeters: 500,
+          machineAvgPaceSecondsPer500m: null,
+          // A pre-hero-truth quotient this row's own OLD save posted —
+          // must NOT reach the screen once machine totals gate tier A.
+          avgSplitSeconds: 130,
+        }),
+      ]),
+    );
+    renderHistoryList();
+    const row = screen.getByText(SEA_FRET.title).closest("li")!;
+    expect(within(row).getByText("500 m")).toBeVisible();
+    expect(within(row).queryByText(/AVG/)).not.toBeInTheDocument();
+  });
+
+  it("TIER B1: renders the work pair's own DISTANCE, and the SAME AVG SPLIT buildStoredSummary recomputes from steps — the list reuses the unchanged, already-work-only stored avgSplitSeconds column rather than recomputing (it has no steps to recompute from)", () => {
+    const detail = buildStoredSummary(
+      baseStoredRow({
+        steps: EXIT7_STEPS,
+        workSeconds: 124.0,
+        workMeters: 500,
+      }),
+    );
+    expect(detail.heroes.distanceMeters).toBe(500);
+    expect(detail.heroes.avgSplitSeconds).toBeCloseTo(124.0, 5);
+    expect(detail.heroes.avgSplit).toBe("2:04.0");
+
+    mockUseLogHistory.mockReturnValue(
+      readyState([
+        makeLog("log-tier-b1", {
+          workSeconds: 124.0,
+          workMeters: 500,
+          // Posted at live-save time by the SAME unchanged
+          // `monitorAvgSplit` computation `tierBAvgSplitSeconds` mirrors
+          // over steps — the "computed pair" this tier renders.
+          avgSplitSeconds: 124.0,
+        }),
+      ]),
+    );
+    renderHistoryList();
+    expect(
+      screen.getByText(`AVG ${detail.heroes.avgSplit} · 500 m`),
+    ).toBeVisible();
+  });
+
+  it("FALLBACK (pre-actualMeters / no machine totals, no work pair): shows the stored fused DISTANCE/AVG SPLIT unchanged — the same values buildStoredSummary's own FALLBACK branch renders for the identical row", () => {
+    const legacySteps: StoredLog["steps"] = [
+      {
+        label: "6:00 @ 6k",
+        actualSplit: 130,
+        actualSource: "pm5",
+        spm: 24,
+      },
+    ];
+    const detail = buildStoredSummary(
+      baseStoredRow({
+        steps: legacySteps,
+        avgSplitSeconds: 130,
+        timeSeconds: 1550,
+        distanceMeters: 6000,
+      }),
+    );
+    expect(detail.heroes.distanceMeters).toBe(6000);
+    expect(detail.heroes.avgSplit).toBe("2:10.0");
+
+    mockUseLogHistory.mockReturnValue(
+      readyState([
+        makeLog("log-fallback", {
+          avgSplitSeconds: 130,
+          distanceMeters: 6000,
+        }),
+      ]),
+    );
+    renderHistoryList();
+    expect(
+      screen.getByText(`AVG ${detail.heroes.avgSplit} · 6,000 m`),
+    ).toBeVisible();
   });
 });
 

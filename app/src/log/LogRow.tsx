@@ -50,18 +50,105 @@ function fmtMeters(meters: number): string {
   return meters.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
-// Spec §5G: `AVG 2:04.5 · 5,000 m` from the stored numbers, each segment
-// independently absent when its underlying value is null, the whole
-// snippet absent (returns "") when both are — the same absence idiom
-// §2B's stored-hero block already uses (old rows read back null
-// everywhere). TIME is deliberately not part of this snippet — §5G's own
-// literal example carries only AVG and DISTANCE.
+// RC-5 (hero-truth design spec) §3, Task 4: the list's own tier gate,
+// mirroring `storedSummary.ts`'s `buildHeroes` — TRUE exactly when the
+// row carries the machine's own work totals (PR #190's pair, both
+// non-null and `> 0`), the same gate that function uses to decide DISTANCE
+// and to decide whether ANY avg-split fallback is forbidden.
+function hasMachineTotals(log: RecentLog): boolean {
+  return (
+    log.machineWorkSeconds !== null &&
+    log.machineWorkMeters !== null &&
+    log.machineWorkSeconds > 0 &&
+    log.machineWorkMeters > 0
+  );
+}
+
+// RC-5 §3, Task 4: DISTANCE, tier-aware — parallel to `buildHeroes`'
+// DISTANCE branch, minus the TIER B2 rung that function has and this one
+// can't (`steps` is excluded from `LOG_LIST_COLUMNS` for size; see this
+// module's header comment). A row that would land in the detail screen's
+// TIER B2 (no machine totals, no RC-1 work pair, but steps carry
+// `actualMeters`) falls through to FALLBACK here instead — a KNOWN,
+// BOUNDED disagreement with the detail screen, accepted because TIER B2
+// is a CLOSED, ~16-day historical window that cannot grow (no row saved
+// since RC-1 shipped, 2026-08-24, can land there — `storedSummary.ts`'s
+// own TIER B2 comment). Pinned by its own dedicated test
+// (`HistoryList.test.tsx`), not left to be discovered later.
+//
+//  TIER A — `hasMachineTotals`: the machine's own work meters, rounded —
+//  byte-identical to `buildHeroes`' TIER A DISTANCE (both round the same
+//  stored scalar).
+//  TIER B1 — no machine totals, but `workSeconds`/`workMeters` (RC-1's
+//  own pair) both present and `> 0`: the work meters, rounded — same
+//  reasoning as TIER A, matching `buildHeroes`' TIER B1 DISTANCE.
+//  FALLBACK — neither pair: the row's stored, possibly-fused
+//  `distanceMeters`, unchanged. This is ALSO `buildHeroes`' own FALLBACK
+//  (and its TIER B2, per the note above) — the two screens already agree
+//  here, both reading the identical stored column.
+function heroDistanceMeters(log: RecentLog): number | undefined {
+  if (hasMachineTotals(log)) {
+    return Math.round(log.machineWorkMeters!);
+  }
+  if (
+    log.workSeconds !== null &&
+    log.workMeters !== null &&
+    log.workSeconds > 0 &&
+    log.workMeters > 0
+  ) {
+    return Math.round(log.workMeters);
+  }
+  return log.distanceMeters ?? undefined;
+}
+
+// RC-5 §3, Task 4: AVG SPLIT, tier-aware.
+//
+//  TIER A — `machineAvgPaceSecondsPer500m` (the narrow scalar projected
+//  server-side, option (a)) when present and `> 0`; otherwise UNDEFINED —
+//  **never** a fallback to `avgSplitSeconds` below, which can hold a
+//  stale pre-hero-truth quotient on a build-738-era row (machine totals
+//  present, the scalar absent because it predates Task 1). Printing that
+//  old quotient beside a detail screen that renders nothing for the same
+//  row is the exact defect this task exists to kill, one screen over
+//  (Global Constraints: the PM5 truncates, we round).
+//
+//  TIER B1 / FALLBACK — the row's stored `avgSplitSeconds` column,
+//  unchanged. This is safe (not a second, drifting quotient) because that
+//  column is posted at live-save time by `monitorAvgSplit`
+//  (`summaryModel.ts`) — a null-index/sub-threshold-excluding computation
+//  that predates and is UNCHANGED by this phase (`storedSummary.ts`'s own
+//  TIER B1 comment) — over the SAME underlying actuals the detail
+//  screen's `tierBAvgSplitSeconds` independently recomputes from `steps`.
+//  Both read the identical population by construction, so the two numbers
+//  agree without this list needing `steps` at all (which
+//  `LOG_LIST_COLUMNS` excludes for size) — proven for a shared exit-7
+//  fixture in `HistoryList.test.tsx`'s own tier-B1 case. For a FALLBACK
+//  row (no machine totals, no work pair — a timer/manual row, a legacy
+//  monitor row, or a TIER B2 row per `heroDistanceMeters`' own note),
+//  this is ALSO `buildHeroes`' own FALLBACK avg split, so the two screens
+//  already agree there too.
+function heroAvgSplitSeconds(log: RecentLog): number | undefined {
+  if (hasMachineTotals(log)) {
+    return log.machineAvgPaceSecondsPer500m !== null &&
+      log.machineAvgPaceSecondsPer500m > 0
+      ? log.machineAvgPaceSecondsPer500m
+      : undefined;
+  }
+  return log.avgSplitSeconds ?? undefined;
+}
+
+// Spec §5G: `AVG 2:04.5 · 5,000 m` from the tier-resolved numbers above,
+// each segment independently absent when its underlying value is
+// undefined, the whole snippet absent (returns "") when both are — the
+// same absence idiom §2B's stored-hero block already uses (old rows read
+// back null everywhere). TIME is deliberately not part of this snippet —
+// §5G's own literal example carries only AVG and DISTANCE.
 function heroSnippet(log: RecentLog): string {
+  const avgSplitSeconds = heroAvgSplitSeconds(log);
+  const distanceMeters = heroDistanceMeters(log);
   return [
-    log.avgSplitSeconds !== null
-      ? `AVG ${fmtSplit(log.avgSplitSeconds)}`
-      : null,
-    log.distanceMeters !== null ? `${fmtMeters(log.distanceMeters)} m` : null,
+    avgSplitSeconds !== undefined ? `AVG ${fmtSplit(avgSplitSeconds)}` : null,
+    distanceMeters !== undefined ? `${fmtMeters(distanceMeters)} m` : null,
   ]
     .filter((segment): segment is string => segment !== null)
     .join(" · ");

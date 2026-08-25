@@ -442,17 +442,28 @@ function makeFakeLogsStore(planState: FakePlanStateStore): LogsStore {
       // `stores/logs.ts`'s `LOG_LIST_COLUMNS` comment for the reason.
       // RC-2/RC-3 wave: `machineSummary` joins them (same size-based
       // exclusion; `machineWorkSeconds`/`machineWorkMeters` stay, same
-      // idiom as the RC-1 pair).
+      // idiom as the RC-1 pair). RC-5 §3, Task 4: ONE scalar comes back
+      // OUT of the excluded blob — `machineAvgPaceSecondsPer500m`, mirrors
+      // the real store's `jsonb_typeof`-gated cast (`LOG_LIST_COLUMNS`'s
+      // own comment): a non-numeric stored value reads back `null`
+      // rather than this fake throwing, matching the real store's own
+      // "never break the whole list over one bad row" contract.
       return source
         .slice(0, limit)
         .map(
           ({
             steps: _steps,
             series: _series,
-            machineSummary: _machineSummary,
+            machineSummary,
             seq: _seq,
             ...rest
-          }) => rest,
+          }) => ({
+            ...rest,
+            machineAvgPaceSecondsPer500m:
+              typeof machineSummary?.avgPaceSecondsPer500m === "number"
+                ? machineSummary.avgPaceSecondsPer500m
+                : null,
+          }),
         );
     },
     // From-the-log spec (2026-08-18), §3: full row (steps included),
