@@ -5064,3 +5064,121 @@ recorded actuals) never claims digit-identity with the machine.
   "elapsed :56.1 (56.1s)"), while `intervalRestTimeSeconds` in the SAME
   frame is a separate 60 — proving `actualSeconds` is work-only, not
   work-plus-trailing-rest (a fused reading would show 116.1, not 56.1).
+
+## 27. What the 2026-08-25 walk decoded (0x0037/0x0038/0x0039/0x003A) — for `pm5/parse.ts` and `src/monitor/driver.ts`
+
+Record: `docs/monitor/sessions/walk-2026-08-25/`. Two committed captures —
+a three-interval rest-bearing piece closed by a natural finish
+(`rests-finished-recording.jsonl.gz`) and a Menu-terminated smoke
+(`smoke-terminated-recording.jsonl.gz`) whose PM5 Memory → View Detail screen
+was photographed. Every number below was computed from the recordings, not read
+off by eye. Field NAMES for previously-unlabelled offsets are tagged INFERENCE
+where only consistency supports them; VALUES confirmed by the monitor's own
+screen or by an independent formula are tagged PRIMARY.
+
+### 27.1 0x0039 is cumulative and rest-exclusive (settles §23 items 2 and 4)
+
+PRIMARY. The rest-bearing capture's 0x0039 reads 254.8 s / 935 m. Its three
+0x0037 splits' OWN time/distance fields (see 27.3) sum to 60.0 + 134.8 + 60.0 =
+254.8 s and 218 + 500 + 217 = 935 m — identical. The program carried 120 s of
+programmed rest and 0x0039 excludes all of it.
+
+Both §23 premises therefore hold: 0x0039 is a whole-workout cumulative total,
+and it counts work only. Every previous 0x0039 in this repo came from a
+zero-rest piece, which is why this could not be settled before.
+
+### 27.2 work + rest = Total Work Distance, in the machine's own three numbers
+
+PRIMARY. Same capture: 935 m (0x0039 distance) + 274 m (0x003A Total Rest
+Distance) = 1209 m, which is exactly the Total Work Distance the 0x0031 stream
+reported at the finish. This is the fact CLAUDE.md's recurring-failure #11 was
+written about — TWD is work PLUS rest-coast metres, which is why comparing our
+own work-plus-rest accumulator against it was always a mirror. Now witnessed
+end to end within one workout, using three independent fields of the machine's.
+
+### 27.3 0x0037's first two fields are workout-cumulative, NOT the interval's own
+
+The interval's own numbers are `[6..8]` (0.1 s) and `[9..11]` (1 m).
+`[0..2]`/`[3..5]` are the workout's running elapsed/distance, and on a DISTANCE
+interval's boundary they have **already reset**: the rest-bearing capture's
+interval 2 reports 0.04 s / 0.2 m in those fields for an interval that really
+ran 134.8 s / 500 m. The driver already reads the correct pair; this is written
+down so nobody "corrects" it toward the wrong one.
+
+Per-interval rest also lives here: `[12..13]` (1 s) and `[14..15]` (1 m).
+
+| split | `[6..8]` own time | `[9..11]` own dist | `[12..13]` rest time | `[14..15]` rest dist |
+| --- | --- | --- | --- | --- |
+| 1 | 60.0 s | 218 m | 60 s | 130 m |
+| 2 | 134.8 s | 500 m | 60 s | 144 m |
+| 3 | 60.0 s | 217 m | 0 s | 0 m |
+
+### 27.4 0x003A's Interval Rest Time is the FINAL interval's, not a total
+
+From the table above: 130 + 144 = 274 m = 0x003A's Total Rest Distance to the
+metre, and split 3 — the last, with no trailing rest — reports 0 s, which is
+exactly what 0x003A's Interval Rest Time reports in the same burst.
+
+That explains all three captures that read 0: every capture this repo holds
+ENDS on a work interval. The field is neither dead nor mis-scaled. It is still
+never gated on, but it is now explained rather than merely distrusted.
+
+### 27.5 Average watts: `0x0038[14..15]` and `0x003A[10..11]`
+
+PRIMARY (independent formula, not a mirror of anything we compute). Checked
+against Concept2's published power relation `P = 2.80 / pace³` with pace in
+s/m, computed from each frame's OWN pace field, four times:
+
+| frame | watts field | predicted from its own pace |
+| --- | --- | --- |
+| 0x0038 split 2 | 143 | 142.9 |
+| 0x0038 split 3 | 132 | 132.6 |
+| 0x0038 smoke | 119 | 119.4 |
+| 0x003A rests | 139 | 138.5 |
+
+Agreement under 1 W on all four. `0x003A[7]` = split/interval count (3 and 1,
+both correct) and `0x003A[8..9]` = calories — both INFERENCE, both consistent
+across the two captures.
+
+### 27.6 0x0039's Average Stroke Rate reads exactly DOUBLE on a terminate
+
+**The operational rule: never display 0x0039's average stroke rate for a
+terminated piece. Use 0x0038's per-split value.**
+
+| capture | 0x0039 `[10]` | 0x0038 `[3]` | PM5 View Detail `s/m` |
+| --- | --- | --- | --- |
+| smoke, TERMINATED | **46** | 23 | **23** (PRIMARY — photographed) |
+| rests, finished | 24 | 24 / 23 | not photographed |
+
+The monitor's own memory screen sides with 0x0038. The previously committed
+terminate capture shows the identical shape (44 against 0x0038's 22): two
+terminate captures, both exactly 2×, and the natural finish in the same walk is
+clean. **Cause unknown and deliberately not guessed here** — do not write a
+mechanism into this section without a capture that shows one.
+
+### 27.7 The terminate path's first screen oracle, and it passes
+
+Everything else on that View Detail screen is digit-identical to the wire, which
+is the first independent confirmation that the 0x0039 observations the terminate
+path stores are what the monitor itself remembers:
+
+| quantity | PM5 screen | 0x0039 | our accumulator |
+| --- | --- | --- | --- |
+| time | `:31.5` | 31.5 s | 30.81 s |
+| distance | `110` | 110 m | 108.6 m |
+| /500m | `2:23.1` | 143.1 s | — |
+
+Our accumulator is short by 1.4 m / 0.7 s because its register closes at the
+terminal frame while the machine takes one more sample — expected, and precisely
+why the observations are stored alongside it.
+
+### 27.8 `0x0038[4]` carries the value the View Detail screen prints rightmost
+
+INFERENCE on the name, PRIMARY on the value. The byte reads 111 on the smoke,
+which is exactly what the photographed screen prints in its rightmost column;
+117 and 120 on the rest-bearing capture's later splits. The values track effort
+and are physiologically plausible, so this is almost certainly heart rate — which
+would mean the belt IS delivering, something this repo had never witnessed (no
+belt was asked for on this walk). Note the tension: 0x0039's heart-rate bytes
+read 0 in the same burst. Do not build on this until a walk deliberately wears
+and does not wear a belt and compares.

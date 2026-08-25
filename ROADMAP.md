@@ -3682,6 +3682,54 @@ that needs no erg, and it can run in a test.
       `drainSummaryReconcile` already does for disconnect/hook-reconcile,
       from `program()`'s own re-arm path, before cancelling it for the
       outgoing run.
+- [ ] **RC-14 — The avg-pace verdict's zero-fire on an ORDINARY finish
+      (walk 2026-08-25, W-2). A SECOND, DISTINCT shape from RC-13 — do
+      not fold them.** Piece 1 of the walk (`w 1' r1 / w 500m r1 / w 1'`,
+      natural finish, all three intervals recorded) produced NO
+      `avg-pace-verdict` ring entry at all. Not a verdict, not one of the
+      five suppressions — silence, which W11 above names as a finding.
+      **RC-13's mechanism is RULED OUT by the capture's own timestamps:**
+      the next `program()` came 148.1 s after the finish, not inside the
+      3000 ms grace, and `reconcileSummary` demonstrably DID run for that
+      run (`summary-reconciled — split-won`, 0.541 s after the finish,
+      seq 71 of `rests-finished-ring.json`). Every branch of
+      `recordAvgPaceVerdict` (`driver.ts:3301`) calls `log.record` before
+      returning — there is no silent path — so the function was never
+      REACHED, on a run whose reconcile ran. The verdict call sits as the
+      next statement inside the same block as that reconcile
+      (`driver.ts:3692`/`:3698`). **The mechanism is NOT established:
+      nothing in this row asserts one, and the first job is to find it,
+      not to patch the call site.** Replayable end to end — both the raw
+      recording and the ring are committed at
+      `docs/monitor/sessions/walk-2026-08-25/`. Note what this costs: the
+      oracle shipped one PR ago (#196) and has now been walked once, on
+      exactly the shape it exists to check, and said nothing.
+- [x] **RC-15 — 0x003A's Interval Rest Time is the LAST interval's.
+      SETTLED by the walk itself (2026-08-25, W-9); no experiment
+      owed.** The field read 0 for the third capture running, this time
+      on a piece carrying two real programmed 60 s rests. The same
+      recording answers it: each 0x0037 carries its own interval's rest
+      time (`[12..13]`, 1 s) and rest distance (`[14..15]`, 1 m), reading
+      60 s/130 m, 60 s/144 m, and 0 s/0 m for the three splits. 130 + 144
+      = 274 m = 0x003A's Total Rest Distance to the metre. So the field
+      is neither dead nor a total — it is the FINAL interval's rest, and
+      every capture we hold ends on a work interval, which has no
+      trailing rest by construction. Still never gate on it (the driver
+      does not); the value is now EXPLAINED rather than merely
+      distrusted. A rest-final program would only confirm this, so the
+      planned experiment is dropped rather than carried.
+- [ ] **RC-16 — Suppress 0x0039's average stroke rate on a terminated
+      piece** (walk 2026-08-25, W-3). On a Menu-terminate the field reads
+      exactly DOUBLE: 46 against the PM5 View Detail screen's own `23
+      s/m` and against 0x0038's per-split 23. The previously committed
+      terminate capture shows the identical 2× (44 against 22), and the
+      natural finish in the same walk is clean (24 against 24/23). Two
+      terminate captures, both exactly 2×, now with the machine's own
+      memory screen as the tie-breaker — the screen sides with 0x0038.
+      Cause unknown and deliberately not guessed here. This field is not
+      displayed today; the row exists so it is never wired up without the
+      terminate suppression, and so the fact is written down where the
+      next reader of the summary decoder will hit it.
 - [ ] **RC-10 — The Concept2 sandbox as a test oracle.** Once the dev key
       lands: post a reconciled row to `log-dev.concept2.com`, pull
       `export/{csv,fit,tcx}` back, and diff it against what we stored.
@@ -3827,7 +3875,20 @@ item** and W3/W4 ride the same piece.
   this one and Phase LL's, which keeps the name because it stays on the
   PHONE leg, where its watchdog-false-fire question is actually
   observable.
-- **W11** — RC-9's two new ring verdicts, read off `MONITOR LOG · COPY`
+- **W11 — WALKED 2026-08-25, and it earned its keep.** Record:
+  `docs/monitor/sessions/walk-2026-08-25/`. `rest-distance-verdict`
+  fired and agreed on the first rest-bearing piece ever put to it
+  (274 m against 274 m). `avg-pace-verdict` fired ZERO times across two
+  pieces where it should have fired twice — once legitimately suppressed
+  on the terminate, and once SILENT on the natural finish, which is
+  RC-14. The absence-is-a-finding clause below is the only reason the
+  silence was noticed at all; the count rule (N pieces ⇒ N lines) is
+  what caught it. The same walk also settled §23 items 2 and 4 (0x0039
+  is cumulative and rest-exclusive) and unblocked RC-9(b), which was
+  oracle-blind for want of a rest-bearing capture reaching 0x0039 —
+  `rests-finished-recording.jsonl.gz` is that capture. Keep this item
+  live for future walks; the read-it-off procedure below is unchanged.
+- **W11 (procedure)** — RC-9's two new ring verdicts, read off `MONITOR LOG · COPY`
   after any rest-bearing multi-interval piece. Grep the pasted log for
   the literal strings `` `avg-pace-verdict` `` and `` `rest-distance-verdict` ``
   — one line each, per run. **The ABSENCE of an `avg-pace-verdict` line
@@ -5611,6 +5672,59 @@ unchanged, cross-version badge render, empty-steps rendering, link-drop
 recovery, honest close reasons, coexistence guard). Release call: PR 2
 is the first taggable tester surface (MINOR); PR 1 tags read-side-first
 at patch level; notes owe "a Just Row never advances your plan".
+
+## Phase LM — When the monitor is lost, say so and stop lying about it
+
+**Opened 2026-08-25**, straight out of the walk that reproduced a tester's
+report first try (`docs/monitor/sessions/walk-2026-08-25/`, finding W-10).
+Scoped by James to all three defects together after he was shown the frame:
+*"the LOST isn't easy to notice, i think we need to highlight that more."*
+
+**What happened.** A tester connected, programmed a workout, tapped "Show me
+the numbers", locked the phone and put it in their pocket, rowed, then hit End
+— and concluded the recording was lost. It was. Locking the phone drops the
+monitor link; nothing rowed while pocketed reaches the run. After ~30 s of real
+rowing the screen read `0m`. The row is not missing from history, though: it is
+saved as a targets-only record stamped **LOGGED BY HAND**, which is exactly
+what a vanished recording looks like from the outside.
+
+**The three defects, which are one story.**
+
+1. **`· LOST` is easy to miss.** It is small mono text in the header, next to
+   the erg's serial number, while the numbers that dominate the screen read
+   `0:00.0` and `0` — which look like a piece that has not started, not like an
+   app that has gone deaf. A rower mid-piece will not notice.
+2. **The banner promises something false.** "Row on. The erg is still counting
+   and End keeps what we saw" is true whenever we saw anything, and a lie in
+   the one case that costs a workout — where we saw nothing. Copy that is
+   reassuring in proportion to how bad the situation is.
+3. **The saved row misdescribes its own provenance.** LOGGED BY HAND is a
+   claim about how a record came to exist, and it is wrong here: the rower
+   rowed, and we failed to hear it. That is a different thing from typing
+   numbers in, and the record should not conflate them.
+
+**TRIAD weight** — defect 3 changes what a stored row claims about itself, so
+this gets the full antagonist pass on its spec and a PM final-PR gate,
+regardless of how small the diff turns out to be.
+
+**Required research before the design is presented** (the standing
+brainstorming rule, and the reason this is a phase and not a fast-path styling
+tweak): iOS owns backgrounding, and we have never checked what it permits.
+Screen Wake Lock, Capacitor's background modes, whether a BLE central can hold
+a subscription while the app is suspended, and what Core Bluetooth
+state-restoration would and would not give us. Vendor docs first, tagged
+PRIMARY / SECONDARY / INFERENCE. **And the does-it-exist question, explicitly:
+before designing any "keep rowing while locked" affordance, establish that iOS
+will actually deliver those notifications — if it will not, name what we are
+asserting on its behalf.** The walk settled that the link IS lost; it did NOT
+settle the mechanism (central torn down vs notifications withheld vs WebView
+suspended), and the fix shape depends on which.
+
+**Not yet decided, and the design owes an answer to each:** whether a
+zero-measured connected session should offer "Log against plan" at all;
+whether the rower should be warned BEFORE locking rather than after; and
+whether a lost link mid-piece should be recoverable by reconnecting rather than
+only endable.
 
 ## Bugfix rounds
 
