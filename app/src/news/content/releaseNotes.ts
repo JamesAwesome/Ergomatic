@@ -5,6 +5,27 @@ import type { ReleaseNote } from "./types";
 // would notice, and internal-only releases are skipped.
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    // v0.22.0 (2026-08-25): range v0.21.0..main = 8 merges, each
+    // accounted per RF15 (the #192 PM gate's own table): #192 (the
+    // MACHINE CONFIRMED block + the 1m counter — three clauses, plus
+    // what CODE is for and the ended-early behaviour), #191
+    // (series-truth: the chart fix, PROSPECTIVE ONLY, and the
+    // chart-clock-matches-totals change above the fold per the #191
+    // gate), #189 (baseline control, tester-visible — its own clause),
+    // #190 (storage only; owns the "rows saved from this update
+    // forward" sentence inside #192's clause), #186 (22-package
+    // dependency bump, no intended behaviour change, no clause),
+    // #185/#187/#188 (docs/spec/walk record only, no clauses).
+    version: "v0.22.0",
+    date: "2026-08-25",
+    items: [
+      "Your saved rows can now show what the erg itself reported: a MACHINE CONFIRMED · WORK ONLY box on the session detail with the monitor's own work time and distance, plus its CODE, the same verification code the PM5 shows in its memory screen, so you can check the phone against the monitor without re-rowing anything. Work only means rest metres are excluded; everything else on that screen includes rest, so the numbers are meant to differ. It appears only on connected rows saved from this update forward (older rows cannot gain it), and on a piece you ended early it shows what the machine recorded up to that point.",
+      "Charts for interval workouts measured in metres stop losing your faster interval: a monitor quirk at the interval boundary could silently drop everything after the first rest from the little pace chart (the numbers were always right; the drawing was not). Fixed for rows saved from this update forward; an already-saved chart with the gap stays as it is. One deliberate change that comes with it: if the connection drops mid-piece, the chart's clock now agrees with the session totals (both come up short by the gap) instead of quietly running its own version of time.",
+      "The metres counter on the connected screen counts every metre again instead of stepping by fives. It reads busier at full speed; it also never lags your actual distance by more than half a metre. That trade was chosen on the erg.",
+      "Baselines look honest when they are empty: an unset baseline now shows as blank with a dim hint instead of a value that looks real, and one +/- control does the adjusting everywhere baselines appear.",
+    ],
+  },
+  {
     // v0.21.0 (2026-08-24): range v0.20.0..main = #179 (questionnaire
     // advance), #181 (the teaching moves to News — the REMOVAL, the
     // time-sensitive clause), #180/#182 (spine PRs 1-2: stored machinery,
