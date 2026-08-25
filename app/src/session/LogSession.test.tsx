@@ -2711,6 +2711,20 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     // Never the pre-formatted strings on these keys.
     expect(body.avgSplitSeconds).not.toBe(model.heroes.avgSplit);
     expect(body.timeSeconds).not.toBe(model.heroes.time);
+
+    // Fix round 1, I5: the `=== model.heroes.X` checks above are
+    // tautological against the SAME `buildSummaryModel` call — they'd
+    // pass even if the tier logic were wrong. Pin the actual NUMBERS this
+    // save writes to the row's own `distance_meters`/`time_seconds`/
+    // `avg_split_seconds` columns, so a regression in what those columns
+    // MEAN (work-only tier B here — `buildMonitorFixture`'s own
+    // `defaultActuals`, no `summaryTotals`, restDistanceMeters 0 on both)
+    // fails HERE, not only in `summaryModel.test.ts`'s own unit coverage.
+    // Work-only: Σdistance 2000+10000=12000, Σelapsed 705+2500=3205,
+    // avgSplit 500×3205/12000 (ONE quotient over the summed pair).
+    expect(body.distanceMeters).toBe(12000);
+    expect(body.timeSeconds).toBe(3205);
+    expect(body.avgSplitSeconds).toBeCloseTo((500 * 3205) / 12000, 10);
   });
 
   // Phase LL Task 4 (design spec §4): the monitor door's own third
@@ -2890,6 +2904,16 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
       verificationBytes: [...REALISTIC_VERIFICATION_BYTES],
       ...REALISTIC_SUMMARY_DETAIL,
     });
+
+    // Fix round 1, I5: this run is TIER A (summaryTotals present) — the
+    // row's own `distance_meters`/`time_seconds`/`avg_split_seconds`
+    // columns (posted as `distanceMeters`/`timeSeconds`/`avgSplitSeconds`)
+    // now mean the MACHINE's own totals, verbatim, not a quotient of
+    // ours: `Math.round(76)`, the raw 24.3, and the machine's own
+    // `avgPaceSecondsPer500m` (159.8) straight off `summaryDetail`.
+    expect(body.distanceMeters).toBe(76);
+    expect(body.timeSeconds).toBe(24.3);
+    expect(body.avgSplitSeconds).toBe(159.8);
   });
 
   it("a MonitorRun with no summaryTotals (a record predating this PR, or closed without the burst) omits machineWorkSeconds/machineWorkMeters/machineSummary from the POST body", async () => {
@@ -3955,19 +3979,27 @@ describe("LogSession: the interrupted header stops reading wall-clock (F6/R-D)",
     expect(screen.queryByText(/1440:00/)).not.toBeInTheDocument();
     expect(screen.getByText(/^AUG 1 ·/)).toBeInTheDocument();
     expect(screen.queryByText(/^AUG 2/)).not.toBeInTheDocument();
-    // The TOTAL line carries what used to be the TIME hero's own number
-    // (work 360s + interval 1's own 300s programmed rest = 660s = 11:00),
-    // with no rest-metres clause (restDistanceMeters is 0 on this run's
-    // only actual).
-    expect(screen.getByText("11:00 total")).toBeInTheDocument();
+    // Fix round 1 (I2/I3): the TOTAL line's rest now comes ONLY from the
+    // measured-rest ladder (RC-1's stored pair, or every actual's own
+    // restSeconds+restDistanceMeters together) — never the program's
+    // programmed rest. This fixture's one actual carries
+    // `restDistanceMeters: 0` but no `restSeconds` at all, so the pair is
+    // INCOMPLETE and no rest is derivable: the total renders work-only,
+    // with no rest clause — "6:00 total", identical to the hero above
+    // (an honest, if redundant, "we don't know the rest" reading, not the
+    // old fused "11:00" the pre-fix-round code would have shown).
+    expect(screen.getByText("6:00 total")).toBeInTheDocument();
   });
 
   // Final-review FIX-4: this test used to claim "wall-clock minutes" but
   // the value it asserted ("58:25") was R-D's MEASURED formula (work +
   // completed rest) — the same one the interrupted case above used. RC-5
-  // (hero-truth) moved that fused number OFF the TIME hero and onto the
-  // TOTAL line instead; the TIME hero itself is now work-only ("53:25").
-  // The monitor door's TIME hero is still never wall-clock (this module's
+  // (hero-truth) moved that population off the TIME hero, which is now
+  // work-only ("53:25"); fix round 1 (I2/I3) further scoped the TOTAL
+  // line to the wire's own MEASURED rest, which this fixture's actuals
+  // don't carry (see below) — so "58:25" doesn't appear anywhere on this
+  // screen any more, not even relocated. The monitor door's TIME hero is
+  // still never wall-clock (this module's
   // own header: "R-D is monitor-only" applies unconditionally, not just
   // when `endedBy === "interrupted"` — RC-5 only changed WHICH measured
   // formula feeds the hero, not that it's measured at all); the "inverse
@@ -3984,11 +4016,13 @@ describe("LogSession: the interrupted header stops reading wall-clock (F6/R-D)",
 
     // Work-only (RC-5): 705+2500 = 3205s -> "53:25".
     expect(screen.getByText("53:25")).toBeInTheDocument();
-    // The TOTAL line carries the OLD fused number this hero used to show:
-    // work 3205s + restSeconds (300 for interval1, 0 for interval2) =
-    // 3505s -> "58:25 total" (no rest-metres clause — both actuals'
-    // restDistanceMeters are 0 on this fixture).
-    expect(screen.getByText("58:25 total")).toBeInTheDocument();
+    // Fix round 1 (I2/I3): both of this fixture's actuals carry
+    // `restDistanceMeters: 0` but neither carries `restSeconds` — the
+    // measured-rest pair is INCOMPLETE, so no rest is derivable (never
+    // the program's own programmed rest, which the pre-fix-round code
+    // would have summed to "58:25 total"). The total renders work-only,
+    // with no rest clause: identical to the hero, "53:25 total".
+    expect(screen.getByText("53:25 total")).toBeInTheDocument();
 
     // Negative guard computed from the fixture's OWN timestamps (not a
     // hand-typed literal) so a regression that swaps the measured formula

@@ -8454,7 +8454,7 @@ section:not(.news-pinned) .news-row:last-of-type {
    buttons; restored in the fix round (review finding C1). Contrast,
    computed via the WCAG relative-luminance formula (never eyeballed, house
    rule):
-     ink-3 on page (eyebrow/meta/hero labels/hint) 6.69:1
+     ink-3 on page (eyebrow/meta/hero labels/hint/total line) 6.69:1
      accent on page (the AVG SPLIT lead hero value, "rust" per the mock) 5.35:1
      ink on page (the title, non-lead hero values) 15.41:1
      ink-2 on surface-sunken (unselected reflection chips) 9.16:1
@@ -8511,7 +8511,11 @@ section:not(.news-pinned) .news-row:last-of-type {
    review's own ruling: "the total line sitting right underneath" is what
    stops a rower filing a bug on a heroes total that shrank). Quiet ink,
    matching `.summary-meta`'s own weight so it reads as a caption on the
-   heroes above it, not a fourth hero. */
+   heroes above it, not a fourth hero. Contrast (fix round 1, M5,
+   WCAG relative-luminance, never eyeballed): --ink-3 on --page, the
+   IDENTICAL pairing this file's own "ink-3 on page (eyebrow/meta/hero
+   labels/hint)" entry two comment blocks above already computes —
+   6.69:1, comfortably clear of the 4.5:1 AA floor. */
 .summary-total-line {
   margin: 6px 0 0;
   font-family: var(--font-mono);
