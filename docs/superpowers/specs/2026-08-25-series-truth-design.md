@@ -107,9 +107,18 @@ normal decimation).** `bucket <= lastEmittedBucket` IS the 1Hz
 decimation — 80-90% of healthy iOS frames take that return (measured
 2.23 frames/s desktop, 90-180ms iOS; notes §"frame cadence") — so
 counting it is an alarm wired to a hot path. The defect signal is the
-STRICTLY backward case: count frames whose bucket is `<`
-`lastEmittedBucket` (the work clock went backwards; exit-7's loss reads
-buckets 67..124 against 196). Plumbing corrected against the code, not
+STRICTLY backward case — REFINED at Task 3 (the implementer measured
+the strict-`<` predicate firing 1 and 18 times on the two committed
+CLEAN captures: the ~450-540ms 0x0033-lags-0x0031 boundary skew makes a
+lagging tick's per-tick clock read backward while the register absorbs
+it and the series is byte-identical — an alarm on normal traffic, the
+same class the pass killed once already). The counted signal is a
+backward frame whose bucket the series NEVER emitted and never will —
+"a reading for a second the chart will never have", i.e. actual data
+loss: `bucket < lastEmittedBucket AND bucket not in the emitted set`.
+The routine lag re-visits already-emitted buckets and counts zero; the
+exit-7 poison shape carries ~57 never-emitted buckets and counts loud.
+(The emitted-bucket set is bounded by session length; a plain Set.) Plumbing corrected against the code, not
 the imagined precedent: `truncated` produces NO ring entry anywhere and
 IS server-persisted, so there is no symmetry to inherit. C′ is
 client-side only: the recorder's result exposes the count; the HOOK
@@ -182,11 +191,12 @@ during the pinned replays so a green result is distinguishable from
    series — a NO-REGRESSION pin, not safety evidence (neither contains
    the risky shape) — with B′'s branch instrumented so green is
    distinguishable from never-ran.
-3. A forced strictly-backward bucket sequence yields a nonzero
+3. A forced backward-and-never-emitted sequence yields a nonzero
    `backwardBucketCount` that reaches the ring via the hook at
-   `closeRecord`; ZERO on the clean replays AND on the healthy exit-7
-   counterfactual (the strict `<` predicate excludes ordinary
-   decimation, which `===` covers).
+   `closeRecord`; ZERO on the clean replays (including their routine
+   boundary-lag ticks, which re-visit emitted buckets) AND on the
+   healthy exit-7 counterfactual; the poisoned exit-7 counterfactual
+   (recorder fed the pre-fix attribution) counts ~57.
 4. `traceModel.ts`'s header states the conditional-on-rower truth for
    BOTH `t` and `d`; ROADMAP carries the axis-quantity question and the
    2×Nm rNN capture walk item, and corrects the stale "rides the next
