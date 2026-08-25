@@ -9202,6 +9202,51 @@ describe("createPm5Driver: summary-half receipt logging (fast-follow Task 1, des
     expect(halves[0]!.detail).toContain("0x003A");
     expect(halves[0]!.detail).toContain(`raw=${hex(bytes)}`);
   });
+
+  it("a 0x0039 notification produces exactly one summary-log-stamp ring entry carrying the decoded wire= stamp and wall= (RC-2, storage-spine design spec §2, PR 1 Task 3)", () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    createPm5Driver(transport, log, { now: () => 0 });
+
+    // Walk-2026-08-23 keystone's own seq 516 raw bytes (interface-notes.md
+    // §24), date/time at offsets 0-3: `78 35 1c 09` decodes to
+    // 2026-08-23 09:28 (`parseSummaryLogStamp`'s own formula, re-derived by
+    // hand in `burstReplay.test.ts`'s own comment on the same bytes) — the
+    // rest of the 20-byte layout is left zeroed, which `parseEndOfWorkout
+    // Summary` still decodes (this entry fires off the stamp, independent
+    // of what the other nine fields read).
+    const bytes = new Uint8Array(20);
+    bytes.set([0x78, 0x35, 0x1c, 0x09], 0);
+    transport.notify(END_OF_WORKOUT_SUMMARY_UUID, bytes);
+
+    const stamps = log.entries().filter((e) => e.kind === "summary-log-stamp");
+    expect(stamps).toHaveLength(1);
+    expect(stamps[0]!.detail).toContain("wire=2026-08-23 09:28");
+    expect(stamps[0]!.detail).toContain("wall=");
+  });
+
+  it("a second 0x0039 (the recovery-HR re-fire) produces a SECOND summary-log-stamp entry — one per NOTIFICATION, not one per run (spec exit criterion 3)", () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    createPm5Driver(transport, log);
+
+    transport.notify(END_OF_WORKOUT_SUMMARY_UUID, new Uint8Array(20));
+    transport.notify(END_OF_WORKOUT_SUMMARY_UUID, new Uint8Array(20));
+
+    const stamps = log.entries().filter((e) => e.kind === "summary-log-stamp");
+    expect(stamps).toHaveLength(2);
+  });
+
+  it("a garbled (too-short) 0x0039 produces NO summary-log-stamp entry — the stamp is derived off the same successful parse gate as the totals", () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    createPm5Driver(transport, log);
+
+    transport.notify(END_OF_WORKOUT_SUMMARY_UUID, new Uint8Array(19));
+
+    const stamps = log.entries().filter((e) => e.kind === "summary-log-stamp");
+    expect(stamps).toHaveLength(0);
+  });
 });
 
 describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design spec §5, adversarial B2/B3/I4/I5)", () => {
@@ -9278,6 +9323,12 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     };
   }
 
+  // Doubles as `summary-observations`' own `detail` fixture (RC-3 Task 3):
+  // its nine fields are exactly `MachineSummaryDetail`'s nine, field for
+  // field — `summaryObservationsEvent` builds `detail` from the SAME
+  // `WorkoutSummary` this object seeds `summaryBytes` from, so every
+  // `detail:` expectation below reuses this constant rather than
+  // hand-duplicating its values.
   const FULL_SUMMARY = {
     avgStrokeRate: 24,
     endingHeartRateBpm: 168,
@@ -9289,6 +9340,15 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     workoutType: 8,
     avgPaceSecondsPer500m: 125,
   };
+
+  /** 0x003F's eight bytes, the keystone capture's own
+   *  (`walk-2026-08-23`'s `photo-w4-verification-code.jpeg` reads
+   *  `6EF3-D827 5B55-52E1` off the PM5's own screen against exactly
+   *  these). Shared by the terminate-door tests below; the natural-finish
+   *  tests above keep their own inline copies, which predate this. */
+  const VERIFICATION_BYTES = Uint8Array.from([
+    0x27, 0xd8, 0xf3, 0x6e, 0xe1, 0x52, 0x55, 0x5b,
+  ]);
 
   /** 0x0039's real 20 bytes for a workout that covered `elapsedSeconds` /
    *  `meters`. Every average field is deliberately POPULATED with a
@@ -9418,6 +9478,7 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
       {
         kind: "summary-observations",
         totals: { workElapsedSeconds: 60, workDistanceMeters: 200 },
+        detail: FULL_SUMMARY,
         verificationBytes: Array.from(verificationBytes),
       },
     ]);
@@ -9491,6 +9552,7 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
       {
         kind: "summary-observations",
         totals: { workElapsedSeconds: 999, workDistanceMeters: 9999 },
+        detail: FULL_SUMMARY,
         verificationBytes: Array.from(verificationBytes),
       },
     ]);
@@ -9918,7 +9980,12 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     ).toHaveLength(2);
   });
 
-  it("(f) A TERMINATED ending never arms the gate: no reconcile is scheduled, and a summary arriving after it is out-of-window", async () => {
+  it("(f) A TERMINATED ending still never arms the RECONCILE gate — and its summary now rides the observations-only door instead of being lost out-of-window (summary-record design spec §1, gates 2+3)", async () => {
+    // REWRITTEN, not deleted: this test used to pin the summary as
+    // `out-of-window`, which was the loss spec §1 exists to fix. What it
+    // pinned that is UNCHANGED — no finish grace, no reconcile deadline, no
+    // synthesized interval — is all still pinned below, because those are
+    // the three things the new door must not disturb.
     const g = primedGate();
     await programViaStub(g.driver, g.transport, ONE_INTERVAL_PROGRAM);
     g.transport.notify(
@@ -9931,22 +9998,291 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     );
     expect(g.events.filter((e) => e.kind === "terminated")).toHaveLength(1);
 
-    // No grace, therefore no deadline to reconcile at. Footnote 12's
+    // UNCHANGED: no grace, therefore no reconcile deadline. Footnote 12's
     // unstable Split/Interval Number is why a terminate opens no grace at
-    // all, and the summary rides the same ruling.
+    // all, and gate 2 deliberately does not share `graceIsOpen` with it.
     expect(g.timer.calls).toHaveLength(0);
 
     g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(40, 130));
+
+    // GATE 3, the whole point: NO interval was synthesized. An abandoned
+    // run must never gain a completed final interval it did not row.
     expect(boundaries(g.events)).toHaveLength(0);
+
+    // The emit waits for 0x003F (the hash sub-window, `HASH_SUBWINDOW_MS`)
+    // exactly as the natural path does — nothing has gone out yet, and the
+    // verdict is deliberately not written yet either: it reports what was
+    // actually emitted, so it cannot claim a run was recorded before it
+    // was (a `program()` landing inside the window abandons the emit).
+    expect(
+      g.events.filter((e) => e.kind === "summary-observations"),
+    ).toStrictEqual([]);
+    expect(verdicts(g.log)).toHaveLength(0);
+    expect(g.timer.pending()?.ms).toBe(200);
+
+    g.transport.notify(LOGGED_WORKOUT_UUID, VERIFICATION_BYTES);
+
+    // 0x003F drains it early — one event, the totals verbatim, the nine
+    // fields, and the hash.
+    expect(g.timer.pending()).toBeNull();
     expect(verdicts(g.log)).toHaveLength(1);
-    expect(verdicts(g.log)[0]!.detail).toContain("out-of-window");
-    // The TERMINATE side of Minor-2's discrimination: a run that never had
-    // a grace reads differently from one whose grace a boundary claimed
-    // (test (a) pins that one).
-    expect(verdicts(g.log)[0]!.detail).toContain(
+    expect(verdicts(g.log)[0]!.detail).toContain("terminate-observations");
+    expect(verdicts(g.log)[0]!.detail).not.toContain("filled-from-summary");
+    expect(
+      g.events.filter((e) => e.kind === "summary-observations"),
+    ).toStrictEqual([
+      {
+        kind: "summary-observations",
+        totals: { workElapsedSeconds: 40, workDistanceMeters: 130 },
+        detail: FULL_SUMMARY,
+        verificationBytes: Array.from(VERIFICATION_BYTES),
+      },
+    ]);
+  });
+
+  it("(f2) THE TERMINATE DOOR SHUTS BEHIND ITSELF (summary-record design spec §1): the ~1-minute HRM re-fire finds it closed and lands out-of-window, carrying the terminate wording Minor-2's discrimination depends on", async () => {
+    const g = primedGate();
+    await programViaStub(g.driver, g.transport, ONE_INTERVAL_PROGRAM);
+    g.transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 30, 100),
+    );
+    g.transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_TERMINATE, 40, 130),
+    );
+    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(40, 130));
+    g.transport.notify(LOGGED_WORKOUT_UUID, VERIFICATION_BYTES);
+    expect(
+      g.events.filter((e) => e.kind === "summary-observations"),
+    ).toHaveLength(1);
+
+    // The HRM re-fire (ecosystem review:420-422), with DIFFERENT numbers —
+    // if the door were still open the record would show these instead.
+    g.clock.advance(60_000);
+    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(999, 9999));
+
+    // Still exactly one event, still the first one's numbers.
+    expect(
+      g.events.filter((e) => e.kind === "summary-observations"),
+    ).toStrictEqual([
+      {
+        kind: "summary-observations",
+        totals: { workElapsedSeconds: 40, workDistanceMeters: 130 },
+        detail: FULL_SUMMARY,
+        verificationBytes: Array.from(VERIFICATION_BYTES),
+      },
+    ]);
+    expect(boundaries(g.events)).toHaveLength(0);
+    // The TERMINATE side of Minor-2's discrimination, preserved: a run that
+    // never had a grace reads differently from one whose grace a boundary
+    // claimed (test (a) pins that one).
+    const lastVerdict = verdicts(g.log).at(-1)!;
+    expect(lastVerdict.detail).toContain("out-of-window");
+    expect(lastVerdict.detail).toContain(
       "ended by terminate, which opens no grace at all",
     );
-    expect(verdicts(g.log)[0]!.detail).not.toContain("already claimed");
+    expect(lastVerdict.detail).not.toContain("already claimed");
+  });
+
+  it("(f3) A TERMINATE WHOSE 0x003F NEVER COMES is not stranded (summary-record design spec §1): the hash sub-window elapses and the observations go out without it, key omitted rather than null", async () => {
+    const g = primedGate();
+    await programViaStub(g.driver, g.transport, ONE_INTERVAL_PROGRAM);
+    g.transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 30, 100),
+    );
+    g.transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_TERMINATE, 40, 130),
+    );
+    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(40, 130));
+    expect(g.timer.pending()?.ms).toBe(200);
+
+    g.timer.pending()!.fire();
+
+    expect(
+      g.events.filter((e) => e.kind === "summary-observations"),
+    ).toStrictEqual([
+      {
+        kind: "summary-observations",
+        totals: { workElapsedSeconds: 40, workDistanceMeters: 130 },
+        detail: FULL_SUMMARY,
+      },
+    ]);
+    expect(boundaries(g.events)).toHaveLength(0);
+  });
+
+  it("(f4) THE LINK DYING DURING THE HASH WAIT still delivers the observations (summary-record design spec §1): `reconcile()` drains the terminate slot, so a teardown cannot throw away a burst the driver already heard", async () => {
+    const g = primedGate();
+    await programViaStub(g.driver, g.transport, ONE_INTERVAL_PROGRAM);
+    g.transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 30, 100),
+    );
+    g.transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_TERMINATE, 40, 130),
+    );
+    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(40, 130));
+    expect(
+      g.events.filter((e) => e.kind === "summary-observations"),
+    ).toStrictEqual([]);
+
+    // `useMonitorSession.ts`'s teardown STEP 1, the same method the hook
+    // calls before it unsubscribes.
+    g.driver.reconcile();
+
+    expect(
+      g.events.filter((e) => e.kind === "summary-observations"),
+    ).toStrictEqual([
+      {
+        kind: "summary-observations",
+        totals: { workElapsedSeconds: 40, workDistanceMeters: 130 },
+        detail: FULL_SUMMARY,
+      },
+    ]);
+    // Drained, not merely cancelled: nothing is left to fire after the
+    // radio is gone.
+    expect(g.timer.pending()).toBeNull();
+  });
+
+  it("(f5) 0x003F ARRIVING FIRST needs no wait at all (summary-record design spec §1): the hash is already on the run when 0x0039 decodes, so the observations go out synchronously and no sub-window is ever armed", async () => {
+    // The ordering is not hypothetical bookkeeping: `verificationBytes` is
+    // written by 0x003F's subscriber for ANY open run, closed or not, so a
+    // stray hash earlier in this run — or a burst whose two notifications
+    // land the other way round — leaves it populated before the summary
+    // ever decodes. Waiting `HASH_SUBWINDOW_MS` for a byte already in hand
+    // would delay the record for nothing.
+    const g = primedGate();
+    await programViaStub(g.driver, g.transport, ONE_INTERVAL_PROGRAM);
+    g.transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 30, 100),
+    );
+    g.transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_TERMINATE, 40, 130),
+    );
+    g.transport.notify(LOGGED_WORKOUT_UUID, VERIFICATION_BYTES);
+    expect(g.timer.calls).toHaveLength(0);
+
+    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(40, 130));
+
+    expect(
+      g.events.filter((e) => e.kind === "summary-observations"),
+    ).toStrictEqual([
+      {
+        kind: "summary-observations",
+        totals: { workElapsedSeconds: 40, workDistanceMeters: 130 },
+        detail: FULL_SUMMARY,
+        verificationBytes: Array.from(VERIFICATION_BYTES),
+      },
+    ]);
+    // NO sub-window was ever armed — this is the branch, not just the
+    // outcome.
+    expect(g.timer.calls).toHaveLength(0);
+    expect(boundaries(g.events)).toHaveLength(0);
+  });
+
+  it("(f6) THE EARLY-BURST TERMINATE ORDERING (fix round 1, IMPORTANT): a 0x0039 that beats our own `terminated` frame is BUFFERED first, and the terminate must pick that buffer up — before this fix it sat in `summaryInGrace` forever, unread and unlogged", async () => {
+    // The burst beating our terminal transition is not exotic: §1's own
+    // PRIMARY research measured it in 3 of 5 committed natural finishes,
+    // and a SINGLE-INTERVAL program is the most exposed shape of all,
+    // because `noteSummary`'s early-side branch fires whenever
+    // `currentIndex === lastIndex` — always true from the instant a
+    // one-interval run opens. On a Menu terminate the whole burst can
+    // therefore be filed as "buffered — held for this run's own natural
+    // close" a moment before the close turns out not to be natural at all.
+    //
+    // Nothing then drained it. `terminatedAwaitingSummary` only opens
+    // `noteSummary`'s door, and by this ordering `noteSummary` has already
+    // run and will not run again; no `pendingSummaryReconcile` exists on a
+    // terminate; so the run ended with the bytes in hand, no
+    // `summary-observations` event, no verdict entry, and a record with no
+    // `summaryTotals` — a SILENT loss, worse than the out-of-window one
+    // this spec set out to fix, because that one at least logged.
+    const g = primedGate();
+    await programViaStub(g.driver, g.transport, ONE_INTERVAL_PROGRAM);
+    g.transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 30, 100),
+    );
+
+    // THE BURST ARRIVES FIRST, while the run is still open and reporting
+    // its only (therefore final) interval.
+    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(40, 130));
+    g.transport.notify(LOGGED_WORKOUT_UUID, VERIFICATION_BYTES);
+    expect(verdicts(g.log).map((e) => e.detail)[0]).toContain("buffered");
+    expect(
+      g.events.filter((e) => e.kind === "summary-observations"),
+    ).toStrictEqual([]);
+
+    // ...and only THEN does the rower's Menu press reach us.
+    g.transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_TERMINATE, 40, 130),
+    );
+
+    // The held summary is picked up and delivered by the SAME
+    // observations-only path the late ordering uses — the hash was already
+    // on the run, so it goes out synchronously with no sub-window.
+    expect(
+      g.events.filter((e) => e.kind === "summary-observations"),
+    ).toStrictEqual([
+      {
+        kind: "summary-observations",
+        totals: { workElapsedSeconds: 40, workDistanceMeters: 130 },
+        detail: FULL_SUMMARY,
+        verificationBytes: Array.from(VERIFICATION_BYTES),
+      },
+    ]);
+    // GATE 3 HOLDS ON THIS ORDERING TOO: still no synthesized interval,
+    // and the buffer is emptied so nothing can consume it a second time.
+    expect(boundaries(g.events)).toHaveLength(0);
+    // A VERDICT EITHER WAY (the silence was half the defect): the trace
+    // names both the buffering and what became of it.
+    const details = verdicts(g.log).map((e) => e.detail);
+    expect(details).toHaveLength(2);
+    expect(details[1]).toContain("terminate-observations");
+    expect(details[1]).toContain("held from before our own terminal");
+    expect(details.some((d) => d.includes("filled-from-summary"))).toBe(false);
+  });
+
+  it("(f7) THE EARLY-BURST ORDERING, HASH STILL OUTSTANDING (fix round 1): the terminate picks the buffer up and waits out the same sub-window, rather than emitting without a hash that is 38ms away", async () => {
+    const g = primedGate();
+    await programViaStub(g.driver, g.transport, ONE_INTERVAL_PROGRAM);
+    g.transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 30, 100),
+    );
+    g.transport.notify(END_OF_WORKOUT_SUMMARY_UUID, summaryBytes(40, 130));
+    g.transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_TERMINATE, 40, 130),
+    );
+
+    // Nothing out yet — the sub-window is armed, exactly as on the late
+    // ordering.
+    expect(
+      g.events.filter((e) => e.kind === "summary-observations"),
+    ).toStrictEqual([]);
+    expect(g.timer.pending()?.ms).toBe(200);
+
+    g.transport.notify(LOGGED_WORKOUT_UUID, VERIFICATION_BYTES);
+
+    expect(
+      g.events.filter((e) => e.kind === "summary-observations"),
+    ).toStrictEqual([
+      {
+        kind: "summary-observations",
+        totals: { workElapsedSeconds: 40, workDistanceMeters: 130 },
+        detail: FULL_SUMMARY,
+        verificationBytes: Array.from(VERIFICATION_BYTES),
+      },
+    ]);
+    expect(g.timer.pending()).toBeNull();
+    expect(boundaries(g.events)).toHaveLength(0);
   });
 
   it("(g) THE AVERAGES ARE NOT DERIVABLE, so they are not invented: the synthesized actual carries null, never a whole-workout average and never zero", async () => {
@@ -10087,6 +10423,7 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
       {
         kind: "summary-observations",
         totals: { workElapsedSeconds: 30, workDistanceMeters: 100 },
+        detail: FULL_SUMMARY,
       },
     ]);
   });
@@ -10142,6 +10479,7 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
       {
         kind: "summary-observations",
         totals: { workElapsedSeconds: 150, workDistanceMeters: 500 },
+        detail: FULL_SUMMARY,
       },
     ]);
   });
@@ -10219,6 +10557,7 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
       {
         kind: "summary-observations",
         totals: { workElapsedSeconds: 150, workDistanceMeters: 500 },
+        detail: FULL_SUMMARY,
         verificationBytes: Array.from(verificationBytes),
       },
     ]);
@@ -10242,6 +10581,7 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     expect(observations).toStrictEqual({
       kind: "summary-observations",
       totals: { workElapsedSeconds: 62.5, workDistanceMeters: 214 },
+      detail: FULL_SUMMARY,
       verificationBytes: Array.from(verificationBytes),
     });
   });
@@ -10260,7 +10600,27 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
     expect("verificationBytes" in observations).toBe(false);
   });
 
-  it("(e) storage-spine design spec §2, NATURAL-FINISH-ONLY: a TERMINATE after an early-side buffer fires no summary-observations event — the bytes are simply abandoned, never filed off a run that never naturally finished", async () => {
+  it("(e) A TERMINATE AFTER AN EARLY-SIDE BUFFER now DELIVERS those bytes as observations (summary-record design spec §1 — this test used to assert the opposite, and the opposite was the defect)", async () => {
+    // **THE PREMISE THIS TEST WAS BUILT ON IS OVERTURNED, and the old
+    // title is left quoted here so the change is not silent.** It read
+    // "NATURAL-FINISH-ONLY: … the bytes are simply abandoned, never filed
+    // off a run that never naturally finished", and it passed for the
+    // reason it stated: `reconcileSummary` was the only builder of a
+    // `summary-observations` event, and a terminate never reaches it.
+    //
+    // Storage-spine §2 was right that a terminate's summary must never
+    // reach `reconcileSummary` — that ruling is INTACT and is now gate 3,
+    // enforced structurally. What it got wrong was "and therefore the
+    // bytes are abandoned": the machine sends a full, honest burst after a
+    // Menu terminate (notes §25, `lab-terminate-ring.json`), and throwing
+    // it away is a loss, not a safeguard. The summary-record spec's §1
+    // separates the two questions — an ABANDONED run may still be
+    // OBSERVED, it just may never gain a derived interval.
+    //
+    // This ordering (buffer first, terminate second) is the one the review
+    // caught as still silently lossy after the first implementation: gate
+    // 2's flag opens `noteSummary`'s door, and by this ordering that door
+    // has already been walked through.
     const g = primedGate();
     await programViaStub(g.driver, g.transport, ONE_INTERVAL_PROGRAM);
     g.transport.notify(
@@ -10274,19 +10634,30 @@ describe("createPm5Driver: THE SUMMARY-FALLBACK GATE (fast-follow Task 2, design
       true,
     );
 
-    // The machine's own terminate report — not a natural finish. No grace
-    // ever opens (footnote 12), `armSummaryReconcile` never arms, and
-    // `reconcileSummary` — the ONLY place a `summary-observations` event
-    // is built — never runs for this run again.
     g.transport.notify(
       GENERAL_STATUS_UUID,
       generalStatusIn(WORKOUTSTATE_TERMINATE, 40, 130),
     );
     expect(g.events.filter((e) => e.kind === "terminated")).toHaveLength(1);
-    expect(g.timer.calls).toHaveLength(0);
+
+    // STILL TRUE, and still what matters: no finish grace, and the ONE
+    // timer now armed is the hash sub-window, not a reconcile deadline —
+    // `reconcileSummary` is never scheduled and never runs for this run.
+    expect(g.timer.pending()?.ms).toBe(200);
+    g.timer.pending()!.fire();
+
+    // NEWLY TRUE: the bytes reach the consumer instead of dying on the run.
     expect(
       g.events.filter((e) => e.kind === "summary-observations"),
-    ).toHaveLength(0);
+    ).toStrictEqual([
+      {
+        kind: "summary-observations",
+        totals: { workElapsedSeconds: 30, workDistanceMeters: 100 },
+        detail: FULL_SUMMARY,
+      },
+    ]);
+    // ...and gate 3 is untouched by that: no interval was derived.
+    expect(boundaries(g.events)).toHaveLength(0);
   });
 
   it("A SUMMARY PAST THE 3000ms WINDOW is not stored: the deadline finds nothing and declines", async () => {

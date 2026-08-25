@@ -2485,7 +2485,17 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
     expect(localStorage.getItem(MONITOR_RUN_KEY)).toBeNull();
   });
 
-  it("(e) TERMINATE teardown is byte-identical to today's — no linger, pinned at minimum", async () => {
+  it("(e) TERMINATE teardown LINGERS TOO (summary-record spec §1 gate 1 — this used to pin the opposite): the link stays up for the burst, and a terminate that never sends one still disconnects at the cap with a byte-identical record", async () => {
+    // REWRITTEN, not deleted. Until spec §1 gate 1 this test asserted
+    // `burstTimer.calls` was EMPTY — that a rower-ended close took the
+    // immediate teardown path — and that assertion is precisely the
+    // production defect: walk-2026-08-23's `ring-phone-3-menu-terminate.json`
+    // ends at `terminal terminated` with no 0x0039/0x003A/0x003F, because
+    // the phone had already hung up ~1s before the burst the machine does
+    // send (notes §25). The linger now arms for `"rower"` as well as
+    // `"finished"`; what is UNCHANGED, and is what this test still pins, is
+    // the outcome when nothing arrives — the cap fires, the disconnect
+    // happens, and the record gains nothing.
     const burstTimer = manualSchedule();
     const { result, fake, transport, unmount } = harness(
       {
@@ -2514,11 +2524,322 @@ describe("useMonitorSession: teardown — the burst linger (storage-spine design
 
     unmount();
 
-    // No natural finish, so no linger ever arms — the immediate path ran,
-    // exactly as it always has.
-    expect(burstTimer.calls).toHaveLength(0);
+    // GATE 1: the link is held open for the burst instead of being dropped
+    // at t=0, exactly as a natural finish already was.
+    expect(burstTimer.pending()?.ms).toBe(BURST_LINGER_MS);
+    expect(transport.disconnects).toBe(0);
+
+    act(() => {
+      burstTimer.pending()!.fire();
+    });
+
     expect(transport.disconnects).toBe(1);
     expect(loadMonitorRun()).not.toHaveProperty("summaryTotals");
+  });
+
+  // docs/monitor/sessions/walk-2026-08-24/lab-terminate-ring.json, byte for
+  // byte — the same three payloads `fake.test.ts`'s own terminate-burst
+  // script carries (Task 5), read straight off the committed capture.
+  const LAB_SUMMARY = Uint8Array.from([
+    0x88, 0x35, 0x0e, 0x0f, 0x7e, 0x09, 0x00, 0xf8, 0x02, 0x00, 0x2c, 0x00,
+    0x00, 0x00, 0x00, 0x64, 0x00, 0x01, 0x3e, 0x06,
+  ]);
+  const LAB_ADDITIONAL_SUMMARY = Uint8Array.from([
+    0x88, 0x35, 0x0e, 0x0f, 0x00, 0x4c, 0x00, 0x01, 0x04, 0x00, 0x56, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x53, 0x02,
+  ]);
+  const LAB_VERIFICATION = Uint8Array.from([
+    0x76, 0x78, 0xe6, 0x7e, 0x23, 0xe3, 0xe4, 0x01, 0x16, 0x17, 0x01, 0x00,
+    0x52, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  ]);
+
+  it("(f) THE MENU-TERMINATE CAPTURE, ALL FOUR GATES (summary-record spec §1): the burst that lands ~1s after a rower-ended close is stored as OBSERVATIONS ONLY — nine fields, the hash, and NOT one synthesized interval", async () => {
+    // The production shape this exists for, end to end through the REAL
+    // hook teardown: rowing ~24s into a 1-interval piece, the rower presses
+    // Menu (0x0031 state 11), the machine sends its partial 0x0037/0x0038,
+    // the app navigates away (unmount) — and only THEN, ~1s later, does the
+    // same 0x0039/0x003A/0x003F burst a natural finish gets arrive.
+    // Production heard none of it (walk-2026-08-23 ring-phone-3).
+    const driverTimer = manualSchedule();
+    const burstTimer = manualSchedule();
+    const { result, fake, transport, unmount } = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [
+          status(100, { elapsedSeconds: 12, distanceMeters: 40 }),
+          status(200, {
+            workoutState: WORKOUTSTATE_TERMINATE,
+            elapsedSeconds: 24.26,
+            distanceMeters: 75.6,
+            spm: 0,
+            currentSplit: 0,
+          }),
+          {
+            atMs: 200,
+            kind: "boundary",
+            actual: {
+              index: 0,
+              elapsedSeconds: 24.3,
+              distanceMeters: 76,
+              avgSpm: 22,
+              avgHeartRateBpm: null,
+              restDistanceMeters: 0,
+            },
+            cumulativeElapsedSeconds: 24.26,
+            cumulativeDistanceMeters: 75.6,
+            burst: {
+              summaryAtMsOffset: 1000,
+              verificationAtMsOffset: 1000,
+              summaryBytes: LAB_SUMMARY,
+              additionalSummaryBytes: LAB_ADDITIONAL_SUMMARY,
+              verificationBytes: LAB_VERIFICATION,
+            },
+          },
+        ],
+      },
+      {
+        burstLingerSchedule: burstTimer.schedule,
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: driverTimer.schedule,
+        },
+      },
+    );
+
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    tick(fake, 100); // t=100: rowing
+    tick(fake, 100); // t=200: the Menu terminate, then its partial boundary
+
+    expect(result.current.phase).toBe("ended");
+    const closed = loadMonitorRun();
+    expect(closed?.endedBy).toBe("rower");
+    // CSAFE-DEF footnote 12: the terminate's own partial 0x0037 is NOT an
+    // interval actual and never was — `boundary-out-of-run`, unchanged.
+    expect(closed?.actuals).toHaveLength(0);
+    expect(closed).not.toHaveProperty("summaryTotals");
+
+    // The app navigates: the REAL unmount teardown runs. GATE 1 defers the
+    // unsubscribe/disconnect instead of hanging up at t=0.
+    unmount();
+    expect(burstTimer.pending()?.ms).toBe(BURST_LINGER_MS);
+    expect(transport.disconnects).toBe(0);
+
+    // ~1s later the whole burst lands in one tick, lab ordering
+    // (0x0039, 0x003A, 0x003F).
+    tick(fake, 1000);
+
+    // GATES 2+3+4, AS AN EXACT RECORD EQUALITY (fix round 1, m2 — this
+    // used to assert the three added fields plus `actuals.length === 0` as
+    // a proxy for "nothing else moved", which cannot see a change to
+    // `terminated`, `endedBy`, `completedAt`, `series`, the work/rest sums,
+    // or anything else on the record). The stored run must be the run this
+    // terminate closed, PLUS exactly three fields and not one byte more.
+    const stored = loadMonitorRun();
+    expect(stored).toStrictEqual({
+      ...closed,
+      summaryTotals: { workElapsedSeconds: 24.3, workDistanceMeters: 76 },
+      summaryDetail: {
+        // PINNED ANOMALY (spec §1 rider c): the same burst's 0x0038 reads
+        // 22 and 0x0032 reads 29 instantaneous, and 22 is the physically
+        // true value (8.5 m/stroke vs an impossible 4.3). Stored verbatim
+        // anyway, and pinned HERE so the anomaly stays visible rather than
+        // being quietly normalised by some later "fix".
+        avgStrokeRate: 44,
+        endingHeartRateBpm: null,
+        avgHeartRateBpm: null,
+        minHeartRateBpm: null,
+        maxHeartRateBpm: null,
+        dragFactorAverage: 100,
+        recoveryHeartRateBpm: null,
+        workoutType: 1,
+        avgPaceSecondsPer500m: 159.8,
+      },
+      verificationBytes: Array.from(LAB_VERIFICATION),
+    });
+
+    // OBSERVATIONS ONLY — the abandoned run gained NO synthesized interval.
+    // `reconcileSummary`'s `filled-from-summary` branch would have filed one
+    // (`intervalComplete{finalBoundary: true}`), corrupting an abandoned
+    // record's meaning, its heroes and `buildMonitorLogSteps`. Implied by
+    // the equality above (`closed.actuals` is empty), asserted separately
+    // because it is the SPEC's claim, not an incidental consequence — and
+    // because the hook's own live view must agree with storage.
+    expect(stored?.actuals).toHaveLength(0);
+    expect(result.current.actuals).toHaveLength(0);
+
+    const entries = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const verdicts = entries.filter((e) => e.kind === "summary-reconciled");
+    expect(verdicts).toHaveLength(1);
+    expect(verdicts[0]!.detail).toContain("terminate-observations");
+    expect(entries.some((e) => e.detail.includes("filled-from-summary"))).toBe(
+      false,
+    );
+
+    // The link comes down at burst completion, and nothing is left ticking.
+    expect(transport.disconnects).toBe(1);
+    expect(driverTimer.pending()).toBeNull();
+    expect(burstTimer.pending()).toBeNull();
+  });
+
+  it("(g) THE EARLY-BURST TERMINATE ORDERING REACHES THE RECORD TOO (fix round 1, IMPORTANT): a 0x0039 that beats the Menu press is buffered, and the terminate picks it up — the record still gains the observations", async () => {
+    // `driver.test.ts`'s (f6)/(f7) pin the ORDERING mechanics at the layer
+    // that owns them. This one exists because the loss this fix repairs
+    // ended at the RECORD, and only the hook can show a record: before the
+    // fix the summary sat in `run.summaryInGrace` unread, and
+    // `loadMonitorRun()` came back with no `summaryTotals` and no verdict
+    // in the ring to say why.
+    const driverTimer = manualSchedule();
+    const burstTimer = manualSchedule();
+    const { result, fake, transport, unmount } = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [
+          status(100, { elapsedSeconds: 12, distanceMeters: 40 }),
+          status(200, {
+            workoutState: WORKOUTSTATE_TERMINATE,
+            elapsedSeconds: 24.26,
+            distanceMeters: 75.6,
+            spm: 0,
+            currentSplit: 0,
+          }),
+        ],
+      },
+      {
+        burstLingerSchedule: burstTimer.schedule,
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: driverTimer.schedule,
+        },
+      },
+    );
+
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    tick(fake, 100); // t=100: rowing
+
+    // THE BURST BEATS THE MENU PRESS. `deliverSummary` puts 0x0039 on the
+    // wire out of band, which is exactly what this ordering is — the run is
+    // still open and (being single-interval) always in its final interval,
+    // so `noteSummary` BUFFERS it.
+    act(() => {
+      fake.deliverSummary({ elapsedSeconds: 24.3, meters: 76 });
+    });
+    expect(loadMonitorRun()).not.toHaveProperty("summaryTotals");
+
+    tick(fake, 100); // t=200: the Menu terminate
+    expect(result.current.phase).toBe("ended");
+    expect(loadMonitorRun()?.endedBy).toBe("rower");
+
+    // The app navigates; the linger holds the link (gate 1).
+    unmount();
+    expect(burstTimer.pending()?.ms).toBe(BURST_LINGER_MS);
+
+    // No 0x003F on this fixture (`deliverSummary` sends 0x0039 alone), so
+    // the sub-window is what delivers — hash or not, nothing is stranded.
+    expect(driverTimer.pending()?.ms).toBe(200);
+    act(() => {
+      driverTimer.pending()!.fire();
+    });
+
+    const stored = loadMonitorRun();
+    expect(stored?.summaryTotals).toStrictEqual({
+      workElapsedSeconds: 24.3,
+      workDistanceMeters: 76,
+    });
+    // The hash never came, so the key is ABSENT — not null, not undefined.
+    expect(stored).not.toHaveProperty("verificationBytes");
+    expect(stored?.summaryDetail?.avgStrokeRate).toBe(24); // deliverSummary's own default
+    // Gate 3 on this ordering as well.
+    expect(stored?.actuals).toHaveLength(0);
+    expect(transport.disconnects).toBe(1);
+    expect(burstTimer.pending()).toBeNull();
+  });
+
+  it("(h) THE WHOLE BURST BEFORE THE MENU PRESS, hash included (fix round 1): the pickup emits SYNCHRONOUSLY inside the terminated close, and it must run AFTER the `terminated` event or the record is still open and declines the write forever", async () => {
+    // The ordering hazard this pins is the terminate-branch twin of the
+    // `finished` branch's own HIGH finding: `emit({kind:"terminated"})` is
+    // what drives the hook's `closeRecord`, and an observations event that
+    // reached `appendSummaryObservations` first would find
+    // `completedAt: null` and decline PERMANENTLY (decline #3,
+    // `monitorRun.ts`). Test (g) cannot see this — its emit is deferred to
+    // the hash sub-window, long after the close — so it takes a fixture
+    // where the hash is ALREADY on the run when the Menu press lands,
+    // which makes the pickup's emit synchronous.
+    //
+    // Realistic, not contrived: this is the rower pressing Menu during the
+    // trailing rest AFTER the last interval's split already filed —
+    // exactly the shape that disproved the first implementation's claim
+    // that a terminated piece "by construction" has no final split.
+    const driverTimer = manualSchedule();
+    const burstTimer = manualSchedule();
+    const { result, fake, transport, unmount } = harness(
+      {
+        program: ONE_INTERVAL,
+        events: [
+          status(100, { elapsedSeconds: 30, distanceMeters: 100 }),
+          // The final split lands while the run is still open, and its
+          // burst follows a hair later: 0x0039 at t=160, 0x003F at t=170.
+          {
+            ...finalBoundary(150),
+            burst: { summaryAtMsOffset: 10, verificationAtMsOffset: 20 },
+          },
+          status(200, {
+            workoutState: WORKOUTSTATE_TERMINATE,
+            elapsedSeconds: 60,
+            distanceMeters: 200,
+            spm: 0,
+            currentSplit: 0,
+          }),
+        ],
+      },
+      {
+        burstLingerSchedule: burstTimer.schedule,
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: driverTimer.schedule,
+        },
+      },
+    );
+
+    await connect(result);
+    await programAndArm(result, fake, ONE_INTERVAL, ONE_IDENTITY);
+    tick(fake, 100); // t=100: rowing
+    tick(fake, 50); // t=150: the final split
+    tick(fake, 20); // t=170: 0x0039 (buffered) and 0x003F (stored on the run)
+
+    // Still nothing written — the run has not closed, so there is nothing
+    // to fold observations onto yet.
+    expect(loadMonitorRun()?.actuals).toHaveLength(1);
+    expect(loadMonitorRun()).not.toHaveProperty("summaryTotals");
+
+    tick(fake, 30); // t=200: the Menu press
+
+    // Written SYNCHRONOUSLY inside the close, hash and all — no timer was
+    // needed, because nothing was outstanding.
+    expect(driverTimer.pending()).toBeNull();
+    const stored = loadMonitorRun();
+    expect(stored?.endedBy).toBe("rower");
+    expect(stored?.summaryTotals).toStrictEqual({
+      workElapsedSeconds: 60,
+      workDistanceMeters: 200,
+    });
+    expect(stored?.verificationBytes).toHaveLength(19);
+    // Gate 3: the split the rower actually rowed is the ONLY actual — the
+    // summary added no second one.
+    expect(stored?.actuals).toHaveLength(1);
+
+    // And because the burst was already heard, the unmount takes the
+    // IMMEDIATE teardown path with no linger at all (`burstAlreadyHeard`).
+    unmount();
+    expect(burstTimer.calls).toHaveLength(0);
+    expect(transport.disconnects).toBe(1);
   });
 });
 

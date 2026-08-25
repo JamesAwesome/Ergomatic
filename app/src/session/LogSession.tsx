@@ -34,6 +34,7 @@ import { clearRun, loadRun, type SessionRun } from "./run";
 import {
   clearMonitorRun,
   loadMonitorRun,
+  type MachineSummaryDetail,
   type MonitorRun,
 } from "../monitor/monitorRun";
 import type { SeriesData } from "../monitor/seriesRecorder";
@@ -439,6 +440,30 @@ interface LogFormFields {
   workMeters?: number;
   restSeconds?: number;
   restMeters?: number;
+  // RC-3 (storage-spine design spec §2, PR 1 Task 7): the monitor mode's
+  // fifth addition, same optional-key idiom as `deviceName`/`series`/
+  // `endedBy`/the four RC-1 fields above — spread straight from
+  // `monitorRun.summaryTotals`/`summaryDetail`/`verificationBytes`
+  // (Tasks 2-4), never re-derived here. Undefined here means
+  // `JSON.stringify` drops the key entirely below, exactly like an absent
+  // `deviceName` already does; the server's own validator (Task 6,
+  // `routes/data.ts`) accepts absent, so this never blocks a save.
+  // The build below guards `summaryDetail` being absent while
+  // `summaryTotals` is present — a REAL historical shape, not merely a
+  // type-system possibility: build 738's `appendSummaryObservations`
+  // (`git show v0.21.0:app/src/monitor/monitorRun.ts`) wrote ONLY
+  // `summaryTotals` (always) and `verificationBytes` (conditionally) —
+  // `summaryDetail` did not exist on that build's `MonitorRun` at all.
+  // An unsaved build-738-era run that survives the update and gets saved
+  // through THIS code carries totals (and maybe bytes) with no detail,
+  // so this guard is live, not dead defensive code. Same shape the
+  // server-side integration test names "a build-738-era record's honest
+  // shape" (`machineSummary.integration.test.ts`).
+  machineWorkSeconds?: number;
+  machineWorkMeters?: number;
+  machineSummary?: {
+    verificationBytes?: readonly number[];
+  } & Partial<MachineSummaryDetail>;
 }
 
 /** Fix round 1 (whole-branch review, I1): the two doors' `handleSave` were
@@ -1372,6 +1397,35 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
           workMeters: monitorRun.workMeters,
           restSeconds: monitorRun.restSeconds,
           restMeters: monitorRun.restMeters,
+          // RC-3 (storage-spine design spec §2, PR 1 Task 7): same
+          // optional-key idiom as `workSeconds` etc. above — spread
+          // straight from `monitorRun.summaryTotals`/`summaryDetail`/
+          // `verificationBytes` (Tasks 2-4), never re-derived here.
+          ...(monitorRun.summaryTotals !== undefined
+            ? {
+                machineWorkSeconds: monitorRun.summaryTotals.workElapsedSeconds,
+                machineWorkMeters: Math.round(
+                  monitorRun.summaryTotals.workDistanceMeters,
+                ),
+                machineSummary: {
+                  ...(monitorRun.verificationBytes !== undefined
+                    ? { verificationBytes: [...monitorRun.verificationBytes] }
+                    : {}),
+                  // A real build-738-era record can carry `summaryTotals`
+                  // (and maybe `verificationBytes`) with no `summaryDetail`
+                  // — that build's `appendSummaryObservations` never wrote
+                  // the field (it didn't exist on that build's
+                  // `MonitorRun` at all; `git show
+                  // v0.21.0:app/src/monitor/monitorRun.ts`). An unsaved
+                  // run from that build, saved through this code after the
+                  // update, reaches here and posts a bytes-only
+                  // `machineSummary` — correct, not a bug. Same shape the
+                  // server-side integration test names "a build-738-era
+                  // record's honest shape."
+                  ...(monitorRun.summaryDetail ?? {}),
+                },
+              }
+            : {}),
         },
         opts,
       );

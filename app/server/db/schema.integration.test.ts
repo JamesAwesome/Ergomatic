@@ -1092,3 +1092,163 @@ describe("migration 0013: baseline provenance columns", () => {
     ).rejects.toThrow(/violates not-null constraint/);
   });
 });
+
+// RC-2/RC-3 wave design spec §1 ("The server tier (same PR)", TRIAD):
+// migration 0016, three additive, nullable columns (machine_work_seconds
+// doublePrecision, machine_work_meters integer, machine_summary jsonb), no
+// default, no backfill. Same pre/post-migration shape as 0011/0013 above: a
+// legacy row is seeded against a migrations folder capped at 0015, then the
+// real (full) migrate() applies 0016 and both cases below read shared state
+// built once in beforeAll.
+describe("migration 0016: the machine summary columns", () => {
+  let container: StartedPostgreSqlContainer;
+  let pool: pg.Pool;
+  let db: Db;
+  let tempDir: string;
+  let preMigrationRowId: string;
+
+  const PRE_0016_TAGS = [
+    "0000_skinny_silver_fox",
+    "0001_tan_thunderball",
+    "0002_rare_khan",
+    "0003_spicy_firedrake",
+    "0004_slippery_starjammers",
+    "0005_fine_radioactive_man",
+    "0006_windy_wendell_vaughn",
+    "0007_shallow_kang",
+    "0008_strip_wu_steps",
+    "0009_brief_kingpin",
+    "0010_familiar_maddog",
+    "0011_futuristic_roxanne_simpson",
+    "0012_amused_wild_child",
+    "0013_melodic_sphinx",
+    "0014_graceful_microchip",
+    "0015_gorgeous_black_queen",
+  ];
+
+  beforeAll(async () => {
+    container = await new PostgreSqlContainer("postgres:18.4").start();
+    ({ pool, db } = createDb(container.getConnectionUri()));
+
+    // A migrations folder containing only 0000-0015, so migrate() below
+    // cannot possibly apply 0016 — the legacy row (no machine_* columns at
+    // all) gets seeded against exactly the schema a real v0.21.0 deploy
+    // would have.
+    tempDir = await mkdtemp(path.join(tmpdir(), "drizzle-pre-0016-"));
+    await mkdir(path.join(tempDir, "meta"));
+    for (const [i, tag] of PRE_0016_TAGS.entries()) {
+      const idx = String(i).padStart(4, "0");
+      await copyFile(
+        path.join("drizzle", `${tag}.sql`),
+        path.join(tempDir, `${tag}.sql`),
+      );
+      await copyFile(
+        path.join("drizzle", "meta", `${idx}_snapshot.json`),
+        path.join(tempDir, "meta", `${idx}_snapshot.json`),
+      );
+    }
+    const journal = JSON.parse(
+      await readFile(path.join("drizzle", "meta", "_journal.json"), "utf-8"),
+    ) as { entries: { idx: number }[] };
+    await writeFile(
+      path.join(tempDir, "meta", "_journal.json"),
+      JSON.stringify({
+        ...journal,
+        entries: journal.entries.filter((e) => e.idx <= 15),
+      }),
+    );
+    await migrate(db, { migrationsFolder: tempDir });
+
+    const [u] = await db
+      .insert(users)
+      .values({
+        googleSub: "pre-0016-user",
+        email: "pre-0016@migrate.test",
+        name: "Pre 0016",
+      })
+      .returning();
+
+    // Seeded against the PRE-0016 schema (no machine_* columns at all) —
+    // raw SQL, same reason 0011/0013's own blocks above use it: the typed
+    // `sessionLogs` insert builder already declares the machine_* columns
+    // in this file's TS schema, and that statement would 500 against the
+    // real pre-0016 table. Must run before the full migrate() call below.
+    const inserted = await db.execute<{ id: string }>(
+      sql`insert into "session_logs"
+          ("user_id", "workout_title", "workout_type", "held", "pain", "steps")
+          values (${u.id}, 'Pre-0016 session', 'AT', 'held', 2, '[]'::jsonb)
+          returning "id"`,
+    );
+    preMigrationRowId = inserted.rows[0]!.id;
+
+    // The real, full folder — only 0016 is new here (0000-0015's hashes
+    // already match what ran against tempDir above), so this is the moment
+    // the ADD COLUMN statements fire. Runs once, shared by every `it`
+    // below.
+    await migrate(db, { migrationsFolder: "drizzle" });
+  });
+
+  afterAll(async () => {
+    await pool.end().catch(() => {});
+    await container.stop().catch(() => {});
+  });
+
+  it("reads a pre-0016 row's existing fields unchanged, and all three machine columns as null, after 0016 applies (never-migrate contract)", async () => {
+    const [after] = await db
+      .select()
+      .from(sessionLogs)
+      .where(eq(sessionLogs.id, preMigrationRowId));
+    expect(after.held).toBe("held");
+    expect(after.pain).toBe(2);
+    expect(after.machineWorkSeconds).toBeNull();
+    expect(after.machineWorkMeters).toBeNull();
+    expect(after.machineSummary).toBeNull();
+  });
+
+  it("accepts a NEW row with all three machine columns populated, round-tripping exactly (fractional seconds included) once 0016 has applied", async () => {
+    const [u] = await db
+      .insert(users)
+      .values({
+        googleSub: "post-0016-user",
+        email: "post-0016@migrate.test",
+        name: "Post 0016",
+      })
+      .returning();
+
+    const machineSummary = {
+      verificationBytes: [118, 120, 230, 126, 35, 227, 228, 1],
+      avgStrokeRate: 44,
+      endingHeartRateBpm: null,
+      avgHeartRateBpm: null,
+      minHeartRateBpm: null,
+      maxHeartRateBpm: null,
+      dragFactorAverage: 100,
+      workoutType: 1,
+      recoveryHeartRateBpm: null,
+      avgPaceSecondsPer500m: 159.8,
+    };
+
+    const [row] = await db
+      .insert(sessionLogs)
+      .values({
+        userId: u.id,
+        workoutTitle: "Machine summary row",
+        workoutType: "AT",
+        held: null,
+        pain: null,
+        steps: [],
+        machineWorkSeconds: 24.3,
+        machineWorkMeters: 76,
+        machineSummary,
+      })
+      .returning();
+
+    const [after] = await db
+      .select()
+      .from(sessionLogs)
+      .where(eq(sessionLogs.id, row.id));
+    expect(after.machineWorkSeconds).toBe(24.3);
+    expect(after.machineWorkMeters).toBe(76);
+    expect(after.machineSummary).toStrictEqual(machineSummary);
+  });
+});

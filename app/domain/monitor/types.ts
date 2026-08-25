@@ -398,28 +398,51 @@ export type MonitorEvent =
   | { kind: "terminated" }
   | { kind: "disconnected"; reason: string }
   | { kind: "reconnected" }
-  // THE MACHINE'S OWN FINISH (storage-spine design spec §2, PR 1):
-  // 0x0039's decoded work-only totals, folded onto a run that closed by a
-  // NATURAL finish — emitted from `src/monitor/driver.ts`'s reconcile
-  // consumption path, AT MOST ONCE per run, whichever of its two branches
-  // the run takes (the split won, or the split never arrived and the
-  // fallback synthesized the final interval). `totals` are 0x0039's own
-  // `elapsedSeconds`/`meters`, untransformed — work-only, never fused with
-  // rest (§1's own caveat: whether that distinction is even OBSERVABLE
-  // depends on the piece; this event reports what the machine sent, not a
-  // corrected number). `verificationBytes` carries 0x003F's raw,
-  // undecoded bytes — present only if that characteristic's notification
-  // was actually received during this run (production reachability needs
-  // its own subscriber, §2's B3 delta); ABSENT (never `undefined`-valued)
-  // otherwise, the same additive-optional shape `IntervalActual.
-  // restDistanceMeters` already uses. Never fired on a `terminate()`/END
-  // close — burst behaviour on that path is UNKNOWN (§1), and this event
-  // asserts nothing about it. Out of scope for what CONSUMES this event
-  // (RC-2/RC-3, decode/display of 0x0039's other fields, is a later wave):
-  // PR 1 only records bytes.
+  // THE MACHINE'S OWN FINISH (storage-spine design spec §2, PR 1; `detail`
+  // added RC-3 Task 3): 0x0039's decoded work-only totals, plus its other
+  // nine fields, folded onto a run the machine spoke a summary for —
+  // emitted from `src/monitor/driver.ts`, AT MOST ONCE per run, by any of
+  // THREE paths: the reconcile's two branches on a NATURAL finish (the
+  // split won, or the split never arrived and the fallback synthesized the
+  // final interval), and — since the summary-record design spec's §1 —
+  // the observations-only door for a run the ROWER ended (a Menu terminate
+  // or the app's End button; the machine sends the identical burst ~1s
+  // after a terminate, notes §25). The third path emits this event and
+  // NOTHING else: no `intervalComplete` is ever derived from a terminated
+  // run's summary, so a consumer can still not tell which path fired, and
+  // still does not need to. `totals` are 0x0039's own `elapsedSeconds`/`meters`,
+  // untransformed — work-only, never fused with rest (§1's own caveat:
+  // whether that distinction is even OBSERVABLE depends on the piece; this
+  // event reports what the machine sent, not a corrected number). `detail`
+  // is the SAME `WorkoutSummary` (`domain/monitor/pm5/parse.ts`) minus that
+  // pair, field-for-field — REQUIRED, not optional: both producers below
+  // always hold a parsed summary at the moment they emit. Declared inline
+  // here rather than importing `src/monitor/monitorRun.ts`'s
+  // `MachineSummaryDetail` (structurally identical) — this module imports
+  // nothing from `src/` (this file's own header). `verificationBytes`
+  // carries 0x003F's raw, undecoded bytes — present only if that
+  // characteristic's notification was actually received during this run
+  // (production reachability needs its own subscriber, §2's B3 delta);
+  // ABSENT (never `undefined`-valued) otherwise, the same
+  // additive-optional shape `IntervalActual.restDistanceMeters` already
+  // uses. (This used to end "never fired on a `terminate()`/END close —
+  // burst behaviour on that path is UNKNOWN". It is no longer unknown:
+  // `walk-2026-08-24/lab-terminate-ring.json` captured the full burst,
+  // 0x003F included, ~1s after a Menu terminate.)
   | {
       kind: "summary-observations";
       totals: { workElapsedSeconds: number; workDistanceMeters: number };
+      detail: {
+        avgStrokeRate: number;
+        endingHeartRateBpm: number | null;
+        avgHeartRateBpm: number | null;
+        minHeartRateBpm: number | null;
+        maxHeartRateBpm: number | null;
+        dragFactorAverage: number;
+        workoutType: number;
+        recoveryHeartRateBpm: number | null;
+        avgPaceSecondsPer500m: number;
+      };
       verificationBytes?: readonly number[];
     };
 

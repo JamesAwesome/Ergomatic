@@ -30,6 +30,7 @@ import {
   connectGuardStage,
   MONITOR_RUN_KEY,
   type MonitorRun,
+  type MachineSummaryDetail,
 } from "./monitorRun";
 import {
   SERIES_SAMPLE_CAP,
@@ -1841,6 +1842,22 @@ describe("appendSummaryObservations: the post-close observation writer (PR 1, de
   const finishedAt = new Date("2026-08-05T12:41:00.000Z");
   const totals = { workElapsedSeconds: 452, workDistanceMeters: 2000 };
   const verificationBytes: readonly number[] = [0x27, 0xd8, 0xf3, 0x6e];
+  // Task 2's own fixture (RC-3, storage-spine design spec §2): the nine
+  // fields 0x0039 carries beyond the work-only totals above. Every average
+  // field is a distinctive non-zero/non-sentinel value on purpose — a
+  // fixture that left them at a shared default could not tell "wrote the
+  // right field" from "wrote a coincidence".
+  const detail: MachineSummaryDetail = {
+    avgStrokeRate: 26,
+    endingHeartRateBpm: null,
+    avgHeartRateBpm: null,
+    minHeartRateBpm: null,
+    maxHeartRateBpm: null,
+    dragFactorAverage: 100,
+    workoutType: 8,
+    recoveryHeartRateBpm: null,
+    avgPaceSecondsPer500m: 124,
+  };
 
   // A realistic naturally-finished record — a v2 run (the shape a real
   // burst always lands on, `createMonitorRun`'s own "every run this
@@ -1866,23 +1883,42 @@ describe("appendSummaryObservations: the post-close observation writer (PR 1, de
 
     const after = appendSummaryObservations(closed.startedAt, {
       totals,
+      detail,
       verificationBytes,
     });
 
     expect(after).toStrictEqual({
       ...closed,
       summaryTotals: totals,
+      summaryDetail: detail,
       verificationBytes,
     });
     expect(loadMonitorRun()).toStrictEqual(viaJson(after));
   });
 
-  it("folds totals alone when the burst produced no 0x003F bytes — verificationBytes is independently optional", () => {
+  it("writes summaryDetail in the same single write as summaryTotals", () => {
     const closed = naturallyClosedRun();
 
-    const after = appendSummaryObservations(closed.startedAt, { totals });
+    const next = appendSummaryObservations(closed.startedAt, {
+      totals,
+      detail,
+      verificationBytes,
+    });
+
+    expect(next?.summaryDetail).toStrictEqual(detail);
+    expect(loadMonitorRun()?.summaryDetail).toStrictEqual(detail);
+  });
+
+  it("folds totals and detail alone when the burst produced no 0x003F bytes — verificationBytes is independently optional", () => {
+    const closed = naturallyClosedRun();
+
+    const after = appendSummaryObservations(closed.startedAt, {
+      totals,
+      detail,
+    });
 
     expect(after?.summaryTotals).toStrictEqual(totals);
+    expect(after?.summaryDetail).toStrictEqual(detail);
     expect(after?.verificationBytes).toBeUndefined();
     expect(loadMonitorRun()?.verificationBytes).toBeUndefined();
   });
@@ -1891,7 +1927,10 @@ describe("appendSummaryObservations: the post-close observation writer (PR 1, de
     const closed = naturallyClosedRun();
     clearMonitorRun();
 
-    const after = appendSummaryObservations(closed.startedAt, { totals });
+    const after = appendSummaryObservations(closed.startedAt, {
+      totals,
+      detail,
+    });
 
     expect(after).toBeNull();
     expect(loadMonitorRun()).toBeNull();
@@ -1915,7 +1954,10 @@ describe("appendSummaryObservations: the post-close observation writer (PR 1, de
       finishedAt,
     );
 
-    const after = appendSummaryObservations(burstStartedAt, { totals });
+    const after = appendSummaryObservations(burstStartedAt, {
+      totals,
+      detail,
+    });
 
     expect(after).toBeNull();
     expect(loadMonitorRun()).toStrictEqual(viaJson(other));
@@ -1925,13 +1967,20 @@ describe("appendSummaryObservations: the post-close observation writer (PR 1, de
     const run: MonitorRun = { ...freshMonitorRun(), v: 2, logSeed: TEST_SEED };
     saveMonitorRun(run);
 
-    const after = appendSummaryObservations(run.startedAt, { totals });
+    const after = appendSummaryObservations(run.startedAt, {
+      totals,
+      detail,
+    });
 
     expect(after).toBeNull();
     expect(loadMonitorRun()?.summaryTotals).toBeUndefined();
   });
 
-  it('returns null when the stored run closed some other way than a natural finish — endedBy !== "finished"', () => {
+  // Task 2 widens the door from "finished" alone to the complement of
+  // link-lost/program-failed (spec §1 gate 1: "rower" covers BOTH venues,
+  // Menu-at-the-erg and the app's End button, and the machine speaks the
+  // identical burst for a Menu terminate — notes §25).
+  it("admits a rower-ended run (Menu terminate / app STOP)", () => {
     const run: MonitorRun = { ...freshMonitorRun(), v: 2, logSeed: TEST_SEED };
     const done = completeMonitorRun(
       run,
@@ -1939,27 +1988,66 @@ describe("appendSummaryObservations: the post-close observation writer (PR 1, de
       finishedAt,
     );
 
-    const after = appendSummaryObservations(done.startedAt, { totals });
+    const after = appendSummaryObservations(done.startedAt, {
+      totals,
+      detail,
+    });
 
-    expect(after).toBeNull();
-    expect(loadMonitorRun()?.summaryTotals).toBeUndefined();
+    expect(after).not.toBeNull();
+    expect(after?.summaryTotals).toStrictEqual(totals);
+    expect(after?.summaryDetail).toStrictEqual(detail);
+    expect(loadMonitorRun()?.summaryTotals).toStrictEqual(totals);
   });
 
-  it("returns null when summaryTotals already exists — write-once, even for a second burst's own numbers", () => {
+  it("still refuses link-lost and program-failed closes", () => {
+    for (const endedBy of ["link-lost", "program-failed"] as const) {
+      localStorage.clear();
+      const run: MonitorRun = {
+        ...freshMonitorRun(),
+        v: 2,
+        logSeed: TEST_SEED,
+      };
+      const done = completeMonitorRun(
+        run,
+        { terminated: true, endedBy },
+        finishedAt,
+      );
+
+      const after = appendSummaryObservations(done.startedAt, {
+        totals,
+        detail,
+      });
+
+      expect(after).toBeNull();
+      expect(loadMonitorRun()?.summaryTotals).toBeUndefined();
+    }
+  });
+
+  it("write-once door still keyed on summaryTotals — returns null when summaryTotals already exists, even for a second burst's own numbers", () => {
     const closed = naturallyClosedRun();
-    const first = appendSummaryObservations(closed.startedAt, { totals });
+    const first = appendSummaryObservations(closed.startedAt, {
+      totals,
+      detail,
+    });
     expect(first?.summaryTotals).toStrictEqual(totals);
+    expect(first?.summaryDetail).toStrictEqual(detail);
 
     const differentTotals = {
       workElapsedSeconds: 999,
       workDistanceMeters: 9999,
     };
+    const differentDetail: MachineSummaryDetail = {
+      ...detail,
+      avgStrokeRate: 30,
+    };
     const second = appendSummaryObservations(closed.startedAt, {
       totals: differentTotals,
+      detail: differentDetail,
     });
 
     expect(second).toBeNull();
     expect(loadMonitorRun()?.summaryTotals).toStrictEqual(totals);
+    expect(loadMonitorRun()?.summaryDetail).toStrictEqual(detail);
   });
 
   it("round-trips a record carrying observations through isMonitorRun — v stays 2, no migration", () => {
@@ -1967,6 +2055,7 @@ describe("appendSummaryObservations: the post-close observation writer (PR 1, de
 
     const after = appendSummaryObservations(closed.startedAt, {
       totals,
+      detail,
       verificationBytes,
     });
     expect(after).not.toBeNull();

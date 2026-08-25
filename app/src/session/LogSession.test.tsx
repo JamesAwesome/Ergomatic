@@ -31,6 +31,7 @@ import {
   connectGuardStage,
   loadMonitorRun,
   saveMonitorRun,
+  type MachineSummaryDetail,
   type MonitorRun,
 } from "../monitor/monitorRun";
 import type { SeriesData } from "../monitor/seriesRecorder";
@@ -297,6 +298,12 @@ function buildMonitorFixture(
     workMeters?: number;
     restSeconds?: number;
     restMeters?: number;
+    summaryTotals?: {
+      workElapsedSeconds: number;
+      workDistanceMeters: number;
+    };
+    summaryDetail?: MachineSummaryDetail;
+    verificationBytes?: readonly number[];
   } = {},
 ): { run: MonitorRun; workout: LibraryWorkout } {
   const hoarfrost = library("Hoarfrost");
@@ -401,6 +408,21 @@ function buildMonitorFixture(
       : {}),
     ...(overrides.restMeters !== undefined
       ? { restMeters: overrides.restMeters }
+      : {}),
+    // RC-3 (storage-spine design spec §2, PR 1 Task 7): same "omit the key
+    // entirely unless given" idiom as `series`/`endedBy`/the four RC-1
+    // fields above, same reason — a real `appendSummaryObservations` only
+    // ever writes `summaryTotals`/`summaryDetail` together (Task 2's own
+    // write-once contract); `verificationBytes` is separately optional
+    // (only the burst-eligible producer sets it).
+    ...(overrides.summaryTotals !== undefined
+      ? { summaryTotals: overrides.summaryTotals }
+      : {}),
+    ...(overrides.summaryDetail !== undefined
+      ? { summaryDetail: overrides.summaryDetail }
+      : {}),
+    ...(overrides.verificationBytes !== undefined
+      ? { verificationBytes: overrides.verificationBytes }
       : {}),
   };
   const workout: LibraryWorkout = {
@@ -2808,6 +2830,155 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     expect("workMeters" in body).toBe(false);
     expect("restSeconds" in body).toBe(false);
     expect("restMeters" in body).toBe(false);
+  });
+
+  // RC-3 (storage-spine design spec §2, PR 1 Task 7): the monitor door's
+  // fifth addition to the wire body, same optional-key idiom
+  // `deviceName`/`series`/`endedBy`/the four RC-1 fields already proved
+  // out — spread straight from `monitorRun.summaryTotals`/`summaryDetail`/
+  // `verificationBytes` (Tasks 2-4), never re-derived here.
+  //
+  // **REAL, capture-derived values — the terminate capture Task 4's own
+  // brief cites (`lab-terminate-ring.json`) and the exact fixture
+  // `machineSummary.integration.test.ts`'s `REALISTIC_SUMMARY` already
+  // uses for the server round trip**: 24.3s/76m, avgStrokeRate 44 (the
+  // capture's own pinned anomaly), dragFactorAverage 100, workoutType 1,
+  // avgPaceSecondsPer500m 159.8, every heart-rate field null (no strap
+  // worn), and the FULL 19-byte 0x003F verification payload (the real 8
+  // captured bytes, zero-padded to the field's fixed width).
+  const REALISTIC_VERIFICATION_BYTES = [
+    118, 120, 230, 126, 35, 227, 228, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  ] as const;
+  const REALISTIC_SUMMARY_DETAIL: MachineSummaryDetail = {
+    avgStrokeRate: 44,
+    endingHeartRateBpm: null,
+    avgHeartRateBpm: null,
+    minHeartRateBpm: null,
+    maxHeartRateBpm: null,
+    dragFactorAverage: 100,
+    workoutType: 1,
+    recoveryHeartRateBpm: null,
+    avgPaceSecondsPer500m: 159.8,
+  };
+
+  it("posts machineWorkSeconds/machineWorkMeters/machineSummary straight from the loaded MonitorRun's summary observations when present — REAL capture values, not hand-picked round fixtures", async () => {
+    const { run, workout } = buildMonitorFixture({
+      summaryTotals: { workElapsedSeconds: 24.3, workDistanceMeters: 76 },
+      summaryDetail: REALISTIC_SUMMARY_DETAIL,
+      verificationBytes: REALISTIC_VERIFICATION_BYTES,
+    });
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-machinesummary-monitor" }), {
+          status: 201,
+        }),
+      ),
+    );
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+
+    const body = parsedBodies(apiFn)[0]!;
+    expect(body.machineWorkSeconds).toBe(24.3);
+    expect(body.machineWorkMeters).toBe(76);
+    expect(body.machineSummary).toStrictEqual({
+      verificationBytes: [...REALISTIC_VERIFICATION_BYTES],
+      ...REALISTIC_SUMMARY_DETAIL,
+    });
+  });
+
+  it("a MonitorRun with no summaryTotals (a record predating this PR, or closed without the burst) omits machineWorkSeconds/machineWorkMeters/machineSummary from the POST body", async () => {
+    const { run, workout } = buildMonitorFixture();
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-no-machinesummary-monitor" }), {
+          status: 201,
+        }),
+      ),
+    );
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+
+    const body = parsedBodies(apiFn)[0]!;
+    expect("machineWorkSeconds" in body).toBe(false);
+    expect("machineWorkMeters" in body).toBe(false);
+    expect("machineSummary" in body).toBe(false);
+  });
+
+  it("a build-738-era record (summaryTotals/verificationBytes present, summaryDetail absent — that build's writer never produced the field) posts a machineSummary carrying verificationBytes only", async () => {
+    const { run, workout } = buildMonitorFixture({
+      summaryTotals: { workElapsedSeconds: 24.3, workDistanceMeters: 76 },
+      verificationBytes: REALISTIC_VERIFICATION_BYTES,
+    });
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-bytesonly-monitor" }), {
+          status: 201,
+        }),
+      ),
+    );
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+
+    const body = parsedBodies(apiFn)[0]!;
+    expect(body.machineSummary).toStrictEqual({
+      verificationBytes: [...REALISTIC_VERIFICATION_BYTES],
+    });
+  });
+
+  // Step 1c: `machineWorkMeters` is `Math.round(workDistanceMeters)`, never
+  // the raw tenths-precision wire value truncated or passed through as-is
+  // — 0x0039's own meters field is `readU24LE/10`
+  // (`domain/monitor/pm5/parse.ts`), so a genuine reading can land on a
+  // half-metre boundary. 500.5 is chosen specifically because floor and
+  // round disagree on it (floor -> 500, round -> 501), so this assertion
+  // cannot pass by accident of a wrong-but-adjacent implementation.
+  // NOT capture-derived, unlike `REALISTIC_SUMMARY_DETAIL`/
+  // `REALISTIC_VERIFICATION_BYTES` above: no committed capture in this
+  // branch has a fractional `workDistanceMeters` example to cite
+  // verbatim. It is wire-plausible (the field's own tenths precision
+  // makes a value like this a genuine possible reading) but invented for
+  // this test, chosen for the round/floor boundary it forces.
+  it("machineWorkMeters is Math.round(summaryTotals.workDistanceMeters), not the raw fractional wire value", async () => {
+    const { run, workout } = buildMonitorFixture({
+      summaryTotals: { workElapsedSeconds: 199.9, workDistanceMeters: 500.5 },
+    });
+    saveMonitorRun(run);
+    mockWorkouts([workout]);
+    mockBaselines();
+    const apiFn = mockApi(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ id: "log-roundmeters-monitor" }), {
+          status: 201,
+        }),
+      ),
+    );
+    await renderManualLog(MONITOR_WORKOUT_ID, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+    await chooseHeldAndPain();
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+    expect(await screen.findByText("TODAY SCREEN")).toBeInTheDocument();
+
+    const body = parsedBodies(apiFn)[0]!;
+    expect(body.machineWorkMeters).toBe(501);
+    expect(body.machineWorkSeconds).toBe(199.9);
   });
 
   it("an empty or >64-char deviceName is omitted from the POST body — the save still succeeds (branch review Minor)", async () => {

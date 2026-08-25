@@ -7,6 +7,7 @@ import {
   parseEndOfWorkoutSummary,
   parseGeneralStatus,
   parseSplitIntervalData,
+  parseSummaryLogStamp,
   toIntervalActual,
   toMonitorFrame,
   toMonitorState,
@@ -827,5 +828,59 @@ describe("toIntervalActual: field mapping (interface-notes.md's own reasoning co
   it("uses splitIntervalType (0x0037 offset 16) for type, stored raw (RC-1)", () => {
     expect(toIntervalActual(baseRaw({ splitIntervalType: 1 })).type).toBe(1);
     expect(toIntervalActual(baseRaw({ splitIntervalType: 0 })).type).toBe(0);
+  });
+});
+
+describe("parseSummaryLogStamp", () => {
+  // Both committed hardware stamps (walk-2026-08-24): date u16 0x3588,
+  // time u16 0x0F03 (phone) and 0x0F0E (lab). INFERENCE formula over one
+  // date/hour — these tests pin OUR decoder against the two captures.
+  it("decodes the exit-7 phone stamp to Aug 24 2026 15:03", () => {
+    const bytes = new Uint8Array([0x88, 0x35, 0x03, 0x0f]);
+    expect(parseSummaryLogStamp(bytes)).toStrictEqual({
+      year: 2026,
+      month: 8,
+      day: 24,
+      hours: 15,
+      minutes: 3,
+    });
+  });
+  it("decodes the lab terminate stamp to Aug 24 2026 15:14", () => {
+    const bytes = new Uint8Array([0x88, 0x35, 0x0e, 0x0f]);
+    expect(parseSummaryLogStamp(bytes)).toStrictEqual({
+      year: 2026,
+      month: 8,
+      day: 24,
+      hours: 15,
+      minutes: 14,
+    });
+  });
+  // Boundary stamps pin OUR ENCODING of the formula, not the machine
+  // (no capture varies these fields yet — spec §2's honest tag).
+  it("round-trips boundary encodings of the inferred formula", () => {
+    const enc = (y: number, mo: number, d: number, h: number, mi: number) =>
+      new Uint8Array([
+        (mo | (d << 4) | ((y - 2000) << 9)) & 0xff,
+        (mo | (d << 4) | ((y - 2000) << 9)) >> 8,
+        mi,
+        h,
+      ]);
+    expect(parseSummaryLogStamp(enc(2026, 1, 1, 0, 0))).toStrictEqual({
+      year: 2026,
+      month: 1,
+      day: 1,
+      hours: 0,
+      minutes: 0,
+    });
+    expect(parseSummaryLogStamp(enc(2031, 12, 31, 23, 59))).toStrictEqual({
+      year: 2031,
+      month: 12,
+      day: 31,
+      hours: 23,
+      minutes: 59,
+    });
+  });
+  it("returns null on fewer than 4 bytes", () => {
+    expect(parseSummaryLogStamp(new Uint8Array([0x88, 0x35, 0x03]))).toBeNull();
   });
 });

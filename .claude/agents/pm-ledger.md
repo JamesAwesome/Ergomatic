@@ -2237,3 +2237,109 @@ out wrong. If something you want to add belongs in `CLAUDE.md`, put it in
   tautology check.
 - **The 30-second rule is 0-for-13.** Still James's to re-set or retire, still
   belongs in `CLAUDE.md`.
+
+## Storage-location ruling, 2026-08-24 (RC-2/RC-3 wave, summary record)
+
+- **A display target names a storage tier; check the read path before
+  approving "store it client-side".** The summary-record spec was approved with
+  display on the log detail AND storage on the client `MonitorRun` record. The
+  log detail is server-backed (`storedSummary.ts:5` — `GET /api/logs/:id`) and
+  `LogSession.tsx:1178` calls `clearMonitorRun()` in the save callback, so the
+  record dies at the instant the row it would decorate is born. Three
+  individually reasonable scoping answers were jointly impossible. **At a
+  phase-open gate, trace the proposed display's fetch call before ruling on
+  where the data lives.**
+- **"Defer the display" and "discard the evidence" are different decisions and
+  look identical in a spec.** Not storing the machine's burst until RC-5 means
+  every connected session rowed in between is permanently unverifiable — a
+  burst never captured cannot be backfilled. Reshaping a stored column later is
+  recoverable; not capturing is not. Prefer the recoverable error.
+- **The additive-nullable-jsonb precedent is in the schema, twice.** Migration
+  0011 (`series`) and 0012 (`ended_by`) both exist because monitor-observed
+  data had to outlive the client record for the log detail to read it
+  (`app/server/db/schema.ts:213-229`). Cite them rather than re-deriving the
+  argument; a ~250-byte blob beside a 1 Hz trace is not a footprint question.
+- **Moving storage to the server re-arms a gate the spec waived.** The wave's
+  PR 2 was scoped "no PM gate — display of already-gated numbers". Displaying
+  server-stored values makes it a stored-shape consumer; the waiver was written
+  against the client-only premise and does not survive the correction.
+- **Resolution (James, 2026-08-24, after a footprint-quantified Eng/DBA/PM
+  argument):** HYBRID — typed `machine_work_seconds`/`machine_work_meters`
+  columns plus one `machine_summary` jsonb; footprint (~50-125 KB/year) ruled
+  a non-issue by all three arguers.
+
+## PM final-PR gate, PR #190 (summary-record wave PR 1 — TRIAD: stored shape ×2), 2026-08-24
+
+- **A "coincidence" in a test comment was the external scale proof the ROADMAP
+  caveat was waiting for.** #190 deleted RC-3's "`avgPaceSecondsPer500m`'s /10
+  scale … has never decoded a real byte — DOC-ONLY until a capture lands"
+  without citing evidence, while two of its own tests contain it: the keystone
+  is 500 m in 138.7 s and its pace field decodes to 138.7 (a 500 m piece's
+  pace-per-500 m IS its elapsed time, from a different byte range —
+  `burstReplay.test.ts` called the match "a coincidence of this particular
+  piece's pace"), and the terminate capture's 24.3 s / 76 m implies 159.9
+  against a decoded 159.8. **When a PR deletes a documented caveat, make it
+  quote the evidence that discharges it** — and when a derived identity makes
+  two independently-decoded fields equal, that is a scale oracle, not a
+  coincidence. Sibling of RF#11: this is the rare case where the app CAN be
+  checked against arithmetic the wire cannot fake.
+- **A discharged display gate covers the population it was photographed
+  against, not the next one.** #180's merge condition gated display of
+  `summaryTotals`/`verificationBytes` on exit-7's photograph; exit-7 passed and
+  the gate is spent — for those two. #190 stores NINE new machine fields with
+  no screen oracle at all, one of which (`avgStrokeRate` = 44 where physics
+  says 22, `pm5-interface-notes.md` §25) the only terminate capture proves
+  wrong. **When a PR extends a verified field set, ask whether the verification
+  extends with it, and re-arm the gate for the new members in the durable
+  record** (here: RC-3's own body, for Phase PS to find).
+- **Verbatim jsonb moves validation to every future reader.**
+  `validateMachineSummary` checks object-ness, a size cap and the
+  `verificationBytes` band; the nine fields ride through unshaped, per the
+  `series`/migration-0011 precedent. Right for a capture PR — but the
+  obligation ("type-guard each field at read") must land beside the stored
+  shape, not only in the route's comment.
+- **"Died at save" is a claim about a PRIOR build; check which fields it
+  covers.** #190's first bullet said the nine stats "died with the client
+  record the moment you saved". They never reached the record at all — the
+  parser had zero consumers. True of #180's two fields, false of the nine, in
+  one compound sentence. **At a gate, read every "before this" clause against
+  the tag it describes** (`git show v0.21.0:<file>` settles it, and this branch
+  used exactly that command to settle a different false premise about build
+  738 — twice).
+- **The strongest argument nobody made, and its resolution, recorded so the
+  next reader does not re-derive it:** the terminate capture (`driver.ts` +375,
+  four gates plus a fifth invented after the antagonist pass, n=1 lab capture,
+  zero app-STOP-venue captures, margin down from ~5x to ~1.7x) had a real case
+  for shipping separately, gated on the walk photograph it already owes. Ruled
+  SHIP TOGETHER on this ledger's own storage-location principle — **not
+  capturing is unrecoverable, reshaping a column later is not** — and because
+  the failure mode is bounded to the status quo (burst missed), with gate 3
+  making the dangerous outcome structural rather than guarded.
+- **Zero-behavioural-line tail, fourth occurrence** (#104, #109, #183, #190):
+  the review's own fix wave changed one error string and otherwise only
+  comments and a test. One command settles it; keep it as the standard.
+- **Exit-criteria freeze, clean:** `## Exit criteria` byte-identical (md5) from
+  the antagonist revision through HEAD, and that commit precedes the plan and
+  every implementation commit. The late spec edit touched §1 wording only —
+  the #104 "check the block, not the file" rule working as intended.
+- **The status-paragraph check has now fired SIX gates running** (#165, #167,
+  #174, #182, #183, #190) — a PR that ticks RC-2 and RC-3 and rewrites 79
+  ROADMAP lines left Phase RC's Status calling the RC-2/RC-3 wave the "live
+  frontier … now unblocked". It was made a merge condition at #183's gate and
+  still is not being run. Stop re-deriving it; run it before reading the body.
+- **Release call: NO TAG on #190** (nothing a tester can see; the #140 rule,
+  fourth pre-statement in a row). `v0.21.0..main` is empty, so PR 2 opens a
+  clean attributable MINOR whose notes owe three clauses: the block, **that it
+  appears only on rows saved from that build forward** (no backfill, by
+  design), and what "MACHINE CONFIRMED" means on a row the rower TERMINATED —
+  #190 makes that data exist, and PR 2 will label an abandoned piece with the
+  machine's own confirmation and a verification code nothing has ever checked
+  for a terminated piece.
+- **Backlog: 64 unchecked / 226 checked on branch vs 64 / 224 on main** — two
+  ticked, two filed. Both new items are hardware-walk items no desk session can
+  discharge, so this is honest deferral, not filing-as-disposal; first
+  non-branch-neutral gate in five, worth watching rather than flagging.
+- **The 30-second rule is 0-for-14** (#190 at ~210 words); eighth consecutive
+  declined enforcement, same reason — outcome line, six so-what bullets, depth
+  in the Record block. Still James's to re-set or retire, still belongs in
+  `CLAUDE.md`.

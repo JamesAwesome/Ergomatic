@@ -646,11 +646,30 @@ const FINISH_HANDOFF_HOLD_MS = 3500;
 
 /**
  * Storage-spine design spec §2's late side (PR 1, Task 3): at a
- * NATURAL-FINISH teardown whose record has not yet heard the machine's
+ * BURST-ELIGIBLE teardown whose record has not yet heard the machine's
  * summary burst (0x0039 + 0x003F), `teardown`'s reconcile/unsubscribe/
  * disconnect steps defer to the EARLIER of the burst arriving or this many
  * milliseconds — exported so tests can name it rather than hard-coding
  * 2000 twice.
+ *
+ * "Burst-eligible" was "natural-finish" until the summary-record design
+ * spec's §1 gate 1 widened it to rower-ended closes as well. The DURATION
+ * is unchanged and was not re-derived: the ~5.0× headroom below is
+ * modelled on the NATURAL finish's 398 ms worst case, and the terminate's
+ * own measured lag is larger — ~1 s from the terminal to the burst
+ * (`walk-2026-08-24/lab-terminate-ring.json`, n = 1), plus up to
+ * `driver.ts`'s `HASH_SUBWINDOW_MS` if 0x003F never comes. That is ~1.2 s
+ * against this 2000, so the terminate path fits with roughly 1.7× margin
+ * rather than 5×.
+ *
+ * AND THE REAL BUDGET IS SMALLER STILL, because this clock starts at
+ * TEARDOWN, not at the terminal frame: the machine's ~1 s is measured from
+ * its own terminate, while these 2000 ms only begin once the hook has
+ * flipped to `ended`, the caller has navigated, and the component has
+ * unmounted. Whatever that navigate-and-unmount takes comes straight off
+ * the top. Stated, not smoothed over: a slower terminate burst — or a
+ * slower navigation — is capped here and lost, and the next terminate
+ * capture is what would move this number.
  *
  * Holds at ~5.0× the modelled worst case (398 ms: late-side first element
  * +90.2 ms plus the burst span +307.8 ms), structurally bounded at one
@@ -1463,7 +1482,9 @@ export function useMonitorSession(
   const handoffHoldRef = useRef<(() => void) | null>(null);
 
   /** Storage-spine design spec §2's late side (PR 1, Task 3): while a
-   *  natural-finish teardown is in its burst linger, this holds the
+   *  BURST-ELIGIBLE teardown (a natural finish or a rower-ended close —
+   *  the linger's own predicate, summary-record spec §1 gate 1) is in its
+   *  burst linger, this holds the
    *  function that finishes it early — set by `teardown` right before it
    *  defers, cleared the moment it runs (by whichever of the two triggers
    *  gets there first: the `summary-observations` handler below, or the
@@ -1981,10 +2002,15 @@ export function useMonitorSession(
       if (event.kind === "summary-observations") {
         // THE MACHINE'S OWN FINISH, FOLDED ONTO THE RECORD (storage-spine
         // design spec §2, PR 1 Task 3). `driver.ts`'s own doc comment on
-        // this event kind: emitted AT MOST ONCE per run, only for a
-        // NATURAL finish, whichever of `reconcileSummary`'s two branches
-        // the run took — the driver never fires it for a terminate/END
-        // close. `runRef.current` is the identity this write is keyed on;
+        // this event kind: emitted AT MOST ONCE per run, by any of three
+        // paths — `reconcileSummary`'s two branches on a natural finish,
+        // and (summary-record spec §1) the observations-only door for a
+        // ROWER-ended close, which emits this event and nothing else. This
+        // handler needs no branch for the third: the write below is the
+        // observation write, which is precisely all a terminate's summary
+        // is allowed to do, and `appendSummaryObservations` re-checks the
+        // eligible-close predicate itself (gate 4). `runRef.current` is
+        // the identity this write is keyed on;
         // `appendSummaryObservations` re-reads storage fresh rather than
         // trusting it (the same `clearMonitorRun()` resurrection race its
         // own doc comment names), so a `run === null` here just means
@@ -1995,13 +2021,15 @@ export function useMonitorSession(
         if (run !== null) {
           const appended = appendSummaryObservations(run.startedAt, {
             totals: event.totals,
+            detail: event.detail,
             ...(event.verificationBytes !== undefined
               ? { verificationBytes: event.verificationBytes }
               : {}),
           });
           if (appended !== null) runRef.current = appended;
         }
-        // If a natural-finish teardown is mid-linger waiting for exactly
+        // If a burst-eligible teardown (natural finish OR rower-ended —
+        // spec §1 gate 1) is mid-linger waiting for exactly
         // this, it finishes NOW rather than at `BURST_LINGER_MS` — "or
         // earlier, on burst completion" (spec §2). `null` at every other
         // time (this ref's own doc comment), so the ordinary in-grace
@@ -2254,24 +2282,47 @@ export function useMonitorSession(
       };
 
       // THE LATE SIDE (storage-spine design spec §2, Task 3): a
-      // NATURAL-FINISH record (`closeRecord`'s own "finished" close
-      // reason, `endByMachine`'s only door for it — never cancel, fail,
-      // an interrupted End, or a terminate) whose burst has not yet been
-      // recorded gets STEP 1 (with its glued hand-off release), STEP 3,
-      // and STEP 4 deferred to the earlier of the burst arriving or
+      // BURST-ELIGIBLE record whose burst has not yet been recorded gets
+      // STEP 1 (with its glued hand-off release), STEP 3, and STEP 4
+      // deferred to the earlier of the burst arriving or
       // `BURST_LINGER_MS`. `run.summaryTotals !== undefined` means the
       // burst already landed and was written BEFORE this teardown ever
       // ran (the early side, §2's own "3 of 5": the burst beat OUR
       // terminal transition, and by the time the hand-off hold found
       // nothing missing and let this screen unmount, `reconcile()` had
       // nothing left to wait for) — that case takes the immediate path
-      // below with NO added latency, same as every close that was never a
-      // natural finish at all.
-      const naturalFinish =
-        run !== null && run.completedAt !== null && run.endedBy === "finished";
+      // below with NO added latency, same as every close that never
+      // expected a burst at all.
+      //
+      // **BURST-ELIGIBLE, not natural-finish (summary-record design spec
+      // §1, GATE 1 of four).** This predicate read `endedBy === "finished"`
+      // until the terminate capture, and that single word is the whole
+      // production defect: walk-2026-08-23's
+      // `ring-phone-3-menu-terminate.json` is a production phone ring of a
+      // Menu terminate and it ends at `terminal terminated` with NO
+      // 0x0039/0x003A/0x003F — not because the machine sends none, but
+      // because this teardown hung up at t=0 while the burst was still
+      // ~1s out (notes §25's lab measurement, `lab-terminate-ring.json`).
+      // The honest predicate is "the link was still up when this record
+      // closed" — the complement of `link-lost`/`program-failed`, which is
+      // exactly `{"finished", "rower"}`. `"rower"` covers BOTH venues (a
+      // Menu press at the erg and the app's own End button —
+      // `MonitorRun.endedBy`'s own table) and stays correct if walk
+      // question W8's PM5 inactivity auto-terminate lands in `"rower"`
+      // later. `monitorRun.ts`'s `appendSummaryObservations` admits the
+      // identical pair (spec §1's GATE 4) — one predicate, two enforcement
+      // points, deliberately: this one decides whether the bytes can still
+      // ARRIVE, that one decides whether they may be WRITTEN.
+      //
+      // Everything else about the linger is unchanged — same
+      // `BURST_LINGER_MS` cap, same one-shot `finish`, same second stash.
+      const burstEligible =
+        run !== null &&
+        run.completedAt !== null &&
+        (run.endedBy === "finished" || run.endedBy === "rower");
       const burstAlreadyHeard = run !== null && run.summaryTotals !== undefined;
 
-      if (naturalFinish && !burstAlreadyHeard) {
+      if (burstEligible && !burstAlreadyHeard) {
         stash();
         const schedule =
           depsRef.current.burstLingerSchedule ??

@@ -318,9 +318,12 @@ export interface FakeBoundaryEvent {
  *  capture at seq 514-518): the machine follows its final 0x0037/0x0038
  *  with 0x0039+0x003A (269.6/270.7 ms later — the same instant, for this
  *  file's purposes) then 0x003F (307.8 ms later) — three more
- *  notifications, each `atMs`-offset from THIS boundary's own `atMs` and
- *  independently scriptable, riding the same virtual clock as everything
- *  else in this file (no wall clock — `tick()`'s own doc comment). A
+ *  notifications riding TWO independently scriptable `atMs`-offsets from
+ *  THIS boundary's own `atMs` (0x0039+0x003A share `summaryAtMsOffset`;
+ *  0x003F gets its own `verificationAtMsOffset`, below — corrected from an
+ *  earlier "three offsets" plan draft, storage-spine design spec §1
+ *  riders), riding the same virtual clock as everything else in this file
+ *  (no wall clock — `tick()`'s own doc comment). A
  *  script controls which side of the real race (design spec §1: "3 of 5
  *  burst-first") it is describing purely through `atMs` values: put a
  *  terminal `FakeStatusEvent` (`WORKOUTSTATE_WORKOUTLOGGED`) BEFORE this
@@ -329,21 +332,22 @@ export interface FakeBoundaryEvent {
  *  (`runDueEvents`) does the rest; nothing about the burst itself needs to
  *  know which race it is in.
  *
- *  `summaryOverrides` is the ONLY totals knob a script gets:
- *  `elapsedSeconds`/`meters` are NOT authored here — 0x0039 reports the
- *  WHOLE WORKOUT's totals, WORK-ONLY (spec §1: "the work-only pins use
- *  the rest-bearing captures ... where the two definitions actually
- *  differ"), and a script that could set an arbitrary number here could
- *  just as easily set a FUSED one with no test able to tell the
- *  difference — exactly the trap `avgSplit`'s removal from
- *  `FakeBoundaryEvent` already fixed once (that field's own doc comment).
- *  The fake instead SUMS every boundary's own `actual.elapsedSeconds`/
- *  `distanceMeters` — the per-interval WORK fields, never
- *  `cumulativeElapsedSeconds`/`cumulativeDistanceMeters`, which include
- *  rest — as each boundary is processed, so the totals this burst reports
- *  are exactly what the script's own intervals say, truthfully: "derived,
- *  never authored", the same rule `boundaryBundle`'s own Average Pace
- *  already follows. */
+ *  `summaryOverrides` is the ONLY totals knob a script gets over the
+ *  COMPUTED encoding (`summaryBytes`'s own doc comment below covers the
+ *  one full escape from that encoding entirely): `elapsedSeconds`/
+ *  `meters` are NOT authored here — 0x0039 reports the WHOLE WORKOUT's
+ *  totals, WORK-ONLY (spec §1: "the work-only pins use the rest-bearing
+ *  captures ... where the two definitions actually differ"), and a
+ *  script that could set an arbitrary number here could just as easily
+ *  set a FUSED one with no test able to tell the difference — exactly
+ *  the trap `avgSplit`'s removal from `FakeBoundaryEvent` already fixed
+ *  once (that field's own doc comment). The fake instead SUMS every
+ *  boundary's own `actual.elapsedSeconds`/`distanceMeters` — the
+ *  per-interval WORK fields, never `cumulativeElapsedSeconds`/
+ *  `cumulativeDistanceMeters`, which include rest — as each boundary is
+ *  processed, so the totals this burst reports are exactly what the
+ *  script's own intervals say, truthfully: "derived, never authored",
+ *  the same rule `boundaryBundle`'s own Average Pace already follows. */
 export interface FakeBurst {
   /** ms after this boundary's own `atMs` that 0x0039/0x003A go out —
    *  default 269.6, the keystone's own measured offset (rounded to the
@@ -371,8 +375,24 @@ export interface FakeBurst {
    *  same non-zero-on-purpose defaults `FakeControls.deliverSummary`
    *  already uses, and for the same reason (that method's own doc
    *  comment: a test asserting "no average carried across" must be able
-   *  to fail against a fake that defaulted to zero). */
+   *  to fail against a fake that defaulted to zero). Ignored when
+   *  `summaryBytes` (below) is set — a raw override replaces the whole
+   *  computed encoding, `summaryOverrides` included. */
   summaryOverrides?: Partial<Omit<WorkoutSummary, "elapsedSeconds" | "meters">>;
+  /** 0x0039's raw bytes, replacing the computed encoding
+   *  (`buildEndOfWorkoutSummaryBytes` over `summaryOverrides` plus the
+   *  derived work-only totals) entirely — the same "raw bytes, verbatim"
+   *  idiom `additionalSummaryBytes`/`verificationBytes` already use, and
+   *  necessary for the SAME reason: `WorkoutSummary` has no field for
+   *  0x0039 offsets 0-3, the Log Entry Date/Time `parseSummaryLogStamp`
+   *  decodes (`parse.ts`'s own doc comment — undecoded on purpose until
+   *  that function existed), so `buildEndOfWorkoutSummaryBytes` always
+   *  writes zero there; a script replaying a REAL capture's date/time
+   *  stamp verbatim (rather than describing one with `summaryOverrides`,
+   *  which cannot reach these bytes at all) has no other way to put them
+   *  on the wire. The terminate-burst script (`fake.test.ts`, storage-
+   *  spine design spec §1 riders) is this field's first use. */
+  summaryBytes?: Uint8Array;
 }
 
 export type FakeTimelineEvent = FakeStatusEvent | FakeBoundaryEvent;
@@ -1511,15 +1531,22 @@ export function createFakeTransport(script: FakeScript): Transport &
   // every fresh accept, same reason `bankedDistanceMeters` is.
   let bankedWorkSeconds = 0;
   let bankedWorkMeters = 0;
-  // Storage-spine design spec §2: the natural-finish burst a boundary's
-  // own `FakeBurst` schedules, checked every `tick()` (`deliverPendingBurst`'s
-  // own doc comment) until both notifications have gone out. `null` when
-  // nothing is pending — the common case, and always the case for a
-  // script that never sets `FakeBoundaryEvent.burst`.
+  // Storage-spine design spec §2: the natural-finish (or terminate) burst
+  // a boundary's own `FakeBurst` schedules, checked every `tick()`
+  // (`deliverPendingBurst`'s own doc comment) until both notifications
+  // have gone out. `null` when nothing is pending — the common case, and
+  // always the case for a script that never sets `FakeBoundaryEvent.burst`.
+  // ONE slot: a script that tries to arm a SECOND burst while one is
+  // still pending is a scripting foot-gun (design spec §1 riders (a)) —
+  // the boundary handler below THROWS rather than silently replacing
+  // what a prior boundary already scheduled.
   let pendingBurst: {
     summaryAtMs: number;
     verificationAtMs: number;
-    summary: WorkoutSummary;
+    // Precomputed at scheduling time (`FakeBurst.summaryBytes` if the
+    // script gave one, else the computed encoding) — `deliverPendingBurst`
+    // sends this verbatim rather than re-deriving it at delivery time.
+    summaryBytes: Uint8Array;
     additionalSummaryBytes: Uint8Array;
     verificationBytes: Uint8Array;
     summaryDelivered: boolean;
@@ -2338,6 +2365,16 @@ export function createFakeTransport(script: FakeScript): Transport &
       // each notification on `linkDown`, checked at ITS OWN due time, not
       // at this scheduling instant.
       if (event.burst) {
+        // The loud overwrite (design spec §1 riders (a)): a fake script
+        // may hold at most one burst. Both descriptions land in the
+        // message — the pending one's own due times, cheaply available
+        // off `pendingBurst` itself, and the new boundary's `atMs` — so a
+        // failing test names both scripts, not just the second one.
+        if (pendingBurst) {
+          throw new Error(
+            `pendingBurst already armed (summary due ${pendingBurst.summaryAtMs}ms, verification due ${pendingBurst.verificationAtMs}ms); a fake script may hold at most one burst (boundary at ${event.atMs}ms tried to arm a second)`,
+          );
+        }
         pendingBurst = {
           summaryAtMs:
             event.atMs +
@@ -2346,12 +2383,14 @@ export function createFakeTransport(script: FakeScript): Transport &
             event.atMs +
             (event.burst.verificationAtMsOffset ??
               DEFAULT_VERIFICATION_BURST_OFFSET_MS),
-          summary: {
-            elapsedSeconds: bankedWorkSeconds,
-            meters: bankedWorkMeters,
-            ...DEFAULT_SUMMARY_AVERAGES,
-            ...event.burst.summaryOverrides,
-          },
+          summaryBytes:
+            event.burst.summaryBytes ??
+            buildEndOfWorkoutSummaryBytes({
+              elapsedSeconds: bankedWorkSeconds,
+              meters: bankedWorkMeters,
+              ...DEFAULT_SUMMARY_AVERAGES,
+              ...event.burst.summaryOverrides,
+            }),
           additionalSummaryBytes:
             event.burst.additionalSummaryBytes ??
             KEYSTONE_ADDITIONAL_SUMMARY_BYTES,
@@ -2399,10 +2438,7 @@ export function createFakeTransport(script: FakeScript): Transport &
       virtualClock >= pendingBurst.summaryAtMs
     ) {
       if (!linkDown) {
-        notify(
-          END_OF_WORKOUT_SUMMARY_UUID,
-          buildEndOfWorkoutSummaryBytes(pendingBurst.summary),
-        );
+        notify(END_OF_WORKOUT_SUMMARY_UUID, pendingBurst.summaryBytes);
         notify(
           END_OF_WORKOUT_ADDITIONAL_SUMMARY_UUID,
           pendingBurst.additionalSummaryBytes,

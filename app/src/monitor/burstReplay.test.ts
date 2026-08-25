@@ -307,6 +307,37 @@ describe("the walk's own finish, replayed to the byte (storage-spine design spec
       [0x27, 0xd8, 0xf3, 0x6e, 0xe1, 0x52, 0x55, 0x5b],
     );
 
+    // `summaryDetail` (RC-3, storage-spine design spec §2, PR 1 Task 3) —
+    // hand-decoded HERE off seq 516's own raw hex (never by calling the
+    // parser: `78 35 1c 09 2e 36 00 88 13 00 19 00 00 00 00 65 00 08 6b 05`,
+    // `parseEndOfWorkoutSummary`'s own byte offsets, interface-notes.md
+    // §23/§24): offset 10 `19` = 25 (avgStrokeRate); offsets 11-14
+    // `00 00 00 00` are ALL the heart-rate `0`/`255` sentinel
+    // (`domain/monitor/pm5/parse.ts`'s `heartRate()`, D5) — no belt was
+    // worn on this walk, so every HR field is `null`; offset 15 `65` = 101
+    // (dragFactorAverage); offset 16 `00` -> null (recoveryHeartRateBpm,
+    // same sentinel); offset 17 `08` = 8 (workoutType); offsets 18-19
+    // `6b 05` LE = 0x056b = 1387, /10 = 138.7 (avgPaceSecondsPer500m) —
+    // matching `summaryTotals.workElapsedSeconds` above is NOT a
+    // coincidence, it is a SCALE ORACLE (PM gate on PR #190): a 500m
+    // piece's pace-per-500m IS its elapsed time by identity, and the two
+    // fields decode from DIFFERENT byte ranges — so their agreement at
+    // 138.7 externally confirms the /10 scale the BLE doc alone could not
+    // (the doc was wrong about Last Split Time two pages earlier). The
+    // terminate capture corroborates: 24.3s/76m implies 159.9 vs the
+    // wire's decoded 159.8.
+    expect(realRecord.summaryDetail).toStrictEqual({
+      avgStrokeRate: 25,
+      endingHeartRateBpm: null,
+      avgHeartRateBpm: null,
+      minHeartRateBpm: null,
+      maxHeartRateBpm: null,
+      dragFactorAverage: 101,
+      workoutType: 8,
+      recoveryHeartRateBpm: null,
+      avgPaceSecondsPer500m: 138.7,
+    });
+
     // The final interval is the REAL 0x0037's own shape (splitInterval
     // TimeSeconds/splitIntervalDistanceMeters, decoded off seq 514's raw
     // hex `c7 1a 00 c4 09 00 ae 02 00 fa 00 00 00 00 00 00 01 02`:
@@ -334,16 +365,18 @@ describe("the walk's own finish, replayed to the byte (storage-spine design spec
     const controlRecord = control.record!;
 
     expect(controlRecord.summaryTotals).toBeUndefined();
+    expect(controlRecord.summaryDetail).toBeUndefined();
     expect(controlRecord.verificationBytes).toBeUndefined();
     expect(controlRecord.endedBy).toBe("finished");
 
     // BYTE-IDENTICAL-BUT-FOR-OBSERVATIONS (spec §6 criterion 2 rephrased
     // as the plan's own task-5 wording): every field the burst does not
     // touch reads identically whether or not the machine's own burst ever
-    // arrived — decode+fold changes ONLY the two observation fields,
+    // arrived — decode+fold changes ONLY the three observation fields,
     // nothing about the split-derived record underneath them.
     const {
       summaryTotals: _st,
+      summaryDetail: _sd,
       verificationBytes: _vb,
       ...realWithoutBurst
     } = realRecord;

@@ -875,6 +875,76 @@ export function describeStoreContracts(
         });
       });
 
+      // RC-2/RC-3 wave design spec §1 ("The server tier (same PR)", TRIAD):
+      // the machine's own totals, same round-trip shape as RC-1's own
+      // cases above.
+      it("create round-trips a REAL, capture-derived FRACTIONAL machineWorkSeconds and a whole machineWorkMeters exactly", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        const { id } = await stores.logs.create(
+          userId,
+          logInput({ machineWorkSeconds: 24.3, machineWorkMeters: 76 }),
+        );
+        const list = await stores.logs.list(userId, 10);
+        const row = list.find((r) => r.id === id);
+        expect(row).toMatchObject({
+          machineWorkSeconds: 24.3,
+          machineWorkMeters: 76,
+        });
+      });
+
+      it("create round-trips machineSummary exactly, verificationBytes included, through the real jsonb column", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        const machineSummary = {
+          verificationBytes: [118, 120, 230, 126, 35, 227, 228, 1],
+          avgStrokeRate: 44,
+          endingHeartRateBpm: null,
+          avgHeartRateBpm: null,
+          minHeartRateBpm: null,
+          maxHeartRateBpm: null,
+          dragFactorAverage: 100,
+          workoutType: 1,
+          recoveryHeartRateBpm: null,
+          avgPaceSecondsPer500m: 159.8,
+        };
+        const { id } = await stores.logs.create(
+          userId,
+          logInput({ machineSummary }),
+        );
+        const row = await stores.logs.get(userId, id);
+        expect(row).toMatchObject({ machineSummary });
+      });
+
+      it("create with no machine fields posted stores all three null (pre-Task-6 body shape)", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        const { id } = await stores.logs.create(userId, logInput());
+        const list = await stores.logs.list(userId, 10);
+        const row = list.find((r) => r.id === id);
+        expect(row).toMatchObject({
+          machineWorkSeconds: null,
+          machineWorkMeters: null,
+        });
+        const getRow = await stores.logs.get(userId, id);
+        expect(getRow).toMatchObject({ machineSummary: null });
+      });
+
+      it("create round-trips a zero machineWorkSeconds/machineWorkMeters — a genuinely zero machine reading, never coerced to null", async () => {
+        const stores = await makeStores();
+        const userId = await stores.makeUser();
+        const { id } = await stores.logs.create(
+          userId,
+          logInput({ machineWorkSeconds: 0, machineWorkMeters: 0 }),
+        );
+        const list = await stores.logs.list(userId, 10);
+        const row = list.find((r) => r.id === id);
+        expect(row).toMatchObject({
+          machineWorkSeconds: 0,
+          machineWorkMeters: 0,
+        });
+      });
+
       // From-the-log spec (2026-08-18), §3: the list projection explicitly
       // drops `steps` (zero client consumers — `RecentLog`, the response's
       // only reader, never carried it), while `get()` (the from-the-log
@@ -929,6 +999,35 @@ export function describeStoreContracts(
           expect(row).toMatchObject({ series });
         });
 
+        // RC-2/RC-3 wave: `machineSummary` joins `steps`/`series` in the
+        // list projection's exclusion (same size-based reason,
+        // `LOG_LIST_COLUMNS`'s own comment) — `machineWorkSeconds`/
+        // `machineWorkMeters` stay in the list, same idiom as the RC-1
+        // pair, so this pair is proven present in the round-trip cases
+        // above, not here.
+        it("list rows never include machineSummary", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          await stores.logs.create(
+            userId,
+            logInput({ machineSummary: { avgStrokeRate: 24 } }),
+          );
+          const list = await stores.logs.list(userId, 10);
+          expect(list[0]).not.toHaveProperty("machineSummary");
+        });
+
+        it("get still returns the full row, machineSummary included", async () => {
+          const stores = await makeStores();
+          const userId = await stores.makeUser();
+          const machineSummary = { avgStrokeRate: 24 };
+          const { id } = await stores.logs.create(
+            userId,
+            logInput({ machineSummary }),
+          );
+          const row = await stores.logs.get(userId, id);
+          expect(row).toMatchObject({ machineSummary });
+        });
+
         // Task 2 review, LOW 1: `LOG_LIST_COLUMNS` (stores/logs.ts) is a
         // hand-maintained mirror of `sessionLogs`' columns, minus `steps`
         // — nothing pinned it against drift before this test. A column
@@ -944,8 +1043,11 @@ export function describeStoreContracts(
         // second column the list projection excludes (a 720 KB
         // worst-case trace is the same dead weight for a list row that
         // `steps` already was), so this pin's own filter grows the
-        // matching key, not the assertion shape.
-        it("the list projection is exactly get()'s key set minus steps minus series — no column silently drops out", async () => {
+        // matching key, not the assertion shape. RC-2/RC-3 wave:
+        // `machineSummary` joins them the same deliberate way (a ~2KB
+        // worst-case blob, same size-based exclusion) — `LOG_LIST_COLUMNS`'s
+        // own comment names the reason.
+        it("the list projection is exactly get()'s key set minus steps minus series minus machineSummary — no column silently drops out", async () => {
           const stores = await makeStores();
           const userId = await stores.makeUser();
           const { id } = await stores.logs.create(
@@ -955,7 +1057,9 @@ export function describeStoreContracts(
           const [listRow] = await stores.logs.list(userId, 10);
           const getRow = await stores.logs.get(userId, id);
           const expectedKeys = Object.keys(getRow!)
-            .filter((k) => k !== "steps" && k !== "series")
+            .filter(
+              (k) => k !== "steps" && k !== "series" && k !== "machineSummary",
+            )
             .sort();
           expect(Object.keys(listRow).sort()).toStrictEqual(expectedKeys);
         });

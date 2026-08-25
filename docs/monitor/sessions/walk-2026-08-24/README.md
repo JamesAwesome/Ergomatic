@@ -58,8 +58,13 @@ app's 15:04 header to the minute; the wire carries no seconds
 (RC-2's hard fact, re-observed).
 
 `0x003F` (WIRE, seq 64): `06 47 99 af 54 b0 21 c0` → as two LE u32 words
-`AF99-4706 C021-B054` (INFERENCE — the hash==verification-code equation
-remains unphotographed; no verification screen was asked for this walk).
+`AF99-4706 C021-B054`. CORRECTION (antagonist full pass, 2026-08-24):
+this README originally tagged the hash==verification-code equation
+INFERENCE/unphotographed — it is PRIMARY, photographed at
+walk-2026-08-23 (`photo-w4-verification-code.jpeg`: screen
+`6EF3-D827 5B55-52E1` vs wire `27 d8 f3 6e | e1 52 55 5b`, exact). No
+verification photo was taken THIS walk, but the equation was already
+settled; only C2-logbook equivalence remains unestablished.
 
 **The race landed on the LATE side this time** (2-of-5 shape,
 terminal-first): terminal `finished` at seq 48, final 0x0037/0x0038 at
@@ -91,7 +96,8 @@ Programmed 1×60s (Walk Smoke), rowed from +23s, **Menu pressed at ~+46s**
    (vs `08` on the completed-workout capture) — noted raw, not yet
    interpreted.
 5. `+47s` **0x003A**, then **0x003F**: `76 78 e6 7e 23 e3 e4 01` → LE
-   words `7EE6-7876 01E4-E323` (same INFERENCE tag as above).
+   words `7EE6-7876 01E4-E323` (rendering rule PRIMARY per the
+   correction above; this particular code is unphotographed).
 6. `+48s` onward: the PM5 back at idle (0x0031 workoutState byte `0d`
    then the menu-idle pattern).
 
