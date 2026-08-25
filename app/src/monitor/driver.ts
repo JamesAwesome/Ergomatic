@@ -117,6 +117,15 @@ import type {
   Transport,
 } from "../../domain/monitor/types.js";
 import type { MonitorEventLog } from "./eventLog";
+// RC-9a (design spec 2026-08-25-free-oracles §1, fix round 1): imported
+// rather than re-declared — a local copy had nothing binding it to
+// `summaryModel.ts`'s own value, so a future change there would silently
+// stop this verdict mirroring `monitorAvgSplit`'s exclusion while this
+// file's own comments kept claiming it does. This is the one place
+// `src/monitor/` reaches into `src/session/` — no `no-restricted-imports`
+// rule forbids it (checked), and the value is a SCALAR the two modules
+// must agree on, not an architectural premise.
+import { MIN_MEASURABLE_ELAPSED_SECONDS } from "../session/summaryModel";
 
 /** A programming/terminate write that never got acked "ok", OR a
  *  programming call whose verification phase never saw the machine report
@@ -799,17 +808,6 @@ const STRUCTURE_MISMATCH_WINDOW_MS = 2000;
  *  it exists to beat. The hold carries the margin, not this window: this
  *  one is a measurement (walk day 3) and must not be padded to make room. */
 const FINISH_GRACE_MS = 3000;
-
-/** RC-9a (design spec 2026-08-25-free-oracles §1) — mirrors
- *  `src/session/summaryModel.ts`'s own `MIN_MEASURABLE_ELAPSED_SECONDS`
- *  (that constant's own doc comment carries the full reasoning: nobody
- *  covers meaningful ground in under a second, so a sub-floor reading is
- *  measurement noise, not a real one, and must stay OUT of a working
- *  average). Re-declared rather than imported: `driver.ts` (`src/monitor/`)
- *  does not otherwise reach into `src/session/`, and this value is a
- *  SCALAR, not an architectural premise (`.claude/agent-briefing.md`'s own
- *  "the plan pins it" rule for exactly this shape of deferral). */
-const MIN_MEASURABLE_ELAPSED_SECONDS = 1;
 
 /** RC-9a (design spec 2026-08-25-free-oracles §1) — the live average-pace
  *  verdict's own band. The pre-spec pass measured a 0.07-0.20 s MEDIAN
@@ -3155,7 +3153,18 @@ export function createPm5Driver(
    *     reads a PERSISTED `IntervalActual[]` where a null-index entry
    *     still exists to be filtered; this driver's live `recordedActuals`
    *     Map is keyed by index and structurally never holds one, so the
-   *     population-count mismatch is the honest live equivalent);
+   *     population-count mismatch is the honest live equivalent) — this
+   *     check alone is NOT sufficient (fix round 1): a mid-work
+   *     `terminated` close loses its own final, still-in-progress
+   *     interval WITHOUT incrementing `run.actuals` at all
+   *     (`emitIntervalComplete`'s out-of-run branch returns before either
+   *     counter moves), so the next check below is required too;
+   *   - this run's own FINAL program interval (`program.intervals.length
+   *     - 1`) was never recorded in `recordedActuals` — covers the
+   *     mid-work-terminate shape the check above cannot see, and the
+   *     natural-finish shape where neither a split nor a summary ever
+   *     arrived (`reconcileSummary`'s "declined ... still missing"
+   *     branch, run.actuals never incremented for that index either);
    *   - a recorded actual measured below `MIN_MEASURABLE_ELAPSED_SECONDS`
    *     — mirrors `monitorAvgSplit`'s identical exclusion. (No live
    *     analogue of that function's THIRD exclusion, a legacy warm-up
@@ -3182,6 +3191,14 @@ export function createPm5Driver(
       );
       return;
     }
+    // FIX ROUND 1 (review, minor): this comparison can also over-suppress
+    // — TWO boundaries landing on the SAME normalized index (a duplicate
+    // Split/Interval Number, the `recordedActuals.set` overwrite) reads
+    // identically to one lost to a null index (`actuals` counts both,
+    // `recordedActuals.size` counts the index once), so a genuinely sound
+    // run could suppress here too. Left as is: the safe direction — a
+    // false suppression costs a missing walk-log line, never a false
+    // DIFFER/agree — and a duplicate index has no committed capture either.
     if (run.actuals > run.recordedActuals.size) {
       log.record(
         "avg-pace-verdict",
@@ -3189,6 +3206,47 @@ export function createPm5Driver(
           `program interval (${run.actuals} actual(s) emitted, only ` +
           `${run.recordedActuals.size} indexed) and is excluded from our ` +
           `own quotient`,
+      );
+      return;
+    }
+    // FIX ROUND 1 (review): a mid-work `terminated` close has NO capture
+    // evidence in this repo (no committed capture ends in workoutState 11)
+    // and a KNOWN false-DIFFER shape the check above cannot see. On a
+    // terminate mid-interval, the still-in-progress interval's own boundary
+    // (if it arrives at all) takes `emitIntervalComplete`'s OUT-OF-RUN
+    // branch (the run already closed, and a `terminated` close opens no
+    // grace to route it through instead) — which returns BEFORE either
+    // `run.actuals` or `run.recordedActuals` is touched (that branch's own
+    // comment: "a closed run's actuals can therefore never grow THIS WAY").
+    // So `run.actuals` and `run.recordedActuals.size` stay EQUAL — the
+    // check above sees nothing wrong — while 0x0032's cumulative average
+    // has already kept counting the rower's real, unrecorded strokes. A
+    // DIFFERENT, ALREADY-AVOIDED version of this same false-DIFFER shape is
+    // why this verdict is called at all after `reconcileSummary` on the
+    // `finished` path rather than synchronously at the terminal transition
+    // (this function's own doc comment, "NEVER compared against..." —
+    // review-verified against `session-2-wu-4unequal.jsonl`: sampling
+    // synchronously at that capture's own terminal frame would compare the
+    // correct machine reading, 129.78, against an INCOMPLETE 4-boundary
+    // quotient of 131.16 — the 5th interval's own split lands ~83ms later
+    // — a 1.38s gap past the 1.0s band). This guard is the general form of
+    // the same underlying shape for the case that placement fix does NOT
+    // cover: whenever this run's own FINAL program interval was never
+    // recorded at all — a mid-work terminate, or a natural finish whose
+    // split AND summary both genuinely never arrived
+    // (`reconcileSummary`'s own "declined ... still missing" branch) — our
+    // quotient is missing an unknown amount of real work the machine's own
+    // average already counts, and no amount of correct TIMING fixes that;
+    // the population itself is short.
+    if (!run.recordedActuals.has(run.program.intervals.length - 1)) {
+      log.record(
+        "avg-pace-verdict",
+        `suppressed — this run's own final interval (index ` +
+          `${run.program.intervals.length - 1}) was never recorded; the ` +
+          `machine's cumulative average may already include work ours has ` +
+          `no record of (mid-work terminate is the ordinary way this ` +
+          `happens — its boundary, if any, is discarded out-of-run and ` +
+          `touches neither run.actuals nor recordedActuals)`,
       );
       return;
     }

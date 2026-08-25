@@ -62,7 +62,7 @@
   - a run with an excluded actual (null-index or sub-threshold) SUPPRESSES with its reason named;
   - a run where `deriveFinalIntervalFromSummary` fired SUPPRESSES (the fill builds our side FROM 0x0039);
   - the scale: a fixture whose expected value would be 10× off if 0x0032's 0.01 s/lsb were treated as 0.1.
-- [ ] Step 3: run red; implement. Sample the **last work-state** 0x0032 (`workoutState ∈ {4,5}`), never the terminal frame's value — the terminal step is real (keystone 138.44 → 138.23; session-2 129.78 → 128.76) and unexplained. Ignore the single 0.00 reading at an interval reset.
+- [ ] Step 3: run red; implement. Sample the **last work-state** 0x0032 (`workoutState ∈ {4,5}`), never the terminal frame's value — the terminal step is real (keystone 138.44 → 138.23; session-2 129.78 → 128.76) and unexplained. Ignore the 0.00 readings at an interval reset (**CORRECTED, fix round 1: 18 of them in session-2 alone, not a single frame** — design spec §1's own evidence base carries the seq list).
 - [ ] Step 4: green; full unit+client; lint; typecheck; per-file coverage on the touched files.
 - [ ] Step 5: commit `feat: the machine's own average pace finally gets read`.
 

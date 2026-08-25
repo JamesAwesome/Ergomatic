@@ -11172,6 +11172,76 @@ describe("createPm5Driver: the live average-pace verdict (RC-9a, design spec 202
     expect(entries[0]!.detail).toContain("1 actual(s) emitted, only 0 indexed");
   });
 
+  it("FIX ROUND 1 (review): suppresses, naming the reason, on a MID-WORK terminate — the still-open final interval's boundary never arrives, and takes the out-of-run branch (touching neither run.actuals nor recordedActuals) even if it does, so the 'unattributable actual' check above cannot see it", async () => {
+    const TWO_INTERVAL_PROGRAM: WorkoutProgram = {
+      intervals: [
+        {
+          type: "work",
+          kind: "time",
+          value: 60,
+          targetSplit: 120,
+          displaySpm: 22,
+          restSeconds: 0,
+        },
+        {
+          type: "work",
+          kind: "time",
+          value: 60,
+          targetSplit: 120,
+          displaySpm: 22,
+          restSeconds: 0,
+        },
+      ],
+    };
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+    await programViaStub(driver, transport, TWO_INTERVAL_PROGRAM);
+    transport.notify(ADDITIONAL_STATUS_2_UUID, additionalStatus2In(0));
+
+    // Interval 0 completes ORDINARILY: 60s/180m, machine averageSplit
+    // 166.67s/500m (500*60/180) — the whole session's own average so far,
+    // nothing banked before it.
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 60, 180),
+    );
+    transport.notify(ADDITIONAL_STATUS_1_UUID, additionalStatus1With(166.67));
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 60, 180));
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 22));
+
+    // Interval 1 — this program's OWN FINAL interval (index 1) — starts
+    // rowing and the rower pulls another 30s/120m before hitting Terminate.
+    // The machine's own 0x0032 already reflects that real, partial work:
+    // cumulative 90s/300m -> 500*90/300 = 150.00s/500m.
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 30, 120),
+    );
+    transport.notify(ADDITIONAL_STATUS_1_UUID, additionalStatus1With(150.0));
+
+    // TERMINATE, mid-interval-1 — no 0x0037/0x0038 for interval 1 EVER
+    // arrives (this test scripts none): the ordinary shape a rower's own
+    // "stop early" produces, not a wire error.
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_TERMINATE, 30, 120),
+    );
+
+    const entries = avgPaceVerdicts(log);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.detail).toContain("suppressed");
+    expect(entries[0]!.detail).toContain("final interval");
+    expect(entries[0]!.detail).toContain("never recorded");
+    // Bug-independent negative check: WITHOUT this fix, the verdict would
+    // have compared 150.00 (machine) against interval 0 ALONE (166.67,
+    // since interval 1 is entirely missing from `recordedActuals`) — a
+    // 16.67s gap, loudly wrong, not silently close. Neither number appears
+    // in a suppressed entry.
+    expect(entries[0]!.detail).not.toContain("166.67");
+    expect(entries[0]!.detail).not.toContain("150.00");
+  });
+
   it("suppresses, naming the reason, when no work-state 0x0032 sample was ever observed this run", async () => {
     const transport = stubTransport();
     const log = createEventLog();
@@ -11195,6 +11265,36 @@ describe("createPm5Driver: the live average-pace verdict (RC-9a, design spec 202
     expect(entries).toHaveLength(1);
     expect(entries[0]!.detail).toBe(
       "suppressed — no work-state (0x0032) averageSplit observed this run",
+    );
+  });
+
+  it("suppresses, naming the reason, when the run's own recorded actuals measure zero distance total (Σd = 0) — a real elapsed-time reading with nothing rowed, not excluded by any check above", async () => {
+    const transport = stubTransport();
+    const log = createEventLog();
+    const driver = createPm5Driver(transport, log);
+    await programViaStub(driver, transport, MINIMAL_PROGRAM);
+    transport.notify(ADDITIONAL_STATUS_2_UUID, additionalStatus2In(0));
+
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_INTERVALWORKTIME, 5, 0),
+    );
+    transport.notify(ADDITIONAL_STATUS_1_UUID, additionalStatus1With(150.0));
+    // 5s elapsed (clears MIN_MEASURABLE_ELAPSED_SECONDS, so NOT excluded as
+    // sub-threshold) but 0m rowed — this run's own final (and only)
+    // interval, so the "final interval never recorded" check above does not
+    // fire either. The only remaining reason to suppress is Σd itself.
+    transport.notify(SPLIT_INTERVAL_DATA_UUID, splitHalf(1, 5, 0));
+    transport.notify(ADDITIONAL_SPLIT_INTERVAL_DATA_UUID, asSplitHalf(1, 22));
+    transport.notify(
+      GENERAL_STATUS_UUID,
+      generalStatusIn(WORKOUTSTATE_TERMINATE, 5, 0),
+    );
+
+    const entries = avgPaceVerdicts(log);
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.detail).toBe(
+      "suppressed — nothing measured this run (Σd = 0)",
     );
   });
 

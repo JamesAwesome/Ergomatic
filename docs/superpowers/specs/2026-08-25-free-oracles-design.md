@@ -30,8 +30,13 @@ the pre-spec pass; every claim is reproducible from
   85/679/135); it **freezes** through rest (session-2 seq 600 → 774:
   136.13 unchanged across 9.6 s and 30.6 m of coasting); it does not
   reset at boundaries (seq 594 reads 135.85 where interval-2-alone
-  would be 130.39); it reads 0.00 on the single interval-reset frame
-  and must be ignored there.
+  would be 130.39); it reads 0.00 on 18 interval-reset frames in
+  session-2 alone (seq 244/249/252/255/258, 782, 1669/1672,
+  2610/2613/2616/2619/2622/2625/2628/2631/2634/2637 — **CORRECTED,
+  fix round 1: not the "single frame" this line originally claimed**,
+  re-decoded directly off `parse.ts` against the committed capture,
+  clustered near boundaries, up to 8 consecutive ticks at one
+  transition) and must be ignored wherever it recurs, not merely once.
 - PRIMARY (C2 logbook API): `distance` and `time` are work-only for
   interval workouts, rest stored separately. So (a) compares two
   independent computers of the quantity the AUTHORITY stores — the
