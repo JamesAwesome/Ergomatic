@@ -2842,7 +2842,21 @@ count bound) — **and hardware-verified: the exit-7 walk on production
 build 738 matched the PM5's memory screen digit for digit
 (work-only 124s/500m, final interval :56.1/250/1:52.2, TWD 742;
 record: `docs/monitor/sessions/walk-2026-08-24/`). The display gate
-is UNLOCKED.** The same walk's lab leg settled the terminate question:
+is UNLOCKED.** **CORRECTED (RC-9, this PR): "TWD 742" reverses which
+system owns which name — Total Work Distance is OUR OWN wire-field
+name for 0x0031, never a label the PM5's memory screen itself prints;
+the 742 the walk actually matched is the hand-summed 500+147+95 across
+three separate screen ROWS (the same figure `walk-2026-08-24/README.md`'s
+own DISTANCE-hero row is now marked CORRECTED IN PLACE for — a mirror
+between our accumulator and our own TWD decode, both the identical
+work-plus-rest-coast odometer, RC-9c retiring the verdict that ever
+compared them for exactly that reason). RC-9 (this PR) corrects that
+account of TWD (`pm5-interface-notes.md` item 25) and wires two
+genuinely independent oracles the exit-7 walk never had: 0x0032's own
+cumulative average pace and 0x003A's own Total Rest Distance — see
+RC-9's own row below (search the ring for `avg-pace-verdict` and
+`rest-distance-verdict`) for what a walk should now read.** The same
+walk's lab leg settled the terminate question:
 a Menu-kill emits the full log-commit burst, hash included
 (`pm5-interface-notes.md` §25) — the terminated path can carry the
 same observation capture, in the RC-2/RC-3 wave's scope. The phase's
@@ -3570,16 +3584,25 @@ that needs no erg, and it can run in a test.
       (d) SHIPPED** (design spec `2026-08-25-free-oracles`, pre-spec
       antagonist pass full on TRIAD ground, PM final gate on the PR);
       **(b) QUEUED**, reason below — this row stays open on (b) alone.
-  - **(a) SHIPPED** — 0x0032's `averageSplit` (offset 9), a PM5-computed
+  - **(a) SHIPPED — walk search string: `` `avg-pace-verdict` ``** (one
+    ring line per run; W11 below has the full read-it-off-a-walk
+    protocol). 0x0032's `averageSplit` (offset 9), a PM5-computed
     cumulative work-only session average pace, is now compared
     (ring-only, no UI, no stored field) against `monitorAvgSplit`'s own
-    quotient over `recordedActuals` — synchronously on a `terminated` close, or once the run's evidence settles (`armSummaryReconcile`'s deadline/early-complete path) on a natural finish — two
+    quotient over `recordedActuals` — synchronously on a `terminated`
+    close, or once the run's evidence settles (`armSummaryReconcile`'s
+    deadline/early-complete path) on a natural finish — two
     independent computers of the quantity the C2 logbook stores, not the
     tier-A hero (post-RC-5 that hero IS 0x0039's own field, so comparing
     it to 0x0032 would be machine-vs-machine). Suppresses on an excluded
     actual or a summary-filled run; 1.0 s band. `fake.ts`'s
     `averageSplit: e.currentSplit` fabrication (would have made every
     fake-driven test vacuous — third sighting of the shape) fixed first.
+    **The ABSENCE of an `avg-pace-verdict` line is itself a finding**:
+    the pre-existing `FINISH_GRACE_MS` zero-fire (below) writes silence,
+    not a suppression reason, whenever the next piece is armed within
+    3 s of the previous one's finish — the walk's own ordinary rhythm
+    between pieces, not a rare edge.
   - **(b) QUEUED, not shipped — oracle-blind today.** 0x0039's totals
     vs. Σ`recordedActuals` needs a rest-bearing capture that SURVIVES to
     a 0x0039: of the eight committed recordings exactly ONE carries a
@@ -3605,7 +3628,9 @@ that needs no erg, and it can run in a test.
     pm5-interface-notes.md` item 25 and `src/monitor/driver.ts`'s own
     doc comment both corrected, each citing its capture (RC-9c, design
     spec §2).
-  - **(d) SHIPPED, new — not in this row's original scope.** 0x003A's
+  - **(d) SHIPPED, new — not in this row's original scope — walk search
+    string: `` `rest-distance-verdict` ``** (also one ring line per run;
+    W11 below). 0x003A's
     Total Rest Distance (offsets 12-14, 1 m/lsb) gets a narrow parser and
     a ring-only verdict against the sum of `recordedActuals`' own
     `restDistanceMeters` (RC-1's stored rest metres): agrees exactly, 242
@@ -3621,31 +3646,42 @@ that needs no erg, and it can run in a test.
     gated on — it reads 0 on both captures including the r60 walk, and
     we do not yet know if that is a firmware quirk or the programmed
     value.
-  - **Two gaps this branch's own reviews found, neither blocking, both
-    worth a future task's attention:**
-    - **Pre-existing zero-fire: `program()` landing inside a finished
-      run's `FINISH_GRACE_MS` (3000 ms) CANCELS the pending
-      `pendingSummaryReconcile` deadline rather than draining it**
+  - **One further gap this branch's own reviews found and left as-is,
+    not blocking, not tracked separately** (the zero-fire below gets its
+    own row instead, RC-13, so it survives this row's own closure —
+    **duplicate-index over-suppression does not, by design**: it is a
+    documented, deliberately-accepted safe direction, not an owed fix).
+    **Duplicate-index over-suppression** (`driver.ts:3280-3288`'s own
+    fix-round-1 comment): (a)'s `run.actuals > run.recordedActuals.size`
+    check also fires when two boundaries land on the SAME normalized
+    index (a duplicate Split/Interval Number overwriting
+    `recordedActuals` via `.set`) — indistinguishable from a genuinely
+    lost index by that comparison alone. No committed capture has a
+    duplicate index to confirm the shape against. Left as-is because the
+    failure mode is a false suppression (a missing verdict), never a
+    false DIFFER/agree — the same "wrong direction is safe" shape (b)'s
+    own queueing reasons on the accumulator.
+- [ ] **RC-13 — The avg-pace verdict's zero-fire on a rapid re-arm.**
+      Pulled out of RC-9's own sub-bullets into its OWN row (PM gate,
+      2026-08-25) so it does not get silently ticked closed the moment
+      RC-9's (b) lands — it is a real, separately-owed gap, not prose
+      riding another row's checkbox. `program()` landing inside a
+      finished run's `FINISH_GRACE_MS` (3000 ms) CANCELS the pending
+      `pendingSummaryReconcile` deadline rather than draining it
       (`driver.ts:5671`, `pendingSummaryReconcile?.()` then `= null`, no
       `reconcileSummary`/`recordAvgPaceVerdict` call) — that outgoing
-      run gets NO (a) verdict at all, silently. This is a DIFFERENT
-      shape than the retired TWD verdict ever had: TWD's comparison ran
-      SYNCHRONOUSLY at the terminal transition, so it could never race a
-      re-arm; (a) is deliberately async (it waits on evidence that can
-      still be in flight), which is exactly what makes it raceable.
-      Zero-fire, not a false verdict — a missing walk-log line, not a
-      wrong one.
-    - **Duplicate-index over-suppression, documented and left as the
-      safe direction** (`driver.ts:3280-3288`'s own fix-round-1
-      comment): (a)'s `run.actuals > run.recordedActuals.size` check
-      also fires when two boundaries land on the SAME normalized index
-      (a duplicate Split/Interval Number overwriting `recordedActuals`
-      via `.set`) — indistinguishable from a genuinely lost index by
-      that comparison alone. No committed capture has a duplicate index
-      to confirm the shape against. Left as-is because the failure mode
-      is a false suppression (a missing verdict), never a false
-      DIFFER/agree — the same "wrong direction is safe" shape (b)'s own
-      queueing reasons on the accumulator.
+      run gets NO `avg-pace-verdict` ring entry at all, silently (W11
+      above has the walk-facing read: absence is a finding, not a
+      non-event). This is a DIFFERENT shape than the retired TWD verdict
+      ever had: TWD's comparison ran SYNCHRONOUSLY at the terminal
+      transition, so it could never race a re-arm; the new verdict is
+      deliberately async (it waits on evidence that can still be in
+      flight), which is exactly what makes it raceable. Zero-fire, not a
+      false verdict — a missing walk-log line, not a wrong one. Fix
+      shape (not yet built): drain the deadline the same way
+      `drainSummaryReconcile` already does for disconnect/hook-reconcile,
+      from `program()`'s own re-arm path, before cancelling it for the
+      outgoing run.
 - [ ] **RC-10 — The Concept2 sandbox as a test oracle.** Once the dev key
       lands: post a reconciled row to `log-dev.concept2.com`, pull
       `export/{csv,fit,tcx}` back, and diff it against what we stored.
@@ -3791,6 +3827,22 @@ item** and W3/W4 ride the same piece.
   this one and Phase LL's, which keeps the name because it stays on the
   PHONE leg, where its watchdog-false-fire question is actually
   observable.
+- **W11** — RC-9's two new ring verdicts, read off `MONITOR LOG · COPY`
+  after any rest-bearing multi-interval piece. Grep the pasted log for
+  the literal strings `` `avg-pace-verdict` `` and `` `rest-distance-verdict` ``
+  — one line each, per run. **The ABSENCE of an `avg-pace-verdict` line
+  is itself a finding, not a non-event**: every other outcome (agree,
+  DIFFER, or any of its five suppressions) writes a plain-English ring
+  entry with a reason, but the pre-existing `FINISH_GRACE_MS` zero-fire
+  (`driver.ts:5671` — `program()` landing inside a finished run's 3 s
+  grace cancels the pending verdict instead of draining it) writes
+  SILENCE — no entry at all. Arming the next piece within 3 s of the
+  previous one's finish is the walk's own NORMAL between-pieces rhythm,
+  so this is not a rare edge to watch for; expect it to fire on a
+  routine multi-piece session and confirm by counting: N pieces rowed
+  should produce N `avg-pace-verdict` lines (minus any genuinely
+  suppressed ones, each with its own named reason), and a gap in that
+  count with no suppression reason is the zero-fire, not a healthy run.
 
 **Arming the hold-open instrument (final-review I3 — the card never said
 HOW before this fix):** W2/W3/W4/W10 all need it armed. On the laptop, in

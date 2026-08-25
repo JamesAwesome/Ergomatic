@@ -862,8 +862,47 @@ const FINISH_GRACE_MS = 3000;
  *  across seven captures, plus an unexplained terminal step of up to
  *  1.02 s (never sampled here — see `lastWorkStateAverageSplit`'s own
  *  comment). 1.0 s clears both with room and is far inside what a single
- *  lost interval would move the quotient by (`recordAvgPaceVerdict`'s own
- *  comment has the worked reasoning). */
+ *  lost interval would move the quotient by — worked below (the ONLY
+ *  place this derivation lives; `recordAvgPaceVerdict`'s own "BAND:"
+ *  line points HERE, not the reverse).
+ *
+ *  THE LOST-INTERVAL DERIVATION. `ours` (`recordAvgPaceVerdict`) is the
+ *  RATIO `500 * ΣT / ΣD` over whatever this run's `recordedActuals`
+ *  holds — never a count. Let `ΣT`/`ΣD` be the TRUE totals (what they
+ *  would be with a missing interval `i`, time `t_i`, distance `d_i`,
+ *  included), `P = 500·ΣT/ΣD` the true average pace, `P_i = 500·t_i/d_i`
+ *  interval `i`'s OWN pace, and `ours = 500·(ΣT-t_i)/(ΣD-d_i)` what this
+ *  function actually computes without it. Substituting `ΣT = P·ΣD/500`
+ *  and clearing denominators:
+ *
+ *      ours - P  =  d_i · (P - P_i) / (ΣD - d_i)
+ *
+ *  **The verdict is INSENSITIVE to a lost interval whose own pace equals
+ *  the run's average**: `P_i = P` drives the shift to exactly ZERO at
+ *  ANY band width, however large the missing interval — `ours` is a
+ *  ratio of sums, not a population count, and losing a data point that
+ *  was already sitting on the mean cannot move a ratio. This is why the
+ *  three checks above this verdict's own suppression list (actuals vs.
+ *  `recordedActuals.size`, the final-interval-recorded check, the
+ *  mid-terminate shape) are load-bearing on their own: they catch a lost
+ *  interval STRUCTURALLY, by population, and this ratio check must never
+ *  be read as a substitute — "agree" proves the two computed pace
+ *  numbers match, never that no interval went missing.
+ *
+ *  Worked from a real run — the exit-7 walk capture
+ *  (`docs/monitor/sessions/walk-2026-08-24/README.md`): interval 1
+ *  67.9 s/250 m (`P_1` = 135.8 s/500m), interval 2 56.1 s/250 m (`P_2` =
+ *  112.2 s/500m), true average `P` = 124.0 s/500m (2:04.0/500m,
+ *  `ΣD` = 500). Losing interval 2 (`d_i` = 250, `P_i` = 112.2, the
+ *  FASTER of the two, `P - P_i` = +11.8): `ours - P` = 250·11.8/250 =
+ *  **+11.8 s/500m** (`ours` reads 135.8, the SLOWER of the two — losing
+ *  a fast interval makes what's left LOOK slower) — 11.8× the 1.0 s
+ *  band, easily caught. Losing interval 1 instead (`P_i` = 135.8,
+ *  `P - P_i` = -11.8) shifts the other way by the same 11.8 s magnitude
+ *  (`ours` reads 112.2) — also caught. Neither
+ *  interval sat exactly on this run's own 124.0 s/500m average, which is
+ *  the ordinary case and why this band catches real losses in practice;
+ *  it is not a guarantee, only the population checks above are. */
 const AVG_PACE_VERDICT_BAND_SECONDS = 1.0;
 
 /** RC-9d (design spec 2026-08-25-free-oracles §3) — the rest-distance
