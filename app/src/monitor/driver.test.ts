@@ -58,6 +58,7 @@ import {
   createPm5Driver,
   ProgramBusyError,
   ProgramRejectionError,
+  restPairComplete,
 } from "./driver";
 import { createFakeTransport, type FakeTimelineEvent } from "./transports/fake";
 
@@ -11667,7 +11668,51 @@ describe("createPm5Driver: the rest-distance oracle (RC-9d, design spec 2026-08-
     expect(entries[0]!.detail).toContain("reported only");
     expect(entries[0]!.detail).toContain("Interval Rest Time=0s");
     expect(entries[0]!.detail).toContain("distance suppressed");
-    expect(entries[0]!.detail).toContain("no restDistanceMeters reading");
+    expect(entries[0]!.detail).toContain(
+      "missing restSeconds and/or restDistanceMeters",
+    );
     expect(entries[0]!.detail).toContain("summary-fallback synthesis");
+  });
+});
+
+describe("restPairComplete (pure) — RC-9d fix round 1: the all-or-nothing gate checks the PAIR, mirroring monitorRun.ts's computeWorkRestSums and summaryModel.ts's monitorRest on the stored record, never restDistanceMeters alone", () => {
+  it("true for an empty array — vacuously complete, same as Array.prototype.every's own contract (the caller's own actuals.length===0 gate handles 'nothing to compare' separately)", () => {
+    expect(restPairComplete([])).toBe(true);
+  });
+
+  it("true when every actual carries BOTH restSeconds and restDistanceMeters", () => {
+    expect(
+      restPairComplete([
+        { restSeconds: 60, restDistanceMeters: 147 },
+        { restSeconds: 60, restDistanceMeters: 95 },
+      ]),
+    ).toBe(true);
+  });
+
+  it("false when restDistanceMeters is set but restSeconds is UNSET — the exact shape fix round 1 found untested and unchecked by the original single-field guard", () => {
+    expect(
+      restPairComplete([{ restSeconds: undefined, restDistanceMeters: 95 }]),
+    ).toBe(false);
+  });
+
+  it("false when restSeconds is set but restDistanceMeters is UNSET — the mirror direction, so the gate is proven to check BOTH fields, not just swap which one it checks", () => {
+    expect(
+      restPairComplete([{ restSeconds: 60, restDistanceMeters: undefined }]),
+    ).toBe(false);
+  });
+
+  it("false when even one actual in a multi-actual run is incomplete — the ALL in all-or-nothing, not merely 'the last one'", () => {
+    expect(
+      restPairComplete([
+        { restSeconds: 60, restDistanceMeters: 147 },
+        { restSeconds: undefined, restDistanceMeters: 95 },
+      ]),
+    ).toBe(false);
+  });
+
+  it("true when both fields are genuinely 0 — a real r0 reading is complete, not treated as missing", () => {
+    expect(restPairComplete([{ restSeconds: 0, restDistanceMeters: 0 }])).toBe(
+      true,
+    );
   });
 });

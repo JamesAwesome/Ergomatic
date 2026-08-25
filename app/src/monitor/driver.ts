@@ -344,6 +344,52 @@ export function computeIntervalAccrued(
   return { kind, value: Math.max(0, progress) };
 }
 
+/**
+ * `recordRestDistanceVerdict`'s own all-or-nothing gate (RC-9d, fix round
+ * 1) — exported as a pure function, same pattern as
+ * `computeIntervalRemaining`/`computeIntervalAccrued` above, because this
+ * predicate is the one place the review found real drift risk: it must
+ * check the SAME PAIR `monitorRun.ts`'s own `computeWorkRestSums`
+ * (monitorRun.ts:765-767) and `summaryModel.ts`'s `monitorRest`
+ * (summaryModel.ts:693-695) check on the STORED record, or a future write
+ * site could produce a plausible-looking but wrong sum — exactly the
+ * "two rest populations under one line" shape this repo has already
+ * shipped once (fix-round I2, cited at summaryModel.ts:611-614).
+ *
+ * `restSeconds`/`restDistanceMeters` are typed INDEPENDENTLY optional on
+ * `IntervalActual` (`domain/monitor/types.ts:295`/`:328`), and that type's
+ * own doc comment (types.ts:323-327) warns a future reconciler "must not
+ * treat 'rest' as one population just because the two live under one
+ * heading" — this function is that warning, enforced. Checking only
+ * `restDistanceMeters` (fix round 1's own finding) would have been TRUE
+ * today only by accident: both of `driver.ts`'s write sites into
+ * `recordedActuals` (the summary-fallback synthesis, which omits BOTH
+ * fields together, and the boundary path, which sets BOTH together from
+ * one `IntervalActual` — see those two call sites' own comments) always
+ * keep the pair together, so a single-field check and a pair check agree
+ * on every actual this driver can build TODAY. They would disagree the
+ * moment either write site's own coupling breaks — the exact shape the
+ * type was widened to allow and the exact drift the review caught.
+ *
+ * Genuinely UNREACHABLE through this driver's own wire-simulated test
+ * surface as of this task (`toIntervalActual`, `domain/monitor/pm5/
+ * parse.ts:653-676`, always sets both fields together from one decoded
+ * 0x0037 frame — `SplitIntervalData`'s own fields are both required,
+ * non-optional `number`s). Tested directly, as a pure predicate, for
+ * exactly that reason — the same testability trade `computeIntervalRemaining`/
+ * `computeIntervalAccrued` above already made.
+ */
+export function restPairComplete(
+  actuals: readonly {
+    restSeconds?: number;
+    restDistanceMeters?: number;
+  }[],
+): boolean {
+  return actuals.every(
+    (a) => a.restSeconds !== undefined && a.restDistanceMeters !== undefined,
+  );
+}
+
 /** One arrived response frame on 0x0022: the RAW bytes alongside the
  *  decoded `CsafeResponse` — `sendSequence`'s own ack-gating reads
  *  `response`, but `sendGetErrorType` needs `raw` too (its own log entry
@@ -3338,14 +3384,15 @@ export function createPm5Driver(
    *  quantity, unlike the retired TWD verdict where both sides were the
    *  same fused work+rest odometer.
    *
-   *  ALL-OR-NOTHING, mirroring `monitorRun.ts`'s own `computeWorkRestSums`
-   *  (the STORED record's identical rule, RC-1, for the identical reason):
-   *  summed only when every recorded actual carries a `restDistanceMeters`
-   *  reading. A run whose final interval fell back to the summary
-   *  synthesis (`deriveFinalIntervalFromSummary`'s caller OMITS both rest
-   *  fields — 0x0039 carries no per-interval rest of its own) suppresses
-   *  rather than silently reading that missing interval's rest as a real
-   *  zero.
+   *  ALL-OR-NOTHING, via `restPairComplete` (own doc comment, above,
+   *  carries the fix-round-1 history): summed only when every recorded
+   *  actual carries BOTH `restSeconds` AND `restDistanceMeters` — the SAME
+   *  pair `monitorRun.ts`'s own `computeWorkRestSums` requires for the
+   *  STORED record (RC-1, identical reason). A run whose final interval
+   *  fell back to the summary synthesis (`deriveFinalIntervalFromSummary`'s
+   *  caller OMITS both rest fields — 0x0039 carries no per-interval rest of
+   *  its own) suppresses rather than silently reading that missing
+   *  interval's rest as a real zero.
    *
    *  ZERO IS A REAL VALUE, never a suppression trigger (evidence base: the
    *  r0 keystone capture decodes 0 and a genuinely rest-free run's own sum
@@ -3382,14 +3429,13 @@ export function createPm5Driver(
       );
       return;
     }
-    const complete = actuals.every((a) => a.restDistanceMeters !== undefined);
-    if (!complete) {
+    if (!restPairComplete(actuals)) {
       log.record(
         "rest-distance-verdict",
         `reported only — Interval Rest Time=${decoded.intervalRestSeconds}s; ` +
-          `distance suppressed — an actual this run recorded has no ` +
-          `restDistanceMeters reading (the summary-fallback synthesis path ` +
-          `omits it; 0x0039 carries no per-interval rest)`,
+          `distance suppressed — an actual this run recorded is missing ` +
+          `restSeconds and/or restDistanceMeters (the summary-fallback ` +
+          `synthesis path omits both; 0x0039 carries no per-interval rest)`,
       );
       return;
     }
