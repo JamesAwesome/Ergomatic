@@ -3682,6 +3682,31 @@ that needs no erg, and it can run in a test.
       `drainSummaryReconcile` already does for disconnect/hook-reconcile,
       from `program()`'s own re-arm path, before cancelling it for the
       outgoing run.
+- [ ] **RC-20 — The diagnostics row never renders on a device's FIRST EVER
+      connected session, and no hardware walk can catch it.** Found by Phase
+      LM's fix round, verified independently at its re-review, and filed rather
+      than fixed because it is pre-existing (shipped by Task 1) and narrower
+      than the PR that found it. `MonitorLogRow` (`LogSession.tsx:934`) reads
+      the stash in a `useState` LAZY INITIALIZER only — no effect, no storage
+      listener, no re-read. `useMonitorSession`'s `teardown` is a passive
+      `useEffect` cleanup, and React runs it AFTER the next route's render
+      commits. So on a genuine first-ever connected session there is no prior
+      entry at mount, the row renders `null`, and it never gets a second
+      chance. Task 1's promise — the diagnostics are reachable on a phone in
+      the never-rowed case — therefore holds only from the SECOND connected
+      session onward.
+      **The walk-protocol trap is the important half, and it is why this gets
+      its own row rather than a line in a PR body:** every walk this project
+      runs happens on a phone that has connected dozens of times, so **a walk
+      will PASS while a brand-new tester gets nothing.** Validating this case
+      needs a factory-reset-equivalent device state, not merely "has not rowed
+      this session". That is the same verify-the-app-against-itself shape as
+      recurring failure #11. Any walk card claiming to exercise the
+      never-rowed readout must say which device state it ran on.
+      **Fix shape:** an effect that re-reads after mount, or lift the read past
+      the teardown boundary. It is a real behavioural change to Task 1's
+      component, which is why it was not smuggled into a fix round scoped to
+      five other findings.
 - [ ] **RC-19 — `server/routes/data.test.ts` flakes under the combined
       `--project unit --project client` run, and it is NOT one flaky test.**
       Observed four times across three sessions on 2026-08-25, and the
