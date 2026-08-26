@@ -28,6 +28,22 @@ approval before any docker command runs, in this exact shape:
       rest or between pieces>
     Phone needed: <NO (default) | YES because <walk item>>
 
+**SHORTEST INTERVAL THAT PROVES THE POINT — James, 2026-08-26: *"our skill
+should instruct you to recommend short intervals. a 500m interval is not short.
+a 250 would be preferred."*** Pick the interval length from what the leg has to
+OBSERVE, never from what looks like a normal workout. A leg that needs a rest
+BOUNDARY needs to reach a boundary — 250 m gets there in half the rowing of
+500 m and proves exactly as much. A leg that needs a long grid needs many
+intervals, not long ones. **Default to 250 m or 1 minute unless the leg names a
+reason it cannot work.** This cost him a 500 m interval on the Phase LM walk to
+observe something a 250 would have shown.
+
+**A leg's stated cost includes GETTING INTO the state it needs.** The same walk
+carried a leg advertised as "~10 seconds, no extra rowing" that silently
+required a full work interval first to reach a rest. If the rower is not
+already in the required state, the cost of arriving is part of the leg's
+budget and is stated in the plan.
+
 **The budget is binding.** No instruction mid-walk may add rowing beyond
 it or convert an "abandon whenever" into "row to completion". If a
 mid-walk discovery genuinely needs more rowing, STOP, present a revised

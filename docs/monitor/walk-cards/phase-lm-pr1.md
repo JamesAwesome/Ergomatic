@@ -91,35 +91,31 @@ counter.** That is CORRECT and is the majority outcome here: the in-flight
 interval's metres are genuinely discarded on close (Phase LM's own owed row).
 Do not record it as cosmetic.
 
-## Leg 2b — sit still after a rest — WALKED 2026-08-26, DID NOT REPRODUCE
+## Leg 2b — REPRODUCED 2026-08-26, on the SECOND attempt
 
-**Result: no `PULL TO RESUME` appeared** after five seconds of stillness at a
-rest boundary. The hypothesis in the spec's Task 5 is not sufficient; see there.
-Kept for the record and for a future attempt, but **do not re-run it expecting
-a result** — provoking it deliberately has now failed once.
+**The instruction that works:** take a pull or two DURING the rest, then stop as
+the work interval starts and sit still. `PULL TO RESUME` appears within about
+two seconds, while the flywheel is still coasting.
 
-**BUDGET CORRECTION, and it is the card's fault, not the operator's.** This leg
-was written as "~10 seconds, no extra rowing" on the assumption the rower is
-ALREADY inside a rest-bearing piece. Delivered cold it costs a full work
-interval first (500 m on the piece actually used) before a rest even exists.
+**The instruction that does NOT work, kept because the wrong turn is the useful
+part:** "sit still after the rest" reproduces nothing. At a dead stop distance
+is 0 and the predicate's own guard clears correctly, so that leg tested the one
+case the mechanism does not cover. It came back negative and was one commit
+from being recorded as evidence AGAINST the mechanism. **It was evidence about
+the instruction.**
+
+**BUDGET CORRECTION — the card's fault, not the operator's.** This leg was
+written "~10 seconds, no extra rowing", which is true only if the rower is
+ALREADY inside a rest-bearing piece. Cold, it costs a full work interval first.
 James, 2026-08-26: *"you said 'ten seconds, no extra rowing.' then asked me to
 row 500m. that's annoying."* **A leg's stated cost must include getting into
-the state it needs.** Conflicting rowing amounts is a named failure in the walk
-skill and this card reproduced it.
+the state it needs.**
 
-Row a rest-bearing workout to its first rest. When the rest ends and the next
-interval starts, **sit still for five seconds before your first pull.** Then row
-on normally.
-
-**Watch for `PULL TO RESUME` during those five seconds.** Report either way —
-"it appeared" and "it did not" are both results, and the second kills a live
-hypothesis.
-
-Why: the pause detector is meant to be immune at a rest boundary because
-distance resets to zero, but a real capture shows the next interval starting at
-0.1 m of coast, which defeats that guard on its first frame. **Download the
-recording after this piece either way** — the capture is the deliverable, not
-the observation.
+**AND THE INTERVAL SHOULD HAVE BEEN SHORTER.** James, same session: *"our skill
+should instruct you to recommend short intervals. a 500m interval is not short.
+a 250 would be preferred."* Nothing about this leg needed 500 m — it needs a
+rest boundary, and a 250 m interval reaches one in half the rowing. Now a
+standing rule in the `hardware-walk` skill.
 
 ## Leg 3 — the §D1e probe, control arm (build A)
 
