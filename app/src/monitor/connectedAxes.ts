@@ -12,7 +12,9 @@
 // side does not — this module only consumes the already-computed boolean,
 // it does not classify reasons), and whether the frame stream is currently
 // suspect (`frameSilence`, published by the liveness watchdog and an
-// app-lifecycle resume alike — §2a's own `deriveLink` reads it to demote a
+// app-lifecycle resume WHOSE MEASURED GAP EXCEEDED THE THRESHOLD alike
+// (2026-08-26: a resume no longer latches on its own) — §2a's own
+// `deriveLink` reads it to demote a
 // live-looking phase to `"lost"` without a real `disconnected` transition).
 //
 // Every derivation below `switch`es EXHAUSTIVELY over all nine
@@ -120,7 +122,8 @@ export interface AxesInput {
   /** Phase LL Task 2 (link-truth design spec §2a): mirrors
    *  `useMonitorSession`'s `SessionState.frameSilence` at the instant of
    *  derivation — `true` whenever the liveness watchdog has declared the
-   *  frame stream silent, or an app-lifecycle resume is treating it as
+   *  frame stream silent, or an app-lifecycle resume MEASURED a gap past
+   *  `SILENCE_THRESHOLD_MS` and is treating it as
    *  suspect, and the banner's own hysteresis has not yet retracted it.
    *  **Not a new axis and not a new state of its own** (spec §2a's own
    *  correction of the first draft, which invented one): this ONLY feeds
@@ -167,7 +170,8 @@ export function deriveLink(input: AxesInput): LinkAxis {
       // Phase LL Task 2 (§2a): `frameSilence` demotes exactly this group
       // to `"lost"` — a driver that is technically still connected but
       // whose frame stream has gone quiet past the watchdog's threshold
-      // (or an app-lifecycle resume treating it as suspect) is a link the
+      // (or an app-lifecycle resume whose MEASURED gap exceeded the
+      // threshold — never a resume by itself) is a link the
       // rower cannot trust any more than a genuine `onDisconnect` would
       // be, and both land on the identical `"lost"` -> `stale` ->
       // `LostBanner` treatment (§2a: "one honest axis"). `picking` is

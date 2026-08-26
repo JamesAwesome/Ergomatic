@@ -1866,7 +1866,9 @@ export function useMonitorSession(
         // should ultimately arbitrate a resumed stream"). Runs whenever
         // the banner currently considers the stream suspect
         // (`frameSilence`) — covers BOTH suspect sources (a genuine
-        // watchdog silence and an app-lifecycle resume both latch
+        // watchdog silence, and an app-lifecycle resume whose MEASURED gap
+        // exceeded the threshold — 2026-08-26: a resume alone no longer
+        // latches anything, see `decideResumeLatch`) both latch
         // `frameSilence` the identical way, so both resume through this
         // same check). Deliberately NOT gated to "only the very first
         // frame after suspicion": `applyContinuityCheck` re-checking every
@@ -2981,8 +2983,8 @@ export function useMonitorSession(
     //
     // WHOLE-BRANCH REVIEW B1 (RULED): `phase === "disconnected"` ALONE
     // predates Task 2, which widened what "lost" means for the SCREEN —
-    // the watchdog and the app-lifecycle resume both latch `frameSilence`
-    // with `phase` still `"live"` (a suppressed stream is not a torn-down
+    // the watchdog and a resume that MEASURED a real gap both latch
+    // `frameSilence` with `phase` still `"live"` (a suppressed stream is not a torn-down
     // connection). Without the `frameSilence` half, a rower pressing End
     // under a LOST THE MONITOR banner stored `"rower"` — the exact
     // conflation `endedBy` exists to end, reintroduced by this phase's own
