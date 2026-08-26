@@ -75,11 +75,13 @@ import { check as checkContinuity } from "./continuity";
 import { createSeriesRecorder, type SeriesRecorder } from "./seriesRecorder";
 import { defaultTransport } from "../adapters/monitorTransport";
 import { registerAppLifecycleListener } from "../adapters/appLifecycle";
-import type {
-  CancelFn,
-  LivenessDeps,
-  LivenessSnapshot,
+import {
+  SILENCE_THRESHOLD_MS,
+  type CancelFn,
+  type LivenessDeps,
+  type LivenessSnapshot,
 } from "./transports/liveness";
+import { GENERAL_STATUS_UUID } from "../../domain/monitor/pm5/uuids.js";
 
 /** The session state machine (design spec §2, verbatim, MINUS `"paused"` —
  *  connected-axes 2a, task 5). Every value here is reached by a REAL event
@@ -412,6 +414,80 @@ export function handleFrameRecovery(
   return schedule(() => {
     update({ frameSilence: false });
   }, BANNER_RETRACT_HYSTERESIS_MS);
+}
+
+/** What `decideResumeLatch` concluded, and the number it concluded it
+ *  from. `gapMs` is `null` when nothing could be measured (no liveness
+ *  decorator on this transport, or no 0x0031 has ever arrived) — an
+ *  absence, deliberately distinguished from a measured zero. */
+export interface ResumeLatchDecision {
+  latch: boolean;
+  gapMs: number | null;
+}
+
+/**
+ * PHASE LM PR 1, FIX ROUND 2 (design spec `2026-08-26-lost-monitor-trigger-
+ * design.md`, Task 1) — **the fix**. Decides whether a lifecycle resume
+ * should raise the lost-link alarm, by MEASURING the stream instead of
+ * assuming.
+ *
+ * **What was wrong.** The resume handler latched `frameSilence: true`
+ * unconditionally and then, three lines later, read the frame count that
+ * refuted it. On 2026-08-26 that produced nine red `LOST THE MONITOR /
+ * Nothing kept.` banners in 288 s over a link that never dropped, with 233
+ * frames arriving across the nine supposed gaps and `liveness-recovery`
+ * following every latch within 3-72 ms
+ * (`docs/monitor/sessions/walk-2026-08-26/`). Correcting which plugin event
+ * we bind (`src/native/appLifecycle.ts`, `pause`/`resume` rather than
+ * `appStateChange`) reduces the FREQUENCY; it does not make the logic
+ * right, because a genuine 800 ms backgrounding is still a real resume over
+ * a stream that never stopped. This predicate is what makes it right.
+ *
+ * **The rule.** Latch only when the evidence says a gap actually happened:
+ *   - `snapshot.silent` — the watchdog already declared silence and has not
+ *     seen a recovery. Its verdict stands regardless of the gap, and it
+ *     cannot be re-derived from the gap: a DRAINED BACKLOG rearms the
+ *     watchdog's timer (`liveness.ts`'s `noteStatusArrival` -> `rearmTimer`),
+ *     so stale arrivals can leave `lastArrivalMs` recent while `silent` is
+ *     the honest reading.
+ *   - otherwise, the measured gap between the snapshot's own clock reading
+ *     and the last 0x0031 arrival, `>= thresholdMs`.
+ *
+ * `Date.now()` — the clock both readings come from
+ * (`livenessDepsRef.current.now`) — is WALL CLOCK and advances THROUGH an
+ * iOS suspension, which is exactly the direction this predicate needs: a
+ * real background shows up as a real gap the instant we resume, with
+ * nothing to wait for.
+ *
+ * **A NEGATIVE gap is not evidence.** A wall clock stepped backwards (an
+ * NTP correction) says nothing about the stream, and reading it as "no gap"
+ * would be as wrong as reading it as a huge one. We do not latch; the
+ * watchdog's own timer, which is still pending, owns that case. There is
+ * deliberately NO separate `gapMs < 0` branch: a negative number can never
+ * be `>= thresholdMs` (2500, positive by construction — see
+ * `SILENCE_THRESHOLD_MS`), so the one comparison below already delivers
+ * this, and an extra guard would be a branch no test could ever kill. The
+ * BEHAVIOUR is pinned by its own test either way.
+ *
+ * **An UNMEASURABLE gap is not evidence either** (no decorator, or no
+ * 0x0031 ever seen). The pre-stream window belongs to the connect/program
+ * timeouts — `liveness.ts`'s header states that boundary for the watchdog's
+ * own arming rule, and this predicate keeps to the same line.
+ *
+ * Pure and directly testable, the same discipline `handleFrameSilence`/
+ * `handleFrameRecovery`/`programHasDistanceGoal` above already follow.
+ */
+export function decideResumeLatch(
+  snapshot: LivenessSnapshot | null,
+  thresholdMs: number,
+): ResumeLatchDecision {
+  if (snapshot === null) return { latch: false, gapMs: null };
+  const lastArrivalMs =
+    snapshot.characteristics[GENERAL_STATUS_UUID]?.lastArrivalMs ?? null;
+  const gapMs = lastArrivalMs === null ? null : snapshot.atMs - lastArrivalMs;
+  if (snapshot.silent) return { latch: true, gapMs };
+  if (gapMs === null) return { latch: false, gapMs };
+  return { latch: gapMs >= thresholdMs, gapMs };
 }
 
 /** Phase LL Task 4 (design spec §4's continuity rule): true whenever `p`
@@ -1064,9 +1140,10 @@ interface SessionState {
   /** Phase LL Task 2 (design spec §2a): `true` whenever the frame stream
    *  is currently being treated as suspect — the watchdog's own
    *  `onSilence` (armed at the first 0x0031 after connect, tripped after
-   *  `SILENCE_THRESHOLD_MS` with no further arrival) or an app-lifecycle
-   *  resume (mechanism 2: no radio fault, the phone simply stopped
-   *  delivering frames while suspended). Latches on `handleFrameSilence`,
+   *  `SILENCE_THRESHOLD_MS` with no further arrival) or a lifecycle resume
+   *  whose MEASURED gap reached that same threshold (mechanism 2, as
+   *  corrected by Phase LM: `decideResumeLatch` — a resume alone is not a
+   *  reason, only the measurement is). Latches on `handleFrameSilence`,
    *  retracts only after `BANNER_RETRACT_HYSTERESIS_MS` of continuous
    *  healthy frames (`handleFrameRecovery`) — never on a single frame.
    *  Published for `connectedAxes.ts`'s `frameSilence` axis input, the
@@ -2684,28 +2761,46 @@ export function useMonitorSession(
       // RESUME, where the very next frame this session sees might follow
       // an arbitrary real-world gap. `registerAppLifecycleListener` is the
       // adapter-layer seam (`src/adapters/appLifecycle.ts`); the platform
-      // conditional lives there, never here. §4's continuity rule (Task 4,
-      // not yet built by this phase) is what should ultimately arbitrate a
-      // resumed stream — until it exists, a resume LATCHES `frameSilence`
-      // immediately, same as any other silence, but the CLEARING path is
-      // real, not a claim: `transport.markSuspect()` (guarded by
+      // conditional lives there, never here.
+      //
+      // PHASE LM PR 1, FIX ROUND 2 (design spec `2026-08-26-lost-monitor-
+      // trigger-design.md`, Task 1). This handler used to latch
+      // `frameSilence: true` on EVERY foreground, unconditionally — and
+      // then read `framesWhileHidden`, the evidence that refutes it, three
+      // lines further down. It raised nine red banners in 288 s over a
+      // link that never dropped
+      // (`docs/monitor/sessions/walk-2026-08-26/`). It now MEASURES:
+      // `decideResumeLatch` (this file, above) reads the liveness snapshot
+      // we already hold and latches only when the gap since the last
+      // 0x0031 genuinely reached `SILENCE_THRESHOLD_MS`, or the watchdog
+      // has already declared silence. Alarm on the LEVEL (stream health),
+      // never on the EDGE (a lifecycle event) — the edge is only a prompt
+      // to re-measure.
+      //
+      // WHEN WE DO NOT LATCH, WE TOUCH NOTHING. Specifically: no
+      // `markSuspect()` (it does `stopTimer(); silent = true`, so with no
+      // latch and no further arrival to rearm, `onSilence` could never
+      // fire and a resume followed by genuine total silence would show
+      // NOTHING AT ALL), and no `hysteresisCancelRef` cancel (a retract
+      // window already counting down belongs to a silence this resume
+      // knows nothing about; cancelling it without re-latching would strand
+      // `frameSilence` at `true` with no timer left to clear it). Leaving
+      // the decorator's own pending timer alone is the fail-safe — the
+      // wall clock advances through suspension, so it matures on resume.
+      //
+      // When we DO latch, the clearing path is the same real one it has
+      // always been: `transport.markSuspect()` (guarded by
       // `hasMarkSuspect`) sets the liveness decorator's OWN internal
       // `silent` flag, so the very next healthy 0x0031 arrival takes the
       // decorator's EXISTING recovery branch and calls `deps.onRecovery()`
       // — the SAME `handleFrameRecovery`/`BANNER_RETRACT_HYSTERESIS_MS`
-      // path a real watchdog silence goes through.
+      // path a real watchdog silence goes through. (That routing was
+      // itself an earlier review fix: calling `update({ frameSilence:
+      // true })` here while leaving the decorator's `silent` at `false`
+      // meant `noteStatusArrival`'s `if (silent)` branch never matched, so
+      // `frameSilence` never cleared again for the rest of the session.
+      // See `markSuspect`'s own doc comment in `liveness.ts`.)
       //
-      // REVIEW FIX (this was wrong the first time this task shipped):
-      // calling `update({ frameSilence: true })` directly here, with
-      // nothing touching the decorator's own `silent` flag, left `silent`
-      // at `false` for any pre-background stream that had been healthy —
-      // so `noteStatusArrival`'s `if (silent)` branch never matched on
-      // resume, `onRecovery` never fired, and `frameSilence` never cleared
-      // again for the rest of the session on any resume shorter than
-      // `SILENCE_THRESHOLD_MS` (a Control Center swipe, a notification
-      // peek — routine, not an edge case; reproduced empirically: 30
-      // healthy frames over 15s, banner still up). `markSuspect()` is what
-      // closes that gap — see its own doc comment in `liveness.ts`.
       // Minor 1: a fresh token for THIS attempt, checked (not read back off
       // the ref) by the `.then()` below — see `lifecycleAttemptRef`'s own
       // doc comment for the race this closes.
@@ -2725,12 +2820,33 @@ export function useMonitorSession(
         // reachable branch under the type as declared (same posture as
         // this file's other known-redundant guards).
         if (event !== "foreground") return;
-        hysteresisCancelRef.current?.();
-        hysteresisCancelRef.current = null;
-        update({ frameSilence: true });
+        // Snapshotted BEFORE anything below can move the decorator's own
+        // state — `markSuspect()` at the bottom of this handler sets
+        // `silent`, so reading after it would be reading our own write.
+        const snapshot = livenessRef.current?.snapshot() ?? null;
+        const { latch, gapMs } = decideResumeLatch(
+          snapshot,
+          SILENCE_THRESHOLD_MS,
+        );
+        if (latch) {
+          hysteresisCancelRef.current?.();
+          hysteresisCancelRef.current = null;
+          update({ frameSilence: true });
+        }
+        // EXIT CRITERION 4 (design spec): every resume is recorded either
+        // way, with the number the decision was made from — and the
+        // wording ASSERTS NO CAUSE. The line this replaced read "resumed
+        // from background — stream treated as suspect", which claimed a
+        // cause nobody had checked and, on the walk that produced this
+        // fix, was untrue nine times out of nine. Three producers of a
+        // silence remain undistinguished; this entry reports what was
+        // MEASURED and what was DECIDED, nothing about why.
         log.record(
           "app-lifecycle",
-          "resumed from background — stream treated as suspect",
+          `resume gap=${gapMs === null ? "unmeasured" : `${gapMs}ms`} ` +
+            `threshold=${SILENCE_THRESHOLD_MS}ms ` +
+            `silent=${snapshot === null ? "unmeasured" : snapshot.silent} ` +
+            `latched=${latch}`,
         );
         // Task 1 (lost-monitor design spec): what arrived while hidden
         // and what the ready gate saw, read off state this hook already
@@ -2753,7 +2869,10 @@ export function useMonitorSession(
             `rowingActive=${lastFrame?.rowingActive ?? "unseen"} ` +
             `distanceIncreased=${distanceIncreased}`,
         );
-        if (hasMarkSuspect(transport)) transport.markSuspect();
+        // Only when we latched — see this handler's own header for why
+        // calling this on a non-latching resume would disarm the watchdog
+        // and leave a genuinely silent stream showing nothing at all.
+        if (latch && hasMarkSuspect(transport)) transport.markSuspect();
       });
       if (lifecycleResult instanceof Promise) {
         void lifecycleResult.then((unsub) => {

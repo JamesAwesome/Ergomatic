@@ -16,20 +16,28 @@
 // question, one file over. This module reuses the same primitive rather
 // than inventing a second one.
 //
-// NATIVE ARM: `@capacitor/app`'s `addListener("appStateChange", ...)`
-// (https://capacitorjs.com/docs/apis/app#addlistenerappstatechange- —
-// PRIMARY, the official Capacitor App API) — `isActive` is the plugin's own
-// boolean for "the app is in the foreground", which this module translates
-// into the same two-value vocabulary the web arm already speaks rather than
-// exposing the plugin's own shape upward.
+// NATIVE ARM: `@capacitor/app`'s `addListener("pause"/"resume", ...)`
+// (https://capacitorjs.com/docs/apis/app — PRIMARY, the official Capacitor
+// App API; the exact iOS notifications each event maps to are quoted in
+// `src/native/appLifecycle.ts`'s own doc comment, from the plugin's shipped
+// `definitions.d.ts`). Those two are translated into the same two-value
+// vocabulary the web arm already speaks rather than exposing the plugin's
+// own shape upward.
+//
+// PHASE LM (2026-08-26): this used to say `appStateChange`, and that was
+// the defect. That event is iOS's ACTIVE/INACTIVE signal — a Control Centre
+// swipe raises it without the app ever leaving the foreground — and it made
+// the red lost-link banner fire nine times in 288 s over a link that never
+// dropped (`docs/monitor/sessions/walk-2026-08-26/`).
 //
 // WHAT THIS DOES NOT CLAIM: whether a backlog of missed BLE notifications
 // drains the instant the app resumes is UNKNOWN (design spec §2: "Whether a
 // backlog drains on resume is walk item W6 — design for both outcomes,
-// promise neither"). This module only reports the transition; it is
-// `useMonitorSession.ts`'s job (mechanism 2's own consumer) to treat
-// whatever arrives after a resume as suspect until proven healthy, never
-// this file's.
+// promise neither"). This module only reports the transition. What that
+// transition MEANS for the stream is `useMonitorSession.ts`'s job
+// (mechanism 2's own consumer), and since Phase LM it decides by MEASURING
+// the gap since the last frame — a resume is a prompt to re-measure, never
+// evidence in itself.
 //
 // PHASE LL MINOR 9 (design spec §2 mechanism 2, amended 2026-08-22, RULED at
 // the whole-branch review): lifecycle-suspect marking is NATIVE ONLY now.

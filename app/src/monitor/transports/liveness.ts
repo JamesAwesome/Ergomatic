@@ -289,9 +289,17 @@ export function withLiveness(
       };
     },
     /** Phase LL Task 2 REVIEW FIX (§2 mechanism 2). Routes an EXTERNAL
-     *  suspicion — an app-lifecycle resume, "we don't know what happened
-     *  while backgrounded" — THROUGH this decorator's own `armed`/`silent`
-     *  state machine, rather than around it.
+     *  suspicion — the session has measured a gap it believes this
+     *  decorator has not accounted for — THROUGH this decorator's own
+     *  `armed`/`silent` state machine, rather than around it.
+     *
+     *  PHASE LM: the caller now calls this ONLY when it has actually
+     *  measured such a gap (`useMonitorSession.ts`'s `decideResumeLatch`).
+     *  Calling it on a resume that measured nothing would be actively
+     *  harmful, not merely noisy: `stopTimer()` below disarms the pending
+     *  watchdog, and with no latch and no further arrival to rearm it,
+     *  `onSilence` could never fire again — a resume followed by genuine
+     *  total silence would show nothing at all.
      *
      *  Before this method existed, `useMonitorSession.ts`'s resume handler
      *  called `update({ frameSilence: true })` directly, leaving `silent`
@@ -322,7 +330,12 @@ export function withLiveness(
     markSuspect(): void {
       stopTimer();
       silent = true;
-      pushEvent("silence", "marked suspect externally (app-lifecycle resume)");
+      // Names WHO, never WHY (Phase LM, design spec exit criterion 4): the
+      // detail this replaced read "(app-lifecycle resume)", which asserted
+      // a cause for a silence when three producers of one remain
+      // undistinguished. The caller's own ring entry carries the numbers
+      // it measured.
+      pushEvent("silence", "marked suspect by the session");
     },
   };
 }
