@@ -491,10 +491,17 @@ not silently take the cheapest:**
      not a negation precisely so a future sixth value cannot silently start
      rendering.
    - **`deviceName`** flips `sourceLabel` (`storedSummary.ts:252`) to the erg's
-     name on a row with zero measured data, and additionally grants it a
-     `timeLabel`. That claims PM5 provenance for numbers that came off nothing —
-     the same provenance/close-reason fusion this task forbids, running in the
-     opposite direction.
+     name and additionally grants the row a `timeLabel`. ~~That claims PM5
+     provenance for numbers that came off nothing.~~ **REASONING CORRECTED at
+     Task 4 (2026-08-25) — the conclusion holds, the argument did not.** The
+     app ALREADY ships exactly that for the sibling case: a run that exists but
+     measured nothing renders `PM5 <name>` beside `TARGETS ONLY · NOTHING
+     MEASURED`, because `buildMonitorModel` sets `sourceLabel: run.deviceName`
+     (`summaryModel.ts:1025`) with no measurement gate. So "claims provenance
+     for nothing" cannot be the objection; it is established behaviour.
+     **The real objection is simpler and fatal: with no record, `deviceName` is
+     UNKNOWABLE.** There is nothing to read it from. Do not quote the struck
+     text in a PR body.
 2. **Live screen only, stored row explicitly left wrong.** Correct what the rower
    sees at save time and accept the stored row keeps reading `LOGGED BY HAND`.
    Acceptable at PR 1's scope, and **only if the PR states the full cost in plain
