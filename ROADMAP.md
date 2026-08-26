@@ -3715,6 +3715,32 @@ that needs no erg, and it can run in a test.
       made it blocking. **That is the whole lesson — the "flake" was a race
       whose odds any nearby edit could change, and three sessions of re-running
       it green were three sessions of not looking.**
+- [ ] **RC-24 — During a rest, the grid's REST cell counts down and wears the
+      accent. APPROVED (James, 2026-08-26); not yet built.** This is the other
+      half of RC-23's ruling and the reason that ruling is safe.
+      **The gap, verified in code:** the grid's active row keeps rendering the
+      interval's own time and metres from live frames
+      (`surfaceModel.ts:1443-1451`), and its `rest` cell is only the PROGRAMMED
+      rest string, static. So **nothing on the grid says a rest is currently
+      running** — which is why moving numbers there read to the rower as their
+      work interval being mis-measured. The step line does say `N OF M · REST`;
+      the grid header deliberately drops the kind word (`:406`).
+      James's framing: *"maybe we can figure out a way to indicate the person
+      is in rest so they arent worried the wrong numbers would be recorded."*
+      **Chosen: the active row's REST cell becomes the countdown during a
+      rest** — `1:00` ticking to `0:00` — and takes the accent mark. It reuses
+      the mechanism that already means "this is the thing counting" rather than
+      inventing a second signal, and answers both "am I resting?" and "how long
+      left?" in the one place a rower is already looking.
+      **Known cost, stated because it widens a documented rule:** `countdown`
+      is currently `"time" | "meters" | null` and `--accent` is documented as
+      "the only place accent appears anywhere on the three panes"
+      (`surfaceModel.ts:398-400`). Both widen to admit rest. Reconcile those
+      comments in the same change, and check `docs/design/DEVIATIONS.md`.
+      **Why this beats locking the numbers** (the option RC-23 rejected): it
+      costs no change to what any number MEANS, so it carries none of that
+      ruling's TRIAD weight. The numbers stay honestly live; only the labelling
+      stops being ambiguous.
 - [x] **RC-23 — DECIDED, KEEP AS IS (James, 2026-08-26): the grid keeps
       showing live frames through the rest and settles when the split lands.**
       Raised by James from his own row — *"the grid view updates during rest,
