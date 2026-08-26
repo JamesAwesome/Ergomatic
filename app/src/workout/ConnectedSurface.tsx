@@ -75,6 +75,12 @@ import { deriveAxes } from "../monitor/connectedAxes";
 import type { MonitorSession } from "../monitor/useMonitorSession";
 import { ARM_TIMEOUT_MS } from "../session/useStagedDiscard";
 import type { EnginePhase } from "../session/engine";
+// The ended frame's own consumer of the measured-anything rule (fix round,
+// whole-branch review HIGH). `buildSurfaceModel` reads the same function
+// for `SurfaceModel.measuredIntervals`, but it is never called on the
+// ENDED frame (see that branch's own comment), so this screen reads the
+// rule directly rather than inventing a second one.
+import { measuredIntervalCount } from "../session/summaryModel";
 import ConnectionLine from "./connected/ConnectionLine";
 import ConnectionLogSheet from "./connected/ConnectionLogSheet";
 import PaneGrid from "./connected/PaneGrid";
@@ -395,14 +401,45 @@ export default function ConnectedSurface({
     // spec §1, task 2: the type dropped it outright) — `buildSurfaceModel`
     // is never called for this frame, which is drawn straight off `session`
     // instead.
+    //
+    // THE PROMISE IS CONDITIONAL NOW (fix round, whole-branch review HIGH).
+    // "Your numbers are kept." used to be unconditional, and the flagship
+    // path runs straight through here: `endSession` calls `closeRecord`,
+    // which records `close-no-record` and returns early because there is no
+    // run, and then flips the phase to `"ended"` regardless. So the rower
+    // who locked their phone before their first pull met three screens in
+    // a row — the banner's "Nothing kept.", this line promising the
+    // opposite, and the summary's "NO MONITOR READING" — with the middle
+    // one the only false member of the three. This phase's own thesis,
+    // inverted, on this phase's own path.
+    //
+    // ONE RULE, NOT A SECOND NOTION OF MEASURED. `measuredIntervalCount` is
+    // `summaryModel.ts`'s exported measured-anything rule, the same one the
+    // banner's `kept` count and the summary's TARGETS ONLY caption read
+    // (design spec exit criterion 5, "one rule plus one adapter per
+    // consumer"). A locally invented "any actual at all" test would
+    // disagree with both of them on a sub-second boundary, which is exactly
+    // the disagreement the shared rule exists to prevent.
+    //
+    // THE ZERO BRANCH NAMES NO CAUSE, and must not learn to: three
+    // producers of the silence are undistinguished here (the design spec's
+    // own "What we do NOT know"). It also drops "The monitor finished it."
+    // — the ending's AUTHOR is not what makes the promise true, the
+    // MEASUREMENT is, and a machine-finished session that measured nothing
+    // (an armed program the PM5 completed with no pull ever seen —
+    // `openHandoffHold`'s own doc comment names that shape) has nothing to
+    // keep either. Four words, per this surface's own copy constraint.
+    const kept = measuredIntervalCount(session.actuals);
     return (
       <main className="screen connected-surface connected-surface-ended">
         <p className="connected-status-label">SESSION ENDED</p>
         <p className="connected-serif-line">That is the session</p>
         <p className="connected-body-line">
-          {session.endedBy === "machine"
-            ? "The monitor finished it. Your numbers are kept."
-            : "Your numbers are kept."}
+          {kept === 0
+            ? "No numbers to keep."
+            : session.endedBy === "machine"
+              ? "The monitor finished it. Your numbers are kept."
+              : "Your numbers are kept."}
         </p>
       </main>
     );

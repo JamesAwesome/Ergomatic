@@ -1859,8 +1859,21 @@ export function useMonitorSession(
           // is this app's own decision, the same bucket the rower's own
           // End press already occupies, and `ConnectedSurface.tsx`'s own
           // `=== "machine"` ternary reads it that way: anything else
-          // renders the neutral "Your numbers are kept," never a false
-          // "The monitor finished it." No handoff hold: a reset is not a
+          // renders "Your numbers are kept," never a false "The monitor
+          // finished it."
+          //
+          // "THE NEUTRAL OPTION" IS WHAT THAT LINE USED TO SAY, and it was
+          // only ever neutral where a record existed (fix round,
+          // whole-branch review HIGH). `endSession` reaches the same
+          // `phase: "ended"` frame with NO record at all — `closeRecord`
+          // logs `close-no-record` and returns — and "your numbers are
+          // kept" over nothing was the flagship lie. That frame now asks
+          // `summaryModel.ts`'s measured-anything rule FIRST and says "No
+          // numbers to keep." at zero, so the `endedBy` choice recorded
+          // here only ever picks between the two honest promises. A
+          // continuity reset closes a record that has actuals, so it lands
+          // on the neutral one exactly as before.
+          // No handoff hold: a reset is not a
           // natural finish (no boundary is coming), the same reasoning
           // `endByMachine`'s own `terminated` branch already uses to
           // skip `openHandoffHold()`.

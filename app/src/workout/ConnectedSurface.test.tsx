@@ -2017,7 +2017,17 @@ describe("ended: the surface hands off and unmounts", () => {
     // HAND-OFF waits.
     const onEnded = vi.fn();
     const { rerender, session: held } = renderSurface(
-      { phase: "ended", endedBy: "machine", handoffHeld: true },
+      {
+        phase: "ended",
+        endedBy: "machine",
+        handoffHeld: true,
+        // A real held hand-off has already measured intervals — the hold
+        // exists to wait for the LAST one. Fix round (whole-branch review):
+        // the body line branches on measurement now, so an empty `actuals`
+        // here would have been a fixture that cannot happen (recurring
+        // failure #3).
+        actuals: [actualOf(0, 480)],
+      },
       onEnded,
     );
 
@@ -2043,14 +2053,73 @@ describe("ended: the surface hands off and unmounts", () => {
   });
 
   it("says who ended it, without making the rower care", () => {
-    const machine = renderSurface({ phase: "ended", endedBy: "machine" });
+    const machine = renderSurface({
+      phase: "ended",
+      endedBy: "machine",
+      actuals: [actualOf(0, 480)],
+    });
     expect(
       screen.getByText("The monitor finished it. Your numbers are kept."),
     ).toBeInTheDocument();
     machine.unmount();
 
-    renderSurface({ phase: "ended", endedBy: "user" });
+    renderSurface({
+      phase: "ended",
+      endedBy: "user",
+      actuals: [actualOf(0, 480)],
+    });
     expect(screen.getByText("Your numbers are kept.")).toBeInTheDocument();
+  });
+
+  // FIX ROUND (whole-branch review, HIGH): the flagship path runs straight
+  // through this frame. `endSession` calls `closeRecord`, which now logs
+  // `close-no-record` and returns early because there is no run, and then
+  // sets `phase: "ended"` regardless — so a rower who locked their phone
+  // before their first pull read, in order: the banner's "Nothing kept.",
+  // then "Your numbers are kept." here, then "NO MONITOR READING" on the
+  // summary. Screen two was the false one, and it was this phase's own
+  // thesis inverted on this phase's own path.
+  it("does NOT claim numbers were kept when nothing was measured — the flagship ending", () => {
+    renderSurface({ phase: "ended", endedBy: "user", actuals: [] });
+    const line = document.querySelector(".connected-body-line")!.textContent;
+    expect(line).toBe("No numbers to keep.");
+    expect(line).not.toMatch(/kept\./);
+  });
+
+  // Same zero, reached by the machine's own finish (an armed program the
+  // PM5 completed with no pull ever seen — `openHandoffHold`'s own doc
+  // comment names that shape). The ending's AUTHOR is not what makes the
+  // "kept" promise true; the measurement is.
+  it("does NOT claim numbers were kept when the MACHINE ended a session that measured nothing", () => {
+    renderSurface({ phase: "ended", endedBy: "machine", actuals: [] });
+    expect(document.querySelector(".connected-body-line")!.textContent).toBe(
+      "No numbers to keep.",
+    );
+  });
+
+  // The SHARED rule, not a second notion of "measured" invented for this
+  // frame: a sub-second boundary is not a kept interval on the banner or
+  // on the summary, so it must not be one here either.
+  it("uses the same measured-anything rule the banner does: a sub-second boundary keeps nothing", () => {
+    renderSurface({
+      phase: "ended",
+      endedBy: "user",
+      actuals: [actualOf(0, 0.4)],
+    });
+    expect(document.querySelector(".connected-body-line")!.textContent).toBe(
+      "No numbers to keep.",
+    );
+  });
+
+  it("still promises what it can when the monitor DID measure something", () => {
+    renderSurface({
+      phase: "ended",
+      endedBy: "user",
+      actuals: [actualOf(0, 0.4), actualOf(1, 428.4)],
+    });
+    expect(document.querySelector(".connected-body-line")!.textContent).toBe(
+      "Your numbers are kept.",
+    );
   });
 });
 

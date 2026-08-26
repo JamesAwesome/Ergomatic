@@ -782,8 +782,22 @@ describe("screen fixtures for pnpm screenshots", () => {
   });
 
   it("the hand-off frame at ended", async () => {
+    // The ORDINARY ending, which is what this fixture has always shown:
+    // the rower rowed, the machine reported a boundary, and the frame is
+    // free to promise the numbers are kept. It carries a real actual as of
+    // the fix round (whole-branch review HIGH) because that promise is
+    // conditional now — with the empty `actuals` this used to pass, the
+    // capture would silently have become the NOTHING-measured frame while
+    // keeping the ordinary frame's name (recurring failure #3). The
+    // nothing-measured wording is pinned in `ConnectedSurface.test.tsx`'s
+    // own "ended" block; this file's job is the layout `e2e` asserts on,
+    // which is identical either way (one `<p>`, different words).
     await expect(
-      capture("live", { phase: "ended", endedBy: "user" }),
+      capture("live", {
+        phase: "ended",
+        endedBy: "user",
+        actuals: [actualFor(0, FIXTURE.program)],
+      }),
     ).toMatchFileSnapshot("../../e2e/fixtures/connected-ended.html");
   });
 });
