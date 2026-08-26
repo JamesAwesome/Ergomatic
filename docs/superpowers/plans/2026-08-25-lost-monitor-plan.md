@@ -75,7 +75,7 @@ localStorage.setItem("ergomatic:last-session-log", exported);
 
 Keep it inside the existing `try/catch` — quota or privacy mode must never break a teardown.
 
-- [ ] **Step 4: Add the wall clock to the ring.** The ring has no wall clock today. Add an ISO timestamp per entry. This is what turns the diagnostics into the probe.
+- [x] **Step 4: ~~Add the wall clock to the ring.~~ DROPPED — the premise was false.** The ring already stamps `atMs` (epoch ms) on every entry (`eventLog.ts:39`, Phase LL Task 1), as this phase's own walk rings show. No change needed; the probe needs no new timestamp.
 
 - [ ] **Step 5: Failing tests for the three new ring entries, then implement.** Each asserts the entry's presence AND its content, not that a logger was called.
   - `endSession` closing with no record (`closeRecord`'s `run === null` early return at `:1477`) records `kind: "close-no-record"` naming that nothing was closed. Today it returns silently, which is why this cost a tester a workout.

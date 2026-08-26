@@ -179,9 +179,15 @@ self-diagnosing:
   what the ready gate saw (`rowingActive`, whether distance increased).
 - A ring entry naming **which** `monitorModeRun` condition missed when it returns
   `null`, so the fall-through is never again silent.
-- **A wall clock on the ring**, which it does not have today
-  (`2026-08-20-ble-connection-management.md` §D9 item 4). This is what turns the
-  instrumentation into the probe.
+- ~~A wall clock on the ring, which it does not have today.~~ **FALSE, and
+  corrected at Task 1's implementation (2026-08-25).** The ring has stamped
+  `atMs` (epoch milliseconds) on every entry since Phase LL Task 1 —
+  `eventLog.ts:39`, and visibly so in this phase's own committed walk rings
+  (`rests-finished-ring.json`, `"atMs":1787693708947` = 2026-08-25T21:35:08Z).
+  The claim came from `2026-08-20-ble-connection-management.md` §D9 item 4,
+  which was already stale when it was cited. **Lesson, and it is the same shape
+  as this phase's other two: a research doc's claim about OUR OWN code gets
+  checked against the code, not quoted.** The probe needs no new timestamp.
 
 ### The readout must exist on the PHONE, in the never-rowed case (delta pass, BLOCKING)
 
