@@ -2692,3 +2692,76 @@ this spec's close).
   monitor's OTHER average-pace field" as proof of independence from OUR
   accumulator — a non-sequitur; and the body of a walk-only PR never named either
   ring entry. Still James's to re-set or retire.
+
+## PM final-PR gate, PR #198 (Phase LM PR 1 — TRIAD: what a stored row claims about itself), 2026-08-25
+
+- **The under-claim/over-claim asymmetry is the argument that settles a "leave
+  the record wrong" call — use it instead of re-deriving.** LM Task 4 chose to
+  fix the live screen and leave the stored row reading `LOGGED BY HAND` for a
+  connected session that opened no record. Both rejected candidates were
+  rejected for reasons that took three revisions to get right; the reason that
+  actually holds is simpler. A row that UNDER-claims (says hand-logged when it
+  was a failed connected session) is a false negative and stays recoverable — a
+  future `door` column is right about new rows. A row that OVER-claims (posts a
+  best-effort last-used `deviceName` over a session that measured nothing) is
+  indistinguishable from a real measurement and poisons every later audit,
+  including the one that would count how often the bug fires. **Prefer the
+  false negative.** Sibling to the 2026-08-24 "prefer the recoverable error".
+- **Fixing the live path is not fixing the report.** The tester's complaint came
+  from HISTORY, not from the screen they had pocketed. PR 1 fixed four live
+  surfaces and left the one durable artefact unchanged, which is defensible —
+  but at a gate, **ask which surface the ORIGINAL report was written from** and
+  check that one first. The PR's own bullet led with "stops posing as
+  hand-typed" and put "the stored row is still wrong" in a subordinate clause.
+- **A phase section with ZERO checkboxes files everything it owes into another
+  phase's backlog.** `## Phase LM` ran 140 lines with no `- [ ]` at all, so its
+  two largest owed items (PR 2, and the permanently-wrong stored row) were
+  prose, and RC-20 — a defect in Phase LM's OWN new component, found by its own
+  fix round — was filed under Phase RC. Fourth syntax of filing-as-deferral in
+  three gates. **At a phase-open gate, require the section to have at least one
+  checkbox before any spec is approved against it.**
+- **A deferral that violates a standing ruling gets a TRIGGER, not just a
+  record.** LM knowingly excepts the 2026-08-18 "same fact must not read as two
+  different words live versus from the log". Documented in three durable homes,
+  which is right — but documented is not time-boxed, and the strongest attack on
+  option 2 is that the divergence is permanent. Condition: a checkbox plus a
+  named trigger ("the door column lands with the next stored-shape change to the
+  logs table").
+- **"True but reads oddly" is where a mis-sized finding hides.** The PR carried
+  `Nothing kept.` beside a nonzero greyed metre counter as a cosmetic walk
+  observation. Verified TRUE — but on a SINGLE-INTERVAL workout it is the
+  outcome of every mid-row link loss, i.e. the majority case of the walk leg
+  that would observe it, and what it honestly reports is that the in-flight
+  interval's metres are discarded. **When a risk is filed as cosmetic, compute
+  how often it fires on the most common workout shape before accepting the
+  label** — a walk will otherwise record the majority case as "as expected".
+- **An exit criterion that costs erg time gets a walk card before it gets a
+  merge gate.** Criteria 9 and 10 existed only inside a 654-line design spec;
+  `docs/monitor/sessions/` had no LM card and `grep "leg A"` returned zero.
+  RC-20's own text already demanded one and the branch had not honoured its own
+  row. Card written at this gate: `docs/monitor/walk-cards/phase-lm-pr1.md`.
+- **The `.superpowers/` dangling citation reached the ROADMAP this time**, not
+  just a PR body: RC-17's row pointed at a task report for the fix itself, and
+  `.superpowers/` is git-excluded. **A row can honour RF#14 (landed in ROADMAP,
+  not a PR body) and still lose the substance.** Grep every new ROADMAP row for
+  `.superpowers/`.
+- **Release call: TAG AFTER THE WALKS, `v0.24.0` MINOR** — do not wait for PR 2;
+  correct resume is blocked on the same walk, and the warning strip is the only
+  preventive element the app has. Range `v0.23.0..main` = #196 (no note, reason
+  written: ring only) + #197 (docs) + #198. **The note's clause most likely to be
+  dropped: repeat the v0.17.0 correction in full.** A correction appended to an
+  old version's entry has an audience of zero. And the notes session must be told
+  the cause-free constraint explicitly.
+- **The 30-second rule FAILED here on CONTENT, not the count** — the first time
+  the two agreed in nineteen PRs. Bullet 6 claimed self-diagnosing diagnostics
+  that the branch's OWN new row says do not render on a device's first-ever
+  connected session; bullet 5 buried the PR's most consequential fact in a
+  subordinate clause. **A PR bullet that contradicts a row the same PR files is
+  a mechanical check** — grep the body's claims against the branch's new rows.
+- **What this PR got RIGHT, worth copying:** Gate 0's question ("in the waiting
+  step, is it actually waiting?") turned a four-copy-defect task into ONE root
+  cause — a `SurfaceStatus` union where `stale` evicted `armed` — curing nine
+  displays plus four the sweep found. The whole-branch review caught the frame
+  between two task boundaries ("Your numbers are kept." where nothing was) that
+  four task reviews structurally could not. A committed capture contradicting
+  itself was found and fixed in passing.
