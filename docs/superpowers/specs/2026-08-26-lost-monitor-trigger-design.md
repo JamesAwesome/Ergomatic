@@ -214,9 +214,27 @@ otherwise.
 task:* the stuck `rowingActive` byte is NOT involved. `nextFreezeRun` does not
 read it.
 
-**What this task delivers now:** the walk leg that reproduces it (walk card leg
-2b), and the analysis above. **The fix is specced only once a capture shows the
-false pause.** The likely shape — the predicate needs "this interval has not
+**WALKED 2026-08-26, AND IT DID NOT REPRODUCE.** James sat still for five
+seconds at a rest boundary on a 4x500m piece and **no `PULL TO RESUME`
+appeared.** Four frames is roughly two seconds, so five seconds was ample.
+
+**So the mechanism as stated is NOT SUFFICIENT.** Coast metres do defeat the
+`distanceMeters <= 0` guard — that part is measured, from the 2026-08-25
+capture — but something else keeps the freeze key changing across those
+frames. The key is `distance|split|spm`, and the most likely candidate is that
+split or rate keeps decaying frame to frame while the rower is still, so the
+run never reaches four identical keys. NOT established; named as the next thing
+to check.
+
+**The symptom is still real** — James reports seeing it sometimes — so this is
+"my explanation is wrong or incomplete", not "the bug does not exist". It needs
+a capture of an occurrence rather than another attempt to provoke one, and the
+device build cannot produce a wire recording (the download row is dev-gated).
+**Do not spec a fix off the unsupported mechanism above.**
+
+~~**What this task delivers now:** the walk leg that reproduces it (walk card leg
+2b), and the analysis above.~~ **The fix is specced only once a capture shows
+the false pause.** The likely shape — the predicate needs "this interval has not
 seen a pull yet", the ready-gate concept applied per-interval rather than per
 session — is a NOTE, not a decision.
 

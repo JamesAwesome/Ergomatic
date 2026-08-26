@@ -91,9 +91,21 @@ counter.** That is CORRECT and is the majority outcome here: the in-flight
 interval's metres are genuinely discarded on close (Phase LM's own owed row).
 Do not record it as cosmetic.
 
-## Leg 2b — sit still after a rest (build A, ~10 seconds, no extra rowing)
+## Leg 2b — sit still after a rest — WALKED 2026-08-26, DID NOT REPRODUCE
 
-Cheapest leg on the card, and it settles an open question outright.
+**Result: no `PULL TO RESUME` appeared** after five seconds of stillness at a
+rest boundary. The hypothesis in the spec's Task 5 is not sufficient; see there.
+Kept for the record and for a future attempt, but **do not re-run it expecting
+a result** — provoking it deliberately has now failed once.
+
+**BUDGET CORRECTION, and it is the card's fault, not the operator's.** This leg
+was written as "~10 seconds, no extra rowing" on the assumption the rower is
+ALREADY inside a rest-bearing piece. Delivered cold it costs a full work
+interval first (500 m on the piece actually used) before a rest even exists.
+James, 2026-08-26: *"you said 'ten seconds, no extra rowing.' then asked me to
+row 500m. that's annoying."* **A leg's stated cost must include getting into
+the state it needs.** Conflicting rowing amounts is a named failure in the walk
+skill and this card reproduced it.
 
 Row a rest-bearing workout to its first rest. When the rest ends and the next
 interval starts, **sit still for five seconds before your first pull.** Then row
