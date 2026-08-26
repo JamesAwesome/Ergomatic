@@ -32,8 +32,18 @@ which that plugin's own iOS source fires from
 `UIApplication.didBecomeActiveNotification` / `willResignActiveNotification` —
 **active/inactive**, iOS's transient-interruption signal. The same file wires a
 separate **`pause`/`resume`** pair to `didEnterBackgroundNotification` /
-`willEnterForegroundNotification` (`AppPlugin.swift:22-40`; both typed at
-`definitions.d.ts:223,234`). We subscribed to the wrong pair.
+`willEnterForegroundNotification`. We subscribed to the wrong pair.
+
+**Two citations, both reachable from this worktree — check them, do not take
+this on trust.** The plugin's iOS source at
+`app/node_modules/@capacitor/app/ios/Sources/AppPlugin/AppPlugin.swift:22-40`
+(also under `app/node_modules/.pnpm/@capacitor+app@8.1.1_*/`), and the shipped
+`definitions.d.ts:213,223,234`, which documents the same mapping on the JS side
+and is the better citation for a reader who does not want to read Swift.
+*(Task 1's implementer reported the Swift path as unreachable and proposed
+replacing it. It is reachable — verified at both paths. The claim is corrected
+here rather than the citation being dropped, because a citation that turns out
+to be fine should not be deleted on a mistaken report.)*
 
 `useMonitorSession.ts:2732` then latches `update({ frameSilence: true })`
 unconditionally on foreground, and reads `framesWhileHidden` at `:2745` — after.
