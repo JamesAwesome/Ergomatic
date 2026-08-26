@@ -24,18 +24,28 @@
 // guards, an unenumerated phase laundered by `?? "live"` into a full live
 // surface).
 //
-// PRECEDENCE FOR THE COLLAPSE TO ONE `SurfaceStatus` (this module still
-// answers four separate questions, never one — the collapse lives in the
-// CALLER): `stale` (the link is lost) beats `armed` (a program sits on the
-// machine with no session open yet) beats `paused` (the freeze predicate
-// fired) beats `live` (everything else). `"ended"` is not part of that
-// collapse at all — the caller renders its own hand-off frame for it and
-// never reaches the axes-to-status decision. Realized in exactly one place
-// (task 2, connected-axes design spec §1): `ConnectedSurface.tsx`'s own
-// call to `deriveAxes`, whose comment carries this same order. There is no
-// `surfaceStatusFor` any more — `deriveAxes` plus that one caller-side
-// ternary replaced it, and the `?? "live"` laundering §F3 named is gone
-// with it.
+// WHAT THE CALLER MAKES OF THESE FOUR (this module still answers four
+// separate questions, never one — the collapse lives in the CALLER).
+// `ConnectedSurface.tsx` reads them into TWO independent facts, not one
+// ranked list:
+//
+//   - `SurfaceStatus`, activity only: `armed` (a program sits on the
+//     machine with no session open yet) beats `paused` (the freeze
+//     predicate fired) beats `live` (everything else).
+//   - `linkLost`, straight off `deriveLink() === "lost"`, passed alongside.
+//
+// **THE LINK USED TO BE A FIFTH RANK IN THAT LIST AND IT COST A WORKOUT**
+// (Phase LM PR 1 Task 2). `stale` was ranked above `armed`, so a rower
+// whose phone went quiet before their first pull got a surface that had
+// stopped being armed: `1 OF 4 · WORK`, `LAST 0:00.0`, and an `EST LEFT`
+// counting down a piece that never began. The two questions were never one
+// question, and this module always knew that — it is the collapse that was
+// wrong, not these axes. `"ended"` is still not part of it: the caller
+// renders its own hand-off frame and never reaches the decision.
+//
+// There is no `surfaceStatusFor` any more — `deriveAxes` plus that
+// caller-side derivation replaced it, and the `?? "live"` laundering §F3
+// named is gone with it.
 
 import type { ConnectedPhase } from "./useMonitorSession";
 
@@ -112,11 +122,13 @@ export interface AxesInput {
    *  derivation — `true` whenever the liveness watchdog has declared the
    *  frame stream silent, or an app-lifecycle resume is treating it as
    *  suspect, and the banner's own hysteresis has not yet retracted it.
-   *  **Not a new axis and not a new `SurfaceStatus` member** (spec §2a's
-   *  own correction of the first draft, which invented one): this ONLY
-   *  feeds `deriveLink`, which routes it onto the EXISTING `"lost"`
-   *  member — the same member `phase === "disconnected"` already
-   *  produces — so `LostBanner` needs no second treatment to know about. */
+   *  **Not a new axis and not a new state of its own** (spec §2a's own
+   *  correction of the first draft, which invented one): this ONLY feeds
+   *  `deriveLink`, which routes it onto the EXISTING `"lost"` member — the
+   *  same member `phase === "disconnected"` already produces — so
+   *  `LostBanner` needs no second treatment to know about. (Phase LM moved
+   *  where that `"lost"` lands: it is the caller's own `linkLost` input
+   *  now, not a `SurfaceStatus` member. Nothing about THIS field changed.) */
   frameSilence: boolean;
 }
 

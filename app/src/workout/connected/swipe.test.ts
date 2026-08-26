@@ -129,6 +129,7 @@ function gridRowsElement(): HTMLElement {
     phases,
     program,
     status: "live",
+    linkLost: false,
     frame: null,
     deviceName: "PM5 432331249",
     actuals: [],

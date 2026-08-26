@@ -727,9 +727,12 @@ export interface MonitorSession {
    *  task 2, the same call `frozen` is. */
   runOpen: boolean;
   /** Mirrors `SessionState.frameSilence` (Phase LL Task 2). Published for
-   *  `connectedAxes.ts`'s `deriveLink` — routed through the EXISTING
-   *  `stale` `SurfaceStatus`, never a new one (spec §2a's own correction:
-   *  no new axis, no new word, no parallel path). */
+   *  `connectedAxes.ts`'s `deriveLink` — routed through the EXISTING lost
+   *  link, never a new state (spec §2a's own correction: no new axis, no
+   *  new word, no parallel path). Phase LM moved where "lost" is CARRIED —
+   *  `SurfaceModelInput.linkLost`, independent of `SurfaceStatus`, so an
+   *  armed surface can report the loss without ceasing to be armed — but
+   *  not what produces it, which is still this field and this axis. */
   frameSilence: boolean;
   /** Opens the platform's monitor chooser (`"picking"`), then connects (`"pairing"`) and
    *  builds the driver around the picked device's REAL advertised name.

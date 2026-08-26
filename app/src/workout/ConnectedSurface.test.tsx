@@ -35,6 +35,7 @@ import {
   type WorkoutProgram,
 } from "../../domain/monitor/program.js";
 import { fmtDuration } from "../../domain/duration.js";
+import { fmtSplit } from "../../domain/format.js";
 import { WORKOUTSTATE_INTERVALWORKTIME } from "../../domain/monitor/pm5/parse.js";
 import type { MonitorFrame } from "../../domain/monitor/types.js";
 import type { Baselines, WorkoutType } from "../../domain/types.js";
@@ -359,6 +360,230 @@ describe("armed's first frame, in the DOM (I-1)", () => {
     expect(
       document.querySelector(".connected-band-cell-value")!.textContent,
     ).toBe(fmtDuration(totalSessionSecondsOf(FIXTURE.phases) / 60));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PHASE LM PR 1 TASK 2 — the ready state, not erased by a lost link.
+//
+// THE DEFECT, from the walk: a rower connected, programmed, tapped "Show me
+// the numbers", pocketed the phone and rowed. The app never saw a first
+// pull, so `phase` never left `"ready"` — but the link went quiet, and
+// `SurfaceStatus` was ONE union carrying both the link and the activity, so
+// `"stale"` (checked first) evicted `"armed"` outright. Four displays
+// flipped together off `armedMirror = status === "armed"`, and the screen
+// the rower unlocked to said `1 OF 4 · WORK`, `LAST 0:00.0`, `LAST 0` and an
+// `EST LEFT` counting down a piece that had never begun.
+//
+// THESE ARE CALLER-LEVEL AND DOM-LEVEL ON PURPOSE. A model-level test
+// written against the FIXED input shape (`status: "armed", linkLost: true`)
+// cannot fail against the broken code — the old signature simply has no way
+// to express the combination, which is the whole bug. Driving the real
+// component from the real session shape (`phase: "ready"` +
+// `frameSilence: true`) is the only test that goes red before the fix and
+// green after it. The per-consumer model pins live in
+// `connected/surfaceModel.test.ts`.
+//
+// THE FIXTURE IS THE WALK'S OWN SHAPE, not a convenient one: an erg whose
+// counters have moved (`elapsedSeconds: 504`) while the app is still in
+// `ready`, reporting no current split and no rate. A fixture with zeroed
+// counters would leave `EST LEFT` accidentally correct before the fix and
+// prove nothing about the number a rower reads.
+// ---------------------------------------------------------------------------
+
+/** "Filling Low" with NO leading opener, so interval 0 is a real 2000 m
+ *  piece carrying a resolved SPLIT target. `FIXTURE`'s own opener is
+ *  effort-ref (`compileProgram` nulls its `targetSplit`), and the armed
+ *  split hero's whole behaviour is "preview the target" — against the
+ *  opener there is no target to preview and the assertion would collapse
+ *  to a dash that proves nothing. */
+const NO_OPENER = (() => {
+  const w = LIBRARY_WORKOUTS.find((s) => s.title === "Filling Low");
+  if (!w) throw new Error("missing library fixture: Filling Low");
+  const draft = buildDraft({
+    id: "filling-low-no-opener",
+    title: w.title,
+    type: w.type as WorkoutType,
+    steps: w.steps,
+  });
+  const phases = buildRun(draft, baselines, t0).phases;
+  const program = compileProgram(phases);
+  if ("code" in program) {
+    throw new Error(`fixture failed to compile: ${program.code}`);
+  }
+  return { phases, program };
+})();
+
+/** The first interval's own programmed split, read out of the fixture. */
+const NO_OPENER_TARGET_SPLIT = (() => {
+  const p = NO_OPENER.phases.find((x) => x.targetKind === "split");
+  if (!p?.targetSplit) throw new Error("fixture has no split work phase");
+  return p.targetSplit;
+})();
+
+/** THE ERG COUNTING WHILE THE APP IS STILL IN `ready` — the fall-through
+ *  frames the spec names ("the panes keep painting live numbers off the
+ *  fall-through `update({ frame })`"). This is the DISCRIMINATING shape:
+ *  every counter moving, so each of the four collapsed displays shows a
+ *  demonstrably wrong value before the fix rather than one that happens to
+ *  coincide with the right answer. */
+function rowingFrame(): MonitorFrame {
+  return frame({
+    state: "rowing",
+    rowingActive: true,
+    intervalIndex: 0,
+    elapsedSeconds: 504,
+    distanceMeters: 1400,
+    currentSplit: 108,
+    spm: 26,
+    intervalRemaining: { kind: "distance", value: 600 },
+  });
+}
+
+/** THE WALK'S OWN FRAME: the same never-left-`ready` surface, read at the
+ *  moment the rower had STOPPED — `currentSplit`/`spm` at zero with the
+ *  counters reset, which is what put `LAST 0:00.0` and `LAST 0` on the
+ *  screen they unlocked to. Kept alongside `rowingFrame` because it is the
+ *  shape actually photographed, and because it reaches the mid-session
+ *  mirror rather than the live readings. */
+function stoppedFrame(): MonitorFrame {
+  return frame({
+    state: "rowing",
+    rowingActive: false,
+    intervalIndex: 0,
+    elapsedSeconds: 504,
+    distanceMeters: 0,
+    currentSplit: 0,
+    spm: 0,
+  });
+}
+
+function renderNeverRowed(overrides: Partial<MonitorSession> = {}) {
+  return render(
+    <ConnectedSurface
+      phases={NO_OPENER.phases}
+      program={NO_OPENER.program}
+      session={session({
+        // `phase: "ready"` + `frameSilence: true` is exactly what
+        // `deriveAxes` turns into `link: "lost"` AND `program: "armed"` with
+        // `session: "none"` — the combination the old single union could
+        // not hold at once.
+        phase: "ready",
+        frameSilence: true,
+        frame: rowingFrame(),
+        ...overrides,
+      })}
+      onEnded={vi.fn()}
+    />,
+  );
+}
+
+/** The two hero readings, in DOM order: split then rate. */
+function heroValues(): string[] {
+  return [...document.querySelectorAll(".connected-hero-value")].map(
+    (n) => n.textContent ?? "",
+  );
+}
+
+describe("Phase LM: a lost link before the first pull does not erase the ready state", () => {
+  it("the header still says READY — not WORK, which claims a piece that never began", () => {
+    renderNeverRowed();
+    expect(screen.getByText("1 OF 4 · READY")).toBeInTheDocument();
+    expect(screen.queryByText("1 OF 4 · WORK")).toBeNull();
+  });
+
+  it("the split hero previews the TARGET and wears no LAST label — there is no last reading to have", () => {
+    renderNeverRowed();
+    // `fmtSplit`'s whole+tenths split is rendered as two spans inside one
+    // value node, so the node's own text is the full reading.
+    expect(heroValues()[0]).toBe(fmtSplit(NO_OPENER_TARGET_SPLIT));
+    // The walk's own screen said `LAST 0:00.0`: both halves were wrong, and
+    // the label is the half that turns a preview into a claimed
+    // measurement.
+    expect(screen.queryByText("LAST")).toBeNull();
+  });
+
+  it("the rate hero reads a plain 0 — a rower who has taken no stroke has no stroke rate", () => {
+    renderNeverRowed();
+    // The frame carries 26 spm. Before the fix that number reached the hero
+    // untouched, captioned as if the app had measured it.
+    expect(heroValues()[1]).toBe("0");
+  });
+
+  // THE WALK'S OWN SCREEN, reproduced and then fixed. Its erg had stopped
+  // by the time the rower looked, so the readings were zeros wearing the
+  // `LAST` label — a caption that turns "the machine shows nothing" into
+  // "we measured nothing", which is the sentence that cost the workout.
+  it("the photographed screen: LAST 0:00.0 / LAST 0 becomes the target preview and a plain 0", () => {
+    renderNeverRowed({ frame: stoppedFrame() });
+    expect(screen.queryByText("LAST")).toBeNull();
+    expect(heroValues()).toStrictEqual([fmtSplit(NO_OPENER_TARGET_SPLIT), "0"]);
+    expect(screen.getByText("1 OF 4 · READY")).toBeInTheDocument();
+  });
+
+  it("EST LEFT reads the WHOLE session — nothing has been rowed off it", () => {
+    renderNeverRowed();
+    // THE NUMBER THIS TASK CARRIES WEIGHT FOR. The fixture's erg has 504 s
+    // on its own clock; before the fix that came straight off the session
+    // total and a rower read a countdown for a piece they had not started.
+    expect(
+      document.querySelector(".connected-band-cell-value")!.textContent,
+    ).toBe(fmtDuration(totalSessionSecondsOf(NO_OPENER.phases) / 60));
+  });
+
+  it("the grid's own header does not run a gold countdown either", () => {
+    localStorage.setItem(LAST_PANE_KEY, "grid");
+    renderNeverRowed();
+    expect(document.querySelector(".connected-header-countdown")).toBeNull();
+    expect(screen.getByText("1 OF 4 · READY")).toBeInTheDocument();
+  });
+
+  it("the grid's active row carries no gold counting mark", () => {
+    localStorage.setItem(LAST_PANE_KEY, "grid");
+    renderNeverRowed();
+    expect(document.querySelector(".connected-grid-countdown")).toBeNull();
+  });
+
+  // THE SWEEP (task brief step 5), pinned rather than merely reported. The
+  // old union made every status mutually exclusive, so anything keyed on a
+  // member was a candidate for the identical collapse. Two more were:
+  // `PaneLive`'s ghost class reads `model.status === "armed"` directly, and
+  // the progress bar reads `elapsedSeconds <= 0` — which the armed branch
+  // is the only producer of before a session opens. Both were wrong on the
+  // walk's screen and both are cured by the one root fix, so they get one
+  // test each here rather than a note in a report.
+  it("the split hero still wears its ghost treatment — a preview must not read as a reading", () => {
+    renderNeverRowed();
+    expect(
+      document.querySelector(".connected-hero-split .connected-hero-value")!
+        .className,
+    ).toContain("connected-hero-ghost");
+  });
+
+  it("the progress bar is all-upcoming — no segment is done and none is active", () => {
+    renderNeverRowed();
+    const segs = [...document.querySelectorAll(".connected-progress-seg")];
+    expect(segs.length).toBeGreaterThan(0);
+    for (const seg of segs) {
+      expect(seg.className).toContain("connected-progress-seg-upcoming");
+    }
+  });
+
+  // THE OTHER HALF OF THE FIX, and the reason the ternary could not simply
+  // be reordered: restoring READY must not cost the rower the one signal
+  // that says the app has stopped hearing the erg. The link is an
+  // INDEPENDENT input now, so both facts are told at once.
+  it("still reports the lost link — the loss is carried alongside READY, not traded for it", () => {
+    renderNeverRowed();
+    expect(screen.getByText(`${DEVICE} · LOST`)).toBeInTheDocument();
+    expect(screen.getByText("LOST THE MONITOR")).toBeInTheDocument();
+  });
+
+  it("passes the caller's two independent facts to buildSurfaceModel", () => {
+    renderNeverRowed();
+    const lastCall = mockBuildSurfaceModel.mock.calls.at(-1)!;
+    expect(lastCall[0].status).toBe("armed");
+    expect(lastCall[0].linkLost).toBe(true);
   });
 });
 
@@ -914,6 +1139,28 @@ describe("frozen (handoff §4, restyled by connected-axes 2a task 5)", () => {
     expect(screen.getByText("PULL TO RESUME")).toBeInTheDocument();
     expect(screen.queryByText(/PAUSED/)).not.toBeInTheDocument();
     expect(CONNECTED_SURFACE_SOURCE).not.toMatch(/PAUSED/);
+  });
+
+  // PHASE LM: A LOST LINK STILL BEATS A FROZEN ERG. Before this task the
+  // precedence was implicit — `"stale"` was a `SurfaceStatus` member the
+  // caller resolved ahead of `"paused"`, so this combination never reached
+  // the paused block at all. The member is gone and the two facts are now
+  // independent, so the order is written out at the render site; this pins
+  // that the screen did not change. `PULL TO RESUME` over a dead feed tells
+  // the rower to fix something a pull cannot fix, and the lost banner is
+  // the message that actually applies.
+  it("a frozen erg whose link has ALSO gone quiet shows the lost banner, not PULL TO RESUME", () => {
+    renderSurface({ frozen: true, frameSilence: true });
+    expect(screen.queryByText("PULL TO RESUME")).toBeNull();
+    expect(screen.getByText("LOST THE MONITOR")).toBeInTheDocument();
+    // And the readings are HELD and greyed rather than blanked to the
+    // paused dash — `livePace`/`liveRate`'s own half of the same
+    // precedence.
+    const hero = document.querySelector(
+      ".connected-hero-split .connected-hero-value",
+    )!;
+    expect(hero.textContent).not.toBe("—");
+    expect(hero.className).toContain("timer-card-actual-stale");
   });
 
   it("THE FOOTER GROWS INTO THE PANE, NOT OVER IT: the header and the pane's own top row never move", () => {

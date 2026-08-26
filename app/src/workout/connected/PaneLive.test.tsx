@@ -101,14 +101,22 @@ function frame(overrides: Partial<MonitorFrame> = {}): MonitorFrame {
   };
 }
 
+/** Phase LM PR 1 Task 2: `"stale"` is no longer a `SurfaceStatus` member —
+ *  the lost link is an independent input (`linkLost`) so that a surface can
+ *  be armed AND unheard at once. This helper still takes the WORD, because
+ *  the stale-table cases below read better naming the state they are about,
+ *  and maps it onto the pair the model actually takes. A lost link with no
+ *  other activity to report is `"live"` plus `linkLost` — the same
+ *  rendering the member used to produce. */
 function renderPane(
-  status: SurfaceStatus,
+  status: SurfaceStatus | "stale",
   frameOverrides: Partial<MonitorFrame> = {},
 ) {
   const model = buildSurfaceModel({
     phases: FIXTURE.phases,
     program: FIXTURE.program,
-    status,
+    status: status === "stale" ? "live" : status,
+    linkLost: status === "stale",
     frame: frame(frameOverrides),
     deviceName: DEVICE,
     actuals: [],
@@ -354,6 +362,7 @@ describe("the unpriced-phase guard (design spec §4/§7 item 7)", () => {
       phases: UNPRICED.phases,
       program: UNPRICED.program,
       status: "live",
+      linkLost: false,
       frame: frame({ intervalIndex: 0, ...overrides }),
       deviceName: DEVICE,
       actuals: [],
@@ -686,6 +695,7 @@ describe("the meters counter on the progress-bar row (connected-metrics design s
       phases: FIXTURE.phases,
       program: FIXTURE.program,
       status: "armed",
+      linkLost: false,
       frame: null,
       deviceName: DEVICE,
       actuals: [],

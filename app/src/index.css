@@ -5546,6 +5546,33 @@ section:not(.news-pinned) .news-row:last-of-type {
   margin: 0;
 }
 
+/* THE READY-SCREEN WARNING (Phase LM PR 1 Task 2, Gate 0 — James,
+   2026-08-25): four words on a sunken strip with a `--marker` left rule.
+   `--marker` because this file already fixes its meaning as "GOLD MEANS
+   LOOK HERE, NEVER YOU ARE BEHIND" (see the connected countdown's own
+   rule) — the warning wants noticing, not alarming, and `--accent` red
+   would say the rower has already done something wrong.
+
+   CONTRAST, COMPUTED (recurring failure #6), on the real tokens:
+   `--marker` #7d5510 on `--surface-sunken` #efeade = 5.50:1, which is what
+   the text actually sits on here, and on `--surface` #fffdf7 = 6.49:1 for
+   the surrounding page. Both clear the 4.5:1 WCAG AA floor. No hit-target
+   floor applies: this is static text, nothing to tap.
+
+   3px left rule, matching the house's other "state marker" strips
+   (`.plan-row-today`, `.step-card`) so the shape is already familiar
+   rather than a new device invented for one line. */
+.connected-keep-on {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  color: var(--marker);
+  background: var(--surface-sunken);
+  border-left: 3px solid var(--marker);
+  padding: 8px 10px;
+  margin: 0;
+}
+
 .connected-reassurance {
   font-family: var(--font-mono);
   font-size: 11px;

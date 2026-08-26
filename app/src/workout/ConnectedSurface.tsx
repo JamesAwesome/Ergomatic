@@ -408,14 +408,29 @@ export default function ConnectedSurface({
     );
   }
 
-  // THE STATUS PRECEDENCE, REALIZED (connected-axes design spec §1;
-  // `connectedAxes.ts`'s own header comment names the order this collapses
-  // to: `ended > disconnected > (armed | mirror | live)`). `ended` is
-  // handled above, before axes are even derived, so this is the one
-  // decision left: `stale` (the link is lost) beats `armed` (a program sits
-  // on the machine with no session open yet — `"ready"`, once the rower has
-  // asked for the numbers) beats `paused` (the freeze predicate fired)
-  // beats `live` (everything else).
+  // TWO INDEPENDENT FACTS, NOT ONE RANKED LIST (Phase LM PR 1 Task 2 —
+  // this replaces the single four-way ternary that used to live here).
+  //
+  // The old version resolved `stale` (the link is lost) AHEAD of `armed` (a
+  // program sits on the machine with no session open yet) into one
+  // `SurfaceStatus`, which made them mutually exclusive. A rower who locked
+  // their phone before their first pull met exactly that combination: the
+  // phase never left `"ready"`, the frames went quiet, `stale` won, and
+  // every display keyed on `armedMirror` flipped together into describing a
+  // piece that had never begun — `1 OF 4 · WORK`, `LAST 0:00.0`, `LAST 0`,
+  // and an `EST LEFT` counting down. It cost them the workout and it took
+  // two days to find, because the screen looked like a session in progress.
+  //
+  // THE FIX IS NOT A REORDER. Putting `armed` first in the same ternary
+  // would have traded one wrong screen for another: the surface would have
+  // said READY and stopped saying it had lost the erg. `linkLost` is passed
+  // ALONGSIDE the status instead, so both are told at once — the header
+  // reads `1 OF 4 · READY` and the device caption reads `· LOST` on the
+  // same frame.
+  //
+  // `status` is now activity only, in the surviving precedence: `armed`
+  // beats `paused` (the freeze predicate fired) beats `live` (everything
+  // else). `ended` is handled above, before axes are even derived.
   //
   // `failureLeavesLinkUp: null` — the conservative "no evidence of a
   // surviving link" reading (`AxesInput`'s own doc comment) — is not a
@@ -434,23 +449,27 @@ export default function ConnectedSurface({
     runOpen: session.runOpen,
     failureLeavesLinkUp: null,
     // Phase LL Task 2 (§2a): the one live consumer of this axis —
-    // `deriveLink` routes it onto the EXISTING `"lost"` member, which this
-    // component's own `status` ternary below already treats as `"stale"`.
+    // `deriveLink` routes it onto the EXISTING `"lost"` member, which is
+    // what `linkLost` below reads.
     frameSilence: session.frameSilence,
   });
+  // THE LINK, ON ITS OWN. One axis answers it — a real `disconnected`
+  // phase or frame silence past the watchdog both land on `"lost"`
+  // (`deriveLink`) — and it travels to the model beside `status`, never
+  // through it.
+  const linkLost = axes.link === "lost";
   const status: SurfaceStatus =
-    axes.link === "lost"
-      ? "stale"
-      : axes.program === "armed" && axes.session === "none"
-        ? "armed"
-        : axes.activity === "frozen"
-          ? "paused"
-          : "live";
+    axes.program === "armed" && axes.session === "none"
+      ? "armed"
+      : axes.activity === "frozen"
+        ? "paused"
+        : "live";
 
   const model = buildSurfaceModel({
     phases,
     program,
     status,
+    linkLost,
     frame: session.frame,
     deviceName: session.deviceName,
     actuals: session.actuals,
@@ -576,7 +595,17 @@ export default function ConnectedSurface({
           `1fr` track rather than painting over it, so TOTAL LEFT and its bar
           stay fully on screen every frame the block is up. */}
       <div className="connected-surface-footer">
-        {model.status === "paused" && (
+        {/* A LOST LINK BEATS A FROZEN ERG, said out loud (Phase LM PR 1
+            Task 2). This precedence is not new: `"stale"` used to be a
+            `SurfaceStatus` member the ternary above resolved AHEAD of
+            `"paused"`, so a lost link never reached this line wearing the
+            paused word. Now that the link rides its own field the two can
+            be true at once, and the order has to be written rather than
+            inherited. It stays as it was for a reason — `PULL TO RESUME`
+            over a dead feed instructs the rower to fix something the pull
+            cannot fix, and the lost banner above is the message that
+            actually applies. */}
+        {model.status === "paused" && !model.stale && (
           <PausedBlock armed={end.armed} onEnd={handleEnd} />
         )}
       </div>

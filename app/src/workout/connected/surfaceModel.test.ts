@@ -46,7 +46,6 @@ import {
   ON_TARGET_BAND_SECONDS,
   phaseIndexForInterval,
   splitHero,
-  staleFor,
   type SurfaceModel,
   type SurfaceModelInput,
 } from "./surfaceModel";
@@ -237,6 +236,7 @@ function model(over: Partial<SurfaceModelInput> = {}) {
     phases: FIXTURE.phases,
     program: FIXTURE.program,
     status: "live",
+    linkLost: false,
     frame: frame(),
     deviceName: DEVICE,
     actuals: [],
@@ -383,12 +383,25 @@ describe("judgedValue: the one judgement path", () => {
   });
 });
 
-describe("staleFor: the single place that decides WHEN a reading is stale", () => {
-  it("only a lost link makes a reading stale — a paused erg is still talking", () => {
-    expect(staleFor("stale")).toBe(true);
-    expect(staleFor("paused")).toBe(false);
-    expect(staleFor("live")).toBe(false);
-    expect(staleFor("armed")).toBe(false);
+// `staleFor(status)` used to be tested here as a pure function. Phase LM
+// PR 1 Task 2 deleted it: it answered "is this reading stale" by reading
+// the STATUS WORD, which is exactly what made a lost link and an armed
+// program mutually exclusive. The rule it encoded is unchanged and is
+// asserted through the model itself now — the only place it was ever
+// observable — one status at a time, against the one input that decides it.
+describe("only a lost link makes a reading stale — a paused erg is still talking", () => {
+  it("greys every judged actual when the link is down, at whatever the surface was doing", () => {
+    for (const status of ["live", "paused", "armed"] as const) {
+      expect(model({ status, linkLost: true }).stale).toBe(true);
+      expect(model({ status, linkLost: true }).linked).toBe(false);
+    }
+  });
+
+  it("greys nothing while the link is up — a frozen erg is still talking to us", () => {
+    for (const status of ["live", "paused", "armed"] as const) {
+      expect(model({ status, linkLost: false }).stale).toBe(false);
+      expect(model({ status, linkLost: false }).linked).toBe(true);
+    }
   });
 });
 
@@ -453,6 +466,7 @@ describe("the mirror: 0 wherever the machine's own display shows 0", () => {
       phases: NO_WARMUP.phases,
       program: NO_WARMUP.program,
       status: "armed",
+      linkLost: false,
       frame: frame({
         state: "armed",
         intervalIndex: 0,
@@ -489,6 +503,7 @@ describe("the mirror: 0 wherever the machine's own display shows 0", () => {
     // pre-session `armed`).
     const m = model({
       status: "live",
+      linkLost: false,
       frame: frame({
         state: "rowing",
         intervalIndex: 1,
@@ -510,6 +525,7 @@ describe("the mirror: 0 wherever the machine's own display shows 0", () => {
     const target = firstWorkPhase();
     const m = model({
       status: "live",
+      linkLost: false,
       frame: frame({
         state: "rowing",
         intervalIndex: 1,
@@ -534,6 +550,7 @@ describe("the mirror: 0 wherever the machine's own display shows 0", () => {
       phases: NO_WARMUP.phases,
       program: NO_WARMUP.program,
       status: "armed",
+      linkLost: false,
       frame: frame({
         state: "armed",
         intervalIndex: 0,
@@ -573,8 +590,12 @@ describe("armed's first frame (I-1): the three properties 2D asks for beyond the
     // outright, not just at armed — 2A's own property table cuts the label
     // from LIVE entirely ("Cut from LIVE: NO NOW/TARGET/UP NEXT labels"),
     // so live and paused now read the SAME empty string armed always did.
-    // `stale` is the only status this field still has a word for.
-    expect(model({ status: "stale" }).nowLabel).toBe("LAST");
+    // A LOST LINK is the only thing this field still has a word for — and
+    // since Phase LM PR 1 Task 2 not even then, if the surface is ARMED:
+    // the split hero is previewing a TARGET on that branch, and captioning
+    // a number nobody rowed `LAST` claims we measured it. See this file's
+    // own Phase LM describe below.
+    expect(model({ status: "live", linkLost: true }).nowLabel).toBe("LAST");
     expect(model({ status: "live" }).nowLabel).toBe("");
     expect(model({ status: "paused" }).nowLabel).toBe("");
   });
@@ -584,6 +605,7 @@ describe("armed's first frame (I-1): the three properties 2D asks for beyond the
       phases: NO_WARMUP.phases,
       program: NO_WARMUP.program,
       status: "armed",
+      linkLost: false,
       frame: frame({
         state: "armed",
         intervalIndex: 0,
@@ -604,6 +626,7 @@ describe("armed's first frame (I-1): the three properties 2D asks for beyond the
       phases: NO_WARMUP.phases,
       program: NO_WARMUP.program,
       status: "live",
+      linkLost: false,
       frame: frame({ intervalIndex: 0 }),
       deviceName: DEVICE,
       actuals: [],
@@ -619,6 +642,7 @@ describe("armed's first frame (I-1): the three properties 2D asks for beyond the
       phases: NO_WARMUP.phases,
       program: NO_WARMUP.program,
       status: "armed",
+      linkLost: false,
       // A non-zero sessionElapsedSeconds on the armed frame — the same
       // shape a stale carried-over reading would have (the design's own
       // §2 Item 3 citation: only spm/currentSplit genuinely carry over on
@@ -645,11 +669,159 @@ describe("armed's first frame (I-1): the three properties 2D asks for beyond the
     // suppression scoped to armed, not a change to the live formula.
     const liveModel = model({
       status: "live",
+      linkLost: false,
       frame: frame({ sessionElapsedSeconds: 900, elapsedSeconds: 900 }),
     });
     expect(liveModel.totalLeftDisplay).not.toBe(
       fmtDuration(totalSessionSecondsOf(FIXTURE.phases) / 60),
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PHASE LM PR 1 TASK 2 — armed AND unheard, the combination the old union
+// could not express.
+//
+// `SurfaceStatus` used to carry `"stale"` as a fourth member, resolved
+// AHEAD of `"armed"`, so the moment the link went quiet the surface stopped
+// being armed and everything hanging off `armedMirror` collapsed together.
+// A tester met exactly that: they locked the phone before their first pull,
+// the app never opened a record, and the screen they came back to described
+// a piece that had never begun.
+//
+// THE PER-CONSUMER PINS LIVE HERE; the fail-first proof lives in
+// `ConnectedSurface.test.tsx`'s own Phase LM describe (a model-level test
+// written against the FIXED input shape cannot fail against the broken one
+// — the old signature had no way to say "armed and lost", which is the
+// bug). These pin the model's four displays one at a time so a regression
+// says WHICH consumer moved, and each is covered by its own mutation in the
+// task report.
+// ---------------------------------------------------------------------------
+
+/** ARMED AND UNHEARD, on a program whose interval 0 carries a real split
+ *  target (`NO_WARMUP` — `FIXTURE`'s opener is effort-ref and has no target
+ *  for the armed hero to preview). The frame is the erg counting while the
+ *  app is still in `ready`: every counter moved, which is what makes each
+ *  assertion below discriminating rather than accidentally right. */
+function armedNeverRowed(over: Partial<SurfaceModelInput> = {}): SurfaceModel {
+  return buildSurfaceModel({
+    phases: NO_WARMUP.phases,
+    program: NO_WARMUP.program,
+    status: "armed",
+    linkLost: true,
+    frame: frame({
+      state: "rowing",
+      rowingActive: true,
+      intervalIndex: 0,
+      elapsedSeconds: 504,
+      distanceMeters: 1400,
+      currentSplit: 108,
+      spm: 26,
+    }),
+    deviceName: DEVICE,
+    actuals: [],
+    ...over,
+  });
+}
+
+/** `NO_WARMUP`'s interval 0: the split the armed hero previews. */
+function noWarmupTargetSplit(): number {
+  const p = NO_WARMUP.phases.find((x) => x.targetKind === "split");
+  if (!p?.targetSplit) throw new Error("fixture has no split work phase");
+  return p.targetSplit;
+}
+
+describe("Phase LM: a lost link does not erase the ready state", () => {
+  it("keeps the READY caption when the link is lost before the first pull", () => {
+    expect(armedNeverRowed().intervalLabelShort).toBe("1 OF 4 · READY");
+  });
+
+  it("keeps the split hero previewing the TARGET, never the erg's own live split", () => {
+    const m = armedNeverRowed();
+    expect(m.pace.display).toBe(fmtSplit(noWarmupTargetSplit()));
+    // NOTHING IS JUDGED at armed (frame 2D): the preview is not a reading
+    // to compare, and a lost link cannot make it one either.
+    expect(m.pace.judgement).toBe("stale");
+    expect(m.pace.absent).toBe(false);
+  });
+
+  it("keeps the rate hero at 0 — a rower who has taken no stroke has no rate", () => {
+    expect(armedNeverRowed().rate.display).toBe("0");
+  });
+
+  it("keeps EST LEFT at the whole session and elapsed at zero — nothing has been rowed off it", () => {
+    const m = armedNeverRowed();
+    expect(m.totalLeftDisplay).toBe(
+      fmtDuration(totalSessionSecondsOf(NO_WARMUP.phases) / 60),
+    );
+    expect(m.elapsedSeconds).toBe(0);
+  });
+
+  it("carries no LAST label — captioning a target preview LAST would claim we measured it", () => {
+    expect(armedNeverRowed().nowLabel).toBe("");
+  });
+
+  it("keeps the grid's active row unmarked — nothing is counting down yet", () => {
+    const m = armedNeverRowed();
+    expect(m.grid.rows[m.grid.activeIndex]!.countdown).toBeNull();
+  });
+
+  // THE OTHER HALF. Restoring READY must not cost the rower the signal that
+  // the app has stopped hearing the erg — that would trade one wrong screen
+  // for another, which is why the fix is two independent inputs rather than
+  // a reordered ternary.
+  it("still reports the lost link alongside READY, not instead of it", () => {
+    const m = armedNeverRowed();
+    expect(m.stale).toBe(true);
+    expect(m.linked).toBe(false);
+    expect(m.deviceCaption).toBe(`${DEVICE} · LOST`);
+  });
+
+  // A HEALTHY armed surface is untouched by any of it: the armed branch
+  // reads identically whether or not the link is up, which is the whole
+  // claim "armed no longer implies a healthy link" makes.
+  it("reads identically to a healthy armed surface, except for the link itself", () => {
+    const lost = armedNeverRowed();
+    const up = armedNeverRowed({ linkLost: false });
+    expect(lost.intervalLabelShort).toBe(up.intervalLabelShort);
+    expect(lost.pace.display).toBe(up.pace.display);
+    expect(lost.rate.display).toBe(up.rate.display);
+    expect(lost.totalLeftDisplay).toBe(up.totalLeftDisplay);
+    expect(lost.elapsedSeconds).toBe(up.elapsedSeconds);
+    expect(lost.nowLabel).toBe(up.nowLabel);
+    expect(lost.deviceCaption).not.toBe(up.deviceCaption);
+  });
+});
+
+// The precedence `"stale"`-the-member used to carry implicitly, by winning
+// the caller's ternary before `"paused"` could: a lost link beats a frozen
+// erg. Deleting the member made it explicit in two places
+// (`livePace`/`liveRate` here, the paused block in `ConnectedSurface.tsx`),
+// and these pin that nothing about a frozen-AND-lost surface moved — a real
+// combination, since the freeze predicate fires on unchanged metrics and
+// the watchdog fires on silence, and a rower who stops and then loses the
+// link produces both.
+describe("Phase LM: a lost link still beats a frozen erg", () => {
+  it("holds the last readings, greyed, rather than blanking them to the paused dash", () => {
+    const m = model({
+      status: "paused",
+      linkLost: true,
+      frame: frame({ currentSplit: 130, spm: 21 }),
+    });
+    expect(m.pace.display).toBe("2:10.0");
+    expect(m.pace.judgement).toBe("stale");
+    expect(m.rate.display).toBe("21");
+    expect(m.nowLabel).toBe("LAST");
+  });
+
+  it("still blanks them while the link is UP — the paused suppression is not weakened", () => {
+    const m = model({
+      status: "paused",
+      linkLost: false,
+      frame: frame({ currentSplit: 130, spm: 21 }),
+    });
+    expect(m.pace.absent).toBe(true);
+    expect(m.rate.absent).toBe(true);
   });
 });
 
@@ -659,6 +831,7 @@ describe("READY (design spec §2D): the armed branch of intervalLabelShort", () 
   it("armed on a numbered interval reads the ordinal plus READY, never WORK", () => {
     const m = model({
       status: "armed",
+      linkLost: false,
       frame: frame({ state: "armed", intervalIndex: 1 }),
     });
     // Phase WU: `2 OF 5`, not `1 OF 4` — the same interval, renumbered
@@ -685,6 +858,7 @@ describe("READY (design spec §2D): the armed branch of intervalLabelShort", () 
       phases: FIXTURE.phases,
       program: FIXTURE.program,
       status: "armed",
+      linkLost: false,
       frame: frame({
         state: "armed",
         intervalIndex: 0,
@@ -854,6 +1028,7 @@ describe('connectedNextText: exhaustive over Phase["type"] (Item B composition t
       phases: NO_WARMUP.phases,
       program: NO_WARMUP.program,
       status: "armed",
+      linkLost: false,
       frame: frame({
         state: "armed",
         intervalIndex: 0,
@@ -871,6 +1046,7 @@ describe('connectedNextText: exhaustive over Phase["type"] (Item B composition t
       phases: NO_WARMUP.phases,
       program: NO_WARMUP.program,
       status: "live",
+      linkLost: false,
       frame: frame({ intervalIndex: 0 }),
       deviceName: DEVICE,
       actuals: [],
@@ -914,6 +1090,7 @@ describe("elapsedSeconds: the model's own numeric elapsed (Task 3's progress bar
       phases: NO_WARMUP.phases,
       program: NO_WARMUP.program,
       status: "armed",
+      linkLost: false,
       // A non-zero carried-over pair, the same shape `totalLeftSeconds`'s
       // own armed test uses, to prove the suppression does not merely
       // coincide with an honestly-zero wire value.
@@ -935,6 +1112,7 @@ describe("elapsedSeconds: the model's own numeric elapsed (Task 3's progress bar
     // describe block's first test.
     const liveModel = model({
       status: "live",
+      linkLost: false,
       frame: frame({ sessionElapsedSeconds: 900, elapsedSeconds: 900 }),
     });
     expect(liveModel.elapsedSeconds).toBe(480 + 900);
@@ -1099,6 +1277,7 @@ describe("live", () => {
       phases: EFFORT_MIN.phases,
       program: EFFORT_MIN.program,
       status: "live",
+      linkLost: false,
       frame: frame({
         intervalIndex: 1,
         // A split that would read `"faster"` against the 5' paddle's own
@@ -1131,6 +1310,7 @@ describe("live", () => {
       phases: EFFORT_MIN.phases,
       program: EFFORT_MIN.program,
       status: "live",
+      linkLost: false,
       frame: frame({ intervalIndex: 0 }),
       deviceName: DEVICE,
       actuals: [],
@@ -1143,6 +1323,7 @@ describe("live", () => {
       phases: EFFORT_MAX.phases,
       program: EFFORT_MAX.program,
       status: "live",
+      linkLost: false,
       frame: frame({ intervalIndex: 0, currentSplit: 100 }),
       deviceName: DEVICE,
       actuals: [],
@@ -1265,6 +1446,7 @@ describe("avg: the interval average and its rest verdict (connected-metrics desi
       phases: EFFORT_MAX.phases,
       program: EFFORT_MAX.program,
       status: "live",
+      linkLost: false,
       frame: frame({ intervalIndex: 0, state: "rowing", splitAvgPace: 95 }),
       deviceName: DEVICE,
       actuals: [],
@@ -1292,6 +1474,7 @@ describe("avg: the interval average and its rest verdict (connected-metrics desi
       phases: EFFORT_MAX.phases,
       program: EFFORT_MAX.program,
       status: "live",
+      linkLost: false,
       frame: frame({ intervalIndex: 0, state: "resting", splitAvgPace: 90 }),
       deviceName: DEVICE,
       actuals: [],
@@ -1328,6 +1511,7 @@ describe("avg: the interval average and its rest verdict (connected-metrics desi
       phases: [],
       program: FIXTURE.program,
       status: "live",
+      linkLost: false,
       frame: frame({ intervalIndex: 0, state: "rowing", splitAvgPace: 150 }),
       deviceName: DEVICE,
       actuals: [],
@@ -1393,6 +1577,7 @@ describe("avg: the interval average and its rest verdict (connected-metrics desi
       phases: WARMUP_WITH_REST.phases,
       program: WARMUP_WITH_REST.program,
       status: "live",
+      linkLost: false,
       frame: frame({ intervalIndex: 0, state: "resting", splitAvgPace: 200 }),
       deviceName: DEVICE,
       actuals: [],
@@ -1425,6 +1610,7 @@ describe("avg: the interval average and its rest verdict (connected-metrics desi
       phases,
       program: WARMUP_WITH_REST.program,
       status: "live",
+      linkLost: false,
       frame: frame({ intervalIndex: 0, state: "resting", splitAvgPace: 200 }),
       deviceName: DEVICE,
       actuals: [],
@@ -1483,7 +1669,8 @@ describe("avg: the interval average and its rest verdict (connected-metrics desi
   // test pins for `pace`/`rate`).
   it("stale: the last AVG value is shown, greyed, never a fabricated verdict", () => {
     const m = model({
-      status: "stale",
+      status: "live",
+      linkLost: true,
       frame: frame({ intervalIndex: 1, state: "rowing", splitAvgPace: 130 }),
     });
     expect(m.avg.display).toBe("2:10.0");
@@ -1746,7 +1933,8 @@ describe("disconnected: lose and degrade (spec C5)", () => {
   it("greys EVERY actual, whatever it would otherwise have judged", () => {
     const target = firstWorkPhase().targetSplit!;
     const m = model({
-      status: "stale",
+      status: "live",
+      linkLost: true,
       frame: frame({ currentSplit: target - 30, spm: 40 }),
     });
     expect(m.stale).toBe(true);
@@ -1755,7 +1943,7 @@ describe("disconnected: lose and degrade (spec C5)", () => {
   });
 
   it("relabels NOW as LAST and hollows the indicator", () => {
-    const m = model({ status: "stale" });
+    const m = model({ status: "live", linkLost: true });
     expect(m.nowLabel).toBe("LAST");
     expect(m.linked).toBe(false);
   });
@@ -1764,7 +1952,7 @@ describe("disconnected: lose and degrade (spec C5)", () => {
     // The exact caption forbids "TRYING" on its own; the extra
     // `not.toContain("TRYING")` trailer that used to follow could not fail
     // once this line passed (test-integrity sweep, S0g).
-    const m = model({ status: "stale" });
+    const m = model({ status: "live", linkLost: true });
     expect(m.deviceCaption).toBe(`${DEVICE} · LOST`);
   });
 });
@@ -1805,9 +1993,9 @@ describe("degenerate inputs", () => {
     // without a picker result, which is a caller bug — but it renders a
     // word, not `undefined`.
     expect(model({ deviceName: null }).deviceCaption).toBe("PM5");
-    expect(model({ deviceName: null, status: "stale" }).deviceCaption).toBe(
-      "PM5 · LOST",
-    );
+    expect(
+      model({ deviceName: null, status: "live", linkLost: true }).deviceCaption,
+    ).toBe("PM5 · LOST");
   });
 
   it("renders an empty phase list without inventing a phase", () => {
@@ -1817,6 +2005,7 @@ describe("degenerate inputs", () => {
       phases: [],
       program: FIXTURE.program,
       status: "live",
+      linkLost: false,
       frame: frame(),
       deviceName: DEVICE,
       actuals: [],
@@ -1952,6 +2141,7 @@ describe("every interval is numbered", () => {
       phases: withRest.phases,
       program: withRest.program,
       status: "live",
+      linkLost: false,
       frame: frame({ intervalIndex: 0, state: "resting" }),
       deviceName: DEVICE,
       actuals: [],
@@ -1973,6 +2163,7 @@ describe("every interval is numbered", () => {
         phases: NO_WARMUP.phases,
         program: NO_WARMUP.program,
         status: "live",
+        linkLost: false,
         frame: frame({ intervalIndex: i }),
         deviceName: DEVICE,
         actuals: [],
@@ -2059,6 +2250,7 @@ describe("boundaries: where the intervals actually are", () => {
       phases: NO_WARMUP.phases,
       program: NO_WARMUP.program,
       status: "live",
+      linkLost: false,
       frame: frame(),
       deviceName: DEVICE,
       actuals: [],
@@ -2131,6 +2323,7 @@ describe("boundaries: where the intervals actually are", () => {
       phases,
       program: FIXTURE.program,
       status: "live",
+      linkLost: false,
       frame: frame(),
       deviceName: DEVICE,
       actuals: [],
@@ -2146,6 +2339,7 @@ describe("boundaries: where the intervals actually are", () => {
       phases,
       program: FIXTURE.program,
       status: "live",
+      linkLost: false,
       frame: frame(),
       deviceName: DEVICE,
       actuals: [],
@@ -2618,6 +2812,7 @@ describe("EST LEFT (Phase LL) — monotonicity across a whole real capture (desi
         phases: SESSION_2_PHASES,
         program: SESSION_2_PROGRAM,
         status: "live",
+        linkLost: false,
         frame: s.frame,
         deviceName: SESSION_2_DEVICE,
         actuals: [],
@@ -2667,6 +2862,7 @@ describe("EST LEFT (Phase LL) — monotonicity across a whole real capture (desi
         phases: SESSION_2_PHASES,
         program: SESSION_2_PROGRAM,
         status: "live",
+        linkLost: false,
         frame: s.frame,
         deviceName: SESSION_2_DEVICE,
         actuals: [],
@@ -2886,6 +3082,7 @@ function handoverHolds(
       phases,
       program,
       status: "live",
+      linkLost: false,
       frame: s.frame,
       deviceName: DEVICE,
       actuals: [],
@@ -3002,6 +3199,7 @@ describe("EST LEFT (Phase LL) — the DISTANCE-work limit, measured on a replay 
         phases: PYRAMID_PHASES,
         program: PYRAMID_PROGRAM,
         status: "live",
+        linkLost: false,
         frame: s.frame,
         deviceName: DEVICE,
         actuals: s.actuals,
