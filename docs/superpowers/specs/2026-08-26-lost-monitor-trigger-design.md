@@ -210,7 +210,11 @@ declares a pause after `PAUSED_FRAME_HOLD` (4) consecutive frames whose
 `distance|split|spm` key is identical. Its only defence at a boundary was
 `frame.distanceMeters <= 0`, whose own comment claimed *"every boundary frame
 reads `d 0`"* — **false for a REST boundary**. Decoding 0x0031 across every
-committed recording: the first work frame after a rest reads `d 0.1`
+committed recording: the first work frame after a rest is ABOVE ZERO in 5 of
+the 8 rest->work transitions across all nine recordings, reading 1.1, 0.9, 0,
+0, 0.2, 1.5, 0.1, 0 (corrected at Task 5's review — the original sentence cited
+a single `0.1` and generalised from n=1; the corpus makes the point stronger,
+and up to 1.5 m)
 (`walk-2026-08-25/rests-finished-recording.jsonl.gz`, second changeover), coast
 metres from a flywheel that never stopped. A coast that then decays below the
 wire's own 0.1 m resolution reports the SAME distance frame after frame with

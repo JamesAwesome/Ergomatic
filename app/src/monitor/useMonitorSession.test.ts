@@ -5096,6 +5096,13 @@ const LL_CORPUS_FILES = [
   "walk-2026-08-17/step-3-pm5-recording-second-rest-1786973713929.jsonl",
   "walk-2026-08-17/step-4-pm5-recording-1786974067695.jsonl",
   "walk-2026-08-18-metrics/pyramid-pm5-recording-1787090555458.jsonl.gz",
+  // LOW-5, Task 5's review: the sweep covered 6 of 9 committed recordings and
+  // omitted the file the whole diagnosis is drawn from. Adding all three —
+  // and the keystone one is the file whose no-rest changeover skips `d 0`
+  // entirely (MEDIUM-1), which this sweep would have surfaced.
+  "walk-2026-08-23/keystone-pm5-recording-1787491974452.jsonl.gz",
+  "walk-2026-08-25/rests-finished-recording.jsonl.gz",
+  "walk-2026-08-25/smoke-terminated-recording.jsonl.gz",
 ];
 
 const LL_SESSIONS_DIR = import.meta.url
@@ -5183,6 +5190,15 @@ describe("Phase LL minor 3: §2b's falsification, pinned as a committed regressi
     "walk-2026-08-18-metrics/pyramid-pm5-recording-1787090555458.jsonl.gz": [
       1080,
     ],
+    // The three added at Task 5's review (LOW-5). Empty is a FINDING, not a
+    // gap: across all nine committed recordings the corpus contains exactly
+    // two identical-key runs, both above. The rest-bearing file is the one
+    // the whole false-pause diagnosis was drawn from, and it contains no
+    // mid-interval stop of its own — the rower rowed straight through both
+    // of its boundaries.
+    "walk-2026-08-23/keystone-pm5-recording-1787491974452.jsonl.gz": [],
+    "walk-2026-08-25/rests-finished-recording.jsonl.gz": [],
+    "walk-2026-08-25/smoke-terminated-recording.jsonl.gz": [],
   };
 
   it.each(LL_CORPUS_FILES)(

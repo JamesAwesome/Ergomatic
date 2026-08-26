@@ -956,7 +956,16 @@ export interface MonitorSessionDeps {
  * elapsed broke the run one frame before the 4-hold fired; without
  * elapsed, the zeros could keep matching for as long as the rower's first
  * strokes take to move split/spm — an unbounded run no fixed hold clears.
- * Every frame of THAT no-rest changeover carries `d 0`, and a genuine
+ * MOST frames of that no-rest changeover carry `d 0` — 4 of the 5 recorded
+ * no-rest changeovers do (MEDIUM-1, Task 5's review, 2026-08-26). The fifth
+ * does NOT: `walk-2026-08-23/keystone-pm5-recording-1787491974452.jsonl.gz`
+ * index 96 goes `rowing/248.5 -> rowing/1.9` with no intervening `d<=0` and
+ * no non-rowing frame, so the freeze run never resets there and `pulled`
+ * carries across. **Pre-existing — the old guard leaked identically — and
+ * REST boundaries are safe because a `resting` frame always resets**, so the
+ * defect Task 5 fixed is genuinely closed. Recorded because the converse the
+ * per-interval story leans on ("every boundary resets a freeze run") is the
+ * half that is not guaranteed. A genuine
  * mid-interval stop has distance already banked, so freeze frames simply do
  * not COUNT until the interval has distance: the no-rest boundary case
  * resets on the guard, not on a one-frame margin. (The rower who stops at
@@ -968,9 +977,11 @@ export interface MonitorSessionDeps {
  * **THAT GUARD DOES NOT COVER A REST BOUNDARY, and this comment used to
  * claim it covered every boundary** (2026-08-26). Measured, by decoding
  * 0x0031 across every committed recording: the first work frame after a
- * REST reads `d 0.1` — coast metres from a flywheel that never stopped —
- * not `d 0` (`walk-2026-08-25/rests-finished-recording.jsonl.gz`, second
- * changeover). The guard is therefore already clear on that frame, which is
+ * REST is ABOVE ZERO in 5 of the 8 rest->work transitions across all nine
+ * recordings, reading 1.1, 0.9, 0, 0, 0.2, 1.5, 0.1, 0 — coast metres from a
+ * flywheel that never stopped. (This used to cite the single `0.1` reading
+ * and generalise from it; the corpus makes the point STRONGER than the
+ * original sentence claimed, and up to 1.5 m rather than 0.1 m.) The guard is therefore already clear on that frame, which is
  * how the false pause `PULL_EVIDENCE_FRAMES` exists to stop got through.
  *
  * Exit is on ANY CHANGE, never on "advance" — equality is the whole
@@ -1056,8 +1067,21 @@ export const PAUSED_FRAME_HOLD = 4;
  *   `false` through an entire real row). Keying a pause on it would trade
  *   this defect for a silent one — a genuine stop that never says anything.
  *
- * ITS ONE KNOWN DEPENDENCE: frames arrive at ~2 Hz in every committed
- * recording, and "strictly increasing" is evaluated per frame, so a much
+ * THE RESIDUAL FALSE POSITIVE, and how narrow it measures. A coast strong
+ * enough to bank five strictly-increasing frames and THEN die inside the
+ * hold would still earn the gate and declare a pause the rower did not make.
+ * Written here rather than left in a git-excluded task report (recurring
+ * failure #14). Measured at Task 5's review rather than left as a worry: at
+ * both recorded mid-interval stops the flywheel falls from ~1.2 m/frame to
+ * below the wire's 0.1 m resolution in ONE to TWO frames (1.2, 1.3, 1.1,
+ * dead; and 1.2, 0.4, dead). A coast holding strictly-increasing distance
+ * for ~2.5 s is not a shape any committed recording contains.
+ *
+ * ITS ONE KNOWN DEPENDENCE: frames arrive at ~2 Hz in EIGHT of the nine
+ * committed recordings (median 539.8 ms) — but at ~1 Hz in the ninth
+ * (`walk-2026-08-23/keystone-…`, median 990 ms, min 810, max 1260), measured
+ * at Task 5's review. **So the cost below is ~5 s on that cadence, not
+ * ~2.5 s.** The earlier "every committed recording" was false, and "strictly increasing" is evaluated per frame, so a much
  * faster stream would need less real motion to satisfy it and a much slower
  * rower more. That is the same dependence `ROWING_ACTIVE_FALLBACK_FRAMES`
  * already carries and the same cadence every capture in
@@ -1197,7 +1221,8 @@ export interface RowingStreak {
 }
 
 /**
- * Pure, exported for the fallback's own tests. `null` means "no streak" —
+ * Pure, exported for the ready-gate fallback's AND the pause gate's tests
+ * (two callers since Task 5, not one). `null` means "no streak" —
  * the frame was not a rowing frame at all, which resets outright rather
  * than merely failing to increment (an `armed`/`resting` frame must not
  * lend its position to the next rowing frame's count).
