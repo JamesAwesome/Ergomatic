@@ -43,7 +43,10 @@ describe("useWorkouts", () => {
   it.each([
     ["an error envelope", JSON.stringify({ error: "nope" })],
     ["null", "null"],
-    ["an HTML page a portal served with 200", JSON.stringify("<html></html>")],
+    // Real HTML rejects in res.json() and reaches the pre-existing .catch;
+    // this row is a JSON STRING, which parses fine and is still not a list.
+    // Named for what it sends (scoped review finding 4).
+    ["a JSON string body, not a list", JSON.stringify("<html></html>")],
   ])(
     "a 200 carrying %s fails into error, never ready",
     async (_label, body) => {

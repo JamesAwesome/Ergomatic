@@ -995,7 +995,11 @@ describe("LogSession: the monitor log's quiet door (7B iteration)", () => {
           detail: "ANCIENT-BOOKMARK",
         },
         { seq: 1, atMs: 4999, kind: "log-door-miss", detail: "STILL-TOO-OLD" },
-        { seq: 2, atMs: 5100, kind: "log-door-miss", detail: "no-run" },
+        // Exactly ON the floor: inclusive, because a miss can be stamped in
+        // the same millisecond as the ring's first entry. `>=` vs `>`
+        // survived mutation without this row (scoped review finding 3).
+        { seq: 2, atMs: 5000, kind: "log-door-miss", detail: "ON-THE-FLOOR" },
+        { seq: 3, atMs: 5100, kind: "log-door-miss", detail: "no-run" },
       ]),
     );
     const writeText = vi.fn().mockResolvedValue(undefined);
@@ -1016,6 +1020,7 @@ describe("LogSession: the monitor log's quiet door (7B iteration)", () => {
     );
     const copied = writeText.mock.calls[0]![0] as string;
     expect(copied).toContain("no-run");
+    expect(copied).toContain("ON-THE-FLOOR");
     expect(copied).not.toContain("ANCIENT-BOOKMARK");
     expect(copied).not.toContain("STILL-TOO-OLD");
     localStorage.removeItem("ergomatic:last-session-log");
@@ -1178,7 +1183,7 @@ describe("LogSession: the monitor log's quiet door (7B iteration)", () => {
     localStorage.removeItem("ergomatic:last-session-log");
   });
 
-  it("the rowed-only stash still wins when both keys exist", async () => {
+  it("a BY-HAND arrival still reads the rowed stash when both keys exist", async () => {
     const rowed = JSON.stringify([{ seq: 0, kind: "write", detail: "f1" }]);
     const general = JSON.stringify([
       { seq: 0, kind: "write", detail: "SOMETHING ELSE" },
@@ -3843,6 +3848,15 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
         { seq: 0, kind: "session-start", detail: "prior entry" },
       ]),
     );
+    // A real teardown writes BOTH stashes (`useMonitorSession`'s `stash()`),
+    // so seed both — the fixture used to carry only the rowed key, which is
+    // a shape production never produces after a rowed session.
+    localStorage.setItem(
+      "ergomatic:last-session-log",
+      JSON.stringify([
+        { seq: 0, atMs: 1000, kind: "session-start", detail: "prior entry" },
+      ]),
+    );
     mockWorkouts([workout]);
     mockBaselines();
     const clearSpy = mockMonitorRunClearSpy();
@@ -3900,6 +3914,22 @@ describe("LogSession: the manual door's monitor mode (7C Task 4)", () => {
     expect(ring[1]!.kind).toBe("post-sacrifice");
     expect(ring[1]!.detail).toContain("413");
     expect(ring[1]!.seq).toBe(1);
+
+    // SCOPED REVIEW finding 1 (2026-08-26): and it must reach the SESSION
+    // stash too. This entry is appended AFTER the teardown that wrote both,
+    // and `readMonitorLogStash` prefers the session stash on a
+    // `?from=monitor` arrival — which is the only arrival that produces a
+    // post-sacrifice. Writing the rowed key alone made the entry invisible
+    // exactly where it is read, silently falsifying the reason this logging
+    // exists: a systematic server refusal of `series` must show up in
+    // diagnostics.
+    const sessionRing = JSON.parse(
+      localStorage.getItem("ergomatic:last-session-log")!,
+    ) as { seq: number; kind: string; detail: string }[];
+    expect(sessionRing.map((e) => e.kind)).toContain("post-sacrifice");
+    expect(
+      sessionRing.find((e) => e.kind === "post-sacrifice")!.detail,
+    ).toContain("413");
     sessionStorage.removeItem("ergomatic:last-rowed-log");
   });
 

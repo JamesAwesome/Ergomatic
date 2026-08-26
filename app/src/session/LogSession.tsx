@@ -481,6 +481,42 @@ function recordPostSacrifice(status: number): void {
       entries = entries.slice(entries.length - POST_SACRIFICE_LOG_CAPACITY);
     }
     sessionStorage.setItem("ergomatic:last-rowed-log", JSON.stringify(entries));
+    // SCOPED REVIEW finding 1 (2026-08-26): this entry must land in BOTH
+    // stashes, because it is appended AFTER the teardown that wrote them.
+    // `readMonitorLogStash` now prefers `last-session-log` on a
+    // `?from=monitor` arrival (bug_002: the rowed key outlives its session
+    // and was handing a previous success to a current failure) — and this is
+    // the one screen that produces a `post-sacrifice` entry, so writing only
+    // the rowed key made it invisible exactly where it is read. That would
+    // have silently falsified this function's own reason for existing: a
+    // systematic server refusal of `series` must be visible in diagnostics.
+    // Written as a second independent read-modify-write rather than reusing
+    // `entries`: the two stashes are not required to be identical, and this
+    // one must not overwrite the session stash with the rowed ring's tail.
+    const sessionRaw = localStorage.getItem("ergomatic:last-session-log");
+    if (sessionRaw !== null) {
+      let sessionEntries = JSON.parse(sessionRaw) as MonitorLogEntry[];
+      if (Array.isArray(sessionEntries)) {
+        sessionEntries.push({
+          seq:
+            sessionEntries.length > 0
+              ? sessionEntries[sessionEntries.length - 1]!.seq + 1
+              : 0,
+          atMs: Date.now(),
+          kind: "post-sacrifice",
+          detail: `series dropped from POST /api/logs after status ${status}`,
+        });
+        if (sessionEntries.length > POST_SACRIFICE_LOG_CAPACITY) {
+          sessionEntries = sessionEntries.slice(
+            sessionEntries.length - POST_SACRIFICE_LOG_CAPACITY,
+          );
+        }
+        localStorage.setItem(
+          "ergomatic:last-session-log",
+          JSON.stringify(sessionEntries),
+        );
+      }
+    }
   } catch {
     // Best-effort diagnostics; never block or complicate the save.
   }

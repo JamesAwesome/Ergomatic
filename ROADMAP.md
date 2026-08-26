@@ -3715,6 +3715,21 @@ that needs no erg, and it can run in a test.
       made it blocking. **That is the whole lesson — the "flake" was a race
       whose odds any nearby edit could change, and three sessions of re-running
       it green were three sessions of not looking.**
+- [ ] **RC-22 — `ergomatic:last-session-log` is never cleared either, so a
+      STALE-URL arrival still copies a previous session's ring.** Residual of
+      the ultrareview's bug_002, found at its scoped review (2026-08-26). The
+      flagship case is genuinely fixed: a session that just ended wrote that
+      key at teardown, so a `?from=monitor` arrival gets its own ring. But
+      **nothing clears the key**, so opening a bookmarked or reloaded
+      `/library/:id/log?from=monitor` with no teardown behind it copies
+      whatever session wrote it last — the same "reloaded bookmark" story the
+      door-miss pruning already had to defend against.
+      Lower harm than bug_002 (it needs a deliberate stale URL rather than the
+      ordinary failure path) but the same shape: a diagnostic presenting an
+      old session's evidence as this one's. **Fix shape:** the same `atMs`
+      floor the door-miss merge now uses, or a per-arrival freshness marker.
+      Do NOT fix it by clearing at connect — that was tried for bug_002 and
+      broke the by-hand recovery path.
 - [ ] **RC-19 — `server/routes/data.test.ts` flakes under the combined
       `--project unit --project client` run, and it is NOT one flaky test.**
       Observed four times across three sessions on 2026-08-25, and the
