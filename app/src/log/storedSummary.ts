@@ -46,6 +46,23 @@
 // shorter table literal — so the identical fact never reads as two
 // different words depending on whether a rower is looking at a session
 // live or from the log.
+//
+// ONE KNOWN, ACCEPTED EXCEPTION TO THAT AGREEMENT (Phase LM PR 1 Task 4,
+// option 2 — stated in the PR, not discovered later): a connected session
+// the app never heard a pull from opens no record at all, so its save
+// falls through the manual door and posts neither `deviceName` nor
+// `endedBy`. The LIVE screen now names that arrival honestly
+// (`summaryModel.ts`'s `NO_PM5_READING_SOURCE`); the STORED row cannot,
+// because the columns below carry no signal separating it from a genuine
+// by-hand entry — `deviceName` null, `endedBy` null, every step `assumed`.
+// The row is not wrong about its NUMBERS (it renders `TARGETS ONLY ·
+// NOTHING MEASURED`, which is exactly true); it is wrong about the DOOR,
+// and unbackfillably so — for this row and every earlier one. Fixing it
+// needs a new stored field plus a migration, and both fields that already
+// exist were examined and rejected: `endedBy` would assert a close reason
+// for a record that never existed, and `deviceName` is not even knowable
+// here, there being no record to read it from. Queued with that analysis
+// at ROADMAP `## Phase LM`.
 
 import { fmtDuration } from "../../domain/duration.js";
 import { fmtSplit } from "../../domain/format.js";

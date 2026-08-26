@@ -110,7 +110,9 @@ import {
 } from "./logDraft";
 import type { SessionRun } from "./run";
 
-/** Per §2A: `AUG 10 · 18:57 · PM5 <id>` / `· TIMER` / `· LOGGED BY HAND`.
+/** Per §2A: `AUG 10 · 18:57 · PM5 <id>` / `· TIMER` / `· LOGGED BY HAND`,
+ *  plus Phase LM Task 4's fourth answer `· NO PM5 READING`
+ *  (`NO_PM5_READING_SOURCE` below has the whole rule).
  *  `timeLabel` is absent for the manual door — an off-app row has no
  *  wall-clock moment to show (§2B's own "date-only" fallback wording). */
 export interface SummaryMeta {
@@ -292,7 +294,18 @@ export interface SummaryModel {
 export type SummaryInput =
   | { door: "monitor"; run: MonitorRun }
   | { door: "timer"; run: SessionRun; steps: LogStep[] }
-  | { door: "manual"; steps: LogStep[]; dateIso: string };
+  | {
+      door: "manual";
+      steps: LogStep[];
+      dateIso: string;
+      /** Phase LM PR 1 Task 4 (lost-monitor design spec): the caller has
+       *  proven this arrival came through the CONNECTED door and found no
+       *  record at all — see `NO_PM5_READING_SOURCE` below for what it
+       *  changes and `LogSession.tsx`'s `connectedArrivalWithNoRecord` for
+       *  what "proven" means. Absent/false on every ordinary by-hand
+       *  visit, which is why nothing else in this union changes shape. */
+      connectedNoRecord?: boolean;
+    };
 
 /** §1's capped deviation-bar formula, exported standalone so its two clamp
  *  edges (1.2% floor, 50% cap) get a direct, non-integration test. Takes
@@ -1138,7 +1151,36 @@ function buildTimerModel(run: SessionRun, steps: LogStep[]): SummaryModel {
 // Manual door
 // ---------------------------------------------------------------------
 
-function buildManualModel(steps: LogStep[], dateIso: string): SummaryModel {
+/** Phase LM PR 1 Task 4: the third answer this screen's SOURCE slot can
+ *  give, beside `PM5 <name>` / `TIMER` / `LOGGED BY HAND`. That slot
+ *  answers ONE question — where did these numbers come from — and for a
+ *  connected arrival with no record the honest answer is that there is no
+ *  reading behind them. It is NOT a close reason and must never become
+ *  one: `endedBy` answers how a session closed, and the two agree only on
+ *  the zero-measured case (spec's own line, and `storedSummary.ts`'s
+ *  `LINK_LOST_LINE` is where a close reason renders).
+ *
+ *  WHAT IT DOES NOT SAY: why. Three producers of the silence are
+ *  undistinguished, so this names only what we can see from here — that we
+ *  hold no reading. The connected surface's own lost banner says
+ *  "Nothing kept." for the same session minutes earlier; the two are
+ *  deliberately the same register (short, no cause, no blame) without
+ *  sharing a string, because they answer different questions on different
+ *  screens.
+ *
+ *  KNOWN AND ACCEPTED DIVERGENCE (Task 4 option 2, stated in the PR): the
+ *  STORED row for this same session still reads `LOGGED BY HAND` —
+ *  `storedSummary.ts`'s `sourceLabel` infers the source from stored
+ *  columns, and nothing the manual door posts distinguishes this case from
+ *  a genuine by-hand entry. Making the stored row honest needs a new
+ *  stored field and a migration; see ROADMAP Phase LM. */
+export const NO_PM5_READING_SOURCE = "NO PM5 READING";
+
+function buildManualModel(
+  steps: LogStep[],
+  dateIso: string,
+  connectedNoRecord: boolean,
+): SummaryModel {
   // `buildManualLogSteps` never sets `actualSource: "stopwatch"` — its own
   // doc comment: "ALL split-ref actuals are 'assumed'" — so a manual
   // door's rows are always prescribed-shaped and its caption always fires.
@@ -1156,9 +1198,14 @@ function buildManualModel(steps: LogStep[], dateIso: string): SummaryModel {
       step.targetSplit !== undefined ? fmtSplit(step.targetSplit) : undefined,
   }));
 
+  // Task 4: the SOURCE slot only. `timeLabel` stays absent either way —
+  // §2B's own date-only fallback for a door with no wall-clock moment of
+  // its own, and the stored screen gates its own `timeLabel` on the same
+  // bucket (`storedSummary.ts`'s `buildMeta`), so adding one here would
+  // put a reading on the live screen that the log screen never shows.
   const meta: SummaryMeta = {
     dateLabel: formatLogDate(dateIso),
-    sourceLabel: "LOGGED BY HAND",
+    sourceLabel: connectedNoRecord ? NO_PM5_READING_SOURCE : "LOGGED BY HAND",
   };
 
   return {
@@ -1225,6 +1272,10 @@ export function buildSummaryModel(input: SummaryInput): SummaryModel {
     case "timer":
       return buildTimerModel(input.run, input.steps);
     case "manual":
-      return buildManualModel(input.steps, input.dateIso);
+      return buildManualModel(
+        input.steps,
+        input.dateIso,
+        input.connectedNoRecord === true,
+      );
   }
 }

@@ -5769,11 +5769,61 @@ dropping the link, with the session resuming ticking on unlock — so the platfo
 explanation is not even complete. PR 1's Task 1 instruments this rather than
 guessing, because PR 2's shape depends on the answer.
 
-**Not yet decided, and the design owes an answer to each:** whether a
-zero-measured connected session should offer "Log against plan" at all;
-whether the rower should be warned BEFORE locking rather than after; and
-whether a lost link mid-piece should be recoverable by reconnecting rather than
-only endable.
+**Three open questions, ANSWERED 2026-08-25 as PR 1 was built** (this list
+documented current state and had gone stale):
+
+- *Should a zero-measured connected session offer "Log against plan" at all?*
+  **Yes, and undemoted** — James's ruling: the rower did the work, only our
+  recording failed. All three exits stay, `Log against plan` leads. Pinned by
+  a test in `LogSession.test.tsx`, not left to the shared component's defaults.
+- *Should the rower be warned BEFORE locking rather than after?* **Yes** —
+  PR 1's ready-screen warning (spec Task 2).
+- *Should a lost link mid-piece be recoverable by reconnecting?* Still **PR 2**
+  (correct resume). Unchanged.
+
+**OWED, and deliberately not built in PR 1: the STORED row for a
+never-started connected session is still wrong.** PR 1 took the design
+spec's Task 4 **option 2** — fix the live screen, leave the stored row —
+and this is the record of what that costs and of the analysis the next
+attempt should start from rather than redo.
+
+- **What ships in PR 1:** the end-of-session summary for a `?from=monitor`
+  arrival with NO record reads `NO PM5 READING` in the SOURCE slot instead of
+  `LOGGED BY HAND`, and takes the workout's own target hint instead of
+  `BY FEEL`. The predicate is deliberately narrow — `from=monitor` AND no
+  record in storage at all — because the other three `monitorModeRun` miss
+  conditions leave a record that may hold real PM5 readings we simply cannot
+  render, and claiming "no reading" over those would not be earned.
+- **What stays wrong:** the saved row keeps reading `LOGGED BY HAND` on the
+  history screen, permanently and unbackfillably, for this row and every
+  earlier one. It is not wrong about its NUMBERS (`TARGETS ONLY · NOTHING
+  MEASURED` is exactly true); it is wrong about the DOOR. The live screen and
+  the stored screen therefore disagree for this one case, which is a knowing
+  exception to the 2026-08-18 copy ruling that the same fact must not read as
+  two different words live versus from the log (`storedSummary.ts`'s SOURCE
+  INFERENCE header carries the exception, at the place the ruling lives).
+- **Why not option 1, and what a future attempt must not re-derive.** Making
+  the stored row honest needs a NEW stored field plus a migration; neither
+  existing candidate works. `endedBy` would assert a close reason for a record
+  that never existed (a sixth enum value, and `buildLinkLostLine`'s deliberate
+  equality check would render it invisibly anyway); `deviceName` is not even
+  knowable in this case, there being no record to read it from — a point
+  worth keeping, because the spec rejected `deviceName` for a DIFFERENT
+  reason ("claims PM5 provenance for numbers that came off nothing") that
+  **already describes shipped behaviour**: a monitor-door row whose record
+  exists but measured nothing posts `deviceName` today and renders
+  `PM5 <name>` with the targets-only caption. So the provenance objection is
+  not the one that kills it here; the missing data is.
+- **The shape a future spec should weigh:** a narrow nullable column
+  carrying exactly "this row came through the connected door and holds no
+  monitor reading", versus the broader and better-modelled `door` column the
+  from-the-log spec's own SOURCE INFERENCE note already wishes existed. The
+  second would retire an inference this repo has flagged as a hack, and would
+  change what EVERY row claims — its own spec, not a tail task. Either way
+  the timeLabel gate in `storedSummary.ts`'s `buildMeta` (currently keyed on
+  `sourceLabel !== "LOGGED BY HAND"`) has to be re-derived positively, or a
+  third bucket silently gains a wall-clock reading the live screen never
+  shows.
 
 ## Bugfix rounds
 

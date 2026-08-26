@@ -1726,6 +1726,55 @@ describe("buildSummaryModel — manual door, a real library workout (Calm Sea, a
     expect(model.meta.sourceLabel).toBe("LOGGED BY HAND");
   });
 
+  // Phase LM PR 1 Task 4: the same real library workout, arriving through
+  // the CONNECTED door with no record behind it. Everything about the
+  // model stays identical — the numbers on screen genuinely are targets —
+  // except the one slot that was making a false claim about the door.
+  it("connectedNoRecord flips ONLY the source slot: NO PM5 READING, with rows, heroes, caption and the absent timeLabel all unchanged", () => {
+    const w = library("Calm Sea");
+    const steps = buildManualLogSteps({ steps: w.steps }, BASELINES);
+    const byHand = buildSummaryModel({
+      door: "manual",
+      steps,
+      dateIso: "2026-08-17T09:00:00.000Z",
+    });
+    const noReading = buildSummaryModel({
+      door: "manual",
+      steps,
+      dateIso: "2026-08-17T09:00:00.000Z",
+      connectedNoRecord: true,
+    });
+
+    expect(noReading.meta.sourceLabel).toBe("NO PM5 READING");
+    expect(byHand.meta.sourceLabel).toBe("LOGGED BY HAND");
+    // A wall-clock reading here would be one the log screen never shows
+    // for the same row (`storedSummary.ts`'s own timeLabel gate).
+    expect(noReading.meta.timeLabel).toBeUndefined();
+    expect(noReading.meta.dateLabel).toBe(byHand.meta.dateLabel);
+    expect(noReading.rows).toStrictEqual(byHand.rows);
+    expect(noReading.heroes).toStrictEqual(byHand.heroes);
+    expect(noReading.caption).toBe("TARGETS ONLY · NOTHING MEASURED");
+  });
+
+  it("connectedNoRecord: false is byte-identical to omitting it — an ordinary by-hand entry is untouched", () => {
+    const w = library("Calm Sea");
+    const steps = buildManualLogSteps({ steps: w.steps }, BASELINES);
+    expect(
+      buildSummaryModel({
+        door: "manual",
+        steps,
+        dateIso: "2026-08-17T09:00:00.000Z",
+        connectedNoRecord: false,
+      }),
+    ).toStrictEqual(
+      buildSummaryModel({
+        door: "manual",
+        steps,
+        dateIso: "2026-08-17T09:00:00.000Z",
+      }),
+    );
+  });
+
   it("a TIME-based work step (Hoarfrost: 2×12' @ 6k+12) renders its duration as m:ss, not a meters suffix", () => {
     const w = library("Hoarfrost");
     const steps = buildManualLogSteps({ steps: w.steps }, BASELINES);

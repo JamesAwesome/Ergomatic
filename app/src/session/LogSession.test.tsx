@@ -2254,6 +2254,118 @@ describe("LogSession: the manual door (Task 3)", () => {
   });
 });
 
+// Phase LM PR 1, Task 4 (lost-monitor design spec) — THE FLAGSHIP ARRIVAL.
+// A rower connected, programmed the workout, rowed, and the app never
+// opened a record at all (`createMonitorRun`'s only call site sits behind
+// the ready gate — `useMonitorSession.ts`). End therefore hands this route
+// `?from=monitor` with NOTHING behind it: `monitorModeRun`'s condition 2,
+// the `no-run` miss Task 1 already writes to the diagnostics stash. The
+// screen falls through to the manual door, and until this task the row it
+// showed said the rower had typed it in by hand.
+//
+// THE FIXTURE IS "NO RECORD AT ALL", deliberately — never a record with
+// zero actuals, which is a different and currently-working path (a real
+// `MonitorRun` reaches the monitor branch and renders `PM5 <name>`). A
+// test built on that shape passes while this arrival fails (recurring
+// failure #3).
+describe("LogSession: a connected arrival with no record (Phase LM Task 4)", () => {
+  it("never says LOGGED BY HAND — the source reads NO PM5 READING instead", async () => {
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    // The fixture, stated as an assertion rather than assumed: storage is
+    // empty, so there is no record for this arrival to find.
+    expect(loadMonitorRun()).toBeNull();
+
+    await renderManualLog(workout.id, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    expect(
+      screen.getByText(
+        `${formatLogDate(new Date().toISOString())} · NO PM5 READING`,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/LOGGED BY HAND/)).not.toBeInTheDocument();
+  });
+
+  it("does not claim the row was rowed BY FEEL — it shows the workout's own single target", async () => {
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+
+    await renderManualLog(workout.id, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    // Both of this fixture's steps resolve to the same target (6k + 12 =
+    // 132 -> 2:12.0), so the single-target rule fires — the same hint the
+    // connected door itself would have shown for this workout.
+    expect(screen.getByText("TARGET 2:12.0")).toBeInTheDocument();
+    expect(screen.queryByText("BY FEEL")).not.toBeInTheDocument();
+  });
+
+  it("keeps all three exits, with Log against plan LEADING and undemoted (James's ruling: the rower did the work)", async () => {
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    mockPlan(readyPlanState(activePlan()));
+
+    await renderManualLog(workout.id, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    const logAgainstPlan = screen.getByRole("button", {
+      name: /^Log against plan/,
+    });
+    const saveWithout = screen.getByRole("button", {
+      name: "Save without logging",
+    });
+    expect(logAgainstPlan.className).toContain("summary-save-lead");
+    expect(saveWithout.className).toContain("summary-save-secondary");
+    expect(
+      screen.getByRole("button", { name: "DISCARD WITHOUT SAVING" }),
+    ).toBeInTheDocument();
+    // Undemoted means it also comes FIRST in the stack, not merely that it
+    // carries the lead class.
+    expect(
+      logAgainstPlan.compareDocumentPosition(saveWithout) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("an ordinary by-hand visit to the same route is untouched — no from=monitor, still LOGGED BY HAND and BY FEEL", async () => {
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+
+    await renderManualLog(workout.id);
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    expect(
+      screen.getByText(
+        `${formatLogDate(new Date().toISOString())} · LOGGED BY HAND`,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("BY FEEL")).toBeInTheDocument();
+  });
+
+  it("a from=monitor arrival that DOES have a record — one for another workout — still reads LOGGED BY HAND: the label is pinned to 'no record at all', never to 'the gate missed'", async () => {
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    const { run } = buildMonitorFixture();
+    saveMonitorRun({ ...run, workoutId: "some-other-workout" });
+
+    await renderManualLog(workout.id, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    expect(
+      screen.getByText(
+        `${formatLogDate(new Date().toISOString())} · LOGGED BY HAND`,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/NO PM5 READING/)).not.toBeInTheDocument();
+  });
+});
+
 // 7C Task 4: `monitorModeRun`'s own four-condition gate (spec §4), tested
 // directly against the pure function first — cheaper than driving the
 // whole screen four times over — with the full screen describe block below

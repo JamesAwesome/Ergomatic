@@ -166,7 +166,20 @@ export const RELEASE_NOTES: ReleaseNote[] = [
       // MID-ROW; the never-started case Phase LM exists for is a
       // different screen and this note makes no claim about it.
       "If the Bluetooth link dies mid-row, the app now says so, within a few seconds: LOST THE MONITOR appears, the live numbers visibly freeze instead of pretending, and the banner stays up until the stream has been genuinely healthy for ten seconds, so it cannot flicker at you. This covers the ways a link dies silently: switching Bluetooth off and on, a phone call taking the app to the background, and drops the app used to swallow.",
-      "A session the link killed is recorded as exactly that. Ending a session under the lost banner stores it as link-lost, not as you giving up. (Corrected 2026-08-23: the record knows the difference; the history screen does not show it yet. That surface is coming.)",
+      // RECONCILED BY Phase LM PR 1 Task 4 (2026-08-25), which is what the
+      // spec asked this task to decide. The sentence WAS false as a
+      // general claim once Task 3 kept the lost banner up in the pre-row
+      // state: a session the app never heard a pull from opens no record
+      // at all, so nothing is stored as link-lost and the save falls
+      // through the manual door. The claim is narrowed to the case it is
+      // true of (a link lost mid-row) rather than deleted, because that
+      // case still holds exactly as shipped; and the second correction
+      // states BOTH halves of Task 4's option 2 — what the tester sees at
+      // save time, and what the stored row still says — so this note
+      // cannot over-claim the way its first correction had to walk back.
+      // Cause-free by the phase's own constraint: three producers of the
+      // silence are undistinguished, so it says what we saw, never why.
+      "A session the link killed is recorded as exactly that. Ending a session under the lost banner stores it as link-lost, not as you giving up. (Corrected 2026-08-23: the record knows the difference; the history screen does not show it yet. That surface is coming.) (Corrected 2026-08-25: only for a link lost mid-row. If the app never heard a pull there is no record to mark: the end-of-session screen says NO PM5 READING, and the saved row still reads LOGGED BY HAND.)",
       "A failed connection attempt no longer poisons the next one. Try Again genuinely starts over, and the app asks your phone what it is already connected to before offering to connect again.",
       "There is a connection log now, one tap from the failure screen, with timestamps. If something goes wrong at the erg, copying that log is the single most useful thing you can send.",
     ],

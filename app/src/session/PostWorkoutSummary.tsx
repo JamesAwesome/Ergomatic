@@ -480,8 +480,12 @@ export interface PostWorkoutSummaryProps {
    *  `null` omits the caption entirely (the F1 rule: never a bare dash). */
   pacesOffCaption: string | null;
   /** `TARGET m:ss` / `BY FEEL` / absent — see `singleTargetHint`'s own doc
-   *  comment for the derivation; the manual door's caller always passes
-   *  the literal `"BY FEEL"` string instead of calling that function. */
+   *  comment for the derivation; the manual door's caller passes the
+   *  literal `"BY FEEL"` string instead of calling that function, EXCEPT
+   *  for Phase LM Task 4's connected arrival with no record, which was
+   *  rowed against a programmed workout and so takes the same
+   *  single-target rule the connected door does (`LogSession.tsx`'s own
+   *  comment at that call site). */
   hint: string | undefined;
   expectedPain: number | null;
   held: HeldResult | null;

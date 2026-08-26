@@ -326,6 +326,35 @@ export function monitorModeRun(
   return run;
 }
 
+/** Phase LM PR 1 Task 4 (lost-monitor design spec): the flagship arrival,
+ *  as a predicate. TRUE only when this route was reached from the
+ *  CONNECTED door (`?from=monitor`, `WorkoutDetail.tsx`'s
+ *  `handleConnectedEnded`) and there is NO RECORD AT ALL in storage — the
+ *  session where the app never heard a first pull, so `createMonitorRun`
+ *  never fired and End had nothing to close.
+ *
+ *  **Deliberately narrower than "`monitorModeRun` returned null".** That
+ *  function misses on four conditions and only the FIRST of them (no
+ *  record) proves we hold nothing: a record that is merely unfinished, for
+ *  another workout, or one whose `logSeed` no longer aligns can carry real
+ *  PM5 readings we simply cannot render here. Saying "no reading" over
+ *  those would be a claim we have not earned, so they keep the
+ *  door-ambiguous `LOGGED BY HAND` they render today. The one rule this
+ *  file already trusts for the same storage read applies: read
+ *  `loadMonitorRun()` directly, never a state var.
+ *
+ *  Known and accepted: a RELOAD of this URL after a successful monitor-mode
+ *  save also lands here (that save clears the record), and this predicate
+ *  cannot tell it from the flagship. Both are "we hold no reading for the
+ *  row you are about to save", which is what the label says — and the same
+ *  pair `recordLogDoorMiss("no-run")` above already records as one class.
+ *
+ *  Exported for tests, same reasoning as `monitorModeRun` above. */
+// eslint-disable-next-line react-refresh/only-export-components
+export function connectedArrivalWithNoRecord(search: URLSearchParams): boolean {
+  return search.get("from") === "monitor" && loadMonitorRun() === null;
+}
+
 /** Resolves the POST body's `workoutType` — `SessionRun` itself doesn't
  *  carry one (confirmed against run.ts's own shape, per the task brief's
  *  "UNVERIFIED — check before use"). Priority order:
@@ -1230,6 +1259,15 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
     monitorModeRun(searchParams, workoutId),
   );
 
+  // Task 4: computed once at mount, the same lazy-init idiom and for the
+  // same reason as `monitorRun` above — this reads storage, and a later
+  // render (a successful save clears the record) must not change what the
+  // screen already told the rower. Only ever consumed in the plain-manual
+  // branch below; the monitor branch returns before it is read.
+  const [connectedNoRecord] = useState<boolean>(() =>
+    connectedArrivalWithNoRecord(searchParams),
+  );
+
   // This door never read the draft/run records in the first place (the
   // hard constraint above), so `onSaved` here is just the navigation —
   // unlike the session door's `onSaved`, there is nothing to clear, save
@@ -1657,6 +1695,12 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
     door: "manual",
     steps: logSteps,
     dateIso: new Date().toISOString(),
+    // Task 4: the ONE thing that differs for a connected arrival with no
+    // record — the SOURCE slot (`NO_PM5_READING_SOURCE`'s own doc comment
+    // has the rule and its accepted stored-row divergence). Rows, heroes
+    // and caption are identical to a by-hand entry, because the numbers on
+    // screen genuinely are targets and nothing else.
+    connectedNoRecord,
   });
   const k2 = manualLockedBaseline("2k", workout.steps, baselines);
   const k6 = manualLockedBaseline("6k", workout.steps, baselines);
@@ -1731,9 +1775,16 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
       title={workout.title}
       model={model}
       pacesOffCaption={pacesText !== null ? `PACES OFF ${pacesText}` : null}
-      // §2D: "by-hand manual door: BY FEEL" — an unconditional override,
-      // never the single-target rule (`singleTargetHint`'s own doc comment).
-      hint="BY FEEL"
+      // §2D: "by-hand manual door: BY FEEL" — an unconditional override
+      // for a genuine off-app entry, never the single-target rule
+      // (`singleTargetHint`'s own doc comment). Task 4 carves out the ONE
+      // arrival that is not an off-app entry: a connected session rowed
+      // against a PROGRAMMED workout, whose targets the erg itself was
+      // carrying. `BY FEEL` there is the same false by-hand claim the
+      // source slot just stopped making, in the other half of the screen —
+      // so this arrival gets the rule the connected door itself uses, and
+      // shows no hint at all when the workout has no single target.
+      hint={connectedNoRecord ? singleTargetHint(logSteps) : "BY FEEL"}
       expectedPain={workout.pain}
       held={held}
       onHeld={setHeld}
