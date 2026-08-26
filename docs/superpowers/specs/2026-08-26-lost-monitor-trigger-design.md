@@ -232,6 +232,44 @@ a capture of an occurrence rather than another attempt to provoke one, and the
 device build cannot produce a wire recording (the download row is dev-gated).
 **Do not spec a fix off the unsupported mechanism above.**
 
+~~**REPRODUCED ON HARDWARE, 2026-08-26 — and the first attempt tested the wrong
+condition.** Recorded in full because the wrong turn is the useful part.
+
+**Attempt 1 (failed to reproduce, and proves nothing).** James was asked to sit
+still for five seconds after a rest. No `PULL TO RESUME`. His correction:
+*"i wasnt coasting i was at a dead stop."* At a dead stop distance sits at 0,
+so `distanceMeters <= 0` CLEARS the run — that is the guard WORKING. The leg
+tested the one case the mechanism does not cover. **A negative result from the
+wrong condition is not evidence, and it was one commit away from being written
+down as "mechanism insufficient".**
+
+**Attempt 2 (reproduced).** The missing precondition came from James: he had
+been taking a pull or two DURING the rest. Instructed to do that and then stop
+as the work interval began, he reported: *"while coasting the pull to resume
+immediately showed up."*
+
+**So the mechanism is sharper than the original guess.** It is not "coast banks
+metres, then everything stops". It is that a DYING coast changes distance by
+less than the 0.1 m the wire resolves, so consecutive frames carry an
+IDENTICAL `distance|split|spm` key while distance is above zero — the guard is
+already cleared, `spm` and `split` are 0, and four frames (~2 s, matching
+"immediately") declare a pause.
+
+**And the product fact underneath it:** that interval had not seen a pull yet.
+`PULL TO RESUME` claims the rower paused something they never started — the
+same class as the `READY`/`WORK` defect this phase already fixed, one predicate
+over. The likely fix shape is the same one: the pause predicate needs "this
+interval has seen a pull", which is the ready-gate concept applied per
+interval. **Still a note, not a decision** — but it is now a note backed by a
+reproduction rather than by a reading of the code.
+
+**Evidence class, stated honestly:** this is an OBSERVATION (what the rower saw,
+with the conditions that produced it), not a wire capture. A device build
+cannot produce a recording — the download row is dev-gated — so the frame-level
+proof of the identical-key run is still owed, and a fix's test should be built
+from a synthetic sequence with the boundary condition above, then confirmed
+against a lab capture.
+
 ~~**What this task delivers now:** the walk leg that reproduces it (walk card leg
 2b), and the analysis above.~~ **The fix is specced only once a capture shows
 the false pause.** The likely shape — the predicate needs "this interval has not
