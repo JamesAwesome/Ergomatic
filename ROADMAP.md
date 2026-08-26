@@ -5907,6 +5907,45 @@ gate.
       the teardown boundary. It is a real behavioural change to Task 1's
       component, which is why it was not smuggled into a fix round scoped to
       five other findings.
+- [ ] **`rowingActive` is falsified but not dangerous — one test and one
+      diagnostic are owed, no behaviour change.** Walk 2026-08-26 read
+      0x0031's byte 9 `false` on every frame of a real row (§20 fact 13,
+      corrected). Task 2 enumerated all six production consumers; **four need
+      nothing at all**, and the two that carry the predicate are:
+      - **The ready gate's fallback works and is pinned.** It is the only
+        consumer where a stuck byte can lose data, and it already carries
+        `ROWING_ACTIVE_FALLBACK_FRAMES`. Deleting `frame.rowingActive` from
+        `declared` (`useMonitorSession.ts:1747`) fails three tests. **Stated
+        cost, accepted:** the fallback opens the record ~5 frames late, so
+        that walk's record opened at the machine's own `elapsed=24.03 /
+        distance=32.9` and `seriesRecorder` missed the row's first metres.
+        The stored per-interval actuals come from 0x0037/0x0038 and are
+        unaffected.
+      - **`surfaceModel.ts:915`'s `midSessionMirror` conjunct is UNPINNED, and
+        this is the actual owed work.** MEASURED, not inferred: deleting
+        `frame.rowingActive === false` from that predicate leaves **5357 tests
+        and 191 test files green**. Its own guard test says in a comment that
+        it isolates the DISTANCE half; nothing isolates the other half. The
+        degeneration is cosmetic — the predicate widens to distance-only, so
+        the heroes read `0:00.0 / 0` for the first metre of an interval
+        instead of clearing on the first pull, self-clearing in ~1 stroke —
+        which is why **no behaviour change is proposed**. Owed: one test that
+        pins the byte half (a `rowingActive: true` frame inside the reset
+        window must NOT mirror), and a reconciled comment.
+      - **Owed diagnostic, and it is the thing that would settle the
+        question:** the ring stores only the decoded boolean, and
+        `pm5/parse.ts:608` is a strict `rowingState === 1`, so any non-1 value
+        reads `false`. Raw `0x0031` ring lines fire on terminal states only.
+        **The next occurrence still will not tell us whether the machine said
+        Inactive or said something we do not decode.** Carry the raw byte in
+        the `frame` / `rowing-active-fallback` entries, or require a
+        `.jsonl.gz` recording on any walk re-testing this.
+      - **Not owed, stated so it is not re-derived:** `parse.ts:608` is the
+        producer; the three log entries (`driver.ts:2517`,
+        `useMonitorSession.ts:1768`, `:2868`) are diagnostics with no
+        behaviour attached; `surfaceModel.ts:312`'s `NO_FRAME` is a constant.
+        `seriesRecorder.ts` never reads the field, so **no stored data depends
+        on this byte**.
 
 **OWED, and deliberately not built in PR 1: the STORED row for a
 never-started connected session is still wrong.** PR 1 took the design
