@@ -3682,31 +3682,6 @@ that needs no erg, and it can run in a test.
       `drainSummaryReconcile` already does for disconnect/hook-reconcile,
       from `program()`'s own re-arm path, before cancelling it for the
       outgoing run.
-- [ ] **RC-20 — The diagnostics row never renders on a device's FIRST EVER
-      connected session, and no hardware walk can catch it.** Found by Phase
-      LM's fix round, verified independently at its re-review, and filed rather
-      than fixed because it is pre-existing (shipped by Task 1) and narrower
-      than the PR that found it. `MonitorLogRow` (`LogSession.tsx:934`) reads
-      the stash in a `useState` LAZY INITIALIZER only — no effect, no storage
-      listener, no re-read. `useMonitorSession`'s `teardown` is a passive
-      `useEffect` cleanup, and React runs it AFTER the next route's render
-      commits. So on a genuine first-ever connected session there is no prior
-      entry at mount, the row renders `null`, and it never gets a second
-      chance. Task 1's promise — the diagnostics are reachable on a phone in
-      the never-rowed case — therefore holds only from the SECOND connected
-      session onward.
-      **The walk-protocol trap is the important half, and it is why this gets
-      its own row rather than a line in a PR body:** every walk this project
-      runs happens on a phone that has connected dozens of times, so **a walk
-      will PASS while a brand-new tester gets nothing.** Validating this case
-      needs a factory-reset-equivalent device state, not merely "has not rowed
-      this session". That is the same verify-the-app-against-itself shape as
-      recurring failure #11. Any walk card claiming to exercise the
-      never-rowed readout must say which device state it ran on.
-      **Fix shape:** an effect that re-reads after mount, or lift the read past
-      the teardown boundary. It is a real behavioural change to Task 1's
-      component, which is why it was not smuggled into a fix round scoped to
-      five other findings.
 - [ ] **RC-19 — `server/routes/data.test.ts` flakes under the combined
       `--project unit --project client` run, and it is NOT one flaky test.**
       Observed four times across three sessions on 2026-08-25, and the
@@ -3754,9 +3729,14 @@ that needs no erg, and it can run in a test.
       EMPTY `stepSums` — the fix-round-2 C1 change from RC-5
       (`storedSummary.ts:620-634`) — while that seed sets neither
       `restSeconds` nor `restMeters`, so the rest half of the line vanishes.
-      **Owner is whoever landed RC-5, not Phase LM**, and the one-line fix is
-      written down in
-      `.superpowers/sdd/2026-08-25-lost-monitor-plan/task-2-report.md`.
+      **Owner is whoever landed RC-5, not Phase LM.** **The fix, inlined here
+      because the report it used to point at lives in git-excluded
+      `.superpowers/` and dies with its worktree (RF#16's corollary, caught at
+      #198's PM gate): add `restSeconds: 120, restMeters: 242` to that
+      screenshot seed's `postLog`.** The unit fixture asserting the identical
+      string (`src/log/storedSummary.test.ts:118-119`) already seeds both and
+      passes, which is exactly why the unit test stayed green while the capture
+      rotted.
       **Why it went unnoticed: `pnpm screenshots` is not part of CI**, so a
       capture assertion can rot indefinitely between the hand-runs that touch
       it. That gap is the more interesting half of this row — the unit test
@@ -5839,6 +5819,70 @@ documented current state and had gone stale):
   PR 1's ready-screen warning (spec Task 2).
 - *Should a lost link mid-piece be recoverable by reconnecting?* Still **PR 2**
   (correct resume). Unchanged.
+
+**Status: PR 1 implemented and reviewed; BLOCKED ON THE WALKS** (James,
+2026-08-25: "Have the walks block"). Exit criteria 9 and 10 are unmet until the
+phone walk and the two-build probe run. Nothing in this phase is complete on
+merge.
+
+### Phase LM — owed work
+
+Checkboxes, because this section ran 140 lines with none, and its own defect had
+to be filed into Phase RC's backlog for want of a home here. Caught at #198's PM
+gate.
+
+- [ ] **LM PR 2 — correct resume**, per James's 2026-08-20 ruling ("CORRECT
+      RESUME, not a background mode"). Blocked on PR 1's §D1e probe: the
+      never-started case falls OUTSIDE that ruling's scope, which is the whole
+      reason the probe exists. Do not start before the probe reports.
+- [ ] **The stored row still reads `LOGGED BY HAND` for a connected session
+      that opened no record — permanently and unbackfillably, for that row and
+      every earlier one.** PR 1 took option 2 knowingly. **This is a knowing
+      exception to James's 2026-08-18 ruling that the same fact must not read as
+      two different words live versus from the log**, and the strongest argument
+      against option 2 is that the divergence is PERMANENT — so it gets a
+      trigger, not merely a record. **Trigger: the `door` column lands with the
+      NEXT stored-shape change to the logs table.** The argument that settles
+      the original call, worth reusing: a row that UNDER-claims is a recoverable
+      false negative, while a row posting a best-effort last-used `deviceName`
+      over a session that measured nothing is a false positive indistinguishable
+      from a real measurement, and would poison the very audit that counts how
+      often this fires.
+- [ ] **The in-flight interval's metres are DISCARDED on a mid-row link loss,
+      and `Nothing kept.` is honestly reporting it.** Filed at #198's PM gate,
+      which checked rather than accepting the "cosmetic" label:
+      `measuredIntervalCount` counts COMPLETED intervals, `closeRecord` records
+      no partial, tier-B heroes need actuals. **On a SINGLE-interval workout —
+      the tester's own 2000 m "Beam Sea" — any mid-row loss gives `kept = 0`
+      beside a nonzero greyed counter.** That is not an oddity to note on walk
+      leg B; it is the MAJORITY outcome of leg B. Say explicitly whether PR 2's
+      correct resume recovers those metres; if not, that is a product decision,
+      not an implementation detail.
+- [ ] **The diagnostics row never renders on a device's FIRST EVER
+      connected session, and no hardware walk can catch it.** (Was RC-20; re-homed to Phase LM at #198's PM gate — it is Phase LM's own component, found by Phase LM's own fix round.) Found by Phase
+      LM's fix round, verified independently at its re-review, and filed rather
+      than fixed because it is pre-existing (shipped by Task 1) and narrower
+      than the PR that found it. `MonitorLogRow` (`LogSession.tsx:934`) reads
+      the stash in a `useState` LAZY INITIALIZER only — no effect, no storage
+      listener, no re-read. `useMonitorSession`'s `teardown` is a passive
+      `useEffect` cleanup, and React runs it AFTER the next route's render
+      commits. So on a genuine first-ever connected session there is no prior
+      entry at mount, the row renders `null`, and it never gets a second
+      chance. Task 1's promise — the diagnostics are reachable on a phone in
+      the never-rowed case — therefore holds only from the SECOND connected
+      session onward.
+      **The walk-protocol trap is the important half, and it is why this gets
+      its own row rather than a line in a PR body:** every walk this project
+      runs happens on a phone that has connected dozens of times, so **a walk
+      will PASS while a brand-new tester gets nothing.** Validating this case
+      needs a factory-reset-equivalent device state, not merely "has not rowed
+      this session". That is the same verify-the-app-against-itself shape as
+      recurring failure #11. Any walk card claiming to exercise the
+      never-rowed readout must say which device state it ran on.
+      **Fix shape:** an effect that re-reads after mount, or lift the read past
+      the teardown boundary. It is a real behavioural change to Task 1's
+      component, which is why it was not smuggled into a fix round scoped to
+      five other findings.
 
 **OWED, and deliberately not built in PR 1: the STORED row for a
 never-started connected session is still wrong.** PR 1 took the design
