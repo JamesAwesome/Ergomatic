@@ -445,7 +445,26 @@ often they recur.
     WebView that WebKit throttles on rules that never read a plist key. A
     correct citation answering the wrong layer reads exactly like
     evidence.
-19. **Writing to the main checkout with a relative shell path.** The SDLC
+19. **Trusting a verification stack that stops at the wire.** Our
+    instruments all sit at or below the transport seam, so a defect whose
+    trigger enters ABOVE it — platform lifecycle, permissions,
+    backgrounding, OS interruptions — is invisible to every gate we own.
+    On 2026-08-26 a red `LOST THE MONITOR` banner fired nine times in
+    288 s over a link that never dropped, and four instruments were blind
+    at once: `RecordedEvent` had no lifecycle member, so no recording
+    could carry it; the unit tests `vi.doMock` `adapters/appLifecycle`,
+    replacing the seam that was wrong; `src/native/**` is `v8 ignore`d,
+    and that was the arm with the bug; e2e runs on web, where the
+    lifecycle arm is a deliberate no-op. It shipped through a full review
+    and was caught by James at an erg
+    (`docs/monitor/sessions/walk-2026-08-26/`). **For any new
+    platform-sourced input, ask which instrument would catch it if it
+    were wrong — and if the answer is none, build the instrument in the
+    same change.** The recording format now carries `lifecycle` events
+    and `transports/replay.ts` emits them for exactly this reason; a
+    recording that carries one and finds no handler wired reports a
+    divergence rather than skipping it silently.
+20. **Writing to the main checkout with a relative shell path.** The SDLC
     rule requires `git rev-parse --show-toplevel` before every COMMIT, and
     that guard works. It does not cover WRITES: the shell's cwd resets
     between tool calls, so a `cat >>` or `>` redirect after a reset edits

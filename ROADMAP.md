@@ -5855,6 +5855,21 @@ Checkboxes, because this section ran 140 lines with none, and its own defect had
 to be filed into Phase RC's backlog for want of a home here. Caught at #198's PM
 gate.
 
+- [ ] **Lifecycle transitions are REPLAY-ONLY, never captured live — and both
+      ends would have to move before that changes.** Filed by fix-round-2
+      Task 4, which added the `lifecycle` member to `RecordedEvent` and taught
+      `transports/replay.ts` to emit it. Live capture was considered and
+      rejected on evidence, not taste: the recording tap is reachable only from
+      `transports/index.ts`'s `fakeMonitorEnabled`-gated WEB arm, and
+      `adapters/monitorTransport.ts`'s `isNative()` branch takes native
+      straight to Capacitor BLE without passing through it — so the recorder
+      exists only where `adapters/appLifecycle.ts`'s web arm is a deliberate
+      no-op (Phase LL minor 9) and never calls back. A live recorder would be
+      an instrument wired to a surface with no signal on it. **Revisit when
+      either end moves**: a recorder composed on the native arm, or a web arm
+      that reports transitions again. Until then a synthesised transition
+      drives the same production handler through the same seam, which is what
+      the gate needs — see `lifecycleReplay.test.ts`.
 - [ ] **LM PR 2 — correct resume**, per James's 2026-08-20 ruling ("CORRECT
       RESUME, not a background mode"). Blocked on PR 1's §D1e probe: the
       never-started case falls OUTSIDE that ruling's scope, which is the whole

@@ -304,3 +304,59 @@ describe("createReplayTransport", () => {
     expect(result.divergences).toHaveLength(0);
   });
 });
+
+// Phase LM Task 4 (design spec `2026-08-26-lost-monitor-trigger-design.md`):
+// the recording vocabulary now carries app-lifecycle transitions, because a
+// defect that enters ABOVE the transport seam was invisible to every gate this
+// project owns. These pin the engine's half of that; `lifecycleReplay.test.ts`
+// pins what the session does with one.
+describe("createReplayTransport: lifecycle events (Phase LM Task 4)", () => {
+  it("delivers a recorded lifecycle transition to onLifecycle, in recorded order, with the clock already advanced to its t", async () => {
+    const recording = buildRecording([
+      { t: 10, dir: "rx", char: "A", hex: "01" },
+      { t: 500, kind: "lifecycle", event: "background" },
+      { t: 900, kind: "lifecycle", event: "foreground" },
+      { t: 1000, dir: "rx", char: "A", hex: "02" },
+    ]);
+    const seen: { event: string; at: number }[] = [];
+    const { transport, clock, run } = createReplayTransport(recording, {
+      onLifecycle: (event) => seen.push({ event, at: clock.now() }),
+    });
+
+    const delivered: string[] = [];
+    transport.subscribe("A", () => delivered.push(`rx@${clock.now()}`));
+
+    const result = await run();
+
+    expect(seen).toStrictEqual([
+      { event: "background", at: 500 },
+      { event: "foreground", at: 900 },
+    ]);
+    // The stream around it is untouched — a lifecycle event orders and
+    // advances like any other, and swallows nothing.
+    expect(delivered).toStrictEqual(["rx@10", "rx@1000"]);
+    expect(result.divergences).toHaveLength(0);
+  });
+
+  it("a recorded lifecycle event with no handler wired is a DIVERGENCE, never a silent skip — a replay that quietly drops this class is the blindness Task 4 removes", async () => {
+    const recording = buildRecording([
+      { t: 500, kind: "lifecycle", event: "foreground" },
+      { t: 600, dir: "rx", char: "A", hex: "01" },
+    ]);
+    const { transport, run } = createReplayTransport(recording);
+
+    let fired = false;
+    transport.subscribe("A", () => {
+      fired = true;
+    });
+
+    const result = await run();
+
+    expect(result.divergences).toStrictEqual([
+      "lifecycle#0 foreground not delivered (no onLifecycle handler)",
+    ]);
+    // Loud, but not fatal: the rest of the log still plays, the same
+    // posture a byte mismatch already takes.
+    expect(fired).toBe(true);
+  });
+});

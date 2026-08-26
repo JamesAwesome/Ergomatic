@@ -28,6 +28,15 @@
 //     write arrives within `barrierTimeoutMs` REAL ms, push a timeout
 //     divergence and release — a wholesale divergence surfaces as a failed
 //     zero-divergence assertion, never a Vitest timeout.
+//   - lifecycle (Phase LM Task 4): NOT a transport event — the app went to
+//     the background or came back. Advance the clock, hand the transition to
+//     `opts.onLifecycle`, drain microtasks. A harness wires that callback to
+//     whatever `adapters/appLifecycle` handed the session, so the recorded
+//     transition arrives at the SAME seam iOS delivers to on a device. If a
+//     recording carries one and no handler is registered, that is a
+//     DIVERGENCE, never a silent skip: a replay that quietly drops the class
+//     of event it was extended to carry is the same blindness Task 4 exists
+//     to remove, just one layer down.
 //   - scan/connect/subscribe/unsubscribe/disconnect/link-drop: `scan()`
 //     resolves the recorded device list; a recorded `link-drop` fires
 //     registered `onDisconnect` callbacks with the recorded reason. The
@@ -45,6 +54,7 @@ import type {
   DiscoveredMonitor,
   Transport,
 } from "../../../domain/monitor/types.js";
+import type { AppLifecycleEvent } from "../../adapters/appLifecycle";
 import {
   fromHexString,
   toHexString,
@@ -98,9 +108,21 @@ async function drainMicrotasks(): Promise<void> {
   for (let i = 0; i < 25; i++) await Promise.resolve();
 }
 
+export interface ReplayOptions {
+  barrierTimeoutMs?: number;
+  /** Phase LM Task 4 — where a recorded `lifecycle` event is delivered.
+   *  Wire this to the callback `adapters/appLifecycle`'s
+   *  `registerAppLifecycleListener` handed the session under test, and the
+   *  recording drives the production handler at exactly the seam a device
+   *  drives it. Omitting it is fine for a recording that carries no
+   *  lifecycle events; a recording that DOES carry one and finds no handler
+   *  reports a divergence (this module's header). */
+  onLifecycle?: (event: AppLifecycleEvent) => void;
+}
+
 export function createReplayTransport(
   recording: ParsedRecording,
-  opts: { barrierTimeoutMs?: number } = {},
+  opts: ReplayOptions = {},
 ): ReplayHandle {
   const barrierTimeoutMs = opts.barrierTimeoutMs ?? 2000;
 
@@ -268,6 +290,15 @@ export function createReplayTransport(
         }
       } else if (event.kind === "link-drop") {
         for (const cb of [...disconnectCbs]) cb(event.reason);
+      } else if (event.kind === "lifecycle") {
+        if (opts.onLifecycle === undefined) {
+          divergences.push(
+            `lifecycle#${event.seq} ${event.event} not delivered (no onLifecycle handler)`,
+          );
+        } else {
+          opts.onLifecycle(event.event);
+          await drainMicrotasks();
+        }
       }
       // scan/connect/subscribe/unsubscribe/disconnect: driver-initiated —
       // the transport methods above already answer them whenever they're

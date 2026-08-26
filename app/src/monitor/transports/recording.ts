@@ -1,5 +1,12 @@
 import type { WorkoutProgram } from "../../../domain/monitor/program.js";
 import type { Transport } from "../../../domain/monitor/types.js";
+// TYPE-ONLY (erased by `verbatimModuleSyntax`, so it adds nothing to this
+// module's runtime graph and nothing to the fold-away argument in
+// `transports/index.ts`). Imported rather than re-declared so the recorded
+// vocabulary cannot drift from the one `useMonitorSession.ts` actually
+// receives — a recording that says "foreground" must mean the same thing the
+// session's own handler is passed, or the replay proves nothing.
+import type { AppLifecycleEvent } from "../../adapters/appLifecycle";
 
 export const RECORDING_FORMAT_TAG = "pm5-recording/v1";
 
@@ -11,6 +18,45 @@ export interface RecordingHeader {
   program?: WorkoutProgram;
 }
 
+/**
+ * THE `lifecycle` MEMBER IS NOT A TRANSPORT EVENT, AND THAT IS WHY IT EXISTS
+ * (Phase LM Task 4, design spec `2026-08-26-lost-monitor-trigger-design.md`).
+ *
+ * Every other member below is something that happened AT the wire. This one
+ * is something that happened to the APP — it went to the background, it came
+ * back — and it is in this vocabulary because the 2026-08-26 walk proved a
+ * defect can enter from there and be invisible to every gate this project
+ * owns: the recorder sits at the transport seam, so nothing above it could
+ * ever be recorded, replayed, or regression-tested. Nine red `LOST THE
+ * MONITOR` banners in 288 s shipped through a full review for exactly that
+ * reason (`docs/monitor/sessions/walk-2026-08-26/`).
+ *
+ * **BACK-COMPATIBLE BY CONSTRUCTION, and deliberately not a format bump.**
+ * Adding a union member is additive: `RECORDING_FORMAT_TAG` stays
+ * `pm5-recording/v1` (bumping it would make `parseRecording` REJECT every
+ * committed capture, which is the opposite of the goal), no existing member
+ * changes, no field becomes required, and a file that carries no `lifecycle`
+ * line is indistinguishable from one written before this member existed.
+ * Proven, not asserted: `lifecycleReplay.test.ts` replays the committed
+ * `walk-2026-08-23` capture — written three days before this member — through
+ * the real driver and asserts zero divergences.
+ *
+ * **NOT CAPTURED LIVE, on purpose, and here is the argument.** The obvious
+ * next step is to have `createRecordingTransport` register its own
+ * app-lifecycle listener so future recordings carry real transitions. It
+ * would record nothing. The tap is reachable ONLY from
+ * `transports/index.ts`'s `fakeMonitorEnabled`-gated web arm, and
+ * `adapters/monitorTransport.ts`'s `isNative()` branch takes native straight
+ * to Capacitor BLE without ever passing through it — so the recorder exists
+ * only on web, while `adapters/appLifecycle.ts`'s web arm is a deliberate
+ * no-op (Phase LL minor 9) and never calls back at all. Live capture would be
+ * an instrument wired to a surface where the signal does not exist. Both ends
+ * would have to change first — a recorder on the native arm, or a web arm
+ * that reports transitions again — and neither is this task's to decide.
+ * Until then a replay driver that SYNTHESISES the transition drives the same
+ * production handler through the same seam, which is what the gate needs.
+ * Recorded in `ROADMAP.md` under Phase LM so it outlives this comment.
+ */
 export type RecordedEvent =
   | {
       seq: number;
@@ -23,6 +69,7 @@ export type RecordedEvent =
   | { seq: number; t: number; kind: "unsubscribe"; char: string }
   | { seq: number; t: number; kind: "disconnect" }
   | { seq: number; t: number; kind: "link-drop"; reason: string }
+  | { seq: number; t: number; kind: "lifecycle"; event: AppLifecycleEvent }
   | { seq: number; t: number; dir: "tx"; char: string; hex: string }
   | { seq: number; t: number; dir: "rx"; char: string; hex: string };
 
