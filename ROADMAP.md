@@ -3715,32 +3715,38 @@ that needs no erg, and it can run in a test.
       made it blocking. **That is the whole lesson — the "flake" was a race
       whose odds any nearby edit could change, and three sessions of re-running
       it green were three sessions of not looking.**
-- [ ] **RC-23 — The grid keeps moving through the rest, then settles. It
-      should lock an interval's finals the moment WORK ends.** James, from the
-      2026-08-26 row: *"the grid view updates during rest, then locks in the
-      right numbers after rest. as soon as work ends, the grid view should lock
-      finals from the split."*
-      **Why it behaves that way, measured not guessed:** the split halves for
-      interval N do not arrive at the work->rest boundary. They arrive at the
-      END of the rest. In `docs/monitor/sessions/walk-2026-08-25/rests-finished-ring.json`
+- [x] **RC-23 — DECIDED, KEEP AS IS (James, 2026-08-26): the grid keeps
+      showing live frames through the rest and settles when the split lands.**
+      Raised by James from his own row — *"the grid view updates during rest,
+      then locks in the right numbers after rest. as soon as work ends, the
+      grid view should lock finals from the split"* — and then **ruled the
+      other way by him once the cost was on the table.** Recorded so nobody
+      re-opens it from the symptom alone.
+      **The wire fact, measured not guessed:** the split halves for interval N
+      do NOT arrive at the work->rest boundary. They arrive at the END of the
+      rest. In `docs/monitor/sessions/walk-2026-08-25/rests-finished-ring.json`
       the frame turns `resting` at `atMs 1787693807210` (seq 21) and
       `interval-complete index=0` lands at `1787693866878` (seq 31) — **59.7 s
-      later, the whole programmed `r60`.** So the grid is showing live frames
-      while it waits for a split that cannot come until the rest is over, and
-      rest-coast metres and the still-running machine clock keep those frames
-      moving.
-      **So the fix is not "wait for the split" — the split is the thing that is
-      late.** It means locking the row at the boundary from what we already
-      have (the accumulator's final pre-rest reading), then reconciling when
-      the split lands. **That makes it a question about what a displayed NUMBER
-      means, which is TRIAD weight** — the accumulator and the split have
-      disagreed before (the accumulator is short by the samples between the
-      terminal frame and the machine's own last sample; walk-2026-08-25 W-4
-      measured 1.4 m / 0.7 s on a terminate).
-      **Open question the spec must answer:** if the locked value and the
-      arriving split disagree, does the row change under the rower's eye after
-      the rest, or does the split win silently, or is the difference too small
-      to see? Do not assume the third.
+      later, the whole programmed `r60`.** The grid moves during the rest
+      because it is showing live frames while waiting for a split that cannot
+      arrive yet, and rest-coast metres plus the machine's still-running clock
+      keep those frames moving.
+      **So "lock finals when work ends" cannot mean "lock from the split" —
+      the split is the late thing.** It would mean locking from OUR
+      accumulator and reconciling ~60 s later when the split arrives. Those two
+      have measurably disagreed: 1.4 m / 0.7 s on the terminate in
+      walk-2026-08-25 W-4, because the accumulator closes at the terminal frame
+      while the machine takes one more sample.
+      **The ruling, and its reasoning:** a row that is honestly still live is
+      better than a row that looks final and then CHANGES under the rower's eye
+      when the split lands. Locking early would buy the appearance of finality
+      at the price of a number that moves after it claimed to be settled —
+      which is the failure this whole phase exists to stamp out.
+      **Reopen only with:** evidence the accumulator and split agree closely
+      enough at a work->rest boundary that a locked value would not visibly
+      change (the W-4 delta was measured on a TERMINATE, not a rest boundary,
+      so it does not settle this), or a rower complaint about the live movement
+      itself rather than about the settling.
 - [ ] **RC-22 — `ergomatic:last-session-log` is never cleared either, so a
       STALE-URL arrival still copies a previous session's ring.** Residual of
       the ultrareview's bug_002, found at its scoped review (2026-08-26). The
