@@ -179,7 +179,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
       // cannot over-claim the way its first correction had to walk back.
       // Cause-free by the phase's own constraint: three producers of the
       // silence are undistinguished, so it says what we saw, never why.
-      "A session the link killed is recorded as exactly that. Ending a session under the lost banner stores it as link-lost, not as you giving up. (Corrected 2026-08-23: the record knows the difference; the history screen does not show it yet. That surface is coming.) (Corrected 2026-08-25: only for a link lost mid-row. If the app never heard a pull there is no record to mark: the end-of-session screen says NO PM5 READING, and the saved row still reads LOGGED BY HAND.)",
+      "A session the link killed is recorded as exactly that. Ending a session under the lost banner stores it as link-lost, not as you giving up. (Corrected 2026-08-23: the record knows the difference; the history screen does not show it yet. That surface is coming.) (Corrected 2026-08-25: only for a link lost mid-row. If the app never heard a pull there is no record to mark: the end-of-session screen says NO MONITOR READING, and the saved row still reads LOGGED BY HAND.)",
       "A failed connection attempt no longer poisons the next one. Try Again genuinely starts over, and the app asks your phone what it is already connected to before offering to connect again.",
       "There is a connection log now, one tap from the failure screen, with timestamps. If something goes wrong at the erg, copying that log is the single most useful thing you can send.",
     ],

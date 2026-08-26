@@ -3682,6 +3682,25 @@ that needs no erg, and it can run in a test.
       `drainSummaryReconcile` already does for disconnect/hook-reconcile,
       from `program()`'s own re-arm path, before cancelling it for the
       outgoing run.
+- [ ] **RC-18 — `"PM5"` is baked into a fallback the rower can SEE, and it
+      will be wrong the day we support another monitor.** James, 2026-08-25,
+      on Phase LM Task 4's new label: *"We may one day support other rowers.
+      Be careful where we use 'PM5'."* That label was renamed in the same
+      breath (`NO MONITOR READING`, matching the shipped `LOST THE MONITOR` —
+      **"monitor" is the house word, "PM5" is a model number**), but the sweep
+      found a SECOND instance that is not copy and was not fixed:
+      `webBluetooth.ts` and `capacitorBle.ts` both do `device.name ?? "PM5"`,
+      so an erg advertising an empty GATT name gets literally named "PM5" in
+      the device caption, in `deviceName` on the saved row, and therefore in
+      the stored record forever. On a Concept2 that is merely redundant; on
+      anything else it is a false claim about which machine the rower used,
+      persisted. **Fix shape:** fall back to a neutral noun, not a model
+      number. Left out of Phase LM PR 1 deliberately — it touches both
+      transports and a stored value, so it wants its own failing test rather
+      than riding a copy change.
+      **Standing rule this establishes:** user-facing copy says "monitor";
+      "PM5" appears only where we are quoting the device's OWN advertised
+      name, or in release notes describing what shipped at the time.
 - [ ] **RC-17 — The tier-A total line drops rest, and only `pnpm screenshots`
       sees it.** Found 2026-08-25 by Phase LM's Task 2 implementer, on a
       capture unrelated to its own work, and landed here rather than left in a

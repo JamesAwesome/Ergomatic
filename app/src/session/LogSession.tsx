@@ -1696,7 +1696,7 @@ function ManualDoorLog({ workoutId }: { workoutId: string }) {
     steps: logSteps,
     dateIso: new Date().toISOString(),
     // Task 4: the ONE thing that differs for a connected arrival with no
-    // record — the SOURCE slot (`NO_PM5_READING_SOURCE`'s own doc comment
+    // record — the SOURCE slot (`NO_MONITOR_READING_SOURCE`'s own doc comment
     // has the rule and its accepted stored-row divergence). Rows, heroes
     // and caption are identical to a by-hand entry, because the numbers on
     // screen genuinely are targets and nothing else.

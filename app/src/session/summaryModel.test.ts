@@ -1730,7 +1730,7 @@ describe("buildSummaryModel — manual door, a real library workout (Calm Sea, a
   // the CONNECTED door with no record behind it. Everything about the
   // model stays identical — the numbers on screen genuinely are targets —
   // except the one slot that was making a false claim about the door.
-  it("connectedNoRecord flips ONLY the source slot: NO PM5 READING, with rows, heroes, caption and the absent timeLabel all unchanged", () => {
+  it("connectedNoRecord flips ONLY the source slot: NO MONITOR READING, with rows, heroes, caption and the absent timeLabel all unchanged", () => {
     const w = library("Calm Sea");
     const steps = buildManualLogSteps({ steps: w.steps }, BASELINES);
     const byHand = buildSummaryModel({
@@ -1745,7 +1745,7 @@ describe("buildSummaryModel — manual door, a real library workout (Calm Sea, a
       connectedNoRecord: true,
     });
 
-    expect(noReading.meta.sourceLabel).toBe("NO PM5 READING");
+    expect(noReading.meta.sourceLabel).toBe("NO MONITOR READING");
     expect(byHand.meta.sourceLabel).toBe("LOGGED BY HAND");
     // A wall-clock reading here would be one the log screen never shows
     // for the same row (`storedSummary.ts`'s own timeLabel gate).

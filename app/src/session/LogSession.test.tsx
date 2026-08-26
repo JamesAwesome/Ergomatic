@@ -2269,7 +2269,7 @@ describe("LogSession: the manual door (Task 3)", () => {
 // test built on that shape passes while this arrival fails (recurring
 // failure #3).
 describe("LogSession: a connected arrival with no record (Phase LM Task 4)", () => {
-  it("never says LOGGED BY HAND — the source reads NO PM5 READING instead", async () => {
+  it("never says LOGGED BY HAND — the source reads NO MONITOR READING instead", async () => {
     const workout = manualWorkoutFixture();
     mockWorkouts([workout]);
     mockBaselines();
@@ -2282,7 +2282,7 @@ describe("LogSession: a connected arrival with no record (Phase LM Task 4)", () 
 
     expect(
       screen.getByText(
-        `${formatLogDate(new Date().toISOString())} · NO PM5 READING`,
+        `${formatLogDate(new Date().toISOString())} · NO MONITOR READING`,
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText(/LOGGED BY HAND/)).not.toBeInTheDocument();
@@ -2362,7 +2362,7 @@ describe("LogSession: a connected arrival with no record (Phase LM Task 4)", () 
         `${formatLogDate(new Date().toISOString())} · LOGGED BY HAND`,
       ),
     ).toBeInTheDocument();
-    expect(screen.queryByText(/NO PM5 READING/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/NO MONITOR READING/)).not.toBeInTheDocument();
   });
 });
 

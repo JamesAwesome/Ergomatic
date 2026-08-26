@@ -111,8 +111,8 @@ import {
 import type { SessionRun } from "./run";
 
 /** Per §2A: `AUG 10 · 18:57 · PM5 <id>` / `· TIMER` / `· LOGGED BY HAND`,
- *  plus Phase LM Task 4's fourth answer `· NO PM5 READING`
- *  (`NO_PM5_READING_SOURCE` below has the whole rule).
+ *  plus Phase LM Task 4's fourth answer `· NO MONITOR READING`
+ *  (`NO_MONITOR_READING_SOURCE` below has the whole rule).
  *  `timeLabel` is absent for the manual door — an off-app row has no
  *  wall-clock moment to show (§2B's own "date-only" fallback wording). */
 export interface SummaryMeta {
@@ -300,7 +300,7 @@ export type SummaryInput =
       dateIso: string;
       /** Phase LM PR 1 Task 4 (lost-monitor design spec): the caller has
        *  proven this arrival came through the CONNECTED door and found no
-       *  record at all — see `NO_PM5_READING_SOURCE` below for what it
+       *  record at all — see `NO_MONITOR_READING_SOURCE` below for what it
        *  changes and `LogSession.tsx`'s `connectedArrivalWithNoRecord` for
        *  what "proven" means. Absent/false on every ordinary by-hand
        *  visit, which is why nothing else in this union changes shape. */
@@ -1174,7 +1174,7 @@ function buildTimerModel(run: SessionRun, steps: LogStep[]): SummaryModel {
  *  columns, and nothing the manual door posts distinguishes this case from
  *  a genuine by-hand entry. Making the stored row honest needs a new
  *  stored field and a migration; see ROADMAP Phase LM. */
-export const NO_PM5_READING_SOURCE = "NO PM5 READING";
+export const NO_MONITOR_READING_SOURCE = "NO MONITOR READING";
 
 function buildManualModel(
   steps: LogStep[],
@@ -1205,7 +1205,9 @@ function buildManualModel(
   // put a reading on the live screen that the log screen never shows.
   const meta: SummaryMeta = {
     dateLabel: formatLogDate(dateIso),
-    sourceLabel: connectedNoRecord ? NO_PM5_READING_SOURCE : "LOGGED BY HAND",
+    sourceLabel: connectedNoRecord
+      ? NO_MONITOR_READING_SOURCE
+      : "LOGGED BY HAND",
   };
 
   return {

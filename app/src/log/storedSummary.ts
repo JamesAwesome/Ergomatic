@@ -52,7 +52,7 @@
 // the app never heard a pull from opens no record at all, so its save
 // falls through the manual door and posts neither `deviceName` nor
 // `endedBy`. The LIVE screen now names that arrival honestly
-// (`summaryModel.ts`'s `NO_PM5_READING_SOURCE`); the STORED row cannot,
+// (`summaryModel.ts`'s `NO_MONITOR_READING_SOURCE`); the STORED row cannot,
 // because the columns below carry no signal separating it from a genuine
 // by-hand entry — `deviceName` null, `endedBy` null, every step `assumed`.
 // The row is not wrong about its NUMBERS (it renders `TARGETS ONLY ·
