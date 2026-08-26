@@ -303,6 +303,31 @@ guard — the same shape as a lifecycle edge standing in for stream health.
    green after. Until this exists, the only thing standing between this class of
    defect and a rower is James at an erg.
 
+## The §D1e probe: CLOSED without running it (James, 2026-08-26)
+
+**Ruling: skip the probe legs.** The two-build, four-effort probe is not run.
+
+**What closed it was free evidence from leg 1.** Both genuine backgrounds on the
+2026-08-26 walk reported `framesWhileHidden=2`
+(`docs/monitor/sessions/walk-2026-08-26b/`, and the leg-1 ring pasted in this
+session). Compare the 2026-08-26 morning walk, where the same counter read 32,
+33, 61 — because those were `active`/`inactive` transitions with the app still
+running, not backgrounds at all. **A genuine background delivers ~nothing**,
+which is most of what the control arm existed to measure, and it points the
+same way as James's 2026-08-20 ruling ("CORRECT RESUME, not a background
+mode").
+
+**State this honestly wherever criterion 9 is cited:** it closed on an
+INCIDENTAL measurement of the control arm only. The variant arm — what
+`bluetooth-central` would change — remains **unmeasured**, exactly as it was
+before this phase. Nothing here licenses a claim about what a background mode
+would buy; it licenses not spending four efforts to find out, because the
+never-started case is now handled honestly without one.
+
+**Reopen if:** correct resume (PR 2) turns out to need frames that a
+foreground-only app cannot get, or a rower reports losing a row across a
+background that leg 1's shape does not explain.
+
 ## Filed, not built
 
 - **The honest "there was a gap" report belongs on the SUMMARY**, after the
