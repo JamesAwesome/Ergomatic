@@ -2688,9 +2688,14 @@ describe("LogSession: the log-door miss survives the teardown that follows it", 
   function ConnectedStandIn({
     workoutId,
     exported,
+    search = "?from=monitor",
   }: {
     workoutId: string;
     exported: string;
+    /** The door the hand-off lands on. Defaults to the real one
+     *  (`WorkoutDetail.tsx`'s `handleConnectedEnded`); the by-hand door is
+     *  passed explicitly by the gate-pin test below. */
+    search?: string;
   }) {
     const navigate = useNavigate();
     useEffect(
@@ -2702,14 +2707,18 @@ describe("LogSession: the log-door miss survives the teardown that follows it", 
     return (
       <button
         type="button"
-        onClick={() => navigate(`/library/${workoutId}/log?from=monitor`)}
+        onClick={() => navigate(`/library/${workoutId}/log${search}`)}
       >
         HAND OFF
       </button>
     );
   }
 
-  async function renderHandOff(workoutId: string, exported: string) {
+  async function renderHandOff(
+    workoutId: string,
+    exported: string,
+    search?: string,
+  ) {
     const { default: LogSession } = await import("./LogSession");
     return render(
       <MemoryRouter initialEntries={["/connected"]}>
@@ -2717,7 +2726,11 @@ describe("LogSession: the log-door miss survives the teardown that follows it", 
           <Route
             path="/connected"
             element={
-              <ConnectedStandIn workoutId={workoutId} exported={exported} />
+              <ConnectedStandIn
+                workoutId={workoutId}
+                exported={exported}
+                search={search}
+              />
             }
           />
           <Route path="/library/:id/log" element={<LogSession />} />
@@ -2736,11 +2749,13 @@ describe("LogSession: the log-door miss survives the teardown that follows it", 
     expect(loadMonitorRun()).toBeNull();
     // A device that has connected before — which is what the tester who
     // lost the workout had (recurring failure #3: the emptier fixture is
-    // not the production one). This is also what makes the row RENDER:
-    // `MonitorLogRow` gates on a mount-time read, and this session's own
-    // teardown has not written yet at that moment. See the fix-round
-    // report for the narrower gap that leaves on a device's very first
-    // connected session.
+    // not the production one). It used to be what made the row RENDER at
+    // all, because `MonitorLogRow` gated on a mount-time read and this
+    // session's own teardown has not written yet at that moment; Task 3's
+    // post-mount re-read closed that gap, and the first-ever-session test
+    // below is the one that pins it. The seed stays: this test is about
+    // the MISS surviving the teardown, and it should keep asserting that
+    // on the production-shaped device state.
     localStorage.setItem(
       "ergomatic:last-session-log",
       JSON.stringify([
@@ -2785,6 +2800,91 @@ describe("LogSession: the log-door miss survives the teardown that follows it", 
     expect(copied[1]).toMatchObject({ detail: "no-run" });
     localStorage.removeItem("ergomatic:last-session-log");
     localStorage.removeItem("ergomatic:log-door-misses");
+  });
+
+  // TASK 3 (fix-round-2 spec) — THE FIRST-EVER CONNECTED SESSION. Every
+  // other test of this row seeds a stash and THEN mounts, which exercises
+  // the path that already worked and can never see this defect. The test
+  // above seeds a PREVIOUS session's stash on purpose; take that seed away
+  // — a device whose very first Connect is this one — and the ordering
+  // this describe block exists for becomes the whole bug: the row's read
+  // ran in a `useState` lazy initializer during the new route's RENDER,
+  // and the teardown that writes the only stash there will ever be is a
+  // PASSIVE unmount cleanup that runs afterwards. The row rendered `null`
+  // and never got a second chance, so the instrument was invisible until a
+  // device's SECOND connected session — and no hardware walk can catch
+  // that, because every walk runs on a phone that has connected dozens of
+  // times (ROADMAP, Phase LM owed work).
+  it("renders on a device's FIRST EVER connected session, where the stash lands AFTER this screen has mounted", async () => {
+    sessionStorage.removeItem("ergomatic:last-rowed-log");
+    localStorage.removeItem("ergomatic:log-door-misses");
+    // A device that has never connected: `beforeEach` clears localStorage,
+    // and nothing seeds it back. Pinned rather than assumed — the seeded
+    // version of this test passes with or without the fix.
+    expect(localStorage.getItem("ergomatic:last-session-log")).toBeNull();
+    expect(loadMonitorRun()).toBeNull();
+    const exported = JSON.stringify([
+      {
+        seq: 0,
+        atMs: 1000,
+        kind: "close-no-record",
+        detail: "endedBy=rower terminated=true",
+      },
+    ]);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    await renderHandOff(workout.id, exported);
+
+    await userEvent.click(screen.getByRole("button", { name: "HAND OFF" }));
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    // Not merely present: it copies THIS session's ring plus the miss this
+    // very arrival recorded — the artifact a tester is asked to send.
+    await userEvent.click(
+      await screen.findByRole("button", { name: "MONITOR LOG · COPY" }),
+    );
+    const copied = JSON.parse(
+      writeText.mock.calls[0]![0] as string,
+    ) as MonitorLogEntry[];
+    expect(copied.map((e) => e.kind)).toStrictEqual([
+      "close-no-record",
+      "log-door-miss",
+    ]);
+    expect(copied[1]).toMatchObject({ detail: "no-run" });
+    localStorage.removeItem("ergomatic:last-session-log");
+    localStorage.removeItem("ergomatic:log-door-misses");
+  });
+
+  // THE GATE THE RE-READ MUST NOT DISSOLVE (same regression the "permanent
+  // furniture" test above pins, now on the ordering path): the post-mount
+  // re-read goes through `readMonitorLogStash` with this door's own
+  // `fromMonitor`, so a by-hand arrival still cannot see a connected
+  // teardown's localStorage leftovers — not even one written while it was
+  // on screen.
+  it("a by-hand door still shows nothing when a connected teardown writes the session key after IT has mounted", async () => {
+    sessionStorage.removeItem("ergomatic:last-rowed-log");
+    const exported = JSON.stringify([
+      { seq: 0, atMs: 1000, kind: "write", detail: "f1" },
+    ]);
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    await renderHandOff(workout.id, exported, "");
+
+    await userEvent.click(screen.getByRole("button", { name: "HAND OFF" }));
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    // The write DID happen — this proves the gate holds, not that the
+    // ordering never occurred.
+    expect(localStorage.getItem("ergomatic:last-session-log")).toBe(exported);
+    expect(document.querySelector(".log-monitor-diag")).toBeNull();
+    localStorage.removeItem("ergomatic:last-session-log");
   });
 });
 

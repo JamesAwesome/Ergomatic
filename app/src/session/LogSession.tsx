@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Link,
   Navigate,
@@ -885,6 +885,20 @@ function readMonitorLogStash(fromMonitor: boolean): string | null {
   return fromMonitor ? withDoorMisses(stash) : stash;
 }
 
+/** The same never-throw posture all three of `MonitorLogRow`'s read sites
+ *  share, in one place rather than three copies of the same `try`: a quota
+ *  error, privacy mode, or a storage the platform has taken away must never
+ *  break this screen — the row simply does not appear. Task 3 gave this
+ *  component a THIRD read site (the post-mount re-read), which is what
+ *  earned the helper. */
+function readMonitorLogStashSafely(fromMonitor: boolean): string | null {
+  try {
+    return readMonitorLogStash(fromMonitor);
+  } catch {
+    return null;
+  }
+}
+
 /** The wire log's one UI door (7B iteration, 2026-08-08 — James: "1 but I
  *  want it to not disrupt the product experience"). A connected session's
  *  teardown stashes its full trace (`useMonitorSession.ts`); the ended
@@ -924,21 +938,62 @@ function readMonitorLogStash(fromMonitor: boolean): string | null {
  *  is why this whole task exists, and it is no longer true.**
  *  `readMonitorLogStash` falls back to the never-rowed key both at mount
  *  and at click time, so a session that never opened a run now renders
- *  and copies exactly like a rowed one. */
+ *  and copies exactly like a rowed one.
+ *
+ *  **TASK 3 (fix-round-2 spec): THE MOUNT-TIME READ ALONE MISSED A DEVICE'S
+ *  FIRST EVER CONNECTED SESSION**, which is the one session where nothing
+ *  was in storage beforehand. The read above is a lazy `useState`
+ *  initializer, so it runs during the new route's RENDER; the teardown that
+ *  writes the only stash such a device has ever had is a PASSIVE unmount
+ *  cleanup (`useMonitorSession.ts`'s `useEffect(() => teardown, [teardown])`)
+ *  — the exact ordering `recordLogDoorMiss`'s own comment already describes
+ *  from the other side. The row rendered `null` and never re-read, so Task
+ *  1's promise (diagnostics reachable on a phone in the never-rowed case)
+ *  held only from the SECOND connected session onward, and no walk could
+ *  ever catch it: every walk runs on a phone that has connected dozens of
+ *  times. The effect below re-reads once after mount, which React runs
+ *  AFTER the outgoing subtree's passive cleanup in that same commit — so
+ *  the stash written milliseconds later is seen without a remount.
+ *
+ *  It re-reads through `readMonitorLogStash` with this door's own
+ *  `fromMonitor`, so the connected-arrival gate above is unchanged: a
+ *  by-hand door still cannot see a connected teardown's leftovers, not even
+ *  one written while it is on screen. And it only ever fills a null — a
+ *  session that already had a stash at mount renders exactly as before. */
 function MonitorLogRow() {
   // Read here rather than threaded from each of the three call sites: a
   // call site that lied about its own door would silently reinstate the
   // permanent-furniture bug, and this component already knows the router.
   const [searchParams] = useSearchParams();
   const fromMonitor = searchParams.get("from") === "monitor";
-  const [stash] = useState<string | null>(() => {
-    try {
-      return readMonitorLogStash(fromMonitor);
-    } catch {
-      return null;
-    }
-  });
+  const [stash, setStash] = useState<string | null>(() =>
+    readMonitorLogStashSafely(fromMonitor),
+  );
   const [copied, setCopied] = useState<"idle" | "copied" | "failed">("idle");
+  // One re-read, not a poll: `teardown`'s stash is synchronous at t=0 on
+  // both its paths (`useMonitorSession.ts`'s STEP 2 comment — the deferred
+  // path defers steps 1/3/4, never this one), and the navigation that
+  // brought us here is what unmounts it, so a single pass through the
+  // passive-mount phase is enough. A later append (the hold-open
+  // instrument, up to 90s out) is already covered by the click handler's
+  // own live read below — it changes the CONTENTS, never whether a stash
+  // exists.
+  useEffect(() => {
+    if (stash !== null) return;
+    // The READ is this effect's real work — storage is the external system
+    // here, and its content changed underneath us while React was
+    // committing. react-hooks' `set-state-in-effect` rule flags a setState
+    // made directly and synchronously in an effect body; routing it through
+    // a resolved-microtask callback is the same "setState in a callback
+    // when external state changes" shape the rule's own message
+    // recommends, and it is the idiom `Countdown.tsx` already uses here for
+    // exactly this reason. The read itself stays in the effect body, which
+    // is what pins the ordering — a microtask changes when the row appears
+    // by nothing a human could perceive, not what it reads.
+    const late = readMonitorLogStashSafely(fromMonitor);
+    if (late === null) return;
+    void Promise.resolve().then(() => setStash(late));
+  }, [stash, fromMonitor]);
   if (stash === null) return null;
   return (
     <button
@@ -951,12 +1006,7 @@ function MonitorLogRow() {
         // `stash` only if BOTH storages have become unreadable between
         // mount and click (extremely unlikely, but never worse than the
         // pre-fix behaviour).
-        let latest: string | null;
-        try {
-          latest = readMonitorLogStash(fromMonitor);
-        } catch {
-          latest = null;
-        }
+        const latest = readMonitorLogStashSafely(fromMonitor);
         void navigator.clipboard
           .writeText(latest ?? stash)
           .then(() => setCopied("copied"))

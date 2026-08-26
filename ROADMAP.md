@@ -5882,20 +5882,37 @@ gate.
       leg B; it is the MAJORITY outcome of leg B. Say explicitly whether PR 2's
       correct resume recovers those metres; if not, that is a product decision,
       not an implementation detail.
-- [ ] **The diagnostics row never renders on a device's FIRST EVER
-      connected session, and no hardware walk can catch it.** (Was RC-20; re-homed to Phase LM at #198's PM gate — it is Phase LM's own component, found by Phase LM's own fix round.) Found by Phase
+- [x] **The diagnostics row never renders on a device's FIRST EVER
+      connected session, and no hardware walk can catch it.** FIXED by
+      fix-round-2 Task 3: `MonitorLogRow` now re-reads the stash once in a
+      post-mount effect, which React runs AFTER the outgoing subtree's
+      passive cleanup in the same commit, so the teardown's write is seen
+      without a remount. The connected-arrival gate is unchanged (the
+      re-read goes through the same `readMonitorLogStash(fromMonitor)`), and
+      a session that already had a stash at mount renders exactly as before.
+      Pinned by two tests that drive the REAL navigation ordering rather
+      than seeding storage and mounting: a first-ever-device hand-off that
+      must show and copy the row, and a by-hand arrival that must still show
+      nothing when a teardown writes while it is on screen. **The
+      walk-protocol trap below still stands** — a walk on a much-connected
+      phone would have passed either way, so the ordering test is the only
+      thing that proves this, and any walk card claiming to exercise the
+      never-rowed readout must still say which device state it ran on.
+      (Was RC-20; re-homed to Phase LM at #198's PM gate — it is Phase LM's own component, found by Phase LM's own fix round.) Found by Phase
       LM's fix round, verified independently at its re-review, and filed rather
-      than fixed because it is pre-existing (shipped by Task 1) and narrower
-      than the PR that found it. `MonitorLogRow` (`LogSession.tsx:934`) reads
-      the stash in a `useState` LAZY INITIALIZER only — no effect, no storage
-      listener, no re-read. `useMonitorSession`'s `teardown` is a passive
-      `useEffect` cleanup, and React runs it AFTER the next route's render
-      commits. So on a genuine first-ever connected session there is no prior
-      entry at mount, the row renders `null`, and it never gets a second
-      chance. Task 1's promise — the diagnostics are reachable on a phone in
-      the never-rowed case — therefore holds only from the SECOND connected
-      session onward.
-      **The walk-protocol trap is the important half, and it is why this gets
+      than fixed at the time because it was pre-existing (shipped by Task 1) and
+      narrower than the PR that found it. **The mechanism, kept because it is the
+      class rather than the instance:** `MonitorLogRow` read the stash in a
+      `useState` LAZY INITIALIZER only — no effect, no storage listener, no
+      re-read — while `useMonitorSession`'s `teardown` is a passive `useEffect`
+      cleanup, and React runs the new route's render BEFORE the outgoing
+      subtree's passive cleanup. So on a genuine first-ever connected session
+      there was no prior entry at mount, the row rendered `null`, and it never
+      got a second chance; Task 1's promise (diagnostics reachable on a phone in
+      the never-rowed case) held only from the SECOND connected session onward.
+      **A test that seeds storage and then mounts cannot see this** — it
+      exercises the already-working path, which is why every unit test was green.
+      **The walk-protocol trap is the important half, and it is why this got
       its own row rather than a line in a PR body:** every walk this project
       runs happens on a phone that has connected dozens of times, so **a walk
       will PASS while a brand-new tester gets nothing.** Validating this case
@@ -5903,10 +5920,6 @@ gate.
       this session". That is the same verify-the-app-against-itself shape as
       recurring failure #11. Any walk card claiming to exercise the
       never-rowed readout must say which device state it ran on.
-      **Fix shape:** an effect that re-reads after mount, or lift the read past
-      the teardown boundary. It is a real behavioural change to Task 1's
-      component, which is why it was not smuggled into a fix round scoped to
-      five other findings.
 - [ ] **`rowingActive` is falsified but not dangerous — one test and one
       diagnostic are owed, no behaviour change.** Walk 2026-08-26 read
       0x0031's byte 9 `false` on every frame of a real row (§20 fact 13,

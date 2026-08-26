@@ -27,21 +27,29 @@ Build B's plist edit is made in the worktree, built, and then reverted there.
 It is not committed on any branch. (`app/ios/App/App/Info.plist` is one of the
 three iOS files this repo never commits anyway.)
 
-## Settle this in the first ten seconds, before any rowing
+## ~~Settle this in the first ten seconds, before any rowing~~ (retired — nothing to settle)
 
-**Does installing build B preserve the app's localStorage container?** The
-probe's whole readout lives there. Same bundle id over an existing install
-should keep the data container — but that is INFERENCE, not established, and
-the answer changes whether criterion 9 is measurable at all on build B.
+The card used to open with a pre-walk check: **does installing build B preserve
+the app's localStorage container?** — on the premise that the probe's readout
+lived there and could be lost. Kept as a record of the question, because the
+inference behind it (same bundle id keeps the data container) is still merely
+INFERENCE and someone will ask again.
 
-**The check is free, and RC-20 is the detector.** After installing build B,
-open any log screen and look for the `MONITOR LOG · COPY` row:
+**RETIRED BY FIX-ROUND-2 TASK 3 — DO NOT RUN THIS CHECK, IT NO LONGER MEANS
+ANYTHING.** The check used the diagnostics row's absence as the container-
+survival detector: the row read its stash once at mount, so on a container
+that had just been replaced it rendered nothing. That defect is fixed — the
+row now re-reads after mount, so it appears from the session's own teardown
+whether or not this device has ever connected before. Row present therefore
+no longer says the container survived.
 
-- **Row present** → the container survived. Proceed.
-- **Row absent** → the container was replaced, so build B is a first-ever
-  connected session (Phase LM's own filed defect), the probe cannot be read on
-  it, and **the walk stops and the card is rewritten.** Do not row four efforts
-  and discover this afterwards.
+**And the question it was asked for has gone away with it.** Criterion 9's
+readout is written by the very session being measured, not carried over from
+an earlier install, and the row that shows it now renders on a first-ever
+connected session. So a replaced container does not make the probe
+unreadable. If a future leg comes to depend on data an EARLIER install
+wrote, that leg needs its own check written for it — no leg on this card
+does.
 
 ## Leg 1 — lock BEFORE the first pull (build A, the flagship)
 
@@ -137,6 +145,8 @@ explicit yes.
 ## What this walk CANNOT establish
 
 **Whether the diagnostics readout works for a brand-new tester.** James's phone
-has connected dozens of times, and the row only fails on a device's first-ever
-connected session. A pass here says nothing about that case, and this card must
-not be cited as having covered it. Phase LM's own owed row carries it.
+has connected dozens of times, so nothing on this card exercises a device's
+first-ever connected session — and that was exactly where the row used to fail.
+The defect is fixed (fix-round-2 Task 3) and pinned by a test that drives the
+real navigation ordering, because a walk never could: a pass here still says
+nothing about that case, and this card must not be cited as having covered it.
