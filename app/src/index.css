@@ -6474,6 +6474,24 @@ section:not(.news-pinned) .news-row:last-of-type {
   text-align: right;
 }
 
+/* EVERYTHING STALE GREYS TOGETHER, INCLUDING THE METRES (Phase LM PR 1
+   Task 3, Gate 0). This counter reads `frame.sessionDistanceMeters`, which
+   simply stops arriving when the link dies — so it held its last value at
+   full `--ink` while both heroes beside it greyed to `--ink-3` and took a
+   `LAST SEEN` caption. The one number still painted as current was the one
+   number nobody could vouch for.
+
+   `--ink-3` is not a new treatment: it is the same value
+   `.timer-card-actual-stale` already paints every held reading, applied
+   here so the whole frame greys as one thing. 7.43:1 on --surface,
+   computed. The class is applied from `model.stale` in `PaneLive.tsx`
+   rather than keyed off `:has(.connected-lost)` — the greying is a fact
+   about the READING, not about whether a banner happens to be on screen
+   above it. */
+.connected-progress-meters-stale {
+  color: var(--ink-3);
+}
+
 /* --- The band: up-next + TOTAL LEFT (CR2 spec 3 Task 4, design spec §2A/
    §2C/§3: "The up-next line is rendered by the band directly"). Replaces
    the old metric row's UP NEXT cell AND `TimerRuler`'s own TOTAL LEFT row
@@ -7003,13 +7021,31 @@ section:not(.news-pinned) .news-row:last-of-type {
 
 /* --- The lost-link banner (handoff §4, spec C5's lose-and-degrade) --- */
 
+/* FILLED RED, NOT SUNKEN (Phase LM PR 1 Task 3, Gate 0). The sunken
+   variant this replaces was a paper-coloured block with a hairline over
+   it, and James, shown the frame that cost a tester their workout: "the
+   LOST isn't easy to notice, i think we need to highlight that more."
+   A block that has to be READ before it registers is not a warning; the
+   fill is what makes this land at arm's length, mid-stroke, out of the
+   corner of an eye.
+
+   Contrast, computed rather than eyeballed: --surface #fffdf7 on
+   --judge-slower #962718 is 7.94:1, against the house 4.5:1 floor. The
+   same pair the token's own comment already measures the other way round
+   (a slower-than-target reading on paper) — a ratio is symmetric, so the
+   fill inherits its headroom.
+
+   THE RISK ACCEPTED WITH IT, stated so the next task does not spend it:
+   red already means "slower than target" a column away on these same
+   panes, so NOTHING ELSE on the connected surface may take a filled red
+   ground. `ConnectedSurface.test.tsx` pins that this is the only rule in
+   the file that does. */
 .connected-lost {
   display: flex;
   flex-direction: column;
   gap: 5px;
   flex: none;
-  background: var(--surface-sunken);
-  border-top: 2px solid var(--ink);
+  background: var(--judge-slower);
   padding: 12px;
   /* Portrait's own share of `.connected-surface`'s margin-based gap
      scheme (see that rule's comment) — paid only when this banner is
@@ -7022,14 +7058,14 @@ section:not(.news-pinned) .news-row:last-of-type {
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.14em;
-  color: var(--ink);
+  color: var(--surface);
 }
 
 .connected-lost-body {
   font-family: var(--font-sans);
   font-size: 13px;
   line-height: 1.4;
-  color: var(--ink-2);
+  color: var(--surface);
 }
 
 /* THE DISCONNECTED STEP-DOWN (design spec §2's own table): the banner

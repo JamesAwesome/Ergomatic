@@ -96,6 +96,7 @@
 
 import { fmtDuration } from "../../domain/duration.js";
 import { fmtSplit } from "../../domain/format.js";
+import type { IntervalActual } from "../../domain/monitor/types.js";
 import { judgeVsTarget } from "../judgeBand.js";
 import {
   measuredSessionSeconds,
@@ -544,6 +545,82 @@ function weightedAverage(
 export const MIN_MEASURABLE_ELAPSED_SECONDS = 1;
 
 // ---------------------------------------------------------------------
+// The measured-anything rule (Phase LM PR 1 Task 3)
+// ---------------------------------------------------------------------
+//
+// "Did the monitor actually measure any of this?" is asked in three
+// places that hold three DIFFERENT shapes: `monitorWorkRows` below has a
+// `LogStep`, `targetsOnlyCaption` has already-built `SummaryRow`s, and the
+// connected surface's lost banner has `IntervalActual[]` straight off the
+// hook. So this is ONE RULE PLUS ONE ADAPTER PER CALLER, not one function
+// called three times — the shapes cannot be unified without dragging the
+// summary's whole row builder onto a live pane.
+//
+// WHY IT IS SHARED AT ALL, rather than two independent predicates that
+// happen to agree today: the obvious banner predicate ("any actual at
+// all") disagrees with this file's own caption on a SUB-SECOND reading,
+// and a rower meets both screens minutes apart. The banner would say two
+// intervals were kept; the summary for the same run would say TARGETS ONLY
+// · NOTHING MEASURED. `summaryModel.test.ts`'s own
+// "measured-anything rule" block checks the adapters against each other on
+// one fixture rather than each against itself.
+
+/** The two facts the rule turns on, extracted from whatever shape a caller
+ *  holds. `fromMonitor` is provenance — a stopwatch reading of the same
+ *  length is a rower's own timing, never a machine measurement — and
+ *  `elapsedSeconds` is the reading's own elapsed time, `undefined` when it
+ *  carries none. */
+export interface MeasuredReading {
+  fromMonitor: boolean;
+  elapsedSeconds: number | undefined;
+}
+
+/** THE RULE. A reading counts only when the MONITOR produced it and it ran
+ *  at least `MIN_MEASURABLE_ELAPSED_SECONDS` (see that constant for why a
+ *  floor exists at all). */
+export function isMeasuredReading(reading: MeasuredReading): boolean {
+  return (
+    reading.fromMonitor &&
+    reading.elapsedSeconds !== undefined &&
+    reading.elapsedSeconds >= MIN_MEASURABLE_ELAPSED_SECONDS
+  );
+}
+
+/** Adapter: the summary/log row shape. `actualSource === "pm5"` is the
+ *  provenance discriminant every monitor-door row already carries
+ *  (`logDraft.ts`'s `buildMonitorLogSteps` writes it, and nothing else
+ *  does). */
+export function readingOfLogStep(step: LogStep): MeasuredReading {
+  return {
+    fromMonitor: step.actualSource === "pm5",
+    elapsedSeconds: step.actualSeconds,
+  };
+}
+
+/** Adapter: the live-surface shape. An `IntervalActual` exists only
+ *  because the machine reported a boundary, so provenance is settled by
+ *  construction — stated here rather than assumed, so the one axis that
+ *  differs between the two callers is visible in both adapters.
+ *  `elapsedSeconds` is copied verbatim into `LogStep.actualSeconds`
+ *  downstream (`buildMonitorLogSteps`), which is what makes the two
+ *  adapters answer identically for the same interval. */
+export function readingOfIntervalActual(
+  actual: IntervalActual,
+): MeasuredReading {
+  return { fromMonitor: true, elapsedSeconds: actual.elapsedSeconds };
+}
+
+/** How many of these readings the rule would keep. The connected
+ *  surface's lost banner names this number ("2 intervals kept."), so it
+ *  must be the number the summary screen will agree with minutes later. */
+export function measuredIntervalCount(
+  actuals: readonly IntervalActual[],
+): number {
+  return actuals.filter((a) => isMeasuredReading(readingOfIntervalActual(a)))
+    .length;
+}
+
+// ---------------------------------------------------------------------
 // Monitor door
 // ---------------------------------------------------------------------
 
@@ -868,13 +945,15 @@ function monitorHeroes(run: MonitorRun): SummaryHeroes {
  *  (§2E's unmeasured-row geometry) — not a measured row with blank
  *  cells — and is excluded from `monitorAvgSplitSeconds`'s average by
  *  that same function's own floor check, so the row list and the hero
- *  agree on which readings count. */
+ *  agree on which readings count.
+ *
+ *  THE RULE ITSELF MOVED OUT (Phase LM PR 1 Task 3): this is now the
+ *  shared `isMeasuredReading` plus this door's own adapter, so the
+ *  connected surface's lost banner counts intervals by the same rule this
+ *  screen will judge them by. The logic is unchanged, byte for byte — see
+ *  the "measured-anything rule" section above for why it is shared. */
 function isMonitorRowMeasurable(step: LogStep): boolean {
-  return (
-    step.actualSource === "pm5" &&
-    step.actualSeconds !== undefined &&
-    step.actualSeconds >= MIN_MEASURABLE_ELAPSED_SECONDS
-  );
+  return isMeasuredReading(readingOfLogStep(step));
 }
 
 function monitorWorkRows(run: MonitorRun): SummaryRow[] {

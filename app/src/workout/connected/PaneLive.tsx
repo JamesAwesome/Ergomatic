@@ -52,10 +52,11 @@
 // deletions); the `/500m` unit beside the split numeral; the word TARGET.
 //
 // STALE: `model.nowLabel` is the ONLY hero label left post-redesign — it
-// collapses to `stale && !armedMirror ? "LAST" : ""` (`surfaceModel.ts`'s
-// own comment). The `&& !armedMirror` half is Phase LM Task 2's: a surface
+// collapses to `stale && !armedMirror ? "LAST SEEN" : ""`
+// (`surfaceModel.ts`'s own comment, which carries why the two words beat
+// the one). The `&& !armedMirror` half is Phase LM Task 2's: a surface
 // that lost the link BEFORE the first pull is showing a target preview, and
-// captioning that `LAST` would claim a reading that never existed. The
+// captioning that at all would claim a reading that never existed. The
 // existing `!== ""` guard below renders nothing at every other status.
 //
 // ARMED (design spec §2D): the split hero's ACTUAL reading previews the
@@ -170,8 +171,23 @@ export default function PaneLive({ model }: { model: SurfaceModel }) {
             is independently reliable (`frame.sessionDistanceMeters`, not
             derived from the phase estimate), so an unpriced phase ahead is
             no reason to hide it too. */}
+        {/* GREYS WITH EVERYTHING ELSE WHEN THE LINK IS GONE (Phase LM PR 1
+            Task 3, Gate 0: "everything stale greys to --ink-3 together,
+            including the metres"). This counter's own source
+            (`frame.sessionDistanceMeters`) just stops arriving, so before
+            this it held its last value at full ink while both heroes
+            greyed and took a `LAST SEEN` caption beside it — the single
+            number still painted as current was the one nobody could vouch
+            for. Keyed on `model.stale`, the same field the heroes'
+            judgement already reads, so the frame greys as ONE thing. */}
         {model.sessionDistanceMeters !== null && (
-          <span className="connected-progress-meters">
+          <span
+            className={
+              model.stale
+                ? "connected-progress-meters connected-progress-meters-stale"
+                : "connected-progress-meters"
+            }
+          >
             {fmtMeters(model.sessionDistanceMeters)}
           </span>
         )}

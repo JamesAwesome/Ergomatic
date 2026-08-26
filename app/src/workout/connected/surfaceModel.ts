@@ -63,6 +63,7 @@ import {
   phaseKindWord,
   totalSessionSecondsOf,
 } from "../../session/Timer";
+import { measuredIntervalCount } from "../../session/summaryModel";
 import { FREE, targetSplitDisplay } from "../../session/TimerTargets";
 
 /** WHAT THE SURFACE IS DOING — and, since Phase LM, nothing else. NOT a
@@ -420,6 +421,15 @@ export interface SurfaceModel {
   status: SurfaceStatus;
   /** Every actual is greyed and unjudgeable. */
   stale: boolean;
+  /** HOW MANY INTERVALS THE MACHINE ACTUALLY MEASURED (Phase LM PR 1 Task
+   *  3). The lost banner names this number out loud, so it must be the
+   *  number the summary screen agrees with minutes later — it is
+   *  `summaryModel.ts`'s own `measuredIntervalCount`, imported rather than
+   *  re-derived, and that module's "measured-anything rule" section
+   *  carries the reasoning. Zero is the case the banner exists for: a
+   *  surface that lost the link before the first pull has nothing to keep,
+   *  and the old copy promised it would keep it anyway. */
+  measuredIntervals: number;
   /** Filled indicator square (linked) vs hollow (link lost). */
   linked: boolean;
   /** `PM5 430123456`, or `PM5 430123456 · LOST`. */
@@ -453,11 +463,13 @@ export interface SurfaceModel {
    *  (`3 OF 12 · 38:20 LEFT`), so a later task reads the ordinal without
    *  re-parsing the phase word back out of the combined caption. */
   intervalOrdinalLabel: string | null;
-  /** `LAST` once the link is gone (handoff §4); `""` every other status.
+  /** `LAST SEEN` once the link is gone (handoff §4's `LAST`, widened by
+   *  Phase LM PR 1 Task 3 — see the return site for why); `""` every other
+   *  status.
    *  CR2 spec 3 Task 2 (design spec §3 fate table, "Stale" table): the
    *  `NOW` branch DIES with the hero labels themselves — 2A's own table
-   *  cuts `NOW`/`TARGET`/`UP NEXT` labels from LIVE outright, so `LAST` is
-   *  now the only word this field ever produces, and `PaneLive.tsx`'s
+   *  cuts `NOW`/`TARGET`/`UP NEXT` labels from LIVE outright, so that is
+   *  now the only caption this field ever produces, and `PaneLive.tsx`'s
    *  existing `!== ""` guard already renders nothing for every other
    *  status with no pane-file change required. The unit used to ride in
    *  this label (`NOW · /500M`); testers asked for it beside the NUMERAL
@@ -1179,6 +1191,7 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
   return {
     status,
     stale,
+    measuredIntervals: measuredIntervalCount(input.actuals),
     linked: !stale,
     deviceCaption: deviceCaptionFor(deviceName, stale),
     intervalLabel: ordinal === null ? kindWord : `INTERVAL ${counted}`,
@@ -1210,12 +1223,21 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
     // did not name and which the fix would otherwise have left wrong). Once
     // `armed` survives a lost link, the split hero beneath this label shows
     // the TARGET as a preview (`armedMirror`, above), and a number nobody
-    // has rowed captioned `LAST` is a stronger lie than the one this task
-    // is fixing: it says we measured it. `LAST` is only ever honest about a
-    // reading that WAS live, so it is suppressed at armed exactly as it is
+    // has rowed captioned `LAST SEEN` is a stronger lie than the one this
+    // task is fixing: it says we measured it. The caption is only ever
+    // honest about a reading that WAS live, so it is suppressed at armed
+    // exactly as it is
     // at every other status where nothing was ever now. The walk's own
     // screen showed `LAST 0:00.0` for this reason.
-    nowLabel: stale && !armedMirror ? "LAST" : "",
+    //
+    // `LAST SEEN`, NOT `LAST` (Phase LM PR 1 Task 3, Gate 0). The bare
+    // word reads as an ordinal — the last of several readings, the most
+    // recent one — which is exactly the impression a held number must not
+    // give. The fact the rower needs is that this is the last value we
+    // HEARD, and that it stopped being current at a moment nobody told
+    // them about. Two words buy that; the same greying (`--ink-3`) that
+    // covers every other stale value covers the number underneath it.
+    nowLabel: stale && !armedMirror ? "LAST SEEN" : "",
     // ARMED'S UP-NEXT IS THE FIRST INTERVAL FORWARD (design spec §2D,
     // antagonist correction 2): today's `connectedNextText(phases,
     // phaseIndex)` names `phases[phaseIndex + 1]` — the coming REST at

@@ -152,6 +152,19 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     version: "v0.17.0",
     date: "2026-08-22",
     items: [
+      // RE-CHECKED AGAINST THE REWRITTEN BANNER (Phase LM PR 1 Task 3,
+      // 2026-08-25) and left as it stands, clause by clause. Task 3
+      // rewrites the banner's BODY and fills it red; this item quotes
+      // neither. `LOST THE MONITOR` is still the title, in both of the
+      // branches the body now has, and deliberately so — it is what a
+      // tester has learned to recognise and what this note tells them to
+      // expect. "The live numbers visibly freeze" is more true than it
+      // was, not less: the session metre counter now greys with the
+      // heroes instead of holding at full ink, and both heroes read `LAST
+      // SEEN`. The ten-second healthy-stream hold is the watchdog's, which
+      // this task does not touch. The item's scenario is a link dying
+      // MID-ROW; the never-started case Phase LM exists for is a
+      // different screen and this note makes no claim about it.
       "If the Bluetooth link dies mid-row, the app now says so, within a few seconds: LOST THE MONITOR appears, the live numbers visibly freeze instead of pretending, and the banner stays up until the stream has been genuinely healthy for ten seconds, so it cannot flicker at you. This covers the ways a link dies silently: switching Bluetooth off and on, a phone call taking the app to the background, and drops the app used to swallow.",
       "A session the link killed is recorded as exactly that. Ending a session under the lost banner stores it as link-lost, not as you giving up. (Corrected 2026-08-23: the record knows the difference; the history screen does not show it yet. That surface is coming.)",
       "A failed connection attempt no longer poisons the next one. Try Again genuinely starts over, and the app asks your phone what it is already connected to before offering to connect again.",

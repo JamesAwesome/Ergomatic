@@ -407,15 +407,18 @@ describe("the unpriced-phase guard (design spec §4/§7 item 7)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Stale table: LAST above each hero, the ONLY hero label left
+// Stale table: LAST SEEN above each hero, the ONLY hero label left
 // ---------------------------------------------------------------------------
 
-describe("stale: LAST above each hero, values grey (design spec Stale table)", () => {
-  it("both heroes carry a LAST caption and the stale judgement class", () => {
+describe("stale: LAST SEEN above each hero, values grey (design spec Stale table)", () => {
+  // `LAST SEEN`, not `LAST` (Phase LM PR 1 Task 3, Gate 0): the bare word
+  // reads as an ordinal, the last of several readings — where the fact the
+  // rower needs is that this is the last number we HEARD.
+  it("both heroes carry a LAST SEEN caption and the stale judgement class", () => {
     renderPane("stale");
     const labels = document.querySelectorAll(".connected-hero-label");
     expect(labels).toHaveLength(2);
-    for (const label of labels) expect(label.textContent).toBe("LAST");
+    for (const label of labels) expect(label.textContent).toBe("LAST SEEN");
     const split = document.querySelector(
       ".connected-hero-split .connected-hero-value",
     )!;
@@ -426,7 +429,7 @@ describe("stale: LAST above each hero, values grey (design spec Stale table)", (
     expect(rate.className).toContain("timer-card-actual-stale");
   });
 
-  it("index.css: the LAST label reads var(--c-size-label), 0.10em, ink-3 — the only hero label role left", () => {
+  it("index.css: the LAST SEEN label reads var(--c-size-label), 0.10em, ink-3 — the only hero label role left", () => {
     const body = ruleBody(".connected-hero-label");
     expect(body).toContain("var(--c-size-label)");
     expect(body).toContain("letter-spacing: 0.1em");

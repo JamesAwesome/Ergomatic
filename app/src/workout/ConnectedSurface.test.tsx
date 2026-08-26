@@ -37,7 +37,10 @@ import {
 import { fmtDuration } from "../../domain/duration.js";
 import { fmtSplit } from "../../domain/format.js";
 import { WORKOUTSTATE_INTERVALWORKTIME } from "../../domain/monitor/pm5/parse.js";
-import type { MonitorFrame } from "../../domain/monitor/types.js";
+import type {
+  IntervalActual,
+  MonitorFrame,
+} from "../../domain/monitor/types.js";
 import type { Baselines, WorkoutType } from "../../domain/types.js";
 import { LIBRARY_WORKOUTS } from "../../server/seed/library/index";
 import { createFakeTransport } from "../monitor/transports/fake";
@@ -334,6 +337,7 @@ describe("armed's first frame, in the DOM (I-1)", () => {
     });
     expect(screen.queryByText("NOW")).toBeNull();
     expect(screen.queryByText("LAST")).toBeNull();
+    expect(screen.queryByText("LAST SEEN")).toBeNull();
   });
 
   it("the grid's active row carries no gold countdown mark", () => {
@@ -1312,18 +1316,43 @@ describe("disconnected: lose and degrade (spec C5)", () => {
     expect(text).not.toContain("CAUGHT UP");
   });
 
-  it("hollows the indicator and reads LAST, not NOW", () => {
+  it("hollows the indicator and reads LAST SEEN, not NOW", () => {
     renderSurface({ phase: "disconnected" });
     expect(
       document.querySelector(".connected-line-mark-hollow"),
     ).not.toBeNull();
     expect(screen.getByText(`${DEVICE} · LOST`)).toBeInTheDocument();
-    // BOTH heroes, not one: the labels are bare NOW/LAST now that the unit
-    // moved next to the numeral (testers via James, 2026-08-13), so a
+    // BOTH heroes, not one: the labels are bare NOW/LAST SEEN now that the
+    // unit moved next to the numeral (testers via James, 2026-08-13), so a
     // `getByText` would throw on the second match rather than assert it.
     // Exactly two, and no NOW left anywhere on the pane.
-    expect(screen.getAllByText("LAST")).toHaveLength(2);
+    //
+    // `LAST SEEN`, not `LAST` (Phase LM PR 1 Task 3, Gate 0): the bare
+    // word reads as an ordinal — the last of several readings — where the
+    // fact the rower needs is that this is the last number we HEARD.
+    expect(screen.getAllByText("LAST SEEN")).toHaveLength(2);
+    expect(screen.queryByText("LAST")).toBeNull();
     expect(screen.queryByText("NOW")).toBeNull();
+  });
+
+  // THE STALE GREY IS ONE TREATMENT, NOT SEVERAL (Gate 0: "everything
+  // stale greys to --ink-3 together, including the metres"). The session
+  // counter froze at full ink while both heroes greyed beside it, so the
+  // one number still painted as current was the one nobody could vouch
+  // for.
+  it("greys the session metres with everything else, instead of leaving one number reading as current", () => {
+    renderSurface({ phase: "disconnected" });
+    const meters = document.querySelector(".connected-progress-meters")!;
+    expect(meters.className).toContain("connected-progress-meters-stale");
+    expect(ruleBody(".connected-progress-meters-stale")).toContain(
+      "color: var(--ink-3)",
+    );
+  });
+
+  it("leaves the metres at full ink while the link is up", () => {
+    renderSurface();
+    const meters = document.querySelector(".connected-progress-meters")!;
+    expect(meters.className).not.toContain("connected-progress-meters-stale");
   });
 
   it("THE STALE OVERRIDE BEATS EVERY JUDGEMENT, on every cell of the pane", () => {
@@ -1362,6 +1391,125 @@ describe("disconnected: lose and degrade (spec C5)", () => {
       screen.getByRole("button", { name: "Tap again to end" }),
     );
     expect(s.endSession).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THE BANNER SAYS WHAT SURVIVED (Phase LM PR 1 Task 3)
+//
+// It used to promise "End keeps what we saw" unconditionally — true
+// whenever we saw something, and a lie in exactly the case that costs a
+// rower their workout. It now branches on whether the machine reported any
+// interval we could measure, and says so in a title plus at most four
+// words: a rower reads this mid-stroke or not at all.
+//
+// The banner asserts NO CAUSE in either branch, which is why the
+// assertions below pin the banner's WHOLE text rather than a substring —
+// a re-added explanatory clause fails them. Three producers of the silence
+// are undistinguished at this layer and the screen must not pick one.
+// ---------------------------------------------------------------------------
+
+/** An actual for `FIXTURE`'s interval `index`, rowed for exactly
+ *  `elapsedSeconds` — the one variable these tests turn on. Real target
+ *  split and rate off the compiled program, never invented numbers. */
+function actualOf(index: number, elapsedSeconds: number): IntervalActual {
+  const iv = FIXTURE.program.intervals[index]!;
+  return {
+    index,
+    elapsedSeconds,
+    distanceMeters: iv.kind === "distance" ? iv.value : 250,
+    avgSplit: iv.targetSplit ?? 132,
+    avgSpm: iv.displaySpm ?? 22,
+    avgHeartRateBpm: 158,
+    restDistanceMeters: 0,
+  };
+}
+
+/** The banner's whole rendered text, title and body run together — the
+ *  view a rower actually gets. */
+function bannerText(): string {
+  return document.querySelector(".connected-lost")!.textContent ?? "";
+}
+
+describe("the lost banner says what survived", () => {
+  it("names the count when the machine finished intervals before the link went quiet", () => {
+    renderSurface({
+      phase: "disconnected",
+      actuals: [actualOf(0, 480), actualOf(1, 428.4)],
+    });
+    expect(bannerText()).toBe("LOST THE MONITOR2 intervals kept.");
+  });
+
+  it("counts one interval in the singular", () => {
+    renderSurface({ phase: "disconnected", actuals: [actualOf(0, 480)] });
+    expect(bannerText()).toBe("LOST THE MONITOR1 interval kept.");
+  });
+
+  // THE FLAGSHIP. This is the surface that cost a tester their workout: the
+  // link went before the first pull, so the machine has reported nothing
+  // and there is nothing to keep. The old copy told them End would keep
+  // what we saw. We saw nothing.
+  it("claims nothing when nothing was measured, on the surface that never saw a pull", () => {
+    renderNeverRowed();
+    expect(bannerText()).toBe("LOST THE MONITORNothing kept.");
+    // Said twice on purpose: the count-naming half of the copy must not
+    // appear at all, in any form, on a surface with nothing to count —
+    // not even as a zero.
+    expect(bannerText()).not.toMatch(/\d/);
+    expect(bannerText()).not.toMatch(/interval/i);
+  });
+
+  // A rower can lose the link a stroke into interval 1 — they HAVE rowed,
+  // but no boundary ever arrived, so there is no interval to keep and the
+  // summary screen for the same run will say NOTHING MEASURED. The two
+  // must not disagree.
+  it("claims nothing mid-row too, when no boundary ever arrived", () => {
+    renderSurface({ phase: "disconnected", actuals: [] });
+    expect(bannerText()).toBe("LOST THE MONITORNothing kept.");
+  });
+
+  // The rule is shared with the summary screen, so a sub-second boundary
+  // is not a kept interval here either (`summaryModel.ts`'s
+  // `measuredIntervalCount` — see its own tests for the disagreement this
+  // prevents).
+  it("does not count a sub-second boundary the summary screen would call unmeasured", () => {
+    renderSurface({
+      phase: "disconnected",
+      actuals: [actualOf(0, 0.4), actualOf(1, 428.4)],
+    });
+    expect(bannerText()).toBe("LOST THE MONITOR1 interval kept.");
+  });
+
+  // FILLED RED, not the sunken variant (Gate 0): unmissable at arm's
+  // length, which is the whole complaint — "the LOST isn't easy to notice,
+  // i think we need to highlight that more" (James, 2026-08-25). Contrast
+  // computed, never eyeballed: --surface #fffdf7 on --judge-slower #962718
+  // is 7.94:1, well clear of the 4.5:1 floor.
+  it("index.css fills the banner red, with paper text on it", () => {
+    // `rulesFor(...)[0]`, not `ruleBody`: this selector has a second rule
+    // inside the landscape query (its own grid placement), and the fill
+    // belongs to the base rule so BOTH orientations inherit it.
+    expect(rulesFor(".connected-lost")[0]!.body).toContain(
+      "background: var(--judge-slower)",
+    );
+    expect(ruleBody(".connected-lost-title")).toContain(
+      "color: var(--surface)",
+    );
+    expect(ruleBody(".connected-lost-body")).toContain("color: var(--surface)");
+  });
+
+  // THE RISK GATE 0 ACCEPTED WITH THE FILL: red already means "slower than
+  // target" a column away, so nothing else on these panes may take a
+  // filled red treatment. Pinned rather than remembered.
+  it("index.css gives nothing else on these panes a filled red ground", () => {
+    const filled = cssRules(INDEX_CSS).filter(
+      (rule) =>
+        rule.body.includes("background: var(--judge-slower)") &&
+        rule.selectors.some((s) => s.startsWith(".connected")),
+    );
+    expect(filled.map((rule) => rule.selectors)).toStrictEqual([
+      [".connected-lost"],
+    ]);
   });
 });
 

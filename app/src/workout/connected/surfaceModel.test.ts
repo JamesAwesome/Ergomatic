@@ -595,7 +595,9 @@ describe("armed's first frame (I-1): the three properties 2D asks for beyond the
     // the split hero is previewing a TARGET on that branch, and captioning
     // a number nobody rowed `LAST` claims we measured it. See this file's
     // own Phase LM describe below.
-    expect(model({ status: "live", linkLost: true }).nowLabel).toBe("LAST");
+    expect(model({ status: "live", linkLost: true }).nowLabel).toBe(
+      "LAST SEEN",
+    );
     expect(model({ status: "live" }).nowLabel).toBe("");
     expect(model({ status: "paused" }).nowLabel).toBe("");
   });
@@ -793,6 +795,49 @@ describe("Phase LM: a lost link does not erase the ready state", () => {
   });
 });
 
+// PHASE LM PR 1 TASK 3. The lost banner names how many intervals survive,
+// so the model has to count them — and count them by the SAME rule the
+// summary screen will use minutes later (`summaryModel.ts`'s
+// `measuredIntervalCount`, imported rather than re-derived here). A count
+// this screen invented for itself is a count the summary can contradict.
+describe("Phase LM: the model counts what was actually measured", () => {
+  /** An actual for `FIXTURE`'s interval `index`, rowed for exactly
+   *  `elapsedSeconds` — the one variable these tests turn on. */
+  function actualOf(index: number, elapsedSeconds: number): IntervalActual {
+    const iv = FIXTURE.program.intervals[index]!;
+    return {
+      index,
+      elapsedSeconds,
+      distanceMeters: iv.kind === "distance" ? iv.value : 250,
+      avgSplit: iv.targetSplit ?? 132,
+      avgSpm: iv.displaySpm ?? 22,
+      avgHeartRateBpm: 158,
+      restDistanceMeters: 0,
+    };
+  }
+
+  it("counts nothing when the machine reported nothing — the never-rowed surface", () => {
+    expect(armedNeverRowed().measuredIntervals).toBe(0);
+  });
+
+  it("counts the intervals the machine actually finished", () => {
+    expect(
+      model({ actuals: [actualOf(0, 480), actualOf(1, 428.4)] })
+        .measuredIntervals,
+    ).toBe(2);
+  });
+
+  // The disagreement the shared rule exists to prevent, pinned at the
+  // model layer too: a sub-second boundary is not a kept interval on
+  // either screen.
+  it("does not count a sub-second boundary the summary screen would call unmeasured", () => {
+    expect(
+      model({ actuals: [actualOf(0, 0.4), actualOf(1, 428.4)] })
+        .measuredIntervals,
+    ).toBe(1);
+  });
+});
+
 // The precedence `"stale"`-the-member used to carry implicitly, by winning
 // the caller's ternary before `"paused"` could: a lost link beats a frozen
 // erg. Deleting the member made it explicit in two places
@@ -811,7 +856,7 @@ describe("Phase LM: a lost link still beats a frozen erg", () => {
     expect(m.pace.display).toBe("2:10.0");
     expect(m.pace.judgement).toBe("stale");
     expect(m.rate.display).toBe("21");
-    expect(m.nowLabel).toBe("LAST");
+    expect(m.nowLabel).toBe("LAST SEEN");
   });
 
   it("still blanks them while the link is UP — the paused suppression is not weakened", () => {
@@ -1942,9 +1987,13 @@ describe("disconnected: lose and degrade (spec C5)", () => {
     expect(m.rate.judgement).toBe("stale");
   });
 
-  it("relabels NOW as LAST and hollows the indicator", () => {
+  // `LAST SEEN`, not `LAST` (Phase LM PR 1 Task 3, Gate 0): the bare word
+  // reads as an ordinal — the last of several readings — where the fact
+  // the rower needs is that this number is the last one we HEARD, and
+  // that it stopped being current at some point they were not told about.
+  it("relabels NOW as LAST SEEN and hollows the indicator", () => {
     const m = model({ status: "live", linkLost: true });
-    expect(m.nowLabel).toBe("LAST");
+    expect(m.nowLabel).toBe("LAST SEEN");
     expect(m.linked).toBe(false);
   });
 

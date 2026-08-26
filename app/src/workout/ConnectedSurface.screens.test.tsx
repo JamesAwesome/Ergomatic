@@ -617,9 +617,23 @@ describe("screen fixtures for pnpm screenshots", () => {
     ).toMatchFileSnapshot("../../e2e/fixtures/connected-paused.html");
   });
 
+  /** THE FIXTURE CARRIES THE INTERVAL IT HAS OBVIOUSLY ROWED (Phase LM PR
+   *  1 Task 3). It used to pass no `actuals` at all, which was invisible
+   *  until the lost banner started naming how many intervals survive: the
+   *  capture would have shown a surface two intervals into Filling Low,
+   *  2,705 m on its own counter, over a banner reading "Nothing kept." —
+   *  the empty-fixture defect (recurring failure #3) rendered as a
+   *  contradiction a reviewer can see. Interval 0's actual is the record
+   *  a real mid-session drop would have; the frame is unchanged, and so
+   *  are the progress-bar boundaries (`actualFor` prices a TIME interval
+   *  at its own programmed length, which is what `measuredWorkSeconds`
+   *  already assumed). */
   it("pane B, connection lost", async () => {
     await expect(
-      capture("live", { phase: "disconnected" }),
+      capture("live", {
+        phase: "disconnected",
+        actuals: [actualFor(0, FIXTURE.program)],
+      }),
     ).toMatchFileSnapshot("../../e2e/fixtures/connected-disconnected.html");
   });
 

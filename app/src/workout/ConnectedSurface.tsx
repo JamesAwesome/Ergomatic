@@ -573,7 +573,7 @@ export default function ConnectedSurface({
           {end.armed ? "TAP AGAIN" : "END"}
         </button>
       </div>
-      {model.stale && <LostBanner />}
+      {model.stale && <LostBanner kept={model.measuredIntervals} />}
       <div className="connected-surface-body">
         {pane === "live" && <PaneLive model={model} />}
         {pane === "grid" && <PaneGrid model={model} />}
@@ -640,13 +640,47 @@ export default function ConnectedSurface({
  *  lose-and-degrade"), because no transport this app ships can reconnect
  *  mid-piece. So the banner states the fact and what still works, and
  *  nothing on it moves. The `RECONNECTED · CAUGHT UP` banner and the grid
- *  backfill go with the same descope. */
-function LostBanner() {
+ *  backfill go with the same descope.
+ *
+ *  IT NOW BRANCHES, AND IT IS SHORT (Phase LM PR 1 Task 3).
+ *
+ *  The old body — "Row on. The erg is still counting and End keeps what we
+ *  saw." — was twelve words that promised a rower something we had no way
+ *  to deliver in exactly the case that costs them a workout. It is true
+ *  whenever we saw something. A tester who locked their phone before their
+ *  first pull read it, rowed, and lost the piece: nothing had been
+ *  measured, so End kept nothing. James on the wording, 2026-08-25: "Too
+ *  much prose. Holy fuck why is everything a whole sentence. This is a
+ *  workout app people aren't going to read a fucking novel of warnings."
+ *  A rower reads this mid-stroke or not at all, so the whole banner is a
+ *  title plus at most four words (Gate 0).
+ *
+ *  `kept` is `SurfaceModel.measuredIntervals`, which is
+ *  `summaryModel.ts`'s own rule (`measuredIntervalCount`) rather than a
+ *  count this screen invented — the summary screen judges the SAME run
+ *  minutes later, and a banner saying two intervals were kept over a
+ *  summary reading TARGETS ONLY · NOTHING MEASURED is the disagreement
+ *  that rule exists to prevent.
+ *
+ *  IT NAMES NO CAUSE, in either branch, and must not learn to. Three
+ *  producers of the silence are undistinguished here — the design spec's
+ *  own "What we do NOT know" — so the banner says what was observed and
+ *  stops. It also promises no recovery: nothing the rower does to their
+ *  phone brings back a reading that was never taken.
+ *
+ *  The title is the SAME in both branches on purpose. It is what the rower
+ *  has already learned to recognise, it is what the shipped v0.17.0
+ *  release note tells them to expect, and the fact it states — we have
+ *  lost the monitor — is equally true either way. Only the promise
+ *  underneath it changes. */
+function LostBanner({ kept }: { kept: number }) {
   return (
     <div className="connected-lost" role="status">
       <span className="connected-lost-title">LOST THE MONITOR</span>
       <span className="connected-lost-body">
-        Row on. The erg is still counting and End keeps what we saw.
+        {kept === 0
+          ? "Nothing kept."
+          : `${kept} ${kept === 1 ? "interval" : "intervals"} kept.`}
       </span>
     </div>
   );
