@@ -1055,6 +1055,43 @@ describe("LogSession: the monitor log's quiet door (7B iteration)", () => {
   // The rowed key still wins when BOTH exist (a rowed session's own
   // teardown writes both) — this pins that the fallback never shadows the
   // more specific key a rowed session already had.
+  // ULTRAREVIEW bug_002 (2026-08-26). The rowed key is written only by a
+  // session that OPENED A RUN and is never cleared, so on any device that had
+  // ever rowed, the flagship never-rowed failure copied the PREVIOUS
+  // successful session's log and presented it as this failure's evidence. A
+  // false positive is worse than an empty copy: it sends whoever reads the
+  // paste chasing a session that worked. No hardware walk can catch it —
+  // every walk phone has rowed before, so the key is always populated.
+  it("a from=monitor arrival copies THIS session's log, not a previous rowed session's", async () => {
+    const previousSuccess = JSON.stringify([
+      { seq: 0, kind: "write", detail: "A SESSION THAT WORKED" },
+    ]);
+    const thisFailure = JSON.stringify([
+      { seq: 0, kind: "close-no-record", detail: "THIS SESSION HEARD NOTHING" },
+    ]);
+    sessionStorage.setItem("ergomatic:last-rowed-log", previousSuccess);
+    localStorage.setItem("ergomatic:last-session-log", thisFailure);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+    const { workout } = buildSessionFixture();
+    mockWorkouts([workout]);
+    await renderLog("/session/log?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "MONITOR LOG · COPY" }),
+    );
+
+    const copied = writeText.mock.calls[0]![0] as string;
+    expect(copied).toContain("THIS SESSION HEARD NOTHING");
+    expect(copied).not.toContain("A SESSION THAT WORKED");
+    sessionStorage.removeItem("ergomatic:last-rowed-log");
+    localStorage.removeItem("ergomatic:last-session-log");
+  });
+
   it("the rowed-only stash still wins when both keys exist", async () => {
     const rowed = JSON.stringify([{ seq: 0, kind: "write", detail: "f1" }]);
     const general = JSON.stringify([

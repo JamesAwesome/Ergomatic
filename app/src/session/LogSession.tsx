@@ -876,9 +876,32 @@ function withDoorMisses(stash: string): string {
  *  the localStorage key does not have. */
 function readMonitorLogStash(fromMonitor: boolean): string | null {
   const rowed = sessionStorage.getItem("ergomatic:last-rowed-log");
-  const stash =
-    rowed ??
-    (fromMonitor ? localStorage.getItem("ergomatic:last-session-log") : null);
+  // ULTRAREVIEW bug_002 (2026-08-26): WHICH stash is right depends on how
+  // this screen was reached, and only the reader knows that.
+  //
+  // `?from=monitor` means the session that just ended sent us here, so its
+  // own trace is the answer. The rowed key is written ONLY by a session that
+  // opened a run and is never cleared, so preferring it here handed the
+  // flagship never-rowed failure the PREVIOUS successful session's log and
+  // presented it as this failure's evidence — worse than an empty copy,
+  // because it sends whoever reads the paste chasing a session that worked.
+  // (On iOS the WebView's sessionStorage lives for the whole app launch, so
+  // "it dies with the tab" was never a bound in practice.)
+  //
+  // A rowed session writes BOTH keys at the same teardown, so preferring the
+  // session stash costs a rowed arrival nothing — same log, same session.
+  //
+  // A by-hand visit (no `from=monitor`) still reads the rowed key alone: no
+  // session just ended, so "the row I meant to copy" is exactly right there,
+  // and the pin for it stays green.
+  //
+  // Fixed HERE rather than by clearing the rowed key at `connect()`, which
+  // was the first attempt: that also destroyed the by-hand recovery path and
+  // failed that pin. The two readers want different keys; the reader is where
+  // that is known.
+  const stash = fromMonitor
+    ? (localStorage.getItem("ergomatic:last-session-log") ?? rowed)
+    : rowed;
   if (stash === null) return null;
   // The misses only ever exist for a `from=monitor` arrival, and only that
   // arrival's own reader wants them.

@@ -3682,7 +3682,7 @@ that needs no erg, and it can run in a test.
       `drainSummaryReconcile` already does for disconnect/hook-reconcile,
       from `program()`'s own re-arm path, before cancelling it for the
       outgoing run.
-- [ ] **RC-21 — The "RetestShortcut flake" is not a flake. It is an
+- [x] **RC-21 — FIXED 2026-08-26 (ultrareview round). The "RetestShortcut flake" was not a flake. It is an
       unvalidated cast at a trust boundary, and it can crash the You screen
       in production.** Found 2026-08-26 while dismissing it for the third
       time. `useWorkouts.ts:32` reads
@@ -3706,6 +3706,15 @@ that needs no erg, and it can run in a test.
       **Sibling of RC-19** — both are failures dismissed as flaky that
       encode a real defect. Worth asking, once, how many others are on that
       list.
+      **FIXED:** `useWorkouts` now validates with `Array.isArray` and fails
+      into the existing `"error"` state, which already carries a retry. Three
+      table-driven tests (error envelope, `null`, an HTML page served with
+      200) all go red without the guard — verified by reverting it.
+      **How it got fixed rather than deferred again:** an unrelated one-line
+      change to `LogSession.tsx` flipped the race from 1-in-3 to 3-in-3, which
+      made it blocking. **That is the whole lesson — the "flake" was a race
+      whose odds any nearby edit could change, and three sessions of re-running
+      it green were three sessions of not looking.**
 - [ ] **RC-19 — `server/routes/data.test.ts` flakes under the combined
       `--project unit --project client` run, and it is NOT one flaky test.**
       Observed four times across three sessions on 2026-08-25, and the
