@@ -200,6 +200,42 @@ function manualLockedBaseline(
     : null;
 }
 
+// Task 1 (lost-monitor design spec): mirrors `recordPostSacrifice`'s own
+// append idiom (below, module scope) onto the DIFFERENT stash
+// `useMonitorSession.ts`'s own teardown now writes unconditionally —
+// `ergomatic:last-session-log` in `localStorage`, not the rowed-only
+// `ergomatic:last-rowed-log` in `sessionStorage`. `monitorModeRun` is a
+// `from=monitor` arrival that just finished tearing down the connected
+// session that sent it here, so this key is very likely to already hold
+// that session's own exported ring — appending onto it, rather than
+// starting a second stash, keeps one artifact for the whole story:
+// what the session recorded, and what the log screen then found (or
+// didn't). Best-effort and silent on any failure (missing/malformed
+// stash, localStorage disabled) — diagnostics never block this screen's
+// render.
+const LOG_DOOR_MISS_CAPACITY = 500;
+
+function recordLogDoorMiss(condition: string): void {
+  try {
+    const raw = localStorage.getItem("ergomatic:last-session-log");
+    let entries = raw !== null ? (JSON.parse(raw) as MonitorLogEntry[]) : [];
+    const nextSeq =
+      entries.length > 0 ? entries[entries.length - 1]!.seq + 1 : 0;
+    entries.push({
+      seq: nextSeq,
+      atMs: Date.now(),
+      kind: "log-door-miss",
+      detail: condition,
+    });
+    if (entries.length > LOG_DOOR_MISS_CAPACITY) {
+      entries = entries.slice(entries.length - LOG_DOOR_MISS_CAPACITY);
+    }
+    localStorage.setItem("ergomatic:last-session-log", JSON.stringify(entries));
+  } catch {
+    // Best-effort diagnostics; never block or complicate this screen's render.
+  }
+}
+
 /** The monitor mode gate (7C spec §4) — the manual door's route
  *  (`/library/:id/log`) is ALSO where `WorkoutDetail.tsx`'s
  *  `handleConnectedEnded` sends a just-finished connected session
@@ -247,9 +283,21 @@ function manualLockedBaseline(
  *
  *  Exported for tests (task brief): each condition gets its own
  *  independent-removal test against this one function, cheaper than
- *  driving the whole screen four times over. Pure — reads `localStorage`
- *  via `loadMonitorRun()` the same way `loadRun`/`loadDraft` already do at
- *  this screen's other call sites, never a hook of its own. */
+ *  driving the whole screen four times over. Reads `localStorage` via
+ *  `loadMonitorRun()` the same way `loadRun`/`loadDraft` already do at this
+ *  screen's other call sites, never a hook of its own.
+ *
+ *  **Task 1 (lost-monitor design spec): no longer side-effect-free.** A
+ *  `from=monitor` arrival that finds no usable record is exactly the
+ *  flagship shape this phase exists to make self-diagnosing, so every
+ *  null-returning branch below (save the flag itself — an ordinary manual
+ *  visit is not evidence of anything) makes one best-effort append onto
+ *  `ergomatic:last-session-log` via `recordLogDoorMiss`, naming WHICH gate
+ *  missed and never why. The RETURN VALUE and every condition's own logic
+ *  are unchanged; this call site's `useState` lazy initializer may run
+ *  twice under StrictMode in dev, which duplicates at most one diagnostic
+ *  entry — harmless for a best-effort append, same posture every other
+ *  writer onto this stash already takes. */
 // eslint-disable-next-line react-refresh/only-export-components
 export function monitorModeRun(
   search: URLSearchParams,
@@ -257,11 +305,22 @@ export function monitorModeRun(
 ): MonitorRun | null {
   if (search.get("from") !== "monitor") return null;
   const run = loadMonitorRun();
-  if (run === null || run.completedAt === null) return null;
-  if (run.workoutId !== workoutId) return null;
+  if (run === null) {
+    recordLogDoorMiss("no-run");
+    return null;
+  }
+  if (run.completedAt === null) {
+    recordLogDoorMiss("not-completed");
+    return null;
+  }
+  if (run.workoutId !== workoutId) {
+    recordLogDoorMiss("workout-id-mismatch");
+    return null;
+  }
   try {
     buildMonitorLogSteps(run);
   } catch {
+    recordLogDoorMiss("log-steps-build-failed");
     return null;
   }
   return run;
@@ -709,32 +768,52 @@ function RecordingDownloadRow() {
   );
 }
 
+/** Reads the two stashes a connected session's teardown may have left
+ *  behind, rowed one first: `ergomatic:last-rowed-log` (sessionStorage,
+ *  written only when a run actually opened) falls back to
+ *  `ergomatic:last-session-log` (localStorage, written UNCONDITIONALLY on
+ *  every teardown as of Task 1, lost-monitor design spec) — the key that
+ *  exists for the never-rowed case this component used to have nothing to
+ *  show for. A session that opened a run writes both, so the more
+ *  specific rowed key still wins whenever it exists; only the never-rowed
+ *  case ever falls through to the second read. */
+function readMonitorLogStash(): string | null {
+  return (
+    sessionStorage.getItem("ergomatic:last-rowed-log") ??
+    localStorage.getItem("ergomatic:last-session-log")
+  );
+}
+
 /** The wire log's one UI door (7B iteration, 2026-08-08 — James: "1 but I
  *  want it to not disrupt the product experience"). A connected session's
- *  teardown stashes its full trace in sessionStorage
- *  (`useMonitorSession.ts`); the ended hand-off frame navigates HERE
- *  before the diagnostics sheet can be reached, so this screen is where
- *  the operator has always wanted the log and never had it. Deliberately
- *  whisper-quiet: absent entirely unless a rowed stash exists in this
- *  tab, one mono caption line below the actions, no layout the manual
- *  path ever sees.
+ *  teardown stashes its full trace (`useMonitorSession.ts`); the ended
+ *  hand-off frame navigates HERE before the diagnostics sheet can be
+ *  reached, so this screen is where the operator has always wanted the
+ *  log and never had it. Deliberately whisper-quiet: absent entirely
+ *  unless a stash exists, one mono caption line below the actions, no
+ *  layout the manual path ever sees.
  *
  *  I2 fix (final-review): the button used to copy `stash` — a value read
  *  ONCE at mount via `useState`'s lazy initializer. The hold-open
- *  instrument (Phase RC spec 1) appends to this SAME key on
+ *  instrument (Phase RC spec 1) appends to the rowed key on
  *  release/expiry, up to 90s AFTER this screen has already mounted (the
  *  finish hand-off navigates here well before that window closes) — so
  *  the mount-time snapshot could never contain the held-open window, and
  *  exit criterion 1's claim that this button "shows the window" was false
- *  as shipped. `stash` now only gates whether the row renders at all (a
- *  session that never rowed has no key at mount and none ever
- *  materializes later either — that part of the mount-time read is still
- *  correct); the CLICK handler re-reads the key fresh, so a hold that
- *  finished after mount is included. */
+ *  as shipped. `stash` now only gates whether the row renders at all; the
+ *  CLICK handler re-reads live, so a hold that finished after mount is
+ *  included.
+ *
+ *  **Task 1 (lost-monitor design spec): the never-rowed case used to have
+ *  no key at mount and none ever materialized later either — that claim
+ *  is why this whole task exists, and it is no longer true.**
+ *  `readMonitorLogStash` falls back to the never-rowed key both at mount
+ *  and at click time, so a session that never opened a run now renders
+ *  and copies exactly like a rowed one. */
 function MonitorLogRow() {
   const [stash] = useState<string | null>(() => {
     try {
-      return sessionStorage.getItem("ergomatic:last-rowed-log");
+      return readMonitorLogStash();
     } catch {
       return null;
     }
@@ -749,12 +828,12 @@ function MonitorLogRow() {
         // I2 fix: read live, not the mount-time closure — see this
         // component's own doc comment for why the mount-time value can be
         // stale by up to HOLD_OPEN_MS. Falls back to the mount-time
-        // `stash` only if sessionStorage has become unreadable between
+        // `stash` only if BOTH storages have become unreadable between
         // mount and click (extremely unlikely, but never worse than the
         // pre-fix behaviour).
         let latest: string | null;
         try {
-          latest = sessionStorage.getItem("ergomatic:last-rowed-log");
+          latest = readMonitorLogStash();
         } catch {
           latest = null;
         }

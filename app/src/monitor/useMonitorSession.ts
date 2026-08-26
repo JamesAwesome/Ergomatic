@@ -1235,6 +1235,13 @@ export function useMonitorSession(
    *  ever written while the phase is `ready`; once the session is live it is
    *  dead weight until the next `cancel()` clears it. */
   const rowingStreakRef = useRef<RowingStreak | null>(null);
+  /** Task 1 (lost-monitor design spec): counts frames `handleFrame` sees
+   *  while the app-lifecycle listener believes the app is backgrounded —
+   *  `null` when not currently tracking a hidden window (never
+   *  backgrounded yet this connection, or the last one has already been
+   *  reported at resume). Set to `0` on every "background" transition,
+   *  read and reset back to `null` on the matching "foreground" one. */
+  const framesWhileHiddenRef = useRef<number | null>(null);
   /** Phase LL Task 4 (design spec §4's continuity rule), widened to all
    *  three axes by F2a (design spec 2026-08-23-continuity-corroboration
    *  §2): the last live frame's own `totalWorkDistanceMeters`,
@@ -1475,7 +1482,20 @@ export function useMonitorSession(
   const closeRecord = useCallback(
     (terminated: boolean, endedBy: CloseReason): void => {
       const run = runRef.current;
-      if (run === null || run.completedAt !== null) return;
+      // Task 1 (lost-monitor design spec): today this returns silently —
+      // the exact silence that cost a tester a workout and two days to
+      // find. Records only that nothing was open to close and the two
+      // values the caller offered; never why no run had opened (the
+      // caller's own three producers are undistinguished here on
+      // purpose — see the design spec's own hard constraint).
+      if (run === null) {
+        logRef.current?.record(
+          "close-no-record",
+          `endedBy=${endedBy} terminated=${terminated}`,
+        );
+        return;
+      }
+      if (run.completedAt !== null) return;
       const withFinalSeries = withSeries(run);
       runRef.current = completeMonitorRun(
         withFinalSeries,
@@ -1591,6 +1611,13 @@ export function useMonitorSession(
 
   const handleFrame = useCallback(
     (frame: MonitorFrame, driver: MonitorDriver): void => {
+      // Task 1 (lost-monitor design spec): counted for EVERY frame, in
+      // whatever phase, while a hidden window is open — the resume
+      // handler below reports this at the next "foreground" regardless
+      // of what else this frame does.
+      if (framesWhileHiddenRef.current !== null) {
+        framesWhileHiddenRef.current += 1;
+      }
       const phase = stateRef.current.phase;
       // FIRST ROWING FRAME WITH FLYWHEEL EVIDENCE -> live (spec §2:
       // every transition maps to a real event or frame field). Two
@@ -2278,9 +2305,25 @@ export function useMonitorSession(
       // a burst still in flight gets a SECOND stash once they finally do
       // (rewritten from "would never reach sessionStorage" to name it,
       // storage-spine design spec §2, Task 3).
-      // sessionStorage, not localStorage: diagnostics for the tab's own
-      // lifetime, not a record. Read it back from the console:
+      // sessionStorage, not localStorage, for the two keys above:
+      // diagnostics for the tab's own lifetime, not a record. Read them
+      // back from the console:
       //   copy(sessionStorage.getItem("ergomatic:last-monitor-log"))
+      //
+      // Task 1 (lost-monitor design spec): a THIRD key, `ergomatic:
+      // last-session-log`, is written UNCONDITIONALLY below — never gated
+      // on `runRef.current !== null` the way the rowed-only key above is.
+      // The flagship case this phase exists for (armed, never pulled,
+      // phone locked before the first stroke) is exactly the case where
+      // `runRef.current` is `null` by definition, so the rowed-only key
+      // and its console-only sibling are both unreachable on the one
+      // device that matters — no console on iOS, and `MonitorLogRow`
+      // (`LogSession.tsx`) used to render only when the rowed key
+      // existed. `localStorage`, deliberately, not `sessionStorage`: a
+      // WebContent process kill is one of the probe's own three possible
+      // outcomes (design spec's §D1e) and would destroy session-scoped
+      // evidence — the instrument would erase exactly the result it
+      // exists to catch.
       const stash = (): void => {
         const log = logRef.current;
         if (log === null) return;
@@ -2296,6 +2339,7 @@ export function useMonitorSession(
           if (runRef.current !== null) {
             sessionStorage.setItem("ergomatic:last-rowed-log", exported);
           }
+          localStorage.setItem("ergomatic:last-session-log", exported);
         } catch {
           // Quota or privacy mode: diagnostics never break a teardown.
         }
@@ -2570,6 +2614,11 @@ export function useMonitorSession(
         (() => createEventLog(undefined, livenessDepsRef.current.now))
       )();
       logRef.current = log;
+      // Task 1 (lost-monitor design spec): a fresh connection tracks no
+      // hidden window yet — clears whatever a PREVIOUS connection's own
+      // background/foreground pair (or an interrupted one that never saw
+      // its matching foreground) left behind.
+      framesWhileHiddenRef.current = null;
       // S6: once per connect, straight into this session's own ring —
       // see `requestStoragePersistence`'s own doc comment for the full
       // reasoning.
@@ -2647,6 +2696,18 @@ export function useMonitorSession(
       const lifecycleAttempt = { cancelled: false };
       lifecycleAttemptRef.current = lifecycleAttempt;
       const lifecycleResult = registerAppLifecycleListener((event) => {
+        if (event === "background") {
+          // Task 1 (lost-monitor design spec): opens a hidden window for
+          // `handleFrame`'s own counter to fill in — read back and
+          // cleared at the matching "foreground" below.
+          framesWhileHiddenRef.current = 0;
+          return;
+        }
+        // Task 1: with "background" handled above, `AppLifecycleEvent`'s
+        // only other member is "foreground" — this check is now
+        // belt-and-braces against a badly-typed native bridge, not a
+        // reachable branch under the type as declared (same posture as
+        // this file's other known-redundant guards).
         if (event !== "foreground") return;
         hysteresisCancelRef.current?.();
         hysteresisCancelRef.current = null;
@@ -2654,6 +2715,27 @@ export function useMonitorSession(
         log.record(
           "app-lifecycle",
           "resumed from background — stream treated as suspect",
+        );
+        // Task 1 (lost-monitor design spec): what arrived while hidden
+        // and what the ready gate saw, read off state this hook already
+        // tracks — the frame count, the machine's own Active declaration
+        // on the last frame seen, and the ready-gate streak's own
+        // banked-distance evidence (`nextRowingStreak`, only ever
+        // written while `phase === "ready"`, so a resume during `"live"`
+        // reports the last window that phase was in `"ready"` for, if
+        // any). Records what was observed, never why the gate did or
+        // didn't open — three producers of the identical symptom are
+        // undistinguished here on purpose.
+        const framesWhileHidden = framesWhileHiddenRef.current ?? 0;
+        framesWhileHiddenRef.current = null;
+        const lastFrame = stateRef.current.frame;
+        const streak = rowingStreakRef.current;
+        const distanceIncreased = streak !== null && streak.frames > 1;
+        log.record(
+          "resume-frames",
+          `phase=${stateRef.current.phase} framesWhileHidden=${framesWhileHidden} ` +
+            `rowingActive=${lastFrame?.rowingActive ?? "unseen"} ` +
+            `distanceIncreased=${distanceIncreased}`,
         );
         if (hasMarkSuspect(transport)) transport.markSuspect();
       });

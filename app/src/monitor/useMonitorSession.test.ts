@@ -2883,6 +2883,35 @@ describe("useMonitorSession: ending", () => {
     status(200, { elapsedSeconds: 40, distanceMeters: 140 }),
   ];
 
+  /** Task 1 (lost-monitor design spec): the flagship shape this phase
+   *  exists for — connected, programmed, armed, and never pulled (the
+   *  ready gate never sees flywheel evidence, so no run ever opens).
+   *  `teardown` drives the REAL `endSession()` path (not `cancel()`), so
+   *  both `closeRecord`'s own null-run branch and the ordinary teardown
+   *  stash run for real, then unmounts (the hook's own `teardown()` runs
+   *  from the unmount effect, same as every other test in this file). */
+  async function arriveArmedWithoutRowing(): Promise<{
+    result: Session;
+    teardown: () => Promise<void>;
+  }> {
+    const { result, fake, unmount } = harness({
+      program: TWO_INTERVALS,
+      events: timeline,
+    });
+    await connect(result);
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+    expect(result.current.phase).toBe("ready");
+    return {
+      result,
+      teardown: async (): Promise<void> => {
+        await act(async () => {
+          await result.current.endSession();
+        });
+        unmount();
+      },
+    };
+  }
+
   it("the rower's End closes the record, terminates the erg, and reports endedBy user", async () => {
     const { result, fake, transport } = harness({
       program: TWO_INTERVALS,
@@ -3102,6 +3131,29 @@ describe("useMonitorSession: ending", () => {
     expect(sessionStorage.getItem("ergomatic:last-rowed-log")).toBe(
       "THE ROW I MEANT TO COPY",
     );
+  });
+
+  it("stashes the diagnostics log even when no run was ever created (the never-rowed case)", async () => {
+    const { teardown } = await arriveArmedWithoutRowing();
+    await teardown();
+
+    const stash = localStorage.getItem("ergomatic:last-session-log");
+    expect(stash).not.toBeNull();
+    expect((JSON.parse(stash!) as unknown[]).length).toBeGreaterThan(0);
+  });
+
+  it("Task 1 (lost-monitor design spec): endSession closing with no record open writes a close-no-record entry naming what was closed, not why nothing was there", async () => {
+    const { teardown } = await arriveArmedWithoutRowing();
+    await teardown();
+
+    const stash = localStorage.getItem("ergomatic:last-session-log");
+    const entries = JSON.parse(stash!) as { kind: string; detail: string }[];
+    const closeNoRecord = entries.find((e) => e.kind === "close-no-record");
+    expect(closeNoRecord).toBeDefined();
+    // Observed call parameters only — endedBy/terminated, never a reason
+    // for why the record was never opened (the hard constraint against
+    // stating a cause for the silence).
+    expect(closeNoRecord!.detail).toBe("endedBy=rower terminated=true");
   });
 
   it("End is idempotent against the terminal event its own terminate() provokes", async () => {
@@ -6375,6 +6427,67 @@ describe("Phase LL Task 2 mechanism 2: the app-lifecycle listener (background/re
       setVisibility("hidden");
       setVisibility("visible");
     }).not.toThrow();
+  });
+
+  it("Task 1 (lost-monitor design spec): resume records frames seen while hidden and what the ready gate saw — driven through the NATIVE dispatch, same reason the reviewer's probe below needs it (minor 9: the web arm never calls back at all)", async () => {
+    let lifecycleCb: ((event: "background" | "foreground") => void) | undefined;
+    vi.doMock("../adapters/appLifecycle", () => ({
+      registerAppLifecycleListener: vi.fn(
+        (cb: (event: "background" | "foreground") => void) => {
+          lifecycleCb = cb;
+          return () => undefined;
+        },
+      ),
+    }));
+    vi.resetModules();
+
+    const { useMonitorSession: freshUseMonitorSession } =
+      await import("./useMonitorSession");
+    // One status frame, never satisfying the ready gate (no rowingActive,
+    // no banked distance) — the exact shape the flagship defect leaves
+    // behind: a frame arrived, but nothing about it looked like a pull.
+    const fake = createFakeTransport({
+      deviceName: DEVICE_NAME,
+      program: TWO_INTERVALS,
+      events: [status(100, { rowingState: 0 })],
+    });
+    const { result } = renderHook(() =>
+      freshUseMonitorSession({
+        createTransport: () => fake,
+        driverOptions: {
+          settleTicks: 0,
+          prepareSettleTicks: 0,
+          schedule: () => (): void => undefined,
+        },
+      }),
+    );
+
+    await act(async () => {
+      await result.current.connect();
+    });
+    await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
+    expect(result.current.phase).toBe("ready");
+
+    act(() => {
+      lifecycleCb!("background");
+    });
+    tick(fake, 100); // the one frame arrives while "hidden"
+    expect(result.current.phase).toBe("ready"); // the gate never opened
+    act(() => {
+      lifecycleCb!("foreground");
+    });
+
+    const exported = JSON.parse(result.current.exportLog()) as {
+      kind: string;
+      detail: string;
+    }[];
+    const resumeEntry = exported.find((e) => e.kind === "resume-frames");
+    expect(resumeEntry).toBeDefined();
+    // Observed values only: what arrived and what the gate saw — never a
+    // claim about why the gate stayed shut.
+    expect(resumeEntry!.detail).toBe(
+      "phase=ready framesWhileHidden=1 rowingActive=false distanceIncreased=false",
+    );
   });
 
   it("NATIVE arm: registerAppLifecycleListener resolves via the async native path, and its unsubscribe reaches lifecycleUnsubRef (the Promise branch)", async () => {

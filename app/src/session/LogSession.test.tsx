@@ -904,12 +904,76 @@ describe("LogSession: the ledger residual (workoutId mismatch)", () => {
 describe("LogSession: the monitor log's quiet door (7B iteration)", () => {
   it("absent entirely when no rowed stash exists — the manual path never sees it", async () => {
     sessionStorage.removeItem("ergomatic:last-rowed-log");
+    localStorage.removeItem("ergomatic:last-session-log");
     const { workout } = buildSessionFixture();
     mockWorkouts([workout]);
     await renderLog();
     await screen.findByRole("heading", { name: "Hoarfrost" });
 
     expect(document.querySelector(".log-monitor-diag")).toBeNull();
+  });
+
+  // Task 1 (lost-monitor design spec): the flagship case — armed, never
+  // pulled, so no `MonitorRun` and no rowed-only sessionStorage key ever
+  // existed — is exactly the case `ergomatic:last-rowed-log` cannot serve
+  // (`MonitorLogRow`'s own header comment used to claim, falsely as of
+  // this task, that such a session "has no key at mount and none ever
+  // materializes later either"). The unconditional `ergomatic:
+  // last-session-log` stash now covers it.
+  it("renders from the never-rowed stash when no rowed record was ever saved, and copies IT", async () => {
+    sessionStorage.removeItem("ergomatic:last-rowed-log");
+    const stash = JSON.stringify([
+      {
+        seq: 0,
+        atMs: 1000,
+        kind: "close-no-record",
+        detail: "endedBy=rower terminated=true",
+      },
+    ]);
+    localStorage.setItem("ergomatic:last-session-log", stash);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+    const { workout } = buildSessionFixture();
+    mockWorkouts([workout]);
+    await renderLog();
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    const row = screen.getByRole("button", { name: "MONITOR LOG · COPY" });
+    await userEvent.click(row);
+
+    expect(writeText).toHaveBeenCalledWith(stash);
+    localStorage.removeItem("ergomatic:last-session-log");
+  });
+
+  // The rowed key still wins when BOTH exist (a rowed session's own
+  // teardown writes both) — this pins that the fallback never shadows the
+  // more specific key a rowed session already had.
+  it("the rowed-only stash still wins when both keys exist", async () => {
+    const rowed = JSON.stringify([{ seq: 0, kind: "write", detail: "f1" }]);
+    const general = JSON.stringify([
+      { seq: 0, kind: "write", detail: "SOMETHING ELSE" },
+    ]);
+    sessionStorage.setItem("ergomatic:last-rowed-log", rowed);
+    localStorage.setItem("ergomatic:last-session-log", general);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+    const { workout } = buildSessionFixture();
+    mockWorkouts([workout]);
+    await renderLog();
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    const row = screen.getByRole("button", { name: "MONITOR LOG · COPY" });
+    await userEvent.click(row);
+
+    expect(writeText).toHaveBeenCalledWith(rowed);
+    sessionStorage.removeItem("ergomatic:last-rowed-log");
+    localStorage.removeItem("ergomatic:last-session-log");
   });
 
   it("with a stash: one mono line, and tapping it copies the stash byte-for-byte", async () => {
@@ -2274,6 +2338,111 @@ describe("LogSession: monitorModeRun (7C spec §4's four-condition gate)", () =>
     saveMonitorRun(run);
     const search = new URLSearchParams(); // reload/bookmark: no from=monitor
     expect(monitorModeRun(search, MONITOR_WORKOUT_ID)).toBeNull();
+  });
+});
+
+// Task 1 (lost-monitor design spec): a `from=monitor` arrival that finds no
+// usable record is exactly the flagship shape ("a from=monitor arrival with
+// NO record") — each of `monitorModeRun`'s four remaining conditions (the
+// flag itself is condition 1 and never logged: it means this page load was
+// never a monitor arrival at all, not that evidence went missing) now
+// appends WHICH one missed onto the same `ergomatic:last-session-log` stash
+// `useMonitorSession.ts`'s own teardown writes unconditionally — so the
+// never-rowed case's evidence lives in ONE place, reachable through the
+// same copy affordance. Records only which condition, never why.
+describe("LogSession: monitorModeRun logs which condition missed onto the log-door stash", () => {
+  function missEntries(): { kind: string; detail: string }[] {
+    const raw = localStorage.getItem("ergomatic:last-session-log");
+    return raw === null
+      ? []
+      : (JSON.parse(raw) as { kind: string; detail: string }[]);
+  }
+
+  it("condition 1 (no from=monitor flag at all) logs nothing — an ordinary manual visit is not the silence this stash exists to catch", () => {
+    const search = new URLSearchParams();
+    monitorModeRun(search, MONITOR_WORKOUT_ID);
+    expect(missEntries()).toHaveLength(0);
+  });
+
+  it("condition 2 (no record at all): logs no-run", () => {
+    const search = new URLSearchParams("from=monitor");
+    expect(loadMonitorRun()).toBeNull();
+    monitorModeRun(search, MONITOR_WORKOUT_ID);
+    const entries = missEntries();
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      kind: "log-door-miss",
+      detail: "no-run",
+    });
+  });
+
+  it("condition 2 (record not completed): logs not-completed", () => {
+    const { run } = buildMonitorFixture();
+    saveMonitorRun({ ...run, completedAt: null });
+    const search = new URLSearchParams("from=monitor");
+    monitorModeRun(search, MONITOR_WORKOUT_ID);
+    expect(missEntries()[0]).toMatchObject({
+      kind: "log-door-miss",
+      detail: "not-completed",
+    });
+  });
+
+  it("condition 3 (workoutId mismatch): logs workout-id-mismatch", () => {
+    const { run } = buildMonitorFixture();
+    saveMonitorRun({ ...run, workoutId: "some-other-workout" });
+    const search = new URLSearchParams("from=monitor");
+    monitorModeRun(search, MONITOR_WORKOUT_ID);
+    expect(missEntries()[0]).toMatchObject({
+      kind: "log-door-miss",
+      detail: "workout-id-mismatch",
+    });
+  });
+
+  it("condition 4 (buildMonitorLogSteps throws): logs log-steps-build-failed", () => {
+    const { run } = buildMonitorFixture();
+    const { logSeed: _drop, ...v1Shaped } = run;
+    saveMonitorRun({ ...v1Shaped, v: 1 });
+    const search = new URLSearchParams("from=monitor");
+    monitorModeRun(search, MONITOR_WORKOUT_ID);
+    expect(missEntries()[0]).toMatchObject({
+      kind: "log-door-miss",
+      detail: "log-steps-build-failed",
+    });
+  });
+
+  it("a real, engaging arrival logs nothing at all", () => {
+    const { run } = buildMonitorFixture();
+    saveMonitorRun(run);
+    const search = new URLSearchParams("from=monitor");
+    expect(monitorModeRun(search, MONITOR_WORKOUT_ID)).toStrictEqual(run);
+    expect(missEntries()).toHaveLength(0);
+  });
+
+  // Same discipline `recordPostSacrifice`'s own capacity cap already has a
+  // dedicated test for (this file's "POST sacrifice" describe block) —
+  // `recordLogDoorMiss` caps this stash the same way `eventLog.ts`'s own
+  // `record()` caps the ring: oldest entry dropped first, count never
+  // grows past capacity.
+  it("caps the stash at 500 entries, oldest dropped first", () => {
+    const seeded = Array.from({ length: 500 }, (_, i) => ({
+      seq: i,
+      atMs: i,
+      kind: "write",
+      detail: `entry ${i}`,
+    }));
+    localStorage.setItem("ergomatic:last-session-log", JSON.stringify(seeded));
+    const search = new URLSearchParams("from=monitor");
+    expect(loadMonitorRun()).toBeNull();
+
+    monitorModeRun(search, MONITOR_WORKOUT_ID);
+
+    const entries = missEntries();
+    expect(entries).toHaveLength(500);
+    expect(entries[0]).toMatchObject({ seq: 1, detail: "entry 1" });
+    expect(entries[499]).toMatchObject({
+      kind: "log-door-miss",
+      detail: "no-run",
+    });
   });
 });
 
