@@ -83,6 +83,24 @@ counter.** That is CORRECT and is the majority outcome here: the in-flight
 interval's metres are genuinely discarded on close (Phase LM's own owed row).
 Do not record it as cosmetic.
 
+## Leg 2b — sit still after a rest (build A, ~10 seconds, no extra rowing)
+
+Cheapest leg on the card, and it settles an open question outright.
+
+Row a rest-bearing workout to its first rest. When the rest ends and the next
+interval starts, **sit still for five seconds before your first pull.** Then row
+on normally.
+
+**Watch for `PULL TO RESUME` during those five seconds.** Report either way —
+"it appeared" and "it did not" are both results, and the second kills a live
+hypothesis.
+
+Why: the pause detector is meant to be immune at a rest boundary because
+distance resets to zero, but a real capture shows the next interval starting at
+0.1 m of coast, which defeats that guard on its first frame. **Download the
+recording after this piece either way** — the capture is the deliverable, not
+the observation.
+
 ## Leg 3 — the §D1e probe, control arm (build A)
 
 1. Connect, program, **start rowing**.

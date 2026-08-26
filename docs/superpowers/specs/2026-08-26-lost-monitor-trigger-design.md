@@ -177,6 +177,44 @@ platform lifecycle, permissions, backgrounding, OS interruptions — is invisibl
 to every gate we own.** Ask, for any new platform-sourced input: which instrument
 would catch it if it were wrong?
 
+**Task 5 — the PULL TO RESUME flash after a rest. CAPTURE FIRST; no fix
+without a reproduction.** James, 2026-08-26: *"I still sometimes see the resume
+banner flash after rest and before my first pull."*
+
+**Mechanism identified, reproduction NOT achieved.** `nextFreezeRun`
+(`useMonitorSession.ts:955`) declares a pause after `PAUSED_FRAME_HOLD` (4)
+consecutive frames whose `distance|split|spm` key is identical. Its defence
+against rest boundaries is the `frame.distanceMeters <= 0` guard, whose own
+comment claims *"every boundary frame reads `d 0`"*.
+
+**On real hardware that claim is false.** Replaying
+`walk-2026-08-25/rests-finished-recording.jsonl.gz` through the predicate, the
+first interval after a rest begins at **`d = 0.1`**, not 0 — coast metres from a
+flywheel that never stopped. The guard is already false on the new interval's
+first frame, so nothing stands between a still rower and a pause declaration
+about 2 s later.
+
+**The capture produces ZERO false pauses**, and the reason matters: James pulled
+immediately at both boundaries (`0.1 -> 0.2 -> 1.8 -> 3.6` and `0 -> 1.8 ->
+3.8`). **The fixture does not contain the behaviour that triggers the bug.** So
+the mechanism is reachable and unproven, and this spec does not pretend
+otherwise.
+
+*A wrong hypothesis, recorded because it cost a minute and would have cost a
+task:* the stuck `rowingActive` byte is NOT involved. `nextFreezeRun` does not
+read it.
+
+**What this task delivers now:** the walk leg that reproduces it (walk card leg
+2b), and the analysis above. **The fix is specced only once a capture shows the
+false pause.** The likely shape — the predicate needs "this interval has not
+seen a pull yet", the ready-gate concept applied per-interval rather than per
+session — is a NOTE, not a decision.
+
+**Note the family resemblance**, which is why it belongs in this spec rather
+than its own: this is a second predicate alarming on a proxy. "Nothing changed
+for 2 s" stands in for "the rower stopped", and coast metres defeat its one
+guard — the same shape as a lifecycle edge standing in for stream health.
+
 ## Exit criteria
 
 1. A Control Center swipe and a notification peek produce **zero**
@@ -191,7 +229,10 @@ would catch it if it were wrong?
    `"resumed from background"` line asserts one nobody checked.
 5. Which path opened the record (declared vs fallback) is visible in the ring.
 6. Re-walk leg A passes: `1 OF 1 · READY`, no banner, live numbers while rowing.
-7. **A desk replay reproduces the old bug and proves the fix** — a recording
+7. **Task 5 has a capture** showing the false pause, or a stated finding that
+   five seconds of stillness after a rest does NOT produce one. Either settles
+   it; neither is assumed.
+8. **A desk replay reproduces the old bug and proves the fix** — a recording
    carrying a lifecycle foreground over a healthy stream, red before the fix,
    green after. Until this exists, the only thing standing between this class of
    defect and a rower is James at an erg.
