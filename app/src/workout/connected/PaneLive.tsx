@@ -52,8 +52,11 @@
 // deletions); the `/500m` unit beside the split numeral; the word TARGET.
 //
 // STALE: `model.nowLabel` is the ONLY hero label left post-redesign — it
-// collapses to `stale ? "LAST" : ""` (`surfaceModel.ts`'s own comment), so
-// the existing `!== ""` guard below renders nothing at every other status.
+// collapses to `stale && !armedMirror ? "LAST" : ""` (`surfaceModel.ts`'s
+// own comment). The `&& !armedMirror` half is Phase LM Task 2's: a surface
+// that lost the link BEFORE the first pull is showing a target preview, and
+// captioning that `LAST` would claim a reading that never existed. The
+// existing `!== ""` guard below renders nothing at every other status.
 //
 // ARMED (design spec §2D): the split hero's ACTUAL reading previews the
 // target value (`surfaceModel.ts`'s `armedMirror`) with its judgement

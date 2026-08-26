@@ -1451,9 +1451,10 @@ export function buildGridModel(args: {
       // judgement the rower had earned, on the one pane whose job is to show
       // what they have done, the moment a link dropped.
       //
-      // `staleFor` stays "the single place that decides WHEN a reading is
-      // stale" — this is not a second opinion about when, it is a cell that
-      // holds no reading to ask about.
+      // `input.linkLost` stays "the single place that decides WHEN a reading
+      // is stale" (Phase LM Task 2 retired `staleFor`, and `SurfaceStatus`
+      // can no longer express the link at all) — this is not a second
+      // opinion about when, it is a cell that holds no reading to ask about.
       const pace = judgedValue({
         kind: "pace",
         actual: actual?.avgSplit ?? null,
