@@ -3682,6 +3682,30 @@ that needs no erg, and it can run in a test.
       `drainSummaryReconcile` already does for disconnect/hook-reconcile,
       from `program()`'s own re-arm path, before cancelling it for the
       outgoing run.
+- [ ] **RC-21 — The "RetestShortcut flake" is not a flake. It is an
+      unvalidated cast at a trust boundary, and it can crash the You screen
+      in production.** Found 2026-08-26 while dismissing it for the third
+      time. `useWorkouts.ts:32` reads
+      `const workouts = (await res.json()) as LibraryWorkout[]` — **a cast,
+      not a check** — and sets `state: "ready"` with it. `RetestShortcut`
+      (`you/RetestShortcut.tsx:29`) correctly guards
+      `state !== "ready"` and then calls `workouts.find(...)`, so the
+      invariant "ready implies array" is the only thing between a 200
+      response and a `TypeError: workoutsState.workouts.find is not a
+      function` that takes down the screen.
+      **Any 200 whose body is not an array reaches it:** an error envelope,
+      `null`, `{}`, or the HTML a captive portal or a misrouted proxy
+      returns with a 200. The unit suite reproduces it intermittently
+      through mock ordering, which is exactly why it kept being recorded as
+      a flake — **a TypeError thrown from a component is never a flake; it
+      is a real crash with a timing-dependent trigger.**
+      **Fix shape:** validate the shape before declaring ready
+      (`Array.isArray`, and reject otherwise into the existing `"error"`
+      state, which already has a retry). Then the cast can go. Cheap, and it
+      converts a crash into the retry path that already exists.
+      **Sibling of RC-19** — both are failures dismissed as flaky that
+      encode a real defect. Worth asking, once, how many others are on that
+      list.
 - [ ] **RC-19 — `server/routes/data.test.ts` flakes under the combined
       `--project unit --project client` run, and it is NOT one flaky test.**
       Observed four times across three sessions on 2026-08-25, and the
