@@ -60,9 +60,11 @@
 // and unbackfillably so — for this row and every earlier one. Fixing it
 // needs a new stored field plus a migration, and both fields that already
 // exist were examined and rejected: `endedBy` would assert a close reason
-// for a record that never existed, and `deviceName` is not even knowable
-// here, there being no record to read it from. Queued with that analysis
-// at ROADMAP `## Phase LM`.
+// for a record that never existed, and `deviceName` — which IS reachable via
+// `loadLastDevice()`, contrary to an earlier claim here — is a best-effort
+// LAST-USED name, so posting it would have the row assert that a named erg
+// supplied numbers that came off nothing. Queued with that analysis at
+// ROADMAP `## Phase LM`.
 
 import { fmtDuration } from "../../domain/duration.js";
 import { fmtSplit } from "../../domain/format.js";

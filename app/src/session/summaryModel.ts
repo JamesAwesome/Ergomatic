@@ -1151,7 +1151,7 @@ function buildTimerModel(run: SessionRun, steps: LogStep[]): SummaryModel {
 // Manual door
 // ---------------------------------------------------------------------
 
-/** Phase LM PR 1 Task 4: the third answer this screen's SOURCE slot can
+/** Phase LM PR 1 Task 4: the fourth answer this screen's SOURCE slot can
  *  give, beside `PM5 <name>` / `TIMER` / `LOGGED BY HAND`. That slot
  *  answers ONE question — where did these numbers come from — and for a
  *  connected arrival with no record the honest answer is that there is no

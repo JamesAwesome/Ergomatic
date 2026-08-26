@@ -499,9 +499,21 @@ not silently take the cheapest:**
      MEASURED`, because `buildMonitorModel` sets `sourceLabel: run.deviceName`
      (`summaryModel.ts:1025`) with no measurement gate. So "claims provenance
      for nothing" cannot be the objection; it is established behaviour.
-     **The real objection is simpler and fatal: with no record, `deviceName` is
-     UNKNOWABLE.** There is nothing to read it from. Do not quote the struck
-     text in a PR body.
+     **"Unknowable" was ALSO false — corrected at Task 4's review.**
+     `loadLastDevice()` (`ConnectedInterstitial.tsx:57`) reads
+     `ergomatic.lastMonitorDevice`, written unconditionally on every successful
+     pair (`:321`), and the navigation to `?from=monitor` happens after that
+     effect. The name IS sitting in localStorage in the flagship case. Nobody
+     considered it; `grep lastDevice` over the spec, plan, report and ROADMAP
+     returned zero.
+     **The surviving objection, which is the one to carry forward:** that value
+     is a best-effort LAST-USED name, not this session's authoritative device,
+     and posting it would make the stored row read `PM5 432331249` — a STRONGER
+     false claim than `LOGGED BY HAND`, asserting the machine supplied numbers
+     that came off nothing. It would additionally grant the row a wall-clock
+     `timeLabel` the live screen never shows (`storedSummary.ts:296`, gated on
+     `source !== "LOGGED BY HAND"`), and still could not make the row say "no
+     reading" without a second stored signal that does not exist.
 2. **Live screen only, stored row explicitly left wrong.** Correct what the rower
    sees at save time and accept the stored row keeps reading `LOGGED BY HAND`.
    Acceptable at PR 1's scope, and **only if the PR states the full cost in plain

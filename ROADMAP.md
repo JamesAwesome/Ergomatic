@@ -3682,6 +3682,21 @@ that needs no erg, and it can run in a test.
       `drainSummaryReconcile` already does for disconnect/hook-reconcile,
       from `program()`'s own re-arm path, before cancelling it for the
       outgoing run.
+- [ ] **RC-19 — `server/routes/data.test.ts` flakes under the combined
+      `--project unit --project client` run, and it is NOT one flaky test.**
+      Observed four times across three sessions on 2026-08-25, and the
+      interesting part is that it fails a DIFFERENT test each time: once
+      *"DELETE is idempotent"*, once *"accepts distanceMeters at its exact
+      upper bound"*, and twice unnamed. Always green on re-run, always green
+      under `--project unit` alone (46 files / 1434 tests), and green in
+      isolation. **A different assertion failing each time means the fault is
+      shared state or ordering, not a bad assertion** — chasing the named test
+      will find nothing. Landed here rather than left in three task reports
+      (recurring failure #14). First moves, from the flake-hunt playbook this
+      repo already has: capture the failure instead of re-running to green,
+      then check whether failures cluster by worker index or by file ordering,
+      to separate a harness race from an app race. Related in kind to the two
+      e2e flakes already tracked.
 - [ ] **RC-18 — `"PM5"` is baked into a fallback the rower can SEE, and it
       will be wrong the day we support another monitor.** James, 2026-08-25,
       on Phase LM Task 4's new label: *"We may one day support other rowers.
@@ -5807,7 +5822,7 @@ and this is the record of what that costs and of the analysis the next
 attempt should start from rather than redo.
 
 - **What ships in PR 1:** the end-of-session summary for a `?from=monitor`
-  arrival with NO record reads `NO PM5 READING` in the SOURCE slot instead of
+  arrival with NO record reads `NO MONITOR READING` in the SOURCE slot instead of
   `LOGGED BY HAND`, and takes the workout's own target hint instead of
   `BY FEEL`. The predicate is deliberately narrow — `from=monitor` AND no
   record in storage at all — because the other three `monitorModeRun` miss
@@ -5825,9 +5840,15 @@ attempt should start from rather than redo.
   the stored row honest needs a NEW stored field plus a migration; neither
   existing candidate works. `endedBy` would assert a close reason for a record
   that never existed (a sixth enum value, and `buildLinkLostLine`'s deliberate
-  equality check would render it invisibly anyway); `deviceName` is not even
-  knowable in this case, there being no record to read it from — a point
-  worth keeping, because the spec rejected `deviceName` for a DIFFERENT
+  equality check would render it invisibly anyway); `deviceName` IS reachable
+  (`loadLastDevice()`, `ConnectedInterstitial.tsx:57`, written on every pair at
+  `:321` — the "unknowable" claim was itself false and is corrected here), but
+  it is a best-effort LAST-USED name rather than this session's authoritative
+  device, and posting it would make the stored row assert that a named erg
+  supplied numbers that came off nothing — a STRONGER false claim than
+  `LOGGED BY HAND` — while granting it a wall-clock `timeLabel` the live screen
+  never shows. Worth keeping, because the spec first rejected `deviceName` for a
+  DIFFERENT
   reason ("claims PM5 provenance for numbers that came off nothing") that
   **already describes shipped behaviour**: a monitor-door row whose record
   exists but measured nothing posts `deviceName` today and renders
