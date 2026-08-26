@@ -836,10 +836,39 @@ function withDoorMisses(stash: string): string {
     const entries = JSON.parse(stash) as MonitorLogEntry[];
     const misses = JSON.parse(raw) as MonitorLogEntry[];
     if (!Array.isArray(entries) || !Array.isArray(misses)) return stash;
+    // ULTRAREVIEW bug_001 (2026-08-26): merge only the misses that belong to
+    // THIS session. The key is append-only and nothing clears it, so without
+    // this a real diagnostic copy carried every miss the install had ever
+    // recorded — months of stale entries from reloaded bookmarks — diluting
+    // the one artifact whose whole job is to explain the failure in front of
+    // you.
+    //
+    // The cut is principled rather than a chosen window: a miss stamped
+    // BEFORE this session's ring even began cannot be about this session.
+    // Both records carry `atMs` from the same `Date.now` clock.
+    //
+    // FAILS OPEN. `atMs` is optional on a ring entry (`eventLog.ts`), and a
+    // ring with no stamped entry gives no floor to compare against — so when
+    // there is no floor, every miss is kept, exactly as before. Losing a
+    // relevant miss is worse than keeping an irrelevant one: the miss is
+    // often the only record of WHY the door was missed at all.
+    //
+    // Storage growth needs no separate cleanup: `LOG_DOOR_MISS_CAPACITY`
+    // already bounds the key at 500 entries. Pruning the STORED list here
+    // would mean writing during a render, which is what this function is
+    // called from.
+    const stamps = entries
+      .map((e) => e.atMs)
+      .filter((t): t is number => typeof t === "number");
+    const floor = stamps.length > 0 ? Math.min(...stamps) : null;
+    const relevant =
+      floor === null
+        ? misses
+        : misses.filter((m) => typeof m.atMs !== "number" || m.atMs >= floor);
     let seq = entries.length > 0 ? entries[entries.length - 1]!.seq + 1 : 0;
     return JSON.stringify([
       ...entries,
-      ...misses.map((m) => ({ ...m, seq: seq++ })),
+      ...relevant.map((m) => ({ ...m, seq: seq++ })),
     ]);
   } catch {
     return stash;

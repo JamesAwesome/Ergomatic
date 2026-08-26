@@ -972,6 +972,92 @@ describe("LogSession: the monitor log's quiet door (7B iteration)", () => {
   // The merge degrades to the ring rather than losing it: a diagnostics
   // reader must never come away with LESS than it would have had before
   // the misses key existed. Both malformed shapes a hand-edited or
+  // ULTRAREVIEW bug_001 (2026-08-26). The misses key is append-only and
+  // nothing clears it, so a real diagnostic copy used to carry every miss the
+  // install had ever recorded — months of stale entries from reloaded
+  // bookmarks — diluting the one artifact whose job is to explain the failure
+  // in front of you. A miss stamped BEFORE this session's ring began cannot
+  // be about this session.
+  it("copies only the misses from THIS session, not the install's whole history", async () => {
+    sessionStorage.removeItem("ergomatic:last-rowed-log");
+    const ring = JSON.stringify([
+      { seq: 0, atMs: 5000, kind: "write", detail: "THIS SESSION" },
+      { seq: 1, atMs: 5200, kind: "write", detail: "THIS SESSION TOO" },
+    ]);
+    localStorage.setItem("ergomatic:last-session-log", ring);
+    localStorage.setItem(
+      "ergomatic:log-door-misses",
+      JSON.stringify([
+        {
+          seq: 0,
+          atMs: 100,
+          kind: "log-door-miss",
+          detail: "ANCIENT-BOOKMARK",
+        },
+        { seq: 1, atMs: 4999, kind: "log-door-miss", detail: "STILL-TOO-OLD" },
+        { seq: 2, atMs: 5100, kind: "log-door-miss", detail: "no-run" },
+      ]),
+    );
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    const { run } = buildMonitorFixture();
+    saveMonitorRun({ ...run, workoutId: workout.id });
+    await renderManualLog(workout.id, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "MONITOR LOG · COPY" }),
+    );
+    const copied = writeText.mock.calls[0]![0] as string;
+    expect(copied).toContain("no-run");
+    expect(copied).not.toContain("ANCIENT-BOOKMARK");
+    expect(copied).not.toContain("STILL-TOO-OLD");
+    localStorage.removeItem("ergomatic:last-session-log");
+    localStorage.removeItem("ergomatic:log-door-misses");
+  });
+
+  // FAILS OPEN: a ring with no `atMs` gives no floor, so every miss is kept.
+  // Losing a relevant miss is worse than keeping an irrelevant one — the miss
+  // is often the only record of WHY the door was missed at all.
+  it("keeps every miss when the ring carries no timestamp to compare against", async () => {
+    sessionStorage.removeItem("ergomatic:last-rowed-log");
+    localStorage.setItem(
+      "ergomatic:last-session-log",
+      JSON.stringify([{ seq: 0, kind: "write", detail: "NO STAMP HERE" }]),
+    );
+    localStorage.setItem(
+      "ergomatic:log-door-misses",
+      JSON.stringify([
+        { seq: 0, atMs: 1, kind: "log-door-miss", detail: "ANCIENT-BUT-KEPT" },
+      ]),
+    );
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+    const workout = manualWorkoutFixture();
+    mockWorkouts([workout]);
+    mockBaselines();
+    const { run } = buildMonitorFixture();
+    saveMonitorRun({ ...run, workoutId: workout.id });
+    await renderManualLog(workout.id, "?from=monitor");
+    await screen.findByRole("heading", { name: "Hoarfrost" });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "MONITOR LOG · COPY" }),
+    );
+    expect(writeText.mock.calls[0]![0] as string).toContain("ANCIENT-BUT-KEPT");
+    localStorage.removeItem("ergomatic:last-session-log");
+    localStorage.removeItem("ergomatic:log-door-misses");
+  });
+
   // half-written key can take.
   it.each([
     ["unparseable JSON", "{not json"],
