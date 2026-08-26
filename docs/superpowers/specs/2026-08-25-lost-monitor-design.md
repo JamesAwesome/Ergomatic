@@ -423,8 +423,19 @@ Failing test first. Two messages where there is one today.
 - **`LAST` becomes `LAST SEEN`** on both heroes, and everything stale greys to
   `--ink-3` together, including the metres. That is the existing house idiom
   (*"every stale value greys to --ink-3"*), not a new treatment.
-- **The banner does not appear on the pre-row state at all.** With `READY`
-  restored (Task 2), there is nothing for it to say there.
+- **The banner is keyed on the LINK, not on the phase.** ~~It does not appear on
+  the pre-row state at all.~~ **CORRECTED 2026-08-25 at Task 3, and the error
+  was the controller's transcription of Gate 0, not the implementers.** The
+  artifact's proposed pre-row mockup drew a HEALTHY armed surface as the
+  replacement for a LOST armed surface, which quietly conflated two different
+  situations, and the spec line inherited the conflation. The correct rule:
+  - **pre-row, link healthy** — no banner. Nothing is wrong, and `READY` says
+    everything.
+  - **pre-row, link lost** — banner renders, saying nothing was kept. This is
+    James's actual bug case, and suppressing the banner here would put it back
+    to `· LOST` in small mono, which is the exact thing he said is easy to miss.
+  Task 2 already shipped it this way and pinned it with a deliberate test;
+  Task 3 kept it and branched the copy honestly. Both were right to.
 
 Copy length is a hard constraint on this task, not a preference: a rower reads
 this mid-stroke or not at all.
