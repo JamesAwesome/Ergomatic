@@ -6204,9 +6204,28 @@ section:not(.news-pinned) .news-row:last-of-type {
    AFTER `.connected-hero-value` so its `color` wins over inheritance; it
    never has to out-rank `connected-value-absent` (armed is never
    `absent` — `armedMirror` always substitutes a real preview number, not a
-   dash) or a judgement class (armed's own judgement is always `"within"`,
-   which — like every other `-within` case — declares no `color` of its
-   own to conflict with). */
+   dash).
+
+   IT NOW OUT-RANKS A JUDGEMENT CLASS, AND THAT IS THE ACCEPTED OUTCOME
+   (fix round, whole-branch review LOW — the reasoning was stale, the
+   pixels are correct). This comment used to argue the case could not
+   arise: "armed's own judgement is always `within`, which declares no
+   `color`". That held only while armed and stale were mutually exclusive.
+   Phase LM PR 1 Task 2 pulled the link out of `SurfaceStatus`, so an armed
+   surface can now be stale, `judgeActual`'s own first line returns
+   `"stale"` before anything else, and the split hero carries BOTH
+   `.timer-card-actual-stale` (`--ink-3`) and `.connected-hero-ghost`
+   (`--ink-4`). Equal specificity, so source order decides and the ghost
+   wins — it is declared here, well below `.timer-card-actual-stale`.
+
+   That is the right answer, not a collision to break: the number under a
+   ghost at armed is a TARGET PREVIEW, not a held reading, so the stale
+   greying has nothing to describe and `LAST SEEN` is suppressed on the
+   same branch for the same reason (`surfaceModel.ts`'s `nowLabel`). A
+   preview should read as a preview whether or not the link is up.
+   `--ink-4` on `--surface` measures 5.29:1, clear of the 4.5:1 floor, so
+   the exception costs no contrast. Anything else that ever wants to
+   out-rank the ghost has to be declared below it, on purpose. */
 .connected-hero-ghost {
   color: var(--ink-4);
 }

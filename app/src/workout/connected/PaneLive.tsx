@@ -60,14 +60,25 @@
 // existing `!== ""` guard below renders nothing at every other status.
 //
 // ARMED (design spec §2D): the split hero's ACTUAL reading previews the
-// target value (`surfaceModel.ts`'s `armedMirror`) with its judgement
-// forced to `"within"` — plain ink, indistinguishable from an ordinary
-// unjudged reading. §2D wants MORE than that: a GHOST, ink-4, never ink-5.
+// target value (`surfaceModel.ts`'s `armedMirror`) with its judging target
+// forced null, so an armed surface with the link UP judges `"within"` —
+// plain ink, indistinguishable from an ordinary unjudged reading. §2D
+// wants MORE than that: a GHOST, ink-4, never ink-5.
 // `connected-hero-ghost` is the one bit of pane-local styling this file
 // adds on top of the model's own judgement class, keyed on `model.status`
 // directly (armed is the only status where the split hero previews a
 // number nobody has actually rowed yet). The rate hero does NOT ghost —
 // §2D: "rate shows 0 plain ink" — so no equivalent class there.
+//
+// "ALWAYS within" WAS TRUE ONLY WHILE ARMED AND STALE COULD NOT COEXIST
+// (fix round, whole-branch review LOW). Task 2 pulled the link out of
+// `SurfaceStatus`, so an armed surface can be stale and `judgeActual`
+// returns `"stale"` before it looks at anything else — the hero then wears
+// `.timer-card-actual-stale` AND this ghost, and the ghost wins on source
+// order. Accepted, deliberately: the number underneath is a target
+// preview, not a held reading, so a stale grey has nothing to describe.
+// `index.css`'s `.connected-hero-ghost` rule carries the full reasoning
+// and the measured contrast.
 
 import type { Judgement } from "../../../domain/judge.js";
 import ConnectedProgressBar from "./ConnectedProgressBar";
