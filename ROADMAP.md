@@ -3682,6 +3682,27 @@ that needs no erg, and it can run in a test.
       `drainSummaryReconcile` already does for disconnect/hook-reconcile,
       from `program()`'s own re-arm path, before cancelling it for the
       outgoing run.
+- [ ] **RC-17 — The tier-A total line drops rest, and only `pnpm screenshots`
+      sees it.** Found 2026-08-25 by Phase LM's Task 2 implementer, on a
+      capture unrelated to its own work, and landed here rather than left in a
+      task report (recurring failure #14). `e2e/screenshots.spec.ts:2370`
+      expects `.summary-total-line` to read `4:04 total · plus 242 m coasting
+      in rest`; it renders `2:04 total`. **Reproduced on a fresh
+      `docker compose down -v` volume, so it is not stale test data.**
+      Diagnosis from the code, not by elimination: the seeded row is tier A
+      (`machineWorkSeconds`/`machineWorkMeters` both set), and `buildHeroes`'s
+      tier-A branch calls `buildStoredTotalLine(row, timeSeconds, {})` with an
+      EMPTY `stepSums` — the fix-round-2 C1 change from RC-5
+      (`storedSummary.ts:620-634`) — while that seed sets neither
+      `restSeconds` nor `restMeters`, so the rest half of the line vanishes.
+      **Owner is whoever landed RC-5, not Phase LM**, and the one-line fix is
+      written down in
+      `.superpowers/sdd/2026-08-25-lost-monitor-plan/task-2-report.md`.
+      **Why it went unnoticed: `pnpm screenshots` is not part of CI**, so a
+      capture assertion can rot indefinitely between the hand-runs that touch
+      it. That gap is the more interesting half of this row — the unit test
+      asserting the same string passes, because it supplies the step sums the
+      seed does not.
 - [ ] **RC-14 — The avg-pace verdict's zero-fire on an ORDINARY finish
       (walk 2026-08-25, W-2). A SECOND, DISTINCT shape from RC-13 — do
       not fold them.** Piece 1 of the walk (`w 1' r1 / w 500m r1 / w 1'`,
