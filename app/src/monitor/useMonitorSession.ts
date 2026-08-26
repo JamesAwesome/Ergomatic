@@ -917,7 +917,10 @@ export interface MonitorSessionDeps {
  * THREE rowing metrics — `distanceMeters`, `currentSplit`, `spm` —
  * unchanged TOGETHER across `PAUSED_FRAME_HOLD` consecutive frames while
  * the machine reads `rowing` AND the interval has banked distance
- * (`distanceMeters > 0`). Exit on ANY change to any of the three.
+ * (`distanceMeters > 0`) AND THIS INTERVAL HAS BEEN PULLED IN
+ * (`PULL_EVIDENCE_FRAMES`, added 2026-08-26 — read its comment before
+ * changing anything here; the hold below is necessary and has not been
+ * sufficient since). Exit on ANY change to any of the three.
  *
  * Why `elapsedSeconds` is NOT in the key (§17 item 20, ANSWERED by the
  * 2026-08-08 hardware recording): on a real PROGRAMMED timed interval the
@@ -953,14 +956,22 @@ export interface MonitorSessionDeps {
  * elapsed broke the run one frame before the 4-hold fired; without
  * elapsed, the zeros could keep matching for as long as the rower's first
  * strokes take to move split/spm — an unbounded run no fixed hold clears.
- * Every boundary frame carries `d 0`, and a genuine mid-interval stop has
- * distance already banked, so freeze frames simply do not COUNT until the
- * interval has distance: the boundary case resets on the guard, not on a
- * one-frame margin. (The rower who stops at the exact instant of a
- * changeover, having moved zero meters in the new interval, reads as the
- * interval's own waiting state rather than PAUSED — the display cost is
- * nothing.) The 4-frame hold itself is retained as recorded-margin
- * against single-frame repeats.
+ * Every frame of THAT no-rest changeover carries `d 0`, and a genuine
+ * mid-interval stop has distance already banked, so freeze frames simply do
+ * not COUNT until the interval has distance: the no-rest boundary case
+ * resets on the guard, not on a one-frame margin. (The rower who stops at
+ * the exact instant of a changeover, having moved zero meters in the new
+ * interval, reads as the interval's own waiting state rather than PAUSED —
+ * the display cost is nothing.) The 4-frame hold itself is retained as
+ * recorded-margin against single-frame repeats.
+ *
+ * **THAT GUARD DOES NOT COVER A REST BOUNDARY, and this comment used to
+ * claim it covered every boundary** (2026-08-26). Measured, by decoding
+ * 0x0031 across every committed recording: the first work frame after a
+ * REST reads `d 0.1` — coast metres from a flywheel that never stopped —
+ * not `d 0` (`walk-2026-08-25/rests-finished-recording.jsonl.gz`, second
+ * changeover). The guard is therefore already clear on that frame, which is
+ * how the false pause `PULL_EVIDENCE_FRAMES` exists to stop got through.
  *
  * Exit is on ANY CHANGE, never on "advance" — equality is the whole
  * predicate. (The record's backwards elapsed ticks, up to −0.57 s,
@@ -997,15 +1008,82 @@ export interface MonitorSessionDeps {
  */
 export const PAUSED_FRAME_HOLD = 4;
 
+/**
+ * HOW MUCH PROGRESS COUNTS AS "THIS INTERVAL HAS BEEN PULLED IN" (Phase LM
+ * fix round 2, task 5 — the second half of the predicate).
+ *
+ * Reported at the erg on 2026-08-26: `PULL TO RESUME` about two seconds into
+ * a work interval, before the rower had taken a stroke in it, with the
+ * flywheel still coasting. The conditions were a pull or two DURING the rest
+ * and then stopping as the work interval began (walk card
+ * `phase-lm-pr1.md`, leg 2b). A coast that has decayed below the wire's own
+ * 0.1 m resolution reports the SAME distance frame after frame, with split
+ * and rate at 0, above a distance that is nevertheless greater than zero —
+ * so `nextFreezeRun`'s `distanceMeters <= 0` guard is already clear on the
+ * interval's first frame, four identical frames follow, and the app tells
+ * the rower to resume something they never started. The same class as the
+ * `READY`/`WORK` defect this phase fixed one predicate over: a state
+ * machine asserting a transition the rower never made.
+ *
+ * So the hold is necessary and no longer sufficient. A pause is a claim
+ * about a rower who WAS rowing, and this counter is the evidence for the
+ * "was": FIVE consecutive frames of strictly increasing distance inside
+ * this interval, evaluated by the very same `nextRowingStreak` the ready
+ * gate's own fallback uses, whose doc comment carries the derivation —
+ * "the shape a coast cannot hold and a rower cannot fail."
+ *
+ * IT IS A SEPARATE CONSTANT FROM `ROWING_ACTIVE_FALLBACK_FRAMES` ON
+ * PURPOSE, though today they hold the same number for the same recorded
+ * reason. The two gates want opposite asymmetries and must be free to move
+ * apart: the ready gate is deliberately GENEROUS about a coast because
+ * failing it silently loses a whole session, while this gate is the
+ * cautious one — the cost of holding it too long is a couple of seconds of
+ * missing instruction, and the cost of opening it too early is the defect
+ * above. Tie them together and a future change made for the ready gate's
+ * asymmetry silently changes this one's.
+ *
+ * WHAT THIS DELIBERATELY DOES NOT KEY ON, and why:
+ * - **Stroke rate.** The record says rate reads 0 for the first ~4 s of a
+ *   work interval while the metres are visibly climbing (three separate
+ *   changeovers in `walk-2026-08-25/rests-finished-recording.jsonl.gz`), and
+ *   the interval's own first frame carries the PREVIOUS interval's rate
+ *   over a zeroed clock — so a rate-based gate is both late for a rower who
+ *   is rowing and already satisfied for one who is not. It is also the
+ *   field that stays PINNED through a real stop (`PAUSED_FRAME_HOLD`'s own
+ *   comment), so it can neither open nor close this gate honestly.
+ * - **`rowingActive`.** Same standing reason `PAUSED_FRAME_HOLD` gives, now
+ *   with the byte FALSIFIED as a hard gate (Phase LM task 2: it read
+ *   `false` through an entire real row). Keying a pause on it would trade
+ *   this defect for a silent one — a genuine stop that never says anything.
+ *
+ * ITS ONE KNOWN DEPENDENCE: frames arrive at ~2 Hz in every committed
+ * recording, and "strictly increasing" is evaluated per frame, so a much
+ * faster stream would need less real motion to satisfy it and a much slower
+ * rower more. That is the same dependence `ROWING_ACTIVE_FALLBACK_FRAMES`
+ * already carries and the same cadence every capture in
+ * `docs/monitor/sessions/` shows; it is written down here rather than
+ * assumed away.
+ */
+export const PULL_EVIDENCE_FRAMES = 5;
+
 /** How many consecutive frames have now carried IDENTICAL values for the
  *  three rowing metrics `freezeKey` keys on — distance, split and rate;
  *  elapsed and heart rate are both deliberately out of it (see
  *  `freezeKey`). `frames` counts the frames themselves (a fresh
  *  value is 1, not 0), so `frames >= PAUSED_FRAME_HOLD` reads exactly as
- *  the spec's sentence does. */
+ *  the spec's sentence does.
+ *
+ *  `pull`/`pulled` carry the OTHER half (`PULL_EVIDENCE_FRAMES`): the run of
+ *  strictly-progressing frames seen so far in this interval, and whether it
+ *  has ever reached the threshold. Both live here rather than in their own
+ *  ref because they share this one's lifetime exactly — every reset of the
+ *  freeze run IS an interval boundary (a rest, or a distance back at zero),
+ *  which is precisely when pull evidence must be forgotten. */
 export interface FreezeRun {
   key: string;
   frames: number;
+  pull: RowingStreak | null;
+  pulled: boolean;
 }
 
 /** The three metrics, and only those three — `elapsedSeconds` is excluded
@@ -1019,10 +1097,14 @@ function freezeKey(frame: MonitorFrame): string {
   // INTERVAL-SCOPED ON PURPOSE — `distanceMeters`, never
   // `sessionDistanceMeters` (added Phase 7B for TOTAL LEFT and the METERS
   // card). The whole no-rest-boundary defence in `PAUSED_FRAME_HOLD`'s
-  // comment rests on 0x0031's per-interval RESET: every boundary frame reads
-  // `d 0`, which is what `nextFreezeRun`'s `> 0` guard clears the false
-  // positive with. The accumulated field never returns to 0 mid-session, so
-  // swapping it in here would silently re-open that defect.
+  // comment rests on 0x0031's per-interval RESET: every frame of a no-rest
+  // changeover reads `d 0`, which is what `nextFreezeRun`'s `> 0` guard
+  // clears the false positive with. The accumulated field never returns to 0
+  // mid-session, so swapping it in here would silently re-open that defect.
+  // (A REST boundary is a different story and this guard does not cover it —
+  // `PULL_EVIDENCE_FRAMES` does. The reset is still what makes the pull
+  // evidence per-interval, so the same "never the accumulated field" rule
+  // applies to `nextRowingStreak`'s reading of it.)
   return `${frame.distanceMeters}|${frame.currentSplit}|${frame.spm}`;
 }
 
@@ -1040,19 +1122,37 @@ export function nextFreezeRun(
   // stroke. The `distanceMeters > 0` guard is the no-rest-boundary
   // clearer — see `PAUSED_FRAME_HOLD`'s own comment.
   if (frame.state !== "rowing" || frame.distanceMeters <= 0) {
-    return { key: "", frames: 0 };
+    return { key: "", frames: 0, pull: null, pulled: false };
   }
+  // Pull evidence, forgotten by the reset above at every interval boundary
+  // and re-earned inside each interval — see `PULL_EVIDENCE_FRAMES`. The
+  // streak's own "a frame that fails to beat the previous distance starts a
+  // NEW streak of one" rule is what a dying coast lands on.
+  const pull = nextRowingStreak(previous?.pull ?? null, frame);
+  const pulled =
+    (previous?.pulled ?? false) ||
+    (pull !== null && pull.frames >= PULL_EVIDENCE_FRAMES);
   const key = freezeKey(frame);
   return previous !== null && previous.key === key
-    ? { key, frames: previous.frames + 1 }
-    : { key, frames: 1 };
+    ? { key, frames: previous.frames + 1, pull, pulled }
+    : { key, frames: 1, pull, pulled };
 }
 
+/** BOTH halves, and the order of the sentence is the product claim: the
+ *  rower has pulled in this interval (`pulled`) AND nothing has moved since
+ *  (`frames`). Without the first half the app tells a rower to resume a
+ *  piece they never started; without the second it never tells a rower who
+ *  genuinely stopped anything at all. */
 export function isPausedRun(run: FreezeRun): boolean {
-  return run.frames >= PAUSED_FRAME_HOLD;
+  return run.pulled && run.frames >= PAUSED_FRAME_HOLD;
 }
 
-const NO_FREEZE: FreezeRun = { key: "", frames: 0 };
+const NO_FREEZE: FreezeRun = {
+  key: "",
+  frames: 0,
+  pull: null,
+  pulled: false,
+};
 
 /**
  * THE `rowingActive` FALLBACK (erg-day review, HIGH-1).

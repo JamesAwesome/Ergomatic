@@ -5904,6 +5904,20 @@ const EXTREME_SPLIT_STORY = [
  *  stays on screen indefinitely instead of racing the sweep. */
 const FREEZING_STORY = [
   ...ROWING_STORY,
+  // TWO MORE PROGRESSING FRAMES BEFORE THE FREEZE (2026-08-26), for the
+  // reason `connected.spec.ts`'s own story carries at length: the predicate
+  // now asks whether THIS interval has been pulled in before it will call a
+  // hold a pause (`PULL_EVIDENCE_FRAMES`, five consecutive frames of
+  // strictly increasing distance), so a fixture that freezes after three
+  // frames is a rower who never started rowing — which is now, correctly,
+  // not a pause.
+  ...[125, 133].map((distanceMeters, i) =>
+    rowingAt(CONNECTED_STORY_START_MS + 700 + i * 100, {
+      elapsedSeconds: 18 + i,
+      distanceMeters,
+      programIntervalIndex: 1,
+    }),
+  ),
   // WIRE-IMPOSSIBLE (review IMPORTANT-2, same shape again — 20s/140m
   // continues cumulatively past `ROWING_STORY`'s own 17s/115m rather than
   // resetting per-interval): historically rendered METERS LEFT as 0

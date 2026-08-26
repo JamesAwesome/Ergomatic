@@ -187,94 +187,84 @@ platform lifecycle, permissions, backgrounding, OS interruptions — is invisibl
 to every gate we own.** Ask, for any new platform-sourced input: which instrument
 would catch it if it were wrong?
 
-**Task 5 — the PULL TO RESUME flash after a rest. CAPTURE FIRST; no fix
-without a reproduction.** James, 2026-08-26: *"I still sometimes see the resume
-banner flash after rest and before my first pull."*
+**Task 5 — the PULL TO RESUME flash after a rest. REPRODUCED, AND FIXED.**
+James, 2026-08-26: *"I still sometimes see the resume banner flash after rest
+and before my first pull."*
 
-**Mechanism identified, reproduction NOT achieved.** `nextFreezeRun`
-(`useMonitorSession.ts:955`) declares a pause after `PAUSED_FRAME_HOLD` (4)
-consecutive frames whose `distance|split|spm` key is identical. Its defence
-against rest boundaries is the `frame.distanceMeters <= 0` guard, whose own
-comment claims *"every boundary frame reads `d 0`"*.
+**The reproduction took two attempts, and the wrong turn is the useful part.**
 
-**On real hardware that claim is false.** Replaying
-`walk-2026-08-25/rests-finished-recording.jsonl.gz` through the predicate, the
-first interval after a rest begins at **`d = 0.1`**, not 0 — coast metres from a
-flywheel that never stopped. The guard is already false on the new interval's
-first frame, so nothing stands between a still rower and a pause declaration
-about 2 s later.
+_Attempt 1 (negative, and it proves nothing)._ James was asked to sit still for
+five seconds after a rest. No `PULL TO RESUME`. His correction: *"i wasnt
+coasting i was at a dead stop."* At a dead stop distance sits at 0, so
+`distanceMeters <= 0` clears the run — that is the guard WORKING. The leg
+tested the one case the mechanism does not cover, and this spec was one commit
+from recording it as "mechanism insufficient."
 
-**The capture produces ZERO false pauses**, and the reason matters: James pulled
-immediately at both boundaries (`0.1 -> 0.2 -> 1.8 -> 3.6` and `0 -> 1.8 ->
-3.8`). **The fixture does not contain the behaviour that triggers the bug.** So
-the mechanism is reachable and unproven, and this spec does not pretend
-otherwise.
-
-*A wrong hypothesis, recorded because it cost a minute and would have cost a
-task:* the stuck `rowingActive` byte is NOT involved. `nextFreezeRun` does not
-read it.
-
-**WALKED 2026-08-26, AND IT DID NOT REPRODUCE.** James sat still for five
-seconds at a rest boundary on a 4x500m piece and **no `PULL TO RESUME`
-appeared.** Four frames is roughly two seconds, so five seconds was ample.
-
-**So the mechanism as stated is NOT SUFFICIENT.** Coast metres do defeat the
-`distanceMeters <= 0` guard — that part is measured, from the 2026-08-25
-capture — but something else keeps the freeze key changing across those
-frames. The key is `distance|split|spm`, and the most likely candidate is that
-split or rate keeps decaying frame to frame while the rower is still, so the
-run never reaches four identical keys. NOT established; named as the next thing
-to check.
-
-**The symptom is still real** — James reports seeing it sometimes — so this is
-"my explanation is wrong or incomplete", not "the bug does not exist". It needs
-a capture of an occurrence rather than another attempt to provoke one, and the
-device build cannot produce a wire recording (the download row is dev-gated).
-**Do not spec a fix off the unsupported mechanism above.**
-
-~~**REPRODUCED ON HARDWARE, 2026-08-26 — and the first attempt tested the wrong
-condition.** Recorded in full because the wrong turn is the useful part.
-
-**Attempt 1 (failed to reproduce, and proves nothing).** James was asked to sit
-still for five seconds after a rest. No `PULL TO RESUME`. His correction:
-*"i wasnt coasting i was at a dead stop."* At a dead stop distance sits at 0,
-so `distanceMeters <= 0` CLEARS the run — that is the guard WORKING. The leg
-tested the one case the mechanism does not cover. **A negative result from the
-wrong condition is not evidence, and it was one commit away from being written
-down as "mechanism insufficient".**
-
-**Attempt 2 (reproduced).** The missing precondition came from James: he had
-been taking a pull or two DURING the rest. Instructed to do that and then stop
-as the work interval began, he reported: *"while coasting the pull to resume
+_Attempt 2 (reproduced)._ The missing precondition was James's: he had been
+taking a pull or two DURING the rest. Instructed to do that and then stop as
+the work interval began, he reported *"while coasting the pull to resume
 immediately showed up."*
 
-**So the mechanism is sharper than the original guess.** It is not "coast banks
-metres, then everything stops". It is that a DYING coast changes distance by
-less than the 0.1 m the wire resolves, so consecutive frames carry an
-IDENTICAL `distance|split|spm` key while distance is above zero — the guard is
-already cleared, `spm` and `split` are 0, and four frames (~2 s, matching
-"immediately") declare a pause.
+**The mechanism, verified against the code and the corpus.** `nextFreezeRun`
+declares a pause after `PAUSED_FRAME_HOLD` (4) consecutive frames whose
+`distance|split|spm` key is identical. Its only defence at a boundary was
+`frame.distanceMeters <= 0`, whose own comment claimed *"every boundary frame
+reads `d 0`"* — **false for a REST boundary**. Decoding 0x0031 across every
+committed recording: the first work frame after a rest reads `d 0.1`
+(`walk-2026-08-25/rests-finished-recording.jsonl.gz`, second changeover), coast
+metres from a flywheel that never stopped. A coast that then decays below the
+wire's own 0.1 m resolution reports the SAME distance frame after frame with
+split and rate at 0, so the guard is already clear, four identical frames
+follow, and about two seconds later the app tells the rower to resume something
+they never started.
 
-**And the product fact underneath it:** that interval had not seen a pull yet.
-`PULL TO RESUME` claims the rower paused something they never started — the
-same class as the `READY`/`WORK` defect this phase already fixed, one predicate
-over. The likely fix shape is the same one: the pause predicate needs "this
-interval has seen a pull", which is the ready-gate concept applied per
-interval. **Still a note, not a decision** — but it is now a note backed by a
-reproduction rather than by a reading of the code.
+**And the product fact underneath it, which is the real bug:** that interval
+had not seen a pull. The same class as the `READY`/`WORK` defect this phase
+fixed one predicate over — a state machine asserting a transition the rower
+never made.
 
-**Evidence class, stated honestly:** this is an OBSERVATION (what the rower saw,
-with the conditions that produced it), not a wire capture. A device build
-cannot produce a recording — the download row is dev-gated — so the frame-level
-proof of the identical-key run is still owed, and a fix's test should be built
-from a synthetic sequence with the boundary condition above, then confirmed
-against a lab capture.
+**THE FIX: the pause predicate now has two halves.** The hold is unchanged and
+is no longer sufficient; a pause also requires evidence that THIS INTERVAL has
+been pulled in — `PULL_EVIDENCE_FRAMES` (5) consecutive frames of strictly
+increasing distance, evaluated by the same `nextRowingStreak` the ready gate's
+own fallback already uses ("the shape a coast cannot hold and a rower cannot
+fail"). The evidence lives on the freeze run itself, so it is forgotten at
+exactly the moments a freeze run resets — a rest, or a distance back at zero —
+which is what makes it per-INTERVAL rather than per-session.
 
-~~**What this task delivers now:** the walk leg that reproduces it (walk card leg
-2b), and the analysis above.~~ **The fix is specced only once a capture shows
-the false pause.** The likely shape — the predicate needs "this interval has not
-seen a pull yet", the ready-gate concept applied per-interval rather than per
-session — is a NOTE, not a decision.
+**What it deliberately does not key on, each for a recorded reason.** Stroke
+rate: the record shows rate reading 0 for the first ~4 s of a work interval
+while the metres climb, and the interval's first frame carries the PREVIOUS
+interval's rate over a zeroed clock — late for a rower who is rowing, already
+satisfied for one who is not, and pinned through a real stop besides.
+`rowingActive`: the standing asymmetry, now with the byte FALSIFIED as a hard
+gate (task 2) — keying a pause on it would trade this defect for a silent one.
+
+**The other direction is pinned as hard as the fix.** A rower who genuinely
+stops MID-INTERVAL must still be told to pull, and both recorded mid-interval
+stops in the whole committed corpus (`step-3` frame 246, `pyramid` frame 1080 —
+the only two identical-key runs any recording contains) still declare a pause at
+the exact frame they always did, now as a committed positive test rather than a
+measurement. Cost of the fix, stated: a rower who pulls and stops inside the
+first ~2.5 s of an interval gets no instruction. That is the deliberate
+direction — this gate is the cautious one, which is why it does not share the
+ready gate's constant even though both hold 5 today.
+
+**Evidence class, stated honestly.** The reproduction is an OBSERVATION with
+conditions, not a wire capture — a device build cannot produce a recording (the
+download row is dev-gated), so the failing test is SYNTHETIC, assembled frame by
+frame out of readings the record does contain (the `d 0.1` first frame with the
+previous interval's split and rate; a hold below the wire's resolution while the
+clock runs). **No capture in `docs/monitor/sessions/` contains a boundary of
+this shape** — every recorded changeover has the rower pulling immediately —
+and that absence is itself the finding: the corpus could not have caught this,
+and cannot confirm it either.
+
+**Still owed:** a wire capture of an occurrence, and a hardware re-walk of leg
+2b (the instruction that reproduces it) confirming the banner no longer appears
+while a genuine mid-piece stop still shows one. The v0.24.0 notes owe this a
+line: what a tester sees change is that `PULL TO RESUME` no longer appears
+before their first pull of an interval.
 
 **Note the family resemblance**, which is why it belongs in this spec rather
 than its own: this is a second predicate alarming on a proxy. "Nothing changed
@@ -295,9 +285,10 @@ guard — the same shape as a lifecycle edge standing in for stream health.
    `"resumed from background"` line asserts one nobody checked.
 5. Which path opened the record (declared vs fallback) is visible in the ring.
 6. Re-walk leg A passes: `1 OF 1 · READY`, no banner, live numbers while rowing.
-7. **Task 5 has a capture** showing the false pause, or a stated finding that
-   five seconds of stillness after a rest does NOT produce one. Either settles
-   it; neither is assumed.
+7. **Task 5's leg 2b re-walked**: the instruction that reproduced the false
+   pause (a pull or two during the rest, then stop as the work interval starts)
+   produces NO `PULL TO RESUME`, and a genuine mid-piece stop in the same
+   session still produces one. Both halves, or the leg settles nothing.
 8. **A desk replay reproduces the old bug and proves the fix** — a recording
    carrying a lifecycle foreground over a healthy stream, red before the fix,
    green after. Until this exists, the only thing standing between this class of

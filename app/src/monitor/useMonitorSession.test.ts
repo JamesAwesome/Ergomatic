@@ -72,6 +72,7 @@ import {
   nextRowingStreak,
   PAUSED_FRAME_HOLD,
   programHasDistanceGoal,
+  PULL_EVIDENCE_FRAMES,
   recordLivenessRecovery,
   recordLivenessSilence,
   useMonitorSession,
@@ -4557,18 +4558,55 @@ const RECORDED_BOUNDARY_RESET: MonitorFrame[] = [
   }),
 ];
 
-/** log lines 3546-3551, plus one later frame from the same stretch: the
- *  rower stops. Two moving frames, then the three keyed metrics freeze at
+/** log lines 3542-3551, plus one later frame from the same stretch: the
+ *  rower stops. SIX moving frames, then the three keyed metrics freeze at
  *  `108.4 / 236.75 / 16` (the elapsed `57.78` alongside them is the empty
  *  arm's own artifact, not part of the key) — and stay frozen for 216 consecutive
  *  frames (3548-3763, where split and spm finally zero), with the heart
- *  rate moving the whole time. The seventh fixture frame below (HR 60) is
+ *  rate moving the whole time. The last fixture frame below (HR 60) is
  *  a real frame from further down that stretch, not line 3552 — HR 60
  *  occurs 24 times inside it; it is here to carry the HR movement into the
  *  fixture, and its keyed metrics are the same frozen three. spm PINNED at
  *  16, not zeroed: the observation that killed the original `spm === 0`
- *  predicate. */
+ *  predicate.
+ *
+ *  IT STARTS FOUR FRAMES EARLIER THAN IT USED TO (`:3542-3545`, still
+ *  verbatim), because the predicate now asks whether THIS interval has
+ *  seen a pull before it will call anything a pause (`PULL_EVIDENCE_FRAMES`).
+ *  The old six-frame window opened two frames before the stop, which is
+ *  less rowing than a real stopped rower has ever done — the fixture was
+ *  shorter than the behaviour it stands for, recurring failure #3. These
+ *  four lines are the same continuous stretch of the same recording, not a
+ *  hand-built runway. */
 const RECORDED_STOP: MonitorFrame[] = [
+  frame({
+    elapsedSeconds: 55.06,
+    distanceMeters: 103.8,
+    currentSplit: 236.75,
+    spm: 16,
+    heartRateBpm: 83,
+  }),
+  frame({
+    elapsedSeconds: 55.53,
+    distanceMeters: 104.7,
+    currentSplit: 236.75,
+    spm: 16,
+    heartRateBpm: 83,
+  }),
+  frame({
+    elapsedSeconds: 56.05,
+    distanceMeters: 105.6,
+    currentSplit: 236.75,
+    spm: 16,
+    heartRateBpm: 83,
+  }),
+  frame({
+    elapsedSeconds: 56.54,
+    distanceMeters: 106.4,
+    currentSplit: 236.75,
+    spm: 16,
+    heartRateBpm: 83,
+  }),
   frame({
     elapsedSeconds: 57.04,
     distanceMeters: 107.3,
@@ -4659,9 +4697,13 @@ describe("the paused derivation, replayed frame by frame from the record", () =>
     const { runs, everPaused } = replay(RECORDED_STOP);
 
     expect(everPaused).toBe(true);
-    // Frames 0-1 are still moving; the freeze starts at index 2, so the
-    // fourth frozen frame is index 5.
+    // Frames 0-5 are still moving; the freeze starts at index 6, so the
+    // fourth frozen frame is index 9.
     expect(runs.map(isPausedRun)).toStrictEqual([
+      false,
+      false,
+      false,
+      false,
       false,
       false,
       false,
@@ -4704,6 +4746,19 @@ describe("the paused derivation, replayed frame by frame from the record", () =>
     heartRateBpm: 61,
   };
 
+  /** The recorded stop's own five progressing frames (`:3542-3546`,
+   *  103.8 -> 107.3), folded in before a hand-built hold. The predicate
+   *  will not call anything a pause until THIS interval has produced pull
+   *  evidence (`PULL_EVIDENCE_FRAMES`), so a hold assembled out of nothing
+   *  but identical frames is a rower who never started — the case the
+   *  false-pause tests below own. Every assertion here is about the KEY, so
+   *  each one starts from a rower who genuinely rowed first. */
+  function afterAPull(): FreezeRun {
+    let run: FreezeRun | null = null;
+    for (const f of RECORDED_STOP.slice(0, 5)) run = nextFreezeRun(run, f);
+    return run!;
+  }
+
   it.each([
     ["distanceMeters", { distanceMeters: 109.2 }],
     ["currentSplit", { currentSplit: 231.4 }],
@@ -4712,7 +4767,7 @@ describe("the paused derivation, replayed frame by frame from the record", () =>
     "a frame that changes ONLY %s breaks a three-frame hold",
     (_metric, moved) => {
       const held = frame(FROZEN);
-      let run = nextFreezeRun(null, held);
+      let run = nextFreezeRun(afterAPull(), held);
       run = nextFreezeRun(run, held);
       run = nextFreezeRun(run, held);
       expect(run.frames).toBe(3);
@@ -4731,7 +4786,7 @@ describe("the paused derivation, replayed frame by frame from the record", () =>
     // one field that keeps moving while the three freeze, so it is the one
     // field the key must NOT contain.
     const held = frame(FROZEN);
-    let run = nextFreezeRun(null, held);
+    let run = nextFreezeRun(afterAPull(), held);
     run = nextFreezeRun(run, held);
     run = nextFreezeRun(run, held);
     run = nextFreezeRun(run, frame({ ...FROZEN, heartRateBpm: 59 }));
@@ -4746,7 +4801,7 @@ describe("the paused derivation, replayed frame by frame from the record", () =>
     // at 4:16.1, rate at 68. With elapsed in the key, the key never
     // repeats on real hardware and PAUSED can never fire at all.
     const held = frame(FROZEN);
-    let run = nextFreezeRun(null, held);
+    let run = nextFreezeRun(afterAPull(), held);
     run = nextFreezeRun(run, held);
     run = nextFreezeRun(run, held);
     run = nextFreezeRun(run, frame({ ...FROZEN, elapsedSeconds: 58.28 }));
@@ -4760,7 +4815,12 @@ describe("the paused derivation, replayed frame by frame from the record", () =>
     // backwards tick) sits at distance 0: under the old key this pair was
     // the backwards-tick-is-a-change pin; under the guard neither frame
     // accumulates at all.
-    const frozen: FreezeRun = { key: "", frames: 0 };
+    const frozen: FreezeRun = {
+      key: "",
+      frames: 0,
+      pull: null,
+      pulled: false,
+    };
     const first = nextFreezeRun(frozen, RECORDED_BACKWARDS[0]!);
     const second = nextFreezeRun(first, RECORDED_BACKWARDS[1]!);
 
@@ -4840,6 +4900,164 @@ describe("the paused derivation, replayed frame by frame from the record", () =>
       expect(run.frames).toBe(0);
       expect(isPausedRun(run)).toBe(false);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THE WORK INTERVAL NOBODY HAS PULLED IN YET (Phase LM fix round 2, task 5)
+//
+// Reported on hardware, 2026-08-26: `PULL TO RESUME` appeared about two
+// seconds into a work interval, while the flywheel was still coasting and
+// before the rower had taken a stroke in it. The rower's own conditions,
+// from the walk card's leg 2b: take a pull or two DURING the rest, then stop
+// as the work interval starts.
+//
+// EVIDENCE CLASS, STATED HONESTLY. This is an OBSERVATION with conditions,
+// not a wire capture — a device build cannot produce a recording (the
+// download row is dev-gated), and the whole committed corpus contains no
+// boundary of this shape: every recorded rest-to-work changeover in
+// `docs/monitor/sessions/` has the rower pulling immediately (measured, this
+// session, by decoding 0x0031 and 0x0032 across all nine committed
+// recordings — the two identical-key runs that exist in the corpus are both
+// mid-interval stops, pinned as such below). So the sequence below is
+// SYNTHETIC, built frame by frame from readings the record does contain:
+//   - the resting frames hold the just-finished interval's distance
+//     ("distance-still", `nextFreezeRun`'s own doc comment);
+//   - the first frame of the new interval reads `d 0.1` with the PREVIOUS
+//     interval's split and rate carried over a zeroed clock — verbatim from
+//     `walk-2026-08-25/rests-finished-recording.jsonl.gz` (its second
+//     rest-to-work changeover: `d 0.1 / split 195.6 / spm 24`, the frame
+//     right after two resting frames at `d 348.6`);
+//   - the frames after it hold `d 0.1 / split 0 / rate 0` while the workout
+//     clock keeps running, which is a coast that has fallen below the wire's
+//     own 0.1 m resolution (`parse.ts` divides the raw field by 10).
+// The synthetic part is only that the rower does NOT pull. Nothing here
+// asserts a cause for what the machine reports; it asserts what the app may
+// say about it.
+// ---------------------------------------------------------------------------
+
+/** Two resting frames, then a work interval whose flywheel is still turning
+ *  too slowly to move the wire's own resolution. `d 0.1 > 0`, so the
+ *  `distanceMeters <= 0` guard is ALREADY clear on the interval's first
+ *  frame — which is why that guard alone never stood between this rower and
+ *  a pause declaration. */
+const COASTED_BOUNDARY: MonitorFrame[] = [
+  frame({ state: "resting", elapsedSeconds: 0, distanceMeters: 348.6 }),
+  frame({ state: "resting", elapsedSeconds: 0, distanceMeters: 348.6 }),
+  frame({
+    elapsedSeconds: 0.09,
+    distanceMeters: 0.1,
+    currentSplit: 195.6,
+    spm: 24,
+  }),
+  ...Array.from({ length: 6 }, (_, i) =>
+    frame({
+      elapsedSeconds: 0.6 + i * 0.5,
+      distanceMeters: 0.1,
+      currentSplit: 0,
+      spm: 0,
+    }),
+  ),
+];
+
+describe("the interval that has not been pulled in yet", () => {
+  it("a dying coast into a fresh work interval NEVER declares a pause, however long it holds the same reading", () => {
+    const { runs, everPaused } = replay(COASTED_BOUNDARY);
+
+    expect(everPaused).toBe(false);
+    // The hold itself is real and is NOT what changed: six identical frames
+    // still accumulate exactly as they always did. What the session may
+    // conclude from them is what changed.
+    expect(runs[runs.length - 1]!.frames).toBeGreaterThanOrEqual(
+      PAUSED_FRAME_HOLD,
+    );
+  });
+
+  it("...and the SAME coast declares one the moment the interval has actually been rowed", () => {
+    // The other direction, on the same fixture shape: five progressing
+    // frames — a rower who pulled — and then the identical dead hold. This
+    // is the feature, and it must survive the fix: a rower who stops
+    // MID-INTERVAL still gets told to pull.
+    // 1.8 / 3.8 / 5.7 / 7.5 / 9.3 and the split beside them are the record's
+    // own: the third rest-to-work changeover in
+    // `walk-2026-08-25/rests-finished-recording.jsonl.gz`, where the rower
+    // pulls straight away. Note the RATE reads 0 through all five of them
+    // while the metres climb — the machine takes about four seconds to
+    // report a stroke rate after a changeover, which is why the rate can
+    // never be what "this interval has been pulled in" is read from.
+    const rowed: MonitorFrame[] = [
+      ...COASTED_BOUNDARY.slice(0, 3),
+      ...[1.8, 3.8, 5.7, 7.5, 9.3].map((distanceMeters, i) =>
+        frame({
+          elapsedSeconds: 0.6 + i * 0.5,
+          distanceMeters,
+          currentSplit: distanceMeters < 5 ? 0 : 138.34,
+          spm: 0,
+        }),
+      ),
+      ...Array.from({ length: 4 }, (_, i) =>
+        frame({
+          elapsedSeconds: 3.1 + i * 0.5,
+          distanceMeters: 9.3,
+          currentSplit: 138.34,
+          spm: 0,
+        }),
+      ),
+    ];
+
+    expect(replay(rowed).everPaused).toBe(true);
+  });
+
+  /** The threshold itself, from both sides — the mutant that survived the
+   *  first pass through this block was `>=` for `>`, because every other
+   *  fixture here happens to carry a frame or two more runway than the
+   *  constant needs. One frame short of `PULL_EVIDENCE_FRAMES` is not
+   *  evidence; exactly `PULL_EVIDENCE_FRAMES` is. Distances are the real
+   *  post-rest ramp (`walk-2026-08-25`, third changeover), truncated to the
+   *  frame count each case needs. */
+  function rampThenHold(progressingFrames: number): MonitorFrame[] {
+    const ramp = [0.1, 1.8, 3.8, 5.7, 7.5, 9.3].slice(0, progressingFrames);
+    const last = ramp[ramp.length - 1]!;
+    return [
+      ...ramp.map((distanceMeters, i) =>
+        frame({ elapsedSeconds: 0.1 + i * 0.5, distanceMeters, spm: 0 }),
+      ),
+      ...Array.from({ length: PAUSED_FRAME_HOLD }, (_, i) =>
+        frame({
+          elapsedSeconds: 3.1 + i * 0.5,
+          distanceMeters: last,
+          spm: 0,
+        }),
+      ),
+    ];
+  }
+
+  it("five progressing frames earn a pause and four do not", () => {
+    // LITERALS, not `PULL_EVIDENCE_FRAMES ± 1`: written in terms of the
+    // constant, this test moves with it and pins nothing — a silent ratchet
+    // to 4 or 6 stays green. Five is what ships, and the number is a
+    // judgement (`PULL_EVIDENCE_FRAMES`'s own comment says where it came
+    // from and which way its two costs run), so changing it should cost a
+    // red test and a fresh derivation rather than an edit.
+    expect(PULL_EVIDENCE_FRAMES).toBe(5);
+    expect(replay(rampThenHold(5)).everPaused).toBe(true);
+    expect(replay(rampThenHold(4)).everPaused).toBe(false);
+  });
+
+  it("the PREVIOUS interval's rowing does not count as this one's pull", () => {
+    // The rower rows interval 0 in full, rests, and coasts into interval 1
+    // without pulling. Pull evidence has to be per-INTERVAL or it is
+    // worthless here: anything session-scoped is already satisfied by the
+    // frames above the rest, and the false pause is straight back.
+    const previousInterval = RECORDED_STOP.slice(0, 6);
+    const rest = Array.from({ length: 4 }, () =>
+      frame({ state: "resting", distanceMeters: 108.4 }),
+    );
+
+    expect(
+      replay([...previousInterval, ...rest, ...COASTED_BOUNDARY.slice(2)])
+        .everPaused,
+    ).toBe(false);
   });
 });
 
@@ -4946,6 +5164,42 @@ describe("Phase LL minor 3: §2b's falsification, pinned as a committed regressi
     },
   );
 
+  /** Where a pause is DECLARED in the committed corpus, measured this
+   *  session by replaying every recording frame by frame. Two, in two files,
+   *  and both are the same shape: metres climbing frame after frame, then
+   *  the three keyed metrics dead while the workout clock keeps running —
+   *  a rower who stopped mid-interval. This is the half of the record the
+   *  false-pause fix must NOT touch, so it is pinned as a positive: the
+   *  negative sweep above would stay green if the predicate stopped firing
+   *  at all. */
+  const LL_RECORDED_MID_INTERVAL_STOPS: Record<string, number[]> = {
+    "walk-2026-08-16/session-1-keystone-2x250r0.jsonl": [],
+    "walk-2026-08-16/session-2-wu-4unequal.jsonl": [],
+    "walk-2026-08-17/step-2-pm5-recording-1786973078979.jsonl": [],
+    "walk-2026-08-17/step-3-pm5-recording-second-rest-1786973713929.jsonl": [
+      246,
+    ],
+    "walk-2026-08-17/step-4-pm5-recording-1786974067695.jsonl": [],
+    "walk-2026-08-18-metrics/pyramid-pm5-recording-1787090555458.jsonl.gz": [
+      1080,
+    ],
+  };
+
+  it.each(LL_CORPUS_FILES)(
+    "%s: every mid-interval stop the recording contains still declares a pause, at the frame it always did",
+    (fileName) => {
+      const { runs } = replay(loadCorpusFreezeFrames(fileName));
+      const onsets: number[] = [];
+      for (let i = 0; i < runs.length; i += 1) {
+        if (isPausedRun(runs[i]!) && (i === 0 || !isPausedRun(runs[i - 1]!))) {
+          onsets.push(i);
+        }
+      }
+
+      expect(onsets).toStrictEqual(LL_RECORDED_MID_INTERVAL_STOPS[fileName]);
+    },
+  );
+
   it("sanity: the corpus genuinely contains post-rest work-interval starts — a suite where this were 0 for every file would prove nothing", () => {
     const total = LL_CORPUS_FILES.reduce((sum, fileName) => {
       const frames = loadCorpusFreezeFrames(fileName);
@@ -5009,28 +5263,40 @@ describe("useMonitorSession: frozen (the freeze predicate), end to end", () => {
       currentSplit: 236,
       spm: 16,
     };
+    // The recording's own five progressing frames ahead of the stop
+    // (`pm5-session3-final.log:3542-3546`) — a rower who actually rowed
+    // this interval, which is what `PULL_EVIDENCE_FRAMES` requires before
+    // anything may be called a pause. The fixture used to open two frames
+    // before the freeze; that is less rowing than any real stopped rower
+    // has done, and it is the same lengthening `RECORDED_STOP` took.
+    const rowed = [103.8, 104.7, 105.6, 106.4, 107.3].map((distanceMeters, i) =>
+      status(100 + i * 100, {
+        elapsedSeconds: 55.06 + i * 0.5,
+        distanceMeters,
+        spm: 16,
+        currentSplit: 236,
+      }),
+    );
     const { result, fake } = harness({
       program: TWO_INTERVALS,
       events: [
-        status(100, {
-          elapsedSeconds: 57.04,
-          distanceMeters: 107.3,
-          spm: 16,
-          currentSplit: 236,
-        }),
-        status(200, frozen),
-        status(300, frozen),
-        status(400, frozen),
-        status(500, frozen),
-        status(600, { ...frozen, elapsedSeconds: 58.3, distanceMeters: 109 }),
+        ...rowed,
+        status(600, frozen),
+        status(700, frozen),
+        status(800, frozen),
+        status(900, frozen),
+        status(1000, { ...frozen, elapsedSeconds: 58.3, distanceMeters: 109 }),
       ],
     });
     await connect(result);
     await programAndArm(result, fake, TWO_INTERVALS, TWO_IDENTITY);
 
-    tick(fake, 100);
-    expect(result.current.phase).toBe("live");
-    expect(result.current.frozen).toBe(false);
+    for (let i = 0; i < rowed.length; i += 1) {
+      tick(fake, 100);
+      expect(result.current.phase).toBe("live");
+      expect(result.current.frozen).toBe(false);
+    }
+
     tick(fake, 100);
     tick(fake, 100);
     tick(fake, 100);

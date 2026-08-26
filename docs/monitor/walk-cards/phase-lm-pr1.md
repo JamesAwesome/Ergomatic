@@ -91,11 +91,23 @@ counter.** That is CORRECT and is the majority outcome here: the in-flight
 interval's metres are genuinely discarded on close (Phase LM's own owed row).
 Do not record it as cosmetic.
 
-## Leg 2b — REPRODUCED 2026-08-26, on the SECOND attempt
+## Leg 2b — REPRODUCED 2026-08-26 on the SECOND attempt, and FIXED the same day
 
-**The instruction that works:** take a pull or two DURING the rest, then stop as
-the work interval starts and sit still. `PULL TO RESUME` appears within about
-two seconds, while the flywheel is still coasting.
+**The instruction that reproduced it:** take a pull or two DURING the rest, then
+stop as the work interval starts and sit still. `PULL TO RESUME` appeared within
+about two seconds, while the flywheel was still coasting — a pause declared
+about an interval nobody had pulled in.
+
+**RUN IT AGAIN, AND IT IS NOW A TWO-SIDED CHECK.** The fix requires evidence
+that the interval has actually been rowed before anything is called a pause, so
+this leg passes only if BOTH halves land:
+
+1. Same instruction as above → **no `PULL TO RESUME`** while the coast dies.
+2. Then row the interval properly for ten seconds or so and **stop mid-interval**
+   → `PULL TO RESUME` **appears**, as it always has.
+
+Half a pass is a fail. A silenced genuine pause is a worse defect than the one
+this leg came for, and only the second half can catch it on hardware.
 
 **The instruction that does NOT work, kept because the wrong turn is the useful
 part:** "sit still after the rest" reproduces nothing. At a dead stop distance
