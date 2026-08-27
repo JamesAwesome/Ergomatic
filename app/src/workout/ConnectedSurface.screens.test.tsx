@@ -711,6 +711,43 @@ describe("screen fixtures for pnpm screenshots", () => {
     ).toMatchFileSnapshot("../../e2e/fixtures/connected-pane-grid.html");
   });
 
+  /** RC-24: the same mid-session frame as above, but the machine is
+   *  RESTING between interval 1 (the first 2000 m rep) and interval 2.
+   *  `restSeconds: 59.91` is the design spec's own decoded wire value
+   *  (`docs/superpowers/specs/2026-08-26-rest-countdown-design.md`,
+   *  `rests-finished-recording.jsonl.gz` idx 375) — not a round number
+   *  chosen for the picture, the actual measured mid-rest reading — so
+   *  this capture is traceable back to a real captured frame, not an
+   *  invented one.
+   *
+   *  `elapsedSeconds`/`distanceMeters` (0x0031's per-interval clock, which
+   *  `assertFramePossible` prices against whichever phase `state` resolves
+   *  to) are zeroed here rather than left at `liveFrame`'s mid-work
+   *  default: the grid's ACTIVE row never reads either field directly
+   *  (`buildGridModel` reads `intervalRemaining`/`intervalAccrued`
+   *  instead, both left at their own defaults, unchanged from the
+   *  non-resting capture above) — they only feed pane A/B's hero numbers,
+   *  which this pane does not render — so zeroing them changes nothing
+   *  this picture shows and sidesteps a pace-plausibility question
+   *  (0x0031's own clock spans work AND its trailing rest as one count,
+   *  which this fixture does not need to model just to prove the
+   *  countdown renders). */
+  it("pane C, the grid mid-rest (RC-24)", async () => {
+    await expect(
+      capture("grid", {
+        actuals: [actualFor(0, FIXTURE.program)],
+        frame: {
+          state: "resting",
+          restSeconds: 59.91,
+          elapsedSeconds: 0,
+          distanceMeters: 0,
+        },
+      }),
+    ).toMatchFileSnapshot(
+      "../../e2e/fixtures/connected-pane-grid-resting.html",
+    );
+  });
+
   /** The scroll case, and the only one that can show it: 25 intervals, the
    *  active row eight deep. Header and caption pinned, EIGHT rows visible
    *  at 844×390's landscape height and fifteen at portrait's, the rest

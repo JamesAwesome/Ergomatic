@@ -5934,6 +5934,40 @@ const FREEZING_STORY = [
   ),
 ];
 
+/** `pm5/parse.ts`'s `WORKOUTSTATE_INTERVALREST`, copied as a plain number —
+ *  this file drives the app from outside and never imports its modules
+ *  (`WORKOUTSTATE_ROWING` above does the same). `3`, NOT `4`
+ *  (`WORKOUTSTATE_ROWING`) — `connected.spec.ts`'s own header names the
+ *  exact bug that swapping these two produces. */
+const WORKOUTSTATE_RESTING = 3;
+
+/** RC-24: one pull, then a rest — `programIntervalIndex: 0` on the resting
+ *  tick because `toProgramIndex` undoes the wire's own forward attribution
+ *  (`domain/monitor/pm5/intervalIndex.ts`: a rest tick's machine index is
+ *  ONE HIGHER than the interval it belongs to, so authoring OUR index here
+ *  keeps this tick filed against the SAME interval — index 0 — the rowing
+ *  tick before it already put the active row on). `restSeconds: 3599`
+ *  (59:59) is deliberately wider than any real PM5 rest this app has ever
+ *  captured (measured max: 60s) — `EXTREME_SPLIT_STORY`'s own philosophy
+ *  applied to this cell: the no-clip test below exists to prove the layout
+ *  survives worse than the wire will ever actually send, not to replay a
+ *  captured value. */
+const RESTING_STORY = [
+  rowingAt(CONNECTED_STORY_START_MS, { elapsedSeconds: 5, distanceMeters: 30 }),
+  {
+    atMs: CONNECTED_STORY_START_MS + 400,
+    kind: "status" as const,
+    workoutState: WORKOUTSTATE_RESTING,
+    elapsedSeconds: 5,
+    distanceMeters: 30,
+    spm: 0,
+    currentSplit: 0,
+    heartRateBpm: 140,
+    programIntervalIndex: 0,
+    restSeconds: 3599,
+  },
+];
+
 /** 200 ms per write for the SURFACE walks — `connected.spec.ts` proved
  *  120 ms enough to make pairing and programming observable at all, and
  *  `screenshots.spec.ts` raised it to 200 ms for the same reason. These
@@ -7056,6 +7090,51 @@ test.describe("connected screens (fake-driven)", () => {
         measured.metersClientWidth,
       );
       expect(measured.metersText).toBe("21097");
+
+      await cleanupAllConnected(page, title);
+    });
+
+    // --- RC-24: the grid says a rest is running ---
+    test("the rest countdown does not overflow its /500M column — narrowest supported portrait (390x844)", async ({
+      page,
+    }) => {
+      const title = "Design Connected Rest No-Clip Workout";
+      await page.setViewportSize({ width: 390, height: 844 });
+      await injectConnectedFake(page, RESTING_STORY);
+      await openConnected(page, title, "design-connected-rest-noclip@e2e.test");
+      await walkToSurface(page);
+      // The pane switch is a UI action, not a wire event — safe to do
+      // before the story's own resting tick has even fired.
+      await page.getByRole("button", { name: "Grid pane" }).click();
+      await expect(page.locator(".connected-pane-grid")).toBeVisible();
+      await pumpUntil(page, ".connected-grid-rest-countdown");
+
+      const measured = await page.evaluate(() => {
+        const cell = document.querySelector<HTMLElement>(
+          ".connected-grid-rest-countdown",
+        )!;
+        const row = cell.closest(".connected-grid-row")!;
+        const doc = document.documentElement;
+        return {
+          cellText: (cell.textContent ?? "").replace(/\s+/g, " ").trim(),
+          rowResting: row.className.includes("connected-grid-resting"),
+          cellScrollWidth: cell.scrollWidth,
+          cellClientWidth: cell.clientWidth,
+          docScrollWidth: doc.scrollWidth,
+          docClientWidth: doc.clientWidth,
+        };
+      });
+      // Real render, real layout, not the eyeballed capture recurring
+      // failure #7 warns against — the actual worst-case string this
+      // fixture authored, measured, not asserted by construction.
+      expect(measured.cellText).toBe("REST 59:59");
+      expect(measured.rowResting).toBe(true);
+      expect(measured.cellScrollWidth).toBeLessThanOrEqual(
+        measured.cellClientWidth,
+      );
+      expect(measured.docScrollWidth).toBeLessThanOrEqual(
+        measured.docClientWidth,
+      );
 
       await cleanupAllConnected(page, title);
     });

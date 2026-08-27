@@ -6952,6 +6952,24 @@ section:not(.news-pinned) .news-row:last-of-type {
   /* `/500M` is flex 1.1 and `REST 0:42` is longer than any split it
      replaces. Nothing may wrap mid-value. */
   white-space: nowrap;
+  /* RC-24 fix round: `flex: 1.1` (inherited from `.connected-grid-pace`,
+     unchanged) plus `min-width: 0` (`.connected-grid-pace`'s own base
+     rule) let the row's flex algorithm shrink this cell below its own
+     content width whenever the shrink budget ran out — invisible at
+     `REST 0:42` (the only value the captured wire session ever showed)
+     but measured clipping a genuinely authorable rest: the builder's own
+     `w` step bound is `0:01..60:00` (`domain/validate.ts`'s
+     `restMinutes` check), so `REST 59:59` is production-reachable, not a
+     synthetic stress value, and it overflowed its column at the
+     narrowest supported portrait width (390px: 95px of content in a
+     72px box) — caught by `e2e/design.spec.ts`'s own no-clip test.
+     `min-width: max-content` overrides the inherited `min-width: 0` for
+     THIS cell only, so flex's shrink phase takes the deficit out of this
+     row's OTHER cells (which keep `min-width: 0`) instead of this one —
+     the fix scales to any digit count a real rest can produce, rather
+     than being tuned to one measured worst case. Word and number keep
+     their spec'd sizes untouched; only the column's own width yields. */
+  min-width: max-content;
 }
 
 /* The word rides at the column-head size so the pair fits the cell; the
