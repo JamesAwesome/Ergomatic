@@ -3899,68 +3899,36 @@ that needs no erg, and it can run in a test.
       had to be extended so the pause HOLDS, because with a one-frame pause
       "exactly one entry" could not tell the two apart, and the mutation
       stayed green until it was.
-- [ ] **RC-26 — `KEEP THE SCREEN ON` warns against the one thing that cannot
-      happen.** The spec's own criterion 3 forbids wording that "blames the
-      screen timeout (which keep-awake already handles)" — and the shipped
-      string is a screen-timeout instruction. Keep-awake has covered this flow
-      since 2026-08-11, and this phase's own ROADMAP says the loss was a MANUAL
-      lock that no wake-lock work would have prevented. So the four words name
-      the wrong hazard. `DON'T LOCK YOUR PHONE` is the same four words.
-      **The walk card raised this verbatim, said only James can answer it, and
-      the walk ran without asking** — which is its own lesson: when a card names
-      a copy question only James can settle, it is asked in the first rest or
-      recorded as unasked. The test pins a word COUNT, so the string is free
-      to change.
-      **NOT FAST PATH, AND BLOCKED ON THE POCKETED-PHONE WALK (corrected
-      2026-08-27, by James).** This entry was carried as "fast path, single
-      string" and that is wrong. James, on being told it: *"Does it? that's
-      about bluetooth not the screen."* He is right about the hazard. What
-      breaks is that the app stops PROCESSING FRAMES once the phone is
-      locked or backgrounded, and Phase LM established we cannot yet
-      distinguish the producers — Core Bluetooth's background rules govern
-      the NATIVE app while our accumulation runs in a WebView WebKit
-      throttles on rules that never read a plist key. The screen is a proxy
-      for "the app is in front and alive", not the hazard.
-      **What IS verified:** `keepAwakeOn()` is armed at mount
-      (`ConnectedInterstitial.tsx:284`), so the automatic timeout genuinely
-      is handled and the only remaining way the screen goes dark is a
-      deliberate lock — which is what the tester did. So the entry's
-      "names the wrong hazard" holds; its implied fix does not.
-      **Why the swap is not safe yet:** `DON'T LOCK YOUR PHONE` is equally
-      wrong if a foreground-locked phone keeps streaming fine, and nobody
-      has watched one. The component's own comment already concedes both
-      halves — it names no cause deliberately ("three producers of the
-      silence are undistinguished") and promises no sufficiency (a call or
-      a WebContent kill background the app with no rower action at all).
-      **Settle it on the pocketed-phone walk, with RC-28.** Two owed items
-      now gate on the same leg; walk them together.
-- [x] **RC-24 — During a rest, the grid counts down and wears the marker.
-      BUILT, on branch `rest-countdown`, awaiting James's merge word.** This
-      is the other half of RC-23's ruling and the reason that ruling is safe.
-      **The shape shipped is NOT the shape this entry originally described.**
-      Two design gates moved it. (1) The approved "REST cell counts down" is
-      invisible in PORTRAIT — `.connected-grid-rest` is `display: none` there
-      — and portrait is where James raised the complaint. Gate 0 presented
-      three orientation-honest candidates with computed contrast; he chose
-      the `/500M` cell (option B). (2) Seeing the landscape capture, he then
-      ruled that landscape puts the countdown in its real REST column, since
-      showing `REST 0:59` beside a REST column reading `3:00` says REST twice
-      with two numbers. Final: **portrait `/500M`, landscape REST column,
-      gold `--marker`, sunken row, split by CSS with one model behind it.**
-      Spec: `docs/superpowers/specs/2026-08-26-rest-countdown-design.md`.
-      **The gap, verified in code:** the grid's active row keeps rendering the
-      interval's own time and metres from live frames
-      (`surfaceModel.ts:1443-1451`), and its `rest` cell is only the PROGRAMMED
-      rest string, static. So **nothing on the grid says a rest is currently
-      running** — which is why moving numbers there read to the rower as their
-      work interval being mis-measured. The step line does say `N OF M · REST`;
-      the grid header deliberately drops the kind word (`:406`).
-      James's framing: *"maybe we can figure out a way to indicate the person
-      is in rest so they arent worried the wrong numbers would be recorded."*
-      **Why this beats locking the numbers** (the option RC-23 rejected): it
-      costs no change to what any number MEANS, so it carries none of that
-      ruling's TRIAD weight. The numbers stay honestly live; only the labelling
-      stops being ambiguous.
+- [x] **RC-26 — CLOSED AS INVALID (James, 2026-08-27). The string stays.
+      Do not reopen.** His ruling: *"'keep the screen on' implies 'dont lock
+      your phone' we can leave it."*
+      **The entry was wrong, and the error is worth keeping because it is a
+      reusable shape.** It claimed `KEEP THE SCREEN ON` "warns against the
+      one thing that cannot happen", reading the spec's criterion 3 (which
+      forbids copy that BLAMES the screen timeout) as if it forbade the
+      screen being mentioned. But the string is an INSTRUCTION, not a causal
+      claim: it names an action and asserts no reason. The component already
+      satisfies criterion 3 on purpose — its own comment records that naming
+      no cause is a hard constraint, because three producers of the silence
+      are undistinguished.
+      **And the two candidate strings ask for the same behaviour.** A rower
+      who reads `KEEP THE SCREEN ON` does not lock their phone, which is
+      James's own point. So the "defect" had no behavioural difference on
+      either side of it.
+      **Two further corrections made on the way to closing it**, both worth
+      more than the item was: (1) it was carried as "fast path, single
+      string", and James pushed back — *"Does it? that's about bluetooth not
+      the screen"* — correctly, since what actually breaks is the app not
+      processing frames once the phone locks, not the screen going dark;
+      (2) the controller then over-corrected and called it BLOCKED on the
+      pocketed-phone walk, which was hedging: the choice of words never
+      depended on the walk's outcome. **VERIFIED while closing:**
+      `keepAwakeOn()` is armed at mount (`ConnectedInterstitial.tsx:284`),
+      so the automatic timeout genuinely is handled.
+      **The lesson:** a copy item that reads a house RULE more strictly than
+      the rule reads itself will generate work that changes nothing. Check
+      what the rule forbids, then check whether the reader would behave
+      differently — if neither answer moves, the item is invalid, not small.
 - [ ] **RC-28 — the r0 case: a rest the app cannot see, where the coast IS
       still judged. Found at RC-27's review, 2026-08-27; correctly outside
       that brief, filed here because it existed only in a review report.**
