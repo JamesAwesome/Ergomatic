@@ -2438,9 +2438,7 @@ test("log-detail", async ({ page }) => {
   // (work-only) from "the total line and the chart below" (both
   // rest-inclusive).
   await expect(
-    page.getByText(
-      "Rest metres excluded from the three numbers above. The total line and the chart below both span rest.",
-    ),
+    page.getByText("Rest is in the total line and the chart."),
   ).toBeVisible();
 
   // Dedicated capture: the trace-chart scroll below moves the viewport

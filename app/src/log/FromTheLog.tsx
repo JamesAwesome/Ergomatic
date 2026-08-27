@@ -84,9 +84,12 @@ function MachineConfirmedBlock({ row }: { row: StoredLog }) {
       {code !== undefined && (
         <p className="log-machine-confirmed-code">CODE {code}</p>
       )}
+      {/* SHORT ON PURPOSE (James, 2026-08-27: "less prose"). The title one
+          line up already says WORK ONLY, so this only has to say where rest
+          DOES appear. Two sentences naming what it is excluded from was
+          restating the title and then correcting itself. */}
       <p className="log-machine-confirmed-caption">
-        Rest metres excluded from the three numbers above. The total line and
-        the chart below both span rest.
+        Rest is in the total line and the chart.
       </p>
     </div>
   );

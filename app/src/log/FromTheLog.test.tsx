@@ -1229,14 +1229,15 @@ describe("FromTheLog — the MACHINE CONFIRMED · WORK ONLY block", () => {
     // wording still argued with the screen — the TOTAL line ("4:04 total
     // · plus 242 m coasting in rest") sits four lines above this caption
     // and is the only thing on screen actually called a total, and it
-    // DOES include rest. New copy separates "the three numbers above"
-    // (work-only) from "the total line and the chart below" (both
-    // rest-inclusive) instead of implying every number above is
-    // rest-free.
+    // DOES include rest.
+    //
+    // FOURTH AND SHORTEST (James, 2026-08-27: "less prose"). Each earlier
+    // correction bought accuracy with another clause, and the result
+    // restated the block's own title before correcting itself. The title
+    // one line up already says WORK ONLY; the only thing left for the
+    // caption to say is where rest DOES appear, which is this sentence.
     expect(
-      screen.getByText(
-        "Rest metres excluded from the three numbers above. The total line and the chart below both span rest.",
-      ),
+      screen.getByText("Rest is in the total line and the chart."),
     ).toBeVisible();
 
     // Placement: below the interval table (§3's own placement rule).
