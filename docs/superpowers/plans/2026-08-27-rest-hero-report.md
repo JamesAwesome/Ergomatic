@@ -1,7 +1,8 @@
 # RC-27 — task report: the LIVE hero counts the rest
 
 Worktree: `/Users/james/projects/github/jamesawesome/Ergomatic/.claude/worktrees/rest-countdown`
-Branch: `rest-hero`. Commits: `d615277`, `b6a389c`.
+Branch: `rest-hero`. Commits: `d615277`, `b6a389c`, `27b5425` (initial task);
+`9a0edae` (fix round 1, below).
 
 ## What changed
 
@@ -250,3 +251,193 @@ neither runs on non-TRIAD, non-phase-boundary work.
 
 Not mine to call — no PR opened, no merge, no worktree removal, per the
 brief's explicit instructions.
+
+---
+
+## Fix round 1 (James's four optionals, all taken)
+
+Review verdict: SPEC COMPLIANCE PASS, CODE QUALITY APPROVED, no must-fixes.
+Commit `9a0edae`.
+
+### Item 1 — nothing proved the gold actually paints
+
+**The gap, exactly as named:** `PaneLive.test.tsx` asserted the class was on
+the element and, separately, that `index.css`'s SOURCE TEXT contains
+`var(--marker)`. Neither resolves a colour — jsdom loads no stylesheet — so a
+later rule that out-ranked or followed `.connected-hero-value-rest` would
+leave both green while the hero painted black.
+
+**Fix:** added `e2e/design.spec.ts`'s `2A/2C — LIVE, mid-rest (RC-27)`
+describe block (two tests, portrait + landscape), loading the real
+`connected-pane-live-resting` fixture through the real app shell and reading
+`getComputedStyle(...).color` on `.connected-hero-split .connected-hero-value`
+— the identical technique RC-24's own grid rest-countdown check already uses
+(`restCellColor`, `toBe("rgb(125, 85, 16)")`).
+
+**Proved it can go red:** mutated `.connected-hero-value-rest`'s `color` from
+`var(--marker)` to `var(--ink)`, rebuilt the served bundle
+(`docker compose ... build`, confirmed by a changed CSS asset hash
+`index-DGhkCCcw.css` → `index-DDaDoOZW.css`), and ran the new portrait test in
+isolation:
+
+```
+Expected: "rgb(125, 85, 16)"
+Received: "rgb(27, 26, 23)"
+```
+
+Restored, rebuilt (hash returned to `index-DGhkCCcw.css`, confirming
+byte-identical restore), reran — both tests green.
+
+### Item 2 — a precedence branch no test could distinguish
+
+**The gap:** `buildSurfaceModel` can never produce `nowLabel !== ""` and
+`restCountdown !== null` simultaneously (`restCountdown`'s guard requires
+`!stale`; `nowLabel` requires `stale`) — mutually exclusive by construction.
+So `PaneLive.tsx`'s `splitHeroLabel` ternary order was asserted by comment
+only; flipping it to `restCountdown !== null ? "REST" : heroLabel` would pass
+every real-model test in the suite.
+
+**Fix (option a, James's preference):** added
+`PaneLive.test.tsx`'s "the precedence itself is falsifiable" test — builds a
+real resting model via `buildSurfaceModel`, confirms it genuinely carries a
+non-null `restCountdown` and an empty `nowLabel` (sanity), then FORCES
+`nowLabel: "LAST SEEN"` onto that same object and renders it directly,
+asserting the split hero's label reads `LAST SEEN`, not `REST`. Trimmed the
+comment above the ternary to name this test rather than re-argue the
+precedence in prose.
+
+**Proved it bites:** flipped the ternary to
+`model.restCountdown !== null ? "REST" : heroLabel`, reran
+`PaneLive.test.tsx` — exactly one test failed, the new one:
+
+```
+Expected: "LAST SEEN"
+Received: "REST"
+```
+
+The other 46 tests in the file stayed green, confirming the coordinator's own
+claim that no existing test could see this. Restored, reran — 47/47 green.
+
+### Item 3 — the capture's frame is one the PM5 cannot emit
+
+**The gap:** `state: "resting"` with `rowingActive: true` (inherited from
+`liveFrame`'s mid-work default) and `spm: 21` — the committed picture showed
+a rower pulling 21 spm during a rest, contradicting the brief's own "the rate
+hero shows 0 during a rest."
+
+**Fix, chose coherence over documenting the incoherence** (cheap enough):
+`rowingActive: false`, `spm: 0` — honest. This alone would trigger
+`midSessionMirror` (`rowingActive === false && distanceMeters <=
+MID_SESSION_RESET_METERS(1)`), substituting `paceActual = 0` and masking the
+coasting split this capture exists to disprove is still shown — the exact
+trap the fixture's own new comment names. Landed on a small, genuinely
+self-consistent frame instead of the round-1 zero/zero pair:
+`distanceMeters: 20`, `elapsedSeconds: secondsFor(20)` (5.136 s, this file's
+own existing helper — `(meters/500) * FIXTURE_AVG_SPLIT`). This clears the
+1 m mirror floor, keeps `assertFramePossible`'s `elapsedSeconds <=
+phaseSeconds(REST phase)` bound honest (5.136 s well under Filling Low's 180 s
+rest — `state: "resting"` folds the phase lookup onto the REST phase, which
+is ALWAYS time-priced at its own duration, so `liveFrame`'s own 205.44 s
+WORK-interval clock would have failed this bound for a reason unrelated to
+this task, which is what the round-1 zeroing was actually dodging), and keeps
+`splitAvgPace`'s own metres-over-clock consistency check honest against
+`FIXTURE_AVG_SPLIT`. Full reasoning is in the fixture's own doc comment
+(`ConnectedSurface.screens.test.tsx`, "pane B, mid-rest (RC-27)").
+
+Regenerated the fixture (`toMatchFileSnapshot`, snapshot rewritten) and both
+PNG captures. **Reopened both images:**
+
+- `connected-pane-live-resting.png` (portrait): identical to round 1 except
+  the rate hero now reads `0` / `Free` / `SPM`, plain ink, where it read `21`
+  before — the fix's own visible consequence. Split hero unchanged: gold
+  `0:59` under `REST`, target `2:06.0 6K +4`, `AVG 2:08.4` in red.
+- `connected-pane-live-resting-landscape.png`: same facts, side-by-side
+  layout, same `0` on the rate hero.
+
+No other visible element changed. Ran the regenerated captures through the
+full `pnpm screenshots` gate (below) — both pass; both are the images now
+committed.
+
+### Item 4 — the RC-24 reuse was textual, not structural
+
+**The gap:** `fmtDuration(Math.floor(frame.restSeconds) / 60)` was repeated
+verbatim at both call sites (the LIVE hero, the grid's active-row cell) — the
+brief's own cited risk ("two places formatting the same wire field is two
+places that can drift") was only half-retired: nothing pinned that the two
+outputs actually AGREE off the same frame.
+
+**Fix:** extracted `formatRestCountdown(restSeconds: number): string`
+(exported, `surfaceModel.ts`, doc comment carries the floor-not-round
+reasoning and names the drift risk), and pointed both call sites at it. Added
+`surfaceModel.test.ts`'s "the hero and the grid cell agree" test: builds ONE
+`buildSurfaceModel` call on a resting frame, reads
+`model.restCountdown` and `model.grid.rows[model.grid.activeIndex]
+.restCountdown`, asserts both are non-null AND `toBe` each other (not merely
+`toEqual` — this is a string identity check, not a shape check). Also added a
+direct unit test on `formatRestCountdown` itself (floor vs round at 59.91,
+60, 1.91).
+
+**Proved the drift test bites, and that the extraction is REAL (not just
+textual):**
+
+- Mutated only the grid call site back to an inline
+  `fmtDuration(Math.round(restSeconds) / 60)` (reintroducing exactly the
+  textual-duplication shape this item complains about, with a deliberate
+  divergence): the pre-existing RC-24 floor test AND the new drift test both
+  failed —
+  ```
+  RC-24 ... "mid-rest: floors..."   expected '1:00' to be '0:59'
+  RC-27 ... "the hero and the grid cell agree"   expected '0:59' to be '1:00'
+  ```
+  Restored, reran — 145/145 green.
+- Mutated the SHARED function itself (`formatRestCountdown`'s own
+  `Math.floor` → `Math.round`): **both** call sites broke together (proving
+  genuine sharing, not two copies that happen to read alike right now) —
+  three tests failed (the RC-24 floor test, the RC-27 floor test, the new
+  `formatRestCountdown` unit test) — and the drift test itself **stayed
+  green**, correctly: the two sides still agreed with each other, just both
+  wrong. This is the expected, discriminating result — a drift test can only
+  ever catch the two sides DISAGREEING, never a shared bug, which is exactly
+  why the standalone `formatRestCountdown` unit test exists alongside it.
+  Restored, reran — 145/145 green.
+
+## Fix round 1 — gates
+
+All run in the foreground or polled to completion.
+
+- `pnpm lint` / `pnpm typecheck` / `pnpm format:check` — clean.
+- `pnpm test` / `pnpm test:coverage` — 210 files, 5668 tests passed, 1 skipped
+  (same pre-existing skip; up from 5665 by the 3 new tests: the precedence
+  test, the drift test, the `formatRestCountdown` unit test — the two new
+  `design.spec.ts` tests run under `pnpm e2e`, not this suite). Stable across
+  two consecutive runs, no flakes this round.
+- `pnpm e2e` — **416/416 passed** (up from 414 by the two new computed-colour
+  tests), fresh full run against the already-clean per-worktree stack.
+- `pnpm screenshots` — 80/81, identical shape to the initial task's own gate:
+  the two new `connected-pane-live-resting`/`-landscape` runs both pass with
+  the regenerated (item 3) captures; the one failure is the SAME pre-existing
+  `log-detail` defect James is filing separately — untouched, not
+  re-investigated, per his explicit "do not touch" instruction.
+- Reverted unrelated PNG churn from full-suite `pnpm screenshots` runs before
+  each commit (`git checkout --` on every screenshot this branch didn't
+  actually change) — same discipline as the initial task, so the diff stays
+  scoped to what this fix round touched.
+
+## Fix round 1 — per-file coverage (files touched or added to)
+
+| File | Stmts | Branch | Funcs | Lines | Uncovered |
+|---|---|---|---|---|---|
+| `src/workout/connected/surfaceModel.ts` | 98.83% | 95.85% | 100% | 98.69% | 221-222 (same pre-existing exhaustive-`default` arm, unrelated) |
+| `src/workout/connected/PaneLive.tsx` | 100% | 100% | 100% | 100% | — (via `coverage/src/workout/connected/PaneLive.tsx.html`, same authoritative source as the initial report) |
+
+`e2e/design.spec.ts` and `ConnectedSurface.screens.test.tsx` are test files,
+not coverage targets; their own bite is proven by the mutations above, which
+is the standard this repo actually holds test changes to (§13,
+docs/TESTING.md).
+
+## Fix round 1 — what I did not touch
+
+Per James's explicit instruction: the r0 case (an interval with zero
+programmed rest gets no rest phase, so a brief `resting` there renders the
+coast JUDGED against a work target) and the `log-detail` screenshots failure.
+Both are his to file; neither is in this branch's diff.
