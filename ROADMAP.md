@@ -3339,6 +3339,18 @@ that needs no erg, and it can run in a test.
       THIRD of its class in this repo: the recorder's own key
       derivation (this PR), Phase LL's boundary fold (below), and the
       CM-era boundary heuristic.
+- [ ] **RC — CROSS-CONNECT TO THE CONCEPT2 LOGBOOK. Belongs to this phase;
+      DEFERRED to Saturday by James (2026-08-27: "we also haven't
+      cross-connected to logbook yet, which should be in phase RC but can
+      wait until we have more tokens on saturday").**
+      Not yet scoped. Note when it is opened that RC-9's own retirement of
+      the TWD mirror turned on exactly this distinction — Concept2's
+      logbook stores WORK ONLY, while TWD is work plus rest-coast metres,
+      so the logbook is a genuinely independent oracle and the first one
+      outside our own definitions (recurring failure #11's second half:
+      "an oracle that shares your definition is a mirror"). The dev API
+      key lives in the repo-root `.env`; its VALUE is never read into a
+      transcript or a committed file.
 - [x] **Put the realtime meters count back (James, 2026-08-24: "i want
       to put that back to a realtime count").** SHIPPED (summary-display
       wave, PR 2, this PR): the connected screen's total-meters counted
@@ -3897,8 +3909,31 @@ that needs no erg, and it can run in a test.
       **The walk card raised this verbatim, said only James can answer it, and
       the walk ran without asking** — which is its own lesson: when a card names
       a copy question only James can settle, it is asked in the first rest or
-      recorded as unasked. Fast-path after merge; the test pins a word COUNT,
-      so the string is free to change.
+      recorded as unasked. The test pins a word COUNT, so the string is free
+      to change.
+      **NOT FAST PATH, AND BLOCKED ON THE POCKETED-PHONE WALK (corrected
+      2026-08-27, by James).** This entry was carried as "fast path, single
+      string" and that is wrong. James, on being told it: *"Does it? that's
+      about bluetooth not the screen."* He is right about the hazard. What
+      breaks is that the app stops PROCESSING FRAMES once the phone is
+      locked or backgrounded, and Phase LM established we cannot yet
+      distinguish the producers — Core Bluetooth's background rules govern
+      the NATIVE app while our accumulation runs in a WebView WebKit
+      throttles on rules that never read a plist key. The screen is a proxy
+      for "the app is in front and alive", not the hazard.
+      **What IS verified:** `keepAwakeOn()` is armed at mount
+      (`ConnectedInterstitial.tsx:284`), so the automatic timeout genuinely
+      is handled and the only remaining way the screen goes dark is a
+      deliberate lock — which is what the tester did. So the entry's
+      "names the wrong hazard" holds; its implied fix does not.
+      **Why the swap is not safe yet:** `DON'T LOCK YOUR PHONE` is equally
+      wrong if a foreground-locked phone keeps streaming fine, and nobody
+      has watched one. The component's own comment already concedes both
+      halves — it names no cause deliberately ("three producers of the
+      silence are undistinguished") and promises no sufficiency (a call or
+      a WebContent kill background the app with no rower action at all).
+      **Settle it on the pocketed-phone walk, with RC-28.** Two owed items
+      now gate on the same leg; walk them together.
 - [x] **RC-24 — During a rest, the grid counts down and wears the marker.
       BUILT, on branch `rest-countdown`, awaiting James's merge word.** This
       is the other half of RC-23's ruling and the reason that ruling is safe.
@@ -3981,21 +4016,39 @@ that needs no erg, and it can run in a test.
       releases while the assertions were green, which is precisely the
       class a release-time regeneration catches and a per-PR pixel gate
       would not have caught any earlier.
-- [ ] **A SCHEDULED capture re-up — still open, and it has one unsettled
-      risk (2026-08-27).** James: *"maybe a scheduled reup."* The
-      release-time step is in; a periodic job is not, and should not be
-      written until this is answered: **every committed PNG was rasterized
-      by macOS Chromium.** A job on `ubuntu-latest` rasterizes with
-      FreeType rather than CoreText — different hinting and subpixel
-      positioning on the identical bundled `@fontsource` faces. This
-      pipeline is demonstrably sensitive at the ±2/255 level (two captures
-      churn at max channel delta 2-3 with nothing visible), so a platform
-      change is very unlikely to be smaller. **INFERENCE, not proven.** If
-      it holds, the first scheduled run diffs all 90 files and then
-      diverges permanently from anything a human regenerates locally.
-      **Cheap to settle before committing to where the job runs:** run the
-      capture suite once inside a Linux container and count differing
-      files. **S**
+- [x] **A SCHEDULED capture re-up — ANSWERED AND CLOSED, 2026-08-27. Not
+      on a Linux runner, and not worth a macOS one. Do not reopen.**
+      James asked for this to be settled and closed in one pass, and it is.
+      **MEASURED, not inferred.** Ran the capture suite inside
+      `mcr.microsoft.com/playwright:v1.62.1-noble` against the same compose
+      stack the host uses (`--network host`, `E2E_BASE_URL` at the stack's
+      own port), then diffed all 90 outputs against the committed
+      macOS-rasterized captures:
+
+      **90 of 90 differ. ZERO identical.** Max channel deltas reach 255,
+      the largest diffs exceed 110,000 px, and `post-workout-summary.png`
+      comes out a different page HEIGHT entirely — so this is not hinting
+      jitter, it is a different layout. The suite itself passed 81/81
+      inside the container, which is the point: every assertion is about
+      the DOM, and none of them can see this.
+
+      The earlier note called it an INFERENCE "very unlikely to be smaller"
+      than ±2/255. It was right to hedge and wrong about the scale — the
+      real answer is total divergence, not a slightly larger delta.
+
+      **Consequence:** a scheduled job on `ubuntu-latest` would rewrite all
+      90 captures on its first run and then fight every human regeneration
+      forever. A macOS runner would avoid that and is not worth its cost
+      for a suite that, by James's own ruling, is documentation rather than
+      a gate. **The release-time step in `docs/RELEASING.md` is the whole
+      mechanism.** It is the one that caught `releases.png` two releases
+      stale while every assertion was green.
+
+      Corollary worth keeping: **the captures are a macOS artifact.**
+      Anyone regenerating them on another platform will produce a 90-file
+      diff that means nothing. If that ever needs to change, the fix is to
+      pin the renderer (a container used by EVERYONE, host included), not
+      to add a job.
 - [ ] **RC-27 — the LIVE tab's big split shows the COASTING flywheel's split
       during a rest, judged against the work target. BUILT, on branch
       `rest-hero`, in review. Found 2026-08-27 while James was reviewing
