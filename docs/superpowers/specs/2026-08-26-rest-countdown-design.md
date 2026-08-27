@@ -68,6 +68,51 @@ armed because the cell "would be claiming a motion that has not started". A
 work-interval cell marked as counting during a rest is the same error one state
 over: it claims the rower's work is what is moving, when the rest is.
 
+## THE APPROVED SHAPE DOES NOT WORK IN PORTRAIT. Found before Gate 0.
+
+**`.connected-grid-rest` is `display: none` in portrait** (`index.css:6908`)
+and only reappears in the landscape query (`:8196`). The column is in the DOM
+in both orientations — one markup — but a phone held upright never shows it.
+
+**James was on a phone, in portrait, when he raised this.** So "the rest cell
+counts down and wears the marker" is invisible in the exact situation that
+produced the complaint. The direction he approved was approved on my
+description, and my description omitted this.
+
+**What survives:** the diagnosis (nothing on the grid says a rest is running),
+the wire evidence (`restSeconds` counts down, measured), and the principle
+(reuse the marker, do not invent a signal). **What does not:** the cell it
+lands on, in portrait.
+
+**Gate 0 must now choose an orientation-honest shape.** Candidates, none
+chosen here:
+
+- **A. Show the REST column in portrait too, but only while resting.** The
+  column already exists in the DOM; this is a visibility rule, not a layout
+  change. Cost: portrait's seven columns were cut to six deliberately for
+  density — `revision §4`'s own table — so this re-opens a decision that was
+  made for a reason. It also makes the grid's column count change mid-piece,
+  which nothing else on this surface does.
+- **B. Put the countdown in a cell portrait already shows.** The active row's
+  TIME cell is the natural candidate: during a rest, time is what is counting.
+  Cost: the time cell means "this interval's time" everywhere else, and this
+  would make it mean two things depending on state — precisely the ambiguity
+  RC-23 refused for the metres.
+- **C. Mark the ROW rather than a cell.** The active row already has a marker
+  square (`.connected-grid-marker`, 4x20 `--ink`) and an `aria-current`. A rest
+  treatment on the row — the marker in `--marker`, or a rest tint — says "this
+  row is resting" without needing a rest column at all. Cost: says a rest is
+  running but not how long is left, which was half the reason for the choice.
+- **D. Portrait and landscape differ deliberately.** Landscape gets the rest
+  cell counting (the approved shape); portrait gets C. Cost: two behaviours to
+  hold, and the design reference dislikes orientation-conditional meaning.
+
+**The lesson, and it is one this repo already names:** I checked that the wire
+could support the countdown and never checked that the cell was on screen. The
+feasibility question had two halves and I answered the interesting one. See
+recurring failure #13 — an instruction (or a design) is a claim about the
+system, and it gets the same evidence bar as any other.
+
 ## Gate 0 — James approves the visual BEFORE any implementation
 
 **Binding, and it precedes every task.** James asked for this gate explicitly.
@@ -84,12 +129,19 @@ What gets presented:
   measured at 6.49 / 5.85 / 5.50:1 in `tokens.css`; re-derive rather than quote.
 - **The open question below, answered by him, not by the spec.**
 
-**OPEN, for Gate 0:** the rest cell currently shows the PROGRAMMED rest on every
-row, so a rower can read the whole workout's shape down the column. If the
-active row's cell starts counting down, that row's programmed value is no longer
-visible. Does that matter? Options: let it count and lose the programmed value
-on that row alone; show `0:42 / 1:00`; or count down and restore the programmed
-value once the rest ends. **The spec does not choose.**
+**DECIDED (James, 2026-08-26): count down during the rest, and RESTORE the
+programmed value once the rest ends.** His reasoning: *"I think 'restore it when
+the rest ends' is consistent."*
+
+It is, and with a rule the grid already follows: **a cell shows the live value
+while it is the thing happening, and settles back to a stated value once it is
+not.** The time and metres cells already work exactly this way — the active row
+counts, completed rows show their actuals, upcoming rows show what was
+programmed. The rest cell joins that rule instead of becoming an exception.
+
+Rejected with it: showing `0:42 / 1:00`, which puts two numbers in a cell a
+rower reads at arm's length mid-piece, to preserve a value they can read on
+every other row of the column.
 
 ## Constraints
 
@@ -125,8 +177,9 @@ value once the rest ends. **The spec does not choose.**
 
 1. Gate 0 approved by James, with contrast ratios stated as numbers and the
    open question above answered.
-2. During a rest the active row's rest cell counts down from the machine's own
-   `restSeconds`, and wears the marker.
+2. During a rest, a rower in PORTRAIT can tell a rest is running, by whichever
+   shape Gate 0 chooses. In landscape the rest cell counts down from the
+   machine's own `restSeconds` and wears the marker.
 3. During work, and while armed, the marker is where it is today. Pinned.
 4. Exactly one cell wears the marker at any time. Pinned.
 5. A rower on the grid mid-rest can tell a rest is running without reading the
