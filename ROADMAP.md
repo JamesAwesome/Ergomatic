@@ -5973,6 +5973,46 @@ the panes' vocabulary now meets its opposite on the screen right after.
 here is not written down anywhere — code, comment, or copy. Establish that
 BEFORE renaming anything, or the rename ships a guess.
 
+## Phase UR — Undefined rest (a PM5 interval type we cannot express)
+
+**Status:** Not started, unscoped. **Brainstorm before sizing** — the
+research pass belongs there, not here. Raised by James 2026-08-26 ("that
+is a PM5 feature").
+
+**What we know today, checked, not assumed.** We do NOT support it at any
+layer. Our grammar's only rest is `{k: "r", minutes}` with a fixed number,
+plus an optional `restMinutes` on a work step (`app/domain/types.ts`), and
+`app/domain/monitor/pm5/commands.ts:35-36` emits only `INTERVALTYPE_TIME`
+(0x00) or `INTERVALTYPE_DIST` (0x01). `docs/monitor/pm5-interface-notes.md:566`
+records the rest / undefined-rest / calorie / watt-minute variants of
+`CSAFE_PM_SET_INTERVALTYPE` as unused, in as many words: "`compileProgram`
+never emits an 'undefined rest' interval". Concept2's Logbook API carries
+`VariableIntervalUndefinedRest` as a distinct `workout_type` member, so the
+concept is theirs and first-class — we simply never reach for it.
+
+**Open questions for the brainstorm** (do not answer them here):
+- **Does the phone timer even have the concept?** `src/session/engine.ts`
+  walks a frozen phase list on a clock. An undefined rest ends when the
+  ROWER decides, not when a timer expires. If the engine has no
+  wait-for-the-user phase, that is the real cost, not the grammar.
+- **What does it do to work/rest accounting?** RC-1's spine stores
+  `rest_seconds`/`rest_meters`. An undefined rest still produces real
+  numbers there, but nothing PREDICTS them, so anything that compares
+  planned against actual needs an answer.
+- **What is the wire delta?** The exact `SET_INTERVALTYPE` value, whether
+  `SET_RESTDURATION` becomes meaningless, and whether the workout-type
+  ordinal changes from the 8 we send unconditionally (`commands.ts:158`).
+  **Settle this against a capture, not a reading** — this phase's
+  neighbours have twice had a stored shape justified from an unchecked
+  citation (recurring failure 16's second corollary).
+- **Is it wanted?** No demand has been observed. The Erg Book model
+  authors fixed rests throughout, and the seeded 300 carry them; this is
+  a machine capability we lack, not a reported gap.
+
+**Trigger:** James asks, or a tester asks for self-paced rest. **Sizing
+unknown until the engine question above is answered** — plausibly S if it
+is grammar-only, plausibly L if the timer needs a new phase kind.
+
 ## Phase JR — Just Row (observe the machine's own free row)
 
 **Status:** Spec at rev 2 (phase-open gates run 2026-08-24: antagonist
