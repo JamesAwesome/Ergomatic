@@ -700,6 +700,43 @@ describe("screen fixtures for pnpm screenshots", () => {
     ).toMatchFileSnapshot("../../e2e/fixtures/connected-disconnected.html");
   });
 
+  /** RC-27: the "pane B, rowing" frame above, but RESTING — the split
+   *  hero's own countdown, mirroring the grid's identical capture below
+   *  (RC-24, "pane C, the grid mid-rest"). `restSeconds: 59.91` is the SAME
+   *  measured wire value that capture uses (design spec
+   *  `docs/superpowers/specs/2026-08-26-rest-countdown-design.md`,
+   *  `rests-finished-recording.jsonl.gz` idx 375) — one real frame, two
+   *  panes, not a second invented number. `currentSplit` is left at
+   *  `liveFrame`'s own default (117.8, "1:57.8") DELIBERATELY, not zeroed:
+   *  the whole point of this capture is proving that a real, non-zero
+   *  coasting split in the frame no longer reaches the hero — a fixture
+   *  built on an already-absent split would prove nothing.
+   *  `elapsedSeconds`/`distanceMeters` are zeroed for the identical reason
+   *  the grid capture states: `surfaceModel.ts`'s `livePace` reads
+   *  `frame.currentSplit`, never the interval clock, so neither field
+   *  feeds the split hero, and zeroing sidesteps `assertFramePossible`'s
+   *  pace-plausibility check (run on every frame this file builds).
+   *  `splitAvgPace: FIXTURE_AVG_SPLIT` (this file's own published pace)
+   *  gives AVG a real judged value, so the capture shows both halves of
+   *  the brief's own claim at once: the hero no longer shows a coasting
+   *  split, and AVG — three lines below it — still does its job. */
+  it("pane B, mid-rest (RC-27)", async () => {
+    await expect(
+      capture("live", {
+        actuals: [actualFor(0, FIXTURE.program)],
+        frame: {
+          state: "resting",
+          restSeconds: 59.91,
+          elapsedSeconds: 0,
+          distanceMeters: 0,
+          splitAvgPace: FIXTURE_AVG_SPLIT,
+        },
+      }),
+    ).toMatchFileSnapshot(
+      "../../e2e/fixtures/connected-pane-live-resting.html",
+    );
+  });
+
   // --- Task 7 ------------------------------------------------------------
 
   /** Mid-session on Filling Low: interval 1 (the easy opener) behind,
