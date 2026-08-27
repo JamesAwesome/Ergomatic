@@ -3922,20 +3922,33 @@ that needs no erg, and it can run in a test.
       the grid header deliberately drops the kind word (`:406`).
       James's framing: *"maybe we can figure out a way to indicate the person
       is in rest so they arent worried the wrong numbers would be recorded."*
-      **Chosen: the active row's REST cell becomes the countdown during a
-      rest** — `1:00` ticking to `0:00` — and takes the accent mark. It reuses
-      the mechanism that already means "this is the thing counting" rather than
-      inventing a second signal, and answers both "am I resting?" and "how long
-      left?" in the one place a rower is already looking.
-      **Known cost, stated because it widens a documented rule:** `countdown`
-      is currently `"time" | "meters" | null` and `--accent` is documented as
-      "the only place accent appears anywhere on the three panes"
-      (`surfaceModel.ts:398-400`). Both widen to admit rest. Reconcile those
-      comments in the same change, and check `docs/design/DEVIATIONS.md`.
       **Why this beats locking the numbers** (the option RC-23 rejected): it
       costs no change to what any number MEANS, so it carries none of that
       ruling's TRIAD weight. The numbers stay honestly live; only the labelling
       stops being ambiguous.
+- [ ] **RC-27 — the LIVE tab's big split shows the COASTING flywheel's split
+      during a rest, judged against the work target. Found 2026-08-27 while
+      James was reviewing RC-24's captures; deliberately kept OUT of RC-24's
+      scope by him, to be discussed after #204 merges.**
+      **The mechanism, verified in code:** `livePace` (`surfaceModel.ts:641-658`)
+      suppresses to `null` only when `status === "paused"`. During a rest it
+      passes `frame.currentSplit` straight through — and through the coast
+      right after work ends that is a real, decaying number, not a dash. (At a
+      genuine dead stop `currentSplit` is 0 and it already dashes; the coast is
+      the exposed window.)
+      **Why it matters:** that value feeds the LIVE pane's hero — the biggest
+      number on the screen, and JUDGED, so a coast can paint it blue
+      ("faster than target") or red against a target the rower is not currently
+      rowing to. It is the same defect RC-24 fixed in the grid's `/500M` cell,
+      on the surface where the number is largest.
+      **RC-24 fixed the grid CELL-LOCALLY on purpose**, in `buildGridModel`,
+      rather than at `livePace` — a function-level suppression would have
+      silently changed this other surface inside a PR James had scoped to the
+      grid. Doing it there is likely the right EVENTUAL fix; it needs its own
+      look at what the LIVE pane should show during a rest (dash? the rest
+      countdown? something else), which is a design question, not a bug fix.
+      **Do not fix this by widening RC-24's cell-local suppression** without
+      answering that question first.
 - [x] **RC-23 — DECIDED, KEEP AS IS (James, 2026-08-26): the grid keeps
       showing live frames through the rest and settles when the split lands.**
       Raised by James from his own row — *"the grid view updates during rest,
