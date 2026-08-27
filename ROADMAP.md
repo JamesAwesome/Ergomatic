@@ -3392,6 +3392,32 @@ that needs no erg, and it can run in a test.
       a capture, and is now unwitnessed with evidence against. **One
       capture cannot prove impossibility**; the code path stays, the
       priority does not.
+- [ ] **RC-37 — Menu at READY: the machine leaves the program and the app
+      never notices. REPORTED BY JAMES 2026-08-27; MECHANISM INFERRED, NOT
+      OBSERVED — capture owed.**
+      His words: *"if you hit 'menu' to end the workout while the app is on
+      the ready screen, it doesn't cancel out."*
+      **VERIFIED in code:** `WORKOUTSTATE` 0 (WaitToBegin) maps to `"armed"`
+      (`parse.ts:518`), which is what READY renders from; the session closes
+      ONLY on `finished` (10/12) or `terminated` (11)
+      (`driver.ts:2527`); and the programmed structure is verified once per
+      arm, never per tick (the ring's own `structure-mismatch` note: "one
+      entry per verify phase, never per tick").
+      **INFERRED, and the capture must settle it:** that Menu at WaitToBegin
+      does not pass through TERMINATE — there is no running workout to
+      terminate — so the machine drops the program and returns to
+      WaitToBegin while we see `armed` throughout and never get a terminal
+      state.
+      **The stuck screen is the small half.** The PM5 has discarded the
+      program and the app has not, and nothing re-verifies structure after
+      arming. A pull after that rows a FREE row on the machine while the app
+      still believes it is running interval 1 of N, attributing the result
+      to a program the machine no longer has. Silent divergence, not a hang.
+      **Mirror of RC-30**: that one is US sending TERMINATE off a derived
+      ready-gate; this is the MACHINE leaving and us not noticing. Same
+      seam, opposite direction — fix them together.
+      **The capture costs ZERO rowing:** connect, let it arm, press Menu,
+      record the `workoutState` sequence. **S**
 - [ ] **RC-32 — F2b's clean sweep is VACUOUS.** `continuity.ts`'s F2b count
       bound writes `completedAt` + `endedBy: "link-lost"` and seals the
       record. Its sweep excludes all six committed captures, so **zero pairs
