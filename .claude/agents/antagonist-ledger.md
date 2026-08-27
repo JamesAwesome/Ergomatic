@@ -3314,3 +3314,60 @@ targetSplit:null}` reproduces the recorded tx exactly and `divergences` stays
   Worth keeping: **"does the rename break the code" and "does the rename break
   the audit" are different questions, and for a taxonomy the second is the
   expensive one.**
+
+## Premise pass, 2026-08-27 (screenshot capture churn)
+
+- **"The ~21 remaining PNG diffs are date-driven; freeze the clock and the
+  suite is stable."** False. Ran `pnpm screenshots` TWICE on the same day at
+  the same commit: 13 of 90 captures still differ with the calendar held
+  constant, and only 7 of the 22 baseline diffs are date text. The dominant
+  source is `e2e/helpers.ts:50`'s `RUN_ID`, rendered by `src/You.tsx`, which
+  flipped the test user's email between a 2-line and a 3-line wrap and
+  shifted four whole pages by one line — 48,610-62,167 px per capture, an
+  independent coin flip per capture per run (three runs showed each of the
+  three possible odd-one-out patterns). **Technique: to separate date churn
+  from nondeterminism, run the capture suite TWICE IN ONE DAY and diff run
+  against run. The calendar is held constant for free, and everything that
+  still moves is the part a frozen clock cannot reach.**
+
+- **"`RUN_ID` is now fixed width, so the reflow is fixed" (`ROADMAP.md`,
+  marked DONE 2026-08-20; restated at length in `e2e/helpers.ts:20-50`).**
+  False, and the note contains its own warning against the assumption that
+  killed it ("isolate the exact length-varying sub-mechanism before assuming
+  a frozen `RUN_ID` alone fixes it"). What was made fixed by construction is
+  LENGTH; the reflow depends on WIDTH. Measured in the running stack:
+  Archivo has no tabular figures (ten `1` = 67.734 px, ten `8` = 74.625 px at
+  13px), a 6-char base36 suffix spans `jjjjjj` 17.41 px to `mmmmmm` 67.09 px,
+  and 12 random samples of the rendered line spread 9.23 px — straddling the
+  wrap boundary. The same file the note names, `you-derive-offer.png`, still
+  churned across the same 13 row bands at 1.85x the pixels the note measured.
+  **Technique: when a fix claims to have made a rendered string invariant,
+  measure the dimension the LAYOUT reads, not the one the code controls.
+  "Fixed length" and "fixed width" are the same sentence in a monospace font
+  and different claims in every other font — check the font before believing
+  either.** Corollary, from an option this pass nearly recommended: the
+  obvious repair (digits only) is also wrong for the same reason, and the
+  measurement killed it in thirty seconds.
+
+- **A pixel COUNT does not classify a diff.** Four of the diffs found here
+  are 39k-80k px: one is stale committed content (`releases.png` still showed
+  `v0.23.0 · 25 AUG` two releases after #205), one is a deterministic
+  sub-pixel shift invisible to a human (`news-reader.png`, max delta 227 and
+  still nothing to see), and two are the wrap flip. Two others are 8 and 10
+  px at max channel delta 2-3 — invisible, but they still dirty `git status`.
+  **Technique: for every image diff, report the max channel delta and whether
+  the pair is stable across a second run, alongside the pixel count. Count
+  alone cannot tell a real regression from a half-pixel of nothing, and both
+  shapes are present in the same suite.**
+
+- **Controller's note on the fix that followed.** The repair landed at the
+  LAYOUT, not the string: `.you-identity { min-width: 0 }` plus the address
+  clamped to one line, so the block's height stops depending on its content
+  and no future identity scheme can reintroduce the reflow. Residual churn on
+  those six captures fell to 541-3,090 px inside rows 45-91. **The first
+  version of the test for it passed vacuously** — it compared a "short" and a
+  "long" address, but `signInViaBackdoor` appends `RUN_ID` to both, so both
+  wrapped to 42 px and the heights matched for the wrong reason. Caught by
+  probing what the test actually rendered. The shipped test measures the
+  element against ITS OWN line box, which is this pass's own lesson applied
+  to its own fix.

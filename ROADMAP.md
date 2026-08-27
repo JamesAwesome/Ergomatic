@@ -3968,6 +3968,34 @@ that needs no erg, and it can run in a test.
       screenshots project should gate CI at all — a capture suite nobody
       runs in CI is documentation, not a gate (recurring failure #21's
       family). **S**
+      **BOTH SETTLED 2026-08-27.** The assertion was fixed in #207 (the
+      fixture had drifted out of realism — a tier-A row cannot derive its
+      rest, and the seed never stored the pair). **JAMES RULED against CI
+      gating:** *"We honestly don't need to run these in ci. It can be part
+      of the release skill and maybe a scheduled reup."* So the capture
+      suite is DOCUMENTATION, deliberately, and `docs/RELEASING.md` now
+      carries a regenerate-and-commit step before the tag.
+      **The antagonist pass that checked this ruling's premise found the
+      churn is NOT what everyone assumed** — see the falsified `DONE` at
+      the `RUN_ID` note below — and found `releases.png` stale by two
+      releases while the assertions were green, which is precisely the
+      class a release-time regeneration catches and a per-PR pixel gate
+      would not have caught any earlier.
+- [ ] **A SCHEDULED capture re-up — still open, and it has one unsettled
+      risk (2026-08-27).** James: *"maybe a scheduled reup."* The
+      release-time step is in; a periodic job is not, and should not be
+      written until this is answered: **every committed PNG was rasterized
+      by macOS Chromium.** A job on `ubuntu-latest` rasterizes with
+      FreeType rather than CoreText — different hinting and subpixel
+      positioning on the identical bundled `@fontsource` faces. This
+      pipeline is demonstrably sensitive at the ±2/255 level (two captures
+      churn at max channel delta 2-3 with nothing visible), so a platform
+      change is very unlikely to be smaller. **INFERENCE, not proven.** If
+      it holds, the first scheduled run diffs all 90 files and then
+      diverges permanently from anything a human regenerates locally.
+      **Cheap to settle before committing to where the job runs:** run the
+      capture suite once inside a Linux container and count differing
+      files. **S**
 - [ ] **RC-27 — the LIVE tab's big split shows the COASTING flywheel's split
       during a rest, judged against the work target. BUILT, on branch
       `rest-hero`, in review. Found 2026-08-27 while James was reviewing
@@ -6001,8 +6029,39 @@ toString(36)`, whose own spec (ECMA-262) guarantees only the shortest
 round-tripping string, not a minimum length — the length-varying
 sub-mechanism this note above says was "not yet isolated" either was
 that slice or is now moot regardless, since the new construction cannot
-vary. The wall-clock date-stamp churn (17 captures) is a SEPARATE,
-still-open source. Covers both sources or captures will keep re-churning
+vary.
+**THAT `DONE` WAS WRONG, AND THIS NOTE CONTAINED THE WARNING THAT WOULD
+HAVE CAUGHT IT (falsified 2026-08-27, antagonist pass; fixed the same
+day).** The instruction three lines up — *"isolate the exact
+length-varying sub-mechanism before assuming a frozen `RUN_ID` alone
+fixes it"* — was not followed; the close asserted the sub-mechanism was
+"moot regardless". It was not. **What was made invariant is LENGTH. The
+layout reads WIDTH.** Archivo carries no tabular figures, so at 13px ten
+`1` measure 67.734px against ten `8` at 74.625px, and a 6-character
+base36 suffix spans `jjjjjj` 17.41px to `mmmmmm` 67.09px; twelve sampled
+run ids spread **9.23px** at identical length, straddling the wrap
+boundary. So the same-length address rendered two lines or three
+depending on which characters it drew. `you-derive-offer.png` — the very
+file this note measured at 26,327px — was still churning at **48,610px
+across the same 13 row bands**, 1.85x the figure the fix was declared
+against. Measured by running the capture suite TWICE IN ONE DAY and
+diffing run against run, which holds the calendar constant for free.
+**Fixed at the layout instead of the string** (`.you-identity`'s
+`min-width: 0` plus the address clamped to one line — `index.css`, and
+`design.spec.ts`'s "reflow the identity block" pin, which measures the
+element against its OWN line box): the block's height no longer depends
+on its content at all, so no future identity scheme can reintroduce it.
+Residual churn on those six captures is now 541-3,090px confined to rows
+45-91, the address text itself. Constraining `RUN_ID`'s alphabet to
+equal-width glyphs was measured as an alternative and REJECTED: it only
+narrows the spread to 0.52px, because kerning is not additive, so it
+makes the flip rare rather than impossible.
+The wall-clock date-stamp churn is a SEPARATE source and is NOT a defect
+— per James's 2026-08-27 ruling the capture suite does not gate CI, so
+date churn is absorbed by regenerating at release time rather than
+fought. Measured composition of a same-commit regeneration: 7 captures
+date text, 5 time-of-day, 2 sub-perceptual rasterizer flicker (max
+channel delta 2-3, invisible but the bytes change). Covers both sources or captures will keep re-churning
 after it ships; `judge()`'s
 documented-unreachable dead-even branch (discriminated union if a second
 producer appears); the live summary's judged-state capture (closed by
