@@ -5997,28 +5997,32 @@ in history marked `JustRow` (Concept2's own enum word).
       do 0x0031 elapsed/distance RESET at the PM's 5-minute auto-splits
       (if yes, a naive observer stores ~5 minutes of a 30-minute row).
       Capture becomes PR 2's replay fixture. **S (erg time)**
-- [ ] **DECIDE BEFORE PR 1 CLOSES THE COLUMN: `workout_type` is about to
-      hold two different taxonomies.** (Found 2026-08-26 by the premise
-      pass on the type-naming question, verified against the vendor.) PR 1
-      plans to close `session_logs.workout_type` to
-      `AN/O2/AT/TR/JustRow` — but `AN` is an Erg Book **intensity** code
-      and `JustRow` is Concept2's **structural** one. Their vocabulary is
-      about the SHAPE of a piece (`JustRow`, `FixedDistanceInterval`,
-      `VariableInterval`...) and their only intensity concept is
-      `targets.heart_rate_zone` 0-5
-      (<https://log.concept2.com/developers/documentation/>); ours is
-      about how hard it should feel. Orthogonal axes wearing one column
-      name. **Cheap now, expensive once the fifth value ships** — either
-      give the structural fact its own column, or keep Concept2's
-      vocabulary out of ours and mark a free row some other way. This is
-      a stored-shape decision and rides PR 1's existing TRIAD gates. **S**
+- [x] **DECIDED 2026-08-26: `workout_type` is NULL for a free row, not
+      `"JustRow"`.** PR 1 was going to close `session_logs.workout_type`
+      to `AN/O2/AT/TR/JustRow`, putting one of Concept2's STRUCTURAL codes
+      beside our four INTENSITY codes. An engineer pass killed the premise:
+      C2's `workout_type` is documented **`Required: No`** with `unknown`
+      first-class, so a future upload can omit it; and the structural value
+      is **totally derivable** because `commands.ts:158` arms the PM5 as
+      `VARIABLE_INTERVAL` unconditionally (hardware-confirmed stable at 8
+      across all three shapes) — deriving is also more correct, since C2
+      requires that field to match the verification code we already store.
+      **Ruling (James): one column, made NULLABLE, intensity only.** A free
+      row stores `null` = "no intensity was prescribed", which is also true
+      of the targetless-workout follow-on. History shows no badge; PS gets
+      four intensity buckets plus an honest "no type" bucket rather than a
+      fifth fake peer. Recorded in the spec under "The stored type,
+      decided". **Folded into PR 1 as a `DROP NOT NULL`** on the migration
+      it already writes — no extra tag. Also learned: the first thing a C2
+      sync would actually owe is `weight_class` (required for rower
+      results, absent from this codebase, and PII).
 - [ ] **PR 1 — every stored shape (TRIAD, tagged BEFORE PR 2 — the R-A
       read-side-first discipline).** `session_logs` branch (`steps: []`
-      iff JustRow, `workoutType` closed to the known set), the new
-      `ended_by: idle` enum member (migration), plan refusal both halves
-      (client posts `advancesPlan: false` AND server refuses for
-      JustRow — the server's default advances today), the unknown-type
-      badge fallback (today it degrades to 1.11:1 invisible text), the
+      iff the type is NULL, and `workout_type` gains `DROP NOT NULL`), the
+      new `ended_by: idle` enum member (migration), plan refusal both
+      halves (client posts `advancesPlan: false` AND server refuses for a
+      null type — the server's default advances today), the null/unknown
+      badge handling (today it degrades to 1.11:1 invisible text), the
       MonitorRun additive `mode` field. Full antagonist pass + PM
       final-PR gate. **M**
 - [ ] **PR 2 — surface + session + log door (L; after RC's wave and PR
