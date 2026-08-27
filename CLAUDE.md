@@ -96,6 +96,12 @@ Roadmap: `ROADMAP.md` (phases + standing rules). Design reference: `docs/design/
     accessibility or platform convention with a published standard.
     Vendor docs and specs first, implementation source second, blog posts
     last and labelled. Tag claims PRIMARY / SECONDARY / INFERENCE.
+    **A citation that justifies a STORED SHAPE quotes the load-bearing
+    line verbatim and names the attribute the argument needs** (required
+    or optional, current or superseded, what the field means) — see
+    recurring failure 16's second corollary, which this rule exists to
+    feed. A tag says where a claim came from; it does not say that the
+    source supports the conclusion drawn from it.
     _Cost of skipping, measured:_ the connected gutter was derived from
     first principles across two sessions and a NO-GO, when Apple
     documents that the landscape inset protects the rounded corners as
@@ -417,6 +423,37 @@ often they recur.
     evidence** — 23 citations across 11 tracked files point into
     `.superpowers/`, which is git-excluded and unreachable to anyone but
     the session that wrote it.
+    **Second corollary, added 2026-08-26 after the same class recurred
+    twice in one spec: A SOURCED premise fails differently, and this rule
+    did not cover it.** Phase JR's spec justified a STORED SHAPE from a
+    citation twice, and both times the citation was real:
+    (1) *"0x0039 has appeared in zero of our five captures"* was true when
+    written and false when used — the 2026-08-23 keystone walk had
+    captured the frame two days earlier, and the cited document was the
+    stale half of a contradiction resolved in the same directory;
+    (2) *"Concept2's API carries `JustRow` first-class"* was correct about
+    the enum and silent on the attribute the whole argument rested on —
+    that field is documented `Required: No`. Neither was unsourced; both
+    were UNDER-READ. Both were caught by an adversarial pass rather than
+    by the person citing, at a cost of a spec revision each.
+    **A citation is only as load-bearing as the line you actually
+    quoted.** When an argument depends on an attribute of a source —
+    required vs optional, current vs superseded, what a field MEANS —
+    quote that line verbatim beside the claim and name the attribute the
+    argument needs. A URL is not evidence; a sentence is. Both failures
+    die to this on sight: quoting the API's field row shows
+    `Required: No`, and quoting a capture claim means opening the capture
+    directory, where the newer walk is sitting.
+    **Two checks, promoted here from the antagonist's ledger because a
+    ledger only one agent reads cannot prevent anything:** for any
+    "we have never observed X" claim, list the capture directory BY DATE
+    and read the newest walk's README first — corpus facts in this repo
+    have expiry dates, and the document stating one is usually older than
+    the walk that killed it. And when a spec tags a vendor document
+    PRIMARY, grep the repo for our own transcription of it AND for any
+    code comment recording a hardware DEPARTURE from it; a document this
+    project has already caught being wrong does not get a fresh PRIMARY
+    tag on the neighbouring claim.
 
 17. **Opening a phase without writing it into the ROADMAP.** Four phases
     running (PW, CS close, CM, LT), the phase's own gate ran
