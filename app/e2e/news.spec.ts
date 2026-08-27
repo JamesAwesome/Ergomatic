@@ -104,7 +104,7 @@ test("News at rest: 7 UNREAD, three pinned rows, four latest rows, WHAT'S NEW sh
 
   await expect(page.getByRole("heading", { name: "WHAT'S NEW" })).toBeVisible();
   await expect(page.locator(".news-release-version").first()).toContainText(
-    "v0.24.0",
+    "v0.25.0",
   );
 });
 
@@ -184,7 +184,7 @@ test("/news/releases lists every version, newest first", async ({ page }) => {
   // title no longer names a number that goes stale every tag.
   const versions = page.locator(".news-release-version");
   await expect(versions).toHaveCount(23);
-  await expect(versions.nth(0)).toContainText("v0.24.0");
+  await expect(versions.nth(0)).toContainText("v0.25.0");
   await expect(versions.nth(1)).toContainText("v0.23.0");
   await expect(versions.nth(2)).toContainText("v0.22.0");
   await expect(versions.nth(3)).toContainText("v0.21.0");

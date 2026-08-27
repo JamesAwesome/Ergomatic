@@ -1334,7 +1334,7 @@ test("releases", async ({ page }) => {
   // without bumping this pin, which broke `pnpm screenshots` on main
   // (caught 2026-08-23; e2e doesn't run this project, so nothing gated it).
   await expect(page.locator(".news-release-version").first()).toContainText(
-    "v0.23.0",
+    "v0.25.0",
   );
   await page.screenshot({
     path: path.join(SCREENSHOTS_DIR, "releases.png"),
