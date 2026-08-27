@@ -1835,20 +1835,11 @@ in a help article (Ergatta's Meteor / Echo / Pulse). Note the explanation
 cost this implies: **Hydrow ships a YouTube video per label for three plain
 English verbs.** Nobody found three or four words self-explanatory.
 
-**Live defects the design pass found, to fix WITH the disclosure work:**
-1. **The plain-word descriptor is misaligned.** `.type-word` is a full-width
-   `<p>` (`index.css:952-963`), so selecting AN renders "SPEED WORK" at x=20,
-   under the **O2** chip, ~250px from the chip it names. It looks correct in
-   `today.png` only because O2 happens to be first.
-2. **Two different plain-word sets ship right now.** `typeWords.ts` says
-   AT = `COMFORTABLY HARD`, O2 = `LOW & SLOW`; `PyramidFigure.tsx` says
-   AT = `THRESHOLD`, O2 = `GENERAL ENDURANCE`. The figure that teaches best
-   is teaching the jargon this work exists to replace, in a different
-   vocabulary from every chip the rower meets afterwards.
-3. **The pyramid's plain words render at 7.44px** (`fontSize="7"` at a 1.0625
-   render scale), a quarter below the house 10px mono floor. Fix in place —
-   the figure STAYS in News per James's 2026-08-23 ruling; a label on a
-   control is not a teaching block, and only the labels move.
+**Live defects the design pass found.** Three real bugs, filed as their own
+items under "Triggered follow-ons" (TL-1 misaligned descriptor, TL-2 two
+plain-word sets, TL-3 the pyramid's sub-floor text) rather than recorded only
+here. **Two of the three are independently fixable and should NOT wait for
+this phase.** They cross-reference this item; this item cross-references them.
 
 **Rejected with reasons, so it is not re-proposed: an intensity COLOUR
 ramp.** A warm ramp needs a red at the hot end and lands back on `--accent`,
@@ -6085,6 +6076,48 @@ next phase. One line per round, newest first.
   Plan sequence's scroll-in-a-box removed (flows with the page, Library-style).
 
 ## Triggered follow-ons (not scheduled — each has an explicit trigger)
+
+- [ ] **TL-1: the type descriptor renders under the WRONG chip.** Select AN
+      on Today or in the Library filter and `SPEED WORK` renders at x=20 —
+      under the **O2** chip, roughly 250px from the chip it names. `.type-word`
+      is a full-width `<p>` in its own row (`index.css:952-963`), so the word
+      never moves regardless of which chip it describes. It looks correct in
+      `today.png` and `library-filtered.png` only because O2 happens to be
+      first. Found 2026-08-26 by the type-label design pass.
+      **Cross-ref: Phase PROD's "the four workout types teach themselves"
+      item.** Option A (the leaning design) deletes `.type-word-row` outright
+      and puts each word inside its own chip, which retires this bug rather
+      than fixing it — so **if that redesign is close, do nothing here.**
+      If PROD slips, fix it standalone: the word belongs in the selected
+      chip's column, or the row goes. **Trigger:** the next PR touching
+      Today's or Library's chip rows, or PROD's design pass starting,
+      whichever comes first. **S**
+- [ ] **TL-2: two different plain-word vocabularies ship at once.**
+      `src/components/typeWords.ts` says AT = `COMFORTABLY HARD`,
+      O2 = `LOW & SLOW`. `PyramidFigure.tsx` (inside the pinned
+      `workout-types` article) says AT = `THRESHOLD`,
+      O2 = `GENERAL ENDURANCE`. So the figure a rower meets first — the one
+      that teaches all four at a glance — uses **different words from every
+      chip he meets afterwards**, and one of them (`THRESHOLD`) is exactly
+      the jargon the disclosure work exists to replace. Found 2026-08-26.
+      **Independent of the redesign: fix now.** `PyramidFigure` should read
+      from `TYPE_WORDS` rather than carrying its own strings, so the two can
+      never diverge again, and its `aria-label` updates with it.
+      **Cross-ref: Phase PROD's disclosure item**, which assumes one
+      vocabulary exists. **Trigger:** next PR touching News content or
+      `typeWords.ts`. **S**
+- [ ] **TL-3: the pyramid's plain words render at 7.44px**, a quarter below
+      the house 10px mono floor. `PyramidFigure.tsx` sets `fontSize="7"` in a
+      `viewBox="0 0 320 190"` that `.reader-figure svg { max-width: 340px }`
+      renders at scale 1.0625. Measured 2026-08-26. The persona's "this
+      taught me the whole thing in two seconds" reaction was to text the
+      design system forbids. **Independent of the redesign: fix now.**
+      `fontSize="10"` (10.63 CSS px) was checked band by band and every label
+      still fits, tightest case `SPEED WORK` in the AN tip with ~5 units
+      slack. **Belongs to PROD's "Accessibility audit" item as well** — it is
+      a text-size floor violation, not a nicety. **Cross-ref: Phase PROD's
+      disclosure item** (same figure, same words). **Trigger:** next PR
+      touching News content, or the accessibility audit. **S**
 
 - **A READ IS LOST IF YOU LEAVE AN ARTICLE BEFORE ITS READ-STATE GET
   LANDS** (found 2026-08-21 by the flake hunt, by REPRODUCING the flake
