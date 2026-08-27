@@ -34,6 +34,15 @@
 // REST, `index.css`'s own `display: none` toggle) and the handful of size
 // tokens (row height, `#` column width) the landscape media query steps.
 //
+// RC-24 (2026-08-26): the `/500M` cell now has a SECOND form. While the
+// machine reports a running rest, that cell stops showing `livePace` (a
+// coasting flywheel's split, judged against a work target it no longer
+// means) and shows the machine's own rest countdown instead, wearing the
+// gold mark that would otherwise sit on TIME or METERS — the mark moves,
+// it does not multiply. One behaviour, both orientations; see
+// `GridRow.countdown`'s own doc comment (`surfaceModel.ts`) for the wire
+// reasoning.
+//
 // THE `#` CELL (design spec §5b, built by Task 4b's `intervalNumbering`):
 // numbering starts at 1 on the first piece. `row.ordinal` used to be `null`
 // for a warm-up row, which rendered `WU`; Phase WU removed that case. This
@@ -160,12 +169,17 @@ export default function PaneGrid({ model }: { model: SurfaceModel }) {
 }
 
 function Row({ row, ref }: { row: GridRow; ref?: React.Ref<HTMLDivElement> }) {
-  const countdownClass = (cell: "time" | "meters"): string =>
+  const countdownClass = (cell: "time" | "meters" | "rest"): string =>
     row.countdown === cell ? " connected-grid-countdown" : "";
   return (
     <div
       ref={ref}
-      className={`connected-grid-row connected-grid-${row.state}`}
+      // RC-24: a running rest sinks the row (`--surface-sunken`), the third
+      // of the three channels that carry "a rest is running" — the word
+      // REST and the gold mark are the other two, none of them alone.
+      className={`connected-grid-row connected-grid-${row.state}${
+        row.countdown === "rest" ? " connected-grid-resting" : ""
+      }`}
       // The colour-free half of "this is the one you are on": the marker
       // square and the ink border say it visually, this says it to a
       // screen reader.
@@ -189,9 +203,23 @@ function Row({ row, ref }: { row: GridRow; ref?: React.Ref<HTMLDivElement> }) {
       <span className={`connected-grid-meters${countdownClass("meters")}`}>
         {row.meters}
       </span>
-      <span className={cellClass("connected-grid-pace", row.pace)}>
-        {row.pace.display}
-      </span>
+      {row.countdown === "rest" ? (
+        /* RC-24: during a rest this cell holds `livePace`, which is
+           `frame.currentSplit` — the split of a COASTING flywheel, judged
+           against the work interval's target. That number is worse than
+           absent: a coast can paint a red or blue verdict on a rest. The
+           rest countdown replaces it, unjudged (no `cellClass` here, on
+           purpose), and takes the gold mark off time/meters for the
+           duration. */
+        <span className="connected-grid-pace connected-grid-rest-countdown">
+          <span className="connected-grid-rest-word">REST</span>{" "}
+          {row.restCountdown}
+        </span>
+      ) : (
+        <span className={cellClass("connected-grid-pace", row.pace)}>
+          {row.pace.display}
+        </span>
+      )}
       <span className={cellClass("connected-grid-spm", row.spm)}>
         {row.spm.display}
       </span>

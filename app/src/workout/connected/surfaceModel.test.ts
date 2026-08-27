@@ -681,6 +681,145 @@ describe("armed's first frame (I-1): the three properties 2D asks for beyond the
 });
 
 // ---------------------------------------------------------------------------
+// RC-24 — the grid says a rest is running. Every fixture value below is
+// taken from the design spec's decode of a real capture
+// (`docs/monitor/sessions/walk-2026-08-25/rests-finished-recording.jsonl.gz`,
+// program `w 1' r1 / w 500m r1 / w 1'`): `restSeconds` ticks at x.91 (60.00,
+// 59.91 ... 2.91, 1.91 — never 0.00), `state === "resting"` leads the
+// countdown by ~1 s (a flat 60.00 at rest ENTRY), and outside a rest
+// `restSeconds` is the CURRENT interval's own programmed rest, not a
+// sentinel (60.00 through a work interval with a rest programmed, 0.00
+// through one with none). `FIXTURE`'s interval 1 is the first 2000 m rep
+// (`kind: "distance"`), so its own countdown (when nothing is resting)
+// is the METERS cell.
+// ---------------------------------------------------------------------------
+describe("RC-24: the /500M cell counts down a running rest", () => {
+  function activeRow(m: SurfaceModel) {
+    return m.grid.rows[m.grid.activeIndex]!;
+  }
+
+  it("mid-rest: floors the wire's own countdown, never rounds it (59.91 -> 0:59, not the 1:00 Math.round would give)", () => {
+    const m = model({
+      frame: frame({ state: "resting", restSeconds: 59.91, intervalIndex: 1 }),
+    });
+    const row = activeRow(m);
+    expect(row.countdown).toBe("rest");
+    expect(row.restCountdown).toBe("0:59");
+  });
+
+  it("rest-entry dwell is BOUNDED, not forbidden (wire fact 1): a flat restSeconds: 60 renders 1:00 while resting, and the identical restSeconds: 60 renders no countdown at all while rowing", () => {
+    const resting = model({
+      frame: frame({ state: "resting", restSeconds: 60, intervalIndex: 1 }),
+    });
+    expect(activeRow(resting).countdown).toBe("rest");
+    expect(activeRow(resting).restCountdown).toBe("1:00");
+
+    const rowing = model({
+      frame: frame({ state: "rowing", restSeconds: 60, intervalIndex: 1 }),
+    });
+    expect(activeRow(rowing).countdown).not.toBe("rest");
+    expect(activeRow(rowing).restCountdown).toBeNull();
+  });
+
+  it("restSeconds ALONE never says a rest is running (wire fact 2): 60.00 and 0.00 both render no rest countdown while WORKING", () => {
+    for (const restSeconds of [60, 0]) {
+      const row = activeRow(
+        model({
+          frame: frame({ state: "rowing", restSeconds, intervalIndex: 1 }),
+        }),
+      );
+      // Interval 1 is the first 2000 m rep: its own dimension is METERS.
+      expect(row.countdown).toBe("meters");
+      expect(row.restCountdown).toBeNull();
+    }
+  });
+
+  it("the zero-rest artifact: resting with restSeconds 0 has nothing to count, so the row falls back to its own dimension", () => {
+    const row = activeRow(
+      model({
+        frame: frame({ state: "resting", restSeconds: 0, intervalIndex: 1 }),
+      }),
+    );
+    expect(row.countdown).toBe("meters");
+    expect(row.restCountdown).toBeNull();
+  });
+
+  it("armed beats resting: nothing counts before the first pull, including a rest that has not begun", () => {
+    const row = activeRow(
+      model({
+        status: "armed",
+        frame: frame({
+          state: "resting",
+          restSeconds: 59.91,
+          intervalIndex: 1,
+        }),
+      }),
+    );
+    expect(row.countdown).toBeNull();
+    expect(row.restCountdown).toBeNull();
+  });
+
+  it("countdown and restCountdown always agree: one reads 'rest' exactly when the other is non-null", () => {
+    const frames = [
+      frame({ state: "resting", restSeconds: 59.91, intervalIndex: 1 }),
+      frame({ state: "resting", restSeconds: 60, intervalIndex: 1 }),
+      frame({ state: "rowing", restSeconds: 60, intervalIndex: 1 }),
+      frame({ state: "rowing", restSeconds: 0, intervalIndex: 1 }),
+      frame({ state: "resting", restSeconds: 0, intervalIndex: 1 }),
+    ];
+    for (const f of frames) {
+      const row = activeRow(model({ frame: f }));
+      expect(row.countdown === "rest").toBe(row.restCountdown !== null);
+    }
+    const armedRow = activeRow(
+      model({
+        status: "armed",
+        frame: frame({
+          state: "resting",
+          restSeconds: 59.91,
+          intervalIndex: 1,
+        }),
+      }),
+    );
+    expect(armedRow.countdown === "rest").toBe(armedRow.restCountdown !== null);
+  });
+
+  it("exactly one row wears the mark while working or resting, and none while armed", () => {
+    // "no row has two marks" is the invariant every branch below shares;
+    // armed is the one state where the honest count is ZERO, not one — the
+    // active row's own countdown is null there (the test above), and this
+    // confirms no OTHER row picks the mark up either.
+    const countMarked = (m: SurfaceModel): number =>
+      m.grid.rows.filter((r) => r.countdown !== null).length;
+
+    expect(
+      countMarked(
+        model({
+          status: "armed",
+          frame: frame({ state: "armed", intervalIndex: 1 }),
+        }),
+      ),
+    ).toBe(0);
+    expect(
+      countMarked(
+        model({ frame: frame({ state: "rowing", intervalIndex: 1 }) }),
+      ),
+    ).toBe(1);
+    expect(
+      countMarked(
+        model({
+          frame: frame({
+            state: "resting",
+            restSeconds: 59.91,
+            intervalIndex: 1,
+          }),
+        }),
+      ),
+    ).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // PHASE LM PR 1 TASK 2 — armed AND unheard, the combination the old union
 // could not express.
 //

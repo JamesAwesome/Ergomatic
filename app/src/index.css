@@ -6934,6 +6934,32 @@ section:not(.news-pinned) .news-row:last-of-type {
   color: var(--marker);
 }
 
+/* RC-24: the active row while the machine is RESTING. The `/500M` cell
+   becomes the machine's own rest countdown and takes the gold mark; the row
+   sinks. THREE CHANNELS, only one of them colour — the word REST, the
+   sunken fill, and the gold — because this grid's own rule (see the
+   dashed-rule comment above) is that meaning never rides colour alone.
+   --marker on --surface-sunken: 5.50:1 (4.5:1 text floor, 3:1 graphic
+   floor — passes both). --ink on --surface-sunken: 14.50:1, so the row's
+   other values stay legible on the new fill. The fill shift itself is only
+   1.18:1, which is exactly why it is never the sole signal. */
+.connected-grid-active.connected-grid-resting {
+  background: var(--surface-sunken);
+}
+
+.connected-grid-rest-countdown {
+  color: var(--marker);
+  /* `/500M` is flex 1.1 and `REST 0:42` is longer than any split it
+     replaces. Nothing may wrap mid-value. */
+  white-space: nowrap;
+}
+
+/* The word rides at the column-head size so the pair fits the cell; the
+   number stays at row size, because the number is what is read. */
+.connected-grid-rest-word {
+  font-size: var(--c-size-thead);
+}
+
 /* Pinned under the scroller: the distance rule (and, since CR2 spec 3
    Task 5, the README's own "N MORE BELOW" scroll hint merged ahead of it —
    `surfaceModel.ts`'s `footerCaptionFor`), in words, never a glyph. */

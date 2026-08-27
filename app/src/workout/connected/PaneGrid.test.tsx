@@ -801,6 +801,56 @@ describe("the dash carries 'not yet', colour does not (handoff §3)", () => {
 });
 
 // ---------------------------------------------------------------------------
+// RC-24 — the grid says a rest is running. Row 2 is FILLING_LOW's program
+// index 1, the first 2000 m rep ("the ACTIVE row is the machine's interval"
+// above pins the same mapping).
+// ---------------------------------------------------------------------------
+
+describe("RC-24: the /500M cell counts down a running rest", () => {
+  it("renders the word and the countdown, and sinks the row", () => {
+    renderGrid({
+      frame: frame({ state: "resting", restSeconds: 42, intervalIndex: 1 }),
+    });
+    const active = row(2);
+    expect(active.className).toContain("connected-grid-resting");
+    const cell = active.querySelector(".connected-grid-rest-countdown");
+    expect(cell).not.toBeNull();
+    // Floored, not rounded — 42.0 is already whole, so this also doubles as
+    // the render-through check for the CSS comment's own worked example.
+    expect(cell!.textContent).toBe("REST 0:42");
+  });
+
+  it("is NOT judged during a rest: a coasting split that would otherwise tint the cell carries no verdict class", () => {
+    // currentSplit: 60 is the same "would otherwise scream a verdict" value
+    // the disconnected-staleness tests above use — far enough inside
+    // PACE_TOLERANCE_SECONDS of the 2000 m rep's own target to tint blue if
+    // this cell were judged at all.
+    renderGrid({
+      frame: frame({
+        state: "resting",
+        restSeconds: 42,
+        intervalIndex: 1,
+        currentSplit: 60,
+      }),
+    });
+    const cell = row(2).querySelector(".connected-grid-pace")!;
+    expect(cell.className).not.toMatch(/timer-card-actual-/);
+  });
+
+  it("during work the pace cell is unchanged: the same judged tint it has today, no resting row, no rest word", () => {
+    renderGrid({
+      frame: frame({ state: "rowing", intervalIndex: 1, currentSplit: 60 }),
+    });
+    const active = row(2);
+    expect(active.className).not.toContain("connected-grid-resting");
+    expect(active.querySelector(".connected-grid-rest-word")).toBeNull();
+    expect(active.querySelector(".connected-grid-pace")!.className).toContain(
+      "timer-card-actual-faster",
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Distance intervals
 // ---------------------------------------------------------------------------
 
@@ -987,6 +1037,8 @@ describe("distance intervals (handoff §3's distance rules)", () => {
         liveHr: NO_READING,
         numbering: intervalNumbering(intervals),
         armed: false,
+        resting: false,
+        restSeconds: 0,
       }).caption;
     };
 
