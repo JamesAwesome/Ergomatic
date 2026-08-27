@@ -3059,3 +3059,85 @@ targetSplit:null}` reproduces the recorded tx exactly and `divergences` stays
 - **James's scope ruling (2026-08-25):** ship (a) rescoped + (c)
   retire-and-correct + (d) the rest-distance oracle; QUEUE (b) until a
   rest-bearing capture that survives to 0x0039 exists.
+
+## Premise pass, 2026-08-26 (the WorkoutType "generic rename" instinct)
+
+- **"The four codes select which baseline a workout's targets resolve against
+  (AN/TR -> 2k, AT/O2 -> 6k)."** Believed because `plans.ts:29-30` says exactly
+  that, in prose, beside the checkpoint constants that act on it. FALSE as a
+  code claim: `pace.ts:33` keys on **`ref.base`**, a field stored PER WORK STEP
+  (`types.ts:5-8`), and a repo-wide search for a behavioural branch on a
+  `WorkoutType` literal in product code returns **ZERO** -- every `.type ===`
+  hit belongs to the PHASE union (`"work"|"rest"|"test"`), a different union
+  sharing the field name. But the comment is true about the DATA: counting the
+  seed gives **an 68/0, tr 218/0 (2k), at 0/193, o2 0/206 (6k) -- 286/286 and
+  399/399, zero crossings** -- and `library.test.ts`'s authoring gates all key
+  on `ref.base`, never `w.type`, so the invariant is enforced by NOTHING.
+  **Technique: when a comment asserts a semantic coupling, ask separately
+  whether the CODE implements it and whether the CORPUS obeys it. The
+  interesting answer here was "no and yes" -- an unenforced 100%-held
+  convention living in one comment, which no amount of reading either the
+  code or the prose alone would have found. Count the corpus.**
+
+- **"A rename is expensive because of the pgEnum."** Deflated by the primary
+  source: PostgreSQL `ALTER TYPE name RENAME VALUE old TO new` is catalog-only,
+  no table rewrite, ordering preserved
+  (<https://www.postgresql.org/docs/current/sql-altertype.html>). Four DDL
+  lines for `workouts.type`; one UPDATE for `session_logs.workout_type` (which
+  is plain `text`, not the enum -- `schema.ts:147` vs `:46`). The real cost is
+  **1230 literal occurrences across 88 files** (26 non-test), 5 e2e spec files,
+  84 captures, and 8 documented ordinal/grouping invariants. **Technique: price
+  a migration against the vendor's DDL semantics before calling it expensive --
+  and then count the literals, because the cost is almost never the database.**
+
+- **"We haven't hit prod yet, so nobody has meaningfully seen the article."**
+  Two claims wearing one sentence. `RELEASING.md:3` -- "The web app at
+  https://ergomatic.waffle.haus deploys continuously on every merge";
+  `deploy.md` documents a GitHub environment named `production`. Every deploy
+  runs the seeder, so **every prod DB holds 300+ typed `workouts` rows before
+  any user exists**. And the article is `articles.tsx:47-56`, slug
+  `workout-types`, `pinned: true`, **registry index 0**, published 2026-08-07 --
+  `git tag --contains` returns **20 tags, v0.6.0 through v0.23.0**.
+  **James's correction, verified and upheld:** prod is CLOSED --
+  `server/index.ts:84` gates account creation on `ALLOWED_EMAILS` and warns
+  "nobody can create an account" when empty -- so the seeded rows regenerate
+  and real user history is bounded by the allowlist. **Technique: when an owner
+  says "we haven't shipped X", split it into the AUDIENCE claim and the
+  STORED-DATA claim and check them separately -- `git tag --contains <commit>`
+  settles the second in one line, a seeder settles it without a single user,
+  and an auth allowlist can make both true at once.**
+
+- **"There is no pressure to extend the four-member set."** Half wrong, and the
+  correction relocates the problem. `git log -L1,1:app/domain/types.ts` shows
+  **two commits in the repo's life -- the creation and a prettier quote change.
+  The members have never changed** (the only nearby taxonomy event went the
+  other way: ROADMAP:1445 RETIRED `"TEST"` from the sibling `PlanCode` union).
+  But the merged Just Row spec writes a fifth value -- `"JustRow"` -- into
+  `session_logs.workout_type` and CLOSES that column to `AN/O2/AT/TR/JustRow`.
+  Verified against the primary source that this conflates two orthogonal
+  taxonomies: Concept2's `workout_type` is **structural** (`JustRow`,
+  `FixedDistanceInterval`, `VariableInterval`...) and its only intensity
+  concept is `targets.heart_rate_zone` 0-5
+  (<https://log.concept2.com/developers/documentation/>), while ours is
+  **intensity**. **Technique: when a design adds a value to a set, check
+  whether the new value comes from the SAME taxonomy as the existing members.
+  A fifth member borrowed from another vendor's vocabulary is a name
+  collision, not an extension -- and it is cheap to catch before the column
+  closes around it.**
+
+- **A grep-driven rename would corrupt an English article.**
+  `surfaceModel.ts:1573`, `if (digits.startsWith("8")) return "AN";` -- "AN 800
+  M PIECE". **Technique: before scoping any rename of a short uppercase token,
+  grep the literal and read every hit for HOMOGRAPHS. Two-letter domain codes
+  collide with ordinary words, CSS values, and article words.**
+
+- **Attacked and NOT broken:** the ordinal/grouping semantics really do survive
+  a neutral rename mechanically -- `plans.test.ts:49`'s strict `O2 > AT > TR >
+  AN` pyramid, `:71-79`'s `["AN","TR"]`-vs-`["O2","AT"]` partition,
+  `library.test.ts:65-79`'s monotone spm/pain bands, and `patterns.json`'s
+  quota grid are all expressible over `Type1..Type4`. The case against generic
+  names is not that the code breaks; it is that eight invariants stop being
+  READABLE and one (the type-to-base pairing) loses its only written record.
+  Worth keeping: **"does the rename break the code" and "does the rename break
+  the audit" are different questions, and for a taxonomy the second is the
+  expensive one.**
