@@ -1221,23 +1221,16 @@ describe("FromTheLog — the MACHINE CONFIRMED · WORK ONLY block", () => {
     expect(screen.getByText("MACHINE CONFIRMED · WORK ONLY")).toBeVisible();
     expect(screen.getByText("2:04.0 work · 500m")).toBeVisible();
     expect(screen.getByText(WALK_VERIFICATION_CODE)).toBeVisible();
-    // RC-5 (hero-truth spec) §3, Task 3: the caption's SECOND correction.
-    // The PM-gate wording above ("Everything else on this screen includes
-    // rest") went false the moment this task made the heroes work-only —
-    // the totals ABOVE the block no longer include rest either. THIRD
-    // correction (Task 3 fix round 4, PM gate finding 6): the second
-    // wording still argued with the screen — the TOTAL line ("4:04 total
-    // · plus 242 m coasting in rest") sits four lines above this caption
-    // and is the only thing on screen actually called a total, and it
-    // DOES include rest. New copy separates "the three numbers above"
-    // (work-only) from "the total line and the chart below" (both
-    // rest-inclusive) instead of implying every number above is
-    // rest-free.
+    // THE CAPTION IS GONE (James, 2026-08-27: "just no prose"), and this
+    // asserts its ABSENCE rather than silently dropping the check — the
+    // block is meant to be three lines now, not three lines and whatever
+    // a later change re-adds. It was rewritten four times (each correction
+    // buying accuracy with another clause) before the fourth read of it
+    // noticed every version was redundant: the title says WORK ONLY, and
+    // the TOTAL line on the same screen names its own rest outright.
     expect(
-      screen.getByText(
-        "Rest metres excluded from the three numbers above. The total line and the chart below both span rest.",
-      ),
-    ).toBeVisible();
+      container.querySelector(".log-machine-confirmed-caption"),
+    ).toBeNull();
 
     // Placement: below the interval table (§3's own placement rule).
     const block = container.querySelector(".log-machine-confirmed");

@@ -84,10 +84,13 @@ function MachineConfirmedBlock({ row }: { row: StoredLog }) {
       {code !== undefined && (
         <p className="log-machine-confirmed-code">CODE {code}</p>
       )}
-      <p className="log-machine-confirmed-caption">
-        Rest metres excluded from the three numbers above. The total line and
-        the chart below both span rest.
-      </p>
+      {/* NO CAPTION (James, 2026-08-27: "just no prose"). This block used to
+          end with a sentence about where rest metres appear. It was rewritten
+          four times, each correction buying accuracy with another clause, and
+          every version was redundant: the title above says WORK ONLY, and the
+          TOTAL line on the same screen names its own rest outright ("4:04
+          total · plus 242 m coasting in rest"). A caption explaining a line
+          that already explains itself is prose, not information. */}
     </div>
   );
 }

@@ -2024,6 +2024,18 @@ async function postLog(
       avgPaceSecondsPer500m?: number;
       verificationBytes: number[];
     } | null;
+    // RC-1's stored work/rest pair, and the reason this helper needs it:
+    // a TIER A row (both `machineWork*` set) is handed an EMPTY `stepSums`
+    // on purpose (`storedSummary.ts`'s `buildHeroes`, fix-round-2 finding
+    // C1 — a terminated row can be tier A while this pair is null, and its
+    // abandoned final interval would poison a derived sum). So for tier A,
+    // `buildStoredRest`'s row-level branch is the ONLY rung that can fire:
+    // without this pair a tier-A row's TOTAL line silently degrades to
+    // work-only, with no coasting clause. A real FINISHED monitor session
+    // always stores it (`completeMonitorRun`'s `computeWorkRestSums`), so
+    // a fixture omitting it is not a smaller row — it is an impossible one.
+    restSeconds?: number | null;
+    restMeters?: number | null;
   },
 ): Promise<void> {
   const result = await page.evaluate(async (b) => {
@@ -2282,6 +2294,20 @@ test("log-detail", async ({ page }) => {
     avgSplitSeconds: 124.0,
     timeSeconds: 244,
     distanceMeters: 742,
+    // RC-1's stored work/rest pair — see the helper's own comment on why a
+    // TIER A row cannot derive these. 60(r1)+60(r2) = 120 s and 147+95 =
+    // 242 m, the same two rests the steps below already describe, so the
+    // TOTAL line's `124 + 120 = 244 s = 4:04` is arithmetic a reader can
+    // check against this fixture rather than a number to take on trust.
+    //
+    // WITHOUT THIS PAIR THIS CAPTURE STOPPED SHOWING ITS OWN FEATURE
+    // (2026-08-27): the row rendered a bare `2:04 total`, the assertion
+    // below went red, and the failure was reported as "pre-existing,
+    // unrelated" in four consecutive task reports — correctly each time,
+    // and that is exactly how it survived. The committed PNG was never
+    // wrong; the FIXTURE drifted out of realism (recurring failure #3).
+    restSeconds: 120,
+    restMeters: 242,
     advancesPlan: true,
     steps: [
       {
@@ -2402,20 +2428,14 @@ test("log-detail", async ({ page }) => {
   ).toBeVisible();
   await expect(page.getByText("2:04.0 work · 500m")).toBeVisible();
   await expect(page.getByText("CODE AF99-4706 C021-B054")).toBeVisible();
-  // RC-5 (hero-truth spec) §3, Task 3: the caption's THIRD correction
-  // (Task 3 fix round 4, PM gate finding 6, copy-only — no re-shoot).
-  // "Everything else on this screen includes rest" went false the moment
-  // the heroes became work-only (this task). The second wording still
-  // argued with the screen: the TOTAL line ("4:04 total · plus 242 m
-  // coasting in rest") sits four lines above this caption and IS a
-  // rest-inclusive total. New copy separates "the three numbers above"
-  // (work-only) from "the total line and the chart below" (both
-  // rest-inclusive).
-  await expect(
-    page.getByText(
-      "Rest metres excluded from the three numbers above. The total line and the chart below both span rest.",
-    ),
-  ).toBeVisible();
+  // THE CAPTION IS GONE (James, 2026-08-27: "just no prose"). Asserted as
+  // an ABSENCE so the committed capture keeps showing a three-line block:
+  // this is the PR's visual record, and a re-added sentence would
+  // otherwise only be caught by a human noticing it in the PNG. The block
+  // was rewritten four times before someone read it and saw every version
+  // was redundant — the title says WORK ONLY, and the TOTAL line four
+  // lines up names its own rest outright.
+  await expect(page.locator(".log-machine-confirmed-caption")).toHaveCount(0);
 
   // Dedicated capture: the trace-chart scroll below moves the viewport
   // far enough down that the block (which sits ABOVE the chart) can

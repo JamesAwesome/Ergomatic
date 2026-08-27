@@ -2509,14 +2509,6 @@ button.back-link:disabled,
   color: var(--ink-2);
 }
 
-.log-machine-confirmed-caption {
-  margin: 0;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  color: var(--ink-3);
-}
-
 /* Log-delete spec (2026-08-18), §1: the staged destructive confirm, last
    in the view, below `.log-plan-footer`. `.button-l4` (index.css's "4 ·
    destructive" level, own doc comment names "Delete workout, Discard at
