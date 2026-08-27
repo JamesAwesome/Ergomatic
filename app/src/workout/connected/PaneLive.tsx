@@ -135,10 +135,25 @@ export default function PaneLive({ model }: { model: SurfaceModel }) {
   const paceTargetAbsent = model.targetSplit.absent;
   // BOTH heroes wear the SAME label (carried forward, I-1): one field, read
   // twice, cannot disagree with itself the way two re-derivations could.
+  // RC-27 gives the SPLIT hero alone a second source: `model.nowLabel`
+  // (stale) wins over a running rest — "A LOST LINK BEATS A FROZEN ERG"
+  // (`surfaceModel.ts`'s `livePace` comment), the identical precedence
+  // here. The two never actually co-occur through `buildSurfaceModel`
+  // (`restCountdown`'s own guard requires `!linkLost`), so this ternary's
+  // ORDER is pinned by a FORCED model, not a real one —
+  // `PaneLive.test.tsx`'s "the precedence itself is falsifiable" test. The
+  // rate hero below keeps reading `heroLabel` alone: putting `REST` into
+  // `heroLabel` itself would label the RATE hero `REST` too — THE TRAP
+  // this task's brief names outright.
   const heroLabel = model.nowLabel;
-  const paceValueClass = `${judgedClass("connected-hero-value", model.pace)}${
-    model.status === "armed" ? " connected-hero-ghost" : ""
-  }`;
+  const splitHeroLabel =
+    heroLabel !== "" ? heroLabel : model.restCountdown !== null ? "REST" : "";
+  const resting = model.restCountdown !== null;
+  const paceValueClass = resting
+    ? "connected-hero-value connected-hero-value-rest"
+    : `${judgedClass("connected-hero-value", model.pace)}${
+        model.status === "armed" ? " connected-hero-ghost" : ""
+      }`;
 
   return (
     <div className="connected-pane connected-pane-live">
@@ -209,12 +224,19 @@ export default function PaneLive({ model }: { model: SurfaceModel }) {
               an empty node still occupies a flex slot and the
               accessibility tree, which is exactly the "absent, not blank"
               idiom the target-ref caption below already uses. */}
-          {heroLabel !== "" && (
-            <span className="connected-hero-label">{heroLabel}</span>
+          {splitHeroLabel !== "" && (
+            <span className="connected-hero-label">{splitHeroLabel}</span>
           )}
           <span className={paceValueClass}>
-            {model.paceWhole}
-            {model.paceTenths !== "" && (
+            {/* RC-27: a running rest replaces the split numeral with the
+                machine's own countdown outright — not a second cell, not a
+                second markup. `model.restCountdown` already carries no
+                decimal component (`fmtDuration`'s own `m:ss` shape), so
+                there is nothing for a tenths span to add; the `resting`
+                branch below simply never renders one, which is "confirm
+                the empty case" rather than a new suppression rule. */}
+            {resting ? model.restCountdown : model.paceWhole}
+            {!resting && model.paceTenths !== "" && (
               <span className="connected-hero-tenths">{model.paceTenths}</span>
             )}
           </span>

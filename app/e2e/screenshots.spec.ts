@@ -3702,6 +3702,10 @@ const CONNECTED_STATES = [
   // regenerated against ordinary work-phase content, not warm-up content.
   "connected-pane-live-opener",
   "connected-pane-live-nohr",
+  // RC-27: pane B mid-rest — the split hero's own countdown, gold, under
+  // REST, in place of the coasting split (the sibling of
+  // `connected-pane-grid-resting` below, same measured wire frame).
+  "connected-pane-live-resting",
   "connected-paused",
   "connected-disconnected",
   // Task 7: pane C mid-session (one row of each state), the 25-interval

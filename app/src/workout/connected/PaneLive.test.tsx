@@ -407,6 +407,180 @@ describe("the unpriced-phase guard (design spec §4/§7 item 7)", () => {
 });
 
 // ---------------------------------------------------------------------------
+// RC-27 — the LIVE hero counts the rest. Same wire facts as RC-24 (that
+// spec's own decode of `docs/monitor/sessions/walk-2026-08-25/
+// rests-finished-recording.jsonl.gz`), one surface over: while a rest is
+// genuinely running, the split hero shows the machine's own countdown
+// instead of `frame.currentSplit` (a coasting flywheel's split, judged
+// against a work target it no longer means).
+//
+// THE TRAP this section pins against: both heroes wear `model.nowLabel`
+// EXCEPT this one case — `REST` belongs to the split hero alone, never the
+// rate hero, which is the naive implementation this brief warns against.
+// ---------------------------------------------------------------------------
+
+describe("RC-27: the split hero counts a running rest (design spec option B)", () => {
+  it("mid-rest: the split hero shows the floored countdown under a REST label, in the gold marker colour", () => {
+    const { model } = renderPane("live", {
+      state: "resting",
+      restSeconds: 59.91,
+      intervalIndex: 1,
+    });
+    expect(model.restCountdown).toBe("0:59");
+    const label = document.querySelector(
+      ".connected-hero-split .connected-hero-label",
+    )!;
+    expect(label.textContent).toBe("REST");
+    const value = document.querySelector(
+      ".connected-hero-split .connected-hero-value",
+    )!;
+    expect(value.textContent).toBe("0:59");
+    expect(value.className).toContain("connected-hero-value-rest");
+  });
+
+  it("THE TRAP, pinned as a negative: the rate hero carries NO label while resting", () => {
+    renderPane("live", {
+      state: "resting",
+      restSeconds: 59.91,
+      intervalIndex: 1,
+    });
+    expect(
+      document.querySelector(".connected-hero-rate .connected-hero-label"),
+    ).toBeNull();
+  });
+
+  it("the realistic mid-rest hero carries no judgement class at all, not even the harmless 'within' one", () => {
+    const { model } = renderPane("live", {
+      state: "resting",
+      restSeconds: 30,
+      intervalIndex: 1,
+      currentSplit: 80,
+    });
+    // FINDING, not a guess (recurring failure #10 — say so rather than
+    // silently working around it): the brief's own opening example ("1:57.8
+    // in blue") does not reproduce through `buildSurfaceModel` as currently
+    // written. `phaseIndexForInterval`'s resting fold lands `phase` on the
+    // REST phase itself whenever one exists (i.e. whenever `restCountdown`
+    // could be non-null at all), and a REST phase never carries
+    // `targetKind`, so `targetSplitSeconds` — and therefore
+    // `paceJudgeTarget` — is already `null` there: `model.pace.judgement`
+    // is `"within"` (plain ink, no colour) for every case this task's own
+    // `restCountdown` guard can fire on. Pinned here so a later change
+    // cannot silently make that stop being true without this test noticing.
+    expect(model.pace.judgement).toBe("within");
+    const value = document.querySelector(
+      ".connected-hero-split .connected-hero-value",
+    )!;
+    expect(value.className).not.toMatch(/timer-card-actual-/);
+  });
+
+  it("PaneLive's OWN rule holds independently of that finding: a genuinely judged pace, forced alongside a countdown, still renders no judgement class", () => {
+    // A real, live judged split — far from interval 1's own 6K target, so
+    // `pace.judgement` is genuinely non-'within' before the override below
+    // pairs it with a countdown. `buildSurfaceModel` itself cannot produce
+    // this exact combination today (the finding in the test above), so this
+    // engineers the one case that proves the RENDER layer's own "never
+    // judge the countdown" rule, decoupled from that fact — a future change
+    // to the target-fold logic must not silently re-tint this hero.
+    const built = buildSurfaceModel({
+      phases: FIXTURE.phases,
+      program: FIXTURE.program,
+      status: "live",
+      linkLost: false,
+      frame: frame({ state: "rowing", intervalIndex: 1, currentSplit: 80 }),
+      deviceName: DEVICE,
+      actuals: [],
+    });
+    expect(built.pace.judgement).not.toBe("within");
+    const forced = { ...built, restCountdown: "0:30" };
+    render(<PaneLive model={forced} />);
+    const value = document.querySelector(
+      ".connected-hero-split .connected-hero-value",
+    )!;
+    expect(value.className).not.toMatch(/timer-card-actual-/);
+  });
+
+  it("during work the hero is unchanged: no REST label, no gold, the ordinary judged split", () => {
+    const { model } = renderPane("live", {
+      state: "rowing",
+      intervalIndex: 1,
+    });
+    expect(model.restCountdown).toBeNull();
+    expect(
+      document.querySelector(".connected-hero-split .connected-hero-label"),
+    ).toBeNull();
+    const value = document.querySelector(
+      ".connected-hero-split .connected-hero-value",
+    )!;
+    expect(value.className).not.toContain("connected-hero-value-rest");
+    expect(value.className).toMatch(/timer-card-actual-/);
+  });
+
+  it("a lost link beats a running rest: LAST SEEN on both heroes, the hero shows the held split, not a countdown", () => {
+    const { model } = renderPane("stale", {
+      state: "resting",
+      restSeconds: 59.91,
+      intervalIndex: 1,
+    });
+    expect(model.restCountdown).toBeNull();
+    const labels = document.querySelectorAll(".connected-hero-label");
+    expect(labels).toHaveLength(2);
+    for (const label of labels) expect(label.textContent).toBe("LAST SEEN");
+    const value = document.querySelector(
+      ".connected-hero-split .connected-hero-value",
+    )!;
+    expect(value.className).not.toContain("connected-hero-value-rest");
+  });
+
+  it("the precedence itself is falsifiable: a forced model carrying BOTH nowLabel and restCountdown resolves to LAST SEEN, never REST", () => {
+    // Fix round 1, item 2 (James): `buildSurfaceModel` cannot produce this
+    // combination today — the `restCountdown` guard requires `!linkLost`
+    // and `nowLabel` requires `stale`, so the two are mutually exclusive
+    // BY CONSTRUCTION at the model layer (the two tests above prove each
+    // half separately). That leaves PaneLive's OWN precedence
+    // (`splitHeroLabel`'s ternary) untested by any real-model case: a
+    // mutant that flips it to `restCountdown !== null ? "REST" :
+    // heroLabel` passes every other test in this file, because none of
+    // them can express the conflict. Forcing it directly — the same
+    // technique the judged-class test above uses — is the only thing that
+    // can see it.
+    const built = buildSurfaceModel({
+      phases: FIXTURE.phases,
+      program: FIXTURE.program,
+      status: "live",
+      linkLost: false,
+      frame: frame({
+        state: "resting",
+        restSeconds: 59.91,
+        intervalIndex: 1,
+      }),
+      deviceName: DEVICE,
+      actuals: [],
+    });
+    // Sanity: the fixture genuinely produces a countdown and no stale
+    // label before the override forces the conflict.
+    expect(built.restCountdown).not.toBeNull();
+    expect(built.nowLabel).toBe("");
+    const forced = { ...built, nowLabel: "LAST SEEN" };
+    render(<PaneLive model={forced} />);
+    const label = document.querySelector(
+      ".connected-hero-split .connected-hero-label",
+    )!;
+    expect(label.textContent).toBe("LAST SEEN");
+  });
+
+  it("index.css: the gold rest value reads var(--marker), no bar/rule/fill added", () => {
+    const body = ruleBody(".connected-hero-value-rest");
+    expect(body).toContain("var(--marker)");
+    // NO MARKER GRAPHIC (James's ruling on the mockup): the gold on the
+    // numeral carries the meaning alone, never a border/background — a bar
+    // answers "which of twelve rows is yours", a question this one-hero
+    // pane does not have.
+    expect(body).not.toMatch(/border|background/);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Stale table: LAST SEEN above each hero, the ONLY hero label left
 // ---------------------------------------------------------------------------
 

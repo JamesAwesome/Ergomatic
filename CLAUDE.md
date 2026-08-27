@@ -510,6 +510,38 @@ often they recur.
     at `git add`. **Every shell write uses an ABSOLUTE worktree path, or a
     `cd` in the SAME command.** Edit/Write tools take absolute paths and
     are safe; shell redirects are not.
+21. **Shipping a gate that cannot go red.** A green check you never proved
+    can fail is not evidence; it is decoration that reads as evidence, and
+    it is worse than no gate because it retires the suspicion that would
+    have found the bug. **RC-24 shipped TWO in a single task** (2026-08-26,
+    PR #204): a `min-width: max-content` clip fix placed on a plain child
+    of the flex item — where `min-width` cannot influence flex shrink at
+    all, since that algorithm reads the ITEM's own value and never a
+    descendant's, so the fix did nothing — and, in the same commit, the
+    e2e no-clip test that measured **that same inline element**, whose
+    `scrollWidth`/`clientWidth` are both always `0`. The gate was green
+    regardless of overflow and would have passed a fully clipped cell.
+    Both survived a full review AND a scoped re-review; the implementer
+    found them itself while rewriting the rule for an unrelated reason.
+    **Every new assertion gets a mutation that makes it fail, and the
+    report states what was mutated and what the failure said.** This is
+    already the rule for "this test can't fail" claims (see the
+    mutation-probe memory and the antagonist's ledger); it is promoted
+    here because a rule only one agent reads cannot prevent anything.
+    **Two smells that predict it:** an assertion measuring a DIFFERENT
+    element than the one the fix changed, and any measurement of an inline
+    element's box (`scrollWidth`, `clientWidth`, `offsetWidth` are `0`
+    there — blockify it or measure its flex-item parent).
+    **Corollary on LAYERS, inside our own code.** Item 18 names the layer
+    trap for external docs; the same PR proved it applies internally. The
+    clip fix was justified by citing `domain/validate.ts`'s `0:01..60:00`
+    rest bound as making `REST 59:59` reachable. The citation was real and
+    answered the wrong layer: that is the BUILDER's authoring bound, while
+    every connected program also passes `compileProgram`, which rejects a
+    folded rest over `MAX_REST_SECONDS = 595` (9:55). The true worst case
+    was four characters narrower, and knowing it deleted the fix outright.
+    **When a bound justifies a decision, name the layer that enforces it
+    and check whether a NARROWER one sits downstream.**
 
 
 ## Commands

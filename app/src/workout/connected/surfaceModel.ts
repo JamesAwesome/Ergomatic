@@ -569,6 +569,11 @@ export interface SurfaceModel {
   paceWhole: string;
   paceTenths: string;
   rate: JudgedValue;
+  /** RC-27: the machine's own rest countdown (`0:59`), floored, for the
+   *  LIVE pane's split hero. NON-NULL ONLY while a rest is genuinely
+   *  running — see the guard below. `null` is "the hero shows the split",
+   *  which is every other moment of a session. */
+  restCountdown: string | null;
   /** THE INTERVAL AVERAGE (connected-metrics design spec, "Average split" +
    *  States table): `frame.splitAvgPace`, plain ink and unjudged while the
    *  interval runs (the standing start dominates a live running average
@@ -810,6 +815,23 @@ function avgValue(args: {
   };
 }
 
+/** RC-27 fix round 1, item 4 (James): ONE formatting expression for the
+ *  machine's own rest countdown, shared by the LIVE hero
+ *  (`buildSurfaceModel`'s own `restCountdown` below) and the grid's
+ *  active-row cell (`buildGridModel`'s own `restCountdown`, RC-24) — both
+ *  floor the SAME wire field (`frame.restSeconds`, ticking at x.91) the
+ *  same way. A shared call site alone does not retire "two places
+ *  formatting the same wire field is two places that can drift" (this
+ *  task's own brief) — a test has to assert the two outputs actually
+ *  AGREE off one frame for that to be more than textual reuse;
+ *  `surfaceModel.test.ts`'s "the hero and the grid cell agree" test is
+ *  that assertion. */
+export function formatRestCountdown(restSeconds: number): string {
+  // FLOOR, not round: the wire ticks at x.91 (59.91, 58.91 ... 1.91), so
+  // rounding would re-render 1:00 on the first counted frame.
+  return fmtDuration(Math.floor(restSeconds) / 60);
+}
+
 export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
   const { phases, program, deviceName, status } = input;
   const frame = input.frame ?? NO_FRAME;
@@ -924,6 +946,23 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
     frame.rowingActive === false &&
     frame.distanceMeters <= MID_SESSION_RESET_METERS;
   const mirrored = armedMirror || midSessionMirror;
+
+  // RC-27. Four terms, none removable:
+  //  - `resting` is the ONLY field that can say a rest is running (wire
+  //    fact 2 — `restSeconds` reads its programmed value all through work).
+  //  - `restSeconds > 0` excludes the zero-rest artifact: a machine can
+  //    briefly report `resting` on an interval with no programmed rest,
+  //    where this field reads 0.00 and there is nothing to count.
+  //  - `!armed` because nothing is counting before the first pull, the
+  //    same stance the grid's countdown and pane B's heroes already take.
+  //  - `!linkLost` because a countdown frozen at its last value is a false
+  //    claim of motion, which is the whole defect class this fixes. While
+  //    the link is down the hero keeps its last reading, greyed and
+  //    unjudged, exactly as it does today.
+  const restCountdown =
+    resting && frame.restSeconds > 0 && !armedMirror && !stale
+      ? formatRestCountdown(frame.restSeconds)
+      : null;
 
   const rawPace = livePace(frame, status, stale);
   const cappedPace =
@@ -1285,6 +1324,7 @@ export function buildSurfaceModel(input: SurfaceModelInput): SurfaceModel {
     paceWhole,
     paceTenths,
     rate,
+    restCountdown,
     avg,
     // `Free`, not a dash, for the same reason `targetSplit` names its phase
     // (James, 2026-08-12): the phone timer has always said `free` here, and
@@ -1497,11 +1537,10 @@ export function buildGridModel(args: {
             : interval.kind === "time"
               ? "time"
               : "meters",
-        // FLOOR, not round: the wire ticks at x.91 (59.91, 58.91 ...), so
-        // rounding would re-render 1:00 on the first counted frame.
-        restCountdown: restingNow
-          ? fmtDuration(Math.floor(restSeconds) / 60)
-          : null,
+        // Shared with the LIVE hero's own `restCountdown` (RC-27 fix round
+        // 1, item 4) — `formatRestCountdown`'s own doc comment carries the
+        // floor-not-round reasoning and the drift risk this retires.
+        restCountdown: restingNow ? formatRestCountdown(restSeconds) : null,
         // Fix round 2 (James: "So /500m in landscape isn't '-' during
         // rest???"): `livePace` is `frame.currentSplit`, a COASTING
         // flywheel's split — real, decaying, and worse than the judged
